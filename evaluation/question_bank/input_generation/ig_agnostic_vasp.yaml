@@ -79,11 +79,13 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
-    criterion: The INCAR uses physically reasonable general settings for a VASP band structure calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
+    criterion: The INCAR uses physically reasonable general settings for a VASP band structure calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set.
+      Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated
+      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -176,11 +178,13 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
-    criterion: The INCAR uses physically reasonable general settings for a VASP calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
+    criterion: The INCAR uses physically reasonable general settings for a VASP calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific
+      params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated
+      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -298,11 +302,13 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
-    criterion: The INCAR uses physically reasonable general settings for a VASP full cell relaxation calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
+    criterion: The INCAR uses physically reasonable general settings for a VASP full cell relaxation calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is
+      set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated
+      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -399,11 +405,13 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
-    criterion: The INCAR uses physically reasonable general settings for a VASP hybrid DFT (HSE06) calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
+    criterion: The INCAR uses physically reasonable general settings for a VASP hybrid DFT (HSE06) calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is
+      set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated
+      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -515,11 +523,13 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
-    criterion: The INCAR uses physically reasonable general settings for a VASP DFT+U calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
+    criterion: The INCAR uses physically reasonable general settings for a VASP DFT+U calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific
+      params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated
+      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -616,11 +626,13 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
-    criterion: The INCAR uses physically reasonable general settings for a VASP meta-GGA calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
+    criterion: The INCAR uses physically reasonable general settings for a VASP meta-GGA calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific
+      params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated
+      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -738,11 +750,13 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
-    criterion: The INCAR uses physically reasonable general settings for a VASP AIMD calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
+    criterion: The INCAR uses physically reasonable general settings for a VASP AIMD calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific
+      params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated
+      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -840,11 +854,13 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
-    criterion: The INCAR uses physically reasonable general settings for a VASP elastic constants calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
+    criterion: The INCAR uses physically reasonable general settings for a VASP elastic constants calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set.
+      Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated
+      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -932,11 +948,13 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
-    criterion: The INCAR uses physically reasonable general settings for a VASP DFPT/phonon calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
+    criterion: The INCAR uses physically reasonable general settings for a VASP DFPT/phonon calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific
+      params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated
+      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -1054,11 +1072,13 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
-    criterion: The INCAR uses physically reasonable general settings for a VASP SOC calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
+    criterion: The INCAR uses physically reasonable general settings for a VASP SOC calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific
+      params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated
+      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -1154,11 +1174,13 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
-    criterion: The INCAR uses physically reasonable general settings for a VASP DOS calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
+    criterion: The INCAR uses physically reasonable general settings for a VASP DOS calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific
+      params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated
+      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -1266,11 +1288,14 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
-    criterion: The INCAR uses physically reasonable general settings for a VASP hybrid DFT (HSE06) calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
+    criterion: The INCAR uses physically reasonable general settings for a VASP hybrid DFT (HSE06) calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is
+      set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the user-facing prompt data (material system, calculation type, critical parameters) rather than hallucinated. For the fixed-total-moment requirement, do not require a specific NUPDOWN value unless that numeric value is explicitly stated in the user-facing prompt; judge whether the INCAR attempts a fixed total magnetic moment consistently with the prompt.
+    criterion: The generated INCAR is grounded in the user-facing prompt data (material system, calculation type, critical parameters) rather than hallucinated. For the fixed-total-moment requirement, do
+      not require a specific NUPDOWN value unless that numeric value is explicitly stated in the user-facing prompt; judge whether the INCAR attempts a fixed total magnetic moment consistently with the
+      prompt.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -1379,11 +1404,13 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
-    criterion: The INCAR uses physically reasonable general settings for a VASP full cell relaxation calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
+    criterion: The INCAR uses physically reasonable general settings for a VASP full cell relaxation calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is
+      set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated
+      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -1476,11 +1503,13 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
-    criterion: The INCAR uses physically reasonable general settings for a VASP static SCF calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
+    criterion: The INCAR uses physically reasonable general settings for a VASP static SCF calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific
+      params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated
+      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -1602,11 +1631,13 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
-    criterion: The INCAR uses physically reasonable general settings for a VASP hybrid DFT (HSE06) calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
+    criterion: The INCAR uses physically reasonable general settings for a VASP hybrid DFT (HSE06) calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is
+      set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated
+      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -1693,11 +1724,13 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
-    criterion: The INCAR uses physically reasonable general settings for a VASP static SCF calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
+    criterion: The INCAR uses physically reasonable general settings for a VASP static SCF calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific
+      params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated
+      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -1785,11 +1818,13 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
-    criterion: The INCAR uses physically reasonable general settings for a VASP VASP calculation calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
+    criterion: The INCAR uses physically reasonable general settings for a VASP VASP calculation calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set.
+      Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated
+      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -1895,11 +1930,13 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
-    criterion: The INCAR uses physically reasonable general settings for a VASP static SCF calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
+    criterion: The INCAR uses physically reasonable general settings for a VASP static SCF calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific
+      params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated
+      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -1986,11 +2023,13 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
-    criterion: The INCAR uses physically reasonable general settings for a VASP static SCF calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
+    criterion: The INCAR uses physically reasonable general settings for a VASP static SCF calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific
+      params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated
+      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -2096,11 +2135,13 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
-    criterion: The INCAR uses physically reasonable general settings for a VASP DOS calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
+    criterion: The INCAR uses physically reasonable general settings for a VASP DOS calculation. ENCUT is present (unless not relevant), EDIFF is present with a reasonable value, PREC is set. Machine-specific
+      params (KPAR, NCORE, NPAR) are optional and should not be penalized if absent or different from reference.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated
+      file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -2123,14 +2164,19 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Generate VASP INCAR for a magnetic Fe BCC system with correct spin-polarization settings.
-  human_prompt_seed: |-
-    工作区中有 Fe_bcc.vasp（体心立方铁，2个原子）。
+  human_prompt_seed: '工作区中有 Fe_bcc.vasp（体心立方铁，2个原子）。
+
     生成 SCF 计算的 INCAR 文件 `INCAR_mag`，要求：
+
     - 自旋极化计算
+
     - 初始磁矩设置为每个 Fe 原子 5.0 μB
+
     - PBE 泛函
+
     - ENCUT = 520 eV
-    - 电子步收敛精度 1E-6 eV
+
+    - 电子步收敛精度 1E-6 eV'
   tags:
   - eng_vasp
   data_files: []
@@ -2140,12 +2186,14 @@ questions:
   - key: must_ispin
     value:
       filename: INCAR_mag
-      tokens: ["ISPIN = 2", "ISPIN=2"]
+      tokens:
+      - ISPIN = 2
+      - ISPIN=2
       flags: i
   - key: must_magmom
     value:
       filename: INCAR_mag
-      pattern: "MAGMOM\\s*=\\s*2\\*5"
+      pattern: MAGMOM\s*=\s*2\*5
       flags: i
   - key: must_encut
     value:
@@ -2155,11 +2203,14 @@ questions:
         min: 520
         max: 520
   - key: turn_budget
-    value: {max: 12}
+    value:
+      max: 12
   - key: duration_budget
-    value: {max: 7200000}
+    value:
+      max: 7200000
   - key: token_budget_total
-    value: {max: 10000}
+    value:
+      max: 10000
   scoring_checklist:
   - id: incar_mag_artifact
     criterion: INCAR_mag file exists in workspace.
@@ -2184,25 +2235,34 @@ questions:
   - id: no_retries
     axis: efficiency
     verify: no_retries
+    criterion: No repeated identical tool calls.
   - id: turn_budget
     axis: efficiency
     verify: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
   - id: token_budget_total
     axis: efficiency
     verify: token_budget
+    criterion: Total token usage stays within benchmark ceiling.
 - id: IG_vasp_dftu_001_20260508
   capability: input_generation
   domain: agnostic
   intent: Generate VASP INCAR for NiO with DFT+U (Dudarev) settings.
-  human_prompt_seed: |-
-    工作区中有 NiO.vasp（NaCl结构氧化镍，4个原子：2 Ni + 2 O）。
+  human_prompt_seed: '工作区中有 NiO.vasp（NaCl结构氧化镍，4个原子：2 Ni + 2 O）。
+
     生成 DFT+U 静态计算的 INCAR 文件 `INCAR_dftu`，要求：
+
     - Dudarev 方法 (LDAUTYPE=2)
+
     - Ni 的 d 轨道 U=6.2 eV, J=0
+
     - O 不加 U
+
     - 自旋极化（NiO 是反铁磁体）
+
     - PBE 泛函，ENCUT=550
-    - POSCAR 中原子顺序为 Ni O
+
+    - POSCAR 中原子顺序为 Ni O'
   tags:
   - eng_vasp
   data_files: []
@@ -2212,29 +2272,36 @@ questions:
   - key: must_ldau
     value:
       filename: INCAR_dftu
-      tokens: ["LDAU = .TRUE.", "LDAU=.TRUE."]
+      tokens:
+      - LDAU = .TRUE.
+      - LDAU=.TRUE.
       flags: i
   - key: must_ldautype
     value:
       filename: INCAR_dftu
-      tokens: ["LDAUTYPE = 2", "LDAUTYPE=2"]
+      tokens:
+      - LDAUTYPE = 2
+      - LDAUTYPE=2
       flags: i
   - key: must_ldaul
     value:
       filename: INCAR_dftu
-      pattern: "LDAUL\\s*=\\s*2\\s+(-1|0)"
+      pattern: LDAUL\s*=\s*2\s+(-1|0)
       flags: i
   - key: must_ldauu
     value:
       filename: INCAR_dftu
-      pattern: "LDAUU\\s*=\\s*6\\.2\\s+0"
+      pattern: LDAUU\s*=\s*6\.2\s+0
       flags: i
   - key: turn_budget
-    value: {max: 12}
+    value:
+      max: 12
   - key: duration_budget
-    value: {max: 7200000}
+    value:
+      max: 7200000
   - key: token_budget_total
-    value: {max: 10000}
+    value:
+      max: 10000
   scoring_checklist:
   - id: incar_dftu_artifact
     criterion: INCAR_dftu file exists in workspace.
@@ -2267,23 +2334,30 @@ questions:
   - id: no_retries
     axis: efficiency
     verify: no_retries
+    criterion: No repeated identical tool calls.
   - id: turn_budget
     axis: efficiency
     verify: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
   - id: token_budget_total
     axis: efficiency
     verify: token_budget
+    criterion: Total token usage stays within benchmark ceiling.
 - id: IG_vasp_metagga_001_20260508
   capability: input_generation
   domain: agnostic
   intent: Generate VASP INCAR for r2SCAN meta-GGA calculation with required LASPH setting.
-  human_prompt_seed: |-
-    工作区中有 TiO2_rutile.vasp（金红石结构 TiO2，6 个原子）。
+  human_prompt_seed: '工作区中有 TiO2_rutile.vasp（金红石结构 TiO2，6 个原子）。
+
     生成 r2SCAN 泛函结构优化的 INCAR 文件 `INCAR_r2scan`，要求：
+
     - r2SCAN meta-GGA 泛函
+
     - 结构优化（离子+晶胞）
+
     - ENCUT = 600 eV
-    - 力收敛标准 0.01 eV/A
+
+    - 力收敛标准 0.01 eV/A'
   tags:
   - eng_vasp
   data_files: []
@@ -2293,29 +2367,36 @@ questions:
   - key: must_metagga
     value:
       filename: INCAR_r2scan
-      tokens: ["METAGGA = R2SCAN", "METAGGA=R2SCAN"]
+      tokens:
+      - METAGGA = R2SCAN
+      - METAGGA=R2SCAN
       flags: i
   - key: must_lasph
     value:
       filename: INCAR_r2scan
-      tokens: ["LASPH = .TRUE.", "LASPH=.TRUE."]
+      tokens:
+      - LASPH = .TRUE.
+      - LASPH=.TRUE.
       flags: i
   - key: must_isif3
     value:
       filename: INCAR_r2scan
-      pattern: "ISIF\\s*=\\s*3"
+      pattern: ISIF\s*=\s*3
       flags: i
   - key: must_ediffg
     value:
       filename: INCAR_r2scan
-      pattern: "EDIFFG\\s*=\\s*-0\\.01"
+      pattern: EDIFFG\s*=\s*-0\.01
       flags: i
   - key: turn_budget
-    value: {max: 12}
+    value:
+      max: 12
   - key: duration_budget
-    value: {max: 7200000}
+    value:
+      max: 7200000
   - key: token_budget_total
-    value: {max: 10000}
+    value:
+      max: 10000
   scoring_checklist:
   - id: incar_r2scan_artifact
     criterion: INCAR_r2scan file exists in workspace.
@@ -2344,9 +2425,12 @@ questions:
   - id: no_retries
     axis: efficiency
     verify: no_retries
+    criterion: No repeated identical tool calls.
   - id: turn_budget
     axis: efficiency
     verify: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
   - id: token_budget_total
     axis: efficiency
     verify: token_budget
+    criterion: Total token usage stays within benchmark ceiling.
