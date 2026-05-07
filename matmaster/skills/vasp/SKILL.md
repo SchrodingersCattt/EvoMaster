@@ -49,9 +49,13 @@ recommended pseudopotentials but do not generate the file.
 - **Static fixed-cell slab/surface setups**: if the prompt says fixed cell or fixed cell shape, set `ISIF = 2` explicitly.
 - **Band structure / DOS must be two-step**: SCF first (uniform k-mesh), then
   NSCF with `ICHARG = 11` (band) or `ICHARG = 11` + dense mesh (DOS).
-- **Projected band / PDOS / DOS tasks**: set `LORBIT = 11` unless the task explicitly
-  requests another projection mode.
+- **Projected band / PDOS / DOS / magnetic-moment analysis tasks**: set
+  `LORBIT = 11` unless the task explicitly requests another projection mode;
+  this also applies to spin-polarized projected outputs.
 - **Spin-polarized**: `ISPIN = 2`; set `MAGMOM` per atom for magnetic systems.
+- **Finite-difference elastic tensor**: set `IBRION = 6`, `ISIF = 3`,
+  `POTIM` to the requested displacement amplitude, and `NFREE = 2` unless a
+  higher-order finite-difference stencil is explicitly requested.
 - **SOC/heavy-element calculations**: set `LSORBIT = .TRUE.`, `ISPIN = 2`,
   `LNONCOLLINEAR = .TRUE.` (implicit), and `ISYM = 0`; set `LMAXMIX = 4`
   unless f-electrons require `LMAXMIX = 6`.

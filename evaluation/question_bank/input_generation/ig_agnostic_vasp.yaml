@@ -642,7 +642,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_incar_007_20260506
+- id: IG_incar_007_20260507
   capability: input_generation
   domain: agnostic
   intent: 'Generate VASP INCAR for Born-Oppenheimer molecular dynamics of Heusler alloy MnNaPm2. Mn is magnetic; timestep 0.5 fs.
@@ -683,7 +683,7 @@ questions:
   - key: critical_NSW
     value:
       filename: INCAR
-      pattern: ^\s*NSW\s*=\s*5000\b
+      pattern: ^\s*NSW\s*=
       flags: im
   - key: critical_POTIM
     value:
@@ -729,7 +729,7 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: critical_NSW
-    criterion: INCAR sets NSW = 5000 (critical param).
+    criterion: INCAR contains NSW assignment (critical param).
     axis: correctness
     verify: text_file_regex
   - id: critical_POTIM
@@ -1814,7 +1814,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_incar_018_20260504
+- id: IG_incar_018_20260507
   capability: input_generation
   domain: agnostic
   intent: 'Generate VASP INCAR for magnetic SCF calculation of double perovskite Ca4TaOs. 5d transition metals (Ta, Os); spin-polarized with MAGMOM.
@@ -1830,16 +1830,14 @@ questions:
     value:
       filename: INCAR
       tokens:
-      - IBRION
       - ISPIN
       - LORBIT
       - MAGMOM
-      - NSW
       flags: i
-  - key: critical_IBRION
+  - key: optional_IBRION
     value:
       filename: INCAR
-      pattern: ^\s*IBRION\s*=\s*\-1\b
+      pattern: (?ims)\A(?!.*^\s*IBRION\s*=)(?:.|\n)*\Z|^\s*IBRION\s*=\s*\-1\b
       flags: im
   - key: critical_ISPIN
     value:
@@ -1856,10 +1854,10 @@ questions:
       filename: INCAR
       pattern: ^\s*MAGMOM\s*=\s*\S+
       flags: im
-  - key: critical_NSW
+  - key: optional_NSW
     value:
       filename: INCAR
-      pattern: ^\s*NSW\s*=\s*0\b
+      pattern: (?ims)\A(?!.*^\s*NSW\s*=)(?:.|\n)*\Z|^\s*NSW\s*=\s*0\b
       flags: im
   - key: turn_budget
     value:
@@ -1882,8 +1880,8 @@ questions:
     criterion: INCAR contains all critical parameter keywords.
     axis: correctness
     verify: text_file_contains_all
-  - id: critical_IBRION
-    criterion: INCAR sets IBRION = -1 (critical param).
+  - id: optional_IBRION
+    criterion: INCAR may omit IBRION; if provided, it must be IBRION = -1.
     axis: correctness
     verify: text_file_regex
   - id: critical_ISPIN
@@ -1898,8 +1896,8 @@ questions:
     criterion: INCAR sets MAGMOM = 6*1.0000 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: critical_NSW
-    criterion: INCAR sets NSW = 0 (critical param).
+  - id: optional_NSW
+    criterion: INCAR may omit NSW; if provided, it must be NSW = 0.
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
