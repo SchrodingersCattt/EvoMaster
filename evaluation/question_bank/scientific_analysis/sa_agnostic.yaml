@@ -687,8 +687,8 @@ questions:
   - key: sample_cd
     value:
       json_path: sample.cd_mg_L
-      target: 37.081033332138716
-      tolerance: 5.0
+      target: 0.037081033332138716
+      tolerance: 0.005
     unit: mg/L
   - key: sample_ep
     value:
@@ -726,7 +726,7 @@ questions:
     axis: correctness
     verify: answer_json_numeric
   - id: regulatory_conclusion
-    criterion: The final answer compares the sample Cd concentration with the 0.1 mg/L limit and concludes that it is over the limit.
+    criterion: The final answer compares the sample Cd concentration with the 0.1 mg/L limit and concludes that it is below the limit.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
