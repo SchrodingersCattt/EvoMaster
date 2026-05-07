@@ -32,8 +32,9 @@ questions:
 
     - `exmos2_cv_100mvps.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_her_mos2_001/1778080951_exmos2_cv_100mvps.txt`
 
-    电极几何面积（来自实验报告）：bulk MoS2 = 0.48 cm² (0.6 cm × 0.8 cm)；exfoliated MoS2 = 0.40 cm² (0.5 cm × 0.8 cm)。
-    请把 LSV/CV 中的电流转换为电流密度（mA/cm²）后再做容性分析。
+    Cdl 计算约定（来自实验报告/EPS 拟合表）：电极几何面积为 bulk MoS2 = 0.48 cm² (0.6 cm × 0.8 cm)，exfoliated MoS2 = 0.40 cm² (0.5 cm × 0.8 cm)。
+    仅在 Cdl/CV 分析中用面积把电流转换为电流密度 `j` (mA/cm²)；LSV 的 `potential_at_5mA_V` 仍表示达到绝对电流 5 mA 时的电位。
+    Cdl 请按报告口径计算：在 CV 曲线 E = -0.08 V 处读取正扫/反扫电流密度，取 full `Δj = j_forward - j_reverse`（不要除以 2），用 `Δj` 对扫速 (mV/s) 做线性拟合，并把斜率换算为 `mF/cm²`。
 
     请完成以下分析：
 
