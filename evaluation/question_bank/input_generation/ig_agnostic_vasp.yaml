@@ -2119,3 +2119,234 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+- id: IG_vasp_mag_001_20260508
+  capability: input_generation
+  domain: agnostic
+  intent: Generate VASP INCAR for a magnetic Fe BCC system with correct spin-polarization settings.
+  human_prompt_seed: |-
+    工作区中有 Fe_bcc.vasp（体心立方铁，2个原子）。
+    生成 SCF 计算的 INCAR 文件 `INCAR_mag`，要求：
+    - 自旋极化计算
+    - 初始磁矩设置为每个 Fe 原子 5.0 μB
+    - PBE 泛函
+    - ENCUT = 520 eV
+    - 电子步收敛精度 1E-6 eV
+  tags:
+  - eng_vasp
+  data_files: []
+  reference_answers:
+  - key: incar_mag_artifact
+    value: INCAR_mag
+  - key: must_ispin
+    value:
+      filename: INCAR_mag
+      tokens: ["ISPIN = 2", "ISPIN=2"]
+      flags: i
+  - key: must_magmom
+    value:
+      filename: INCAR_mag
+      pattern: "MAGMOM\\s*=\\s*2\\*5"
+      flags: i
+  - key: must_encut
+    value:
+      filename: INCAR_mag
+      checks:
+      - key: ENCUT
+        min: 520
+        max: 520
+  - key: turn_budget
+    value: {max: 12}
+  - key: duration_budget
+    value: {max: 7200000}
+  - key: token_budget_total
+    value: {max: 10000}
+  scoring_checklist:
+  - id: incar_mag_artifact
+    criterion: INCAR_mag file exists in workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_ispin
+    criterion: INCAR_mag contains ISPIN = 2 for spin-polarized calculation.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: must_magmom
+    criterion: INCAR_mag sets MAGMOM with 2*5 (or equivalent per-atom magnetic moment for 2 Fe atoms).
+    axis: correctness
+    verify: text_file_regex
+  - id: must_encut
+    criterion: ENCUT is set to 520 eV.
+    axis: correctness
+    verify: text_file_numeric_range
+  - id: grounding_mag
+    criterion: Agent explains why ISPIN=2 and MAGMOM are needed for Fe (magnetic material), not just blindly setting parameters.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+- id: IG_vasp_dftu_001_20260508
+  capability: input_generation
+  domain: agnostic
+  intent: Generate VASP INCAR for NiO with DFT+U (Dudarev) settings.
+  human_prompt_seed: |-
+    工作区中有 NiO.vasp（NaCl结构氧化镍，4个原子：2 Ni + 2 O）。
+    生成 DFT+U 静态计算的 INCAR 文件 `INCAR_dftu`，要求：
+    - Dudarev 方法 (LDAUTYPE=2)
+    - Ni 的 d 轨道 U=6.2 eV, J=0
+    - O 不加 U
+    - 自旋极化（NiO 是反铁磁体）
+    - PBE 泛函，ENCUT=550
+    - POSCAR 中原子顺序为 Ni O
+  tags:
+  - eng_vasp
+  data_files: []
+  reference_answers:
+  - key: incar_dftu_artifact
+    value: INCAR_dftu
+  - key: must_ldau
+    value:
+      filename: INCAR_dftu
+      tokens: ["LDAU = .TRUE.", "LDAU=.TRUE."]
+      flags: i
+  - key: must_ldautype
+    value:
+      filename: INCAR_dftu
+      tokens: ["LDAUTYPE = 2", "LDAUTYPE=2"]
+      flags: i
+  - key: must_ldaul
+    value:
+      filename: INCAR_dftu
+      pattern: "LDAUL\\s*=\\s*2\\s+(-1|0)"
+      flags: i
+  - key: must_ldauu
+    value:
+      filename: INCAR_dftu
+      pattern: "LDAUU\\s*=\\s*6\\.2\\s+0"
+      flags: i
+  - key: turn_budget
+    value: {max: 12}
+  - key: duration_budget
+    value: {max: 7200000}
+  - key: token_budget_total
+    value: {max: 10000}
+  scoring_checklist:
+  - id: incar_dftu_artifact
+    criterion: INCAR_dftu file exists in workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_ldau
+    criterion: LDAU = .TRUE. is set to enable DFT+U.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: must_ldautype
+    criterion: LDAUTYPE = 2 (Dudarev method) is specified.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: must_ldaul
+    criterion: LDAUL array matches species order (2 for Ni d-orbital, -1 or 0 for O).
+    axis: correctness
+    verify: text_file_regex
+  - id: must_ldauu
+    criterion: LDAUU array sets 6.2 for Ni and 0 for O, matching POSCAR species order.
+    axis: correctness
+    verify: text_file_regex
+  - id: ispin_set
+    criterion: ISPIN=2 is set because NiO is antiferromagnetic.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_dftu
+    criterion: Agent explains the physical basis for U value choice and why Dudarev (not Liechtenstein) method is appropriate.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+- id: IG_vasp_metagga_001_20260508
+  capability: input_generation
+  domain: agnostic
+  intent: Generate VASP INCAR for r2SCAN meta-GGA calculation with required LASPH setting.
+  human_prompt_seed: |-
+    工作区中有 TiO2_rutile.vasp（金红石结构 TiO2，6 个原子）。
+    生成 r2SCAN 泛函结构优化的 INCAR 文件 `INCAR_r2scan`，要求：
+    - r2SCAN meta-GGA 泛函
+    - 结构优化（离子+晶胞）
+    - ENCUT = 600 eV
+    - 力收敛标准 0.01 eV/A
+  tags:
+  - eng_vasp
+  data_files: []
+  reference_answers:
+  - key: incar_r2scan_artifact
+    value: INCAR_r2scan
+  - key: must_metagga
+    value:
+      filename: INCAR_r2scan
+      tokens: ["METAGGA = R2SCAN", "METAGGA=R2SCAN"]
+      flags: i
+  - key: must_lasph
+    value:
+      filename: INCAR_r2scan
+      tokens: ["LASPH = .TRUE.", "LASPH=.TRUE."]
+      flags: i
+  - key: must_isif3
+    value:
+      filename: INCAR_r2scan
+      pattern: "ISIF\\s*=\\s*3"
+      flags: i
+  - key: must_ediffg
+    value:
+      filename: INCAR_r2scan
+      pattern: "EDIFFG\\s*=\\s*-0\\.01"
+      flags: i
+  - key: turn_budget
+    value: {max: 12}
+  - key: duration_budget
+    value: {max: 7200000}
+  - key: token_budget_total
+    value: {max: 10000}
+  scoring_checklist:
+  - id: incar_r2scan_artifact
+    criterion: INCAR_r2scan file exists in workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_metagga
+    criterion: METAGGA = R2SCAN is set for r2SCAN functional.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: must_lasph
+    criterion: LASPH = .TRUE. is set (required for meta-GGA calculations).
+    axis: correctness
+    verify: text_file_contains_all
+  - id: must_isif3
+    criterion: ISIF = 3 for full cell+ion relaxation.
+    axis: correctness
+    verify: text_file_regex
+  - id: must_ediffg
+    criterion: EDIFFG = -0.01 for force convergence criterion.
+    axis: correctness
+    verify: text_file_regex
+  - id: grounding_lasph
+    criterion: Agent explains that LASPH=.TRUE. is mandatory for meta-GGA functionals (non-spherical contributions to PAW).
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
