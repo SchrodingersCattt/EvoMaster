@@ -1,15 +1,15 @@
 {
-  "generated_at": "2026-05-07T12:21:20.251598+00:00",
+  "generated_at": "2026-05-07T17:19:25.198645+00:00",
   "summary": {
-    "total_rules": 1427,
-    "covered_rules": 605,
-    "uncovered_rules": 822,
-    "coverage_pct": 42.4,
+    "total_rules": 1428,
+    "covered_rules": 611,
+    "uncovered_rules": 817,
+    "coverage_pct": 42.8,
     "by_source_type": {
       "skill": {
-        "total": 1317,
-        "covered": 579,
-        "pct": 44.0
+        "total": 1318,
+        "covered": 585,
+        "pct": 44.4
       },
       "tool": {
         "total": 89,
@@ -29,14 +29,14 @@
         "pct": 47.8
       },
       "hard_guard": {
-        "total": 82,
-        "covered": 48,
-        "pct": 58.5
+        "total": 83,
+        "covered": 49,
+        "pct": 59.0
       },
       "general": {
         "total": 925,
-        "covered": 371,
-        "pct": 40.1
+        "covered": 376,
+        "pct": 40.6
       },
       "config_default": {
         "total": 26,
@@ -82,8 +82,8 @@
       },
       "assemble-atomic-structure": {
         "total": 31,
-        "covered": 7,
-        "pct": 22.6
+        "covered": 6,
+        "pct": 19.4
       },
       "build-atomic-structure": {
         "total": 28,
@@ -102,8 +102,8 @@
       },
       "sample-atomic-structures": {
         "total": 30,
-        "covered": 6,
-        "pct": 20.0
+        "covered": 7,
+        "pct": 23.3
       },
       "transform-atomic-structure": {
         "total": 39,
@@ -167,8 +167,8 @@
       },
       "mlips": {
         "total": 33,
-        "covered": 24,
-        "pct": 72.7
+        "covered": 25,
+        "pct": 75.8
       },
       "orca": {
         "total": 33,
@@ -177,8 +177,8 @@
       },
       "plan-executor": {
         "total": 127,
-        "covered": 40,
-        "pct": 31.5
+        "covered": 41,
+        "pct": 32.3
       },
       "checkcif-validator": {
         "total": 17,
@@ -281,9 +281,9 @@
         "pct": 20.0
       },
       "vasp": {
-        "total": 46,
-        "covered": 35,
-        "pct": 76.1
+        "total": 47,
+        "covered": 39,
+        "pct": 83.0
       },
       "xrd-analysis": {
         "total": 16,
@@ -340,11 +340,11 @@
       "id": "abacus/minimum-workflow/2",
       "is_covered": true,
       "covered_by": [
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "PXRD_thermal_expansion_001_20260506",
-        "SC_struct_002_20260409",
-        "SC_struct_005_20260423",
+        "SC_struct_002_20260507",
+        "SC_struct_005_20260507",
         "WO_gromacs_em_npt_001_20260507",
         "WO_gromacs_solvate_001_20260507",
         "CR_WO_Ag_adsorption_20260412"
@@ -372,8 +372,8 @@
       "is_covered": true,
       "covered_by": [
         "BP_struct_003_20260428",
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "IG_abacus_003_20260504",
         "IG_abacus_005_20260504",
         "WO_elec_008_20260501",
@@ -390,8 +390,8 @@
       "id": "abacus/minimum-workflow/5",
       "is_covered": true,
       "covered_by": [
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "WO_mech_003_20260501"
       ],
       "match_method": "tag+weak_keyword"
@@ -431,8 +431,8 @@
       "is_covered": true,
       "covered_by": [
         "IG_abacus_001_20260504",
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "IG_abacus_003_20260504",
         "IG_abacus_004_20260504",
         "IG_abacus_002_20260504",
@@ -464,8 +464,8 @@
       "is_covered": true,
       "covered_by": [
         "IG_abacus_001_20260504",
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "IG_abacus_003_20260504",
         "IG_abacus_004_20260504",
         "IG_abacus_002_20260504",
@@ -496,7 +496,7 @@
       "covered_by": [
         "IG_abacus_005_20260504",
         "IG_abacus_006_20260504",
-        "SC_struct_008_20260410",
+        "SC_struct_008_20260507",
         "WO_elec_009_20260415"
       ],
       "match_method": "tag+keyword"
@@ -512,7 +512,7 @@
       "covered_by": [
         "IG_abacus_005_20260504",
         "IG_abacus_006_20260504",
-        "SC_struct_008_20260410",
+        "SC_struct_008_20260507",
         "WO_elec_009_20260415"
       ],
       "match_method": "tag+keyword"
@@ -603,7 +603,7 @@
         "IG_abacus_004_20260504",
         "IG_incar_001_20260506",
         "IG_incar_003_20260506",
-        "IG_incar_004_20260506",
+        "IG_incar_004_20260507",
         "IG_incar_017_20260506",
         "SF_env_leak_001_20260428",
         "DF_scxrd_001_20260408"
@@ -850,6 +850,7 @@
       "covered_by": [
         "IG_abacus_005_20260504",
         "IG_abacus_006_20260504",
+        "SC_struct_008_20260507",
         "WO_elec_009_20260415"
       ],
       "match_method": "tag+weak_keyword"
@@ -897,8 +898,8 @@
       "is_covered": true,
       "covered_by": [
         "IG_abacus_001_20260504",
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "IG_abacus_002_20260504"
       ],
       "match_method": "tag+keyword"
@@ -912,8 +913,8 @@
       "id": "abacus/bohrium-submission-defaults/39",
       "is_covered": true,
       "covered_by": [
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506"
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -926,15 +927,15 @@
       "id": "abacus/bohrium-submission-defaults/40",
       "is_covered": true,
       "covered_by": [
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "IG_incar_001_20260506",
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
         "IG_incar_003_20260506",
-        "IG_incar_004_20260506",
+        "IG_incar_004_20260507",
         "IG_incar_005_20260504",
-        "IG_incar_006_20260504",
-        "IG_incar_007_20260506",
+        "IG_incar_006_20260507",
+        "IG_incar_007_20260507",
         "IG_incar_008_20260506"
       ],
       "match_method": "tag+keyword"
@@ -949,8 +950,8 @@
       "is_covered": true,
       "covered_by": [
         "IG_abacus_001_20260504",
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "IG_abacus_003_20260504",
         "IG_abacus_004_20260504",
         "IG_abacus_002_20260504",
@@ -982,8 +983,8 @@
       "is_covered": true,
       "covered_by": [
         "IG_abacus_001_20260504",
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "IG_abacus_003_20260504",
         "IG_abacus_002_20260504"
       ],
@@ -1022,8 +1023,8 @@
       "id": "abacus/references/46",
       "is_covered": true,
       "covered_by": [
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "WO_mech_003_20260501"
       ],
       "match_method": "tag+weak_keyword"
@@ -1061,8 +1062,8 @@
       "id": "abacus/references/49",
       "is_covered": true,
       "covered_by": [
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "WO_mech_003_20260501"
       ],
       "match_method": "tag+keyword"
@@ -1155,8 +1156,8 @@
       "covered_by": [
         "BP_struct_003_20260428",
         "IG_abacus_001_20260504",
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "IG_abacus_003_20260504",
         "IG_abacus_004_20260504",
         "IG_abacus_002_20260504",
@@ -1297,8 +1298,8 @@
         "WO_direct_spec_priority_002_20260412",
         "WO_direct_archive_extract_002_20260412",
         "IG_abacus_001_20260504",
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "IG_abacus_003_20260504",
         "IG_abacus_004_20260504"
       ],
@@ -1402,8 +1403,8 @@
       "is_covered": true,
       "covered_by": [
         "EC_filename_case_001_20260428",
-        "SC_struct_hetero_20260409",
-        "SC_struct_SiH_20260423"
+        "SC_struct_hetero_20260507",
+        "SC_struct_SiH_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -1438,8 +1439,8 @@
       "id": "abinit/submission-workflow/78",
       "is_covered": true,
       "covered_by": [
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "PXRD_thermal_expansion_001_20260506"
       ],
       "match_method": "keyword_only"
@@ -1479,8 +1480,8 @@
       "covered_by": [
         "DF_scxrd_001_20260408",
         "DF_scxrd_002_20260408",
-        "SC_struct_002_20260409",
-        "SC_struct_006_20260406"
+        "SC_struct_002_20260507",
+        "SC_struct_006_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -1605,10 +1606,10 @@
       "covered_by": [
         "BP_elec_001_20260428",
         "IG_abacus_001_20260504",
-        "SC_struct_009_20260420",
-        "SC_struct_010_20260429",
-        "CR_SC_ZnS001_20260428",
-        "SC_elec_004_20260404"
+        "SC_struct_009_20260507",
+        "SC_struct_010_20260507",
+        "CR_SC_ZnS001_20260507",
+        "SC_elec_004_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -1721,15 +1722,15 @@
       "is_covered": true,
       "covered_by": [
         "BP_elec_001_20260428",
+        "SA_lsv_cd_001_20260506",
+        "SA_uvvis_glucose_maf4_001_20260506",
+        "SA_pxrd_maf4_phase_001_20260506",
+        "SA_lfp_cycling_001_20260506",
+        "SA_her_mos2_001_20260506",
         "pl_donor_20260422",
-        "SC_struct_005_20260423",
-        "SC_struct_008_20260410",
-        "SR_db_006_20260416v1",
-        "SR_db_005_20260416v1",
-        "WO_kinetic_001_20260504",
-        "WO_mlip_dpa_001_20260411v2",
-        "WO_mlip_dpa_003_20260411v2",
-        "WO_gromacs_em_npt_001_20260507"
+        "SA_perovskite_pl_lifetime_001_20260506",
+        "SC_struct_005_20260507",
+        "SC_struct_008_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -1740,11 +1741,9 @@
       "text": "Formula and atom counts equal the sum of assembled components.",
       "source_type": "skill",
       "id": "assemble-atomic-structure/acceptance-checklist/103",
-      "is_covered": true,
-      "covered_by": [
-        "SC_struct_hetero_20260409"
-      ],
-      "match_method": "keyword_only"
+      "is_covered": false,
+      "covered_by": [],
+      "match_method": null
     },
     {
       "source_name": "assemble-atomic-structure",
@@ -1799,7 +1798,7 @@
       "id": "assemble-atomic-structure/acceptance-checklist/108",
       "is_covered": true,
       "covered_by": [
-        "SC_elec_004_20260404"
+        "SC_elec_004_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -1812,7 +1811,7 @@
       "id": "assemble-atomic-structure/cross-skill-refs/109",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409"
+        "SC_struct_002_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -1837,7 +1836,7 @@
       "is_covered": true,
       "covered_by": [
         "BP_elec_001_20260428",
-        "CR_SC_ZnS001_20260428"
+        "CR_SC_ZnS001_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -1850,8 +1849,8 @@
       "id": "build-atomic-structure/when-to-use/112",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_build_001_20260508",
-        "SC_struct_build_002_20260507",
+        "SC_struct_build_001_20260508v2",
+        "SC_struct_build_002_20260507v2",
         "WO_kinetic_001_20260504",
         "WO_struct_003_20260505"
       ],
@@ -1866,12 +1865,12 @@
       "id": "build-atomic-structure/when-to-use/113",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_010_20260429",
-        "SC_struct_build_001_20260508",
-        "SC_struct_build_002_20260507",
-        "SC_struct_build_003_20260507",
-        "SC_elec_004_20260404",
+        "SC_struct_002_20260507",
+        "SC_struct_010_20260507",
+        "SC_struct_build_001_20260508v2",
+        "SC_struct_build_002_20260507v2",
+        "SC_struct_build_003_20260507v2",
+        "SC_elec_004_20260507",
         "WO_elec_002_20260506",
         "WO_kinetic_001_20260504",
         "WO_mech_002_20260404"
@@ -1887,7 +1886,7 @@
       "id": "build-atomic-structure/when-to-use/114",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_build_003_20260507"
+        "SC_struct_build_003_20260507v2"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -1900,7 +1899,7 @@
       "id": "build-atomic-structure/when-to-use/115",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_build_003_20260507",
+        "SC_struct_build_003_20260507v2",
         "WO_mech_002_20260404",
         "WO_elec_005_20260404"
       ],
@@ -1915,10 +1914,10 @@
       "id": "build-atomic-structure/decision-tree/116",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_005_20260423",
-        "SC_struct_build_001_20260508",
-        "SC_struct_build_002_20260507",
-        "SC_struct_build_003_20260507",
+        "SC_struct_005_20260507",
+        "SC_struct_build_001_20260508v2",
+        "SC_struct_build_002_20260507v2",
+        "SC_struct_build_003_20260507v2",
         "SR_db_002_20260416v1",
         "SR_db_008_20260416v1",
         "SR_db_004_20260416v1",
@@ -1935,8 +1934,8 @@
       "id": "build-atomic-structure/decision-tree/117",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_build_001_20260508",
-        "SC_struct_build_002_20260507",
+        "SC_struct_build_001_20260508v2",
+        "SC_struct_build_002_20260507v2",
         "WO_struct_003_20260505"
       ],
       "match_method": "tag+keyword"
@@ -1950,7 +1949,7 @@
       "id": "build-atomic-structure/decision-tree/118",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_build_003_20260507",
+        "SC_struct_build_003_20260507v2",
         "WO_mech_002_20260404"
       ],
       "match_method": "tag+keyword"
@@ -1975,12 +1974,12 @@
       "id": "build-atomic-structure/decision-tree/120",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_010_20260429",
-        "SC_struct_build_001_20260508",
-        "SC_struct_build_002_20260507",
-        "SC_struct_build_003_20260507",
-        "SC_elec_004_20260404",
+        "SC_struct_002_20260507",
+        "SC_struct_010_20260507",
+        "SC_struct_build_001_20260508v2",
+        "SC_struct_build_002_20260507v2",
+        "SC_struct_build_003_20260507v2",
+        "SC_elec_004_20260507",
         "WO_elec_002_20260506",
         "WO_kinetic_001_20260504",
         "WO_mech_002_20260404"
@@ -1996,9 +1995,9 @@
       "id": "build-atomic-structure/local-api/121",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_build_001_20260508",
-        "SC_struct_build_002_20260507",
-        "SC_struct_build_003_20260507"
+        "SC_struct_build_001_20260508v2",
+        "SC_struct_build_002_20260507v2",
+        "SC_struct_build_003_20260507v2"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -2011,9 +2010,9 @@
       "id": "build-atomic-structure/local-api/122",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_008_20260410",
-        "SC_struct_build_001_20260508",
-        "SC_struct_build_002_20260507",
+        "SC_struct_008_20260507",
+        "SC_struct_build_001_20260508v2",
+        "SC_struct_build_002_20260507v2",
         "WO_kinetic_001_20260504"
       ],
       "match_method": "tag+weak_keyword"
@@ -2038,8 +2037,8 @@
       "id": "build-atomic-structure/hard-guards/124",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_008_20260410",
-        "SC_struct_build_002_20260507"
+        "SC_struct_008_20260507",
+        "SC_struct_build_002_20260507v2"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -2074,8 +2073,8 @@
       "id": "build-atomic-structure/hard-guards/127",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_build_001_20260508",
-        "SC_struct_build_002_20260507",
+        "SC_struct_build_001_20260508v2",
+        "SC_struct_build_002_20260507v2",
         "WO_kinetic_001_20260504"
       ],
       "match_method": "tag+keyword"
@@ -2089,7 +2088,7 @@
       "id": "build-atomic-structure/hard-guards/128",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_build_003_20260507"
+        "SC_struct_build_003_20260507v2"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -2102,7 +2101,7 @@
       "id": "build-atomic-structure/hard-guards/129",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_008_20260410",
+        "SC_struct_008_20260507",
         "WO_elec_002_20260506",
         "WO_struct_003_20260505"
       ],
@@ -2117,12 +2116,12 @@
       "id": "build-atomic-structure/acceptance-checklist/130",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_005_20260423",
-        "SC_struct_006_20260406",
-        "SC_struct_008_20260410",
-        "SC_struct_build_001_20260508",
-        "SC_struct_build_002_20260507",
-        "SC_struct_build_003_20260507",
+        "SC_struct_005_20260507",
+        "SC_struct_006_20260507",
+        "SC_struct_008_20260507",
+        "SC_struct_build_001_20260508v2",
+        "SC_struct_build_002_20260507v2",
+        "SC_struct_build_003_20260507v2",
         "WO_mech_002_20260404",
         "WO_elec_006_20260411v2"
       ],
@@ -2137,9 +2136,9 @@
       "id": "build-atomic-structure/acceptance-checklist/131",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_build_001_20260508"
+        "SC_struct_build_001_20260508v2"
       ],
-      "match_method": "tag+keyword"
+      "match_method": "tag+weak_keyword"
     },
     {
       "source_name": "build-atomic-structure",
@@ -2150,8 +2149,8 @@
       "id": "build-atomic-structure/acceptance-checklist/132",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_build_001_20260508",
-        "SC_struct_build_002_20260507",
+        "SC_struct_build_001_20260508v2",
+        "SC_struct_build_002_20260507v2",
         "WO_struct_003_20260505"
       ],
       "match_method": "tag+weak_keyword"
@@ -2165,9 +2164,10 @@
       "id": "build-atomic-structure/acceptance-checklist/133",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_build_001_20260508",
-        "SC_struct_build_002_20260507",
-        "SC_struct_build_003_20260507",
+        "SC_struct_008_20260507",
+        "SC_struct_build_001_20260508v2",
+        "SC_struct_build_002_20260507v2",
+        "SC_struct_build_003_20260507v2",
         "WO_mech_002_20260404"
       ],
       "match_method": "tag+keyword"
@@ -2192,9 +2192,10 @@
       "id": "build-atomic-structure/acceptance-checklist/135",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_008_20260410",
-        "SC_struct_build_001_20260508",
-        "SC_struct_build_002_20260507",
+        "SC_struct_005_20260507",
+        "SC_struct_008_20260507",
+        "SC_struct_build_001_20260508v2",
+        "SC_struct_build_002_20260507v2",
         "WO_kinetic_001_20260504",
         "WO_struct_003_20260505"
       ],
@@ -2209,9 +2210,9 @@
       "id": "build-atomic-structure/cross-skill-refs/136",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_008_20260410",
-        "SC_struct_build_001_20260508",
-        "SC_struct_build_002_20260507",
+        "SC_struct_008_20260507",
+        "SC_struct_build_001_20260508v2",
+        "SC_struct_build_002_20260507v2",
         "WO_kinetic_001_20260504",
         "WO_struct_003_20260505"
       ],
@@ -2248,8 +2249,9 @@
       "id": "build-atomic-structure/cross-skill-refs/139",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_008_20260410",
-        "SC_struct_build_002_20260507",
+        "SC_struct_008_20260507",
+        "SC_struct_build_001_20260508v2",
+        "SC_struct_build_002_20260507v2",
         "WO_elec_002_20260506"
       ],
       "match_method": "tag+weak_keyword"
@@ -2331,8 +2333,8 @@
       "id": "inspect-atomic-structure/decision-tree/146",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_010_20260429"
+        "SC_struct_002_20260507",
+        "SC_struct_010_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -2345,7 +2347,7 @@
       "id": "inspect-atomic-structure/decision-tree/147",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_010_20260429"
+        "SC_struct_010_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -2369,9 +2371,9 @@
       "id": "inspect-atomic-structure/local-api/149",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_006_20260406",
-        "SC_struct_010_20260429",
-        "SC_struct_build_003_20260507"
+        "SC_struct_006_20260507",
+        "SC_struct_010_20260507",
+        "SC_struct_build_003_20260507v2"
       ],
       "match_method": "keyword_only"
     },
@@ -2406,7 +2408,7 @@
       "id": "inspect-atomic-structure/hard-guards/152",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_build_002_20260507",
+        "SC_struct_build_002_20260507v2",
         "SR_db_001_20260416v1",
         "SR_db_006_20260416v1",
         "SR_db_005_20260416v1",
@@ -2446,7 +2448,7 @@
       "id": "inspect-atomic-structure/hard-guards/155",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_005_20260423"
+        "SC_struct_005_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -2471,8 +2473,7 @@
       "is_covered": true,
       "covered_by": [
         "IG_abacus_001_20260504",
-        "IG_abacus_002_20260504",
-        "SC_struct_hetero_20260409"
+        "IG_abacus_002_20260504"
       ],
       "match_method": "keyword_only"
     },
@@ -2529,14 +2530,14 @@
       "id": "inspect-atomic-structure/cross-skill-refs/162",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_009_20260420",
-        "SC_struct_010_20260429",
-        "SC_struct_build_001_20260508",
-        "SC_struct_build_002_20260507",
-        "CR_SC_ZnS001_20260428",
-        "SC_elec_004_20260404",
-        "SC_struct_hetero_20260409",
+        "SC_struct_002_20260507",
+        "SC_struct_009_20260507",
+        "SC_struct_010_20260507",
+        "SC_struct_build_001_20260508v2",
+        "SC_struct_build_002_20260507v2",
+        "CR_SC_ZnS001_20260507",
+        "SC_elec_004_20260507",
+        "SC_struct_hetero_20260507",
         "WO_kinetic_001_20260504",
         "WO_mlip_dpa_001_20260411v2"
       ],
@@ -2573,7 +2574,7 @@
       "id": "inspect-atomic-structure/cross-skill-refs/165",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409"
+        "SC_struct_002_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -2597,8 +2598,8 @@
       "id": "operate-molecular-crystal/when-to-use/167",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_006_20260406"
+        "SC_struct_002_20260507",
+        "SC_struct_006_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -2611,7 +2612,7 @@
       "id": "operate-molecular-crystal/when-to-use/168",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_005_20260423"
+        "SC_struct_005_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -2624,9 +2625,9 @@
       "id": "operate-molecular-crystal/when-to-use/169",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_005_20260423",
-        "SC_struct_006_20260406"
+        "SC_struct_002_20260507",
+        "SC_struct_005_20260507",
+        "SC_struct_006_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -2639,9 +2640,9 @@
       "id": "operate-molecular-crystal/when-to-use/170",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_005_20260423",
-        "SC_struct_006_20260406"
+        "SC_struct_002_20260507",
+        "SC_struct_005_20260507",
+        "SC_struct_006_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -2654,7 +2655,7 @@
       "id": "operate-molecular-crystal/when-to-use/171",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409"
+        "SC_struct_002_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -2667,9 +2668,9 @@
       "id": "operate-molecular-crystal/when-to-use/172",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_005_20260423",
-        "SC_struct_006_20260406"
+        "SC_struct_002_20260507",
+        "SC_struct_005_20260507",
+        "SC_struct_006_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -2682,9 +2683,9 @@
       "id": "operate-molecular-crystal/decision-tree/173",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_005_20260423",
-        "SC_elec_004_20260404",
+        "SC_struct_002_20260507",
+        "SC_struct_005_20260507",
+        "SC_elec_004_20260507",
         "WO_error_mid_flow_001_20260428"
       ],
       "match_method": "tag+weak_keyword"
@@ -2698,8 +2699,8 @@
       "id": "operate-molecular-crystal/decision-tree/174",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_006_20260406"
+        "SC_struct_002_20260507",
+        "SC_struct_006_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -2712,7 +2713,7 @@
       "id": "operate-molecular-crystal/decision-tree/175",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409"
+        "SC_struct_002_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -2725,9 +2726,9 @@
       "id": "operate-molecular-crystal/decision-tree/176",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_005_20260423",
-        "SC_struct_006_20260406"
+        "SC_struct_002_20260507",
+        "SC_struct_005_20260507",
+        "SC_struct_006_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -2741,7 +2742,7 @@
       "is_covered": true,
       "covered_by": [
         "IG_nep_001_20260428",
-        "SC_struct_005_20260423"
+        "SC_struct_005_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -2754,7 +2755,7 @@
       "id": "operate-molecular-crystal/read-/-write/178",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_005_20260423"
+        "SC_struct_005_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -2767,7 +2768,7 @@
       "id": "operate-molecular-crystal/disorder-→-ordered-replicas/179",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_005_20260423"
+        "SC_struct_005_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -2791,7 +2792,7 @@
       "id": "operate-molecular-crystal/hydrogen-completion/181",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_006_20260406"
+        "SC_struct_006_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -2881,8 +2882,8 @@
       "id": "operate-molecular-crystal/hard-guards/189",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_006_20260406"
+        "SC_struct_002_20260507",
+        "SC_struct_006_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -2895,8 +2896,8 @@
       "id": "operate-molecular-crystal/hard-guards/190",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_006_20260406"
+        "SC_struct_002_20260507",
+        "SC_struct_006_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -2909,7 +2910,7 @@
       "id": "operate-molecular-crystal/hard-guards/191",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_006_20260406"
+        "SC_struct_006_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -2922,8 +2923,8 @@
       "id": "operate-molecular-crystal/hard-guards/192",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_006_20260406"
+        "SC_struct_002_20260507",
+        "SC_struct_006_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -2936,8 +2937,8 @@
       "id": "operate-molecular-crystal/hard-guards/193",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_006_20260406"
+        "SC_struct_002_20260507",
+        "SC_struct_006_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -2950,7 +2951,7 @@
       "id": "operate-molecular-crystal/hard-guards/194",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409"
+        "SC_struct_002_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -2963,9 +2964,9 @@
       "id": "operate-molecular-crystal/hard-guards/195",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_005_20260423",
-        "SC_struct_006_20260406"
+        "SC_struct_002_20260507",
+        "SC_struct_005_20260507",
+        "SC_struct_006_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -2978,7 +2979,7 @@
       "id": "operate-molecular-crystal/hard-guards/196",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_005_20260423"
+        "SC_struct_005_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -2991,10 +2992,10 @@
       "id": "operate-molecular-crystal/hard-guards/197",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_005_20260423",
-        "SC_struct_006_20260406"
+        "SC_struct_005_20260507",
+        "SC_struct_006_20260507"
       ],
-      "match_method": "tag+weak_keyword"
+      "match_method": "tag+keyword"
     },
     {
       "source_name": "operate-molecular-crystal",
@@ -3005,11 +3006,11 @@
       "id": "operate-molecular-crystal/acceptance-checklist/198",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_005_20260423",
-        "SC_struct_006_20260406",
-        "SC_struct_010_20260429",
-        "SC_struct_build_003_20260507",
+        "SC_struct_002_20260507",
+        "SC_struct_005_20260507",
+        "SC_struct_006_20260507",
+        "SC_struct_010_20260507",
+        "SC_struct_build_003_20260507v2",
         "WO_mech_002_20260404"
       ],
       "match_method": "tag+keyword"
@@ -3023,9 +3024,9 @@
       "id": "operate-molecular-crystal/acceptance-checklist/199",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_005_20260423",
-        "SC_struct_006_20260406"
+        "SC_struct_002_20260507",
+        "SC_struct_005_20260507",
+        "SC_struct_006_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -3038,8 +3039,8 @@
       "id": "operate-molecular-crystal/acceptance-checklist/200",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_006_20260406"
+        "SC_struct_002_20260507",
+        "SC_struct_006_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -3052,7 +3053,7 @@
       "id": "operate-molecular-crystal/acceptance-checklist/201",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_005_20260423"
+        "SC_struct_005_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -3066,10 +3067,10 @@
       "is_covered": true,
       "covered_by": [
         "DF_scxrd_002_20260408",
-        "SC_struct_005_20260423",
-        "SC_struct_006_20260406"
+        "SC_struct_005_20260507",
+        "SC_struct_006_20260507"
       ],
-      "match_method": "keyword_only"
+      "match_method": "tag+keyword"
     },
     {
       "source_name": "operate-molecular-crystal",
@@ -3080,9 +3081,9 @@
       "id": "operate-molecular-crystal/acceptance-checklist/203",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_005_20260423",
-        "SC_struct_006_20260406"
+        "SC_struct_002_20260507",
+        "SC_struct_005_20260507",
+        "SC_struct_006_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -3095,7 +3096,7 @@
       "id": "operate-molecular-crystal/acceptance-checklist/204",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_005_20260423"
+        "SC_struct_005_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -3108,9 +3109,9 @@
       "id": "operate-molecular-crystal/acceptance-checklist/205",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_005_20260423",
-        "SC_struct_006_20260406"
+        "SC_struct_002_20260507",
+        "SC_struct_005_20260507",
+        "SC_struct_006_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -3123,10 +3124,10 @@
       "id": "operate-molecular-crystal/acceptance-checklist/206",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_005_20260423"
+        "SC_struct_002_20260507",
+        "SC_struct_005_20260507"
       ],
-      "match_method": "tag+weak_keyword"
+      "match_method": "tag+keyword"
     },
     {
       "source_name": "operate-molecular-crystal",
@@ -3137,9 +3138,9 @@
       "id": "operate-molecular-crystal/cross-skill-refs/207",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_005_20260423",
-        "SC_struct_006_20260406"
+        "SC_struct_002_20260507",
+        "SC_struct_005_20260507",
+        "SC_struct_006_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -3152,7 +3153,7 @@
       "id": "operate-molecular-crystal/cross-skill-refs/208",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409"
+        "SC_struct_002_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -3165,7 +3166,7 @@
       "id": "operate-molecular-crystal/cross-skill-refs/209",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409"
+        "SC_struct_002_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -3178,9 +3179,9 @@
       "id": "operate-molecular-crystal/cross-skill-refs/210",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_005_20260423",
-        "SC_struct_006_20260406"
+        "SC_struct_002_20260507",
+        "SC_struct_005_20260507",
+        "SC_struct_006_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -3445,7 +3446,7 @@
         "IG_abacus_006_20260504",
         "IG_incar_011_20260506",
         "DF_scxrd_002_20260408",
-        "SC_struct_002_20260409",
+        "SC_struct_002_20260507",
         "SR_db_009_20260502",
         "SR_db_005_20260416v1",
         "WO_struct_003_20260505"
@@ -3486,9 +3487,11 @@
       "text": "Every returned file or directory path is reported.",
       "source_type": "skill",
       "id": "sample-atomic-structures/acceptance-checklist/236",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
+      "is_covered": true,
+      "covered_by": [
+        "SC_struct_005_20260507"
+      ],
+      "match_method": "keyword_only"
     },
     {
       "source_name": "sample-atomic-structures",
@@ -3622,7 +3625,7 @@
       "id": "transform-atomic-structure/decision-tree/246",
       "is_covered": true,
       "covered_by": [
-        "SC_elec_004_20260404",
+        "SC_elec_004_20260507",
         "WO_mlip_dpa_011_20260415",
         "WO_elec_003_20260404"
       ],
@@ -3732,8 +3735,8 @@
       "id": "transform-atomic-structure/local-api/255",
       "is_covered": true,
       "covered_by": [
-        "CR_SC_ZnS001_20260428",
-        "SC_elec_004_20260404",
+        "SC_struct_010_20260507",
+        "CR_SC_ZnS001_20260507",
         "WO_mlip_dpa_011_20260415",
         "WO_mlip_dpa_005_20260411v2",
         "WO_mlip_dpa_004_20260411v2",
@@ -3895,7 +3898,8 @@
       "id": "transform-atomic-structure/doping-and-defect-acceptance-checklist/267",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_008_20260410"
+        "SC_struct_008_20260507",
+        "SC_struct_build_003_20260507v2"
       ],
       "match_method": "keyword_only"
     },
@@ -3972,14 +3976,14 @@
       "covered_by": [
         "BP_elec_001_20260428",
         "EC_filename_case_001_20260428",
+        "SA_lsv_cd_001_20260506",
+        "SA_uvvis_glucose_maf4_001_20260506",
+        "SA_pxrd_maf4_phase_001_20260506",
+        "SA_lfp_cycling_001_20260506",
+        "SA_her_mos2_001_20260506",
         "pl_donor_20260422",
-        "SC_struct_005_20260423",
-        "SC_struct_008_20260410",
-        "SR_db_006_20260416v1",
-        "SR_db_005_20260416v1",
-        "WO_kinetic_001_20260504",
-        "WO_mlip_dpa_001_20260411v2",
-        "WO_mlip_dpa_003_20260411v2"
+        "SA_perovskite_pl_lifetime_001_20260506",
+        "SC_struct_005_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -3992,7 +3996,7 @@
       "id": "transform-atomic-structure/acceptance-checklist/274",
       "is_covered": true,
       "covered_by": [
-        "SC_elec_004_20260404",
+        "SC_elec_004_20260507",
         "WO_mlip_dpa_011_20260415",
         "WO_elec_003_20260404"
       ],
@@ -4034,8 +4038,8 @@
       "id": "transform-atomic-structure/cross-skill-refs/277",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_006_20260406"
+        "SC_struct_002_20260507",
+        "SC_struct_006_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -4178,7 +4182,7 @@
       "is_covered": true,
       "covered_by": [
         "IG_cp2k_001_20260428",
-        "IG_incar_004_20260506",
+        "IG_incar_004_20260507",
         "WO_elec_002_20260506"
       ],
       "match_method": "tag+keyword"
@@ -4233,9 +4237,9 @@
         "IG_abacus_006_20260504",
         "IG_nep_001_20260428",
         "IG_incar_001_20260506",
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
         "IG_incar_003_20260506",
-        "IG_incar_004_20260506",
+        "IG_incar_004_20260507",
         "IG_incar_005_20260504"
       ],
       "match_method": "keyword_only"
@@ -4426,8 +4430,8 @@
       "is_covered": true,
       "covered_by": [
         "EC_filename_case_001_20260428",
-        "SC_struct_hetero_20260409",
-        "SC_struct_SiH_20260423"
+        "SC_struct_hetero_20260507",
+        "SC_struct_SiH_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -4499,8 +4503,8 @@
       "id": "data-analysis/when-to-use/315",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_008_20260410",
-        "SC_struct_SiH_20260423",
+        "SC_struct_008_20260507",
+        "SC_struct_SiH_20260507",
         "WO_general_intake_001_20260422",
         "WO_mlip_dpa_011_20260415",
         "WO_mlip_dpa_003_20260411v2",
@@ -4748,11 +4752,11 @@
       "id": "gpumd/minimum-workflow/335",
       "is_covered": true,
       "covered_by": [
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "PXRD_thermal_expansion_001_20260506",
-        "SC_struct_002_20260409",
-        "SC_struct_005_20260423",
+        "SC_struct_002_20260507",
+        "SC_struct_005_20260507",
         "WO_mlip_dpa_001_20260411v2",
         "WO_mlip_dpa_004_20260411v2",
         "WO_gromacs_em_npt_001_20260507",
@@ -4954,9 +4958,9 @@
         "IG_gpumd_008_20260429",
         "IG_gpumd_009_20260429",
         "IG_gpumd_012_20260429",
-        "SC_struct_006_20260406",
-        "WO_gpumdnep_002_20260428",
-        "WO_gpumdnep_003_20260428"
+        "SA_lsv_cd_001_20260506",
+        "SA_uvvis_glucose_maf4_001_20260506",
+        "SA_pxrd_maf4_phase_001_20260506"
       ],
       "match_method": "tag+keyword"
     },
@@ -5335,7 +5339,7 @@
       "is_covered": true,
       "covered_by": [
         "IG_gromacs_001_20260428",
-        "SC_struct_008_20260410",
+        "SC_struct_008_20260507",
         "WO_gromacs_solvate_001_20260507"
       ],
       "match_method": "tag+weak_keyword"
@@ -5616,8 +5620,8 @@
       "id": "gromacs/submission-workflow/398",
       "is_covered": true,
       "covered_by": [
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "PXRD_thermal_expansion_001_20260506"
       ],
       "match_method": "keyword_only"
@@ -5783,7 +5787,7 @@
         "IG_nep_001_20260428",
         "IG_lammps_001_20260428",
         "IG_incar_001_20260506",
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
         "IG_incar_003_20260506"
       ],
       "match_method": "keyword_only"
@@ -5809,7 +5813,8 @@
       "is_covered": true,
       "covered_by": [
         "IG_abacus_003_20260504",
-        "IG_lammps_001_20260428"
+        "IG_lammps_001_20260428",
+        "SA_her_mos2_001_20260506"
       ],
       "match_method": "keyword_only"
     },
@@ -5826,11 +5831,11 @@
         "BP_struct_003_20260428",
         "EC_tool_choice_read_001_20260428",
         "EC_tool_choice_write_001_20260428",
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "IG_abacus_003_20260504",
         "IG_abacus_005_20260504",
-        "IG_incar_007_20260506",
+        "IG_incar_007_20260507",
         "SF_destructive_cmd_001_20260428"
       ],
       "match_method": "keyword_only"
@@ -5873,8 +5878,8 @@
         "IG_abacus_005_20260504",
         "IG_lammps_001_20260428",
         "PXRD_thermal_expansion_001_20260506",
-        "SC_struct_013_20260411v3",
-        "SC_struct_hetero_20260409",
+        "SC_struct_013_20260507",
+        "SC_struct_hetero_20260507",
         "WO_elec_008_20260501",
         "WO_struct_003_20260505"
       ],
@@ -6007,6 +6012,7 @@
       "is_covered": true,
       "covered_by": [
         "IG_abacus_003_20260504",
+        "SA_her_mos2_001_20260506",
         "WO_gromacs_solvate_001_20260507"
       ],
       "match_method": "keyword_only"
@@ -6136,11 +6142,11 @@
       "id": "mcp-mat-compdart/注意事项/438",
       "is_covered": true,
       "covered_by": [
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "PXRD_thermal_expansion_001_20260506",
-        "SC_struct_002_20260409",
-        "SC_struct_005_20260423",
+        "SC_struct_002_20260507",
+        "SC_struct_005_20260507",
         "WO_gromacs_em_npt_001_20260507",
         "WO_gromacs_solvate_001_20260507",
         "CR_WO_Ag_adsorption_20260412"
@@ -6617,9 +6623,13 @@
       "text": "machine | `c16_m64_1 * NVIDIA 4090`",
       "source_type": "skill",
       "id": "mlips/bohrium-submission/475",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
+      "is_covered": true,
+      "covered_by": [
+        "WO_mlip_dpa_007_20260422",
+        "WO_mech_004_20260415",
+        "WO_general_steel_008_20260417"
+      ],
+      "match_method": "tag+keyword"
     },
     {
       "source_name": "mlips",
@@ -6632,7 +6642,7 @@
       "covered_by": [
         "BP_struct_004_20260423",
         "EC_tool_choice_write_001_20260428",
-        "CR_SC_ZnS001_20260428",
+        "CR_SC_ZnS001_20260507",
         "WO_gromacs_solvate_001_20260507",
         "CR_WO_Ag_adsorption_20260412"
       ],
@@ -6648,12 +6658,12 @@
       "is_covered": true,
       "covered_by": [
         "IG_incar_001_20260506",
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
         "IG_incar_003_20260506",
-        "IG_incar_004_20260506",
+        "IG_incar_004_20260507",
         "IG_incar_005_20260504",
-        "IG_incar_006_20260504",
-        "IG_incar_007_20260506",
+        "IG_incar_006_20260507",
+        "IG_incar_007_20260507",
         "IG_incar_008_20260506",
         "IG_incar_009_20260506",
         "IG_incar_010_20260506"
@@ -6721,7 +6731,7 @@
       "id": "mlips/models/482",
       "is_covered": true,
       "covered_by": [
-        "IG_incar_002_20260506"
+        "IG_incar_002_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -6734,11 +6744,14 @@
       "id": "mlips/task-scripts/483",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_008_20260410",
+        "SC_struct_008_20260507",
         "WO_mlip_dpa_001_20260411v2",
         "WO_mlip_dpa_011_20260415",
         "WO_mlip_dpa_009_20260415",
-        "CR_WO_Ag_adsorption_20260412"
+        "WO_mech_004_20260415",
+        "WO_elec_004_20260404",
+        "CR_WO_Ag_adsorption_20260412",
+        "WO_elec_001_20260411v2"
       ],
       "match_method": "tag+keyword"
     },
@@ -6779,10 +6792,13 @@
       "id": "mlips/task-scripts/486",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_008_20260410",
+        "SC_struct_008_20260507",
         "WO_mlip_dpa_001_20260411v2",
         "WO_mlip_dpa_009_20260415",
-        "CR_WO_Ag_adsorption_20260412"
+        "WO_mech_004_20260415",
+        "WO_elec_004_20260404",
+        "CR_WO_Ag_adsorption_20260412",
+        "WO_elec_001_20260411v2"
       ],
       "match_method": "tag+keyword"
     },
@@ -6851,10 +6867,10 @@
         "BP_struct_003_20260428",
         "IG_abacus_005_20260504",
         "IG_cp2k_001_20260428",
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
         "IG_incar_003_20260506",
         "IG_incar_017_20260506",
-        "SC_struct_008_20260410",
+        "SC_struct_008_20260507",
         "WO_mlip_dpa_001_20260411v2",
         "WO_mlip_dpa_005_20260411v2",
         "WO_mlip_dpa_002_20260411v2"
@@ -6870,13 +6886,14 @@
       "id": "mlips/key-rules/492",
       "is_covered": true,
       "covered_by": [
+        "WO_mech_008_20260415",
         "WO_mlip_dpa_011_20260415",
         "WO_mlip_dpa_002_20260411v2",
         "WO_mlip_dpa_003_20260411v2",
         "WO_mlip_dpa_009_20260415",
         "WO_elec_009_20260415"
       ],
-      "match_method": "keyword_only"
+      "match_method": "tag+weak_keyword"
     },
     {
       "source_name": "mlips",
@@ -6887,9 +6904,12 @@
       "id": "mlips/key-rules/493",
       "is_covered": true,
       "covered_by": [
+        "WO_mech_008_20260415",
         "WO_mlip_dpa_001_20260411v2",
+        "WO_mlip_dpa_007_20260422",
         "WO_mlip_dpa_005_20260411v2",
-        "WO_mlip_dpa_002_20260411v2"
+        "WO_mlip_dpa_002_20260411v2",
+        "WO_mech_004_20260415"
       ],
       "match_method": "tag+keyword"
     },
@@ -6902,12 +6922,12 @@
       "id": "mlips/key-rules/494",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
+        "SC_struct_002_20260507",
         "WO_mlip_dpa_001_20260411v2",
         "WO_elec_004_20260404",
         "CR_WO_Ag_adsorption_20260412"
       ],
-      "match_method": "keyword_only"
+      "match_method": "tag+keyword"
     },
     {
       "source_name": "mlips",
@@ -6918,9 +6938,12 @@
       "id": "mlips/key-rules/495",
       "is_covered": true,
       "covered_by": [
+        "WO_mech_008_20260415",
+        "WO_mech_005_20260415",
         "WO_mlip_dpa_001_20260411v2",
         "WO_mlip_dpa_005_20260411v2",
-        "WO_mlip_dpa_002_20260411v2"
+        "WO_mlip_dpa_002_20260411v2",
+        "WO_elec_001_20260411v2"
       ],
       "match_method": "tag+keyword"
     },
@@ -6934,11 +6957,14 @@
       "is_covered": true,
       "covered_by": [
         "EC_filename_case_001_20260428",
-        "SC_struct_hetero_20260409",
-        "SC_struct_SiH_20260423",
+        "SC_struct_hetero_20260507",
+        "SC_struct_SiH_20260507",
         "WO_mlip_dpa_001_20260411v2",
         "WO_mlip_dpa_009_20260415",
-        "CR_WO_Ag_adsorption_20260412"
+        "WO_mech_004_20260415",
+        "WO_elec_004_20260404",
+        "CR_WO_Ag_adsorption_20260412",
+        "WO_elec_001_20260411v2"
       ],
       "match_method": "tag+keyword"
     },
@@ -6996,8 +7022,8 @@
       "is_covered": true,
       "covered_by": [
         "IG_gpumd_006_20260429",
-        "SC_struct_008_20260410",
-        "SC_struct_010_20260429",
+        "SC_struct_008_20260507",
+        "SC_struct_010_20260507",
         "WO_general_planning_003_20260422",
         "WO_mech_001_20260502",
         "WO_gpumdnep_002_20260428"
@@ -7185,7 +7211,7 @@
       "id": "orca/task-types/516",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_008_20260410",
+        "SC_struct_008_20260507",
         "WO_mech_004_20260415"
       ],
       "match_method": "keyword_only"
@@ -7249,8 +7275,8 @@
         "WO_direct_spec_priority_002_20260412",
         "WO_direct_archive_extract_002_20260412",
         "IG_abacus_001_20260504",
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "IG_abacus_003_20260504",
         "IG_abacus_004_20260504"
       ],
@@ -7476,9 +7502,11 @@
       "text": "exactly one complete planning stack in the workspace.",
       "source_type": "skill",
       "id": "plan-executor/activation/541",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
+      "is_covered": true,
+      "covered_by": [
+        "CR_SC_ZnS001_20260507"
+      ],
+      "match_method": "keyword_only"
     },
     {
       "source_name": "plan-executor",
@@ -7524,7 +7552,8 @@
       "id": "plan-executor/operational-fallback/545",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_010_20260429"
+        "SC_struct_010_20260507",
+        "SC_struct_hetero_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -7728,7 +7757,7 @@
       "id": "plan-executor/startup-sequence/563",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_008_20260410"
+        "SC_struct_008_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -7792,14 +7821,14 @@
       "covered_by": [
         "BP_struct_004_20260423",
         "WO_direct_archive_extract_002_20260412",
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "DF_scxrd_002_20260408",
-        "SC_struct_006_20260406",
-        "CR_SC_ZnS001_20260428",
-        "SC_struct_hetero_20260409",
+        "SC_struct_006_20260507",
+        "CR_SC_ZnS001_20260507",
         "WO_mech_003_20260501",
-        "WO_struct_001_20260404"
+        "WO_struct_001_20260404",
+        "WO_elec_001_20260411v2"
       ],
       "match_method": "keyword_only"
     },
@@ -7823,8 +7852,8 @@
       "id": "plan-executor/task-execution-loop/570",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_006_20260406",
-        "SC_struct_008_20260410",
+        "SC_struct_006_20260507",
+        "SC_struct_008_20260507",
         "WO_mlip_dpa_007_20260422",
         "WO_mlip_dpa_011_20260415"
       ],
@@ -7868,7 +7897,8 @@
       "covered_by": [
         "WO_direct_exact_filename_002_20260412",
         "IG_abacus_001_20260504",
-        "SC_elec_004_20260404",
+        "SC_elec_004_20260507",
+        "SC_struct_hetero_20260507",
         "WO_elec_005_20260404"
       ],
       "match_method": "keyword_only"
@@ -7886,8 +7916,9 @@
         "EC_tool_choice_write_001_20260428",
         "IG_abacus_001_20260504",
         "PXRD_thermal_expansion_001_20260506",
+        "SA_her_mos2_001_20260506",
         "pl_donor_20260422",
-        "SC_struct_008_20260410",
+        "SC_struct_008_20260507",
         "WO_elec_008_20260501",
         "WO_mech_004_20260415"
       ],
@@ -8309,6 +8340,7 @@
         "DD_general_004_20260422",
         "DF_scxrd_002_20260408",
         "PXRD_thermal_expansion_001_20260506",
+        "SA_pxrd_maf4_phase_001_20260506",
         "WO_mech_010_20260415",
         "WO_mech_006_20260415"
       ],
@@ -8393,6 +8425,7 @@
       "covered_by": [
         "DD_general_004_20260422",
         "PXRD_thermal_expansion_001_20260506",
+        "SA_her_mos2_001_20260506",
         "WO_elec_008_20260501"
       ],
       "match_method": "keyword_only"
@@ -8435,12 +8468,13 @@
       "is_covered": true,
       "covered_by": [
         "PXRD_thermal_expansion_001_20260506",
-        "SC_struct_002_20260409",
-        "SC_struct_005_20260423",
-        "SC_struct_006_20260406",
-        "SC_struct_008_20260410",
-        "SC_elec_004_20260404",
-        "SC_struct_hetero_20260409",
+        "SA_her_mos2_001_20260506",
+        "SC_struct_002_20260507",
+        "SC_struct_005_20260507",
+        "SC_struct_006_20260507",
+        "SC_struct_008_20260507",
+        "SC_elec_004_20260507",
+        "SC_struct_hetero_20260507",
         "WO_elec_008_20260501"
       ],
       "match_method": "keyword_only"
@@ -8458,12 +8492,12 @@
         "SF_env_leak_001_20260428",
         "DF_scxrd_002_20260408",
         "PXRD_thermal_expansion_001_20260506",
-        "SC_struct_002_20260409",
-        "SC_struct_build_001_20260508",
-        "SC_struct_build_003_20260507",
+        "SA_pxrd_maf4_phase_001_20260506",
+        "SC_struct_002_20260507",
+        "SC_struct_build_001_20260508v2",
+        "SC_struct_build_003_20260507v2",
         "WO_mech_010_20260415",
-        "WO_gromacs_em_npt_001_20260507",
-        "WO_mech_006_20260415"
+        "WO_gromacs_em_npt_001_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -8501,6 +8535,7 @@
         "DD_general_004_20260422",
         "DF_scxrd_002_20260408",
         "PXRD_thermal_expansion_001_20260506",
+        "SA_pxrd_maf4_phase_001_20260506",
         "WO_general_intake_001_20260422",
         "WO_mech_010_20260415",
         "WO_mech_006_20260415"
@@ -8609,7 +8644,7 @@
         "IG_abacus_001_20260504",
         "IG_abacus_004_20260504",
         "IG_abacus_002_20260504",
-        "SC_struct_006_20260406",
+        "SC_struct_006_20260507",
         "SR_db_009_20260502",
         "WO_general_intake_001_20260422",
         "WO_error_mid_flow_001_20260428",
@@ -8659,8 +8694,8 @@
         "IG_abacus_006_20260504",
         "PXRD_thermal_expansion_001_20260506",
         "WO_general_perov_007_20260417",
-        "SC_struct_005_20260423",
-        "SC_struct_SiH_20260423"
+        "SC_struct_005_20260507",
+        "SC_struct_SiH_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -8709,8 +8744,8 @@
       "is_covered": true,
       "covered_by": [
         "PXRD_thermal_expansion_001_20260506",
-        "SC_struct_005_20260423",
-        "SC_struct_SiH_20260423",
+        "SC_struct_005_20260507",
+        "SC_struct_SiH_20260507",
         "WO_mech_004_20260415",
         "WO_elec_003_20260404"
       ],
@@ -8796,6 +8831,7 @@
         "DD_general_004_20260422",
         "DF_scxrd_002_20260408",
         "PXRD_thermal_expansion_001_20260506",
+        "SA_pxrd_maf4_phase_001_20260506",
         "WO_mech_010_20260415",
         "WO_mech_006_20260415"
       ],
@@ -8855,15 +8891,15 @@
       "is_covered": true,
       "covered_by": [
         "IG_abacus_001_20260504",
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "IG_abacus_003_20260504",
         "IG_abacus_004_20260504",
         "IG_abacus_002_20260504",
         "IG_abacus_005_20260504",
         "IG_abacus_006_20260504",
         "WO_general_perov_007_20260417",
-        "SC_struct_002_20260409"
+        "SC_struct_002_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -8878,8 +8914,9 @@
       "covered_by": [
         "DD_general_004_20260422",
         "PXRD_thermal_expansion_001_20260506",
+        "SA_her_mos2_001_20260506",
         "pl_donor_20260422",
-        "SC_struct_008_20260410",
+        "SC_struct_008_20260507",
         "WO_elec_008_20260501",
         "WO_mech_004_20260415"
       ],
@@ -9115,8 +9152,8 @@
         "DD_missing_input_001_20260428",
         "WO_direct_archive_extract_002_20260412",
         "WO_general_perov_007_20260417",
-        "SC_struct_006_20260406",
-        "SC_struct_008_20260410",
+        "SC_struct_006_20260507",
+        "SC_struct_008_20260507",
         "SR_db_006_20260416v1",
         "SR_db_007_20260416v1",
         "SR_db_009_20260502",
@@ -9436,7 +9473,7 @@
       "id": "composition-optimization/composition-optimization-skill/696",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_010_20260429",
+        "SC_struct_010_20260507",
         "WO_elec_006_20260411v2"
       ],
       "match_method": "keyword_only"
@@ -9543,7 +9580,7 @@
       "covered_by": [
         "DD_general_004_20260422",
         "WO_general_perov_007_20260417",
-        "SC_struct_010_20260429",
+        "SC_struct_010_20260507",
         "SR_db_001_20260416v1",
         "SR_db_002_20260416v1",
         "SR_db_006_20260416v1",
@@ -9564,8 +9601,8 @@
       "is_covered": true,
       "covered_by": [
         "IG_gpumd_006_20260429",
-        "SC_struct_008_20260410",
-        "SC_struct_010_20260429",
+        "SC_struct_008_20260507",
+        "SC_struct_010_20260507",
         "WO_mech_001_20260502"
       ],
       "match_method": "keyword_only"
@@ -9586,9 +9623,9 @@
         "IG_abacus_006_20260504",
         "IG_nep_001_20260428",
         "DF_scxrd_002_20260408",
-        "SC_struct_002_20260409",
-        "SC_struct_005_20260423",
-        "SC_struct_010_20260429"
+        "SC_struct_002_20260507",
+        "SC_struct_005_20260507",
+        "SC_struct_010_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -9667,7 +9704,7 @@
       "id": "composition-optimization/workflow/714",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_008_20260410"
+        "SC_struct_008_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -9691,7 +9728,7 @@
       "id": "composition-optimization/workflow/716",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_010_20260429",
+        "SC_struct_010_20260507",
         "WO_mlip_dpa_005_20260411v2"
       ],
       "match_method": "keyword_only"
@@ -9775,7 +9812,7 @@
       "id": "composition-optimization/workflow/723",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_008_20260410",
+        "SC_struct_008_20260507",
         "WO_mlip_dpa_011_20260415"
       ],
       "match_method": "keyword_only"
@@ -9794,11 +9831,11 @@
         "DF_scxrd_002_20260408",
         "PXRD_thermal_expansion_001_20260506",
         "PXRD_pawley_303K_001_20260502_v1",
+        "SA_lsv_cd_001_20260506",
         "pl_donor_20260422",
-        "SC_struct_008_20260410",
-        "SC_struct_009_20260420",
-        "SR_db_001_20260416v1",
-        "SR_db_006_20260416v1"
+        "SC_struct_008_20260507",
+        "SC_struct_009_20260507",
+        "SR_db_001_20260416v1"
       ],
       "match_method": "keyword_only"
     },
@@ -10196,7 +10233,9 @@
       "covered_by": [
         "BP_elec_001_20260428",
         "IG_cp2k_001_20260428",
-        "IG_lammps_001_20260428"
+        "IG_lammps_001_20260428",
+        "SA_lsv_cd_001_20260506",
+        "SA_uvvis_glucose_maf4_001_20260506"
       ],
       "match_method": "keyword_only"
     },
@@ -10410,7 +10449,7 @@
       "is_covered": true,
       "covered_by": [
         "IG_abacus_003_20260504",
-        "IG_incar_004_20260506"
+        "IG_incar_004_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -10447,8 +10486,8 @@
       "id": "input-manual-helper/abacus-input-generation-(render_input.py-+-diagnose_input.py)/781",
       "is_covered": true,
       "covered_by": [
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506"
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -10629,7 +10668,7 @@
         "IG_abacus_002_20260504",
         "IG_incar_001_20260506",
         "IG_incar_003_20260506",
-        "IG_incar_004_20260506",
+        "IG_incar_004_20260507",
         "IG_incar_017_20260506",
         "SF_env_leak_001_20260428",
         "DF_scxrd_001_20260408"
@@ -10666,7 +10705,7 @@
         "IG_gromacs_001_20260428",
         "IG_lammps_001_20260428",
         "IG_incar_001_20260506",
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
         "IG_incar_003_20260506"
       ],
       "match_method": "keyword_only"
@@ -10680,10 +10719,10 @@
       "id": "input-manual-helper/gromacs-input-generation-(render_input.py-+-diagnose_input.py)/799",
       "is_covered": true,
       "covered_by": [
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "PXRD_thermal_expansion_001_20260506",
-        "SC_elec_004_20260404"
+        "SC_elec_004_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -10732,7 +10771,7 @@
       "is_covered": true,
       "covered_by": [
         "IG_gromacs_001_20260428",
-        "SC_struct_006_20260406",
+        "SC_struct_006_20260507",
         "WO_mlip_dpa_008_20260415"
       ],
       "match_method": "keyword_only"
@@ -10776,9 +10815,9 @@
       "covered_by": [
         "IG_incar_001_20260506",
         "IG_incar_003_20260506",
-        "IG_incar_006_20260504",
-        "IG_incar_016_20260506",
-        "SC_struct_005_20260423",
+        "IG_incar_006_20260507",
+        "IG_incar_016_20260507",
+        "SC_struct_005_20260507",
         "WO_elec_008_20260501"
       ],
       "match_method": "keyword_only"
@@ -10814,7 +10853,7 @@
       "id": "input-manual-helper/pyscf-(direct-python-script)/809",
       "is_covered": true,
       "covered_by": [
-        "SC_elec_004_20260404",
+        "SC_elec_004_20260507",
         "CR_WO_Ag_adsorption_20260412"
       ],
       "match_method": "keyword_only"
@@ -10984,8 +11023,8 @@
       "id": "input-manual-helper/local-input-generation-and-validation/824",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "CR_SC_ZnS001_20260428"
+        "SC_struct_002_20260507",
+        "CR_SC_ZnS001_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -11023,7 +11062,7 @@
       "id": "input-manual-helper/physical-checks-to-consider-(not-a-procedure)/827",
       "is_covered": true,
       "covered_by": [
-        "IG_incar_004_20260506"
+        "IG_incar_004_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -11040,7 +11079,7 @@
         "IG_abacus_001_20260504",
         "IG_abacus_003_20260504",
         "IG_abacus_005_20260504",
-        "SC_struct_009_20260420"
+        "SC_struct_009_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -11053,7 +11092,7 @@
       "id": "input-manual-helper/physical-checks-to-consider-(not-a-procedure)/829",
       "is_covered": true,
       "covered_by": [
-        "IG_incar_002_20260506"
+        "IG_incar_002_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -11148,8 +11187,8 @@
       "is_covered": true,
       "covered_by": [
         "IG_abacus_001_20260504",
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "IG_abacus_003_20260504",
         "IG_abacus_004_20260504",
         "IG_abacus_002_20260504",
@@ -11554,8 +11593,9 @@
       "id": "manuscript-scribe/scripts/872",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_008_20260410",
-        "SC_struct_009_20260420",
+        "SA_uvvis_glucose_maf4_001_20260506",
+        "SC_struct_008_20260507",
+        "SC_struct_009_20260507",
         "SR_db_006_20260416v1"
       ],
       "match_method": "keyword_only"
@@ -11765,13 +11805,13 @@
         "BP_struct_005_20260406v2",
         "EC_tool_choice_write_001_20260428",
         "IG_abacus_001_20260504",
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "IG_abacus_003_20260504",
         "IG_abacus_005_20260504",
         "SF_destructive_cmd_001_20260428",
         "PXRD_thermal_expansion_001_20260506",
-        "SC_struct_002_20260409"
+        "SC_struct_002_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -12264,8 +12304,8 @@
       "id": "poly-generator/rules/933",
       "is_covered": true,
       "covered_by": [
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "PXRD_thermal_expansion_001_20260506"
       ],
       "match_method": "keyword_only"
@@ -12369,7 +12409,8 @@
         "DF_scxrd_001_20260408",
         "DF_scxrd_002_20260408",
         "PXRD_thermal_expansion_001_20260506",
-        "PXRD_pawley_303K_001_20260502_v1"
+        "PXRD_pawley_303K_001_20260502_v1",
+        "SA_pxrd_maf4_phase_001_20260506"
       ],
       "match_method": "tag+keyword"
     },
@@ -12383,8 +12424,8 @@
       "is_covered": true,
       "covered_by": [
         "IG_gpumd_006_20260429",
-        "SC_struct_008_20260410",
-        "SC_struct_010_20260429",
+        "SC_struct_008_20260507",
+        "SC_struct_010_20260507",
         "WO_mech_001_20260502"
       ],
       "match_method": "keyword_only"
@@ -12399,7 +12440,8 @@
       "is_covered": true,
       "covered_by": [
         "DF_scxrd_002_20260408",
-        "PXRD_thermal_expansion_001_20260506"
+        "PXRD_thermal_expansion_001_20260506",
+        "SA_pxrd_maf4_phase_001_20260506"
       ],
       "match_method": "tag+keyword"
     },
@@ -12768,8 +12810,8 @@
       "id": "result-analysis/multi-step-feature-extraction/970",
       "is_covered": true,
       "covered_by": [
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "PXRD_thermal_expansion_001_20260506"
       ],
       "match_method": "keyword_only"
@@ -12799,7 +12841,7 @@
       "is_covered": true,
       "covered_by": [
         "BP_elec_001_20260428",
-        "SC_elec_004_20260404",
+        "SC_elec_004_20260507",
         "WO_elec_003_20260404",
         "WO_elec_006_20260411v2",
         "CR_WO_Ag_adsorption_20260412",
@@ -13050,7 +13092,6 @@
       "id": "structure-manager/electronic-property-construction/989",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_build_001_20260508",
         "SR_db_001_20260416v1",
         "SR_db_002_20260416v1",
         "SR_db_009_20260502",
@@ -13092,8 +13133,9 @@
       "id": "structure-manager/rules/992",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_hetero_20260409",
-        "SC_struct_SiH_20260423"
+        "SC_struct_005_20260507",
+        "SC_struct_hetero_20260507",
+        "SC_struct_SiH_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -13217,9 +13259,10 @@
       "is_covered": true,
       "covered_by": [
         "IG_abacus_005_20260504",
-        "SC_struct_009_20260420",
-        "SC_struct_010_20260429",
-        "CR_SC_ZnS001_20260428"
+        "SC_struct_009_20260507",
+        "SC_struct_010_20260507",
+        "CR_SC_ZnS001_20260507",
+        "SC_elec_004_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -13232,8 +13275,8 @@
       "id": "tasker-polar-surface/tasker's-three-surface-types/1002",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_009_20260420",
-        "SC_struct_hetero_20260409"
+        "SC_struct_009_20260507",
+        "SC_struct_hetero_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -13246,7 +13289,7 @@
       "id": "tasker-polar-surface/tasker's-three-surface-types/1003",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_009_20260420"
+        "SC_struct_009_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -13259,9 +13302,9 @@
       "id": "tasker-polar-surface/tasker's-three-surface-types/1004",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_009_20260420",
-        "SC_struct_010_20260429",
-        "CR_SC_ZnS001_20260428"
+        "SC_struct_009_20260507",
+        "SC_struct_010_20260507",
+        "CR_SC_ZnS001_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -13275,8 +13318,8 @@
       "is_covered": true,
       "covered_by": [
         "IG_abacus_004_20260504",
-        "SC_struct_009_20260420",
-        "CR_SC_ZnS001_20260428"
+        "SC_struct_009_20260507",
+        "CR_SC_ZnS001_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -13290,7 +13333,7 @@
       "is_covered": true,
       "covered_by": [
         "BP_elec_001_20260428",
-        "SC_struct_009_20260420",
+        "SC_struct_009_20260507",
         "CR_WO_Ag_adsorption_20260412"
       ],
       "match_method": "tag+weak_keyword"
@@ -13317,7 +13360,8 @@
       "covered_by": [
         "BP_elec_001_20260428",
         "IG_incar_013_20260506",
-        "IG_incar_014_20260506",
+        "IG_incar_014_20260507",
+        "SC_struct_hetero_20260507",
         "WO_elec_006_20260411v2",
         "CR_WO_Ag_adsorption_20260412"
       ],
@@ -13343,13 +13387,13 @@
       "id": "tasker-polar-surface/workflow:-unified-build-path-for-all-types/1010",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_009_20260420",
-        "SC_struct_010_20260429",
-        "SC_struct_013_20260411v3",
-        "SC_elec_004_20260404",
-        "SC_struct_hetero_20260409",
-        "SC_struct_SiH_20260423",
+        "SC_struct_002_20260507",
+        "SC_struct_009_20260507",
+        "SC_struct_010_20260507",
+        "SC_struct_013_20260507",
+        "SC_elec_004_20260507",
+        "SC_struct_hetero_20260507",
+        "SC_struct_SiH_20260507",
         "WO_elec_006_20260411v2",
         "WO_elec_005_20260404",
         "WO_struct_001_20260404"
@@ -13365,16 +13409,16 @@
       "id": "tasker-polar-surface/workflow:-unified-build-path-for-all-types/1011",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_009_20260420",
-        "SC_struct_010_20260429",
-        "SC_struct_013_20260411v3",
-        "SC_struct_build_001_20260508",
-        "SC_struct_build_002_20260507",
-        "SC_struct_build_003_20260507",
-        "CR_SC_ZnS001_20260428",
-        "SC_elec_004_20260404",
-        "SC_struct_hetero_20260409"
+        "SC_struct_002_20260507",
+        "SC_struct_009_20260507",
+        "SC_struct_010_20260507",
+        "SC_struct_013_20260507",
+        "SC_struct_build_001_20260508v2",
+        "SC_struct_build_002_20260507v2",
+        "SC_struct_build_003_20260507v2",
+        "CR_SC_ZnS001_20260507",
+        "SC_elec_004_20260507",
+        "SC_struct_hetero_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -13398,7 +13442,7 @@
       "id": "tasker-polar-surface/workflow:-unified-build-path-for-all-types/1013",
       "is_covered": true,
       "covered_by": [
-        "CR_SC_ZnS001_20260428"
+        "CR_SC_ZnS001_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -13413,10 +13457,12 @@
       "covered_by": [
         "BP_elec_001_20260428",
         "IG_incar_013_20260506",
-        "IG_incar_014_20260506",
-        "SC_struct_009_20260420",
-        "SC_struct_010_20260429",
-        "CR_SC_ZnS001_20260428"
+        "IG_incar_014_20260507",
+        "SC_struct_002_20260507",
+        "SC_struct_009_20260507",
+        "SC_struct_010_20260507",
+        "SC_struct_013_20260507",
+        "CR_SC_ZnS001_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -13431,13 +13477,13 @@
       "covered_by": [
         "IG_abacus_003_20260504",
         "IG_abacus_004_20260504",
-        "SC_struct_002_20260409",
-        "SC_struct_009_20260420",
-        "SC_struct_010_20260429",
-        "SC_struct_013_20260411v3",
-        "CR_SC_ZnS001_20260428",
-        "SC_elec_004_20260404",
-        "SC_struct_hetero_20260409",
+        "SC_struct_002_20260507",
+        "SC_struct_009_20260507",
+        "SC_struct_010_20260507",
+        "SC_struct_013_20260507",
+        "CR_SC_ZnS001_20260507",
+        "SC_elec_004_20260507",
+        "SC_struct_hetero_20260507",
         "WO_mlip_dpa_011_20260415"
       ],
       "match_method": "tag+weak_keyword"
@@ -13451,8 +13497,8 @@
       "id": "tasker-polar-surface/workflow:-unified-build-path-for-all-types/1016",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_010_20260429",
-        "SC_elec_004_20260404",
+        "SC_struct_010_20260507",
+        "SC_elec_004_20260507",
         "WO_elec_005_20260404"
       ],
       "match_method": "tag+keyword"
@@ -13468,10 +13514,10 @@
       "covered_by": [
         "BP_elec_001_20260428",
         "IG_abacus_001_20260504",
-        "SC_struct_009_20260420",
-        "SC_struct_010_20260429",
-        "CR_SC_ZnS001_20260428",
-        "SC_elec_004_20260404"
+        "SC_struct_009_20260507",
+        "SC_struct_010_20260507",
+        "CR_SC_ZnS001_20260507",
+        "SC_elec_004_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -13484,8 +13530,8 @@
       "id": "tasker-polar-surface/workflow:-unified-build-path-for-all-types/1018",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_009_20260420",
-        "SC_struct_SiH_20260423",
+        "SC_struct_009_20260507",
+        "SC_struct_SiH_20260507",
         "WO_elec_006_20260411v2",
         "WO_elec_007_20260415",
         "WO_struct_001_20260404",
@@ -13504,11 +13550,11 @@
       "covered_by": [
         "BP_elec_001_20260428",
         "IG_abacus_001_20260504",
-        "SC_struct_009_20260420",
-        "SC_struct_010_20260429",
-        "CR_SC_ZnS001_20260428",
-        "SC_elec_004_20260404",
-        "SC_struct_hetero_20260409",
+        "SC_struct_009_20260507",
+        "SC_struct_010_20260507",
+        "CR_SC_ZnS001_20260507",
+        "SC_elec_004_20260507",
+        "SC_struct_hetero_20260507",
         "WO_struct_001_20260404",
         "WO_struct_002_20260404"
       ],
@@ -13539,7 +13585,7 @@
       "is_covered": true,
       "covered_by": [
         "EC_batch_all_items_001_20260428",
-        "CR_SC_ZnS001_20260428"
+        "CR_SC_ZnS001_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -13586,11 +13632,12 @@
       "is_covered": true,
       "covered_by": [
         "EC_batch_all_items_001_20260428",
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
         "IG_incar_003_20260506",
         "IG_incar_008_20260506",
-        "IG_incar_018_20260504",
-        "WO_general_perov_007_20260417"
+        "IG_incar_018_20260507",
+        "WO_general_perov_007_20260417",
+        "SA_perovskite_pl_lifetime_001_20260506"
       ],
       "match_method": "keyword_only"
     },
@@ -13630,11 +13677,11 @@
         "IG_abacus_003_20260504",
         "IG_abacus_004_20260504",
         "IG_abacus_005_20260504",
-        "SC_struct_009_20260420",
-        "SC_struct_010_20260429",
-        "CR_SC_ZnS001_20260428",
-        "SC_elec_004_20260404",
-        "SC_struct_hetero_20260409"
+        "SC_struct_009_20260507",
+        "SC_struct_010_20260507",
+        "SC_struct_013_20260507",
+        "CR_SC_ZnS001_20260507",
+        "SC_elec_004_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -13652,9 +13699,9 @@
         "IG_abacus_003_20260504",
         "IG_abacus_004_20260504",
         "IG_abacus_005_20260504",
-        "SC_struct_010_20260429",
-        "SC_elec_004_20260404",
-        "SC_struct_hetero_20260409",
+        "SC_struct_010_20260507",
+        "SC_elec_004_20260507",
+        "SC_struct_hetero_20260507",
         "WO_elec_007_20260415"
       ],
       "match_method": "tag+keyword"
@@ -13669,12 +13716,12 @@
       "is_covered": true,
       "covered_by": [
         "IG_incar_001_20260506",
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
         "IG_incar_003_20260506",
-        "IG_incar_004_20260506",
+        "IG_incar_004_20260507",
         "IG_incar_005_20260504",
-        "IG_incar_006_20260504",
-        "IG_incar_007_20260506",
+        "IG_incar_006_20260507",
+        "IG_incar_007_20260507",
         "IG_incar_008_20260506",
         "IG_incar_009_20260506",
         "IG_incar_010_20260506"
@@ -13693,8 +13740,9 @@
         "BP_struct_005_20260406v2",
         "DD_tool_fail_recovery_001_20260428",
         "IG_nep_001_20260428",
+        "IG_incar_012_20260507",
         "IG_incar_013_20260506",
-        "IG_incar_014_20260506",
+        "IG_incar_014_20260507",
         "WO_mlip_dpa_010_20260415"
       ],
       "match_method": "tag+keyword"
@@ -13710,10 +13758,11 @@
       "covered_by": [
         "IG_abacus_003_20260504",
         "IG_abacus_005_20260504",
-        "SC_struct_002_20260409",
-        "SC_struct_008_20260410",
-        "SC_struct_009_20260420",
-        "CR_SC_ZnS001_20260428"
+        "SC_struct_002_20260507",
+        "SC_struct_008_20260507",
+        "SC_struct_009_20260507",
+        "SC_struct_build_003_20260507v2",
+        "CR_SC_ZnS001_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -13728,7 +13777,7 @@
       "covered_by": [
         "IG_incar_001_20260506",
         "IG_incar_013_20260506",
-        "IG_incar_014_20260506"
+        "IG_incar_014_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -13742,8 +13791,8 @@
       "is_covered": true,
       "covered_by": [
         "BP_elec_001_20260428",
-        "SC_struct_009_20260420",
-        "CR_SC_ZnS001_20260428"
+        "SC_struct_009_20260507",
+        "CR_SC_ZnS001_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -13756,7 +13805,7 @@
       "id": "tasker-polar-surface/step-2-—-运行-build_slab_tasker_fix.py-生成-slab（优先）/1035",
       "is_covered": true,
       "covered_by": [
-        "CR_SC_ZnS001_20260428",
+        "CR_SC_ZnS001_20260507",
         "CR_WO_Ag_adsorption_20260412"
       ],
       "match_method": "tag+weak_keyword"
@@ -13782,11 +13831,11 @@
       "is_covered": true,
       "covered_by": [
         "IG_abacus_004_20260504",
-        "SC_struct_002_20260409",
-        "SC_struct_010_20260429",
-        "SC_elec_004_20260404",
-        "SC_struct_hetero_20260409",
-        "SC_struct_SiH_20260423",
+        "SC_struct_002_20260507",
+        "SC_struct_010_20260507",
+        "SC_elec_004_20260507",
+        "SC_struct_hetero_20260507",
+        "SC_struct_SiH_20260507",
         "WO_end_to_end_001_20260428",
         "WO_elec_006_20260411v2",
         "CR_WO_Ag_adsorption_20260412"
@@ -13804,8 +13853,8 @@
       "covered_by": [
         "BP_elec_001_20260428",
         "IG_incar_013_20260506",
-        "IG_incar_014_20260506",
-        "SC_struct_013_20260411v3",
+        "IG_incar_014_20260507",
+        "SC_struct_013_20260507",
         "CR_WO_Ag_adsorption_20260412"
       ],
       "match_method": "tag+keyword"
@@ -13830,9 +13879,9 @@
       "id": "tasker-polar-surface/batch-processing/1040",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_009_20260420",
-        "SC_struct_SiH_20260423",
+        "SC_struct_002_20260507",
+        "SC_struct_009_20260507",
+        "SC_struct_SiH_20260507",
         "WO_struct_001_20260404"
       ],
       "match_method": "tag+keyword"
@@ -13846,8 +13895,8 @@
       "id": "tasker-polar-surface/checklist/1041",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_SiH_20260423"
+        "SC_struct_002_20260507",
+        "SC_struct_SiH_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -13861,7 +13910,7 @@
       "is_covered": true,
       "covered_by": [
         "BP_elec_001_20260428",
-        "CR_SC_ZnS001_20260428"
+        "CR_SC_ZnS001_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -13874,13 +13923,13 @@
       "id": "tasker-polar-surface/checklist/1043",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_009_20260420",
-        "SC_struct_010_20260429",
-        "SC_struct_013_20260411v3",
-        "CR_SC_ZnS001_20260428",
-        "SC_elec_004_20260404",
-        "SC_struct_hetero_20260409",
+        "SC_struct_002_20260507",
+        "SC_struct_009_20260507",
+        "SC_struct_010_20260507",
+        "SC_struct_013_20260507",
+        "CR_SC_ZnS001_20260507",
+        "SC_elec_004_20260507",
+        "SC_struct_hetero_20260507",
         "WO_elec_006_20260411v2",
         "WO_elec_005_20260404",
         "WO_struct_001_20260404"
@@ -13897,8 +13946,11 @@
       "is_covered": true,
       "covered_by": [
         "BP_elec_001_20260428",
-        "SC_struct_009_20260420",
-        "SC_struct_010_20260429",
+        "SC_struct_002_20260507",
+        "SC_struct_009_20260507",
+        "SC_struct_010_20260507",
+        "SC_struct_013_20260507",
+        "SC_struct_hetero_20260507",
         "WO_struct_002_20260404"
       ],
       "match_method": "tag+weak_keyword"
@@ -13954,7 +14006,8 @@
       "covered_by": [
         "BP_elec_001_20260428",
         "IG_incar_013_20260506",
-        "IG_incar_014_20260506",
+        "IG_incar_014_20260507",
+        "SC_struct_010_20260507",
         "WO_elec_006_20260411v2",
         "WO_struct_001_20260404"
       ],
@@ -13970,10 +14023,10 @@
       "is_covered": true,
       "covered_by": [
         "IG_abacus_005_20260504",
-        "SC_struct_002_20260409",
-        "SC_struct_009_20260420",
-        "SC_struct_010_20260429",
-        "SC_elec_004_20260404",
+        "SC_struct_002_20260507",
+        "SC_struct_009_20260507",
+        "SC_struct_010_20260507",
+        "SC_elec_004_20260507",
         "WO_elec_006_20260411v2",
         "CR_WO_Ag_adsorption_20260412"
       ],
@@ -14004,13 +14057,13 @@
         "BP_elec_001_20260428",
         "IG_abacus_005_20260504",
         "IG_incar_013_20260506",
-        "SC_struct_002_20260409",
-        "SC_struct_009_20260420",
-        "SC_struct_010_20260429",
-        "CR_SC_ZnS001_20260428",
-        "SC_elec_004_20260404",
-        "SC_struct_hetero_20260409",
-        "SC_struct_SiH_20260423"
+        "SC_struct_002_20260507",
+        "SC_struct_009_20260507",
+        "SC_struct_010_20260507",
+        "CR_SC_ZnS001_20260507",
+        "SC_elec_004_20260507",
+        "SC_struct_SiH_20260507",
+        "WO_end_to_end_001_20260428"
       ],
       "match_method": "tag+keyword"
     },
@@ -14026,13 +14079,13 @@
         "BP_elec_001_20260428",
         "IG_abacus_005_20260504",
         "IG_incar_013_20260506",
-        "SC_struct_002_20260409",
-        "SC_struct_009_20260420",
-        "SC_struct_010_20260429",
-        "CR_SC_ZnS001_20260428",
-        "SC_elec_004_20260404",
-        "SC_struct_hetero_20260409",
-        "SC_struct_SiH_20260423"
+        "SC_struct_002_20260507",
+        "SC_struct_009_20260507",
+        "SC_struct_010_20260507",
+        "CR_SC_ZnS001_20260507",
+        "SC_elec_004_20260507",
+        "SC_struct_SiH_20260507",
+        "WO_end_to_end_001_20260428"
       ],
       "match_method": "tag+keyword"
     },
@@ -14045,10 +14098,9 @@
       "id": "tasker-polar-surface/2.1-when-the-lookup-table-has-no-entry:-search-literature-on-the-fly/1053",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_009_20260420",
-        "SC_struct_010_20260429",
-        "CR_SC_ZnS001_20260428",
-        "SC_struct_hetero_20260409",
+        "SC_struct_009_20260507",
+        "SC_struct_010_20260507",
+        "CR_SC_ZnS001_20260507",
         "WO_elec_006_20260411v2",
         "WO_struct_001_20260404",
         "WO_struct_002_20260404"
@@ -14068,12 +14120,12 @@
         "IG_abacus_004_20260504",
         "IG_abacus_005_20260504",
         "IG_incar_013_20260506",
-        "SC_struct_002_20260409",
-        "SC_struct_009_20260420",
-        "SC_struct_010_20260429",
-        "CR_SC_ZnS001_20260428",
-        "SC_elec_004_20260404",
-        "SC_struct_hetero_20260409"
+        "SC_struct_002_20260507",
+        "SC_struct_009_20260507",
+        "SC_struct_010_20260507",
+        "CR_SC_ZnS001_20260507",
+        "SC_elec_004_20260507",
+        "SC_struct_SiH_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -14086,7 +14138,7 @@
       "id": "tasker-polar-surface/2.1-when-the-lookup-table-has-no-entry:-search-literature-on-the-fly/1055",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_009_20260420"
+        "SC_struct_009_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -14099,8 +14151,8 @@
       "id": "tasker-polar-surface/2.1-when-the-lookup-table-has-no-entry:-search-literature-on-the-fly/1056",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "CR_SC_ZnS001_20260428"
+        "SC_struct_002_20260507",
+        "CR_SC_ZnS001_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -14131,10 +14183,11 @@
         "IG_abacus_003_20260504",
         "IG_abacus_004_20260504",
         "IG_abacus_005_20260504",
-        "SC_struct_002_20260409",
-        "SC_struct_009_20260420",
-        "SC_struct_010_20260429",
-        "SC_elec_004_20260404",
+        "SC_struct_002_20260507",
+        "SC_struct_009_20260507",
+        "SC_struct_010_20260507",
+        "SC_elec_004_20260507",
+        "SC_struct_hetero_20260507",
         "WO_elec_006_20260411v2"
       ],
       "match_method": "tag+keyword"
@@ -14148,7 +14201,7 @@
       "id": "tasker-polar-surface/3.-interpret-output/1059",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_009_20260420"
+        "SC_struct_009_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -14161,8 +14214,8 @@
       "id": "tasker-polar-surface/3.-interpret-output/1060",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_010_20260429",
+        "SC_struct_002_20260507",
+        "SC_struct_010_20260507",
         "CR_WO_Ag_adsorption_20260412"
       ],
       "match_method": "tag+weak_keyword"
@@ -14176,8 +14229,8 @@
       "id": "tasker-polar-surface/scripts/1061",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_009_20260420"
+        "SC_struct_002_20260507",
+        "SC_struct_009_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -14190,8 +14243,8 @@
       "id": "tasker-polar-surface/scripts/1062",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_hetero_20260409",
-        "SC_struct_SiH_20260423"
+        "SC_struct_hetero_20260507",
+        "SC_struct_SiH_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -14217,12 +14270,13 @@
       "id": "tasker-polar-surface/scripts/1064",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_009_20260420",
-        "SC_struct_010_20260429",
-        "CR_SC_ZnS001_20260428",
-        "SC_elec_004_20260404",
-        "SC_struct_hetero_20260409",
-        "SC_struct_SiH_20260423"
+        "SC_struct_009_20260507",
+        "SC_struct_010_20260507",
+        "SC_struct_013_20260507",
+        "CR_SC_ZnS001_20260507",
+        "SC_elec_004_20260507",
+        "SC_struct_hetero_20260507",
+        "SC_struct_SiH_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -14246,7 +14300,7 @@
       "id": "tasker-polar-surface/scripts/1066",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_009_20260420"
+        "SC_struct_009_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -14261,8 +14315,9 @@
       "covered_by": [
         "BP_elec_001_20260428",
         "IG_incar_013_20260506",
-        "IG_incar_014_20260506",
-        "SC_struct_002_20260409",
+        "IG_incar_014_20260507",
+        "SC_struct_002_20260507",
+        "SC_struct_hetero_20260507",
         "WO_elec_006_20260411v2",
         "CR_WO_Ag_adsorption_20260412"
       ],
@@ -14278,7 +14333,7 @@
       "is_covered": true,
       "covered_by": [
         "BP_elec_001_20260428",
-        "SC_struct_002_20260409",
+        "SC_struct_002_20260507",
         "WO_elec_005_20260404"
       ],
       "match_method": "tag+weak_keyword"
@@ -14298,10 +14353,10 @@
         "IG_abacus_004_20260504",
         "IG_abacus_005_20260504",
         "IG_incar_013_20260506",
-        "IG_incar_014_20260506",
-        "SC_struct_002_20260409",
-        "SC_struct_009_20260420",
-        "SC_struct_010_20260429"
+        "IG_incar_014_20260507",
+        "SA_pxrd_maf4_phase_001_20260506",
+        "SC_struct_002_20260507",
+        "SC_struct_009_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -14316,7 +14371,7 @@
       "covered_by": [
         "BP_elec_001_20260428",
         "IG_abacus_001_20260504",
-        "SC_elec_004_20260404",
+        "SC_elec_004_20260507",
         "WO_elec_005_20260404"
       ],
       "match_method": "tag+weak_keyword"
@@ -14362,8 +14417,8 @@
         "IG_abacus_004_20260504",
         "IG_abacus_005_20260504",
         "IG_incar_013_20260506",
-        "IG_incar_014_20260506",
-        "SC_struct_013_20260411v3",
+        "IG_incar_014_20260507",
+        "SC_struct_013_20260507",
         "WO_end_to_end_001_20260428",
         "WO_elec_007_20260415"
       ],
@@ -14378,13 +14433,13 @@
       "id": "tasker-polar-surface/integration/1074",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_002_20260409",
-        "SC_struct_009_20260420",
-        "SC_struct_010_20260429",
-        "SC_struct_013_20260411v3",
-        "CR_SC_ZnS001_20260428",
-        "SC_elec_004_20260404",
-        "SC_struct_hetero_20260409",
+        "SC_struct_002_20260507",
+        "SC_struct_009_20260507",
+        "SC_struct_010_20260507",
+        "SC_struct_013_20260507",
+        "CR_SC_ZnS001_20260507",
+        "SC_elec_004_20260507",
+        "SC_struct_hetero_20260507",
         "WO_elec_006_20260411v2",
         "WO_elec_005_20260404",
         "WO_struct_001_20260404"
@@ -14400,7 +14455,7 @@
       "id": "tasker-polar-surface/integration/1075",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_009_20260420"
+        "SC_struct_009_20260507"
       ],
       "match_method": "tag+weak_keyword"
     },
@@ -14415,16 +14470,16 @@
       "covered_by": [
         "BP_elec_001_20260428",
         "IG_incar_013_20260506",
-        "IG_incar_014_20260506",
-        "SC_struct_002_20260409",
-        "SC_struct_009_20260420",
-        "SC_struct_010_20260429",
-        "SC_struct_013_20260411v3",
-        "CR_SC_ZnS001_20260428",
-        "SC_elec_004_20260404",
-        "SC_struct_hetero_20260409"
+        "IG_incar_014_20260507",
+        "SC_struct_002_20260507",
+        "SC_struct_009_20260507",
+        "SC_struct_010_20260507",
+        "SC_struct_013_20260507",
+        "CR_SC_ZnS001_20260507",
+        "SC_elec_004_20260507",
+        "SC_struct_hetero_20260507"
       ],
-      "match_method": "tag+weak_keyword"
+      "match_method": "tag+keyword"
     },
     {
       "source_name": "tasker-polar-surface",
@@ -14459,7 +14514,8 @@
       "covered_by": [
         "BP_elec_001_20260428",
         "IG_incar_013_20260506",
-        "IG_incar_014_20260506",
+        "IG_incar_014_20260507",
+        "SC_struct_hetero_20260507",
         "WO_elec_006_20260411v2",
         "CR_WO_Ag_adsorption_20260412"
       ],
@@ -14474,7 +14530,7 @@
       "id": "tasker-polar-surface/additional-resources/1080",
       "is_covered": true,
       "covered_by": [
-        "SC_struct_010_20260429",
+        "SC_struct_010_20260507",
         "WO_elec_006_20260411v2"
       ],
       "match_method": "tag+weak_keyword"
@@ -14490,9 +14546,10 @@
       "covered_by": [
         "BP_elec_001_20260428",
         "IG_incar_013_20260506",
-        "IG_incar_014_20260506",
-        "SC_elec_004_20260404",
-        "SC_struct_SiH_20260423",
+        "IG_incar_014_20260507",
+        "SC_elec_004_20260507",
+        "SC_struct_hetero_20260507",
+        "SC_struct_SiH_20260507",
         "WO_elec_006_20260411v2",
         "CR_WO_Ag_adsorption_20260412",
         "WO_elec_005_20260404",
@@ -14512,7 +14569,8 @@
         "BP_elec_001_20260428",
         "BP_struct_004_20260423",
         "IG_incar_013_20260506",
-        "IG_incar_014_20260506",
+        "IG_incar_014_20260507",
+        "SC_struct_hetero_20260507",
         "WO_elec_006_20260411v2",
         "WO_elec_007_20260415",
         "CR_WO_Ag_adsorption_20260412"
@@ -14534,10 +14592,10 @@
         "IG_abacus_004_20260504",
         "IG_abacus_005_20260504",
         "IG_incar_013_20260506",
-        "IG_incar_014_20260506",
-        "SC_struct_002_20260409",
-        "SC_struct_013_20260411v3",
-        "CR_SC_ZnS001_20260428"
+        "IG_incar_014_20260507",
+        "SC_struct_002_20260507",
+        "SC_struct_013_20260507",
+        "CR_SC_ZnS001_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -14595,12 +14653,12 @@
       "is_covered": true,
       "covered_by": [
         "IG_incar_001_20260506",
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
         "IG_incar_003_20260506",
-        "IG_incar_004_20260506",
+        "IG_incar_004_20260507",
         "IG_incar_005_20260504",
-        "IG_incar_006_20260504",
-        "IG_incar_007_20260506",
+        "IG_incar_006_20260507",
+        "IG_incar_007_20260507",
         "IG_incar_008_20260506",
         "IG_incar_009_20260506",
         "IG_incar_010_20260506"
@@ -14719,8 +14777,8 @@
       "covered_by": [
         "BP_struct_005_20260406v2",
         "EC_filename_case_001_20260428",
-        "SC_struct_hetero_20260409",
-        "SC_struct_SiH_20260423"
+        "SC_struct_hetero_20260507",
+        "SC_struct_SiH_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -14735,8 +14793,8 @@
       "covered_by": [
         "BP_struct_005_20260406v2",
         "EC_filename_case_001_20260428",
-        "SC_struct_hetero_20260409",
-        "SC_struct_SiH_20260423"
+        "SC_struct_hetero_20260507",
+        "SC_struct_SiH_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -14828,7 +14886,8 @@
       "id": "vaspkit-postprocess/common-tasks-(post-processing,-no-potcar)/1107",
       "is_covered": true,
       "covered_by": [
-        "PXRD_thermal_expansion_001_20260506"
+        "PXRD_thermal_expansion_001_20260506",
+        "SA_perovskite_pl_lifetime_001_20260506"
       ],
       "match_method": "keyword_only"
     },
@@ -14931,14 +14990,14 @@
       "covered_by": [
         "WO_direct_archive_extract_002_20260412",
         "EC_tool_choice_write_001_20260428",
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "IG_abacus_003_20260504",
         "PXRD_thermal_expansion_001_20260506",
+        "SC_struct_013_20260507",
+        "SC_elec_004_20260507",
         "SR_db_004_20260416v1",
-        "WO_mech_009_20260415",
-        "WO_mech_010_20260415",
-        "WO_mech_007_20260501"
+        "WO_mech_009_20260415"
       ],
       "match_method": "keyword_only"
     },
@@ -15791,7 +15850,7 @@
         "IG_abacus_001_20260504",
         "IG_abacus_002_20260504",
         "IG_cp2k_001_20260428",
-        "SC_struct_005_20260423",
+        "SC_struct_005_20260507",
         "WO_mech_003_20260501"
       ],
       "match_method": "keyword_only"
@@ -15818,12 +15877,12 @@
       "covered_by": [
         "IG_lammps_001_20260428",
         "IG_incar_001_20260506",
-        "IG_incar_007_20260506",
+        "IG_incar_007_20260507",
         "DF_scxrd_001_20260408",
         "DF_scxrd_002_20260408",
-        "SC_struct_002_20260409",
-        "SC_struct_005_20260423",
-        "SC_struct_006_20260406",
+        "SC_struct_002_20260507",
+        "SC_struct_005_20260507",
+        "SC_struct_006_20260507",
         "WO_elec_008_20260501",
         "WO_mlip_dpa_008_20260415"
       ],
@@ -16009,7 +16068,7 @@
       "id": "pyscf/submission-workflow/1207",
       "is_covered": true,
       "covered_by": [
-        "SC_elec_004_20260404",
+        "SC_elec_004_20260507",
         "CR_WO_Ag_adsorption_20260412"
       ],
       "match_method": "keyword_only"
@@ -16158,8 +16217,8 @@
         "WO_direct_spec_priority_002_20260412",
         "WO_direct_archive_extract_002_20260412",
         "IG_abacus_001_20260504",
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "IG_abacus_003_20260504",
         "IG_abacus_004_20260504"
       ],
@@ -16274,8 +16333,8 @@
       "is_covered": true,
       "covered_by": [
         "EC_filename_case_001_20260428",
-        "SC_struct_hetero_20260409",
-        "SC_struct_SiH_20260423"
+        "SC_struct_hetero_20260507",
+        "SC_struct_SiH_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -16310,8 +16369,8 @@
       "id": "quantum_espresso/submission-workflow/1232",
       "is_covered": true,
       "covered_by": [
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "PXRD_thermal_expansion_001_20260506"
       ],
       "match_method": "keyword_only"
@@ -16376,6 +16435,7 @@
         "IG_abacus_004_20260504",
         "IG_abacus_002_20260504",
         "IG_abacus_005_20260504",
+        "IG_incar_012_20260507",
         "PXRD_thermal_expansion_001_20260506",
         "WO_general_postproc_002_20260422",
         "WO_elec_006_20260411v2"
@@ -16523,6 +16583,7 @@
       "id": "skill-manager/error-handling/1250",
       "is_covered": true,
       "covered_by": [
+        "SA_lsv_cd_001_20260506",
         "pl_donor_20260422"
       ],
       "match_method": "keyword_only"
@@ -16572,9 +16633,9 @@
       "is_covered": true,
       "covered_by": [
         "DD_tool_fail_recovery_001_20260428",
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
-        "SC_struct_008_20260410",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
+        "SC_struct_008_20260507",
         "SR_recommend_20260430",
         "CR_WO_Ag_adsorption_20260412"
       ],
@@ -16592,12 +16653,12 @@
         "BP_struct_003_20260428",
         "IG_cp2k_001_20260428",
         "IG_incar_001_20260506",
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
         "IG_incar_003_20260506",
-        "IG_incar_004_20260506",
+        "IG_incar_004_20260507",
         "IG_incar_005_20260504",
-        "IG_incar_006_20260504",
-        "IG_incar_007_20260506",
+        "IG_incar_006_20260507",
+        "IG_incar_007_20260507",
         "IG_incar_008_20260506"
       ],
       "match_method": "tag+keyword"
@@ -16614,11 +16675,10 @@
         "EC_filename_case_001_20260428",
         "IG_incar_001_20260506",
         "IG_incar_003_20260506",
-        "IG_incar_004_20260506",
+        "IG_incar_004_20260507",
         "IG_incar_017_20260506",
-        "SC_struct_build_001_20260508",
-        "SC_struct_build_002_20260507",
-        "SC_struct_hetero_20260409",
+        "SC_struct_build_001_20260508v2",
+        "SC_struct_build_002_20260507v2",
         "SR_db_001_20260416v1",
         "SR_db_009_20260502"
       ],
@@ -16633,16 +16693,16 @@
       "id": "vasp/minimum-workflow/1257",
       "is_covered": true,
       "covered_by": [
+        "BP_struct_005_20260406v2",
         "BP_struct_003_20260428",
+        "BP_struct_004_20260423",
         "IG_abacus_003_20260504",
         "IG_cp2k_001_20260428",
         "IG_incar_001_20260506",
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
         "IG_incar_003_20260506",
-        "IG_incar_004_20260506",
-        "IG_incar_005_20260504",
-        "IG_incar_006_20260504",
-        "IG_incar_007_20260506"
+        "IG_incar_004_20260507",
+        "IG_incar_005_20260504"
       ],
       "match_method": "tag+keyword"
     },
@@ -16655,16 +16715,16 @@
       "id": "vasp/minimum-workflow/1258",
       "is_covered": true,
       "covered_by": [
+        "BP_struct_003_20260428",
+        "BP_struct_004_20260423",
+        "DD_general_004_20260422",
+        "WO_direct_spec_priority_002_20260412",
         "EC_spec_partial_001_20260428",
         "IG_abacus_001_20260504",
         "IG_incar_001_20260506",
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
         "IG_incar_003_20260506",
-        "IG_incar_004_20260506",
-        "IG_incar_005_20260504",
-        "IG_incar_006_20260504",
-        "IG_incar_007_20260506",
-        "IG_incar_008_20260506"
+        "IG_incar_004_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -16678,15 +16738,15 @@
       "is_covered": true,
       "covered_by": [
         "BP_struct_003_20260428",
+        "DD_general_004_20260422",
+        "WO_direct_spec_priority_002_20260412",
         "EC_spec_partial_001_20260428",
         "IG_incar_001_20260506",
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
         "IG_incar_003_20260506",
-        "IG_incar_004_20260506",
+        "IG_incar_004_20260507",
         "IG_incar_005_20260504",
-        "IG_incar_006_20260504",
-        "IG_incar_007_20260506",
-        "IG_incar_008_20260506"
+        "IG_incar_006_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -16700,17 +16760,17 @@
       "is_covered": true,
       "covered_by": [
         "IG_incar_001_20260506",
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
         "IG_incar_003_20260506",
-        "IG_incar_004_20260506",
+        "IG_incar_004_20260507",
         "IG_incar_005_20260504",
-        "IG_incar_006_20260504",
-        "IG_incar_007_20260506",
+        "IG_incar_006_20260507",
+        "IG_incar_007_20260507",
         "IG_incar_008_20260506",
         "IG_incar_009_20260506",
         "IG_incar_010_20260506"
       ],
-      "match_method": "tag+weak_keyword"
+      "match_method": "tag+keyword"
     },
     {
       "source_name": "vasp",
@@ -16722,15 +16782,15 @@
       "is_covered": true,
       "covered_by": [
         "BP_struct_003_20260428",
+        "WO_direct_spec_priority_002_20260412",
         "EC_spec_partial_001_20260428",
         "IG_cp2k_001_20260428",
         "IG_incar_001_20260506",
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
         "IG_incar_003_20260506",
-        "IG_incar_004_20260506",
+        "IG_incar_004_20260507",
         "IG_incar_005_20260504",
-        "IG_incar_006_20260504",
-        "IG_incar_007_20260506"
+        "IG_incar_006_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -16743,10 +16803,12 @@
       "id": "vasp/hard-guards/1262",
       "is_covered": true,
       "covered_by": [
+        "BP_struct_003_20260428",
+        "WO_direct_spec_priority_002_20260412",
         "EC_spec_partial_001_20260428",
-        "IG_incar_007_20260506",
+        "IG_incar_007_20260507",
         "IG_incar_013_20260506",
-        "IG_incar_018_20260504",
+        "IG_incar_018_20260507",
         "WO_end_to_end_001_20260428"
       ],
       "match_method": "tag+keyword"
@@ -16760,8 +16822,10 @@
       "id": "vasp/hard-guards/1263",
       "is_covered": true,
       "covered_by": [
+        "BP_struct_003_20260428",
+        "WO_direct_spec_priority_002_20260412",
         "EC_spec_partial_001_20260428",
-        "IG_incar_007_20260506",
+        "IG_incar_007_20260507",
         "IG_incar_013_20260506",
         "WO_end_to_end_001_20260428"
       ],
@@ -16776,9 +16840,13 @@
       "id": "vasp/hard-guards/1264",
       "is_covered": true,
       "covered_by": [
+        "BP_struct_003_20260428",
+        "BP_struct_004_20260423",
+        "DD_general_004_20260422",
+        "WO_direct_spec_priority_002_20260412",
         "EC_spec_partial_001_20260428",
-        "IG_incar_002_20260506",
-        "IG_incar_004_20260506",
+        "IG_incar_002_20260507",
+        "IG_incar_004_20260507",
         "IG_incar_010_20260506",
         "IG_incar_017_20260506",
         "WO_end_to_end_001_20260428"
@@ -16794,9 +16862,12 @@
       "id": "vasp/hard-guards/1265",
       "is_covered": true,
       "covered_by": [
+        "BP_struct_005_20260406v2",
         "BP_struct_003_20260428",
+        "BP_struct_004_20260423",
+        "WO_direct_spec_priority_002_20260412",
         "EC_spec_partial_001_20260428",
-        "IG_incar_007_20260506",
+        "IG_incar_007_20260507",
         "IG_incar_013_20260506",
         "WO_end_to_end_001_20260428"
       ],
@@ -16826,7 +16897,7 @@
         "IG_lammps_001_20260428",
         "IG_incar_003_20260506",
         "IG_incar_013_20260506",
-        "SC_struct_008_20260410",
+        "SC_struct_008_20260507",
         "WO_mlip_dpa_011_20260415",
         "WO_struct_001_20260404",
         "WO_struct_002_20260404",
@@ -16843,16 +16914,16 @@
       "id": "vasp/hard-guards/1268",
       "is_covered": true,
       "covered_by": [
+        "BP_struct_003_20260428",
         "EC_spec_partial_001_20260428",
         "IG_incar_001_20260506",
         "IG_incar_003_20260506",
-        "IG_incar_007_20260506",
+        "IG_incar_007_20260507",
         "IG_incar_008_20260506",
         "IG_incar_009_20260506",
         "IG_incar_011_20260506",
-        "IG_incar_012_20260504",
-        "IG_incar_013_20260506",
-        "IG_incar_014_20260506"
+        "IG_incar_012_20260507",
+        "IG_incar_013_20260506"
       ],
       "match_method": "tag+keyword"
     },
@@ -16869,7 +16940,7 @@
         "IG_lammps_001_20260428",
         "IG_incar_003_20260506",
         "IG_incar_013_20260506",
-        "SC_struct_008_20260410",
+        "SC_struct_008_20260507",
         "WO_mlip_dpa_011_20260415",
         "WO_struct_001_20260404",
         "WO_struct_002_20260404",
@@ -16886,7 +16957,9 @@
       "id": "vasp/hard-guards/1270",
       "is_covered": true,
       "covered_by": [
-        "IG_incar_002_20260506",
+        "BP_struct_003_20260428",
+        "DD_general_004_20260422",
+        "IG_incar_002_20260507",
         "IG_incar_013_20260506"
       ],
       "match_method": "tag+weak_keyword"
@@ -16900,12 +16973,13 @@
       "id": "vasp/hard-guards/1271",
       "is_covered": true,
       "covered_by": [
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
+        "IG_incar_012_20260507",
         "IG_incar_013_20260506",
-        "IG_incar_014_20260506",
-        "IG_incar_016_20260506",
-        "IG_incar_018_20260504",
-        "IG_incar_019_20260506",
+        "IG_incar_014_20260507",
+        "IG_incar_016_20260507",
+        "IG_incar_018_20260507",
+        "IG_incar_019_20260507",
         "WO_end_to_end_001_20260428"
       ],
       "match_method": "tag+keyword"
@@ -16919,10 +16993,11 @@
       "id": "vasp/hard-guards/1272",
       "is_covered": true,
       "covered_by": [
+        "BP_struct_003_20260428",
         "EC_filename_case_001_20260428",
         "IG_incar_001_20260506",
         "IG_incar_003_20260506",
-        "IG_incar_004_20260506",
+        "IG_incar_004_20260507",
         "IG_incar_017_20260506",
         "WO_end_to_end_001_20260428"
       ],
@@ -16932,7 +17007,7 @@
       "source_name": "vasp",
       "section": "Hard Guards",
       "rule_type": "hard_guard",
-      "text": "**Projected band / PDOS / DOS tasks**: set `LORBIT = 11` unless the task explicitly requests another projection mode.",
+      "text": "**Projected band / PDOS / DOS / magnetic-moment analysis tasks**: set `LORBIT = 11` unless the task explicitly requests another projection mode; this also applies to spin-polarized projected outputs.",
       "source_type": "skill",
       "id": "vasp/hard-guards/1273",
       "is_covered": true,
@@ -16940,10 +17015,11 @@
         "IG_incar_001_20260506",
         "IG_incar_003_20260506",
         "IG_incar_011_20260506",
-        "IG_incar_018_20260504",
-        "IG_incar_020_20260506"
+        "IG_incar_012_20260507",
+        "IG_incar_018_20260507",
+        "IG_incar_020_20260507"
       ],
-      "match_method": "tag+keyword"
+      "match_method": "tag+weak_keyword"
     },
     {
       "source_name": "vasp",
@@ -16956,14 +17032,30 @@
       "covered_by": [
         "IG_incar_003_20260506",
         "IG_incar_005_20260504",
-        "IG_incar_006_20260504",
-        "IG_incar_007_20260506",
+        "IG_incar_006_20260507",
+        "IG_incar_007_20260507",
         "IG_incar_010_20260506",
         "IG_incar_011_20260506",
-        "IG_incar_012_20260504",
+        "IG_incar_012_20260507",
         "IG_incar_015_20260504",
-        "IG_incar_016_20260506",
-        "IG_incar_018_20260504"
+        "IG_incar_016_20260507",
+        "IG_incar_018_20260507"
+      ],
+      "match_method": "tag+keyword"
+    },
+    {
+      "source_name": "vasp",
+      "section": "Hard Guards",
+      "rule_type": "hard_guard",
+      "text": "**Finite-difference elastic tensor**: set `IBRION = 6`, `ISIF = 3`, `POTIM` to the requested displacement amplitude, and `NFREE = 2` unless a higher-order finite-difference stencil is explicitly requested.",
+      "source_type": "skill",
+      "id": "vasp/hard-guards/1275",
+      "is_covered": true,
+      "covered_by": [
+        "IG_incar_007_20260507",
+        "IG_incar_008_20260506",
+        "IG_incar_009_20260506",
+        "IG_incar_012_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -16973,19 +17065,19 @@
       "rule_type": "hard_guard",
       "text": "**SOC/heavy-element calculations**: set `LSORBIT = .TRUE.`, `ISPIN = 2`, `LNONCOLLINEAR = .TRUE.` (implicit), and `ISYM = 0`; set `LMAXMIX = 4` unless f-electrons require `LMAXMIX = 6`.",
       "source_type": "skill",
-      "id": "vasp/hard-guards/1275",
+      "id": "vasp/hard-guards/1276",
       "is_covered": true,
       "covered_by": [
         "IG_incar_003_20260506",
         "IG_incar_005_20260504",
-        "IG_incar_006_20260504",
-        "IG_incar_007_20260506",
+        "IG_incar_006_20260507",
+        "IG_incar_007_20260507",
         "IG_incar_010_20260506",
-        "IG_incar_012_20260504",
+        "IG_incar_012_20260507",
         "IG_incar_015_20260504",
-        "IG_incar_016_20260506",
-        "IG_incar_018_20260504",
-        "IG_incar_019_20260506"
+        "IG_incar_016_20260507",
+        "IG_incar_018_20260507",
+        "IG_incar_019_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -16995,12 +17087,12 @@
       "rule_type": "hard_guard",
       "text": "**Hybrid DFT (HSE06)**: `LHFCALC = .TRUE.`, `HFSCREEN = 0.2`, `ALGO = Damped` or `All`, `TIME = 0.4`.",
       "source_type": "skill",
-      "id": "vasp/hard-guards/1276",
+      "id": "vasp/hard-guards/1277",
       "is_covered": true,
       "covered_by": [
-        "IG_incar_002_20260506",
-        "IG_incar_004_20260506",
-        "IG_incar_012_20260504",
+        "IG_incar_002_20260507",
+        "IG_incar_004_20260507",
+        "IG_incar_012_20260507",
         "IG_incar_015_20260504"
       ],
       "match_method": "tag+keyword"
@@ -17011,7 +17103,7 @@
       "rule_type": "hard_guard",
       "text": "**DFT+U**: `LDAU = .TRUE.`, `LDAUTYPE = 2` (Dudarev), `LDAUL`, `LDAUU`, `LDAUJ` arrays matching species order in POSCAR; set `LMAXMIX = 4` for d-electron systems and `LMAXMIX = 6` for f-electron systems.",
       "source_type": "skill",
-      "id": "vasp/hard-guards/1277",
+      "id": "vasp/hard-guards/1278",
       "is_covered": true,
       "covered_by": [
         "IG_incar_005_20260504"
@@ -17024,10 +17116,10 @@
       "rule_type": "hard_guard",
       "text": "**Meta-GGA (SCAN/R2SCAN)**: `LASPH = .TRUE.` is required.",
       "source_type": "skill",
-      "id": "vasp/hard-guards/1278",
+      "id": "vasp/hard-guards/1279",
       "is_covered": true,
       "covered_by": [
-        "IG_incar_006_20260504"
+        "IG_incar_006_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -17036,17 +17128,6 @@
       "section": "Hard Guards",
       "rule_type": "hard_guard",
       "text": "**POTCAR must be resolved before submission.** VASP cannot run without POTCAR. Before submitting, use AskQuestion to ask the user where POTCAR is located. Options:",
-      "source_type": "skill",
-      "id": "vasp/hard-guards/1279",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
-    },
-    {
-      "source_name": "vasp",
-      "section": "Hard Guards",
-      "rule_type": "hard_guard",
-      "text": "\"VASP 镜像中已内置 POTCAR（如 `/opt/vasp/potcar/PBE/`）\"",
       "source_type": "skill",
       "id": "vasp/hard-guards/1280",
       "is_covered": false,
@@ -17057,16 +17138,27 @@
       "source_name": "vasp",
       "section": "Hard Guards",
       "rule_type": "hard_guard",
-      "text": "\"Bohrium 节点上的某个目录（请填路径）\"",
+      "text": "\"VASP 镜像中已内置 POTCAR（如 `/opt/vasp/potcar/PBE/`）\"",
       "source_type": "skill",
       "id": "vasp/hard-guards/1281",
+      "is_covered": false,
+      "covered_by": [],
+      "match_method": null
+    },
+    {
+      "source_name": "vasp",
+      "section": "Hard Guards",
+      "rule_type": "hard_guard",
+      "text": "\"Bohrium 节点上的某个目录（请填路径）\"",
+      "source_type": "skill",
+      "id": "vasp/hard-guards/1282",
       "is_covered": true,
       "covered_by": [
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "PXRD_thermal_expansion_001_20260506",
-        "SC_struct_002_20260409",
-        "SC_struct_005_20260423",
+        "SC_struct_002_20260507",
+        "SC_struct_005_20260507",
         "WO_gromacs_em_npt_001_20260507",
         "WO_gromacs_solvate_001_20260507",
         "CR_WO_Ag_adsorption_20260412"
@@ -17079,7 +17171,7 @@
       "rule_type": "hard_guard",
       "text": "\"我没有 POTCAR\" If the user has no POTCAR, do NOT submit — inform them POTCAR is license-restricted and cannot be auto-generated, then stop. If POTCAR is in the image or on a node path, write a `run.sh` that copies/concatenates POTCAR from that path before running VASP. State recommended PAW pseudopotentials (e.g., `Al`, `Si`, `O`, `Fe_pv`, `Ti_sv`) so they know what elements to prepare.",
       "source_type": "skill",
-      "id": "vasp/hard-guards/1282",
+      "id": "vasp/hard-guards/1283",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -17090,10 +17182,12 @@
       "rule_type": "general",
       "text": "Bulk SCF/relaxation: Gamma-centered Monkhorst-Pack. Density: ~30-40 A per reciprocal lattice vector (e.g., a=4 A -> k ~ 8-10 per direction).",
       "source_type": "skill",
-      "id": "vasp/k-point-rules/1283",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
+      "id": "vasp/k-point-rules/1284",
+      "is_covered": true,
+      "covered_by": [
+        "BP_struct_003_20260428"
+      ],
+      "match_method": "tag+weak_keyword"
     },
     {
       "source_name": "vasp",
@@ -17101,7 +17195,7 @@
       "rule_type": "general",
       "text": "Slab/surface: dense in-plane, `1` in vacuum direction.",
       "source_type": "skill",
-      "id": "vasp/k-point-rules/1284",
+      "id": "vasp/k-point-rules/1285",
       "is_covered": true,
       "covered_by": [
         "IG_abacus_003_20260504",
@@ -17117,7 +17211,7 @@
       "rule_type": "general",
       "text": "Band structure: line-mode along high-symmetry path (use pymatgen `HighSymmKpath` or `scripts/generate_kpoints.py --mode line`).",
       "source_type": "skill",
-      "id": "vasp/k-point-rules/1285",
+      "id": "vasp/k-point-rules/1286",
       "is_covered": true,
       "covered_by": [
         "WO_end_to_end_001_20260428"
@@ -17130,9 +17224,11 @@
       "rule_type": "general",
       "text": "DOS: dense uniform mesh (>= 2x SCF mesh density). Use `ISMEAR = -5`.",
       "source_type": "skill",
-      "id": "vasp/k-point-rules/1286",
+      "id": "vasp/k-point-rules/1287",
       "is_covered": true,
       "covered_by": [
+        "BP_struct_003_20260428",
+        "WO_direct_spec_priority_002_20260412",
         "EC_spec_partial_001_20260428",
         "IG_incar_001_20260506",
         "IG_incar_011_20260506",
@@ -17146,10 +17242,12 @@
       "rule_type": "general",
       "text": "Molecular/isolated: Gamma-only (`1 1 1`).",
       "source_type": "skill",
-      "id": "vasp/k-point-rules/1287",
+      "id": "vasp/k-point-rules/1288",
       "is_covered": true,
       "covered_by": [
-        "IG_incar_007_20260506"
+        "BP_struct_003_20260428",
+        "BP_struct_004_20260423",
+        "IG_incar_007_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -17159,19 +17257,19 @@
       "rule_type": "general",
       "text": "Convergence test: keep KPOINTS fixed when sweeping ENCUT, and vice versa.",
       "source_type": "skill",
-      "id": "vasp/k-point-rules/1288",
+      "id": "vasp/k-point-rules/1289",
       "is_covered": true,
       "covered_by": [
+        "BP_struct_005_20260406v2",
         "BP_struct_003_20260428",
+        "WO_direct_spec_priority_002_20260412",
         "EC_spec_partial_001_20260428",
         "IG_incar_001_20260506",
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
         "IG_incar_003_20260506",
-        "IG_incar_004_20260506",
+        "IG_incar_004_20260507",
         "IG_incar_005_20260504",
-        "IG_incar_006_20260504",
-        "IG_incar_007_20260506",
-        "IG_incar_008_20260506"
+        "IG_incar_006_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -17181,7 +17279,7 @@
       "rule_type": "general",
       "text": "image | Use Bohrium `list_images` with keyword `vasp`. If none exists, do not submit.",
       "source_type": "skill",
-      "id": "vasp/bohrium-submission/1289",
+      "id": "vasp/bohrium-submission/1290",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -17192,18 +17290,18 @@
       "rule_type": "general",
       "text": "machine | `c32_m128_cpu`",
       "source_type": "skill",
-      "id": "vasp/bohrium-submission/1290",
+      "id": "vasp/bohrium-submission/1291",
       "is_covered": true,
       "covered_by": [
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "IG_incar_001_20260506",
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
         "IG_incar_003_20260506",
-        "IG_incar_004_20260506",
+        "IG_incar_004_20260507",
         "IG_incar_005_20260504",
-        "IG_incar_006_20260504",
-        "IG_incar_007_20260506",
+        "IG_incar_006_20260507",
+        "IG_incar_007_20260507",
         "IG_incar_008_20260506"
       ],
       "match_method": "tag+keyword"
@@ -17214,7 +17312,7 @@
       "rule_type": "general",
       "text": "cmd | `OMP_NUM_THREADS=1 mpirun -np 16 vasp_std > log 2>&1`",
       "source_type": "skill",
-      "id": "vasp/bohrium-submission/1291",
+      "id": "vasp/bohrium-submission/1292",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -17225,7 +17323,7 @@
       "rule_type": "general",
       "text": "`-np` is typically half of CPU cores (32 virtual cores → 16 physical cores on Bohrium).",
       "source_type": "skill",
-      "id": "vasp/bohrium-submission/1292",
+      "id": "vasp/bohrium-submission/1293",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -17236,10 +17334,13 @@
       "rule_type": "general",
       "text": "Use `vasp_gam` for Gamma-only, `vasp_ncl` for SOC/noncollinear calculations.",
       "source_type": "skill",
-      "id": "vasp/bohrium-submission/1293",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
+      "id": "vasp/bohrium-submission/1294",
+      "is_covered": true,
+      "covered_by": [
+        "BP_struct_003_20260428",
+        "BP_struct_004_20260423"
+      ],
+      "match_method": "tag+keyword"
     },
     {
       "source_name": "vasp",
@@ -17247,10 +17348,13 @@
       "rule_type": "general",
       "text": "Use `vasp_gam` for Gamma-only, `vasp_ncl` for SOC/noncollinear.",
       "source_type": "skill",
-      "id": "vasp/bohrium-submission/1294",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
+      "id": "vasp/bohrium-submission/1295",
+      "is_covered": true,
+      "covered_by": [
+        "BP_struct_003_20260428",
+        "BP_struct_004_20260423"
+      ],
+      "match_method": "tag+weak_keyword"
     },
     {
       "source_name": "vasp",
@@ -17258,17 +17362,17 @@
       "rule_type": "general",
       "text": "POTCAR must be present in the run directory (user responsibility).",
       "source_type": "skill",
-      "id": "vasp/bohrium-submission/1295",
+      "id": "vasp/bohrium-submission/1296",
       "is_covered": true,
       "covered_by": [
         "EC_spec_partial_001_20260428",
         "IG_incar_001_20260506",
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
         "IG_incar_003_20260506",
-        "IG_incar_004_20260506",
+        "IG_incar_004_20260507",
         "IG_incar_005_20260504",
-        "IG_incar_006_20260504",
-        "IG_incar_007_20260506",
+        "IG_incar_006_20260507",
+        "IG_incar_007_20260507",
         "IG_incar_008_20260506",
         "IG_incar_009_20260506"
       ],
@@ -17280,7 +17384,7 @@
       "rule_type": "general",
       "text": "`scripts/get_potcar.py --elements \"Fe,O\"` — recommend pseudopotentials, compute ENCUT from ENMAX",
       "source_type": "skill",
-      "id": "vasp/scripts/1296",
+      "id": "vasp/scripts/1297",
       "is_covered": true,
       "covered_by": [
         "IG_incar_009_20260506"
@@ -17293,19 +17397,19 @@
       "rule_type": "general",
       "text": "`scripts/validate_incar.py -f INCAR -t relax` — check tag conflicts, missing required tags, ENCUT reasonableness",
       "source_type": "skill",
-      "id": "vasp/scripts/1297",
+      "id": "vasp/scripts/1298",
       "is_covered": true,
       "covered_by": [
+        "BP_struct_003_20260428",
+        "WO_direct_spec_priority_002_20260412",
         "EC_spec_partial_001_20260428",
         "IG_incar_001_20260506",
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
         "IG_incar_003_20260506",
-        "IG_incar_004_20260506",
+        "IG_incar_004_20260507",
         "IG_incar_005_20260504",
-        "IG_incar_006_20260504",
-        "IG_incar_007_20260506",
-        "IG_incar_008_20260506",
-        "IG_incar_009_20260506"
+        "IG_incar_006_20260507",
+        "IG_incar_007_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -17315,19 +17419,19 @@
       "rule_type": "general",
       "text": "`scripts/generate_kpoints.py` — generate KPOINTS from structure (auto mesh, line-mode, slab detection)",
       "source_type": "skill",
-      "id": "vasp/scripts/1298",
+      "id": "vasp/scripts/1299",
       "is_covered": true,
       "covered_by": [
+        "BP_struct_003_20260428",
+        "BP_struct_004_20260423",
         "EC_filename_case_001_20260428",
         "IG_incar_001_20260506",
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
         "IG_incar_003_20260506",
-        "IG_incar_004_20260506",
+        "IG_incar_004_20260507",
         "IG_incar_005_20260504",
-        "IG_incar_006_20260504",
-        "IG_incar_007_20260506",
-        "IG_incar_008_20260506",
-        "IG_incar_009_20260506"
+        "IG_incar_006_20260507",
+        "IG_incar_007_20260507"
       ],
       "match_method": "tag+keyword"
     },
@@ -17337,19 +17441,19 @@
       "rule_type": "general",
       "text": "`references/incar_tags.md` — INCAR tag reference organized by calculation type",
       "source_type": "skill",
-      "id": "vasp/references-(read-on-demand)/1299",
+      "id": "vasp/references-(read-on-demand)/1300",
       "is_covered": true,
       "covered_by": [
+        "BP_struct_003_20260428",
+        "BP_struct_004_20260423",
+        "DD_general_004_20260422",
+        "WO_direct_spec_priority_002_20260412",
         "EC_spec_partial_001_20260428",
         "IG_incar_001_20260506",
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
         "IG_incar_003_20260506",
-        "IG_incar_004_20260506",
-        "IG_incar_005_20260504",
-        "IG_incar_006_20260504",
-        "IG_incar_007_20260506",
-        "IG_incar_008_20260506",
-        "IG_incar_009_20260506"
+        "IG_incar_004_20260507",
+        "IG_incar_005_20260504"
       ],
       "match_method": "tag+keyword"
     },
@@ -17359,7 +17463,7 @@
       "rule_type": "general",
       "text": "`references/input_examples.md` — worked examples for common simulation types",
       "source_type": "skill",
-      "id": "vasp/references-(read-on-demand)/1300",
+      "id": "vasp/references-(read-on-demand)/1301",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -17370,7 +17474,7 @@
       "rule_type": "decision_tree",
       "text": "SCXRD structure solution from HKL | `scripts/solve_refine_scxrd.py` | `.hkl` + space group + elements",
       "source_type": "skill",
-      "id": "xrd-analysis/when-to-use/1301",
+      "id": "xrd-analysis/when-to-use/1302",
       "is_covered": true,
       "covered_by": [
         "DF_scxrd_001_20260408",
@@ -17384,7 +17488,7 @@
       "rule_type": "decision_tree",
       "text": "HKL → CIF conversion | `scripts/solve_refine_scxrd.py` | `.hkl` (+ `.ins` / `.p4p` auto-discovered)",
       "source_type": "skill",
-      "id": "xrd-analysis/when-to-use/1302",
+      "id": "xrd-analysis/when-to-use/1303",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -17395,7 +17499,7 @@
       "rule_type": "decision_tree",
       "text": "PXRD lattice refinement (no GSAS-II) | `scripts/refine_lattice_pxrd.py` | XY pattern + space group + initial cell",
       "source_type": "skill",
-      "id": "xrd-analysis/when-to-use/1303",
+      "id": "xrd-analysis/when-to-use/1304",
       "is_covered": true,
       "covered_by": [
         "DF_scxrd_001_20260408",
@@ -17411,7 +17515,7 @@
       "rule_type": "decision_tree",
       "text": "Multi-temperature lattice evolution | `scripts/refine_lattice_pxrd.py --multi-temp` | directory of XY patterns",
       "source_type": "skill",
-      "id": "xrd-analysis/when-to-use/1304",
+      "id": "xrd-analysis/when-to-use/1305",
       "is_covered": true,
       "covered_by": [
         "PXRD_thermal_expansion_001_20260506"
@@ -17424,7 +17528,7 @@
       "rule_type": "workflow_step",
       "text": "**Use the provided script. Never write your own SCXRD solver from scratch.**",
       "source_type": "skill",
-      "id": "xrd-analysis/scxrd-workflow-—-mandatory/1305",
+      "id": "xrd-analysis/scxrd-workflow-—-mandatory/1306",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -17435,7 +17539,7 @@
       "rule_type": "workflow_step",
       "text": "python3 scripts/solve_refine_scxrd.py \\\n       --hkl data.hkl --sg \"P2_1/c\" --elements C H N O \\\n       --grid 72 --trials 2 --cycles 400 \\\n       --output result.cif --json result.json",
       "source_type": "skill",
-      "id": "xrd-analysis/scxrd-workflow-—-mandatory/1306",
+      "id": "xrd-analysis/scxrd-workflow-—-mandatory/1307",
       "is_covered": true,
       "covered_by": [
         "PXRD_thermal_expansion_001_20260506"
@@ -17448,7 +17552,7 @@
       "rule_type": "workflow_step",
       "text": "The script auto-discovers companion `.ins` / `.p4p` files from the HKL stem.",
       "source_type": "skill",
-      "id": "xrd-analysis/scxrd-workflow-—-mandatory/1307",
+      "id": "xrd-analysis/scxrd-workflow-—-mandatory/1308",
       "is_covered": true,
       "covered_by": [
         "BP_struct_003_20260428",
@@ -17462,7 +17566,7 @@
       "rule_type": "workflow_step",
       "text": "Pipeline: parse HKL (SHELX HKLF4) → try SHELX if installed → charge-flipping fallback → least-squares refinement → CIF output.",
       "source_type": "skill",
-      "id": "xrd-analysis/scxrd-workflow-—-mandatory/1308",
+      "id": "xrd-analysis/scxrd-workflow-—-mandatory/1309",
       "is_covered": true,
       "covered_by": [
         "PXRD_thermal_expansion_001_20260506",
@@ -17476,14 +17580,15 @@
       "rule_type": "workflow_step",
       "text": "**CIF completeness check** — verify the output CIF contains all of:",
       "source_type": "skill",
-      "id": "xrd-analysis/scxrd-workflow-—-mandatory/1309",
+      "id": "xrd-analysis/scxrd-workflow-—-mandatory/1310",
       "is_covered": true,
       "covered_by": [
         "EC_no_truncation_001_20260430",
         "SF_env_leak_001_20260428",
-        "SC_struct_002_20260409",
-        "SC_struct_build_001_20260508",
-        "SC_struct_build_003_20260507",
+        "SC_struct_002_20260507",
+        "SC_struct_build_001_20260508v2",
+        "SC_struct_build_003_20260507v2",
+        "SC_struct_SiH_20260507",
         "WO_elec_009_20260415"
       ],
       "match_method": "keyword_only"
@@ -17494,7 +17599,7 @@
       "rule_type": "workflow_step",
       "text": "**Parse `result.json`** for R1, wR2, GooF. Report if R1 > 0.15 — the structure may be unreliable.",
       "source_type": "skill",
-      "id": "xrd-analysis/scxrd-workflow-—-mandatory/1310",
+      "id": "xrd-analysis/scxrd-workflow-—-mandatory/1311",
       "is_covered": true,
       "covered_by": [
         "DF_scxrd_001_20260408",
@@ -17512,11 +17617,12 @@
       "rule_type": "workflow_step",
       "text": "python3 scripts/refine_lattice_pxrd.py \\\n    --data pattern.xy --sg \"Pm-3m\" \\\n    --cell \"a=3.905\" --wavelength 1.5406 \\\n    -o result.json",
       "source_type": "skill",
-      "id": "xrd-analysis/pxrd-lattice-refinement-workflow/1311",
+      "id": "xrd-analysis/pxrd-lattice-refinement-workflow/1312",
       "is_covered": true,
       "covered_by": [
         "PXRD_thermal_expansion_001_20260506",
-        "PXRD_pawley_303K_001_20260502_v1"
+        "PXRD_pawley_303K_001_20260502_v1",
+        "SA_pxrd_maf4_phase_001_20260506"
       ],
       "match_method": "tag+keyword"
     },
@@ -17526,7 +17632,7 @@
       "rule_type": "workflow_step",
       "text": "python3 scripts/refine_lattice_pxrd.py \\\n    --data ./ --sg \"Pm-3m\" \\\n    --cell \"a=3.905\" --wavelength 1.5406 --multi-temp \\\n    -o result.json",
       "source_type": "skill",
-      "id": "xrd-analysis/pxrd-lattice-refinement-workflow/1312",
+      "id": "xrd-analysis/pxrd-lattice-refinement-workflow/1313",
       "is_covered": true,
       "covered_by": [
         "PXRD_thermal_expansion_001_20260506"
@@ -17539,7 +17645,7 @@
       "rule_type": "general",
       "text": "**Use the provided scripts.** Do not write ad-hoc SCXRD code, charge-flipping implementations, or CIF generators from scratch. The scripts handle all known pitfalls (HKL parsing edge cases, symmetry operation generation, CIF field completeness, Hill formula ordering).",
       "source_type": "skill",
-      "id": "xrd-analysis/hard-constraints/1313",
+      "id": "xrd-analysis/hard-constraints/1314",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -17550,7 +17656,7 @@
       "rule_type": "general",
       "text": "**Elements and space group are mandatory** for SCXRD. If not in the prompt, extract from INS/P4P companion files. Never guess elements.",
       "source_type": "skill",
-      "id": "xrd-analysis/hard-constraints/1314",
+      "id": "xrd-analysis/hard-constraints/1315",
       "is_covered": true,
       "covered_by": [
         "DF_scxrd_001_20260408",
@@ -17566,7 +17672,7 @@
       "rule_type": "general",
       "text": "**Do not fabricate atomic positions.** If charge-flipping finds no atoms, report failure — do not invent coordinates.",
       "source_type": "skill",
-      "id": "xrd-analysis/hard-constraints/1315",
+      "id": "xrd-analysis/hard-constraints/1316",
       "is_covered": true,
       "covered_by": [
         "DF_scxrd_002_20260408"
@@ -17579,7 +17685,7 @@
       "rule_type": "general",
       "text": "**Validate R-factors.** R1 > 0.15 or wR2 > 0.40 should be flagged as potentially unreliable. Report the numbers; let the user decide.",
       "source_type": "skill",
-      "id": "xrd-analysis/hard-constraints/1316",
+      "id": "xrd-analysis/hard-constraints/1317",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -17590,17 +17696,6 @@
       "section": "json_schema",
       "rule_type": "general",
       "text": "Parameter 'task_summary': Optional short label for this delegated task",
-      "id": "agent_tool/json_schema/1317",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
-    },
-    {
-      "source_type": "tool",
-      "source_name": "agent_tool",
-      "section": "json_schema",
-      "rule_type": "general",
-      "text": "Parameter 'description': Deprecated alias for task_summary",
       "id": "agent_tool/json_schema/1318",
       "is_covered": false,
       "covered_by": [],
@@ -17611,7 +17706,7 @@
       "source_name": "agent_tool",
       "section": "json_schema",
       "rule_type": "general",
-      "text": "Parameter 'prompt': Complete task briefing for the subagent",
+      "text": "Parameter 'description': Deprecated alias for task_summary",
       "id": "agent_tool/json_schema/1319",
       "is_covered": false,
       "covered_by": [],
@@ -17622,7 +17717,7 @@
       "source_name": "agent_tool",
       "section": "json_schema",
       "rule_type": "general",
-      "text": "Parameter 'task_summary': Optional short label for this delegated task",
+      "text": "Parameter 'prompt': Complete task briefing for the subagent",
       "id": "agent_tool/json_schema/1320",
       "is_covered": false,
       "covered_by": [],
@@ -17633,7 +17728,7 @@
       "source_name": "agent_tool",
       "section": "json_schema",
       "rule_type": "general",
-      "text": "Parameter 'description': Deprecated alias for task_summary",
+      "text": "Parameter 'task_summary': Optional short label for this delegated task",
       "id": "agent_tool/json_schema/1321",
       "is_covered": false,
       "covered_by": [],
@@ -17644,8 +17739,19 @@
       "source_name": "agent_tool",
       "section": "json_schema",
       "rule_type": "general",
-      "text": "Parameter 'prompt': Complete task briefing for the subagent",
+      "text": "Parameter 'description': Deprecated alias for task_summary",
       "id": "agent_tool/json_schema/1322",
+      "is_covered": false,
+      "covered_by": [],
+      "match_method": null
+    },
+    {
+      "source_type": "tool",
+      "source_name": "agent_tool",
+      "section": "json_schema",
+      "rule_type": "general",
+      "text": "Parameter 'prompt': Complete task briefing for the subagent",
+      "id": "agent_tool/json_schema/1323",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -17656,10 +17762,10 @@
       "section": "prompt",
       "rule_type": "general",
       "text": "{meta.name}: {meta.when_to_use or meta.description}",
-      "id": "agent_tool/prompt/1323",
+      "id": "agent_tool/prompt/1324",
       "is_covered": true,
       "covered_by": [
-        "SC_elec_004_20260404",
+        "SC_elec_004_20260507",
         "WO_mlip_dpa_005_20260411v2"
       ],
       "match_method": "keyword_only"
@@ -17670,7 +17776,7 @@
       "section": "prompt",
       "rule_type": "general",
       "text": "No model-visible subagent definitions are currently available.\",",
-      "id": "agent_tool/prompt/1324",
+      "id": "agent_tool/prompt/1325",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -17681,7 +17787,7 @@
       "section": "prompt",
       "rule_type": "general",
       "text": "If you want to read a specific file path, use Read instead of Agent.\",",
-      "id": "agent_tool/prompt/1325",
+      "id": "agent_tool/prompt/1326",
       "is_covered": true,
       "covered_by": [
         "BP_struct_005_20260406v2",
@@ -17689,11 +17795,11 @@
         "IG_abacus_001_20260504",
         "IG_abacus_002_20260504",
         "IG_incar_001_20260506",
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
         "IG_incar_003_20260506",
-        "IG_incar_004_20260506",
+        "IG_incar_004_20260507",
         "IG_incar_005_20260504",
-        "IG_incar_006_20260504"
+        "IG_incar_006_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -17703,7 +17809,7 @@
       "section": "prompt",
       "rule_type": "general",
       "text": "If you are searching within a specific file or a set of 2-3 files, use Read or Grep instead of Agent.\",",
-      "id": "agent_tool/prompt/1326",
+      "id": "agent_tool/prompt/1327",
       "is_covered": true,
       "covered_by": [
         "BP_struct_005_20260406v2",
@@ -17712,8 +17818,8 @@
         "EC_tool_choice_read_001_20260428",
         "EC_tool_choice_write_001_20260428",
         "IG_abacus_001_20260504",
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "IG_abacus_003_20260504",
         "IG_abacus_002_20260504"
       ],
@@ -17725,7 +17831,7 @@
       "section": "prompt",
       "rule_type": "general",
       "text": "If you only need a quick path lookup, use Glob instead of Agent.\",",
-      "id": "agent_tool/prompt/1327",
+      "id": "agent_tool/prompt/1328",
       "is_covered": true,
       "covered_by": [
         "WO_mech_009_20260415"
@@ -17738,12 +17844,12 @@
       "section": "prompt",
       "rule_type": "general",
       "text": "If the task does not match any subagent type listed above, do not use Agent.\",",
-      "id": "agent_tool/prompt/1328",
+      "id": "agent_tool/prompt/1329",
       "is_covered": true,
       "covered_by": [
         "BP_struct_003_20260428",
         "IG_cp2k_001_20260428",
-        "SC_struct_009_20260420",
+        "SC_struct_009_20260507",
         "WO_elec_008_20260501",
         "WO_mech_007_20260501",
         "WO_end_to_end_001_20260428"
@@ -17756,17 +17862,6 @@
       "section": "prompt",
       "rule_type": "general",
       "text": "Always include a short task summary when possible.\",",
-      "id": "agent_tool/prompt/1329",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
-    },
-    {
-      "source_type": "tool",
-      "source_name": "agent_tool",
-      "section": "prompt",
-      "rule_type": "general",
-      "text": "When the subagent is done, the result comes back to you, not directly to the user. If the user should see it, send a concise summary yourself.\",",
       "id": "agent_tool/prompt/1330",
       "is_covered": false,
       "covered_by": [],
@@ -17777,7 +17872,7 @@
       "source_name": "agent_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "The subagent's outputs should generally be trusted.\",",
+      "text": "When the subagent is done, the result comes back to you, not directly to the user. If the user should see it, send a concise summary yourself.\",",
       "id": "agent_tool/prompt/1331",
       "is_covered": false,
       "covered_by": [],
@@ -17788,7 +17883,7 @@
       "source_name": "agent_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "Clearly tell the subagent whether you expect it to write code or just to do research.\",",
+      "text": "The subagent's outputs should generally be trusted.\",",
       "id": "agent_tool/prompt/1332",
       "is_covered": false,
       "covered_by": [],
@@ -17799,7 +17894,7 @@
       "source_name": "agent_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "If you want parallel delegation, send multiple Agent tool calls in a single assistant message.\",",
+      "text": "Clearly tell the subagent whether you expect it to write code or just to do research.\",",
       "id": "agent_tool/prompt/1333",
       "is_covered": false,
       "covered_by": [],
@@ -17810,7 +17905,7 @@
       "source_name": "agent_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "Each Agent invocation starts fresh, so the prompt must include all needed context.\",",
+      "text": "If you want parallel delegation, send multiple Agent tool calls in a single assistant message.\",",
       "id": "agent_tool/prompt/1334",
       "is_covered": false,
       "covered_by": [],
@@ -17821,7 +17916,7 @@
       "source_name": "agent_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "Intermediate subagent events are forwarded with a spawn_id for streaming and replay, but the parent agent should treat the final tool result as the authoritative completion payload.\",",
+      "text": "Each Agent invocation starts fresh, so the prompt must include all needed context.\",",
       "id": "agent_tool/prompt/1335",
       "is_covered": false,
       "covered_by": [],
@@ -17832,7 +17927,7 @@
       "source_name": "agent_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "MatMaster does not currently support background tasks, fork-style context inheritance, or resuming a prior subagent. Do not imply those capabilities.\",",
+      "text": "Intermediate subagent events are forwarded with a spawn_id for streaming and replay, but the parent agent should treat the final tool result as the authoritative completion payload.\",",
       "id": "agent_tool/prompt/1336",
       "is_covered": false,
       "covered_by": [],
@@ -17843,7 +17938,7 @@
       "source_name": "agent_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "Explain what you're trying to accomplish and why.\",",
+      "text": "MatMaster does not currently support background tasks, fork-style context inheritance, or resuming a prior subagent. Do not imply those capabilities.\",",
       "id": "agent_tool/prompt/1337",
       "is_covered": false,
       "covered_by": [],
@@ -17854,7 +17949,7 @@
       "source_name": "agent_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "Describe what you've already learned or ruled out.\",",
+      "text": "Explain what you're trying to accomplish and why.\",",
       "id": "agent_tool/prompt/1338",
       "is_covered": false,
       "covered_by": [],
@@ -17865,7 +17960,7 @@
       "source_name": "agent_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "Give enough context about the surrounding problem that the agent can make judgment calls instead of following a narrow instruction.\",",
+      "text": "Describe what you've already learned or ruled out.\",",
       "id": "agent_tool/prompt/1339",
       "is_covered": false,
       "covered_by": [],
@@ -17876,7 +17971,7 @@
       "source_name": "agent_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "If you need a short response, say so (for example: \"report in under 200 words\").',",
+      "text": "Give enough context about the surrounding problem that the agent can make judgment calls instead of following a narrow instruction.\",",
       "id": "agent_tool/prompt/1340",
       "is_covered": false,
       "covered_by": [],
@@ -17887,7 +17982,7 @@
       "source_name": "agent_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "Lookups: hand over the exact command. Investigations: hand over the question.\",",
+      "text": "If you need a short response, say so (for example: \"report in under 200 words\").',",
       "id": "agent_tool/prompt/1341",
       "is_covered": false,
       "covered_by": [],
@@ -17898,7 +17993,7 @@
       "source_name": "agent_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "Terse command-style prompts produce shallow, generic work.\",",
+      "text": "Lookups: hand over the exact command. Investigations: hand over the question.\",",
       "id": "agent_tool/prompt/1342",
       "is_covered": false,
       "covered_by": [],
@@ -17909,7 +18004,7 @@
       "source_name": "agent_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "Match the user's language (Chinese/English). \",",
+      "text": "Terse command-style prompts produce shallow, generic work.\",",
       "id": "agent_tool/prompt/1343",
       "is_covered": false,
       "covered_by": [],
@@ -17920,8 +18015,19 @@
       "source_name": "agent_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "Do not write prompts like based on your findings, fix the bug. Include the relevant file paths, suspected cause, and what specifically should change.\",",
+      "text": "Match the user's language (Chinese/English). \",",
       "id": "agent_tool/prompt/1344",
+      "is_covered": false,
+      "covered_by": [],
+      "match_method": null
+    },
+    {
+      "source_type": "tool",
+      "source_name": "agent_tool",
+      "section": "prompt",
+      "rule_type": "general",
+      "text": "Do not write prompts like based on your findings, fix the bug. Include the relevant file paths, suspected cause, and what specifically should change.\",",
+      "id": "agent_tool/prompt/1345",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -17932,7 +18038,7 @@
       "section": "prompt",
       "rule_type": "general",
       "text": "each Bash call costs one turn. Combine related",
-      "id": "bash_tool/prompt/1345",
+      "id": "bash_tool/prompt/1346",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -17943,7 +18049,7 @@
       "section": "json_schema",
       "rule_type": "general",
       "text": "Parameter 'input_dir': Directory containing all input files to upload. (submit)",
-      "id": "bohrium_tool/json_schema/1346",
+      "id": "bohrium_tool/json_schema/1347",
       "is_covered": true,
       "covered_by": [
         "PXRD_thermal_expansion_001_20260506"
@@ -17956,7 +18062,7 @@
       "section": "json_schema",
       "rule_type": "general",
       "text": "Parameter 'image': Docker image address, e.g. registry.dp.tech/dptech/cp2k:2024.1. (submit)",
-      "id": "bohrium_tool/json_schema/1347",
+      "id": "bohrium_tool/json_schema/1348",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -17967,19 +18073,6 @@
       "section": "json_schema",
       "rule_type": "general",
       "text": "Parameter 'cmd': Shell command to run inside the container. (submit)",
-      "id": "bohrium_tool/json_schema/1348",
-      "is_covered": true,
-      "covered_by": [
-        "PXRD_thermal_expansion_001_20260506"
-      ],
-      "match_method": "keyword_only"
-    },
-    {
-      "source_type": "tool",
-      "source_name": "bohrium_tool",
-      "section": "json_schema",
-      "rule_type": "general",
-      "text": "Parameter 'machine': Bohrium machine type. Default: c32_m128_cpu. (submit)",
       "id": "bohrium_tool/json_schema/1349",
       "is_covered": true,
       "covered_by": [
@@ -17992,19 +18085,8 @@
       "source_name": "bohrium_tool",
       "section": "json_schema",
       "rule_type": "general",
-      "text": "Parameter 'job_name': Human-readable job name. (submit)",
+      "text": "Parameter 'machine': Bohrium machine type. Default: c32_m128_cpu. (submit)",
       "id": "bohrium_tool/json_schema/1350",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
-    },
-    {
-      "source_type": "tool",
-      "source_name": "bohrium_tool",
-      "section": "json_schema",
-      "rule_type": "general",
-      "text": "Parameter 'disk_size': Disk size in GB. Default: 50. (submit)",
-      "id": "bohrium_tool/json_schema/1351",
       "is_covered": true,
       "covered_by": [
         "PXRD_thermal_expansion_001_20260506"
@@ -18016,7 +18098,18 @@
       "source_name": "bohrium_tool",
       "section": "json_schema",
       "rule_type": "general",
-      "text": "Parameter 'job_id': Job ID returned by submit. (poll, download, kill)",
+      "text": "Parameter 'job_name': Human-readable job name. (submit)",
+      "id": "bohrium_tool/json_schema/1351",
+      "is_covered": false,
+      "covered_by": [],
+      "match_method": null
+    },
+    {
+      "source_type": "tool",
+      "source_name": "bohrium_tool",
+      "section": "json_schema",
+      "rule_type": "general",
+      "text": "Parameter 'disk_size': Disk size in GB. Default: 50. (submit)",
       "id": "bohrium_tool/json_schema/1352",
       "is_covered": true,
       "covered_by": [
@@ -18029,7 +18122,7 @@
       "source_name": "bohrium_tool",
       "section": "json_schema",
       "rule_type": "general",
-      "text": "Parameter 'result_dir': Directory where downloaded artifacts will be stored. (download)",
+      "text": "Parameter 'job_id': Job ID returned by submit. (poll, download, kill)",
       "id": "bohrium_tool/json_schema/1353",
       "is_covered": true,
       "covered_by": [
@@ -18042,18 +18135,20 @@
       "source_name": "bohrium_tool",
       "section": "json_schema",
       "rule_type": "general",
-      "text": "Parameter 'keyword': Filter keyword for images or machines. (list_images, list_machines)",
+      "text": "Parameter 'result_dir': Directory where downloaded artifacts will be stored. (download)",
       "id": "bohrium_tool/json_schema/1354",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
+      "is_covered": true,
+      "covered_by": [
+        "PXRD_thermal_expansion_001_20260506"
+      ],
+      "match_method": "keyword_only"
     },
     {
       "source_type": "tool",
       "source_name": "bohrium_tool",
       "section": "json_schema",
       "rule_type": "general",
-      "text": "Parameter 'machine_type': Machine type filter. Default: cpu. (list_machines)",
+      "text": "Parameter 'keyword': Filter keyword for images or machines. (list_images, list_machines)",
       "id": "bohrium_tool/json_schema/1355",
       "is_covered": false,
       "covered_by": [],
@@ -18064,8 +18159,19 @@
       "source_name": "bohrium_tool",
       "section": "json_schema",
       "rule_type": "general",
-      "text": "Parameter 'max_results': Maximum entries to return. Default: 20. (list_images, list_machines)",
+      "text": "Parameter 'machine_type': Machine type filter. Default: cpu. (list_machines)",
       "id": "bohrium_tool/json_schema/1356",
+      "is_covered": false,
+      "covered_by": [],
+      "match_method": null
+    },
+    {
+      "source_type": "tool",
+      "source_name": "bohrium_tool",
+      "section": "json_schema",
+      "rule_type": "general",
+      "text": "Parameter 'max_results': Maximum entries to return. Default: 20. (list_images, list_machines)",
+      "id": "bohrium_tool/json_schema/1357",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -18076,17 +18182,6 @@
       "section": "prompt",
       "rule_type": "general",
       "text": "**Always** load the corresponding software skill first (cp2k, qe, abacus, orca,",
-      "id": "bohrium_tool/prompt/1357",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
-    },
-    {
-      "source_type": "tool",
-      "source_name": "bohrium_tool",
-      "section": "prompt",
-      "rule_type": "general",
-      "text": "calling list_images or list_machines.\\n",
       "id": "bohrium_tool/prompt/1358",
       "is_covered": false,
       "covered_by": [],
@@ -18097,7 +18192,7 @@
       "source_name": "bohrium_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "Only call list_images / list_machines when the loaded skill does not",
+      "text": "calling list_images or list_machines.\\n",
       "id": "bohrium_tool/prompt/1359",
       "is_covered": false,
       "covered_by": [],
@@ -18108,7 +18203,7 @@
       "source_name": "bohrium_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "**submit**: package input directory and submit a job, returns job_id.",
+      "text": "Only call list_images / list_machines when the loaded skill does not",
       "id": "bohrium_tool/prompt/1360",
       "is_covered": false,
       "covered_by": [],
@@ -18119,7 +18214,7 @@
       "source_name": "bohrium_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "**poll**: single-shot job status check, returns current status immediately.",
+      "text": "**submit**: package input directory and submit a job, returns job_id.",
       "id": "bohrium_tool/prompt/1361",
       "is_covered": false,
       "covered_by": [],
@@ -18130,7 +18225,7 @@
       "source_name": "bohrium_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "**download**: download artifacts for a finished or failed job into result_dir.",
+      "text": "**poll**: single-shot job status check, returns current status immediately.",
       "id": "bohrium_tool/prompt/1362",
       "is_covered": false,
       "covered_by": [],
@@ -18141,7 +18236,7 @@
       "source_name": "bohrium_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "**kill**: request termination of a previously submitted job. Use only when",
+      "text": "**download**: download artifacts for a finished or failed job into result_dir.",
       "id": "bohrium_tool/prompt/1363",
       "is_covered": false,
       "covered_by": [],
@@ -18152,7 +18247,7 @@
       "source_name": "bohrium_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "**list_images**: query available Docker images by keyword.\\n",
+      "text": "**kill**: request termination of a previously submitted job. Use only when",
       "id": "bohrium_tool/prompt/1364",
       "is_covered": false,
       "covered_by": [],
@@ -18163,8 +18258,19 @@
       "source_name": "bohrium_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "**list_machines**: query available machine types (cpu / gpu).\\n",
+      "text": "**list_images**: query available Docker images by keyword.\\n",
       "id": "bohrium_tool/prompt/1365",
+      "is_covered": false,
+      "covered_by": [],
+      "match_method": null
+    },
+    {
+      "source_type": "tool",
+      "source_name": "bohrium_tool",
+      "section": "prompt",
+      "rule_type": "general",
+      "text": "**list_machines**: query available machine types (cpu / gpu).\\n",
+      "id": "bohrium_tool/prompt/1366",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -18175,7 +18281,7 @@
       "section": "json_schema",
       "rule_type": "general",
       "text": "Parameter 'old_string': The text to replace",
-      "id": "edit_tool/json_schema/1366",
+      "id": "edit_tool/json_schema/1367",
       "is_covered": true,
       "covered_by": [
         "PXRD_thermal_expansion_001_20260506"
@@ -18188,7 +18294,7 @@
       "section": "prompt",
       "rule_type": "general",
       "text": "Fast file pattern matching tool that works with any codebase size\\n",
-      "id": "glob_tool/prompt/1367",
+      "id": "glob_tool/prompt/1368",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -18199,11 +18305,11 @@
       "section": "prompt",
       "rule_type": "general",
       "text": "Supports glob patterns like \\\"**/*.js\\\" or \\\"src/**/*.ts\\\"\\n",
-      "id": "glob_tool/prompt/1368",
+      "id": "glob_tool/prompt/1369",
       "is_covered": true,
       "covered_by": [
         "PXRD_thermal_expansion_001_20260506",
-        "SC_struct_002_20260409"
+        "SC_struct_002_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -18213,7 +18319,7 @@
       "section": "prompt",
       "rule_type": "general",
       "text": "Returns matching file paths sorted by modification time\\n",
-      "id": "glob_tool/prompt/1369",
+      "id": "glob_tool/prompt/1370",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -18224,15 +18330,15 @@
       "section": "prompt",
       "rule_type": "general",
       "text": "Use this tool when you need to find files by name patterns\\n",
-      "id": "glob_tool/prompt/1370",
+      "id": "glob_tool/prompt/1371",
       "is_covered": true,
       "covered_by": [
         "BP_struct_005_20260406v2",
         "BP_struct_003_20260428",
         "EC_tool_choice_read_001_20260428",
         "EC_tool_choice_write_001_20260428",
-        "IG_abacus_007_20260506",
-        "IG_abacus_008_20260506",
+        "IG_abacus_007_20260507",
+        "IG_abacus_008_20260507",
         "IG_abacus_003_20260504",
         "IG_abacus_005_20260504",
         "SF_destructive_cmd_001_20260428",
@@ -18246,7 +18352,7 @@
       "section": "prompt",
       "rule_type": "general",
       "text": "When you are doing an open ended search that may require multiple",
-      "id": "glob_tool/prompt/1371",
+      "id": "glob_tool/prompt/1372",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -18257,7 +18363,7 @@
       "section": "json_schema",
       "rule_type": "general",
       "text": "Parameter 'path': File or directory to search in. Defaults to current working directory.",
-      "id": "grep_tool/json_schema/1372",
+      "id": "grep_tool/json_schema/1373",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -18268,7 +18374,7 @@
       "section": "json_schema",
       "rule_type": "general",
       "text": "Parameter 'glob': Glob pattern to filter files (e.g. \\",
-      "id": "grep_tool/json_schema/1373",
+      "id": "grep_tool/json_schema/1374",
       "is_covered": true,
       "covered_by": [
         "BP_struct_003_20260428",
@@ -18276,8 +18382,8 @@
         "IG_abacus_005_20260504",
         "PXRD_thermal_expansion_001_20260506",
         "PXRD_pawley_303K_001_20260502_v1",
-        "SC_struct_013_20260411v3",
-        "SC_struct_hetero_20260409",
+        "SC_struct_013_20260507",
+        "SC_struct_hetero_20260507",
         "WO_elec_008_20260501",
         "WO_struct_003_20260505"
       ],
@@ -18289,17 +18395,6 @@
       "section": "json_schema",
       "rule_type": "general",
       "text": "Parameter 'context': Number of lines to show before and after each match. Takes precedence over -C.",
-      "id": "grep_tool/json_schema/1374",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
-    },
-    {
-      "source_type": "tool",
-      "source_name": "grep_tool",
-      "section": "json_schema",
-      "rule_type": "general",
-      "text": "Parameter 'multiline': Enable multiline mode (rg -U --multiline-dotall). Only works with rg. Default: false.",
       "id": "grep_tool/json_schema/1375",
       "is_covered": false,
       "covered_by": [],
@@ -18310,8 +18405,19 @@
       "source_name": "grep_tool",
       "section": "json_schema",
       "rule_type": "general",
-      "text": "Parameter 'offset': Skip first N lines/entries before applying head_limit. Defaults to 0.",
+      "text": "Parameter 'multiline': Enable multiline mode (rg -U --multiline-dotall). Only works with rg. Default: false.",
       "id": "grep_tool/json_schema/1376",
+      "is_covered": false,
+      "covered_by": [],
+      "match_method": null
+    },
+    {
+      "source_type": "tool",
+      "source_name": "grep_tool",
+      "section": "json_schema",
+      "rule_type": "general",
+      "text": "Parameter 'offset': Skip first N lines/entries before applying head_limit. Defaults to 0.",
+      "id": "grep_tool/json_schema/1377",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -18322,17 +18428,6 @@
       "section": "prompt",
       "rule_type": "general",
       "text": "ALWAYS use Grep for search tasks. NEVER invoke `grep` or `rg`",
-      "id": "grep_tool/prompt/1377",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
-    },
-    {
-      "source_type": "tool",
-      "source_name": "grep_tool",
-      "section": "prompt",
-      "rule_type": "general",
-      "text": "Supports full regex syntax (e.g., \\\"log.*Error\\\", \\\"function\\\\s+\\\\w+\\\")\\n",
       "id": "grep_tool/prompt/1378",
       "is_covered": false,
       "covered_by": [],
@@ -18343,16 +18438,27 @@
       "source_name": "grep_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "Filter files with glob parameter (e.g., \\\"*.js\\\", \\\"**/*.tsx\\\")\\n",
+      "text": "Supports full regex syntax (e.g., \\\"log.*Error\\\", \\\"function\\\\s+\\\\w+\\\")\\n",
       "id": "grep_tool/prompt/1379",
+      "is_covered": false,
+      "covered_by": [],
+      "match_method": null
+    },
+    {
+      "source_type": "tool",
+      "source_name": "grep_tool",
+      "section": "prompt",
+      "rule_type": "general",
+      "text": "Filter files with glob parameter (e.g., \\\"*.js\\\", \\\"**/*.tsx\\\")\\n",
+      "id": "grep_tool/prompt/1380",
       "is_covered": true,
       "covered_by": [
         "BP_struct_003_20260428",
         "IG_abacus_003_20260504",
         "IG_abacus_005_20260504",
         "PXRD_thermal_expansion_001_20260506",
-        "SC_struct_013_20260411v3",
-        "SC_struct_hetero_20260409",
+        "SC_struct_013_20260507",
+        "SC_struct_hetero_20260507",
         "WO_elec_008_20260501",
         "WO_struct_003_20260505"
       ],
@@ -18364,7 +18470,7 @@
       "section": "prompt",
       "rule_type": "general",
       "text": "Output modes: \\\"content\\\" shows matching lines,",
-      "id": "grep_tool/prompt/1380",
+      "id": "grep_tool/prompt/1381",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -18375,7 +18481,7 @@
       "section": "prompt",
       "rule_type": "general",
       "text": "Pattern syntax: Uses ripgrep when available, falls back to grep",
-      "id": "grep_tool/prompt/1381",
+      "id": "grep_tool/prompt/1382",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -18386,17 +18492,6 @@
       "section": "json_schema",
       "rule_type": "general",
       "text": "Parameter 'question': Natural-language research question or search intent.",
-      "id": "paper_search_tool/json_schema/1382",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
-    },
-    {
-      "source_type": "tool",
-      "source_name": "paper_search_tool",
-      "section": "json_schema",
-      "rule_type": "general",
-      "text": "Parameter 'start_time': Start date YYYY-MM-DD (optional; defaults to 2000-01-01).",
       "id": "paper_search_tool/json_schema/1383",
       "is_covered": false,
       "covered_by": [],
@@ -18407,7 +18502,7 @@
       "source_name": "paper_search_tool",
       "section": "json_schema",
       "rule_type": "general",
-      "text": "Parameter 'end_time': End date YYYY-MM-DD (optional; defaults to today).",
+      "text": "Parameter 'start_time': Start date YYYY-MM-DD (optional; defaults to 2000-01-01).",
       "id": "paper_search_tool/json_schema/1384",
       "is_covered": false,
       "covered_by": [],
@@ -18418,7 +18513,7 @@
       "source_name": "paper_search_tool",
       "section": "json_schema",
       "rule_type": "general",
-      "text": "Parameter 'page_size': Max papers to return (1–100, default 20).",
+      "text": "Parameter 'end_time': End date YYYY-MM-DD (optional; defaults to today).",
       "id": "paper_search_tool/json_schema/1385",
       "is_covered": false,
       "covered_by": [],
@@ -18429,17 +18524,28 @@
       "source_name": "paper_search_tool",
       "section": "json_schema",
       "rule_type": "general",
-      "text": "Parameter 'rerank': Optional AI rerank: 0 off, 1 on.",
+      "text": "Parameter 'page_size': Max papers to return (1–100, default 20).",
       "id": "paper_search_tool/json_schema/1386",
+      "is_covered": false,
+      "covered_by": [],
+      "match_method": null
+    },
+    {
+      "source_type": "tool",
+      "source_name": "paper_search_tool",
+      "section": "json_schema",
+      "rule_type": "general",
+      "text": "Parameter 'rerank': Optional AI rerank: 0 off, 1 on.",
+      "id": "paper_search_tool/json_schema/1387",
       "is_covered": true,
       "covered_by": [
         "IG_incar_001_20260506",
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
         "IG_incar_003_20260506",
-        "IG_incar_004_20260506",
+        "IG_incar_004_20260507",
         "IG_incar_005_20260504",
-        "IG_incar_006_20260504",
-        "IG_incar_007_20260506",
+        "IG_incar_006_20260507",
+        "IG_incar_007_20260507",
         "IG_incar_008_20260506",
         "IG_incar_009_20260506",
         "IG_incar_010_20260506"
@@ -18452,7 +18558,7 @@
       "section": "json_schema",
       "rule_type": "general",
       "text": "Parameter 'encoding': Optional explicit text encoding to use when reading.",
-      "id": "read_tool/json_schema/1387",
+      "id": "read_tool/json_schema/1388",
       "is_covered": true,
       "covered_by": [
         "IG_incar_001_20260506"
@@ -18465,7 +18571,7 @@
       "section": "prompt",
       "rule_type": "general",
       "text": "Core execution --",
-      "id": "read_tool/prompt/1388",
+      "id": "read_tool/prompt/1389",
       "is_covered": true,
       "covered_by": [
         "WO_general_planning_003_20260422",
@@ -18479,7 +18585,7 @@
       "section": "json_schema",
       "rule_type": "general",
       "text": "Parameter 'action': Legacy action field; `get_info` maps to Skill info lookup.",
-      "id": "skill_tool/json_schema/1389",
+      "id": "skill_tool/json_schema/1390",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -18490,7 +18596,7 @@
       "section": "json_schema",
       "rule_type": "general",
       "text": "Parameter 'skill': Accepted for compatibility with the new Skill tool.",
-      "id": "skill_tool/json_schema/1390",
+      "id": "skill_tool/json_schema/1391",
       "is_covered": true,
       "covered_by": [
         "IG_abacus_001_20260504"
@@ -18503,17 +18609,6 @@
       "section": "prompt",
       "rule_type": "general",
       "text": "Use this tool with the skill name\\n",
-      "id": "skill_tool/prompt/1391",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
-    },
-    {
-      "source_type": "tool",
-      "source_name": "skill_tool",
-      "section": "prompt",
-      "rule_type": "general",
-      "text": "Examples:\\n",
       "id": "skill_tool/prompt/1392",
       "is_covered": false,
       "covered_by": [],
@@ -18524,7 +18619,7 @@
       "source_name": "skill_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "`skill: \"pdf\"` - invoke the pdf skill\\n",
+      "text": "Examples:\\n",
       "id": "skill_tool/prompt/1393",
       "is_covered": false,
       "covered_by": [],
@@ -18535,7 +18630,7 @@
       "source_name": "skill_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "`skill: \"review-pr\"` - invoke the review-pr skill\\n\\n",
+      "text": "`skill: \"pdf\"` - invoke the pdf skill\\n",
       "id": "skill_tool/prompt/1394",
       "is_covered": false,
       "covered_by": [],
@@ -18546,7 +18641,7 @@
       "source_name": "skill_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "Available skills are listed in system-reminder messages in the conversation\\n",
+      "text": "`skill: \"review-pr\"` - invoke the review-pr skill\\n\\n",
       "id": "skill_tool/prompt/1395",
       "is_covered": false,
       "covered_by": [],
@@ -18557,7 +18652,7 @@
       "source_name": "skill_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "When a skill matches the user's request, invoke it before generating",
+      "text": "Available skills are listed in system-reminder messages in the conversation\\n",
       "id": "skill_tool/prompt/1396",
       "is_covered": false,
       "covered_by": [],
@@ -18568,7 +18663,7 @@
       "source_name": "skill_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "Never mention a skill without actually calling this tool\\n",
+      "text": "When a skill matches the user's request, invoke it before generating",
       "id": "skill_tool/prompt/1397",
       "is_covered": false,
       "covered_by": [],
@@ -18579,8 +18674,19 @@
       "source_name": "skill_tool",
       "section": "prompt",
       "rule_type": "general",
-      "text": "Do not invoke a skill that is already running",
+      "text": "Never mention a skill without actually calling this tool\\n",
       "id": "skill_tool/prompt/1398",
+      "is_covered": false,
+      "covered_by": [],
+      "match_method": null
+    },
+    {
+      "source_type": "tool",
+      "source_name": "skill_tool",
+      "section": "prompt",
+      "rule_type": "general",
+      "text": "Do not invoke a skill that is already running",
+      "id": "skill_tool/prompt/1399",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -18591,7 +18697,7 @@
       "section": "json_schema",
       "rule_type": "general",
       "text": "Parameter 'status': Task status",
-      "id": "todo_write_tool/json_schema/1399",
+      "id": "todo_write_tool/json_schema/1400",
       "is_covered": true,
       "covered_by": [
         "BP_struct_003_20260428",
@@ -18613,7 +18719,7 @@
       "section": "json_schema",
       "rule_type": "general",
       "text": "Parameter 'activeForm': Present continuous task description",
-      "id": "todo_write_tool/json_schema/1400",
+      "id": "todo_write_tool/json_schema/1401",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -18624,16 +18730,16 @@
       "section": "json_schema",
       "rule_type": "general",
       "text": "Parameter 'prompt': The prompt to apply to the fetched content",
-      "id": "web_fetch_tool/json_schema/1401",
+      "id": "web_fetch_tool/json_schema/1402",
       "is_covered": true,
       "covered_by": [
         "IG_incar_001_20260506",
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
         "IG_incar_003_20260506",
-        "IG_incar_004_20260506",
+        "IG_incar_004_20260507",
         "IG_incar_005_20260504",
-        "IG_incar_006_20260504",
-        "IG_incar_007_20260506",
+        "IG_incar_006_20260507",
+        "IG_incar_007_20260507",
         "IG_incar_008_20260506",
         "IG_incar_009_20260506",
         "IG_incar_010_20260506"
@@ -18646,7 +18752,7 @@
       "section": "prompt",
       "rule_type": "general",
       "text": "each fetch costs a full turn. Before fetching,",
-      "id": "web_fetch_tool/prompt/1402",
+      "id": "web_fetch_tool/prompt/1403",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -18657,7 +18763,7 @@
       "section": "prompt",
       "rule_type": "general",
       "text": "check loaded Skills and tool descriptions —",
-      "id": "web_search_tool/prompt/1403",
+      "id": "web_search_tool/prompt/1404",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -18668,19 +18774,19 @@
       "section": "json_schema",
       "rule_type": "general",
       "text": "Parameter 'content': The content to write to the file",
-      "id": "write_tool/json_schema/1404",
+      "id": "write_tool/json_schema/1405",
       "is_covered": true,
       "covered_by": [
         "EC_tool_choice_write_001_20260428",
         "IG_abacus_001_20260504",
         "IG_abacus_002_20260504",
         "IG_incar_001_20260506",
-        "IG_incar_002_20260506",
+        "IG_incar_002_20260507",
         "IG_incar_003_20260506",
-        "IG_incar_004_20260506",
+        "IG_incar_004_20260507",
         "IG_incar_005_20260504",
-        "IG_incar_006_20260504",
-        "IG_incar_007_20260506"
+        "IG_incar_006_20260507",
+        "IG_incar_007_20260507"
       ],
       "match_method": "keyword_only"
     },
@@ -18690,7 +18796,7 @@
       "section": "json_schema",
       "rule_type": "general",
       "text": "Parameter 'encoding': Optional explicit text encoding for the write operation.",
-      "id": "write_tool/json_schema/1405",
+      "id": "write_tool/json_schema/1406",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -18701,17 +18807,6 @@
       "section": "System",
       "rule_type": "general",
       "text": "Output is displayed to the user in GitHub-flavored Markdown.",
-      "id": "system_prompt/system/1406",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
-    },
-    {
-      "source_type": "system_prompt",
-      "source_name": "system_prompt",
-      "section": "System",
-      "rule_type": "general",
-      "text": "Tags in tool results/messages (like <system-reminder>) are system metadata, not user content.",
       "id": "system_prompt/system/1407",
       "is_covered": false,
       "covered_by": [],
@@ -18722,8 +18817,19 @@
       "source_name": "system_prompt",
       "section": "System",
       "rule_type": "general",
-      "text": "Prior messages auto-compress near context limits; conversation length is unlimited.",
+      "text": "Tags in tool results/messages (like <system-reminder>) are system metadata, not user content.",
       "id": "system_prompt/system/1408",
+      "is_covered": false,
+      "covered_by": [],
+      "match_method": null
+    },
+    {
+      "source_type": "system_prompt",
+      "source_name": "system_prompt",
+      "section": "System",
+      "rule_type": "general",
+      "text": "Prior messages auto-compress near context limits; conversation length is unlimited.",
+      "id": "system_prompt/system/1409",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -18734,17 +18840,6 @@
       "section": "Doing tasks",
       "rule_type": "general",
       "text": "Interpret unclear instructions in the context of computational materials science and the current working directory.",
-      "id": "system_prompt/doing-tasks/1409",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
-    },
-    {
-      "source_type": "system_prompt",
-      "source_name": "system_prompt",
-      "section": "Doing tasks",
-      "rule_type": "general",
-      "text": "Read existing configurations, task files, and local context before modifying them. Prefer editing over creating files when updating existing assets.",
       "id": "system_prompt/doing-tasks/1410",
       "is_covered": false,
       "covered_by": [],
@@ -18755,7 +18850,7 @@
       "source_name": "system_prompt",
       "section": "Doing tasks",
       "rule_type": "general",
-      "text": "Prefer explicit task instructions and referenced files over default assumptions.",
+      "text": "Read existing configurations, task files, and local context before modifying them. Prefer editing over creating files when updating existing assets.",
       "id": "system_prompt/doing-tasks/1411",
       "is_covered": false,
       "covered_by": [],
@@ -18766,8 +18861,19 @@
       "source_name": "system_prompt",
       "section": "Doing tasks",
       "rule_type": "general",
-      "text": "If an approach fails, diagnose the error before switching. Don't retry blindly.",
+      "text": "Prefer explicit task instructions and referenced files over default assumptions.",
       "id": "system_prompt/doing-tasks/1412",
+      "is_covered": false,
+      "covered_by": [],
+      "match_method": null
+    },
+    {
+      "source_type": "system_prompt",
+      "source_name": "system_prompt",
+      "section": "Doing tasks",
+      "rule_type": "general",
+      "text": "If an approach fails, diagnose the error before switching. Don't retry blindly.",
+      "id": "system_prompt/doing-tasks/1413",
       "is_covered": true,
       "covered_by": [
         "DD_tool_fail_recovery_001_20260428"
@@ -18780,7 +18886,7 @@
       "section": "Doing tasks",
       "rule_type": "general",
       "text": "Don't add features or \"improve\" beyond what was asked.",
-      "id": "system_prompt/doing-tasks/1413",
+      "id": "system_prompt/doing-tasks/1414",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -18791,17 +18897,6 @@
       "section": "Scientific methodology",
       "rule_type": "general",
       "text": "Every computational choice must be justifiable. Surface assumptions explicitly.",
-      "id": "system_prompt/scientific-methodology/1414",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
-    },
-    {
-      "source_type": "system_prompt",
-      "source_name": "system_prompt",
-      "section": "Scientific methodology",
-      "rule_type": "general",
-      "text": "Validate that parameters match the physical system (symmetry, cell, boundary conditions). Flag or adapt when inputs conflict with the structure or task constraints.",
       "id": "system_prompt/scientific-methodology/1415",
       "is_covered": false,
       "covered_by": [],
@@ -18812,8 +18907,19 @@
       "source_name": "system_prompt",
       "section": "Scientific methodology",
       "rule_type": "general",
-      "text": "Balance correctness with feasibility. Prefer simpler methods when they meet accuracy needs.",
+      "text": "Validate that parameters match the physical system (symmetry, cell, boundary conditions). Flag or adapt when inputs conflict with the structure or task constraints.",
       "id": "system_prompt/scientific-methodology/1416",
+      "is_covered": false,
+      "covered_by": [],
+      "match_method": null
+    },
+    {
+      "source_type": "system_prompt",
+      "source_name": "system_prompt",
+      "section": "Scientific methodology",
+      "rule_type": "general",
+      "text": "Balance correctness with feasibility. Prefer simpler methods when they meet accuracy needs.",
+      "id": "system_prompt/scientific-methodology/1417",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -18824,7 +18930,7 @@
       "section": "Computational software",
       "rule_type": "general",
       "text": "Choose packages and defaults according to the **task text**, **Skills** (`matmaster/skills`), executor/runtime notes, and what is actually installed in the session—do not assume a single global stack.",
-      "id": "system_prompt/computational-software/1417",
+      "id": "system_prompt/computational-software/1418",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -18835,7 +18941,7 @@
       "section": "Computational software",
       "rule_type": "general",
       "text": "Prefer open-source tools that fit the task; avoid recommending commercially licensed packages that are not available in this deployment unless the user explicitly works in an environment that provides them.",
-      "id": "system_prompt/computational-software/1418",
+      "id": "system_prompt/computational-software/1419",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -18846,7 +18952,7 @@
       "section": "Using your tools",
       "rule_type": "general",
       "text": "Use dedicated tools over Bash: Read (not cat/head/tail), Edit (not sed/awk), Write (not echo), Glob (not find/ls), Grep (not grep/rg). Reserve Bash for shell execution only.",
-      "id": "system_prompt/using-your-tools/1419",
+      "id": "system_prompt/using-your-tools/1420",
       "is_covered": true,
       "covered_by": [
         "EC_tool_choice_write_001_20260428"
@@ -18859,17 +18965,6 @@
       "section": "Using your tools",
       "rule_type": "general",
       "text": "Plan multi-step tasks mentally. Call independent tools in parallel; sequence dependent calls.",
-      "id": "system_prompt/using-your-tools/1420",
-      "is_covered": false,
-      "covered_by": [],
-      "match_method": null
-    },
-    {
-      "source_type": "system_prompt",
-      "source_name": "system_prompt",
-      "section": "Using your tools",
-      "rule_type": "general",
-      "text": "When referring to generated figures in the answer, use `[[fig:<figure_id>]]`.",
       "id": "system_prompt/using-your-tools/1421",
       "is_covered": false,
       "covered_by": [],
@@ -18880,8 +18975,19 @@
       "source_name": "system_prompt",
       "section": "Using your tools",
       "rule_type": "general",
-      "text": "Do not embed local file paths or markdown images for generated figures.",
+      "text": "When referring to generated figures in the answer, use `[[fig:<figure_id>]]`.",
       "id": "system_prompt/using-your-tools/1422",
+      "is_covered": false,
+      "covered_by": [],
+      "match_method": null
+    },
+    {
+      "source_type": "system_prompt",
+      "source_name": "system_prompt",
+      "section": "Using your tools",
+      "rule_type": "general",
+      "text": "Do not embed local file paths or markdown images for generated figures.",
+      "id": "system_prompt/using-your-tools/1423",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -18892,7 +18998,7 @@
       "section": "Tone and style",
       "rule_type": "general",
       "text": "Communicate in the same language the user uses. If the user writes in Chinese, respond in Chinese; if in English, respond in English. Be concise. Include file paths when referencing data.",
-      "id": "system_prompt/tone-and-style/1423",
+      "id": "system_prompt/tone-and-style/1424",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -18903,7 +19009,7 @@
       "section": "Output efficiency",
       "rule_type": "general",
       "text": "Decisions that need the user's input",
-      "id": "system_prompt/output-efficiency/1424",
+      "id": "system_prompt/output-efficiency/1425",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -18914,7 +19020,7 @@
       "section": "Output efficiency",
       "rule_type": "general",
       "text": "Key results and their interpretation",
-      "id": "system_prompt/output-efficiency/1425",
+      "id": "system_prompt/output-efficiency/1426",
       "is_covered": true,
       "covered_by": [
         "PXRD_thermal_expansion_001_20260506",
@@ -18936,7 +19042,7 @@
       "section": "Output efficiency",
       "rule_type": "general",
       "text": "Errors or blockers that change the plan",
-      "id": "system_prompt/output-efficiency/1426",
+      "id": "system_prompt/output-efficiency/1427",
       "is_covered": false,
       "covered_by": [],
       "match_method": null
@@ -19430,19 +19536,19 @@
       "text": "**Dispersion correction is required for weak-interaction systems unless explicitly disabled**: for layered materials, MOF/organic systems, weakly bound interfaces, H-passivated models, and slabs/surfaces, include `IVDW` (e.g., `11` or `12`). For complex dispersion setups, first consult `https://vasp.at/wiki/IVDW`."
     },
     {
-      "id": "vasp/hard-guards/1279",
+      "id": "vasp/hard-guards/1280",
       "source_name": "vasp",
       "rule_type": "hard_guard",
       "text": "**POTCAR must be resolved before submission.** VASP cannot run without POTCAR. Before submitting, use AskQuestion to ask the user where POTCAR is located. Options:"
     },
     {
-      "id": "vasp/hard-guards/1280",
+      "id": "vasp/hard-guards/1281",
       "source_name": "vasp",
       "rule_type": "hard_guard",
       "text": "\"VASP 镜像中已内置 POTCAR（如 `/opt/vasp/potcar/PBE/`）\""
     },
     {
-      "id": "vasp/hard-guards/1282",
+      "id": "vasp/hard-guards/1283",
       "source_name": "vasp",
       "rule_type": "hard_guard",
       "text": "\"我没有 POTCAR\" If the user has no POTCAR, do NOT submit — inform them POTCAR is license-restricted and cannot be auto-generated, then stop. If POTCAR is in the image or on a node path, write a `run.sh` that copies/concatenates POTCAR from that path before running VASP. State recommended PAW pseudopotentials (e.g., `Al`, `Si`, `O`, `Fe_pv`, `Ti_sv`) so they know what elements to prepare."
