@@ -39,22 +39,27 @@ recommended pseudopotentials but do not generate the file.
   - Semiconductors/insulators: `ISMEAR = 0` (Gaussian) with `SIGMA = 0.05`.
   - DOS / accurate total energy: `ISMEAR = -5` (tetrahedron with Blochl corrections).
   - Single atom / molecule (Gamma-only): `ISMEAR = 0`, `SIGMA = 0.01`.
-- **Before finalizing INCAR, explicitly judge whether dispersion correction is needed**:
-  for layered materials, MOF/organic systems, weakly bound interfaces, and many slabs, include `IVDW` (e.g., `11` or `12`).
+- **Dispersion correction is required for weak-interaction systems unless explicitly disabled**:
+  for layered materials, MOF/organic systems, weakly bound interfaces, H-passivated models, and slabs/surfaces, include `IVDW` (e.g., `11` or `12`).
   For complex dispersion setups, first consult `https://vasp.at/wiki/IVDW`.
 - **Relaxation tasks MUST set**:
   - `IBRION = 2` (CG) or `1` (quasi-Newton), and `NSW >= 100`.
   - `ISIF = 2` for ionic-only, `ISIF = 3` for full cell+ionic relaxation.
   - `EDIFFG` negative for force convergence (e.g., `EDIFFG = -0.01` eV/A).
+- **Static fixed-cell slab/surface setups**: if the prompt says fixed cell or fixed cell shape, set `ISIF = 2` explicitly.
 - **Band structure / DOS must be two-step**: SCF first (uniform k-mesh), then
   NSCF with `ICHARG = 11` (band) or `ICHARG = 11` + dense mesh (DOS).
+- **Projected band / PDOS / DOS tasks**: set `LORBIT = 11` unless the task explicitly
+  requests another projection mode.
 - **Spin-polarized**: `ISPIN = 2`; set `MAGMOM` per atom for magnetic systems.
-- **SOC**: `LSORBIT = .TRUE.` requires `ISPIN = 2` and `LNONCOLLINEAR = .TRUE.`
-  (implicit).
+- **SOC/heavy-element calculations**: set `LSORBIT = .TRUE.`, `ISPIN = 2`,
+  `LNONCOLLINEAR = .TRUE.` (implicit), and `ISYM = 0`; set `LMAXMIX = 4`
+  unless f-electrons require `LMAXMIX = 6`.
 - **Hybrid DFT (HSE06)**: `LHFCALC = .TRUE.`, `HFSCREEN = 0.2`,
   `ALGO = Damped` or `All`, `TIME = 0.4`.
 - **DFT+U**: `LDAU = .TRUE.`, `LDAUTYPE = 2` (Dudarev), `LDAUL`, `LDAUU`,
-  `LDAUJ` arrays matching species order in POSCAR.
+  `LDAUJ` arrays matching species order in POSCAR; set `LMAXMIX = 4` for
+  d-electron systems and `LMAXMIX = 6` for f-electron systems.
 - **Meta-GGA (SCAN/R2SCAN)**: `LASPH = .TRUE.` is required.
 - **POTCAR must be resolved before submission.** VASP cannot run without
   POTCAR. Before submitting, use AskQuestion to ask the user where POTCAR
