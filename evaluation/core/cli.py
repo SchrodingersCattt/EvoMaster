@@ -54,6 +54,12 @@ def main() -> int:
         help='Force using seed prompts (disable rewriting)',
     )
     parser.add_argument(
+        '--exp',
+        default=None,
+        choices=['direct', 'planner'],
+        help='Experiment / mode: maps to matmaster/exps/{exp}.toml (default: direct)',
+    )
+    parser.add_argument(
         '--slices',
         default=None,
         metavar='EXPR',
@@ -121,6 +127,8 @@ def main() -> int:
         eval_cfg['question_bank_dir'] = args.question_bank_dir
     if args.use_seed_prompt:
         eval_cfg['use_seed_prompt'] = True
+    if args.exp is not None:
+        eval_cfg['exp'] = args.exp
     if args.slices is not None:
         eval_cfg['include_slices'] = [
             s.model_dump() for s in parse_slices_expression(args.slices)
