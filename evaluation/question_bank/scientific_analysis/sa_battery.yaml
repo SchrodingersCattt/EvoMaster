@@ -69,7 +69,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 28000
+      max: 20000
   scoring_checklist:
   - id: cycle1_capacity
     criterion: The first-cycle discharge specific capacity reported in eval_results is consistent with the uploaded cycling workbook.

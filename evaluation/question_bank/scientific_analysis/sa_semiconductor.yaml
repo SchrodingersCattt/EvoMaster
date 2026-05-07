@@ -148,7 +148,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 30000
+      max: 20000
   scoring_checklist:
   - id: lambda_max
     criterion: The emission maximum reported in eval_results is consistent with the uploaded emission spectrum.

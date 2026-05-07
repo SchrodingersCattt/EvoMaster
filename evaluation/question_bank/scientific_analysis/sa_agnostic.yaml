@@ -720,7 +720,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 25000
+      max: 20000
   scoring_checklist:
   - id: calibration_slope
     criterion: The calibration slope reported in eval_results is consistent with the uploaded Cd standard traces.
@@ -839,7 +839,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 36000
+      max: 22000
   scoring_checklist:
   - id: endpoint_wavelength
     criterion: The endpoint wavelength reported in eval_results is consistent with the assay export.
@@ -967,7 +967,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 22000
+      max: 20000
   scoring_checklist:
   - id: pristine_peak1
     criterion: The first main pristine MAF-4 peak position reported in eval_results is consistent with the uploaded PXRD trace.
