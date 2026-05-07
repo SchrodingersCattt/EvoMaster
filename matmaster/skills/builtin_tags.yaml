@@ -61,8 +61,6 @@ skills:
   poly-generator: [polymer]
   poly-forcefield: [polymer, molecular-dynamics]
 
-  gromacs-system-prep: [molecular-dynamics]
-  grompp-remote-mdrun: [molecular-dynamics]
 
   plan-executor: [planning]
   acceptance-writer: [planning]

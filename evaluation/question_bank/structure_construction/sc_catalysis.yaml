@@ -11,7 +11,7 @@ questions:
 
     '
   tags:
-  - phy_surface
+  - struct_surface
   data_files: []
   reference_answers:
   - key: file_exists
@@ -93,7 +93,7 @@ questions:
 
     '
   tags:
-  - phy_surface
+  - struct_surface
   data_files: []
   reference_answers:
   - key: slab_layers

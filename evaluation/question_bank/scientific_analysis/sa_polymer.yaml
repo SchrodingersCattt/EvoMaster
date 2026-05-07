@@ -22,7 +22,6 @@ questions:
 
     '
   tags:
-  - mat_polymer
   data_files:
   - key: donor_bundle
     path: data/pl_donor/donor_prescreen_bundle.json

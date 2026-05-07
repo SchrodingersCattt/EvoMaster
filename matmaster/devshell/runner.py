@@ -155,6 +155,9 @@ class DevRunner:
                     if event_observer is not None:
                         event_observer.emit(event)
 
+                # Inject event_sink so child agents forward events
+                self._pg_ctx.run_meta["event_sink"] = _on_event
+
                 return await drain_run_stream(
                     runtime.kernel.run_stream(
                         spec, task, history=self.history, cancel_token=cancel_token

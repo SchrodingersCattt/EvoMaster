@@ -39,6 +39,9 @@ recommended pseudopotentials but do not generate the file.
   - Semiconductors/insulators: `ISMEAR = 0` (Gaussian) with `SIGMA = 0.05`.
   - DOS / accurate total energy: `ISMEAR = -5` (tetrahedron with Blochl corrections).
   - Single atom / molecule (Gamma-only): `ISMEAR = 0`, `SIGMA = 0.01`.
+- **Before finalizing INCAR, explicitly judge whether dispersion correction is needed**:
+  for layered materials, MOF/organic systems, weakly bound interfaces, and many slabs, include `IVDW` (e.g., `11` or `12`).
+  For complex dispersion setups, first consult `https://vasp.at/wiki/IVDW`.
 - **Relaxation tasks MUST set**:
   - `IBRION = 2` (CG) or `1` (quasi-Newton), and `NSW >= 100`.
   - `ISIF = 2` for ionic-only, `ISIF = 3` for full cell+ionic relaxation.

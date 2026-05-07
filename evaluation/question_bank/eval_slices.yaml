@@ -35,19 +35,31 @@ slices:
     type: skill
     slices:
       - "@code_mlip"
-    count: 24
+    count: 9
 
-  - target: "Skill: atomic-structure"
+  - target: "Skill: build-atomic-structure"
     type: skill
     slices:
-      - structure_construction
-    count: 11
+      - "@struct_build"
+    count: 5
+
+  - target: "Skill: transform-atomic-structure"
+    type: skill
+    slices:
+      - "@struct_transform"
+    count: 9
+
+  - target: "Skill: operate-molecular-crystal"
+    type: skill
+    slices:
+      - "@struct_molcrys"
+    count: 3
 
   - target: "Skill: tasker-polar-surface"
     type: skill
     slices:
-      - "@phy_surface"
-    count: 44
+      - "@struct_surface"
+    count: 22
 
   - target: "Skill: xrd + checkcif"
     type: skill
@@ -65,7 +77,7 @@ slices:
     type: skill
     slices:
       - "@eng_cp2k"
-    count: 1
+    count: 2
 
   - target: "Skill: lammps"
     type: skill
@@ -84,16 +96,14 @@ slices:
   - target: "Tool: mcp-mat-struct-db"
     type: tool
     slices:
-      - structure_retrieval
-    count: 9
+      - "@meta_database"
+    count: 13
 
   - target: "Tool: Bohrium batch/sweep"
     type: tool
     slices:
       - batch_processing
-      - "@wf_batch"
-      - "@wf_sweep"
-    count: 13
+    count: 4
 
   # ── Prompts ─────────────────────────────────────────────────────────
 
@@ -116,27 +126,3 @@ slices:
     count: 7
 
   # ── Cross-cutting ───────────────────────────────────────────────────
-
-  - target: "Cross: hybrid DFT"
-    type: cross
-    slices:
-      - "@hybrid_functional"
-    count: 5
-
-  - target: "Cross: phonon"
-    type: cross
-    slices:
-      - "@phy_phonon"
-    count: 8
-
-  - target: "Cross: defect"
-    type: cross
-    slices:
-      - "@phy_defect"
-    count: 11
-
-  - target: "Cross: MD workflow"
-    type: cross
-    slices:
-      - "@phy_md"
-    count: 17

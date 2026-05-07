@@ -12,7 +12,6 @@ questions:
 
     '
   tags:
-  - log_diagnosis
   priority: P0
   data_files:
   - key: case_bundle

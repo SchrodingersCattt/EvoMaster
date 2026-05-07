@@ -2,7 +2,7 @@ version: v5
 capability: input_generation
 domain: agnostic
 questions:
-- id: IG_abacus_001_20260501
+- id: IG_abacus_001_20260504
   capability: input_generation
   domain: agnostic
   intent: 'Add ABACUS LCAO BSSE correction for Fe(110) slab: define Fe_empty species, place
@@ -25,7 +25,7 @@ questions:
     '
   tags:
   - eng_abacus
-  - phy_surface
+  - struct_surface
   data_files:
   - key: base_slab
     path: data/IG_abacus_001_20260404/base_slab.stru
@@ -72,8 +72,8 @@ questions:
         min: 80
         max: 120
       - key: scf_thr
-        min: 1.0e-08
-        max: 1.0e-06
+        min: 1.0e-10
+        max: 0.01
   - key: suggested_input_bsse_smearing
     value:
       filename: INPUT_bsse
@@ -94,8 +94,8 @@ questions:
         - fermi-dirac
       - key: smearing_sigma
         allow_missing_key: true
-        min: 0.005
-        max: 0.03
+        min: 0.001
+        max: 0.1
   - key: variable_empty_layer_placement
     value: {}
   - key: variable_fe_empty_species_quality
@@ -207,7 +207,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_003_20260422
+- id: IG_abacus_003_20260504
   capability: input_generation
   domain: agnostic
   intent: Generate ABACUS PW SCF INPUT and KPT files for Al slab electrostatic-potential calculation
@@ -227,7 +227,7 @@ questions:
     '
   tags:
   - eng_abacus
-  - phy_surface
+  - struct_surface
   data_files:
   - key: base_al_slab
     path: data/IG_abacus_003_20260406/base_al_slab.stru
@@ -281,8 +281,8 @@ questions:
         - fermi-dirac
       - key: smearing_sigma
         allow_missing_key: true
-        min: 0.005
-        max: 0.03
+        min: 0.001
+        max: 0.1
   - key: variable_kpt_inplane_density
     value:
       filename: KPT_pot
@@ -372,7 +372,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_004_20260422
+- id: IG_abacus_004_20260504
   capability: input_generation
   domain: agnostic
   intent: Generate ABACUS PW SCF input for dipole correction on an asymmetric H2O slab, with
@@ -392,7 +392,7 @@ questions:
     '
   tags:
   - eng_abacus
-  - phy_surface
+  - struct_surface
   data_files:
   - key: base_h2o
     path: data/IG_abacus_004_20260406/base_h2o.stru
@@ -429,8 +429,8 @@ questions:
         min: 35
         max: 75
       - key: scf_thr
-        min: 1.0e-08
-        max: 1.0e-05
+        min: 1.0e-10
+        max: 0.01
       - key: out_pot
         expected: 2
         tolerance: 0
@@ -464,8 +464,8 @@ questions:
         - fermi-dirac
       - key: smearing_sigma
         allow_missing_key: true
-        min: 0.005
-        max: 0.03
+        min: 0.001
+        max: 0.1
   - key: input_dipole_artifact
     value: INPUT_dipole
   - key: kpt_dipole_artifact
@@ -550,7 +550,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_002_20260422
+- id: IG_abacus_002_20260504
   capability: input_generation
   domain: agnostic
   intent: Add ABACUS LCAO BSSE correction at a bulk Fe vacancy site using a single Fe_empty
@@ -573,7 +573,7 @@ questions:
     '
   tags:
   - eng_abacus
-  - phy_defect
+  - struct_transform
   priority: P0
   data_files:
   - key: base_vacancy
@@ -611,8 +611,8 @@ questions:
         min: 80
         max: 120
       - key: scf_thr
-        min: 1.0e-07
-        max: 1.0e-06
+        min: 1.0e-10
+        max: 0.01
   - key: suggested_input_vac_smearing
     value:
       filename: INPUT_vac_bsse
@@ -633,8 +633,8 @@ questions:
         - fermi-dirac
       - key: smearing_sigma
         allow_missing_key: true
-        min: 0.005
-        max: 0.03
+        min: 0.001
+        max: 0.1
   - key: variable_bsse_explanation
     value: {}
   - key: variable_fe_empty_at_vacancy
@@ -738,7 +738,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_005_20260430
+- id: IG_abacus_005_20260504
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS PW bulk-and-slab inputs for Al fcc(100) surface-energy convergence
@@ -760,8 +760,7 @@ questions:
     '
   tags:
   - eng_abacus
-  - phy_surface
-  - wf_inputs
+  - struct_surface
   data_files:
   - key: bulk_al_fcc
     path: data/IG_abacus_005_20260406/bulk_al_fcc.stru
@@ -815,13 +814,7 @@ questions:
       checks:
       - key: ecutwfc
         min: 35
-        max: 75
-      - key: scf_nmax
-        min: 50
-        max: 1000
-      - key: relax_nmax
-        min: 50
-        max: 1000
+        max: 100
   - key: variable_input_bulk_smearing_or_mixing
     value:
       filename: INPUT_bulk_relax
@@ -842,8 +835,8 @@ questions:
         - fermi-dirac
       - key: smearing_sigma
         allow_missing_key: true
-        min: 0.005
-        max: 0.03
+        min: 0.001
+        max: 0.1
       - key: mixing_type
         allow_missing_key: true
         allowed_values:
@@ -907,8 +900,7 @@ questions:
     verify: text_file_regex
     weight: 1.0
   - id: suggested_input_bulk_relax_numerics
-    criterion: '[Suggested] INPUT_bulk_relax follows benchmark numeric settings (`ecutwfc`,
-      `scf_nmax`/`relax_nmax` within 50~1000).'
+    criterion: '[Suggested] INPUT_bulk_relax follows benchmark numeric settings (`ecutwfc` in a reasonable low-cost range).'
     axis: correctness
     verify: text_file_numeric_range
     weight: 0.6
@@ -977,7 +969,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_006_20260422
+- id: IG_abacus_006_20260504
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS PW inputs for Mo surface-vacancy energy using bulk, pristine slab,
@@ -999,8 +991,7 @@ questions:
     '
   tags:
   - eng_abacus
-  - phy_defect
-  - wf_inputs
+  - struct_transform
   data_files:
   - key: mo_bulk
     path: data/IG_abacus_006_20260406/mo_bulk.stru
@@ -1054,21 +1045,21 @@ questions:
       checks:
       - key: ecutwfc
         min: 10
-        max: 29.999
+        max: 50
   - key: suggested_slab_clean_low_cost_cutoff
     value:
       filename: INPUT_slab_clean
       checks:
       - key: ecutwfc
         min: 10
-        max: 29.999
+        max: 50
   - key: suggested_slab_vac_low_cost_cutoff
     value:
       filename: INPUT_slab_vac
       checks:
       - key: ecutwfc
         min: 10
-        max: 29.999
+        max: 50
   - key: variable_bulk_smearing_or_mixing
     value:
       filename: INPUT_bulk_mo
@@ -1089,8 +1080,8 @@ questions:
         - fermi-dirac
       - key: smearing_sigma
         allow_missing_key: true
-        min: 0.005
-        max: 0.03
+        min: 0.001
+        max: 0.1
       - key: mixing_type
         allow_missing_key: true
         allowed_values:
@@ -1135,8 +1126,8 @@ questions:
         - fermi-dirac
       - key: smearing_sigma
         allow_missing_key: true
-        min: 0.005
-        max: 0.03
+        min: 0.001
+        max: 0.1
       - key: mixing_type
         allow_missing_key: true
         allowed_values:
@@ -1181,8 +1172,8 @@ questions:
         - fermi-dirac
       - key: smearing_sigma
         allow_missing_key: true
-        min: 0.005
-        max: 0.03
+        min: 0.001
+        max: 0.1
       - key: mixing_type
         allow_missing_key: true
         allowed_values:

@@ -14,9 +14,6 @@ questions:
 
     最终回答需简要判断该结果在室温机械性能评估上的可信度。'
   tags:
-  - meta_userlog
-  - phy_elastic
-  - screening_hte
   - meta_database
   data_files: []
   reference_answers:
@@ -107,8 +104,6 @@ questions:
 
     最终回答中简要说明：优化后结构相对输入结构的主要变化（可定性描述）。'
   tags:
-  - screening_hte
-  - meta_userlog
   data_files: []
   reference_answers:
   - key: optimized_structure
@@ -199,9 +194,6 @@ questions:
     \ `hull_distance`, `stability_label`, `reference_phases`, `notes`；\n2) `cucrzr_convex_hull_report.md`：说明\
     \ query 输入梳理、mock 后处理流程、稳定性判据及不确定性。\n\n最终回答中请明确说明该结构在热力学稳定性上的定性结论（稳定/亚稳/不稳定）。\n"
   tags:
-  - wf_postprocess
-  - phy_surface
-  - meta_userlog
   data_files: []
   reference_answers:
   - key: hull_summary_json
@@ -294,9 +286,6 @@ questions:
 
     最终回答请给出“Ni 含量变化-强度变化”的总体趋势判断。'
   tags:
-  - meta_userlog
-  - phy_elastic
-  - mat_hea
   data_files: []
   reference_answers:
   - key: tensile_json

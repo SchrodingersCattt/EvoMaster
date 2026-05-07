@@ -15,6 +15,7 @@ from .evaluator_helpers import (
     check_answer_json_numeric_from_ref,
     check_checkcif_alerts,
     check_duration_budget,
+    check_json_file_artifacts,
     check_json_file_numeric_range,
     check_json_file_schema,
     check_molcrys_local_env_from_evidence,
@@ -175,6 +176,7 @@ for _name, _fn in [
     ("text_file_regex", check_text_file_regex_from_evidence),
     ("json_file_schema", check_json_file_schema),
     ("json_file_numeric_range", check_json_file_numeric_range),
+    ("json_file_artifacts", check_json_file_artifacts),
     ("tool_name_used", check_tool_name_used),
 ]:
     BinaryEvaluator._VERIFY_REGISTRY[_name] = (_evidence_ref_handler(_fn), True)

@@ -1,6 +1,6 @@
 ---
 name: gromacs
-description: "MUST use this skill for ANY task involving GROMACS (classical MD NVT/NPT, energy minimization, free energy perturbation, enhanced sampling, etc.). For system building (solvation, ions), see gromacs-system-prep."
+description: "MUST use this skill for ANY task involving GROMACS (classical MD NVT/NPT, energy minimization, free energy perturbation, enhanced sampling, system building, solvation, ion addition, etc.)."
 skill_type: operator
 ---
 
@@ -14,16 +14,18 @@ GROMACS is a high-performance molecular dynamics package primarily designed for 
 |------|---------------------|
 | image | `registry.dp.tech/dptech/gromacs:2022.2` |
 | machine | `c32_m128_cpu` (32 cores, 128 GB RAM) |
-| cmd | `gmx grompp -f md.mdp -c conf.gro -p topol.top -o run.tpr && gmx mdrun -v -deffnm run > log 2>&1` |
+| cmd | `bash run.sh > log 2>&1` |
 
 | Item | GPU Alternative |
 |------|-----------------|
 | machine | `c6_m60_1 * NVIDIA 4090` |
-| cmd | `gmx grompp -f md.mdp -c conf.gro -p topol.top -o run.tpr && gmx mdrun -v -deffnm run -gpu_id 0 > log 2>&1` |
+| cmd | `bash run.sh > log 2>&1` (add `-gpu_id 0` to mdrun in script) |
 
+> **The Bohrium GROMACS image has `gmx_mpi` only (not `gmx`).** Do NOT use `-ntmpi` (thread-MPI is not compiled in).
 > Adjust `grompp` arguments to match actual filenames.
 > For GPU options: `Bohrium(action="list_machines", machine_type="gpu", keyword="4090")`.
 > For different GROMACS versions: `Bohrium(action="list_images", keyword="gromacs")`.
+> When submitting multiple systems in parallel, use **distinct file names** (e.g. `sysA_init.gro`, `sysB_init.gro`) to avoid Bohrium upload cache collisions.
 
 ## Input Preparation
 
@@ -36,13 +38,24 @@ GROMACS uses three core files: **topology** (`.top`), **coordinates** (`.gro`), 
 uv run python scripts/render_input.py --software gromacs --task md --output md.mdp
 ```
 
-### System Building Workflow
+### System Building (inside `run.sh`, executed on Bohrium)
 
-For building a complete system from scratch (solvation, ion addition, topology generation), use the **gromacs-system-prep** skill which provides:
-- `gmx pdb2gmx` for topology generation
-- `gmx solvate` for solvation
-- `gmx genion` for ion addition
-- `gmx make_ndx` for index groups
+These commands run inside the submitted `run.sh` — `gmx_mpi` is only available in the Bohrium image, NOT locally.
+
+The image's shared data lives at `$GMXLIB` (typically `/usr/local/gromacs/share/gromacs/top/`). Topology `#include` directives (e.g. `#include "oplsaa.ff/forcefield.itp"`) resolve against this path automatically. When referencing data files explicitly (e.g. `spc216.gro`), use the full path:
+
+```bash
+GMXTOP=$(find /usr/local -type d -name "top" -path "*/gromacs/*" | head -1)
+```
+
+| Step | Command | Purpose |
+|------|---------|---------|
+| Topology from PDB | `gmx_mpi pdb2gmx -f input.pdb -o processed.gro -water spce` | Generate `.top` + `.gro` from PDB |
+| Edit box | `gmx_mpi editconf -f input.gro -o box.gro -d 1.0 -bt cubic` | Set box with padding |
+| Solvate | `gmx_mpi solvate -cp box.gro -cs $GMXTOP/spc216.gro -o solvated.gro -p topol.top` | Add solvent (`-p` updates existing `.top`) |
+| Ion prep | `gmx_mpi grompp -f ions.mdp -c solvated.gro -p topol.top -o ions.tpr -maxwarn 3` | Prepare `.tpr` for genion |
+| Add ions | `echo "SOL" \| gmx_mpi genion -s ions.tpr -o ionized.gro -p topol.top -pname NA -nname CL -neutral` | Neutralize system |
+| Index groups | `gmx_mpi make_ndx -f conf.gro -o index.ndx` | Create custom groups |
 
 ### Ready-to-run files
 
@@ -78,14 +91,25 @@ If the user provides `.gro` + `.top` + `.mdp` (or a pre-built `.tpr`), skip prep
 - **Box size**: minimum image convention requires box dimension > 2 * rcoulomb; check `gmx editconf -d 1.0` padding
 - **Periodic boundary conditions**: `pbc = xyz` for standard 3D periodic
 
+## Key Rules
+
+1. **Chain all steps in one script** — When a workflow has multiple sequential steps (EM → NVT → NPT), write a single `run.sh` that executes them all. Always start with `set -e` so the script aborts on first failure. Each Bohrium submission has ~1 min overhead for scheduling; avoid submitting steps separately.
+2. **`gmx_mpi solvate -p` requires the topology to exist** — The `-p` flag *updates* an existing `.top` with solvent molecule counts. If the topology doesn't exist yet, omit `-p` and manually add `[ molecules ]` entries, or create the topology first.
+3. **Use provided input files directly** — If the user provides `.gro` + `.top` + `.mdp`, do NOT recreate them. Write a `run.sh` that references them as-is for `grompp`.
+4. **`grompp -maxwarn 3`** — Always pass `-maxwarn 3` (at minimum) to avoid grompp aborting on non-fatal notes (e.g. overridden mdp parameters).
+5. **`genion` requires a `.tpr`** — Run `grompp` first to produce the `.tpr`, then feed it to `genion`.
+6. **DO NOT run `gmx_mpi` locally** — `gmx_mpi` is only available in the Bohrium image. All GROMACS commands (including system building) must be in the submitted `run.sh`.
+7. **Interactive selections via pipe** — Commands that need interactive group input (e.g. `genion`, `make_ndx`) must use `echo "GROUP" | gmx_mpi ...` in the script.
+
 ## Submission Workflow
 
-1. Prepare system (use gromacs-system-prep skill if building from scratch)
-2. Generate/verify MDP: `render_input.py --software gromacs --task md --output md.mdp`
-3. Ensure `.gro`, `.top`, `.mdp` are in one directory
-4. Submit (the cmd runs both grompp and mdrun):
-   `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/gromacs:2022.2", cmd="gmx grompp -f md.mdp -c conf.gro -p topol.top -o run.tpr && gmx mdrun -v -deffnm run > log 2>&1")`
+1. Prepare input files locally (MDP, structure, topology — or use provided files)
+2. Write a `run.sh` that chains all steps (system building if needed + grompp + mdrun)
+3. Ensure all files (`.gro`, `.top`, `.mdp`, `run.sh`) are in one directory
+4. Submit:
+   `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/gromacs:2022.2", cmd="bash run.sh > log 2>&1")`
 5. Poll: `Bohrium(action="poll", job_id=<id>)`
+6. Download: `Bohrium(action="download", job_id=<id>, result_dir="<output_dir>")`
 
 ## Post-Processing
 

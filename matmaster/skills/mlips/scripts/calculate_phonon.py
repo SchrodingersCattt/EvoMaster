@@ -3,8 +3,9 @@
 Usage::
 
     python calculate_phonon.py --structure input.cif --model DPA3.1-3M \\
-        --temperatures 300 600 900 [--head OMat24] [--displacement 0.005] \\
-        [--calc-tdos] [--calc-pdos] [--mesh 40] [--charge 0] [--spin 1]
+        [--supercell 5 5 1] --temperatures 300 600 900 [--head OMat24] \\
+        [--displacement 0.005] [--calc-tdos] [--calc-pdos] [--mesh 40] \\
+        [--charge 0] [--spin 1]
 
 Outputs:
     phonon_band.png / .yaml / .dat  — band structure
@@ -43,6 +44,13 @@ def parse_args() -> argparse.Namespace:
     )
     p.add_argument(
         "--displacement", type=float, default=0.005, help="Displacement distance (Å)"
+    )
+    p.add_argument(
+        "--supercell",
+        type=int,
+        nargs=3,
+        default=[1, 1, 1],
+        help="Supercell dimensions (e.g. 5 5 1 for 2D materials)",
     )
     p.add_argument("--calc-tdos", action="store_true", help="Calculate total DOS")
     p.add_argument("--calc-pdos", action="store_true", help="Calculate projected DOS")
@@ -84,7 +92,8 @@ def main() -> None:
         cell=atoms.get_cell(),
         scaled_positions=atoms.get_scaled_positions(),
     )
-    phonon = Phonopy(ph_atoms, [[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+    sc = args.supercell
+    phonon = Phonopy(ph_atoms, [[sc[0], 0, 0], [0, sc[1], 0], [0, 0, sc[2]]])
     phonon.generate_displacements(distance=args.displacement)
 
     # Forces

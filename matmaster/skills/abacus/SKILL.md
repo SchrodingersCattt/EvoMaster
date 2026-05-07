@@ -17,6 +17,8 @@ electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE.
 ## Minimum Workflow
 
 1. Read provided `STRU` first and reuse filenames exactly (PP/orbital/structure).
+   Pseudopotentials (`.upf`) default path: `/root/apns-pseudopotentials-v1/`.
+   Orbitals (`.orb`) default path: `/root/apns-orbitals-efficiency-v1/`.
 2. Generate `INPUT` (and `KPT` when needed).
 3. For uncertain params/workflows, check local `references/*` first.
 4. If references are insufficient or ambiguous, use official ABACUS docs on web as fallback.
@@ -43,6 +45,8 @@ electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE.
 ## Parameter Baseline (Use Judgment, Not Blind Fixed Values)
 
 - Use physically reasonable `ecutwfc`, `smearing`, and SCF thresholds for system and PP quality.
+- `ecutwfc` (Type: Real): energy cutoff for plane-wave functions. Unit is `Ry`. Even under `basis_type lcao`, `ecutwfc` is still required because local pseudopotential parts and related forces are evaluated in plane-wave representation. Default baseline: `50` (PW), `100` (LCAO), unless task requirements override.
+- In low-cost or benchmark settings, `ecutwfc` can be set below the default baseline if task intent prioritizes speed over accuracy.
 - For fast tasks with lower accuracy requirements, choose lower-precision settings (including lower `ecutwfc`) to prioritize turnaround time.
 - Distinguish `LCAO` vs `PW` parameter semantics and sensitivity; do not directly copy basis-specific settings across modes.
 - Use `smearing_sigma 0.015` as the default starting point unless the task specifies otherwise.
@@ -69,7 +73,7 @@ Keep the previous default profile unless task/environment explicitly overrides i
 
 | Item | Default |
 |------|---------|
-| image | `registry.dp.tech/dptech/abacus:LTSv3.10.1` |
+| image | `registry.dp.tech/dptech/dp/native/hub/mrdic2/abacusp:1.0.1-1778080680` |
 | machine | `c32_m128_cpu` |
 | cmd | `OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1` |
 
