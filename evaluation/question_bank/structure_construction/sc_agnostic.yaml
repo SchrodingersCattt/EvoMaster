@@ -129,7 +129,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_005_20260507
+- id: SC_struct_005_20260508
   capability: structure_construction
   domain: agnostic
   intent: Infer SG-derived chemical formulas for 5 disordered crystal structures and construct
@@ -562,7 +562,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_009_20260507
+- id: SC_struct_009_20260508
   capability: structure_construction
   domain: agnostic
   intent: Build a stoichiometric and symmetric CeO2(111) surface with three Ce-O-Ce trilayers

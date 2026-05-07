@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: catalysis
 questions:
-- id: CR_SC_ZnS001_20260507
+- id: CR_SC_ZnS001_20260508
   capability: structure_construction
   domain: catalysis
   intent: Build ZnS(001) polar surface slab with 3 layers and 2x2x1 supercell per doc 3.1.2.
