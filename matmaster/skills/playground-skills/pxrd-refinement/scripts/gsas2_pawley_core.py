@@ -3,19 +3,15 @@
 from __future__ import annotations
 
 import csv
-import json
 import os
 import re
 import sys
-import tempfile
-from contextlib import redirect_stdout
-from pathlib import Path
 
 import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from curation import CurationResult, curate, write_diagnostic_plot  # noqa: E402
-from gsas2_pawley_cell import standardize_cell  # noqa: E402
+from gsas2_pawley_cell import _CELL_FIELDS, _ESD_FIELDS, standardize_cell  # noqa: E402
 
 DEFAULT_GSAS2_PATH = "/root/g2full/GSAS-II/GSASII"
 
@@ -48,6 +44,7 @@ CELL_PARAMS = {
 
 COLD_START_WR_FLOOR = 10.0
 COLD_START_WR_SPREAD = 1.5
+
 
 def generate_pawley_reflections(
     phase_data: dict, dmin: float, dmax: float | None = None

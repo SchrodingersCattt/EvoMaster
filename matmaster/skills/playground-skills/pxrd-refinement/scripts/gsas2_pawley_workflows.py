@@ -7,7 +7,6 @@ import tempfile
 from pathlib import Path
 
 import numpy as np
-
 from gsas2_pawley_core import (  # noqa: E402
     cell_dict_to_list,
     cell_volume,
@@ -17,6 +16,7 @@ from gsas2_pawley_core import (  # noqa: E402
     read_xy_file,
     refine_one_pattern,
 )
+
 
 def _refine_kwargs_from_args(args) -> dict:
     """Common keyword args shared by run_single / run_directory / run_wide_csv."""
