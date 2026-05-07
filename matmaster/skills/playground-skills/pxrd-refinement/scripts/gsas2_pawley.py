@@ -39,6 +39,7 @@ from contextlib import redirect_stdout
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import gsas2_pawley_workflows as _workflows  # noqa: E402
 from gsas2_pawley_cell import (  # noqa: E402,F401
     cell_to_lattice,
     lattice_to_cell,
@@ -46,19 +47,40 @@ from gsas2_pawley_cell import (  # noqa: E402,F401
     standardize_cell,
 )
 from gsas2_pawley_core import (  # noqa: E402,F401
+    COLD_START_WR_FLOOR,
+    COLD_START_WR_SPREAD,
     DEFAULT_GSAS2_PATH,
+    REF_VOL_WR_TOLERANCE,
     cell_volume,
     pick_best_candidate,
     refine_one_pattern,
     setup_gsas2,
+    summarize_multi_start,
 )
 from gsas2_pawley_workflows import (  # noqa: E402,F401
     merge_chain_directions,
-    run_directory,
-    run_single,
-    run_wide_csv,
     self_heal_chain_outliers,
 )
+
+
+def _sync_workflow_patch_points() -> None:
+    """Keep old gsas2_pawley monkeypatch tests working after module split."""
+    _workflows.refine_one_pattern = refine_one_pattern
+
+
+def run_single(args) -> dict:
+    _sync_workflow_patch_points()
+    return _workflows.run_single(args)
+
+
+def run_directory(args) -> dict:
+    _sync_workflow_patch_points()
+    return _workflows.run_directory(args)
+
+
+def run_wide_csv(args) -> dict:
+    _sync_workflow_patch_points()
+    return _workflows.run_wide_csv(args)
 
 
 def main() -> None:
