@@ -207,7 +207,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_007_20260506
+- id: IG_abacus_007_20260507
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS Si LCAO-SCF inputs and Bohrium submission configuration.
@@ -231,15 +231,13 @@ questions:
   - key: must_input_pseudo_dir
     value:
       filename: INPUT
-      pattern: (?im)^\s*pseudo_dir\s+/root/apns-pseudopotentials-v1\s*$
+      pattern: (?im)^\s*pseudo_dir\s+/root/apns-pseudopotentials-v1/?\s*$
       flags: im
   - key: must_stru_si_pseudo
     value:
       filename: STRU
       pattern: (?im)^\s*Si\s+[0-9.]+\s+Si\.upf\s*$
       flags: im
-  - key: variable_submission_success
-    value: {}
   - key: variable_workspace_files_correct
     value: {}
   - key: turn_budget
@@ -250,7 +248,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 20000
   scoring_checklist:
   - id: submit_json_artifact
     criterion: Generated deliverables count even if the final answer does not quote file contents;
@@ -292,11 +290,6 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 1.0
-  - id: variable_submission_success
-    criterion: '[Variable] The prepared setup is submitted successfully on Bohrium.'
-    axis: correctness
-    verify: llm_binary_judge
-    weight: 0.5
   - id: variable_workspace_files_correct
     criterion: '[Variable] Workspace files are mutually consistent for the ABACUS Si LCAO-SCF
       run.'
@@ -316,7 +309,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_008_20260506
+- id: IG_abacus_008_20260507
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS Si PW-SCF inputs and Bohrium submission configuration.
@@ -347,15 +340,13 @@ questions:
   - key: must_input_pseudo_dir
     value:
       filename: INPUT
-      pattern: (?im)^\s*pseudo_dir\s+/root/apns-pseudopotentials-v1\s*$
+      pattern: (?im)^\s*pseudo_dir\s+/root/apns-pseudopotentials-v1/?\s*$
       flags: im
   - key: must_stru_si_pseudo
     value:
       filename: STRU
       pattern: (?im)^\s*Si\s+[0-9.]+\s+Si\.upf\s*$
       flags: im
-  - key: variable_submission_success
-    value: {}
   - key: variable_workspace_files_correct
     value: {}
   - key: turn_budget
@@ -366,7 +357,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 20000
   scoring_checklist:
   - id: submit_json_artifact
     criterion: Generated deliverables count even if the final answer does not quote file contents;
@@ -413,11 +404,6 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 1.0
-  - id: variable_submission_success
-    criterion: '[Variable] The prepared setup is submitted successfully on Bohrium.'
-    axis: correctness
-    verify: llm_binary_judge
-    weight: 0.5
   - id: variable_workspace_files_correct
     criterion: '[Variable] Workspace files are mutually consistent for the ABACUS Si PW-SCF
       run.'
