@@ -2577,8 +2577,6 @@ questions:
     4) 添加 Na+/Cl- 离子中和体系电荷（genion）
     5) 执行能量最小化（steep, emtol=1000, nsteps=50000）
 
-    全部步骤应在一次 Bohrium 提交中完成（写一个 run.sh 脚本串联所有步骤）。
-
     在最终回答中报告：EM 收敛步数、最终势能 (kJ/mol)、体系中水分子数量。'
   tags:
   - eng_gromacs
