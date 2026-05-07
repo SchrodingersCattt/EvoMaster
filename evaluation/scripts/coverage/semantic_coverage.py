@@ -160,10 +160,10 @@ SKILL_TAG_MAP: dict[str, list[str]] = {
     "operate-molecular-crystal": ["struct_molcrys"],
     "mcp-mat-struct-db": ["meta_database"],
     "structure-manager": ["meta_database"],
-    "xrd-analysis": ["char_xrd"],
-    "checkcif-validator": ["char_xrd"],
-    "mcp-mat-xrd": ["char_xrd"],
-    "pxrd-refinement": ["char_xrd"],
+    "xrd-analysis": ["char_diffraction"],
+    "checkcif-validator": ["char_diffraction"],
+    "mcp-mat-xrd": ["char_diffraction"],
+    "pxrd-refinement": ["char_diffraction"],
     "sample-atomic-structures": ["struct_build"],
     "assemble-atomic-structure": ["struct_surface", "struct_build"],
     "inspect-atomic-structure": ["struct_build", "struct_transform", "struct_surface"],
@@ -206,7 +206,7 @@ def get_relevant_questions(rule: dict, all_questions: dict[str, dict]) -> list[d
     tag_matched = []
     cap_matched = []
 
-    for _qid, q in all_questions.items():
+    for q in all_questions.values():
         q_tags = q.get("tags") or []
         q_cap = q.get("capability") or ""
 

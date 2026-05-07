@@ -43,10 +43,10 @@ SKILL_TAG_MAP: dict[str, list[str]] = {
     "operate-molecular-crystal": ["struct_molcrys"],
     "mcp-mat-struct-db": ["meta_database"],
     "structure-manager": ["meta_database"],
-    "xrd-analysis": ["char_xrd"],
-    "checkcif-validator": ["char_xrd"],
-    "mcp-mat-xrd": ["char_xrd"],
-    "pxrd-refinement": ["char_xrd"],
+    "xrd-analysis": ["char_diffraction"],
+    "checkcif-validator": ["char_diffraction"],
+    "mcp-mat-xrd": ["char_diffraction"],
+    "pxrd-refinement": ["char_diffraction"],
 }
 
 # Section-to-rule_type classification
