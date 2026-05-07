@@ -244,9 +244,10 @@ def load_cache() -> dict[str, dict]:
     return {}
 
 
-def save_cache(cache: dict[str, dict]) -> None:
+def save_cache(cache: dict[str, dict], fingerprint: str = "") -> None:
     CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    CACHE_FILE.write_text(json.dumps(cache, ensure_ascii=False))
+    to_save = {**cache, "__q_fingerprint__": fingerprint}
+    CACHE_FILE.write_text(json.dumps(to_save, ensure_ascii=False))
 
 
 def main():
@@ -282,9 +283,21 @@ def main():
         rules = rules[: args.max_rules]
         print(f"Limited to {len(rules)} rules")
 
-    # Load cache
-    cache = load_cache()
-    print(f"Cache: {len(cache)} entries")
+    # Build question bank fingerprint for cache invalidation
+    import hashlib
+
+    q_ids = sorted(q["id"] for q in all_questions.values()) if isinstance(all_questions, dict) else sorted(q["id"] for q in all_questions)
+    q_fingerprint = hashlib.md5(",".join(q_ids).encode()).hexdigest()[:12]
+
+    # Load cache — invalidate if question bank changed
+    raw_cache = load_cache()
+    cached_fingerprint = raw_cache.get("__q_fingerprint__", "")
+    if cached_fingerprint != q_fingerprint:
+        print(f"Cache invalidated: question bank changed ({cached_fingerprint[:8]}→{q_fingerprint[:8]})")
+        cache = {}
+    else:
+        cache = {k: v for k, v in raw_cache.items() if k != "__q_fingerprint__"}
+    print(f"Cache: {len(cache)} entries (fingerprint: {q_fingerprint})")
 
     client = openai.OpenAI(api_key=API_KEY, base_url=API_BASE, timeout=30.0)
 
@@ -319,7 +332,7 @@ def main():
                     judged += 1
                     if judged % 50 == 0:
                         print(f"  Progress: {judged}/{len(to_judge)}")
-                        save_cache(cache)
+                        save_cache(cache, q_fingerprint)
                 except Exception as e:
                     errors += 1
                     rule = futures[future]
@@ -333,7 +346,7 @@ def main():
                         }
                     )
 
-        save_cache(cache)
+        save_cache(cache, q_fingerprint)
         print(f"Judged {judged} rules ({errors} errors)")
 
     # Compute summary
