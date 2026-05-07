@@ -54,7 +54,6 @@ class AgentLoopConfig:
     eval_ingest_submit_timeout: float = 120.0
     enable_checklist_agent: bool = True
     checklist_permission_mode: str = ""
-    history_root: Path | None = None
 
 
 @dataclass

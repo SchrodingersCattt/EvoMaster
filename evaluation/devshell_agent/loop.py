@@ -93,14 +93,6 @@ class DevshellAgentLoop:
         exp = (self._cfg.defaults.exp or "").strip()
         return exp if exp else "direct"
 
-    def _history_root(self) -> Path:
-        if self._cfg.history_root is not None:
-            return self._cfg.history_root.resolve()
-        return (self._cfg.repo_root / "evaluation" / "devshell_agent_history").resolve()
-
-    def _history_session_dir(self) -> Path:
-        return self._history_root() / self._cfg.session_dir.name
-
     def _iteration_user_message(self, *, it: int) -> str:
         cfg = self._cfg
         extra = cfg.extra_instruction.strip()
@@ -116,7 +108,7 @@ class DevshellAgentLoop:
 2. 检查返回结果中是否有 `p0_gate_failed: true`（P0 回归门控失败）：
    - **若 P0 回归**：不要调用 delegate_optimization 或 escalate_checklist_revision，直接跳到步骤 4 报告本轮失败。
    - **若 P0 通过或无 P0 题目**：继续步骤 3。
-3. 读取**脱敏摘要**（`macro_mean_0_100`、`task_scores`；单题 `score` 为 0/100：**该题 k 次 repeat 在「除 `token_budget_total`、`turn_budget` 外 checklist 全过」口径下** 才为 100）。除 **main_read_text / main_glob_paths / main_grep_text** 允许的 ``evaluation/devshell_agent_history/`` 整目录外，不要自行读取 `evaluation/**` 其它路径或原始 `score_reason`。若未达标：根据脱敏摘要做分流。若问题更像产品侧实现/提示问题，调用 **delegate_optimization**（优先填写 **candidate_layers** 与 **failure_buckets**、**capabilities_affected**；`candidate_layers` 用 ``skill / tool / system_prompt / runtime`` 标注你判断最像哪一层；**allowed_evidence_paths** 尽量用会话级路径如 ``eval_runs/iter_XX/raw_runs.jsonl``，避免逐题 workspace）；若问题更像 checklist / reference answers / evaluator 口径问题，调用 **escalate_checklist_revision**。你可以在同一轮内多次调用 `delegate_optimization`，但你**不能**亲自改文件。
+3. 读取**脱敏摘要**（`macro_mean_0_100`、`task_scores`；单题 `score` 为 0/100：**该题 k 次 repeat 在「除 `token_budget_total`、`turn_budget` 外 checklist 全过」口径下** 才为 100）。不要自行读取 `evaluation/**` 路径或原始 `score_reason`。若未达标：根据脱敏摘要做分流。若问题更像产品侧实现/提示问题，调用 **delegate_optimization**（优先填写 **candidate_layers** 与 **failure_buckets**、**capabilities_affected**；`candidate_layers` 用 ``skill / tool / system_prompt / runtime`` 标注你判断最像哪一层；**allowed_evidence_paths** 尽量用会话级路径如 ``eval_runs/iter_XX/raw_runs.jsonl``，避免逐题 workspace）；若问题更像 checklist / reference answers / evaluator 口径问题，调用 **escalate_checklist_revision**。你可以在同一轮内多次调用 `delegate_optimization`，但你**不能**亲自改文件。
 4. 调用 **report_iteration_outcome**（`iteration_index={it}`），填写**反映当前仓库状态**的真实 `macro_mean_0_100`（完全通过题占比×100，与 `target_pass_rate` 同口径）与 `files_touched`（主 Agent 自身通常为空）；在 `rationale` 中总结本轮分流、子 Agent 结果与下一步。若 P0 回归，在 rationale 中说明回归详情。
 {extra_block}
 """
@@ -157,7 +149,6 @@ class DevshellAgentLoop:
             "started_at_utc": datetime.now(timezone.utc).isoformat(),
             "repo_root": str(cfg.repo_root.resolve()),
             "session_dir": str(session_dir.resolve()),
-            "history_root": str(self._history_root()),
             "max_iterations": cfg.max_iterations,
             "target_pass_rate": cfg.target_pass_rate,
             "permission_mode": cfg.permission_mode,
@@ -184,71 +175,6 @@ class DevshellAgentLoop:
             json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
-
-    def _write_iteration_history(
-        self,
-        *,
-        it: int,
-        state: AgentLoopSharedState,
-        outcome: dict[str, Any],
-    ) -> None:
-        history_dir = self._history_session_dir() / "iterations"
-        history_dir.mkdir(parents=True, exist_ok=True)
-        payload = {
-            "iteration_index": it,
-            "outcome": outcome,
-            "optimization_reports": [
-                row
-                for row in state.optimization_reports
-                if int(row.get("iteration_index", -1)) == it
-            ],
-            "checklist_reports": [
-                row
-                for row in state.checklist_revision_reports
-                if int(row.get("iteration_index", -1)) == it
-            ],
-            "optimization_delegations": [
-                row
-                for row in state.optimization_delegations_pending
-                if int(row.get("iteration_index", -1)) == it
-            ],
-        }
-        (history_dir / f"iter_{it:02d}.json").write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-
-    def _write_session_history_summary(
-        self,
-        *,
-        state: AgentLoopSharedState,
-        exit_code: int,
-    ) -> None:
-        session_dir = self._history_session_dir()
-        session_dir.mkdir(parents=True, exist_ok=True)
-        summary = {
-            "session_dir": str(self._cfg.session_dir.resolve()),
-            "exit_code": exit_code,
-            "outcomes": state.outcomes,
-            "optimization_reports": state.optimization_reports,
-            "checklist_revision_reports": state.checklist_revision_reports,
-        }
-        (session_dir / "session_summary.json").write_text(
-            json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-
-        index_path = self._history_root() / "index.jsonl"
-        index_path.parent.mkdir(parents=True, exist_ok=True)
-        row = {
-            "session_name": self._cfg.session_dir.name,
-            "session_dir": str(self._cfg.session_dir.resolve()),
-            "exit_code": exit_code,
-            "history_dir": str(session_dir),
-            "outcome_count": len(state.outcomes),
-        }
-        with index_path.open("a", encoding="utf-8") as f:
-            f.write(json.dumps(row, ensure_ascii=False) + "\n")
 
     async def run(self) -> int:
         """Run up to ``max_iterations`` SDK rounds; return 0 on clean stop, 1 on warnings."""
@@ -388,7 +314,6 @@ class DevshellAgentLoop:
                             loop_log,
                         )
 
-                    self._write_iteration_history(it=it, state=state, outcome=last)
                     score = int(last.get("macro_mean_0_100", 0))
                     met = bool(last.get("target_met"))
 
@@ -414,7 +339,6 @@ class DevshellAgentLoop:
                         )
                         break
 
-        self._write_session_history_summary(state=state, exit_code=exit_code)
         return exit_code
 
     def _checklist_permission_mode_resolved(self) -> str:
