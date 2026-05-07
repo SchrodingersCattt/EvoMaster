@@ -118,7 +118,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_005_20260423
+- id: SC_struct_005_20260507
   capability: structure_construction
   domain: agnostic
   intent: Infer SG-derived chemical formulas for 5 disordered crystal structures and construct
@@ -152,7 +152,9 @@ questions:
 
     每个结构的 ordered replica 输出文件命名为 `ordered_<原始文件名>.cif`（例如 `ordered_disorder_DAN-2.cif`）。
 
-    最终答案按文件名逐项列出上述信息。
+    所有 ordered replica 必须是完全有序结构：输出 CIF 中所有 `_atom_site_occupancy` 均为 1，不得保留 partial/split occupancy。
+
+    最终答案按文件名逐项列出上述信息，并显式写出每个原始文件名与对应 `ordered_<原始文件名>.cif` 的配对。
 
     '
   tags:
@@ -162,7 +164,26 @@ questions:
     value:
       pattern: ordered_*.cif
       expected: 5
-      tolerance: 1
+      tolerance: 0
+  - key: ordered_files_parsable
+    value:
+      filename: ordered_*.cif
+  - key: ordered_files_occupancy_one
+    value:
+      filename: ordered_*.cif
+      tolerance: 1.0e-6
+  - key: ordered_file_name_mapping
+    value:
+    - disorder_DAN-2.cif
+    - disorder_DAP-4.cif
+    - disorder_PAP-H4.cif
+    - disorder_PAP-M5.cif
+    - disorder_TILPEN.cif
+    - ordered_disorder_DAN-2.cif
+    - ordered_disorder_DAP-4.cif
+    - ordered_disorder_PAP-H4.cif
+    - ordered_disorder_PAP-M5.cif
+    - ordered_disorder_TILPEN.cif
   - key: sc005_disorder_formulas
     value: {}
   - key: required_fields
@@ -184,6 +205,15 @@ questions:
       output files in workspace).
     axis: correctness
     verify: struct_file_count
+  - id: ordered_files_parsable
+    criterion: All `ordered_*.cif` deliverables can be parsed as structure files.
+    axis: correctness
+    verify: struct_file_parsable
+  - id: ordered_files_occupancy_one
+    criterion: Every ordered-replica CIF has only occupancy-1 sites; no partial or split occupancies
+      remain in `_atom_site_occupancy`.
+    axis: correctness
+    verify: struct_file_all_occupancy_one
   - id: sc005_disorder_formulas
     criterion: The answer includes the four reference formula strings for DAP-4, PAP-H4, PAP-M5,
       and TILPEN; for DAN-2 the reported ordered-replica chemical_formula uses integer stoichiometry
@@ -204,6 +234,11 @@ questions:
       and ordered_output_archive.
     axis: correctness
     verify: llm_binary_judge
+  - id: ordered_file_name_mapping
+    criterion: Final answer explicitly names all five input CIF basenames and the five corresponding
+      `ordered_<basename>.cif` output files.
+    axis: correctness
+    verify: contains_all
   - id: grounding_source
     criterion: The answer explains the physical/chemical basis for each structure (disorder/occupancy,
       connectivity, valence or charge balance, and what changes when building an ordered replica),
