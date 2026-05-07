@@ -15,7 +15,8 @@ questions:
     我这边做类似单点时习惯用 ENCUT=520、ISMEAR=0、SIGMA=0.2，供你对照。
 
     '
-  tags: []
+  tags:
+  - eng_vasp
   data_files:
   - key: run_spec
     path: data/WO_direct_001_spec_conflict/run_spec.json
@@ -206,7 +207,7 @@ questions:
   intent: Agent should prefer the dedicated Read tool over bash cat/head/tail for
     reading files.
   human_prompt_seed: '请读取工作目录下的 `config.yaml` 文件内容并告诉我里面配置了什么参数。'
-  tags:
+  tags: []
   data_files:
   - key: config_yaml
     path: data/EC_tool_choice_read_001/config.yaml
@@ -262,7 +263,7 @@ questions:
     - NumPy
 
     - ASE'
-  tags:
+  tags: []
   data_files: []
   reference_answers:
   - key: output_artifact
@@ -320,7 +321,7 @@ questions:
   human_prompt_seed: '请生成一个包含 20 种常见金属元素的表格，列出每种元素的符号、原子序数、晶体结构类型（FCC/BCC/HCP）和常温晶格常数（Å）。
 
     将完整表格写入 `metals_table.md`，不要省略任何行。'
-  tags:
+  tags: []
   data_files: []
   reference_answers:
   - key: output_artifact
@@ -384,7 +385,7 @@ questions:
     6. 刚玉 (Al2O3, corundum)
 
     文件名分别为：diamond.txt, nacl.txt, zns.txt, batio3.txt, mgal2o4.txt, al2o3.txt'
-  tags:
+  tags: []
   priority: P0
   data_files: []
   reference_answers:

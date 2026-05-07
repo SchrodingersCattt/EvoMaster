@@ -104,6 +104,7 @@ questions:
 
     最终回答中简要说明：优化后结构相对输入结构的主要变化（可定性描述）。'
   tags:
+  - code_mlip
   data_files: []
   reference_answers:
   - key: optimized_structure
@@ -194,6 +195,7 @@ questions:
     \ `hull_distance`, `stability_label`, `reference_phases`, `notes`；\n2) `cucrzr_convex_hull_report.md`：说明\
     \ query 输入梳理、mock 后处理流程、稳定性判据及不确定性。\n\n最终回答中请明确说明该结构在热力学稳定性上的定性结论（稳定/亚稳/不稳定）。\n"
   tags:
+  - code_mlip
   data_files: []
   reference_answers:
   - key: hull_summary_json
@@ -284,8 +286,9 @@ questions:
     请输出： 1) `duplex_ni_tensile_predictions.json`：至少包含 `formula`, `ni_content`, `predicted_uts`,
     `trend_label`； 2) `duplex_ni_tensile_analysis.md`：说明 Ni 含量变化导致强度变化的机理解释与不确定性。
 
-    最终回答请给出“Ni 含量变化-强度变化”的总体趋势判断。'
+    最终回答请给出”Ni 含量变化-强度变化”的总体趋势判断。'
   tags:
+  - code_mlip
   data_files: []
   reference_answers:
   - key: tensile_json

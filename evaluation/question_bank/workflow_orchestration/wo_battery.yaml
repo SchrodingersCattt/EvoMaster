@@ -86,6 +86,7 @@ questions:
     \ eV\n   - μ_Na（BCC Na金属）= -1.31 eV/atom\n   - n = 12（脱出的Na离子数：每个formula unit脱3个 × Z=4）\n\
     4. 按公式 V = -[E(sodiated) - E(desodiated) - n·μ_Na] / n 计算平均电压；\n5. 输出平均电压(V vs Na/Na⁺)、n值、各能量值。\n"
   tags:
+  - code_mlip
   data_files: []
   reference_answers:
   - key: avg_voltage_V

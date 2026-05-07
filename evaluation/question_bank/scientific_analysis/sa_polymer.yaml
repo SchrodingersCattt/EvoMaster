@@ -21,7 +21,7 @@ questions:
     4. 写出至少一个不确定性来源。
 
     '
-  tags:
+  tags: []
   data_files:
   - key: donor_bundle
     path: data/pl_donor/donor_prescreen_bundle.json
