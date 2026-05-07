@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: catalysis
 questions:
-- id: CR_SC_ZnS001_20260428
+- id: CR_SC_ZnS001_20260507
   capability: structure_construction
   domain: catalysis
   intent: Build ZnS(001) polar surface slab with 3 layers and 2x2x1 supercell per doc 3.1.2.
@@ -23,6 +23,18 @@ questions:
       tolerance: 2
       axis: z
       layer_tol_A: 0.5
+  - key: zn_s_ratio
+    value:
+      filename: ZnS_001_slab.cif
+      element_a: Zn
+      element_b: S
+      expected_ratio: 1.0
+      tolerance: 0.01
+  - key: slab_atom_count
+    value:
+      filename: ZnS_001_slab.cif
+      expected: 24
+      tolerance: 0
   - key: turn_budget
     value:
       max: 22
@@ -43,8 +55,16 @@ questions:
       0.5 Å along z are merged into one plane.
     axis: correctness
     verify: struct_file_layer_count
+  - id: zn_s_ratio
+    criterion: The output slab preserves Zn:S = 1:1 stoichiometry.
+    axis: correctness
+    verify: struct_file_stoichiometry_ratio
+  - id: slab_atom_count
+    criterion: The 3-bilayer 2x2x1 ZnS(001) slab contains exactly 24 atoms.
+    axis: correctness
+    verify: struct_file_atom_count
   - id: supercell_vacuum_ok
-    criterion: 交付的 ZnS(001) slab 采用 2×2×1 扩胞，真空层 ≥15 Å。
+    criterion: 交付的 ZnS(001) slab 采用 2×2×1 扩胞，真空层 ≥15 Å；若只在答案中声明，必须与 `ZnS_001_slab.cif` 的晶胞尺寸和层厚说明一致。
     axis: correctness
     verify: llm_binary_judge
     weight: 1.0
