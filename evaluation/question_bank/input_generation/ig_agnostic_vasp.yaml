@@ -102,7 +102,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_incar_002_20260506
+- id: IG_incar_002_20260507
   capability: input_generation
   domain: agnostic
   intent: 'Generate VASP INCAR for a static SCF calculation of organic-inorganic hybrid perovskite C26H28Cl4N4Pb2. Semiconductor, high-precision convergence.
@@ -119,7 +119,6 @@ questions:
       filename: INCAR
       tokens:
       - EDIFF
-      - NSW
       - PREC
       - IVDW
       flags: i
@@ -128,10 +127,10 @@ questions:
       filename: INCAR
       pattern: ^\s*EDIFF\s*=\s*\S+
       flags: im
-  - key: critical_NSW
+  - key: optional_NSW
     value:
       filename: INCAR
-      pattern: ^\s*NSW\s*=\s*0\b
+      pattern: (?ims)\A(?!.*^\s*NSW\s*=)(?:.|\n)*\Z|^\s*NSW\s*=\s*0\b
       flags: im
   - key: critical_PREC
     value:
@@ -168,8 +167,8 @@ questions:
     criterion: INCAR sets EDIFF = 1e-06 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: critical_NSW
-    criterion: INCAR sets NSW = 0 (critical param).
+  - id: optional_NSW
+    criterion: INCAR may omit NSW; if provided, it must be NSW = 0.
     axis: correctness
     verify: text_file_regex
   - id: critical_PREC
@@ -326,7 +325,7 @@ questions:
     criterion: INCAR sets LORBIT = 11 (critical param).
     axis: correctness
     verify: text_file_regex
-- id: IG_incar_004_20260506
+- id: IG_incar_004_20260507
   capability: input_generation
   domain: agnostic
   intent: 'Generate VASP INCAR for HSE06 hybrid functional calculation of MOF C30H22N4O10Zn2. Accurate electronic structure and band gap.
@@ -344,7 +343,6 @@ questions:
       tokens:
       - HFSCREEN
       - LHFCALC
-      - NSW
       - IVDW
       flags: i
   - key: critical_HFSCREEN
@@ -357,10 +355,10 @@ questions:
       filename: INCAR
       pattern: ^\s*LHFCALC\s*=\s*\.?(?:TRUE|T)\.?
       flags: im
-  - key: critical_NSW
+  - key: optional_NSW
     value:
       filename: INCAR
-      pattern: ^\s*NSW\s*=\s*0\b
+      pattern: (?ims)\A(?!.*^\s*NSW\s*=)(?:.|\n)*\Z|^\s*NSW\s*=\s*0\b
       flags: im
   - key: turn_budget
     value:
@@ -396,8 +394,8 @@ questions:
     criterion: INCAR sets LHFCALC = .TRUE. (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: critical_NSW
-    criterion: INCAR sets NSW = 0 (critical param).
+  - id: optional_NSW
+    criterion: INCAR may omit NSW; if provided, it must be NSW = 0.
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
@@ -540,7 +538,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_incar_006_20260504
+- id: IG_incar_006_20260507
   capability: input_generation
   domain: agnostic
   intent: 'Generate VASP INCAR for SCAN metaGGA calculation of intermetallic Tm2ZnGa2. Tm has f electrons; spin-polarized.
@@ -559,7 +557,6 @@ questions:
       - ISPIN
       - LASPH
       - METAGGA
-      - NSW
       flags: i
   - key: critical_ISPIN
     value:
@@ -576,10 +573,10 @@ questions:
       filename: INCAR
       pattern: ^\s*METAGGA\s*=\s*SCAN\b
       flags: im
-  - key: critical_NSW
+  - key: optional_NSW
     value:
       filename: INCAR
-      pattern: ^\s*NSW\s*=\s*0\b
+      pattern: (?ims)\A(?!.*^\s*NSW\s*=)(?:.|\n)*\Z|^\s*NSW\s*=\s*0\b
       flags: im
   - key: turn_budget
     value:
@@ -614,8 +611,8 @@ questions:
     criterion: INCAR sets METAGGA = SCAN (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: critical_NSW
-    criterion: INCAR sets NSW = 0 (critical param).
+  - id: optional_NSW
+    criterion: INCAR may omit NSW; if provided, it must be NSW = 0.
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
@@ -1180,7 +1177,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_incar_012_20260504
+- id: IG_incar_012_20260507
   capability: input_generation
   domain: agnostic
   intent: 'Generate VASP INCAR for NEB transition state search with HSE06 of Prussian blue analogue C24Fe8N24Na4. Fe magnetic, NUPDOWN=20.
@@ -1273,7 +1270,7 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the provided prompt data (material system, calculation type, critical parameters) rather than hallucinated. Judge solely from the final answer and stated file content; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The generated INCAR is grounded in the user-facing prompt data (material system, calculation type, critical parameters) rather than hallucinated. For the fixed-total-moment requirement, do not require a specific NUPDOWN value unless that numeric value is explicitly stated in the user-facing prompt; judge whether the INCAR attempts a fixed total magnetic moment consistently with the prompt.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -1405,7 +1402,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_incar_014_20260506
+- id: IG_incar_014_20260507
   capability: input_generation
   domain: agnostic
   intent: 'Generate VASP INCAR for static calculation of hydrogen-passivated SiO2 slab H16O24Si12. Insulator, fixed cell (ISIF=2).
@@ -1422,25 +1419,23 @@ questions:
     value:
       filename: INCAR
       tokens:
-      - IBRION
       - ISIF
-      - NSW
       - IVDW
       flags: i
-  - key: critical_IBRION
+  - key: optional_IBRION
     value:
       filename: INCAR
-      pattern: ^\s*IBRION\s*=\s*\-1\b
+      pattern: (?ims)\A(?!.*^\s*IBRION\s*=)(?:.|\n)*\Z|^\s*IBRION\s*=\s*\-1\b
       flags: im
   - key: critical_ISIF
     value:
       filename: INCAR
       pattern: ^\s*ISIF\s*=\s*2\b
       flags: im
-  - key: critical_NSW
+  - key: optional_NSW
     value:
       filename: INCAR
-      pattern: ^\s*NSW\s*=\s*0\b
+      pattern: (?ims)\A(?!.*^\s*NSW\s*=)(?:.|\n)*\Z|^\s*NSW\s*=\s*0\b
       flags: im
   - key: turn_budget
     value:
@@ -1468,16 +1463,16 @@ questions:
     criterion: INCAR contains all critical parameter keywords.
     axis: correctness
     verify: text_file_contains_all
-  - id: critical_IBRION
-    criterion: INCAR sets IBRION = -1 (critical param).
+  - id: optional_IBRION
+    criterion: INCAR may omit IBRION; if provided, it must be IBRION = -1.
     axis: correctness
     verify: text_file_regex
   - id: critical_ISIF
     criterion: INCAR sets ISIF = 2 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: critical_NSW
-    criterion: INCAR sets NSW = 0 (critical param).
+  - id: optional_NSW
+    criterion: INCAR may omit NSW; if provided, it must be NSW = 0.
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
@@ -1630,7 +1625,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_incar_016_20260506
+- id: IG_incar_016_20260507
   capability: input_generation
   domain: agnostic
   intent: 'Generate VASP INCAR for GW precursor SCF of rare-earth selenide DySe. Dy has f electrons (MAGMOM~7); save wavefunctions for subsequent GW.
@@ -1648,7 +1643,6 @@ questions:
       tokens:
       - ENCUT
       - ISPIN
-      - NSW
       flags: i
   - key: critical_ENCUT
     value:
@@ -1660,10 +1654,10 @@ questions:
       filename: INCAR
       pattern: ^\s*ISPIN\s*=\s*2\b
       flags: im
-  - key: critical_NSW
+  - key: optional_NSW
     value:
       filename: INCAR
-      pattern: ^\s*NSW\s*=\s*0\b
+      pattern: (?ims)\A(?!.*^\s*NSW\s*=)(?:.|\n)*\Z|^\s*NSW\s*=\s*0\b
       flags: im
   - key: turn_budget
     value:
@@ -1694,8 +1688,8 @@ questions:
     criterion: INCAR sets ISPIN = 2 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: critical_NSW
-    criterion: INCAR sets NSW = 0 (critical param).
+  - id: optional_NSW
+    criterion: INCAR may omit NSW; if provided, it must be NSW = 0.
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
@@ -1924,7 +1918,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_incar_019_20260506
+- id: IG_incar_019_20260507
   capability: input_generation
   domain: agnostic
   intent: 'Generate VASP INCAR for non-magnetic insulator static SCF calculation of cesium borate B12Cs4O20. Non-magnetic (ISPIN=1), wide-gap insulator.
@@ -1942,7 +1936,6 @@ questions:
       tokens:
       - ENCUT
       - ISPIN
-      - NSW
       flags: i
   - key: critical_ENCUT
     value:
@@ -1954,10 +1947,10 @@ questions:
       filename: INCAR
       pattern: ^\s*ISPIN\s*=\s*1\b
       flags: im
-  - key: critical_NSW
+  - key: optional_NSW
     value:
       filename: INCAR
-      pattern: ^\s*NSW\s*=\s*0\b
+      pattern: (?ims)\A(?!.*^\s*NSW\s*=)(?:.|\n)*\Z|^\s*NSW\s*=\s*0\b
       flags: im
   - key: turn_budget
     value:
@@ -1988,8 +1981,8 @@ questions:
     criterion: INCAR sets ISPIN = 1 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: critical_NSW
-    criterion: INCAR sets NSW = 0 (critical param).
+  - id: optional_NSW
+    criterion: INCAR may omit NSW; if provided, it must be NSW = 0.
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
@@ -2016,7 +2009,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_incar_020_20260506
+- id: IG_incar_020_20260507
   capability: input_generation
   domain: agnostic
   intent: 'Generate VASP INCAR for magnetic metal SCF calculation of ternary selenide Na3AlSe. Spin-polarized (ISPIN=2) with PDOS (LORBIT=11).
@@ -2033,20 +2026,18 @@ questions:
       filename: INCAR
       tokens:
       - EDIFF
-      - IBRION
       - ISPIN
       - LORBIT
-      - NSW
       flags: i
   - key: critical_EDIFF
     value:
       filename: INCAR
       pattern: ^\s*EDIFF\s*=\s*\S+
       flags: im
-  - key: critical_IBRION
+  - key: optional_IBRION
     value:
       filename: INCAR
-      pattern: ^\s*IBRION\s*=\s*\-1\b
+      pattern: (?ims)\A(?!.*^\s*IBRION\s*=)(?:.|\n)*\Z|^\s*IBRION\s*=\s*\-1\b
       flags: im
   - key: critical_ISPIN
     value:
@@ -2058,10 +2049,10 @@ questions:
       filename: INCAR
       pattern: ^\s*LORBIT\s*=\s*11\b
       flags: im
-  - key: critical_NSW
+  - key: optional_NSW
     value:
       filename: INCAR
-      pattern: ^\s*NSW\s*=\s*0\b
+      pattern: (?ims)\A(?!.*^\s*NSW\s*=)(?:.|\n)*\Z|^\s*NSW\s*=\s*0\b
       flags: im
   - key: turn_budget
     value:
@@ -2088,8 +2079,8 @@ questions:
     criterion: INCAR sets EDIFF = 1e-07 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: critical_IBRION
-    criterion: INCAR sets IBRION = -1 (critical param).
+  - id: optional_IBRION
+    criterion: INCAR may omit IBRION; if provided, it must be IBRION = -1.
     axis: correctness
     verify: text_file_regex
   - id: critical_ISPIN
@@ -2100,8 +2091,8 @@ questions:
     criterion: INCAR sets LORBIT = 11 (critical param).
     axis: correctness
     verify: text_file_regex
-  - id: critical_NSW
-    criterion: INCAR sets NSW = 0 (critical param).
+  - id: optional_NSW
+    criterion: INCAR may omit NSW; if provided, it must be NSW = 0.
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
