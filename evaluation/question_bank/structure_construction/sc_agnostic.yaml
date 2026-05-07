@@ -280,7 +280,7 @@ questions:
       benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
-- id: SC_struct_006_20260406
+- id: SC_struct_006_20260507
   capability: structure_construction
   domain: agnostic
   intent: Add missing hydrogens to the diacetylmorphine (DACMOR) molecular crystal CIF and
@@ -340,6 +340,11 @@ questions:
       filename: dacmor_hydrogenated.cif
       expected_formula: C21H23NO5
       z_value: 4
+  - key: explicit_report_tokens
+    value:
+    - C21H23NO5
+    - '109'
+    - dacmor_hydrogenated.cif
   - key: turn_budget
     value: *id001
   - key: duration_budget
@@ -368,6 +373,11 @@ questions:
       local geometry (hybridisation, coordination).
     axis: correctness
     verify: molcrys_local_env
+  - id: explicit_report_tokens
+    criterion: Final answer explicitly reports formula C21H23NO5, a representative H-C-H angle
+      near 109 degrees, and the `dacmor_hydrogenated.cif` output basename.
+    axis: correctness
+    verify: contains_all
   - id: grounding_source
     criterion: The answer states the chemical/geometry rationale (which C/N atoms receive
       H, tetrahedral geometry targets, carbonyl/ester O should not be hydrogenated) and ties
