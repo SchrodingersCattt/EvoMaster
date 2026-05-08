@@ -316,8 +316,8 @@ class TestStreamLlmItems:
         assert "thinking part 1" in thought_completes[0].event.content
 
     @pytest.mark.asyncio
-    async def test_response_complete_at_stream_end(self) -> None:
-        """ResponseEvent(complete) emitted at end of content stream."""
+    async def test_response_segment_end_at_stream_end(self) -> None:
+        """ResponseEvent(segment_end) emitted at end of content stream."""
         from matmaster.core.agent import AgentKernel, _KernelItem
 
         provider = ReasoningThenContentProvider()
@@ -336,8 +336,16 @@ class TestStreamLlmItems:
             and isinstance(i.event, ResponseEvent)
             and i.event.stream_state == "complete"
         ]
-        assert len(response_completes) >= 1, "Should yield ResponseEvent(complete)"
-        assert "visible part 1" in response_completes[0].event.content
+        response_segment_ends = [
+            i
+            for i in items
+            if i.event
+            and isinstance(i.event, ResponseEvent)
+            and i.event.stream_state == "segment_end"
+        ]
+        assert response_completes == []
+        assert len(response_segment_ends) >= 1
+        assert "visible part 1" in response_segment_ends[0].event.content
 
     @pytest.mark.asyncio
     async def test_final_yield_carries_llm_response(self) -> None:
@@ -510,6 +518,8 @@ class TestRunItemsAssistantState:
         # State should contain tool_calls
         state = assistant_state_events[0].state
         assert state.get("tool_calls") is not None
+        assert assistant_state_events[0].turn_index == 0
+        assert assistant_state_events[0].turn_usage != {}
 
     @pytest.mark.asyncio
     async def test_assistant_state_drops_trivial_tool_call_preamble_content(

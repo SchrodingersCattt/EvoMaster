@@ -78,6 +78,31 @@ class TestResponseEvent:
         assert evt.stream_id is None
 
 
+class TestResponseEventUsage:
+    def test_response_usage_fields(self) -> None:
+        evt = ResponseEvent(
+            source="agent",
+            content="answer",
+            stream_state="complete",
+            turn_index=2,
+            turn_usage={"prompt_tokens": 10, "completion_tokens": 4},
+            total_usage={"prompt_tokens": 30, "completion_tokens": 9},
+            usage_vendor={"inputTokens": 10, "outputTokens": 4},
+        )
+
+        assert evt.turn_index == 2
+        assert evt.turn_usage == {"prompt_tokens": 10, "completion_tokens": 4}
+        assert evt.total_usage == {"prompt_tokens": 30, "completion_tokens": 9}
+        assert evt.usage_vendor == {"inputTokens": 10, "outputTokens": 4}
+
+    def test_response_usage_defaults(self) -> None:
+        evt = ResponseEvent(source="agent")
+        assert evt.turn_index is None
+        assert evt.turn_usage == {}
+        assert evt.total_usage == {}
+        assert evt.usage_vendor is None
+
+
 class TestToolCallEvent:
     def test_instantiation(self) -> None:
         evt = ToolCallEvent(
@@ -113,6 +138,16 @@ class TestToolResultEvent:
         assert evt.result == "output"
         assert evt.status == "success"
         assert evt.payload == {}
+
+
+def test_tool_result_turn_index_defaults_to_none() -> None:
+    evt = ToolResultEvent(
+        source="agent",
+        call_id="c1",
+        tool_name="bash",
+        result="output",
+    )
+    assert evt.turn_index is None
 
 
 class TestFinishDetail:
@@ -203,6 +238,11 @@ class TestAssistantStateEvent:
         assert isinstance(restored, AssistantStateEvent)
         assert restored.finish_detail is not None
         assert restored.finish_detail.truncation_risk is True
+
+
+def test_assistant_state_turn_index_defaults_to_none() -> None:
+    evt = AssistantStateEvent(source="agent", state={"content": None})
+    assert evt.turn_index is None
 
 
 class TestSkillHitEvent:

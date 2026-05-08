@@ -17,14 +17,18 @@ import asyncio
 import logging
 import time
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
-from dataclasses import field as dc_field
 from typing import TYPE_CHECKING, Any
 
 from matmaster.core.finish_diagnostics import (
     build_finish_detail,
     is_incomplete_response,
     is_valid_natural_finish,
+)
+from matmaster.core.kernel_items import (
+    _KernelItem,
+    _KernelState,
+    _KernelStopRequested,
+    _TerminalItem,
 )
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.errors import LLMError
@@ -74,39 +78,6 @@ logger = logging.getLogger(__name__)
 _STOP_CHECK_EVERY_N_STREAM_CHUNKS = 8
 # 重试退避时切片 sleep 的步长（秒），便于尽快响应停止
 _STOP_RETRY_SLEEP_SLICE_SEC = 0.25
-
-
-@dataclass
-class _TerminalItem:
-    reason: str
-    final_content: str | None = None
-    num_turns: int = 0
-    usage: dict[str, int] = dc_field(default_factory=dict)
-    usage_vendor_by_turn: list[dict[str, Any]] = dc_field(default_factory=list)
-    messages: list[Any] = dc_field(default_factory=list)
-    finish_detail: FinishDetail | None = None
-
-
-@dataclass
-class _KernelItem:
-    event: Any = None  # BusEvent | None
-    llm_response: LLMResponse | None = None
-    messages_delta: list[Any] | None = None
-    terminal: _TerminalItem | None = None
-
-
-@dataclass
-class _KernelState:
-    messages: list[Any]
-    turn: int = 0
-    total_usage: dict[str, int] = dc_field(default_factory=dict)
-    usage_vendor_by_turn: list[dict[str, Any]] = dc_field(default_factory=list)
-    cached_tool_definitions: list[dict[str, Any]] | None = None
-    last_catalog_version: int = -1
-
-
-class _KernelStopRequested(Exception):
-    pass
 
 
 class AgentKernel:
@@ -448,6 +419,28 @@ class AgentKernel:
             state.usage_vendor_by_turn.append(
                 dict(response.usage_vendor) if response.usage_vendor else {}
             )
+            turn_index = state.turn - 1
+            is_root_run = spec.meta.get("spawn_id") is None
+            if (
+                is_root_run
+                and response.content
+                and not is_trivial_response_text(response.content)
+            ):
+                yield _KernelItem(
+                    event=ResponseEvent(
+                        source="agent",
+                        content=response.content,
+                        stream_state="complete",
+                        turn_index=turn_index,
+                        turn_usage=dict(turn_usage),
+                        total_usage=dict(state.total_usage),
+                        usage_vendor=(
+                            dict(response.usage_vendor)
+                            if response.usage_vendor
+                            else None
+                        ),
+                    )
+                )
             if spec.compactor:
                 spec.compactor.update_message_count(len(state.messages))
 
@@ -496,6 +489,7 @@ class AgentKernel:
                     event=AssistantStateEvent(
                         source="agent",
                         state=assistant_msg.model_dump(mode="json"),
+                        turn_index=turn_index,
                         turn_usage=dict(turn_usage),
                         total_usage=dict(state.total_usage),
                         finish_detail=assistant_finish_detail,
@@ -540,6 +534,7 @@ class AgentKernel:
                         result=tool_result.content,
                         status=tool_result.status,
                         payload=tool_result.payload,
+                        turn_index=turn_index,
                         turn_usage=dict(turn_usage),
                         total_usage=dict(state.total_usage),
                     )
@@ -810,7 +805,7 @@ class AgentKernel:
                                 )
                             if not is_trivial_response_text(visible_snapshot):
                                 yield self._response_item(
-                                    visible_snapshot, stream_id, "complete"
+                                    visible_snapshot, stream_id, "segment_end"
                                 )
                         else:
                             pending_response_parts.clear()
@@ -851,7 +846,9 @@ class AgentKernel:
                         yield self._response_item(
                             visible_snapshot, stream_id, "streaming"
                         )
-                    yield self._response_item(visible_snapshot, stream_id, "complete")
+                    yield self._response_item(
+                        visible_snapshot, stream_id, "segment_end"
+                    )
                 else:
                     pending_response_parts.clear()
             # End marker
