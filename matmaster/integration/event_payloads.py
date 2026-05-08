@@ -50,6 +50,42 @@ def _flatten_bohrium_content(raw_payload: object) -> object:
 
 
 _CONTENT_META_KEYS = frozenset({'type', 'source', 'timestamp'})
+_RESPONSE_USAGE_KEYS = (
+    'turn_index',
+    'stream_id',
+    'turn_usage',
+    'total_usage',
+    'usage_vendor',
+)
+
+
+def _response_public_content(payload: dict[str, Any]) -> object | None:
+    content = payload.get('content')
+    if not (payload.get('turn_usage') or payload.get('total_usage')):
+        return content
+
+    out: dict[str, Any] = {'content': content or ''}
+    for key in _RESPONSE_USAGE_KEYS:
+        value = payload.get(key)
+        if value is not None and value != {}:
+            out[key] = value
+    return out
+
+
+def normalize_response_sse_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    if payload.get('type') != 'response':
+        return payload
+
+    content = payload.get('content')
+    if not isinstance(content, dict) or 'content' not in content:
+        return payload
+
+    normalized = dict(payload)
+    normalized['content'] = str(content.get('content') or '')
+    for key in _RESPONSE_USAGE_KEYS:
+        if key in content and content.get(key) is not None:
+            normalized[key] = content[key]
+    return normalized
 
 
 def build_public_sse_payload_from_bus_dump(
@@ -88,13 +124,16 @@ def build_public_sse_payload_from_bus_dump(
     for key, value in raw.items():
         if key not in out:
             out[key] = value
-    return out
+    return normalize_response_sse_payload(out)
 
 
 def _public_content_for_event(
     event_type: str, payload: dict[str, Any]
 ) -> object | None:
     """Adapt internal event payloads to the frontend SSE contract."""
+    if event_type == 'response':
+        return _response_public_content(payload)
+
     if event_type == 'tool_call':
         call_id = payload.get('call_id')
         return {
@@ -115,6 +154,8 @@ def _public_content_for_event(
             'info': payload.get('info') or payload.get('payload') or {},
         }
         if payload.get('turn_usage'):
+            if payload.get('turn_index') is not None:
+                out['turn_index'] = payload['turn_index']
             out['turn_usage'] = payload['turn_usage']
             out['total_usage'] = payload.get('total_usage', {})
         return out
@@ -180,6 +221,12 @@ def _public_content_for_event(
         }
         if payload.get('finish_detail') is not None:
             content['finish_detail'] = payload['finish_detail']
+        if payload.get('num_turns') is not None:
+            content['num_turns'] = payload['num_turns']
+        if payload.get('usage'):
+            content['usage'] = payload['usage']
+        if payload.get('usage_vendor_by_turn'):
+            content['usage_vendor_by_turn'] = payload['usage_vendor_by_turn']
         return content
 
     if event_type == 'assistant_state':
@@ -187,6 +234,8 @@ def _public_content_for_event(
         if payload.get('finish_detail') is not None:
             content['finish_detail'] = payload['finish_detail']
         if payload.get('turn_usage'):
+            if payload.get('turn_index') is not None:
+                content['turn_index'] = payload['turn_index']
             content['turn_usage'] = payload['turn_usage']
             content['total_usage'] = payload.get('total_usage', {})
         return content

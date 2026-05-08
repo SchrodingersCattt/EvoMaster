@@ -109,6 +109,28 @@ class ToolCallLengthProvider:
             yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
 
 
+class ToolCallsFinishWithoutPayloadProvider:
+    stream_timeout = 10.0
+    max_retries = 2
+    retry_delay = 0.0
+
+    def __init__(self) -> None:
+        self.call_count = 0
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        pass
+
+    async def chat(self, messages, tools=None):
+        return LLMResponse(content="not used", finish_reason="stop")
+
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
+        self.call_count += 1
+        yield StreamChunk(finish_reason="tool_calls")
+
+
 @pytest.mark.asyncio
 async def test_tool_call_length_finish_adds_assistant_state_detail(caplog) -> None:
     import logging
@@ -230,6 +252,28 @@ class TestInvalidFinishTerminalDetails:
         assert events[-1].finish_detail.provider_finish_reason == (
             "guardrail_intervened"
         )
+
+    @pytest.mark.asyncio
+    async def test_tool_calls_finish_without_payload_sets_missing_tool_call_detail(
+        self,
+    ) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        provider = ToolCallsFinishWithoutPayloadProvider()
+        events = [
+            event
+            async for event in AgentKernel().run_stream(
+                _make_spec(provider=provider),
+                "test task",
+            )
+        ]
+
+        assert provider.call_count == 2
+        assert events[-1].status == "failed"
+        assert events[-1].reason == "invalid_finish"
+        assert events[-1].finish_detail.kind == "missing_tool_call_payload"
+        assert events[-1].finish_detail.provider_finish_reason == "tool_calls"
+        assert events[-1].finish_detail.has_tool_calls is False
 
 
 @pytest.mark.asyncio
