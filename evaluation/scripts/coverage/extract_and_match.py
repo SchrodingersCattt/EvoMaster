@@ -419,7 +419,19 @@ _PROCESS_PATTERNS = re.compile(
     r"|use\s+MCP"
     r"|use\s+AskQuestion"
     r"|tool_include_only"
-    r"|avoid.*bash",
+    r"|avoid.*bash"
+    r"|gsas2_\w+\.py"
+    r"|render_input\.py"
+    r"|diagnose_input\.py"
+    r"|run_vaspkit\.py"
+    r"|assess_structure\.py"
+    r"|convert_format\.py"
+    r"|check_slab_tasker\.py"
+    r"|build_slab_tasker_fix\.py"
+    r"|curation\.py"
+    r"|registry\.dp\.tech"
+    r"|c\d+_m\d+_\w+"
+    r"|Bohrium\(action=",
     re.IGNORECASE,
 )
 
