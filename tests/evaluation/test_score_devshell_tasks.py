@@ -326,7 +326,7 @@ class TestScoreTask:
             intent="Test devshell scoring",
             human_prompt_seed="Do the thing.",
             reference_answers=[
-                ReferenceAnswer(key="used_calc", value="execute_bash"),
+                ReferenceAnswer(key="used_calc", value="bash"),
                 ReferenceAnswer(key="token_budget_total", value={"max": 999999}),
             ],
             scoring_checklist=[
@@ -404,7 +404,7 @@ class TestScoreTask:
             intent="Test devshell scoring",
             human_prompt_seed="Do the thing.",
             reference_answers=[
-                ReferenceAnswer(key="used_calc", value="execute_bash"),
+                ReferenceAnswer(key="used_calc", value="bash"),
                 ReferenceAnswer(key="wall_ms", value={"max": 100}),
             ],
             scoring_checklist=[
