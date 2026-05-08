@@ -93,7 +93,7 @@ banks:
 - path: scientific_analysis/sa_agnostic.yaml
   capability: scientific_analysis
   domain: agnostic
-  questions: 9
+  questions: 10
 - path: scientific_analysis/sa_battery.yaml
   capability: scientific_analysis
   domain: battery

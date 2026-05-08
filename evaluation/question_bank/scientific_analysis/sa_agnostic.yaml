@@ -255,7 +255,7 @@ questions:
     axis: efficiency
     verify: token_budget
     weight: 1.0
-- id: PXRD_thermal_expansion_001_20260506
+- id: PXRD_thermal_expansion_001_20260508
   capability: scientific_analysis
   domain: agnostic
   intent: Perform Pawley refinement on variable-temperature PXRD patterns to extract lattice
@@ -513,6 +513,17 @@ questions:
     axis: correctness
     verify: llm_binary_judge
     weight: 0.5
+  - id: initial_cell_from_reference
+    criterion: Agent uses an initial cell from the provided data or a prior refinement
+      result, not an invented/eyeballed cell.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_chain_across_phase
+    criterion: Each temperature pattern is refined independently or with proper anchor
+      propagation; agent does not blindly chain all patterns in one submission ignoring
+      potential phase transitions.
+    axis: correctness
+    verify: llm_binary_judge
   - id: grounding_source
     criterion: Lattice parameters and fit results are derived from Pawley refinement of the
       provided PXRD data file, not from literature values or hallucination. Judge from the
@@ -1204,5 +1215,74 @@ questions:
     verify: duration_budget
   - id: token_budget_total
     criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: SA_pxrd_rietveld_001_20260508
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Perform Rietveld refinement on PXRD data with a known CIF model
+  human_prompt_seed: "工作区中有 PXRD 数据文件 `sample.xy` 和初始结构模型 `model.cif`（某氧化物）。请对该\
+    \ PXRD 数据进行 Rietveld 精修，优化原子位置和热参数，输出精修后的结构 `refined.cif` 和精修报告（包含\
+    \ Rwp、晶胞参数、原子坐标）。"
+  tags:
+  - char_xrd
+  data_files:
+  - key: sample_xy
+    path: data/SA_pxrd_rietveld_001_20260508/sample.xy
+    oss_url: ''
+    description: PXRD pattern
+  - key: model_cif
+    path: data/SA_pxrd_rietveld_001_20260508/model.cif
+    oss_url: ''
+    description: Initial structure model
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 30000
+  scoring_checklist:
+  - id: refined_cif_exists
+    criterion: Agent produces a refined.cif file in the workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: rwp_reported
+    criterion: Agent answer contains an Rwp value from the refinement.
+    axis: correctness
+    verify: text_file_regex
+    pattern: '[Rr]wp.*\d+\.\d+'
+  - id: results_json_parsed
+    criterion: Agent parsed the refinement results.json and checked success status
+      before reporting.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: cell_params_reported
+    criterion: Final answer includes refined lattice parameters (a, b, c, alpha,
+      beta, gamma).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: Results are based on actual refinement output, not fabricated.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: Agent completes refinement without unnecessary retries or parameter
+      sweeps.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within 20 turns.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed 7200000 ms (2 hours).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage does not exceed 30000 tokens.
     axis: efficiency
     verify: token_budget
