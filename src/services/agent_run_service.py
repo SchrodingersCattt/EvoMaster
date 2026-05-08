@@ -647,6 +647,13 @@ class AgentRunService:
                     }
                 )
 
+            # -- Stage 5b: Runtime user-instructions injection --
+            user_prompt, history = _apply_user_instructions_to_initial_user_query(
+                user_prompt=user_prompt,
+                user_instructions=user_instructions,
+                history=history,
+            )
+
             # -- Stage 6: Generator event stream --
             run_result_event = None
             async with aclosing(
