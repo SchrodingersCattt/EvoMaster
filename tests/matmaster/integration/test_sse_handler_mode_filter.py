@@ -59,3 +59,13 @@ def test_complete_response_always_filtered() -> None:
         stream_state='complete',
     )
     assert handler._should_skip(ev) is True
+
+
+def test_segment_end_response_filtered_like_complete() -> None:
+    handler = _make_handler('planner')
+    ev = ResponseEvent(
+        source='MatMaster',
+        content='segment text',
+        stream_state='segment_end',
+    )
+    assert handler._should_skip(ev) is True

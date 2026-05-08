@@ -96,6 +96,15 @@ def _build_finish_detail_inner(
             message="Model output was blocked or truncated by provider content policy.",
             **base,
         )
+    if finish_reason == "tool_calls" and not tool_calls:
+        return FinishDetail(
+            kind="missing_tool_call_payload",
+            message=(
+                "Model stopped for tool calls but the provider stream did not "
+                "include a usable tool call payload."
+            ),
+            **base,
+        )
     if finish_reason == "stop" and not has_visible and has_reasoning:
         return FinishDetail(
             kind="reasoning_only",
