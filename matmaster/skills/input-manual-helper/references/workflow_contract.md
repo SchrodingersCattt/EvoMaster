@@ -24,6 +24,7 @@ workspace:
 ```bash
 uv run python <skill_dir>/scripts/render_input.py --software <engine> --task <task> --output <input_file>
 uv run python <skill_dir>/scripts/diagnose_input.py --software <engine> --input <input_file> --json_out diagnosis.json
+uv run python <skill_dir>/scripts/write_manifest.py --software <engine> --task <task> --input-dir <run_dir> --diagnosis <run_dir>/diagnosis.json
 ```
 
 Use `--format json` when JSON should also be printed to stdout. Use
@@ -57,7 +58,9 @@ The manifest must list missing files explicitly and set `submit_ready` to false.
 
 ## Manifest Schema
 
-Write `input_prep_manifest.json` in the prepared input directory.
+Write `input_prep_manifest.json` in the prepared input directory. Prefer
+`scripts/write_manifest.py` so diagnostics are normalized and required fields
+are not omitted.
 
 ```json
 {
@@ -80,6 +83,8 @@ Write `input_prep_manifest.json` in the prepared input directory.
 ```
 
 Use an empty list for absent file groups. Do not omit fields.
+Keep `bohrium_command` present even when `submit_ready` is false; use an empty
+string if no command is valid until blockers are fixed.
 
 ## Submission Rule
 

@@ -10,7 +10,7 @@ Use this table to choose the input-preparation route. Engine-specific physical r
 | ABINIT | `render_input.py` plus `diagnose_input.py` | `run.abi` | Check ABINIT references for ecut, ngkpt, nband, toldfe, and pseudopotential files. |
 | LAMMPS | `render_input.py` plus `diagnose_input.py` | `.lammps` input script | Check the LAMMPS skill or docs for units, boundary, pair style, fix order, and run blocks. |
 | ORCA | `render_input.py` plus `diagnose_input.py` | `.inp` | Check the ORCA skill for charge/multiplicity, PAL, TDDFT, RI/aux basis, and command defaults. |
-| GROMACS | Generate/adapt `.mdp` when needed; package user topology and coordinates | `.mdp`, `.gro`, `.top`, optional `.tpr` | Check the GROMACS skill for grompp/mdrun staging and topology consistency. |
+| GROMACS | `render_input.py` plus `diagnose_input.py` for `.mdp`; package user topology and coordinates | `.mdp`, `.gro`, `.top`, optional `.tpr` | Check the GROMACS skill for grompp/mdrun staging and topology consistency. |
 | PySCF | Do not render engine input; write a Python script directly | `run_pyscf.py`, structure file | Still check Python syntax, charge/spin, structure path, requested output fields, and manifest completeness. |
 
 ## Route Selection

@@ -37,6 +37,10 @@ def _get_backend(software: str):
         from engine.software.lammps import LAMMPSBackend
 
         return LAMMPSBackend()
+    if key == "gromacs":
+        from engine.software.gromacs import GROMACSBackend
+
+        return GROMACSBackend()
     if key == "orca":
         from engine.software.orca import ORCABackend
 
@@ -46,7 +50,7 @@ def _get_backend(software: str):
 
         return QEBackend()
 
-    supported = "abacus, abinit, cp2k, lammps, orca, qe, quantum-espresso"
+    supported = "abacus, abinit, cp2k, gromacs, lammps, orca, qe, quantum-espresso"
     print(
         (f"Error: unsupported software '{software}'. " f"Supported: {supported}"),
         file=sys.stderr,
@@ -102,7 +106,7 @@ def main() -> None:
     parser.add_argument(
         "--software",
         required=True,
-        help="Software name: cp2k, orca, qe, abinit, lammps, abacus",
+        help="Software name: cp2k, orca, qe, abinit, gromacs, lammps, abacus",
     )
     parser.add_argument(
         "--task",

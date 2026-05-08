@@ -11,6 +11,7 @@ __all__ = [
     "QEBackend",
     "ABINITBackend",
     "LAMMPSBackend",
+    "GROMACSBackend",
     "AbacusBackend",
 ]
 
@@ -32,6 +33,10 @@ def __getattr__(name: str):
         from engine.software.lammps import LAMMPSBackend
 
         return LAMMPSBackend
+    if name == "GROMACSBackend":
+        from engine.software.gromacs import GROMACSBackend
+
+        return GROMACSBackend
     if name == "ORCABackend":
         from engine.software.orca import ORCABackend
 

@@ -358,6 +358,20 @@ questions:
       - Ni
       - Fe
       - predicted_hardness
+  - key: csv_has_elements
+    value:
+      filename: candidates.csv
+      tokens:
+      - Cr
+      - Co
+      - Ni
+      - Fe
+      flags: i
+  - key: csv_has_hardness
+    value:
+      filename: candidates.csv
+      pattern: hardness
+      flags: i
   - key: turn_budget
     value:
       max: 18
@@ -430,7 +444,8 @@ questions:
     predicted_ductility.'
   tags: []
   data_files:
-  - path: data/WO_compopt_002_20260508/seeds.json
+  - key: seed_compositions
+    path: data/WO_compopt_002_20260508/seeds.json
     oss_url: ''
   reference_answers:
   - key: optimized_csv
@@ -445,6 +460,20 @@ questions:
       - Fe
       - yield_strength
       - ductility
+  - key: csv_has_elements
+    value:
+      filename: optimized.csv
+      tokens:
+      - Cr
+      - Co
+      - Ni
+      - Fe
+      flags: i
+  - key: csv_has_properties
+    value:
+      filename: optimized.csv
+      pattern: yield_strength
+      flags: i
   - key: turn_budget
     value:
       max: 18

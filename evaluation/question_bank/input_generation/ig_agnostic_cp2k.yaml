@@ -74,3 +74,203 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+- id: IG_cp2k_002_20260508
+  capability: input_generation
+  domain: agnostic
+  intent: Validate and package an already complete CP2K input without rerendering it.
+  human_prompt_seed: '工作区里已有 `cp2k_ready.inp`，它是用户准备好的 CP2K 输入。
+
+    请按 input-manual-helper 的流程处理这个 ready-to-run user input：
+
+    1. Resolve `skill_dir` to `matmaster/skills/input-manual-helper`。
+
+    2. Validate an existing engine input before execution：不要重新生成或覆盖 `cp2k_ready.inp`，只复制到 `run_cp2k_ready/input.inp`。
+
+    3. 调用 `diagnose_input.py --software cp2k --input run_cp2k_ready/input.inp --json_out run_cp2k_ready/diagnosis.json`，保存 machine-readable diagnostics。
+
+    4. 用 `scripts/write_manifest.py` 写 `run_cp2k_ready/input_prep_manifest.json`；不要 hand-write 或 omit required fields，manifest 必须包含 software、task、input_dir、generated_files、user_provided_files、diagnostics、auxiliary_files、assumptions、submit_ready、bohrium_command。
+
+    5. Submit only if `submit_ready` is true and the relevant engine skill supplies image/machine/cmd；本题只准备目录，不实际提交。
+
+    最终只交付 `run_cp2k_ready/` 目录和简短说明。'
+  tags:
+  - eng_cp2k
+  data_files:
+  - key: cp2k_ready
+    path: data/IG_cp2k_002_20260508/cp2k_ready.inp
+    oss_url: ''
+    description: Complete CP2K input that should be validated and packaged without rerendering.
+  reference_answers:
+  - key: packaged_input_artifact
+    value: input.inp
+  - key: diagnosis_artifact
+    value: diagnosis.json
+  - key: manifest_schema
+    value:
+      filename: input_prep_manifest.json
+      required_keys:
+      - software
+      - task
+      - input_dir
+      - generated_files
+      - user_provided_files
+      - diagnostics
+      - auxiliary_files
+      - assumptions
+      - submit_ready
+      - bohrium_command
+  - key: ready_input_not_rerendered
+    value:
+      filename: input.inp
+      tokens:
+      - PROJECT mgo_ready
+      - CUTOFF 400
+      - EPS_SCF 1.0E-6
+      - DZVP-MOLOPT-SR-GTH
+      flags: i
+  - key: manifest_submit_ready_true
+    value:
+      filename: input_prep_manifest.json
+      pattern: '"submit_ready"\s*:\s*true'
+      flags: i
+  - key: manifest_diagnostics_json
+    value:
+      filename: input_prep_manifest.json
+      pattern: '"diagnostics"\s*:\s*\{[\s\S]*"file"\s*:\s*"diagnosis\.json"'
+      flags: i
+  - key: engine_defaults_grounding
+    value: CP2K Bohrium image, machine, and command defaults are checked in the CP2K skill instead of copied from memory.
+  - key: turn_budget
+    value:
+      max: 14
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 16000
+  scoring_checklist:
+  - id: packaged_input_artifact
+    criterion: The complete ready-to-run CP2K input is packaged as `run_cp2k_ready/input.inp`.
+    axis: correctness
+    verify: artifact_exists
+  - id: diagnosis_artifact
+    criterion: The existing engine input is validated before execution and `diagnose_input.py` output is saved as machine-readable `diagnosis.json`.
+    axis: correctness
+    verify: artifact_exists
+  - id: manifest_schema
+    criterion: The run directory includes `input_prep_manifest.json` written with `scripts/write_manifest.py`; the agent must not hand-write or omit required manifest fields.
+    axis: correctness
+    verify: json_file_schema
+  - id: ready_input_not_rerendered
+    criterion: The agent does not render over a complete ready input when the user asked only to package and validate it; key CP2K values from `cp2k_ready.inp` are preserved.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: manifest_submit_ready_true
+    criterion: The manifest sets `submit_ready` to true only after diagnosis reports no unhandled errors or blockers.
+    axis: correctness
+    verify: text_file_regex
+  - id: manifest_diagnostics_json
+    criterion: The manifest records the saved JSON diagnostics file instead of calling `diagnose_input.py` without saving machine-readable diagnostics.
+    axis: correctness
+    verify: text_file_regex
+  - id: engine_defaults_grounding
+    criterion: Submit only if `submit_ready` is true and the relevant CP2K engine skill supplies Bohrium image, machine, or command defaults; the answer should not copy defaults from memory.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: IG_cp2k_003_20260508
+  capability: input_generation
+  domain: agnostic
+  intent: Diagnose a CP2K input with physically invalid settings and block submission.
+  human_prompt_seed: '工作区里有 `cp2k_needs_fix.inp`。请用 input-manual-helper 的诊断流程做 preflight，不要提交作业：
+
+    1. 用 `diagnose_input.py --software cp2k --input cp2k_needs_fix.inp --json_out diagnosis.json` 保存诊断。
+
+    2. Treating parser success as physical validity 是错误做法；请检查 CUTOFF 和 EPS_SCF 是否有物理意义。
+
+    3. 如果 diagnosis has unhandled errors or blockers，必须用 `scripts/write_manifest.py` 写 `input_prep_manifest.json` 且 `submit_ready=false`；不要 hand-write 或 omit required fields，并说明 blockers 和修复建议。
+
+    4. 不要在 blockers 未处理时提交；不要臆造 Bohrium cmd/image/machine。
+
+    输出 `diagnosis.json`、`input_prep_manifest.json` 和简短修复说明。'
+  tags:
+  - eng_cp2k
+  data_files:
+  - key: bad_cp2k_input
+    path: data/IG_cp2k_003_20260508/cp2k_needs_fix.inp
+    oss_url: ''
+    description: CP2K input with intentionally poor physical settings for diagnosis.
+  reference_answers:
+  - key: diagnosis_artifact
+    value: diagnosis.json
+  - key: manifest_schema
+    value:
+      filename: input_prep_manifest.json
+      required_keys:
+      - software
+      - task
+      - input_dir
+      - generated_files
+      - user_provided_files
+      - diagnostics
+      - auxiliary_files
+      - assumptions
+      - submit_ready
+      - bohrium_command
+  - key: manifest_submit_ready_false
+    value:
+      filename: input_prep_manifest.json
+      pattern: '"submit_ready"\s*:\s*false'
+      flags: i
+  - key: answer_mentions_blockers
+    value: The final answer identifies unhandled errors or blockers and says submission is blocked until they are fixed.
+  - key: turn_budget
+    value:
+      max: 12
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 14000
+  scoring_checklist:
+  - id: diagnosis_artifact
+    criterion: The agent calls the CP2K diagnosis route and saves `diagnose_input.py` machine-readable diagnostics as `diagnosis.json`.
+    axis: correctness
+    verify: artifact_exists
+  - id: manifest_schema
+    criterion: The agent writes `input_prep_manifest.json` with `scripts/write_manifest.py` even when the input is not submit-ready; it must not hand-write or omit required fields.
+    axis: correctness
+    verify: json_file_schema
+  - id: manifest_submit_ready_false
+    criterion: The manifest sets `submit_ready` to false when diagnosis has unhandled errors or blockers.
+    axis: correctness
+    verify: text_file_regex
+  - id: answer_mentions_blockers
+    criterion: The answer handles diagnosis errors or blockers before submission, does not treat parser success as physical validity, and refuses to submit while blockers remain.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget

@@ -46,7 +46,8 @@ Use this route table to choose engine-specific handling:
 6. Handle diagnosis errors or blockers before submission. Warnings may proceed
    only when the manifest records a concise rationale.
 7. Gather required auxiliary files into one input directory.
-8. Write `input_prep_manifest.json`.
+8. Write `input_prep_manifest.json` with `scripts/write_manifest.py`; do not
+   hand-write or omit required fields.
 9. Submit only if `submit_ready` is true and the relevant engine skill supplies
    or confirms the Bohrium image and command.
 
@@ -76,6 +77,8 @@ Every prepared run directory must include `input_prep_manifest.json` with:
 
 If the input is not submit-ready, set `submit_ready` to false and explain the
 blocking issue in `assumptions` or an adjacent report.
+Keep `bohrium_command` present even when it is an empty string because submission
+is blocked.
 
 ## Engine Boundaries
 

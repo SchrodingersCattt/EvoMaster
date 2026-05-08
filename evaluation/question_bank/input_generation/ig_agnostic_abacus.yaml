@@ -218,6 +218,197 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
+- id: IG_abacus_009_20260508
+  capability: input_generation
+  domain: agnostic
+  intent: Use input-manual-helper to render, diagnose, and manifest an ABACUS SCF run directory from task intent.
+  human_prompt_seed: '请用 input-manual-helper 准备一个最小 ABACUS LCAO SCF 输入目录：
+
+    - 材料：Si diamond conventional cell，a=5.43 Å。
+
+    - 任务：ABACUS scf。
+
+    - 输出目录：`run_abacus_scf/`，其中应包含 `INPUT`、`STRU`、`KPT`、`diagnosis.json`、`input_prep_manifest.json`。
+
+    - 必须先 resolve `skill_dir` 到 `matmaster/skills/input-manual-helper`，再 choose engine and task type using `references/engine_routes.md`。
+
+    - For rendered engines, run `render_input.py` 生成输入，再用 `diagnose_input.py --software abacus --input run_abacus_scf/INPUT --json_out run_abacus_scf/diagnosis.json` 做诊断。
+
+    - 用 `scripts/write_manifest.py` 写 `input_prep_manifest.json`；不要 hand-write 或 omit required fields。
+
+    - 这是把 task intent plus structure files 转成 runnable engine artifacts 的题；不要手写一段和 helper 路由无关的散装文件。
+
+    本题只准备输入目录，不实际提交 Bohrium。'
+  tags:
+  - eng_abacus
+  data_files: []
+  reference_answers:
+  - key: input_artifact
+    value: INPUT
+  - key: stru_artifact
+    value: STRU
+  - key: kpt_artifact
+    value: KPT
+  - key: diagnosis_artifact
+    value: diagnosis.json
+  - key: manifest_schema
+    value:
+      filename: input_prep_manifest.json
+      required_keys:
+      - software
+      - task
+      - input_dir
+      - generated_files
+      - user_provided_files
+      - diagnostics
+      - auxiliary_files
+      - assumptions
+      - submit_ready
+      - bohrium_command
+  - key: abacus_core_keywords
+    value:
+      filename: INPUT
+      tokens:
+      - calculation
+      - scf
+      - basis_type
+      - lcao
+      flags: i
+  - key: helper_routing_grounding
+    value: The answer describes resolving skill_dir, using references/engine_routes.md, rendering with render_input.py, and diagnosing with diagnose_input.py JSON output.
+  - key: turn_budget
+    value:
+      max: 16
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 18000
+  scoring_checklist:
+  - id: input_artifact
+    criterion: Generated deliverables include ABACUS `INPUT` in the prepared run directory.
+    axis: correctness
+    verify: artifact_exists
+  - id: stru_artifact
+    criterion: Generated deliverables include ABACUS `STRU` in the prepared run directory.
+    axis: correctness
+    verify: artifact_exists
+  - id: kpt_artifact
+    criterion: Generated deliverables include ABACUS `KPT` in the prepared run directory.
+    axis: correctness
+    verify: artifact_exists
+  - id: diagnosis_artifact
+    criterion: The primary input is diagnosed with JSON output saved as `diagnosis.json`.
+    axis: correctness
+    verify: artifact_exists
+  - id: manifest_schema
+    criterion: The run directory includes `input_prep_manifest.json` written with `scripts/write_manifest.py`; the agent must not hand-write or omit required manifest fields.
+    axis: correctness
+    verify: json_file_schema
+  - id: abacus_core_keywords
+    criterion: The rendered ABACUS INPUT contains SCF and LCAO controls.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: helper_routing_grounding
+    criterion: The workflow resolves `skill_dir`, chooses engine and task type using `references/engine_routes.md`, and for rendered engines runs `render_input.py` plus `diagnose_input.py`; it uses input-manual-helper to generate or adapt input files for ABACUS, CP2K, QE, ABINIT, LAMMPS, ORCA, GROMACS, or PySCF instead of bypassing the helper.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: IG_abacus_010_20260508
+  capability: input_generation
+  domain: agnostic
+  intent: Package an ABACUS input directory with auxiliary files and engine-skill submission defaults.
+  human_prompt_seed: '请为一个已准备好的 ABACUS LCAO 运行目录做 submission preflight，目录名用 `run_abacus_packaged/`：
+
+    1. 生成或整理 `INPUT`、`STRU`、`KPT`，并把所需 auxiliary files（例如 pseudopotential/orbital 文件名占位或清单）集中到同一个 input directory。
+
+    2. 用 input-manual-helper 的 `scripts/write_manifest.py` 写 `input_prep_manifest.json`；不要 hand-write 或 omit required fields，并明确 `auxiliary_files`、`diagnostics.file`、`submit_ready`、`bohrium_command`。
+
+    3. `bohrium_command`、image、machine 等提交默认值必须来自 ABACUS skill；不要 copying image, machine, or command defaults from memory。
+
+    4. Submit only if `submit_ready` is true；本题不要真正提交，只输出目录和说明。
+
+    请确保 manifest 能让后续 Bohrium submission 使用。'
+  tags:
+  - eng_abacus
+  data_files: []
+  reference_answers:
+  - key: manifest_schema
+    value:
+      filename: input_prep_manifest.json
+      required_keys:
+      - software
+      - task
+      - input_dir
+      - generated_files
+      - user_provided_files
+      - diagnostics
+      - auxiliary_files
+      - assumptions
+      - submit_ready
+      - bohrium_command
+  - key: manifest_has_auxiliary_files
+    value:
+      filename: input_prep_manifest.json
+      pattern: '"auxiliary_files"\s*:\s*\['
+      flags: i
+  - key: manifest_has_bohrium_command
+    value:
+      filename: input_prep_manifest.json
+      pattern: '"bohrium_command"\s*:\s*"[^"]+"'
+      flags: i
+  - key: engine_skill_defaults_grounding
+    value: The final answer states that ABACUS image, machine, and command defaults were checked from the ABACUS skill rather than copied from memory.
+  - key: turn_budget
+    value:
+      max: 14
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 16000
+  scoring_checklist:
+  - id: manifest_schema
+    criterion: The package includes `input_prep_manifest.json` written with `scripts/write_manifest.py`; it must include software, task, input_dir, generated_files, user_provided_files, diagnostics, auxiliary_files, assumptions, submit_ready, and bohrium_command without omitting required fields.
+    axis: correctness
+    verify: json_file_schema
+  - id: manifest_has_auxiliary_files
+    criterion: The manifest gathers required auxiliary files into one input directory and records them in `auxiliary_files`.
+    axis: correctness
+    verify: text_file_regex
+  - id: manifest_has_bohrium_command
+    criterion: The manifest records a non-empty Bohrium command while keeping actual submission gated.
+    axis: correctness
+    verify: text_file_regex
+  - id: engine_skill_defaults_grounding
+    criterion: Submit only if `submit_ready` is true and the relevant ABACUS engine skill supplies image, machine, and command defaults; the answer must avoid copying image, machine, or command defaults from memory.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
 - id: IG_abacus_007_20260508
   capability: input_generation
   domain: agnostic

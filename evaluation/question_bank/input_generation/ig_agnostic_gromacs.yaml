@@ -76,3 +76,88 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+- id: IG_gromacs_002_20260508
+  capability: input_generation
+  domain: agnostic
+  intent: Adapt a GROMACS minimization input through input-manual-helper and record the manifest gate.
+  human_prompt_seed: '请用 input-manual-helper 为 GROMACS energy minimization 准备 `run_gromacs_em/`：
+
+    - 生成或 adapt input files：`em.mdp`，参数为 steepest descent、nsteps=50000、emtol=1000、emstep=0.01。
+
+    - 选择 engine/task 时参考 `references/engine_routes.md`；GROMACS 属于 ABACUS, CP2K, QE, ABINIT, LAMMPS, ORCA, GROMACS, or PySCF 这组 engine input helper 路由中的一员。
+
+    - 运行或模拟 `diagnose_input.py --software gromacs --input run_gromacs_em/em.mdp --json_out run_gromacs_em/diagnosis.json` 的诊断结果，并用 `scripts/write_manifest.py` 写 `input_prep_manifest.json`；不要 hand-write 或 omit required fields。
+
+    - manifest 中必须包含 `submit_ready` gate；如果有 blockers 就不能提交。
+
+    本题只生成输入目录，不实际运行 GROMACS。'
+  tags:
+  - eng_gromacs
+  data_files: []
+  reference_answers:
+  - key: mdp_artifact
+    value: em.mdp
+  - key: manifest_schema
+    value:
+      filename: input_prep_manifest.json
+      required_keys:
+      - software
+      - task
+      - input_dir
+      - generated_files
+      - user_provided_files
+      - diagnostics
+      - auxiliary_files
+      - assumptions
+      - submit_ready
+      - bohrium_command
+  - key: required_keywords
+    value:
+      filename: em.mdp
+      tokens:
+      - integrator
+      - steep
+      - nsteps
+      - emtol
+      - emstep
+      flags: i
+  - key: helper_route_grounding
+    value: The answer routes GROMACS input generation through input-manual-helper and records a submit_ready manifest gate.
+  - key: turn_budget
+    value:
+      max: 12
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 14000
+  scoring_checklist:
+  - id: mdp_artifact
+    criterion: The GROMACS input generation task writes `em.mdp` in the prepared run directory.
+    axis: correctness
+    verify: artifact_exists
+  - id: manifest_schema
+    criterion: The run directory includes `input_prep_manifest.json` written with `scripts/write_manifest.py`, without hand-writing or omitting required fields, and with the submit_ready gate.
+    axis: correctness
+    verify: json_file_schema
+  - id: required_keywords
+    criterion: The generated or adapted input file contains the requested GROMACS minimization parameters.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: helper_route_grounding
+    criterion: The agent uses input-manual-helper to generate or adapt input files for an engine in the ABACUS, CP2K, QE, ABINIT, LAMMPS, ORCA, GROMACS, or PySCF route family, and validates with diagnose_input.py before any submission.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget

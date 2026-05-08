@@ -270,6 +270,17 @@ def test_manifest_bank_metadata_matches_bank_files() -> None:
         assert manifest_domain == bank_domain, entry["path"]
 
 
+def test_manifest_banks_validate_against_v5_schema() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    bank_root = repo_root / "evaluation" / "question_bank"
+    manifest = yaml.safe_load((bank_root / "manifest.yaml").read_text(encoding="utf-8"))
+
+    for entry in manifest["banks"]:
+        bank_path = bank_root / entry["path"]
+        raw_bank = yaml.safe_load(bank_path.read_text(encoding="utf-8"))
+        QuestionBank.model_validate(raw_bank)
+
+
 def test_active_question_banks_use_only_business_line_domains() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     bank_root = repo_root / "evaluation" / "question_bank"
@@ -372,4 +383,4 @@ def test_manifest_active_totals_after_phase2_splits() -> None:
     manifest = yaml.safe_load((bank_root / "manifest.yaml").read_text(encoding="utf-8"))
 
     assert len(manifest["banks"]) == 30
-    assert sum(int(entry["questions"]) for entry in manifest["banks"]) == 148
+    assert sum(int(entry["questions"]) for entry in manifest["banks"]) == 156
