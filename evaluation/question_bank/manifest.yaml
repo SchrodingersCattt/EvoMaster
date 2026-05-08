@@ -69,7 +69,7 @@ banks:
 - path: input_generation/ig_agnostic_abacus.yaml
   capability: input_generation
   domain: agnostic
-  questions: 14
+  questions: 16
 - path: input_generation/ig_agnostic_gpumd.yaml
   capability: input_generation
   domain: agnostic
@@ -81,11 +81,11 @@ banks:
 - path: input_generation/ig_agnostic_cp2k.yaml
   capability: input_generation
   domain: agnostic
-  questions: 1
+  questions: 3
 - path: input_generation/ig_agnostic_gromacs.yaml
   capability: input_generation
   domain: agnostic
-  questions: 1
+  questions: 2
 - path: safety_refusal/sf_agnostic.yaml
   capability: safety_refusal
   domain: agnostic
@@ -154,5 +154,3 @@ banks:
   capability: workflow_orchestration
   domain: semiconductor
   questions: 2
-
-# Total: 157 questions across 30 active bank files

@@ -47,6 +47,32 @@ evaluation/question_bank/
 | `grounding` | 是否使用了正确的工具/数据源，而非凭空编造 |
 | `efficiency` | 过程是否高效（无冗余调用、耗时/token 合理） |
 
+### 提示词 / 工具 / Skill 覆盖率口径
+
+`evaluation/scripts/coverage/extract_and_match.py` 会从 `matmaster/skills`、
+内置工具提示与系统提示中抽取规则，并与题库做匹配。报告同时保留两套口径：
+
+- **Raw coverage**：所有抽取规则都进入分母，用于观察提示词、工具、Skill
+  文档的整体匹配情况。
+- **Actionable coverage**：只统计应由题库 checklist 捕获的规则。每条规则会带
+  `actionability`、`is_actionable` 与 `actionability_reason`；默认只有
+  `actionability: testable` 进入 actionable 分母。
+
+行动性分类配置在
+`evaluation/scripts/coverage/rule_scope_overrides.yaml`。常用分类为：
+
+| actionability | 含义 |
+| --- | --- |
+| `testable` | 应通过题目 checklist、确定性 verifier 或 LLM judge 覆盖 |
+| `policy_only` | 系统/流程/对话策略，不默认要求科学题库覆盖 |
+| `tool_schema` | 工具参数或工具 schema 说明，优先通过工具单测覆盖 |
+| `runtime_dependent` | 依赖 MCP、Bohrium 镜像、机器队列等运行时资源 |
+| `out_of_scope` | 当前评测目标外的能力或暂未启用服务 |
+
+新增大类 Skill、工具或 MCP 时，若其规则不应默认进入题库补题分母，应同步更新
+`rule_scope_overrides.yaml`，并为 `testable` 规则优先设计能真正失败的 checklist；
+不要只靠 tag/关键词把 raw coverage 刷高。
+
 ### `EvalConfig` 与 Agent 运行（`run_mat_task`）
 
 - **`empty_completion_max_retries`**（默认 `1`）：当单次运行结果为 `status=completed`、无工具调用、且无可见答案（含内核 `reason=natural` 或旧版 playground 无 `reason` 字段）时，视为「可能因网关/流式偶发空流」，**整题重跑**最多额外次数；`0` 表示关闭。`mat_result` 会附带 `empty_completion_retry_count`（实际执行的重试次数），`duration_ms` 为**多次尝试之和**。

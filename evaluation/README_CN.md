@@ -19,6 +19,18 @@ MATTER 是 `evaluation/` 下的独立评测模块，当前仅维护 **v5+** 题�
 
 v5+ 引入了 **显式权重机制** 和 **运行时解耦**，使评测更灵活、更可移植。
 
+## 覆盖率口径
+
+提示词 / 工具 / Skill 覆盖率脚本位于 `evaluation/scripts/coverage/`。
+`extract_and_match.py` 输出的 `coverage_report.json` 同时包含：
+
+- **Raw coverage**：所有抽取规则都计入分母。
+- **Actionable coverage**：仅统计 `actionability: testable` 的规则，用于安排补题优先级。
+
+规则分类可在 `evaluation/scripts/coverage/rule_scope_overrides.yaml` 调整。默认分类包括
+`testable`、`policy_only`、`tool_schema`、`runtime_dependent`、`out_of_scope`。
+补题时应优先看 `summary.actionable_pct` 与 actionable critical gaps，避免用关键词匹配代替真实 checklist 覆盖。
+
 ## 当前题库结构
 
 - `question_bank/manifest.yaml`: v5+ 题库注册表。

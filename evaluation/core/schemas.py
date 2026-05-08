@@ -68,6 +68,8 @@ VerifyLiteral = Literal[
     'struct_file_count',
     # surface termination check
     'struct_file_surface_termination',
+    'struct_file_integer_stoichiometry',
+    'struct_file_replicas_distinct',
     # IUCr checkCIF web service (single-crystal XRD validation)
     'checkcif_no_a_alerts',
     # plain-text file checks
@@ -81,8 +83,6 @@ VerifyLiteral = Literal[
     'json_file_schema',
     'json_file_numeric_range',
     'json_file_artifacts',
-    # tool usage check (did agent call a specific tool name?)
-    'tool_name_used',
 ]
 
 AxisLiteral = Literal['correctness', 'grounding', 'efficiency']
@@ -318,7 +318,6 @@ class QuestionItem(BaseModel):
             'json_file_schema',
             'json_file_numeric_range',
             'json_file_artifacts',
-            'tool_name_used',
         }
         for item in self.scoring_checklist:
             if item.verify in _needs_ref and item.id not in ref_keys:
