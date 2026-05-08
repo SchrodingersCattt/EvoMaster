@@ -1,0 +1,31 @@
+version: v1
+description: >
+  Classifies extracted prompt/tool/skill rules for actionable coverage reporting.
+  Raw coverage keeps every extracted rule. Actionable coverage only counts rules
+  that should realistically be caught by question-bank scoring checklists.
+
+actionable_scopes:
+  - testable
+
+source_defaults:
+  plan-executor:
+    actionability: policy_only
+    reason: planner handoff artifacts are process contracts, not default MATTER task checklist targets
+  skill-manager:
+    actionability: policy_only
+    reason: skill-management behavior is tested outside scientific task coverage by default
+  proposal-review:
+    actionability: policy_only
+    reason: proposal review is a meta-workflow and not part of default task coverage
+
+source_name_patterns:
+  - pattern: "^mcp-mat-(doc|electron-microscope|nmr|xrd)$"
+    actionability: runtime_dependent
+    reason: specialized MCP services are not part of the default actionable question-bank scope
+
+text_patterns:
+  - pattern: "registry\\.dp\\.tech|list_images|list_machines|machine \\|"
+    actionability: runtime_dependent
+    reason: image and machine selection depends on the deployed runtime catalog
+
+id_overrides: {}

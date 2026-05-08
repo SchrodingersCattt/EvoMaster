@@ -243,7 +243,9 @@ def _compute_cache_key(rule: dict, relevant_questions: list[dict]) -> str:
     for q in sorted(relevant_questions, key=lambda x: x.get("id", "")):
         parts.append(q.get("id", ""))
         for item in q.get("scoring_checklist", []):
-            parts.append(f"{item.get('id', '')}:{item.get('verify', '')}:{item.get('criterion', '')}")
+            parts.append(
+                f"{item.get('id', '')}:{item.get('verify', '')}:{item.get('criterion', '')}"
+            )
     return hashlib.md5("|".join(parts).encode()).hexdigest()
 
 
@@ -361,6 +363,10 @@ def main():
     total = len(results)
     covered = sum(1 for r in results if r.get("covered"))
     uncovered = total - covered
+    actionable_results = [r for r in results if r.get("is_actionable", True)]
+    actionable_total = len(actionable_results)
+    actionable_covered = sum(1 for r in actionable_results if r.get("covered"))
+    actionable_uncovered = actionable_total - actionable_covered
 
     by_type = {}
     for r in results:
@@ -374,6 +380,21 @@ def main():
     for r in results:
         sn = r.get("source_name", "unknown")
         entry = by_skill.setdefault(sn, {"total": 0, "covered": 0})
+        entry["total"] += 1
+        if r.get("covered"):
+            entry["covered"] += 1
+
+    by_actionability = {}
+    for r in results:
+        actionability = r.get("actionability", "testable")
+        entry = by_actionability.setdefault(
+            actionability,
+            {
+                "total": 0,
+                "covered": 0,
+                "actionable": bool(r.get("is_actionable", True)),
+            },
+        )
         entry["total"] += 1
         if r.get("covered"):
             entry["covered"] += 1
@@ -396,6 +417,14 @@ def main():
             "covered_rules": covered,
             "uncovered_rules": uncovered,
             "coverage_pct": round(100 * covered / total, 1) if total else 0,
+            "actionable_total": actionable_total,
+            "actionable_covered": actionable_covered,
+            "actionable_uncovered": actionable_uncovered,
+            "actionable_pct": (
+                round(100 * actionable_covered / actionable_total, 1)
+                if actionable_total
+                else 0
+            ),
             "by_rule_type": {
                 k: {
                     **v,
@@ -414,17 +443,44 @@ def main():
                 }
                 for k, v in sorted(by_skill.items(), key=lambda x: -x[1]["total"])
             },
+            "by_actionability": {
+                k: {
+                    **v,
+                    "pct": (
+                        round(100 * v["covered"] / v["total"], 1) if v["total"] else 0
+                    ),
+                }
+                for k, v in sorted(by_actionability.items())
+            },
         },
         "uncovered_critical": [
             {
                 "id": r["id"],
                 "source_name": r.get("source_name"),
                 "rule_type": r.get("rule_type"),
+                "actionability": r.get("actionability", "testable"),
+                "actionability_reason": r.get("actionability_reason", ""),
                 "text": r.get("text", "")[:200],
                 "reason": r.get("reason", ""),
             }
             for r in uncovered_rules
-            if r.get("rule_type") in ("hard_guard", "pitfall", "physical_check")
+            if (
+                r.get("rule_type") in ("hard_guard", "pitfall", "physical_check")
+                and r.get("is_actionable", True)
+            )
+        ],
+        "excluded_from_actionable": [
+            {
+                "id": r["id"],
+                "source_name": r.get("source_name"),
+                "source_type": r.get("source_type"),
+                "rule_type": r.get("rule_type"),
+                "actionability": r.get("actionability", "testable"),
+                "actionability_reason": r.get("actionability_reason", ""),
+                "text": r.get("text", "")[:200],
+            }
+            for r in results
+            if not r.get("is_actionable", True)
         ],
         "rules": [
             {
@@ -433,6 +489,9 @@ def main():
                 "section": r.get("section"),
                 "rule_type": r.get("rule_type"),
                 "text": r.get("text", "")[:200],
+                "actionability": r.get("actionability", "testable"),
+                "is_actionable": r.get("is_actionable", True),
+                "actionability_reason": r.get("actionability_reason", ""),
                 "covered": r.get("covered", False),
                 "confidence": r.get("confidence", "low"),
                 "covered_by": r.get("covered_by", []),
@@ -452,6 +511,10 @@ def main():
     print(f"  Total rules:    {total}")
     print(f"  Covered:        {covered} ({output['summary']['coverage_pct']}%)")
     print(f"  Uncovered:      {uncovered}")
+    print(
+        f"  Actionable:     {actionable_covered}/{actionable_total} "
+        f"({output['summary']['actionable_pct']}%)"
+    )
     print(f"  Critical gaps:  {len(output['uncovered_critical'])}")
     print(f"{'='*60}")
     print("\n  By rule type:")

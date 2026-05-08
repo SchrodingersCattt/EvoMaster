@@ -26,6 +26,43 @@ TOOLS_DIR = ROOT / "matmaster" / "tools" / "builtin"
 BASE_TOML = ROOT / "matmaster" / "exps" / "_base.toml"
 QUESTION_BANK = ROOT / "evaluation" / "question_bank"
 OUTPUT_FILE = ROOT / "evaluation" / "coverage_report.json"
+ACTIONABILITY_CONFIG_FILE = (
+    ROOT / "evaluation" / "scripts" / "coverage" / "rule_scope_overrides.yaml"
+)
+
+ACTIONABILITY_VALUES = {
+    "testable",
+    "policy_only",
+    "tool_schema",
+    "runtime_dependent",
+    "out_of_scope",
+}
+
+DEFAULT_ACTIONABLE_SCOPES = {"testable"}
+
+DEFAULT_ACTIONABILITY_CONFIG = {
+    "actionable_scopes": sorted(DEFAULT_ACTIONABLE_SCOPES),
+    "source_type_defaults": {
+        "tool": {
+            "actionability": "tool_schema",
+            "reason": "builtin tool schema and prompt rules are validated outside question-bank coverage by default",
+        },
+        "system_prompt": {
+            "actionability": "policy_only",
+            "reason": "system prompt behavior is not a scientific-task checklist by default",
+        },
+    },
+    "rule_type_defaults": {
+        "config_default": {
+            "actionability": "runtime_dependent",
+            "reason": "executor image, machine, and command defaults depend on runtime availability",
+        }
+    },
+    "source_defaults": {},
+    "source_name_patterns": [],
+    "text_patterns": [],
+    "id_overrides": {},
+}
 
 # ── Skill-to-tag mapping ─────────────────────────────────────────────────────
 
@@ -446,6 +483,158 @@ def classify_scope(rules: list[dict]) -> list[dict]:
     return rules
 
 
+# ── Phase 3c: Classify actionable coverage scope ─────────────────────────────
+
+
+def _merge_mapping_config(defaults: dict, override: dict) -> dict:
+    merged = dict(defaults)
+    merged.update(override)
+    return merged
+
+
+def _merge_actionability_config(config: dict | None) -> dict:
+    """Merge user overrides with built-in actionability defaults."""
+    config = config or {}
+    merged = dict(DEFAULT_ACTIONABILITY_CONFIG)
+    for key in (
+        "source_type_defaults",
+        "rule_type_defaults",
+        "source_defaults",
+        "id_overrides",
+    ):
+        merged[key] = _merge_mapping_config(
+            DEFAULT_ACTIONABILITY_CONFIG.get(key, {}), config.get(key, {})
+        )
+    for key in ("source_name_patterns", "text_patterns"):
+        merged[key] = [
+            *DEFAULT_ACTIONABILITY_CONFIG.get(key, []),
+            *config.get(key, []),
+        ]
+    merged["actionable_scopes"] = config.get(
+        "actionable_scopes", DEFAULT_ACTIONABILITY_CONFIG["actionable_scopes"]
+    )
+    return merged
+
+
+def load_actionability_config(path: Path = ACTIONABILITY_CONFIG_FILE) -> dict:
+    """Load optional rule actionability overrides."""
+    if not path.exists():
+        return _merge_actionability_config({})
+    loaded = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if not isinstance(loaded, dict):
+        raise ValueError(f"Actionability config must be a mapping: {path}")
+    return _merge_actionability_config(loaded)
+
+
+def _read_actionability_entry(entry: object, *, reason: str) -> tuple[str, str]:
+    if isinstance(entry, str):
+        actionability = entry
+        actionability_reason = reason
+    elif isinstance(entry, dict):
+        actionability = str(entry.get("actionability", ""))
+        actionability_reason = str(entry.get("reason") or reason)
+    else:
+        raise ValueError(f"Invalid actionability config entry: {entry!r}")
+
+    if actionability not in ACTIONABILITY_VALUES:
+        allowed = ", ".join(sorted(ACTIONABILITY_VALUES))
+        raise ValueError(
+            f"Invalid actionability {actionability!r}; expected one of: {allowed}"
+        )
+    return actionability, actionability_reason
+
+
+def _match_pattern_entry(
+    *,
+    entries: list[dict],
+    value: str,
+    default_reason: str,
+) -> tuple[str, str] | None:
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise ValueError(f"Pattern entry must be a mapping: {entry!r}")
+        pattern = entry.get("pattern")
+        if not pattern:
+            raise ValueError(f"Pattern entry is missing 'pattern': {entry!r}")
+        flags = re.IGNORECASE if entry.get("ignore_case", True) else 0
+        if re.search(str(pattern), value, flags=flags):
+            return _read_actionability_entry(entry, reason=default_reason)
+    return None
+
+
+def classify_rule_actionability(
+    rule: dict, config: dict | None = None
+) -> tuple[str, str]:
+    """Classify whether a rule should count toward actionable question coverage."""
+    merged = _merge_actionability_config(config)
+    rule_id = str(rule.get("id", ""))
+    source_name = str(rule.get("source_name", ""))
+    source_type = str(rule.get("source_type", ""))
+    rule_type = str(rule.get("rule_type", "general"))
+    text = str(rule.get("text", ""))
+
+    id_entry = merged.get("id_overrides", {}).get(rule_id)
+    if id_entry is not None:
+        return _read_actionability_entry(
+            id_entry, reason=f"explicit id override for {rule_id}"
+        )
+
+    source_entry = merged.get("source_defaults", {}).get(source_name)
+    if source_entry is not None:
+        return _read_actionability_entry(
+            source_entry, reason=f"default for source_name={source_name}"
+        )
+
+    source_pattern = _match_pattern_entry(
+        entries=merged.get("source_name_patterns", []),
+        value=source_name,
+        default_reason=f"source_name pattern matched {source_name}",
+    )
+    if source_pattern is not None:
+        return source_pattern
+
+    text_pattern = _match_pattern_entry(
+        entries=merged.get("text_patterns", []),
+        value=text,
+        default_reason="rule text matched actionability pattern",
+    )
+    if text_pattern is not None:
+        return text_pattern
+
+    source_type_entry = merged.get("source_type_defaults", {}).get(source_type)
+    if source_type_entry is not None:
+        return _read_actionability_entry(
+            source_type_entry, reason=f"default for source_type={source_type}"
+        )
+
+    rule_type_entry = merged.get("rule_type_defaults", {}).get(rule_type)
+    if rule_type_entry is not None:
+        return _read_actionability_entry(
+            rule_type_entry, reason=f"default for rule_type={rule_type}"
+        )
+
+    return "testable", "default testable skill rule"
+
+
+def apply_actionability(rules: list[dict], config: dict | None = None) -> list[dict]:
+    """Annotate rules with actionability metadata used by actionable coverage."""
+    merged = _merge_actionability_config(config)
+    actionable_scopes = set(merged.get("actionable_scopes") or [])
+    invalid = actionable_scopes - ACTIONABILITY_VALUES
+    if invalid:
+        allowed = ", ".join(sorted(ACTIONABILITY_VALUES))
+        raise ValueError(
+            f"Invalid actionable_scopes {sorted(invalid)!r}; expected: {allowed}"
+        )
+
+    for rule in rules:
+        actionability, reason = classify_rule_actionability(rule, merged)
+        rule["actionability"] = actionability
+        rule["is_actionable"] = actionability in actionable_scopes
+        rule["actionability_reason"] = reason
+    return rules
+
+
 # ── Phase 4: Load questions and match ────────────────────────────────────────
 
 
@@ -532,9 +721,16 @@ def match_rules_to_questions(rules: list[dict], questions: list[dict]) -> list[d
 
 def build_report(rules: list[dict]) -> dict:
     """Build the coverage report JSON."""
+    if any("actionability" not in r for r in rules):
+        rules = apply_actionability(rules, config={})
+
     total = len(rules)
     covered = sum(1 for r in rules if r["is_covered"])
     uncovered = total - covered
+    actionable_rules = [r for r in rules if r.get("is_actionable")]
+    actionable_total = len(actionable_rules)
+    actionable_covered = sum(1 for r in actionable_rules if r["is_covered"])
+    actionable_uncovered = actionable_total - actionable_covered
 
     # By source_type
     by_source: dict[str, dict] = {}
@@ -586,6 +782,52 @@ def build_report(rules: list[dict]) -> dict:
     for v in by_scope.values():
         v["pct"] = round(100.0 * v["covered"] / v["total"], 1) if v["total"] else 0.0
 
+    # By actionability
+    by_actionability: dict[str, dict] = {}
+    for r in rules:
+        actionability = r.get("actionability", "testable")
+        if actionability not in by_actionability:
+            by_actionability[actionability] = {
+                "total": 0,
+                "covered": 0,
+                "actionable": bool(r.get("is_actionable")),
+            }
+        by_actionability[actionability]["total"] += 1
+        if r["is_covered"]:
+            by_actionability[actionability]["covered"] += 1
+    for v in by_actionability.values():
+        v["pct"] = round(100.0 * v["covered"] / v["total"], 1) if v["total"] else 0.0
+
+    # Actionable-only breakdowns are the numbers to use for gap-closing work.
+    by_actionable_source: dict[str, dict] = {}
+    by_actionable_type: dict[str, dict] = {}
+    by_actionable_skill: dict[str, dict] = {}
+    for r in actionable_rules:
+        st = r["source_type"]
+        rt = r["rule_type"]
+        by_actionable_source.setdefault(st, {"total": 0, "covered": 0})
+        by_actionable_type.setdefault(rt, {"total": 0, "covered": 0})
+        by_actionable_source[st]["total"] += 1
+        by_actionable_type[rt]["total"] += 1
+        if r["is_covered"]:
+            by_actionable_source[st]["covered"] += 1
+            by_actionable_type[rt]["covered"] += 1
+        if r["source_type"] == "skill":
+            sn = r["source_name"]
+            by_actionable_skill.setdefault(sn, {"total": 0, "covered": 0})
+            by_actionable_skill[sn]["total"] += 1
+            if r["is_covered"]:
+                by_actionable_skill[sn]["covered"] += 1
+    for group in (
+        by_actionable_source,
+        by_actionable_type,
+        by_actionable_skill,
+    ):
+        for v in group.values():
+            v["pct"] = (
+                round(100.0 * v["covered"] / v["total"], 1) if v["total"] else 0.0
+            )
+
     # Critical uncovered rules
     critical_types = {"hard_guard", "pitfall", "physical_check"}
     uncovered_critical = [
@@ -594,9 +836,29 @@ def build_report(rules: list[dict]) -> dict:
             "source_name": r["source_name"],
             "rule_type": r["rule_type"],
             "text": r["text"],
+            "actionability": r.get("actionability", "testable"),
+            "actionability_reason": r.get("actionability_reason", ""),
         }
         for r in rules
-        if not r["is_covered"] and r["rule_type"] in critical_types
+        if (
+            not r["is_covered"]
+            and r["rule_type"] in critical_types
+            and r.get("is_actionable")
+        )
+    ]
+
+    excluded_from_actionable = [
+        {
+            "id": r["id"],
+            "source_name": r["source_name"],
+            "source_type": r["source_type"],
+            "rule_type": r["rule_type"],
+            "actionability": r.get("actionability", "testable"),
+            "actionability_reason": r.get("actionability_reason", ""),
+            "text": r["text"],
+        }
+        for r in rules
+        if not r.get("is_actionable")
     ]
 
     return {
@@ -606,13 +868,26 @@ def build_report(rules: list[dict]) -> dict:
             "covered_rules": covered,
             "uncovered_rules": uncovered,
             "coverage_pct": round(100.0 * covered / total, 1) if total else 0.0,
+            "actionable_total": actionable_total,
+            "actionable_covered": actionable_covered,
+            "actionable_uncovered": actionable_uncovered,
+            "actionable_pct": (
+                round(100.0 * actionable_covered / actionable_total, 1)
+                if actionable_total
+                else 0.0
+            ),
             "by_source_type": by_source,
             "by_rule_type": by_type,
             "by_skill": by_skill,
             "by_scope": by_scope,
+            "by_actionability": by_actionability,
+            "by_actionable_source_type": by_actionable_source,
+            "by_actionable_rule_type": by_actionable_type,
+            "by_actionable_skill": by_actionable_skill,
         },
         "rules": rules,
         "uncovered_critical": uncovered_critical,
+        "excluded_from_actionable": excluded_from_actionable,
     }
 
 
@@ -626,6 +901,8 @@ def print_summary(report: dict) -> None:
     print(f"  Covered:         {s['covered_rules']}")
     print(f"  Uncovered:       {s['uncovered_rules']}")
     print(f"  Coverage:        {s['coverage_pct']}%")
+    print(f"  Actionable:      {s['actionable_covered']}/{s['actionable_total']}")
+    print(f"  Actionable pct:  {s['actionable_pct']}%")
     print(f"\n{'─'*60}")
     print(f"  {'Source Type':<20} {'Total':>6} {'Covered':>8} {'Pct':>6}")
     print(f"  {'─'*20} {'─'*6} {'─'*8} {'─'*6}")
@@ -637,6 +914,13 @@ def print_summary(report: dict) -> None:
     for rt, v in sorted(s["by_rule_type"].items()):
         print(f"  {rt:<20} {v['total']:>6} {v['covered']:>8} {v['pct']:>5.1f}%")
     print(f"\n{'─'*60}")
+    print(f"  {'Actionability':<20} {'Total':>6} {'Covered':>8} {'Pct':>6}")
+    print(f"  {'─'*20} {'─'*6} {'─'*8} {'─'*6}")
+    for actionability, v in sorted(s["by_actionability"].items()):
+        print(
+            f"  {actionability:<20} {v['total']:>6} {v['covered']:>8} {v['pct']:>5.1f}%"
+        )
+    print(f"\n{'─'*60}")
     print(f"  {'Skill':<30} {'Total':>6} {'Covered':>8} {'Pct':>6}")
     print(f"  {'─'*30} {'─'*6} {'─'*8} {'─'*6}")
     for sk, v in sorted(s["by_skill"].items(), key=lambda x: -x[1]["total"]):
@@ -645,7 +929,7 @@ def print_summary(report: dict) -> None:
     crit = report["uncovered_critical"]
     if crit:
         print(f"\n{'─'*60}")
-        print(f"  UNCOVERED CRITICAL RULES ({len(crit)}):")
+        print(f"  ACTIONABLE UNCOVERED CRITICAL RULES ({len(crit)}):")
         print(f"  {'─'*56}")
         for item in crit[:20]:
             text_short = item["text"][:70] + ("..." if len(item["text"]) > 70 else "")
@@ -680,7 +964,11 @@ def main() -> None:
     print(f"  Loaded {len(questions)} questions")
     all_rules = match_rules_to_questions(all_rules, questions)
 
-    print("Phase 5: Generating report...")
+    print("Phase 5: Classifying actionable coverage scope...")
+    actionability_config = load_actionability_config()
+    all_rules = apply_actionability(all_rules, actionability_config)
+
+    print("Phase 6: Generating report...")
     report = build_report(all_rules)
 
     OUTPUT_FILE.parent.mkdir(parents=True, exist_ok=True)
