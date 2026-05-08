@@ -90,6 +90,7 @@ class FinishDetail(BaseModel):
         "empty_response",
         "reasoning_only",
         "missing_llm_response",
+        "missing_tool_call_payload",
         "non_stop_finish",
         "unknown",
     ]

@@ -96,7 +96,7 @@ def _invalid_finish_error_message(finish_detail: Any) -> str:
     if kind == 'output_length_exceeded':
         return (
             '模型输出被 provider 的输出 token 上限截断，'
-            '未形成可提交的最终回答。请缩短上下文或提高输出上限后重试。'
+            '未形成可提交的最终回答，请稍后重试。'
         )
     if kind == 'content_filtered':
         return '模型输出被 provider 内容策略截断或拦截，未形成可提交的最终回答。'
@@ -106,6 +106,11 @@ def _invalid_finish_error_message(finish_detail: Any) -> str:
         return '模型本轮没有返回可见最终回答。请重试。'
     if kind == 'missing_llm_response':
         return '模型流结束但没有返回可验证的响应对象。请重试。'
+    if kind == 'missing_tool_call_payload':
+        return (
+            '模型声明要调用工具，但 provider 流式响应未返回有效工具调用参数。'
+            '系统已重试仍未恢复，请重试或切换模型。'
+        )
     return '模型没有返回有效最终回答。请重试。'
 
 
