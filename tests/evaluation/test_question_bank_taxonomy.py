@@ -281,6 +281,42 @@ def test_manifest_banks_validate_against_v5_schema() -> None:
         QuestionBank.model_validate(raw_bank)
 
 
+def test_input_manual_helper_coverage_questions_are_outcome_based() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    bank_root = repo_root / "evaluation" / "question_bank" / "input_generation"
+    question_ids = {
+        "IG_abacus_009_20260508",
+        "IG_abacus_010_20260508",
+        "IG_cp2k_002_20260508",
+        "IG_cp2k_003_20260508",
+        "IG_gromacs_002_20260508",
+    }
+    forbidden_terms = {
+        "input-manual-helper",
+        "skill_dir",
+        "render_input.py",
+        "diagnose_input.py",
+        "write_manifest.py",
+        "references/engine_routes.md",
+        "engine skill",
+    }
+
+    questions = []
+    for bank_path in bank_root.glob("ig_agnostic_*.yaml"):
+        raw_bank = yaml.safe_load(bank_path.read_text(encoding="utf-8"))
+        questions.extend(raw_bank["questions"])
+
+    selected = [q for q in questions if q["id"] in question_ids]
+    assert {q["id"] for q in selected} == question_ids
+
+    for question in selected:
+        chunks = [question["intent"], question["human_prompt_seed"]]
+        chunks.extend(item["criterion"] for item in question["scoring_checklist"])
+        text = "\n".join(chunks).lower()
+        for forbidden in forbidden_terms:
+            assert forbidden not in text, question["id"]
+
+
 def test_active_question_banks_use_only_business_line_domains() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     bank_root = repo_root / "evaluation" / "question_bank"

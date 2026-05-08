@@ -27,5 +27,8 @@ text_patterns:
   - pattern: "registry\\.dp\\.tech|list_images|list_machines|machine \\|"
     actionability: runtime_dependent
     reason: image and machine selection depends on the deployed runtime catalog
+  - pattern: "skill_dir|references/engine_routes\\.md|render_input\\.py|diagnose_input\\.py|write_manifest\\.py|relevant engine skill|Generate or adapt input files for ABACUS|For rendered engines, run:"
+    actionability: policy_only
+    reason: internal skill workflow routes are verified by skill tests, not portable question-bank scoring checklists
 
 id_overrides: {}

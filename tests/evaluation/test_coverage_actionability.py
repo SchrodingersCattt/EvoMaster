@@ -3,6 +3,7 @@ from __future__ import annotations
 from evaluation.scripts.coverage.extract_and_match import (
     apply_actionability,
     build_report,
+    load_actionability_config,
 )
 
 
@@ -120,3 +121,40 @@ def test_actionability_config_can_override_exact_rule_ids() -> None:
     assert rules[0]["actionability_reason"] == (
         "explicitly enforced by physical-consistency tasks"
     )
+
+
+def test_internal_skill_workflow_rules_are_not_actionable_question_targets() -> None:
+    config = load_actionability_config()
+    rules = apply_actionability(
+        [
+            _rule(
+                source_name="input-manual-helper",
+                rule_type="workflow_step",
+                text="For rendered engines, run: `uv run python <skill_dir>/scripts/render_input.py`",
+            ),
+            _rule(
+                source_name="input-manual-helper",
+                rule_type="workflow_step",
+                text="Write `input_prep_manifest.json` with `scripts/write_manifest.py`.",
+            ),
+            _rule(
+                source_name="input-manual-helper",
+                rule_type="workflow_step",
+                text="Resolve `skill_dir` to this skill directory.",
+            ),
+            _rule(
+                source_name="input-manual-helper",
+                rule_type="decision_tree",
+                text="Generate or adapt input files for ABACUS, CP2K, QE, ABINIT, LAMMPS, ORCA, GROMACS, or PySCF.",
+            ),
+            _rule(
+                source_name="input-manual-helper",
+                rule_type="workflow_step",
+                text="For rendered engines, run:",
+            ),
+        ],
+        config=config,
+    )
+
+    assert {rule["actionability"] for rule in rules} == {"policy_only"}
+    assert all(not rule["is_actionable"] for rule in rules)
