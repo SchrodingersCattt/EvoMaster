@@ -64,6 +64,7 @@ _project_root = Path(__file__).resolve().parent.parent.parent
 RUN_ID_WEB = 'mat_master_web'
 
 _MATMASTER_CONFIG_DIR = _project_root / 'config'
+_USER_INSTRUCTIONS_PATH = '/personal/.matmaster/agent.md'
 
 
 def _get_agent_default_llm() -> str | None:
@@ -316,22 +317,22 @@ class AgentRunService:
                     session_type=session_type,
                     execution_workdir=execution_workdir,
                 )
-            # Read user custom instructions from NAS if session is available
-            custom_instructions: str | None = None
-            _ci_session = bohrium_result.execution_session if bohrium_result else None
-            if _ci_session is None:
-                _ci_session = pg_ctx.session
-            if _ci_session is not None:
+            # Read user instructions from NAS if session is available.
+            user_instructions: str | None = None
+            _ui_session = bohrium_result.execution_session if bohrium_result else None
+            if _ui_session is None:
+                _ui_session = pg_ctx.session
+            if _ui_session is not None:
                 try:
-                    _ci_path = '/personal/.matmaster/agent.md'
-                    if hasattr(_ci_session, 'path_exists') and _ci_session.path_exists(
-                        _ci_path
+                    if hasattr(_ui_session, 'path_exists') and _ui_session.path_exists(
+                        _USER_INSTRUCTIONS_PATH
                     ):
-                        custom_instructions = (
-                            _ci_session.read_file(_ci_path).strip() or None
+                        user_instructions = (
+                            _ui_session.read_file(_USER_INSTRUCTIONS_PATH).strip()
+                            or None
                         )
-                except Exception as _ci_err:
-                    logger.debug('read custom instructions skipped: %s', _ci_err)
+                except Exception as _ui_err:
+                    logger.debug('read user instructions skipped: %s', _ui_err)
 
             # Workspace handling depends on the finalized Bohrium/archival context.
             fanout.add_handler(
@@ -499,7 +500,7 @@ class AgentRunService:
                         'event_sink': _child_event_sink,
                         'checkpoint_sink_factory': _checkpoint_sink_factory,
                         'figure_upload_config': figure_upload_config,
-                        'custom_instructions': custom_instructions,
+                        'user_instructions': user_instructions,
                     }
                 }
             )

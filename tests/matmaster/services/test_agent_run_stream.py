@@ -58,6 +58,8 @@ def _make_mock_pg_ctx() -> MagicMock:
     ctx.session = MagicMock()
     ctx.session._cancel_token = None
     ctx.session.capabilities = MagicMock()
+    ctx.session.path_exists.return_value = False
+    ctx.session.read_file.return_value = ''
     ctx.archival = None
     ctx.run_meta = {}
     ctx.with_bohrium.return_value = ctx
