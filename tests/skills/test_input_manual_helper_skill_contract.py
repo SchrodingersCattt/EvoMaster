@@ -8,10 +8,25 @@ from pathlib import Path
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-SKILL_DIR = (
-    REPO_ROOT / "matmaster" / "skills" / "playground-skills" / "input-manual-helper"
-)
+SKILL_DIR = REPO_ROOT / "matmaster" / "skills" / "input-manual-helper"
 SKILL_MD = SKILL_DIR / "SKILL.md"
+
+
+def test_skill_lives_in_top_level_skills_directory() -> None:
+    assert SKILL_MD.exists()
+    assert not (
+        REPO_ROOT / "matmaster" / "skills" / "playground-skills" / "input-manual-helper"
+    ).exists()
+
+
+def test_registry_discovers_skill_from_top_level_root() -> None:
+    from matmaster.skills.registry import SkillRegistry
+
+    registry = SkillRegistry(REPO_ROOT / "matmaster" / "skills")
+    skill = registry.get_skill("input-manual-helper")
+
+    assert skill is not None
+    assert skill.skill_path == SKILL_DIR
 
 
 def _skill_parts() -> tuple[dict, str]:
