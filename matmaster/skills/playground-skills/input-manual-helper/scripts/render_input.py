@@ -19,32 +19,39 @@ if str(_SKILL_DIR) not in sys.path:
 
 
 def _get_backend(software: str):
-    """根据软件名返回对应 Backend 实例。"""
-    from engine.software.abacus import AbacusBackend
-    from engine.software.abinit import ABINITBackend
-    from engine.software.cp2k import CP2KBackend
-    from engine.software.lammps import LAMMPSBackend
-    from engine.software.orca import ORCABackend
-    from engine.software.qe import QEBackend
-
-    backends = {
-        "cp2k": CP2KBackend,
-        "orca": ORCABackend,
-        "qe": QEBackend,
-        "quantum-espresso": QEBackend,
-        "abinit": ABINITBackend,
-        "lammps": LAMMPSBackend,
-        "abacus": AbacusBackend,
-    }
+    """Return only the requested backend to avoid unrelated dependency imports."""
     key = software.lower().strip()
-    if key not in backends:
-        supported = ", ".join(sorted(set(backends.keys())))
-        print(
-            (f"Error: unsupported software '{software}'. " f"Supported: {supported}"),
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    return backends[key]()
+    if key == "abacus":
+        from engine.software.abacus import AbacusBackend
+
+        return AbacusBackend()
+    if key == "abinit":
+        from engine.software.abinit import ABINITBackend
+
+        return ABINITBackend()
+    if key == "cp2k":
+        from engine.software.cp2k import CP2KBackend
+
+        return CP2KBackend()
+    if key == "lammps":
+        from engine.software.lammps import LAMMPSBackend
+
+        return LAMMPSBackend()
+    if key == "orca":
+        from engine.software.orca import ORCABackend
+
+        return ORCABackend()
+    if key in ("qe", "quantum-espresso"):
+        from engine.software.qe import QEBackend
+
+        return QEBackend()
+
+    supported = "abacus, abinit, cp2k, lammps, orca, qe, quantum-espresso"
+    print(
+        (f"Error: unsupported software '{software}'. " f"Supported: {supported}"),
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 
 def _parse_params(param_list: list[str]) -> dict:

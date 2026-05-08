@@ -1,23 +1,8 @@
-"""
-engine/software 包 — 各软件的 SoftwareBackend 实现。
+"""Lazy exports for input-manual-helper software backends."""
 
-导出：
-  SoftwareBackend — 抽象基类（来自 base.py）
-  CP2KBackend     — CP2K 后端骨架（Phase 1 实现）
-  ORCABackend     — ORCA 后端骨架（Phase 1 实现）
-  QEBackend       — Quantum ESPRESSO 后端骨架（Phase 1 实现）
-  ABINITBackend   — ABINIT 后端骨架（Phase 1 实现）
-  LAMMPSBackend   — LAMMPS 后端骨架（Phase 1 实现）
-  AbacusBackend   — ABACUS 后端（Phase 2 实现）
-"""
+from __future__ import annotations
 
-from engine.software.abacus import AbacusBackend
-from engine.software.abinit import ABINITBackend
 from engine.software.base import SoftwareBackend
-from engine.software.cp2k import CP2KBackend
-from engine.software.lammps import LAMMPSBackend
-from engine.software.orca import ORCABackend
-from engine.software.qe import QEBackend
 
 __all__ = [
     "SoftwareBackend",
@@ -28,3 +13,31 @@ __all__ = [
     "LAMMPSBackend",
     "AbacusBackend",
 ]
+
+
+def __getattr__(name: str):
+    if name == "AbacusBackend":
+        from engine.software.abacus import AbacusBackend
+
+        return AbacusBackend
+    if name == "ABINITBackend":
+        from engine.software.abinit import ABINITBackend
+
+        return ABINITBackend
+    if name == "CP2KBackend":
+        from engine.software.cp2k import CP2KBackend
+
+        return CP2KBackend
+    if name == "LAMMPSBackend":
+        from engine.software.lammps import LAMMPSBackend
+
+        return LAMMPSBackend
+    if name == "ORCABackend":
+        from engine.software.orca import ORCABackend
+
+        return ORCABackend
+    if name == "QEBackend":
+        from engine.software.qe import QEBackend
+
+        return QEBackend
+    raise AttributeError(name)
