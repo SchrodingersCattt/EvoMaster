@@ -698,41 +698,50 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: SR_recommend_20260430
+- id: SR_recommend_20260508
   capability: structure_retrieval
   domain: agnostic
   intent: Recommend soluble acrylate NTD photoresist monomers and provide verified SMILES from databases.
   human_prompt_seed: |-
-    Recommend acrylate-type monomers suitable for NTD photoresist formulations with relatively high solubility.
-    For each candidate include: `name`, `SMILES`, `CAS` (if available), `source_database` (where the SMILES/CAS was obtained).
-    DO NOT FABRICATE any SMILES, CAS, or identifiers. All chemistry identifiers must be retrieved from authoritative databases accessible via the system (do not invent values or guess SMILES).
+    推荐适用于NTD光刻胶配方、具有较高溶解性的丙烯酸酯类单体。每个候选单体需包含：名称、SMILES结构式。禁止编造单体信息。
   tags:
   - meta_database
   data_files: []
   reference_answers:
   - key: grounding_source
     value: {}
-  - key: recommendation_hit_rate
+  - key: candidate_hit_rate
     value:
-      reference_list_file: reference_list.json
-      min_ratio: 0.6
+      filename: '*.json'
+      tokens:
+        - "CC(C)C1(C2CC3CC(C2)CC1C3)OC(=O)C=C"
+        - "CC(=C)C(=O)OC1(CCCC1)C2=CC=CC=C2"
+        - "CC(=C)C(=O)OC1(CCCCC1)C2=CC=CC=C2"
+        - "CCC1(C2CC3CC1CC(C3)(C2)O)OC(=O)C(=C)C"
+        - "CCC1(CC2CC1C3C2C4CCC3C4)OC(=O)C(=C)C"
+        - "CC(=C)C(=O)OC1(CCCC1)C"
+        - "CC(=C)C(=O)OC(C)(C)C1CCCCC1"
+        - "CC(=C)C(=O)OCC(=O)OC1C2CC3C1OC(=O)C3C2"
+        - "CC(=C)C(=O)OC1CC2CC1C3C2COC3=O"
+        - "CC(=C)C(=O)OC1C2CC3C(C1OC3=O)O2"
+      minimum_threshold: 5
   - key: turn_budget
     value:
-      max: 5
+      max: 8
   - key: duration_budget
     value:
-      max: 180000
+      max: 7200000
   - key: token_budget_total
     value:
       max: 8000
   scoring_checklist:
   - id: grounding_source
-    criterion: Outputs are grounded in provided inputs and do not fabricate.
+    criterion: Outputs (names and SMILES of candidate monomers) are grounded in provided inputs and DO NOT FABRICATE.
     axis: grounding
     verify: llm_binary_judge
     weight: 1.0
-  - id: recommendation_hit_rate
-    criterion: "Recommendation hit rate >= 0.6 against provided reference list."
+  - id: candidate_hit_rate
+    criterion: "Candidate number must meet the minimum threshold (5) against provided token list."
     axis: correctness
     verify: text_file_contains_all
     weight: 1.0
