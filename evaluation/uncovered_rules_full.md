@@ -6,9 +6,9 @@ Generated: 2026-05-08 02:31 UTC
 
 | Metric | Value |
 |--------|-------|
-| Total rules | 1428 |
-| Covered | 125 (8.8%) |
-| Uncovered | 1303 |
+| Total rules | 1370 |
+| Covered | 122 (8.9%) |
+| Uncovered | 1248 |
 
 ## Coverage by Rule Type
 
@@ -17,12 +17,12 @@ Generated: 2026-05-08 02:31 UTC
 | hard_guard | 35 | 83 | 42.2% |
 | pitfall | 1 | 4 | 25.0% |
 | acceptance | 7 | 45 | 15.6% |
-| decision_tree | 13 | 87 | 14.9% |
-| workflow_step | 12 | 180 | 6.7% |
-| physical_check | 4 | 61 | 6.6% |
+| decision_tree | 12 | 91 | 13.2% |
+| config_default | 2 | 26 | 7.7% |
+| physical_check | 4 | 55 | 7.3% |
 | api_recipe | 1 | 17 | 5.9% |
-| general | 51 | 925 | 5.5% |
-| config_default | 1 | 26 | 3.8% |
+| general | 50 | 871 | 5.7% |
+| workflow_step | 10 | 178 | 5.6% |
 
 ## Coverage by Skill
 
@@ -40,7 +40,7 @@ Generated: 2026-05-08 02:31 UTC
 | cp2k | 4 | 35 | 11.4% |
 | assemble-atomic-structure | 3 | 31 | 9.7% |
 | mlips | 3 | 33 | 9.1% |
-| mcp-mat-struct-db | 1 | 12 | 8.3% |
+| mcp-mat-struct-db | 5 | 12 | 41.7% |
 | transform-atomic-structure | 3 | 39 | 7.7% |
 | lammps | 2 | 28 | 7.1% |
 | tasker-polar-surface | 5 | 83 | 6.0% |
