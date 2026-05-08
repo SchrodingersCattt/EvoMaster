@@ -65,7 +65,7 @@ _project_root = Path(__file__).resolve().parent.parent.parent
 RUN_ID_WEB = 'mat_master_web'
 
 _MATMASTER_CONFIG_DIR = _project_root / 'config'
-_USER_INSTRUCTIONS_PATH = '/personal/.matmaster/agent.md'
+_USER_INSTRUCTIONS_PATH = '/personal/.matmaster/AGENT.md'
 _USER_INSTRUCTIONS_START = (
     f'<matmaster-user-instructions source="{_USER_INSTRUCTIONS_PATH}">'
 )

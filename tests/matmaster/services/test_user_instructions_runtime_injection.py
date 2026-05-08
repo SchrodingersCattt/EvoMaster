@@ -1,7 +1,12 @@
-"""Unit tests for runtime user-instructions injection."""
+"""Tests for runtime user-instructions injection."""
 
 from __future__ import annotations
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from matmaster.types.events import RunResultEvent
 from matmaster.types.messages import (
     AssistantMessage,
     ImageContentPart,
@@ -13,6 +18,10 @@ from src.services.agent_run_service import (
     _USER_INSTRUCTIONS_START,
     _apply_user_instructions_to_initial_user_query,
     _strip_user_instructions_prefix,
+)
+from tests.matmaster.services.test_agent_run_stream import (
+    _make_cancel_token,
+    _patched_service,
 )
 
 
@@ -144,3 +153,71 @@ def test_malformed_wrapper_is_left_unchanged() -> None:
     malformed = f"{_USER_INSTRUCTIONS_START}\nold instructions\nplain query"
 
     assert _strip_user_instructions_prefix(malformed) == malformed
+
+
+@pytest.mark.asyncio
+async def test_run_agent_applies_user_instructions_to_current_prompt_when_history_empty():
+    run_result = RunResultEvent(source='agent', status='completed', reason='natural')
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        svc._test_pg_ctx.session.path_exists.return_value = True
+        svc._test_pg_ctx.session.read_file.return_value = 'Prefer concise answers.'
+
+        ok, _elapsed = await svc.run_agent(
+            session_id='sess-1',
+            user_prompt='first question',
+            send_cb=AsyncMock(),
+            cancel_token=_make_cancel_token(),
+            mode='direct',
+            task_id='task-1',
+        )
+
+    assert ok is True
+    assert svc._test_fake_exp.last_task is not None
+    assert svc._test_fake_exp.last_task.startswith(_USER_INSTRUCTIONS_START)
+    assert 'Prefer concise answers.' in svc._test_fake_exp.last_task
+    assert svc._test_fake_exp.last_task.endswith('first question')
+    assert svc._test_fake_exp.last_run_kwargs['history'] == []
+    assert (
+        svc._test_fake_exp.last_ctx.run_meta['user_instructions']
+        == 'Prefer concise answers.'
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_agent_applies_user_instructions_to_restored_first_user_message():
+    run_result = RunResultEvent(source='agent', status='completed', reason='natural')
+    restored_history = [
+        SystemMessage(content='[Compacted Context]\nsummary'),
+        UserMessage(content='first question'),
+        AssistantMessage(content='first answer'),
+    ]
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        svc._test_pg_ctx.session.path_exists.return_value = True
+        svc._test_pg_ctx.session.read_file.return_value = 'Prefer concise answers.'
+
+        with patch(
+            'src.services.agent_run_service.HistoryRestoreService',
+            create=True,
+        ) as restore_cls:
+            restore_inst = MagicMock()
+            restore_inst.restore_history.return_value = restored_history
+            restore_cls.return_value = restore_inst
+
+            ok, _elapsed = await svc.run_agent(
+                session_id='sess-1',
+                user_prompt='follow up',
+                send_cb=AsyncMock(),
+                cancel_token=_make_cancel_token(),
+                mode='direct',
+                task_id='task-2',
+            )
+
+    assert ok is True
+    assert svc._test_fake_exp.last_task == 'follow up'
+    sent_history = svc._test_fake_exp.last_run_kwargs['history']
+    assert sent_history[1].content.startswith(_USER_INSTRUCTIONS_START)
+    assert 'Prefer concise answers.' in sent_history[1].content
+    assert sent_history[1].content.endswith('first question')
+    assert restored_history[1].content == 'first question'
