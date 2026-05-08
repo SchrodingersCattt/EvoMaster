@@ -316,6 +316,19 @@ class AgentRunService:
                     session_type=session_type,
                     execution_workdir=execution_workdir,
                 )
+            # Read user custom instructions from NAS if session is available
+            custom_instructions: str | None = None
+            _ci_session = bohrium_result.execution_session if bohrium_result else None
+            if _ci_session is None:
+                _ci_session = pg_ctx.session
+            if _ci_session is not None:
+                try:
+                    _ci_path = '/personal/.matmaster/agent.md'
+                    if hasattr(_ci_session, 'path_exists') and _ci_session.path_exists(_ci_path):
+                        custom_instructions = _ci_session.read_file(_ci_path).strip() or None
+                except Exception as _ci_err:
+                    logger.debug('read custom instructions skipped: %s', _ci_err)
+
             # Workspace handling depends on the finalized Bohrium/archival context.
             fanout.add_handler(
                 WorkspaceHandler(
@@ -482,6 +495,7 @@ class AgentRunService:
                         'event_sink': _child_event_sink,
                         'checkpoint_sink_factory': _checkpoint_sink_factory,
                         'figure_upload_config': figure_upload_config,
+                        'custom_instructions': custom_instructions,
                     }
                 }
             )
