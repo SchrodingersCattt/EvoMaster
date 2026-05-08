@@ -1,5 +1,20 @@
 # nep.in Keyword Reference
 
+Official sources:
+
+- `nep.in`: https://gpumd.org/nep/input_files/nep_in.html
+- NEP formalism: https://gpumd.org/potentials/nep.html
+
+`nep.in` configures NEP training or prediction. Blank lines and lines starting
+with `#` are ignored. Other lines follow:
+
+```text
+keyword parameter_1 parameter_2 ...
+```
+
+Keywords can appear in any order except `type_weight`, which cannot appear
+before `type`.
+
 ## Required Files
 
 | File | Description |
@@ -13,6 +28,10 @@
 | Keyword | Syntax | Notes |
 |---------|--------|-------|
 | `type` | `type <N> <El1> <El2> ...` | N = number of species. Elements must match `train.xyz`. Order matters â€” determines internal type mapping. |
+
+GPUMD currently supports NEP3 and NEP4. NEP1 and NEP2 are deprecated. For
+multi-component systems, prefer `version 4` unless the user needs compatibility
+with an existing NEP3 workflow.
 
 ## Descriptor Parameters
 
@@ -64,9 +83,17 @@ Tip: if virial data is absent from `train.xyz`, set `lambda_v 0.0` explicitly â€
 | Keyword | Syntax | Default | Notes |
 |---------|--------|---------|-------|
 | `version` | `version <N>` | `4` | NEP version. Use 4 for current release. |
+| `prediction` | `prediction <0\|1>` | `0` | `0` trains; `1` runs prediction/inference. |
+| `model_type` | `model_type <type>` | potential | Select potential, dipole, or polarizability model. |
+| `charge_mode` | `charge_mode <mode>` | none | Charge-related model mode when needed. |
 | `zbl` | `zbl <r_inner> <r_outer>` | none | Add ZBL repulsive potential for close-range interactions. Useful for radiation damage / high-energy collisions. |
+| `type_weight` | `type_weight ...` | none | Force weights for atom types; must appear after `type`. |
 | `lambda_shear` | `lambda_shear <w>` | `0.0` | Shear-modulus regularization weight. |
-| `lambda_zbl` | `lambda_zbl <w>` | `0.0` | ZBL loss weight. |
+| `lambda_z` | `lambda_z <w>` | `0.0` | ZBL-related loss weight in current docs. |
+| `force_delta` | `force_delta <value>` | none | Bias term for improving small-force accuracy. |
+| `save_potential` | `save_potential <interval>` | version dependent | Controls potential save interval. |
+| `output_descriptor` | `output_descriptor <0\|1>` | `0` | Output descriptors, usually in prediction mode. |
+| `fine_tune` | `fine_tune <...>` | none | Fine-tune from an existing potential when supported. |
 
 ## Common Configurations
 

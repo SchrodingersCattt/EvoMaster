@@ -72,9 +72,9 @@ run        100000
 ensemble   nve
 compute_msd 5 500
 compute_sdc 5 500
-compute_viscosity 5 500 10000
-compute_rdf 200 6.0
-compute_adf 180 3.5
+compute_viscosity 5 500
+compute_rdf 6.0 200 1000
+compute_adf 1000 180 0.0 3.5
 dump_thermo 1000
 run        1000000
 ```
@@ -120,16 +120,18 @@ time_step  1
 
 # NVT with active-learning trigger
 ensemble   nvt_ber 500 500 100
-active     100 0.1
-dump_observer 1000 observe
+active     100 1 1 1 0.1
+dump_observer observe 1000 1000 1 1
 dump_thermo 1000
 run        500000
 ```
 
 **Key points:**
 - Two `potential` lines: first drives the MD, second is the observer.
-- `active 100 0.1`: check disagreement every 100 steps, save if max force difference > 0.1 eV/A.
-- `dump_observer 1000 observe`: write per-potential predictions every 1000 steps.
+- `active 100 1 1 1 0.1`: check committee uncertainty every 100 steps and save
+  structures above 0.1 eV/A with velocity, force, and uncertainty data.
+- `dump_observer observe 1000 1000 1 1`: write per-potential thermo and exyz
+  observer outputs every 1000 steps, including velocities and forces.
 - `observe` mode outputs individual potentials; use `average` for averaged predictions.
 
 ## Example 6: NEMD Thermal Conductivity (Source-Sink Method)

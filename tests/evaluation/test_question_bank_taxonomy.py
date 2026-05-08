@@ -286,7 +286,6 @@ def test_input_manual_helper_coverage_questions_are_outcome_based() -> None:
     bank_root = repo_root / "evaluation" / "question_bank" / "input_generation"
     question_ids = {
         "IG_abacus_009_20260508",
-        "IG_abacus_010_20260508",
         "IG_cp2k_002_20260508",
         "IG_cp2k_003_20260508",
         "IG_gromacs_002_20260508",

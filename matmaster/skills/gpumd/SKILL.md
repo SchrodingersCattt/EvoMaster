@@ -6,29 +6,64 @@ skill_type: operator
 
 # GPUMD Skill
 
-GPUMD is a GPU-native MD package with two executables:
-- `gpumd`: run simulations via `run.in`
-- `nep`: train/infer NEP models via `nep.in`
+GPUMD is a GPU-native molecular-dynamics package. Use the two official
+executables consistently:
+
+- `gpumd`: run MD simulations from `model.xyz` + `run.in`.
+- `nep`: train NEP models from `nep.in` + `train.xyz` + `test.xyz`.
 
 ## Minimum Workflow
 
-1. Read the task; identify which simulation type is needed
-2. Load this skill; consult `references/run_in_keywords.md` or `references/nep_in_keywords.md`
-3. Write `run.in` (or `nep.in`) following the two-stage pattern below
-4. Stage all input files (`run.in`, `model.xyz`, potential files) in `input_dir/`
-5. Submit to Bohrium
+1. Identify the executable: `gpumd` for MD/analysis runs, `nep` for NEP training.
+2. Read existing structure/data files before editing. Do not invent species,
+   groups, lattice vectors, or training labels.
+3. For `gpumd`, write `model.xyz`, `run.in`, and required potential files in the
+   same run directory. For `nep`, write `nep.in` next to `train.xyz` and
+   `test.xyz`.
+4. Use the local references before relying on memory:
+   `references/run_in_keywords.md`, `references/nep_in_keywords.md`,
+   `references/input_examples.md`, `references/model_xyz_format.md`, and the
+   task-specific references listed at the end of this file.
+5. If a task asks for a Bohrium job, stage the complete input directory and use
+   the defaults below unless the user specifies another image/machine.
 
 ## Hard Guards
 
-1. **`potential` must come first.** Every `run.in` must start with `potential` line(s) before any `ensemble`, `run`, or `compute_*`.
-2. **Two-stage pattern: equilibrate then produce.** Equilibration (NVT/NPT) → production (NVE for transport, or target ensemble). Separate with distinct `run` blocks.
-3. **`compute_*` before its `run`.** Any `compute_hac`, `compute_hnemd`, `compute_shc`, `compute_msd`, `compute_sdc`, `compute_viscosity`, `compute_dos` must appear before the `run` command in the same block.
-4. **`dump_*` before its `run`.** Same rule for `dump_thermo`, `dump_position`, `dump_force`, `dump_dipole`, `dump_polarizability`, `dump_observer`.
-5. **NVE for equilibrium transport properties.** EMD (`compute_hac`), MSD (`compute_msd`), DOS (`compute_dos`), SHC (`compute_shc`), viscosity (`compute_viscosity`) require `ensemble nve` in the production stage. Exception: HNEMD (`compute_hnemd`) uses NVT; NEMD source-sink (`heat_nhc`/`heat_lan`/`heat_bdp`) uses its own thermostatted ensemble.
-6. **NEP: `type` line must list actual species.** `type N El1 El2 ...` where N = number of species, matching `train.xyz` data.
-7. **`model.xyz` must use extended XYZ format.** Header line 2 must contain `lattice="..."` (9 floats, row-major) and `pbc="T T T"`. See `references/model_xyz_format.md`.
-8. **Group columns required for group-based keywords.** If using `source`/`sink` in NEMD ensembles, `compute_temperature group_method`, or group-filtered `compute_*`/`dump_*`, the `model.xyz` must define group columns in Properties.
-9. **`compute_*` and `dump_*` reset after each `run`.** If a second `run` block needs the same compute/dump, re-specify them before that `run`.
+1. `run.in` is sequential. Put all `potential` lines before any `velocity`,
+   `ensemble`, `compute_*`, `dump_*`, or `run` command.
+2. Use separate blocks: equilibrate first, then production. A new `ensemble`
+   line starts a new block; each block should end with `run N`.
+3. Every `compute_*` and `dump_*` must appear before the `run` it belongs to.
+   They reset after each `run`, so re-specify them in later blocks.
+4. Equilibrium transport production uses `ensemble nve`: EMD (`compute_hac`),
+   MSD (`compute_msd`), DOS (`compute_dos`), SHC (`compute_shc`), viscosity
+   (`compute_viscosity`). Exceptions: HNEMD uses NVT with `compute_hnemd`;
+   source-sink NEMD uses `heat_nhc`, `heat_lan`, or `heat_bdp`.
+5. `model.xyz` is extended XYZ, not plain XYZ. Line 2 must contain
+   `lattice="..."`, `pbc="T T T"` or task-specific PBC, and a valid
+   `Properties=...` declaration.
+6. Group-based NEMD/temperature/filtered dumps require integer group columns in
+   `model.xyz` before the run. GPUMD will not auto-partition source/sink groups.
+7. `model.xyz` species must match the NEP potential exactly. Do not use a
+   universal or example `nep.txt` for elements outside its training domain.
+8. `compute_dos` takes only 3 required arguments:
+   `compute_dos <sample_interval> <Nc> <max_omega>`. Do not add a
+   `num_omega` argument.
+9. In GPUMD v5.2, `compute_rdf` is `compute_rdf <cutoff> <num_bins> <interval>`
+   and `compute_viscosity` has two required arguments:
+   `compute_viscosity <sample_interval> <correlation_steps>`.
+10. In GPUMD v5.2, `dump_observer` is
+    `dump_observer <observe|average> <interval_thermo> <interval_exyz> <has_velocity> <has_force>`.
+    Do not use older shorthand forms.
+11. In GPUMD v5.2, `active` is
+    `active <interval> <has_velocity> <has_force> <has_uncertainty> <threshold>`,
+    and only works with a committee of NEP potentials.
+12. Respect the Nyquist bound for `compute_dos` and `compute_shc`:
+   `max_omega < pi / (sample_interval * time_step)`. For example, with
+   `sample_interval=5` and `time_step=1` fs, keep `max_omega < 628` THz.
+   See `references/run_in_keywords.md` for examples.
+13. For `nep.in`, the `type N El1 El2 ...` line is mandatory and must match the
+    species present in `train.xyz` and `test.xyz`.
 
 ## Default Potential
 
@@ -54,6 +89,26 @@ curl -fsSL -o nep.txt https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/gpu
 This is hosted on internal OSS and downloads fast from Bohrium nodes.
 
 Browse all available potentials: https://gpumd.cn/database.html
+
+## Common `run.in` Patterns
+
+Use these as templates, then adjust temperatures, steps, and output intervals to
+the task scale.
+
+- EMD thermal conductivity: NVT equilibration, then NVE production with
+  `compute_hac`.
+- HNEMD thermal conductivity: NVT equilibration, then NVT production with
+  `compute_hnemd`; add `compute_shc` only if spectral decomposition is requested.
+- NEMD source-sink thermal transport: define source/sink groups in `model.xyz`,
+  equilibrate, then use `ensemble heat_nhc`/`heat_lan`/`heat_bdp` and
+  `compute_temperature group_method <idx>`.
+- Liquid diffusion/viscosity/RDF: NPT or NVT equilibration, then NVE production
+  with `compute_msd`, `compute_sdc`, `compute_viscosity`, `compute_rdf`, and
+  optionally `compute_adf`.
+- Phonon DOS: NVT equilibration, then NVE production with `compute_dos`.
+- Active learning / observer: at least two `potential` lines; first potential
+  drives MD in `observe` mode, or all potentials are averaged in `average` mode.
+  Use `active` and/or v5.2 `dump_observer` syntax.
 
 ## Bohrium Submission Defaults
 
@@ -85,9 +140,45 @@ population    50      # default
 generation    100000  # default
 ```
 
+NEP training guardrails:
+
+- If `train.xyz` lacks virial/stress data, set `lambda_v 0.0`.
+- Keep angular cutoff <= radial cutoff. Typical baseline: `cutoff 8 4`.
+- Keep `batch` <= number of training structures. For small datasets, use the
+  dataset size instead of blindly keeping `batch 1000`.
+- Add `zbl <r_inner> <r_outer>` for high-energy collision/radiation-damage data
+  when short-range repulsion is needed.
+- Do not claim a trained model is production quality from `nep.in` alone; inspect
+  `loss.out`, `energy_train/test.out`, `force_train/test.out`, and
+  `virial_train/test.out` when available.
+
+## Official Docs
+
+The official GPUMD docs describe GPUMD as a GPU MD package that supports NEP
+models and exposes the `gpumd` and `nep` executables:
+https://gpumd.org/
+
+Official required files:
+
+- `gpumd`: `model.xyz` and `run.in`
+  (https://gpumd.org/gpumd/input_files/index.html)
+- `nep`: `nep.in`, `train.xyz`, and `test.xyz`
+  (https://gpumd.org/nep/input_files/index.html)
+
 ## References (read on demand)
 
+- `references/official_docs_map.md` — official GPUMD page map and when to use each page
 - `references/run_in_keywords.md` — complete keyword reference for `run.in`
+- `references/potential_files.md` — NEP, EAM, ADP, Tersoff, FCP potential formats
+- `references/dump_outputs.md` — dump keywords, observer outputs, trajectories, restarts
 - `references/nep_in_keywords.md` — NEP training parameter reference for `nep.in`
+- `references/nep_advanced_workflows.md` — NEP prediction, descriptors, type weights, fine-tuning
 - `references/input_examples.md` — worked examples for common simulation types
 - `references/model_xyz_format.md` — model.xyz extended XYZ format, group definitions
+- `references/nep_training_data_format.md` — `train.xyz`/`test.xyz` schema, units, labels
+- `references/output_files.md` — GPUMD/NEP output files and analysis guards
+- `references/heat_transport_workflows.md` — EMD, NEMD, HNEMD, SHC, modal workflow rules
+- `references/modal_analysis.md` — GKMA/HNEMA modal analysis syntax and guards
+- `references/active_learning.md` — NEP committee uncertainty and active outputs
+- `references/general_md_static_workflows.md` — minimization, NVT/NPT, elastic, phonon, RDF/ADF
+- `references/installation_runtime.md` — GPU/runtime, optional features, Bohrium notes

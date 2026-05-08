@@ -203,18 +203,14 @@ questions:
 - id: IG_abacus_009_20260508
   capability: input_generation
   domain: agnostic
-  intent: Prepare, validate, and package an ABACUS SCF run directory from task intent.
+  intent: Prepare and validate an ABACUS LCAO SCF run directory from task intent.
   human_prompt_seed: '请准备一个最小 ABACUS LCAO SCF 输入目录：
 
     - 材料：Si diamond conventional cell，a=5.43 Å。
 
     - 任务：ABACUS scf。
 
-    - 输出目录：`run_abacus_scf/`，其中应包含 `INPUT`、`STRU`、`KPT`、`diagnosis.json`、`input_prep_manifest.json`。
-
-    - 请验证主输入并保存 machine-readable diagnostics 到 `run_abacus_scf/diagnosis.json`。
-
-    - `input_prep_manifest.json` 必须是 JSON object，至少包含这些顶层字段：software、task、input_dir、generated_files、user_provided_files、diagnostics、auxiliary_files、assumptions、submit_ready、bohrium_command；其中 `diagnostics.file` 必须是 `diagnosis.json`，`submit_ready` 必须是 JSON boolean。
+    - 输出目录：`run_abacus_scf/`，其中应包含 `INPUT`、`STRU`、`KPT`。
 
     - 这是把 task intent plus structure files 转成 runnable engine artifacts 的题；不要只在最终回答里描述而不写文件。
 
@@ -229,22 +225,6 @@ questions:
     value: STRU
   - key: kpt_artifact
     value: KPT
-  - key: diagnosis_artifact
-    value: diagnosis.json
-  - key: manifest_schema
-    value:
-      filename: input_prep_manifest.json
-      required_keys:
-      - software
-      - task
-      - input_dir
-      - generated_files
-      - user_provided_files
-      - diagnostics
-      - auxiliary_files
-      - assumptions
-      - submit_ready
-      - bohrium_command
   - key: abacus_core_keywords
     value:
       filename: INPUT
@@ -255,7 +235,7 @@ questions:
       - lcao
       flags: i
   - key: output_grounding
-    value: The final answer accurately summarizes the generated ABACUS run directory, diagnosis artifact, manifest gate, and that no Bohrium submission was run.
+    value: The final answer accurately summarizes the generated ABACUS run directory and that no Bohrium submission was run.
   - key: turn_budget
     value:
       max: 16
@@ -278,20 +258,12 @@ questions:
     criterion: Generated deliverables include ABACUS `KPT` in the prepared run directory.
     axis: correctness
     verify: artifact_exists
-  - id: diagnosis_artifact
-    criterion: The primary input is diagnosed with JSON output saved as `diagnosis.json`.
-    axis: correctness
-    verify: artifact_exists
-  - id: manifest_schema
-    criterion: The run directory includes `input_prep_manifest.json` with the required manifest fields.
-    axis: correctness
-    verify: json_file_schema
   - id: abacus_core_keywords
     criterion: The rendered ABACUS INPUT contains SCF and LCAO controls.
     axis: correctness
     verify: text_file_contains_all
   - id: output_grounding
-    criterion: The final answer accurately summarizes the generated ABACUS run directory, diagnosis artifact, manifest gate, and that no Bohrium submission was run.
+    criterion: The final answer accurately summarizes the generated ABACUS run directory and that no Bohrium submission was run.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -306,96 +278,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_010_20260508
-  capability: input_generation
-  domain: agnostic
-  intent: Package an ABACUS input directory with auxiliary files and engine-skill submission defaults.
-  human_prompt_seed: '请为一个已准备好的 ABACUS LCAO 运行目录做 submission preflight，目录名用 `run_abacus_packaged/`：
-
-    1. 生成或整理 `INPUT`、`STRU`、`KPT`，并把所需 auxiliary files（例如 pseudopotential/orbital 文件名占位或清单）集中到同一个 input directory。
-
-    2. 验证主输入并保存 machine-readable diagnostics 到 `diagnosis.json`。
-
-    3. 写 `input_prep_manifest.json`。它必须是 JSON object，至少包含这些顶层字段：software、task、input_dir、generated_files、user_provided_files、diagnostics、auxiliary_files、assumptions、submit_ready、bohrium_command；其中 `diagnostics.file` 必须是 `diagnosis.json`，`submit_ready` 必须是 JSON boolean。如果没有可靠提交资源信息，`bohrium_command` 可以为空字符串。
-
-    4. 本题不要真正提交，只输出目录和说明；不要臆造 Bohrium image、machine 或 command 默认值。
-
-    请确保 manifest 能让后续 Bohrium submission 使用。'
-  tags:
-  - eng_abacus
-  data_files: []
-  reference_answers:
-  - key: manifest_schema
-    value:
-      filename: input_prep_manifest.json
-      required_keys:
-      - software
-      - task
-      - input_dir
-      - generated_files
-      - user_provided_files
-      - diagnostics
-      - auxiliary_files
-      - assumptions
-      - submit_ready
-      - bohrium_command
-  - key: manifest_has_auxiliary_files
-    value:
-      filename: input_prep_manifest.json
-      pattern: '"auxiliary_files"\s*:\s*\['
-      flags: i
-  - key: diagnosis_artifact
-    value: diagnosis.json
-  - key: manifest_has_diagnostics_file
-    value:
-      filename: input_prep_manifest.json
-      pattern: '"diagnostics"\s*:\s*\{[\s\S]*"file"\s*:\s*"diagnosis\.json"'
-      flags: i
-  - key: output_grounding
-    value: The final answer states that the ABACUS directory was packaged for preflight, diagnostics and manifest were produced, and no job was submitted.
-  - key: turn_budget
-    value:
-      max: 14
-  - key: duration_budget
-    value:
-      max: 7200000
-  - key: token_budget_total
-    value:
-      max: 16000
-  scoring_checklist:
-  - id: manifest_schema
-    criterion: The package includes `input_prep_manifest.json` with software, task, input_dir, generated_files, user_provided_files, diagnostics, auxiliary_files, assumptions, submit_ready, and bohrium_command.
-    axis: correctness
-    verify: json_file_schema
-  - id: manifest_has_auxiliary_files
-    criterion: The manifest gathers required auxiliary files into one input directory and records them in `auxiliary_files`.
-    axis: correctness
-    verify: text_file_regex
-  - id: diagnosis_artifact
-    criterion: The package includes machine-readable diagnostics as `diagnosis.json`.
-    axis: correctness
-    verify: artifact_exists
-  - id: manifest_has_diagnostics_file
-    criterion: The manifest records the saved diagnostics file.
-    axis: correctness
-    verify: text_file_regex
-  - id: output_grounding
-    criterion: The final answer states that the ABACUS directory was packaged for preflight, diagnostics and manifest were produced, and no job was submitted.
-    axis: grounding
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent completes the task within the turn budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration does not exceed ceiling.
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
-- id: IG_abacus_011_20260507
+- id: IG_abacus_010_20260507
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS LCAO-SCF inputs for an isolated spin-polarized oxygen atom.
@@ -537,7 +420,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_012_20260507
+- id: IG_abacus_011_20260507
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS input files for ASE-ABACUS ethanol relaxation and vibrational-frequency stages.
@@ -655,7 +538,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_013_20260507
+- id: IG_abacus_012_20260507
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS input files for Ni FCC lattice-constant energy calculations.
@@ -785,7 +668,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_014_20260507
+- id: IG_abacus_013_20260507
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS inputs for a representative Cu FCC stacking-fault energy SCF calculation.
@@ -904,7 +787,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_015_20260507
+- id: IG_abacus_014_20260507
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS+LibRI HSE06 SCF, band, and DOS input files for silicon.
@@ -1088,7 +971,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_016_20260507
+- id: IG_abacus_015_20260507
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS INPUT and KPT files for Pt(111) ORR OH* and OOH* relaxation runs.
@@ -2593,5 +2476,254 @@ questions:
     verify: duration_budget
   - id: token_budget_total
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
+    axis: efficiency
+    verify: token_budget
+- id: IG_abacus_016_20260507
+  capability: input_generation
+  domain: agnostic
+  intent: Prepare ABACUS PBE+U LCAO cell-relax input directories for comparing rocksalt and square-planar NiO phases.
+  human_prompt_seed: '我想用 ABACUS 比较 NiO 两种候选结构的相对稳定性：一个是常规岩盐相，另一个是 Ni 处于平面四配位环境的变形相。请先只准备后续计算需要的输入文件。
+
+    计算方法统一采用 LCAO 基组和 PBE+U，Ni 的 U 值取 5.0 eV；两套输入应使用一致的计算精度、赝势/轨道来源和 k 点采样策略，便于之后做能量比较。
+
+    请在当前目录下分别建立 `nio_rocksalt/` 和 `nio_square_planar/`，写入对应的 ABACUS `INPUT` 和 `STRU`。不要运行计算，也不要提交任务。'
+  tags:
+  - eng_abacus
+  - struct_transform
+  reference_answers:
+  - key: rocksalt_input_artifact
+    value: nio_rocksalt/INPUT
+  - key: rocksalt_stru_artifact
+    value: nio_rocksalt/STRU
+  - key: square_input_artifact
+    value: nio_square_planar/INPUT
+  - key: square_stru_artifact
+    value: nio_square_planar/STRU
+  - key: must_rocksalt_input_core
+    value:
+      filename: nio_rocksalt/INPUT
+      tokens:
+      - calculation cell-relax
+      - basis_type lcao
+      - dft_plus_u 1
+      - nspin 2
+      - cal_force 1
+      - cal_stress 1
+      flags: i
+  - key: must_square_input_core
+    value:
+      filename: nio_square_planar/INPUT
+      tokens:
+      - calculation cell-relax
+      - basis_type lcao
+      - dft_plus_u 1
+      - nspin 2
+      - cal_force 1
+      - cal_stress 1
+      flags: i
+  - key: must_rocksalt_u_ni
+    value:
+      filename: nio_rocksalt/INPUT
+      pattern: (?im)^\s*hubbard_u\s+5(?:\.0+)?(?:\s+5(?:\.0+)?)?\s+0(?:\.0+)?\s*$|^\s*hubbard_u\s+5(?:\.0+)?\s*$
+      flags: im
+  - key: must_square_u_ni
+    value:
+      filename: nio_square_planar/INPUT
+      pattern: (?im)^\s*hubbard_u\s+5(?:\.0+)?(?:\s+5(?:\.0+)?)?\s+0(?:\.0+)?\s*$|^\s*hubbard_u\s+5(?:\.0+)?\s*$
+      flags: im
+  - key: must_rocksalt_orbital_corr
+    value:
+      filename: nio_rocksalt/INPUT
+      pattern: (?im)^\s*orbital_corr\s+2(?:\s+2)?(?:\s+-1)?\s*$
+      flags: im
+  - key: must_square_orbital_corr
+    value:
+      filename: nio_square_planar/INPUT
+      pattern: (?im)^\s*orbital_corr\s+2(?:\s+2)?(?:\s+-1)?\s*$
+      flags: im
+  - key: must_rocksalt_numerics
+    value:
+      filename: nio_rocksalt/INPUT
+      checks:
+      - key: ecutwfc
+        min: 80
+        max: 150
+      - key: scf_thr
+        min: 1.0e-10
+        max: 1.0e-05
+      - key: force_thr_ev
+        min: 0.001
+        max: 0.05
+      - key: stress_thr
+        min: 0.01
+        max: 5.0
+      - key: relax_nmax
+        min: 20
+        max: 300
+      - key: kspacing
+        min: 0.04
+        max: 0.15
+        if_component_count_in:
+        - 1
+        - 3
+  - key: must_square_numerics
+    value:
+      filename: nio_square_planar/INPUT
+      checks:
+      - key: ecutwfc
+        min: 80
+        max: 150
+      - key: scf_thr
+        min: 1.0e-10
+        max: 1.0e-05
+      - key: force_thr_ev
+        min: 0.001
+        max: 0.05
+      - key: stress_thr
+        min: 0.01
+        max: 5.0
+      - key: relax_nmax
+        min: 20
+        max: 300
+      - key: kspacing
+        min: 0.04
+        max: 0.15
+        if_component_count_in:
+        - 1
+        - 3
+  - key: must_rocksalt_stru_species_orbitals
+    value:
+      filename: nio_rocksalt/STRU
+      tokens:
+      - ATOMIC_SPECIES
+      - Ni_ONCV_PBE-1.2.upf
+      - O.upf
+      - NUMERICAL_ORBITAL
+      - Ni_gga_8au_100Ry_4s2p2d1f.orb
+      - O_gga_6au_100Ry_2s2p1d.orb
+      - LATTICE_VECTORS
+      - ATOMIC_POSITIONS
+      flags: i
+  - key: must_square_stru_species_orbitals
+    value:
+      filename: nio_square_planar/STRU
+      tokens:
+      - ATOMIC_SPECIES
+      - Ni_ONCV_PBE-1.2.upf
+      - O.upf
+      - NUMERICAL_ORBITAL
+      - Ni_gga_8au_100Ry_4s2p2d1f.orb
+      - O_gga_6au_100Ry_2s2p1d.orb
+      - LATTICE_VECTORS
+      - ATOMIC_POSITIONS
+      flags: i
+  - key: variable_phase_structures
+    value: {}
+  - key: variable_afm_dftu_setup
+    value: {}
+  - key: turn_budget
+    value:
+      max: 10
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 14000
+  scoring_checklist:
+  - id: rocksalt_input_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `nio_rocksalt/INPUT` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.5
+  - id: rocksalt_stru_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `nio_rocksalt/STRU` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.5
+  - id: square_input_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `nio_square_planar/INPUT` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.5
+  - id: square_stru_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `nio_square_planar/STRU` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.5
+  - id: must_rocksalt_input_core
+    criterion: '[Must] Rocksalt INPUT uses ABACUS LCAO PBE+U cell-relax core controls with spin polarization, forces, and stress.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_square_input_core
+    criterion: '[Must] Square-planar INPUT uses ABACUS LCAO PBE+U cell-relax core controls with spin polarization, forces, and stress.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_rocksalt_u_ni
+    criterion: '[Must] Rocksalt INPUT assigns U_Ni = 5.0 eV through `hubbard_u`, allowing one Ni species or split Ni spin species.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_square_u_ni
+    criterion: '[Must] Square-planar INPUT assigns U_Ni = 5.0 eV through `hubbard_u`, allowing one Ni species or split Ni spin species.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_rocksalt_orbital_corr
+    criterion: '[Must] Rocksalt INPUT applies +U to Ni d orbitals using `orbital_corr 2` for each Ni species and no +U for O when O is listed.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.8
+  - id: must_square_orbital_corr
+    criterion: '[Must] Square-planar INPUT applies +U to Ni d orbitals using `orbital_corr 2` for each Ni species and no +U for O when O is listed.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.8
+  - id: must_rocksalt_numerics
+    criterion: '[Must] Rocksalt INPUT uses reasonable LCAO DFT+U cell-relax numerical controls, including ecutwfc, scf_thr, force/stress thresholds, relax_nmax, and kspacing.'
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.8
+  - id: must_square_numerics
+    criterion: '[Must] Square-planar INPUT uses reasonable LCAO DFT+U cell-relax numerical controls, including ecutwfc, scf_thr, force/stress thresholds, relax_nmax, and kspacing.'
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.8
+  - id: must_rocksalt_stru_species_orbitals
+    criterion: '[Must] Rocksalt STRU uses APNS Ni/O pseudopotential and orbital names and valid structure sections.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_square_stru_species_orbitals
+    criterion: '[Must] Square-planar STRU uses APNS Ni/O pseudopotential and orbital names and valid structure sections.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: variable_phase_structures
+    criterion: '[Variable] The two STRU files represent distinct NiO polymorphs: rocksalt/octahedral Ni for `nio_rocksalt` and a plausible square-planar NiO prototype such as PdO/cooperite-type for `nio_square_planar`; do not require exact lattice constants.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 0.8
+  - id: variable_afm_dftu_setup
+    criterion: '[Variable] Magnetic setup is physically reasonable for NiO DFT+U comparison: AFM or equivalent opposite Ni initial moments are acceptable; split Ni species or per-atom magnetic moments are acceptable if ABACUS syntax is valid and U is applied to all Ni species.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 0.8
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: duration_budget
+    criterion: Wall-clock run duration is recorded and does not exceed a generous benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
