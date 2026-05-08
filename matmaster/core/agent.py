@@ -17,14 +17,18 @@ import asyncio
 import logging
 import time
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
-from dataclasses import field as dc_field
 from typing import TYPE_CHECKING, Any
 
 from matmaster.core.finish_diagnostics import (
     build_finish_detail,
     is_incomplete_response,
     is_valid_natural_finish,
+)
+from matmaster.core.kernel_items import (
+    _KernelItem,
+    _KernelState,
+    _KernelStopRequested,
+    _TerminalItem,
 )
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.errors import LLMError
@@ -74,39 +78,6 @@ logger = logging.getLogger(__name__)
 _STOP_CHECK_EVERY_N_STREAM_CHUNKS = 8
 # 重试退避时切片 sleep 的步长（秒），便于尽快响应停止
 _STOP_RETRY_SLEEP_SLICE_SEC = 0.25
-
-
-@dataclass
-class _TerminalItem:
-    reason: str
-    final_content: str | None = None
-    num_turns: int = 0
-    usage: dict[str, int] = dc_field(default_factory=dict)
-    usage_vendor_by_turn: list[dict[str, Any]] = dc_field(default_factory=list)
-    messages: list[Any] = dc_field(default_factory=list)
-    finish_detail: FinishDetail | None = None
-
-
-@dataclass
-class _KernelItem:
-    event: Any = None  # BusEvent | None
-    llm_response: LLMResponse | None = None
-    messages_delta: list[Any] | None = None
-    terminal: _TerminalItem | None = None
-
-
-@dataclass
-class _KernelState:
-    messages: list[Any]
-    turn: int = 0
-    total_usage: dict[str, int] = dc_field(default_factory=dict)
-    usage_vendor_by_turn: list[dict[str, Any]] = dc_field(default_factory=list)
-    cached_tool_definitions: list[dict[str, Any]] | None = None
-    last_catalog_version: int = -1
-
-
-class _KernelStopRequested(Exception):
-    pass
 
 
 class AgentKernel:

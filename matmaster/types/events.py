@@ -52,6 +52,10 @@ class ResponseEvent(EventBase):
     content: str = ""
     stream_state: str | None = None  # 'start' | 'streaming' | 'end' | 'complete' | None
     stream_id: str | None = None
+    turn_index: int | None = None
+    turn_usage: dict[str, int] = Field(default_factory=dict)
+    total_usage: dict[str, int] = Field(default_factory=dict)
+    usage_vendor: dict[str, Any] | None = None
 
 
 class ToolCallEvent(EventBase):
@@ -72,6 +76,7 @@ class ToolResultEvent(EventBase):
     result: Any  # str | dict
     status: str = "success"
     payload: dict[str, Any] = Field(default_factory=dict)
+    turn_index: int | None = None
     turn_usage: dict[str, int] = Field(default_factory=dict)
     total_usage: dict[str, int] = Field(default_factory=dict)
 
@@ -137,6 +142,7 @@ class AssistantStateEvent(EventBase):
 
     type: Literal["assistant_state"] = "assistant_state"
     state: dict[str, Any]  # AssistantMessage.model_dump() content
+    turn_index: int | None = None
     turn_usage: dict[str, int] = Field(default_factory=dict)
     total_usage: dict[str, int] = Field(default_factory=dict)
     finish_detail: FinishDetail | None = None
