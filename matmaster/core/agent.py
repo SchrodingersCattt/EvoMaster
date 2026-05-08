@@ -549,12 +549,6 @@ class AgentKernel:
                             )
                         )
 
-            # ── Turn budget awareness ──────────────────────────
-            # Inject a turn-count hint into the last ToolMessage so the
-            # LLM sees how many turns it has consumed.  Escalating urgency
-            # when max_turns represents a realistic budget (≤ 50).
-            self._inject_turn_budget_nudge(state, spec.max_turns)
-
         yield self._terminal(state, "max_turns")
 
     async def _call_llm_streaming(
@@ -925,55 +919,6 @@ class AgentKernel:
                 retryable=False,
                 error_category="bad_request",
             )
-
-    @staticmethod
-    def _inject_turn_budget_nudge(
-        state: _KernelState,
-        max_turns: int,
-    ) -> None:
-        """Append turn-count awareness to the last tool result message."""
-        if max_turns <= 0 or not state.messages:
-            return
-
-        remaining = max_turns - state.turn
-        nudge: str | None = None
-
-        if max_turns <= 50 and remaining >= 0:
-            pct = state.turn / max_turns
-            if pct >= 0.90:
-                nudge = (
-                    f"\n\n[SYSTEM: Turn {state.turn}/{max_turns} - "
-                    f"only {remaining} left. Deliver final answer NOW. "
-                    "Do not start new operations.]"
-                )
-            elif pct >= 0.75:
-                nudge = (
-                    f"\n\n[SYSTEM: Turn {state.turn}/{max_turns} - "
-                    f"{remaining} left. Wrap up: essential steps only, "
-                    "batch remaining work.]"
-                )
-            elif pct >= 0.60:
-                nudge = (
-                    f"\n\n[SYSTEM: Turn {state.turn}/{max_turns} - "
-                    f"{remaining} left. Plan efficiently.]"
-                )
-            else:
-                nudge = f"\n\n[Turn {state.turn}/{max_turns}]"
-        elif state.turn >= 5 and state.turn % 5 == 0:
-            nudge = f"\n\n[Turn {state.turn}]"
-
-        if nudge is None:
-            return
-
-        for index in range(len(state.messages) - 1, -1, -1):
-            if isinstance(state.messages[index], ToolMessage):
-                msg = state.messages[index]
-                state.messages[index] = ToolMessage(
-                    tool_call_id=msg.tool_call_id,
-                    tool_name=msg.tool_name,
-                    content=(msg.content or "") + nudge,
-                )
-                return
 
     @staticmethod
     def _accumulate_usage(total: dict[str, int], delta: dict[str, int]) -> None:
