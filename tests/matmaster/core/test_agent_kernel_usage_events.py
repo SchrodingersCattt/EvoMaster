@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from matmaster.types.events import ResponseEvent
+from matmaster.types.events import ResponseEvent, RunResultEvent
 
 from .agent_kernel_test_helpers import _make_spec
 from .test_agent_kernel_stream import (
@@ -59,7 +59,9 @@ async def test_run_stream_emits_usage_bearing_response_complete() -> None:
         events.append(event)
 
     completes = [
-        e for e in events if isinstance(e, ResponseEvent) and e.stream_state == "complete"
+        e
+        for e in events
+        if isinstance(e, ResponseEvent) and e.stream_state == "complete"
     ]
     assert len(completes) == 1
     assert completes[0].content == "hello world"
@@ -80,7 +82,9 @@ async def test_retry_discarded_attempt_does_not_emit_usage_response_complete() -
         events.append(event)
 
     completes = [
-        e for e in events if isinstance(e, ResponseEvent) and e.stream_state == "complete"
+        e
+        for e in events
+        if isinstance(e, ResponseEvent) and e.stream_state == "complete"
     ]
     assert provider.call_count == 2
     assert [e.content for e in completes] == ["recovered"]
@@ -98,5 +102,36 @@ async def test_child_runtime_does_not_emit_usage_response_complete() -> None:
         events.append(event)
 
     assert not [
-        e for e in events if isinstance(e, ResponseEvent) and e.stream_state == "complete"
+        e
+        for e in events
+        if isinstance(e, ResponseEvent) and e.stream_state == "complete"
     ]
+
+
+@pytest.mark.asyncio
+async def test_completed_run_result_usage_matches_distinct_response_turn_usage() -> (
+    None
+):
+    from matmaster.core.agent import AgentKernel
+
+    events: list[Any] = []
+    async for event in AgentKernel().run_stream(
+        _make_spec(provider=ContentOnlyProvider()), "test task"
+    ):
+        events.append(event)
+
+    usage: dict[str, int] = {}
+    seen: set[int] = set()
+    for event in events:
+        if not isinstance(event, ResponseEvent):
+            continue
+        if event.stream_state != "complete" or event.turn_index is None:
+            continue
+        if event.turn_index in seen:
+            continue
+        seen.add(event.turn_index)
+        for key, value in event.turn_usage.items():
+            usage[key] = usage.get(key, 0) + value
+
+    run_result = next(e for e in events if isinstance(e, RunResultEvent))
+    assert usage == run_result.usage

@@ -213,6 +213,26 @@ class TestPublicContentForEvent:
             'completion_tokens': 6,
         }
 
+    def test_failed_run_result_preserves_usage_and_finish_detail(self) -> None:
+        detail = {
+            'kind': 'reasoning_only',
+            'message': 'Model produced reasoning but no visible content.',
+            'last_turn_usage': {'prompt_tokens': 10, 'completion_tokens': 2},
+        }
+        content = _public_content_for_event(
+            'run_result',
+            {
+                'status': 'failed',
+                'reason': 'invalid_finish',
+                'final_content': None,
+                'num_turns': 1,
+                'usage': {'prompt_tokens': 10, 'completion_tokens': 2},
+                'finish_detail': detail,
+            },
+        )
+        assert content['usage'] == {'prompt_tokens': 10, 'completion_tokens': 2}
+        assert content['finish_detail'] == detail
+
     def test_usage_event_mappings_preserve_turn_index(self) -> None:
         state = {'role': 'assistant', 'content': None, 'tool_calls': []}
         assistant = _public_content_for_event(

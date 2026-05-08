@@ -116,10 +116,10 @@ class SSEHandler:
         """Check if event should be skipped for SSE push."""
         event_type = getattr(event, 'type', '')
 
-        if (
-            isinstance(event, (ThoughtEvent, ResponseEvent))
-            and event.stream_state in {'complete', 'segment_end'}
-        ):
+        if isinstance(event, (ThoughtEvent, ResponseEvent)) and event.stream_state in {
+            'complete',
+            'segment_end',
+        }:
             return True
 
         # Internal-only: never push assistant_state to frontend
