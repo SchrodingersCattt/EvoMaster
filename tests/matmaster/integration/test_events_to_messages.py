@@ -212,6 +212,22 @@ class TestEventsToMessagesPreservesOrder:
         assert isinstance(result[-1], AssistantMessage)
         assert result[-1].content == "answer"
 
+    def test_structured_response_content_discards_usage_metadata(self):
+        events = [
+            _user_event("q"),
+            {
+                "source": "MatMaster",
+                "type": "response",
+                "content": {
+                    "content": "answer",
+                    "turn_usage": {"total_tokens": 12},
+                },
+            },
+        ]
+        result = ChatHistoryConverter.events_to_messages(events)
+        assert isinstance(result[-1], AssistantMessage)
+        assert result[-1].content == "answer"
+
     def test_thought_and_response_merge_into_single_assistant_message(self):
         events = [
             _user_event("q"),

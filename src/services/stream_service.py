@@ -15,6 +15,7 @@ from functools import lru_cache
 from typing import Protocol, runtime_checkable
 
 from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES
+from matmaster.integration.event_payloads import normalize_response_sse_payload
 from src.dao.redis_dao import (
     INTERACTION_CANCEL_VALUE,
     STREAM_CHANNEL_PREFIX,
@@ -95,7 +96,7 @@ def _normalize_replayed_event(event: dict) -> dict:
     """Normalize source labels in replayed history events to the public set."""
     replay_event = dict(event)
     replay_event['source'] = normalize_event_source(replay_event.get('source'))
-    return replay_event
+    return normalize_response_sse_payload(replay_event)
 
 
 def _normalize_replayed_compaction_events(events: list[dict]) -> list[dict]:

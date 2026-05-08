@@ -118,7 +118,7 @@ class SSEHandler:
 
         if (
             isinstance(event, (ThoughtEvent, ResponseEvent))
-            and event.stream_state == 'complete'
+            and event.stream_state in {'complete', 'segment_end'}
         ):
             return True
 
