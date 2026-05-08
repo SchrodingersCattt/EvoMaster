@@ -188,5 +188,3 @@ def check_json_file_artifacts(
         parts.append(f'{len(missing)} missing ({", ".join(show)}{tail})')
     parts.append(f'expected {expected_count}±{count_tolerance}')
     return ok, '; '.join(parts)
-
-
