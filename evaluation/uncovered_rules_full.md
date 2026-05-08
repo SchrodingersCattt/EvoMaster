@@ -197,7 +197,7 @@ Generated: 2026-05-08 02:31 UTC
 - **[decision_tree]** "Summarize experiment metrics" → statistical profiling
 - **[decision_tree]** "Plot / visualize data from a table" → matplotlib rendering
 - **[workflow_step]** **Profile**: Read the data file. Report row count, column names & dtypes, missing values per column (count + rate).
-- **[workflow_step]** **Outlier detection — IQR method**: The IQR (Interquartile Range) method uses Q1 (25th percentile) and Q3 (75th percentile) to compute IQR = Q3 − Q1. 
+- **[workflow_step]** **Outlier detection — IQR method**: The IQR (Interquartile Range) method uses Q1 (25th percentile) and Q3 (75th percentile) to compute IQR = Q3 − Q1.
 - **[workflow_step]** **Unit / consistency audit**: Cross-check column-name suffixes (e.g. `_C`, `_kW`, `_pct`) against value ranges; flag conflicts.
 - **[workflow_step]** **Write deliverables**: QC report (Markdown), metrics JSON, and any supplementary files the task requests.
 
@@ -217,7 +217,7 @@ Generated: 2026-05-08 02:31 UTC
 - **[workflow_step]** Stage all input files (`run.in`, `model.xyz`, potential files) in `input_dir/`
 - **[workflow_step]** Submit to Bohrium
 - **[hard_guard]** **`potential` must come first.** Every `run.in` must start with `potential` line(s) before any `ensemble`, `run`, or `compute_*`.
-- **[hard_guard]** **`compute_*` before its `run`.** Any `compute_hac`, `compute_hnemd`, `compute_shc`, `compute_msd`, `compute_sdc`, `compute_viscosity`, `compute_dos` 
+- **[hard_guard]** **`compute_*` before its `run`.** Any `compute_hac`, `compute_hnemd`, `compute_shc`, `compute_msd`, `compute_sdc`, `compute_viscosity`, `compute_dos`
 - **[hard_guard]** **`dump_*` before its `run`.** Same rule for `dump_thermo`, `dump_position`, `dump_force`, `dump_dipole`, `dump_polarizability`, `dump_observer`.
 - **[hard_guard]** **`model.xyz` must use extended XYZ format.** Header line 2 must contain `lattice="..."` (9 floats, row-major) and `pbc="T T T"`. See `references/mode
 - **[hard_guard]** **Group columns required for group-based keywords.** If using `source`/`sink` in NEMD ensembles, `compute_temperature group_method`, or group-filtered
@@ -235,9 +235,9 @@ Generated: 2026-05-08 02:31 UTC
 - **[workflow_step]** **User-provided ready file check (exit early)** — Before doing anything else, check whether the user has already provided a complete, ready-to-run inp
 - **[workflow_step]** **Prepare structure_file** — Ensure the structure path exists and is pymatgen-instanceable; do not assume formats the engine cannot read.
 - **[workflow_step]** **Call render_input.py** — Run the script to generate the input file with appropriate parameters and software name.
-- **[workflow_step]** **Call diagnose_input.py** — Run to validate parameter ranges and consistency. Validation is **physical-sense review**: check that key parameters are 
+- **[workflow_step]** **Call diagnose_input.py** — Run to validate parameter ranges and consistency. Validation is **physical-sense review**: check that key parameters are
 - **[workflow_step]** **Gather auxiliary files** — Collect all required auxiliary files (pseudopotentials, basis sets, orbital files, topology files, etc.) into one directo
-- **[workflow_step]** **Submit via `Bohrium`** — `action="submit"`, `input_dir="<dir>"`, `image="<image>"`, `cmd="<command>"` (stdout/stderr should land in `log`; the tool 
+- **[workflow_step]** **Submit via `Bohrium`** — `action="submit"`, `input_dir="<dir>"`, `image="<image>"`, `cmd="<command>"` (stdout/stderr should land in `log`; the tool
 - **[workflow_step]** **Write Python script** — Create `run_pyscf.py` (or similar) that imports PySCF, loads the structure, sets parameters (charge, spin, method, basis, et
 - **[workflow_step]** **Prepare structure** — Place structure file (XYZ or other pymatgen-readable format) in the same directory.
 - **[workflow_step]** **Submit** — **`Bohrium`** with `action="submit"`, `input_dir`, `image=<pyscf_image>`, `cmd="python run_pyscf.py > log 2>&1"`.
@@ -271,7 +271,7 @@ Generated: 2026-05-08 02:31 UTC
 
 - **[workflow_step]** **Source preparation**: For PDFs, use `mat_doc_*` tools first. For web sources, use search/extraction tools.
 - **[workflow_step]** **Normalize and merge**: `build_lit_table.py` harmonizes fields, deduplicates, preserves conflicts with metadata.
-- **[workflow_step]** **Enrich** (agent-side): Read `_tmp/lit_data/normalized_rows.json`, apply pattern-based or semantic extraction (see `references/enrich_strategy.md`), 
+- **[workflow_step]** **Enrich** (agent-side): Read `_tmp/lit_data/normalized_rows.json`, apply pattern-based or semantic extraction (see `references/enrich_strategy.md`),
 - **[workflow_step]** **Export**: CSV or JSONL. For business deliverables (e.g. `candidates.csv`), see `references/business_export_candidates.md`.
 
 ### manuscript-scribe (5 uncovered)
@@ -355,7 +355,7 @@ Generated: 2026-05-08 02:31 UTC
    #!/bin/bash
    python3 gsas2_pawley.py \
      --data ./ \
-     --space-group 
+     --space-group
 - **[workflow_step]** **Parse `results.json`**: check `success`, `warnings`, `curation.verdict` first; then `wR`/`Rwp` against the contract-3 thresholds; then cell vs. init
 - **[workflow_step]** wR_fwd − wR_rev
 
@@ -493,4 +493,3 @@ Generated: 2026-05-08 02:31 UTC
     --data ./ --sg "Pm-3m" \
     --cell "a=3.905" --wavelength 1.5406 --multi-temp \
     -o result.json
-
