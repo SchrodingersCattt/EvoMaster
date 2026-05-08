@@ -5,6 +5,7 @@ from __future__ import annotations
 from matmaster.integration.event_payloads import (
     _normalize_public_source,
     _public_content_for_event,
+    normalize_response_sse_payload,
 )
 
 
@@ -174,6 +175,89 @@ class TestPublicContentForEvent:
         payload = {'type': 'response', 'source': 'Agent', 'content': 'hello'}
 
         assert _public_content_for_event('response', payload) == 'hello'
+
+    def test_response_with_usage_returns_structured_content(self) -> None:
+        payload = {
+            'type': 'response',
+            'source': 'Agent',
+            'content': 'answer',
+            'stream_state': 'complete',
+            'stream_id': 's1',
+            'turn_index': 2,
+            'turn_usage': {'prompt_tokens': 10, 'completion_tokens': 4},
+            'total_usage': {'prompt_tokens': 30, 'completion_tokens': 9},
+            'usage_vendor': {'inputTokens': 10, 'outputTokens': 4},
+        }
+        assert _public_content_for_event('response', payload) == {
+            'content': 'answer',
+            'turn_index': 2,
+            'stream_id': 's1',
+            'turn_usage': {'prompt_tokens': 10, 'completion_tokens': 4},
+            'total_usage': {'prompt_tokens': 30, 'completion_tokens': 9},
+            'usage_vendor': {'inputTokens': 10, 'outputTokens': 4},
+        }
+
+    def test_run_result_public_content_includes_usage(self) -> None:
+        payload = {
+            'type': 'run_result',
+            'source': 'Agent',
+            'status': 'completed',
+            'reason': 'natural',
+            'final_content': 'done',
+            'num_turns': 2,
+            'usage': {'prompt_tokens': 20, 'completion_tokens': 6},
+            'usage_vendor_by_turn': [{'inputTokens': 20, 'outputTokens': 6}],
+        }
+        assert _public_content_for_event('run_result', payload)['usage'] == {
+            'prompt_tokens': 20,
+            'completion_tokens': 6,
+        }
+
+    def test_usage_event_mappings_preserve_turn_index(self) -> None:
+        state = {'role': 'assistant', 'content': None, 'tool_calls': []}
+        assistant = _public_content_for_event(
+            'assistant_state',
+            {
+                'state': state,
+                'turn_index': 1,
+                'turn_usage': {'prompt_tokens': 10},
+                'total_usage': {'prompt_tokens': 10},
+            },
+        )
+        tool = _public_content_for_event(
+            'tool_result',
+            {
+                'call_id': 'call-6',
+                'tool_name': 'bash',
+                'result': 'output',
+                'status': 'success',
+                'turn_index': 1,
+                'turn_usage': {'prompt_tokens': 10},
+                'total_usage': {'prompt_tokens': 10},
+            },
+        )
+        assert assistant['turn_index'] == 1
+        assert tool['turn_index'] == 1
+
+    def test_structured_response_content_is_unpacked_for_sse(self) -> None:
+        payload = {
+            'source': 'MatMaster',
+            'type': 'response',
+            'content': {
+                'content': 'answer',
+                'turn_index': 3,
+                'turn_usage': {'total_tokens': 12},
+                'total_usage': {'total_tokens': 30},
+                'usage_vendor': {'inputTokens': 10, 'outputTokens': 2},
+            },
+            'session_id': 'sess',
+            'task_id': 'task',
+            'spawn_id': None,
+        }
+        normalized = normalize_response_sse_payload(payload)
+        assert normalized['content'] == 'answer'
+        assert normalized['turn_index'] == 3
+        assert normalized['turn_usage'] == {'total_tokens': 12}
 
     def test_response_figures_payload_maps_to_public_content(self) -> None:
         payload = {
