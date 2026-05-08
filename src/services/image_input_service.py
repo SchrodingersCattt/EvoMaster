@@ -61,7 +61,7 @@ class ImageInputSettings:
     allow_insecure_hosts: frozenset[str] = frozenset()
     max_images: int = 5
     max_url_length: int = 4096
-    max_bytes: int = 10 * 1024 * 1024
+    max_bytes: int = 5 * 1024 * 1024
     per_image_timeout_seconds: float = 3.0
     max_redirects: int = 3
 
