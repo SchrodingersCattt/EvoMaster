@@ -324,8 +324,12 @@ class AgentRunService:
             if _ci_session is not None:
                 try:
                     _ci_path = '/personal/.matmaster/agent.md'
-                    if hasattr(_ci_session, 'path_exists') and _ci_session.path_exists(_ci_path):
-                        custom_instructions = _ci_session.read_file(_ci_path).strip() or None
+                    if hasattr(_ci_session, 'path_exists') and _ci_session.path_exists(
+                        _ci_path
+                    ):
+                        custom_instructions = (
+                            _ci_session.read_file(_ci_path).strip() or None
+                        )
                 except Exception as _ci_err:
                     logger.debug('read custom instructions skipped: %s', _ci_err)
 
