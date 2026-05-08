@@ -286,6 +286,7 @@ def test_input_manual_helper_coverage_questions_are_outcome_based() -> None:
     bank_root = repo_root / "evaluation" / "question_bank" / "input_generation"
     question_ids = {
         "IG_abacus_009_20260508",
+        "IG_abacus_010_20260508",
         "IG_cp2k_002_20260508",
         "IG_cp2k_003_20260508",
         "IG_gromacs_002_20260508",
@@ -418,4 +419,4 @@ def test_manifest_active_totals_after_phase2_splits() -> None:
     manifest = yaml.safe_load((bank_root / "manifest.yaml").read_text(encoding="utf-8"))
 
     assert len(manifest["banks"]) == 30
-    assert sum(int(entry["questions"]) for entry in manifest["banks"]) == 162
+    assert sum(int(entry["questions"]) for entry in manifest["banks"]) == 163

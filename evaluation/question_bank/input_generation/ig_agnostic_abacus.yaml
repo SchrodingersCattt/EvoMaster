@@ -203,14 +203,18 @@ questions:
 - id: IG_abacus_009_20260508
   capability: input_generation
   domain: agnostic
-  intent: Prepare and validate an ABACUS LCAO SCF run directory from task intent.
+  intent: Prepare, validate, and package an ABACUS SCF run directory from task intent.
   human_prompt_seed: '请准备一个最小 ABACUS LCAO SCF 输入目录：
 
     - 材料：Si diamond conventional cell，a=5.43 Å。
 
     - 任务：ABACUS scf。
 
-    - 输出目录：`run_abacus_scf/`，其中应包含 `INPUT`、`STRU`、`KPT`。
+    - 输出目录：`run_abacus_scf/`，其中应包含 `INPUT`、`STRU`、`KPT`、`diagnosis.json`、`input_prep_manifest.json`。
+
+    - 请验证主输入并保存 machine-readable diagnostics 到 `run_abacus_scf/diagnosis.json`。
+
+    - `input_prep_manifest.json` 必须是 JSON object，至少包含这些顶层字段：software、task、input_dir、generated_files、user_provided_files、diagnostics、auxiliary_files、assumptions、submit_ready、bohrium_command；其中 `diagnostics.file` 必须是 `diagnosis.json`，`submit_ready` 必须是 JSON boolean。
 
     - 这是把 task intent plus structure files 转成 runnable engine artifacts 的题；不要只在最终回答里描述而不写文件。
 
@@ -225,6 +229,22 @@ questions:
     value: STRU
   - key: kpt_artifact
     value: KPT
+  - key: diagnosis_artifact
+    value: diagnosis.json
+  - key: manifest_schema
+    value:
+      filename: input_prep_manifest.json
+      required_keys:
+      - software
+      - task
+      - input_dir
+      - generated_files
+      - user_provided_files
+      - diagnostics
+      - auxiliary_files
+      - assumptions
+      - submit_ready
+      - bohrium_command
   - key: abacus_core_keywords
     value:
       filename: INPUT
@@ -235,7 +255,7 @@ questions:
       - lcao
       flags: i
   - key: output_grounding
-    value: The final answer accurately summarizes the generated ABACUS run directory and that no Bohrium submission was run.
+    value: The final answer accurately summarizes the generated ABACUS run directory, diagnosis artifact, manifest gate, and that no Bohrium submission was run.
   - key: turn_budget
     value:
       max: 16
@@ -258,12 +278,20 @@ questions:
     criterion: Generated deliverables include ABACUS `KPT` in the prepared run directory.
     axis: correctness
     verify: artifact_exists
+  - id: diagnosis_artifact
+    criterion: The primary input is diagnosed with JSON output saved as `diagnosis.json`.
+    axis: correctness
+    verify: artifact_exists
+  - id: manifest_schema
+    criterion: The run directory includes `input_prep_manifest.json` with the required manifest fields.
+    axis: correctness
+    verify: json_file_schema
   - id: abacus_core_keywords
     criterion: The rendered ABACUS INPUT contains SCF and LCAO controls.
     axis: correctness
     verify: text_file_contains_all
   - id: output_grounding
-    criterion: The final answer accurately summarizes the generated ABACUS run directory and that no Bohrium submission was run.
+    criterion: The final answer accurately summarizes the generated ABACUS run directory, diagnosis artifact, manifest gate, and that no Bohrium submission was run.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -278,7 +306,96 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_010_20260507
+- id: IG_abacus_010_20260508
+  capability: input_generation
+  domain: agnostic
+  intent: Package an ABACUS input directory with auxiliary files and engine-skill submission defaults.
+  human_prompt_seed: '请为一个已准备好的 ABACUS LCAO 运行目录做 submission preflight，目录名用 `run_abacus_packaged/`：
+
+    1. 生成或整理 `INPUT`、`STRU`、`KPT`，并把所需 auxiliary files（例如 pseudopotential/orbital 文件名占位或清单）集中到同一个 input directory。
+
+    2. 验证主输入并保存 machine-readable diagnostics 到 `diagnosis.json`。
+
+    3. 写 `input_prep_manifest.json`。它必须是 JSON object，至少包含这些顶层字段：software、task、input_dir、generated_files、user_provided_files、diagnostics、auxiliary_files、assumptions、submit_ready、bohrium_command；其中 `diagnostics.file` 必须是 `diagnosis.json`，`submit_ready` 必须是 JSON boolean。如果没有可靠提交资源信息，`bohrium_command` 可以为空字符串。
+
+    4. 本题不要真正提交，只输出目录和说明；不要臆造 Bohrium image、machine 或 command 默认值。
+
+    请确保 manifest 能让后续 Bohrium submission 使用。'
+  tags:
+  - eng_abacus
+  data_files: []
+  reference_answers:
+  - key: manifest_schema
+    value:
+      filename: input_prep_manifest.json
+      required_keys:
+      - software
+      - task
+      - input_dir
+      - generated_files
+      - user_provided_files
+      - diagnostics
+      - auxiliary_files
+      - assumptions
+      - submit_ready
+      - bohrium_command
+  - key: manifest_has_auxiliary_files
+    value:
+      filename: input_prep_manifest.json
+      pattern: '"auxiliary_files"\s*:\s*\['
+      flags: i
+  - key: diagnosis_artifact
+    value: diagnosis.json
+  - key: manifest_has_diagnostics_file
+    value:
+      filename: input_prep_manifest.json
+      pattern: '"diagnostics"\s*:\s*\{[\s\S]*"file"\s*:\s*"diagnosis\.json"'
+      flags: i
+  - key: output_grounding
+    value: The final answer states that the ABACUS directory was packaged for preflight, diagnostics and manifest were produced, and no job was submitted.
+  - key: turn_budget
+    value:
+      max: 14
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 16000
+  scoring_checklist:
+  - id: manifest_schema
+    criterion: The package includes `input_prep_manifest.json` with software, task, input_dir, generated_files, user_provided_files, diagnostics, auxiliary_files, assumptions, submit_ready, and bohrium_command.
+    axis: correctness
+    verify: json_file_schema
+  - id: manifest_has_auxiliary_files
+    criterion: The manifest gathers required auxiliary files into one input directory and records them in `auxiliary_files`.
+    axis: correctness
+    verify: text_file_regex
+  - id: diagnosis_artifact
+    criterion: The package includes machine-readable diagnostics as `diagnosis.json`.
+    axis: correctness
+    verify: artifact_exists
+  - id: manifest_has_diagnostics_file
+    criterion: The manifest records the saved diagnostics file.
+    axis: correctness
+    verify: text_file_regex
+  - id: output_grounding
+    criterion: The final answer states that the ABACUS directory was packaged for preflight, diagnostics and manifest were produced, and no job was submitted.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: IG_abacus_011_20260507
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS LCAO-SCF inputs for an isolated spin-polarized oxygen atom.
@@ -420,7 +537,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_011_20260507
+- id: IG_abacus_012_20260507
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS input files for ASE-ABACUS ethanol relaxation and vibrational-frequency stages.
@@ -538,7 +655,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_012_20260507
+- id: IG_abacus_013_20260507
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS input files for Ni FCC lattice-constant energy calculations.
@@ -668,7 +785,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_013_20260507
+- id: IG_abacus_014_20260507
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS inputs for a representative Cu FCC stacking-fault energy SCF calculation.
@@ -787,7 +904,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_014_20260507
+- id: IG_abacus_015_20260507
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS+LibRI HSE06 SCF, band, and DOS input files for silicon.
@@ -971,7 +1088,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_015_20260507
+- id: IG_abacus_016_20260507
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS INPUT and KPT files for Pt(111) ORR OH* and OOH* relaxation runs.
@@ -2478,7 +2595,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_016_20260507
+- id: IG_abacus_017_20260507
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS PBE+U LCAO cell-relax input directories for comparing rocksalt and square-planar NiO phases.
