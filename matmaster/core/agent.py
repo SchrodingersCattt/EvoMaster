@@ -419,6 +419,28 @@ class AgentKernel:
             state.usage_vendor_by_turn.append(
                 dict(response.usage_vendor) if response.usage_vendor else {}
             )
+            turn_index = state.turn - 1
+            is_root_run = spec.meta.get("spawn_id") is None
+            if (
+                is_root_run
+                and response.content
+                and not is_trivial_response_text(response.content)
+            ):
+                yield _KernelItem(
+                    event=ResponseEvent(
+                        source="agent",
+                        content=response.content,
+                        stream_state="complete",
+                        turn_index=turn_index,
+                        turn_usage=dict(turn_usage),
+                        total_usage=dict(state.total_usage),
+                        usage_vendor=(
+                            dict(response.usage_vendor)
+                            if response.usage_vendor
+                            else None
+                        ),
+                    )
+                )
             if spec.compactor:
                 spec.compactor.update_message_count(len(state.messages))
 
@@ -467,6 +489,7 @@ class AgentKernel:
                     event=AssistantStateEvent(
                         source="agent",
                         state=assistant_msg.model_dump(mode="json"),
+                        turn_index=turn_index,
                         turn_usage=dict(turn_usage),
                         total_usage=dict(state.total_usage),
                         finish_detail=assistant_finish_detail,
@@ -511,6 +534,7 @@ class AgentKernel:
                         result=tool_result.content,
                         status=tool_result.status,
                         payload=tool_result.payload,
+                        turn_index=turn_index,
                         turn_usage=dict(turn_usage),
                         total_usage=dict(state.total_usage),
                     )
@@ -781,7 +805,7 @@ class AgentKernel:
                                 )
                             if not is_trivial_response_text(visible_snapshot):
                                 yield self._response_item(
-                                    visible_snapshot, stream_id, "complete"
+                                    visible_snapshot, stream_id, "segment_end"
                                 )
                         else:
                             pending_response_parts.clear()
@@ -822,7 +846,9 @@ class AgentKernel:
                         yield self._response_item(
                             visible_snapshot, stream_id, "streaming"
                         )
-                    yield self._response_item(visible_snapshot, stream_id, "complete")
+                    yield self._response_item(
+                        visible_snapshot, stream_id, "segment_end"
+                    )
                 else:
                     pending_response_parts.clear()
             # End marker
