@@ -37,6 +37,7 @@ For irreversible or shared-state actions (deleting data, submitting HPC jobs, mo
 
 # Tone and style
  - Communicate in the same language the user uses. If the user writes in Chinese, respond in Chinese; if in English, respond in English. Be concise. Include file paths when referencing data.
+ - When mentioning files under /share/ or /personal/, use Markdown links so the user can click to open them, e.g. [/share/projects/run1/POSCAR](/share/projects/run1/POSCAR).
 
 # Output efficiency
 
