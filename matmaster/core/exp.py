@@ -408,6 +408,7 @@ class Exp:
                     **spec.meta,
                     "task_id": run_meta.get("task_id", ""),
                     "session_id": run_meta.get("session_id", ""),
+                    "spawn_id": spawn_id,
                     "checkpoint_sink_factory": checkpoint_sink_factory,
                     "checkpoint_sink": checkpoint_sink,
                 },
@@ -711,6 +712,14 @@ class Exp:
             if isinstance(cfg, dict) and cfg.get("sync_tools")
         }
 
+        run_meta_for_record = getattr(ctx, "run_meta", None) or {}
+        external_record = run_meta_for_record.get("record_active_mcp_server")
+        if external_record is not None and not callable(external_record):
+            self.logger.warning(
+                "run_meta.record_active_mcp_server is not callable, ignoring"
+            )
+            external_record = None
+
         builtin_cfg = self._config.tools.builtin or []
         allow_builtin_all = "*" in builtin_cfg
         allowed_builtin = set(builtin_cfg) if not allow_builtin_all else None
@@ -778,6 +787,16 @@ class Exp:
                 else:
                     registry.register(lazy_tool, source="mcp")
 
+            if external_record is not None:
+                try:
+                    external_record(mcp_server)
+                except Exception:
+                    self.logger.warning(
+                        "record_active_mcp_server callback raised for server=%s",
+                        mcp_server,
+                        exc_info=True,
+                    )
+
         skill_tool = SkillTool(
             session=ctx.session,
             skill_registry=skill_registry,
@@ -792,5 +811,23 @@ class Exp:
             ),
             source="skill",
         )
+
+        # Replay servers activated by Skill on past turns of this session.
+        # on_skill_hit reads only from the on-disk schema cache (no MCP IO),
+        # is idempotent (skips tools already in registry), and warns +
+        # skips on cache miss.
+        replay_servers = run_meta_for_record.get("active_mcp_servers") or ()
+        if isinstance(replay_servers, (set, frozenset, list, tuple)):
+            for server_name in replay_servers:
+                if not isinstance(server_name, str) or not server_name:
+                    continue
+                try:
+                    on_skill_hit(server_name)
+                except Exception:
+                    self.logger.warning(
+                        "Replay of MCP server '%s' raised, skipping",
+                        server_name,
+                        exc_info=True,
+                    )
 
         self._skill_registry = skill_registry

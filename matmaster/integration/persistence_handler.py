@@ -24,7 +24,7 @@ class PersistenceHandler:
     """Persists events to database via events_table.add_event()."""
 
     _SKIP_TYPES = frozenset({'log_line', 'llm_token'})
-    _STREAMING_STATES = frozenset({'start', 'streaming', 'end'})
+    _STREAMING_STATES = frozenset({'start', 'streaming', 'segment_end', 'end'})
 
     def __init__(
         self,
