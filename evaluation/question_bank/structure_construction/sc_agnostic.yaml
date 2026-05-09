@@ -291,7 +291,7 @@ questions:
       benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
-- id: SC_struct_006_20260507v2
+- id: SC_struct_006_20260507v3
   capability: structure_construction
   domain: agnostic
   intent: Add missing hydrogens to the diacetylmorphine (DACMOR) molecular crystal CIF and
@@ -336,6 +336,17 @@ questions:
     value:
       filename: dacmor_hydrogenated.cif
       formula: C21H23NO5
+  - key: total_atom_count
+    value:
+      filename: dacmor_hydrogenated.cif
+      expected: 200
+      tolerance: 0
+  - key: hydrogen_atom_count
+    value:
+      filename: dacmor_hydrogenated.cif
+      element: H
+      expected: 92
+      tolerance: 0
   - key: hch_angle_deg
     value:
       filename: dacmor_hydrogenated.cif
@@ -367,6 +378,14 @@ questions:
     criterion: The reduced chemical formula read from dacmor_hydrogenated.cif matches C21H23NO5.
     axis: correctness
     verify: struct_file_formula
+  - id: total_atom_count
+    criterion: The output CIF contains exactly 200 atoms for four C21H23NO5 molecules.
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: hydrogen_atom_count
+    criterion: The output CIF contains exactly 92 H atoms, i.e. 23 H atoms per molecule for Z=4.
+    axis: correctness
+    verify: struct_file_atom_count
   - id: hch_angle_deg
     criterion: The mean H-C-H angle computed from dacmor_hydrogenated.cif is close to tetrahedral
       109.48 degrees within a reasonable tolerance.
