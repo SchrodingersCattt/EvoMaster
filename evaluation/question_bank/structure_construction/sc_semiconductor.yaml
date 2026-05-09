@@ -127,16 +127,12 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_SiH_20260507v3
+- id: SC_struct_SiH_20260507v4
   capability: structure_construction
   domain: semiconductor
   intent: Passivate dangling bonds on both top and bottom surfaces of a Si(100) slab with
     hydrogen atoms.
-  human_prompt_seed: '读取 `hydrogen_cap_spec.json`，对 Si(100) slab 上下两个表面的悬挂键进行氢饱和。 要求：识别 slab
-    顶部和底部所有欠配位 Si 原子，添加 H 使其达到四配位，选择化学合理的 Si–H 键长。输出结构文件为 `Si100_H_passivated_POSCAR`，并报告：
-    (1) 添加的 H 原子总数；(2) 代表性 Si–H 键长（Å）；(3) 验证所有表面 Si 均已达到四配位。
-
-    '
+  human_prompt_seed: '读取 `hydrogen_cap_spec.json`，对 Si(100) slab 上下表面的悬挂键进行氢饱和，使所有表面 Si 达到四配位。输出为 `Si100_H_passivated_POSCAR`。'
   tags:
   - struct_surface
   data_files:
