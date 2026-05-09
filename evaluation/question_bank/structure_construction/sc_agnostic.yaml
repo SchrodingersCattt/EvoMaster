@@ -359,20 +359,12 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_008_20260507v3
+- id: SC_struct_008_20260507v4
   capability: structure_construction
   domain: agnostic
   intent: Construct a computation-ready gamma-alumina bulk model and validate stoichiometry,
     geometry, coordination environments, and post-relaxation force.
-  human_prompt_seed: 'Construct a computation-ready γ-Al2O3 bulk model. Export as `gamma_alumina.cif`.
-    In the final answer, explicitly report: (1) whether `gamma_alumina.cif` exists; (2) the
-    Al:O stoichiometric ratio read from the file; (3) the three cell angles from the file;
-    (4) whether both tetrahedral and octahedral [AlO] coordination environments are present;
-    (5) the shortest interatomic distance found; (6) the maximum force per atom after relaxation.
-    Also include a machine-readable block
-    `<eval_results>{"max_force_ev_per_ang": <number>}</eval_results>` in the final answer.
-
-    '
+  human_prompt_seed: 'Build a γ-Al₂O₃ bulk model and relax it. Export as `gamma_alumina.cif`. Include `<eval_results>{"max_force_ev_per_ang": <number>}</eval_results>` in your answer.'
   tags:
   - struct_build
   data_files: []
