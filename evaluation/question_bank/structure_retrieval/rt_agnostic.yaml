@@ -190,7 +190,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: SR_db_007_20260416v1
+- id: SR_db_007_20260509v2
   capability: structure_retrieval
   domain: agnostic
   intent: Retrieve up to five CoREMOF-2019 entries satisfying atom-count, surface-area, and element constraints.
@@ -222,7 +222,8 @@ questions:
       - surface_area_m2g
       - elements
       - structure_identifier
-      - CoREMOF
+      - CoRE
+      - MOF
       - O
       - C
       flags: i
@@ -516,7 +517,7 @@ questions:
     criterion: Token usage within budget.
     axis: efficiency
     verify: token_budget
-- id: SR_db_batch_001_20260508
+- id: SR_db_batch_001_20260509v2
   capability: structure_retrieval
   domain: agnostic
   intent: Batch-retrieve structures by Material ID and verify efficient query pattern.
