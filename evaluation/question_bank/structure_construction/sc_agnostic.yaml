@@ -2,34 +2,11 @@ version: v5
 capability: structure_construction
 domain: agnostic
 questions:
-- id: SC_struct_002_20260507v3
+- id: SC_struct_002_20260507v4
   capability: structure_construction
   domain: agnostic
   intent: Build a 4-layer (110) surface slab from the uploaded PUBMUU03 molecular crystal CIF and verify molecule integrity plus atom-count scaling.
-  human_prompt_seed: '对以下通过 OSS URL 提供的 CIF 结构进行处理：
-
-    - `surface_PUBMUU03.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_surface/1774583701_surface_PUBMUU03.cif`
-
-
-    任务：基于该结构切出 `(1, 1, 0)` 表面 slab，要求为 4 层。
-
-    真空层不是重点，可以不特别说明或自行设定合理值。
-
-
-    重点检查并在最终答案中明确报告：
-
-    (1) 切面后分子是否被切断，并给出判断依据；
-
-    (2) 输入单胞的原子数；
-
-    (3) 最终 slab 的原子总数；
-
-    (4) 最终 slab 原子数与输入单胞原子数的比值，以及该比值与 4 层 slab 预期是否一致。
-
-
-    输出 slab 结构文件为 `slab_PUBMUU03_110.cif`，并给出上述核查结论。
-
-    '
+  human_prompt_seed: '从 `surface_PUBMUU03.cif` 切出 (1,1,0) 表面 slab，4 个原子层，输出为 `slab_PUBMUU03_110.cif`。文件地址：`https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_surface/1774583701_surface_PUBMUU03.cif`'
   tags:
   - struct_surface
   - struct_molcrys
