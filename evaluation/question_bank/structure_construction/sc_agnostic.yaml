@@ -254,52 +254,11 @@ questions:
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
-- id: SC_struct_006_20260507v6
+- id: SC_struct_006_20260507v7
   capability: structure_construction
   domain: agnostic
   intent: Add missing hydrogens to the diacetylmorphine (DACMOR) molecular crystal CIF and validate the formula, local molecular environment, and tetrahedral geometry using MolCrysKit.
-  human_prompt_seed: '对以下通过 OSS URL 提供的 CIF 结构进行补氢处理：
-
-    - `DACMOR.cif` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_surface/cda9f292ec4b411facb478d0486b54ce/DACMOR.cif`
-
-
-    该结构为二乙酰吗啡（diacetylmorphine）分子晶体，从单晶XRD解析得到，但缺少了 H 原子。
-
-    请对该结构补氢，并导出为 `dacmor_hydrogenated.cif`。
-
-    要求：添加 H 原子使结构符合价键规则、具备化学意义。
-
-    这是本地 CIF 结构编辑与验证任务，不需要 Bohrium/远程计算/DFT/MD 作业，
-    不要提交远程作业或搜索计算镜像。
-
-    在最终作答前，请用输出 CIF 本身做代码验证：
-
-    - `dacmor_hydrogenated.cif` 的 reduced formula 必须对应 C21H23NO5；
-
-    - 全晶胞总原子数必须为 200，H 原子数必须为 92；
-
-    - 用 C-H cutoff 1.5 Å 对输出 CIF 中所有 H-C-H triplets 计算未过滤均值，
-      该均值应接近 109.48°（不要只报告人工筛选的代表性子集）；
-
-    - MolCrysKit/ChemicalEnvironment 检查应无断裂、无多余键，且 H-bearing atoms
-      具有合理 coordination / local geometry。如果这些代码检查失败，请先修复结构，
-      不要把 outlier 解释为 artifact 后直接提交。
-
-
-    重点检查并在最终答案中明确报告：
-
-    (1) 补氢后每个分子的最简化学式；
-
-    (2) 每个分子中 H 原子的总数；
-
-    (3) 代表性的 H-C-H 键角（度）；
-
-    (4) 补氢后分子的连接性是否完整（无断裂或多余键）。
-
-
-    输出结构文件，并给出上述核查结论。
-
-    '
+  human_prompt_seed: '该 CIF 是从单晶 XRD 解析的二乙酰吗啡（diacetylmorphine）分子晶体，H 原子缺失。请补全 H 原子并导出为 `dacmor_hydrogenated.cif`。文件地址：`https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_surface/cda9f292ec4b411facb478d0486b54ce/DACMOR.cif`'
   tags:
   - struct_molcrys
   data_files:
