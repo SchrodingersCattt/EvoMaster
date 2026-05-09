@@ -2,17 +2,12 @@ version: v5
 capability: structure_construction
 domain: semiconductor
 questions:
-- id: SC_struct_hetero_20260507v2
+- id: SC_struct_hetero_20260507v3
   capability: structure_construction
   domain: semiconductor
   intent: Build a graphene/h-BN vertical van der Waals heterostructure with controlled lattice
     mismatch.
-  human_prompt_seed: '读取 `hetero_spec.json`，构建 graphene/h-BN 垂直范德华异质结。 要求：(1) 构建共度超胞使晶格失配
-    < 2%；(2) AB 堆叠，层间距 3.35 A； (3) z 方向加 15 A 真空层。输出 `hetero_graphene_hBN.cif` 和 `hetero_graphene_hBN_POSCAR`，报告实际失配度和总原子数。
-
-    最终答案必须包含 `<eval_results>{"lattice_mismatch_percent": <number>}</eval_results>`，其中 `lattice_mismatch_percent` 为实际晶格失配百分比。
-
-    '
+  human_prompt_seed: '读取 `hetero_spec.json`，构建 graphene/h-BN 垂直范德华异质结：晶格失配 < 2%，AB 堆叠，层间距 3.35 Å，z 方向 15 Å 真空层。输出 `hetero_graphene_hBN.cif` 和 `hetero_graphene_hBN_POSCAR`。最终答案中包含 `<eval_results>{"lattice_mismatch_percent": <number>}</eval_results>`。'
   tags:
   - struct_surface
   data_files:
