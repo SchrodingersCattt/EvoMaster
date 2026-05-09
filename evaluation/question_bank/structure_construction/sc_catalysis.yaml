@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: catalysis
 questions:
-- id: CR_SC_ZnS001_20260507
+- id: CR_SC_ZnS001_20260508
   capability: structure_construction
   domain: catalysis
   intent: Build ZnS(001) polar surface slab with 3 layers and 2x2x1 supercell per doc 3.1.2.
@@ -70,6 +70,19 @@ questions:
     weight: 1.0
   - id: polar_handling
     criterion: 答案说明了 ZnS(001) 表面的极性问题，并至少提出一种合理的处理策略（如构建对称 slab、施加偶极修正等），所述策略与交付的结构文件一致。
+    axis: grounding
+    verify: llm_binary_judge
+  - id: tasker_type_identification
+    criterion: The agent identifies ZnS(001) as a Tasker Type-3 polar surface (alternating
+      Zn-only and S-only planes along [001] producing a net dipole moment), or equivalently
+      states that the surface is polar due to its stacking of mono-element charged layers.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: polar_surface_remedy
+    criterion: The agent explicitly discusses at least one physically motivated remedy for
+      the Type-3 polarity — such as constructing a symmetric slab with matching top/bottom
+      terminations, applying a dipole correction in the vacuum, or reconstructing/passivating
+      the surface to quench the macroscopic dipole.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries

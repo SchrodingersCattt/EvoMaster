@@ -27,32 +27,43 @@ from engine.schema import SchemaRegistry  # noqa: E402
 
 
 def _get_backend(software: str):
-    """根据软件名返回对应 Backend 实例。"""
-    from engine.software.abacus import AbacusBackend
-    from engine.software.abinit import ABINITBackend
-    from engine.software.cp2k import CP2KBackend
-    from engine.software.lammps import LAMMPSBackend
-    from engine.software.orca import ORCABackend
-    from engine.software.qe import QEBackend
-
-    backends = {
-        "cp2k": CP2KBackend,
-        "orca": ORCABackend,
-        "qe": QEBackend,
-        "quantum-espresso": QEBackend,
-        "abinit": ABINITBackend,
-        "lammps": LAMMPSBackend,
-        "abacus": AbacusBackend,
-    }
+    """Return only the requested backend to avoid unrelated dependency imports."""
     key = software.lower().strip()
-    if key not in backends:
-        supported = ", ".join(sorted(set(backends.keys())))
-        print(
-            f"Error: unsupported software '{software}'. Supported: {supported}",
-            file=sys.stderr,
-        )
-        sys.exit(1)
-    return backends[key]()
+    if key == "abacus":
+        from engine.software.abacus import AbacusBackend
+
+        return AbacusBackend()
+    if key == "abinit":
+        from engine.software.abinit import ABINITBackend
+
+        return ABINITBackend()
+    if key == "cp2k":
+        from engine.software.cp2k import CP2KBackend
+
+        return CP2KBackend()
+    if key == "lammps":
+        from engine.software.lammps import LAMMPSBackend
+
+        return LAMMPSBackend()
+    if key == "gromacs":
+        from engine.software.gromacs import GROMACSBackend
+
+        return GROMACSBackend()
+    if key == "orca":
+        from engine.software.orca import ORCABackend
+
+        return ORCABackend()
+    if key in ("qe", "quantum-espresso"):
+        from engine.software.qe import QEBackend
+
+        return QEBackend()
+
+    supported = "abacus, abinit, cp2k, gromacs, lammps, orca, qe, quantum-espresso"
+    print(
+        f"Error: unsupported software '{software}'. Supported: {supported}",
+        file=sys.stderr,
+    )
+    sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
@@ -273,7 +284,7 @@ def main() -> None:
     parser.add_argument(
         "--software",
         required=True,
-        help="Software name: cp2k, orca, qe, abinit, lammps, abacus",
+        help="Software name: cp2k, orca, qe, abinit, gromacs, lammps, abacus",
     )
     parser.add_argument(
         "--input",
@@ -286,6 +297,12 @@ def main() -> None:
         choices=["human", "json"],
         default="human",
         help="Output format (default: human).",
+    )
+    parser.add_argument(
+        "--json_out",
+        default=None,
+        metavar="FILE",
+        help="Write machine-readable diagnostics JSON to FILE.",
     )
     parser.add_argument(
         "--fix",
@@ -318,9 +335,10 @@ def main() -> None:
 
     doc = backend.parse(text, source)
     diagnostics = backend.get_diagnostics(doc, schema)
+    result_dict: dict = {"diagnostics": [d.to_dict() for d in diagnostics]}
 
     if args.format == "json":
-        result_dict: dict = {"diagnostics": [d.to_dict() for d in diagnostics]}
+        pass
     else:
         if not diagnostics:
             print("No issues found.")
@@ -359,25 +377,28 @@ def main() -> None:
                     for f in fixes_applied:
                         print(f"  • {f}")
 
-                if args.format == "json":
-                    result_dict["fixed"] = True
-                    result_dict["fixes_applied"] = fixes_applied
-                    if fix_path:
-                        result_dict["fixed_file"] = str(fix_path)
+                result_dict["fixed"] = True
+                result_dict["fixes_applied"] = fixes_applied
+                if fix_path:
+                    result_dict["fixed_file"] = str(fix_path)
             else:
                 if args.format != "json":
                     print("\nNo auto-fixable issues found.", file=sys.stderr)
-                if args.format == "json":
-                    result_dict["fixed"] = False
-                    result_dict["fixes_applied"] = []
+                result_dict["fixed"] = False
+                result_dict["fixes_applied"] = []
         else:
             print(
                 "\nNote: --fix is currently supported for ABACUS only.",
                 file=sys.stderr,
             )
-            if args.format == "json":
-                result_dict["fixed"] = False
-                result_dict["fixes_applied"] = []
+            result_dict["fixed"] = False
+            result_dict["fixes_applied"] = []
+
+    if args.json_out:
+        Path(args.json_out).write_text(
+            json.dumps(result_dict, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
 
     if args.format == "json":
         print(json.dumps(result_dict, ensure_ascii=False, indent=2))

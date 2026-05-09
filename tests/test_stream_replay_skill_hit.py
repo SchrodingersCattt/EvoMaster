@@ -50,6 +50,29 @@ class TestReplayFilterSkillHit:
         assert _should_emit_event_to_sse(event) is False
 
 
+def test_normalize_replayed_event_unpacks_structured_response_content() -> None:
+    from src.services.stream_service import _normalize_replayed_event
+
+    out = _normalize_replayed_event(
+        {
+            "source": "agent",
+            "type": "response",
+            "content": {
+                "content": "answer",
+                "turn_index": 1,
+                "turn_usage": {"total_tokens": 12},
+                "total_usage": {"total_tokens": 20},
+            },
+            "session_id": "sess",
+            "task_id": "task",
+            "spawn_id": None,
+        }
+    )
+    assert out["source"] == "MatMaster"
+    assert out["content"] == "answer"
+    assert out["turn_index"] == 1
+
+
 class TestReplayDedupeSpawnId:
     """Replay dedupe must key by (task_id, spawn_id) so subagent response does not hide parent run_result."""
 

@@ -74,7 +74,7 @@ electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE.
 
 ## Bohrium Submission Defaults
 
-This section is the **single source of truth** for ABACUS `image` / `machine` / `cmd` on Bohrium. Other skills (for example `matmaster/skills/playground-skills/input-manual-helper`) refer here instead of copying the values.
+This section is the **single source of truth** for ABACUS `image` / `machine` / `cmd` on Bohrium. Other skills (for example `matmaster/skills/input-manual-helper`) refer here instead of copying the values.
 
 Keep the previous default profile unless task/environment explicitly overrides it.
 

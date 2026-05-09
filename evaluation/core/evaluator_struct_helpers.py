@@ -14,6 +14,10 @@ from evaluation.validators.structure_general import (
     check_parsable,
     check_space_group,
 )
+from evaluation.validators.structure_ordering import (
+    check_integer_stoichiometry,
+    check_replicas_distinct,
+)
 
 from .evidence import EvidenceBundle
 from .schemas import ReferenceAnswer
@@ -91,4 +95,30 @@ def check_struct_file_min_interatomic_distance(
         filename=str(cfg.get('filename', '*.cif')),
         min_distance_A=float(cfg.get('min_distance_A', cfg.get('expected_min_A', 0))),
         elements=elements,
+    )
+
+
+def check_struct_file_integer_stoichiometry(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_integer_stoichiometry(
+        ws,
+        filename=str(cfg.get('filename', '*.cif')),
+    )
+
+
+def check_struct_file_replicas_distinct(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_replicas_distinct(
+        ws,
+        filename=str(cfg.get('filename', '*.cif')),
     )

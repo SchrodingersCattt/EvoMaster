@@ -10,7 +10,7 @@ questions:
   human_prompt_seed: '请使用结构数据库查询 mp-99999999（一个不存在的 ID）的结构信息，并将结果保存到 result.json。
 
     如果查询失败，请分析失败原因，尝试其他合理的获取方式（如按化学式搜索等），并在最终回答中说明失败原因和你的处理策略。'
-  tags:
+  tags: []
   data_files: []
   reference_answers:
   - key: turn_budget
@@ -61,7 +61,7 @@ questions:
   intent: When a required input file is missing, agent should report the issue clearly
     rather than fabricating data or silently skipping.
   human_prompt_seed: '请读取工作目录下的 `experiment_data.csv`，对其中的能量数据做统计分析（均值、标准差、最大最小值），并将结果写入 `stats_report.json`。'
-  tags:
+  tags: []
   data_files: []
   reference_answers:
   - key: turn_budget

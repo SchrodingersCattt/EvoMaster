@@ -6,22 +6,20 @@ questions:
   capability: execution_contract
   domain: agnostic
   priority: P0
-  intent: When run_spec.json contradicts free-text instructions, generated INCAR-like file
-    must follow the spec (direct.toml contract).
-  human_prompt_seed: '工作区里有 `run_spec.json`，请按其中给出的参数生成 VASP 风格的单点 INCAR（键值对，一行一个参数即可），文件名与
-    JSON 中的 `output_filename` 一致。
+  intent: When run_spec.json contradicts free-text instructions, generated INCAR-like file must follow the spec (direct.toml contract).
+  human_prompt_seed: '工作区里有 `run_spec.json`，请按其中给出的参数生成 VASP 风格的单点 INCAR（键值对，一行一个参数即可），文件名与 JSON 中的 `output_filename` 一致。
 
 
     我这边做类似单点时习惯用 ENCUT=520、ISMEAR=0、SIGMA=0.2，供你对照。
 
     '
-  tags: []
+  tags:
+  - eng_vasp
   data_files:
   - key: run_spec
     path: data/WO_direct_001_spec_conflict/run_spec.json
     oss_url: ''
-    description: ENCUT/ISMEAR/SIGMA and output_filename; seed text suggests different defaults
-      on purpose.
+    description: ENCUT/ISMEAR/SIGMA and output_filename; seed text suggests different defaults on purpose.
   reference_answers:
   - key: incar_artifact
     value: single_point.incar
@@ -59,18 +57,15 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: encut_from_spec
-    criterion: single_point.incar sets ENCUT from run_spec.json (400), not the wrong 520 value
-      in the prompt text.
+    criterion: single_point.incar sets ENCUT from run_spec.json (400), not the wrong 520 value in the prompt text.
     axis: correctness
     verify: text_file_regex
   - id: ismear_from_spec
-    criterion: single_point.incar sets ISMEAR from run_spec.json (-5), not 0 from the prompt
-      text.
+    criterion: single_point.incar sets ISMEAR from run_spec.json (-5), not 0 from the prompt text.
     axis: correctness
     verify: text_file_regex
   - id: sigma_from_spec
-    criterion: single_point.incar sets SIGMA from run_spec.json (0.05), not 0.2 from the prompt
-      text.
+    criterion: single_point.incar sets SIGMA from run_spec.json (0.05), not 0.2 from the prompt text.
     axis: correctness
     verify: text_file_regex
   - id: turn_budget
@@ -89,10 +84,8 @@ questions:
   capability: execution_contract
   domain: agnostic
   priority: P0
-  intent: Extract provided .tgz so required file appears at workspace root with expected name
-    (direct.toml archive handling).
-  human_prompt_seed: '工作区里有 `bundle.tgz`，里面有 `extract_me.txt`。请解压，并在根目录（与 `bundle.tgz` 同级）留下可打开的
-    `extract_me.txt`。
+  intent: Extract provided .tgz so required file appears at workspace root with expected name (direct.toml archive handling).
+  human_prompt_seed: '工作区里有 `bundle.tgz`，里面有 `extract_me.txt`。请解压，并在根目录（与 `bundle.tgz` 同级）留下可打开的 `extract_me.txt`。
 
 
     不要求运行任何计算。
@@ -149,8 +142,7 @@ questions:
   capability: execution_contract
   domain: agnostic
   priority: P0
-  intent: Deliverable must use exact filename summary.md without unauthorized suffix variants
-    (direct.toml workspace naming).
+  intent: Deliverable must use exact filename summary.md without unauthorized suffix variants (direct.toml workspace naming).
   human_prompt_seed: '请在当前工作区根目录写一句简短说明（一两行即可），保存为 Markdown 文件。
 
 
@@ -200,119 +192,6 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: EC_tool_choice_read_001_20260428
-  capability: execution_contract
-  domain: agnostic
-  intent: Agent should prefer the dedicated Read tool over bash cat/head/tail for
-    reading files.
-  human_prompt_seed: '请读取工作目录下的 `config.yaml` 文件内容并告诉我里面配置了什么参数。'
-  tags:
-  data_files:
-  - key: config_yaml
-    path: data/EC_tool_choice_read_001/config.yaml
-    description: Simple YAML config file for read tool preference test.
-  reference_answers:
-  - key: tool_preference
-    value: Read
-  - key: turn_budget
-    value:
-      max: 6
-  - key: duration_budget
-    value:
-      max: 7200000
-  - key: token_budget_total
-    value:
-      max: 6000
-  scoring_checklist:
-  - id: correct_content
-    criterion: Agent correctly reports the content and parameters from config.yaml.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: tool_preference
-    criterion: Agent uses the dedicated Read tool to read the file.
-    axis: efficiency
-    verify: tool_name_used
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration does not exceed ceiling.
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
-- id: EC_tool_choice_write_001_20260428
-  capability: execution_contract
-  domain: agnostic
-  intent: Agent should prefer dedicated Write/Edit tools over bash echo/cat heredoc
-    for creating files.
-  human_prompt_seed: '请在工作目录下创建一个 `README.md` 文件，内容为：
-
-    # Project
-
-    This is a test project for materials simulation.
-
-    ## Requirements
-
-    - Python 3.10+
-
-    - NumPy
-
-    - ASE'
-  tags:
-  data_files: []
-  reference_answers:
-  - key: output_artifact
-    value: README.md
-  - key: tool_preference
-    value: Write
-  - key: correct_content
-    value:
-      filename: README.md
-      tokens:
-      - Project
-      - materials simulation
-      - Python
-      - NumPy
-      - ASE
-      flags: i
-  - key: turn_budget
-    value:
-      max: 6
-  - key: duration_budget
-    value:
-      max: 7200000
-  - key: token_budget_total
-    value:
-      max: 6000
-  scoring_checklist:
-  - id: output_artifact
-    criterion: Agent writes `README.md` to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: correct_content
-    criterion: README.md contains the requested content sections.
-    axis: correctness
-    verify: text_file_contains_all
-  - id: tool_preference
-    criterion: Agent uses the dedicated Write tool to create the file.
-    axis: efficiency
-    verify: tool_name_used
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration does not exceed ceiling.
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
 - id: EC_no_truncation_001_20260430
   capability: execution_contract
   domain: agnostic
@@ -320,7 +199,7 @@ questions:
   human_prompt_seed: '请生成一个包含 20 种常见金属元素的表格，列出每种元素的符号、原子序数、晶体结构类型（FCC/BCC/HCP）和常温晶格常数（Å）。
 
     将完整表格写入 `metals_table.md`，不要省略任何行。'
-  tags:
+  tags: []
   data_files: []
   reference_answers:
   - key: output_artifact
@@ -328,7 +207,7 @@ questions:
   - key: row_count
     value:
       filename: metals_table.md
-      pattern: '^\|?\s*[A-Z][a-z]?\s*\|'
+      pattern: ^\|?\s*[A-Z][a-z]?\s*\|
       flags: m
   - key: turn_budget
     value:
@@ -345,7 +224,7 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: no_truncation
-    criterion: "The file metals_table.md must not contain any truncation indicators such as '...' (ellipsis) that would indicate omitted rows. Check the file content for any occurrence of '...'."
+    criterion: The file metals_table.md must not contain any truncation indicators such as '...' (ellipsis) that would indicate omitted rows. Check the file content for any occurrence of '...'.
     axis: correctness
     verify: llm_binary_judge
   - id: row_count
@@ -367,8 +246,7 @@ questions:
 - id: EC_batch_all_items_001_20260428
   capability: execution_contract
   domain: agnostic
-  intent: When given N items to process, agent must complete ALL N, not stop at a
-    partial subset.
+  intent: When given N items to process, agent must complete ALL N, not stop at a partial subset.
   human_prompt_seed: '请为以下 6 种材料分别创建一个简单的描述文件（纯文本，包含材料名称、化学式、晶体结构类型）：
 
     1. 金刚石 (Diamond, C, FCC)
@@ -384,7 +262,7 @@ questions:
     6. 刚玉 (Al2O3, corundum)
 
     文件名分别为：diamond.txt, nacl.txt, zns.txt, batio3.txt, mgal2o4.txt, al2o3.txt'
-  tags:
+  tags: []
   priority: P0
   data_files: []
   reference_answers:
@@ -483,8 +361,7 @@ questions:
 - id: EC_spec_partial_001_20260428
   capability: execution_contract
   domain: agnostic
-  intent: When run_spec.json has only partial fields, agent should use spec values
-    where present and fill missing fields from prompt defaults, not error out.
+  intent: When run_spec.json has only partial fields, agent should use spec values where present and fill missing fields from prompt defaults, not error out.
   human_prompt_seed: '请根据 run_spec.json 和以下说明生成 VASP INCAR 文件。
 
     默认参数：ENCUT=520, ISMEAR=0, SIGMA=0.05, EDIFF=1E-6, IBRION=2, NSW=100, ISIF=3
@@ -504,11 +381,11 @@ questions:
   - key: encut_from_spec
     value:
       filename: INCAR
-      pattern: 'ENCUT\s*=\s*600'
+      pattern: ENCUT\s*=\s*600
   - key: ismear_from_spec
     value:
       filename: INCAR
-      pattern: 'ISMEAR\s*=\s*1'
+      pattern: ISMEAR\s*=\s*1
   - key: defaults_filled
     value:
       filename: INCAR
@@ -581,13 +458,11 @@ questions:
       max: 8000
   scoring_checklist:
   - id: output_artifact
-    criterion: Agent writes exactly `POSCAR` (uppercase) to workspace, not `poscar`
-      or any case variant.
+    criterion: Agent writes exactly `POSCAR` (uppercase) to workspace, not `poscar` or any case variant.
     axis: correctness
     verify: artifact_exists
   - id: valid_structure
-    criterion: The POSCAR file contains a valid Si diamond cubic structure with lattice
-      constant approximately 5.43 Å.
+    criterion: The POSCAR file contains a valid Si diamond cubic structure with lattice constant approximately 5.43 Å.
     axis: correctness
     verify: llm_binary_judge
   - id: turn_budget

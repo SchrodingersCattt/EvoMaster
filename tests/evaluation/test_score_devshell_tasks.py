@@ -217,7 +217,7 @@ class TestFormatters:
                 axis="grounding",
                 passed=True,
                 reason="tool called",
-                verify_method="tool_name_used",
+                verify_method="duration_budget",
             ),
             "token_budget_total": CriterionResult(
                 criterion_id="token_budget_total",
@@ -263,7 +263,7 @@ class TestFormatters:
                 axis="grounding",
                 passed=True,
                 reason="ok",
-                verify_method="tool_name_used",
+                verify_method="duration_budget",
             ),
             "turn_budget": CriterionResult(
                 criterion_id="turn_budget",
@@ -326,15 +326,15 @@ class TestScoreTask:
             intent="Test devshell scoring",
             human_prompt_seed="Do the thing.",
             reference_answers=[
-                ReferenceAnswer(key="used_calc", value="execute_bash"),
+                ReferenceAnswer(key="wall_budget", value={"max": 99999}),
                 ReferenceAnswer(key="token_budget_total", value={"max": 999999}),
             ],
             scoring_checklist=[
                 ScoringCheckItem(
-                    id="used_calc",
-                    criterion="Uses bash-backed calc call.",
-                    axis="grounding",
-                    verify="tool_name_used",
+                    id="wall_budget",
+                    criterion="Wall time within budget.",
+                    axis="efficiency",
+                    verify="duration_budget",
                 ),
                 ScoringCheckItem(
                     id="token_budget_total",
@@ -373,7 +373,7 @@ class TestScoreTask:
         assert result["error"] is None
         assert result["score"] == 100
         assert result["all_criteria_passed"] is True
-        assert "used_calc" in result["score_reason"]
+        assert "wall_budget" in result["score_reason"]
         assert "✓ pass" in result["score_reason"]
 
     def test_score_task_zero_when_any_criterion_fails(self, tmp_run_dir: Path) -> None:
@@ -404,15 +404,15 @@ class TestScoreTask:
             intent="Test devshell scoring",
             human_prompt_seed="Do the thing.",
             reference_answers=[
-                ReferenceAnswer(key="used_calc", value="execute_bash"),
+                ReferenceAnswer(key="token_budget_total", value={"max": 999999}),
                 ReferenceAnswer(key="wall_ms", value={"max": 100}),
             ],
             scoring_checklist=[
                 ScoringCheckItem(
-                    id="used_calc",
-                    criterion="Uses bash-backed calc call.",
-                    axis="grounding",
-                    verify="tool_name_used",
+                    id="token_budget_total",
+                    criterion="Token usage within budget.",
+                    axis="efficiency",
+                    verify="token_budget",
                 ),
                 ScoringCheckItem(
                     id="wall_ms",
