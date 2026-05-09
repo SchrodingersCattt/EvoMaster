@@ -861,14 +861,12 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_build_001_20260508v4
+- id: SC_struct_build_001_20260508v5
   capability: structure_construction
   domain: agnostic
   intent: Build FCC copper conventional cell using ASE bulk prototype and verify lattice
     constant, atom count, and space group.
-  human_prompt_seed: '构建 FCC 铜 (Cu) 的惯用晶胞结构，使用实验晶格常数 a = 3.615 Å。
-    导出为 `cu_fcc.cif`。在最终回答中明确报告：(1) 读取文件后得到的晶格常数；(2) 空间群编号与符号；(3)
-    惯用晶胞中的原子数。'
+  human_prompt_seed: '用实验晶格常数 a = 3.615 Å 构建 FCC 铜的惯用晶胞，导出为 `cu_fcc.cif`。'
   tags:
   - struct_build
   data_files: []
