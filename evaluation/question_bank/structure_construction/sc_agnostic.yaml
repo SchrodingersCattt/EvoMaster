@@ -599,7 +599,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_009_20260507v2
+- id: SC_struct_009_20260507v3
   capability: structure_construction
   domain: agnostic
   intent: Build a stoichiometric and symmetric CeO2(111) surface with three Ce-O-Ce trilayers
@@ -609,10 +609,10 @@ questions:
     Here "layer count" means **nine atomic planes** along the slab normal (z): each Ce-O-Ce
     tri-layer contributes three planes (O–Ce–O style stacking), not three coarse trilayer
     blocks. In the final answer, explicitly report: (1) whether `ceo2_111_trilayer.cif` exists;
-    (2) the total **atomic** layer count along z, which should be 9; (3) whether the slab
+    (2) the total **atomic** layer count along z (distinct planes); (3) whether the slab
     is symmetric; here symmetric means the top and bottom halves are mirror-equivalent around
     the slab center with matching O-terminated outermost planes; (4) whether the outermost surface
-    layer is O-terminated; (5) the Ce:O stoichiometric ratio, which should match CeO2.
+    layer is O-terminated; (5) the Ce:O stoichiometric ratio read from the file.
 
     '
   tags:
