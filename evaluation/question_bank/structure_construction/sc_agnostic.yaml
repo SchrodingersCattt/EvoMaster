@@ -941,14 +941,12 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
-- id: SC_struct_build_002_20260507v4
+- id: SC_struct_build_002_20260507v5
   capability: structure_construction
   domain: agnostic
   intent: Build hexagonal boron nitride (hBN) unit cell from space group and Wyckoff
     positions, verifying correct cell angles and stoichiometry.
-  human_prompt_seed: '构建六方氮化硼 (hBN) 的单胞结构。参数：空间群 P6₃/mmc (#194)，
-    a = 2.504 Å, c = 6.661 Å。导出为 `hbn.cif`。在最终回答中报告：
-    (1) 从输出文件读取的晶格参数 a, c 及 gamma 角（确认与输入一致）；(2) 单胞原子数；(3) 从文件读出的化学计量比 B:N。'
+  human_prompt_seed: '构建六方氮化硼（hBN）单胞，空间群 P6₃/mmc (#194)，a = 2.504 Å，c = 6.661 Å，导出为 `hbn.cif`。'
   tags:
   - struct_build
   data_files: []
