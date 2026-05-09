@@ -1043,14 +1043,12 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
-- id: SC_struct_build_003_20260507v4
+- id: SC_struct_build_003_20260507v5
   capability: structure_construction
   domain: agnostic
   intent: Build a phenol molecule from SMILES using RDKit and verify atom count and
     chemical formula.
-  human_prompt_seed: '从 SMILES `c1ccc(cc1)O` 构建苯酚 (phenol) 分子的三维结构。
-    导出为 `phenol.xyz`。在最终回答中报告：(1) 化学式；(2) 原子总数；(3)
-    所有原子是否有合理的三维坐标，以及最短原子间距离是多少（用以判断有无异常重叠）。'
+  human_prompt_seed: '从 SMILES `c1ccc(cc1)O` 构建苯酚的三维分子构象，导出为 `phenol.xyz`。'
   tags:
   - struct_build
   data_files: []
