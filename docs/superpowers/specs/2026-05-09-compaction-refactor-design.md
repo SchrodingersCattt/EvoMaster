@@ -58,7 +58,7 @@ Claude Code 的关键概念可以映射为 MatMaster 现有对象：
 
 核心判断是：MatMaster 不需要照搬 Claude Code 的 system boundary message。MatMaster 的 DB checkpoint 已经天然承担切断模型历史的职责。公开 `compaction` 事件负责用户可见状态，内部 `history_checkpoint` 负责模型恢复状态。
 
-## 0.1 现有代码事实与约束
+## 现有代码事实与约束
 
 本节用于锁定评审中暴露出的实现边界，防止后续计划基于错误假设展开。
 
@@ -187,9 +187,12 @@ class CompactionConfig(BaseModel):
 实际阈值计算：
 
 ```text
+raw_estimated_tokens = estimate_tokens(messages)
+estimated_tokens = ceil(raw_estimated_tokens * provider_token_safety_ratio)
 reserved = min(summary_reserved_tokens, int(context_limit * 0.1))
 effective_window = context_limit - reserved
 auto_compact_threshold = effective_window - auto_compact_buffer_tokens
+should_auto_compact = estimated_tokens >= auto_compact_threshold
 ```
 
 默认情况下：
@@ -203,7 +206,7 @@ auto_compact_threshold = 167000
 
 `trigger_ratio` 在迁移期保留，但内部优先使用新预算公式。若旧配置只设置了 `trigger_ratio`，仍能按旧逻辑近似工作。
 
-`provider_token_safety_ratio` 用于抵消 `tiktoken` GPT encoder 在 Claude、Gemini 和中文文本上的偏差。第一版不试图实现精确 tokenizer，而是在本地估算后乘以安全系数；不同 provider 可以在配置中覆盖 buffer 或 ratio。Phase 2 的验收必须包含中文长会话和 Claude/Bedrock provider 的 smoke 验证，不能只依赖 OpenAI-compatible 单元测试。
+`provider_token_safety_ratio` 作用在本地估算值上，而不是改变上下文窗口本身。它用于抵消 `tiktoken` GPT encoder 在 Claude、Gemini 和中文文本上的偏差。第一版不试图实现精确 tokenizer，而是在本地估算后乘以安全系数；不同 provider 可以在配置中覆盖 buffer 或 ratio。Phase 2 的验收必须包含中文长会话和 Claude/Bedrock provider 的 smoke 验证，不能只依赖 OpenAI-compatible 单元测试。
 
 ## 工具结果预算
 
@@ -255,6 +258,14 @@ artifact store 规则：
 - 写入失败时不能丢失原工具结果；fallback 为现有内存截断策略，并在 `CompactionEvent.failure_reason` 或 `payload` 中标记。
 
 这部分需要尊重项目约定：Bohrium 远端共享目录默认是 project-scoped `/share`，不要偷偷创建 session-scoped `/share/workspace/{session_id}`。
+
+这里的 `session_id` 只是 `.matmaster/tool-results/` 下的 artifact 子目录分隔符，不改变 workspace root 语义。远端 workspace root 仍然是 project-scoped `/share`，不会变成 `/share/workspace/{session_id}`。
+
+敏感内容边界：
+
+- Phase 3 第一版不承诺做工具结果内容的主动脱敏，因为完整 `tool_result` 可能包含临时 token、cookie、用户粘贴的 API key 或外部命令输出中的凭证片段。
+- 如果 tool metadata 或调用方显式标记结果为 sensitive，则不写 artifact，直接走 ephemeral truncation，并在事件中标记原因。
+- 对未标记但实际包含敏感串的输出，Phase 3 只记录为已知风险；后续阶段应增加 artifact 写入前的疑似 token lint，例如匹配 access key、bearer token、cookie、private key header 等高置信模式。
 
 清理策略：
 
@@ -346,7 +357,7 @@ runtime user instructions 的影响：
 
 - 当前逻辑会查找第一条 `UserMessage` 并注入用户指令。
 - 如果 v2 第一版保持 `summary_role="system"`，无需改变注入目标，但必须新增回归测试证明 v2 checkpoint 下仍注入第一条真实 user query。
-- 如果后续启用 user summary，则必须跳过 compact summary。判定方式：`message.content.startswith("[Compacted Context]")` 或 checkpoint metadata 标记。
+- 如果后续启用 user summary，则必须跳过 compact summary。推荐路线是在消息模型或 checkpoint 解码结果上保留 metadata，例如 `extras={"compact_summary": True}`；`message.content.startswith("[Compacted Context]")` 只作为旧数据或异常恢复场景的兼容兜底。
 - 该逻辑的具体位置是 `src/services/agent_run_service.py::_apply_user_instructions_to_initial_user_query()`，不是空泛的后续事项。
 
 Phase 4 的 provider compatibility gate 至少包含：
@@ -417,7 +428,7 @@ checkpoint base_messages
 + current user prompt
 ```
 
-实现上需要明确一个边界：`HistoryRestoreService` 只负责 checkpoint core + tail events；动态 rehydration 应在 `AgentRunService` 或 `Exp.build_runtime()` 附近完成，靠 `run_meta` 和现有 registry 重建能力注入。
+实现边界固定为：动态 rehydration 在 `Exp.build_runtime()` 中完成，因为当前 `JobRegistry.rebuild_from_events(...)` 已经在那里重建 Bohrium job registry。`HistoryRestoreService` 只负责 checkpoint core + tail events；`AgentRunService` 负责拿到恢复后的 messages，并在进入 `Exp.run_stream()` 前把 runtime rehydration 生成的消息接到 `state.messages` 的合适位置。
 
 不在第一阶段注入：
 
@@ -496,6 +507,8 @@ class CompactionEvent(EventBase):
 
 raw events fallback 必须经过 restore-time budgeter。否则 checkpoint 失败时，DB 中完整 `tool_result` 会重新进入模型上下文，抵消工具结果预算的效果。预算输出如果能复用既有 artifact path 就复用；artifact 缺失时可以从 DB 完整内容重新写入 artifact。
 
+因此 Phase 3 会改变 `HistoryRestoreService` 的构造依赖：当前构造只需要 `events_table`，接入后应变为类似 `HistoryRestoreService(events_table, tool_result_budgeter=...)`。所有构造点、工厂函数和测试 fixture 必须同步迁移；未配置 budgeter 的测试场景可以传入 no-op budgeter，避免 raw restore 行为在不同测试里隐式分叉。
+
 ## 错误处理
 
 错误处理遵循项目 AGENTS.md 约定：DAO 不吞异常；服务层除明确降级外让异常向上抛；压缩链路中的可降级错误必须写清原因。
@@ -529,6 +542,8 @@ uv run pytest tests/matmaster/services/test_history_restore_service.py
 uv run pytest tests/test_stream_replay_skill_hit.py
 ```
 
+`tests/test_stream_replay_skill_hit.py` 用于验证 compaction / checkpoint 事件隐藏规则调整后，公开的 `skill_hit` 回放不被误吞；它不是 compaction 核心单测，但属于本次事件回放兼容性的回归集。
+
 新增测试覆盖：
 
 - token budget 公式产生 167k 默认自动压缩阈值。
@@ -561,6 +576,7 @@ uv run pytest tests/test_stream_replay_skill_hit.py
 - `pre_tokens / post_tokens_estimated` 比值分布：衡量压缩效率。
 - `checkpoint_written=false` 的数量和 session 分布：定位 DB / codec / barrier 问题。
 - artifact 写入失败数量：区分本地权限、远端 session 能力和路径安全校验失败。
+- artifact 疑似敏感串 lint 命中数：Phase 3 可先只记录或 dry-run，后续再决定是否阻断写入。
 
 ## 分阶段实施
 
@@ -580,6 +596,7 @@ uv run pytest tests/test_stream_replay_skill_hit.py
 验收：
 
 - 默认自动压缩阈值为 167000。
+- `provider_token_safety_ratio` 作用在 `estimate_tokens(messages)` 的结果上，而不是修改 `context_limit`。
 - Claude/Bedrock 中文长会话 smoke 不撞 provider 硬限制。
 - 旧测试按新阈值更新。
 - 不改变 checkpoint schema。
@@ -593,7 +610,9 @@ uv run pytest tests/test_stream_replay_skill_hit.py
 - 大工具结果写入 `.matmaster/tool-results/`。
 - 模型上下文只保留预览和路径。
 - raw restore fallback 也应用 budgeter。
+- `HistoryRestoreService` 增加 budgeter 依赖，所有构造点、工厂函数和测试 fixture 同步迁移。
 - 现有 `_truncate_tool_results()` 保留为 artifact 写入失败或不支持 artifact store 时的 fallback。
+- sensitive tool result 默认不写 artifact；无法识别的敏感输出记录为第一版已知风险。
 - 工具调用序列仍通过 provider 消息校验。
 
 ### Phase 4: v2 summary 和 checkpoint
