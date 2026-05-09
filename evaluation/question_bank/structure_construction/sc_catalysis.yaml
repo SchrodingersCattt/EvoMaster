@@ -110,21 +110,11 @@ questions:
     criterion: Total token usage stays within a generous benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: SC_elec_004_20260507v3
+- id: SC_elec_004_20260507v4
   capability: structure_construction
   domain: catalysis
   intent: Build Ag(001) surface slab and place CO molecule at ontop site for adsorption calculation.
-  human_prompt_seed: '构建CO在Ag(001)表面的吸附结构：
-
-    1. 获取Ag FCC体相结构（空间群Fm-3m，a=4.086 Å）；
-
-    2. 切出(001)表面slab：4个原子层（即沿z方向4个不等价原子平面），3×3扩胞，真空层15 Å；
-
-    3. 在slab顶层ontop位点放置CO分子（C端朝下，初始距离~2.0 Å）；
-
-    4. 输出三个结构文件：bare_slab.vasp, CO_molecule.vasp, adsorbed_system.vasp。
-
-    '
+  human_prompt_seed: '构建 CO 在 Ag(001) 表面的初始吸附结构：3×3 超胞，4 层 slab，真空 15 Å，CO 置于顶层 ontop 位 C 端朝下，初始距离约 2 Å。输出 `bare_slab.vasp`、`CO_molecule.vasp`、`adsorbed_system.vasp`。'
   tags:
   - struct_surface
   data_files: []
