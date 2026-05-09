@@ -231,6 +231,8 @@ questions:
     verify: struct_file_formula
   - id: dap4_formula
     criterion: The file `ordered_disorder_DAP-4.cif` has the expected ordered-replica composition.
+    axis: correctness
+    verify: struct_file_formula
   - id: sc005_disorder_formulas
     criterion: The answer includes the four reference formula strings for DAP-4, PAP-H4, PAP-M5, and TILPEN; for DAN-2 the reported ordered-replica chemical_formula uses integer stoichiometry only (no fractional
       occupancies like 13.98 in counts).
