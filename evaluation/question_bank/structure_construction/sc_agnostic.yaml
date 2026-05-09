@@ -86,11 +86,11 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_005_20260508
+- id: SC_struct_005_20260508v2
   capability: structure_construction
   domain: agnostic
   intent: Infer SG-derived chemical formulas for 5 disordered crystal structures and construct ordered replicas to assess 3D structure perception.
-  human_prompt_seed: '对以下 5 个含无序占位的晶体结构逐一处理，所有输入都通过 OSS URL 提供：
+  human_prompt_seed: '对以下 5 个含无序占位的晶体结构分别生成有序 replica，每个输出命名为 `ordered_<原始文件名>.cif`：
 
     - `disorder_DAN-2.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_disorder/strucuture_disorder/disorder_DAN-2.cif`
 
@@ -101,26 +101,6 @@ questions:
     - `disorder_PAP-M5.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_disorder/strucuture_disorder/disorder_PAP-M5.cif`
 
     - `disorder_TILPEN.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_disorder/strucuture_disorder/disorder_TILPEN.cif`
-
-
-    对每个结构，使用结构生成工具构造 ordered replica，并汇总：
-
-    (1) `chemical_formula`（尽量保持工具/结构解析返回的原始字符串）；
-
-    (2) `is_disordered`；
-
-    (3) `ordered_replica_count`；
-
-    (4) `ordered_output_archive`。
-
-
-    对 `disorder_DAN-2.cif` 的 ordered replica：`chemical_formula` 必须为**整数化学计量**（不得再出现类似 `H13.98` 这类分数占位形式的计数）。
-
-    每个结构的 ordered replica 输出文件命名为 `ordered_<原始文件名>.cif`（例如 `ordered_disorder_DAN-2.cif`）。
-
-    所有 ordered replica 必须是完全有序结构：输出 CIF 中所有 `_atom_site_occupancy` 均为 1，不得保留 partial/split occupancy。
-
-    最终答案按文件名逐项列出上述信息，并显式写出每个原始文件名与对应 `ordered_<原始文件名>.cif` 的配对。
 
     '
   tags:
