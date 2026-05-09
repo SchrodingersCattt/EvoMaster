@@ -196,8 +196,6 @@ questions:
     axis: correctness
     verify: sc005_disorder_formulas
     weight: 0.5
-    axis: correctness
-    verify: struct_file_formula
   - id: paph4_formula
     criterion: The file `ordered_disorder_PAP-H4.cif` has the expected ordered-replica composition.
     axis: correctness
