@@ -291,7 +291,7 @@ questions:
       benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
-- id: SC_struct_006_20260507v5
+- id: SC_struct_006_20260507v6
   capability: structure_construction
   domain: agnostic
   intent: Add missing hydrogens to the diacetylmorphine (DACMOR) molecular crystal CIF and
@@ -379,13 +379,12 @@ questions:
       expected_formula: C21H23NO5
       z_value: 4
   - key: turn_budget
-    value:
-      max: 24
+    value: *id001
   - key: duration_budget
     value: *id002
   - key: token_budget_total
     value:
-      max: 35000
+      max: 28000
   scoring_checklist:
   - id: file_exists
     criterion: The output file `dacmor_hydrogenated.cif` exists.
