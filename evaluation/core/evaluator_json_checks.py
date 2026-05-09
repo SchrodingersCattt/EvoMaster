@@ -74,6 +74,8 @@ def check_json_file_numeric_range(
     for part in parts:
         if isinstance(val, dict) and part in val:
             val = val[part]
+        elif isinstance(val, list) and part.isdigit() and int(part) < len(val):
+            val = val[int(part)]
         else:
             return False, f'key path {key_path!r} not found in {filename}'
     try:
@@ -95,6 +97,8 @@ def _traverse_dotted(obj: object, dotted_key: str) -> object | None:
     for part in dotted_key.split('.'):
         if isinstance(val, dict) and part in val:
             val = val[part]
+        elif isinstance(val, list) and part.isdigit() and int(part) < len(val):
+            val = val[int(part)]
         else:
             return None
     return val
