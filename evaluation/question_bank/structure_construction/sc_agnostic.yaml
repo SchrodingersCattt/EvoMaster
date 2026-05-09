@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: agnostic
 questions:
-- id: SC_struct_002_20260507v2
+- id: SC_struct_002_20260507v3
   capability: structure_construction
   domain: agnostic
   intent: Build a 4-layer (110) surface slab from the uploaded PUBMUU03 molecular crystal
@@ -25,7 +25,7 @@ questions:
 
     (3) 最终 slab 的原子总数；
 
-    (4) 是否满足"最终原子数 = 单胞原子数的 4 倍"。
+    (4) 最终 slab 原子数与输入单胞原子数的比值，以及该比值与 4 层 slab 预期是否一致。
 
 
     输出 slab 结构文件为 `slab_PUBMUU03_110.cif`，并给出上述核查结论。
