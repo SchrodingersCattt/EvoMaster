@@ -133,7 +133,7 @@ banks:
 - path: workflow_orchestration/wo_alloy.yaml
   capability: workflow_orchestration
   domain: alloy
-  questions: 6
+  questions: 5
 - path: workflow_orchestration/wo_agnostic.yaml
   capability: workflow_orchestration
   domain: agnostic
