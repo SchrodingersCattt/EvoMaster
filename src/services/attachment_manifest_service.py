@@ -7,7 +7,6 @@ from urllib.parse import quote, unquote, urlparse, urlunparse
 
 from src.utils.chat_event_source import normalize_event_source
 
-
 AttachmentKind = Literal["file", "image", "workspace"]
 
 
@@ -96,6 +95,8 @@ def build_available_attachments(
         )
 
     for event in events:
+        if len(entries) >= max_entries:
+            break
         if normalize_event_source(event.get("source")) != "User":
             continue
         if (event.get("type") or "").strip() != "query":

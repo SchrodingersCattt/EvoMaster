@@ -357,11 +357,11 @@ async def chat_stream(
             msg="该会话已有任务在运行，请等待完成或先取消后再发新消息",
         )
     # 给 agent 的 prompt：正文 + 当前会话可用附件清单。多轮历史由 run_agent
-    # 通过 task.meta['dialog_history'] 注入；这里补充 files/images/workspace_paths
-    # 的显式可引用资源列表，便于 agent 在后续轮次继续使用附件。
+    # 通过 task.meta['dialog_history'] 注入；这里仅查询父级 User/query 事件，
+    # 避免为附件清单拉取整段 tool/response 历史。
     base_prompt = _build_agent_prompt(
         req.content or "",
-        events_svc.get_session_events(sid),
+        events_svc.get_session_user_query_events(sid),
     )
     return StreamingResponse(
         stream_svc.generate_send_stream(sid, base_prompt, ctx),

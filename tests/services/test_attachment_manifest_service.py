@@ -106,7 +106,9 @@ def test_build_available_attachments_deduplicates_by_kind_and_value() -> None:
     ]
 
 
-def test_build_available_attachments_filters_non_user_query_and_invalid_values() -> None:
+def test_build_available_attachments_filters_non_user_query_and_invalid_values() -> (
+    None
+):
     events = [
         {
             "source": "System",
@@ -209,6 +211,29 @@ def test_build_available_attachments_uses_simple_total_max_entries_limit() -> No
     assert [(entry.kind, entry.label, entry.value) for entry in entries] == [
         ("file", "file_1", "https://oss.example.com/chat/1.csv"),
         ("file", "file_2", "https://oss.example.com/chat/2.csv"),
+    ]
+
+
+def test_build_available_attachments_stops_scanning_after_max_entries() -> None:
+    class FailsIfRead(dict):
+        def get(self, *args, **kwargs):
+            raise AssertionError("event after max_entries should not be inspected")
+
+    entries = build_available_attachments(
+        [
+            {
+                "source": "User",
+                "type": "query",
+                "content": "first",
+                "files": ["https://oss.example.com/chat/1.csv"],
+            },
+            FailsIfRead(),
+        ],
+        max_entries=1,
+    )
+
+    assert [(entry.kind, entry.label, entry.value) for entry in entries] == [
+        ("file", "file_1", "https://oss.example.com/chat/1.csv"),
     ]
 
 

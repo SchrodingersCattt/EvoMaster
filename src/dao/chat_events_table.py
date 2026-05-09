@@ -217,6 +217,24 @@ class ChatEventsTable(BaseTable):
                     events.append(ev)
                 return events
 
+    def get_session_user_query_events(self, session_id: str) -> list[dict]:
+        """获取父级 User/query 历史事件，供附件清单等轻量查询使用。"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f'''
+                    SELECT id, session_id, source, type, content, task_id, invocation_id, spawn_id, created_at
+                    FROM {self.table_name}
+                    WHERE session_id = %s
+                      AND source = 'User'
+                      AND type = 'query'
+                      AND spawn_id IS NULL
+                    ORDER BY created_at ASC, id ASC
+                    ''',
+                    (session_id,),
+                )
+                return [self._row_to_event(row) for row in list(cursor.fetchall())]
+
     def get_last_user_query(self, session_id: str) -> dict | None:
         """
         获取该会话最后一次用户输入（source=User, type=query），用于部署中断后重跑。
