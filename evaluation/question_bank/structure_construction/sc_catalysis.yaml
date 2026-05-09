@@ -97,7 +97,7 @@ questions:
     criterion: Total token usage stays within a generous benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: SC_elec_004_20260507
+- id: SC_elec_004_20260507v2
   capability: structure_construction
   domain: catalysis
   intent: Build Ag(001) surface slab and place CO molecule at ontop site for adsorption calculation.
@@ -200,8 +200,9 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: structure_validity
-    criterion: Slab has 4 atomic layers (4 z-distinct planes, 36 Ag atoms), vacuum ≥ 15 Å,
-      CO is placed at ontop site with C-down orientation.
+    criterion: Slab has 4 atomic layers, vacuum ≥ 15 Å, and CO is placed at ontop site with
+      C-down orientation. Ag and CO loading values are evaluated only by deterministic structure-file
+      checks.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source

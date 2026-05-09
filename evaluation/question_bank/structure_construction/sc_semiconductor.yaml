@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: semiconductor
 questions:
-- id: SC_struct_hetero_20260507
+- id: SC_struct_hetero_20260507v2
   capability: structure_construction
   domain: semiconductor
   intent: Build a graphene/h-BN vertical van der Waals heterostructure with controlled lattice
@@ -96,9 +96,9 @@ questions:
     axis: correctness
     verify: struct_file_bond_length
   - id: required_fields
-    criterion: Output includes structure file, lattice mismatch percentage below 2%, total
-      atom count, interlayer distance near 3.35 A, AB stacking, and vacuum thickness near
-      15 A.
+    criterion: Output includes structure file, lattice mismatch percentage below 2%, interlayer
+      distance near 3.35 A, AB stacking, and vacuum thickness near 15 A. Element ratios are evaluated
+      only by deterministic structure-file checks.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
@@ -132,7 +132,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_SiH_20260507
+- id: SC_struct_SiH_20260507v2
   capability: structure_construction
   domain: semiconductor
   intent: Passivate dangling bonds on both top and bottom surfaces of a Si(100) slab with
@@ -216,9 +216,9 @@ questions:
     axis: correctness
     verify: struct_file_atom_count
   - id: required_fields
-    criterion: Output includes structure file, total number of added H atoms (covering both
-      surfaces), representative Si-H bond length, and an explicit check that all Si atoms
-      (top and bottom) reach four coordination.
+    criterion: Output includes structure file, representative Si-H bond length, and an explicit
+      check that all Si atoms (top and bottom) reach four coordination. H loading is evaluated
+      only by deterministic structure-file checks.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source

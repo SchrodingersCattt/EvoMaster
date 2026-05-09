@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: agnostic
 questions:
-- id: SC_struct_002_20260507
+- id: SC_struct_002_20260507v2
   capability: structure_construction
   domain: agnostic
   intent: Build a 4-layer (110) surface slab from the uploaded PUBMUU03 molecular crystal
@@ -53,12 +53,6 @@ questions:
     - total_atoms
     - atom_count_ratio_check
     - molecule_integrity_check
-  - key: explicit_report_tokens
-    value:
-    - '144'
-    - '576'
-    - '4'
-    - slab_PUBMUU03_110.cif
   - key: molcrys_slab_molecular_integrity
     value:
       unit_cell_atoms: 144
@@ -88,16 +82,10 @@ questions:
     axis: correctness
     verify: molcrys_slab_molecular_integrity
   - id: required_fields
-    criterion: Output includes structure file, unit-cell atom count, final atom count, an
-      explicit 4x ratio check, and a molecule-integrity narrative consistent with MolCrysKit
-      / connectivity reasoning.
+    criterion: Output names the slab structure file and gives a molecule-integrity narrative
+      consistent with MolCrysKit / connectivity reasoning. Numeric scaling is evaluated only by deterministic structure-file checks.
     axis: correctness
     verify: llm_binary_judge
-  - id: explicit_report_tokens
-    criterion: Final answer explicitly includes the 144-atom input cell, 576-atom slab,
-      4x atom-count scaling, and `slab_PUBMUU03_110.cif` output basename.
-    axis: correctness
-    verify: contains_all
   - id: grounding_source
     criterion: The answer states what physical picture is used (molecular connectivity, periodic
       boundaries, (110) plane vs bulk, and how that supports or contradicts cutting molecules),
@@ -129,7 +117,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_005_20260507
+- id: SC_struct_005_20260507v2
   capability: structure_construction
   domain: agnostic
   intent: Infer SG-derived chemical formulas for 5 disordered crystal structures and construct
@@ -195,8 +183,26 @@ questions:
     - ordered_disorder_PAP-H4.cif
     - ordered_disorder_PAP-M5.cif
     - ordered_disorder_TILPEN.cif
-  - key: sc005_disorder_formulas
-    value: {}
+  - key: dan2_formula
+    value:
+      filename: ordered_disorder_DAN-2.cif
+      formula: K1H14C6N5O9
+  - key: dap4_formula
+    value:
+      filename: ordered_disorder_DAP-4.cif
+      formula: H144C48N24Cl24O96
+  - key: paph4_formula
+    value:
+      filename: ordered_disorder_PAP-H4.cif
+      formula: H288C80N48Cl48O192
+  - key: papm5_formula
+    value:
+      filename: ordered_disorder_PAP-M5.cif
+      formula: Ag8H112C40N16Cl24O96
+  - key: tilpen_formula
+    value:
+      filename: ordered_disorder_TILPEN.cif
+      formula: Fe2H40C24N16O2
   - key: required_fields
     value:
     - chemical_formula
@@ -225,24 +231,29 @@ questions:
       remain in `_atom_site_occupancy`.
     axis: correctness
     verify: struct_file_all_occupancy_one
-  - id: sc005_disorder_formulas
-    criterion: The answer includes the four reference formula strings for DAP-4, PAP-H4, PAP-M5,
-      and TILPEN; for DAN-2 the reported ordered-replica chemical_formula uses integer stoichiometry
-      only (no fractional occupancies like 13.98 in counts).
+  - id: dan2_formula
+    criterion: The file `ordered_disorder_DAN-2.cif` has the expected integer composition.
     axis: correctness
-    verify: sc005_disorder_formulas
-    weight: 0.5
-  - id: partial_formulas_ok
-    criterion: The answer reports chemically plausible ordered-replica formulas for at least
-      3 of the 5 structures. Reference formulas — DAP-4 H144C48N24Cl24O96, PAP-H4 H288C80N48Cl48O192,
-      PAP-M5 Ag8H112C40N16Cl24O96, TILPEN Fe2H40C24N16O2, DAN-2 integer-only stoichiometry.
-      Pass if ≥3 formulas are present and correct (element ordering may differ).
+    verify: struct_file_formula
+  - id: dap4_formula
+    criterion: The file `ordered_disorder_DAP-4.cif` has the expected ordered-replica composition.
     axis: correctness
-    verify: llm_binary_judge
-    weight: 0.5
+    verify: struct_file_formula
+  - id: paph4_formula
+    criterion: The file `ordered_disorder_PAP-H4.cif` has the expected ordered-replica composition.
+    axis: correctness
+    verify: struct_file_formula
+  - id: papm5_formula
+    criterion: The file `ordered_disorder_PAP-M5.cif` has the expected ordered-replica composition.
+    axis: correctness
+    verify: struct_file_formula
+  - id: tilpen_formula
+    criterion: The file `ordered_disorder_TILPEN.cif` has the expected ordered-replica composition.
+    axis: correctness
+    verify: struct_file_formula
   - id: required_fields
-    criterion: Each filename is paired with chemical_formula, is_disordered, ordered_replica_count,
-      and ordered_output_archive.
+    criterion: Each filename is paired with the requested field names listed in the prompt.
+      Field values are evaluated from the ordered CIF files.
     axis: correctness
     verify: llm_binary_judge
   - id: ordered_file_name_mapping
@@ -280,7 +291,7 @@ questions:
       benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
-- id: SC_struct_006_20260507
+- id: SC_struct_006_20260507v2
   capability: structure_construction
   domain: agnostic
   intent: Add missing hydrogens to the diacetylmorphine (DACMOR) molecular crystal CIF and
@@ -340,11 +351,6 @@ questions:
       filename: dacmor_hydrogenated.cif
       expected_formula: C21H23NO5
       z_value: 4
-  - key: explicit_report_tokens
-    value:
-    - C21H23NO5
-    - '109'
-    - dacmor_hydrogenated.cif
   - key: turn_budget
     value: *id001
   - key: duration_budget
@@ -373,11 +379,6 @@ questions:
       local geometry (hybridisation, coordination).
     axis: correctness
     verify: molcrys_local_env
-  - id: explicit_report_tokens
-    criterion: Final answer explicitly reports formula C21H23NO5, a representative H-C-H angle
-      near 109 degrees, and the `dacmor_hydrogenated.cif` output basename.
-    axis: correctness
-    verify: contains_all
   - id: grounding_source
     criterion: The answer states the chemical/geometry rationale (which C/N atoms receive
       H, tetrahedral geometry targets, carbonyl/ester O should not be hydrogenated) and ties
@@ -409,7 +410,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_008_20260507
+- id: SC_struct_008_20260507v2
   capability: structure_construction
   domain: agnostic
   intent: Construct a computation-ready gamma-alumina bulk model and validate stoichiometry,
@@ -532,7 +533,7 @@ questions:
     verify: llm_binary_judge
     weight: 0.5
   - id: grounding_source
-    criterion: The answer links Al:O stoichiometry, cell angles, tetrahedral vs octahedral
+    criterion: The answer links code-checked Al:O ratio, cell angles, tetrahedral vs octahedral
       Al sites, minimum contact distances, and post-relax forces to `gamma_alumina.cif` and
       the stated relaxation, not handbook recall disconnected from that file. Judge solely
       from the final answer and named deliverables; do not fail because the tool-call log
@@ -562,7 +563,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_009_20260507
+- id: SC_struct_009_20260507v2
   capability: structure_construction
   domain: agnostic
   intent: Build a stoichiometric and symmetric CeO2(111) surface with three Ce-O-Ce trilayers
@@ -648,7 +649,7 @@ questions:
     verify: llm_binary_judge
   - id: grounding_source
     criterion: The answer explains slab polarity/symmetry, layer stacking for CeO2(111), O
-      termination, and Ce:O stoichiometry using `ceo2_111_trilayer.cif`, not textbook-only
+      termination, and code-checked Ce:O ratio using `ceo2_111_trilayer.cif`, not textbook-only
       claims disconnected from that file. Judge solely from the final answer and named deliverables;
       do not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
@@ -671,7 +672,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_010_20260507
+- id: SC_struct_010_20260507v2
   capability: structure_construction
   domain: agnostic
   intent: Build a seven-layer Ag(111) slab with explicit water and potassium ions for an electrochemical
@@ -751,9 +752,6 @@ questions:
   - key: required_fields
     value:
     - file_exists
-    - ag_count
-    - water_count
-    - k_count
     - slab_layers
     - vacuum_A
     - interface_side
@@ -813,10 +811,10 @@ questions:
     axis: correctness
     verify: contains_all
   - id: required_fields
-    criterion: The answer explicitly reports the output structure file, Ag atom count, H2O
-      molecule count, K ion count, slab layer count, vacuum thickness near 12 Å, confirms
-      neutral-water-only composition (no OH-/H3O+), and states that solvent/ions are placed
-      above one side of the slab rather than embedded into the metal.
+    criterion: The answer explicitly reports the output structure file, slab layer check,
+      vacuum thickness near 12 Å, neutral-water-only species (no OH-/H3O+), and that
+      solvent/ions are placed above one side of the slab. Numeric loading values are
+      evaluated only by deterministic structure-file checks.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
@@ -974,7 +972,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_build_001_20260508v2
+- id: SC_struct_build_001_20260508v3
   capability: structure_construction
   domain: agnostic
   intent: Build FCC copper conventional cell using ASE bulk prototype and verify lattice
@@ -1044,8 +1042,8 @@ questions:
     axis: correctness
     verify: contains_all
   - id: grounding_source
-    criterion: Final answer explicitly states the lattice constant, space group number,
-      and atom count from the built structure.
+    criterion: Final answer explicitly states the lattice constant and space group number from
+      the built structure. Cell size is evaluated only by deterministic structure-file checks.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -1056,7 +1054,7 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
-- id: SC_struct_build_002_20260507v2
+- id: SC_struct_build_002_20260507v3
   capability: structure_construction
   domain: agnostic
   intent: Build hexagonal boron nitride (hBN) unit cell from space group and Wyckoff
@@ -1147,8 +1145,9 @@ questions:
     axis: correctness
     verify: contains_all
   - id: grounding_source
-    criterion: Final answer reports lattice parameters, gamma angle, atom count, and
-      B:N ratio from the built structure.
+    criterion: Final answer reports lattice parameters, gamma angle, and space-group setting
+      from the built structure. Cell size and element-ratio checks are evaluated only by deterministic
+      structure-file checks.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -1159,7 +1158,7 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
-- id: SC_struct_build_003_20260507v2
+- id: SC_struct_build_003_20260507v3
   capability: structure_construction
   domain: agnostic
   intent: Build a phenol molecule from SMILES using RDKit and verify atom count and
@@ -1184,7 +1183,6 @@ questions:
       min_distance_A: 0.7
   - key: required_fields
     value:
-    - '13'
     - phenol
   - key: turn_budget
     value:
@@ -1207,7 +1205,8 @@ questions:
     axis: correctness
     verify: struct_file_min_interatomic_distance
   - id: required_fields
-    criterion: Final answer explicitly states atom count 13 and mentions phenol.
+    criterion: Final answer mentions phenol; the numeric size check is evaluated only by deterministic
+      structure-file checks.
     axis: correctness
     verify: contains_all
   - id: grounding_source
