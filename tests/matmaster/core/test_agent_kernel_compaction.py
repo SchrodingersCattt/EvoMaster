@@ -430,3 +430,37 @@ class TestExpCheckpointSinkScopeResolution:
         )
         assert parent_runtime.spec.meta["checkpoint_sink"] is parent_sink
         assert child_runtime.spec.meta["checkpoint_sink"] is child_sink
+
+
+@pytest.mark.asyncio
+async def test_kernel_runs_pre_compaction_barrier_before_compactor() -> None:
+    from matmaster.core.agent import AgentKernel
+
+    sequence: list[str] = []
+
+    class BarrierCompactor(_DurablePreflightCompactor):
+        async def apply_compaction_plan(self, plan, messages):
+            sequence.append("apply")
+            return await super().apply_compaction_plan(plan, messages)
+
+    async def barrier() -> None:
+        sequence.append("barrier")
+
+    spec = _make_spec(provider=ContentOnlyProvider()).model_copy(
+        update={
+            "compactor": BarrierCompactor(),
+            "meta": {
+                "pre_compaction_barrier": barrier,
+                "checkpoint_sink": lambda **kwargs: None,
+            },
+        }
+    )
+
+    async for _event in AgentKernel().run_stream(
+        spec,
+        "task",
+        history=[UserMessage(content="old"), AssistantMessage(content="answer")],
+    ):
+        pass
+
+    assert sequence[:2] == ["barrier", "apply"]

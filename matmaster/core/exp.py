@@ -186,6 +186,7 @@ class Exp:
     async def assemble(self, ctx: PlaygroundContext) -> AgentRuntimeSpec:
         """Data transform: config + ctx -> AgentRuntimeSpec."""
         return AgentRuntimeSpec(
+            context_builder=ContextBuilder(),
             llm_provider=ctx.llm_provider,
             max_turns=self._config.max_turns,
             compaction=self._config.compaction,
@@ -402,6 +403,7 @@ class Exp:
                 "capability_policy": capability_policy,
                 "structural_validation": structural_validation,
                 "system_prompt": system_prompt,
+                "context_builder": builder,
                 "hook_executor": hook_executor,
                 "compactor": compactor,
                 "meta": {
