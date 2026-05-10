@@ -6,16 +6,44 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from matmaster.core.context_builder import ContextBuilder
-from matmaster.types.messages import AssistantMessage, SystemMessage, UserMessage
+from matmaster.core.context_compactor import CompactionPlan, ContextCompactor
+from matmaster.manifests.rehydrator import CompactionRehydrator
+from matmaster.skills.registry import SkillRegistry
+from matmaster.types.context import PlaygroundContext
+from matmaster.types.messages import (
+    AssistantMessage,
+    LLMResponse,
+    StreamChunk,
+    SystemMessage,
+    UserMessage,
+)
+from matmaster.types.runtime import CompactionConfig
 from src.services.history_checkpoint_codec import serialize_base_messages
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.history_restore_service import HistoryRestoreService
 
 
 def _compact_user_message(summary: str) -> UserMessage:
-    return UserMessage(
-        content=ContextBuilder().build_compact_bundle(summary=summary)
-    )
+    return UserMessage(content=ContextBuilder().build_compact_bundle(summary=summary))
+
+
+class _SummaryProvider:
+    def __init__(self, summary: str) -> None:
+        self.summary = summary
+        self.calls: list[list[dict[str, Any]]] = []
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return None
+
+    async def chat(self, messages, tools=None):
+        self.calls.append(messages)
+        return LLMResponse(content=self.summary, finish_reason="stop")
+
+    async def chat_stream(self, messages, tools=None, *, timeout=None):
+        yield StreamChunk(content=self.summary, finish_reason="stop")
 
 
 def _user_event(
@@ -298,6 +326,102 @@ async def test_restore_with_checkpoint_plus_incremental_events() -> None:
         2,
         None,
     ) in events_table.calls
+
+
+@pytest.mark.asyncio
+async def test_compaction_checkpoint_rehydrates_only_attachment_delta(
+    tmp_path,
+) -> None:
+    session_id = "sess-attachment-delta"
+    events_table = InMemoryEventsTable()
+    fanout = Mock()
+    fanout.flush_persistence_barrier = AsyncMock()
+
+    previous_checkpoint_covered_until = events_table.add_event(
+        session_id,
+        "User",
+        "query",
+        {
+            "content": "old upload before previous checkpoint",
+            "files": ["https://oss.example.com/chat/file_1.cif"],
+        },
+    )
+    events_table.add_event(
+        session_id,
+        "User",
+        "query",
+        {
+            "content": "new upload after previous checkpoint",
+            "files": ["https://oss.example.com/chat/file_2.cif"],
+        },
+        task_id="task-after-checkpoint",
+    )
+    events_table.add_event(
+        session_id,
+        "MatMaster",
+        "response",
+        "new upload acknowledged",
+        task_id="task-after-checkpoint",
+    )
+
+    rehydrator = CompactionRehydrator(
+        get_query_events=lambda: events_table.get_session_events(session_id),
+        get_all_events=lambda: events_table.get_session_events(session_id),
+        get_latest_checkpoint_covered_until_event_id=(
+            lambda: previous_checkpoint_covered_until
+        ),
+        skill_registry=SkillRegistry([tmp_path / "skills"]),
+        playground_ctx=PlaygroundContext(
+            workdir=tmp_path,
+            session_type="local",
+            cache_area=tmp_path / "cache",
+        ),
+    )
+    compactor = ContextCompactor(
+        config=CompactionConfig(context_limit=128000),
+        summary_provider=_SummaryProvider("Recovered summary with fresh attachment"),
+        rehydrator=rehydrator,
+        context_builder=ContextBuilder(),
+    )
+
+    messages = [
+        SystemMessage(content="system prompt"),
+        UserMessage(content="continue from current session"),
+        AssistantMessage(content="working"),
+    ]
+    result = await compactor.apply_compaction_plan(
+        CompactionPlan(
+            compaction_id="task-1:root:1",
+            compaction_count=1,
+            phase="runtime",
+            trigger_tokens=1000,
+            turn=2,
+        ),
+        messages,
+    )
+
+    assert result.base_snapshot is not None
+    checkpoint_sink = HistoryCheckpointService(events_table).build_checkpoint_sink(
+        fanout=fanout,
+        session_id=session_id,
+        task_id="task-1",
+        invocation_id="inv-1",
+        spawn_id=None,
+    )
+    await checkpoint_sink(
+        payload={"durability": "durable", "strategy": "summary"},
+        base_messages=result.base_snapshot,
+    )
+
+    checkpoint = events_table.history_checkpoints(spawn_id=None)[0]
+    base_messages = checkpoint["content"]["base_messages"]
+    assert [message["role"] for message in base_messages] == ["user"]
+    content = base_messages[0]["content"]
+    assert "<previous_session_summary>" in content
+    assert "[Compacted Context]" not in content
+    assert "<attachments>" in content
+    assert "file_2" in content
+    assert "file_1" not in content
 
 
 @pytest.mark.asyncio
