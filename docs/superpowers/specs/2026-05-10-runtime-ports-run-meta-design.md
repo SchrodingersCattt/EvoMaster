@@ -22,6 +22,7 @@
 ## 目标
 
 - 将 `run_meta` 中的运行时 callback 迁移到显式、typed、不可序列化的 `RuntimePorts` 字段。
+- 保证 `RuntimePorts` 只是能力端口集合，而不是 typed 版 `run_meta` 或新的运行时杂物箱。
 - 保留并复用现有 `HookExecutor`，避免项目内出现两套都叫 hook 的体系。
 - 明确 `run_meta`、`AgentRuntimeSpec.meta`、`RuntimePorts`、`HookExecutor` 的职责边界。
 - 保持服务层到核心层的单向依赖关系：服务层构造端口实现，核心层只依赖中立类型合同。
@@ -33,6 +34,8 @@
 - 不改变现有 `HookExecutor` 的 `observe`、`intercept`、`rewrite` 语义。
 - 不把 history reader、checkpoint sink、barrier 等必要能力塞进 `HookExecutor`。
 - 不重构 `figure_upload_config`、`bohrium_rebuild_events`、`attachment_manifest` 的全部流转；这些字段可在后续阶段继续收敛。
+- 不新增 `runtime_meta`、`runtime_context`、`extra`、`metadata`、`state`、`services` 等通用兜底变量。
+- 不把 `RuntimePorts` 当作新的 `run_meta` 使用；它不能承载被动 metadata、配置 blob、任意对象或临时状态。
 - 不改变 API/Worker 队列模式、Redis 协调、SSE fanout 或 checkpoint 持久化策略。
 
 ## 术语与边界
@@ -57,6 +60,16 @@
 `RuntimePorts` 是核心层需要的外部能力端口，属于依赖倒置的 typed contract。它承载 callback、factory、sink、barrier 等不可序列化运行时对象。
 
 它的语义是：核心层需要这些能力才能完成某个功能，但核心层不关心这些能力来自数据库、Redis、SSE、fanout、checkpoint service，还是测试 fake。
+
+`RuntimePorts` 不是新的 `run_meta` 类型变量。它有几条硬约束：
+
+- 不允许出现 `dict[str, Any]` 形式的任意数据袋。
+- 不允许出现 `extra`、`metadata`、`state`、`context`、`services`、`payload` 这类兜底字段。
+- 不承载 `task_id`、`session_id`、`active_skills`、`attachment_manifest` 等被动 metadata。
+- 每个字段必须对应一个核心层实际调用的能力，且字段名描述能力语义，而不是描述服务层实现。
+- 新增字段前必须能回答：哪个核心组件消费它、调用顺序是什么、返回值语义是什么、异常是否向上抛出。
+
+换句话说，`RuntimePorts` 是窄接口，不是可扩展属性包。树状分组只用于表达运行域关系，不用于给未来随手塞字段预留空间。
 
 ### HookExecutor
 
@@ -181,6 +194,7 @@ class KernelRuntimePorts:
 - 端口按运行域归类，不按 callback 来源归类。
 - 顶层边界对象只保留阶段语义，即 Playground 边界和 Kernel 边界。
 - leaf type 可以是 Protocol 或 dataclass，但消费方不直接依赖一堆散落的 leaf type。
+- aggregate 只能包含明确命名的子端口或能力字段，不能包含 `meta`、`extra`、`state` 等兜底容器。
 
 ## 数据流
 
@@ -563,6 +577,10 @@ tests/matmaster/services/test_agent_run_stream_response_figures.py
 
 迁移期若同时写 `run_meta` 和 `runtime_ports`，`Exp` 必须规定优先级：`runtime_ports` 优先，旧 `run_meta` fallback 仅用于兼容。
 
+### 风险：RuntimePorts 退化成新 run_meta
+
+如果后续为了方便在 `RuntimePorts` 上增加 `extra`、`metadata`、`state`、`services` 或 `dict[str, Any]` 字段，就会重新制造一个 typed 版 `run_meta`。实施计划必须禁止这类字段；新增能力只能进入明确运行域子端口，并且必须有明确消费者和调用语义。
+
 ### 风险：checkpoint / barrier 失败语义被误改
 
 不能把 `pre_compaction_barrier` 改成 `HookExecutor.emit()`，因为 `emit()` 会吞 observer 异常。barrier 是顺序屏障，必须保持 await 和异常传播。
@@ -578,6 +596,8 @@ devshell 当前直接写 `run_meta["event_sink"]`。迁移时应改成 `with_run
 ```text
 run_meta 只承载被动运行 metadata；服务能力 callback、sink、factory、barrier 等不可序列化运行时对象必须放入显式 RuntimePorts 字段。
 
+RuntimePorts 不是新的 run_meta。RuntimePorts 及其子端口不得包含 extra、metadata、state、context、services、payload 或 dict[str, Any] 这类兜底字段；新增字段必须是明确命名的能力端口，并说明消费者、调用时机、返回值和异常语义。
+
 HookExecutor 专指事件扩展系统，用于 observe/intercept/rewrite 运行过程事件；RuntimePorts 专指核心层依赖的外部能力端口。不得把需要返回业务数据或承担顺序屏障语义的服务端口伪装成 HookExecutor handler。
 ```
 
@@ -589,6 +609,7 @@ HookExecutor 专指事件扩展系统，用于 observe/intercept/rewrite 运行�
 - `Exp` 优先消费 `ctx.runtime_ports`，旧 `run_meta` callback 只在迁移期作为 fallback。
 - `AgentKernel` 优先消费 `spec.runtime_ports`，不再依赖 `spec.meta` 中的 callback。
 - `HookExecutor` 保持现有事件扩展职责，不承载 history reader、checkpoint sink 或 barrier。
+- `RuntimePorts` 及其子端口没有 `extra`、`metadata`、`state`、`context`、`services`、`payload`、`dict[str, Any]` 形式的兜底字段。
 - 相关测试通过：
 
 ```bash
