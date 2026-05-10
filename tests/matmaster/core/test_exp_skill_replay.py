@@ -1,4 +1,4 @@
-"""Tests for Exp on_skill_hit external record callback and active-server replay."""
+"""Tests for Exp skill-driven active-server replay."""
 
 from __future__ import annotations
 
@@ -55,18 +55,17 @@ def _build_cfg(env):
 
 
 @pytest.mark.asyncio
-async def test_on_skill_hit_invokes_record_active_mcp_server(tmp_path):
-    """on_skill_hit must notify the run_meta callback with the activated server."""
+async def test_on_skill_hit_does_not_require_run_meta_record_callback(tmp_path):
+    """Skill execution still injects MCP tools without a run_meta record callback."""
     env = _setup_skill_env(tmp_path)
     cfg = _build_cfg(env)
     exp = Exp(cfg)
     registry = ToolRegistry()
 
-    recorded: list[str] = []
     ctx = MagicMock(spec=PlaygroundContext)
     ctx.session = MagicMock()
     ctx.execution_workdir = str(tmp_path)
-    ctx.run_meta = {"record_active_mcp_server": recorded.append}
+    ctx.run_meta = {}
 
     exp._init_skill_tools(ctx, registry)
 
@@ -75,12 +74,12 @@ async def test_on_skill_hit_invokes_record_active_mcp_server(tmp_path):
     result = normalize_tool_result(raw_result)
     assert result.status == "success", result.content
 
-    assert recorded == ["mat_sg"]
+    assert "mat_sg_build_bulk" in registry
 
 
 @pytest.mark.asyncio
-async def test_init_skill_tools_replays_active_servers_into_registry(tmp_path):
-    """active_mcp_servers in run_meta must trigger on_skill_hit during init."""
+async def test_init_skill_tools_replays_active_skills_into_registry(tmp_path):
+    """active_skills in run_meta must activate skill-declared MCP servers."""
     env = _setup_skill_env(tmp_path)
     cfg = _build_cfg(env)
     exp = Exp(cfg)
@@ -89,7 +88,7 @@ async def test_init_skill_tools_replays_active_servers_into_registry(tmp_path):
     ctx = MagicMock(spec=PlaygroundContext)
     ctx.session = MagicMock()
     ctx.execution_workdir = str(tmp_path)
-    ctx.run_meta = {"active_mcp_servers": frozenset({"mat_sg"})}
+    ctx.run_meta = {"active_skills": frozenset({"test-skill"})}
 
     # No use_skill call -- replay must inject the lazy tool by itself.
     exp._init_skill_tools(ctx, registry)
@@ -113,7 +112,7 @@ async def test_replay_is_idempotent_with_use_skill(tmp_path):
     ctx = MagicMock(spec=PlaygroundContext)
     ctx.session = MagicMock()
     ctx.execution_workdir = str(tmp_path)
-    ctx.run_meta = {"active_mcp_servers": frozenset({"mat_sg"})}
+    ctx.run_meta = {"active_skills": frozenset({"test-skill"})}
 
     exp._init_skill_tools(ctx, registry)
     assert "mat_sg_build_bulk" in registry
@@ -130,10 +129,9 @@ async def test_replay_is_idempotent_with_use_skill(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_replay_silently_skips_servers_with_no_cache(tmp_path):
-    """A server in active set but missing cache must not crash; just warn."""
+async def test_old_active_mcp_servers_field_is_ignored(tmp_path):
+    """The old active_mcp_servers field must not activate tools."""
     env = _setup_skill_env(tmp_path)
-    # Note: no `mat_unknown.json` in cache dir.
     cfg = _build_cfg(env)
     exp = Exp(cfg)
     registry = ToolRegistry()
@@ -141,10 +139,28 @@ async def test_replay_silently_skips_servers_with_no_cache(tmp_path):
     ctx = MagicMock(spec=PlaygroundContext)
     ctx.session = MagicMock()
     ctx.execution_workdir = str(tmp_path)
-    ctx.run_meta = {"active_mcp_servers": frozenset({"mat_unknown"})}
+    ctx.run_meta = {"active_mcp_servers": frozenset({"mat_sg"})}
 
     exp._init_skill_tools(ctx, registry)
 
-    # Skill tool still registered, no exception, no spurious tool.
     assert "Skill" in registry
-    assert not any(k.startswith("mat_unknown_") for k in registry._tools)
+    assert "mat_sg_build_bulk" not in registry
+
+
+@pytest.mark.asyncio
+async def test_replay_silently_skips_missing_skill(tmp_path):
+    """A missing skill in active set must not crash or activate tools."""
+    env = _setup_skill_env(tmp_path)
+    cfg = _build_cfg(env)
+    exp = Exp(cfg)
+    registry = ToolRegistry()
+
+    ctx = MagicMock(spec=PlaygroundContext)
+    ctx.session = MagicMock()
+    ctx.execution_workdir = str(tmp_path)
+    ctx.run_meta = {"active_skills": frozenset({"missing-skill"})}
+
+    exp._init_skill_tools(ctx, registry)
+
+    assert "Skill" in registry
+    assert "mat_sg_build_bulk" not in registry

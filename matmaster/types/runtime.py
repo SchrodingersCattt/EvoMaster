@@ -16,6 +16,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from matmaster.core.context_builder import ContextBuilder
 from matmaster.core.hooks import HookExecutor
 
 from .llm_provider import LLMProvider
@@ -30,6 +31,17 @@ class CompactionConfig(BaseModel):
     trigger_ratio: float = 0.9
     strategy: str = "summary"  # 'sliding_window' | 'summary' | 'latest_half'
     compaction_llm: str | None = None  # key in config.llm
+    reserved_summary_tokens: int = 20_000
+    auto_compact_buffer_tokens: int = 13_000
+
+    @property
+    def auto_threshold(self) -> int:
+        return max(
+            0,
+            self.context_limit
+            - self.reserved_summary_tokens
+            - self.auto_compact_buffer_tokens,
+        )
 
 
 class AgentRuntimeSpec(BaseModel):
@@ -53,6 +65,7 @@ class AgentRuntimeSpec(BaseModel):
     compaction: CompactionConfig = Field(default_factory=CompactionConfig)
     system_prompt: str = ""
     compactor: Any | None = None
+    context_builder: ContextBuilder
 
     # Extensible metadata bag (prompt templates, MCP/skill config, etc.)
     meta: dict[str, Any] = Field(default_factory=dict)
@@ -71,6 +84,12 @@ class AgentRuntimeSpec(BaseModel):
         from matmaster.core.tool_runner import ToolRunner
         from matmaster.tools.tool_catalog import ToolCatalog
         from matmaster.types.topology import RuntimeTopology
+
+        if not isinstance(self.context_builder, ContextBuilder):
+            raise ValueError(
+                "context_builder must be ContextBuilder, "
+                f"got {type(self.context_builder).__name__}"
+            )
 
         checks: list[tuple[str, Any, type]] = [
             ("tool_runner", self.tool_runner, ToolRunner),

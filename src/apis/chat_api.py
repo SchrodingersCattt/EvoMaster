@@ -1,7 +1,6 @@
 import json
 import logging
 from pathlib import Path as FsPath
-from urllib.parse import quote, unquote, urlparse, urlunparse
 
 from fastapi import APIRouter, Body, Depends, Path, Request
 from fastapi.responses import StreamingResponse
@@ -221,6 +220,7 @@ async def chat_stream(
     org_id: str | None = Depends(UserService.optional_org_id),
     chat_svc: ChatSessionsService = Depends(get_sessions_service),
     stream_svc: ChatStreamService = Depends(get_stream_service),
+    events_svc: ChatEventsService = Depends(get_events_service),
 ):
     """ag-ui：统一流接口。会话已分享时可不鉴权；未分享时需登录且为会话所有者。
 
@@ -351,18 +351,7 @@ async def chat_stream(
         raise ConflictErrorResponse(
             msg="该会话已有任务在运行，请等待完成或先取消后再发新消息",
         )
-    # 给 agent 的 prompt：正文 + 附件 URL + 工作区路径；多轮历史由 run_agent 通过 task.meta['dialog_history'] 注入
     base_prompt = (req.content or "").strip()
-    if req.files:
-        normalized = [
-            urlunparse(
-                urlparse(u)._replace(path=quote(unquote(urlparse(u).path), safe="/"))
-            )
-            for u in req.files
-        ]
-        base_prompt += "\n\n[Attached files]\n" + "\n".join(normalized)
-    if req.workspace_paths:
-        base_prompt += "\n\n[Workspace paths]\n" + "\n".join(req.workspace_paths)
     return StreamingResponse(
         stream_svc.generate_send_stream(sid, base_prompt, ctx),
         media_type="text/event-stream",

@@ -14,6 +14,7 @@ Termination conditions:
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import time
 from collections.abc import AsyncIterator
@@ -58,6 +59,7 @@ from matmaster.response_text import (
     normalize_visible_response_text,
 )
 from matmaster.types.message_normalization import (
+    canonicalize_messages_for_provider,
     normalize_and_validate_openai_messages,
 )
 from matmaster.types.messages import (
@@ -101,6 +103,11 @@ class AgentKernel:
             )
         )
         messages_before = len(state.messages)
+        pre_compaction_barrier = spec.meta.get("pre_compaction_barrier")
+        if callable(pre_compaction_barrier):
+            result = pre_compaction_barrier()
+            if inspect.isawaitable(result):
+                await result
         result = await spec.compactor.apply_compaction_plan(plan, state.messages)
         messages_after = len(state.messages)
 
@@ -302,11 +309,16 @@ class AgentKernel:
             ImageContentPart.model_validate(image)
             for image in spec.meta.get("current_user_images", [])
         ]
+        attachment_text = str(spec.meta.get("attachment_manifest") or "")
+        user_content = spec.context_builder.build_user_request(
+            user_text=task,
+            attachments=attachment_text,
+        )
         state = _KernelState(
             messages=[
                 SystemMessage(content=spec.system_prompt),
                 *(history or []),
-                UserMessage(content=task, images=current_user_images),
+                UserMessage(content=user_content, images=current_user_images),
             ]
         )
 
@@ -390,7 +402,9 @@ class AgentKernel:
 
             tool_defs = state.cached_tool_definitions
 
-            api_messages = normalize_and_validate_openai_messages(state.messages)
+            api_messages = normalize_and_validate_openai_messages(
+                canonicalize_messages_for_provider(state.messages)
+            )
 
             llm_response: LLMResponse | None = None
             try:

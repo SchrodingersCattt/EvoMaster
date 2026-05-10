@@ -34,9 +34,33 @@ class ContextBuilder:
 
     SEPARATOR = "\n\n---\n\n"
 
-    SECTION_ORDER = ("system_prompt", "identity", "skills", "tools", "memory", "task")
+    SYSTEM_SECTION_ORDER = (
+        "system_prompt",
+        "identity",
+        "skills",
+        "tools",
+        "memory",
+        "task",
+    )
 
-    def build(
+    BUNDLE_SECTION_ORDER = (
+        "header",
+        "previous_session_summary",
+        "rehydrated_context",
+        "continuation_instruction",
+    )
+
+    DEFAULT_COMPACT_HEADER = (
+        "以下是先前对话的压缩摘要，作为历史背景。"
+        "请基于这些信息继续完成当前任务，不要复述摘要、不要重新自我介绍。"
+    )
+
+    DEFAULT_CONTINUATION_INSTRUCTION = (
+        "不要向用户复述上述摘要，除非用户明确要求。"
+        "请直接基于这些背景继续完成当前任务。"
+    )
+
+    def build_system_prompt(
         self,
         ctx: PlaygroundContext,
         tool_registry: Any = None,
@@ -67,7 +91,7 @@ class ContextBuilder:
 
         section_builders: dict[str, str] = {}
 
-        for section_name in self.SECTION_ORDER:
+        for section_name in self.SYSTEM_SECTION_ORDER:
             if section_name in disabled:
                 continue
 
@@ -84,6 +108,54 @@ class ContextBuilder:
                 section_builders[section_name] = content
 
         return self.SEPARATOR.join(section_builders.values())
+
+    def build_user_request(
+        self,
+        *,
+        user_text: str,
+        attachments: str | None = None,
+    ) -> str:
+        parts = []
+        text = (user_text or "").strip()
+        if text:
+            parts.append(text)
+        attachment_text = (attachments or "").strip()
+        if attachment_text:
+            parts.append(attachment_text)
+        return "\n\n".join(parts)
+
+    def build_compact_bundle(
+        self,
+        *,
+        summary: str,
+        rehydrated_context: str | None = None,
+        continuation_instruction: str | None = None,
+    ) -> str:
+        summary_text = (summary or "").strip()
+        if not summary_text:
+            raise ValueError("compact summary must not be empty")
+
+        instruction = (
+            continuation_instruction
+            if continuation_instruction is not None
+            else self.DEFAULT_CONTINUATION_INSTRUCTION
+        )
+
+        sections = [
+            self.DEFAULT_COMPACT_HEADER,
+            self._tag("previous_session_summary", summary_text),
+        ]
+        rehydrated = (rehydrated_context or "").strip()
+        if rehydrated:
+            sections.append(self._tag("rehydrated_context", rehydrated))
+        instruction_text = (instruction or "").strip()
+        if instruction_text:
+            sections.append(self._tag("continuation_instruction", instruction_text))
+        return "\n\n".join(sections)
+
+    @staticmethod
+    def _tag(name: str, content: str) -> str:
+        return f"<{name}>\n{content}\n</{name}>"
 
     def _build_section(
         self,

@@ -8,11 +8,11 @@ from unittest.mock import patch
 
 import pytest
 
+from matmaster.core.context_builder import ContextBuilder
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
     StreamChunk,
-    SystemMessage,
     UserMessage,
 )
 
@@ -71,17 +71,14 @@ class _DurablePreflightCompactor:
     async def apply_compaction_plan(self, plan, messages: list[Any]):
         from matmaster.core.context_compactor import CompactionResult
 
-        task_message = messages[-1]
+        bundle = ContextBuilder().build_compact_bundle(summary="summary")
+        compact_message = UserMessage(content=bundle)
         base_snapshot = [
-            SystemMessage(content="[Compacted Context]\nsummary").model_dump(
-                mode="json"
-            ),
-            task_message.model_dump(mode="json"),
+            compact_message.model_dump(mode="json"),
         ]
         messages[:] = [
             messages[0],
-            SystemMessage(content="[Compacted Context]\nsummary"),
-            task_message,
+            compact_message,
         ]
         return CompactionResult(
             compaction_id=plan.compaction_id,
@@ -139,11 +136,12 @@ class _LifecycleCompactor:
         from matmaster.core.context_compactor import CompactionResult
 
         self.apply_calls += 1
-        task_message = messages[-1]
+        compact_message = UserMessage(
+            content=ContextBuilder().build_compact_bundle(summary=self._summary_text)
+        )
         messages[:] = [
             messages[0],
-            SystemMessage(content=f"[Compacted Context]\n{self._summary_text}"),
-            task_message,
+            compact_message,
         ]
         return CompactionResult(
             compaction_id=plan.compaction_id,
@@ -155,10 +153,7 @@ class _LifecycleCompactor:
             retained_turns=1,
             failure_reason=None,
             base_snapshot=[
-                SystemMessage(
-                    content=f"[Compacted Context]\n{self._summary_text}"
-                ).model_dump(mode="json"),
-                task_message.model_dump(mode="json"),
+                compact_message.model_dump(mode="json"),
             ],
         )
 
@@ -294,10 +289,9 @@ class TestCheckpointAwareCompaction:
             {
                 "payload": {"durability": "durable", "strategy": "summary"},
                 "base_messages": [
-                    SystemMessage(content="[Compacted Context]\nsummary").model_dump(
-                        mode="json"
-                    ),
-                    UserMessage(content="test task").model_dump(mode="json"),
+                    UserMessage(
+                        content=ContextBuilder().build_compact_bundle(summary="summary")
+                    ).model_dump(mode="json"),
                 ],
             }
         ]
@@ -430,3 +424,37 @@ class TestExpCheckpointSinkScopeResolution:
         )
         assert parent_runtime.spec.meta["checkpoint_sink"] is parent_sink
         assert child_runtime.spec.meta["checkpoint_sink"] is child_sink
+
+
+@pytest.mark.asyncio
+async def test_kernel_runs_pre_compaction_barrier_before_compactor() -> None:
+    from matmaster.core.agent import AgentKernel
+
+    sequence: list[str] = []
+
+    class BarrierCompactor(_DurablePreflightCompactor):
+        async def apply_compaction_plan(self, plan, messages):
+            sequence.append("apply")
+            return await super().apply_compaction_plan(plan, messages)
+
+    async def barrier() -> None:
+        sequence.append("barrier")
+
+    spec = _make_spec(provider=ContentOnlyProvider()).model_copy(
+        update={
+            "compactor": BarrierCompactor(),
+            "meta": {
+                "pre_compaction_barrier": barrier,
+                "checkpoint_sink": lambda **kwargs: None,
+            },
+        }
+    )
+
+    async for _event in AgentKernel().run_stream(
+        spec,
+        "task",
+        history=[UserMessage(content="old"), AssistantMessage(content="answer")],
+    ):
+        pass
+
+    assert sequence[:2] == ["barrier", "apply"]
