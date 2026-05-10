@@ -23,6 +23,8 @@ from matmaster.integration.fanout import RunEventFanout
 from matmaster.integration.persistence_handler import PersistenceHandler
 from matmaster.integration.sse_handler import SSEHandler
 from matmaster.integration.workspace_handler import WorkspaceHandler
+from matmaster.manifests import attachment as attachment_manifest
+from matmaster.manifests import skill as skill_manifest
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.context import WorkspaceArchivalConfig
 from matmaster.types.events import (
@@ -30,6 +32,7 @@ from matmaster.types.events import (
     CancelledEvent,
     ErrorEvent,
     RunResultEvent,
+    SkillHitEvent,
     StreamClosedEvent,
     ToolResultEvent,
 )
@@ -259,144 +262,54 @@ async def _emit_error_and_close_fanout(
     )
 
 
-def _legal_servers_from_cache_dir(cache_dir: Path) -> list[str]:
-    """List MCP server names with on-disk schema caches.
-
-    Cache files are produced by `matmaster.tools.cache_mcp_schemas` and named
-    `<server>.json`; their existence is a stronger guarantee than mcp_config
-    membership for replay purposes (Exp._init_skill_tools loads schemas from
-    here without any network IO).
-    """
-    if not cache_dir.exists():
-        return []
-    return sorted(p.stem for p in cache_dir.glob("*.json") if p.is_file())
-
-
-def _match_longest_server(tool_name: str, legal: list[str]) -> str | None:
-    """Match an MCP tool_name to its server using the longest prefix in `legal`.
-
-    Examples (with legal = {"mat_xrd", "mat_struct_db", "mat_sg"}):
-      mat_xrd_read           -> mat_xrd
-      mat_struct_db_query    -> mat_struct_db
-      totally_unrelated_tool -> None
-
-    A naive `name.split("_", 1)[0]` would mis-classify all of these as "mat",
-    which is why we compare against the cache-derived legal list.
-    """
-    best: str | None = None
-    for server in legal:
-        if tool_name == server or tool_name.startswith(server + "_"):
-            if best is None or len(server) > len(best):
-                best = server
-    return best
-
-
-def _resolve_active_mcp_servers_from_events(
-    events: list[dict],
-    cache_dir: Path,
-    skill_registry: Any | None,
-) -> set[str]:
-    """Resolve which MCP servers were activated in past turns from raw DB events.
-
-    The authoritative source for activation is the persisted event stream of a
-    session. This helper walks events of types `skill_hit` (resolved via
-    SkillRegistry) and `assistant_state` / `tool_call` (matched against the
-    on-disk schema cache via longest-prefix). Pure function; no DB / network IO.
-    """
-    legal = _legal_servers_from_cache_dir(cache_dir)
-    if not legal and skill_registry is None:
-        return set()
-    legal_set = set(legal)
-
-    resolved: set[str] = set()
-
-    def _add_from_tool_calls(tool_calls: Any) -> None:
-        if not isinstance(tool_calls, list):
-            return
-        for tc in tool_calls:
-            if not isinstance(tc, dict):
-                continue
-            name = tc.get("name") or ""
-            if not isinstance(name, str) or not name:
-                continue
-            server = _match_longest_server(name, legal)
-            if server:
-                resolved.add(server)
-
-    for ev in events:
-        if not isinstance(ev, dict):
-            continue
-        ev_type = ev.get("type")
-        content = ev.get("content")
-        if ev_type == "skill_hit" and skill_registry is not None:
-            skill_name = ""
-            if isinstance(content, dict):
-                skill_name = content.get("skill_name") or ""
-            elif isinstance(content, str):
-                skill_name = content
-            if not skill_name:
-                continue
-            try:
-                skill = skill_registry.get_skill(skill_name)
-            except Exception:
-                continue
-            if skill is None:
-                continue
-            mcp_server = getattr(getattr(skill, "meta_info", None), "mcp_server", None)
-            if isinstance(mcp_server, str) and mcp_server in legal_set:
-                resolved.add(mcp_server)
-        elif ev_type == "assistant_state" and isinstance(content, dict):
-            _add_from_tool_calls(content.get("tool_calls"))
-        elif ev_type == "tool_call":
-            tool_name = ev.get("tool_name") or ""
-            if isinstance(tool_name, str) and tool_name:
-                server = _match_longest_server(tool_name, legal)
-                if server:
-                    resolved.add(server)
-
-    return resolved
-
-
 class AgentRunService:
     """Agent execution service: pipeline orchestration via matmaster components."""
 
     def __init__(self, sessions_service=None):
         self._sessions_service = sessions_service or get_sessions_service()
         self._pg_manager = PlaygroundManager(_project_root)
-        # Hot cache: session_id -> set of mcp_server names already activated
-        # by Skill on any past turn. The authoritative source is DB events
-        # (skill_hit + assistant tool_calls); this dict only avoids re-scanning
-        # the DB on every turn. Populated lazily on cache miss.
-        self._active_mcp_servers: dict[str, set[str]] = {}
+        # Hot cache: session_id -> set of skill names already activated.
+        # The authoritative source is DB skill_hit events; this dict only
+        # avoids re-scanning the DB on every turn. Populated lazily on cache miss.
+        self._active_skills: dict[str, set[str]] = {}
 
     def init_playground_sync(self) -> None:
         """Validate configs at startup -- delegates to PlaygroundManager."""
         self._pg_manager.validate_startup()
 
-    def _resolve_active_mcp_servers(
+    def _build_skill_registry(self, exp_config: Any) -> Any | None:
+        if getattr(exp_config, "skills", None) is None or not exp_config.skills.enabled:
+            return None
+        try:
+            from matmaster.skills.registry import SkillRegistry
+
+            roots_raw = exp_config.skills.skills_root
+            if isinstance(roots_raw, list):
+                roots = [Path(root) for root in roots_raw if root]
+            elif roots_raw:
+                roots = [Path(roots_raw)]
+            else:
+                roots = []
+            return SkillRegistry(roots) if roots else None
+        except Exception:
+            logger.warning(
+                "active skill rehydrate: building SkillRegistry failed",
+                exc_info=True,
+            )
+            return None
+
+    def _resolve_active_skill_names(
         self,
         session_id: str,
         events_table: Any,
         exp_config: Any,
     ) -> set[str]:
-        """Return the activated-MCP-server set for a session.
-
-        Looks up the in-memory hot cache first; on miss, scans the DB events
-        once via _resolve_active_mcp_servers_from_events and populates the
-        cache. The returned set is the canonical mutable container -- the
-        record_active_mcp_server callback added to run_meta mutates this same
-        object via setdefault.
-        """
-        cached = self._active_mcp_servers.get(session_id)
+        cached = self._active_skills.get(session_id)
         if cached is not None:
             return cached
 
-        rebuilt: set[str] = set()
-        if (
-            events_table is not None
-            and getattr(exp_config, "skills", None) is not None
-            and exp_config.skills.enabled
-        ):
+        raw_events: list[dict] = []
+        if events_table is not None:
             try:
                 raw_events = events_table.get_session_events(
                     session_id,
@@ -404,39 +317,23 @@ class AgentRunService:
                 )
             except Exception:
                 logger.warning(
-                    "active_mcp rehydrate: get_session_events failed for session_id=%s",
+                    "active skill rehydrate: get_session_events failed for session_id=%s",
                     session_id,
                     exc_info=True,
                 )
-                raw_events = []
 
-            cache_dir = Path(exp_config.skills.cache_dir)
-            skill_registry = None
-            try:
-                from matmaster.skills.registry import SkillRegistry
-
-                roots_raw = exp_config.skills.skills_root
-                if isinstance(roots_raw, list):
-                    roots = [Path(r) for r in roots_raw if r]
-                elif roots_raw:
-                    roots = [Path(roots_raw)]
-                else:
-                    roots = []
-                if roots:
-                    skill_registry = SkillRegistry(roots)
-            except Exception:
-                logger.warning(
-                    "active_mcp rehydrate: building SkillRegistry failed; "
-                    "falling back to tool_call-only inference",
-                    exc_info=True,
-                )
-
-            rebuilt = _resolve_active_mcp_servers_from_events(
-                raw_events, cache_dir, skill_registry
+        registry = self._build_skill_registry(exp_config)
+        skills = skill_manifest.resolve_active_skills(raw_events, registry)
+        names = {
+            str(
+                getattr(skill, "name", "")
+                or getattr(getattr(skill, "meta_info", None), "name", "")
             )
-
-        self._active_mcp_servers[session_id] = rebuilt
-        return rebuilt
+            for skill in skills
+        }
+        names.discard("")
+        self._active_skills[session_id] = names
+        return names
 
     async def run_agent(
         self,
@@ -801,6 +698,82 @@ class AgentRunService:
                 if events_table is not None
                 else []
             )
+            query_events: list[dict] = []
+            if events_table is not None:
+                try:
+                    raw_query_events = events_table.get_session_user_query_events(
+                        session_id
+                    )
+                    query_events = (
+                        raw_query_events if isinstance(raw_query_events, list) else []
+                    )
+                except Exception:
+                    logger.warning(
+                        "attachment manifest: get_session_user_query_events failed for session_id=%s",
+                        session_id,
+                        exc_info=True,
+                    )
+            entries = attachment_manifest.build_available_attachments(query_events)
+            attachment_text = attachment_manifest.format_available_attachments(entries)
+
+            def _get_query_events() -> list[dict]:
+                return list(query_events)
+
+            def _get_all_events() -> list[dict]:
+                if events_table is None:
+                    return []
+                try:
+                    events = events_table.get_session_events(
+                        session_id,
+                        limit=_DIALOG_HISTORY_MAX_EVENTS,
+                    )
+                    return events if isinstance(events, list) else []
+                except Exception:
+                    logger.warning("manifest: get_session_events failed", exc_info=True)
+                    return []
+
+            def _get_latest_checkpoint_covered_until_event_id() -> int | None:
+                if events_table is None:
+                    return None
+                try:
+                    checkpoints = events_table.get_history_checkpoints(
+                        session_id, None, limit=1
+                    )
+                except Exception:
+                    logger.warning(
+                        "manifest: get_history_checkpoints failed",
+                        exc_info=True,
+                    )
+                    return None
+                if not isinstance(checkpoints, list):
+                    return None
+                for checkpoint in checkpoints:
+                    if not isinstance(checkpoint, dict):
+                        continue
+                    content = checkpoint.get("content")
+                    if isinstance(content, dict):
+                        raw = content.get("covered_until_event_id")
+                        if raw is not None:
+                            try:
+                                return int(raw)
+                            except (TypeError, ValueError):
+                                return None
+                return None
+
+            pg_ctx = pg_ctx.model_copy(
+                update={
+                    'run_meta': {
+                        **pg_ctx.run_meta,
+                        'attachment_manifest': attachment_text,
+                        'get_query_events': _get_query_events,
+                        'get_all_events': _get_all_events,
+                        'get_latest_checkpoint_covered_until_event_id': (
+                            _get_latest_checkpoint_covered_until_event_id
+                        ),
+                        'pre_compaction_barrier': fanout.flush_persistence_barrier,
+                    }
+                }
+            )
             bohrium_rebuild_events: list[dict] = []
             try:
                 if events_table is not None:
@@ -827,22 +800,22 @@ class AgentRunService:
                 history=history,
             )
 
-            # Resolve active MCP servers (hot cache + DB rehydrate). Must run
+            # Resolve active skills (hot cache + DB rehydrate). Must run
             # AFTER history is available so the snapshot frozen below reflects
-            # any servers recovered from past turns.
-            active_servers = self._resolve_active_mcp_servers(
+            # any skills recovered from past turns.
+            active_skills = self._resolve_active_skill_names(
                 session_id, events_table, exp_config
             )
 
-            def _record_active_mcp_server(server: str) -> None:
-                self._active_mcp_servers.setdefault(session_id, set()).add(server)
+            def _remember_skill_hit(skill_name: str) -> None:
+                if skill_name:
+                    self._active_skills.setdefault(session_id, set()).add(skill_name)
 
             pg_ctx = pg_ctx.model_copy(
                 update={
                     'run_meta': {
                         **pg_ctx.run_meta,
-                        'active_mcp_servers': frozenset(active_servers),
-                        'record_active_mcp_server': _record_active_mcp_server,
+                        'active_skills': frozenset(active_skills),
                     }
                 }
             )
@@ -865,6 +838,9 @@ class AgentRunService:
                         normalized = _normalize_public_source(event.source)
                         if event.source != normalized:
                             event = event.model_copy(update={'source': normalized})
+
+                    if isinstance(event, SkillHitEvent):
+                        _remember_skill_hit(event.skill_name)
 
                     if isinstance(event, RunResultEvent) and event.spawn_id is None:
                         await _dispatch_response_figures_if_dirty('final_flush')

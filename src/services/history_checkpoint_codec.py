@@ -80,7 +80,12 @@ def validate_base_messages(messages: list[Message]) -> None:
         context="history_checkpoint_base_messages",
     )
 
-    if not isinstance(messages[0], SystemMessage):
-        raise ValueError(
-            "checkpoint base_messages must start with compacted SystemMessage"
-        )
+    if not isinstance(messages[0], UserMessage):
+        raise ValueError("checkpoint base_messages must start with compact UserMessage")
+
+    if any(isinstance(message, SystemMessage) for message in messages):
+        raise ValueError("checkpoint base_messages must not contain SystemMessage")
+
+    first_content = (messages[0].content or "").strip()
+    if "<previous_session_summary>" not in first_content:
+        raise ValueError("checkpoint base_messages[0] must be compact context bundle")

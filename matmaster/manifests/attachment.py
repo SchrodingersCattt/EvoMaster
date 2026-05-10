@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 from urllib.parse import quote, unquote, urlparse, urlunparse
 
-from src.utils.chat_event_source import normalize_event_source
+from matmaster.utils.event_source import normalize_event_source
 
 AttachmentKind = Literal["file", "image", "workspace"]
 
@@ -16,6 +16,7 @@ class AttachmentEntry:
     label: str
     name: str
     value: str
+    source_event_id: int | None = None
 
 
 def _string_list(value: Any) -> list[str]:
@@ -33,6 +34,16 @@ def _query_payload(event: dict[str, Any]) -> dict[str, Any]:
         if key in event:
             payload[key] = event.get(key)
     return payload
+
+
+def _event_id(event: dict[str, Any]) -> int | None:
+    raw = event.get("id")
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
 
 
 def _name_from_url(value: str, fallback: str) -> str:
@@ -76,7 +87,7 @@ def build_available_attachments(
     seen: set[tuple[AttachmentKind, str]] = set()
     entries: list[AttachmentEntry] = []
 
-    def add(kind: AttachmentKind, value: str) -> None:
+    def add(kind: AttachmentKind, value: str, source_event_id: int | None) -> None:
         if len(entries) >= max_entries:
             return
         normalized_value = _normalize_attachment_value(kind, value)
@@ -91,6 +102,7 @@ def build_available_attachments(
                 label=f"{kind}_{counters[kind]}",
                 name=_entry_name(kind, normalized_value),
                 value=normalized_value,
+                source_event_id=source_event_id,
             )
         )
 
@@ -102,14 +114,28 @@ def build_available_attachments(
         if (event.get("type") or "").strip() != "query":
             continue
         payload = _query_payload(event)
+        source_event_id = _event_id(event)
         for value in _string_list(payload.get("files")):
-            add("file", value)
+            add("file", value, source_event_id)
         for value in _string_list(payload.get("images")):
-            add("image", value)
+            add("image", value, source_event_id)
         for value in _string_list(payload.get("workspace_paths")):
-            add("workspace", value)
+            add("workspace", value, source_event_id)
 
     return entries
+
+
+def filter_entries_after_event_id(
+    entries: list[AttachmentEntry],
+    after_id: int | None,
+) -> list[AttachmentEntry]:
+    if after_id is None:
+        return list(entries)
+    return [
+        entry
+        for entry in entries
+        if entry.source_event_id is not None and entry.source_event_id > after_id
+    ]
 
 
 def format_available_attachments(entries: list[AttachmentEntry]) -> str:
@@ -122,19 +148,3 @@ def format_available_attachments(entries: list[AttachmentEntry]) -> str:
         else:
             lines.append(f"{entry.label} {entry.name} {entry.value}")
     return "\n".join(lines)
-
-
-def append_available_attachments(
-    prompt: str,
-    events: list[dict[str, Any]],
-    *,
-    max_entries: int = 30,
-) -> str:
-    block = format_available_attachments(
-        build_available_attachments(events, max_entries=max_entries)
-    )
-    if not block:
-        return prompt
-    if not prompt:
-        return block
-    return f"{prompt}\n\n{block}"

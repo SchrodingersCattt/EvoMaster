@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from matmaster.core.context_builder import ContextBuilder
 from matmaster.core.hooks import HookExecutor
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.llm_provider import LLMProvider
@@ -97,16 +98,23 @@ class TestCompactionConfigUpdate:
 # ── AgentRuntimeSpec ────────────────────────────────────
 
 
+def test_agent_runtime_spec_requires_context_builder() -> None:
+    with pytest.raises(ValueError, match="context_builder"):
+        AgentRuntimeSpec()
+
+
 class TestAgentRuntimeSpec:
     def test_minimal_instantiation(self) -> None:
         provider = _MockLLMProvider()
         spec = AgentRuntimeSpec(
+            context_builder=ContextBuilder(),
             llm_provider=provider,
         )
         assert spec.llm_provider is not None
 
     def test_defaults(self) -> None:
         spec = AgentRuntimeSpec(
+            context_builder=ContextBuilder(),
             llm_provider=_MockLLMProvider(),
         )
         assert spec.max_turns == 100
@@ -117,6 +125,7 @@ class TestAgentRuntimeSpec:
 
     def test_frozen(self) -> None:
         spec = AgentRuntimeSpec(
+            context_builder=ContextBuilder(),
             llm_provider=_MockLLMProvider(),
         )
         with pytest.raises(ValidationError):
@@ -125,6 +134,7 @@ class TestAgentRuntimeSpec:
     def test_max_turns_field_exists_and_defaults_to_100(self) -> None:
         """CONT-05: TerminationPolicy simplified to AgentRuntimeSpec.max_turns."""
         spec = AgentRuntimeSpec(
+            context_builder=ContextBuilder(),
             llm_provider=_MockLLMProvider(),
         )
         assert isinstance(spec.max_turns, int)
@@ -132,6 +142,7 @@ class TestAgentRuntimeSpec:
 
     def test_serialization(self) -> None:
         spec = AgentRuntimeSpec(
+            context_builder=ContextBuilder(),
             llm_provider=_MockLLMProvider(),
             max_turns=50,
             system_prompt="You are a scientist.",
@@ -152,6 +163,7 @@ class TestAgentRuntimeSpec:
         assert isinstance(provider, LLMProvider)
 
         spec = AgentRuntimeSpec(
+            context_builder=ContextBuilder(),
             llm_provider=provider,
         )
         assert isinstance(spec.llm_provider, LLMProvider)
@@ -160,6 +172,7 @@ class TestAgentRuntimeSpec:
         """hook_executor field accepts HookExecutor instances."""
         executor = HookExecutor()
         spec = AgentRuntimeSpec(
+            context_builder=ContextBuilder(),
             llm_provider=_MockLLMProvider(),
             hook_executor=executor,
         )
@@ -169,18 +182,21 @@ class TestAgentRuntimeSpec:
 
 class TestAgentRuntimeSpecCompactor:
     def test_compactor_default_none(self) -> None:
-        spec = AgentRuntimeSpec()
+        spec = AgentRuntimeSpec(context_builder=ContextBuilder())
         assert spec.compactor is None
 
     def test_compactor_accepts_object(self) -> None:
         class FakeCompactor:
             pass
 
-        spec = AgentRuntimeSpec(compactor=FakeCompactor())
+        spec = AgentRuntimeSpec(
+            context_builder=ContextBuilder(),
+            compactor=FakeCompactor(),
+        )
         assert spec.compactor is not None
 
     def test_compactor_frozen_reference(self) -> None:
-        spec = AgentRuntimeSpec()
+        spec = AgentRuntimeSpec(context_builder=ContextBuilder())
         with pytest.raises(Exception, match="frozen"):
             spec.compactor = "new"
 
@@ -193,6 +209,7 @@ class TestAgentRuntimeSpecFrozenRejectMutation:
 
     def test_agent_runtime_spec_frozen_reject_mutation(self) -> None:
         spec = AgentRuntimeSpec(
+            context_builder=ContextBuilder(),
             llm_provider=_MockLLMProvider(),
         )
         with pytest.raises(ValidationError):
@@ -206,6 +223,7 @@ class TestAgentRuntimeSpecDefaults:
 
     def test_agent_runtime_spec_defaults(self) -> None:
         spec = AgentRuntimeSpec(
+            context_builder=ContextBuilder(),
             llm_provider=_MockLLMProvider(),
         )
         assert spec.max_turns == 100
@@ -220,6 +238,7 @@ class TestAgentRuntimeSpecArbitraryTypes:
     def test_agent_runtime_spec_arbitrary_types(self) -> None:
         provider = _MockLLMProvider()
         spec = AgentRuntimeSpec(
+            context_builder=ContextBuilder(),
             llm_provider=provider,
         )
         assert spec.llm_provider is provider
@@ -233,7 +252,10 @@ class TestAgentRuntime:
     """AgentRuntime frozen dataclass — runtime bundle from Exp.build_runtime()."""
 
     def _make_spec(self) -> AgentRuntimeSpec:
-        return AgentRuntimeSpec(llm_provider=_MockLLMProvider())
+        return AgentRuntimeSpec(
+            context_builder=ContextBuilder(),
+            llm_provider=_MockLLMProvider(),
+        )
 
     def test_agent_runtime_creation(self) -> None:
         """AgentRuntime holds kernel, spec, and cleanup callable."""
@@ -307,7 +329,7 @@ class TestAgentRuntimeSpecToolRuntimeV2Fields:
 
     def test_new_fields_default_none(self) -> None:
         """All 5 new fields default to None when not provided."""
-        spec = AgentRuntimeSpec()
+        spec = AgentRuntimeSpec(context_builder=ContextBuilder())
         assert spec.tool_runner is None
         assert spec.tool_catalog is None
         assert spec.runtime_topology is None
@@ -317,6 +339,7 @@ class TestAgentRuntimeSpecToolRuntimeV2Fields:
     def test_backward_compat_with_existing_constructor(self) -> None:
         """Existing _make_spec() pattern (no new fields) still works."""
         spec = AgentRuntimeSpec(
+            context_builder=ContextBuilder(),
             llm_provider=_MockLLMProvider(),
             hook_executor=None,
             max_turns=10,
@@ -337,7 +360,7 @@ class TestAgentRuntimeSpecToolRuntimeV2Fields:
 
         runner = _StubToolRunner()
 
-        spec = AgentRuntimeSpec(tool_runner=runner)
+        spec = AgentRuntimeSpec(context_builder=ContextBuilder(), tool_runner=runner)
 
         assert spec.tool_runner is runner
 
@@ -349,6 +372,7 @@ class TestAgentRuntimeSpecToolRuntimeV2Fields:
         catalog = ToolCatalog(registry)
 
         spec = AgentRuntimeSpec(
+            context_builder=ContextBuilder(),
             tool_catalog=catalog,
         )
         assert spec.tool_catalog is catalog
@@ -362,13 +386,13 @@ class TestAgentRuntimeSpecToolRuntimeV2Fields:
             control_root="/tmp",
             workspace_root="/tmp/workspace",
         )
-        spec = AgentRuntimeSpec(runtime_topology=topo)
+        spec = AgentRuntimeSpec(context_builder=ContextBuilder(), runtime_topology=topo)
         assert spec.runtime_topology is topo
         assert spec.runtime_topology.session_kind == "local"
 
     def test_model_dump_includes_new_fields(self) -> None:
         """model_dump() output includes the 5 new fields."""
-        spec = AgentRuntimeSpec()
+        spec = AgentRuntimeSpec(context_builder=ContextBuilder())
         data = spec.model_dump()
         assert "tool_runner" in data
         assert "tool_catalog" in data
@@ -382,19 +406,22 @@ class TestAgentRuntimeSpecToolRuntimeV2Fields:
     def test_tool_runner_rejects_invalid_type(self) -> None:
         """tool_runner field rejects non-ToolRunner objects at construction."""
         with pytest.raises(ValidationError, match="tool_runner must be ToolRunner"):
-            AgentRuntimeSpec(tool_runner=object())
+            AgentRuntimeSpec(context_builder=ContextBuilder(), tool_runner=object())
 
     def test_tool_catalog_rejects_invalid_type(self) -> None:
         """tool_catalog field rejects non-ToolCatalog objects at construction."""
         with pytest.raises(ValidationError, match="tool_catalog must be ToolCatalog"):
-            AgentRuntimeSpec(tool_catalog="not a catalog")
+            AgentRuntimeSpec(
+                context_builder=ContextBuilder(),
+                tool_catalog="not a catalog",
+            )
 
     def test_runtime_topology_rejects_invalid_type(self) -> None:
         """runtime_topology field rejects non-RuntimeTopology objects."""
         with pytest.raises(
             ValidationError, match="runtime_topology must be RuntimeTopology"
         ):
-            AgentRuntimeSpec(runtime_topology=42)
+            AgentRuntimeSpec(context_builder=ContextBuilder(), runtime_topology=42)
 
 
 # ── Types re-export from matmaster.types (Phase 32) ───

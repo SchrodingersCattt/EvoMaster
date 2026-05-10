@@ -2,6 +2,16 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, Mock, call
 
+from matmaster.core.context_builder import ContextBuilder
+from matmaster.types.messages import UserMessage
+from src.services.history_checkpoint_codec import serialize_base_messages
+
+
+def _compact_base_messages(summary: str) -> list[dict]:
+    return serialize_base_messages(
+        [UserMessage(content=ContextBuilder().build_compact_bundle(summary=summary))]
+    )
+
 
 class TestHistoryCheckpointService:
     async def test_checkpoint_sink_flushes_barrier_then_writes_single_checkpoint(
@@ -30,12 +40,7 @@ class TestHistoryCheckpointService:
             spawn_id=None,
         )
 
-        base_messages = [
-            {
-                "role": "system",
-                "content": "compacted summary",
-            }
-        ]
+        base_messages = _compact_base_messages("compacted summary")
 
         covered_until = await sink(
             payload={"durability": "durable", "strategy": "summary"},

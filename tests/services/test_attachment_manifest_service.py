@@ -1,6 +1,7 @@
-from src.services.attachment_manifest_service import (
+from matmaster.manifests.attachment import (
     AttachmentEntry,
     build_available_attachments,
+    filter_entries_after_event_id,
     format_available_attachments,
 )
 
@@ -27,18 +28,21 @@ def test_build_available_attachments_reads_top_level_query_metadata() -> None:
             label="file_1",
             name="data.csv",
             value="https://oss.example.com/chat/data.csv",
+            source_event_id=None,
         ),
         AttachmentEntry(
             kind="image",
             label="image_1",
             name="em.png",
             value="https://oss.example.com/chat/em.png",
+            source_event_id=None,
         ),
         AttachmentEntry(
             kind="workspace",
             label="workspace_1",
             name="/share/a.cif",
             value="/share/a.cif",
+            source_event_id=None,
         ),
     ]
 
@@ -244,18 +248,21 @@ def test_format_available_attachments_outputs_compact_block() -> None:
             label="file_1",
             name="data.csv",
             value="https://oss.example.com/chat/data.csv",
+            source_event_id=None,
         ),
         AttachmentEntry(
             kind="image",
             label="image_1",
             name="em.png",
             value="https://oss.example.com/chat/em.png",
+            source_event_id=None,
         ),
         AttachmentEntry(
             kind="workspace",
             label="workspace_1",
             name="/share/a.cif",
             value="/share/a.cif",
+            source_event_id=None,
         ),
     ]
 
@@ -269,3 +276,77 @@ def test_format_available_attachments_outputs_compact_block() -> None:
 
 def test_format_available_attachments_returns_empty_string_without_entries() -> None:
     assert format_available_attachments([]) == ""
+
+
+def test_build_available_attachments_records_source_event_id() -> None:
+    events = [
+        {
+            "id": 10,
+            "source": "User",
+            "type": "query",
+            "content": "first",
+            "files": ["https://oss.example.com/chat/a.csv"],
+        },
+        {
+            "id": 11,
+            "source": "User",
+            "type": "query",
+            "content": "second",
+            "files": ["https://oss.example.com/chat/b.csv"],
+        },
+    ]
+
+    entries = build_available_attachments(events)
+
+    assert [(entry.label, entry.source_event_id) for entry in entries] == [
+        ("file_1", 10),
+        ("file_2", 11),
+    ]
+
+
+def test_filter_entries_after_event_id_preserves_stable_labels() -> None:
+    events = [
+        {
+            "id": 10,
+            "source": "User",
+            "type": "query",
+            "content": "first",
+            "files": ["https://oss.example.com/chat/a.csv"],
+        },
+        {
+            "id": 20,
+            "source": "User",
+            "type": "query",
+            "content": "second",
+            "files": ["https://oss.example.com/chat/b.csv"],
+            "images": ["https://oss.example.com/chat/c.png"],
+        },
+    ]
+
+    all_entries = build_available_attachments(events)
+    delta = filter_entries_after_event_id(all_entries, 10)
+
+    assert [(entry.kind, entry.label, entry.value) for entry in delta] == [
+        ("file", "file_2", "https://oss.example.com/chat/b.csv"),
+        ("image", "image_1", "https://oss.example.com/chat/c.png"),
+    ]
+
+
+def test_filter_entries_after_event_id_none_keeps_all_entries() -> None:
+    entries = [
+        AttachmentEntry(
+            kind="file",
+            label="file_1",
+            name="a.csv",
+            value="https://oss.example.com/chat/a.csv",
+            source_event_id=10,
+        )
+    ]
+
+    assert filter_entries_after_event_id(entries, None) == entries
+
+
+def test_attachment_module_does_not_expose_prompt_append_shortcut() -> None:
+    import matmaster.manifests.attachment as attachment
+
+    assert not hasattr(attachment, "append_available_attachments")

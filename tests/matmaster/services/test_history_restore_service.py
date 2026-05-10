@@ -6,6 +6,15 @@ from src.services.history_checkpoint_codec import serialize_base_messages
 from src.services.history_restore_service import HistoryRestoreService
 
 
+def _compact_user_message(summary: str) -> UserMessage:
+    return UserMessage(
+        content=(
+            "以下是先前对话的压缩摘要，作为历史背景。\n\n"
+            f"<previous_session_summary>\n{summary}\n</previous_session_summary>"
+        )
+    )
+
+
 def _checkpoint(
     *,
     checkpoint_id: int,
@@ -124,7 +133,7 @@ def test_restore_uses_latest_valid_checkpoint() -> None:
             _checkpoint(
                 checkpoint_id=20,
                 covered_until_event_id=20,
-                base_messages=[SystemMessage(content="[Compacted Context]\nlatest")],
+                base_messages=[_compact_user_message("latest")],
             )
         ],
         scope_events=[
@@ -141,12 +150,12 @@ def test_restore_uses_latest_valid_checkpoint() -> None:
         task_id=None,
     )
 
-    assert isinstance(history[0], SystemMessage)
+    assert isinstance(history[0], UserMessage)
     assert isinstance(history[-1], AssistantMessage)
-    assert history[0].content == "[Compacted Context]\nlatest"
+    assert "latest" in (history[0].content or "")
     assert history[-1].content == "follow up answer"
     assert [type(message) for message in history] == [
-        SystemMessage,
+        UserMessage,
         UserMessage,
         AssistantMessage,
     ]
@@ -159,7 +168,7 @@ def test_restore_falls_back_to_older_checkpoint_when_latest_is_invalid() -> None
             _checkpoint(
                 checkpoint_id=20,
                 covered_until_event_id=20,
-                base_messages=[SystemMessage(content="[Compacted Context]\nolder")],
+                base_messages=[_compact_user_message("older")],
             ),
         ],
         scope_events=[
@@ -176,15 +185,43 @@ def test_restore_falls_back_to_older_checkpoint_when_latest_is_invalid() -> None
         task_id=None,
     )
 
-    assert isinstance(history[0], SystemMessage)
-    assert history[0].content == "[Compacted Context]\nolder"
+    assert isinstance(history[0], UserMessage)
+    assert "older" in (history[0].content or "")
     assert isinstance(history[-1], AssistantMessage)
     assert history[-1].content == "answer from older checkpoint"
     assert [type(message) for message in history] == [
-        SystemMessage,
+        UserMessage,
         UserMessage,
         AssistantMessage,
     ]
+
+
+def test_restore_skips_old_system_checkpoint_and_uses_older_valid_checkpoint() -> None:
+    events_table = FakeEventsTable(
+        checkpoints=[
+            _checkpoint(
+                checkpoint_id=2,
+                covered_until_event_id=20,
+                base_messages=[SystemMessage(content="[Compacted Context]\nold")],
+            ),
+            _checkpoint(
+                checkpoint_id=1,
+                covered_until_event_id=10,
+                base_messages=[_compact_user_message("valid")],
+            ),
+        ],
+        scope_events=[],
+    )
+
+    history = HistoryRestoreService(events_table).restore_history(
+        session_id="s1",
+        spawn_id=None,
+        task_id=None,
+    )
+
+    assert len(history) == 1
+    assert isinstance(history[0], UserMessage)
+    assert "valid" in (history[0].content or "")
 
 
 def test_restore_without_checkpoint_uses_raw_event_history() -> None:

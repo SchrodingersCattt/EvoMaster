@@ -13,7 +13,7 @@ from matmaster.types.messages import (
     ToolMessage,
     UserMessage,
 )
-from src.utils.chat_event_source import normalize_event_source
+from matmaster.utils.event_source import normalize_event_source
 
 logger = logging.getLogger(__name__)
 
