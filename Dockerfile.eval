@@ -102,9 +102,15 @@ COPY --from=eval-toolchain /usr/bin/claude /usr/bin/claude
 #     && rm -rf /var/lib/apt/lists/* \
 #     && aws --version
 
-# 评测 validators：numpy + pymatgen（struct_file_*，见 score_baseline_tasks / BinaryEvaluator）
+# 评测 validators 与 agent 本地脚本：numpy + pymatgen + ase + molcrys-kit
+# pymatgen/numpy: struct_file_* 校验器需要（见 score_baseline_tasks / BinaryEvaluator）
+# ase: agent 在 SC 题目里写本地几何脚本时常用
+# molcrys-kit: operate-molecular-crystal SKILL 的本地 API；不装会强迫 agent 绕道 Bohrium
+ARG MOLCRYS_KIT_REF=v0.2.0
 RUN --mount=type=cache,target=/root/.cache/uv \
-    . /app/.venv/bin/activate && uv pip install numpy "pymatgen>=2024.1"
+    . /app/.venv/bin/activate && uv pip install \
+        numpy "pymatgen>=2024.1" "ase>=3.22" \
+        "https://github.com/SchrodingersCattt/MolCrysKit/archive/refs/tags/${MOLCRYS_KIT_REF}.tar.gz"
 
 # claude --dangerously-skip-permissions 拒绝在 root 下运行，创建非 root 用户。
 # 不对 /app 整树 chown：.venv 与源码小文件极多，递归改属主在 overlay 上极慢（CI 可数十秒）。
