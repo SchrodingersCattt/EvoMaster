@@ -5,7 +5,7 @@
 2. 阈值触发: 小 context_window + 高 prompt_tokens → 触发摘要压缩
 3. 阈值未达: 低 prompt_tokens → 不触发
 4. 冷却机制: 连续 turn 不触发
-5. 摘要策略: summary provider 正常 → [Compacted Context] 摘要
+5. 摘要策略: summary provider 正常 → user role compact bundle 摘要
 6. 滑动窗口回退: summary provider 失败 → sliding_window 截断
 7. 两阶段结果: plan/apply 返回稳定的 compaction 结果元数据
 8. 多轮压缩: 首次压缩后继续积累，再次触发
@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+from matmaster.core.context_builder import ContextBuilder
 from matmaster.core.context_compactor import (
     ContextCompactor,
     estimate_tokens,
@@ -91,6 +92,26 @@ class FailingSummaryProvider:
         yield StreamChunk(content="", finish_reason="stop")
 
 
+class _EmptyRehydrator:
+    async def build(self) -> str:
+        return ""
+
+
+def _make_compactor(
+    config: CompactionConfig,
+    provider,
+    *,
+    event_sink=None,
+) -> ContextCompactor:
+    return ContextCompactor(
+        config=config,
+        summary_provider=provider,
+        rehydrator=_EmptyRehydrator(),
+        context_builder=ContextBuilder(),
+        event_sink=event_sink,
+    )
+
+
 def _build_conversation(n_turns: int, content_size: int = 500) -> list:
     """构建包含 n 个完整 turn 的对话。"""
     msgs = [
@@ -156,7 +177,7 @@ class TestDefaultDevshellPath:
         """默认启用压缩时，低于阈值也应保持原消息不变。"""
         config = CompactionConfig(context_limit=128_000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
-        compactor = ContextCompactor(config=config, summary_provider=provider)
+        compactor = _make_compactor(config, provider)
 
         msgs = _build_conversation(5)
         original_len = len(msgs)
@@ -179,7 +200,7 @@ class TestThresholdBehavior:
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         msgs = _build_conversation(5)
-        compactor = ContextCompactor(config=config, summary_provider=provider)
+        compactor = _make_compactor(config, provider)
         compactor.update_message_count(len(msgs))
 
         # prompt_tokens=950 已接近阈值 900，加上 delta 估算必超
@@ -193,7 +214,7 @@ class TestThresholdBehavior:
         config = CompactionConfig(context_limit=128_000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         msgs = _build_conversation(3)
-        compactor = ContextCompactor(config=config, summary_provider=provider)
+        compactor = _make_compactor(config, provider)
         compactor.update_message_count(len(msgs))
 
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 1000}, turn=3)
@@ -202,19 +223,19 @@ class TestThresholdBehavior:
         assert compactor._compaction_count == 0
 
     async def test_threshold_boundary_exact(self) -> None:
-        """精确边界: estimated == threshold - 1 -> 不触发。"""
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        """低于自动 compact 阈值时不触发。"""
+        config = CompactionConfig(context_limit=34000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         # 只用 system + user, delta 极小
         msgs = [
             SystemMessage(content="sys"),
             UserMessage(content="hi"),
         ]
-        compactor = ContextCompactor(config=config, summary_provider=provider)
+        compactor = _make_compactor(config, provider)
         compactor.update_message_count(len(msgs))
 
-        # prompt_tokens 刚好不足
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 800}, turn=3)
+        # context_limit=34000 时默认保留预算后 auto_threshold 为 1000。
+        await compactor.compact_if_needed(msgs, {"prompt_tokens": 900}, turn=3)
         assert provider.call_count == 0
 
 
@@ -228,7 +249,7 @@ class TestCooldown:
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         msgs = _build_conversation(5)
-        compactor = ContextCompactor(config=config, summary_provider=provider)
+        compactor = _make_compactor(config, provider)
         compactor.update_message_count(len(msgs))
 
         # 首次触发 at turn=3
@@ -244,7 +265,7 @@ class TestCooldown:
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         msgs = _build_conversation(8)
-        compactor = ContextCompactor(config=config, summary_provider=provider)
+        compactor = _make_compactor(config, provider)
         compactor.update_message_count(len(msgs))
 
         # turn=3 触发
@@ -282,28 +303,29 @@ class TestSummaryStrategy:
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider(summary="Concise summary of work done.")
         msgs = _build_conversation(10)
-        compactor = ContextCompactor(config=config, summary_provider=provider)
+        compactor = _make_compactor(config, provider)
         compactor.update_message_count(len(msgs))
         original_len = len(msgs)
 
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
 
-        # 结构: [SystemMessage(原始), SystemMessage([Compacted Context]), UserMessage(task), ...recent]
+        # 结构: [SystemMessage(原始), UserMessage(compact bundle)]
         assert len(msgs) < original_len, "压缩后消息数应减少"
+        assert len(msgs) == 2
         assert isinstance(msgs[0], SystemMessage)
         assert msgs[0].content == "You are a helpful assistant."
-        assert isinstance(msgs[1], SystemMessage)
-        assert "[Compacted Context]" in msgs[1].content
+        assert isinstance(msgs[1], UserMessage)
+        assert "[Compacted Context]" not in (msgs[1].content or "")
+        assert "<previous_session_summary>" in (msgs[1].content or "")
         assert "Concise summary of work done." in msgs[1].content
-        assert isinstance(msgs[2], UserMessage)
-        assert "Analyze this dataset" in msgs[2].content
+        assert "Analyze this dataset" not in msgs[1].content
 
     async def test_summary_provider_receives_old_messages(self) -> None:
         """摘要 provider 收到的是被压缩的旧消息，不含 recent turns。"""
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         msgs = _build_conversation(6)
-        compactor = ContextCompactor(config=config, summary_provider=provider)
+        compactor = _make_compactor(config, provider)
         compactor.update_message_count(len(msgs))
 
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
@@ -325,17 +347,20 @@ class TestSlidingWindowFallback:
         provider = FailingSummaryProvider()
         msgs = _build_conversation(10)
         original_len = len(msgs)
-        compactor = ContextCompactor(config=config, summary_provider=provider)
+        compactor = _make_compactor(config, provider)
         compactor.update_message_count(len(msgs))
 
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
 
-        assert len(msgs) < original_len, "回退策略也应减少消息数"
-        # 无 [Compacted Context] 消息
+        assert len(msgs) == original_len, "回退策略只截断大 tool result，不删除消息"
+        # 无 compact bundle 消息
         assert isinstance(msgs[0], SystemMessage)
         assert "[Compacted Context]" not in (msgs[0].content or "")
-        # msgs[1] 应为 initial task UserMessage
         assert isinstance(msgs[1], UserMessage)
+        assert any(
+            isinstance(message, ToolMessage) and "truncated" in (message.content or "")
+            for message in msgs
+        )
         assert compactor._compaction_count == 1
 
 
@@ -349,7 +374,7 @@ class TestCompactionResults:
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         msgs = _build_conversation(5)
-        compactor = ContextCompactor(config=config, summary_provider=provider)
+        compactor = _make_compactor(config, provider)
         compactor.update_message_count(len(msgs))
 
         plan = await compactor.plan_runtime_compaction(
@@ -360,14 +385,16 @@ class TestCompactionResults:
         assert result.compaction_count == 1
         assert result.strategy == "summary"
         assert result.trigger_tokens > 0
-        assert result.retained_turns >= 3
+        assert result.retained_turns == 0
+        assert result.base_snapshot is not None
+        assert [item["role"] for item in result.base_snapshot] == ["user"]
 
     async def test_fallback_result_strategy(self) -> None:
         """回退策略的 result.strategy 字段为 sliding_window。"""
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = FailingSummaryProvider()
         msgs = _build_conversation(5)
-        compactor = ContextCompactor(config=config, summary_provider=provider)
+        compactor = _make_compactor(config, provider)
         compactor.update_message_count(len(msgs))
 
         plan = await compactor.plan_runtime_compaction(
@@ -382,9 +409,7 @@ class TestCompactionResults:
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         msgs = _build_conversation(5)
-        compactor = ContextCompactor(
-            config=config, summary_provider=provider, event_sink=None
-        )
+        compactor = _make_compactor(config, provider, event_sink=None)
         compactor.update_message_count(len(msgs))
 
         await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
@@ -401,7 +426,7 @@ class TestMultipleCompactions:
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         msgs = _build_conversation(8)
-        compactor = ContextCompactor(config=config, summary_provider=provider)
+        compactor = _make_compactor(config, provider)
         compactor.update_message_count(len(msgs))
 
         # 第一次压缩 at turn=3
@@ -452,7 +477,7 @@ class TestRetainedTurnsSelection:
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         msgs = _build_conversation(10)
-        compactor = ContextCompactor(config=config, summary_provider=provider)
+        compactor = _make_compactor(config, provider)
 
         turns = parse_turns(msgs)
         selected, count = compactor._select_recent_turns(turns)
@@ -463,7 +488,7 @@ class TestRetainedTurnsSelection:
         config = CompactionConfig(context_limit=100000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         msgs = _build_conversation(2)
-        compactor = ContextCompactor(config=config, summary_provider=provider)
+        compactor = _make_compactor(config, provider)
 
         turns = parse_turns(msgs)
         selected, count = compactor._select_recent_turns(turns)
@@ -475,7 +500,7 @@ class TestRetainedTurnsSelection:
         provider = MockSummaryProvider()
         # 每个 turn 的 content 很大
         msgs = _build_conversation(20, content_size=2000)
-        compactor = ContextCompactor(config=config, summary_provider=provider)
+        compactor = _make_compactor(config, provider)
 
         turns = parse_turns(msgs)
         selected, count = compactor._select_recent_turns(turns)
@@ -495,7 +520,7 @@ class TestToolTruncationFallback:
     async def test_truncation_when_single_turn_exceeds_threshold(self) -> None:
         """1 个 turn 就超限 -> 无可压缩旧 turn -> 截断大 tool result。"""
         config = CompactionConfig(context_limit=500, trigger_ratio=0.9)
-        provider = MockSummaryProvider()
+        provider = FailingSummaryProvider()
 
         # 构造：1 turn with 3 大 tool results (每个 2000+ chars)
         msgs = [
@@ -525,7 +550,7 @@ class TestToolTruncationFallback:
             ),
         ]
 
-        compactor = ContextCompactor(config=config, summary_provider=provider)
+        compactor = _make_compactor(config, provider)
         compactor.update_message_count(len(msgs))
 
         plan = await compactor.plan_runtime_compaction(
@@ -533,9 +558,7 @@ class TestToolTruncationFallback:
         )
         result = await compactor.apply_compaction_plan(plan, msgs)
 
-        # summary 不应被调用（没有旧 turn 可摘要）
-        assert provider.call_count == 0
-        # 但截断应发生
+        # summary 失败后，回退路径截断大 tool result。
         assert compactor._compaction_count == 1
 
         # 至少 1 个 ToolMessage 被截断
@@ -551,7 +574,8 @@ class TestToolTruncationFallback:
             assert "HEAD_" in m.content
             assert len(m.content) < 2000
 
-        assert result.strategy == "tool_truncation"
+        assert result.strategy == "sliding_window"
+        assert result.durability == "ephemeral"
 
     async def test_no_truncation_below_threshold(self) -> None:
         """即使只有 1 turn，未超阈值不截断。"""
@@ -568,7 +592,7 @@ class TestToolTruncationFallback:
             ),
         ]
 
-        compactor = ContextCompactor(config=config, summary_provider=provider)
+        compactor = _make_compactor(config, provider)
         compactor.update_message_count(len(msgs))
 
         # prompt_tokens=1000 远低于 128000*0.9 -> 不触发

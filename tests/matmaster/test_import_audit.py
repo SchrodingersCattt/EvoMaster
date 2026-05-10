@@ -178,3 +178,21 @@ def test_runtime_code_does_not_import_bohrium_sdk() -> None:
                     if module == "bohrium" or module.startswith("bohrium."):
                         offenders.append(f"{path}:{node.lineno}")
     assert offenders == []
+
+
+def test_manifest_modules_do_not_import_src() -> None:
+    root = Path("matmaster/manifests")
+    offenders: list[str] = []
+    for path in root.glob("*.py"):
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            elif isinstance(node, ast.ImportFrom):
+                names = [node.module or ""]
+            else:
+                continue
+            if any(name == "src" or name.startswith("src.") for name in names):
+                offenders.append(f"{path}:{names}")
+
+    assert offenders == []

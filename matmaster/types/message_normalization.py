@@ -6,11 +6,37 @@ from typing import Any
 
 from matmaster.response_text import is_trivial_response_text
 from matmaster.types.errors import LLMError
-from matmaster.types.messages import AssistantMessage, Message
+from matmaster.types.messages import AssistantMessage, Message, UserMessage
 
 logger = logging.getLogger(__name__)
 
 _OPENAI_COMPATIBLE_ROLES = {"system", "user", "assistant", "tool"}
+
+
+def _merge_user_messages(left: UserMessage, right: UserMessage) -> UserMessage:
+    content_parts = [
+        part.strip()
+        for part in (left.content or "", right.content or "")
+        if part and part.strip()
+    ]
+    return UserMessage(
+        content="\n\n".join(content_parts),
+        images=[*left.images, *right.images],
+    )
+
+
+def canonicalize_messages_for_provider(messages: Iterable[Message]) -> list[Message]:
+    canonical: list[Message] = []
+    for message in messages:
+        if (
+            canonical
+            and isinstance(canonical[-1], UserMessage)
+            and isinstance(message, UserMessage)
+        ):
+            canonical[-1] = _merge_user_messages(canonical[-1], message)
+            continue
+        canonical.append(message)
+    return canonical
 
 
 def _message_to_api_dict(message: Message | dict[str, Any]) -> dict[str, Any]:

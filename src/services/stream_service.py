@@ -16,6 +16,7 @@ from typing import Protocol, runtime_checkable
 
 from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES
 from matmaster.integration.event_payloads import normalize_response_sse_payload
+from matmaster.utils.event_source import normalize_event_source
 from src.dao.redis_dao import (
     INTERACTION_CANCEL_VALUE,
     STREAM_CHANNEL_PREFIX,
@@ -39,7 +40,6 @@ from src.services.session_directory_service import (
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
 from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
-from src.utils.chat_event_source import normalize_event_source
 from src.utils.constant import AG_UI_EVENT, REDIS_URL, SERVICE_ENV
 from src.utils.feishu_notifier import (
     CARD_TEMPLATE_ORANGE,

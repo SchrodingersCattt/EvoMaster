@@ -105,6 +105,76 @@ def test_events_service_get_session_events_passes_include_spawn() -> None:
     table.get_session_events.assert_called_once_with("sid-2", include_spawn=True)
 
 
+def test_get_session_user_query_events_filters_parent_user_queries(
+    chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
+) -> None:
+    table, cursor = chat_events_table_with_mocks
+    cursor.fetchall.return_value = []
+
+    table.get_session_user_query_events("sess-x")
+
+    sql, params = cursor.execute.call_args[0]
+    assert "session_id = %s" in sql
+    assert "source = 'User'" in sql
+    assert "type = 'query'" in sql
+    assert "spawn_id IS NULL" in sql
+    assert params == ("sess-x",)
+
+
+def test_get_session_user_query_events_unwraps_attachment_metadata(
+    chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
+) -> None:
+    table, cursor = chat_events_table_with_mocks
+    ts = datetime(2026, 3, 26, 12, 0, 0)
+    cursor.fetchall.return_value = [
+        {
+            "id": 1,
+            "session_id": "sess-x",
+            "source": "User",
+            "type": "query",
+            "content": (
+                '{"content": "old turn",'
+                ' "files": ["https://oss.example.com/chat/old.csv"],'
+                ' "images": ["https://oss.example.com/chat/old.png"],'
+                ' "workspace_paths": ["/share/old.cif"]}'
+            ),
+            "task_id": "task-1",
+            "invocation_id": "inv-1",
+            "spawn_id": None,
+            "created_at": ts,
+        }
+    ]
+
+    out = table.get_session_user_query_events("sess-x")
+
+    assert out == [
+        {
+            "id": 1,
+            "source": "User",
+            "type": "query",
+            "content": "old turn",
+            "session_id": "sess-x",
+            "task_id": "task-1",
+            "invocation_id": "inv-1",
+            "spawn_id": None,
+            "created_at_ms": int(ts.timestamp() * 1000),
+            "files": ["https://oss.example.com/chat/old.csv"],
+            "images": ["https://oss.example.com/chat/old.png"],
+            "workspace_paths": ["/share/old.cif"],
+        }
+    ]
+
+
+def test_events_service_get_session_user_query_events_delegates_to_table() -> None:
+    table = MagicMock()
+    table.get_session_user_query_events.return_value = []
+    svc = ChatEventsService(events_table=table, sessions_service=MagicMock())
+
+    svc.get_session_user_query_events("sid-1")
+
+    table.get_session_user_query_events.assert_called_once_with("sid-1")
+
+
 def test_get_bohrium_events_pairs_tool_call_and_result(
     chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
 ) -> None:
