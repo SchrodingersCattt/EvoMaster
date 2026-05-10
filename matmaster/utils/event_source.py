@@ -22,4 +22,3 @@ def normalize_event_source(source: Any) -> str:
     if raw.startswith("MatMaster:"):
         return raw
     return MATMASTER_SOURCE
-

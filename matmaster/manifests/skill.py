@@ -12,7 +12,9 @@ def _skill_name(skill: Any) -> str:
     ).strip()
 
 
-def resolve_active_skills(events: list[dict[str, Any]], skill_registry: Any) -> list[Any]:
+def resolve_active_skills(
+    events: list[dict[str, Any]], skill_registry: Any
+) -> list[Any]:
     skills: list[Any] = []
     if skill_registry is None:
         return skills
@@ -41,4 +43,3 @@ def format_loaded_skills(skills: list[Any]) -> str:
         else:
             lines.append(f"- {name}{suffix}")
     return "\n".join(lines)
-

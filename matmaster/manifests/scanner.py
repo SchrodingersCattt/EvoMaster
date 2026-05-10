@@ -50,4 +50,3 @@ def scan_skill_hits(events: list[dict[str, Any]]) -> list[SkillHitRecord]:
             )
         )
     return records
-

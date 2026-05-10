@@ -148,4 +148,3 @@ def format_available_attachments(entries: list[AttachmentEntry]) -> str:
         else:
             lines.append(f"{entry.label} {entry.name} {entry.value}")
     return "\n".join(lines)
-

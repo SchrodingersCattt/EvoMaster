@@ -196,7 +196,9 @@ def test_backward_compat_tool_registry_param(
     builder: ContextBuilder, ctx: PlaygroundContext
 ) -> None:
     """Passing tool_registry positional arg is accepted but ignored."""
-    result = builder.build_system_prompt(ctx, "some_registry_value", system_prompt="Test.")
+    result = builder.build_system_prompt(
+        ctx, "some_registry_value", system_prompt="Test."
+    )
     assert "# System" in result
     assert "function calling" in result
 
@@ -206,7 +208,9 @@ def test_build_method_removed(builder: ContextBuilder) -> None:
 
 
 def test_build_user_request_with_text_only(builder: ContextBuilder) -> None:
-    assert builder.build_user_request(user_text="run PXRD", attachments=None) == "run PXRD"
+    assert (
+        builder.build_user_request(user_text="run PXRD", attachments=None) == "run PXRD"
+    )
 
 
 def test_build_user_request_with_attachments(builder: ContextBuilder) -> None:
@@ -216,9 +220,7 @@ def test_build_user_request_with_attachments(builder: ContextBuilder) -> None:
     )
 
     assert result == (
-        "analyze\n\n"
-        "[Available attachments]\n"
-        "file_1 data.csv https://oss/data.csv"
+        "analyze\n\n" "[Available attachments]\n" "file_1 data.csv https://oss/data.csv"
     )
 
 

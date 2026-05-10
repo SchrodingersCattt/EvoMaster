@@ -17,8 +17,9 @@ class CompactionRehydrator:
         *,
         get_query_events: Callable[[], list[dict[str, Any]]],
         get_all_events: Callable[[], list[dict[str, Any]]],
-        get_latest_checkpoint_covered_until_event_id: Callable[[], int | None]
-        | None = None,
+        get_latest_checkpoint_covered_until_event_id: (
+            Callable[[], int | None] | None
+        ) = None,
         skill_registry: Any,
         playground_ctx: Any,
         legal_mcp_servers: set[str] | None = None,
@@ -91,7 +92,9 @@ class CompactionRehydrator:
         try:
             return fn()
         except Exception:
-            logger.warning("compaction rehydrator manifest failed: %s", name, exc_info=True)
+            logger.warning(
+                "compaction rehydrator manifest failed: %s", name, exc_info=True
+            )
             return default
 
     @staticmethod
@@ -118,4 +121,3 @@ class CompactionRehydrator:
             self._wrap("external_artifacts", external_artifacts),
         ]
         return "\n\n".join(section for section in sections if section)
-

@@ -27,4 +27,3 @@ def test_scan_skill_hits_accepts_legacy_string_content() -> None:
     assert scan_skill_hits([{"id": "7", "type": "skill_hit", "content": "search"}]) == [
         SkillHitRecord(skill_name="search", event_id=7, timestamp=None)
     ]
-

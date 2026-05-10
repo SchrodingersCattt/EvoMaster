@@ -420,9 +420,10 @@ async def test_agent_run_service_injects_full_attachment_manifest_before_exp_run
     run_meta = svc._test_fake_exp.last_ctx.run_meta
     assert "attachment_manifest" in run_meta
     assert "[Available attachments]" in run_meta["attachment_manifest"]
-    assert "file_1 data.csv https://oss.example.com/chat/data.csv" in run_meta[
-        "attachment_manifest"
-    ]
+    assert (
+        "file_1 data.csv https://oss.example.com/chat/data.csv"
+        in run_meta["attachment_manifest"]
+    )
     assert callable(run_meta["get_query_events"])
     assert callable(run_meta["get_all_events"])
     assert callable(run_meta["get_latest_checkpoint_covered_until_event_id"])

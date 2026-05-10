@@ -13,7 +13,6 @@ from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
     StreamChunk,
-    SystemMessage,
     UserMessage,
 )
 
@@ -291,9 +290,7 @@ class TestCheckpointAwareCompaction:
                 "payload": {"durability": "durable", "strategy": "summary"},
                 "base_messages": [
                     UserMessage(
-                        content=ContextBuilder().build_compact_bundle(
-                            summary="summary"
-                        )
+                        content=ContextBuilder().build_compact_bundle(summary="summary")
                     ).model_dump(mode="json"),
                 ],
             }

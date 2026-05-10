@@ -358,12 +358,15 @@ class Exp:
                         spec.compaction.compaction_llm,
                     )
 
+            def empty_events():
+                return []
+
             get_query_events = run_meta.get("get_query_events")
             if not callable(get_query_events):
-                get_query_events = lambda: []
+                get_query_events = empty_events
             get_all_events = run_meta.get("get_all_events")
             if not callable(get_all_events):
-                get_all_events = lambda: []
+                get_all_events = empty_events
             get_latest_checkpoint_covered_until_event_id = run_meta.get(
                 "get_latest_checkpoint_covered_until_event_id"
             )
@@ -844,7 +847,9 @@ class Exp:
                         exc_info=True,
                     )
                     continue
-                mcp_server = getattr(getattr(skill, "meta_info", None), "mcp_server", None)
+                mcp_server = getattr(
+                    getattr(skill, "meta_info", None), "mcp_server", None
+                )
                 if not isinstance(mcp_server, str) or not mcp_server:
                     continue
                 try:

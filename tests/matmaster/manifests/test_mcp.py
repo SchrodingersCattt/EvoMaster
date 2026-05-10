@@ -58,4 +58,3 @@ def test_format_active_mcp_marks_unavailable_servers(tmp_path: Path) -> None:
 
     assert "[Active MCP servers]" in text
     assert "- mat_xrd: unavailable" in text
-

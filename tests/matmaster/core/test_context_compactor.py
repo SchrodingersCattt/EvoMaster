@@ -251,7 +251,7 @@ def _make_multi_turn_messages() -> list:
 
 class TestCompactorThreshold:
     async def test_skip_when_below_threshold(self) -> None:
-        from matmaster.core.context_compactor import ContextCompactor
+        pass
 
         config = CompactionConfig(context_limit=128000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
@@ -263,7 +263,7 @@ class TestCompactorThreshold:
         assert len(provider.calls) == 0
 
     async def test_trigger_when_above_threshold(self) -> None:
-        from matmaster.core.context_compactor import ContextCompactor
+        pass
 
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
@@ -275,7 +275,7 @@ class TestCompactorThreshold:
         assert len(provider.calls) == 1
 
     async def test_cooldown_skips_consecutive_turn(self) -> None:
-        from matmaster.core.context_compactor import ContextCompactor
+        pass
 
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
@@ -292,7 +292,6 @@ class TestCompactorThreshold:
 
 class TestCompactorPlanApply:
     async def test_plan_runtime_compaction_returns_running_metadata(self) -> None:
-        from matmaster.core.context_compactor import ContextCompactor
         from matmaster.types.runtime import CompactionConfig
 
         provider = DummySummaryProvider("summary text")
@@ -319,7 +318,6 @@ class TestCompactorPlanApply:
         assert plan.strategy is None
 
     async def test_apply_compaction_plan_reports_fallback_strategy(self) -> None:
-        from matmaster.core.context_compactor import ContextCompactor
         from matmaster.types.runtime import CompactionConfig
 
         provider = DummySummaryProvider(RuntimeError("summary down"))
@@ -426,7 +424,7 @@ class TestCompactorOutput:
         assert "second summary" in (msgs[1].content or "")
 
     async def test_fallback_on_summary_failure(self) -> None:
-        from matmaster.core.context_compactor import ContextCompactor
+        pass
 
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = FailingSummaryProvider()
@@ -449,7 +447,7 @@ class TestCompactorOutput:
 
 class TestCompactorMessageCount:
     def test_update_message_count(self) -> None:
-        from matmaster.core.context_compactor import ContextCompactor
+        pass
 
         config = CompactionConfig(context_limit=128000)
         provider = MockSummaryProvider()
@@ -464,7 +462,7 @@ class TestCompactorMessageCount:
 
 class TestCompactorResultMetadata:
     async def test_apply_runtime_plan_reports_summary_result(self) -> None:
-        from matmaster.core.context_compactor import ContextCompactor
+        pass
 
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
@@ -482,7 +480,7 @@ class TestCompactorResultMetadata:
         assert result.trigger_tokens > 0
 
     async def test_preflight_summary_returns_durable_result(self) -> None:
-        from matmaster.core.context_compactor import ContextCompactor
+        pass
 
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
@@ -497,7 +495,7 @@ class TestCompactorResultMetadata:
         assert result.durability == "durable"
 
     async def test_runtime_sliding_window_result_is_ephemeral(self) -> None:
-        from matmaster.core.context_compactor import ContextCompactor
+        pass
 
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = FailingSummaryProvider()
@@ -517,7 +515,7 @@ class TestCompactorResultMetadata:
     async def test_preflight_summary_failure_raises_instead_of_silent_fallback(
         self,
     ) -> None:
-        from matmaster.core.context_compactor import ContextCompactor
+        pass
 
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = FailingSummaryProvider()
@@ -528,7 +526,7 @@ class TestCompactorResultMetadata:
             await compactor.preflight_if_needed(msgs)
 
     async def test_summary_input_contains_tool_name_and_call_id(self) -> None:
-        from matmaster.core.context_compactor import ContextCompactor
+        pass
 
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
@@ -544,7 +542,7 @@ class TestCompactorResultMetadata:
         assert "bash" in prompt_text
 
     async def test_compact_if_needed_succeeds_without_event_sink(self) -> None:
-        from matmaster.core.context_compactor import ContextCompactor
+        pass
 
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
@@ -563,7 +561,6 @@ class TestToolTruncationFallback:
         self,
     ) -> None:
         """Preflight uses the same summary-to-bundle path for any compact window."""
-        from matmaster.core.context_compactor import ContextCompactor
 
         config = CompactionConfig(context_limit=500, trigger_ratio=0.9)
         provider = MockSummaryProvider()
@@ -598,7 +595,6 @@ class TestToolTruncationFallback:
 
     async def test_summarizes_when_no_compressible_turns(self) -> None:
         """1 turn with huge tool results -> summary bundle on success."""
-        from matmaster.core.context_compactor import ContextCompactor
 
         config = CompactionConfig(context_limit=500, trigger_ratio=0.9)
         provider = MockSummaryProvider()
@@ -646,9 +642,10 @@ class TestToolTruncationFallback:
         assert result.strategy == "summary"
         assert result.durability == "durable"
 
-    async def test_no_truncation_for_small_tool_results_on_summary_failure(self) -> None:
+    async def test_no_truncation_for_small_tool_results_on_summary_failure(
+        self,
+    ) -> None:
         """Small tool results (< 500 chars) are not truncated."""
-        from matmaster.core.context_compactor import ContextCompactor
 
         config = CompactionConfig(context_limit=500, trigger_ratio=0.9)
         provider = FailingSummaryProvider()
@@ -673,7 +670,6 @@ class TestToolTruncationFallback:
 
     async def test_truncation_preserves_head_and_tail_on_summary_failure(self) -> None:
         """Fallback truncation keeps head 200 + tail 100 chars."""
-        from matmaster.core.context_compactor import ContextCompactor
 
         config = CompactionConfig(context_limit=200, trigger_ratio=0.9)
         provider = FailingSummaryProvider()
@@ -706,7 +702,6 @@ class TestCompactorCompatibility:
 
     async def test_no_event_when_no_sink(self) -> None:
         """Compactor with event_sink=None still works."""
-        from matmaster.core.context_compactor import ContextCompactor
 
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()

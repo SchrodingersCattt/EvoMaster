@@ -280,7 +280,9 @@ class ContextCompactor:
             message for message in messages if not isinstance(message, SystemMessage)
         ]
         if not summary_input:
-            raise ValueError("Cannot compact messages without user or assistant history")
+            raise ValueError(
+                "Cannot compact messages without user or assistant history"
+            )
 
         strategy = "summary"
         durability = "durable"

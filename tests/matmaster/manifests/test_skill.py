@@ -21,7 +21,10 @@ def test_resolve_active_skills_uses_skill_hit_events_only(tmp_path: Path) -> Non
     registry = SkillRegistry([root])
 
     events = [
-        {"type": "assistant_state", "content": {"tool_calls": [{"name": "mat_xrd_read"}]}},
+        {
+            "type": "assistant_state",
+            "content": {"tool_calls": [{"name": "mat_xrd_read"}]},
+        },
         {"type": "tool_call", "tool_name": "mat_xrd_read"},
         {"id": 1, "type": "skill_hit", "content": {"skill_name": "pxrd"}},
         {"id": 2, "type": "skill_hit", "content": {"skill_name": "mlip"}},
@@ -48,4 +51,3 @@ def test_format_loaded_skills_outputs_compact_block(tmp_path: Path) -> None:
     assert "[Loaded skills]" in text
     assert "- pxrd: PXRD helper" in text
     assert "mcp_server=mat_xrd" in text
-

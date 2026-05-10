@@ -118,4 +118,3 @@ async def test_rehydrator_returns_other_sections_when_one_manifest_fails(
     assert "<loaded_skills>" in text
     assert "PXRD helper" in text
     assert "query down" in caplog.text
-

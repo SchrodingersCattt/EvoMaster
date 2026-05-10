@@ -58,4 +58,3 @@ def test_canonicalize_does_not_cross_assistant_tool_pairs() -> None:
         "tool",
         "user",
     ]
-

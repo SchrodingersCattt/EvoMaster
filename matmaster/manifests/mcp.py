@@ -12,9 +12,7 @@ def _skill_mcp_server(skill: Any) -> str | None:
 
 def resolve_declared_servers(skills: list[Any]) -> set[str]:
     return {
-        server
-        for skill in skills
-        if (server := _skill_mcp_server(skill)) is not None
+        server for skill in skills if (server := _skill_mcp_server(skill)) is not None
     }
 
 
@@ -64,4 +62,3 @@ def format_active_mcp(
             if isinstance(name, str) and name:
                 lines.append(f"  - {server}_{name}")
     return "\n".join(lines)
-
