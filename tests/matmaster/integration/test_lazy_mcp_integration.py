@@ -158,7 +158,7 @@ class TestLazyMCPIntegration:
         assert 'mat_sg_build_bulk' in registry
 
     async def test_replay_makes_tool_available_on_subsequent_runs(self, tmp_path):
-        """Two-turn simulation: turn 1 activates mat_sg, turn 2 replays it."""
+        """Two-turn simulation: turn 1 activates a skill, turn 2 replays it."""
         env = self._setup_env(tmp_path)
         cfg = ExpConfig.model_validate(
             {
@@ -174,7 +174,7 @@ class TestLazyMCPIntegration:
             }
         )
 
-        active: set[str] = set()
+        active_skills: set[str] = set()
 
         # ---- turn 1 ----
         exp1 = Exp(cfg)
@@ -182,16 +182,13 @@ class TestLazyMCPIntegration:
         ctx1 = MagicMock(spec=PlaygroundContext)
         ctx1.session = MagicMock()
         ctx1.execution_workdir = str(tmp_path)
-        ctx1.run_meta = {
-            "active_mcp_servers": frozenset(active),
-            "record_active_mcp_server": active.add,
-        }
+        ctx1.run_meta = {"active_skills": frozenset(active_skills)}
         exp1._init_skill_tools(ctx1, registry1)
         assert "mat_sg_build_bulk" not in registry1
         result = await _execute_use_skill(registry1, skill_name="test-skill")
         assert result.status == "success"
         assert "mat_sg_build_bulk" in registry1
-        assert active == {"mat_sg"}
+        active_skills.add("test-skill")
 
         # ---- turn 2 (fresh Exp / registry, but same active set) ----
         exp2 = Exp(cfg)
@@ -199,10 +196,7 @@ class TestLazyMCPIntegration:
         ctx2 = MagicMock(spec=PlaygroundContext)
         ctx2.session = MagicMock()
         ctx2.execution_workdir = str(tmp_path)
-        ctx2.run_meta = {
-            "active_mcp_servers": frozenset(active),
-            "record_active_mcp_server": active.add,
-        }
+        ctx2.run_meta = {"active_skills": frozenset(active_skills)}
         exp2._init_skill_tools(ctx2, registry2)
 
         # No use_skill call this turn; replay must have already injected it.
