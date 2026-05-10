@@ -9,15 +9,12 @@ Verifies that:
 import pytest
 
 from matmaster.integration.event_payloads import _normalize_public_source
+from matmaster.utils.event_source import normalize_event_source
 
 _is_matmaster_source = pytest.importorskip(
     "src.services.chat_history",
     reason="src not available (isolation test)",
 )._is_matmaster_source
-normalize_event_source = pytest.importorskip(
-    "src.utils.chat_event_source",
-    reason="src not available (isolation test)",
-).normalize_event_source
 
 # ── normalize_event_source tests ──────────────────────
 

@@ -5,7 +5,7 @@ from functools import lru_cache
 
 from src.dao.chat_events_table import ChatEventsTable, get_chat_events_table
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
-from src.utils.chat_event_source import normalize_event_source
+from matmaster.utils.event_source import normalize_event_source
 
 logger = logging.getLogger(__name__)
 
