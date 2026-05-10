@@ -334,6 +334,7 @@ class Exp:
         compactor = None
         if spec.llm_provider is not None:
             from matmaster.core.context_compactor import ContextCompactor
+            from matmaster.manifests.rehydrator import CompactionRehydrator
 
             summary_provider = spec.llm_provider
             if spec.compaction.compaction_llm:
@@ -357,9 +358,34 @@ class Exp:
                         spec.compaction.compaction_llm,
                     )
 
+            get_query_events = run_meta.get("get_query_events")
+            if not callable(get_query_events):
+                get_query_events = lambda: []
+            get_all_events = run_meta.get("get_all_events")
+            if not callable(get_all_events):
+                get_all_events = lambda: []
+            get_latest_checkpoint_covered_until_event_id = run_meta.get(
+                "get_latest_checkpoint_covered_until_event_id"
+            )
+            rehydrator = CompactionRehydrator(
+                get_query_events=get_query_events,
+                get_all_events=get_all_events,
+                get_latest_checkpoint_covered_until_event_id=(
+                    get_latest_checkpoint_covered_until_event_id
+                    if callable(get_latest_checkpoint_covered_until_event_id)
+                    else None
+                ),
+                skill_registry=self._skill_registry,
+                playground_ctx=ctx,
+                legal_mcp_servers=run_meta.get("legal_mcp_servers"),
+                schemas_by_server=run_meta.get("schemas_by_server"),
+            )
+
             compactor = ContextCompactor(
                 config=spec.compaction,
                 summary_provider=summary_provider,
+                rehydrator=rehydrator,
+                context_builder=builder,
                 event_sink=None,  # _run_items() injects a local deque-backed sink
                 compaction_scope=(
                     f'{run_meta.get("task_id", "")}:{spawn_id or "root"}'
@@ -413,6 +439,8 @@ class Exp:
                     "spawn_id": spawn_id,
                     "checkpoint_sink_factory": checkpoint_sink_factory,
                     "checkpoint_sink": checkpoint_sink,
+                    "attachment_manifest": run_meta.get("attachment_manifest", ""),
+                    "pre_compaction_barrier": run_meta.get("pre_compaction_barrier"),
                 },
             }
         )

@@ -13,6 +13,8 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
+from matmaster.core.context_builder import ContextBuilder
+from matmaster.manifests.rehydrator import CompactionRehydrator
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import (
     AssistantMessage,
@@ -36,7 +38,12 @@ into a concise structured summary. Preserve:
 - User constraints, parameters, and preferences stated during the conversation
 - Current status and what has been accomplished
 
-Do NOT add new information. Do NOT include pleasantries. Be factual and precise.\
+Do NOT add new information. Do NOT include pleasantries. Be factual and precise.
+
+If the input starts with a previous compact context bundle, merge it with later
+events and produce a fresh conversation summary. Older <rehydrated_context>
+blocks are historical state snapshots; do not copy them verbatim. Current state
+is supplied separately by the new rehydrated context.\
 """
 
 
@@ -159,11 +166,16 @@ class ContextCompactor:
         self,
         config: CompactionConfig,
         summary_provider: LLMProvider,
+        *,
+        rehydrator: CompactionRehydrator,
+        context_builder: ContextBuilder,
         event_sink: Callable[[Any], Awaitable[None]] | None = None,
         compaction_scope: str = "root",
     ) -> None:
         self._config = config
         self._summary_provider = summary_provider
+        self._rehydrator = rehydrator
+        self._context_builder = context_builder
         self._event_sink = event_sink
         self._compaction_scope = compaction_scope
         self._last_llm_message_count: int = 0
@@ -196,12 +208,18 @@ class ContextCompactor:
         next_count = self._compaction_count + 1
         return next_count, f"{self._compaction_scope}:{next_count}"
 
+    def _auto_threshold(self) -> int:
+        threshold = getattr(self._config, "auto_threshold", None)
+        if isinstance(threshold, int):
+            return threshold
+        return int(self._config.context_limit * self._config.trigger_ratio)
+
     def _plan_preflight_compaction(
         self,
         messages: list[Message],
     ) -> CompactionPlan | None:
         estimated_tokens = estimate_tokens(messages, safety_margin=1.1)
-        threshold = self._config.context_limit * self._config.trigger_ratio
+        threshold = self._auto_threshold()
         if estimated_tokens < threshold:
             return None
         count, compaction_id = self._next_compaction_id()
@@ -232,7 +250,7 @@ class ContextCompactor:
         delta_messages = messages[self._last_llm_message_count :]
         delta_tokens = estimate_tokens(delta_messages, safety_margin=1.1)
         estimated_tokens = base_tokens + delta_tokens
-        threshold = self._config.context_limit * self._config.trigger_ratio
+        threshold = self._auto_threshold()
         if estimated_tokens < threshold:
             return None
 
@@ -258,75 +276,26 @@ class ContextCompactor:
                 f"messages[0] must be SystemMessage, got {type(messages[0])}"
             )
         system_msg = messages[0]
-        task_idx = _find_initial_task_index(messages)
-        if task_idx <= 0:
-            raise ValueError("Initial UserMessage(task) not found")
-        initial_task_msg = messages[task_idx]
+        summary_input = [
+            message for message in messages if not isinstance(message, SystemMessage)
+        ]
+        if not summary_input:
+            raise ValueError("Cannot compact messages without user or assistant history")
 
-        turns = parse_turns(messages)
-        if not turns:
-            return
-
-        recent_turns, kept_count = self._select_recent_turns(turns)
-        compressible_start = task_idx + 1
-        compressible_end = len(messages) - sum(len(t) for t in recent_turns)
-        if compressible_end <= compressible_start:
-            if plan.phase == "preflight":
-                raise ValueError(
-                    "Preflight compaction requires compressible old turns; "
-                    "tool_truncation is runtime-only"
-                )
-            truncated = self._truncate_tool_results(
-                messages,
-                plan.trigger_tokens,
-                self._config.context_limit * self._config.trigger_ratio,
-            )
-            if truncated > 0:
-                self._compaction_count = plan.compaction_count
-                self._last_compaction_turn = plan.turn or 0
-                self._last_llm_message_count = len(messages)
-                logger.warning(
-                    "Context compaction #%d (tool_truncation) at turn %d: "
-                    "estimated=%d threshold=%d truncated_messages=%d",
-                    self._compaction_count,
-                    self._last_compaction_turn,
-                    plan.trigger_tokens,
-                    int(self._config.context_limit * self._config.trigger_ratio),
-                    truncated,
-                )
-                return CompactionResult(
-                    compaction_id=plan.compaction_id,
-                    compaction_count=plan.compaction_count,
-                    phase=plan.phase,
-                    strategy="tool_truncation",
-                    durability="ephemeral",
-                    trigger_tokens=plan.trigger_tokens,
-                    retained_turns=kept_count,
-                    failure_reason=None,
-                    base_snapshot=None,
-                )
-            return CompactionResult(
-                compaction_id=plan.compaction_id,
-                compaction_count=self._compaction_count,
-                phase=plan.phase,
-                strategy="tool_truncation",
-                durability="ephemeral",
-                trigger_tokens=plan.trigger_tokens,
-                retained_turns=kept_count,
-                failure_reason=None,
-                base_snapshot=None,
-            )
-
-        old_messages = messages[compressible_start:compressible_end]
         strategy = "summary"
         durability = "durable"
         failure_reason: str | None = None
-        flat_recent = [m for turn_messages in recent_turns for m in turn_messages]
+        retained_turns = 0
 
         try:
-            summary = await self._summarize(old_messages)
-            compact_msg = SystemMessage(content=f"[Compacted Context]\n{summary}")
-            messages[:] = [system_msg, compact_msg, initial_task_msg, *flat_recent]
+            summary = await self._summarize(summary_input)
+            rehydrated = await self._rehydrator.build()
+            bundle = self._context_builder.build_compact_bundle(
+                summary=summary,
+                rehydrated_context=rehydrated,
+            )
+            compact_user_msg = UserMessage(content=bundle)
+            messages[:] = [system_msg, compact_user_msg]
         except Exception as exc:
             if plan.phase == "preflight":
                 logger.warning(
@@ -342,7 +311,13 @@ class ContextCompactor:
             strategy = "sliding_window"
             durability = "ephemeral"
             failure_reason = str(exc)
-            messages[:] = [system_msg, initial_task_msg, *flat_recent]
+            truncated = self._truncate_tool_results(
+                messages,
+                plan.trigger_tokens,
+                self._auto_threshold(),
+            )
+            if truncated == 0:
+                messages[:] = [system_msg, *summary_input[-3:]]
 
         self._compaction_count = plan.compaction_count
         if plan.phase == "runtime":
@@ -355,15 +330,13 @@ class ContextCompactor:
             self._compaction_count,
             self._last_compaction_turn,
             plan.trigger_tokens,
-            int(self._config.context_limit * self._config.trigger_ratio),
+            self._auto_threshold(),
             strategy,
-            kept_count,
+            retained_turns,
         )
         base_snapshot = None
         if durability == "durable":
-            base_snapshot = [
-                message.model_dump(mode="json") for message in messages[1:]
-            ]
+            base_snapshot = [messages[1].model_dump(mode="json")]
         return CompactionResult(
             compaction_id=plan.compaction_id,
             compaction_count=plan.compaction_count,
@@ -371,7 +344,7 @@ class ContextCompactor:
             strategy=strategy,
             durability=durability,
             trigger_tokens=plan.trigger_tokens,
-            retained_turns=kept_count,
+            retained_turns=retained_turns,
             failure_reason=failure_reason,
             base_snapshot=base_snapshot,
         )

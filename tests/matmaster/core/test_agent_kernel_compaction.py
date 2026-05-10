@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
+from matmaster.core.context_builder import ContextBuilder
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -71,17 +72,14 @@ class _DurablePreflightCompactor:
     async def apply_compaction_plan(self, plan, messages: list[Any]):
         from matmaster.core.context_compactor import CompactionResult
 
-        task_message = messages[-1]
+        bundle = ContextBuilder().build_compact_bundle(summary="summary")
+        compact_message = UserMessage(content=bundle)
         base_snapshot = [
-            SystemMessage(content="[Compacted Context]\nsummary").model_dump(
-                mode="json"
-            ),
-            task_message.model_dump(mode="json"),
+            compact_message.model_dump(mode="json"),
         ]
         messages[:] = [
             messages[0],
-            SystemMessage(content="[Compacted Context]\nsummary"),
-            task_message,
+            compact_message,
         ]
         return CompactionResult(
             compaction_id=plan.compaction_id,
@@ -139,11 +137,12 @@ class _LifecycleCompactor:
         from matmaster.core.context_compactor import CompactionResult
 
         self.apply_calls += 1
-        task_message = messages[-1]
+        compact_message = UserMessage(
+            content=ContextBuilder().build_compact_bundle(summary=self._summary_text)
+        )
         messages[:] = [
             messages[0],
-            SystemMessage(content=f"[Compacted Context]\n{self._summary_text}"),
-            task_message,
+            compact_message,
         ]
         return CompactionResult(
             compaction_id=plan.compaction_id,
@@ -155,10 +154,7 @@ class _LifecycleCompactor:
             retained_turns=1,
             failure_reason=None,
             base_snapshot=[
-                SystemMessage(
-                    content=f"[Compacted Context]\n{self._summary_text}"
-                ).model_dump(mode="json"),
-                task_message.model_dump(mode="json"),
+                compact_message.model_dump(mode="json"),
             ],
         )
 
@@ -294,10 +290,11 @@ class TestCheckpointAwareCompaction:
             {
                 "payload": {"durability": "durable", "strategy": "summary"},
                 "base_messages": [
-                    SystemMessage(content="[Compacted Context]\nsummary").model_dump(
-                        mode="json"
-                    ),
-                    UserMessage(content="test task").model_dump(mode="json"),
+                    UserMessage(
+                        content=ContextBuilder().build_compact_bundle(
+                            summary="summary"
+                        )
+                    ).model_dump(mode="json"),
                 ],
             }
         ]
