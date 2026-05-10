@@ -115,7 +115,6 @@ class TestAgentRuntimeSpec:
     def test_defaults(self) -> None:
         spec = AgentRuntimeSpec(
             context_builder=ContextBuilder(),
-            llm_provider=_MockLLMProvider(),
         )
         assert spec.max_turns == 100
         assert spec.hook_executor is None
@@ -448,3 +447,48 @@ class TestTypesReExport:
         from matmaster.types import ToolDecision
 
         assert hasattr(ToolDecision, "model_fields")
+
+
+class TestAgentRuntimeSpecRuntimePorts:
+    def test_runtime_ports_default_exists_and_is_excluded_from_dump(self) -> None:
+        from matmaster.types.runtime_ports import KernelRuntimePorts
+
+        spec = AgentRuntimeSpec(
+            context_builder=ContextBuilder(),
+        )
+
+        assert isinstance(spec.runtime_ports, KernelRuntimePorts)
+        assert spec.runtime_ports.checkpoint_sink is None
+        assert spec.runtime_ports.pre_compaction_barrier is None
+        assert "runtime_ports" not in spec.model_dump()
+        assert "runtime_ports" not in spec.model_dump(mode="json", fallback=repr)
+
+    def test_runtime_ports_accepts_kernel_ports_instance(self) -> None:
+        from matmaster.types.runtime_ports import KernelRuntimePorts
+
+        async def checkpoint_sink(*, payload, base_messages):
+            return 12
+
+        ports = KernelRuntimePorts(checkpoint_sink=checkpoint_sink)
+        spec = AgentRuntimeSpec(
+            context_builder=ContextBuilder(),
+            llm_provider=_MockLLMProvider(),
+            runtime_ports=ports,
+        )
+
+        assert spec.runtime_ports is ports
+
+    def test_model_validate_accepts_runtime_ports_dataclass(self) -> None:
+        from matmaster.types.runtime_ports import KernelRuntimePorts
+
+        ports = KernelRuntimePorts()
+
+        spec = AgentRuntimeSpec.model_validate(
+            {
+                "context_builder": ContextBuilder(),
+                "llm_provider": _MockLLMProvider(),
+                "runtime_ports": ports,
+            }
+        )
+
+        assert spec.runtime_ports == ports

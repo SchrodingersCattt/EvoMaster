@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable
 from dataclasses import dataclass, field
-from typing import Any, Protocol, TypedDict
+from typing import Any, Protocol, TypedDict, runtime_checkable
 
 from matmaster.types.events import BusEvent
 
@@ -18,16 +18,19 @@ class CompactionCheckpointPayload(TypedDict):
     strategy: str
 
 
+@runtime_checkable
 class BusEventSink(Protocol):
     def __call__(self, event: BusEvent) -> Awaitable[None] | None:
         ...
 
 
+@runtime_checkable
 class PreCompactionBarrier(Protocol):
     def __call__(self) -> Awaitable[None] | None:
         ...
 
 
+@runtime_checkable
 class CheckpointSink(Protocol):
     async def __call__(
         self,
@@ -38,11 +41,13 @@ class CheckpointSink(Protocol):
         ...
 
 
+@runtime_checkable
 class CheckpointSinkFactory(Protocol):
     def __call__(self, *, spawn_id: str | None = None) -> CheckpointSink:
         ...
 
 
+@runtime_checkable
 class SessionEventHistoryPort(Protocol):
     def query_events(self) -> list[dict[str, Any]]:
         ...
