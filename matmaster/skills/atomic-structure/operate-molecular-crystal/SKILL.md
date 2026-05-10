@@ -39,11 +39,21 @@ crystals unless you have verified that no molecule is cut.
 
 ## Local API
 
-Operator snippets run in the Bohrium remote shell image. `molcrys-kit==0.2.0`
-and `obabel` are expected there. **Prefer the high-level molcrys-kit one-shot
-APIs below — they are the same functions the legacy `mat_sg_*` builders wrap.
-Do not reinvent ordering / hydrogen completion / desolvation by parsing
-`scan_cif_disorder` output by hand.**
+**Run these snippets locally** (in the agent's Python environment) using
+`molcrys-kit==0.2.0`. Do **not** submit to Bohrium for these molecular-crystal
+operations — they are pure Python, complete in seconds, and the local
+`molcrys-kit` install is the single source of truth. `obabel` is an optional
+fallback when `molcrys-kit` cannot parse a plain organic CIF (see Hydrogen
+completion below).
+
+**Prefer the high-level molcrys-kit one-shot APIs below** — they are the same
+functions the legacy `mat_sg_*` builders wrap. Do not reinvent ordering /
+hydrogen completion / desolvation by parsing `scan_cif_disorder` output by
+hand.
+
+If `molcrys-kit` is missing in the environment, install it with
+`uv pip install molcrys-kit==0.2.0` (or via the project's `calculation` extra)
+rather than escalating to Bohrium.
 
 ### Read / write
 
