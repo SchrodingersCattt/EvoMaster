@@ -379,6 +379,132 @@ class TestCheckpointAwareCompaction:
         assert compaction_event.failure_reason == "checkpoint unavailable"
 
 
+@pytest.mark.asyncio
+async def test_kernel_reads_checkpoint_sink_from_runtime_ports() -> None:
+    from matmaster.core.agent import AgentKernel
+    from matmaster.types.runtime_ports import KernelRuntimePorts
+
+    provider = ContentOnlyProvider()
+    compactor = _DurablePreflightCompactor()
+    checkpoint_calls: list[dict[str, Any]] = []
+
+    async def checkpoint_sink(
+        *, payload: dict[str, Any], base_messages: list[dict[str, Any]]
+    ) -> int | None:
+        checkpoint_calls.append(
+            {
+                "payload": payload,
+                "base_messages": base_messages,
+            }
+        )
+        return 99
+
+    spec = _make_spec(provider=provider).model_copy(
+        update={
+            "compactor": compactor,
+            "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
+            "meta": {},
+        }
+    )
+
+    events = [
+        event
+        async for event in AgentKernel().run_stream(
+            spec,
+            "test task",
+            history=[
+                UserMessage(content="old question"),
+                AssistantMessage(content="old answer"),
+            ],
+        )
+    ]
+
+    assert checkpoint_calls
+    assert any(getattr(event, "covered_until_event_id", None) == 99 for event in events)
+
+
+class _BarrierFailureCompactor(_DurablePreflightCompactor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.apply_calls = 0
+
+    async def apply_compaction_plan(self, plan, messages):
+        self.apply_calls += 1
+        return await super().apply_compaction_plan(plan, messages)
+
+
+@pytest.mark.asyncio
+async def test_kernel_sync_pre_compaction_barrier_error_stops_compaction() -> None:
+    from matmaster.core.agent import AgentKernel
+    from matmaster.types.runtime_ports import KernelRuntimePorts
+
+    provider = ContentOnlyProvider()
+    compactor = _BarrierFailureCompactor()
+
+    def barrier() -> None:
+        raise RuntimeError("barrier failed")
+
+    spec = _make_spec(provider=provider).model_copy(
+        update={
+            "compactor": compactor,
+            "runtime_ports": KernelRuntimePorts(pre_compaction_barrier=barrier),
+            "meta": {},
+        }
+    )
+
+    with pytest.raises(RuntimeError, match="barrier failed"):
+        [
+            event
+            async for event in AgentKernel().run_stream(
+                spec,
+                "test task",
+                history=[
+                    UserMessage(content="old question"),
+                    AssistantMessage(content="old answer"),
+                ],
+            )
+        ]
+
+    assert compactor.preflight_calls == 1
+    assert compactor.apply_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_kernel_async_pre_compaction_barrier_error_stops_compaction() -> None:
+    from matmaster.core.agent import AgentKernel
+    from matmaster.types.runtime_ports import KernelRuntimePorts
+
+    provider = ContentOnlyProvider()
+    compactor = _BarrierFailureCompactor()
+
+    async def barrier() -> None:
+        raise RuntimeError("async barrier failed")
+
+    spec = _make_spec(provider=provider).model_copy(
+        update={
+            "compactor": compactor,
+            "runtime_ports": KernelRuntimePorts(pre_compaction_barrier=barrier),
+            "meta": {},
+        }
+    )
+
+    with pytest.raises(RuntimeError, match="async barrier failed"):
+        [
+            event
+            async for event in AgentKernel().run_stream(
+                spec,
+                "test task",
+                history=[
+                    UserMessage(content="old question"),
+                    AssistantMessage(content="old answer"),
+                ],
+            )
+        ]
+
+    assert compactor.preflight_calls == 1
+    assert compactor.apply_calls == 0
+
+
 # ── TestExpCheckpointSinkScopeResolution ─────────────────────
 
 
