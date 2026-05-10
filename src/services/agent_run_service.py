@@ -38,6 +38,10 @@ from matmaster.types.events import (
 )
 from matmaster.types.figures import FigureUploadConfig
 from matmaster.types.messages import Message, UserMessage
+from matmaster.types.runtime_ports import (
+    PlaygroundCompactionPort,
+    PlaygroundRuntimePorts,
+)
 from src.dao.chat_events_table import get_chat_events_table
 from src.dao.oss_io import upload_bytes_to_oss
 from src.dao.redis_dao import get_redis_dao
@@ -759,6 +763,27 @@ class AgentRunService:
                             except (TypeError, ValueError):
                                 return None
                 return None
+
+            class _RunSessionEventHistory:
+                def query_events(self) -> list[dict[str, Any]]:
+                    return _get_query_events()
+
+                def all_events(self) -> list[dict[str, Any]]:
+                    return _get_all_events()
+
+                def latest_checkpoint_covered_until_event_id(self) -> int | None:
+                    return _get_latest_checkpoint_covered_until_event_id()
+
+            pg_ctx = pg_ctx.with_runtime_ports(
+                PlaygroundRuntimePorts(
+                    child_event_forward_sink=_child_event_sink,
+                    compaction=PlaygroundCompactionPort(
+                        history=_RunSessionEventHistory(),
+                        checkpoint_sink_factory=_checkpoint_sink_factory,
+                        pre_compaction_barrier=fanout.flush_persistence_barrier,
+                    ),
+                )
+            )
 
             pg_ctx = pg_ctx.model_copy(
                 update={

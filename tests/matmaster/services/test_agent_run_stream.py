@@ -50,6 +50,8 @@ def _make_mock_playground(pg_ctx: Any) -> Any:
 
 def _make_mock_pg_ctx() -> MagicMock:
     """Build a mock PlaygroundContext with minimum viable fields."""
+    from matmaster.types.runtime_ports import PlaygroundRuntimePorts
+
     ctx = MagicMock()
     ctx.workdir = '/tmp/workspace'
     ctx.execution_workdir = '/tmp/workspace'
@@ -60,8 +62,15 @@ def _make_mock_pg_ctx() -> MagicMock:
     ctx.session.read_file.return_value = ''
     ctx.archival = None
     ctx.run_meta = {}
+    ctx.runtime_ports = PlaygroundRuntimePorts()
     ctx.with_bohrium.return_value = ctx
     ctx.with_execution.return_value = ctx
+
+    def _with_runtime_ports(runtime_ports: PlaygroundRuntimePorts) -> MagicMock:
+        ctx.runtime_ports = runtime_ports
+        return ctx
+
+    ctx.with_runtime_ports.side_effect = _with_runtime_ports
 
     def _model_copy(*, update: dict[str, Any] | None = None, **_: Any) -> MagicMock:
         if update:
@@ -350,7 +359,7 @@ async def test_run_agent_injects_cancel_token_into_session_and_exp():
 
 
 @pytest.mark.asyncio
-async def test_run_agent_injects_event_sink_into_pg_ctx_run_meta():
+async def test_run_agent_injects_child_event_forward_sink_into_runtime_ports():
     run_result = RunResultEvent(source='agent', status='completed', reason='natural')
 
     async with _patched_service([run_result]) as (svc, _sse, _persist):
@@ -364,7 +373,8 @@ async def test_run_agent_injects_event_sink_into_pg_ctx_run_meta():
         )
 
     assert ok is True
-    injected = svc._test_fake_exp.last_ctx.run_meta['event_sink']
+    ports = svc._test_fake_exp.last_ctx.runtime_ports
+    injected = ports.child_event_forward_sink
     assert callable(injected)
     assert svc._test_fake_exp.last_ctx.run_meta['task_id'] == 'task-1'
 
@@ -426,10 +436,14 @@ async def test_agent_run_service_injects_full_attachment_manifest_before_exp_run
         "file_1 data.csv https://oss.example.com/chat/data.csv"
         in run_meta["attachment_manifest"]
     )
-    assert callable(run_meta["get_query_events"])
-    assert callable(run_meta["get_all_events"])
-    assert callable(run_meta["get_latest_checkpoint_covered_until_event_id"])
-    assert callable(run_meta["pre_compaction_barrier"])
+    history = svc._test_fake_exp.last_ctx.runtime_ports.compaction.history
+    assert history is not None
+    assert callable(history.query_events)
+    assert callable(history.all_events)
+    assert callable(history.latest_checkpoint_covered_until_event_id)
+    assert callable(
+        svc._test_fake_exp.last_ctx.runtime_ports.compaction.pre_compaction_barrier
+    )
 
 
 @pytest.mark.asyncio
@@ -479,9 +493,9 @@ async def test_run_agent_uses_history_restore_service_and_injects_spawn_aware_ch
         assert svc._test_fake_exp.last_run_kwargs['history'] == restored_history
 
         checkpoint_cls.assert_called_once_with(svc._test_events_table)
-        checkpoint_sink_factory = svc._test_fake_exp.last_ctx.run_meta[
-            'checkpoint_sink_factory'
-        ]
+        checkpoint_sink_factory = (
+            svc._test_fake_exp.last_ctx.runtime_ports.compaction.checkpoint_sink_factory
+        )
         assert callable(checkpoint_sink_factory)
 
         built_sink = checkpoint_sink_factory(spawn_id='spawn-child-1')
@@ -563,7 +577,7 @@ async def test_stream_events_reach_handlers_via_fanout():
 @pytest.mark.asyncio
 async def test_child_event_sink_reaches_sse_and_persistence():
     async def child_then_parent(ctx):
-        await ctx.run_meta['event_sink'](
+        await ctx.runtime_ports.child_event_forward_sink(
             ResponseEvent(
                 source='MatMaster:direct',
                 spawn_id='childdeadbeef123',
