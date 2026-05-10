@@ -103,10 +103,7 @@ class AgentKernel:
             )
         )
         messages_before = len(state.messages)
-        pre_compaction_barrier = (
-            spec.runtime_ports.pre_compaction_barrier
-            or spec.meta.get("pre_compaction_barrier")
-        )
+        pre_compaction_barrier = spec.runtime_ports.pre_compaction_barrier
         if callable(pre_compaction_barrier):
             result = pre_compaction_barrier()
             if inspect.isawaitable(result):
@@ -325,10 +322,7 @@ class AgentKernel:
             ]
         )
 
-        checkpoint_sink = (
-            spec.runtime_ports.checkpoint_sink
-            or spec.meta.get("checkpoint_sink")
-        )
+        checkpoint_sink = spec.runtime_ports.checkpoint_sink
 
         if spec.compactor:
             spec.compactor.update_message_count(len(state.messages))

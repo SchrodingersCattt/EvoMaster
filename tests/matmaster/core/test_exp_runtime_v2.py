@@ -92,7 +92,7 @@ class _MockProvider:
 
 
 @pytest.mark.asyncio
-async def test_build_runtime_prefers_runtime_ports_history_over_run_meta(
+async def test_build_runtime_uses_runtime_ports_history(
     tmp_path: Path,
 ) -> None:
     from matmaster.config.exp import ExpConfig
@@ -118,11 +118,6 @@ async def test_build_runtime_prefers_runtime_ports_history_over_run_meta(
         execution_workdir=str(tmp_path),
         session_type="local",
         cache_area=tmp_path / "cache",
-        run_meta={
-            "get_query_events": lambda: [{"event_id": 1, "source": "legacy"}],
-            "get_all_events": lambda: [{"event_id": 10, "source": "legacy"}],
-            "get_latest_checkpoint_covered_until_event_id": lambda: 10,
-        },
         llm_provider=_MockProvider(),
         runtime_ports=PlaygroundRuntimePorts(
             compaction=PlaygroundCompactionPort(history=RuntimeHistory()),
@@ -135,35 +130,6 @@ async def test_build_runtime_prefers_runtime_ports_history_over_run_meta(
     assert rehydrator._get_query_events() == [{"event_id": 2, "source": "runtime"}]
     assert rehydrator._get_all_events() == [{"event_id": 20, "source": "runtime"}]
     assert rehydrator._get_latest_checkpoint_covered_until_event_id() == 20
-
-
-@pytest.mark.asyncio
-async def test_build_runtime_falls_back_to_run_meta_history_when_port_missing(
-    tmp_path: Path,
-) -> None:
-    from matmaster.config.exp import ExpConfig
-    from matmaster.core.exp import Exp
-    from matmaster.types.context import PlaygroundContext
-
-    ctx = PlaygroundContext(
-        workdir=tmp_path,
-        execution_workdir=str(tmp_path),
-        session_type="local",
-        cache_area=tmp_path / "cache",
-        run_meta={
-            "get_query_events": lambda: [{"event_id": 1, "source": "legacy"}],
-            "get_all_events": lambda: [{"event_id": 10, "source": "legacy"}],
-            "get_latest_checkpoint_covered_until_event_id": lambda: 10,
-        },
-        llm_provider=_MockProvider(),
-    )
-
-    runtime = await Exp(ExpConfig(name="test")).build_runtime(ctx)
-    rehydrator = runtime.spec.compactor._rehydrator
-
-    assert rehydrator._get_query_events() == [{"event_id": 1, "source": "legacy"}]
-    assert rehydrator._get_all_events() == [{"event_id": 10, "source": "legacy"}]
-    assert rehydrator._get_latest_checkpoint_covered_until_event_id() == 10
 
 
 def _make_playground_context(

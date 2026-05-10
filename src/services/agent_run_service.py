@@ -669,8 +669,6 @@ class AgentRunService:
                 update={
                     'run_meta': {
                         **pg_ctx.run_meta,
-                        'event_sink': _child_event_sink,
-                        'checkpoint_sink_factory': _checkpoint_sink_factory,
                         'figure_upload_config': figure_upload_config,
                         'user_instructions': user_instructions,
                     }
@@ -790,12 +788,6 @@ class AgentRunService:
                     'run_meta': {
                         **pg_ctx.run_meta,
                         'attachment_manifest': attachment_text,
-                        'get_query_events': _get_query_events,
-                        'get_all_events': _get_all_events,
-                        'get_latest_checkpoint_covered_until_event_id': (
-                            _get_latest_checkpoint_covered_until_event_id
-                        ),
-                        'pre_compaction_barrier': fanout.flush_persistence_barrier,
                     }
                 }
             )

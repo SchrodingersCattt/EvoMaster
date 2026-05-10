@@ -610,6 +610,33 @@ async def test_child_event_sink_reaches_sse_and_persistence():
 
 
 @pytest.mark.asyncio
+async def test_run_agent_does_not_store_callback_ports_in_run_meta():
+    run_result = RunResultEvent(source="agent", status="completed", reason="natural")
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        await svc.run_agent(
+            session_id="session-1",
+            user_prompt="hello",
+            send_cb=AsyncMock(),
+            cancel_token=_make_cancel_token(),
+            mode="direct",
+            task_id="task-1",
+            invocation_id="inv-1",
+        )
+
+    run_meta = svc._test_fake_exp.last_ctx.run_meta
+    forbidden = {
+        "event_sink",
+        "checkpoint_sink_factory",
+        "get_query_events",
+        "get_all_events",
+        "get_latest_checkpoint_covered_until_event_id",
+        "pre_compaction_barrier",
+    }
+    assert forbidden.isdisjoint(run_meta)
+
+
+@pytest.mark.asyncio
 async def test_source_normalization_on_events():
     """Event source is normalized to MatMaster before fanout dispatch."""
     thought = ThoughtEvent(source='agent', content='thinking...')

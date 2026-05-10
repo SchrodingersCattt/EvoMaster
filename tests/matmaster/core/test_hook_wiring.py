@@ -301,6 +301,8 @@ class TestExpWiring:
         self,
         tmp_path: Path,
     ) -> None:
+        from matmaster.types.runtime_ports import PlaygroundRuntimePorts
+
         forwarded = []
 
         async def sink(event) -> None:
@@ -311,8 +313,11 @@ class TestExpWiring:
             execution_workdir=str(tmp_path / "exec"),
             session_type="local",
             cache_area=tmp_path / "cache",
-            run_meta={"session_id": "session-1", "event_sink": sink},
+            run_meta={"session_id": "session-1"},
             llm_provider=MockLLMProvider(),
+            runtime_ports=PlaygroundRuntimePorts(
+                child_event_forward_sink=sink,
+            ),
         )
 
         async def fake_drain_run_stream(_stream, on_event=None):
@@ -352,7 +357,7 @@ class TestExpWiring:
         assert len({event.spawn_id for event in forwarded}) == 1
 
     @pytest.mark.asyncio
-    async def test_make_spawn_fn_prefers_runtime_ports_child_event_forward_sink(
+    async def test_make_spawn_fn_uses_runtime_ports_child_event_forward_sink(
         self,
         tmp_path: Path,
     ) -> None:
@@ -360,21 +365,18 @@ class TestExpWiring:
 
         forwarded = []
 
-        async def new_sink(event) -> None:
-            forwarded.append(("new", event))
-
-        async def old_sink(event) -> None:
-            forwarded.append(("old", event))
+        async def sink(event) -> None:
+            forwarded.append(event)
 
         ctx = PlaygroundContext(
             workdir=tmp_path,
             execution_workdir=str(tmp_path / "exec"),
             session_type="local",
             cache_area=tmp_path / "cache",
-            run_meta={"session_id": "session-1", "event_sink": old_sink},
+            run_meta={"session_id": "session-1"},
             llm_provider=MockLLMProvider(),
             runtime_ports=PlaygroundRuntimePorts(
-                child_event_forward_sink=new_sink,
+                child_event_forward_sink=sink,
             ),
         )
 
@@ -402,9 +404,8 @@ class TestExpWiring:
 
         assert result == "child done"
         assert len(forwarded) == 1
-        assert forwarded[0][0] == "new"
-        assert forwarded[0][1].source == "MatMaster:direct"
-        assert forwarded[0][1].spawn_id
+        assert forwarded[0].source == "MatMaster:direct"
+        assert forwarded[0].spawn_id
 
     @pytest.mark.asyncio
     async def test_make_spawn_fn_without_event_sink_still_returns_child_summary(

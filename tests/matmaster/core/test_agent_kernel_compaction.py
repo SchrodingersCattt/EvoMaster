@@ -15,6 +15,7 @@ from matmaster.types.messages import (
     StreamChunk,
     UserMessage,
 )
+from matmaster.types.runtime_ports import KernelRuntimePorts
 
 from .agent_kernel_test_helpers import _make_spec
 
@@ -168,14 +169,16 @@ def _build_long_history() -> list[Any]:
 
 
 def build_runtime_spec_with_compaction(*, checkpoint_sink: Any, summary_text: str):
+    from matmaster.types.runtime_ports import KernelRuntimePorts
+
     spec = _make_spec(provider=ContentOnlyProvider())
     return spec.model_copy(
         update={
             "compactor": _LifecycleCompactor(summary_text),
             "meta": {
                 "task_id": "task-1",
-                "checkpoint_sink": checkpoint_sink,
             },
+            "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
         }
     )
 
@@ -266,9 +269,7 @@ class TestCheckpointAwareCompaction:
         spec = _make_spec(provider=provider).model_copy(
             update={
                 "compactor": compactor,
-                "meta": {
-                    "checkpoint_sink": checkpoint_sink,
-                },
+                "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
             }
         )
 
@@ -313,9 +314,7 @@ class TestCheckpointAwareCompaction:
         spec = _make_spec(provider=provider).model_copy(
             update={
                 "compactor": compactor,
-                "meta": {
-                    "checkpoint_sink": checkpoint_sink,
-                },
+                "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
             }
         )
 
@@ -353,9 +352,7 @@ class TestCheckpointAwareCompaction:
         spec = _make_spec(provider=provider).model_copy(
             update={
                 "compactor": compactor,
-                "meta": {
-                    "checkpoint_sink": checkpoint_sink,
-                },
+                "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
             }
         )
 
@@ -554,21 +551,12 @@ class TestExpCheckpointSinkScopeResolution:
         assert seen_spawn_ids == [None, "child-1"]
         assert parent_runtime.spec.runtime_ports.checkpoint_sink is parent_sink
         assert child_runtime.spec.runtime_ports.checkpoint_sink is child_sink
-        assert (
-            parent_runtime.spec.meta["checkpoint_sink_factory"]
-            is checkpoint_sink_factory
-        )
-        assert (
-            child_runtime.spec.meta["checkpoint_sink_factory"]
-            is checkpoint_sink_factory
-        )
-        assert parent_runtime.spec.meta["checkpoint_sink"] is parent_sink
-        assert child_runtime.spec.meta["checkpoint_sink"] is child_sink
 
 
 @pytest.mark.asyncio
 async def test_kernel_runs_pre_compaction_barrier_before_compactor() -> None:
     from matmaster.core.agent import AgentKernel
+    from matmaster.types.runtime_ports import KernelRuntimePorts
 
     sequence: list[str] = []
 
@@ -583,10 +571,10 @@ async def test_kernel_runs_pre_compaction_barrier_before_compactor() -> None:
     spec = _make_spec(provider=ContentOnlyProvider()).model_copy(
         update={
             "compactor": BarrierCompactor(),
-            "meta": {
-                "pre_compaction_barrier": barrier,
-                "checkpoint_sink": lambda **kwargs: None,
-            },
+            "runtime_ports": KernelRuntimePorts(
+                pre_compaction_barrier=barrier,
+                checkpoint_sink=lambda **kwargs: None,
+            ),
         }
     )
 
