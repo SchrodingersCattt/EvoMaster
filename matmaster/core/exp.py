@@ -316,7 +316,7 @@ class Exp:
 
         # 5. System prompt via ContextBuilder
         builder = ContextBuilder()
-        system_prompt = builder.build(
+        system_prompt = builder.build_system_prompt(
             ctx,
             registry,
             system_prompt=self._config.system_prompt,

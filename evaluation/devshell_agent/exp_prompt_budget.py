@@ -1,9 +1,9 @@
 """MatMaster ``matmaster/exps/{name}.toml`` prompt token budget (devshell loop).
 
 Counts the **full assembled prompt** that current runtime wiring produces at
-agent start: ``ContextBuilder.build()`` output only. Local builtin / skill
-tool guidance now lives in ``function.description``, so it is intentionally
-excluded from this budget.
+agent start: ``ContextBuilder.build_system_prompt()`` output only. Local
+builtin / skill tool guidance now lives in ``function.description``, so it is
+intentionally excluded from this budget.
 
 Uses the same tiktoken model encoding as ``matmaster.core.context_compactor``.
 """
@@ -61,7 +61,7 @@ def _build_skills_meta(cfg: ExpConfig) -> str:
 
 
 def _build_full_prompt_text(cfg: ExpConfig) -> str:
-    """Reconstruct the text ``ContextBuilder.build()`` would produce.
+    """Reconstruct the text ``ContextBuilder.build_system_prompt()`` would produce.
 
     Includes only the static text sections assembled by ``ContextBuilder``:
     system prompt, developer instructions, skill meta, and the generic
@@ -69,29 +69,26 @@ def _build_full_prompt_text(cfg: ExpConfig) -> str:
     descriptions now supplied via ``function.description``.
     """
     from matmaster.core.context_builder import ContextBuilder
+    from matmaster.types.context import PlaygroundContext
 
-    sections: list[str] = []
     builder = ContextBuilder()
-
-    # 1. System prompt
-    system_section = builder._build_system_prompt(cfg.system_prompt)
-    if system_section:
-        sections.append(system_section)
-
-    # 2. Identity (developer_instructions)
-    identity_section = builder._build_identity(cfg.developer_instructions)
-    if identity_section:
-        sections.append(identity_section)
-
-    # 3. Skills meta context
     skills_text = _build_skills_meta(cfg)
-    if skills_text:
-        sections.append(f"# Skills\n\n{skills_text}")
 
-    # 4. Generic tools section from ContextBuilder (always present)
-    sections.append(builder._build_tools())
+    class _SkillRegistrySnapshot:
+        def get_meta_info_context(self) -> str:
+            return skills_text
 
-    return builder.SEPARATOR.join(section for section in sections if section)
+    ctx = PlaygroundContext(
+        workdir=Path("."),
+        session_type="local",
+        cache_area=Path("."),
+    )
+    return builder.build_system_prompt(
+        ctx,
+        system_prompt=cfg.system_prompt,
+        identity=cfg.developer_instructions,
+        skill_registry=_SkillRegistrySnapshot() if skills_text else None,
+    )
 
 
 def static_prompt_token_total_for_exp(
