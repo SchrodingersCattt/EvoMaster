@@ -56,6 +56,8 @@ def _make_mock_pg_ctx() -> MagicMock:
     ctx.session = MagicMock()
     ctx.session._cancel_token = None
     ctx.session.capabilities = MagicMock()
+    ctx.session.path_exists.return_value = False
+    ctx.session.read_file.return_value = ''
     ctx.archival = None
     ctx.run_meta = {}
     ctx.with_bohrium.return_value = ctx
@@ -85,10 +87,12 @@ class _FakeExp:
         self._config.name = 'direct'
         self._cleanup_callbacks: list = []
         self.last_ctx: Any = None
+        self.last_task: str | None = None
         self.last_run_kwargs: dict[str, Any] | None = None
 
     async def run_stream(self, *args: Any, **kwargs: Any):
         self.last_ctx = args[0] if args else None
+        self.last_task = args[1] if len(args) > 1 else None
         self.last_run_kwargs = kwargs
         try:
             if callable(self._events):
