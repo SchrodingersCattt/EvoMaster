@@ -394,6 +394,42 @@ async def test_run_agent_injects_figure_upload_config_into_pg_ctx_run_meta():
 
 
 @pytest.mark.asyncio
+async def test_agent_run_service_injects_full_attachment_manifest_before_exp_run():
+    run_result = RunResultEvent(source='agent', status='completed', reason='natural')
+
+    async with _patched_service([run_result]) as (svc, _, __):
+        svc._test_events_table.get_session_user_query_events.return_value = [
+            {
+                "id": 1,
+                "source": "User",
+                "type": "query",
+                "content": "upload",
+                "files": ["https://oss.example.com/chat/data.csv"],
+            }
+        ]
+
+        await svc.run_agent(
+            session_id='sess-attachments',
+            user_prompt='hi',
+            send_cb=AsyncMock(),
+            cancel_token=_make_cancel_token(),
+            mode='direct',
+            task_id='task-1',
+        )
+
+    run_meta = svc._test_fake_exp.last_ctx.run_meta
+    assert "attachment_manifest" in run_meta
+    assert "[Available attachments]" in run_meta["attachment_manifest"]
+    assert "file_1 data.csv https://oss.example.com/chat/data.csv" in run_meta[
+        "attachment_manifest"
+    ]
+    assert callable(run_meta["get_query_events"])
+    assert callable(run_meta["get_all_events"])
+    assert callable(run_meta["get_latest_checkpoint_covered_until_event_id"])
+    assert callable(run_meta["pre_compaction_barrier"])
+
+
+@pytest.mark.asyncio
 async def test_run_agent_uses_history_restore_service_and_injects_spawn_aware_checkpoint_factory():
     run_result = RunResultEvent(source='agent', status='completed', reason='natural')
     restored_history = [MagicMock(name='restored_message')]

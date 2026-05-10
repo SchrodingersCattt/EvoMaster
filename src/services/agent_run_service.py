@@ -23,6 +23,7 @@ from matmaster.integration.fanout import RunEventFanout
 from matmaster.integration.persistence_handler import PersistenceHandler
 from matmaster.integration.sse_handler import SSEHandler
 from matmaster.integration.workspace_handler import WorkspaceHandler
+from matmaster.manifests import attachment as attachment_manifest
 from matmaster.manifests import skill as skill_manifest
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.context import WorkspaceArchivalConfig
@@ -579,6 +580,82 @@ class AgentRunService:
                 )
                 if events_table is not None
                 else []
+            )
+            query_events: list[dict] = []
+            if events_table is not None:
+                try:
+                    raw_query_events = events_table.get_session_user_query_events(
+                        session_id
+                    )
+                    query_events = (
+                        raw_query_events if isinstance(raw_query_events, list) else []
+                    )
+                except Exception:
+                    logger.warning(
+                        "attachment manifest: get_session_user_query_events failed for session_id=%s",
+                        session_id,
+                        exc_info=True,
+                    )
+            entries = attachment_manifest.build_available_attachments(query_events)
+            attachment_text = attachment_manifest.format_available_attachments(entries)
+
+            def _get_query_events() -> list[dict]:
+                return list(query_events)
+
+            def _get_all_events() -> list[dict]:
+                if events_table is None:
+                    return []
+                try:
+                    events = events_table.get_session_events(
+                        session_id,
+                        limit=_DIALOG_HISTORY_MAX_EVENTS,
+                    )
+                    return events if isinstance(events, list) else []
+                except Exception:
+                    logger.warning("manifest: get_session_events failed", exc_info=True)
+                    return []
+
+            def _get_latest_checkpoint_covered_until_event_id() -> int | None:
+                if events_table is None:
+                    return None
+                try:
+                    checkpoints = events_table.get_history_checkpoints(
+                        session_id, None, limit=1
+                    )
+                except Exception:
+                    logger.warning(
+                        "manifest: get_history_checkpoints failed",
+                        exc_info=True,
+                    )
+                    return None
+                if not isinstance(checkpoints, list):
+                    return None
+                for checkpoint in checkpoints:
+                    if not isinstance(checkpoint, dict):
+                        continue
+                    content = checkpoint.get("content")
+                    if isinstance(content, dict):
+                        raw = content.get("covered_until_event_id")
+                        if raw is not None:
+                            try:
+                                return int(raw)
+                            except (TypeError, ValueError):
+                                return None
+                return None
+
+            pg_ctx = pg_ctx.model_copy(
+                update={
+                    'run_meta': {
+                        **pg_ctx.run_meta,
+                        'attachment_manifest': attachment_text,
+                        'get_query_events': _get_query_events,
+                        'get_all_events': _get_all_events,
+                        'get_latest_checkpoint_covered_until_event_id': (
+                            _get_latest_checkpoint_covered_until_event_id
+                        ),
+                        'pre_compaction_barrier': fanout.flush_persistence_barrier,
+                    }
+                }
             )
             bohrium_rebuild_events: list[dict] = []
             try:

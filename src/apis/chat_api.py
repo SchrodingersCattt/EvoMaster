@@ -27,7 +27,6 @@ from src.models.chat import (
     ShareStatusData,
 )
 from src.services.agent_run_service import _get_agent_default_llm
-from src.services.attachment_manifest_service import append_available_attachments
 from src.services.events_service import ChatEventsService, get_events_service
 from src.services.image_input_service import ImageInputError, get_image_input_service
 from src.services.quota_service import check_quota
@@ -89,10 +88,6 @@ def _session_workspace_data_from_row(row: dict) -> SessionDirectoryData:
         if m in ("direct", "planner"):
             mode = m
     return SessionDirectoryData(directory=directory, mode=mode)
-
-
-def _build_agent_prompt(content: str, events: list[dict]) -> str:
-    return append_available_attachments((content or "").strip(), events)
 
 
 def _session_directory_error(exc: SessionDirectoryError) -> BaseErrorResponse:
@@ -356,13 +351,7 @@ async def chat_stream(
         raise ConflictErrorResponse(
             msg="该会话已有任务在运行，请等待完成或先取消后再发新消息",
         )
-    # 给 agent 的 prompt：正文 + 当前会话可用附件清单。多轮历史由 run_agent
-    # 通过 task.meta['dialog_history'] 注入；这里仅查询父级 User/query 事件，
-    # 避免为附件清单拉取整段 tool/response 历史。
-    base_prompt = _build_agent_prompt(
-        req.content or "",
-        events_svc.get_session_user_query_events(sid),
-    )
+    base_prompt = (req.content or "").strip()
     return StreamingResponse(
         stream_svc.generate_send_stream(sid, base_prompt, ctx),
         media_type="text/event-stream",
