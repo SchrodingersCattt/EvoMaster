@@ -2,34 +2,11 @@ version: v5
 capability: structure_construction
 domain: agnostic
 questions:
-- id: SC_struct_002_20260507
+- id: SC_struct_002_20260507v4
   capability: structure_construction
   domain: agnostic
   intent: Build a 4-layer (110) surface slab from the uploaded PUBMUU03 molecular crystal CIF and verify molecule integrity plus atom-count scaling.
-  human_prompt_seed: '对以下通过 OSS URL 提供的 CIF 结构进行处理：
-
-    - `surface_PUBMUU03.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_surface/1774583701_surface_PUBMUU03.cif`
-
-
-    任务：基于该结构切出 `(1, 1, 0)` 表面 slab，要求为 4 层。
-
-    真空层不是重点，可以不特别说明或自行设定合理值。
-
-
-    重点检查并在最终答案中明确报告：
-
-    (1) 切面后分子是否被切断，并给出判断依据；
-
-    (2) 输入单胞的原子数；
-
-    (3) 最终 slab 的原子总数；
-
-    (4) 是否满足"最终原子数 = 单胞原子数的 4 倍"。
-
-
-    输出 slab 结构文件为 `slab_PUBMUU03_110.cif`，并给出上述核查结论。
-
-    '
+  human_prompt_seed: '从 `surface_PUBMUU03.cif` 切出 (1,1,0) 表面 slab，4 个原子层，输出为 `slab_PUBMUU03_110.cif`。文件地址：`https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_surface/1774583701_surface_PUBMUU03.cif`'
   tags:
   - struct_surface
   - struct_molcrys
@@ -52,12 +29,6 @@ questions:
     - total_atoms
     - atom_count_ratio_check
     - molecule_integrity_check
-  - key: explicit_report_tokens
-    value:
-    - '144'
-    - '576'
-    - '4'
-    - slab_PUBMUU03_110.cif
   - key: molcrys_slab_molecular_integrity
     value:
       unit_cell_atoms: 144
@@ -86,13 +57,10 @@ questions:
     axis: correctness
     verify: molcrys_slab_molecular_integrity
   - id: required_fields
-    criterion: Output includes structure file, unit-cell atom count, final atom count, an explicit 4x ratio check, and a molecule-integrity narrative consistent with MolCrysKit / connectivity reasoning.
+    criterion: Output names the slab structure file and gives a molecule-integrity narrative
+      consistent with MolCrysKit / connectivity reasoning. Numeric scaling is evaluated only by deterministic structure-file checks.
     axis: correctness
     verify: llm_binary_judge
-  - id: explicit_report_tokens
-    criterion: Final answer explicitly includes the 144-atom input cell, 576-atom slab, 4x atom-count scaling, and `slab_PUBMUU03_110.cif` output basename.
-    axis: correctness
-    verify: contains_all
   - id: grounding_source
     criterion: The answer states what physical picture is used (molecular connectivity, periodic boundaries, (110) plane vs bulk, and how that supports or contradicts cutting molecules), citing the structures,
       not generic recall disconnected from those files. Judge solely from the final answer and named deliverables; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
@@ -118,11 +86,11 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_005_20260508
+- id: SC_struct_005_20260508v2
   capability: structure_construction
   domain: agnostic
   intent: Infer SG-derived chemical formulas for 5 disordered crystal structures and construct ordered replicas to assess 3D structure perception.
-  human_prompt_seed: '对以下 5 个含无序占位的晶体结构逐一处理，所有输入都通过 OSS URL 提供：
+  human_prompt_seed: '对以下 5 个含无序占位的晶体结构分别生成有序 replica，每个输出命名为 `ordered_<原始文件名>.cif`：
 
     - `disorder_DAN-2.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_disorder/strucuture_disorder/disorder_DAN-2.cif`
 
@@ -133,26 +101,6 @@ questions:
     - `disorder_PAP-M5.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_disorder/strucuture_disorder/disorder_PAP-M5.cif`
 
     - `disorder_TILPEN.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_disorder/strucuture_disorder/disorder_TILPEN.cif`
-
-
-    对每个结构，使用结构生成工具构造 ordered replica，并汇总：
-
-    (1) `chemical_formula`（尽量保持工具/结构解析返回的原始字符串）；
-
-    (2) `is_disordered`；
-
-    (3) `ordered_replica_count`；
-
-    (4) `ordered_output_archive`。
-
-
-    对 `disorder_DAN-2.cif` 的 ordered replica：`chemical_formula` 必须为**整数化学计量**（不得再出现类似 `H13.98` 这类分数占位形式的计数）。
-
-    每个结构的 ordered replica 输出文件命名为 `ordered_<原始文件名>.cif`（例如 `ordered_disorder_DAN-2.cif`）。
-
-    所有 ordered replica 必须是完全有序结构：输出 CIF 中所有 `_atom_site_occupancy` 均为 1，不得保留 partial/split occupancy。
-
-    最终答案按文件名逐项列出上述信息，并显式写出每个原始文件名与对应 `ordered_<原始文件名>.cif` 的配对。
 
     '
   tags:
@@ -182,8 +130,26 @@ questions:
     - ordered_disorder_PAP-H4.cif
     - ordered_disorder_PAP-M5.cif
     - ordered_disorder_TILPEN.cif
-  - key: sc005_disorder_formulas
-    value: {}
+  - key: dan2_formula
+    value:
+      filename: ordered_disorder_DAN-2.cif
+      formula: K1H14C6N5O9
+  - key: dap4_formula
+    value:
+      filename: ordered_disorder_DAP-4.cif
+      formula: H144C48N24Cl24O96
+  - key: paph4_formula
+    value:
+      filename: ordered_disorder_PAP-H4.cif
+      formula: H288C80N48Cl48O192
+  - key: papm5_formula
+    value:
+      filename: ordered_disorder_PAP-M5.cif
+      formula: Ag8H112C40N16Cl24O96
+  - key: tilpen_formula
+    value:
+      filename: ordered_disorder_TILPEN.cif
+      formula: Fe2H40C24N16O2
   - key: required_fields
     value:
     - chemical_formula
@@ -216,18 +182,32 @@ questions:
     criterion: Every ordered-replica CIF has only occupancy-1 sites; no partial or split occupancies remain in `_atom_site_occupancy`.
     axis: correctness
     verify: struct_file_all_occupancy_one
+  - id: dan2_formula
+    criterion: The file `ordered_disorder_DAN-2.cif` has the expected integer composition.
+    axis: correctness
+    verify: struct_file_formula
+  - id: dap4_formula
+    criterion: The file `ordered_disorder_DAP-4.cif` has the expected ordered-replica composition.
+    axis: correctness
+    verify: struct_file_formula
   - id: sc005_disorder_formulas
     criterion: The answer includes the four reference formula strings for DAP-4, PAP-H4, PAP-M5, and TILPEN; for DAN-2 the reported ordered-replica chemical_formula uses integer stoichiometry only (no fractional
       occupancies like 13.98 in counts).
     axis: correctness
     verify: sc005_disorder_formulas
     weight: 0.5
-  - id: partial_formulas_ok
-    criterion: The answer reports chemically plausible ordered-replica formulas for at least 3 of the 5 structures. Reference formulas — DAP-4 H144C48N24Cl24O96, PAP-H4 H288C80N48Cl48O192, PAP-M5 Ag8H112C40N16Cl24O96,
-      TILPEN Fe2H40C24N16O2, DAN-2 integer-only stoichiometry. Pass if ≥3 formulas are present and correct (element ordering may differ).
+  - id: paph4_formula
+    criterion: The file `ordered_disorder_PAP-H4.cif` has the expected ordered-replica composition.
     axis: correctness
-    verify: llm_binary_judge
-    weight: 0.5
+    verify: struct_file_formula
+  - id: papm5_formula
+    criterion: The file `ordered_disorder_PAP-M5.cif` has the expected ordered-replica composition.
+    axis: correctness
+    verify: struct_file_formula
+  - id: tilpen_formula
+    criterion: The file `ordered_disorder_TILPEN.cif` has the expected ordered-replica composition.
+    axis: correctness
+    verify: struct_file_formula
   - id: required_fields
     criterion: Each filename is paired with chemical_formula, is_disordered, ordered_replica_count, and ordered_output_archive.
     axis: correctness
@@ -272,36 +252,11 @@ questions:
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
-- id: SC_struct_006_20260507
+- id: SC_struct_006_20260507v7
   capability: structure_construction
   domain: agnostic
   intent: Add missing hydrogens to the diacetylmorphine (DACMOR) molecular crystal CIF and validate the formula, local molecular environment, and tetrahedral geometry using MolCrysKit.
-  human_prompt_seed: '对以下通过 OSS URL 提供的 CIF 结构进行补氢处理：
-
-    - `DACMOR.cif` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_surface/cda9f292ec4b411facb478d0486b54ce/DACMOR.cif`
-
-
-    该结构为二乙酰吗啡（diacetylmorphine）分子晶体，从单晶XRD解析得到，但缺少了 H 原子。
-
-    请对该结构补氢，并导出为 `dacmor_hydrogenated.cif`。
-
-    要求：添加 H 原子使结构符合价键规则、具备化学意义。
-
-
-    重点检查并在最终答案中明确报告：
-
-    (1) 补氢后每个分子的最简化学式；
-
-    (2) 每个分子中 H 原子的总数；
-
-    (3) 代表性的 H-C-H 键角（度）；
-
-    (4) 补氢后分子的连接性是否完整（无断裂或多余键）。
-
-
-    输出结构文件，并给出上述核查结论。
-
-    '
+  human_prompt_seed: '该 CIF 是从单晶 XRD 解析的二乙酰吗啡（diacetylmorphine）分子晶体，H 原子缺失。请补全 H 原子并导出为 `dacmor_hydrogenated.cif`。文件地址：`https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_surface/cda9f292ec4b411facb478d0486b54ce/DACMOR.cif`'
   tags:
   - struct_molcrys
   data_files:
@@ -316,6 +271,17 @@ questions:
     value:
       filename: dacmor_hydrogenated.cif
       formula: C21H23NO5
+  - key: total_atom_count
+    value:
+      filename: dacmor_hydrogenated.cif
+      expected: 200
+      tolerance: 0
+  - key: hydrogen_atom_count
+    value:
+      filename: dacmor_hydrogenated.cif
+      element: H
+      expected: 92
+      tolerance: 0
   - key: hch_angle_deg
     value:
       filename: dacmor_hydrogenated.cif
@@ -331,11 +297,6 @@ questions:
       filename: dacmor_hydrogenated.cif
       expected_formula: C21H23NO5
       z_value: 4
-  - key: explicit_report_tokens
-    value:
-    - C21H23NO5
-    - '109'
-    - dacmor_hydrogenated.cif
   - key: turn_budget
     value: *id001
   - key: duration_budget
@@ -352,8 +313,17 @@ questions:
     criterion: The reduced chemical formula read from dacmor_hydrogenated.cif matches C21H23NO5.
     axis: correctness
     verify: struct_file_formula
+  - id: total_atom_count
+    criterion: The output CIF contains exactly 200 atoms for four C21H23NO5 molecules.
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: hydrogen_atom_count
+    criterion: The output CIF contains exactly 92 H atoms, i.e. 23 H atoms per molecule for Z=4.
+    axis: correctness
+    verify: struct_file_atom_count
   - id: hch_angle_deg
-    criterion: The mean H-C-H angle computed from dacmor_hydrogenated.cif is close to tetrahedral 109.48 degrees within a reasonable tolerance.
+    criterion: The unfiltered mean H-C-H angle computed from all output-CIF H-C-H triplets
+      with C-H cutoff 1.5 A is close to tetrahedral 109.48 degrees within tolerance.
     axis: correctness
     verify: struct_file_bond_angle
   - id: molcrys_local_env
@@ -361,10 +331,6 @@ questions:
       analysis confirms H-bearing atoms have chemically consistent local geometry (hybridisation, coordination).
     axis: correctness
     verify: molcrys_local_env
-  - id: explicit_report_tokens
-    criterion: Final answer explicitly reports formula C21H23NO5, a representative H-C-H angle near 109 degrees, and the `dacmor_hydrogenated.cif` output basename.
-    axis: correctness
-    verify: contains_all
   - id: grounding_source
     criterion: The answer states the chemical/geometry rationale (which C/N atoms receive H, tetrahedral geometry targets, carbonyl/ester O should not be hydrogenated) and ties checks to `dacmor_hydrogenated.cif`
       and the input CIF, not only procedural wording disconnected from those files. Judge solely from the final answer and named deliverables; do not fail because the tool-call log omits MCP, web_search,
@@ -391,16 +357,12 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_008_20260507
+- id: SC_struct_008_20260507v4
   capability: structure_construction
   domain: agnostic
-  intent: Construct a computation-ready gamma-alumina bulk model and validate stoichiometry, geometry, coordination environments, and post-relaxation force.
-  human_prompt_seed: 'Construct a computation-ready γ-Al2O3 bulk model. Export as `gamma_alumina.cif`. In the final answer, explicitly report: (1) whether `gamma_alumina.cif` exists; (2) the Al:O ratio,
-    which should be approximately 2:3 (±5%); (3) the three cell angles, each close to 90 degrees (±2 degrees); (4) whether both tetrahedral and octahedral [AlO] environments exist; (5) whether all interatomic
-    distances are greater than 1.0 A; (6) the relaxed maximum force, which should be below 0.1 eV/A. Also include a machine-readable block `<eval_results>{"max_force_ev_per_ang": <number>}</eval_results>`
-    in the final answer.
-
-    '
+  intent: Construct a computation-ready gamma-alumina bulk model and validate stoichiometry,
+    geometry, coordination environments, and post-relaxation force.
+  human_prompt_seed: 'Build a γ-Al₂O₃ bulk model and relax it. Export as `gamma_alumina.cif`. Include `<eval_results>{"max_force_ev_per_ang": <number>}</eval_results>` in your answer.'
   tags:
   - struct_build
   data_files: []
@@ -503,8 +465,11 @@ questions:
     verify: llm_binary_judge
     weight: 0.5
   - id: grounding_source
-    criterion: The answer links Al:O stoichiometry, cell angles, tetrahedral vs octahedral Al sites, minimum contact distances, and post-relax forces to `gamma_alumina.cif` and the stated relaxation, not
-      handbook recall disconnected from that file. Judge solely from the final answer and named deliverables; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The answer links code-checked Al:O ratio, cell angles, tetrahedral vs octahedral
+      Al sites, minimum contact distances, and post-relax forces to `gamma_alumina.cif` and
+      the stated relaxation, not handbook recall disconnected from that file. Judge solely
+      from the final answer and named deliverables; do not fail because the tool-call log
+      omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -527,17 +492,13 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_009_20260508
+- id: SC_struct_009_20260508v2
   capability: structure_construction
   domain: agnostic
-  intent: Build a stoichiometric and symmetric CeO2(111) surface with three Ce-O-Ce trilayers and oxygen termination; slab normal stacking should expose nine distinct atomic planes along z (three trilayers
-    times three planes each).
-  human_prompt_seed: 'Build a CeO2(111) surface with three Ce-O-Ce tri-layers. Export as `ceo2_111_trilayer.cif`. Here "layer count" means **nine atomic planes** along the slab normal (z): each Ce-O-Ce
-    tri-layer contributes three planes (O–Ce–O style stacking), not three coarse trilayer blocks. In the final answer, explicitly report: (1) whether `ceo2_111_trilayer.cif` exists; (2) the total **atomic**
-    layer count along z, which should be 9; (3) whether the slab is symmetric; here symmetric means the top and bottom halves are mirror-equivalent around the slab center with matching O-terminated outermost
-    planes; (4) whether the outermost surface layer is O-terminated; (5) the Ce:O stoichiometric ratio, which should match CeO2.
-
-    '
+  intent: Build a stoichiometric and symmetric CeO2(111) surface with three Ce-O-Ce trilayers
+    and oxygen termination; slab normal stacking should expose nine distinct atomic planes
+    along z (three trilayers times three planes each).
+  human_prompt_seed: 'Build a symmetric CeO2(111) surface slab with three Ce-O-Ce tri-layers. Export as `ceo2_111_trilayer.cif`.'
   tags:
   - struct_surface
   priority: P0
@@ -633,25 +594,11 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_010_20260507
+- id: SC_struct_010_20260507v3
   capability: structure_construction
   domain: agnostic
   intent: Build a seven-layer Ag(111) slab with explicit water and potassium ions for an electrochemical interface initial model.
-  human_prompt_seed: '构建一个 Ag(111) 界面初始结构并导出为 `ag111_k_water_interface.cif`。
-
-    要求：
-
-    (1) Ag(111) slab 为 (2 × 3) 面内超胞，并具有 7 个原子层；
-
-    (2) 在金属基底上方加入 43 个 H2O 分子和 2 个 K 离子； 仅允许中性 H2O 分子，不允许引入 OH-/H3O+ 或水分解产物；
-
-    (3) z 方向保留约 12 Å 真空层；
-
-    (4) 最终答案中明确报告 Ag 原子数、H2O 分子数、K 离子数、slab 层数、真空层厚度， 并说明这些溶剂/离子位于金属表面同一侧上方。
-
-    最终答案还必须包含 `<eval_results>` JSON，例如 `{"vacuum_angstrom": 12.0, "supercell_a": 2, "supercell_b": 3, "adsorbate_side": "same_side"}`，用于机器判定真空厚度、面内超胞和溶剂/离子同侧说明。
-
-    '
+  human_prompt_seed: '构建 Ag(111)/水界面初始结构：Ag(111) slab 为 2×3 超胞 7 层，上方加入 43 个 H₂O 分子和 2 个 K⁺ 离子（仅中性 H₂O，不引入 OH⁻/H₃O⁺），z 方向约 12 Å 真空层。导出为 `ag111_k_water_interface.cif`。最终答案中包含 `<eval_results>{"vacuum_angstrom": <number>, "supercell_a": <int>, "supercell_b": <int>, "adsorbate_side": "same_side"}</eval_results>`。'
   tags:
   - struct_surface
   data_files: []
@@ -712,9 +659,6 @@ questions:
   - key: required_fields
     value:
     - file_exists
-    - ag_count
-    - water_count
-    - k_count
     - slab_layers
     - vacuum_A
     - interface_side
@@ -770,8 +714,10 @@ questions:
     axis: correctness
     verify: contains_all
   - id: required_fields
-    criterion: The answer explicitly reports the output structure file, Ag atom count, H2O molecule count, K ion count, slab layer count, vacuum thickness near 12 Å, confirms neutral-water-only composition
-      (no OH-/H3O+), and states that solvent/ions are placed above one side of the slab rather than embedded into the metal.
+    criterion: The answer explicitly reports the output structure file, slab layer check,
+      vacuum thickness near 12 Å, neutral-water-only species (no OH-/H3O+), and that
+      solvent/ions are placed above one side of the slab. Numeric loading values are
+      evaluated only by deterministic structure-file checks.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
@@ -799,16 +745,11 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_013_20260507
+- id: SC_struct_013_20260507v2
   capability: structure_construction
   domain: agnostic
   intent: Construct and compare close-packed layer cross sections for fcc and hcp crystals, then expand both slabs to 5x5x1 supercells.
-  human_prompt_seed: '请演示 fcc 与 hcp 近密堆积结构的差异，完成以下建模任务并导出结构：
-
-    1) 先分别构建 fcc 与 hcp 体相模板结构； 2) 对两者各自切出近密堆积层截面，要求 5 个原子层，并设置约 1 层真空； 3) 将两个截面结构都扩展为 5×5×1 超胞； 4) 输出文件： - `fcc_close_packed_5x5x1.cif` - `hcp_close_packed_5x5x1.cif` - `packing_comparison.md`（说明 fcc/hcp
-    堆垛差异与截面构建设置）。
-
-    最终回答需简要说明：你如何保证两种结构在可比条件下进行截面对比。'
+  human_prompt_seed: '分别构建 fcc 和 hcp 近密堆积截面 slab（各 5 层，5×5×1 超胞），输出 `fcc_close_packed_5x5x1.cif`、`hcp_close_packed_5x5x1.cif` 和 `packing_comparison.md`，说明两者堆垛方式的区别。'
   tags:
   - struct_surface
   data_files: []
@@ -918,11 +859,12 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_build_001_20260508v2
+- id: SC_struct_build_001_20260508v5
   capability: structure_construction
   domain: agnostic
-  intent: Build FCC copper conventional cell using ASE bulk prototype and verify lattice constant, atom count, and space group.
-  human_prompt_seed: '构建 FCC 铜 (Cu) 的惯用晶胞结构，使用实验晶格常数 a = 3.615 Å。 导出为 `cu_fcc.cif`。在最终回答中明确报告：(1) 晶格常数；(2) 空间群编号 #225 / Fm-3m；(3) 惯用晶胞中的原子数 4。'
+  intent: Build FCC copper conventional cell using ASE bulk prototype and verify lattice
+    constant, atom count, and space group.
+  human_prompt_seed: '用实验晶格常数 a = 3.615 Å 构建 FCC 铜的惯用晶胞，导出为 `cu_fcc.cif`。'
   tags:
   - struct_build
   data_files: []
@@ -985,7 +927,8 @@ questions:
     axis: correctness
     verify: contains_all
   - id: grounding_source
-    criterion: Final answer explicitly states the lattice constant, space group number, and atom count from the built structure.
+    criterion: Final answer explicitly states the lattice constant and space group number from
+      the built structure. Cell size is evaluated only by deterministic structure-file checks.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -996,11 +939,12 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
-- id: SC_struct_build_002_20260507v2
+- id: SC_struct_build_002_20260507v5
   capability: structure_construction
   domain: agnostic
-  intent: Build hexagonal boron nitride (hBN) unit cell from space group and Wyckoff positions, verifying correct cell angles and stoichiometry.
-  human_prompt_seed: 构建六方氮化硼 (hBN) 的单胞结构。参数：空间群 P6₃/mmc (#194)， a = 2.504 Å, c = 6.661 Å。导出为 `hbn.cif`。在最终回答中明确报告：(1) 晶格参数 a, c；(2) gamma 角；(3) 单胞原子数；(4) 化学计量比 B:N。
+  intent: Build hexagonal boron nitride (hBN) unit cell from space group and Wyckoff
+    positions, verifying correct cell angles and stoichiometry.
+  human_prompt_seed: '构建六方氮化硼（hBN）单胞，空间群 P6₃/mmc (#194)，a = 2.504 Å，c = 6.661 Å，导出为 `hbn.cif`。'
   tags:
   - struct_build
   data_files: []
@@ -1084,7 +1028,9 @@ questions:
     axis: correctness
     verify: contains_all
   - id: grounding_source
-    criterion: Final answer reports lattice parameters, gamma angle, atom count, and B:N ratio from the built structure.
+    criterion: Final answer reports lattice parameters, gamma angle, and space-group setting
+      from the built structure. Cell size and element-ratio checks are evaluated only by deterministic
+      structure-file checks.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -1095,11 +1041,12 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
-- id: SC_struct_build_003_20260507v2
+- id: SC_struct_build_003_20260507v5
   capability: structure_construction
   domain: agnostic
-  intent: Build a phenol molecule from SMILES using RDKit and verify atom count and chemical formula.
-  human_prompt_seed: 从 SMILES `c1ccc(cc1)O` 构建苯酚 (phenol) 分子的三维结构。 导出为 `phenol.xyz`。在最终回答中报告：(1) 化学式；(2) 原子总数；(3) 是否所有原子都有合理的三维坐标（最短原子间距离不小于 0.7 Å，无重叠）。
+  intent: Build a phenol molecule from SMILES using RDKit and verify atom count and
+    chemical formula.
+  human_prompt_seed: '从 SMILES `c1ccc(cc1)O` 构建苯酚的三维分子构象，导出为 `phenol.xyz`。'
   tags:
   - struct_build
   data_files: []
@@ -1117,7 +1064,6 @@ questions:
       min_distance_A: 0.7
   - key: required_fields
     value:
-    - '13'
     - phenol
   - key: turn_budget
     value:
@@ -1139,7 +1085,8 @@ questions:
     axis: correctness
     verify: struct_file_min_interatomic_distance
   - id: required_fields
-    criterion: Final answer explicitly states atom count 13 and mentions phenol.
+    criterion: Final answer mentions phenol; the numeric size check is evaluated only by deterministic
+      structure-file checks.
     axis: correctness
     verify: contains_all
   - id: grounding_source

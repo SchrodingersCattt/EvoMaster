@@ -305,7 +305,6 @@ class QuestionItem(BaseModel):
             'turn_budget',
             'molcrys_slab_molecular_integrity',
             'molcrys_local_env',
-            'sc005_disorder_formulas',
             'struct_file_parsable',
             'struct_file_all_occupancy_one',
             'struct_file_space_group',
