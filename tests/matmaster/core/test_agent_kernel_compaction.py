@@ -384,10 +384,17 @@ class TestCheckpointAwareCompaction:
 
 class TestExpCheckpointSinkScopeResolution:
     @pytest.mark.asyncio
-    async def test_build_runtime_resolves_checkpoint_sink_by_spawn_scope(self) -> None:
+    async def test_build_runtime_resolves_checkpoint_sink_by_spawn_scope(
+        self,
+        tmp_path: Path,
+    ) -> None:
         from matmaster.config.exp import ExpConfig
         from matmaster.core.exp import Exp
         from matmaster.types.context import PlaygroundContext
+        from matmaster.types.runtime_ports import (
+            PlaygroundCompactionPort,
+            PlaygroundRuntimePorts,
+        )
 
         parent_sink = object()
         child_sink = object()
@@ -400,12 +407,17 @@ class TestExpCheckpointSinkScopeResolution:
             return parent_sink
 
         ctx = PlaygroundContext(
-            workdir=Path("/tmp/test-exp"),
+            workdir=tmp_path,
             session_type="local",
-            cache_area=Path("/tmp/test-exp-cache"),
-            execution_workdir="/tmp/test-exp",
+            cache_area=tmp_path / "cache",
+            execution_workdir=str(tmp_path),
             llm_provider=ContentOnlyProvider(),
-            run_meta={"checkpoint_sink_factory": checkpoint_sink_factory},
+            run_meta={},
+            runtime_ports=PlaygroundRuntimePorts(
+                compaction=PlaygroundCompactionPort(
+                    checkpoint_sink_factory=checkpoint_sink_factory,
+                )
+            ),
         )
         exp = Exp(ExpConfig(name="test"))
 
@@ -414,6 +426,8 @@ class TestExpCheckpointSinkScopeResolution:
             child_runtime = await exp.build_runtime(ctx, spawn_id="child-1")
 
         assert seen_spawn_ids == [None, "child-1"]
+        assert parent_runtime.spec.runtime_ports.checkpoint_sink is parent_sink
+        assert child_runtime.spec.runtime_ports.checkpoint_sink is child_sink
         assert (
             parent_runtime.spec.meta["checkpoint_sink_factory"]
             is checkpoint_sink_factory

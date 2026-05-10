@@ -352,6 +352,61 @@ class TestExpWiring:
         assert len({event.spawn_id for event in forwarded}) == 1
 
     @pytest.mark.asyncio
+    async def test_make_spawn_fn_prefers_runtime_ports_child_event_forward_sink(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from matmaster.types.runtime_ports import PlaygroundRuntimePorts
+
+        forwarded = []
+
+        async def new_sink(event) -> None:
+            forwarded.append(("new", event))
+
+        async def old_sink(event) -> None:
+            forwarded.append(("old", event))
+
+        ctx = PlaygroundContext(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path / "exec"),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+            run_meta={"session_id": "session-1", "event_sink": old_sink},
+            llm_provider=MockLLMProvider(),
+            runtime_ports=PlaygroundRuntimePorts(
+                child_event_forward_sink=new_sink,
+            ),
+        )
+
+        async def fake_drain_run_stream(_stream, on_event=None):
+            if on_event is not None:
+                await on_event(ResponseEvent(source="agent", content="child answer"))
+            return SimpleNamespace(
+                status="completed",
+                final_content="child done",
+                reason="natural",
+            )
+
+        with (
+            patch(
+                "matmaster.config.loader.load_exp_config",
+                return_value=ExpConfig(name="direct"),
+            ),
+            patch(
+                "matmaster.core.stream_drain.drain_run_stream",
+                side_effect=fake_drain_run_stream,
+            ),
+        ):
+            spawn_fn = Exp._make_spawn_fn(ctx, source_prefix="MatMaster")
+            result = await spawn_fn("direct", "summarize this task")
+
+        assert result == "child done"
+        assert len(forwarded) == 1
+        assert forwarded[0][0] == "new"
+        assert forwarded[0][1].source == "MatMaster:direct"
+        assert forwarded[0][1].spawn_id
+
+    @pytest.mark.asyncio
     async def test_make_spawn_fn_without_event_sink_still_returns_child_summary(
         self,
         tmp_path: Path,

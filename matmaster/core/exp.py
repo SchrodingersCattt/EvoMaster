@@ -30,6 +30,7 @@ from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec
+from matmaster.types.runtime_ports import EmptySessionEventHistory, KernelRuntimePorts
 
 if TYPE_CHECKING:
     from matmaster.types.messages import Message
@@ -118,7 +119,10 @@ class Exp:
             child_source = f"{source_prefix}:{exp_name}"
             child_spawn_id = uuid.uuid4().hex[:16]
             parent_session_id = ctx.run_meta.get("session_id", "")
-            event_sink = ctx.run_meta.get("event_sink")
+            event_sink = (
+                ctx.runtime_ports.child_event_forward_sink
+                or ctx.run_meta.get("event_sink")
+            )
 
             async def _forward_child_event(event: Any) -> None:
                 if event_sink is None:
@@ -225,6 +229,41 @@ class Exp:
         ):
             planes.add(ToolPlane.EXTERNAL_SERVICE)
         return frozenset(planes)
+
+    @staticmethod
+    def _legacy_history_from_run_meta(run_meta: dict[str, Any]) -> Any | None:
+        get_query_events = run_meta.get("get_query_events")
+        get_all_events = run_meta.get("get_all_events")
+        get_latest_checkpoint_covered_until_event_id = run_meta.get(
+            "get_latest_checkpoint_covered_until_event_id"
+        )
+        if not (
+            callable(get_query_events)
+            or callable(get_all_events)
+            or callable(get_latest_checkpoint_covered_until_event_id)
+        ):
+            return None
+
+        class _LegacyHistory:
+            def query_events(self) -> list[dict[str, Any]]:
+                if callable(get_query_events):
+                    events = get_query_events()
+                    return events if isinstance(events, list) else []
+                return []
+
+            def all_events(self) -> list[dict[str, Any]]:
+                if callable(get_all_events):
+                    events = get_all_events()
+                    return events if isinstance(events, list) else []
+                return []
+
+            def latest_checkpoint_covered_until_event_id(self) -> int | None:
+                if callable(get_latest_checkpoint_covered_until_event_id):
+                    value = get_latest_checkpoint_covered_until_event_id()
+                    return value if isinstance(value, int) or value is None else None
+                return None
+
+        return _LegacyHistory()
 
     # ── Phase 2: build_runtime ───────────────────────────
 
@@ -358,25 +397,17 @@ class Exp:
                         spec.compaction.compaction_llm,
                     )
 
-            def empty_events():
-                return []
+            history_port = ctx.runtime_ports.compaction.history
+            if history_port is None:
+                history_port = self._legacy_history_from_run_meta(run_meta)
+            if history_port is None:
+                history_port = EmptySessionEventHistory()
 
-            get_query_events = run_meta.get("get_query_events")
-            if not callable(get_query_events):
-                get_query_events = empty_events
-            get_all_events = run_meta.get("get_all_events")
-            if not callable(get_all_events):
-                get_all_events = empty_events
-            get_latest_checkpoint_covered_until_event_id = run_meta.get(
-                "get_latest_checkpoint_covered_until_event_id"
-            )
             rehydrator = CompactionRehydrator(
-                get_query_events=get_query_events,
-                get_all_events=get_all_events,
+                get_query_events=history_port.query_events,
+                get_all_events=history_port.all_events,
                 get_latest_checkpoint_covered_until_event_id=(
-                    get_latest_checkpoint_covered_until_event_id
-                    if callable(get_latest_checkpoint_covered_until_event_id)
-                    else None
+                    history_port.latest_checkpoint_covered_until_event_id
                 ),
                 skill_registry=self._skill_registry,
                 playground_ctx=ctx,
@@ -420,10 +451,17 @@ class Exp:
         )
 
         # 9. Assemble final spec with all v2 fields
-        checkpoint_sink_factory = run_meta.get("checkpoint_sink_factory")
+        checkpoint_sink_factory = (
+            ctx.runtime_ports.compaction.checkpoint_sink_factory
+            or run_meta.get("checkpoint_sink_factory")
+        )
         checkpoint_sink = None
         if callable(checkpoint_sink_factory):
             checkpoint_sink = checkpoint_sink_factory(spawn_id=spawn_id)
+        pre_compaction_barrier = (
+            ctx.runtime_ports.compaction.pre_compaction_barrier
+            or run_meta.get("pre_compaction_barrier")
+        )
         spec = spec.model_copy(
             update={
                 "tool_catalog": catalog,
@@ -435,6 +473,10 @@ class Exp:
                 "context_builder": builder,
                 "hook_executor": hook_executor,
                 "compactor": compactor,
+                "runtime_ports": KernelRuntimePorts(
+                    checkpoint_sink=checkpoint_sink,
+                    pre_compaction_barrier=pre_compaction_barrier,
+                ),
                 "meta": {
                     **spec.meta,
                     "task_id": run_meta.get("task_id", ""),
@@ -443,7 +485,7 @@ class Exp:
                     "checkpoint_sink_factory": checkpoint_sink_factory,
                     "checkpoint_sink": checkpoint_sink,
                     "attachment_manifest": run_meta.get("attachment_manifest", ""),
-                    "pre_compaction_barrier": run_meta.get("pre_compaction_barrier"),
+                    "pre_compaction_barrier": pre_compaction_barrier,
                 },
             }
         )
