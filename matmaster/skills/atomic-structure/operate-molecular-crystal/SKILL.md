@@ -51,9 +51,16 @@ functions the legacy `mat_sg_*` builders wrap. Do not reinvent ordering /
 hydrogen completion / desolvation by parsing `scan_cif_disorder` output by
 hand.
 
-If `molcrys-kit` is missing in the environment, install it with
-`uv pip install molcrys-kit==0.2.0` (or via the project's `calculation` extra)
-rather than escalating to Bohrium.
+If `molcrys-kit` is missing in the environment, install it directly from the
+GitHub release tarball (it is not published on PyPI):
+
+```bash
+pip install "https://github.com/SchrodingersCattt/MolCrysKit/archive/refs/tags/v0.2.0.tar.gz"
+```
+
+Use `pip` (not `uv`) so the same one-liner works inside Bohrium remote shells
+and any other Python environment that may not have `uv` available. Do **not**
+escalate to Bohrium just because the package is missing.
 
 ### Read / write
 
