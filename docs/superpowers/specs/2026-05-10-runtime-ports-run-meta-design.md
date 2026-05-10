@@ -82,14 +82,37 @@ matmaster/types/runtime_ports.py
 
 该模块只依赖标准库和 typing/dataclasses，不依赖 `src.services`、Redis、数据库、FastAPI、SSE handler 或具体 service。它属于中立边界合同层。
 
-核心类型：
+核心类型采用树状聚合，而不是把所有 port 类并列展开。使用方只需要面对两个边界入口：
+
+- `PlaygroundRuntimePorts`：`PlaygroundContext` 到 `Exp` 的边界入口。
+- `KernelRuntimePorts`：`AgentRuntimeSpec` 到 `AgentKernel` 的边界入口。
+
+内部再按运行域分组。第一阶段只需要一个子域：`compaction`。child agent 事件转发暂时作为 `PlaygroundRuntimePorts.child_event_sink` 的一级字段，因为它目前只有一个能力点，单独建 `EventForwardingPorts` 反而会制造空壳层级。
+
+层级关系：
+
+```text
+PlaygroundRuntimePorts
+├── child_event_sink
+└── compaction: PlaygroundCompactionPort
+    ├── history: SessionEventHistoryPort
+    ├── checkpoint_sink_factory
+    └── pre_compaction_barrier
+
+KernelRuntimePorts
+└── compaction: KernelCompactionPort
+    ├── checkpoint_sink
+    └── pre_compaction_barrier
+```
+
+代码草案：
 
 ```python
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Protocol
 
 
 EventSink = Callable[[Any], Awaitable[None] | None]
@@ -98,42 +121,66 @@ CheckpointSink = Callable[..., Awaitable[int | None] | int | None]
 CheckpointSinkFactory = Callable[..., CheckpointSink]
 
 
-def _empty_events() -> list[dict[str, Any]]:
-    return []
+class SessionEventHistoryPort(Protocol):
+    def query_events(self) -> list[dict[str, Any]]:
+        ...
 
+    def all_events(self) -> list[dict[str, Any]]:
+        ...
 
-def _no_checkpoint() -> int | None:
-    return None
+    def latest_checkpoint_covered_until_event_id(self) -> int | None:
+        ...
 
 
 @dataclass(frozen=True)
-class CompactionHistoryPort:
-    get_query_events: Callable[[], list[dict[str, Any]]] = _empty_events
-    get_all_events: Callable[[], list[dict[str, Any]]] = _empty_events
-    get_latest_checkpoint_covered_until_event_id: Callable[
-        [], int | None
-    ] = _no_checkpoint
+class EmptySessionEventHistory:
+    def query_events(self) -> list[dict[str, Any]]:
+        return []
+
+    def all_events(self) -> list[dict[str, Any]]:
+        return []
+
+    def latest_checkpoint_covered_until_event_id(self) -> int | None:
+        return None
+
+
+@dataclass(frozen=True)
+class PlaygroundCompactionPort:
+    history: SessionEventHistoryPort = field(
+        default_factory=EmptySessionEventHistory
+    )
+    checkpoint_sink_factory: CheckpointSinkFactory | None = None
+    pre_compaction_barrier: PreCompactionBarrier | None = None
 
 
 @dataclass(frozen=True)
 class PlaygroundRuntimePorts:
-    event_sink: EventSink | None = None
-    checkpoint_sink_factory: CheckpointSinkFactory | None = None
-    compaction_history: CompactionHistoryPort = field(
-        default_factory=CompactionHistoryPort
+    child_event_sink: EventSink | None = None
+    compaction: PlaygroundCompactionPort = field(
+        default_factory=PlaygroundCompactionPort
     )
+
+
+@dataclass(frozen=True)
+class KernelCompactionPort:
+    checkpoint_sink: CheckpointSink | None = None
     pre_compaction_barrier: PreCompactionBarrier | None = None
 
 
 @dataclass(frozen=True)
 class KernelRuntimePorts:
-    checkpoint_sink: CheckpointSink | None = None
-    pre_compaction_barrier: PreCompactionBarrier | None = None
+    compaction: KernelCompactionPort = field(default_factory=KernelCompactionPort)
 ```
 
-`PlaygroundRuntimePorts` 面向 `Exp`，保留 `checkpoint_sink_factory`，因为 `Exp.build_runtime(..., spawn_id=...)` 才知道当前 runtime 对应 root run 还是 child run。
+`PlaygroundCompactionPort` 面向 `Exp`，保留 `checkpoint_sink_factory`，因为 `Exp.build_runtime(..., spawn_id=...)` 才知道当前 runtime 对应 root run 还是 child run。
 
-`KernelRuntimePorts` 面向 `AgentKernel`，只放已经解析好的 `checkpoint_sink` 和 `pre_compaction_barrier`，kernel 不需要知道 factory 或服务层状态。
+`KernelCompactionPort` 面向 `AgentKernel`，只放已经解析好的 `checkpoint_sink` 和 `pre_compaction_barrier`，kernel 不需要知道 factory 或服务层状态。
+
+这个组织方式有三个约束：
+
+- 端口按运行域归类，不按 callback 来源归类。
+- 顶层边界对象只保留阶段语义，即 Playground 边界和 Kernel 边界。
+- leaf type 可以是 Protocol 或 dataclass，但消费方不直接依赖一堆散落的 leaf type。
 
 ## 数据流
 
@@ -148,7 +195,8 @@ src/services/agent_run_service.py
         v
 
 matmaster/core/exp.py
-  从 ctx.runtime_ports 读取 compaction history、event sink、checkpoint factory、barrier
+  从 ctx.runtime_ports.child_event_sink 读取 child event sink
+  从 ctx.runtime_ports.compaction 读取 history、checkpoint factory、barrier
   创建现有 HookExecutor
   解析 checkpoint_sink_factory(spawn_id=...)
   构造 KernelRuntimePorts
@@ -164,7 +212,7 @@ matmaster/types/runtime.py
         v
 
 matmaster/core/agent.py
-  从 spec.runtime_ports 读取 checkpoint_sink 和 pre_compaction_barrier
+  从 spec.runtime_ports.compaction 读取 checkpoint_sink 和 pre_compaction_barrier
   从 spec.hook_executor 发射 RUN_START、RUN_END、USER_PROMPT_SUBMIT、CONTEXT_COMPACTION 等事件
 ```
 
@@ -207,20 +255,27 @@ def with_runtime_ports(
 - `get_latest_checkpoint_covered_until_event_id`
 - `pre_compaction_barrier`
 
-应改为构造 `PlaygroundRuntimePorts`：
+应改为构造 `PlaygroundRuntimePorts`。服务层可以定义一个局部 adapter，把当前闭包组织成 `SessionEventHistoryPort`，避免继续把三个历史读取函数散落在顶层：
 
 ```python
+class _RunSessionEventHistory:
+    def query_events(self) -> list[dict[str, Any]]:
+        return _get_query_events()
+
+    def all_events(self) -> list[dict[str, Any]]:
+        return _get_all_events()
+
+    def latest_checkpoint_covered_until_event_id(self) -> int | None:
+        return _get_latest_checkpoint_covered_until_event_id()
+
+
 runtime_ports = PlaygroundRuntimePorts(
-    event_sink=_child_event_sink,
-    checkpoint_sink_factory=_checkpoint_sink_factory,
-    compaction_history=CompactionHistoryPort(
-        get_query_events=_get_query_events,
-        get_all_events=_get_all_events,
-        get_latest_checkpoint_covered_until_event_id=(
-            _get_latest_checkpoint_covered_until_event_id
-        ),
+    child_event_sink=_child_event_sink,
+    compaction=PlaygroundCompactionPort(
+        history=_RunSessionEventHistory(),
+        checkpoint_sink_factory=_checkpoint_sink_factory,
+        pre_compaction_barrier=fanout.flush_persistence_barrier,
     ),
-    pre_compaction_barrier=fanout.flush_persistence_barrier,
 )
 pg_ctx = pg_ctx.with_runtime_ports(runtime_ports)
 ```
@@ -234,7 +289,7 @@ pg_ctx = pg_ctx.with_runtime_ports(runtime_ports)
 Compaction rehydrator 优先使用：
 
 ```python
-history_port = ctx.runtime_ports.compaction_history
+history_port = ctx.runtime_ports.compaction.history
 ```
 
 旧 `run_meta["get_query_events"]` 等字段作为兼容 fallback。fallback 只存在于迁移期，后续删除。
@@ -242,20 +297,24 @@ history_port = ctx.runtime_ports.compaction_history
 `Exp._make_spawn_fn()` 当前从 `ctx.run_meta["event_sink"]` 读取 child event sink。迁移后优先使用：
 
 ```python
-event_sink = ctx.runtime_ports.event_sink
+event_sink = ctx.runtime_ports.child_event_sink
 ```
 
 `Exp.build_runtime()` 当前把 `checkpoint_sink` 和 `pre_compaction_barrier` 塞进 `spec.meta`。迁移后应构造：
 
 ```python
 checkpoint_sink = None
-factory = ctx.runtime_ports.checkpoint_sink_factory
+factory = ctx.runtime_ports.compaction.checkpoint_sink_factory
 if factory is not None:
     checkpoint_sink = factory(spawn_id=spawn_id)
 
 kernel_ports = KernelRuntimePorts(
-    checkpoint_sink=checkpoint_sink,
-    pre_compaction_barrier=ctx.runtime_ports.pre_compaction_barrier,
+    compaction=KernelCompactionPort(
+        checkpoint_sink=checkpoint_sink,
+        pre_compaction_barrier=(
+            ctx.runtime_ports.compaction.pre_compaction_barrier
+        ),
+    ),
 )
 ```
 
@@ -288,8 +347,8 @@ runtime_ports: KernelRuntimePorts = Field(
 `AgentKernel` 改为从 `spec.runtime_ports` 读取必要端口：
 
 ```python
-pre_compaction_barrier = spec.runtime_ports.pre_compaction_barrier
-checkpoint_sink = spec.runtime_ports.checkpoint_sink
+pre_compaction_barrier = spec.runtime_ports.compaction.pre_compaction_barrier
+checkpoint_sink = spec.runtime_ports.compaction.checkpoint_sink
 ```
 
 `spec.hook_executor` 保持现有事件 hook 语义。
@@ -336,15 +395,12 @@ for register_hooks in ctx.runtime_ports.hook_registrars:
 
 创建 `matmaster/types/runtime_ports.py`，定义：
 
-- `CompactionHistoryPort`
-- `PlaygroundRuntimePorts`
-- `KernelRuntimePorts`
-- `EventSink`
-- `CheckpointSink`
-- `CheckpointSinkFactory`
-- `PreCompactionBarrier`
+- 边界 aggregate：`PlaygroundRuntimePorts`、`KernelRuntimePorts`。
+- 运行域子端口：`PlaygroundCompactionPort`、`KernelCompactionPort`。
+- leaf 协议与默认实现：`SessionEventHistoryPort`、`EmptySessionEventHistory`。
+- callback 类型别名：`EventSink`、`CheckpointSink`、`CheckpointSinkFactory`、`PreCompactionBarrier`。
 
-新增类型测试，验证默认端口可调用且返回空数据或 `None`。
+新增类型测试，验证默认 `EmptySessionEventHistory` 返回空数据和 `None`，并验证顶层 aggregate 的默认结构完整。
 
 ### 阶段 2：扩展 PlaygroundContext
 
@@ -366,14 +422,14 @@ for register_hooks in ctx.runtime_ports.hook_registrars:
 
 修改 `Exp._make_spawn_fn()`：
 
-- 优先读 `ctx.runtime_ports.event_sink`。
+- 优先读 `ctx.runtime_ports.child_event_sink`。
 - 迁移期 fallback 到 `ctx.run_meta.get("event_sink")`。
 
 修改 `Exp.build_runtime()`：
 
-- compaction history 优先来自 `ctx.runtime_ports.compaction_history`。
-- checkpoint sink 优先来自 `ctx.runtime_ports.checkpoint_sink_factory`。
-- pre compaction barrier 优先来自 `ctx.runtime_ports.pre_compaction_barrier`。
+- compaction history 优先来自 `ctx.runtime_ports.compaction.history`。
+- checkpoint sink 优先来自 `ctx.runtime_ports.compaction.checkpoint_sink_factory`。
+- pre compaction barrier 优先来自 `ctx.runtime_ports.compaction.pre_compaction_barrier`。
 
 旧 `run_meta` callback 仅作为 fallback。
 
@@ -389,8 +445,8 @@ for register_hooks in ctx.runtime_ports.hook_registrars:
 
 修改 `AgentKernel`：
 
-- `pre_compaction_barrier` 从 `spec.runtime_ports.pre_compaction_barrier` 读取。
-- `checkpoint_sink` 从 `spec.runtime_ports.checkpoint_sink` 读取。
+- `pre_compaction_barrier` 从 `spec.runtime_ports.compaction.pre_compaction_barrier` 读取。
+- `checkpoint_sink` 从 `spec.runtime_ports.compaction.checkpoint_sink` 读取。
 
 迁移期 fallback 到 `spec.meta`，后续删除。
 
@@ -434,7 +490,7 @@ tests/matmaster/types/test_runtime.py
 
 覆盖：
 
-- 默认 `CompactionHistoryPort` 返回空事件和 `None` checkpoint。
+- 默认 `EmptySessionEventHistory` 返回空事件和 `None` checkpoint。
 - `PlaygroundContext.runtime_ports` 默认存在。
 - `PlaygroundContext.model_dump()` 不包含 `runtime_ports`。
 - `AgentRuntimeSpec.runtime_ports` 默认存在。
@@ -452,10 +508,10 @@ tests/matmaster/core/test_exp_runtime_v2.py
 
 覆盖：
 
-- `Exp.build_runtime()` 将 `ctx.runtime_ports.checkpoint_sink_factory(spawn_id=...)` 解析为 `spec.runtime_ports.checkpoint_sink`。
+- `Exp.build_runtime()` 将 `ctx.runtime_ports.compaction.checkpoint_sink_factory(spawn_id=...)` 解析为 `spec.runtime_ports.compaction.checkpoint_sink`。
 - root run 和 child run 使用不同 `spawn_id` 时能拿到不同 sink。
-- compaction rehydrator 使用 `ctx.runtime_ports.compaction_history`。
-- `AgentKernel` 调用 `spec.runtime_ports.pre_compaction_barrier` 后再执行 compaction。
+- compaction rehydrator 使用 `ctx.runtime_ports.compaction.history`。
+- `AgentKernel` 调用 `spec.runtime_ports.compaction.pre_compaction_barrier` 后再执行 compaction。
 
 ### 服务层测试
 
@@ -478,7 +534,7 @@ tests/matmaster/services/test_agent_run_stream_response_figures.py
 迁移期保留旧 `run_meta` fallback 时，增加测试证明：
 
 - 旧式 `run_meta["get_all_events"]` 仍可被 `Exp` 使用。
-- 新式 `ctx.runtime_ports.compaction_history.get_all_events` 优先级高于旧 key。
+- 新式 `ctx.runtime_ports.compaction.history.all_events` 优先级高于旧 key。
 
 删除 fallback 的提交中，同步删除这些兼容性测试。
 
@@ -488,7 +544,7 @@ tests/matmaster/services/test_agent_run_stream_response_figures.py
 
 - `pre_compaction_barrier` 抛出的异常应向上冒泡，避免 compaction 在持久化未完成时继续执行。
 - `checkpoint_sink` 抛出的异常保持当前 kernel 语义：记录 warning，并把 compaction result 标记为 checkpoint 失败。
-- `CompactionHistoryPort` 的具体实现是否降级由注入方决定；如果服务层选择捕获异常并返回空列表，需要在注入函数旁写明原因。
+- `SessionEventHistoryPort` 的具体实现是否降级由注入方决定；如果服务层选择捕获异常并返回空列表，需要在注入函数旁写明原因。
 - `HookExecutor` 继续保持 observer 异常只记录 warning 的语义。
 
 这与项目级约定一致：DAO 和服务层默认不吞异常，确有降级需求时在调用处或本层写明原因。
