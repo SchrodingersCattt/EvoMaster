@@ -20,14 +20,12 @@ class CompactionCheckpointPayload(TypedDict):
 
 @runtime_checkable
 class BusEventSink(Protocol):
-    def __call__(self, event: BusEvent) -> Awaitable[None] | None:
-        ...
+    def __call__(self, event: BusEvent) -> Awaitable[None] | None: ...
 
 
 @runtime_checkable
 class PreCompactionBarrier(Protocol):
-    def __call__(self) -> Awaitable[None] | None:
-        ...
+    def __call__(self) -> Awaitable[None] | None: ...
 
 
 @runtime_checkable
@@ -37,26 +35,21 @@ class CheckpointSink(Protocol):
         *,
         payload: CompactionCheckpointPayload,
         base_messages: list[dict[str, Any]],
-    ) -> int | None:
-        ...
+    ) -> int | None: ...
 
 
 @runtime_checkable
 class CheckpointSinkFactory(Protocol):
-    def __call__(self, *, spawn_id: str | None = None) -> CheckpointSink:
-        ...
+    def __call__(self, *, spawn_id: str | None = None) -> CheckpointSink: ...
 
 
 @runtime_checkable
 class SessionEventHistoryPort(Protocol):
-    def query_events(self) -> list[dict[str, Any]]:
-        ...
+    def query_events(self) -> list[dict[str, Any]]: ...
 
-    def all_events(self) -> list[dict[str, Any]]:
-        ...
+    def all_events(self) -> list[dict[str, Any]]: ...
 
-    def latest_checkpoint_covered_until_event_id(self) -> int | None:
-        ...
+    def latest_checkpoint_covered_until_event_id(self) -> int | None: ...
 
 
 @dataclass(frozen=True)
