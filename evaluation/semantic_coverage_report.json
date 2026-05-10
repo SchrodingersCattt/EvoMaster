@@ -363,182 +363,182 @@
     {
       "actionability": "runtime_dependent",
       "actionability_reason": "specialized MCP services are not part of the default actionable question-bank scope",
-      "id": "mcp-mat-doc/\u5de5\u5177\u5217\u8868/460",
+      "id": "mcp-mat-doc/工具列表/460",
       "rule_type": "general",
       "source_name": "mcp-mat-doc",
       "source_type": "skill",
-      "text": "extract_material_data_from_pdf | sync | \u4ece PDF \u6587\u6863\u4e2d\u63d0\u53d6\u6750\u6599\u79d1\u5b66\u6570\u636e"
+      "text": "extract_material_data_from_pdf | sync | 从 PDF 文档中提取材料科学数据"
     },
     {
       "actionability": "runtime_dependent",
       "actionability_reason": "specialized MCP services are not part of the default actionable question-bank scope",
-      "id": "mcp-mat-doc/\u5178\u578b\u7528\u6cd5/461",
+      "id": "mcp-mat-doc/典型用法/461",
       "rule_type": "general",
       "source_name": "mcp-mat-doc",
       "source_type": "skill",
-      "text": "\u4ece\u8bba\u6587 PDF \u63d0\u53d6\u6676\u4f53\u53c2\u6570: `mat_doc_extract_material_data_from_pdf`"
+      "text": "从论文 PDF 提取晶体参数: `mat_doc_extract_material_data_from_pdf`"
     },
     {
       "actionability": "runtime_dependent",
       "actionability_reason": "specialized MCP services are not part of the default actionable question-bank scope",
-      "id": "mcp-mat-doc/\u6ce8\u610f\u4e8b\u9879/462",
+      "id": "mcp-mat-doc/注意事项/462",
       "rule_type": "general",
       "source_name": "mcp-mat-doc",
       "source_type": "skill",
-      "text": "\u4ec5\u6ce8\u518c extract_material_data_from_pdf \u4e00\u4e2a\u5de5\u5177 (tool_include_only \u8fc7\u6ee4)"
+      "text": "仅注册 extract_material_data_from_pdf 一个工具 (tool_include_only 过滤)"
     },
     {
       "actionability": "runtime_dependent",
       "actionability_reason": "specialized MCP services are not part of the default actionable question-bank scope",
-      "id": "mcp-mat-doc/\u6ce8\u610f\u4e8b\u9879/463",
+      "id": "mcp-mat-doc/注意事项/463",
       "rule_type": "general",
       "source_name": "mcp-mat-doc",
       "source_type": "skill",
-      "text": "executor \u4e3a null\uff0c\u5de5\u5177\u5728\u672c\u5730\u540c\u6b65\u6267\u884c"
+      "text": "executor 为 null，工具在本地同步执行"
     },
     {
       "actionability": "runtime_dependent",
       "actionability_reason": "specialized MCP services are not part of the default actionable question-bank scope",
-      "id": "mcp-mat-electron-microscope/\u5de5\u5177\u5217\u8868/464",
+      "id": "mcp-mat-electron-microscope/工具列表/464",
       "rule_type": "general",
       "source_name": "mcp-mat-electron-microscope",
       "source_type": "skill",
-      "text": "get_electron_microscope_recognize | sync | \u7535\u5b50\u663e\u5fae\u955c\u56fe\u50cf\u8bc6\u522b\u4e0e\u7279\u5f81\u5206\u6790"
+      "text": "get_electron_microscope_recognize | sync | 电子显微镜图像识别与特征分析"
     },
     {
       "actionability": "runtime_dependent",
       "actionability_reason": "specialized MCP services are not part of the default actionable question-bank scope",
-      "id": "mcp-mat-electron-microscope/\u5178\u578b\u7528\u6cd5/465",
+      "id": "mcp-mat-electron-microscope/典型用法/465",
       "rule_type": "general",
       "source_name": "mcp-mat-electron-microscope",
       "source_type": "skill",
-      "text": "SEM/TEM \u56fe\u50cf\u81ea\u52a8\u5206\u6790: `mat_electron_microscope_get_electron_microscope_recognize`"
+      "text": "SEM/TEM 图像自动分析: `mat_electron_microscope_get_electron_microscope_recognize`"
     },
     {
       "actionability": "runtime_dependent",
       "actionability_reason": "specialized MCP services are not part of the default actionable question-bank scope",
-      "id": "mcp-mat-electron-microscope/\u6ce8\u610f\u4e8b\u9879/466",
+      "id": "mcp-mat-electron-microscope/注意事项/466",
       "rule_type": "general",
       "source_name": "mcp-mat-electron-microscope",
       "source_type": "skill",
-      "text": "\u4ec5\u6ce8\u518c get_electron_microscope_recognize \u4e00\u4e2a\u5de5\u5177 (tool_include_only \u8fc7\u6ee4)"
+      "text": "仅注册 get_electron_microscope_recognize 一个工具 (tool_include_only 过滤)"
     },
     {
       "actionability": "runtime_dependent",
       "actionability_reason": "specialized MCP services are not part of the default actionable question-bank scope",
-      "id": "mcp-mat-electron-microscope/\u6ce8\u610f\u4e8b\u9879/467",
+      "id": "mcp-mat-electron-microscope/注意事项/467",
       "rule_type": "general",
       "source_name": "mcp-mat-electron-microscope",
       "source_type": "skill",
-      "text": "executor \u4e3a null\uff0c\u5de5\u5177\u5728\u672c\u5730\u540c\u6b65\u6267\u884c"
+      "text": "executor 为 null，工具在本地同步执行"
     },
     {
       "actionability": "runtime_dependent",
       "actionability_reason": "specialized MCP services are not part of the default actionable question-bank scope",
-      "id": "mcp-mat-nmr/\u5de5\u5177\u5217\u8868/468",
+      "id": "mcp-mat-nmr/工具列表/468",
       "rule_type": "general",
       "source_name": "mcp-mat-nmr",
       "source_type": "skill",
-      "text": "NMR_search_tool | sync | NMR \u6570\u636e\u5e93\u68c0\u7d22"
+      "text": "NMR_search_tool | sync | NMR 数据库检索"
     },
     {
       "actionability": "runtime_dependent",
       "actionability_reason": "specialized MCP services are not part of the default actionable question-bank scope",
-      "id": "mcp-mat-nmr/\u5de5\u5177\u5217\u8868/469",
+      "id": "mcp-mat-nmr/工具列表/469",
       "rule_type": "general",
       "source_name": "mcp-mat-nmr",
       "source_type": "skill",
-      "text": "NMR_predict_tool | sync | NMR \u5316\u5b66\u4f4d\u79fb\u9884\u6d4b"
+      "text": "NMR_predict_tool | sync | NMR 化学位移预测"
     },
     {
       "actionability": "runtime_dependent",
       "actionability_reason": "specialized MCP services are not part of the default actionable question-bank scope",
-      "id": "mcp-mat-nmr/\u5de5\u5177\u5217\u8868/470",
+      "id": "mcp-mat-nmr/工具列表/470",
       "rule_type": "general",
       "source_name": "mcp-mat-nmr",
       "source_type": "skill",
-      "text": "NMR_reverse_predict_tool | sync | NMR \u53cd\u5411\u9884\u6d4b\uff0c\u4ece\u8c31\u56fe\u63a8\u65ad\u7ed3\u6784"
+      "text": "NMR_reverse_predict_tool | sync | NMR 反向预测，从谱图推断结构"
     },
     {
       "actionability": "runtime_dependent",
       "actionability_reason": "specialized MCP services are not part of the default actionable question-bank scope",
-      "id": "mcp-mat-nmr/\u5178\u578b\u7528\u6cd5/471",
+      "id": "mcp-mat-nmr/典型用法/471",
       "rule_type": "general",
       "source_name": "mcp-mat-nmr",
       "source_type": "skill",
-      "text": "\u68c0\u7d22 NMR \u53c2\u8003\u6570\u636e: `mat_nmr_NMR_search_tool`"
+      "text": "检索 NMR 参考数据: `mat_nmr_NMR_search_tool`"
     },
     {
       "actionability": "runtime_dependent",
       "actionability_reason": "specialized MCP services are not part of the default actionable question-bank scope",
-      "id": "mcp-mat-nmr/\u5178\u578b\u7528\u6cd5/472",
+      "id": "mcp-mat-nmr/典型用法/472",
       "rule_type": "general",
       "source_name": "mcp-mat-nmr",
       "source_type": "skill",
-      "text": "\u9884\u6d4b\u5316\u5b66\u4f4d\u79fb: `mat_nmr_NMR_predict_tool`"
+      "text": "预测化学位移: `mat_nmr_NMR_predict_tool`"
     },
     {
       "actionability": "runtime_dependent",
       "actionability_reason": "specialized MCP services are not part of the default actionable question-bank scope",
-      "id": "mcp-mat-nmr/\u5178\u578b\u7528\u6cd5/473",
+      "id": "mcp-mat-nmr/典型用法/473",
       "rule_type": "general",
       "source_name": "mcp-mat-nmr",
       "source_type": "skill",
-      "text": "\u4ece\u8c31\u56fe\u53cd\u5411\u63a8\u65ad\u7ed3\u6784: `mat_nmr_NMR_reverse_predict_tool`"
+      "text": "从谱图反向推断结构: `mat_nmr_NMR_reverse_predict_tool`"
     },
     {
       "actionability": "runtime_dependent",
       "actionability_reason": "specialized MCP services are not part of the default actionable question-bank scope",
-      "id": "mcp-mat-nmr/\u6ce8\u610f\u4e8b\u9879/474",
+      "id": "mcp-mat-nmr/注意事项/474",
       "rule_type": "general",
       "source_name": "mcp-mat-nmr",
       "source_type": "skill",
-      "text": "\u4ec5\u6ce8\u518c tool_include_only \u4e2d\u6307\u5b9a\u7684\u4e09\u4e2a\u5de5\u5177"
+      "text": "仅注册 tool_include_only 中指定的三个工具"
     },
     {
       "actionability": "runtime_dependent",
       "actionability_reason": "specialized MCP services are not part of the default actionable question-bank scope",
-      "id": "mcp-mat-nmr/\u6ce8\u610f\u4e8b\u9879/475",
+      "id": "mcp-mat-nmr/注意事项/475",
       "rule_type": "general",
       "source_name": "mcp-mat-nmr",
       "source_type": "skill",
-      "text": "executor \u4e3a null\uff0c\u6240\u6709\u5de5\u5177\u5747\u5728\u672c\u5730\u540c\u6b65\u6267\u884c"
+      "text": "executor 为 null，所有工具均在本地同步执行"
     },
     {
       "actionability": "runtime_dependent",
       "actionability_reason": "specialized MCP services are not part of the default actionable question-bank scope",
-      "id": "mcp-mat-xrd/\u5de5\u5177\u5217\u8868/488",
+      "id": "mcp-mat-xrd/工具列表/488",
       "rule_type": "general",
       "source_name": "mcp-mat-xrd",
       "source_type": "skill",
-      "text": "xrd_phase_identification | sync | XRD \u7269\u76f8\u9274\u5b9a\uff0c\u8f93\u5165\u884d\u5c04\u6570\u636e\u8fd4\u56de\u5339\u914d\u7269\u76f8\u53ca\u7f6e\u4fe1\u5ea6"
+      "text": "xrd_phase_identification | sync | XRD 物相鉴定，输入衍射数据返回匹配物相及置信度"
     },
     {
       "actionability": "runtime_dependent",
       "actionability_reason": "specialized MCP services are not part of the default actionable question-bank scope",
-      "id": "mcp-mat-xrd/\u5178\u578b\u7528\u6cd5/489",
+      "id": "mcp-mat-xrd/典型用法/489",
       "rule_type": "general",
       "source_name": "mcp-mat-xrd",
       "source_type": "skill",
-      "text": "XRD \u7269\u76f8\u9274\u5b9a: `mat_xrd_xrd_phase_identification`"
+      "text": "XRD 物相鉴定: `mat_xrd_xrd_phase_identification`"
     },
     {
       "actionability": "runtime_dependent",
       "actionability_reason": "specialized MCP services are not part of the default actionable question-bank scope",
-      "id": "mcp-mat-xrd/\u6ce8\u610f\u4e8b\u9879/490",
+      "id": "mcp-mat-xrd/注意事项/490",
       "rule_type": "general",
       "source_name": "mcp-mat-xrd",
       "source_type": "skill",
-      "text": "\u4ec5\u6ce8\u518c xrd_phase_identification \u4e00\u4e2a\u5de5\u5177 (tool_include_only \u8fc7\u6ee4)"
+      "text": "仅注册 xrd_phase_identification 一个工具 (tool_include_only 过滤)"
     },
     {
       "actionability": "runtime_dependent",
       "actionability_reason": "specialized MCP services are not part of the default actionable question-bank scope",
-      "id": "mcp-mat-xrd/\u6ce8\u610f\u4e8b\u9879/491",
+      "id": "mcp-mat-xrd/注意事项/491",
       "rule_type": "general",
       "source_name": "mcp-mat-xrd",
       "source_type": "skill",
-      "text": "executor \u4e3a null\uff0c\u5de5\u5177\u5728\u672c\u5730\u540c\u6b65\u6267\u884c"
+      "text": "executor 为 null，工具在本地同步执行"
     },
     {
       "actionability": "runtime_dependent",
@@ -574,7 +574,7 @@
       "rule_type": "workflow_step",
       "source_name": "mlips",
       "source_type": "skill",
-      "text": "Submit (DPA \u2014 default): `Bohrium(action=\"submit\", input_dir=\"<dir>\", image=\"registry.dp.tech/dptech/dpa-calculator:e13a296f\", cmd=\"python optimize_structure.py --structure input.cif --model DPA3.1-3M "
+      "text": "Submit (DPA — default): `Bohrium(action=\"submit\", input_dir=\"<dir>\", image=\"registry.dp.tech/dptech/dpa-calculator:e13a296f\", cmd=\"python optimize_structure.py --structure input.cif --model DPA3.1-3M "
     },
     {
       "actionability": "runtime_dependent",
@@ -655,7 +655,7 @@
       "rule_type": "general",
       "source_name": "plan-executor",
       "source_type": "skill",
-      "text": "`docs/WORKSPACE.md` \u2192 `Current Planning Unit`;"
+      "text": "`docs/WORKSPACE.md` → `Current Planning Unit`;"
     },
     {
       "actionability": "policy_only",
@@ -916,7 +916,7 @@
       "rule_type": "general",
       "source_name": "plan-executor",
       "source_type": "skill",
-      "text": "next 1\u20133 `T#` items from the active queue"
+      "text": "next 1–3 `T#` items from the active queue"
     },
     {
       "actionability": "policy_only",
@@ -1132,7 +1132,7 @@
       "rule_type": "general",
       "source_name": "plan-executor",
       "source_type": "skill",
-      "text": "# Evidence: T12 \u2014 SCF on 6\u00d76\u00d76 k-mesh\n\n## Task reference\n- Plan ID: T12 (phase P2)\n- Deliverable path: runs/T12/OUTCAR\n- Spec refs: S3, S6\n- Acceptance refs: A2, A5\n\n## Exit criteria checklist\n- [x] S"
+      "text": "# Evidence: T12 — SCF on 6×6×6 k-mesh\n\n## Task reference\n- Plan ID: T12 (phase P2)\n- Deliverable path: runs/T12/OUTCAR\n- Spec refs: S3, S6\n- Acceptance refs: A2, A5\n\n## Exit criteria checklist\n- [x] S"
     },
     {
       "actionability": "policy_only",
@@ -1177,7 +1177,7 @@
       "rule_type": "general",
       "source_name": "plan-executor",
       "source_type": "skill",
-      "text": "`Task.Status` | existing pre-run state (`ready` or `not-started`) \u2192 `in-progress` \u2192 `completed` / `blocked` / `superseded`"
+      "text": "`Task.Status` | existing pre-run state (`ready` or `not-started`) → `in-progress` → `completed` / `blocked` / `superseded`"
     },
     {
       "actionability": "policy_only",
@@ -1186,7 +1186,7 @@
       "rule_type": "general",
       "source_name": "plan-executor",
       "source_type": "skill",
-      "text": "`Phase.Status` *(if present)* | `not-started` / `in-progress` \u2192 `completed` / `blocked` for the current phase only"
+      "text": "`Phase.Status` *(if present)* | `not-started` / `in-progress` → `completed` / `blocked` for the current phase only"
     },
     {
       "actionability": "policy_only",
@@ -1240,7 +1240,7 @@
       "rule_type": "general",
       "source_name": "plan-executor",
       "source_type": "skill",
-      "text": "`Session Log` | **append only** \u2014 never edit or delete prior entries"
+      "text": "`Session Log` | **append only** — never edit or delete prior entries"
     },
     {
       "actionability": "policy_only",
@@ -1573,7 +1573,7 @@
       "rule_type": "general",
       "source_name": "plan-executor",
       "source_type": "skill",
-      "text": "`tasks-in-progress` | wall-clock or turn budget exhausted mid-phase with \u2265 1 task still `in-progress` or runnable | `State Snapshot.resume-from` points at the next entry; any in-flight task is marked "
+      "text": "`tasks-in-progress` | wall-clock or turn budget exhausted mid-phase with ≥ 1 task still `in-progress` or runnable | `State Snapshot.resume-from` points at the next entry; any in-flight task is marked "
     },
     {
       "actionability": "policy_only",
@@ -1771,7 +1771,7 @@
       "rule_type": "general",
       "source_name": "plan-executor",
       "source_type": "skill",
-      "text": "A fresh agent must be able to resume from `PLAN.md` `State Snapshot` alone \u2014 every in-progress state must be recoverable without this session's chat."
+      "text": "A fresh agent must be able to resume from `PLAN.md` `State Snapshot` alone — every in-progress state must be recoverable without this session's chat."
     },
     {
       "actionability": "policy_only",
@@ -1798,7 +1798,7 @@
       "rule_type": "decision_tree",
       "source_name": "proposal-review",
       "source_type": "skill",
-      "text": "\"Review / evaluate this proposal\" \u2192 full review workflow below"
+      "text": "\"Review / evaluate this proposal\" → full review workflow below"
     },
     {
       "actionability": "policy_only",
@@ -1807,7 +1807,7 @@
       "rule_type": "decision_tree",
       "source_name": "proposal-review",
       "source_type": "skill",
-      "text": "\"Score this project plan\" \u2192 scorecard generation"
+      "text": "\"Score this project plan\" → scorecard generation"
     },
     {
       "actionability": "policy_only",
@@ -1816,7 +1816,7 @@
       "rule_type": "decision_tree",
       "source_name": "proposal-review",
       "source_type": "skill",
-      "text": "\"Assess risks of this project\" \u2192 risk analysis + mitigation"
+      "text": "\"Assess risks of this project\" → risk analysis + mitigation"
     },
     {
       "actionability": "policy_only",
@@ -1834,7 +1834,7 @@
       "rule_type": "workflow_step",
       "source_name": "proposal-review",
       "source_type": "skill",
-      "text": "**Score** each dimension per the evaluation policy. Each sub-score rationale must cite \u2265 2 specific evidence points from the proposal text."
+      "text": "**Score** each dimension per the evaluation policy. Each sub-score rationale must cite ≥ 2 specific evidence points from the proposal text."
     },
     {
       "actionability": "policy_only",
@@ -1861,7 +1861,7 @@
       "rule_type": "general",
       "source_name": "proposal-review",
       "source_type": "skill",
-      "text": "Feasibility / executability | **\u53ef\u884c\u6027** and **\u53ef\u6267\u884c\u6027** (use both; \u53ef\u6267\u884c\u6027 for operational-level concerns) | \u53ef\u505a\u6027"
+      "text": "Feasibility / executability | **可行性** and **可执行性** (use both; 可执行性 for operational-level concerns) | 可做性"
     },
     {
       "actionability": "policy_only",
@@ -1870,7 +1870,7 @@
       "rule_type": "general",
       "source_name": "proposal-review",
       "source_type": "skill",
-      "text": "Project establishment / approval | **\u7acb\u9879** (e.g., \"\u662f\u5426\u5efa\u8bae\u7acb\u9879\", \"\u7acb\u9879\u4f9d\u636e\") | \u542f\u52a8\u9879\u76ee"
+      "text": "Project establishment / approval | **立项** (e.g., \"是否建议立项\", \"立项依据\") | 启动项目"
     },
     {
       "actionability": "policy_only",
@@ -1879,7 +1879,7 @@
       "rule_type": "general",
       "source_name": "proposal-review",
       "source_type": "skill",
-      "text": "Innovation | **\u521b\u65b0\u6027** | \u65b0\u9896\u6027 (acceptable but less formal)"
+      "text": "Innovation | **创新性** | 新颖性 (acceptable but less formal)"
     },
     {
       "actionability": "policy_only",
@@ -1888,7 +1888,7 @@
       "rule_type": "general",
       "source_name": "proposal-review",
       "source_type": "skill",
-      "text": "Importance / significance | **\u91cd\u8981\u6027** | \u610f\u4e49 (acceptable as supplement)"
+      "text": "Importance / significance | **重要性** | 意义 (acceptable as supplement)"
     },
     {
       "actionability": "policy_only",
@@ -1897,7 +1897,7 @@
       "rule_type": "general",
       "source_name": "proposal-review",
       "source_type": "skill",
-      "text": "Funding recommendation | **\u8d44\u52a9\u5efa\u8bae** / **\u7acb\u9879\u5efa\u8bae** | \u2014"
+      "text": "Funding recommendation | **资助建议** / **立项建议** | —"
     },
     {
       "actionability": "policy_only",
@@ -1906,7 +1906,7 @@
       "rule_type": "general",
       "source_name": "proposal-review",
       "source_type": "skill",
-      "text": "Each scoring dimension must have \u2265 2 evidence-grounded arguments."
+      "text": "Each scoring dimension must have ≥ 2 evidence-grounded arguments."
     },
     {
       "actionability": "policy_only",
@@ -1933,7 +1933,7 @@
       "rule_type": "general",
       "source_name": "proposal-review",
       "source_type": "skill",
-      "text": "Discuss \u53ef\u6267\u884c\u6027 alongside general \u53ef\u884c\u6027 in the feasibility section \u2014 cover resource requirements, team capability, timeline realism, and technical risk mitigation specifically from an operational execution"
+      "text": "Discuss 可执行性 alongside general 可行性 in the feasibility section — cover resource requirements, team capability, timeline realism, and technical risk mitigation specifically from an operational execution"
     },
     {
       "actionability": "policy_only",
@@ -1942,7 +1942,7 @@
       "rule_type": "general",
       "source_name": "proposal-review",
       "source_type": "skill",
-      "text": "Include a \u7acb\u9879 recommendation tied to the overall score and risk assessment."
+      "text": "Include a 立项 recommendation tied to the overall score and risk assessment."
     },
     {
       "actionability": "policy_only",
@@ -1951,7 +1951,7 @@
       "rule_type": "general",
       "source_name": "proposal-review",
       "source_type": "skill",
-      "text": "**Scorecard JSON**: Must contain all scoring dimensions as top-level keys with numeric values within the specified range. Include `total_score` and `recommendation` (e.g. \"\u5efa\u8bae\u7acb\u9879\" / \"\u4e0d\u5efa\u8bae\u7acb\u9879\" / \"\u5efa\u8bae\u6709\u6761\u4ef6\u7acb\u9879\")"
+      "text": "**Scorecard JSON**: Must contain all scoring dimensions as top-level keys with numeric values within the specified range. Include `total_score` and `recommendation` (e.g. \"建议立项\" / \"不建议立项\" / \"建议有条件立项\")"
     },
     {
       "actionability": "policy_only",
@@ -1960,7 +1960,7 @@
       "rule_type": "general",
       "source_name": "proposal-review",
       "source_type": "skill",
-      "text": "**Rationale Markdown**: Structured sections per dimension; each section cites \u2265 2 specific evidence points from the proposal. Must include separate \u53ef\u884c\u6027 and \u53ef\u6267\u884c\u6027 assessments."
+      "text": "**Rationale Markdown**: Structured sections per dimension; each section cites ≥ 2 specific evidence points from the proposal. Must include separate 可行性 and 可执行性 assessments."
     },
     {
       "actionability": "policy_only",
@@ -2203,7 +2203,7 @@
       "rule_type": "general",
       "source_name": "skill-manager",
       "source_type": "skill",
-      "text": "`name` \u2014 display name (parsed from SKILL.md in the package)"
+      "text": "`name` — display name (parsed from SKILL.md in the package)"
     },
     {
       "actionability": "policy_only",
@@ -2212,7 +2212,7 @@
       "rule_type": "general",
       "source_name": "skill-manager",
       "source_type": "skill",
-      "text": "`status` \u2014 `ready` / `uploading` / `failed`"
+      "text": "`status` — `ready` / `uploading` / `failed`"
     },
     {
       "actionability": "policy_only",
@@ -2221,7 +2221,7 @@
       "rule_type": "general",
       "source_name": "skill-manager",
       "source_type": "skill",
-      "text": "`byte_size`, `file_count` \u2014 package stats"
+      "text": "`byte_size`, `file_count` — package stats"
     },
     {
       "actionability": "policy_only",
@@ -2244,7 +2244,7 @@
     {
       "actionability": "policy_only",
       "actionability_reason": "skill-management behavior is tested outside scientific task coverage by default",
-      "id": "skill-manager/step-1-\u2014-zip-the-skill-directory/1187",
+      "id": "skill-manager/step-1-—-zip-the-skill-directory/1187",
       "rule_type": "general",
       "source_name": "skill-manager",
       "source_type": "skill",
@@ -2253,7 +2253,7 @@
     {
       "actionability": "policy_only",
       "actionability_reason": "skill-management behavior is tested outside scientific task coverage by default",
-      "id": "skill-manager/step-2-\u2014-upload-the-zip/1188",
+      "id": "skill-manager/step-2-—-upload-the-zip/1188",
       "rule_type": "general",
       "source_name": "skill-manager",
       "source_type": "skill",
@@ -2262,7 +2262,7 @@
     {
       "actionability": "policy_only",
       "actionability_reason": "skill-management behavior is tested outside scientific task coverage by default",
-      "id": "skill-manager/step-3-\u2014-register-the-skill/1189",
+      "id": "skill-manager/step-3-—-register-the-skill/1189",
       "rule_type": "general",
       "source_name": "skill-manager",
       "source_type": "skill",
@@ -2959,7 +2959,7 @@
       "rule_type": "general",
       "source_name": "paper_search_tool",
       "source_type": "tool",
-      "text": "Parameter 'page_size': Max papers to return (1\u2013100, default 20)."
+      "text": "Parameter 'page_size': Max papers to return (1–100, default 20)."
     },
     {
       "actionability": "tool_schema",
@@ -3139,7 +3139,7 @@
       "rule_type": "general",
       "source_name": "web_search_tool",
       "source_type": "tool",
-      "text": "check loaded Skills and tool descriptions \u2014"
+      "text": "check loaded Skills and tool descriptions —"
     },
     {
       "actionability": "tool_schema",
@@ -3265,7 +3265,7 @@
       "rule_type": "general",
       "source_name": "system_prompt",
       "source_type": "system_prompt",
-      "text": "Choose packages and defaults according to the **task text**, **Skills** (`matmaster/skills`), executor/runtime notes, and what is actually installed in the session\u2014do not assume a single global stack."
+      "text": "Choose packages and defaults according to the **task text**, **Skills** (`matmaster/skills`), executor/runtime notes, and what is actually installed in the session—do not assume a single global stack."
     },
     {
       "actionability": "policy_only",
@@ -3423,7 +3423,7 @@
       "covered_by": [],
       "id": "abacus/minimum-workflow/5",
       "is_actionable": true,
-      "reason": "The rule specifies a pseudopotential lookup order (apns_pseudopotentials_v1.list \u2192 stru_multispecies.md), but none of the evaluation questions have scoring criteria that would detect a violation of this specific lookup order.",
+      "reason": "The rule specifies a pseudopotential lookup order (apns_pseudopotentials_v1.list → stru_multispecies.md), but none of the evaluation questions have scoring criteria that would detect a violation of this specific lookup order.",
       "rule_type": "workflow_step",
       "section": "Minimum Workflow",
       "source_name": "abacus",
@@ -3677,11 +3677,11 @@
       "covered_by": [],
       "id": "abacus/k-point-rules/22",
       "is_actionable": true,
-      "reason": "None of the evaluation questions have scoring checklist criteria that would specifically detect violation of the 'minimum 12\u00d712 in-plane k-points for metal slab calculations' rule.",
+      "reason": "None of the evaluation questions have scoring checklist criteria that would specifically detect violation of the 'minimum 12×12 in-plane k-points for metal slab calculations' rule.",
       "rule_type": "general",
       "section": "K-point Rules",
       "source_name": "abacus",
-      "text": "Metal slab calculations: **minimum 12\u00d712 in-plane** k-points (or equivalent `kspacing \u2264 0.10` in-plane). Do not use less."
+      "text": "Metal slab calculations: **minimum 12×12 in-plane** k-points (or equivalent `kspacing ≤ 0.10` in-plane). Do not use less."
     },
     {
       "actionability": "testable",
@@ -4033,7 +4033,7 @@
       "rule_type": "general",
       "section": "References",
       "source_name": "abacus",
-      "text": "**Pre-flight validator**: `scripts/validate_input.py` \u2014 run before every Bohrium submit"
+      "text": "**Pre-flight validator**: `scripts/validate_input.py` — run before every Bohrium submit"
     },
     {
       "actionability": "testable",
@@ -4726,7 +4726,7 @@
       ],
       "id": "assemble-atomic-structure/hard-guards/96",
       "is_actionable": true,
-      "reason": "The rule is covered because multiple questions explicitly require a vacuum thickness of at least 15 \u00c5 in their scoring checklists, and violating this by using a smaller vacuum would cause those checklist items to fail.",
+      "reason": "The rule is covered because multiple questions explicitly require a vacuum thickness of at least 15 Å in their scoring checklists, and violating this by using a smaller vacuum would cause those checklist items to fail.",
       "rule_type": "hard_guard",
       "section": "Hard Guards",
       "source_name": "assemble-atomic-structure",
@@ -5134,7 +5134,7 @@
       "rule_type": "hard_guard",
       "section": "Hard Guards",
       "source_name": "build-atomic-structure",
-      "text": "**Never hand-write fractional coordinates into a manually constructed ASE `cell` array.** Fractional coordinates depend on the cell angle convention (\u03b3=60\u00b0 vs 120\u00b0 for hexagonal). Use `pymatgen Lattic"
+      "text": "**Never hand-write fractional coordinates into a manually constructed ASE `cell` array.** Fractional coordinates depend on the cell angle convention (γ=60° vs 120° for hexagonal). Use `pymatgen Lattic"
     },
     {
       "actionability": "testable",
@@ -5568,7 +5568,7 @@
       "covered_by": [],
       "id": "inspect-atomic-structure/hard-guards/154",
       "is_actionable": true,
-      "reason": "No evaluation question's scoring checklist includes criteria that would deterministically fail if vacuum thickness is below 15 \u00c5 for a detected slab.",
+      "reason": "No evaluation question's scoring checklist includes criteria that would deterministically fail if vacuum thickness is below 15 Å for a detected slab.",
       "rule_type": "hard_guard",
       "section": "Hard Guards",
       "source_name": "inspect-atomic-structure",
@@ -5928,11 +5928,11 @@
       "covered_by": [
         "SC_struct_005_20260508"
       ],
-      "id": "operate-molecular-crystal/disorder-\u2192-ordered-replicas/179",
+      "id": "operate-molecular-crystal/disorder-→-ordered-replicas/179",
       "is_actionable": true,
       "reason": "The rule's core function of generating ordered replicas from disordered sites is directly required by SC_struct_005_20260508, which mandates processing disordered structures into occupancy-1 CIF files, and a violation (e.g., not generating ordered replicas or leaving partial occupancies) would cause multiple deterministic checklist items to fail.",
       "rule_type": "general",
-      "section": "Disorder \u2192 ordered replicas",
+      "section": "Disorder → ordered replicas",
       "source_name": "operate-molecular-crystal",
       "text": "from molcrys_kit.analysis.disorder.process import (\n    generate_ordered_replicas_from_disordered_sites,\n)\nfrom molcrys_kit.io.output import write_cif\n\n# method='optimal' returns a single best structu"
     },
@@ -5974,7 +5974,7 @@
       "covered_by": [],
       "id": "operate-molecular-crystal/hydrogen-completion/182",
       "is_actionable": true,
-      "reason": "The rule specifies RDKit-based hydrogen addition and optimization with specific parameters (MMFF94, 500 iterations, randomSeed=42), but none of the evaluation questions check for these implementation details\u2014they only verify final chemical formulas, geometry, and molecular integrity.",
+      "reason": "The rule specifies RDKit-based hydrogen addition and optimization with specific parameters (MMFF94, 500 iterations, randomSeed=42), but none of the evaluation questions check for these implementation details—they only verify final chemical formulas, geometry, and molecular integrity.",
       "rule_type": "general",
       "section": "Hydrogen completion",
       "source_name": "operate-molecular-crystal",
@@ -6284,11 +6284,11 @@
       ],
       "id": "operate-molecular-crystal/acceptance-checklist/203",
       "is_actionable": true,
-      "reason": "The rule requires reporting mean H-C-H angles for sp3 carbons within \u00b15\u00b0 of 109.5\u00b0, and question SC_struct_006_20260507's scoring checklist includes 'struct_file_bond_angle' which explicitly checks that 'The mean H-C-H angle computed from dacmor_hydrogenated.cif is close to tetrahedral 109.48 degrees within a reasonable tolerance' - a violation would fail this deterministic criterion.",
+      "reason": "The rule requires reporting mean H-C-H angles for sp3 carbons within ±5° of 109.5°, and question SC_struct_006_20260507's scoring checklist includes 'struct_file_bond_angle' which explicitly checks that 'The mean H-C-H angle computed from dacmor_hydrogenated.cif is close to tetrahedral 109.48 degrees within a reasonable tolerance' - a violation would fail this deterministic criterion.",
       "rule_type": "acceptance",
       "section": "Acceptance Checklist",
       "source_name": "operate-molecular-crystal",
-      "text": "Hydrogenation reports the measured mean H-C-H angle for sp3 carbons (and H-C-H around sp2 carbons when present); both must lie within \u00b15\u00b0 of the ideal (109.5\u00b0 / 120\u00b0). State the value explicitly in th"
+      "text": "Hydrogenation reports the measured mean H-C-H angle for sp3 carbons (and H-C-H around sp2 carbons when present); both must lie within ±5° of the ideal (109.5° / 120°). State the value explicitly in th"
     },
     {
       "actionability": "testable",
@@ -6386,7 +6386,7 @@
       "covered_by": [],
       "id": "operate-molecular-crystal/cross-skill-refs/210",
       "is_actionable": true,
-      "reason": "The rule references helper scripts for fragile molecular-crystal slab/passivation cases, but none of the evaluation questions require or check for the use of those specific scripts\u2014violating the rule would not cause any scoring checklist to fail.",
+      "reason": "The rule references helper scripts for fragile molecular-crystal slab/passivation cases, but none of the evaluation questions require or check for the use of those specific scripts—violating the rule would not cause any scoring checklist to fail.",
       "rule_type": "general",
       "section": "Cross-Skill Refs",
       "source_name": "operate-molecular-crystal",
@@ -6544,7 +6544,7 @@
       "rule_type": "general",
       "section": "MCP Tools",
       "source_name": "sample-atomic-structures",
-      "text": "`mat_sg_query_job_status(job_id)` \u2014 poll until status is terminal."
+      "text": "`mat_sg_query_job_status(job_id)` — poll until status is terminal."
     },
     {
       "actionability": "testable",
@@ -6558,7 +6558,7 @@
       "rule_type": "general",
       "section": "MCP Tools",
       "source_name": "sample-atomic-structures",
-      "text": "`mat_sg_get_job_results(job_id)` \u2014 fetch artifact paths once status is `succeeded`/`finished`."
+      "text": "`mat_sg_get_job_results(job_id)` — fetch artifact paths once status is `succeeded`/`finished`."
     },
     {
       "actionability": "testable",
@@ -6572,7 +6572,7 @@
       "rule_type": "general",
       "section": "MCP Tools",
       "source_name": "sample-atomic-structures",
-      "text": "`mat_sg_terminate_job(job_id)` \u2014 abort a run that is misconfigured or exceeds the user-approved budget."
+      "text": "`mat_sg_terminate_job(job_id)` — abort a run that is misconfigured or exceeds the user-approved budget."
     },
     {
       "actionability": "testable",
@@ -6600,7 +6600,7 @@
       "rule_type": "general",
       "section": "MCP Tools",
       "source_name": "sample-atomic-structures",
-      "text": "Poll `query_job_status` with backoff (e.g. 5s \u2192 15s \u2192 30s, capped at 60s)"
+      "text": "Poll `query_job_status` with backoff (e.g. 5s → 15s → 30s, capped at 60s)"
     },
     {
       "actionability": "testable",
@@ -7639,7 +7639,7 @@
       "rule_type": "pitfall",
       "section": "Common Pitfalls",
       "source_name": "cp2k",
-      "text": "**ADMM auxiliary basis syntax (CP2K \u2265 2024.1)**: use `BASIS_SET AUX_FIT cFIT3` in `&KIND`, not the deprecated `AUX_FIT_BASIS_SET`. The matching file is `BASIS_SET_FILE_NAME BASIS_ADMM` (NOT `BASIS_ADM"
+      "text": "**ADMM auxiliary basis syntax (CP2K ≥ 2024.1)**: use `BASIS_SET AUX_FIT cFIT3` in `&KIND`, not the deprecated `AUX_FIT_BASIS_SET`. The matching file is `BASIS_SET_FILE_NAME BASIS_ADMM` (NOT `BASIS_ADM"
     },
     {
       "actionability": "testable",
@@ -7743,7 +7743,7 @@
       "rule_type": "physical_check",
       "section": "Physical Checks",
       "source_name": "cp2k",
-      "text": "**Basis set**: default to `DZVP-MOLOPT-SR-GTH` for all elements. Only use `TZV2P-MOLOPT-GTH` when higher accuracy is explicitly required \u2014 it is significantly slower for large systems (>100 atoms). Po"
+      "text": "**Basis set**: default to `DZVP-MOLOPT-SR-GTH` for all elements. Only use `TZV2P-MOLOPT-GTH` when higher accuracy is explicitly required — it is significantly slower for large systems (>100 atoms). Po"
     },
     {
       "actionability": "testable",
@@ -7888,7 +7888,7 @@
       "rule_type": "decision_tree",
       "section": "When to use",
       "source_name": "data-analysis",
-      "text": "\"Check data quality / QC this CSV\" \u2192 QC workflow below"
+      "text": "\"Check data quality / QC this CSV\" → QC workflow below"
     },
     {
       "actionability": "testable",
@@ -7902,7 +7902,7 @@
       "rule_type": "decision_tree",
       "section": "When to use",
       "source_name": "data-analysis",
-      "text": "\"Find outliers / anomalies\" \u2192 IQR or Z-score detection"
+      "text": "\"Find outliers / anomalies\" → IQR or Z-score detection"
     },
     {
       "actionability": "testable",
@@ -7916,7 +7916,7 @@
       "rule_type": "decision_tree",
       "section": "When to use",
       "source_name": "data-analysis",
-      "text": "\"Summarize experiment metrics\" \u2192 statistical profiling"
+      "text": "\"Summarize experiment metrics\" → statistical profiling"
     },
     {
       "actionability": "testable",
@@ -7930,7 +7930,7 @@
       "rule_type": "decision_tree",
       "section": "When to use",
       "source_name": "data-analysis",
-      "text": "\"Plot / visualize data from a table\" \u2192 matplotlib rendering"
+      "text": "\"Plot / visualize data from a table\" → matplotlib rendering"
     },
     {
       "actionability": "testable",
@@ -7958,7 +7958,7 @@
       "rule_type": "workflow_step",
       "section": "QC Workflow",
       "source_name": "data-analysis",
-      "text": "**Outlier detection \u2014 IQR method**: The IQR (Interquartile Range) method uses Q1 (25th percentile) and Q3 (75th percentile) to compute IQR = Q3 \u2212 Q1. Values outside [Q1 \u2212 1.5 * IQR, Q3 + 1.5 * IQR] ar"
+      "text": "**Outlier detection — IQR method**: The IQR (Interquartile Range) method uses Q1 (25th percentile) and Q3 (75th percentile) to compute IQR = Q3 − Q1. Values outside [Q1 − 1.5 * IQR, Q3 + 1.5 * IQR] ar"
     },
     {
       "actionability": "testable",
@@ -8000,7 +8000,7 @@
       "rule_type": "general",
       "section": "Notation Rules (Hard Constraints)",
       "source_name": "data-analysis",
-      "text": "**Multiplication sign**: Use the ASCII asterisk `*` in all formulas inside reports and JSON. Write `1.5 * IQR`, **never** `1.5 \u00d7 IQR` or `1.5 \u00b7 IQR`."
+      "text": "**Multiplication sign**: Use the ASCII asterisk `*` in all formulas inside reports and JSON. Write `1.5 * IQR`, **never** `1.5 × IQR` or `1.5 · IQR`."
     },
     {
       "actionability": "testable",
@@ -8056,7 +8056,7 @@
       "rule_type": "general",
       "section": "Rules",
       "source_name": "data-analysis",
-      "text": "Read the data file **before** generating any deliverable \u2014 do not hallucinate columns or values."
+      "text": "Read the data file **before** generating any deliverable — do not hallucinate columns or values."
     },
     {
       "actionability": "testable",
@@ -8198,11 +8198,11 @@
       ],
       "id": "gpumd/hard-guards/337",
       "is_actionable": true,
-      "reason": "The rule requires distinct equilibration and production run blocks, and questions IG_gpumd_001 and IG_gpumd_002 explicitly require '\u5148\u5e73\u8861\u518d\u751f\u4ea7' (equilibrate then produce) in their prompts, which would be checked by the 'text_file_contains_all' scoring criterion for key EMD/HNEMD commands that inherently enforce this two-stage pattern.",
+      "reason": "The rule requires distinct equilibration and production run blocks, and questions IG_gpumd_001 and IG_gpumd_002 explicitly require '先平衡再生产' (equilibrate then produce) in their prompts, which would be checked by the 'text_file_contains_all' scoring criterion for key EMD/HNEMD commands that inherently enforce this two-stage pattern.",
       "rule_type": "hard_guard",
       "section": "Hard Guards",
       "source_name": "gpumd",
-      "text": "**Two-stage pattern: equilibrate then produce.** Equilibration (NVT/NPT) \u2192 production (NVE for transport, or target ensemble). Separate with distinct `run` blocks."
+      "text": "**Two-stage pattern: equilibrate then produce.** Equilibration (NVT/NPT) → production (NVE for transport, or target ensemble). Separate with distinct `run` blocks."
     },
     {
       "actionability": "testable",
@@ -8333,7 +8333,7 @@
       "rule_type": "general",
       "section": "Default Potential",
       "source_name": "gpumd",
-      "text": "`potentials/nep/C_2024_NEP4.txt` \u2014 Carbon"
+      "text": "`potentials/nep/C_2024_NEP4.txt` — Carbon"
     },
     {
       "actionability": "testable",
@@ -8347,7 +8347,7 @@
       "rule_type": "general",
       "section": "Default Potential",
       "source_name": "gpumd",
-      "text": "`potentials/nep/Si_2022_NEP3_5body.txt` \u2014 Silicon"
+      "text": "`potentials/nep/Si_2022_NEP3_5body.txt` — Silicon"
     },
     {
       "actionability": "testable",
@@ -8447,7 +8447,7 @@
       "rule_type": "general",
       "section": "References (read on demand)",
       "source_name": "gpumd",
-      "text": "`references/run_in_keywords.md` \u2014 complete keyword reference for `run.in`"
+      "text": "`references/run_in_keywords.md` — complete keyword reference for `run.in`"
     },
     {
       "actionability": "testable",
@@ -8464,7 +8464,7 @@
       "rule_type": "general",
       "section": "References (read on demand)",
       "source_name": "gpumd",
-      "text": "`references/nep_in_keywords.md` \u2014 NEP training parameter reference for `nep.in`"
+      "text": "`references/nep_in_keywords.md` — NEP training parameter reference for `nep.in`"
     },
     {
       "actionability": "testable",
@@ -8478,7 +8478,7 @@
       "rule_type": "general",
       "section": "References (read on demand)",
       "source_name": "gpumd",
-      "text": "`references/input_examples.md` \u2014 worked examples for common simulation types"
+      "text": "`references/input_examples.md` — worked examples for common simulation types"
     },
     {
       "actionability": "testable",
@@ -8492,7 +8492,7 @@
       "rule_type": "general",
       "section": "References (read on demand)",
       "source_name": "gpumd",
-      "text": "`references/model_xyz_format.md` \u2014 model.xyz extended XYZ format, group definitions"
+      "text": "`references/model_xyz_format.md` — model.xyz extended XYZ format, group definitions"
     },
     {
       "actionability": "runtime_dependent",
@@ -8622,7 +8622,7 @@
       ],
       "id": "gromacs/system-building-(inside-`run.sh`,-executed-on-bohrium)/366",
       "is_actionable": true,
-      "reason": "The rule 'Set box with padding' is specifically tested by WO_gromacs_solvate_001_20260507, which requires '\u8bbe\u7f6e\u7acb\u65b9\u76d2\u5b50\uff0c\u6eb6\u8d28\u5230\u76d2\u5b50\u8fb9\u754c\u81f3\u5c11 1.0 nm\uff08editconf\uff09' and the scoring checklist includes deterministic criteria that would fail if the editconf command is missing or incorrect.",
+      "reason": "The rule 'Set box with padding' is specifically tested by WO_gromacs_solvate_001_20260507, which requires '设置立方盒子，溶质到盒子边界至少 1.0 nm（editconf）' and the scoring checklist includes deterministic criteria that would fail if the editconf command is missing or incorrect.",
       "rule_type": "general",
       "section": "System Building (inside `run.sh`, executed on Bohrium)",
       "source_name": "gromacs",
@@ -8980,7 +8980,7 @@
       "rule_type": "general",
       "section": "Key Rules",
       "source_name": "gromacs",
-      "text": "**Chain all steps in one script** \u2014 When a workflow has multiple sequential steps (EM \u2192 NVT \u2192 NPT), write a single `run.sh` that executes them all. Always start with `set -e` so the script aborts on f"
+      "text": "**Chain all steps in one script** — When a workflow has multiple sequential steps (EM → NVT → NPT), write a single `run.sh` that executes them all. Always start with `set -e` so the script aborts on f"
     },
     {
       "actionability": "testable",
@@ -8996,7 +8996,7 @@
       "rule_type": "general",
       "section": "Key Rules",
       "source_name": "gromacs",
-      "text": "**`gmx_mpi solvate -p` requires the topology to exist** \u2014 The `-p` flag *updates* an existing `.top` with solvent molecule counts. If the topology doesn't exist yet, omit `-p` and manually add `[ mole"
+      "text": "**`gmx_mpi solvate -p` requires the topology to exist** — The `-p` flag *updates* an existing `.top` with solvent molecule counts. If the topology doesn't exist yet, omit `-p` and manually add `[ mole"
     },
     {
       "actionability": "testable",
@@ -9012,7 +9012,7 @@
       "rule_type": "general",
       "section": "Key Rules",
       "source_name": "gromacs",
-      "text": "**Use provided input files directly** \u2014 If the user provides `.gro` + `.top` + `.mdp`, do NOT recreate them. Write a `run.sh` that references them as-is for `grompp`."
+      "text": "**Use provided input files directly** — If the user provides `.gro` + `.top` + `.mdp`, do NOT recreate them. Write a `run.sh` that references them as-is for `grompp`."
     },
     {
       "actionability": "testable",
@@ -9028,7 +9028,7 @@
       "rule_type": "general",
       "section": "Key Rules",
       "source_name": "gromacs",
-      "text": "**`grompp -maxwarn 3`** \u2014 Always pass `-maxwarn 3` (at minimum) to avoid grompp aborting on non-fatal notes (e.g. overridden mdp parameters)."
+      "text": "**`grompp -maxwarn 3`** — Always pass `-maxwarn 3` (at minimum) to avoid grompp aborting on non-fatal notes (e.g. overridden mdp parameters)."
     },
     {
       "actionability": "testable",
@@ -9044,7 +9044,7 @@
       "rule_type": "general",
       "section": "Key Rules",
       "source_name": "gromacs",
-      "text": "**`genion` requires a `.tpr`** \u2014 Run `grompp` first to produce the `.tpr`, then feed it to `genion`."
+      "text": "**`genion` requires a `.tpr`** — Run `grompp` first to produce the `.tpr`, then feed it to `genion`."
     },
     {
       "actionability": "testable",
@@ -9060,7 +9060,7 @@
       "rule_type": "general",
       "section": "Key Rules",
       "source_name": "gromacs",
-      "text": "**DO NOT run `gmx_mpi` locally** \u2014 `gmx_mpi` is only available in the Bohrium image. All GROMACS commands (including system building) must be in the submitted `run.sh`."
+      "text": "**DO NOT run `gmx_mpi` locally** — `gmx_mpi` is only available in the Bohrium image. All GROMACS commands (including system building) must be in the submitted `run.sh`."
     },
     {
       "actionability": "testable",
@@ -9074,7 +9074,7 @@
       "rule_type": "workflow_step",
       "section": "Submission Workflow",
       "source_name": "gromacs",
-      "text": "Prepare input files locally (MDP, structure, topology \u2014 or use provided files)"
+      "text": "Prepare input files locally (MDP, structure, topology — or use provided files)"
     },
     {
       "actionability": "testable",
@@ -9816,13 +9816,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-compdart/\u5de5\u5177\u5217\u8868/449",
+      "id": "mcp-mat-compdart/工具列表/449",
       "is_actionable": true,
       "reason": "No evaluation questions are provided, so there is no scoring checklist to test the rule.",
       "rule_type": "general",
-      "section": "\u5de5\u5177\u5217\u8868",
+      "section": "工具列表",
       "source_name": "mcp-mat-compdart",
-      "text": "submit_run_dart_ga | async | \u9057\u4f20\u7b97\u6cd5\u6210\u5206\u4f18\u5316\uff0c\u652f\u6301\u591a\u76ee\u6807\u4f18\u5316\u3001\u4ee3\u7406\u6a21\u578b/\u7ebf\u6027\u6df7\u5408\u76ee\u6807\u3001\u6210\u5206\u7ea6\u675f\uff08\u5143\u7d20\u5206\u6570\u8303\u56f4\uff09\u3001\u521d\u59cb\u79cd\u7fa4"
+      "text": "submit_run_dart_ga | async | 遗传算法成分优化，支持多目标优化、代理模型/线性混合目标、成分约束（元素分数范围）、初始种群"
     },
     {
       "actionability": "testable",
@@ -9830,13 +9830,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-compdart/\u5de5\u5177\u5217\u8868/450",
+      "id": "mcp-mat-compdart/工具列表/450",
       "is_actionable": true,
       "reason": "No evaluation questions are provided that could test the rule, so there is no scenario where violating it would cause a scoring_checklist failure.",
       "rule_type": "general",
-      "section": "\u5de5\u5177\u5217\u8868",
+      "section": "工具列表",
       "source_name": "mcp-mat-compdart",
-      "text": "query_job_status | async | \u67e5\u8be2\u8ba1\u7b97\u4efb\u52a1\u72b6\u6001 (Running/Succeeded/Failed)"
+      "text": "query_job_status | async | 查询计算任务状态 (Running/Succeeded/Failed)"
     },
     {
       "actionability": "testable",
@@ -9844,13 +9844,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-compdart/\u5de5\u5177\u5217\u8868/451",
+      "id": "mcp-mat-compdart/工具列表/451",
       "is_actionable": true,
       "reason": "No evaluation questions are provided that involve terminating a computational job, so the rule cannot be tested.",
       "rule_type": "general",
-      "section": "\u5de5\u5177\u5217\u8868",
+      "section": "工具列表",
       "source_name": "mcp-mat-compdart",
-      "text": "terminate_job | async | \u7ec8\u6b62\u8ba1\u7b97\u4efb\u52a1"
+      "text": "terminate_job | async | 终止计算任务"
     },
     {
       "actionability": "testable",
@@ -9858,13 +9858,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-compdart/\u5de5\u5177\u5217\u8868/452",
+      "id": "mcp-mat-compdart/工具列表/452",
       "is_actionable": true,
       "reason": "No evaluation questions are provided, so there is no deterministic or LLM-judge criterion to test the rule about using the get_job_results tool.",
       "rule_type": "general",
-      "section": "\u5de5\u5177\u5217\u8868",
+      "section": "工具列表",
       "source_name": "mcp-mat-compdart",
-      "text": "get_job_results | async | \u83b7\u53d6\u8ba1\u7b97\u4efb\u52a1\u7ed3\u679c"
+      "text": "get_job_results | async | 获取计算任务结果"
     },
     {
       "actionability": "testable",
@@ -9872,13 +9872,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-compdart/\u5178\u578b\u7528\u6cd5/453",
+      "id": "mcp-mat-compdart/典型用法/453",
       "is_actionable": true,
       "reason": "No evaluation questions are provided that could test the specific rule about using the genetic algorithm component optimization function, so violation cannot be caught.",
       "rule_type": "general",
-      "section": "\u5178\u578b\u7528\u6cd5",
+      "section": "典型用法",
       "source_name": "mcp-mat-compdart",
-      "text": "\u9057\u4f20\u7b97\u6cd5\u6210\u5206\u4f18\u5316: `mat_compdart_submit_run_dart_ga`"
+      "text": "遗传算法成分优化: `mat_compdart_submit_run_dart_ga`"
     },
     {
       "actionability": "testable",
@@ -9886,13 +9886,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-compdart/\u5178\u578b\u7528\u6cd5/454",
+      "id": "mcp-mat-compdart/典型用法/454",
       "is_actionable": true,
       "reason": "No evaluation questions are provided that involve checking the status of a job, which is the specific action required by the rule.",
       "rule_type": "general",
-      "section": "\u5178\u578b\u7528\u6cd5",
+      "section": "典型用法",
       "source_name": "mcp-mat-compdart",
-      "text": "\u67e5\u8be2\u4efb\u52a1\u72b6\u6001: `mat_compdart_query_job_status`"
+      "text": "查询任务状态: `mat_compdart_query_job_status`"
     },
     {
       "actionability": "testable",
@@ -9900,13 +9900,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-compdart/\u5178\u578b\u7528\u6cd5/455",
+      "id": "mcp-mat-compdart/典型用法/455",
       "is_actionable": true,
       "reason": "No questions are provided that test the specific rule for retrieving optimization results via mat_compdart_get_job_results, so violation cannot be caught by any scoring checklist.",
       "rule_type": "general",
-      "section": "\u5178\u578b\u7528\u6cd5",
+      "section": "典型用法",
       "source_name": "mcp-mat-compdart",
-      "text": "\u83b7\u53d6\u4f18\u5316\u7ed3\u679c: `mat_compdart_get_job_results`"
+      "text": "获取优化结果: `mat_compdart_get_job_results`"
     },
     {
       "actionability": "testable",
@@ -9914,13 +9914,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-compdart/\u6ce8\u610f\u4e8b\u9879/456",
+      "id": "mcp-mat-compdart/注意事项/456",
       "is_actionable": true,
       "reason": "No evaluation questions are provided to test the rule about tool_include_only configuration, so violation cannot be caught.",
       "rule_type": "general",
-      "section": "\u6ce8\u610f\u4e8b\u9879",
+      "section": "注意事项",
       "source_name": "mcp-mat-compdart",
-      "text": "\u672a\u914d\u7f6e tool_include_only\uff0c\u6ce8\u518c MCP Server \u66b4\u9732\u7684\u6240\u6709\u5de5\u5177\uff08\u5171 4 \u4e2a\uff09"
+      "text": "未配置 tool_include_only，注册 MCP Server 暴露的所有工具（共 4 个）"
     },
     {
       "actionability": "testable",
@@ -9928,13 +9928,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-compdart/\u6ce8\u610f\u4e8b\u9879/457",
+      "id": "mcp-mat-compdart/注意事项/457",
       "is_actionable": true,
       "reason": "No evaluation questions are provided to test the rule about async execution and GPU cluster submission.",
       "rule_type": "general",
-      "section": "\u6ce8\u610f\u4e8b\u9879",
+      "section": "注意事项",
       "source_name": "mcp-mat-compdart",
-      "text": "sync_tools \u4e3a\u7a7a\uff0c\u6240\u6709\u5de5\u5177\u5747\u4e3a\u5f02\u6b65\u6267\u884c\uff0c\u4efb\u52a1\u63d0\u4ea4\u5230 Bohrium GPU \u96c6\u7fa4"
+      "text": "sync_tools 为空，所有工具均为异步执行，任务提交到 Bohrium GPU 集群"
     },
     {
       "actionability": "testable",
@@ -9942,13 +9942,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-compdart/\u6ce8\u610f\u4e8b\u9879/458",
+      "id": "mcp-mat-compdart/注意事项/458",
       "is_actionable": true,
       "reason": "No evaluation questions are provided that would test the specific workflow of submitting an async job, polling its status, and retrieving results.",
       "rule_type": "general",
-      "section": "\u6ce8\u610f\u4e8b\u9879",
+      "section": "注意事项",
       "source_name": "mcp-mat-compdart",
-      "text": "\u5f02\u6b65\u5de5\u5177\u63d0\u4ea4\u540e\u4f7f\u7528 query_job_status \u8f6e\u8be2\u72b6\u6001\uff0c\u5b8c\u6210\u540e\u7528 get_job_results \u83b7\u53d6\u7ed3\u679c"
+      "text": "异步工具提交后使用 query_job_status 轮询状态，完成后用 get_job_results 获取结果"
     },
     {
       "actionability": "testable",
@@ -9956,13 +9956,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-compdart/\u6ce8\u610f\u4e8b\u9879/459",
+      "id": "mcp-mat-compdart/注意事项/459",
       "is_actionable": true,
       "reason": "The rule specifies a hardware requirement, but no evaluation question includes scoring criteria that would check or penalize the agent for not using an NVIDIA 4090 GPU.",
       "rule_type": "general",
-      "section": "\u6ce8\u610f\u4e8b\u9879",
+      "section": "注意事项",
       "source_name": "mcp-mat-compdart",
-      "text": "\u4f7f\u7528 NVIDIA 4090 GPU \u673a\u578b (c16_m64_1 * NVIDIA 4090)"
+      "text": "使用 NVIDIA 4090 GPU 机型 (c16_m64_1 * NVIDIA 4090)"
     },
     {
       "actionability": "runtime_dependent",
@@ -9970,13 +9970,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-doc/\u5de5\u5177\u5217\u8868/460",
+      "id": "mcp-mat-doc/工具列表/460",
       "is_actionable": false,
       "reason": "No evaluation questions are provided that would test the specific rule for extracting material data from PDFs, so violation cannot be caught.",
       "rule_type": "general",
-      "section": "\u5de5\u5177\u5217\u8868",
+      "section": "工具列表",
       "source_name": "mcp-mat-doc",
-      "text": "extract_material_data_from_pdf | sync | \u4ece PDF \u6587\u6863\u4e2d\u63d0\u53d6\u6750\u6599\u79d1\u5b66\u6570\u636e"
+      "text": "extract_material_data_from_pdf | sync | 从 PDF 文档中提取材料科学数据"
     },
     {
       "actionability": "runtime_dependent",
@@ -9984,13 +9984,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-doc/\u5178\u578b\u7528\u6cd5/461",
+      "id": "mcp-mat-doc/典型用法/461",
       "is_actionable": false,
       "reason": "No evaluation questions are provided that could test the rule, so there is no way for the scoring checklist to catch a violation.",
       "rule_type": "general",
-      "section": "\u5178\u578b\u7528\u6cd5",
+      "section": "典型用法",
       "source_name": "mcp-mat-doc",
-      "text": "\u4ece\u8bba\u6587 PDF \u63d0\u53d6\u6676\u4f53\u53c2\u6570: `mat_doc_extract_material_data_from_pdf`"
+      "text": "从论文 PDF 提取晶体参数: `mat_doc_extract_material_data_from_pdf`"
     },
     {
       "actionability": "runtime_dependent",
@@ -9998,13 +9998,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-doc/\u6ce8\u610f\u4e8b\u9879/462",
+      "id": "mcp-mat-doc/注意事项/462",
       "is_actionable": false,
       "reason": "No questions are provided, so there is no way for the rule to be evaluated or enforced by any scoring checklist.",
       "rule_type": "general",
-      "section": "\u6ce8\u610f\u4e8b\u9879",
+      "section": "注意事项",
       "source_name": "mcp-mat-doc",
-      "text": "\u4ec5\u6ce8\u518c extract_material_data_from_pdf \u4e00\u4e2a\u5de5\u5177 (tool_include_only \u8fc7\u6ee4)"
+      "text": "仅注册 extract_material_data_from_pdf 一个工具 (tool_include_only 过滤)"
     },
     {
       "actionability": "runtime_dependent",
@@ -10012,13 +10012,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-doc/\u6ce8\u610f\u4e8b\u9879/463",
+      "id": "mcp-mat-doc/注意事项/463",
       "is_actionable": false,
       "reason": "No questions are provided, so there is no scenario where the rule's violation could be tested or detected.",
       "rule_type": "general",
-      "section": "\u6ce8\u610f\u4e8b\u9879",
+      "section": "注意事项",
       "source_name": "mcp-mat-doc",
-      "text": "executor \u4e3a null\uff0c\u5de5\u5177\u5728\u672c\u5730\u540c\u6b65\u6267\u884c"
+      "text": "executor 为 null，工具在本地同步执行"
     },
     {
       "actionability": "runtime_dependent",
@@ -10026,13 +10026,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-electron-microscope/\u5de5\u5177\u5217\u8868/464",
+      "id": "mcp-mat-electron-microscope/工具列表/464",
       "is_actionable": false,
       "reason": "No evaluation questions are provided that could test the specific rule for the 'get_electron_microscope_recognize' tool, so violation of this rule cannot be caught by any scoring checklist.",
       "rule_type": "general",
-      "section": "\u5de5\u5177\u5217\u8868",
+      "section": "工具列表",
       "source_name": "mcp-mat-electron-microscope",
-      "text": "get_electron_microscope_recognize | sync | \u7535\u5b50\u663e\u5fae\u955c\u56fe\u50cf\u8bc6\u522b\u4e0e\u7279\u5f81\u5206\u6790"
+      "text": "get_electron_microscope_recognize | sync | 电子显微镜图像识别与特征分析"
     },
     {
       "actionability": "runtime_dependent",
@@ -10040,13 +10040,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-electron-microscope/\u5178\u578b\u7528\u6cd5/465",
+      "id": "mcp-mat-electron-microscope/典型用法/465",
       "is_actionable": false,
       "reason": "No evaluation questions are provided that would test the specific SEM/TEM image analysis functionality, so violating this rule cannot cause any scoring checklist to fail.",
       "rule_type": "general",
-      "section": "\u5178\u578b\u7528\u6cd5",
+      "section": "典型用法",
       "source_name": "mcp-mat-electron-microscope",
-      "text": "SEM/TEM \u56fe\u50cf\u81ea\u52a8\u5206\u6790: `mat_electron_microscope_get_electron_microscope_recognize`"
+      "text": "SEM/TEM 图像自动分析: `mat_electron_microscope_get_electron_microscope_recognize`"
     },
     {
       "actionability": "runtime_dependent",
@@ -10054,13 +10054,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-electron-microscope/\u6ce8\u610f\u4e8b\u9879/466",
+      "id": "mcp-mat-electron-microscope/注意事项/466",
       "is_actionable": false,
       "reason": "No evaluation questions are provided to test the rule about registering only the get_electron_microscope_recognize tool.",
       "rule_type": "general",
-      "section": "\u6ce8\u610f\u4e8b\u9879",
+      "section": "注意事项",
       "source_name": "mcp-mat-electron-microscope",
-      "text": "\u4ec5\u6ce8\u518c get_electron_microscope_recognize \u4e00\u4e2a\u5de5\u5177 (tool_include_only \u8fc7\u6ee4)"
+      "text": "仅注册 get_electron_microscope_recognize 一个工具 (tool_include_only 过滤)"
     },
     {
       "actionability": "runtime_dependent",
@@ -10068,13 +10068,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-electron-microscope/\u6ce8\u610f\u4e8b\u9879/467",
+      "id": "mcp-mat-electron-microscope/注意事项/467",
       "is_actionable": false,
       "reason": "No questions are provided, so there is no scenario where the rule's violation could be tested or detected.",
       "rule_type": "general",
-      "section": "\u6ce8\u610f\u4e8b\u9879",
+      "section": "注意事项",
       "source_name": "mcp-mat-electron-microscope",
-      "text": "executor \u4e3a null\uff0c\u5de5\u5177\u5728\u672c\u5730\u540c\u6b65\u6267\u884c"
+      "text": "executor 为 null，工具在本地同步执行"
     },
     {
       "actionability": "runtime_dependent",
@@ -10082,13 +10082,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-nmr/\u5de5\u5177\u5217\u8868/468",
+      "id": "mcp-mat-nmr/工具列表/468",
       "is_actionable": false,
       "reason": "No evaluation questions are provided that could test the NMR_search_tool, so the rule cannot be covered.",
       "rule_type": "general",
-      "section": "\u5de5\u5177\u5217\u8868",
+      "section": "工具列表",
       "source_name": "mcp-mat-nmr",
-      "text": "NMR_search_tool | sync | NMR \u6570\u636e\u5e93\u68c0\u7d22"
+      "text": "NMR_search_tool | sync | NMR 数据库检索"
     },
     {
       "actionability": "runtime_dependent",
@@ -10096,13 +10096,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-nmr/\u5de5\u5177\u5217\u8868/469",
+      "id": "mcp-mat-nmr/工具列表/469",
       "is_actionable": false,
       "reason": "No evaluation questions are provided that could test the NMR_predict_tool, so the rule cannot be covered.",
       "rule_type": "general",
-      "section": "\u5de5\u5177\u5217\u8868",
+      "section": "工具列表",
       "source_name": "mcp-mat-nmr",
-      "text": "NMR_predict_tool | sync | NMR \u5316\u5b66\u4f4d\u79fb\u9884\u6d4b"
+      "text": "NMR_predict_tool | sync | NMR 化学位移预测"
     },
     {
       "actionability": "runtime_dependent",
@@ -10110,13 +10110,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-nmr/\u5de5\u5177\u5217\u8868/470",
+      "id": "mcp-mat-nmr/工具列表/470",
       "is_actionable": false,
       "reason": "No evaluation questions are provided that involve the NMR reverse prediction tool, so there is no scoring checklist to test the rule.",
       "rule_type": "general",
-      "section": "\u5de5\u5177\u5217\u8868",
+      "section": "工具列表",
       "source_name": "mcp-mat-nmr",
-      "text": "NMR_reverse_predict_tool | sync | NMR \u53cd\u5411\u9884\u6d4b\uff0c\u4ece\u8c31\u56fe\u63a8\u65ad\u7ed3\u6784"
+      "text": "NMR_reverse_predict_tool | sync | NMR 反向预测，从谱图推断结构"
     },
     {
       "actionability": "runtime_dependent",
@@ -10124,13 +10124,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-nmr/\u5178\u578b\u7528\u6cd5/471",
+      "id": "mcp-mat-nmr/典型用法/471",
       "is_actionable": false,
       "reason": "No evaluation questions are provided that could test the rule, so there is no scenario where violating the rule would cause a scoring checklist to fail.",
       "rule_type": "general",
-      "section": "\u5178\u578b\u7528\u6cd5",
+      "section": "典型用法",
       "source_name": "mcp-mat-nmr",
-      "text": "\u68c0\u7d22 NMR \u53c2\u8003\u6570\u636e: `mat_nmr_NMR_search_tool`"
+      "text": "检索 NMR 参考数据: `mat_nmr_NMR_search_tool`"
     },
     {
       "actionability": "runtime_dependent",
@@ -10138,13 +10138,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-nmr/\u5178\u578b\u7528\u6cd5/472",
+      "id": "mcp-mat-nmr/典型用法/472",
       "is_actionable": false,
       "reason": "No evaluation questions are provided, so there is no scoring checklist to test the rule.",
       "rule_type": "general",
-      "section": "\u5178\u578b\u7528\u6cd5",
+      "section": "典型用法",
       "source_name": "mcp-mat-nmr",
-      "text": "\u9884\u6d4b\u5316\u5b66\u4f4d\u79fb: `mat_nmr_NMR_predict_tool`"
+      "text": "预测化学位移: `mat_nmr_NMR_predict_tool`"
     },
     {
       "actionability": "runtime_dependent",
@@ -10152,13 +10152,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-nmr/\u5178\u578b\u7528\u6cd5/473",
+      "id": "mcp-mat-nmr/典型用法/473",
       "is_actionable": false,
       "reason": "No evaluation questions are provided that could test the rule, so violation cannot be caught.",
       "rule_type": "general",
-      "section": "\u5178\u578b\u7528\u6cd5",
+      "section": "典型用法",
       "source_name": "mcp-mat-nmr",
-      "text": "\u4ece\u8c31\u56fe\u53cd\u5411\u63a8\u65ad\u7ed3\u6784: `mat_nmr_NMR_reverse_predict_tool`"
+      "text": "从谱图反向推断结构: `mat_nmr_NMR_reverse_predict_tool`"
     },
     {
       "actionability": "runtime_dependent",
@@ -10166,13 +10166,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-nmr/\u6ce8\u610f\u4e8b\u9879/474",
+      "id": "mcp-mat-nmr/注意事项/474",
       "is_actionable": false,
       "reason": "No evaluation questions are provided to test whether the agent violates the rule by using tools outside the specified set.",
       "rule_type": "general",
-      "section": "\u6ce8\u610f\u4e8b\u9879",
+      "section": "注意事项",
       "source_name": "mcp-mat-nmr",
-      "text": "\u4ec5\u6ce8\u518c tool_include_only \u4e2d\u6307\u5b9a\u7684\u4e09\u4e2a\u5de5\u5177"
+      "text": "仅注册 tool_include_only 中指定的三个工具"
     },
     {
       "actionability": "runtime_dependent",
@@ -10180,13 +10180,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-nmr/\u6ce8\u610f\u4e8b\u9879/475",
+      "id": "mcp-mat-nmr/注意事项/475",
       "is_actionable": false,
       "reason": "No evaluation questions are provided that test whether tools are executed synchronously locally when executor is null.",
       "rule_type": "general",
-      "section": "\u6ce8\u610f\u4e8b\u9879",
+      "section": "注意事项",
       "source_name": "mcp-mat-nmr",
-      "text": "executor \u4e3a null\uff0c\u6240\u6709\u5de5\u5177\u5747\u5728\u672c\u5730\u540c\u6b65\u6267\u884c"
+      "text": "executor 为 null，所有工具均在本地同步执行"
     },
     {
       "actionability": "testable",
@@ -10196,11 +10196,11 @@
       "covered_by": [],
       "id": "mcp-mat-struct-db/efficiency-rules/476",
       "is_actionable": true,
-      "reason": "The rule about limiting query attempts to 1\u20132 per target compound is not directly enforced by any scoring checklist, as no criterion penalizes excessive retries beyond 'no_retries' which only forbids identical repeated calls.",
+      "reason": "The rule about limiting query attempts to 1–2 per target compound is not directly enforced by any scoring checklist, as no criterion penalizes excessive retries beyond 'no_retries' which only forbids identical repeated calls.",
       "rule_type": "general",
       "section": "Efficiency Rules",
       "source_name": "mcp-mat-struct-db",
-      "text": "**Budget 1\u20132 query attempts per target compound**. If the first query fails or times out, try ONE alternative query form (different formula notation, composition range, or material ID). If both fail, "
+      "text": "**Budget 1–2 query attempts per target compound**. If the first query fails or times out, try ONE alternative query form (different formula notation, composition range, or material ID). If both fail, "
     },
     {
       "actionability": "testable",
@@ -10216,7 +10216,7 @@
       "rule_type": "general",
       "section": "Efficiency Rules",
       "source_name": "mcp-mat-struct-db",
-      "text": "**Batch tasks (\u22655 structures)**: Query breadth-first \u2014 submit all queries before waiting. Do not spend >3 turns on any single entry. **Turn economy is critical**: plan the minimum number of queries to"
+      "text": "**Batch tasks (≥5 structures)**: Query breadth-first — submit all queries before waiting. Do not spend >3 turns on any single entry. **Turn economy is critical**: plan the minimum number of queries to"
     },
     {
       "actionability": "testable",
@@ -10258,7 +10258,7 @@
       "rule_type": "general",
       "section": "Query Strategies",
       "source_name": "mcp-mat-struct-db",
-      "text": "Exact formula (e.g. LaH\u2081\u2080) | `fetch_structures_from_db` by formula"
+      "text": "Exact formula (e.g. LaH₁₀) | `fetch_structures_from_db` by formula"
     },
     {
       "actionability": "testable",
@@ -10367,7 +10367,7 @@
       "rule_type": "general",
       "section": "Honesty Constraint",
       "source_name": "mcp-mat-struct-db",
-      "text": "Partial results are acceptable \u2014 report what was found and what was not."
+      "text": "Partial results are acceptable — report what was found and what was not."
     },
     {
       "actionability": "runtime_dependent",
@@ -10375,13 +10375,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-xrd/\u5de5\u5177\u5217\u8868/488",
+      "id": "mcp-mat-xrd/工具列表/488",
       "is_actionable": false,
       "reason": "The rule is about XRD phase identification with diffraction data input, but all provided questions involve single-crystal structure determination, Pawley refinement, or peak comparison, none of which require the specific tool 'xrd_phase_identification' for matching phases from diffraction patterns.",
       "rule_type": "general",
-      "section": "\u5de5\u5177\u5217\u8868",
+      "section": "工具列表",
       "source_name": "mcp-mat-xrd",
-      "text": "xrd_phase_identification | sync | XRD \u7269\u76f8\u9274\u5b9a\uff0c\u8f93\u5165\u884d\u5c04\u6570\u636e\u8fd4\u56de\u5339\u914d\u7269\u76f8\u53ca\u7f6e\u4fe1\u5ea6"
+      "text": "xrd_phase_identification | sync | XRD 物相鉴定，输入衍射数据返回匹配物相及置信度"
     },
     {
       "actionability": "runtime_dependent",
@@ -10389,13 +10389,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-xrd/\u5178\u578b\u7528\u6cd5/489",
+      "id": "mcp-mat-xrd/典型用法/489",
       "is_actionable": false,
-      "reason": "The rule 'XRD \u7269\u76f8\u9274\u5b9a: `mat_xrd_xrd_phase_identification`' pertains to phase identification from XRD data, but none of the evaluation questions include a scoring checklist criterion that specifically tests for correct phase identification as a distinct, required step that would fail if the rule is violated.",
+      "reason": "The rule 'XRD 物相鉴定: `mat_xrd_xrd_phase_identification`' pertains to phase identification from XRD data, but none of the evaluation questions include a scoring checklist criterion that specifically tests for correct phase identification as a distinct, required step that would fail if the rule is violated.",
       "rule_type": "general",
-      "section": "\u5178\u578b\u7528\u6cd5",
+      "section": "典型用法",
       "source_name": "mcp-mat-xrd",
-      "text": "XRD \u7269\u76f8\u9274\u5b9a: `mat_xrd_xrd_phase_identification`"
+      "text": "XRD 物相鉴定: `mat_xrd_xrd_phase_identification`"
     },
     {
       "actionability": "runtime_dependent",
@@ -10403,13 +10403,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-xrd/\u6ce8\u610f\u4e8b\u9879/490",
+      "id": "mcp-mat-xrd/注意事项/490",
       "is_actionable": false,
       "reason": "The rule mandates registering only the 'xrd_phase_identification' tool, but none of the evaluation questions include scoring criteria that check which tools are registered or penalize the registration of additional tools.",
       "rule_type": "general",
-      "section": "\u6ce8\u610f\u4e8b\u9879",
+      "section": "注意事项",
       "source_name": "mcp-mat-xrd",
-      "text": "\u4ec5\u6ce8\u518c xrd_phase_identification \u4e00\u4e2a\u5de5\u5177 (tool_include_only \u8fc7\u6ee4)"
+      "text": "仅注册 xrd_phase_identification 一个工具 (tool_include_only 过滤)"
     },
     {
       "actionability": "runtime_dependent",
@@ -10417,13 +10417,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "mcp-mat-xrd/\u6ce8\u610f\u4e8b\u9879/491",
+      "id": "mcp-mat-xrd/注意事项/491",
       "is_actionable": false,
-      "reason": "The rule 'executor \u4e3a null\uff0c\u5de5\u5177\u5728\u672c\u5730\u540c\u6b65\u6267\u884c' pertains to the local synchronous execution of a tool, but none of the evaluation questions' scoring checklists include criteria that would detect or penalize whether the tool execution is local versus remote or synchronous versus asynchronous.",
+      "reason": "The rule 'executor 为 null，工具在本地同步执行' pertains to the local synchronous execution of a tool, but none of the evaluation questions' scoring checklists include criteria that would detect or penalize whether the tool execution is local versus remote or synchronous versus asynchronous.",
       "rule_type": "general",
-      "section": "\u6ce8\u610f\u4e8b\u9879",
+      "section": "注意事项",
       "source_name": "mcp-mat-xrd",
-      "text": "executor \u4e3a null\uff0c\u5de5\u5177\u5728\u672c\u5730\u540c\u6b65\u6267\u884c"
+      "text": "executor 为 null，工具在本地同步执行"
     },
     {
       "actionability": "runtime_dependent",
@@ -10493,7 +10493,7 @@
       "rule_type": "general",
       "section": "Models",
       "source_name": "mlips",
-      "text": "**DPA3.1-3M** | DP | **DPA (default)** | General inorganic \u2014 **default**, 3M params"
+      "text": "**DPA3.1-3M** | DP | **DPA (default)** | General inorganic — **default**, 3M params"
     },
     {
       "actionability": "testable",
@@ -10677,7 +10677,7 @@
       "rule_type": "general",
       "section": "Key Rules",
       "source_name": "mlips",
-      "text": "**Validate before optimizing.** Before submitting to Bohrium for MLIP relaxation, verify the input structure is physically reasonable (min interatomic distance > 1.0 \u00c5, correct stoichiometry). If the "
+      "text": "**Validate before optimizing.** Before submitting to Bohrium for MLIP relaxation, verify the input structure is physically reasonable (min interatomic distance > 1.0 Å, correct stoichiometry). If the "
     },
     {
       "actionability": "testable",
@@ -10734,7 +10734,7 @@
       ],
       "id": "mlips/key-rules/513",
       "is_actionable": true,
-      "reason": "The rule 'Both structures must be relaxed, same atoms in same order' is specifically tested by WO_mlip_dpa_005_20260411v2's scoring checklist which requires the agent to optimize initial and final states before NEB calculation, and a violation would cause the 'NEB workflow (build defect states \u2192 optimize endpoints \u2192 NEB \u2192 parse barrier) completes without unnecessary steps' criterion to fail.",
+      "reason": "The rule 'Both structures must be relaxed, same atoms in same order' is specifically tested by WO_mlip_dpa_005_20260411v2's scoring checklist which requires the agent to optimize initial and final states before NEB calculation, and a violation would cause the 'NEB workflow (build defect states → optimize endpoints → NEB → parse barrier) completes without unnecessary steps' criterion to fail.",
       "rule_type": "general",
       "section": "Key Rules",
       "source_name": "mlips",
@@ -10794,7 +10794,7 @@
       "rule_type": "workflow_step",
       "section": "Submission Workflow",
       "source_name": "mlips",
-      "text": "Submit (DPA \u2014 default): `Bohrium(action=\"submit\", input_dir=\"<dir>\", image=\"registry.dp.tech/dptech/dpa-calculator:e13a296f\", cmd=\"python optimize_structure.py --structure input.cif --model DPA3.1-3M "
+      "text": "Submit (DPA — default): `Bohrium(action=\"submit\", input_dir=\"<dir>\", image=\"registry.dp.tech/dptech/dpa-calculator:e13a296f\", cmd=\"python optimize_structure.py --structure input.cif --model DPA3.1-3M "
     },
     {
       "actionability": "testable",
@@ -11382,7 +11382,7 @@
       "rule_type": "general",
       "section": "Activation",
       "source_name": "plan-executor",
-      "text": "`docs/WORKSPACE.md` \u2192 `Current Planning Unit`;"
+      "text": "`docs/WORKSPACE.md` → `Current Planning Unit`;"
     },
     {
       "actionability": "policy_only",
@@ -11784,11 +11784,11 @@
       "covered_by": [],
       "id": "plan-executor/startup-sequence/588",
       "is_actionable": false,
-      "reason": "No questions are provided that could test the rule about executing the next 1\u20133 items from the active queue.",
+      "reason": "No questions are provided that could test the rule about executing the next 1–3 items from the active queue.",
       "rule_type": "general",
       "section": "Startup sequence",
       "source_name": "plan-executor",
-      "text": "next 1\u20133 `T#` items from the active queue"
+      "text": "next 1–3 `T#` items from the active queue"
     },
     {
       "actionability": "policy_only",
@@ -12124,7 +12124,7 @@
       "rule_type": "general",
       "section": "EVIDENCE.md schema",
       "source_name": "plan-executor",
-      "text": "# Evidence: T12 \u2014 SCF on 6\u00d76\u00d76 k-mesh\n\n## Task reference\n- Plan ID: T12 (phase P2)\n- Deliverable path: runs/T12/OUTCAR\n- Spec refs: S3, S6\n- Acceptance refs: A2, A5\n\n## Exit criteria checklist\n- [x] S"
+      "text": "# Evidence: T12 — SCF on 6×6×6 k-mesh\n\n## Task reference\n- Plan ID: T12 (phase P2)\n- Deliverable path: runs/T12/OUTCAR\n- Spec refs: S3, S6\n- Acceptance refs: A2, A5\n\n## Exit criteria checklist\n- [x] S"
     },
     {
       "actionability": "policy_only",
@@ -12194,7 +12194,7 @@
       "rule_type": "general",
       "section": "PLAN.md write permissions",
       "source_name": "plan-executor",
-      "text": "`Task.Status` | existing pre-run state (`ready` or `not-started`) \u2192 `in-progress` \u2192 `completed` / `blocked` / `superseded`"
+      "text": "`Task.Status` | existing pre-run state (`ready` or `not-started`) → `in-progress` → `completed` / `blocked` / `superseded`"
     },
     {
       "actionability": "policy_only",
@@ -12208,7 +12208,7 @@
       "rule_type": "general",
       "section": "PLAN.md write permissions",
       "source_name": "plan-executor",
-      "text": "`Phase.Status` *(if present)* | `not-started` / `in-progress` \u2192 `completed` / `blocked` for the current phase only"
+      "text": "`Phase.Status` *(if present)* | `not-started` / `in-progress` → `completed` / `blocked` for the current phase only"
     },
     {
       "actionability": "policy_only",
@@ -12292,7 +12292,7 @@
       "rule_type": "general",
       "section": "PLAN.md write permissions",
       "source_name": "plan-executor",
-      "text": "`Session Log` | **append only** \u2014 never edit or delete prior entries"
+      "text": "`Session Log` | **append only** — never edit or delete prior entries"
     },
     {
       "actionability": "policy_only",
@@ -12810,7 +12810,7 @@
       "rule_type": "general",
       "section": "Terminal states",
       "source_name": "plan-executor",
-      "text": "`tasks-in-progress` | wall-clock or turn budget exhausted mid-phase with \u2265 1 task still `in-progress` or runnable | `State Snapshot.resume-from` points at the next entry; any in-flight task is marked "
+      "text": "`tasks-in-progress` | wall-clock or turn budget exhausted mid-phase with ≥ 1 task still `in-progress` or runnable | `State Snapshot.resume-from` points at the next entry; any in-flight task is marked "
     },
     {
       "actionability": "policy_only",
@@ -13118,7 +13118,7 @@
       "rule_type": "general",
       "section": "Hard rules",
       "source_name": "plan-executor",
-      "text": "A fresh agent must be able to resume from `PLAN.md` `State Snapshot` alone \u2014 every in-progress state must be recoverable without this session's chat."
+      "text": "A fresh agent must be able to resume from `PLAN.md` `State Snapshot` alone — every in-progress state must be recoverable without this session's chat."
     },
     {
       "actionability": "policy_only",
@@ -13149,7 +13149,7 @@
       "rule_type": "general",
       "section": "Alert Levels",
       "source_name": "checkcif-validator",
-      "text": "**A** | Serious problem \u2014 must be resolved or explicitly explained before publication"
+      "text": "**A** | Serious problem — must be resolved or explicitly explained before publication"
     },
     {
       "actionability": "testable",
@@ -13163,7 +13163,7 @@
       "rule_type": "general",
       "section": "Alert Levels",
       "source_name": "checkcif-validator",
-      "text": "**B** | Potentially serious \u2014 should be investigated"
+      "text": "**B** | Potentially serious — should be investigated"
     },
     {
       "actionability": "testable",
@@ -13177,7 +13177,7 @@
       "rule_type": "general",
       "section": "Alert Levels",
       "source_name": "checkcif-validator",
-      "text": "**C** | Check \u2014 minor issue or unusual feature worth noting"
+      "text": "**C** | Check — minor issue or unusual feature worth noting"
     },
     {
       "actionability": "testable",
@@ -13191,7 +13191,7 @@
       "rule_type": "general",
       "section": "Alert Levels",
       "source_name": "checkcif-validator",
-      "text": "**G** | General information \u2014 informational only"
+      "text": "**G** | General information — informational only"
     },
     {
       "actionability": "testable",
@@ -13219,7 +13219,7 @@
       "rule_type": "general",
       "section": "run_checkcif.py",
       "source_name": "checkcif-validator",
-      "text": "`--file` \u2014 Path to the CIF file to validate (required)."
+      "text": "`--file` — Path to the CIF file to validate (required)."
     },
     {
       "actionability": "testable",
@@ -13233,7 +13233,7 @@
       "rule_type": "general",
       "section": "run_checkcif.py",
       "source_name": "checkcif-validator",
-      "text": "`--timeout` \u2014 HTTP request timeout in seconds (default: 180). Large CIFs with embedded structure factors may take longer."
+      "text": "`--timeout` — HTTP request timeout in seconds (default: 180). Large CIFs with embedded structure factors may take longer."
     },
     {
       "actionability": "testable",
@@ -13382,7 +13382,7 @@
       "rule_type": "general",
       "section": "Rules",
       "source_name": "checkcif-validator",
-      "text": "The full HTML report contains detailed descriptions of each alert \u2014 read it to understand what needs to be fixed."
+      "text": "The full HTML report contains detailed descriptions of each alert — read it to understand what needs to be fixed."
     },
     {
       "actionability": "testable",
@@ -13438,7 +13438,7 @@
       "rule_type": "general",
       "section": "Tool (via Skill)",
       "source_name": "compliance-guardian",
-      "text": "**run_script** with **script_name**: `check_compliance.py`, **script_args**: two arguments \u2014 plan description and intended command (quote if containing spaces)."
+      "text": "**run_script** with **script_name**: `check_compliance.py`, **script_args**: two arguments — plan description and intended command (quote if containing spaces)."
     },
     {
       "actionability": "testable",
@@ -14362,7 +14362,7 @@
       "rule_type": "workflow_step",
       "section": "Workflow",
       "source_name": "deep-survey",
-      "text": "Run `collect_evidence.py --collected_json _tmp/surveys/collected_<topic>.json [--facet \"...\"]` to auto-populate evidence_cards. **Mandatory** \u2014 do NOT manually write evidence_cards."
+      "text": "Run `collect_evidence.py --collected_json _tmp/surveys/collected_<topic>.json [--facet \"...\"]` to auto-populate evidence_cards. **Mandatory** — do NOT manually write evidence_cards."
     },
     {
       "actionability": "testable",
@@ -14558,7 +14558,7 @@
       "rule_type": "general",
       "section": "Rules",
       "source_name": "deep-survey",
-      "text": "One-way delegation: deep-survey \u2192 manuscript-scribe only."
+      "text": "One-way delegation: deep-survey → manuscript-scribe only."
     },
     {
       "actionability": "testable",
@@ -14642,7 +14642,7 @@
       "rule_type": "general",
       "section": "Rules",
       "source_name": "lit-data-organizer",
-      "text": "Do not parse raw PDFs directly \u2014 use `mat_doc_*` first."
+      "text": "Do not parse raw PDFs directly — use `mat_doc_*` first."
     },
     {
       "actionability": "testable",
@@ -14796,7 +14796,7 @@
       "rule_type": "workflow_step",
       "section": "Workflow",
       "source_name": "manuscript-scribe",
-      "text": "**Retrieval first** \u2014 Run literature search (mat_sn_*, web-search) before any writing. Exception: `computational_report` with user-provided parameters."
+      "text": "**Retrieval first** — Run literature search (mat_sn_*, web-search) before any writing. Exception: `computational_report` with user-provided parameters."
     },
     {
       "actionability": "testable",
@@ -14810,7 +14810,7 @@
       "rule_type": "workflow_step",
       "section": "Workflow",
       "source_name": "manuscript-scribe",
-      "text": "**Chunked writing** \u2014 Draft each section in chunks via `write_section.py` (create + `--append`), or build in temp files with `append_chunk.py`, then pass with `--content_file`."
+      "text": "**Chunked writing** — Draft each section in chunks via `write_section.py` (create + `--append`), or build in temp files with `append_chunk.py`, then pass with `--content_file`."
     },
     {
       "actionability": "testable",
@@ -14824,7 +14824,7 @@
       "rule_type": "workflow_step",
       "section": "Workflow",
       "source_name": "manuscript-scribe",
-      "text": "**Validate** \u2014 `validate_content.py --draft draft.md --profile <profile>`. Fix sections below minimum word count."
+      "text": "**Validate** — `validate_content.py --draft draft.md --profile <profile>`. Fix sections below minimum word count."
     },
     {
       "actionability": "testable",
@@ -14838,7 +14838,7 @@
       "rule_type": "workflow_step",
       "section": "Workflow",
       "source_name": "manuscript-scribe",
-      "text": "**Assemble** \u2014 `assemble_manuscript.py --sections_dir sections/ --output final.md --validate --profile <profile>`. Runs consistency checks (terms, abbreviations, references). Auto-exports to `.tex`+`."
+      "text": "**Assemble** — `assemble_manuscript.py --sections_dir sections/ --output final.md --validate --profile <profile>`. Runs consistency checks (terms, abbreviations, references). Auto-exports to `.tex`+`."
     },
     {
       "actionability": "testable",
@@ -14852,7 +14852,7 @@
       "rule_type": "workflow_step",
       "section": "Workflow",
       "source_name": "manuscript-scribe",
-      "text": "**Polish** \u2014 `polish_text.py --file <assembled> --target_section <Name> --use_llm` for point-by-point revision."
+      "text": "**Polish** — `polish_text.py --file <assembled> --target_section <Name> --use_llm` for point-by-point revision."
     },
     {
       "actionability": "testable",
@@ -15468,7 +15468,7 @@
       "rule_type": "general",
       "section": "Rules",
       "source_name": "poly-forcefield",
-      "text": "gaff\u7528\u8fd9\u4e2a`matmaster/skills/playground-skills/polyFF/assets/gaff_min.dat`"
+      "text": "gaff用这个`matmaster/skills/playground-skills/polyFF/assets/gaff_min.dat`"
     },
     {
       "actionability": "testable",
@@ -15936,7 +15936,7 @@
       "rule_type": "general",
       "section": "When to trigger",
       "source_name": "pxrd-refinement",
-      "text": "User has PXRD pattern + (known or guessable) space group \u2192 `gsas2_pawley.py`"
+      "text": "User has PXRD pattern + (known or guessable) space group → `gsas2_pawley.py`"
     },
     {
       "actionability": "testable",
@@ -15950,7 +15950,7 @@
       "rule_type": "general",
       "section": "When to trigger",
       "source_name": "pxrd-refinement",
-      "text": "User has PXRD + a CIF model \u2192 `gsas2_rietveld.py`"
+      "text": "User has PXRD + a CIF model → `gsas2_rietveld.py`"
     },
     {
       "actionability": "testable",
@@ -15966,7 +15966,7 @@
       "rule_type": "general",
       "section": "When to trigger",
       "source_name": "pxrd-refinement",
-      "text": "Multi-pattern PXRD series asking for one cell per pattern \u2192 `gsas2_pawley.py \u00d7 N` (split jobs across phase or structure-setting changes; do **not** chain a single cell through a discontinuity)"
+      "text": "Multi-pattern PXRD series asking for one cell per pattern → `gsas2_pawley.py × N` (split jobs across phase or structure-setting changes; do **not** chain a single cell through a discontinuity)"
     },
     {
       "actionability": "testable",
@@ -15980,7 +15980,7 @@
       "rule_type": "general",
       "section": "When to trigger",
       "source_name": "pxrd-refinement",
-      "text": "Single-crystal XRD / HKL / SHELX \u2192 not this skill"
+      "text": "Single-crystal XRD / HKL / SHELX → not this skill"
     },
     {
       "actionability": "testable",
@@ -15991,11 +15991,11 @@
         "PXRD_thermal_expansion_001_20260508",
         "PXRD_pawley_303K_001_20260502_v1"
       ],
-      "id": "pxrd-refinement/hard-contracts-(load-bearing-\u2014-read-every-time)/887",
+      "id": "pxrd-refinement/hard-contracts-(load-bearing-—-read-every-time)/887",
       "is_actionable": true,
       "reason": "The rule is covered because the scoring checklists for PXRD questions explicitly require using GSAS-II Pawley refinement (e.g., 'results came from gsas2_pawley.py executed on Bohrium') and penalize writing local scipy/numpy replacements, which would directly detect violations of the rule.",
       "rule_type": "general",
-      "section": "Hard contracts (load-bearing \u2014 read every time)",
+      "section": "Hard contracts (load-bearing — read every time)",
       "source_name": "pxrd-refinement",
       "text": "**Use the provided scripts. Never write your own GSAS-II driver, and never write a local-Python \"Pawley\" / \"Rietveld\" replacement that uses `scipy.optimize` on peak positions.** No `pawley_all.py`, no"
     },
@@ -16007,13 +16007,13 @@
       "covered_by": [
         "PXRD_thermal_expansion_001_20260508"
       ],
-      "id": "pxrd-refinement/hard-contracts-(load-bearing-\u2014-read-every-time)/888",
+      "id": "pxrd-refinement/hard-contracts-(load-bearing-—-read-every-time)/888",
       "is_actionable": true,
       "reason": "The rule is explicitly covered by the scoring checklist item 'Agent uses an initial cell from the provided data or a prior refinement result, not an invented/eyeballed cell' in question PXRD_thermal_expansion_001_20260508, which directly tests the prohibition against inventing cells from d_max or eyeballing peak positions.",
       "rule_type": "general",
-      "section": "Hard contracts (load-bearing \u2014 read every time)",
+      "section": "Hard contracts (load-bearing — read every time)",
       "source_name": "pxrd-refinement",
-      "text": "**Initial cell must come from a reference.** Priority: user/prompt \u2192 CIF \u2192 prior refinement \u2192 adjacent pattern in the same phase/series \u2192 literature \u2192 `gsas2_autoindex.py`. **Never invent a cell from "
+      "text": "**Initial cell must come from a reference.** Priority: user/prompt → CIF → prior refinement → adjacent pattern in the same phase/series → literature → `gsas2_autoindex.py`. **Never invent a cell from "
     },
     {
       "actionability": "testable",
@@ -16021,13 +16021,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "pxrd-refinement/hard-contracts-(load-bearing-\u2014-read-every-time)/889",
+      "id": "pxrd-refinement/hard-contracts-(load-bearing-—-read-every-time)/889",
       "is_actionable": true,
       "reason": "The rule requires rejecting refinements with wR > 0.20 (Pawley) or Rwp > 0.15 (Rietveld), but none of the evaluation questions have scoring criteria that would fail an agent for reporting such high R-factors or for not validating against these specific numerical thresholds.",
       "rule_type": "general",
-      "section": "Hard contracts (load-bearing \u2014 read every time)",
+      "section": "Hard contracts (load-bearing — read every time)",
       "source_name": "pxrd-refinement",
-      "text": "**Validate the result before reporting.** A refinement can \"converge\" onto a 2\u00d7 / 3\u00d7 / 4\u00d7 supercell with `wR > 40 %`; the math closes but the cell is wrong. **Reject and report failure if `wR > 0.20` "
+      "text": "**Validate the result before reporting.** A refinement can \"converge\" onto a 2× / 3× / 4× supercell with `wR > 40 %`; the math closes but the cell is wrong. **Reject and report failure if `wR > 0.20` "
     },
     {
       "actionability": "testable",
@@ -16037,11 +16037,11 @@
       "covered_by": [
         "PXRD_thermal_expansion_001_20260508"
       ],
-      "id": "pxrd-refinement/hard-contracts-(load-bearing-\u2014-read-every-time)/890",
+      "id": "pxrd-refinement/hard-contracts-(load-bearing-—-read-every-time)/890",
       "is_actionable": true,
       "reason": "The rule is covered because the scoring checklist for question PXRD_thermal_expansion_001_20260508 includes an LLM-judge criterion that explicitly checks for the presence of both a log file and a results JSON from Bohrium downloads, which directly corresponds to the rule's requirement to verify successful execution by checking for these files.",
       "rule_type": "general",
-      "section": "Hard contracts (load-bearing \u2014 read every time)",
+      "section": "Hard contracts (load-bearing — read every time)",
       "source_name": "pxrd-refinement",
       "text": "**Verify the submit actually executed.** After `Bohrium(action=\"download\", ...)` the result directory MUST contain `log` (script stdout/stderr) AND the script's `--output` JSON file. **If `log` is mis"
     },
@@ -16053,11 +16053,11 @@
       "covered_by": [
         "PXRD_thermal_expansion_001_20260508"
       ],
-      "id": "pxrd-refinement/hard-contracts-(load-bearing-\u2014-read-every-time)/891",
+      "id": "pxrd-refinement/hard-contracts-(load-bearing-—-read-every-time)/891",
       "is_actionable": true,
       "reason": "The rule's budget constraint on Bohrium job submissions is directly tested by the scoring checklist item 'Pass if the final answer, workspace evidence, or tool-call observations indicate at most 3 Bohrium submit calls for this two-phase task', which would fail if the agent violates the rule by submitting extra jobs.",
       "rule_type": "general",
-      "section": "Hard contracts (load-bearing \u2014 read every time)",
+      "section": "Hard contracts (load-bearing — read every time)",
       "source_name": "pxrd-refinement",
       "text": "**Hard budget: minimize Bohrium jobs per multi-pattern task.** General plan: split data into physically continuous phases/segments; submit one forward batch per segment in parallel; add at most one re"
     },
@@ -16069,13 +16069,13 @@
       "covered_by": [
         "PXRD_thermal_expansion_001_20260508"
       ],
-      "id": "pxrd-refinement/hard-contracts-(load-bearing-\u2014-read-every-time)/892",
+      "id": "pxrd-refinement/hard-contracts-(load-bearing-—-read-every-time)/892",
       "is_actionable": true,
       "reason": "The scoring checklist for PXRD_thermal_expansion_001_20260508 includes an LLM-judge criterion that explicitly requires the agent to inspect the curation diagnostics or warnings field of the Pawley results JSON, which directly corresponds to the rule's requirement to read `result[\"curation\"]` and `result[\"warnings\"]` before trusting the cell.",
       "rule_type": "general",
-      "section": "Hard contracts (load-bearing \u2014 read every time)",
+      "section": "Hard contracts (load-bearing — read every time)",
       "source_name": "pxrd-refinement",
-      "text": "**Curation runs by default.** It auto-clips low-2\u03b8 artifacts (typical on DFT-simulated patterns), picks peaks, and emits a PASS/WARN/FAIL verdict in the result JSON. **Read `result[\"curation\"]` and `r"
+      "text": "**Curation runs by default.** It auto-clips low-2θ artifacts (typical on DFT-simulated patterns), picks peaks, and emits a PASS/WARN/FAIL verdict in the result JSON. **Read `result[\"curation\"]` and `r"
     },
     {
       "actionability": "testable",
@@ -16119,7 +16119,7 @@
       "rule_type": "workflow_step",
       "section": "Workflow",
       "source_name": "pxrd-refinement",
-      "text": "# input_dir/run.sh \u2014 write this via Bash(cat <<'RUNEOF' > run.sh ...)\n   #!/bin/bash\n   python3 gsas2_pawley.py \\\n     --data ./ \\\n     --space-group \"P 21\" \\\n     --cell \"a=<A>,b=<B>,c=<C>,beta=<BETA"
+      "text": "# input_dir/run.sh — write this via Bash(cat <<'RUNEOF' > run.sh ...)\n   #!/bin/bash\n   python3 gsas2_pawley.py \\\n     --data ./ \\\n     --space-group \"P 21\" \\\n     --cell \"a=<A>,b=<B>,c=<C>,beta=<BETA"
     },
     {
       "actionability": "testable",
@@ -16159,11 +16159,11 @@
       "covered_by": [],
       "id": "pxrd-refinement/workflow/898",
       "is_actionable": true,
-      "reason": "The rule 'wR_fwd \u2212 wR_rev' pertains to a specific refinement diagnostic for checking systematic errors in single-crystal data, but none of the evaluation questions include a scoring criterion that would require reporting or checking this difference.",
+      "reason": "The rule 'wR_fwd − wR_rev' pertains to a specific refinement diagnostic for checking systematic errors in single-crystal data, but none of the evaluation questions include a scoring criterion that would require reporting or checking this difference.",
       "rule_type": "workflow_step",
       "section": "Workflow",
       "source_name": "pxrd-refinement",
-      "text": "wR_fwd \u2212 wR_rev"
+      "text": "wR_fwd − wR_rev"
     },
     {
       "actionability": "testable",
@@ -16211,7 +16211,7 @@
       "rule_type": "general",
       "section": "References (read on demand)",
       "source_name": "pxrd-refinement",
-      "text": "`references/gsas2_refinement_guide.md` \u2014 input format, parameter tables, refinement step strategy, R-factor interpretation, **curation + wR trap**, common errors and fixes"
+      "text": "`references/gsas2_refinement_guide.md` — input format, parameter tables, refinement step strategy, R-factor interpretation, **curation + wR trap**, common errors and fixes"
     },
     {
       "actionability": "testable",
@@ -16225,7 +16225,7 @@
       "rule_type": "general",
       "section": "References (read on demand)",
       "source_name": "pxrd-refinement",
-      "text": "`references/bohrium_workflow.md` \u2014 image / machine / `cmd` templates, parallel submit + interleaved poll patterns, failure triage"
+      "text": "`references/bohrium_workflow.md` — image / machine / `cmd` templates, parallel submit + interleaved poll patterns, failure triage"
     },
     {
       "actionability": "testable",
@@ -16239,7 +16239,7 @@
       "rule_type": "general",
       "section": "References (read on demand)",
       "source_name": "pxrd-refinement",
-      "text": "`references/autoindex.md` \u2014 when to attempt, GSAS-II Visser limits on DFT-simulated PXRD, parameter selection"
+      "text": "`references/autoindex.md` — when to attempt, GSAS-II Visser limits on DFT-simulated PXRD, parameter selection"
     },
     {
       "actionability": "testable",
@@ -16463,7 +16463,7 @@
       "rule_type": "general",
       "section": "Acquisition Paths",
       "source_name": "structure-manager",
-      "text": "**Database (MCP)**: `mat_struct_db_*` \u2014 search by formula, composition, material ID, prototype."
+      "text": "**Database (MCP)**: `mat_struct_db_*` — search by formula, composition, material ID, prototype."
     },
     {
       "actionability": "testable",
@@ -16477,7 +16477,7 @@
       "rule_type": "general",
       "section": "Acquisition Paths",
       "source_name": "structure-manager",
-      "text": "**Structure generation (MCP)**: `mat_sg_*` \u2014 build from SMILES, Wyckoff positions, prototype, surfaces, supercells, defects."
+      "text": "**Structure generation (MCP)**: `mat_sg_*` — build from SMILES, Wyckoff positions, prototype, surfaces, supercells, defects."
     },
     {
       "actionability": "testable",
@@ -16491,7 +16491,7 @@
       "rule_type": "general",
       "section": "Acquisition Paths",
       "source_name": "structure-manager",
-      "text": "**Literature search**: `mat_sn_*` / `web-search` \u2192 `extract_info_from_webpage` \u2192 `fetch_web_structure.py --url` or `--page`. For 403/paywall, try alternative open-access URLs."
+      "text": "**Literature search**: `mat_sn_*` / `web-search` → `extract_info_from_webpage` → `fetch_web_structure.py --url` or `--page`. For 403/paywall, try alternative open-access URLs."
     },
     {
       "actionability": "testable",
@@ -16547,7 +16547,7 @@
       "rule_type": "general",
       "section": "Scripts",
       "source_name": "structure-manager",
-      "text": "`assess_structure.py` | `--file structure.cif` \u2192 JSON: is_valid, dimensionality, formula, warnings"
+      "text": "`assess_structure.py` | `--file structure.cif` → JSON: is_valid, dimensionality, formula, warnings"
     },
     {
       "actionability": "testable",
@@ -16575,7 +16575,7 @@
       "rule_type": "general",
       "section": "Scripts",
       "source_name": "structure-manager",
-      "text": "`fetch_web_structure.py` | `--url <direct_link>` or `--page <html_url>` \u2192 downloads structure files"
+      "text": "`fetch_web_structure.py` | `--url <direct_link>` or `--page <html_url>` → downloads structure files"
     },
     {
       "actionability": "testable",
@@ -16645,7 +16645,7 @@
       "rule_type": "general",
       "section": "Electronic Property Construction",
       "source_name": "structure-manager",
-      "text": "DOS: dense uniform k-mesh. Work function: slab \u2265 20 \u00c5 vacuum + dipole correction."
+      "text": "DOS: dense uniform k-mesh. Work function: slab ≥ 20 Å vacuum + dipole correction."
     },
     {
       "actionability": "testable",
@@ -16655,11 +16655,11 @@
       "covered_by": [],
       "id": "structure-manager/electronic-property-construction/933",
       "is_actionable": true,
-      "reason": "The rule 'supercell \u2265 10 \u00c5 between images' pertains to defect construction in electronic property simulations, but none of the evaluation questions involve defect modeling, supercell creation, or any scoring criteria that would check for compliance with this specific geometric constraint.",
+      "reason": "The rule 'supercell ≥ 10 Å between images' pertains to defect construction in electronic property simulations, but none of the evaluation questions involve defect modeling, supercell creation, or any scoring criteria that would check for compliance with this specific geometric constraint.",
       "rule_type": "general",
       "section": "Electronic Property Construction",
       "source_name": "structure-manager",
-      "text": "Defects: supercell \u2265 10 \u00c5 between images."
+      "text": "Defects: supercell ≥ 10 Å between images."
     },
     {
       "actionability": "testable",
@@ -16757,7 +16757,7 @@
       "rule_type": "general",
       "section": "Rules",
       "source_name": "structure-manager",
-      "text": "**Deterministic workflow**: When multiple equivalent approaches exist (e.g. database search vs generation), pick the most reliable one consistently. For known materials: database first \u2192 generation fa"
+      "text": "**Deterministic workflow**: When multiple equivalent approaches exist (e.g. database search vs generation), pick the most reliable one consistently. For known materials: database first → generation fa"
     },
     {
       "actionability": "testable",
@@ -16799,7 +16799,7 @@
       "rule_type": "general",
       "section": "Tasker's three surface types",
       "source_name": "tasker-polar-surface",
-      "text": "**Type 1** | None \u2014 each layer is charge-neutral along the normal | Safe to cut; no special handling."
+      "text": "**Type 1** | None — each layer is charge-neutral along the normal | Safe to cut; no special handling."
     },
     {
       "actionability": "testable",
@@ -16833,7 +16833,7 @@
       "rule_type": "general",
       "section": "Tasker's three surface types",
       "source_name": "tasker-polar-surface",
-      "text": "**Type 3** | Non-zero \u2014 each repeat has a net dipole | Polar; naive cut is unstable. Use **symmetric slab** (same termination on both sides), passivation, or note that reconstruction/charge transfer m"
+      "text": "**Type 3** | Non-zero — each repeat has a net dipole | Polar; naive cut is unstable. Use **symmetric slab** (same termination on both sides), passivation, or note that reconstruction/charge transfer m"
     },
     {
       "actionability": "testable",
@@ -16847,7 +16847,7 @@
       "rule_type": "general",
       "section": "Tasker's three surface types",
       "source_name": "tasker-polar-surface",
-      "text": "**Type 1**: e.g. rocksalt (100): alternating cation/anion in-plane \u2192 neutral layers."
+      "text": "**Type 1**: e.g. rocksalt (100): alternating cation/anion in-plane → neutral layers."
     },
     {
       "actionability": "testable",
@@ -16922,7 +16922,7 @@
       "rule_type": "workflow_step",
       "section": "Workflow: unified build path for all types",
       "source_name": "tasker-polar-surface",
-      "text": "If (formula, miller) is not in lookup, do literature search first (see \u00a72.1) and set a **provisional** type."
+      "text": "If (formula, miller) is not in lookup, do literature search first (see §2.1) and set a **provisional** type."
     },
     {
       "actionability": "testable",
@@ -17056,13 +17056,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "tasker-polar-surface/step-1-\u2014-\u4ece\u6587\u732e/\u7f51\u9875\u62ff\u53c2\u6570/961",
+      "id": "tasker-polar-surface/step-1-—-从文献/网页拿参数/961",
       "is_actionable": true,
       "reason": "The rule specifies using mat_sn_* or web-search to search for slab construction parameters, but none of the evaluation questions have scoring criteria that would fail an agent for not performing such searches when building surface structures.",
       "rule_type": "general",
-      "section": "Step 1 \u2014 \u4ece\u6587\u732e/\u7f51\u9875\u62ff\u53c2\u6570",
+      "section": "Step 1 — 从文献/网页拿参数",
       "source_name": "tasker-polar-surface",
-      "text": "\u7528 **mat_sn_*** \u6216 **web-search** \u641c\u8be5 (formula, \u6676\u9762)\uff0c\u5982 \"ZnO 0001 symmetric slab layers\", \"<formula> <hkl> slab construction vacuum\"\u3002"
+      "text": "用 **mat_sn_*** 或 **web-search** 搜该 (formula, 晶面)，如 \"ZnO 0001 symmetric slab layers\", \"<formula> <hkl> slab construction vacuum\"。"
     },
     {
       "actionability": "testable",
@@ -17070,13 +17070,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "tasker-polar-surface/step-1-\u2014-\u4ece\u6587\u732e/\u7f51\u9875\u62ff\u53c2\u6570/962",
+      "id": "tasker-polar-surface/step-1-—-从文献/网页拿参数/962",
       "is_actionable": true,
       "reason": "The rule requires extracting layer count, vacuum thickness, and termination recommendations from literature/web, but all evaluation questions provide these parameters directly in the prompt or workspace files, so violating this extraction rule would not cause any scoring checklist to fail.",
       "rule_type": "general",
-      "section": "Step 1 \u2014 \u4ece\u6587\u732e/\u7f51\u9875\u62ff\u53c2\u6570",
+      "section": "Step 1 — 从文献/网页拿参数",
       "source_name": "tasker-polar-surface",
-      "text": "\u4ece\u8bba\u6587/\u6559\u7a0b\u91cc\u63d0\u53d6\uff1a**\u5c42\u6570**\uff08\u6216 repeat units\uff09\u3001**\u771f\u7a7a\u539a\u5ea6**\u3001\u4ee5\u53ca\u662f\u5426\u63a8\u8350\u67d0\u79cd**\u7ec8\u6b62\u9762**\uff08\u5982\u4e0a\u4e0b\u90fd\u662f O \u7ec8\u6b62\uff09\u3002"
+      "text": "从论文/教程里提取：**层数**（或 repeat units）、**真空厚度**、以及是否推荐某种**终止面**（如上下都是 O 终止）。"
     },
     {
       "actionability": "testable",
@@ -17084,11 +17084,11 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "tasker-polar-surface/\u26a0-layer-counting-\u2014-`-l`-maps-to-ase-`surface()`-layers,-not-bilayers/963",
+      "id": "tasker-polar-surface/⚠-layer-counting-—-`-l`-maps-to-ase-`surface()`-layers,-not-bilayers/963",
       "is_actionable": true,
       "reason": "The rule specifies the mapping between '-L' parameter and ASE surface() layers for zinc blende (001), but none of the evaluation questions test this specific parameter mapping or zinc blende surface construction with layer counting.",
       "rule_type": "general",
-      "section": "\u26a0 Layer counting \u2014 `-L` maps to ASE `surface()` layers, not bilayers",
+      "section": "⚠ Layer counting — `-L` maps to ASE `surface()` layers, not bilayers",
       "source_name": "tasker-polar-surface",
       "text": "Zinc blende (001) | ZnS | 2 (Zn + S) | `-L 6`"
     },
@@ -17098,11 +17098,11 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "tasker-polar-surface/\u26a0-layer-counting-\u2014-`-l`-maps-to-ase-`surface()`-layers,-not-bilayers/964",
+      "id": "tasker-polar-surface/⚠-layer-counting-—-`-l`-maps-to-ase-`surface()`-layers,-not-bilayers/964",
       "is_actionable": true,
       "reason": "The rule specifies that for rocksalt (001) surfaces like MgO, '-L 6' maps to 6 ASE surface() layers (3 Mg+O bilayers), but none of the evaluation questions test the specific layer-count mapping for rocksalt (001) surfaces or require the agent to use the '-L' parameter with ASE surface() in a way that would catch this violation.",
       "rule_type": "general",
-      "section": "\u26a0 Layer counting \u2014 `-L` maps to ASE `surface()` layers, not bilayers",
+      "section": "⚠ Layer counting — `-L` maps to ASE `surface()` layers, not bilayers",
       "source_name": "tasker-polar-surface",
       "text": "Rocksalt (001) | MgO | 2 (Mg + O) | `-L 6`"
     },
@@ -17112,11 +17112,11 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "tasker-polar-surface/\u26a0-layer-counting-\u2014-`-l`-maps-to-ase-`surface()`-layers,-not-bilayers/965",
+      "id": "tasker-polar-surface/⚠-layer-counting-—-`-l`-maps-to-ase-`surface()`-layers,-not-bilayers/965",
       "is_actionable": true,
       "reason": "The rule about wurtzite ZnO layer counting and the '-L 6' parameter mapping to ASE surface layers is not tested by any evaluation question's deterministic or LLM-judge scoring criteria.",
       "rule_type": "general",
-      "section": "\u26a0 Layer counting \u2014 `-L` maps to ASE `surface()` layers, not bilayers",
+      "section": "⚠ Layer counting — `-L` maps to ASE `surface()` layers, not bilayers",
       "source_name": "tasker-polar-surface",
       "text": "Wurtzite (0001) | ZnO | 2 (Zn + O) | `-L 6`"
     },
@@ -17126,13 +17126,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "tasker-polar-surface/\u26a0-layer-counting-\u2014-`-l`-maps-to-ase-`surface()`-layers,-not-bilayers/966",
+      "id": "tasker-polar-surface/⚠-layer-counting-—-`-l`-maps-to-ase-`surface()`-layers,-not-bilayers/966",
       "is_actionable": true,
       "reason": "The rule about fluorite (111) layer counting and the '-L 9' mapping to ASE surface layers is not tested by any evaluation question's scoring checklist, as no question requires generating a CeO2(111) slab with a specific layer count using the '-L' parameter or checks for the ASE surface() layer definition.",
       "rule_type": "general",
-      "section": "\u26a0 Layer counting \u2014 `-L` maps to ASE `surface()` layers, not bilayers",
+      "section": "⚠ Layer counting — `-L` maps to ASE `surface()` layers, not bilayers",
       "source_name": "tasker-polar-surface",
-      "text": "Fluorite (111) | CeO\u2082 | 3 (O + Ce + O) | `-L 9`"
+      "text": "Fluorite (111) | CeO₂ | 3 (O + Ce + O) | `-L 9`"
     },
     {
       "actionability": "testable",
@@ -17140,13 +17140,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "tasker-polar-surface/\u26a0-layer-counting-\u2014-`-l`-maps-to-ase-`surface()`-layers,-not-bilayers/967",
+      "id": "tasker-polar-surface/⚠-layer-counting-—-`-l`-maps-to-ase-`surface()`-layers,-not-bilayers/967",
       "is_actionable": true,
       "reason": "The rule is about a specific mapping for perovskite (001) SrTiO3 where '-L 6' corresponds to ASE surface() layers, but none of the evaluation questions involve constructing a SrTiO3 (001) slab with a layer count parameter that would test this mapping.",
       "rule_type": "general",
-      "section": "\u26a0 Layer counting \u2014 `-L` maps to ASE `surface()` layers, not bilayers",
+      "section": "⚠ Layer counting — `-L` maps to ASE `surface()` layers, not bilayers",
       "source_name": "tasker-polar-surface",
-      "text": "Perovskite (001) | SrTiO\u2083 | 2 (SrO + TiO\u2082) | `-L 6`"
+      "text": "Perovskite (001) | SrTiO₃ | 2 (SrO + TiO₂) | `-L 6`"
     },
     {
       "actionability": "testable",
@@ -17154,13 +17154,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "tasker-polar-surface/step-2-\u2014-\u8fd0\u884c-build_slab_tasker_fix.py-\u751f\u6210-slab\uff08\u4f18\u5148\uff09/968",
+      "id": "tasker-polar-surface/step-2-—-运行-build_slab_tasker_fix.py-生成-slab（优先）/968",
       "is_actionable": true,
       "reason": "The rule requires checking that user-specified slab parameters (layers, thickness, vacuum, supercell, charge) are passed via script_args rather than using defaults, but none of the evaluation questions involve running the build_slab_tasker_fix.py script or have scoring criteria that would detect whether script arguments were properly passed.",
       "rule_type": "general",
-      "section": "Step 2 \u2014 \u8fd0\u884c build_slab_tasker_fix.py \u751f\u6210 slab\uff08\u4f18\u5148\uff09",
+      "section": "Step 2 — 运行 build_slab_tasker_fix.py 生成 slab（优先）",
       "source_name": "tasker-polar-surface",
-      "text": "**\u6839\u636e\u7528\u6237\u6216\u6587\u732e\u9700\u6c42\u4f20\u53c2**\uff1a\u7528\u6237\u660e\u786e\u8981\u6c42\u7684\u5c42\u6570\u3001\u539a\u5ea6\u3001\u771f\u7a7a\u3001\u6269\u80de\u3001\u7535\u8377\u7b49\uff0c\u5fc5\u987b\u901a\u8fc7 script_args \u4f20\u7ed9\u811a\u672c\uff0c\u4e0d\u8981\u53ea\u7528\u9ed8\u8ba4\u503c\u3002"
+      "text": "**根据用户或文献需求传参**：用户明确要求的层数、厚度、真空、扩胞、电荷等，必须通过 script_args 传给脚本，不要只用默认值。"
     },
     {
       "actionability": "testable",
@@ -17168,11 +17168,11 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "tasker-polar-surface/step-2-\u2014-\u8fd0\u884c-build_slab_tasker_fix.py-\u751f\u6210-slab\uff08\u4f18\u5148\uff09/969",
+      "id": "tasker-polar-surface/step-2-—-运行-build_slab_tasker_fix.py-生成-slab（优先）/969",
       "is_actionable": true,
       "reason": "The rule is about invoking a specific script (build_slab_tasker_fix.py) with specific arguments, but none of the evaluation questions require or check for the use of that script or its parameters.",
       "rule_type": "general",
-      "section": "Step 2 \u2014 \u8fd0\u884c build_slab_tasker_fix.py \u751f\u6210 slab\uff08\u4f18\u5148\uff09",
+      "section": "Step 2 — 运行 build_slab_tasker_fix.py 生成 slab（优先）",
       "source_name": "tasker-polar-surface",
       "text": "Invoke `Skill` with `action=run_script`, `script_name=build_slab_tasker_fix.py`, and script args (choose one mode):"
     },
@@ -17182,11 +17182,11 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "tasker-polar-surface/step-2-\u2014-\u8fd0\u884c-build_slab_tasker_fix.py-\u751f\u6210-slab\uff08\u4f18\u5148\uff09/970",
+      "id": "tasker-polar-surface/step-2-—-运行-build_slab_tasker_fix.py-生成-slab（优先）/970",
       "is_actionable": true,
       "reason": "The rule specifies the exact command-line syntax for building a slab using the build_slab_tasker_fix.py script, but none of the evaluation questions require using this specific script or check for compliance with its command-line format.",
       "rule_type": "general",
-      "section": "Step 2 \u2014 \u8fd0\u884c build_slab_tasker_fix.py \u751f\u6210 slab\uff08\u4f18\u5148\uff09",
+      "section": "Step 2 — 运行 build_slab_tasker_fix.py 生成 slab（优先）",
       "source_name": "tasker-polar-surface",
       "text": "by layers: `-i <bulk_path> -m <h> <k> <l> -L <repeat_layers> -v <vacuum> -o <slab_path>`"
     },
@@ -17196,11 +17196,11 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "tasker-polar-surface/step-2-\u2014-\u8fd0\u884c-build_slab_tasker_fix.py-\u751f\u6210-slab\uff08\u4f18\u5148\uff09/971",
+      "id": "tasker-polar-surface/step-2-—-运行-build_slab_tasker_fix.py-生成-slab（优先）/971",
       "is_actionable": true,
       "reason": "The rule specifies a command-line syntax for building a slab by thickness using the build_slab_tasker_fix.py script, but none of the evaluation questions test the agent's ability to execute this specific command or check for its correct parameter usage.",
       "rule_type": "general",
-      "section": "Step 2 \u2014 \u8fd0\u884c build_slab_tasker_fix.py \u751f\u6210 slab\uff08\u4f18\u5148\uff09",
+      "section": "Step 2 — 运行 build_slab_tasker_fix.py 生成 slab（优先）",
       "source_name": "tasker-polar-surface",
       "text": "by thickness: `-i <bulk_path> -m <h> <k> <l> -T <thickness_A> -v <vacuum> -o <slab_path>`"
     },
@@ -17210,13 +17210,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "tasker-polar-surface/step-2-\u2014-\u8fd0\u884c-build_slab_tasker_fix.py-\u751f\u6210-slab\uff08\u4f18\u5148\uff09/972",
+      "id": "tasker-polar-surface/step-2-—-运行-build_slab_tasker_fix.py-生成-slab（优先）/972",
       "is_actionable": true,
       "reason": "The rule about optional tiling parameters is not tested because none of the evaluation questions require or check for tiling/supercell generation using the specific build_slab_tasker_fix.py script or its tiling parameters.",
       "rule_type": "general",
-      "section": "Step 2 \u2014 \u8fd0\u884c build_slab_tasker_fix.py \u751f\u6210 slab\uff08\u4f18\u5148\uff09",
+      "section": "Step 2 — 运行 build_slab_tasker_fix.py 生成 slab（优先）",
       "source_name": "tasker-polar-surface",
-      "text": "Optional tiling (\u7528\u6237\u6216\u6587\u732e\u8981\u6c42\u8d85\u80de/\u6700\u5c0f\u5c3a\u5bf8\u65f6\u5fc5\u4f20):"
+      "text": "Optional tiling (用户或文献要求超胞/最小尺寸时必传):"
     },
     {
       "actionability": "testable",
@@ -17224,11 +17224,11 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "tasker-polar-surface/step-2-\u2014-\u8fd0\u884c-build_slab_tasker_fix.py-\u751f\u6210-slab\uff08\u4f18\u5148\uff09/973",
+      "id": "tasker-polar-surface/step-2-—-运行-build_slab_tasker_fix.py-生成-slab（优先）/973",
       "is_actionable": true,
       "reason": "The rule about 'fixed repeat: --tile-repeat NX NY NZ' is specific to slab construction using a particular script (build_slab_tasker_fix.py), but none of the evaluation questions test slab construction with explicit tile-repeat parameters or check the correctness of such parameters in their scoring checklists.",
       "rule_type": "general",
-      "section": "Step 2 \u2014 \u8fd0\u884c build_slab_tasker_fix.py \u751f\u6210 slab\uff08\u4f18\u5148\uff09",
+      "section": "Step 2 — 运行 build_slab_tasker_fix.py 生成 slab（优先）",
       "source_name": "tasker-polar-surface",
       "text": "fixed repeat: `--tile-repeat NX NY NZ`"
     },
@@ -17238,11 +17238,11 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "tasker-polar-surface/step-2-\u2014-\u8fd0\u884c-build_slab_tasker_fix.py-\u751f\u6210-slab\uff08\u4f18\u5148\uff09/974",
+      "id": "tasker-polar-surface/step-2-—-运行-build_slab_tasker_fix.py-生成-slab（优先）/974",
       "is_actionable": true,
       "reason": "The rule specifies minimum in-plane size parameters for the build_slab_tasker_fix.py script, but none of the evaluation questions test slab construction using that specific tool or require checking those command-line flags.",
       "rule_type": "general",
-      "section": "Step 2 \u2014 \u8fd0\u884c build_slab_tasker_fix.py \u751f\u6210 slab\uff08\u4f18\u5148\uff09",
+      "section": "Step 2 — 运行 build_slab_tasker_fix.py 生成 slab（优先）",
       "source_name": "tasker-polar-surface",
       "text": "minimum in-plane size: `--tile-min-x <A> --tile-min-y <A>`"
     },
@@ -17252,13 +17252,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "tasker-polar-surface/step-2-\u2014-\u8fd0\u884c-build_slab_tasker_fix.py-\u751f\u6210-slab\uff08\u4f18\u5148\uff09/975",
+      "id": "tasker-polar-surface/step-2-—-运行-build_slab_tasker_fix.py-生成-slab（优先）/975",
       "is_actionable": true,
       "reason": "The rule about optional charge override for non-binary or literature-given charges is not covered by any evaluation question's scoring checklist, as none require or check for charge specification in slab construction or input generation.",
       "rule_type": "general",
-      "section": "Step 2 \u2014 \u8fd0\u884c build_slab_tasker_fix.py \u751f\u6210 slab\uff08\u4f18\u5148\uff09",
+      "section": "Step 2 — 运行 build_slab_tasker_fix.py 生成 slab（优先）",
       "source_name": "tasker-polar-surface",
-      "text": "Optional charge override: `--charge \"Zn:2,O:-2\"` or JSON string (\u975e\u4e8c\u5143\u6216\u6587\u732e\u7ed9\u51fa\u7535\u8377\u65f6\u4f7f\u7528)."
+      "text": "Optional charge override: `--charge \"Zn:2,O:-2\"` or JSON string (非二元或文献给出电荷时使用)."
     },
     {
       "actionability": "testable",
@@ -17266,11 +17266,11 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "tasker-polar-surface/step-2-\u2014-\u8fd0\u884c-build_slab_tasker_fix.py-\u751f\u6210-slab\uff08\u4f18\u5148\uff09/976",
+      "id": "tasker-polar-surface/step-2-—-运行-build_slab_tasker_fix.py-生成-slab（优先）/976",
       "is_actionable": true,
       "reason": "None of the evaluation questions require or test the specific scenario of a script exiting non-zero with 'No nonpolar solution found' and the agent's response to that failure, as all scoring checklists focus on successful structure generation, file creation, parameter correctness, or mock energy calculations without probing script execution failure handling.",
       "rule_type": "general",
-      "section": "Step 2 \u2014 \u8fd0\u884c build_slab_tasker_fix.py \u751f\u6210 slab\uff08\u4f18\u5148\uff09",
+      "section": "Step 2 — 运行 build_slab_tasker_fix.py 生成 slab（优先）",
       "source_name": "tasker-polar-surface",
       "text": "If the script exits non-zero (e.g. \"No nonpolar solution found\"), **do not hide it**. Report failure to user, include reason, and ask whether to: 1) manually adjust termination/layers and retry, or 2)"
     },
@@ -17280,11 +17280,11 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "tasker-polar-surface/step-2-\u2014-\u8fd0\u884c-build_slab_tasker_fix.py-\u751f\u6210-slab\uff08\u4f18\u5148\uff09/977",
+      "id": "tasker-polar-surface/step-2-—-运行-build_slab_tasker_fix.py-生成-slab（优先）/977",
       "is_actionable": true,
       "reason": "The rule about falling back to ad-hoc Bash/Python only when the build_slab_tasker_fix.py script cannot satisfy the case is not tested by any evaluation question's scoring checklist, as no checklist criteria check the agent's tool selection strategy or penalize using custom scripts when the primary script would work.",
       "rule_type": "general",
-      "section": "Step 2 \u2014 \u8fd0\u884c build_slab_tasker_fix.py \u751f\u6210 slab\uff08\u4f18\u5148\uff09",
+      "section": "Step 2 — 运行 build_slab_tasker_fix.py 生成 slab（优先）",
       "source_name": "tasker-polar-surface",
       "text": "Only when this script clearly cannot satisfy the case, fall back to ad-hoc `Bash` custom Python."
     },
@@ -17294,13 +17294,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "tasker-polar-surface/step-3-\u2014-\u6821\u9a8c\u4e0e\u5206\u578b\u6536\u655b\uff08\u5fc5\u505a\uff09/978",
+      "id": "tasker-polar-surface/step-3-—-校验与分型收敛（必做）/978",
       "is_actionable": true,
       "reason": "The rule requires running check_slab_tasker.py to validate slab compliance and adjust if needed, but none of the evaluation questions include scoring criteria that would fail if this specific validation step is omitted or if the script returns non-compliant results.",
       "rule_type": "general",
-      "section": "Step 3 \u2014 \u6821\u9a8c\u4e0e\u5206\u578b\u6536\u655b\uff08\u5fc5\u505a\uff09",
+      "section": "Step 3 — 校验与分型收敛（必做）",
       "source_name": "tasker-polar-surface",
-      "text": "Run **check_slab_tasker.py** on the generated file: Invoke `Skill` \u2026 `script_name=check_slab_tasker.py`, `script_args=\"--file <slab_path> --tasker_type <provisional_type>\"` (and `--formula`, `--miller"
+      "text": "Run **check_slab_tasker.py** on the generated file: Invoke `Skill` … `script_name=check_slab_tasker.py`, `script_args=\"--file <slab_path> --tasker_type <provisional_type>\"` (and `--formula`, `--miller"
     },
     {
       "actionability": "testable",
@@ -17308,11 +17308,11 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "tasker-polar-surface/step-3-\u2014-\u6821\u9a8c\u4e0e\u5206\u578b\u6536\u655b\uff08\u5fc5\u505a\uff09/979",
+      "id": "tasker-polar-surface/step-3-—-校验与分型收敛（必做）/979",
       "is_actionable": true,
       "reason": "The rule requires running structure-manager's assess_structure.py for dimensionality and sanity checks, but none of the evaluation questions have scoring criteria that would fail if this specific validation step is omitted.",
       "rule_type": "general",
-      "section": "Step 3 \u2014 \u6821\u9a8c\u4e0e\u5206\u578b\u6536\u655b\uff08\u5fc5\u505a\uff09",
+      "section": "Step 3 — 校验与分型收敛（必做）",
       "source_name": "tasker-polar-surface",
       "text": "Run **structure-manager** `assess_structure.py` on the same file for dimensionality and sanity."
     },
@@ -17352,11 +17352,11 @@
       "covered_by": [],
       "id": "tasker-polar-surface/batch-processing/982",
       "is_actionable": true,
-      "reason": "The rule mandates a specific batch processing pipeline (build \u2192 parse \u2192 check \u2192 add_adsorbate), but none of the evaluation questions test for adherence to this sequential workflow or penalize its omission.",
+      "reason": "The rule mandates a specific batch processing pipeline (build → parse → check → add_adsorbate), but none of the evaluation questions test for adherence to this sequential workflow or penalize its omission.",
       "rule_type": "general",
       "section": "Batch processing",
       "source_name": "tasker-polar-surface",
-      "text": "After batch build, **must** batch check. Pipeline: `build --batch` \u2192 parse success list \u2192 `check --batch` \u2192 `add_adsorbate --batch`."
+      "text": "After batch build, **must** batch check. Pipeline: `build --batch` → parse success list → `check --batch` → `add_adsorbate --batch`."
     },
     {
       "actionability": "testable",
@@ -17468,7 +17468,7 @@
       "rule_type": "general",
       "section": "2. Use reference and lookup",
       "source_name": "tasker-polar-surface",
-      "text": "**reference/tasker_lookup.yaml**: Machine-readable (material, surface) \u2192 Tasker type + short note + ref. When you pass `--formula` and `--miller`, the checker compares with this table; if `literature_"
+      "text": "**reference/tasker_lookup.yaml**: Machine-readable (material, surface) → Tasker type + short note + ref. When you pass `--formula` and `--miller`, the checker compares with this table; if `literature_"
     },
     {
       "actionability": "testable",
@@ -17597,7 +17597,7 @@
       "rule_type": "general",
       "section": "2.1 When the lookup table has no entry: search literature on the fly",
       "source_name": "tasker-polar-surface",
-      "text": "**Optional \u2014 extend the table**: After a compliant result, you may add the new (formula, miller, tasker_type, note, ref) to `reference/tasker_lookup.yaml` (or report to the user: \"Consider adding this"
+      "text": "**Optional — extend the table**: After a compliant result, you may add the new (formula, miller, tasker_type, note, ref) to `reference/tasker_lookup.yaml` (or report to the user: \"Consider adding this"
     },
     {
       "actionability": "testable",
@@ -17891,7 +17891,7 @@
       "rule_type": "general",
       "section": "Integration",
       "source_name": "tasker-polar-surface",
-      "text": "**\u5438\u9644\u5206\u5b50**\uff1a\u9700\u8981\u5728 slab \u4e0a\u52a0\u5438\u9644\u5206\u5b50\u65f6\uff0c\u4f18\u5148\u4f7f\u7528 `add_adsorbate_batch.py`\uff08\u672c\u5730\u811a\u672c\uff0c\u652f\u6301\u6279\u91cf\uff09\uff0c\u800c\u975e MCP `mat_sg_build_surface_adsorbate`\uff08\u4ec5\u652f\u6301\u5355\u6b21\u8c03\u7528\uff09\u3002\u5c24\u5176\u662f\u6279\u91cf\u573a\u666f\u4e0b\u5fc5\u987b\u4f7f\u7528\u672c\u5730\u811a\u672c\u3002\u5355\u4e2a\u7ed3\u6784\u65f6\u4e24\u8005\u5747\u53ef\u3002"
+      "text": "**吸附分子**：需要在 slab 上加吸附分子时，优先使用 `add_adsorbate_batch.py`（本地脚本，支持批量），而非 MCP `mat_sg_build_surface_adsorbate`（仅支持单次调用）。尤其是批量场景下必须使用本地脚本。单个结构时两者均可。"
     },
     {
       "actionability": "testable",
@@ -17919,7 +17919,7 @@
       "rule_type": "general",
       "section": "Additional resources",
       "source_name": "tasker-polar-surface",
-      "text": "**reference/tasker_lookup.yaml**: (formula, miller) \u2192 Tasker type + note + ref; used by checker with `--formula`/`--miller`. When no entry exists, search literature on the fly (\u00a72.1)."
+      "text": "**reference/tasker_lookup.yaml**: (formula, miller) → Tasker type + note + ref; used by checker with `--formula`/`--miller`. When no entry exists, search literature on the fly (§2.1)."
     },
     {
       "actionability": "testable",
@@ -18465,7 +18465,7 @@
       "rule_type": "decision_tree",
       "section": "When to use",
       "source_name": "proposal-review",
-      "text": "\"Review / evaluate this proposal\" \u2192 full review workflow below"
+      "text": "\"Review / evaluate this proposal\" → full review workflow below"
     },
     {
       "actionability": "policy_only",
@@ -18479,7 +18479,7 @@
       "rule_type": "decision_tree",
       "section": "When to use",
       "source_name": "proposal-review",
-      "text": "\"Score this project plan\" \u2192 scorecard generation"
+      "text": "\"Score this project plan\" → scorecard generation"
     },
     {
       "actionability": "policy_only",
@@ -18493,7 +18493,7 @@
       "rule_type": "decision_tree",
       "section": "When to use",
       "source_name": "proposal-review",
-      "text": "\"Assess risks of this project\" \u2192 risk analysis + mitigation"
+      "text": "\"Assess risks of this project\" → risk analysis + mitigation"
     },
     {
       "actionability": "policy_only",
@@ -18521,7 +18521,7 @@
       "rule_type": "workflow_step",
       "section": "Review Workflow",
       "source_name": "proposal-review",
-      "text": "**Score** each dimension per the evaluation policy. Each sub-score rationale must cite \u2265 2 specific evidence points from the proposal text."
+      "text": "**Score** each dimension per the evaluation policy. Each sub-score rationale must cite ≥ 2 specific evidence points from the proposal text."
     },
     {
       "actionability": "policy_only",
@@ -18563,7 +18563,7 @@
       "rule_type": "general",
       "section": "Standard Chinese Academic Review Vocabulary",
       "source_name": "proposal-review",
-      "text": "Feasibility / executability | **\u53ef\u884c\u6027** and **\u53ef\u6267\u884c\u6027** (use both; \u53ef\u6267\u884c\u6027 for operational-level concerns) | \u53ef\u505a\u6027"
+      "text": "Feasibility / executability | **可行性** and **可执行性** (use both; 可执行性 for operational-level concerns) | 可做性"
     },
     {
       "actionability": "policy_only",
@@ -18573,11 +18573,11 @@
       "covered_by": [],
       "id": "proposal-review/standard-chinese-academic-review-vocabulary/1069",
       "is_actionable": false,
-      "reason": "No evaluation questions are provided that could test the specific vocabulary usage of '\u7acb\u9879' in an academic review context.",
+      "reason": "No evaluation questions are provided that could test the specific vocabulary usage of '立项' in an academic review context.",
       "rule_type": "general",
       "section": "Standard Chinese Academic Review Vocabulary",
       "source_name": "proposal-review",
-      "text": "Project establishment / approval | **\u7acb\u9879** (e.g., \"\u662f\u5426\u5efa\u8bae\u7acb\u9879\", \"\u7acb\u9879\u4f9d\u636e\") | \u542f\u52a8\u9879\u76ee"
+      "text": "Project establishment / approval | **立项** (e.g., \"是否建议立项\", \"立项依据\") | 启动项目"
     },
     {
       "actionability": "policy_only",
@@ -18591,7 +18591,7 @@
       "rule_type": "general",
       "section": "Standard Chinese Academic Review Vocabulary",
       "source_name": "proposal-review",
-      "text": "Innovation | **\u521b\u65b0\u6027** | \u65b0\u9896\u6027 (acceptable but less formal)"
+      "text": "Innovation | **创新性** | 新颖性 (acceptable but less formal)"
     },
     {
       "actionability": "policy_only",
@@ -18605,7 +18605,7 @@
       "rule_type": "general",
       "section": "Standard Chinese Academic Review Vocabulary",
       "source_name": "proposal-review",
-      "text": "Importance / significance | **\u91cd\u8981\u6027** | \u610f\u4e49 (acceptable as supplement)"
+      "text": "Importance / significance | **重要性** | 意义 (acceptable as supplement)"
     },
     {
       "actionability": "policy_only",
@@ -18615,11 +18615,11 @@
       "covered_by": [],
       "id": "proposal-review/standard-chinese-academic-review-vocabulary/1072",
       "is_actionable": false,
-      "reason": "No questions are provided that could test the use of the specific Chinese vocabulary '\u8d44\u52a9\u5efa\u8bae' or '\u7acb\u9879\u5efa\u8bae' in a funding recommendation context, so violating this rule would not cause any scoring checklist to fail.",
+      "reason": "No questions are provided that could test the use of the specific Chinese vocabulary '资助建议' or '立项建议' in a funding recommendation context, so violating this rule would not cause any scoring checklist to fail.",
       "rule_type": "general",
       "section": "Standard Chinese Academic Review Vocabulary",
       "source_name": "proposal-review",
-      "text": "Funding recommendation | **\u8d44\u52a9\u5efa\u8bae** / **\u7acb\u9879\u5efa\u8bae** | \u2014"
+      "text": "Funding recommendation | **资助建议** / **立项建议** | —"
     },
     {
       "actionability": "policy_only",
@@ -18633,7 +18633,7 @@
       "rule_type": "general",
       "section": "Rationale Document Guidance",
       "source_name": "proposal-review",
-      "text": "Each scoring dimension must have \u2265 2 evidence-grounded arguments."
+      "text": "Each scoring dimension must have ≥ 2 evidence-grounded arguments."
     },
     {
       "actionability": "policy_only",
@@ -18671,11 +18671,11 @@
       "covered_by": [],
       "id": "proposal-review/rationale-document-guidance/1076",
       "is_actionable": false,
-      "reason": "No evaluation questions are provided that would test the specific requirement to discuss \u53ef\u6267\u884c\u6027 (executability) alongside general feasibility, including operational execution details like resource requirements, team capability, timeline realism, and technical risk mitigation.",
+      "reason": "No evaluation questions are provided that would test the specific requirement to discuss 可执行性 (executability) alongside general feasibility, including operational execution details like resource requirements, team capability, timeline realism, and technical risk mitigation.",
       "rule_type": "general",
       "section": "Rationale Document Guidance",
       "source_name": "proposal-review",
-      "text": "Discuss \u53ef\u6267\u884c\u6027 alongside general \u53ef\u884c\u6027 in the feasibility section \u2014 cover resource requirements, team capability, timeline realism, and technical risk mitigation specifically from an operational execution"
+      "text": "Discuss 可执行性 alongside general 可行性 in the feasibility section — cover resource requirements, team capability, timeline realism, and technical risk mitigation specifically from an operational execution"
     },
     {
       "actionability": "policy_only",
@@ -18685,11 +18685,11 @@
       "covered_by": [],
       "id": "proposal-review/rationale-document-guidance/1077",
       "is_actionable": false,
-      "reason": "No evaluation questions are provided to test whether the agent includes a \u7acb\u9879 recommendation tied to the overall score and risk assessment.",
+      "reason": "No evaluation questions are provided to test whether the agent includes a 立项 recommendation tied to the overall score and risk assessment.",
       "rule_type": "general",
       "section": "Rationale Document Guidance",
       "source_name": "proposal-review",
-      "text": "Include a \u7acb\u9879 recommendation tied to the overall score and risk assessment."
+      "text": "Include a 立项 recommendation tied to the overall score and risk assessment."
     },
     {
       "actionability": "policy_only",
@@ -18703,7 +18703,7 @@
       "rule_type": "general",
       "section": "Deliverable Format Requirements",
       "source_name": "proposal-review",
-      "text": "**Scorecard JSON**: Must contain all scoring dimensions as top-level keys with numeric values within the specified range. Include `total_score` and `recommendation` (e.g. \"\u5efa\u8bae\u7acb\u9879\" / \"\u4e0d\u5efa\u8bae\u7acb\u9879\" / \"\u5efa\u8bae\u6709\u6761\u4ef6\u7acb\u9879\")"
+      "text": "**Scorecard JSON**: Must contain all scoring dimensions as top-level keys with numeric values within the specified range. Include `total_score` and `recommendation` (e.g. \"建议立项\" / \"不建议立项\" / \"建议有条件立项\")"
     },
     {
       "actionability": "policy_only",
@@ -18717,7 +18717,7 @@
       "rule_type": "general",
       "section": "Deliverable Format Requirements",
       "source_name": "proposal-review",
-      "text": "**Rationale Markdown**: Structured sections per dimension; each section cites \u2265 2 specific evidence points from the proposal. Must include separate \u53ef\u884c\u6027 and \u53ef\u6267\u884c\u6027 assessments."
+      "text": "**Rationale Markdown**: Structured sections per dimension; each section cites ≥ 2 specific evidence points from the proposal. Must include separate 可行性 and 可执行性 assessments."
     },
     {
       "actionability": "policy_only",
@@ -18857,7 +18857,7 @@
       "rule_type": "general",
       "section": "Prerequisites",
       "source_name": "pyatb",
-      "text": "`HR.dat` \u2014 Hamiltonian matrix in real space"
+      "text": "`HR.dat` — Hamiltonian matrix in real space"
     },
     {
       "actionability": "testable",
@@ -18871,7 +18871,7 @@
       "rule_type": "general",
       "section": "Prerequisites",
       "source_name": "pyatb",
-      "text": "`SR.dat` \u2014 Overlap matrix in real space"
+      "text": "`SR.dat` — Overlap matrix in real space"
     },
     {
       "actionability": "testable",
@@ -18885,7 +18885,7 @@
       "rule_type": "general",
       "section": "Prerequisites",
       "source_name": "pyatb",
-      "text": "`rR.dat` \u2014 Position matrix (optional, for Berry phase)"
+      "text": "`rR.dat` — Position matrix (optional, for Berry phase)"
     },
     {
       "actionability": "testable",
@@ -18899,7 +18899,7 @@
       "rule_type": "general",
       "section": "Prerequisites",
       "source_name": "pyatb",
-      "text": "`kpoints` \u2014 k-point information (optional)"
+      "text": "`kpoints` — k-point information (optional)"
     },
     {
       "actionability": "testable",
@@ -20159,7 +20159,7 @@
       "rule_type": "general",
       "section": "1. List Skills",
       "source_name": "skill-manager",
-      "text": "`name` \u2014 display name (parsed from SKILL.md in the package)"
+      "text": "`name` — display name (parsed from SKILL.md in the package)"
     },
     {
       "actionability": "policy_only",
@@ -20173,7 +20173,7 @@
       "rule_type": "general",
       "section": "1. List Skills",
       "source_name": "skill-manager",
-      "text": "`status` \u2014 `ready` / `uploading` / `failed`"
+      "text": "`status` — `ready` / `uploading` / `failed`"
     },
     {
       "actionability": "policy_only",
@@ -20187,7 +20187,7 @@
       "rule_type": "general",
       "section": "1. List Skills",
       "source_name": "skill-manager",
-      "text": "`byte_size`, `file_count` \u2014 package stats"
+      "text": "`byte_size`, `file_count` — package stats"
     },
     {
       "actionability": "policy_only",
@@ -20223,11 +20223,11 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "skill-manager/step-1-\u2014-zip-the-skill-directory/1187",
+      "id": "skill-manager/step-1-—-zip-the-skill-directory/1187",
       "is_actionable": false,
       "reason": "No evaluation questions are provided that test the specific command-line execution of zipping a skill directory.",
       "rule_type": "general",
-      "section": "Step 1 \u2014 Zip the skill directory",
+      "section": "Step 1 — Zip the skill directory",
       "source_name": "skill-manager",
       "text": "cd /path/to/parent && zip -r /tmp/skill_upload.zip my-skill-dir/"
     },
@@ -20237,11 +20237,11 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "skill-manager/step-2-\u2014-upload-the-zip/1188",
+      "id": "skill-manager/step-2-—-upload-the-zip/1188",
       "is_actionable": false,
       "reason": "No evaluation questions are provided, so there is no way to test whether violating the curl upload command would cause a scoring checklist failure.",
       "rule_type": "general",
-      "section": "Step 2 \u2014 Upload the zip",
+      "section": "Step 2 — Upload the zip",
       "source_name": "skill-manager",
       "text": "curl -s -X POST \\\n  -H \"accessKey: ${BOHRIUM_ACCESS_KEY}\" \\\n  -F \"file=@/tmp/skill_upload.zip\" \\\n  \"${BOHRIUM_OPENAPI_BASE_COM}/openapi/v1/matmaster/users/${BOHRIUM_USER_ID}/skills/upload-zip\" \\\n  | p"
     },
@@ -20251,11 +20251,11 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "skill-manager/step-3-\u2014-register-the-skill/1189",
+      "id": "skill-manager/step-3-—-register-the-skill/1189",
       "is_actionable": false,
       "reason": "No evaluation questions are provided to test the specific curl command for registering a skill, so the rule cannot be covered.",
       "rule_type": "general",
-      "section": "Step 3 \u2014 Register the skill",
+      "section": "Step 3 — Register the skill",
       "source_name": "skill-manager",
       "text": "curl -s -X POST \\\n  -H \"accessKey: ${BOHRIUM_ACCESS_KEY}\" \\\n  -H \"Content-Type: application/json\" \\\n  -d '{\"bundle_object_key\": \"<OBJECT_KEY_FROM_STEP_2>\", \"status\": \"ready\"}' \\\n  \"${BOHRIUM_OPENAPI_B"
     },
@@ -20442,7 +20442,7 @@
       "rule_type": "hard_guard",
       "section": "Hard Guards",
       "source_name": "vasp",
-      "text": "**ENCUT must be set explicitly** \u2014 never rely on VASP's POTCAR default. Minimum: 1.3x max ENMAX from the relevant pseudopotentials. Typical: 400-520 eV."
+      "text": "**ENCUT must be set explicitly** — never rely on VASP's POTCAR default. Minimum: 1.3x max ENMAX from the relevant pseudopotentials. Typical: 400-520 eV."
     },
     {
       "actionability": "testable",
@@ -20802,7 +20802,7 @@
       "rule_type": "hard_guard",
       "section": "Hard Guards",
       "source_name": "vasp",
-      "text": "\"VASP \u955c\u50cf\u4e2d\u5df2\u5185\u7f6e POTCAR\uff08\u5982 `/opt/vasp/potcar/PBE/`\uff09\""
+      "text": "\"VASP 镜像中已内置 POTCAR（如 `/opt/vasp/potcar/PBE/`）\""
     },
     {
       "actionability": "testable",
@@ -20816,7 +20816,7 @@
       "rule_type": "hard_guard",
       "section": "Hard Guards",
       "source_name": "vasp",
-      "text": "\"Bohrium \u8282\u70b9\u4e0a\u7684\u67d0\u4e2a\u76ee\u5f55\uff08\u8bf7\u586b\u8def\u5f84\uff09\""
+      "text": "\"Bohrium 节点上的某个目录（请填路径）\""
     },
     {
       "actionability": "testable",
@@ -20830,7 +20830,7 @@
       "rule_type": "hard_guard",
       "section": "Hard Guards",
       "source_name": "vasp",
-      "text": "\"\u6211\u6ca1\u6709 POTCAR\" If the user has no POTCAR, do NOT submit \u2014 inform them POTCAR is license-restricted and cannot be auto-generated, then stop. If POTCAR is in the image or on a node path, write a `run.sh` "
+      "text": "\"我没有 POTCAR\" If the user has no POTCAR, do NOT submit — inform them POTCAR is license-restricted and cannot be auto-generated, then stop. If POTCAR is in the image or on a node path, write a `run.sh` "
     },
     {
       "actionability": "testable",
@@ -20840,7 +20840,7 @@
       "covered_by": [],
       "id": "vasp/k-point-rules/1226",
       "is_actionable": true,
-      "reason": "None of the evaluation questions have scoring checklist criteria that would specifically detect violations of the k-point mesh type (Gamma-centered Monkhorst-Pack) or density (30-40 \u00c5 per reciprocal lattice vector) for bulk SCF/relaxation calculations.",
+      "reason": "None of the evaluation questions have scoring checklist criteria that would specifically detect violations of the k-point mesh type (Gamma-centered Monkhorst-Pack) or density (30-40 Å per reciprocal lattice vector) for bulk SCF/relaxation calculations.",
       "rule_type": "general",
       "section": "K-point Rules",
       "source_name": "vasp",
@@ -20972,7 +20972,7 @@
       "rule_type": "general",
       "section": "Bohrium Submission",
       "source_name": "vasp",
-      "text": "`-np` is typically half of CPU cores (32 virtual cores \u2192 16 physical cores on Bohrium)."
+      "text": "`-np` is typically half of CPU cores (32 virtual cores → 16 physical cores on Bohrium)."
     },
     {
       "actionability": "testable",
@@ -21028,7 +21028,7 @@
       "rule_type": "general",
       "section": "Scripts",
       "source_name": "vasp",
-      "text": "`scripts/get_potcar.py --elements \"Fe,O\"` \u2014 recommend pseudopotentials, compute ENCUT from ENMAX"
+      "text": "`scripts/get_potcar.py --elements \"Fe,O\"` — recommend pseudopotentials, compute ENCUT from ENMAX"
     },
     {
       "actionability": "testable",
@@ -21042,7 +21042,7 @@
       "rule_type": "general",
       "section": "Scripts",
       "source_name": "vasp",
-      "text": "`scripts/validate_incar.py -f INCAR -t relax` \u2014 check tag conflicts, missing required tags, ENCUT reasonableness"
+      "text": "`scripts/validate_incar.py -f INCAR -t relax` — check tag conflicts, missing required tags, ENCUT reasonableness"
     },
     {
       "actionability": "testable",
@@ -21056,7 +21056,7 @@
       "rule_type": "general",
       "section": "Scripts",
       "source_name": "vasp",
-      "text": "`scripts/generate_kpoints.py` \u2014 generate KPOINTS from structure (auto mesh, line-mode, slab detection)"
+      "text": "`scripts/generate_kpoints.py` — generate KPOINTS from structure (auto mesh, line-mode, slab detection)"
     },
     {
       "actionability": "testable",
@@ -21070,7 +21070,7 @@
       "rule_type": "general",
       "section": "References (read on demand)",
       "source_name": "vasp",
-      "text": "`references/incar_tags.md` \u2014 INCAR tag reference organized by calculation type"
+      "text": "`references/incar_tags.md` — INCAR tag reference organized by calculation type"
     },
     {
       "actionability": "testable",
@@ -21084,7 +21084,7 @@
       "rule_type": "general",
       "section": "References (read on demand)",
       "source_name": "vasp",
-      "text": "`references/input_examples.md` \u2014 worked examples for common simulation types"
+      "text": "`references/input_examples.md` — worked examples for common simulation types"
     },
     {
       "actionability": "testable",
@@ -21108,11 +21108,11 @@
       "covered_by": [],
       "id": "xrd-analysis/when-to-use/1245",
       "is_actionable": true,
-      "reason": "The rule specifies a specific HKL \u2192 CIF conversion script, but none of the evaluation questions require or check the use of that exact script, as they only assess final outputs like CIF files, R factors, and lattice parameters without mandating a particular tool or script.",
+      "reason": "The rule specifies a specific HKL → CIF conversion script, but none of the evaluation questions require or check the use of that exact script, as they only assess final outputs like CIF files, R factors, and lattice parameters without mandating a particular tool or script.",
       "rule_type": "decision_tree",
       "section": "When to Use",
       "source_name": "xrd-analysis",
-      "text": "HKL \u2192 CIF conversion | `scripts/solve_refine_scxrd.py` | `.hkl` (+ `.ins` / `.p4p` auto-discovered)"
+      "text": "HKL → CIF conversion | `scripts/solve_refine_scxrd.py` | `.hkl` (+ `.ins` / `.p4p` auto-discovered)"
     },
     {
       "actionability": "testable",
@@ -21148,11 +21148,11 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "xrd-analysis/scxrd-workflow-\u2014-mandatory/1248",
+      "id": "xrd-analysis/scxrd-workflow-—-mandatory/1248",
       "is_actionable": true,
       "reason": "None of the evaluation questions have a scoring checklist item that specifically checks whether the agent used a provided script or wrote its own SCXRD solver from scratch.",
       "rule_type": "workflow_step",
-      "section": "SCXRD Workflow \u2014 MANDATORY",
+      "section": "SCXRD Workflow — MANDATORY",
       "source_name": "xrd-analysis",
       "text": "**Use the provided script. Never write your own SCXRD solver from scratch.**"
     },
@@ -21162,11 +21162,11 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "xrd-analysis/scxrd-workflow-\u2014-mandatory/1249",
+      "id": "xrd-analysis/scxrd-workflow-—-mandatory/1249",
       "is_actionable": true,
       "reason": "The rule is a specific command-line invocation for a script with fixed arguments, but none of the evaluation questions have scoring checklist criteria that would deterministically fail if the agent used a different script, omitted the --json flag, or altered the specified parameters.",
       "rule_type": "workflow_step",
-      "section": "SCXRD Workflow \u2014 MANDATORY",
+      "section": "SCXRD Workflow — MANDATORY",
       "source_name": "xrd-analysis",
       "text": "python3 scripts/solve_refine_scxrd.py \\\n       --hkl data.hkl --sg \"P2_1/c\" --elements C H N O \\\n       --grid 72 --trials 2 --cycles 400 \\\n       --output result.cif --json result.json"
     },
@@ -21176,11 +21176,11 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "xrd-analysis/scxrd-workflow-\u2014-mandatory/1250",
+      "id": "xrd-analysis/scxrd-workflow-—-mandatory/1250",
       "is_actionable": true,
-      "reason": "The rule about auto-discovering companion .ins/.p4p files from HKL stem is not tested because none of the evaluation questions require the agent to discover these files\u2014they are explicitly provided alongside the .hkl file in the prompts, and the scoring checklists do not check for file discovery behavior.",
+      "reason": "The rule about auto-discovering companion .ins/.p4p files from HKL stem is not tested because none of the evaluation questions require the agent to discover these files—they are explicitly provided alongside the .hkl file in the prompts, and the scoring checklists do not check for file discovery behavior.",
       "rule_type": "workflow_step",
-      "section": "SCXRD Workflow \u2014 MANDATORY",
+      "section": "SCXRD Workflow — MANDATORY",
       "source_name": "xrd-analysis",
       "text": "The script auto-discovers companion `.ins` / `.p4p` files from the HKL stem."
     },
@@ -21190,13 +21190,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "xrd-analysis/scxrd-workflow-\u2014-mandatory/1251",
+      "id": "xrd-analysis/scxrd-workflow-—-mandatory/1251",
       "is_actionable": true,
       "reason": "The rule specifies a mandatory SCXRD workflow pipeline with specific program choices and fallbacks, but none of the evaluation questions' scoring checklists require or check for adherence to that exact pipeline sequence or tool selection.",
       "rule_type": "workflow_step",
-      "section": "SCXRD Workflow \u2014 MANDATORY",
+      "section": "SCXRD Workflow — MANDATORY",
       "source_name": "xrd-analysis",
-      "text": "Pipeline: parse HKL (SHELX HKLF4) \u2192 try SHELX if installed \u2192 charge-flipping fallback \u2192 least-squares refinement \u2192 CIF output."
+      "text": "Pipeline: parse HKL (SHELX HKLF4) → try SHELX if installed → charge-flipping fallback → least-squares refinement → CIF output."
     },
     {
       "actionability": "testable",
@@ -21204,13 +21204,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "xrd-analysis/scxrd-workflow-\u2014-mandatory/1252",
+      "id": "xrd-analysis/scxrd-workflow-—-mandatory/1252",
       "is_actionable": true,
-      "reason": "The rule 'CIF completeness check \u2014 verify the output CIF contains all of:' is not covered by any evaluation question because no scoring checklist includes a deterministic or LLM-judge criterion that specifically checks for the presence or completeness of required CIF fields beyond zero A-level alerts.",
+      "reason": "The rule 'CIF completeness check — verify the output CIF contains all of:' is not covered by any evaluation question because no scoring checklist includes a deterministic or LLM-judge criterion that specifically checks for the presence or completeness of required CIF fields beyond zero A-level alerts.",
       "rule_type": "workflow_step",
-      "section": "SCXRD Workflow \u2014 MANDATORY",
+      "section": "SCXRD Workflow — MANDATORY",
       "source_name": "xrd-analysis",
-      "text": "**CIF completeness check** \u2014 verify the output CIF contains all of:"
+      "text": "**CIF completeness check** — verify the output CIF contains all of:"
     },
     {
       "actionability": "testable",
@@ -21218,13 +21218,13 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "xrd-analysis/scxrd-workflow-\u2014-mandatory/1253",
+      "id": "xrd-analysis/scxrd-workflow-—-mandatory/1253",
       "is_actionable": true,
       "reason": "The rule requires reporting if R1 > 0.15 as a reliability flag, but none of the scoring checklists include a criterion that would fail an answer for not reporting this condition, even if the agent omitted it or reported a high R1 without comment.",
       "rule_type": "workflow_step",
-      "section": "SCXRD Workflow \u2014 MANDATORY",
+      "section": "SCXRD Workflow — MANDATORY",
       "source_name": "xrd-analysis",
-      "text": "**Parse `result.json`** for R1, wR2, GooF. Report if R1 > 0.15 \u2014 the structure may be unreliable."
+      "text": "**Parse `result.json`** for R1, wR2, GooF. Report if R1 > 0.15 — the structure may be unreliable."
     },
     {
       "actionability": "testable",
@@ -21294,7 +21294,7 @@
       "rule_type": "general",
       "section": "Hard Constraints",
       "source_name": "xrd-analysis",
-      "text": "**Do not fabricate atomic positions.** If charge-flipping finds no atoms, report failure \u2014 do not invent coordinates."
+      "text": "**Do not fabricate atomic positions.** If charge-flipping finds no atoms, report failure — do not invent coordinates."
     },
     {
       "actionability": "testable",
@@ -22260,7 +22260,7 @@
       "rule_type": "general",
       "section": "json_schema",
       "source_name": "paper_search_tool",
-      "text": "Parameter 'page_size': Max papers to return (1\u2013100, default 20)."
+      "text": "Parameter 'page_size': Max papers to return (1–100, default 20)."
     },
     {
       "actionability": "tool_schema",
@@ -22540,7 +22540,7 @@
       "rule_type": "general",
       "section": "prompt",
       "source_name": "web_search_tool",
-      "text": "check loaded Skills and tool descriptions \u2014"
+      "text": "check loaded Skills and tool descriptions —"
     },
     {
       "actionability": "tool_schema",
@@ -22745,7 +22745,7 @@
       "rule_type": "general",
       "section": "Computational software",
       "source_name": "system_prompt",
-      "text": "Choose packages and defaults according to the **task text**, **Skills** (`matmaster/skills`), executor/runtime notes, and what is actually installed in the session\u2014do not assume a single global stack."
+      "text": "Choose packages and defaults according to the **task text**, **Skills** (`matmaster/skills`), executor/runtime notes, and what is actually installed in the session—do not assume a single global stack."
     },
     {
       "actionability": "policy_only",
@@ -23324,7 +23324,7 @@
       "reason": "None of the evaluation questions have scoring criteria that would detect whether fractional coordinates were hand-written into an ASE cell array versus using proper construction methods like pymatgen or ASE bulk().",
       "rule_type": "hard_guard",
       "source_name": "build-atomic-structure",
-      "text": "**Never hand-write fractional coordinates into a manually constructed ASE `cell` array.** Fractional coordinates depend on the cell angle convention (\u03b3=60\u00b0 vs 120\u00b0 for hexagonal). Use `pymatgen Lattic"
+      "text": "**Never hand-write fractional coordinates into a manually constructed ASE `cell` array.** Fractional coordinates depend on the cell angle convention (γ=60° vs 120° for hexagonal). Use `pymatgen Lattic"
     },
     {
       "actionability": "testable",
@@ -23375,7 +23375,7 @@
       "actionability": "testable",
       "actionability_reason": "default testable skill rule",
       "id": "inspect-atomic-structure/hard-guards/154",
-      "reason": "No evaluation question's scoring checklist includes criteria that would deterministically fail if vacuum thickness is below 15 \u00c5 for a detected slab.",
+      "reason": "No evaluation question's scoring checklist includes criteria that would deterministically fail if vacuum thickness is below 15 Å for a detected slab.",
       "rule_type": "hard_guard",
       "source_name": "inspect-atomic-structure",
       "text": "If a slab is detected, estimate vacuum thickness. A vacuum dimension below 15 A is suspect for surface simulations."
@@ -23603,7 +23603,7 @@
       "reason": "No scoring checklist item in any question explicitly checks for ENCUT being explicitly set, not relying on POTCAR defaults, or meeting the 1.3x ENMAX minimum requirement.",
       "rule_type": "hard_guard",
       "source_name": "vasp",
-      "text": "**ENCUT must be set explicitly** \u2014 never rely on VASP's POTCAR default. Minimum: 1.3x max ENMAX from the relevant pseudopotentials. Typical: 400-520 eV."
+      "text": "**ENCUT must be set explicitly** — never rely on VASP's POTCAR default. Minimum: 1.3x max ENMAX from the relevant pseudopotentials. Typical: 400-520 eV."
     },
     {
       "actionability": "testable",
@@ -23648,7 +23648,7 @@
       "reason": "The rule about POTCAR being pre-installed in the VASP image is not tested by any evaluation question's scoring checklist, as no question requires the agent to reference or use POTCAR paths, and violating this rule would not cause any checklist to fail.",
       "rule_type": "hard_guard",
       "source_name": "vasp",
-      "text": "\"VASP \u955c\u50cf\u4e2d\u5df2\u5185\u7f6e POTCAR\uff08\u5982 `/opt/vasp/potcar/PBE/`\uff09\""
+      "text": "\"VASP 镜像中已内置 POTCAR（如 `/opt/vasp/potcar/PBE/`）\""
     },
     {
       "actionability": "testable",
@@ -23657,7 +23657,7 @@
       "reason": "The rule is a placeholder for a specific directory path on Bohrium nodes, and none of the evaluation questions require the agent to specify, use, or validate any directory paths related to Bohrium.",
       "rule_type": "hard_guard",
       "source_name": "vasp",
-      "text": "\"Bohrium \u8282\u70b9\u4e0a\u7684\u67d0\u4e2a\u76ee\u5f55\uff08\u8bf7\u586b\u8def\u5f84\uff09\""
+      "text": "\"Bohrium 节点上的某个目录（请填路径）\""
     },
     {
       "actionability": "testable",
@@ -23666,7 +23666,7 @@
       "reason": "None of the 32 evaluation questions test the specific rule about handling missing POTCAR files, informing users about license restrictions, or writing run.sh scripts to copy POTCAR from existing paths.",
       "rule_type": "hard_guard",
       "source_name": "vasp",
-      "text": "\"\u6211\u6ca1\u6709 POTCAR\" If the user has no POTCAR, do NOT submit \u2014 inform them POTCAR is license-restricted and cannot be auto-generated, then stop. If POTCAR is in the image or on a node path, write a `run.sh` "
+      "text": "\"我没有 POTCAR\" If the user has no POTCAR, do NOT submit — inform them POTCAR is license-restricted and cannot be auto-generated, then stop. If POTCAR is in the image or on a node path, write a `run.sh` "
     },
     {
       "actionability": "testable",
@@ -23684,7 +23684,7 @@
       "reason": "None of the evaluation questions require ADMM calculations or auxiliary basis sets, so violating the specific ADMM syntax rule would not cause any scoring checklist to fail.",
       "rule_type": "pitfall",
       "source_name": "cp2k",
-      "text": "**ADMM auxiliary basis syntax (CP2K \u2265 2024.1)**: use `BASIS_SET AUX_FIT cFIT3` in `&KIND`, not the deprecated `AUX_FIT_BASIS_SET`. The matching file is `BASIS_SET_FILE_NAME BASIS_ADMM` (NOT `BASIS_ADM"
+      "text": "**ADMM auxiliary basis syntax (CP2K ≥ 2024.1)**: use `BASIS_SET AUX_FIT cFIT3` in `&KIND`, not the deprecated `AUX_FIT_BASIS_SET`. The matching file is `BASIS_SET_FILE_NAME BASIS_ADMM` (NOT `BASIS_ADM"
     },
     {
       "actionability": "testable",
@@ -23774,7 +23774,7 @@
       "reason": "No question's scoring checklist includes criteria that would specifically detect violation of the basis set default rule (DZVP-MOLOPT-SR-GTH for all elements, TZV2P only when higher accuracy required) or potential selection rule (GTH-PBE for PBE-based functionals).",
       "rule_type": "physical_check",
       "source_name": "cp2k",
-      "text": "**Basis set**: default to `DZVP-MOLOPT-SR-GTH` for all elements. Only use `TZV2P-MOLOPT-GTH` when higher accuracy is explicitly required \u2014 it is significantly slower for large systems (>100 atoms). Po"
+      "text": "**Basis set**: default to `DZVP-MOLOPT-SR-GTH` for all elements. Only use `TZV2P-MOLOPT-GTH` when higher accuracy is explicitly required — it is significantly slower for large systems (>100 atoms). Po"
     },
     {
       "actionability": "testable",
