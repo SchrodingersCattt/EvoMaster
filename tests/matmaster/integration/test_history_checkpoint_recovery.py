@@ -5,10 +5,17 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
+from matmaster.core.context_builder import ContextBuilder
 from matmaster.types.messages import AssistantMessage, SystemMessage, UserMessage
 from src.services.history_checkpoint_codec import serialize_base_messages
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.history_restore_service import HistoryRestoreService
+
+
+def _compact_user_message(summary: str) -> UserMessage:
+    return UserMessage(
+        content=ContextBuilder().build_compact_bundle(summary=summary)
+    )
 
 
 def _user_event(
@@ -250,9 +257,7 @@ async def test_restore_with_checkpoint_plus_incremental_events() -> None:
     )
     checkpoint_base_messages = serialize_base_messages(
         [
-            SystemMessage(content="[Compacted Context]\nRecovered summary"),
-            UserMessage(content="restored durable question"),
-            AssistantMessage(content="restored durable answer"),
+            _compact_user_message("Recovered summary"),
         ]
     )
 
@@ -276,16 +281,12 @@ async def test_restore_with_checkpoint_plus_incremental_events() -> None:
     )
 
     assert [type(message) for message in history] == [
-        SystemMessage,
         UserMessage,
-        AssistantMessage,
         UserMessage,
         AssistantMessage,
     ]
-    assert [message.content for message in history] == [
-        "[Compacted Context]\nRecovered summary",
-        "restored durable question",
-        "restored durable answer",
+    assert "Recovered summary" in (history[0].content or "")
+    assert [message.content for message in history[1:]] == [
         "incremental follow-up question",
         "incremental follow-up answer",
     ]
@@ -373,9 +374,7 @@ async def test_spawn_id_checkpoint_does_not_affect_parent_restore() -> None:
     )
     child_base_messages = serialize_base_messages(
         [
-            SystemMessage(content="[Compacted Context]\nchild summary"),
-            UserMessage(content="child restored question"),
-            AssistantMessage(content="child restored answer"),
+            _compact_user_message("child summary"),
         ]
     )
 
@@ -415,16 +414,12 @@ async def test_spawn_id_checkpoint_does_not_affect_parent_restore() -> None:
     ]
     assert all("child" not in str(message.content) for message in parent_history)
     assert [type(message) for message in child_history] == [
-        SystemMessage,
         UserMessage,
-        AssistantMessage,
         UserMessage,
         AssistantMessage,
     ]
-    assert [message.content for message in child_history] == [
-        "[Compacted Context]\nchild summary",
-        "child restored question",
-        "child restored answer",
+    assert "child summary" in (child_history[0].content or "")
+    assert [message.content for message in child_history[1:]] == [
         "child incremental question",
         "child incremental answer",
     ]
@@ -454,9 +449,7 @@ async def test_restore_after_midrun_crash_uses_written_checkpoint() -> None:
     )
     checkpoint_base_messages = serialize_base_messages(
         [
-            SystemMessage(content="[Compacted Context]\ncheckpoint before crash"),
-            UserMessage(content="checkpointed question"),
-            AssistantMessage(content="checkpointed answer"),
+            _compact_user_message("checkpoint before crash"),
         ]
     )
 
@@ -480,16 +473,12 @@ async def test_restore_after_midrun_crash_uses_written_checkpoint() -> None:
     )
 
     assert [type(message) for message in history] == [
-        SystemMessage,
         UserMessage,
-        AssistantMessage,
         UserMessage,
         AssistantMessage,
     ]
-    assert [message.content for message in history] == [
-        "[Compacted Context]\ncheckpoint before crash",
-        "checkpointed question",
-        "checkpointed answer",
+    assert "checkpoint before crash" in (history[0].content or "")
+    assert [message.content for message in history[1:]] == [
         "question emitted before crash",
         "partial answer emitted before crash",
     ]
@@ -527,8 +516,7 @@ async def test_compaction_events_replay_but_do_not_enter_restore_tail() -> None:
         payload={"durability": "durable", "strategy": "summary"},
         base_messages=serialize_base_messages(
             [
-                SystemMessage(content="[Compacted Context]\nsummary"),
-                UserMessage(content="task"),
+                _compact_user_message("summary"),
             ]
         ),
     )
@@ -556,6 +544,5 @@ async def test_compaction_events_replay_but_do_not_enter_restore_tail() -> None:
     )
 
     assert [type(msg).__name__ for msg in restored] == [
-        "SystemMessage",
         "UserMessage",
     ]

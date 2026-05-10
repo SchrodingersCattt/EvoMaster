@@ -16,10 +16,18 @@ from src.services.history_checkpoint_codec import (
 )
 
 
+def _compact_user_message() -> UserMessage:
+    return UserMessage(
+        content=(
+            "以下是先前对话的压缩摘要，作为历史背景。"
+            "\n\n<previous_session_summary>\nsummary\n</previous_session_summary>"
+        )
+    )
+
+
 def test_serialize_base_messages_uses_model_dump_json() -> None:
     messages = [
-        SystemMessage(content="[Compacted Context]\nsummary"),
-        UserMessage(content="task"),
+        _compact_user_message(),
         AssistantMessage(
             content=None,
             tool_calls=[ToolCallData(id="tc-1", name="bash", arguments={"cmd": "pwd"})],
@@ -30,16 +38,15 @@ def test_serialize_base_messages_uses_model_dump_json() -> None:
 
     payload = serialize_base_messages(messages)
 
-    assert payload[0]["role"] == "system"
-    assert payload[2]["role"] == "assistant"
-    assert payload[2]["reasoning_content"] == "reasoning"
-    assert payload[3]["tool_name"] == "bash"
+    assert payload[0]["role"] == "user"
+    assert payload[1]["role"] == "assistant"
+    assert payload[1]["reasoning_content"] == "reasoning"
+    assert payload[2]["tool_name"] == "bash"
 
 
 def test_deserialize_base_messages_roundtrip() -> None:
     messages = [
-        SystemMessage(content="[Compacted Context]\nsummary"),
-        UserMessage(content="task"),
+        _compact_user_message(),
         AssistantMessage(
             content=None,
             tool_calls=[ToolCallData(id="tc-1", name="bash", arguments={"cmd": "pwd"})],
@@ -50,13 +57,31 @@ def test_deserialize_base_messages_roundtrip() -> None:
 
     restored = deserialize_base_messages(serialize_base_messages(messages))
 
-    assert isinstance(restored[0], SystemMessage)
-    assert isinstance(restored[1], UserMessage)
-    assert isinstance(restored[2], AssistantMessage)
-    assert isinstance(restored[3], ToolMessage)
-    assert restored[2].tool_calls is not None
-    assert restored[2].tool_calls[0].id == "tc-1"
-    assert restored[3].tool_name == "bash"
+    assert isinstance(restored[0], UserMessage)
+    assert isinstance(restored[1], AssistantMessage)
+    assert isinstance(restored[2], ToolMessage)
+    assert restored[1].tool_calls is not None
+    assert restored[1].tool_calls[0].id == "tc-1"
+    assert restored[2].tool_name == "bash"
+
+
+def test_validate_base_messages_accepts_compact_user_bundle() -> None:
+    validate_base_messages([_compact_user_message()])
+
+
+def test_validate_base_messages_rejects_system_message_anywhere() -> None:
+    with pytest.raises(ValueError, match="must not contain SystemMessage"):
+        validate_base_messages(
+            [
+                _compact_user_message(),
+                SystemMessage(content="[Compacted Context]\nold"),
+            ]
+        )
+
+
+def test_validate_base_messages_rejects_old_system_start_checkpoint() -> None:
+    with pytest.raises(ValueError, match="must start with compact UserMessage"):
+        validate_base_messages([SystemMessage(content="[Compacted Context]\nold")])
 
 
 def test_validate_base_messages_rejects_empty() -> None:
@@ -66,7 +91,7 @@ def test_validate_base_messages_rejects_empty() -> None:
 
 def test_validate_base_messages_rejects_invalid_tool_sequence() -> None:
     messages = [
-        SystemMessage(content="sys"),
+        _compact_user_message(),
         ToolMessage(tool_call_id="tc-1", tool_name="bash", content="result"),
     ]
 
@@ -76,7 +101,7 @@ def test_validate_base_messages_rejects_invalid_tool_sequence() -> None:
 
 def test_validate_base_messages_rejects_orphan_tool_after_assistant_text() -> None:
     messages = [
-        SystemMessage(content="sys"),
+        _compact_user_message(),
         AssistantMessage(content="hello"),
         ToolMessage(tool_call_id="tc-1", tool_name="bash", content="result"),
     ]
@@ -87,7 +112,7 @@ def test_validate_base_messages_rejects_orphan_tool_after_assistant_text() -> No
 
 def test_validate_base_messages_rejects_tool_id_mismatch() -> None:
     messages = [
-        SystemMessage(content="sys"),
+        _compact_user_message(),
         AssistantMessage(
             content=None,
             tool_calls=[ToolCallData(id="tc-1", name="bash", arguments={"cmd": "pwd"})],
@@ -101,7 +126,7 @@ def test_validate_base_messages_rejects_tool_id_mismatch() -> None:
 
 def test_validate_base_messages_rejects_duplicate_tool_results() -> None:
     messages = [
-        SystemMessage(content="sys"),
+        _compact_user_message(),
         AssistantMessage(
             content=None,
             tool_calls=[
@@ -119,7 +144,7 @@ def test_validate_base_messages_rejects_duplicate_tool_results() -> None:
 
 def test_validate_base_messages_rejects_unclosed_turn_before_new_assistant() -> None:
     messages = [
-        SystemMessage(content="sys"),
+        _compact_user_message(),
         AssistantMessage(
             content=None,
             tool_calls=[ToolCallData(id="tc-1", name="bash", arguments={"cmd": "pwd"})],
@@ -133,7 +158,7 @@ def test_validate_base_messages_rejects_unclosed_turn_before_new_assistant() -> 
 
 def test_validate_base_messages_rejects_empty_tool_call_id() -> None:
     messages = [
-        SystemMessage(content="sys"),
+        _compact_user_message(),
         AssistantMessage(
             content=None,
             tool_calls=[ToolCallData(id="", name="bash", arguments={"cmd": "pwd"})],
