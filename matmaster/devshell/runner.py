@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -14,6 +15,7 @@ from matmaster.devshell.config import DevConfig
 from matmaster.devshell.stream_hook import DevStreamHook
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.context import PlaygroundContext
+from matmaster.types.events import BusEvent
 from matmaster.types.messages import Message, UserMessage
 
 if TYPE_CHECKING:
@@ -136,6 +138,21 @@ class DevRunner:
 
         async def _run_once() -> DrainResult:
             try:
+                # Build on_event callback for real-time forwarding
+                def _on_event(event: BusEvent) -> None:
+                    self._stream_hook.on_event(event)
+                    if event_observer is not None:
+                        event_observer.emit(event)
+
+                # Inject forward sink before build_runtime so child agent spawn
+                # closures capture the runtime port.
+                self._pg_ctx = self._pg_ctx.with_runtime_ports(
+                    replace(
+                        self._pg_ctx.runtime_ports,
+                        child_event_forward_sink=_on_event,
+                    )
+                )
+
                 runtime = await exp.build_runtime(self._pg_ctx)
                 spec = runtime.spec
 
@@ -148,15 +165,6 @@ class DevRunner:
                     session = self._pg_ctx.session
                     if session is not None:
                         session._cancel_token = cancel_token
-
-                # Build on_event callback for real-time forwarding
-                def _on_event(event: Any) -> None:
-                    self._stream_hook.on_event(event)
-                    if event_observer is not None:
-                        event_observer.emit(event)
-
-                # Inject event_sink so child agents forward events
-                self._pg_ctx.run_meta["event_sink"] = _on_event
 
                 return await drain_run_stream(
                     runtime.kernel.run_stream(

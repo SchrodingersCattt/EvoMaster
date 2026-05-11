@@ -35,7 +35,7 @@ class CompactionRehydrator:
         self._legal_mcp_servers = legal_mcp_servers
         self._schemas_by_server = schemas_by_server
 
-    async def build(self) -> str:
+    async def build(self, *, until_event_id: int | None = None) -> str:
         query_events = self._safe_call("query_events", self._get_query_events, [])
         all_events = self._safe_call("all_events", self._get_all_events, [])
         latest_covered_until = None
@@ -57,9 +57,10 @@ class CompactionRehydrator:
         attachments_text = self._safe_call(
             "attachments",
             lambda: attachment_manifest.format_available_attachments(
-                attachment_manifest.filter_entries_after_event_id(
+                attachment_manifest.filter_entries_in_event_range(
                     attachment_manifest.build_available_attachments(query_events),
-                    latest_covered_until,
+                    after_id=latest_covered_until,
+                    until_id=until_event_id,
                 )
             ),
             "",

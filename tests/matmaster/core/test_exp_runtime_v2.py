@@ -91,6 +91,75 @@ class _MockProvider:
         yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 5})
 
 
+@pytest.mark.asyncio
+async def test_build_runtime_uses_runtime_ports_history(
+    tmp_path: Path,
+) -> None:
+    from matmaster.config.exp import ExpConfig
+    from matmaster.core.exp import Exp
+    from matmaster.types.context import PlaygroundContext
+    from matmaster.types.runtime_ports import (
+        PlaygroundCompactionPort,
+        PlaygroundRuntimePorts,
+    )
+
+    class RuntimeHistory:
+        def query_events(self):
+            return [{"event_id": 2, "source": "runtime"}]
+
+        def all_events(self):
+            return [{"event_id": 20, "source": "runtime"}]
+
+        def latest_checkpoint_covered_until_event_id(self):
+            return 20
+
+    ctx = PlaygroundContext(
+        workdir=tmp_path,
+        execution_workdir=str(tmp_path),
+        session_type="local",
+        cache_area=tmp_path / "cache",
+        llm_provider=_MockProvider(),
+        runtime_ports=PlaygroundRuntimePorts(
+            compaction=PlaygroundCompactionPort(history=RuntimeHistory()),
+        ),
+    )
+
+    runtime = await Exp(ExpConfig(name="test")).build_runtime(ctx)
+    rehydrator = runtime.spec.compactor._rehydrator
+
+    assert rehydrator._get_query_events() == [{"event_id": 2, "source": "runtime"}]
+    assert rehydrator._get_all_events() == [{"event_id": 20, "source": "runtime"}]
+    assert rehydrator._get_latest_checkpoint_covered_until_event_id() == 20
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_passes_current_input_context_to_kernel_meta(
+    tmp_path: Path,
+) -> None:
+    from matmaster.config.exp import ExpConfig
+    from matmaster.core.exp import Exp
+    from matmaster.types.context import PlaygroundContext
+    from matmaster.types.current_input import CurrentInputContext
+
+    current_input_context = CurrentInputContext.from_values(
+        user_text="current task",
+        files=["https://oss.example.com/chat/current.cif"],
+        pre_query_scope_event_id=12,
+    )
+    ctx = PlaygroundContext(
+        workdir=tmp_path,
+        execution_workdir=str(tmp_path),
+        session_type="local",
+        cache_area=tmp_path / "cache",
+        llm_provider=_MockProvider(),
+        run_meta={"current_input_context": current_input_context},
+    )
+
+    runtime = await Exp(ExpConfig(name="test")).build_runtime(ctx)
+
+    assert runtime.spec.meta["current_input_context"] == current_input_context
+
+
 def _make_playground_context(
     workdir: str = "/tmp/test-workdir",
     execution_workdir: str = "/tmp/test-exec",

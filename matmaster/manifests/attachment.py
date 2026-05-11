@@ -129,12 +129,27 @@ def filter_entries_after_event_id(
     entries: list[AttachmentEntry],
     after_id: int | None,
 ) -> list[AttachmentEntry]:
-    if after_id is None:
+    return filter_entries_in_event_range(
+        entries,
+        after_id=after_id,
+        until_id=None,
+    )
+
+
+def filter_entries_in_event_range(
+    entries: list[AttachmentEntry],
+    *,
+    after_id: int | None,
+    until_id: int | None,
+) -> list[AttachmentEntry]:
+    if after_id is None and until_id is None:
         return list(entries)
     return [
         entry
         for entry in entries
-        if entry.source_event_id is not None and entry.source_event_id > after_id
+        if entry.source_event_id is not None
+        and (after_id is None or entry.source_event_id > after_id)
+        and (until_id is None or entry.source_event_id <= until_id)
     ]
 
 

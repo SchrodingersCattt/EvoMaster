@@ -92,3 +92,39 @@ class TestHistoryCheckpointService:
         fanout.flush_persistence_barrier.assert_not_awaited()
         events_table.get_latest_scope_event_id.assert_not_called()
         events_table.add_history_checkpoint.assert_not_called()
+
+    async def test_checkpoint_sink_uses_payload_boundary_override(self) -> None:
+        from src.services.history_checkpoint_service import HistoryCheckpointService
+
+        events_table = Mock()
+        events_table.get_latest_scope_event_id.return_value = 99
+        events_table.add_history_checkpoint.return_value = True
+        fanout = Mock()
+        fanout.flush_persistence_barrier = AsyncMock()
+        sink = HistoryCheckpointService(events_table).build_checkpoint_sink(
+            fanout=fanout,
+            session_id="s1",
+            task_id="t1",
+            invocation_id="i1",
+            spawn_id=None,
+        )
+        base_messages = _compact_base_messages("summary")
+
+        covered = await sink(
+            payload={
+                "durability": "durable",
+                "strategy": "summary",
+                "covered_until_event_id": 41,
+            },
+            base_messages=base_messages,
+        )
+
+        assert covered == 41
+        events_table.get_latest_scope_event_id.assert_not_called()
+        events_table.add_history_checkpoint.assert_called_once()
+        assert (
+            events_table.add_history_checkpoint.call_args.kwargs[
+                "covered_until_event_id"
+            ]
+            == 41
+        )

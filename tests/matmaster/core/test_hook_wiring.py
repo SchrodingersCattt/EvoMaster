@@ -89,7 +89,13 @@ class FakeCompactor:
             turn=turn,
         )
 
-    async def apply_compaction_plan(self, plan, messages):
+    async def apply_compaction_plan(
+        self,
+        plan,
+        messages,
+        *,
+        current_input_context=None,
+    ):
         from matmaster.core.context_compactor import CompactionResult
 
         messages[:] = messages[:1]
@@ -146,7 +152,13 @@ class DoubleEventCompactor:
             turn=turn,
         )
 
-    async def apply_compaction_plan(self, plan, messages):
+    async def apply_compaction_plan(
+        self,
+        plan,
+        messages,
+        *,
+        current_input_context=None,
+    ):
         from matmaster.core.context_compactor import CompactionResult
 
         if plan.phase == "preflight":
@@ -301,6 +313,8 @@ class TestExpWiring:
         self,
         tmp_path: Path,
     ) -> None:
+        from matmaster.types.runtime_ports import PlaygroundRuntimePorts
+
         forwarded = []
 
         async def sink(event) -> None:
@@ -311,8 +325,11 @@ class TestExpWiring:
             execution_workdir=str(tmp_path / "exec"),
             session_type="local",
             cache_area=tmp_path / "cache",
-            run_meta={"session_id": "session-1", "event_sink": sink},
+            run_meta={"session_id": "session-1"},
             llm_provider=MockLLMProvider(),
+            runtime_ports=PlaygroundRuntimePorts(
+                child_event_forward_sink=sink,
+            ),
         )
 
         async def fake_drain_run_stream(_stream, on_event=None):
@@ -350,6 +367,57 @@ class TestExpWiring:
         assert {event.source for event in forwarded} == {"MatMaster:direct"}
         assert all(event.spawn_id for event in forwarded)
         assert len({event.spawn_id for event in forwarded}) == 1
+
+    @pytest.mark.asyncio
+    async def test_make_spawn_fn_uses_runtime_ports_child_event_forward_sink(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from matmaster.types.runtime_ports import PlaygroundRuntimePorts
+
+        forwarded = []
+
+        async def sink(event) -> None:
+            forwarded.append(event)
+
+        ctx = PlaygroundContext(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path / "exec"),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+            run_meta={"session_id": "session-1"},
+            llm_provider=MockLLMProvider(),
+            runtime_ports=PlaygroundRuntimePorts(
+                child_event_forward_sink=sink,
+            ),
+        )
+
+        async def fake_drain_run_stream(_stream, on_event=None):
+            if on_event is not None:
+                await on_event(ResponseEvent(source="agent", content="child answer"))
+            return SimpleNamespace(
+                status="completed",
+                final_content="child done",
+                reason="natural",
+            )
+
+        with (
+            patch(
+                "matmaster.config.loader.load_exp_config",
+                return_value=ExpConfig(name="direct"),
+            ),
+            patch(
+                "matmaster.core.stream_drain.drain_run_stream",
+                side_effect=fake_drain_run_stream,
+            ),
+        ):
+            spawn_fn = Exp._make_spawn_fn(ctx, source_prefix="MatMaster")
+            result = await spawn_fn("direct", "summarize this task")
+
+        assert result == "child done"
+        assert len(forwarded) == 1
+        assert forwarded[0].source == "MatMaster:direct"
+        assert forwarded[0].spawn_id
 
     @pytest.mark.asyncio
     async def test_make_spawn_fn_without_event_sink_still_returns_child_summary(
