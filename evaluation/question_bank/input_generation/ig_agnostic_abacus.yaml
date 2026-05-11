@@ -1520,7 +1520,9 @@ questions:
 
     3) `STRU` 中的 Mg、N、Rh 三种元素必须使用 skill references 中实际存在的 APNS pseudopotential 和 numerical-orbital 文件名；不要凭元素符号猜成 `元素名.upf`。
 
-    4) 结构只需是一个合理的周期性测试小胞，重点是三种元素、`INPUT`/`STRU`/`KPT` 互相一致；不要运行计算。'
+    4) 另外写一个 `apns_lookup_note.md`，简要记录你依据的 ABACUS skill reference list 路径，以及 Mg、N、Rh 对应的 pseudopotential/orbital 文件名映射。
+
+    5) 结构只需是一个合理的周期性测试小胞，重点是三种元素、`INPUT`/`STRU`/`KPT` 互相一致；不要运行计算。'
   tags:
   - eng_abacus
   reference_answers:
@@ -1530,6 +1532,8 @@ questions:
     value: STRU
   - key: kpt_artifact
     value: KPT
+  - key: lookup_note_artifact
+    value: apns_lookup_note.md
   - key: must_input_lcao_core
     value:
       filename: INPUT
@@ -1573,6 +1577,19 @@ questions:
       filename: KPT
       pattern: (?im)^\s*[1-9]\d*\s+[1-9]\d*\s+[1-9]\d*(?:\s+0\s+0\s+0)?\s*$
       flags: im
+  - key: must_lookup_note_sources
+    value:
+      filename: apns_lookup_note.md
+      tokens:
+      - apns_pseudopotentials_v1.list
+      - apns_orbitals_efficiency_v1.list
+      - Mg.PD04.PBE.UPF
+      - N_ONCV_PBE-1.0.upf
+      - Rh_ONCV_PBE_FR-1.0.upf
+      - Mg_gga_10au_100Ry_2s1p.orb
+      - N_gga_8au_100Ry_2s2p1d.orb
+      - Rh_gga_10au_100Ry_4s2p2d1f.orb
+      flags: i
   - key: variable_reference_grounding
     value: {}
   - key: turn_budget
@@ -1600,6 +1617,11 @@ questions:
     axis: correctness
     verify: artifact_exists
     weight: 1.0
+  - id: lookup_note_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `apns_lookup_note.md` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.8
   - id: must_input_lcao_core
     criterion: '[Must] INPUT uses ABACUS LCAO SCF and points to the APNS pseudopotential/orbital directories.'
     axis: correctness
@@ -1635,8 +1657,13 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 0.8
+  - id: must_lookup_note_sources
+    criterion: '[Must] apns_lookup_note.md cites both APNS reference lists and records the exact Mg/N/Rh pseudopotential and orbital filename mapping.'
+    axis: grounding
+    verify: text_file_contains_all
+    weight: 1.0
   - id: variable_reference_grounding
-    criterion: '[Variable] The selected pseudopotential and orbital filenames are grounded in APNS reference lists and the files are mutually consistent; do not accept guessed element-name pseudopotentials when a different APNS filename exists.'
+    criterion: '[Variable] The selected pseudopotential and orbital filenames are grounded in ABACUS skill APNS reference lists (`apns_pseudopotentials_v1.list` and `apns_orbitals_efficiency_v1.list`) and the files are mutually consistent; do not accept guessed element-name pseudopotentials when a different APNS filename exists.'
     axis: grounding
     verify: llm_binary_judge
     weight: 0.5
