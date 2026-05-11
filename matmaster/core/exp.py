@@ -679,12 +679,46 @@ class Exp:
                     merged[key] = value
             return merged
 
+        def _local_user_skills_root(session: Any | None) -> Path | None:
+            if session is None:
+                return None
+            raw = getattr(session, "local_user_skills_root", None)
+            if not isinstance(raw, str):
+                return None
+            root = raw.strip()
+            return Path(root) if root else None
+
+        def _disabled_skill_names_from_settings(root: Path) -> set[str]:
+            settings_path = root / ".settings.json"
+            if not settings_path.is_file():
+                return set()
+            try:
+                payload = _json.loads(settings_path.read_text(encoding="utf-8"))
+            except Exception:
+                self.logger.warning(
+                    "Failed to read skill settings: %s",
+                    settings_path,
+                    exc_info=True,
+                )
+                return set()
+            disabled = payload.get("disabled") if isinstance(payload, dict) else None
+            if not isinstance(disabled, list):
+                return set()
+            return {
+                name.strip()
+                for name in disabled
+                if isinstance(name, str) and name.strip()
+            }
+
         # Build root list from str | list[str]
         roots_raw = skills_cfg.skills_root
         if isinstance(roots_raw, list):
             roots = [Path(r) for r in roots_raw if r]
         else:
             roots = [Path(roots_raw)] if roots_raw else []
+        local_user_skills_root = _local_user_skills_root(ctx.session)
+        if local_user_skills_root is not None:
+            roots.append(local_user_skills_root)
         if not roots:
             self.logger.warning(
                 "skills.enabled=true but skills_root is empty, skipping skill init"
@@ -692,8 +726,11 @@ class Exp:
             return
 
         skill_registry = SkillRegistry(roots)
-        if skills_cfg.disabled_skill_names:
-            skill_registry.remove_skills(set(skills_cfg.disabled_skill_names))
+        disabled_skill_names = set(skills_cfg.disabled_skill_names)
+        for root in roots:
+            disabled_skill_names.update(_disabled_skill_names_from_settings(root))
+        if disabled_skill_names:
+            skill_registry.remove_skills(disabled_skill_names)
         schema_cache = ToolSchemaCache(Path(skills_cfg.cache_dir))
 
         # MCP runtime config: ALWAYS self-load from config_dir.

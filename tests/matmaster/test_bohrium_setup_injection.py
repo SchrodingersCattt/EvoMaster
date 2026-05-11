@@ -70,7 +70,6 @@ class TestBohriumSetupServiceOrchestration:
             result = await svc.run_setup(
                 session_id="session-123",
                 playground=object(),
-                skill_sync_spec=None,
                 run_started_at=1000.0,
             )
 
@@ -130,7 +129,6 @@ class TestBohriumSetupServiceOrchestration:
             await svc.run_setup(
                 session_id='sess-1',
                 playground=object(),
-                skill_sync_spec=None,
                 run_started_at=1.0,
                 bohrium_required=True,
             )
@@ -166,7 +164,6 @@ class TestBohriumSetupServiceOrchestration:
             result = svc._run_setup_sync(
                 session_id='sess-1',
                 pg=object(),
-                skill_sync_spec=None,
                 event_callback=sink,
                 run_started_at=1.0,
                 bohrium_required=True,
