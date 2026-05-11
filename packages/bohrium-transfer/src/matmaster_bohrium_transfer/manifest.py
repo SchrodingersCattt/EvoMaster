@@ -6,6 +6,8 @@ import time
 from pathlib import Path
 from typing import Any
 
+from filelock import FileLock
+
 from .security import secure_write_json
 
 
@@ -16,6 +18,12 @@ class ManifestStore:
     def transfer_dir(self, transfer_id: str) -> Path:
         return self.root / transfer_id
 
+    def lock(self, transfer_id: str) -> FileLock:
+        directory = self.transfer_dir(transfer_id)
+        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        directory.chmod(0o700)
+        return FileLock(str(directory / "manifest.lock"))
+
     def read(self, transfer_id: str) -> dict[str, Any]:
         path = self.transfer_dir(transfer_id) / "manifest.json"
         return json.loads(path.read_text(encoding="utf-8"))
@@ -23,6 +31,7 @@ class ManifestStore:
     def write(self, transfer_id: str, manifest: dict[str, Any]) -> None:
         directory = self.transfer_dir(transfer_id)
         directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        directory.chmod(0o700)
         path = directory / "manifest.json"
         tmp = directory / f"manifest.{time.time_ns()}.tmp"
         secure_write_json(tmp, manifest)

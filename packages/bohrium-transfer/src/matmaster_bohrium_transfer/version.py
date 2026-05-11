@@ -4,16 +4,24 @@ import platform
 from importlib.metadata import PackageNotFoundError, version
 
 PACKAGE_NAME = "matmaster-bohrium-transfer"
-SCHEMA_VERSION = "v1"
-PROTOCOL_VERSION = "1.0"
+SCHEMA_VERSION = "v2"
+PROTOCOL_VERSION = "1.1"
 GIT_COMMIT = "unknown"
 
 CAPABILITIES = (
     "multipart_upload",
     "upload_concurrency",
-    "manifest_resume",
+    "manifest_resume_v2",
+    "transfer_id_path_isolation",
+    "strict_business_code",
+    "single_retry_budget",
+    "streaming_part_upload",
+    "part_content_md5",
     "range_resume",
     "range_download_concurrency",
+    "download_sha256",
+    "download_zip_verify",
+    "download_hash_validation",
     "sandbox_iterate",
     "zip_stored",
     "secure_payload_file",
@@ -36,6 +44,7 @@ def version_payload() -> dict[str, object]:
         "ok": True,
         "package": PACKAGE_NAME,
         "package_version": PACKAGE_VERSION,
+        "build_id": f"{PACKAGE_VERSION}+{GIT_COMMIT}",
         "protocol_version": PROTOCOL_VERSION,
         "schema_version": SCHEMA_VERSION,
         "git_commit": GIT_COMMIT,

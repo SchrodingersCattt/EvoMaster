@@ -418,17 +418,24 @@ class TestBohriumDownloadExecution:
         ):
             del headers, params, timeout
             http_get_calls.append(url)
-            if url.startswith('https://store.example/api/download/prefix/log'):
+            decoded_url = url.replace('%2F', '/')
+            if decoded_url.startswith('https://store.example/api/download/prefix/log'):
                 return _FakeDownloadResponse(content=b'job failed\n')
-            if url.startswith('https://store.example/api/download/prefix/job-789.zip'):
+            if decoded_url.startswith(
+                'https://store.example/api/download/prefix/job-789.zip'
+            ):
                 return _FakeDownloadResponse(status_code=404)
-            if url.startswith('https://store.example/api/download/prefix/run_bader.sh'):
+            if decoded_url.startswith(
+                'https://store.example/api/download/prefix/run_bader.sh'
+            ):
                 return _FakeDownloadResponse(content=b'#!/bin/bash\necho run\n')
-            if url.startswith(
+            if decoded_url.startswith(
                 'https://store.example/api/download/prefix/OUT.ABACUS/warning.log'
             ):
                 return _FakeDownloadResponse(content=b'warning details\n')
-            if url.startswith('https://store.example/api/download/prefix/bader_bin'):
+            if decoded_url.startswith(
+                'https://store.example/api/download/prefix/bader_bin'
+            ):
                 return _FakeDownloadResponse(content=b'binary')
             return _FakeDownloadResponse(status_code=404)
 

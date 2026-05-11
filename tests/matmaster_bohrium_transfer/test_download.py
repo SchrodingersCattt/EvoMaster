@@ -1,16 +1,22 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import io
 import zipfile
 from pathlib import Path
 
+import pytest
 from matmaster_bohrium_transfer.download import (
+    build_download_url,
     choose_sandbox_zip_object,
     download_file,
     extract_zip_safe,
     probe_range,
     run_download_results_payload,
+    verify_zip_archive,
 )
+from matmaster_bohrium_transfer.errors import TransferError
 
 
 class FakeResponse:
@@ -109,6 +115,18 @@ def test_probe_range_handles_missing_content_length() -> None:
     assert capability.bytes_total is None
 
 
+def test_build_download_url_encodes_object_key_and_token() -> None:
+    url = build_download_url(
+        "https://store.example",
+        "prefix/job 1/out.zip",
+        "a+b/c==",
+    )
+
+    assert "/prefix%2Fjob%201%2Fout.zip?" in url
+    assert "token=a%2Bb%2Fc%3D%3D" in url
+    assert "a+b/c==" not in url
+
+
 def test_download_file_uses_concurrent_range_requests(tmp_path: Path) -> None:
     session = FakeRangeSession()
     dest = tmp_path / "out.zip"
@@ -130,10 +148,49 @@ def test_download_file_uses_concurrent_range_requests(tmp_path: Path) -> None:
     assert ranges == ["bytes=0-3", "bytes=4-7", "bytes=8-9"]
     assert summary.bytes_total == 10
     assert summary.resume_supported is True
+    assert summary.sha256 == hashlib.sha256(b"0123456789").hexdigest()
+    assert summary.server_hash_checked is False
+    assert summary.hash_validation_skipped is True
     event_types = [event.event_type for event in sink.events]
     assert "download_started" in event_types
     assert "download_part_completed" in event_types
     assert "download_completed" in event_types
+
+
+def test_download_file_validates_content_md5_header(tmp_path: Path) -> None:
+    content = b"hello"
+    md5_base64 = base64.b64encode(
+        hashlib.md5(content, usedforsecurity=False).digest()
+    ).decode()
+
+    class Session:
+        def head(self, url, *, allow_redirects=True, timeout=30):
+            del url, allow_redirects, timeout
+            return FakeResponse(headers={})
+
+        def get(self, url, *, headers=None, timeout=300, stream=True):
+            del url, headers, timeout, stream
+            return FakeResponse(content, headers={"Content-MD5": md5_base64})
+
+    summary = download_file(
+        "https://store.example/api/download/out.zip?token=t",
+        tmp_path / "out.zip",
+        session=Session(),
+        concurrency=1,
+    )
+
+    assert summary.sha256 == hashlib.sha256(content).hexdigest()
+    assert summary.server_hash_checked is True
+    assert summary.server_hash_value == md5_base64
+    assert summary.hash_validation_skipped is False
+
+
+def test_verify_zip_archive_rejects_invalid_zip(tmp_path: Path) -> None:
+    archive = tmp_path / "bad.zip"
+    archive.write_bytes(b"not-a-zip")
+
+    with pytest.raises(TransferError, match="invalid zip"):
+        verify_zip_archive(archive)
 
 
 def test_run_download_results_payload_preserves_sandbox_fallback_order(
@@ -200,11 +257,16 @@ def test_run_download_results_payload_preserves_sandbox_fallback_order(
 
     assert "log" in result["files"]
     assert "done" in result["log_tail"]
+    transfer_metadata = result["metadata"]["transfer"]
+    assert transfer_metadata["download_sha256"] == hashlib.sha256(zip_bytes).hexdigest()
+    assert transfer_metadata["fallback_attempts"]
     assert any("iterate" in call for call in calls)
     assert any("job-55.zip" in call for call in calls)
 
 
-def test_run_download_results_payload_returns_bad_zip_marker(tmp_path: Path) -> None:
+def test_run_download_results_payload_treats_bad_zip_as_transfer_failure(
+    tmp_path: Path,
+) -> None:
     class Response:
         content = b"not-a-zip"
         ok = True
@@ -224,15 +286,13 @@ def test_run_download_results_payload_returns_bad_zip_marker(tmp_path: Path) -> 
         def get(self, url, **kwargs):
             return Response()
 
-    result = run_download_results_payload(
-        {
-            "job_id": "job-1",
-            "detail_data": {"resultUrl": "https://store.example/out.zip"},
-            "result_dir": str(tmp_path / "results"),
-            "sandbox": False,
-        },
-        session=FakeSession(),
-    )
-
-    assert result["files"] == ["(bad zip: out.zip)"]
-    assert result["log_tail"] == "(no log file found in result directory)"
+    with pytest.raises(TransferError, match="invalid zip"):
+        run_download_results_payload(
+            {
+                "job_id": "job-1",
+                "detail_data": {"resultUrl": "https://store.example/out.zip"},
+                "result_dir": str(tmp_path / "results"),
+                "sandbox": False,
+            },
+            session=FakeSession(),
+        )

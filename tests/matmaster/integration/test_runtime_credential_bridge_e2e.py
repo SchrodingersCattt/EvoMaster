@@ -6,7 +6,7 @@ import asyncio
 import json
 from types import SimpleNamespace
 
-from matmaster_bohrium_transfer.version import SCHEMA_VERSION
+from matmaster_bohrium_transfer.version import PROTOCOL_VERSION, SCHEMA_VERSION
 
 import matmaster.bohrium.client as bohrium_client_module
 import matmaster.bohrium.upload as bohrium_upload_module
@@ -14,6 +14,9 @@ from matmaster.bohrium.credentials import build_bohrium_context
 from matmaster.bohrium.runtime import BohriumRuntimeHandle, attach_runtime, get_runtime
 from matmaster.bohrium.types import BohriumCredentials, BohriumExecutionContext
 from matmaster.tools.builtin.bohrium_tool import BohriumTool
+from matmaster.tools.builtin.bohrium_tool.remote_runner import (
+    REQUIRED_REMOTE_CAPABILITIES,
+)
 from matmaster.tools.tool_result import ToolResult
 
 
@@ -106,8 +109,12 @@ class _RemoteShareSession(SimpleNamespace):
                 "stdout": json.dumps(
                     {
                         "schema_version": SCHEMA_VERSION,
-                        "protocol_version": "1.0",
+                        "protocol_version": PROTOCOL_VERSION,
                         "ok": True,
+                        "package": "matmaster-bohrium-transfer",
+                        "package_version": "0.1.0",
+                        "build_id": "0.1.0+test",
+                        "capabilities": sorted(REQUIRED_REMOTE_CAPABILITIES),
                     }
                 ),
                 "stderr": "",
@@ -120,7 +127,7 @@ class _RemoteShareSession(SimpleNamespace):
                 "stdout": json.dumps(
                     {
                         "schema_version": SCHEMA_VERSION,
-                        "protocol_version": "1.0",
+                        "protocol_version": PROTOCOL_VERSION,
                         "ok": True,
                         "oss_key": "p/input.zip",
                     }
@@ -268,6 +275,8 @@ class TestBohriumToolAndRemoteShare:
         assert len(payload_writes) == 1
         helper_payload = json.loads(payload_writes[0])
         assert helper_payload["schema_version"] == SCHEMA_VERSION
+        assert helper_payload["protocol_version"] == PROTOCOL_VERSION
+        assert helper_payload["transfer_id"].startswith("submit-")
         assert helper_payload["input_dir"] == "/share/inputs"
         assert helper_payload["token"] == "t"
         assert post_calls[1]["payload"]["cmd"].endswith("> log 2>&1")

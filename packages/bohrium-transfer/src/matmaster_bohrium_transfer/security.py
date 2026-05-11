@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -32,6 +33,11 @@ def redact_secrets(value: Any) -> str:
     if isinstance(sanitized, str):
         return sanitized
     return json.dumps(sanitized, ensure_ascii=False, sort_keys=True)
+
+
+def token_fingerprint(token: str, transfer_id: str) -> str:
+    material = f"{transfer_id}:{token}".encode()
+    return hashlib.sha256(material).hexdigest()
 
 
 def secure_write_json(path: str | Path, payload: dict[str, Any]) -> None:
