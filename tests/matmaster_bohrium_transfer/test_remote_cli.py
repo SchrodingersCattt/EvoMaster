@@ -59,3 +59,35 @@ def test_upload_submit_uses_transfer_id_isolated_archive_paths(
         "/share/.matmaster/transfers/t-a/archive/input.zip",
         "/share/.matmaster/transfers/t-b/archive/input.zip",
     ]
+
+
+def test_upload_submit_uses_serial_multipart(tmp_path: Path, monkeypatch) -> None:
+    input_dir = tmp_path / "input"
+    input_dir.mkdir()
+    (input_dir / "payload.bin").write_bytes(b"payload")
+    captured: dict = {}
+
+    def fake_upload_file_multipart(**kwargs):
+        captured.update(kwargs)
+        return {"bytes_total": 7, "parts_total": 1}
+
+    monkeypatch.setattr(
+        remote_module,
+        "upload_file_multipart",
+        fake_upload_file_multipart,
+    )
+
+    result = remote_module._upload_submit(
+        {
+            "transfer_id": "t-serial",
+            "input_dir": str(input_dir),
+            "store_host": "https://store.example.com",
+            "store_path": "sandbox/jobs/run-1/",
+            "token": "token-123",
+            "transfer_root": str(tmp_path / "transfers"),
+        }
+    )
+
+    assert result["ok"] is True
+    assert result["oss_key"] == "sandbox/jobs/run-1/input.zip"
+    assert captured.get("concurrency") == 1
