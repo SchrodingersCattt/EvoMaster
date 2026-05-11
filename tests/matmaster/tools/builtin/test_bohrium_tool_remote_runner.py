@@ -7,7 +7,9 @@ import pytest
 
 from matmaster.bohrium.errors import BohriumTransferError
 from matmaster.tools.builtin.bohrium_tool.remote_runner import (
+    REQUIRED_REMOTE_CAPABILITIES,
     SCHEMA_VERSION,
+    probe_remote_transfer,
     run_remote_helper,
 )
 
@@ -91,16 +93,29 @@ class RunnerSession:
         self.writes.append((path, content))
 
 
+def _remote_version_payload(*, capabilities=None) -> dict[str, Any]:
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "protocol_version": "1.1",
+        "ok": True,
+        "package": "matmaster-bohrium-transfer",
+        "package_version": "0.1.0",
+        "build_id": "0.1.0+test",
+        "capabilities": sorted(capabilities or REQUIRED_REMOTE_CAPABILITIES),
+    }
+
+
 def test_run_remote_helper_writes_payload_file_and_cleans_up() -> None:
     session = RunnerSession(
-        helper_stdout=json.dumps(
+        version_stdout=json.dumps(_remote_version_payload()),
+        command_stdout=json.dumps(
             {
                 "schema_version": SCHEMA_VERSION,
-                "protocol_version": "1.0",
+                "protocol_version": "1.1",
                 "ok": True,
                 "oss_key": "prefix/input.zip",
             }
-        )
+        ),
     )
 
     result = run_remote_helper(
@@ -142,13 +157,7 @@ def test_run_remote_helper_writes_payload_file_and_cleans_up() -> None:
 
 def test_run_remote_helper_rejects_schema_mismatch_and_cleans_up() -> None:
     session = RunnerSession(
-        version_stdout=json.dumps(
-            {
-                "schema_version": SCHEMA_VERSION,
-                "protocol_version": "1.0",
-                "ok": True,
-            }
-        ),
+        version_stdout=json.dumps(_remote_version_payload()),
         command_stdout=json.dumps(
             {"schema_version": "v0", "protocol_version": "1.0", "ok": True}
         ),
@@ -169,13 +178,7 @@ def test_run_remote_helper_rejects_schema_mismatch_and_cleans_up() -> None:
 
 def test_run_remote_helper_rejects_non_json_stdout() -> None:
     session = RunnerSession(
-        version_stdout=json.dumps(
-            {
-                "schema_version": SCHEMA_VERSION,
-                "protocol_version": "1.0",
-                "ok": True,
-            }
-        ),
+        version_stdout=json.dumps(_remote_version_payload()),
         command_stdout="not json",
         command_exit_code=1,
     )
@@ -190,17 +193,11 @@ def test_run_remote_helper_rejects_non_json_stdout() -> None:
 
 def test_run_remote_helper_rejects_ok_false_with_redacted_error() -> None:
     session = RunnerSession(
-        version_stdout=json.dumps(
-            {
-                "schema_version": SCHEMA_VERSION,
-                "protocol_version": "1.0",
-                "ok": True,
-            }
-        ),
+        version_stdout=json.dumps(_remote_version_payload()),
         command_stdout=json.dumps(
             {
                 "schema_version": SCHEMA_VERSION,
-                "protocol_version": "1.0",
+                "protocol_version": "1.1",
                 "ok": False,
                 "error": "failed https://store/api/download/x?token=secret-token",
             }
@@ -220,18 +217,40 @@ def test_run_remote_helper_rejects_ok_false_with_redacted_error() -> None:
     assert "token=<redacted>" in message
 
 
-def test_remote_version_probe_uses_preinstalled_package() -> None:
+def test_run_remote_helper_uses_safe_message_without_leaking_diagnostics() -> None:
     session = RunnerSession(
-        helper_stdout=json.dumps(
+        version_stdout=json.dumps(_remote_version_payload()),
+        command_stdout=json.dumps(
             {
-                "schema_version": "v1",
-                "protocol_version": "1.0",
-                "ok": True,
-                "package": "matmaster-bohrium-transfer",
-                "capabilities": ["multipart_upload", "zip_stored"],
+                "schema_version": SCHEMA_VERSION,
+                "protocol_version": "1.1",
+                "ok": False,
+                "safe_message": "invalid zip archive",
+                "diagnostics": {
+                    "fallback_attempts": [
+                        {"error": "https://store/out.zip?token=secret-token"}
+                    ]
+                },
             }
-        )
+        ),
+        command_exit_code=1,
     )
+
+    with pytest.raises(BohriumTransferError) as exc_info:
+        run_remote_helper(
+            session,
+            subcommand="download-results",
+            payload={"result_dir": "/share/results"},
+        )
+
+    message = str(exc_info.value)
+    assert "invalid zip archive" in message
+    assert "secret-token" not in message
+    assert "fallback_attempts" not in message
+
+
+def test_remote_version_probe_uses_preinstalled_package() -> None:
+    session = RunnerSession(helper_stdout=json.dumps(_remote_version_payload()))
 
     from matmaster.tools.builtin.bohrium_tool.remote_runner import (
         probe_remote_transfer,
@@ -249,24 +268,45 @@ def test_remote_version_probe_uses_preinstalled_package() -> None:
 def test_remote_version_probe_rejects_non_json() -> None:
     session = RunnerSession(helper_stdout="not json", helper_exit_code=1)
 
-    from matmaster.tools.builtin.bohrium_tool.remote_runner import (
-        probe_remote_transfer,
-    )
-
     with pytest.raises(BohriumTransferError, match="remote transfer version probe"):
         probe_remote_transfer(session)
 
 
-def test_run_remote_transfer_uses_package_cli_not_source_copy() -> None:
+def test_remote_version_probe_rejects_missing_required_capabilities() -> None:
     session = RunnerSession(
         helper_stdout=json.dumps(
             {
-                "schema_version": "v1",
-                "protocol_version": "1.0",
+                "schema_version": SCHEMA_VERSION,
+                "protocol_version": "1.1",
+                "ok": True,
+                "package": "matmaster-bohrium-transfer",
+                "package_version": "0.1.0",
+                "build_id": "0.1.0+test",
+                "capabilities": ["multipart_upload"],
+            }
+        )
+    )
+
+    with pytest.raises(BohriumTransferError) as exc_info:
+        probe_remote_transfer(session)
+
+    message = str(exc_info.value)
+    assert "remote transfer capability mismatch" in message
+    assert "part_content_md5" in message
+    assert "matmaster_bohrium_transfer" in message
+
+
+def test_run_remote_transfer_uses_package_cli_not_source_copy() -> None:
+    session = RunnerSession(
+        version_stdout=json.dumps(_remote_version_payload()),
+        command_stdout=json.dumps(
+            {
+                "schema_version": SCHEMA_VERSION,
+                "protocol_version": "1.1",
                 "ok": True,
                 "oss_key": "prefix/input.zip",
             }
-        )
+        ),
     )
 
     from matmaster.tools.builtin.bohrium_tool.remote_runner import run_remote_transfer

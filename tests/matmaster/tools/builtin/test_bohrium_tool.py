@@ -399,21 +399,21 @@ class TestBohriumExecution:
         assert isinstance(result, ToolResult)
         assert result.status == "success"
         assert session.download_calls == []
-        assert helper_calls == [
-            (
-                "upload-submit",
-                {
-                    "input_dir": "/share/Pd111_submit",
-                    "store_host": "https://store.example.com",
-                    "store_path": "sandbox/jobs/run-1/",
-                    "token": "token-123",
-                    "object_name": "input.zip",
-                },
-            )
-        ]
+        assert helper_calls[0][0] == "upload-submit"
+        helper_payload = helper_calls[0][1]
+        assert helper_payload["transfer_id"].startswith("submit-")
+        assert helper_payload | {"transfer_id": "<dynamic>"} == {
+            "transfer_id": "<dynamic>",
+            "input_dir": "/share/Pd111_submit",
+            "store_host": "https://store.example.com",
+            "store_path": "sandbox/jobs/run-1/",
+            "token": "token-123",
+            "object_name": "input.zip",
+        }
         assert post_calls[1][1]["cmd"].endswith("> log 2>&1")
         assert post_calls[1][1]["ossPath"][0].startswith(
-            "https://store.example.com/api/download/sandbox/jobs/run-1/input.zip"
+            "https://store.example.com/api/download/"
+            "sandbox%2Fjobs%2Frun-1%2Finput.zip"
         )
 
     def test_submit_delegates_input_path_resolution_to_bohrium_paths(

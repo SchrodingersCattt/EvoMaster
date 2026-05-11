@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from matmaster_bohrium_transfer.errors import TransferError
 
 from matmaster.bohrium.artifacts import download_job_artifacts
 from matmaster.bohrium.types import (
@@ -81,6 +82,49 @@ def test_upload_input_source_uses_remote_helper_without_session_download(
     assert helper_calls[0][1]["input_dir"] == "/share/input"
 
 
+def test_upload_input_source_adds_transfer_id_and_encodes_download_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = FakeRemoteSession()
+    helper_calls: list[tuple[str, dict]] = []
+
+    def fake_remote_helper(session_arg, *, subcommand, payload, timeout=3600):
+        del timeout
+        assert session_arg is session
+        helper_calls.append((subcommand, payload))
+        return {
+            "schema_version": "v1",
+            "ok": True,
+            "oss_key": "sandbox/jobs/run-1/input.zip",
+        }
+
+    monkeypatch.setattr(
+        "matmaster.tools.builtin.bohrium_tool.transfers.run_remote_transfer",
+        fake_remote_helper,
+    )
+    source = BohriumInputSource(
+        kind="remote_share_dir",
+        raw_path="/share/input",
+        resolved_path="/share/input",
+    )
+
+    upload = upload_input_source(
+        source,
+        create_data={
+            "storePath": "sandbox/jobs/run-1/",
+            "storeHost": "https://store.example.com",
+            "token": "a+b/c==",
+        },
+        session=session,
+    )
+
+    helper_payload = helper_calls[0][1]
+    assert helper_payload["transfer_id"]
+    assert helper_payload["transfer_id"].startswith("submit-")
+    assert "a+b/c==" not in upload.download_url
+    assert "token=a%2Bb%2Fc%3D%3D" in upload.download_url
+
+
 def test_publish_download_target_remote_direct_does_not_upload(
     tmp_path: Path,
 ) -> None:
@@ -151,7 +195,7 @@ def test_download_job_artifacts_preserves_sandbox_zip_object_fallback(
     assert captured["detail_data"]["resultUrl"].endswith("token=root-token")
 
 
-def test_download_job_artifacts_returns_bad_zip_marker_without_crashing(
+def test_download_job_artifacts_treats_bad_zip_as_transfer_failure(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -175,22 +219,18 @@ def test_download_job_artifacts_returns_bad_zip_marker_without_crashing(
     )
 
     def fake_run_download_results_payload(payload):
-        return {
-            "files": ["(bad zip: out.zip)"],
-            "log_tail": "(no log file found in result directory)",
-        }
+        del payload
+        raise TransferError("download_verify", "invalid zip archive")
 
     monkeypatch.setattr(
         "matmaster.bohrium.artifacts.run_download_results_payload",
         fake_run_download_results_payload,
     )
 
-    files, log_tail = download_job_artifacts(
-        job_id=1,
-        detail_data={"resultUrl": "https://store.example/out.zip"},
-        result_dir=target.staging_dir,
-        ctx=ctx,
-    )
-
-    assert files == ["(bad zip: out.zip)"]
-    assert log_tail == "(no log file found in result directory)"
+    with pytest.raises(TransferError, match="invalid zip"):
+        download_job_artifacts(
+            job_id=1,
+            detail_data={"resultUrl": "https://store.example/out.zip"},
+            result_dir=target.staging_dir,
+            ctx=ctx,
+        )

@@ -9,6 +9,7 @@ from pathlib import Path
 from .archive import create_zip_store
 from .client import StoreHostClient
 from .download import run_download_results_payload
+from .errors import TransferError
 from .manifest import ManifestStore
 from .multipart import upload_file_multipart
 from .security import redact_secrets
@@ -35,10 +36,13 @@ def _upload_submit(payload: dict[str, object]) -> dict[str, object]:
     store_path = str(payload["store_path"]).strip().rstrip("/") + "/"
     token = str(payload["token"])
     object_name = str(payload.get("object_name") or "input.zip")
+    transfer_id = str(payload.get("transfer_id") or "").strip()
+    if not transfer_id:
+        raise ValueError("missing required payload field: transfer_id")
     transfer_root = Path(
         str(payload.get("transfer_root") or "/share/.matmaster/transfers")
     )
-    archive_path = transfer_root / "archives" / object_name
+    archive_path = transfer_root / transfer_id / "archive" / object_name
     archive = create_zip_store(input_dir, archive_path)
     object_key = f"{store_path}{object_name}"
     client = StoreHostClient(store_host, token)
@@ -47,9 +51,7 @@ def _upload_submit(payload: dict[str, object]) -> dict[str, object]:
         file_path=archive.archive_path,
         object_key=object_key,
         manifest_store=ManifestStore(transfer_root),
-        transfer_id=str(
-            payload.get("transfer_id") or f"submit-input-{abs(hash(object_key))}"
-        ),
+        transfer_id=transfer_id,
     )
     return {
         "schema_version": SCHEMA_VERSION,
@@ -63,6 +65,23 @@ def _upload_submit(payload: dict[str, object]) -> dict[str, object]:
 
 def _download_results(payload: dict[str, object]) -> dict[str, object]:
     return run_download_results_payload(payload)
+
+
+def _error_payload(exc: Exception, *, stage: str) -> dict[str, object]:
+    if isinstance(exc, TransferError):
+        payload = exc.to_payload()
+        payload.setdefault("schema_version", SCHEMA_VERSION)
+        payload.setdefault("protocol_version", PROTOCOL_VERSION)
+        return payload
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "protocol_version": PROTOCOL_VERSION,
+        "ok": False,
+        "stage": stage,
+        "retryable": False,
+        "safe_message": redact_secrets(str(exc)),
+        "resume_available": False,
+    }
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -92,34 +111,14 @@ def main(argv: Sequence[str] | None = None) -> int:
             _print_json(_upload_submit(_load_payload(args.payload_file)))
             return 0
         except Exception as exc:
-            _print_json(
-                {
-                    "schema_version": SCHEMA_VERSION,
-                    "protocol_version": PROTOCOL_VERSION,
-                    "ok": False,
-                    "stage": "upload_submit",
-                    "retryable": False,
-                    "safe_message": redact_secrets(str(exc)),
-                    "resume_available": False,
-                }
-            )
+            _print_json(_error_payload(exc, stage="upload_submit"))
             return 1
     if args.command == "download-results":
         try:
             _print_json(_download_results(_load_payload(args.payload_file)))
             return 0
         except Exception as exc:
-            _print_json(
-                {
-                    "schema_version": SCHEMA_VERSION,
-                    "protocol_version": PROTOCOL_VERSION,
-                    "ok": False,
-                    "stage": "download_results",
-                    "retryable": False,
-                    "safe_message": redact_secrets(str(exc)),
-                    "resume_available": False,
-                }
-            )
+            _print_json(_error_payload(exc, stage="download_results"))
             return 1
     parser.error(f"unsupported command: {args.command}")
     return 2
