@@ -194,6 +194,25 @@ class Exp:
             meta={},
         )
 
+    @staticmethod
+    def _build_kernel_meta(
+        base_meta: dict[str, Any],
+        run_meta: dict[str, Any],
+        *,
+        spawn_id: str | None,
+    ) -> dict[str, Any]:
+        meta = {
+            **base_meta,
+            "task_id": run_meta.get("task_id", ""),
+            "session_id": run_meta.get("session_id", ""),
+            "spawn_id": spawn_id,
+            "attachment_manifest": run_meta.get("attachment_manifest", ""),
+        }
+        current_input_context = run_meta.get("current_input_context")
+        if current_input_context is not None:
+            meta["current_input_context"] = current_input_context
+        return meta
+
     # ── Active planes derivation ────────────────────────
 
     @staticmethod
@@ -431,13 +450,11 @@ class Exp:
                     checkpoint_sink=checkpoint_sink,
                     pre_compaction_barrier=pre_compaction_barrier,
                 ),
-                "meta": {
-                    **spec.meta,
-                    "task_id": run_meta.get("task_id", ""),
-                    "session_id": run_meta.get("session_id", ""),
-                    "spawn_id": spawn_id,
-                    "attachment_manifest": run_meta.get("attachment_manifest", ""),
-                },
+                "meta": self._build_kernel_meta(
+                    spec.meta,
+                    run_meta,
+                    spawn_id=spawn_id,
+                ),
             }
         )
 

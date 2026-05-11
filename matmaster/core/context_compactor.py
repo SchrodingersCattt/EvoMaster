@@ -319,7 +319,12 @@ class ContextCompactor:
 
         try:
             summary = await self._summarize(summary_input)
-            rehydrated = await self._rehydrator.build()
+            until_event_id = (
+                current_input_context.pre_query_scope_event_id
+                if current_split and current_input_context is not None
+                else None
+            )
+            rehydrated = await self._rehydrator.build(until_event_id=until_event_id)
             if current_split and current_input_context is not None:
                 runtime_bundle = self._context_builder.build_compact_bundle(
                     summary=summary,
