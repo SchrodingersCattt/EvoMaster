@@ -18,6 +18,7 @@ import inspect
 import logging
 import time
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from matmaster.core.finish_diagnostics import (
@@ -32,6 +33,7 @@ from matmaster.core.kernel_items import (
     _TerminalItem,
 )
 from matmaster.types.cancellation import CancellationToken
+from matmaster.types.current_input import CurrentInputContext
 from matmaster.types.errors import LLMError
 from matmaster.types.events import (
     AssistantStateEvent,
@@ -92,6 +94,7 @@ class AgentKernel:
         state: _KernelState,
         plan: Any,
         checkpoint_sink: Any,
+        current_input_context: CurrentInputContext | None = None,
     ) -> AsyncIterator[_KernelItem]:
         yield _KernelItem(
             event=CompactionEvent(
@@ -108,7 +111,11 @@ class AgentKernel:
             result = pre_compaction_barrier()
             if inspect.isawaitable(result):
                 await result
-        result = await spec.compactor.apply_compaction_plan(plan, state.messages)
+        result = await spec.compactor.apply_compaction_plan(
+            plan,
+            state.messages,
+            current_input_context=current_input_context,
+        )
         messages_after = len(state.messages)
 
         if spec.hook_executor is not None:
@@ -310,6 +317,18 @@ class AgentKernel:
                 UserPromptContext(prompt=task, session_id=session_id),
             )
 
+        raw_current_input_context = spec.meta.get("current_input_context")
+        current_input_context = (
+            raw_current_input_context
+            if isinstance(raw_current_input_context, CurrentInputContext)
+            else CurrentInputContext.from_payload(raw_current_input_context)
+        )
+        effective_current_input_context = (
+            replace(current_input_context, user_text=task)
+            if current_input_context is not None
+            else None
+        )
+
         current_user_images = [
             ImageContentPart.model_validate(image)
             for image in spec.meta.get("current_user_images", [])
@@ -335,13 +354,23 @@ class AgentKernel:
                 spec.compactor, "plan_preflight_compaction", None
             )
             if callable(preflight_planner):
-                plan = preflight_planner(state.messages)
+                skip_preflight_for_empty_history = (
+                    effective_current_input_context is not None
+                    and effective_current_input_context.has_effective_input()
+                    and not history
+                )
+                plan = (
+                    None
+                    if skip_preflight_for_empty_history
+                    else preflight_planner(state.messages)
+                )
                 if plan is not None:
                     async for item in self._run_compaction_plan(
                         spec=spec,
                         state=state,
                         plan=plan,
                         checkpoint_sink=checkpoint_sink,
+                        current_input_context=effective_current_input_context,
                     ):
                         yield item
             else:

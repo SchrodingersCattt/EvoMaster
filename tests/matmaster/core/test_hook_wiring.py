@@ -89,7 +89,13 @@ class FakeCompactor:
             turn=turn,
         )
 
-    async def apply_compaction_plan(self, plan, messages):
+    async def apply_compaction_plan(
+        self,
+        plan,
+        messages,
+        *,
+        current_input_context=None,
+    ):
         from matmaster.core.context_compactor import CompactionResult
 
         messages[:] = messages[:1]
@@ -146,7 +152,13 @@ class DoubleEventCompactor:
             turn=turn,
         )
 
-    async def apply_compaction_plan(self, plan, messages):
+    async def apply_compaction_plan(
+        self,
+        plan,
+        messages,
+        *,
+        current_input_context=None,
+    ):
         from matmaster.core.context_compactor import CompactionResult
 
         if plan.phase == "preflight":

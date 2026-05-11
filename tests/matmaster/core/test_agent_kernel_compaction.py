@@ -9,6 +9,7 @@ from unittest.mock import patch
 import pytest
 
 from matmaster.core.context_builder import ContextBuilder
+from matmaster.types.current_input import CurrentInputContext
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -69,7 +70,13 @@ class _DurablePreflightCompactor:
     async def preflight_if_needed(self, messages: list[Any]) -> None:
         return None
 
-    async def apply_compaction_plan(self, plan, messages: list[Any]):
+    async def apply_compaction_plan(
+        self,
+        plan,
+        messages: list[Any],
+        *,
+        current_input_context=None,
+    ):
         from matmaster.core.context_compactor import CompactionResult
 
         bundle = ContextBuilder().build_compact_bundle(summary="summary")
@@ -133,7 +140,13 @@ class _LifecycleCompactor:
             turn=turn,
         )
 
-    async def apply_compaction_plan(self, plan, messages: list[Any]):
+    async def apply_compaction_plan(
+        self,
+        plan,
+        messages: list[Any],
+        *,
+        current_input_context=None,
+    ):
         from matmaster.core.context_compactor import CompactionResult
 
         self.apply_calls += 1
@@ -425,13 +438,29 @@ class _BarrierFailureCompactor(_DurablePreflightCompactor):
         super().__init__()
         self.apply_calls = 0
 
-    async def apply_compaction_plan(self, plan, messages):
+    async def apply_compaction_plan(
+        self,
+        plan,
+        messages,
+        *,
+        current_input_context=None,
+    ):
         self.apply_calls += 1
-        return await super().apply_compaction_plan(plan, messages)
+        return await super().apply_compaction_plan(
+            plan,
+            messages,
+            current_input_context=current_input_context,
+        )
 
 
 class _BoundaryOverrideCompactor(_DurablePreflightCompactor):
-    async def apply_compaction_plan(self, plan, messages: list[Any]):
+    async def apply_compaction_plan(
+        self,
+        plan,
+        messages: list[Any],
+        *,
+        current_input_context=None,
+    ):
         from matmaster.core.context_compactor import CompactionResult
 
         bundle = ContextBuilder().build_compact_bundle(summary="summary")
@@ -455,6 +484,106 @@ class _BoundaryOverrideCompactor(_DurablePreflightCompactor):
             base_snapshot=base_snapshot,
             checkpoint_covered_until_event_id=41,
         )
+
+
+class _RecordingCurrentInputCompactor(_DurablePreflightCompactor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.seen_current_input_context: Any = None
+        self.apply_calls = 0
+
+    async def apply_compaction_plan(
+        self,
+        plan,
+        messages: list[Any],
+        *,
+        current_input_context=None,
+    ):
+        self.apply_calls += 1
+        self.seen_current_input_context = current_input_context
+        return await super().apply_compaction_plan(
+            plan,
+            messages,
+            current_input_context=current_input_context,
+        )
+
+
+@pytest.mark.asyncio
+async def test_kernel_passes_effective_current_input_context_to_preflight_compactor():
+    from matmaster.core.agent import AgentKernel
+
+    compactor = _RecordingCurrentInputCompactor()
+
+    async def checkpoint_sink(**kwargs):
+        return 42
+
+    spec = _make_spec(provider=ContentOnlyProvider()).model_copy(
+        update={
+            "compactor": compactor,
+            "meta": {
+                "current_input_context": CurrentInputContext.from_values(
+                    user_text="original before rewrite",
+                    files=["https://oss.example.com/chat/current.cif"],
+                    pre_query_scope_event_id=42,
+                )
+            },
+            "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
+        }
+    )
+
+    [
+        event
+        async for event in AgentKernel().run_stream(
+            spec,
+            "effective task text",
+            history=[
+                UserMessage(content="old question"),
+                AssistantMessage(content="old answer"),
+            ],
+        )
+    ]
+
+    assert compactor.seen_current_input_context.user_text == "effective task text"
+    assert compactor.seen_current_input_context.files == (
+        "https://oss.example.com/chat/current.cif",
+    )
+    assert compactor.seen_current_input_context.pre_query_scope_event_id == 42
+
+
+@pytest.mark.asyncio
+async def test_kernel_skips_preflight_current_split_when_history_is_empty() -> None:
+    from matmaster.core.agent import AgentKernel
+
+    compactor = _RecordingCurrentInputCompactor()
+
+    async def checkpoint_sink(**kwargs):
+        return 42
+
+    spec = _make_spec(provider=ContentOnlyProvider()).model_copy(
+        update={
+            "compactor": compactor,
+            "meta": {
+                "current_input_context": CurrentInputContext.from_values(
+                    user_text="current task",
+                    files=["https://oss.example.com/chat/current.cif"],
+                    pre_query_scope_event_id=42,
+                )
+            },
+            "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
+        }
+    )
+
+    [
+        event
+        async for event in AgentKernel().run_stream(
+            spec,
+            "current task",
+            history=None,
+        )
+    ]
+
+    assert compactor.preflight_calls == 0
+    assert compactor.apply_calls == 0
 
 
 @pytest.mark.asyncio
@@ -632,9 +761,19 @@ async def test_kernel_runs_pre_compaction_barrier_before_compactor() -> None:
     sequence: list[str] = []
 
     class BarrierCompactor(_DurablePreflightCompactor):
-        async def apply_compaction_plan(self, plan, messages):
+        async def apply_compaction_plan(
+            self,
+            plan,
+            messages,
+            *,
+            current_input_context=None,
+        ):
             sequence.append("apply")
-            return await super().apply_compaction_plan(plan, messages)
+            return await super().apply_compaction_plan(
+                plan,
+                messages,
+                current_input_context=current_input_context,
+            )
 
     async def barrier() -> None:
         sequence.append("barrier")
