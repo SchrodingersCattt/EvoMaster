@@ -96,6 +96,44 @@ async def test_rehydrator_filters_attachment_delta_after_checkpoint(
 
 
 @pytest.mark.asyncio
+async def test_rehydrator_preserves_current_query_attachment_after_pre_query_checkpoint(
+    tmp_path: Path,
+) -> None:
+    events = [
+        {
+            "id": 10,
+            "source": "User",
+            "type": "query",
+            "content": "old",
+            "files": ["https://oss.example.com/chat/old.cif"],
+        },
+        {
+            "id": 20,
+            "source": "User",
+            "type": "query",
+            "content": "current",
+            "files": ["https://oss.example.com/chat/current.cif"],
+        },
+    ]
+    rehydrator = CompactionRehydrator(
+        get_query_events=lambda: events,
+        get_all_events=lambda: events,
+        get_latest_checkpoint_covered_until_event_id=lambda: 10,
+        skill_registry=_registry(tmp_path),
+        playground_ctx=PlaygroundContext(
+            workdir=tmp_path,
+            session_type="local",
+            cache_area=tmp_path / "cache",
+        ),
+    )
+
+    text = await rehydrator.build()
+
+    assert "old.cif" not in text
+    assert "file_2 current.cif https://oss.example.com/chat/current.cif" in text
+
+
+@pytest.mark.asyncio
 async def test_rehydrator_returns_other_sections_when_one_manifest_fails(
     tmp_path: Path,
     caplog,
