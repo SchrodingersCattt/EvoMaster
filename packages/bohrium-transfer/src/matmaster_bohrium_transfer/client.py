@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import base64
 import json
-from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
 
@@ -108,7 +107,7 @@ class StoreHostClient:
         initial_key: str,
         number: int,
         part_size: int,
-        data: Iterable[bytes] | Callable[[], Iterable[bytes]],
+        data: bytes,
         md5_base64: str,
         md5_hex: str,
     ) -> StoreHostPartResult:

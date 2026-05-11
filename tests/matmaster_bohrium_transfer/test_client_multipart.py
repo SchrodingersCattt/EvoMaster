@@ -93,7 +93,7 @@ def test_store_host_upload_part_uses_tiefblue_multipart_param_contract() -> None
         initial_key="init-1",
         number=2,
         part_size=5,
-        data=[b"abcde"],
+        data=b"abcde",
         md5_base64=base64.b64encode(
             hashlib.md5(b"abcde", usedforsecurity=False).digest()
         ).decode(),
@@ -139,7 +139,7 @@ def test_complete_multipart_accepts_success_response_without_data() -> None:
     }
 
 
-def test_upload_file_multipart_streams_parts_with_content_length(
+def test_upload_file_multipart_sends_part_bytes_with_content_length(
     tmp_path: Path,
 ) -> None:
     file_path = tmp_path / "input.zip"
@@ -166,9 +166,9 @@ def test_upload_file_multipart_streams_parts_with_content_length(
     ]
     _, headers, request = upload_calls[0]
     body = request["data"]
-    assert not isinstance(body, bytes)
-    assert b"".join(body) == b"abc"
+    assert body == b"abc"
     assert headers["Content-Length"] == "3"
+    assert "Transfer-Encoding" not in headers
     decoded = decode_storage_param(headers["X-Storage-Param"])
     assert decoded == {"initialKey": "init-1", "number": 1, "partSize": 3}
 
