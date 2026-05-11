@@ -3,9 +3,9 @@
 import logging
 from functools import lru_cache
 
+from matmaster.utils.event_source import normalize_event_source
 from src.dao.chat_events_table import ChatEventsTable, get_chat_events_table
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
-from src.utils.chat_event_source import normalize_event_source
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +75,10 @@ class ChatEventsService:
     def get_session_events(self, session_id: str, include_spawn: bool = False) -> list:
         """返回某会话的历史消息列表（从数据库读取）。默认仅父级事件；include_spawn 含子 agent 行。"""
         return self.table.get_session_events(session_id, include_spawn=include_spawn)
+
+    def get_session_user_query_events(self, session_id: str) -> list:
+        """返回某会话的父级 User/query 历史事件（从数据库读取）。"""
+        return self.table.get_session_user_query_events(session_id)
 
     def get_last_user_query(self, session_id: str):
         """

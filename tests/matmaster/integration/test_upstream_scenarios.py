@@ -311,3 +311,16 @@ class TestEventHandlerPersistence:
         assert [p.get("type") for p in payloads] == ["response", "response"]
         assert payloads[0]["content"] == "..."
         assert payloads[1]["content"] == "真实内容"
+
+    async def test_persistence_skips_response_segment_end(self) -> None:
+        mock_events_table = MagicMock()
+        handler = PersistenceHandler(mock_events_table, "sess-1", "task-1")
+        await handler.handle(
+            ResponseEvent(
+                source="agent",
+                content="segment text",
+                stream_state="segment_end",
+                stream_id="s1",
+            )
+        )
+        mock_events_table.add_event.assert_not_called()

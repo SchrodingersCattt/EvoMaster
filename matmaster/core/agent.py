@@ -14,17 +14,22 @@ Termination conditions:
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import time
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
-from dataclasses import field as dc_field
 from typing import TYPE_CHECKING, Any
 
 from matmaster.core.finish_diagnostics import (
     build_finish_detail,
     is_incomplete_response,
     is_valid_natural_finish,
+)
+from matmaster.core.kernel_items import (
+    _KernelItem,
+    _KernelState,
+    _KernelStopRequested,
+    _TerminalItem,
 )
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.errors import LLMError
@@ -54,6 +59,7 @@ from matmaster.response_text import (
     normalize_visible_response_text,
 )
 from matmaster.types.message_normalization import (
+    canonicalize_messages_for_provider,
     normalize_and_validate_openai_messages,
 )
 from matmaster.types.messages import (
@@ -74,39 +80,6 @@ logger = logging.getLogger(__name__)
 _STOP_CHECK_EVERY_N_STREAM_CHUNKS = 8
 # 重试退避时切片 sleep 的步长（秒），便于尽快响应停止
 _STOP_RETRY_SLEEP_SLICE_SEC = 0.25
-
-
-@dataclass
-class _TerminalItem:
-    reason: str
-    final_content: str | None = None
-    num_turns: int = 0
-    usage: dict[str, int] = dc_field(default_factory=dict)
-    usage_vendor_by_turn: list[dict[str, Any]] = dc_field(default_factory=list)
-    messages: list[Any] = dc_field(default_factory=list)
-    finish_detail: FinishDetail | None = None
-
-
-@dataclass
-class _KernelItem:
-    event: Any = None  # BusEvent | None
-    llm_response: LLMResponse | None = None
-    messages_delta: list[Any] | None = None
-    terminal: _TerminalItem | None = None
-
-
-@dataclass
-class _KernelState:
-    messages: list[Any]
-    turn: int = 0
-    total_usage: dict[str, int] = dc_field(default_factory=dict)
-    usage_vendor_by_turn: list[dict[str, Any]] = dc_field(default_factory=list)
-    cached_tool_definitions: list[dict[str, Any]] | None = None
-    last_catalog_version: int = -1
-
-
-class _KernelStopRequested(Exception):
-    pass
 
 
 class AgentKernel:
@@ -130,6 +103,11 @@ class AgentKernel:
             )
         )
         messages_before = len(state.messages)
+        pre_compaction_barrier = spec.meta.get("pre_compaction_barrier")
+        if callable(pre_compaction_barrier):
+            result = pre_compaction_barrier()
+            if inspect.isawaitable(result):
+                await result
         result = await spec.compactor.apply_compaction_plan(plan, state.messages)
         messages_after = len(state.messages)
 
@@ -331,11 +309,16 @@ class AgentKernel:
             ImageContentPart.model_validate(image)
             for image in spec.meta.get("current_user_images", [])
         ]
+        attachment_text = str(spec.meta.get("attachment_manifest") or "")
+        user_content = spec.context_builder.build_user_request(
+            user_text=task,
+            attachments=attachment_text,
+        )
         state = _KernelState(
             messages=[
                 SystemMessage(content=spec.system_prompt),
                 *(history or []),
-                UserMessage(content=task, images=current_user_images),
+                UserMessage(content=user_content, images=current_user_images),
             ]
         )
 
@@ -419,7 +402,9 @@ class AgentKernel:
 
             tool_defs = state.cached_tool_definitions
 
-            api_messages = normalize_and_validate_openai_messages(state.messages)
+            api_messages = normalize_and_validate_openai_messages(
+                canonicalize_messages_for_provider(state.messages)
+            )
 
             llm_response: LLMResponse | None = None
             try:
@@ -448,6 +433,28 @@ class AgentKernel:
             state.usage_vendor_by_turn.append(
                 dict(response.usage_vendor) if response.usage_vendor else {}
             )
+            turn_index = state.turn - 1
+            is_root_run = spec.meta.get("spawn_id") is None
+            if (
+                is_root_run
+                and response.content
+                and not is_trivial_response_text(response.content)
+            ):
+                yield _KernelItem(
+                    event=ResponseEvent(
+                        source="agent",
+                        content=response.content,
+                        stream_state="complete",
+                        turn_index=turn_index,
+                        turn_usage=dict(turn_usage),
+                        total_usage=dict(state.total_usage),
+                        usage_vendor=(
+                            dict(response.usage_vendor)
+                            if response.usage_vendor
+                            else None
+                        ),
+                    )
+                )
             if spec.compactor:
                 spec.compactor.update_message_count(len(state.messages))
 
@@ -496,6 +503,7 @@ class AgentKernel:
                     event=AssistantStateEvent(
                         source="agent",
                         state=assistant_msg.model_dump(mode="json"),
+                        turn_index=turn_index,
                         turn_usage=dict(turn_usage),
                         total_usage=dict(state.total_usage),
                         finish_detail=assistant_finish_detail,
@@ -540,6 +548,7 @@ class AgentKernel:
                         result=tool_result.content,
                         status=tool_result.status,
                         payload=tool_result.payload,
+                        turn_index=turn_index,
                         turn_usage=dict(turn_usage),
                         total_usage=dict(state.total_usage),
                     )
@@ -553,12 +562,6 @@ class AgentKernel:
                                 skill_name=skill_name,
                             )
                         )
-
-            # ── Turn budget awareness ──────────────────────────
-            # Inject a turn-count hint into the last ToolMessage so the
-            # LLM sees how many turns it has consumed.  Escalating urgency
-            # when max_turns represents a realistic budget (≤ 50).
-            self._inject_turn_budget_nudge(state, spec.max_turns)
 
         yield self._terminal(state, "max_turns")
 
@@ -810,7 +813,7 @@ class AgentKernel:
                                 )
                             if not is_trivial_response_text(visible_snapshot):
                                 yield self._response_item(
-                                    visible_snapshot, stream_id, "complete"
+                                    visible_snapshot, stream_id, "segment_end"
                                 )
                         else:
                             pending_response_parts.clear()
@@ -851,7 +854,9 @@ class AgentKernel:
                         yield self._response_item(
                             visible_snapshot, stream_id, "streaming"
                         )
-                    yield self._response_item(visible_snapshot, stream_id, "complete")
+                    yield self._response_item(
+                        visible_snapshot, stream_id, "segment_end"
+                    )
                 else:
                     pending_response_parts.clear()
             # End marker
@@ -928,68 +933,6 @@ class AgentKernel:
                 retryable=False,
                 error_category="bad_request",
             )
-
-    @staticmethod
-    def _inject_turn_budget_nudge(
-        state: _KernelState,
-        max_turns: int,
-    ) -> None:
-        """Append turn-count awareness to the last ToolMessage.
-
-        Provides the LLM with real-time feedback on turn consumption so it
-        can self-regulate and avoid exceeding task budgets:
-
-        - **Constrained budget** (``max_turns ≤ 50``): always show
-          ``[Turn X/Y]``, with escalating urgency at 60 %/75 %/90 %
-          thresholds.
-        - **Unconstrained budget** (``max_turns > 50``): periodic
-          ``[Turn N]`` marker every 5 turns starting from turn 5 for
-          soft awareness.
-        """
-        if max_turns <= 0 or not state.messages:
-            return
-
-        remaining = max_turns - state.turn
-        nudge: str | None = None
-
-        if max_turns <= 50 and remaining >= 0:
-            pct = state.turn / max_turns
-            if pct >= 0.90:
-                nudge = (
-                    f"\n\n[SYSTEM: Turn {state.turn}/{max_turns} — "
-                    f"only {remaining} left. Deliver final answer NOW. "
-                    "Do not start new operations.]"
-                )
-            elif pct >= 0.75:
-                nudge = (
-                    f"\n\n[SYSTEM: Turn {state.turn}/{max_turns} — "
-                    f"{remaining} left. Wrap up: essential steps only, "
-                    "batch remaining work.]"
-                )
-            elif pct >= 0.60:
-                nudge = (
-                    f"\n\n[SYSTEM: Turn {state.turn}/{max_turns} — "
-                    f"{remaining} left. Plan efficiently.]"
-                )
-            else:
-                nudge = f"\n\n[Turn {state.turn}/{max_turns}]"
-        elif state.turn >= 5 and state.turn % 5 == 0:
-            # Unconstrained budget: soft periodic awareness
-            nudge = f"\n\n[Turn {state.turn}]"
-
-        if nudge is None:
-            return
-
-        # Append to the last ToolMessage in the message list
-        for i in range(len(state.messages) - 1, -1, -1):
-            if isinstance(state.messages[i], ToolMessage):
-                msg = state.messages[i]
-                state.messages[i] = ToolMessage(
-                    tool_call_id=msg.tool_call_id,
-                    tool_name=msg.tool_name,
-                    content=(msg.content or "") + nudge,
-                )
-                return
 
     @staticmethod
     def _accumulate_usage(total: dict[str, int], delta: dict[str, int]) -> None:

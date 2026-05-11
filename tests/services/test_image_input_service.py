@@ -9,6 +9,7 @@ from src.services.image_input_service import (
     IMAGE_INPUT_DUPLICATE_ATTACHMENT,
     IMAGE_INPUT_INVALID_SCHEME,
     IMAGE_INPUT_SIZE_UNKNOWN,
+    IMAGE_INPUT_TOO_LARGE,
     IMAGE_INPUT_UNSUPPORTED_MIME,
     VISION_MODEL_NOT_SUPPORTED,
     ImageInputError,
@@ -78,6 +79,29 @@ def test_head_success_accepts_png() -> None:
     assert images[0].url == "https://oss.example.com/chat/a.png"
     assert images[0].mime_type == "image/png"
     assert images[0].size_bytes == 100
+    client.get.assert_not_called()
+
+
+def test_default_limit_rejects_image_over_five_mib() -> None:
+    client = MagicMock()
+    client.head.return_value = _response(
+        200,
+        method="HEAD",
+        headers={
+            "content-type": "image/png",
+            "content-length": str(5 * 1024 * 1024 + 1),
+        },
+    )
+
+    with patch("src.services.image_input_service.httpx.Client") as client_cls:
+        client_cls.return_value.__enter__.return_value = client
+        with pytest.raises(ImageInputError) as exc:
+            _service().validate_current_images(
+                files=[],
+                images=["https://oss.example.com/chat/a.png"],
+            )
+
+    assert exc.value.error_code == IMAGE_INPUT_TOO_LARGE
     client.get.assert_not_called()
 
 

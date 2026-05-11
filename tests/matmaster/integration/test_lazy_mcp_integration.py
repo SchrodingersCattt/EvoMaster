@@ -157,6 +157,51 @@ class TestLazyMCPIntegration:
         # Still only one mat_sg_build_bulk
         assert 'mat_sg_build_bulk' in registry
 
+    async def test_replay_makes_tool_available_on_subsequent_runs(self, tmp_path):
+        """Two-turn simulation: turn 1 activates a skill, turn 2 replays it."""
+        env = self._setup_env(tmp_path)
+        cfg = ExpConfig.model_validate(
+            {
+                'name': 'test',
+                'skills': {
+                    'enabled': True,
+                    'skills_root': str(env / 'skills'),
+                    'cache_dir': str(env / 'cache'),
+                    'config_dir': str(env),
+                    'mcp_config_file': 'mcp_config.json',
+                    'mcp_runtime_file': 'mcp.yaml',
+                },
+            }
+        )
+
+        active_skills: set[str] = set()
+
+        # ---- turn 1 ----
+        exp1 = Exp(cfg)
+        registry1 = ToolRegistry()
+        ctx1 = MagicMock(spec=PlaygroundContext)
+        ctx1.session = MagicMock()
+        ctx1.execution_workdir = str(tmp_path)
+        ctx1.run_meta = {"active_skills": frozenset(active_skills)}
+        exp1._init_skill_tools(ctx1, registry1)
+        assert "mat_sg_build_bulk" not in registry1
+        result = await _execute_use_skill(registry1, skill_name="test-skill")
+        assert result.status == "success"
+        assert "mat_sg_build_bulk" in registry1
+        active_skills.add("test-skill")
+
+        # ---- turn 2 (fresh Exp / registry, but same active set) ----
+        exp2 = Exp(cfg)
+        registry2 = ToolRegistry()
+        ctx2 = MagicMock(spec=PlaygroundContext)
+        ctx2.session = MagicMock()
+        ctx2.execution_workdir = str(tmp_path)
+        ctx2.run_meta = {"active_skills": frozenset(active_skills)}
+        exp2._init_skill_tools(ctx2, registry2)
+
+        # No use_skill call this turn; replay must have already injected it.
+        assert "mat_sg_build_bulk" in registry2
+
     async def test_no_cache_warns_but_doesnt_crash(self, tmp_path):
         """When cache is empty, skill trigger warns but doesn't crash."""
         # Skill pointing to uncached server

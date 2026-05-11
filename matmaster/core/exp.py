@@ -186,6 +186,7 @@ class Exp:
     async def assemble(self, ctx: PlaygroundContext) -> AgentRuntimeSpec:
         """Data transform: config + ctx -> AgentRuntimeSpec."""
         return AgentRuntimeSpec(
+            context_builder=ContextBuilder(),
             llm_provider=ctx.llm_provider,
             max_turns=self._config.max_turns,
             compaction=self._config.compaction,
@@ -316,7 +317,7 @@ class Exp:
 
         # 5. System prompt via ContextBuilder
         builder = ContextBuilder()
-        system_prompt = builder.build(
+        system_prompt = builder.build_system_prompt(
             ctx,
             registry,
             system_prompt=self._config.system_prompt,
@@ -333,6 +334,7 @@ class Exp:
         compactor = None
         if spec.llm_provider is not None:
             from matmaster.core.context_compactor import ContextCompactor
+            from matmaster.manifests.rehydrator import CompactionRehydrator
 
             summary_provider = spec.llm_provider
             if spec.compaction.compaction_llm:
@@ -356,9 +358,37 @@ class Exp:
                         spec.compaction.compaction_llm,
                     )
 
+            def empty_events():
+                return []
+
+            get_query_events = run_meta.get("get_query_events")
+            if not callable(get_query_events):
+                get_query_events = empty_events
+            get_all_events = run_meta.get("get_all_events")
+            if not callable(get_all_events):
+                get_all_events = empty_events
+            get_latest_checkpoint_covered_until_event_id = run_meta.get(
+                "get_latest_checkpoint_covered_until_event_id"
+            )
+            rehydrator = CompactionRehydrator(
+                get_query_events=get_query_events,
+                get_all_events=get_all_events,
+                get_latest_checkpoint_covered_until_event_id=(
+                    get_latest_checkpoint_covered_until_event_id
+                    if callable(get_latest_checkpoint_covered_until_event_id)
+                    else None
+                ),
+                skill_registry=self._skill_registry,
+                playground_ctx=ctx,
+                legal_mcp_servers=run_meta.get("legal_mcp_servers"),
+                schemas_by_server=run_meta.get("schemas_by_server"),
+            )
+
             compactor = ContextCompactor(
                 config=spec.compaction,
                 summary_provider=summary_provider,
+                rehydrator=rehydrator,
+                context_builder=builder,
                 event_sink=None,  # _run_items() injects a local deque-backed sink
                 compaction_scope=(
                     f'{run_meta.get("task_id", "")}:{spawn_id or "root"}'
@@ -402,14 +432,18 @@ class Exp:
                 "capability_policy": capability_policy,
                 "structural_validation": structural_validation,
                 "system_prompt": system_prompt,
+                "context_builder": builder,
                 "hook_executor": hook_executor,
                 "compactor": compactor,
                 "meta": {
                     **spec.meta,
                     "task_id": run_meta.get("task_id", ""),
                     "session_id": run_meta.get("session_id", ""),
+                    "spawn_id": spawn_id,
                     "checkpoint_sink_factory": checkpoint_sink_factory,
                     "checkpoint_sink": checkpoint_sink,
+                    "attachment_manifest": run_meta.get("attachment_manifest", ""),
+                    "pre_compaction_barrier": run_meta.get("pre_compaction_barrier"),
                 },
             }
         )
@@ -711,6 +745,8 @@ class Exp:
             if isinstance(cfg, dict) and cfg.get("sync_tools")
         }
 
+        run_meta_for_record = getattr(ctx, "run_meta", None) or {}
+
         builtin_cfg = self._config.tools.builtin or []
         allow_builtin_all = "*" in builtin_cfg
         allowed_builtin = set(builtin_cfg) if not allow_builtin_all else None
@@ -729,7 +765,7 @@ class Exp:
             else:
                 registry.register(paper_tool, source="builtin")
 
-        def on_skill_hit(mcp_server: str) -> None:
+        def activate_mcp_server(mcp_server: str) -> None:
             schemas = schema_cache.load(mcp_server)
             if not schemas:
                 self.logger.warning(
@@ -781,16 +817,48 @@ class Exp:
         skill_tool = SkillTool(
             session=ctx.session,
             skill_registry=skill_registry,
-            on_skill_hit=on_skill_hit,
+            on_skill_hit=activate_mcp_server,
         )
         registry.register(skill_tool, source="skill")
         registry.register(
             LegacyUseSkillTool(
                 session=ctx.session,
                 skill_registry=skill_registry,
-                on_skill_hit=on_skill_hit,
+                on_skill_hit=activate_mcp_server,
             ),
             source="skill",
         )
+
+        # Replay skills activated on past turns of this session.
+        # activate_mcp_server reads only from the on-disk schema cache (no MCP IO),
+        # is idempotent (skips tools already in registry), and warns +
+        # skips on cache miss.
+        replay_skills = run_meta_for_record.get("active_skills") or ()
+        if isinstance(replay_skills, (set, frozenset, list, tuple)):
+            for skill_name in replay_skills:
+                if not isinstance(skill_name, str) or not skill_name:
+                    continue
+                try:
+                    skill = skill_registry.get_skill(skill_name)
+                except Exception:
+                    self.logger.warning(
+                        "Replay of skill '%s' raised, skipping",
+                        skill_name,
+                        exc_info=True,
+                    )
+                    continue
+                mcp_server = getattr(
+                    getattr(skill, "meta_info", None), "mcp_server", None
+                )
+                if not isinstance(mcp_server, str) or not mcp_server:
+                    continue
+                try:
+                    activate_mcp_server(mcp_server)
+                except Exception:
+                    self.logger.warning(
+                        "Replay of MCP server for skill '%s' raised, skipping",
+                        skill_name,
+                        exc_info=True,
+                    )
 
         self._skill_registry = skill_registry

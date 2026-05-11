@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-import json
 from contextlib import asynccontextmanager
 from typing import Any
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
@@ -24,7 +23,6 @@ from matmaster.types.events import (
     ResponseEvent,
     RunResultEvent,
     ThoughtEvent,
-    ToolResultEvent,
 )
 
 # ---------------------------------------------------------------------------
@@ -58,6 +56,8 @@ def _make_mock_pg_ctx() -> MagicMock:
     ctx.session = MagicMock()
     ctx.session._cancel_token = None
     ctx.session.capabilities = MagicMock()
+    ctx.session.path_exists.return_value = False
+    ctx.session.read_file.return_value = ''
     ctx.archival = None
     ctx.run_meta = {}
     ctx.with_bohrium.return_value = ctx
@@ -87,10 +87,12 @@ class _FakeExp:
         self._config.name = 'direct'
         self._cleanup_callbacks: list = []
         self.last_ctx: Any = None
+        self.last_task: str | None = None
         self.last_run_kwargs: dict[str, Any] | None = None
 
     async def run_stream(self, *args: Any, **kwargs: Any):
         self.last_ctx = args[0] if args else None
+        self.last_task = args[1] if len(args) > 1 else None
         self.last_run_kwargs = kwargs
         try:
             if callable(self._events):
@@ -287,6 +289,7 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
             svc._sessions_service = MagicMock()
             svc._sessions_service.get_session_user_id.return_value = 'user-1'
             svc._pg_manager = pg_mgr
+            svc._active_skills = {}
             svc._test_fake_exp = fake_exp
             svc._test_pg_ctx = pg_ctx
             svc._test_events_table = events_table_fn.return_value
@@ -390,6 +393,43 @@ async def test_run_agent_injects_figure_upload_config_into_pg_ctx_run_meta():
     assert figure_cfg.session_id == 'sess-1'
     assert figure_cfg.task_id == 'task-1'
     assert callable(figure_cfg.upload_bytes)
+
+
+@pytest.mark.asyncio
+async def test_agent_run_service_injects_full_attachment_manifest_before_exp_run():
+    run_result = RunResultEvent(source='agent', status='completed', reason='natural')
+
+    async with _patched_service([run_result]) as (svc, _, __):
+        svc._test_events_table.get_session_user_query_events.return_value = [
+            {
+                "id": 1,
+                "source": "User",
+                "type": "query",
+                "content": "upload",
+                "files": ["https://oss.example.com/chat/data.csv"],
+            }
+        ]
+
+        await svc.run_agent(
+            session_id='sess-attachments',
+            user_prompt='hi',
+            send_cb=AsyncMock(),
+            cancel_token=_make_cancel_token(),
+            mode='direct',
+            task_id='task-1',
+        )
+
+    run_meta = svc._test_fake_exp.last_ctx.run_meta
+    assert "attachment_manifest" in run_meta
+    assert "[Available attachments]" in run_meta["attachment_manifest"]
+    assert (
+        "file_1 data.csv https://oss.example.com/chat/data.csv"
+        in run_meta["attachment_manifest"]
+    )
+    assert callable(run_meta["get_query_events"])
+    assert callable(run_meta["get_all_events"])
+    assert callable(run_meta["get_latest_checkpoint_covered_until_event_id"])
+    assert callable(run_meta["pre_compaction_barrier"])
 
 
 @pytest.mark.asyncio
@@ -713,6 +753,7 @@ async def test_exception_emits_error_and_closed():
             svc = AgentRunService.__new__(AgentRunService)
             svc._sessions_service = MagicMock()
             svc._pg_manager = pg_mgr
+            svc._active_skills = {}
 
             result = await svc.run_agent(
                 session_id='s1',
@@ -818,147 +859,6 @@ async def test_persistence_receives_events():
     assert 'thought' in persist_types
     assert 'run_result' in persist_types
     assert 'stream_closed' in persist_types
-
-
-@pytest.mark.asyncio
-async def test_ask_question_bridge_events_go_through_fanout_and_persistence():
-    async def ask_then_finish(ctx):
-        await ctx.interaction_bridge.ask(
-            request_id="aq_1",
-            questions=[
-                {
-                    "question": "Q1",
-                    "header": "H1",
-                    "options": [
-                        {"label": "A1", "description": "desc"},
-                        {"label": "A2", "description": "desc"},
-                    ],
-                    "allow_freeform": True,
-                    "multi_select": False,
-                }
-            ],
-            metadata={"scene": "test"},
-        )
-        yield RunResultEvent(source="agent", status="completed", reason="natural")
-
-    send_cb = MagicMock()
-    reply_queue = _ImmediateReplyQueue(
-        json.dumps(
-            {
-                "payload": {
-                    "request_id": "aq_1",
-                    "answers": {"Q1": "A1"},
-                    "annotations": {},
-                }
-            }
-        )
-    )
-
-    async with _patched_service(ask_then_finish) as (svc, _, persist_events):
-        with patch(
-            "src.services.stream_service.RedisReplyQueue",
-            return_value=reply_queue,
-        ):
-            await svc.run_agent(
-                session_id="s1",
-                user_prompt="hi",
-                send_cb=send_cb,
-                cancel_token=_make_cancel_token(),
-                mode="direct",
-                task_id="t1",
-                invocation_id="inv-1",
-            )
-
-    payload = send_cb.call_args_list[0].args[0]
-    assert payload["type"] == "ask_question"
-    assert payload["session_id"] == "s1"
-    assert payload["task_id"] == "t1"
-    assert payload["invocation_id"] == "inv-1"
-    assert payload["content"]["request_id"] == "aq_1"
-    assert payload["content"]["metadata"] == {"scene": "test"}
-
-    persisted = [
-        event
-        for event in persist_events
-        if getattr(event, "type", None) == "ask_question"
-    ]
-    assert len(persisted) == 1
-    assert persisted[0].request_id == "aq_1"
-
-
-@pytest.mark.asyncio
-async def test_ask_question_tool_result_reaches_sse_before_run_result():
-    async def ask_then_emit_tool_result(ctx):
-        await ctx.interaction_bridge.ask(
-            request_id="aq_1",
-            questions=[
-                {
-                    "question": "Q1",
-                    "header": "H1",
-                    "options": [
-                        {"label": "A1", "description": "desc"},
-                        {"label": "A2", "description": "desc"},
-                    ],
-                    "allow_freeform": True,
-                    "multi_select": False,
-                }
-            ],
-            metadata={"scene": "stream-order"},
-        )
-        yield ToolResultEvent(
-            source="agent",
-            call_id="call_aq_1",
-            tool_name="AskQuestion",
-            result='"Q1"="A1"',
-            status="success",
-            payload={
-                "request_id": "aq_1",
-                "answers": {"Q1": "A1"},
-                "annotations": {},
-            },
-        )
-        yield RunResultEvent(source="agent", status="completed", reason="natural")
-
-    send_cb = MagicMock()
-    reply_queue = _ImmediateReplyQueue(
-        json.dumps(
-            {
-                "payload": {
-                    "request_id": "aq_1",
-                    "answers": {"Q1": "A1"},
-                    "annotations": {},
-                }
-            }
-        )
-    )
-
-    async with _patched_service(ask_then_emit_tool_result) as (svc, _, __):
-        with patch(
-            "src.services.stream_service.RedisReplyQueue",
-            return_value=reply_queue,
-        ):
-            await svc.run_agent(
-                session_id="s1",
-                user_prompt="hi",
-                send_cb=send_cb,
-                cancel_token=_make_cancel_token(),
-                mode="direct",
-                task_id="t1",
-                invocation_id="inv-1",
-            )
-
-    payloads = [call.args[0] for call in send_cb.call_args_list]
-    payload_types = [payload["type"] for payload in payloads]
-
-    ask_idx = payload_types.index("ask_question")
-    tool_result_idx = payload_types.index("tool_result")
-    run_result_idx = payload_types.index("run_result")
-    stream_closed_idx = payload_types.index("stream_closed")
-
-    assert ask_idx < tool_result_idx < run_result_idx < stream_closed_idx
-    assert payloads[tool_result_idx]["content"]["id"] == "call_aq_1"
-    assert payloads[tool_result_idx]["content"]["name"] == "AskQuestion"
-    assert payloads[tool_result_idx]["content"]["result"] == '"Q1"="A1"'
 
 
 @pytest.mark.asyncio

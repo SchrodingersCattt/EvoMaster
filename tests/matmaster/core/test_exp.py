@@ -372,7 +372,7 @@ class TestExpCleanup:
 
 
 class TestIdentityOverride:
-    """Identity from config is forwarded to ContextBuilder.build()."""
+    """Identity from config is forwarded to ContextBuilder.build_system_prompt()."""
 
     async def test_identity_from_config(self) -> None:
         exp = Exp(
@@ -402,7 +402,7 @@ class TestIdentityOverride:
 
 
 class TestSystemPromptOverride:
-    """system_prompt from config is forwarded to ContextBuilder.build()."""
+    """system_prompt from config is forwarded to ContextBuilder.build_system_prompt()."""
 
     async def test_system_prompt_from_config(self) -> None:
         exp = Exp(
