@@ -158,6 +158,13 @@ payload 中携带：
 runtime-only current input context。它只用于本次 run 的 compact 构造，不作为新的
 持久化数据源，也不新增 RuntimePorts 字段。
 
+`pg_ctx.run_meta["current_input_context"]` 还必须继续透传到 `AgentRuntimeSpec.meta`。
+这是当前 checkout 中最容易遗漏的闭环点：`AgentRunService` 只能把 context 注入
+`PlaygroundContext.run_meta`，而 `AgentKernel` 实际读取的是 `spec.meta`。因此
+`Exp.build_runtime()` 组装 kernel spec 时必须显式复制该字段。否则 API / Worker
+链路虽然已经捕获了 current input context，preflight compactor 仍然会看到
+`current_input_context=None`，从而回退到旧的全量 summary 行为。
+
 `user_text` 的最终值由 kernel 在构造当前 `UserMessage` 时确定。若
 `oversized-user-input-offload` 已经把 `task` 改写成短引用文本，则
 `current_input_context.user_text` 也必须使用改写后的 `task`，不能使用
@@ -288,6 +295,53 @@ checkpoint_sink(
 如果 payload 没有提供 `covered_until_event_id`，sink 仍保持当前行为：flush
 persistence 后查询最新 scope event id。这保证 runtime compact 不受影响。
 
+### Rehydrated context 的上界
+
+preflight current input split 不能只调整 checkpoint 的 `covered_until_event_id`，还必须
+调整 compact bundle 内的 rehydrated attachment 范围。
+
+原因是当前 User/query 已经在 `prepare_send_message()` 阶段落库。`CompactionRehydrator`
+如果只按“上一个 checkpoint 之后”过滤附件，就会把本轮 query 的附件也放进
+`<rehydrated_context><attachments>...`。这会破坏 checkpoint 语义：checkpoint
+声明只覆盖到当前 query 之前，但 base snapshot 内容已经包含当前 query 之后的附件。
+
+为此，attachment manifest 需要支持事件范围过滤：
+
+```python
+filter_entries_in_event_range(
+    entries,
+    after_id=latest_checkpoint_covered_until_event_id,
+    until_id=pre_query_scope_event_id,
+)
+```
+
+规则：
+
+- `after_id` 仍表示排除已经被上一 checkpoint 覆盖的旧附件。
+- `until_id` 是可选上界；preflight current split 启用时设为
+  `current_input_context.pre_query_scope_event_id`。
+- 设置任一边界时，`source_event_id is None` 的 entry 不能进入结果，因为无法证明它
+  属于 checkpoint 范围内。
+- 非 current split 路径不传 `until_id`，保持现有 runtime compact 行为。
+
+`CompactionRehydrator.build()` 因此增加可选参数：
+
+```python
+async def build(self, *, until_event_id: int | None = None) -> str:
+    ...
+```
+
+preflight current split 路径调用：
+
+```python
+rehydrated = await self._rehydrator.build(
+    until_event_id=current_input_context.pre_query_scope_event_id
+)
+```
+
+当前请求的附件只应出现在 `<current_instruction>` 和 tail event 恢复路径中，不应提前
+进入 checkpoint base 的 rehydrated context。
+
 关联类型和调用点必须同步更新：
 
 - `matmaster/types/runtime_ports.py`：
@@ -301,9 +355,14 @@ persistence 后查询最新 scope event id。这保证 runtime compact 不受影
 - `matmaster/core/context_compactor.py`：`CompactionResult` 增加
   `checkpoint_covered_until_event_id: int | None`，仅 preflight current input split
   成功且边界可用时填值。
-- `matmaster/services/history_checkpoint_service.py`：sink 优先使用
+- `src/services/history_checkpoint_service.py`：sink 优先使用
   `payload["covered_until_event_id"]`；只有 payload 未提供时才 fallback 到
   `get_latest_scope_event_id(session_id, spawn_id)`。
+- `matmaster/core/exp.py`：`Exp.build_runtime()` 将
+  `run_meta["current_input_context"]` 复制到 `AgentRuntimeSpec.meta`。
+- `matmaster/manifests/attachment.py`：新增 attachment event-id 范围过滤。
+- `matmaster/manifests/rehydrator.py`：`CompactionRehydrator.build()` 支持
+  `until_event_id`，并在 attachment manifest 构造时使用范围过滤。
 - `tests/matmaster/types/test_runtime_ports.py`：补充 payload 带
   `covered_until_event_id` 的协议 case。
 - `tests/matmaster/core/test_agent_kernel_compaction.py`：所有 fake sink 接受新 payload
@@ -321,19 +380,23 @@ persistence 后查询最新 scope event id。这保证 runtime compact 不受影
 6. `HistoryRestoreService.restore_history()` 恢复旧历史，并排除当前 `task_id` 的事件。
 7. `AgentRunService` 将 `SendStreamContext.current_input_context` 放入
    `pg_ctx.run_meta["current_input_context"]`，作为 runtime-only passive metadata。
-8. `AgentKernel` 先执行 oversized input offloader；如果 task 被改写，生成
+8. `Exp.build_runtime()` 将 `pg_ctx.run_meta["current_input_context"]` 复制到
+   `AgentRuntimeSpec.meta["current_input_context"]`。
+9. `AgentKernel` 先执行 oversized input offloader；如果 task 被改写，生成
    effective current input context，使 `user_text` 等于改写后的 task。
-9. `AgentKernel` 用 effective task 与 attachment manifest 构造当前 `UserMessage`。
-10. preflight compact 估算超过阈值。
-11. 如果 current input split 启用且 `history_messages` 非空，compactor 总结
+10. `AgentKernel` 用 effective task 与 attachment manifest 构造当前 `UserMessage`。
+11. preflight compact 估算超过阈值。
+12. 如果 current input split 启用且 `history_messages` 非空，compactor 总结
    `history_messages`，不总结当前 `UserMessage`。
-12. compactor 构造：
+13. compactor 用 `pre_query_scope_event_id` 作为 rehydrated attachment 上界，只补回
+   当前 query 之前的 attachment manifest。
+14. compactor 构造：
    - runtime compact message：包含 `<current_instruction>`
    - checkpoint base snapshot：不包含 `<current_instruction>`，也不包含 images
    - `checkpoint_covered_until_event_id=pre_query_scope_event_id`
-13. checkpoint sink 写入 `history_checkpoint`，覆盖边界为当前 query 之前。
-14. `compaction complete` 事件继续正常发给 SSE 和 persistence。
-15. 当前 run 继续执行，provider 看到旧历史摘要和当前精确指令。
+15. checkpoint sink 写入 `history_checkpoint`，覆盖边界为当前 query 之前。
+16. `compaction complete` 事件继续正常发给 SSE 和 persistence。
+17. 当前 run 继续执行，provider 看到旧历史摘要和当前精确指令。
 
 ## 失败处理
 
@@ -362,6 +425,10 @@ persistence 后查询最新 scope event id。这保证 runtime compact 不受影
 - preflight compact 触发时，summary provider 收不到当前用户文本。
 - preflight compact 触发时，summary provider 收不到当前 `files` / `workspace_paths`
   文本。
+- `Exp.build_runtime()` 能把 `pg_ctx.run_meta["current_input_context"]` 透传到
+  `runtime.spec.meta["current_input_context"]`。
+- preflight current split 触发时，rehydrated attachments 不包含
+  `pre_query_scope_event_id` 之后的当前 query 附件。
 - `history_messages` 为空时，preflight planner / kernel guard 短路为 `plan=None`，
   不调用 summary。
 - compact 后当前 run 的 `UserMessage.content` 包含 `<current_instruction>` 和当前
@@ -377,8 +444,8 @@ persistence 后查询最新 scope event id。这保证 runtime compact 不受影
 - 下一轮 restore 从 checkpoint base 加 tail events 恢复当前 query。
 - 下一轮 restore + canonicalize 后，provider 侧相邻 `UserMessage` 被合并，不破坏
   OpenAI-compatible 的 system/user/assistant 顺序。
-- rehydrator 使用新的 `covered_until_event_id` 过滤附件时，不重复列出已经被 summary
-  收纳的旧 attachment manifest 条目。
+- rehydrator 使用事件范围过滤附件时，不重复列出已经被上一 checkpoint 覆盖的旧
+  attachment manifest 条目，也不提前列出当前 query 之后的 attachment manifest 条目。
 - `pre_query_scope_event_id` 缺失时，本次 compact 不写 `history_checkpoint` 行，
   `CompactionEvent.checkpoint_written=False`，`failure_reason` 可读。
 - runtime compact 不启用 current input split，现有测试保持通过。
@@ -390,10 +457,15 @@ persistence 后查询最新 scope event id。这保证 runtime compact 不受影
 - current input context 作为 passive run metadata 传递，不新增 RuntimePorts 能力端口。
 - `pre_query_scope_event_id` 在 `prepare_send_message()` 写当前 User/query 前 snapshot，
   并随 `SendStreamContext` 进入 `AgentRunService` / `pg_ctx.run_meta`。
+- `Exp.build_runtime()` 是 run metadata 到 kernel metadata 的唯一透传点；必须把
+  `current_input_context` 纳入 `AgentRuntimeSpec.meta`。
 - `apply_compaction_plan()` 增加可选 `current_input_context` 参数；planner 阶段不接收
   该参数。
 - preflight current input split 成功时，必须分别构造 runtime user message 与
   checkpoint user message。
+- preflight current input split 构造 rehydrated context 时使用
+  `pre_query_scope_event_id` 作为 attachment 上界；当前 query 附件只进入
+  `<current_instruction>` 和后续 tail-event restore。
 - checkpoint payload 增加可选 `covered_until_event_id` override；runtime compact
   未提供该键时保持 sink 现有 latest-scope fallback。
 - 与 oversized input offloader 的顺序固定为 offloader 在前，current input split 在后；
