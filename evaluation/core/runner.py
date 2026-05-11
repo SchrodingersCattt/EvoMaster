@@ -176,6 +176,8 @@ def _question_matches_slice(question: QuestionItem, sl: CapabilitySlice) -> bool
         have = {str(t).lower() for t in question.tags}
         if not all(req.lower() in have for req in sl.tags):
             return False
+    if sl.scope is not None and question.scope != sl.scope:
+        return False
     return True
 
 

@@ -108,6 +108,8 @@ DomainLiteral = Literal[
     'agnostic',
 ]
 
+ScopeLiteral = Literal['platform', 'knowledge']
+
 GENERIC_PROCESS_TAGS = {
     'workflow',
     'workflow_acceleration',
@@ -239,6 +241,7 @@ class QuestionItem(BaseModel):
     id: str
     capability: CapabilityLiteral
     domain: DomainLiteral
+    scope: ScopeLiteral = 'knowledge'
     intent: str
     human_prompt_seed: str
     tags: list[QuestionTag] = Field(default_factory=list)
@@ -393,6 +396,7 @@ class CapabilitySlice(BaseModel):
     capability: str | None = None
     domains: list[str] | None = None
     tags: list[str] | None = None
+    scope: str | None = None
 
     @field_validator('capability')
     @classmethod
