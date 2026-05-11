@@ -293,6 +293,7 @@ def test_remote_version_probe_rejects_missing_required_capabilities() -> None:
     message = str(exc_info.value)
     assert "remote transfer capability mismatch" in message
     assert "part_content_md5" in message
+    assert "storehost_tiefblue_part_contract" in message
     assert "matmaster_bohrium_transfer" in message
 
 

@@ -118,6 +118,41 @@ def test_request_storehost_json_raises_immediately_for_nonretryable_business_cod
     assert len(session.calls) == 1
 
 
+def test_request_storehost_json_can_allow_success_without_data() -> None:
+    session = FakeSession([FakeResponse(payload={"code": 0, "message": "ok"})])
+
+    response = request_storehost_json(
+        session,
+        "POST",
+        "https://store.example/api/upload/multipart/complete",
+        stage="multipart_complete",
+        allow_missing_data=True,
+    )
+
+    assert response.data == {}
+
+
+def test_request_storehost_json_reports_business_error_without_data() -> None:
+    session = FakeSession(
+        [
+            FakeResponse(
+                payload={
+                    "code": 40001,
+                    "message": "unsupported Content-MD5",
+                }
+            )
+        ]
+    )
+
+    with pytest.raises(NonRetryableTransferError, match="unsupported Content-MD5"):
+        request_storehost_json(
+            session,
+            "POST",
+            "https://store.example/api/upload/multipart/upload",
+            stage="multipart_part",
+        )
+
+
 def test_request_storehost_json_redacts_secrets_from_error_messages() -> None:
     session = FakeSession(
         [

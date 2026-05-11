@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import matmaster_bohrium_transfer.remote as remote_module
 from matmaster_bohrium_transfer.remote import main
+from matmaster_bohrium_transfer.version import PROTOCOL_VERSION
 
 
 def test_remote_cli_version_outputs_json(capsys) -> None:
@@ -15,9 +16,10 @@ def test_remote_cli_version_outputs_json(capsys) -> None:
     payload = json.loads(captured.out)
     assert exit_code == 0
     assert payload["ok"] is True
-    assert payload["protocol_version"] == "1.1"
+    assert payload["protocol_version"] == PROTOCOL_VERSION
     assert "multipart_upload" in payload["capabilities"]
     assert "part_content_md5" in payload["capabilities"]
+    assert "storehost_tiefblue_part_contract" in payload["capabilities"]
     assert captured.err == ""
 
 

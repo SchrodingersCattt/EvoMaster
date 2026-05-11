@@ -76,6 +76,7 @@ def request_storehost_json(
     data: Any = None,
     timeout: int | None = None,
     policy: RetryPolicy | None = None,
+    allow_missing_data: bool = False,
 ) -> StoreHostResponse:
     active_policy = policy or RetryPolicy()
     retryable_codes = set(retryable_business_codes or ())
@@ -143,45 +144,48 @@ def request_storehost_json(
                     stage,
                     "StoreHost response JSON must be an object",
                 )
-            if "data" not in body:
-                raise NonRetryableTransferError(
-                    stage,
-                    f"StoreHost response missing data: {redact_secrets(body)}",
+            code = body.get("code")
+            if expected_code is None:
+                code_ok = code in (None, 0)
+            else:
+                code_ok = code == expected_code
+            if not code_ok:
+                code_text = _message_from_body(
+                    body, f"StoreHost business code {code!r} for {stage}"
                 )
-            data_block = body.get("data")
+                if code in retryable_codes:
+                    ledger["business_failures"] += 1
+                    retryable = (
+                        ledger["business_failures"] < active_policy.business_attempts
+                    )
+                    raise RetryableTransferError(
+                        stage,
+                        code_text,
+                        retryable=retryable,
+                    )
+                raise NonRetryableTransferError(stage, code_text)
+
+            if "data" not in body:
+                if allow_missing_data:
+                    data_block = {}
+                else:
+                    raise NonRetryableTransferError(
+                        stage,
+                        f"StoreHost response missing data: {redact_secrets(body)}",
+                    )
+            else:
+                data_block = body.get("data")
             if not isinstance(data_block, dict):
                 raise NonRetryableTransferError(
                     stage,
                     f"StoreHost response data must be an object: "
                     f"{redact_secrets(body)}",
                 )
-
-            code = body.get("code")
-            if expected_code is None:
-                code_ok = code in (None, 0)
-            else:
-                code_ok = code == expected_code
-            if code_ok:
-                return StoreHostResponse(
-                    data=data_block,
-                    headers=dict(getattr(response, "headers", {}) or {}),
-                    status_code=status_code,
-                    raw_body=body,
-                )
-
-            code_text = _message_from_body(
-                body, f"StoreHost business code {code!r} for {stage}"
+            return StoreHostResponse(
+                data=data_block,
+                headers=dict(getattr(response, "headers", {}) or {}),
+                status_code=status_code,
+                raw_body=body,
             )
-            if code in retryable_codes:
-                ledger["business_failures"] += 1
-                retryable = (
-                    ledger["business_failures"] < active_policy.business_attempts
-                )
-                raise RetryableTransferError(
-                    stage,
-                    code_text,
-                    retryable=retryable,
-                )
-            raise NonRetryableTransferError(stage, code_text)
 
     raise NonRetryableTransferError(stage, "StoreHost request failed unexpectedly")
