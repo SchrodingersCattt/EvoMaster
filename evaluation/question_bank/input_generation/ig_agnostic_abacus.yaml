@@ -324,7 +324,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_010_20260508
+- id: IG_abacus_010_20260511
   capability: input_generation
   domain: agnostic
   intent: Package an ABACUS input directory with auxiliary files and engine-skill submission defaults.
@@ -353,7 +353,6 @@ questions:
       - generated_files
       - user_provided_files
       - diagnostics
-      - auxiliary_files
       - assumptions
       - submit_ready
       - bohrium_command
@@ -379,7 +378,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 16000
+      max: 40000
   scoring_checklist:
   - id: manifest_schema
     criterion: The package includes `input_prep_manifest.json` with software, task, input_dir, generated_files, user_provided_files, diagnostics, auxiliary_files, assumptions, submit_ready, and bohrium_command.
@@ -413,11 +412,11 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_011_20260507
+- id: IG_abacus_011_20260511
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS LCAO-SCF inputs for an isolated spin-polarized oxygen atom.
-  human_prompt_seed: 请为孤立氧原子准备一个 ABACUS LCAO 单点自洽计算。体系放在 10 Å 立方盒中，使用 Gamma 点；考虑氧原子的开壳层自旋态。将完整的 `INPUT`、`STRU` 和 `KPT` 写入当前目录。
+  human_prompt_seed: 请为孤立氧原子准备一个 ABACUS LCAO 单点自洽计算。体系放在 10 Å 立方盒中，使用 Gamma 点；考虑氧原子的开壳层自旋态，需要开启自旋极化；。将完整的 `INPUT`、`STRU` 和 `KPT` 写入当前目录。
   tags:
   - eng_abacus
   reference_answers:
@@ -486,7 +485,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 12000
+      max: 20000
   scoring_checklist:
   - id: input_artifact
     criterion: Generated deliverables count even if the final answer does not quote file contents; `INPUT` must be written to the workspace.
@@ -673,7 +672,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_013_20260507
+- id: IG_abacus_013_20260511
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS input files for Ni FCC lattice-constant energy calculations.
@@ -694,7 +693,6 @@ questions:
       - calculation scf
       - basis_type lcao
       - nspin 2
-      - xc pbe
       - pseudo_dir
       - orbital_dir
       - smearing_method mp
@@ -738,13 +736,13 @@ questions:
     value: {}
   - key: turn_budget
     value:
-      max: 8
+      max: 16
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 12000
+      max: 40000
   scoring_checklist:
   - id: input_artifact
     criterion: Generated deliverables count even if the final answer does not quote file contents; `INPUT` must be written to the workspace.
@@ -803,7 +801,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_014_20260507
+- id: IG_abacus_014_20260511
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS inputs for a representative Cu FCC stacking-fault energy SCF calculation.
@@ -822,9 +820,6 @@ questions:
       tokens:
       - calculation scf
       - basis_type lcao
-      - smearing_method mp
-      - cal_force 1
-      - cal_stress 1
       - kspacing
       flags: i
   - key: must_input_numerics
@@ -843,7 +838,7 @@ questions:
         max: 0.05
       - key: kspacing
         min: 0.08
-        max: 0.25
+        max: 1
   - key: must_stru_cu_species_orbital
     value:
       filename: STRU_fault
@@ -867,13 +862,13 @@ questions:
     value: {}
   - key: turn_budget
     value:
-      max: 8
+      max: 16
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 12000
+      max: 40000
   scoring_checklist:
   - id: input_artifact
     criterion: Generated deliverables count even if the final answer does not quote file contents; `INPUT` must be written to the workspace.
@@ -922,7 +917,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_015_20260507
+- id: IG_abacus_015_20260511
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS+LibRI HSE06 SCF, band, and DOS input files for silicon.
@@ -964,7 +959,6 @@ questions:
       - init_chg file
       - symmetry 0
       - out_band 1
-      - out_bandgap 1
       flags: i
   - key: must_input_dos_hse_core
     value:
@@ -1016,13 +1010,13 @@ questions:
     value: {}
   - key: turn_budget
     value:
-      max: 8
+      max: 25
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 14000
+      max: 80000
   scoring_checklist:
   - id: input_scf_artifact
     criterion: Generated deliverables count even if the final answer does not quote file contents; `INPUT-scf` must be written to the workspace.
@@ -1106,7 +1100,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_016_20260507
+- id: IG_abacus_016_20260511
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS INPUT and KPT files for Pt(111) ORR OH* and OOH* relaxation runs.
@@ -1130,10 +1124,7 @@ questions:
       - basis_type lcao
       - pseudo_dir /root/apns-pseudopotentials-v1
       - orbital_dir /root/apns-orbitals-efficiency-v1
-      - smearing_method mp
       - cal_force 1
-      - cal_stress 1
-      - out_stru 1
       flags: i
   - key: must_ooh_input_relax_core
     value:
@@ -1143,10 +1134,7 @@ questions:
       - basis_type lcao
       - pseudo_dir /root/apns-pseudopotentials-v1
       - orbital_dir /root/apns-orbitals-efficiency-v1
-      - smearing_method mp
       - cal_force 1
-      - cal_stress 1
-      - out_stru 1
       flags: i
   - key: must_oh_input_numerics
     value:
@@ -1198,13 +1186,13 @@ questions:
     value: {}
   - key: turn_budget
     value:
-      max: 8
+      max: 16
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 14000
+      max: 40000
   scoring_checklist:
   - id: oh_input_artifact
     criterion: Generated deliverables count even if the final answer does not quote file contents; `relax-OH/Top/INPUT` must be written to the workspace.
@@ -1273,13 +1261,15 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_017_20260507
+- id: IG_abacus_017_20260511
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS PBE+U LCAO cell-relax input directories for comparing rocksalt and square-planar NiO phases.
   human_prompt_seed: '我想用 ABACUS 比较 NiO 两种候选结构的相对稳定性：一个是常规岩盐相，另一个是 Ni 处于平面四配位环境的变形相。请先只准备后续计算需要的输入文件。
 
-    计算方法统一采用 LCAO 基组和 PBE+U，Ni 的 U 值取 5.0 eV；两套输入应使用一致的计算精度、赝势/轨道来源和 k 点采样策略，便于之后做能量比较。
+    这个比较需要先把两种候选相都做晶胞参数和原子位置的弛豫，而不是只对初始结构做静态单点能。计算方法统一采用 LCAO 基组和 PBE+U，Ni 的 U 值取 5.0 eV；两套输入应使用一致的计算精度、赝势/轨道来源和 k 点采样策略，便于之后做能量比较。
+
+    请在 INPUT 中包含结构弛豫所需的力、应力和收敛控制（例如力/应力阈值、最大弛豫步数等），并让两种结构采用可比较的一套数值精度。
 
     请在当前目录下分别建立 `nio_rocksalt/` 和 `nio_square_planar/`，写入对应的 ABACUS `INPUT` 和 `STRU`。不要运行计算，也不要提交任务。'
   tags:
@@ -1346,9 +1336,6 @@ questions:
       - key: scf_thr
         min: 1.0e-10
         max: 1.0e-05
-      - key: force_thr_ev
-        min: 0.001
-        max: 0.05
       - key: stress_thr
         min: 0.01
         max: 5.0
@@ -1371,9 +1358,6 @@ questions:
       - key: scf_thr
         min: 1.0e-10
         max: 1.0e-05
-      - key: force_thr_ev
-        min: 0.001
-        max: 0.05
       - key: stress_thr
         min: 0.01
         max: 5.0
@@ -1424,7 +1408,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 14000
+      max: 40000
   scoring_checklist:
   - id: rocksalt_input_artifact
     criterion: Generated deliverables count even if the final answer does not quote file contents; `nio_rocksalt/INPUT` must be written to the workspace.
@@ -1506,6 +1490,156 @@ questions:
     axis: correctness
     verify: llm_binary_judge
     weight: 0.8
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: duration_budget
+    criterion: Wall-clock run duration is recorded and does not exceed a generous benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: IG_abacus_018_20260511
+  capability: input_generation
+  domain: agnostic
+  intent: Prepare ABACUS LCAO-SCF inputs that require resolving nontrivial APNS pseudopotential filenames.
+  human_prompt_seed: '请为一个 Mg-N-Rh 三元素小胞准备 ABACUS LCAO-SCF 输入文件，用于测试 APNS 赝势/轨道文件名解析是否正确。
+
+    要求：
+
+    1) 生成当前目录下的 `INPUT`、`STRU`、`KPT`。
+
+    2) 使用 ABACUS LCAO 和 PBE 单点自洽；显式设置 APNS 赝势目录和轨道目录。
+
+    3) `STRU` 中的 Mg、N、Rh 三种元素必须使用 skill references 中实际存在的 APNS pseudopotential 和 numerical-orbital 文件名；不要凭元素符号猜成 `元素名.upf`。
+
+    4) 结构只需是一个合理的周期性测试小胞，重点是三种元素、`INPUT`/`STRU`/`KPT` 互相一致；不要运行计算。'
+  tags:
+  - eng_abacus
+  reference_answers:
+  - key: input_artifact
+    value: INPUT
+  - key: stru_artifact
+    value: STRU
+  - key: kpt_artifact
+    value: KPT
+  - key: must_input_lcao_core
+    value:
+      filename: INPUT
+      tokens:
+      - calculation scf
+      - basis_type lcao
+      - pseudo_dir /root/apns-pseudopotentials-v1
+      - orbital_dir /root/apns-orbitals-efficiency-v1
+      flags: i
+  - key: must_input_ntype_three
+    value:
+      filename: INPUT
+      pattern: (?im)^\s*ntype\s+3\s*$
+      flags: im
+  - key: must_stru_mg_pseudo
+    value:
+      filename: STRU
+      pattern: (?im)^\s*Mg\s+[0-9.]+\s+Mg\.PD04\.PBE\.UPF\s*$
+      flags: im
+  - key: must_stru_n_pseudo
+    value:
+      filename: STRU
+      pattern: (?im)^\s*N\s+[0-9.]+\s+N_ONCV_PBE-1\.0\.upf\s*$
+      flags: im
+  - key: must_stru_rh_pseudo
+    value:
+      filename: STRU
+      pattern: (?im)^\s*Rh\s+[0-9.]+\s+Rh_ONCV_PBE_FR-1\.0\.upf\s*$
+      flags: im
+  - key: must_stru_orbitals
+    value:
+      filename: STRU
+      tokens:
+      - NUMERICAL_ORBITAL
+      - Mg_gga_10au_100Ry_2s1p.orb
+      - N_gga_8au_100Ry_2s2p1d.orb
+      - Rh_gga_10au_100Ry_4s2p2d1f.orb
+      flags: i
+  - key: must_kpt_gamma
+    value:
+      filename: KPT
+      pattern: (?im)^\s*[1-9]\d*\s+[1-9]\d*\s+[1-9]\d*(?:\s+0\s+0\s+0)?\s*$
+      flags: im
+  - key: variable_reference_grounding
+    value: {}
+  - key: turn_budget
+    value:
+      max: 12
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 40000
+  scoring_checklist:
+  - id: input_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `INPUT` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: stru_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `STRU` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: kpt_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `KPT` must be written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: must_input_lcao_core
+    criterion: '[Must] INPUT uses ABACUS LCAO SCF and points to the APNS pseudopotential/orbital directories.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_input_ntype_three
+    criterion: '[Must] INPUT sets ntype to 3 for Mg, N, and Rh.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_stru_mg_pseudo
+    criterion: '[Must] STRU uses the actual APNS Mg pseudopotential filename, not a guessed Mg.upf.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_stru_n_pseudo
+    criterion: '[Must] STRU uses the actual APNS N pseudopotential filename, not a guessed N.upf.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_stru_rh_pseudo
+    criterion: '[Must] STRU uses the actual APNS Rh pseudopotential filename, including the FR suffix.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_stru_orbitals
+    criterion: '[Must] STRU uses the actual APNS numerical-orbital filenames for Mg, N, and Rh.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_kpt_gamma
+    criterion: '[Must] KPT contains a valid positive 3D Gamma-style mesh line.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.8
+  - id: variable_reference_grounding
+    criterion: '[Variable] The selected pseudopotential and orbital filenames are grounded in APNS reference lists and the files are mutually consistent; do not accept guessed element-name pseudopotentials when a different APNS filename exists.'
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 0.5
   - id: turn_budget
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
@@ -1635,7 +1769,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_008_20260508
+- id: IG_abacus_008_20260511
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS Si PW-SCF inputs and Bohrium submission configuration.
@@ -1688,7 +1822,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 20000
+      max: 30000
   scoring_checklist:
   - id: submit_json_artifact
     criterion: Generated deliverables count even if the final answer does not quote file contents;
