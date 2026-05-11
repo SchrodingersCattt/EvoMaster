@@ -5,7 +5,7 @@ from importlib.metadata import PackageNotFoundError, version
 
 PACKAGE_NAME = "matmaster-bohrium-transfer"
 SCHEMA_VERSION = "v2"
-PROTOCOL_VERSION = "1.1"
+PROTOCOL_VERSION = "1.2"
 GIT_COMMIT = "unknown"
 
 CAPABILITIES = (
@@ -17,6 +17,7 @@ CAPABILITIES = (
     "single_retry_budget",
     "streaming_part_upload",
     "part_content_md5",
+    "storehost_tiefblue_part_contract",
     "range_resume",
     "range_download_concurrency",
     "download_sha256",

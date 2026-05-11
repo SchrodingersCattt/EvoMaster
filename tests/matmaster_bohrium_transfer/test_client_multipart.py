@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 from matmaster_bohrium_transfer.client import StoreHostClient, decode_storage_param
-from matmaster_bohrium_transfer.errors import StorageInitError
+from matmaster_bohrium_transfer.errors import StorageInitError, StoragePartUploadError
 from matmaster_bohrium_transfer.manifest import ManifestStore
 from matmaster_bohrium_transfer.multipart import upload_file_multipart
 from matmaster_bohrium_transfer.security import token_fingerprint
@@ -84,7 +84,7 @@ def test_init_multipart_rejects_nonzero_business_code() -> None:
         client.init_multipart("prefix/input.zip")
 
 
-def test_store_host_upload_part_sends_tiefblue_compatible_header() -> None:
+def test_store_host_upload_part_uses_tiefblue_multipart_param_contract() -> None:
     session = FakeSession()
     client = StoreHostClient("https://store.example", "token-1", session=session)
 
@@ -106,13 +106,42 @@ def test_store_host_upload_part_sends_tiefblue_compatible_header() -> None:
     assert decoded["initialKey"] == "init-1"
     assert decoded["number"] == 2
     assert decoded["partSize"] == 5
-    assert decoded["objectKey"] == "prefix/input.zip"
-    assert decoded["contentMd5"] == headers["Content-MD5"]
+    assert "objectKey" not in decoded
+    assert "contentMd5" not in decoded
+    assert "Content-MD5" not in headers
     assert headers["Content-Length"] == "5"
     assert headers["Authorization"] == "Bearer token-1"
 
 
-def test_upload_file_multipart_streams_parts_with_content_md5(tmp_path: Path) -> None:
+def test_complete_multipart_accepts_success_response_without_data() -> None:
+    class CompleteWithoutDataSession:
+        def __init__(self) -> None:
+            self.calls: list[tuple[str, dict, dict]] = []
+
+        def post(self, url, *, headers=None, json=None, data=None, timeout=None):
+            self.calls.append(
+                (url, headers or {}, {"json": json, "data": data, "timeout": timeout})
+            )
+            return FakeResponse(payload={"code": 0, "message": "ok"})
+
+    session = CompleteWithoutDataSession()
+    client = StoreHostClient("https://store.example", "token-1", session=session)
+
+    client.complete_multipart(
+        object_key="prefix/input.zip",
+        initial_key="init-1",
+        part_strings=["part-1"],
+    )
+
+    assert session.calls[0][2]["json"] == {
+        "initialKey": "init-1",
+        "partString": ["part-1"],
+    }
+
+
+def test_upload_file_multipart_streams_parts_with_content_length(
+    tmp_path: Path,
+) -> None:
     file_path = tmp_path / "input.zip"
     file_path.write_bytes(b"abcdef")
     session = FakeSession()
@@ -140,9 +169,49 @@ def test_upload_file_multipart_streams_parts_with_content_md5(tmp_path: Path) ->
     assert not isinstance(body, bytes)
     assert b"".join(body) == b"abc"
     assert headers["Content-Length"] == "3"
-    assert headers["Content-MD5"] == "kAFQmDzST7DWlj99KOF/cg=="
     decoded = decode_storage_param(headers["X-Storage-Param"])
-    assert decoded["contentMd5"] == "kAFQmDzST7DWlj99KOF/cg=="
+    assert decoded == {"initialKey": "init-1", "number": 1, "partSize": 3}
+
+
+def test_upload_file_multipart_preserves_storehost_part_error_message(
+    tmp_path: Path,
+) -> None:
+    class PartFailureSession(FakeSession):
+        def post(self, url, *, headers=None, json=None, data=None, timeout=None):
+            if url.endswith("/api/upload/multipart/upload"):
+                return FakeResponse(
+                    payload={
+                        "code": 40001,
+                        "message": "unsupported multipart header",
+                    }
+                )
+            return super().post(
+                url,
+                headers=headers,
+                json=json,
+                data=data,
+                timeout=timeout,
+            )
+
+    file_path = tmp_path / "input.zip"
+    file_path.write_bytes(b"abc")
+    client = StoreHostClient(
+        "https://store.example",
+        "token-1",
+        session=PartFailureSession(),
+    )
+
+    with pytest.raises(StoragePartUploadError, match="unsupported multipart header"):
+        upload_file_multipart(
+            client=client,
+            file_path=file_path,
+            object_key="prefix/input.zip",
+            manifest_store=ManifestStore(tmp_path / "manifest"),
+            transfer_id="t1",
+            part_size=3,
+            concurrency=1,
+            part_retries=1,
+        )
 
 
 def test_upload_file_multipart_writes_manifest_v2_without_raw_token(
@@ -284,6 +353,7 @@ def test_upload_file_multipart_resumes_completed_manifest_parts(
         "part-2",
         "part-3",
     ]
+    assert "path" not in complete_call[2]["json"]
     assert summary["resume_used"] is True
 
 
