@@ -1,21 +1,25 @@
 {
+  "construction_steps": [
+    "Step 1 (bulk-terminated slab): cut a Si(100) slab with 6 atomic layers from diamond Si (a = 5.43 A) and add at least 15 A of vacuum on top and bottom.",
+    "Step 2 (2x1 dimer reconstruction on BOTH top and bottom surfaces): pair adjacent surface Si atoms into Si-Si dimers (typical dimer bond length ~2.3 A). After this step every surface Si atom has only ONE remaining dangling bond, not two; the reconstruction must actually be applied to the geometry, not merely declared.",
+    "Step 3 (hydrogen passivation): place H on the remaining surface dangling bonds with Si-H = 1.48 A so that every Si atom is 4-coordinated."
+  ],
   "requirements": {
     "H_bond_length_A": 1.48,
+    "must_apply_dimer_reconstruction_before_h": true,
     "output_format": "POSCAR",
-    "passivate_bottom_dangling_bonds": true,
-    "passivate_top_dangling_bonds": true,
-    "verify": "all top and bottom surface Si atoms are 4-coordinated after H addition"
+    "verify": "After Step 3 every Si atom is 4-coordinated. Each surface Si's coordination is composed of: 2 sub-surface Si back-bonds + 1 Si-Si dimer bond (to its dimer partner) + 1 Si-H bond. Bulk Si keeps its 4 Si-Si bonds."
   },
   "surface": {
     "bulk_structure": "Si diamond",
-    "material": "Si(100) 2x1 reconstructed",
+    "lattice_constant_A": 5.43,
     "miller_indices": [
       1,
       0,
       0
     ],
-    "reconstruction": "2x1 dimer",
-    "slab_layers": 6
+    "slab_layers": 6,
+    "vacuum_min_A": 15.0
   },
-  "task": "hydrogen_passivation"
+  "task": "build_then_passivate"
 }
