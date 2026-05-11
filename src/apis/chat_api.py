@@ -95,7 +95,7 @@ def _session_directory_error(exc: SessionDirectoryError) -> BaseErrorResponse:
         http_status=exc.http_status,
         code=exc.http_status,
         msg=exc.message,
-        data={'error_code': exc.error_code},
+        data={"error_code": exc.error_code},
     )
 
 
@@ -305,7 +305,10 @@ async def chat_stream(
             model_remaining = await check_model_quota(user_id, model_route_key)
             logger.info(
                 "stream model_quota check: session_id=%s user_id=%s model=%s remaining=%s",
-                sid, user_id, model_route_key, model_remaining,
+                sid,
+                user_id,
+                model_route_key,
+                model_remaining,
             )
             if model_remaining == 0:
                 raise ForbiddenErrorResponse(
@@ -316,7 +319,8 @@ async def chat_stream(
         except Exception as e:
             logger.warning(
                 "stream model_quota check failed (allowing): session_id=%s error=%s",
-                sid, e,
+                sid,
+                e,
             )
 
     # 仅 Worker 队列模式：发送消息需 REDIS_URL，否则返回 503
@@ -424,19 +428,19 @@ def _submit_interaction_reply(
     reply_queue = stream_svc.get_reply_queue(sid)
     if reply_queue is None:
         raise ConflictErrorResponse(
-            msg='当前无活跃任务，或任务已结束',
+            msg="当前无活跃任务，或任务已结束",
         )
 
     payload = {
-        'source': 'User',
-        'type': event_type,
-        'content': content,
-        'session_id': sid,
+        "source": "User",
+        "type": event_type,
+        "content": content,
+        "session_id": sid,
     }
     run_ctx = stream_svc.get_run_context(sid)
     if run_ctx:
-        payload['task_id'] = run_ctx.get('task_id')
-        payload['invocation_id'] = run_ctx.get('invocation_id')
+        payload["task_id"] = run_ctx.get("task_id")
+        payload["invocation_id"] = run_ctx.get("invocation_id")
 
     stream_svc.publish_reply_event(sid, payload)
     reply_queue.put_content(queue_value)
