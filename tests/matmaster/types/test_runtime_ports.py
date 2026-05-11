@@ -76,14 +76,22 @@ async def test_checkpoint_sink_protocol_signature() -> None:
 
     typed_sink: CheckpointSink = sink
     covered = await typed_sink(
-        payload={"durability": "durable", "strategy": "summary"},
+        payload={
+            "durability": "durable",
+            "strategy": "summary",
+            "covered_until_event_id": 41,
+        },
         base_messages=[{"role": "user", "content": "compact"}],
     )
 
     assert covered == 42
     assert calls == [
         (
-            {"durability": "durable", "strategy": "summary"},
+            {
+                "durability": "durable",
+                "strategy": "summary",
+                "covered_until_event_id": 41,
+            },
             [{"role": "user", "content": "compact"}],
         )
     ]

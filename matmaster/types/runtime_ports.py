@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable
 from dataclasses import dataclass, field
-from typing import Any, Protocol, TypedDict, runtime_checkable
+from typing import Any, NotRequired, Protocol, TypedDict, runtime_checkable
 
 from matmaster.types.events import BusEvent
 
@@ -16,6 +16,7 @@ from matmaster.types.events import BusEvent
 class CompactionCheckpointPayload(TypedDict):
     durability: str
     strategy: str
+    covered_until_event_id: NotRequired[int]
 
 
 @runtime_checkable
