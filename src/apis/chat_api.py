@@ -309,7 +309,7 @@ async def chat_stream(
             )
             if model_remaining == 0:
                 raise ForbiddenErrorResponse(
-                    msg=f"该模型（{model_route_key}）今日免费次数已用完。",
+                    msg="当前模型今日免费次数已用完，请切换其他模型或明天再试。",
                 )
         except ForbiddenErrorResponse:
             raise
