@@ -406,6 +406,35 @@ async def test_run_agent_injects_figure_upload_config_into_pg_ctx_run_meta():
 
 
 @pytest.mark.asyncio
+async def test_run_agent_injects_current_input_context_into_pg_ctx_run_meta():
+    from matmaster.types.current_input import CurrentInputContext
+
+    run_result = RunResultEvent(source="agent", status="completed", reason="natural")
+    current_input_context = CurrentInputContext.from_values(
+        user_text="current prompt",
+        files=["https://oss.example.com/chat/current.cif"],
+        pre_query_scope_event_id=21,
+    )
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        ok, _elapsed = await svc.run_agent(
+            session_id="sess-1",
+            user_prompt="current prompt",
+            send_cb=AsyncMock(),
+            cancel_token=_make_cancel_token(),
+            mode="direct",
+            task_id="task-1",
+            current_input_context=current_input_context,
+        )
+
+    assert ok is True
+    assert (
+        svc._test_fake_exp.last_ctx.run_meta["current_input_context"]
+        == current_input_context
+    )
+
+
+@pytest.mark.asyncio
 async def test_agent_run_service_injects_full_attachment_manifest_before_exp_run():
     run_result = RunResultEvent(source='agent', status='completed', reason='natural')
 

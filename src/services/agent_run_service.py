@@ -401,6 +401,15 @@ class AgentRunService:
                     'task_id': task_id,
                 }
             )
+            if current_input_context is not None:
+                pg_ctx = pg_ctx.model_copy(
+                    update={
+                        'run_meta': {
+                            **pg_ctx.run_meta,
+                            'current_input_context': current_input_context,
+                        }
+                    }
+                )
             try:
                 events_table = get_chat_events_table()
             except Exception:
