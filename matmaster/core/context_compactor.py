@@ -15,6 +15,10 @@ from typing import Any, Literal
 
 from matmaster.core.context_builder import ContextBuilder
 from matmaster.manifests.rehydrator import CompactionRehydrator
+from matmaster.types.current_input import (
+    CurrentInputContext,
+    build_current_instruction_block,
+)
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import (
     AssistantMessage,
@@ -45,6 +49,12 @@ events and produce a fresh conversation summary. Older <rehydrated_context>
 blocks are historical state snapshots; do not copy them verbatim. Current state
 is supplied separately by the new rehydrated context.\
 """
+
+CURRENT_INPUT_CONTINUATION_INSTRUCTION = (
+    "不要向用户复述上述摘要，除非用户明确要求。"
+    "当前用户指令位于下面的 <current_instruction> 块中；"
+    "请基于摘要背景直接执行该指令。"
+)
 
 
 def _get_encoder():
@@ -268,6 +278,8 @@ class ContextCompactor:
         self,
         plan: CompactionPlan,
         messages: list[Message],
+        *,
+        current_input_context: CurrentInputContext | None = None,
     ) -> CompactionResult:
         """Apply a previously planned compaction and mutate messages in place."""
         if not messages:
@@ -277,9 +289,22 @@ class ContextCompactor:
                 f"messages[0] must be SystemMessage, got {type(messages[0])}"
             )
         system_msg = messages[0]
-        summary_input = [
-            message for message in messages if not isinstance(message, SystemMessage)
-        ]
+        current_split = (
+            plan.phase == "preflight"
+            and current_input_context is not None
+            and current_input_context.has_effective_input()
+            and len(messages) >= 3
+            and isinstance(messages[-1], UserMessage)
+            and bool(messages[1:-1])
+        )
+        if current_split:
+            summary_input = list(messages[1:-1])
+        else:
+            summary_input = [
+                message
+                for message in messages
+                if not isinstance(message, SystemMessage)
+            ]
         if not summary_input:
             raise ValueError(
                 "Cannot compact messages without user or assistant history"
@@ -289,16 +314,48 @@ class ContextCompactor:
         durability = "durable"
         failure_reason: str | None = None
         retained_turns = 0
+        checkpoint_covered_until_event_id: int | None = None
+        checkpoint_user_msg: UserMessage | None = None
 
         try:
             summary = await self._summarize(summary_input)
             rehydrated = await self._rehydrator.build()
-            bundle = self._context_builder.build_compact_bundle(
-                summary=summary,
-                rehydrated_context=rehydrated,
-            )
-            compact_user_msg = UserMessage(content=bundle)
-            messages[:] = [system_msg, compact_user_msg]
+            if current_split and current_input_context is not None:
+                runtime_bundle = self._context_builder.build_compact_bundle(
+                    summary=summary,
+                    rehydrated_context=rehydrated,
+                    continuation_instruction=CURRENT_INPUT_CONTINUATION_INSTRUCTION,
+                )
+                checkpoint_bundle = self._context_builder.build_compact_bundle(
+                    summary=summary,
+                    rehydrated_context=rehydrated,
+                )
+                current_user_message = messages[-1]
+                instruction = build_current_instruction_block(current_input_context)
+                runtime_user_msg = UserMessage(
+                    content=(
+                        f"{runtime_bundle}\n\n{instruction}"
+                        if instruction
+                        else runtime_bundle
+                    ),
+                    images=list(current_user_message.images),
+                )
+                checkpoint_user_msg = UserMessage(content=checkpoint_bundle)
+                messages[:] = [system_msg, runtime_user_msg]
+                if current_input_context.pre_query_scope_event_id is None:
+                    durability = "ephemeral"
+                    failure_reason = "preflight_current_input_boundary_missing"
+                else:
+                    checkpoint_covered_until_event_id = (
+                        current_input_context.pre_query_scope_event_id
+                    )
+            else:
+                bundle = self._context_builder.build_compact_bundle(
+                    summary=summary,
+                    rehydrated_context=rehydrated,
+                )
+                checkpoint_user_msg = UserMessage(content=bundle)
+                messages[:] = [system_msg, checkpoint_user_msg]
         except Exception as exc:
             if plan.phase == "preflight":
                 logger.warning(
@@ -338,8 +395,8 @@ class ContextCompactor:
             retained_turns,
         )
         base_snapshot = None
-        if durability == "durable":
-            base_snapshot = [messages[1].model_dump(mode="json")]
+        if durability == "durable" and checkpoint_user_msg is not None:
+            base_snapshot = [checkpoint_user_msg.model_dump(mode="json")]
         return CompactionResult(
             compaction_id=plan.compaction_id,
             compaction_count=plan.compaction_count,
@@ -350,6 +407,7 @@ class ContextCompactor:
             retained_turns=retained_turns,
             failure_reason=failure_reason,
             base_snapshot=base_snapshot,
+            checkpoint_covered_until_event_id=checkpoint_covered_until_event_id,
         )
 
     def _select_recent_turns(
