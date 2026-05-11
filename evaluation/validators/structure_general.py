@@ -229,6 +229,49 @@ def check_bond_count(
 # ---------------------------------------------------------------------------
 
 
+def _collect_pair_distances(
+    struct: Structure | Molecule,
+    *,
+    element_a: str,
+    element_b: str,
+    cutoff_A: float,
+) -> list[float]:
+    """Return all A-B distances < cutoff_A (avoiding double-count when A==B)."""
+    sites = struct.sites
+    same = element_a == element_b
+    lengths: list[float] = []
+    for i, si in enumerate(sites):
+        if si.species_string != element_a:
+            continue
+        for j, sj in enumerate(sites):
+            if j == i or sj.species_string != element_b:
+                continue
+            if same and j <= i:
+                continue
+            dist = (
+                si.distance(sj)
+                if isinstance(struct, Molecule)
+                else struct.get_distance(i, j)
+            )
+            if dist < cutoff_A:
+                lengths.append(dist)
+    return lengths
+
+
+def _load_struct_or_err(
+    workspace_dir: str | Path, filename: str
+) -> tuple[Path | None, Structure | Molecule | None, str]:
+    if not _PMG_AVAILABLE:
+        return None, None, _IMPORT_MSG
+    fpath = _resolve_file(Path(workspace_dir), filename)
+    if fpath is None:
+        return None, None, f'no file matching {filename!r} in {workspace_dir}'
+    try:
+        return fpath, _load_structure(fpath), ''
+    except Exception as exc:
+        return fpath, None, f'could not parse {fpath.name}: {exc}'
+
+
 def check_bond_length(
     workspace_dir: str | Path,
     *,
@@ -239,49 +282,59 @@ def check_bond_length(
     expected: float,
     tolerance: float,
 ) -> tuple[bool, str]:
-    """Check that the mean bond length between *element_a*–*element_b* is within tolerance."""
-    if not _PMG_AVAILABLE:
-        return False, _IMPORT_MSG
-    root = Path(workspace_dir)
-    fpath = _resolve_file(root, filename)
-    if fpath is None:
-        return False, f'no file matching {filename!r} in {root}'
-    try:
-        struct = _load_structure(fpath)
-    except Exception as exc:
-        return False, f'could not parse {fpath.name}: {exc}'
-
-    lengths: list[float] = []
-    sites = struct.sites
-    for i, si in enumerate(sites):
-        if si.species_string != element_a:
-            continue
-        for j, sj in enumerate(sites):
-            if j <= i and element_a == element_b:
-                continue
-            if j == i:
-                continue
-            if sj.species_string != element_b:
-                continue
-            if isinstance(struct, Molecule):
-                dist = si.distance(sj)
-            else:
-                dist = struct.get_distance(i, j)
-            if dist < cutoff_A:
-                lengths.append(dist)
-
+    """Check that the mean A-B bond length is within tolerance."""
+    fpath, struct, err = _load_struct_or_err(workspace_dir, filename)
+    if struct is None:
+        return False, err
+    lengths = _collect_pair_distances(
+        struct, element_a=element_a, element_b=element_b, cutoff_A=cutoff_A
+    )
     if not lengths:
         return (
             False,
             f'{fpath.name}: no {element_a}-{element_b} bonds found within {cutoff_A} Å',
         )
-
     mean_len = float(np.mean(lengths))
     hit = abs(mean_len - expected) <= tolerance
-    return (
-        hit,
+    return hit, (
         f'{fpath.name}: mean {element_a}-{element_b} bond length = {mean_len:.4f} Å '
-        f'({len(lengths)} bonds), expected={expected}±{tolerance}',
+        f'({len(lengths)} bonds), expected={expected}±{tolerance}'
+    )
+
+
+def check_bond_length_range(
+    workspace_dir: str | Path,
+    *,
+    filename: str,
+    element_a: str,
+    element_b: str,
+    cutoff_A: float = 3.0,
+    expected_min: float,
+    expected_max: float,
+) -> tuple[bool, str]:
+    """Check that every A-B pair within ``cutoff_A`` lies in [min, max].
+
+    Catches squeezed (<min) or stretched-but-still-bonded (>max) pairs that an
+    over-aggressive or under-relaxed reconstruction leaves behind.
+    """
+    fpath, struct, err = _load_struct_or_err(workspace_dir, filename)
+    if struct is None:
+        return False, err
+    lengths = _collect_pair_distances(
+        struct, element_a=element_a, element_b=element_b, cutoff_A=cutoff_A
+    )
+    if not lengths:
+        return (
+            False,
+            f'{fpath.name}: no {element_a}-{element_b} bonds found within {cutoff_A} Å',
+        )
+    min_len = float(np.min(lengths))
+    max_len = float(np.max(lengths))
+    hit = (min_len >= expected_min) and (max_len <= expected_max)
+    return hit, (
+        f'{fpath.name}: {element_a}-{element_b} bond lengths (<{cutoff_A} Å): '
+        f'min={min_len:.4f} Å, max={max_len:.4f} Å ({len(lengths)} bonds), '
+        f'expected all in [{expected_min}, {expected_max}] Å'
     )
 
 
@@ -305,10 +358,23 @@ def check_bond_angle(
     expected_deg: float,
     tolerance_deg: float,
     cutoff_A: float = 3.0,
+    cutoff_a_b_A: float | None = None,
+    cutoff_c_b_A: float | None = None,
+    cutoff_a_b_min_A: float = 0.0,
+    cutoff_c_b_min_A: float = 0.0,
 ) -> tuple[bool, str]:
     """Check the mean angle A-B-C where *triplet* = [A, B, C].
 
-    B is the vertex.  Only considers bonds A-B and C-B shorter than *cutoff_A*.
+    B is the vertex.  An A-B pair is admitted as a bond when its (PBC-corrected,
+    minimum-image) distance lies in ``[cutoff_a_b_min_A, cutoff_a_b_A]``; same
+    for C-B with ``[cutoff_c_b_min_A, cutoff_c_b_A]``.
+
+    The legacy single-cutoff API (``cutoff_A``) is kept for backwards
+    compatibility: when ``cutoff_a_b_A`` / ``cutoff_c_b_A`` are not given they
+    default to ``cutoff_A`` and the lower bounds default to 0 Å.
+
+    The angle vectors are computed from minimum-image displacements (B->A and
+    B->C) so that bonds crossing the periodic boundary are not corrupted.
     """
     if not _PMG_AVAILABLE:
         return False, _IMPORT_MSG
@@ -324,59 +390,68 @@ def check_bond_angle(
     except Exception as exc:
         return False, f'could not parse {fpath.name}: {exc}'
 
+    cutoff_ab_max = float(cutoff_a_b_A) if cutoff_a_b_A is not None else float(cutoff_A)
+    cutoff_cb_max = float(cutoff_c_b_A) if cutoff_c_b_A is not None else float(cutoff_A)
+    cutoff_ab_min = float(cutoff_a_b_min_A)
+    cutoff_cb_min = float(cutoff_c_b_min_A)
+
     elem_a, elem_b, elem_c = triplet
     sites = struct.sites
 
-    # Find vertex atoms (element B)
     b_indices = [i for i, s in enumerate(sites) if s.species_string == elem_b]
     a_indices = [i for i, s in enumerate(sites) if s.species_string == elem_a]
     c_indices = [i for i, s in enumerate(sites) if s.species_string == elem_c]
 
+    is_periodic = not isinstance(struct, Molecule)
+    cell_matrix = np.array(struct.lattice.matrix) if is_periodic else None
+    cell_inv = np.linalg.inv(cell_matrix) if is_periodic else None
+
+    def _mic_vec(disp: np.ndarray) -> np.ndarray:
+        if not is_periodic:
+            return disp
+        f = disp @ cell_inv
+        f -= np.round(f)
+        return f @ cell_matrix
+
     angles: list[float] = []
     for bi in b_indices:
-        # Find A neighbours
         a_nbrs = []
         for ai in a_indices:
             if ai == bi:
                 continue
-            if isinstance(struct, Molecule):
-                d = sites[ai].distance(sites[bi])
-            else:
+            if is_periodic:
                 d = struct.get_distance(ai, bi)
-            if d < cutoff_A:
+            else:
+                d = sites[ai].distance(sites[bi])
+            if cutoff_ab_min <= d <= cutoff_ab_max:
                 a_nbrs.append(ai)
 
-        # Find C neighbours
         c_nbrs = []
         for ci in c_indices:
             if ci == bi:
                 continue
-            if isinstance(struct, Molecule):
-                d = sites[ci].distance(sites[bi])
-            else:
+            if is_periodic:
                 d = struct.get_distance(ci, bi)
-            if d < cutoff_A:
+            else:
+                d = sites[ci].distance(sites[bi])
+            if cutoff_cb_min <= d <= cutoff_cb_max:
                 c_nbrs.append(ci)
 
+        b_coord = np.array(sites[bi].coords)
         for ai in a_nbrs:
             for ci in c_nbrs:
                 if ai == ci:
                     continue
-                # Compute vectors B->A and B->C
-                if isinstance(struct, Molecule):
-                    va = np.array(sites[ai].coords) - np.array(sites[bi].coords)
-                    vc = np.array(sites[ci].coords) - np.array(sites[bi].coords)
-                else:
-                    # Use Cartesian coords (handles periodicity for within-cell)
-                    va = np.array(sites[ai].coords) - np.array(sites[bi].coords)
-                    vc = np.array(sites[ci].coords) - np.array(sites[bi].coords)
+                va = _mic_vec(np.array(sites[ai].coords) - b_coord)
+                vc = _mic_vec(np.array(sites[ci].coords) - b_coord)
                 angles.append(_angle_deg(va, vc))
 
     if not angles:
         return (
             False,
             f'{fpath.name}: no {elem_a}-{elem_b}-{elem_c} angle found '
-            f'within cutoff {cutoff_A} Å',
+            f'within {elem_a}-{elem_b}=[{cutoff_ab_min},{cutoff_ab_max}] Å, '
+            f'{elem_c}-{elem_b}=[{cutoff_cb_min},{cutoff_cb_max}] Å',
         )
 
     mean_angle = float(np.mean(angles))

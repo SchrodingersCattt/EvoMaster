@@ -127,12 +127,12 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_SiH_20260507v4
+- id: SC_struct_SiH_20260512v7
   capability: structure_construction
   domain: semiconductor
   intent: Passivate dangling bonds on both top and bottom surfaces of a Si(100) slab with
     hydrogen atoms.
-  human_prompt_seed: '读取 `hydrogen_cap_spec.json`，对 Si(100) slab 上下表面的悬挂键进行氢饱和，使所有表面 Si 达到四配位。输出为 `Si100_H_passivated_POSCAR`。'
+  human_prompt_seed: '读取 `hydrogen_cap_spec.json`，按 spec 中给出的三步构造流程（bulk-terminated slab → 2×1 dimer 重构 → 对剩余悬挂键氢饱和）建模 Si(100) 表面，使每个 Si 原子最终都达到 sp3 四配位。注意采用 spec 指定的最小 in-plane 周期（每 surface 仅暴露一对 dimer），不要放大 in-plane supercell。输出为 `Si100_H_passivated_POSCAR`。'
   tags:
   - struct_surface
   data_files:
@@ -165,7 +165,18 @@ questions:
       - H
       expected_deg: 109.47
       tolerance_deg: 8.0
-      cutoff_A: 2.6
+      cutoff_a_b_min_A: 2.0
+      cutoff_a_b_A: 2.5
+      cutoff_c_b_min_A: 1.0
+      cutoff_c_b_A: 1.7
+  - key: si_si_bond_length_range_A
+    value:
+      filename: Si100_H_passivated_POSCAR
+      element_a: Si
+      element_b: Si
+      cutoff_A: 2.7
+      expected_min: 2.20
+      expected_max: 2.50
   - key: h_atom_count
     value:
       filename: Si100_H_passivated_POSCAR
@@ -198,9 +209,17 @@ questions:
   - id: si_si_h_angle_deg
     criterion: The mean Si-Si-H angle read from the POSCAR is close to tetrahedral 109.47
       degrees (tolerance 8 degrees), confirming that passivating H atoms sit at tetrahedral
-      positions around the surface Si atoms.
+      positions around the surface Si atoms. Only physical Si-Si and Si-H bonds are
+      counted (Si-Si in [2.0, 2.5] Å, Si-H in [1.0, 1.7] Å) so squeezed back-bonds and
+      next-neighbour H pairs do not pollute the statistic.
     axis: correctness
     verify: struct_file_bond_angle
+  - id: si_si_bond_length_range_A
+    criterion: Every Si-Si bond shorter than 2.7 Å in the POSCAR lies in the physical
+      bulk-Si range [2.20, 2.50] Å. This catches over-aggressive dimer moves that
+      squeeze a back-bond (e.g. down to 1.81 Å) or unrelaxed bulk-spaced surface pairs.
+    axis: correctness
+    verify: struct_file_bond_length_range
   - id: h_atom_count
     criterion: The final POSCAR contains exactly 4 H atoms, matching top-and-bottom passivation
       of the 2x1 Si(100) slab background.
