@@ -119,6 +119,45 @@ def test_chat_stream_returns_503_when_redis_url_missing(tmp_path):
             p.stop()
 
 
+def test_prepare_send_message_captures_current_input_context_before_user_event():
+    from src.models.chat import ChatSendRequest
+    from src.services.stream_service import ChatStreamService
+
+    sessions_service = MagicMock()
+    sessions_service.get_session.return_value = {"session_directory": None}
+    sessions_service.try_acquire_session_run.return_value = (True, None)
+    events_service = MagicMock()
+    events_service.get_latest_scope_event_id.return_value = 77
+    service = ChatStreamService(
+        sessions_service=sessions_service,
+        events_service=events_service,
+        agent_run_service=MagicMock(),
+        deploy_state_service=MagicMock(),
+    )
+    req = ChatSendRequest(
+        content="analyze current",
+        files=["https://oss.example.com/chat/new.cif"],
+        images=["https://oss.example.com/chat/current.png"],
+        workspace_paths=["/share/current/POSCAR"],
+    )
+
+    with (
+        patch("src.services.stream_service.REDIS_URL", "redis://test"),
+        patch("src.services.stream_service.get_redis_dao", return_value=MagicMock()),
+    ):
+        ctx = service.prepare_send_message("sess-1", req, user_id="user-1")
+
+    assert ctx.current_input_context.user_text == "analyze current"
+    assert ctx.current_input_context.files == ("https://oss.example.com/chat/new.cif",)
+    assert ctx.current_input_context.images == (
+        "https://oss.example.com/chat/current.png",
+    )
+    assert ctx.current_input_context.workspace_paths == ("/share/current/POSCAR",)
+    assert ctx.current_input_context.pre_query_scope_event_id == 77
+    events_service.get_latest_scope_event_id.assert_called_once_with("sess-1", None)
+    events_service.add_history_event.assert_called_once()
+
+
 def test_generate_send_stream_skips_current_task_in_history_replay():
     """发送流回放历史时不应再次回放当前任务刚落库的 query。"""
     from src.services.stream_service import ChatStreamService, SendStreamContext

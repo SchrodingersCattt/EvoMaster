@@ -30,6 +30,7 @@ from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec
+from matmaster.types.runtime_ports import EmptySessionEventHistory, KernelRuntimePorts
 
 if TYPE_CHECKING:
     from matmaster.types.messages import Message
@@ -118,7 +119,7 @@ class Exp:
             child_source = f"{source_prefix}:{exp_name}"
             child_spawn_id = uuid.uuid4().hex[:16]
             parent_session_id = ctx.run_meta.get("session_id", "")
-            event_sink = ctx.run_meta.get("event_sink")
+            event_sink = ctx.runtime_ports.child_event_forward_sink
 
             async def _forward_child_event(event: Any) -> None:
                 if event_sink is None:
@@ -192,6 +193,25 @@ class Exp:
             compaction=self._config.compaction,
             meta={},
         )
+
+    @staticmethod
+    def _build_kernel_meta(
+        base_meta: dict[str, Any],
+        run_meta: dict[str, Any],
+        *,
+        spawn_id: str | None,
+    ) -> dict[str, Any]:
+        meta = {
+            **base_meta,
+            "task_id": run_meta.get("task_id", ""),
+            "session_id": run_meta.get("session_id", ""),
+            "spawn_id": spawn_id,
+            "attachment_manifest": run_meta.get("attachment_manifest", ""),
+        }
+        current_input_context = run_meta.get("current_input_context")
+        if current_input_context is not None:
+            meta["current_input_context"] = current_input_context
+        return meta
 
     # ── Active planes derivation ────────────────────────
 
@@ -358,25 +378,15 @@ class Exp:
                         spec.compaction.compaction_llm,
                     )
 
-            def empty_events():
-                return []
+            history_port = ctx.runtime_ports.compaction.history
+            if history_port is None:
+                history_port = EmptySessionEventHistory()
 
-            get_query_events = run_meta.get("get_query_events")
-            if not callable(get_query_events):
-                get_query_events = empty_events
-            get_all_events = run_meta.get("get_all_events")
-            if not callable(get_all_events):
-                get_all_events = empty_events
-            get_latest_checkpoint_covered_until_event_id = run_meta.get(
-                "get_latest_checkpoint_covered_until_event_id"
-            )
             rehydrator = CompactionRehydrator(
-                get_query_events=get_query_events,
-                get_all_events=get_all_events,
+                get_query_events=history_port.query_events,
+                get_all_events=history_port.all_events,
                 get_latest_checkpoint_covered_until_event_id=(
-                    get_latest_checkpoint_covered_until_event_id
-                    if callable(get_latest_checkpoint_covered_until_event_id)
-                    else None
+                    history_port.latest_checkpoint_covered_until_event_id
                 ),
                 skill_registry=self._skill_registry,
                 playground_ctx=ctx,
@@ -420,10 +430,11 @@ class Exp:
         )
 
         # 9. Assemble final spec with all v2 fields
-        checkpoint_sink_factory = run_meta.get("checkpoint_sink_factory")
+        checkpoint_sink_factory = ctx.runtime_ports.compaction.checkpoint_sink_factory
         checkpoint_sink = None
         if callable(checkpoint_sink_factory):
             checkpoint_sink = checkpoint_sink_factory(spawn_id=spawn_id)
+        pre_compaction_barrier = ctx.runtime_ports.compaction.pre_compaction_barrier
         spec = spec.model_copy(
             update={
                 "tool_catalog": catalog,
@@ -435,16 +446,15 @@ class Exp:
                 "context_builder": builder,
                 "hook_executor": hook_executor,
                 "compactor": compactor,
-                "meta": {
-                    **spec.meta,
-                    "task_id": run_meta.get("task_id", ""),
-                    "session_id": run_meta.get("session_id", ""),
-                    "spawn_id": spawn_id,
-                    "checkpoint_sink_factory": checkpoint_sink_factory,
-                    "checkpoint_sink": checkpoint_sink,
-                    "attachment_manifest": run_meta.get("attachment_manifest", ""),
-                    "pre_compaction_barrier": run_meta.get("pre_compaction_barrier"),
-                },
+                "runtime_ports": KernelRuntimePorts(
+                    checkpoint_sink=checkpoint_sink,
+                    pre_compaction_barrier=pre_compaction_barrier,
+                ),
+                "meta": self._build_kernel_meta(
+                    spec.meta,
+                    run_meta,
+                    spawn_id=spawn_id,
+                ),
             }
         )
 

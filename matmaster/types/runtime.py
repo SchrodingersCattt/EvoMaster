@@ -20,6 +20,7 @@ from matmaster.core.context_builder import ContextBuilder
 from matmaster.core.hooks import HookExecutor
 
 from .llm_provider import LLMProvider
+from .runtime_ports import KernelRuntimePorts
 
 
 class CompactionConfig(BaseModel):
@@ -61,6 +62,11 @@ class AgentRuntimeSpec(BaseModel):
     max_turns: int = 100
 
     hook_executor: HookExecutor | None = None
+    runtime_ports: KernelRuntimePorts = Field(
+        default_factory=KernelRuntimePorts,
+        repr=False,
+        exclude=True,
+    )
 
     compaction: CompactionConfig = Field(default_factory=CompactionConfig)
     system_prompt: str = ""

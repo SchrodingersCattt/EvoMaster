@@ -5,8 +5,10 @@ from __future__ import annotations
 import pytest
 
 from matmaster.core.context_builder import ContextBuilder
+from matmaster.types.current_input import CurrentInputContext
 from matmaster.types.messages import (
     AssistantMessage,
+    ImageContentPart,
     LLMResponse,
     StreamChunk,
     SystemMessage,
@@ -18,12 +20,17 @@ from matmaster.types.runtime import CompactionConfig
 
 
 class FakeRehydrator:
-    def __init__(self, text: str = "") -> None:
+    def __init__(self, text: str = "", ranged_text: str | None = None) -> None:
         self.text = text
+        self.ranged_text = ranged_text
         self.calls = 0
+        self.until_event_ids: list[int | None] = []
 
-    async def build(self) -> str:
+    async def build(self, *, until_event_id: int | None = None) -> str:
         self.calls += 1
+        self.until_event_ids.append(until_event_id)
+        if until_event_id is not None and self.ranged_text is not None:
+            return self.ranged_text
         return self.text
 
 
@@ -201,6 +208,7 @@ def _make_compactor(
     provider,
     *,
     rehydrated: str = "",
+    rehydrated_until: str | None = None,
     event_sink=None,
     compaction_scope: str = "root",
 ):
@@ -209,7 +217,7 @@ def _make_compactor(
     return ContextCompactor(
         config=config,
         summary_provider=provider,
-        rehydrator=FakeRehydrator(rehydrated),
+        rehydrator=FakeRehydrator(rehydrated, ranged_text=rehydrated_until),
         context_builder=ContextBuilder(),
         event_sink=event_sink,
         compaction_scope=compaction_scope,
@@ -540,6 +548,134 @@ class TestCompactorResultMetadata:
         assert "tool_call_id" in prompt_text
         assert "tool_name" in prompt_text
         assert "bash" in prompt_text
+
+
+class TestPreflightCurrentInputSplit:
+    async def test_summarizes_previous_history_and_keeps_current_instruction(
+        self,
+    ) -> None:
+        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        provider = MockSummaryProvider()
+        rehydrated_with_current = (
+            "<attachments>\n"
+            "file_1 old.cif https://oss.example.com/chat/old.cif\n"
+            "file_2 new.cif https://oss.example.com/chat/new.cif\n"
+            "</attachments>"
+        )
+        rehydrated_until_current = (
+            "<attachments>\n"
+            "file_1 old.cif https://oss.example.com/chat/old.cif\n"
+            "</attachments>"
+        )
+        compactor = _make_compactor(
+            config,
+            provider,
+            rehydrated=rehydrated_with_current,
+            rehydrated_until=rehydrated_until_current,
+        )
+        ctx = CurrentInputContext.from_values(
+            user_text="Use only the new file",
+            files=["https://oss.example.com/chat/new.cif"],
+            images=["https://oss.example.com/chat/new.png"],
+            workspace_paths=["/share/current/POSCAR"],
+            pre_query_scope_event_id=42,
+        )
+        msgs = [
+            SystemMessage(content="sys"),
+            UserMessage(content="old question"),
+            AssistantMessage(content="old answer"),
+            UserMessage(
+                content=(
+                    "Use only the new file\n\n"
+                    "<available_attachments>\n"
+                    "file_1 old.cif https://oss.example.com/chat/old.cif\n"
+                    "file_2 new.cif https://oss.example.com/chat/new.cif\n"
+                    "</available_attachments>"
+                ),
+                images=[ImageContentPart(url="https://oss.example.com/chat/new.png")],
+            ),
+        ]
+
+        result = await compactor.apply_compaction_plan(
+            compactor.plan_preflight_compaction(msgs),
+            msgs,
+            current_input_context=ctx,
+        )
+
+        prompt_text = provider.calls[0][1]["content"]
+        runtime_content = msgs[1].content or ""
+        rehydrated_context = runtime_content.split("<rehydrated_context>", 1)[1].split(
+            "</rehydrated_context>", 1
+        )[0]
+        current_instruction = runtime_content.split("<current_instruction>", 1)[1]
+        assert "old question" in prompt_text
+        assert "old answer" in prompt_text
+        assert "Use only the new file" not in prompt_text
+        assert "new.cif" not in prompt_text
+        assert "<current_instruction>" in runtime_content
+        assert "old.cif" in rehydrated_context
+        assert "new.cif" not in rehydrated_context
+        assert "file_1 new.cif https://oss.example.com/chat/new.cif" in (
+            current_instruction
+        )
+        assert "old.cif" not in current_instruction
+        assert msgs[1].images[0].url == "https://oss.example.com/chat/new.png"
+        assert result.checkpoint_covered_until_event_id == 42
+        assert compactor._rehydrator.until_event_ids == [42]
+        assert result.base_snapshot is not None
+        assert "<current_instruction>" not in result.base_snapshot[0]["content"]
+        assert "new.cif" not in result.base_snapshot[0]["content"]
+        assert result.base_snapshot[0].get("images") in (None, [])
+
+    async def test_missing_pre_query_boundary_makes_split_ephemeral(self) -> None:
+        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        provider = MockSummaryProvider()
+        compactor = _make_compactor(config, provider)
+        ctx = CurrentInputContext.from_values(
+            user_text="current task",
+            files=["https://oss.example.com/chat/current.cif"],
+        )
+        msgs = [
+            SystemMessage(content="sys"),
+            UserMessage(content="old question"),
+            AssistantMessage(content="old answer"),
+            UserMessage(content="current task"),
+        ]
+
+        result = await compactor.apply_compaction_plan(
+            compactor.plan_preflight_compaction(msgs),
+            msgs,
+            current_input_context=ctx,
+        )
+
+        assert result.durability == "ephemeral"
+        assert result.failure_reason == "preflight_current_input_boundary_missing"
+        assert result.base_snapshot is None
+
+    async def test_attachment_only_current_input_is_preserved(self) -> None:
+        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        provider = MockSummaryProvider()
+        compactor = _make_compactor(config, provider)
+        ctx = CurrentInputContext.from_values(
+            files=["https://oss.example.com/chat/only.cif"],
+            pre_query_scope_event_id=42,
+        )
+        msgs = [
+            SystemMessage(content="sys"),
+            UserMessage(content="old question"),
+            AssistantMessage(content="old answer"),
+            UserMessage(content=""),
+        ]
+
+        await compactor.apply_compaction_plan(
+            compactor.plan_preflight_compaction(msgs),
+            msgs,
+            current_input_context=ctx,
+        )
+
+        assert "file_1 only.cif https://oss.example.com/chat/only.cif" in (
+            msgs[1].content or ""
+        )
 
     async def test_compact_if_needed_succeeds_without_event_sink(self) -> None:
         pass

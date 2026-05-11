@@ -33,11 +33,15 @@ class HistoryCheckpointService:
 
             validate_base_messages(deserialize_base_messages(base_messages))
             await fanout.flush_persistence_barrier()
-            covered_until_event_id = await asyncio.to_thread(
-                self.events_table.get_latest_scope_event_id,
-                session_id,
-                spawn_id,
-            )
+            raw_covered_until = payload.get("covered_until_event_id")
+            if raw_covered_until is not None:
+                covered_until_event_id = int(raw_covered_until)
+            else:
+                covered_until_event_id = await asyncio.to_thread(
+                    self.events_table.get_latest_scope_event_id,
+                    session_id,
+                    spawn_id,
+                )
             await asyncio.to_thread(
                 self.events_table.add_history_checkpoint,
                 session_id,
