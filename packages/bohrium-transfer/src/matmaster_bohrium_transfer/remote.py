@@ -15,6 +15,8 @@ from .multipart import upload_file_multipart
 from .security import redact_secrets
 from .version import PROTOCOL_VERSION, SCHEMA_VERSION, version_payload
 
+_SUBMIT_UPLOAD_CONCURRENCY = 1
+
 
 def _print_json(payload: dict[str, object]) -> None:
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
@@ -52,6 +54,7 @@ def _upload_submit(payload: dict[str, object]) -> dict[str, object]:
         object_key=object_key,
         manifest_store=ManifestStore(transfer_root),
         transfer_id=transfer_id,
+        concurrency=_SUBMIT_UPLOAD_CONCURRENCY,
     )
     return {
         "schema_version": SCHEMA_VERSION,
