@@ -27,6 +27,7 @@ from matmaster.manifests import attachment as attachment_manifest
 from matmaster.manifests import skill as skill_manifest
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.context import WorkspaceArchivalConfig
+from matmaster.types.current_input import CurrentInputContext
 from matmaster.types.events import (
     BusEvent,
     CancelledEvent,
@@ -351,6 +352,7 @@ class AgentRunService:
         llm_override: str | None = None,
         model_override: str | None = None,
         images: list[str] | None = None,
+        current_input_context: CurrentInputContext | None = None,
         bohrium_required: bool = False,
         remote_workdir: str | None = None,
     ) -> tuple[bool | tuple[bool, str], int]:
