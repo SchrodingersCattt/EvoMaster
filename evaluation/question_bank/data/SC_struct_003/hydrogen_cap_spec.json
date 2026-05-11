@@ -1,6 +1,6 @@
 {
   "construction_steps": [
-    "Step 1 (bulk-terminated slab): cut a Si(100) slab with 6 atomic layers from diamond Si (a = 5.43 A) and add at least 15 A of vacuum on top and bottom.",
+    "Step 1 (bulk-terminated slab): cut a Si(100) slab with 6 atomic layers from diamond Si (a = 5.43 A) and add at least 15 A of vacuum on top and bottom. Use the MINIMUM in-plane periodicity that admits a single 2x1 dimer on each surface: each of the top and bottom surfaces must expose exactly two surface Si atoms (i.e. one dimer pair per surface). Do not enlarge the in-plane supercell beyond this minimum.",
     "Step 2 (2x1 dimer reconstruction on BOTH top and bottom surfaces): pair adjacent surface Si atoms into Si-Si dimers (typical dimer bond length ~2.3 A). After this step every surface Si atom has only ONE remaining dangling bond, not two; the reconstruction must actually be applied to the geometry, not merely declared.",
     "Step 3 (hydrogen passivation): place H on the remaining surface dangling bonds with Si-H = 1.48 A so that every Si atom is 4-coordinated."
   ],

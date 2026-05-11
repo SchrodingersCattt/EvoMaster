@@ -127,12 +127,12 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_SiH_20260508v5
+- id: SC_struct_SiH_20260512v6
   capability: structure_construction
   domain: semiconductor
   intent: Passivate dangling bonds on both top and bottom surfaces of a Si(100) slab with
     hydrogen atoms.
-  human_prompt_seed: '读取 `hydrogen_cap_spec.json`，按 spec 中给出的三步构造流程（bulk-terminated slab → 2×1 dimer 重构 → 对剩余悬挂键氢饱和）建模 Si(100) 表面，使每个 Si 原子最终都达到 sp3 四配位。输出为 `Si100_H_passivated_POSCAR`。'
+  human_prompt_seed: '读取 `hydrogen_cap_spec.json`，按 spec 中给出的三步构造流程（bulk-terminated slab → 2×1 dimer 重构 → 对剩余悬挂键氢饱和）建模 Si(100) 表面，使每个 Si 原子最终都达到 sp3 四配位。注意采用 spec 指定的最小 in-plane 周期（每 surface 仅暴露一对 dimer），不要放大 in-plane supercell。输出为 `Si100_H_passivated_POSCAR`。'
   tags:
   - struct_surface
   data_files:
