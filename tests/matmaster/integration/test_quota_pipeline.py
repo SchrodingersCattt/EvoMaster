@@ -249,7 +249,7 @@ class TestQuotaDeductedOnSuccess:
         mock_llm = _SuccessLLM()
         svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
 
-        async def mock_use_quota(uid):
+        async def mock_use_quota(uid, **kwargs):
             pass
 
         use_quota_mock = MagicMock(side_effect=mock_use_quota)
@@ -263,7 +263,7 @@ class TestQuotaDeductedOnSuccess:
         svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
         payloads: list[dict[str, Any]] = []
 
-        async def mock_use_quota(uid):
+        async def mock_use_quota(uid, **kwargs):
             pass
 
         use_quota_mock = MagicMock(side_effect=mock_use_quota)
@@ -309,7 +309,7 @@ class TestQuotaDeductedOnSuccess:
         svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
         payloads: list[dict[str, Any]] = []
 
-        async def mock_use_quota(uid):
+        async def mock_use_quota(uid, **kwargs):
             pass
 
         use_quota_mock = MagicMock(side_effect=mock_use_quota)
@@ -338,7 +338,7 @@ class TestQuotaNotDeductedOnCancel:
         # Pre-cancel before run -> kernel returns cancelled immediately
         cancel_token = _make_cancel_token(cancelled=True)
 
-        async def mock_use_quota(uid):
+        async def mock_use_quota(uid, **kwargs):
             pass
 
         use_quota_mock = MagicMock(side_effect=mock_use_quota)
@@ -356,7 +356,7 @@ class TestQuotaNotDeductedOnCancel:
 
         cancel_token = _make_cancel_token(cancelled=True)
 
-        async def mock_use_quota(uid):
+        async def mock_use_quota(uid, **kwargs):
             pass
 
         use_quota_mock = MagicMock(side_effect=mock_use_quota)
@@ -387,7 +387,7 @@ class TestQuotaNotDeductedOnCancel:
 
         cancel_token = _make_cancel_token(cancelled=True)
 
-        async def mock_use_quota(uid):
+        async def mock_use_quota(uid, **kwargs):
             pass
 
         use_quota_mock = MagicMock(side_effect=mock_use_quota)
@@ -414,7 +414,7 @@ class TestQuotaNotDeductedOnError:
         mock_llm = _ErrorLLM()
         svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
 
-        async def mock_use_quota(uid):
+        async def mock_use_quota(uid, **kwargs):
             pass
 
         use_quota_mock = MagicMock(side_effect=mock_use_quota)
@@ -428,7 +428,7 @@ class TestQuotaNotDeductedOnError:
         svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
         payloads: list[dict[str, Any]] = []
 
-        async def mock_use_quota(uid):
+        async def mock_use_quota(uid, **kwargs):
             pass
 
         use_quota_mock = MagicMock(side_effect=mock_use_quota)
@@ -457,7 +457,7 @@ class TestQuotaNotDeductedOnError:
         mock_llm = _ErrorLLM()
         svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
 
-        async def mock_use_quota(uid):
+        async def mock_use_quota(uid, **kwargs):
             pass
 
         use_quota_mock = MagicMock(side_effect=mock_use_quota)
@@ -480,7 +480,7 @@ class TestQuotaNotDeductedOnError:
         mock_llm = _InvalidFinishLLM()
         svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
 
-        async def mock_use_quota(uid):
+        async def mock_use_quota(uid, **kwargs):
             pass
 
         use_quota_mock = MagicMock(side_effect=mock_use_quota)
@@ -496,7 +496,7 @@ class TestQuotaNotDeductedOnError:
         svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
         payloads: list[dict[str, Any]] = []
 
-        async def mock_use_quota(uid):
+        async def mock_use_quota(uid, **kwargs):
             pass
 
         use_quota_mock = MagicMock(side_effect=mock_use_quota)
@@ -546,7 +546,7 @@ class TestQuotaNotDeductedOnError:
         mock_llm = _InvalidFinishLLM()
         svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
 
-        async def mock_use_quota(uid):
+        async def mock_use_quota(uid, **kwargs):
             pass
 
         use_quota_mock = MagicMock(side_effect=mock_use_quota)
@@ -570,7 +570,7 @@ class TestQuotaNotDeductedOnError:
         mock_llm = _EmptyStopLLM()
         svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
 
-        async def mock_use_quota(uid):
+        async def mock_use_quota(uid, **kwargs):
             pass
 
         use_quota_mock = MagicMock(side_effect=mock_use_quota)
@@ -586,7 +586,7 @@ class TestQuotaNotDeductedOnError:
         svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
         payloads: list[dict[str, Any]] = []
 
-        async def mock_use_quota(uid):
+        async def mock_use_quota(uid, **kwargs):
             pass
 
         use_quota_mock = MagicMock(side_effect=mock_use_quota)
@@ -635,7 +635,7 @@ class TestQuotaNotDeductedOnError:
         mock_llm = _EmptyStopLLM()
         svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
 
-        async def mock_use_quota(uid):
+        async def mock_use_quota(uid, **kwargs):
             pass
 
         use_quota_mock = MagicMock(side_effect=mock_use_quota)
@@ -659,7 +659,7 @@ class TestQuotaNotDeductedOnError:
         mock_llm = _SentinelStopLLM()
         svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
 
-        async def mock_use_quota(uid):
+        async def mock_use_quota(uid, **kwargs):
             pass
 
         use_quota_mock = MagicMock(side_effect=mock_use_quota)
@@ -675,7 +675,7 @@ class TestQuotaNotDeductedOnError:
         svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
         payloads: list[dict[str, Any]] = []
 
-        async def mock_use_quota(uid):
+        async def mock_use_quota(uid, **kwargs):
             pass
 
         use_quota_mock = MagicMock(side_effect=mock_use_quota)
@@ -725,7 +725,7 @@ class TestQuotaDeduction:
 
         use_quota_calls = []
 
-        async def mock_use_quota(uid):
+        async def mock_use_quota(uid, **kwargs):
             use_quota_calls.append(uid)
 
         use_quota_mock = MagicMock(side_effect=mock_use_quota)

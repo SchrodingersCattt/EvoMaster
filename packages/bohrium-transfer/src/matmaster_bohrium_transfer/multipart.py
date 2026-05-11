@@ -10,9 +10,10 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 
+from .errors import StoragePartUploadError, TransferError
 from .manifest import ManifestStore
 from .progress import NoopProgressSink, ProgressSink, TransferProgressEvent
-from .security import token_fingerprint
+from .security import redact_secrets, token_fingerprint
 
 PART_CHUNK_SIZE = 1024 * 1024
 DEFAULT_PART_SIZE = 16 * 1024 * 1024
@@ -260,7 +261,34 @@ def upload_file_multipart(
                 last_error = exc
                 if attempt < part_retries:
                     time.sleep(min(2 ** (attempt - 1), 30) + random.uniform(0, 1.0))
-        raise RuntimeError(f"part {spec['number']} failed") from last_error
+        if isinstance(last_error, TransferError):
+            last_error.transfer_id = transfer_id
+            last_error.bytes_total = file_size
+            last_error.resume_available = bool(completed)
+            diagnostics = dict(last_error.diagnostics or {})
+            diagnostics.update(
+                {
+                    "part_number": spec["number"],
+                    "part_size": spec["size"],
+                    "attempts": part_retries,
+                }
+            )
+            last_error.diagnostics = diagnostics
+            raise last_error
+        raise StoragePartUploadError(
+            "multipart_part",
+            f"multipart part {spec['number']} failed: "
+            f"{redact_secrets(str(last_error) or 'unknown error')}",
+            retryable=True,
+            transfer_id=transfer_id,
+            bytes_total=file_size,
+            resume_available=bool(completed),
+            diagnostics={
+                "part_number": spec["number"],
+                "part_size": spec["size"],
+                "attempts": part_retries,
+            },
+        ) from last_error
 
     pending_parts = [part for part in part_entries if part["number"] not in completed]
     with ThreadPoolExecutor(max_workers=concurrency) as executor:

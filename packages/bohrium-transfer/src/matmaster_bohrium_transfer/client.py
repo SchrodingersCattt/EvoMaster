@@ -116,13 +116,10 @@ class StoreHostClient:
             "initialKey": initial_key,
             "number": number,
             "partSize": part_size,
-            "objectKey": object_key,
-            "contentMd5": md5_base64,
         }
         headers = self._headers()
         headers["X-Storage-Param"] = encode_storage_param(param)
         headers["Content-Length"] = str(part_size)
-        headers["Content-MD5"] = md5_base64
         try:
             response = request_storehost_json(
                 self.session,
@@ -180,12 +177,12 @@ class StoreHostClient:
                 stage="multipart_complete",
                 headers=self._headers(),
                 json_body={
-                    "path": object_key,
                     "initialKey": initial_key,
                     "partString": part_strings,
                 },
                 timeout=300,
                 retryable_business_codes={50001, 50002, 50003},
+                allow_missing_data=True,
             )
         except TransferError as exc:
             raise _wrap_storage_error(StorageCompleteError, exc) from exc

@@ -898,7 +898,7 @@ class AgentRunService:
                 if run_result_event.status == 'completed':
                     user_id = self._sessions_service.get_session_user_id(session_id)
                     if user_id:
-                        await use_quota(user_id)
+                        await use_quota(user_id, model_key=model_override)
                     return (True, _elapsed_ms())
                 fail_reason = (
                     run_result_event.reason or run_result_event.status or 'failed'

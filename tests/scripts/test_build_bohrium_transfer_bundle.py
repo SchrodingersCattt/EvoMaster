@@ -25,5 +25,6 @@ def test_build_bohrium_transfer_bundle_dry_run_outputs_metadata() -> None:
     assert payload["protocol_version"] == PROTOCOL_VERSION
     assert payload["schema_version"] == SCHEMA_VERSION
     assert "part_content_md5" in payload["capabilities"]
+    assert "storehost_tiefblue_part_contract" in payload["capabilities"]
     assert payload["wheel_path"].endswith(".whl")
     assert payload["sha256_path"].endswith(".sha256")

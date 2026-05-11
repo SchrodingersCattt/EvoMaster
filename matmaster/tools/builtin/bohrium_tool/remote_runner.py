@@ -17,6 +17,7 @@ REQUIRED_REMOTE_CAPABILITIES = {
     "single_retry_budget",
     "streaming_part_upload",
     "part_content_md5",
+    "storehost_tiefblue_part_contract",
     "manifest_resume_v2",
     "download_sha256",
     "download_zip_verify",
@@ -91,7 +92,8 @@ def probe_remote_transfer(session) -> dict[str, Any]:
             "remote transfer capability mismatch: "
             f"package={package} version={version} build={build_id} "
             f"missing={','.join(missing)}; update the Bohrium remote image so "
-            "matmaster_bohrium_transfer includes protocol 1.1 capabilities"
+            f"matmaster_bohrium_transfer includes protocol {PROTOCOL_VERSION} "
+            "capabilities"
         )
     return payload
 
