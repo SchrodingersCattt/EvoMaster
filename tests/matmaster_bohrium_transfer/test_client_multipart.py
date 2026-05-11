@@ -1,11 +1,16 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import json
 from pathlib import Path
 
+import pytest
 from matmaster_bohrium_transfer.client import StoreHostClient, decode_storage_param
+from matmaster_bohrium_transfer.errors import StorageInitError
 from matmaster_bohrium_transfer.manifest import ManifestStore
 from matmaster_bohrium_transfer.multipart import upload_file_multipart
+from matmaster_bohrium_transfer.security import token_fingerprint
 
 
 class FakeResponse:
@@ -54,6 +59,31 @@ class RecordingSink:
         self.events.append(event)
 
 
+def _md5_fields(data: bytes) -> tuple[str, str]:
+    digest = hashlib.md5(data, usedforsecurity=False)
+    return base64.b64encode(digest.digest()).decode(), digest.hexdigest()
+
+
+def test_init_multipart_rejects_nonzero_business_code() -> None:
+    class BusinessFailureSession:
+        def post(self, url, *, headers=None, json=None, data=None, timeout=None):
+            del url, headers, json, data, timeout
+            return FakeResponse(
+                payload={
+                    "code": 50001,
+                    "message": "multipart init failed",
+                    "data": {},
+                }
+            )
+
+    client = StoreHostClient(
+        "https://store.example", "token-1", session=BusinessFailureSession()
+    )
+
+    with pytest.raises(StorageInitError, match="multipart init failed"):
+        client.init_multipart("prefix/input.zip")
+
+
 def test_store_host_upload_part_sends_tiefblue_compatible_header() -> None:
     session = FakeSession()
     client = StoreHostClient("https://store.example", "token-1", session=session)
@@ -63,17 +93,83 @@ def test_store_host_upload_part_sends_tiefblue_compatible_header() -> None:
         initial_key="init-1",
         number=2,
         part_size=5,
-        data=b"abcde",
+        data=[b"abcde"],
+        md5_base64=base64.b64encode(
+            hashlib.md5(b"abcde", usedforsecurity=False).digest()
+        ).decode(),
+        md5_hex=hashlib.md5(b"abcde", usedforsecurity=False).hexdigest(),
     )
 
-    assert result == "part-2"
+    assert result.part_string == "part-2"
     _, headers, _ = session.calls[-1]
     decoded = decode_storage_param(headers["X-Storage-Param"])
     assert decoded["initialKey"] == "init-1"
     assert decoded["number"] == 2
     assert decoded["partSize"] == 5
     assert decoded["objectKey"] == "prefix/input.zip"
+    assert decoded["contentMd5"] == headers["Content-MD5"]
+    assert headers["Content-Length"] == "5"
     assert headers["Authorization"] == "Bearer token-1"
+
+
+def test_upload_file_multipart_streams_parts_with_content_md5(tmp_path: Path) -> None:
+    file_path = tmp_path / "input.zip"
+    file_path.write_bytes(b"abcdef")
+    session = FakeSession()
+    client = StoreHostClient("https://store.example", "token-1", session=session)
+    store = ManifestStore(tmp_path / "manifest")
+
+    upload_file_multipart(
+        client=client,
+        file_path=file_path,
+        object_key="prefix/input.zip",
+        manifest_store=store,
+        transfer_id="t1",
+        part_size=3,
+        concurrency=1,
+        part_retries=1,
+    )
+
+    upload_calls = [
+        call
+        for call in session.calls
+        if call[0].endswith("/api/upload/multipart/upload")
+    ]
+    _, headers, request = upload_calls[0]
+    body = request["data"]
+    assert not isinstance(body, bytes)
+    assert b"".join(body) == b"abc"
+    assert headers["Content-Length"] == "3"
+    assert headers["Content-MD5"] == "kAFQmDzST7DWlj99KOF/cg=="
+    decoded = decode_storage_param(headers["X-Storage-Param"])
+    assert decoded["contentMd5"] == "kAFQmDzST7DWlj99KOF/cg=="
+
+
+def test_upload_file_multipart_writes_manifest_v2_without_raw_token(
+    tmp_path: Path,
+) -> None:
+    file_path = tmp_path / "input.zip"
+    file_path.write_bytes(b"abcdef")
+    session = FakeSession()
+    client = StoreHostClient("https://store.example", "token-1", session=session)
+    store = ManifestStore(tmp_path / "manifest")
+
+    upload_file_multipart(
+        client=client,
+        file_path=file_path,
+        object_key="prefix/input.zip",
+        manifest_store=store,
+        transfer_id="t1",
+        part_size=3,
+        concurrency=1,
+        part_retries=1,
+    )
+
+    manifest = store.read("t1")
+    assert manifest["schema_version"] == "v2"
+    assert "token" not in manifest
+    assert manifest["token_fingerprint"]
+    assert all(part["md5_base64"] for part in manifest["parts"])
 
 
 def test_upload_file_multipart_writes_manifest_and_completes(
@@ -111,17 +207,20 @@ def test_upload_file_multipart_resumes_completed_manifest_parts(
 ) -> None:
     file_path = tmp_path / "input.zip"
     file_path.write_bytes(b"abcdefghij")
+    md5_1, md5_1_hex = _md5_fields(b"abcd")
+    md5_2, md5_2_hex = _md5_fields(b"efgh")
+    md5_3, md5_3_hex = _md5_fields(b"ij")
     session = FakeSession()
     client = StoreHostClient("https://store.example", "token-1", session=session)
     store = ManifestStore(tmp_path / "manifest")
     store.write(
         "t1",
         {
-            "schema_version": "v1",
+            "schema_version": "v2",
             "transfer_id": "t1",
             "object_key": "prefix/input.zip",
             "initial_key": "init-resume",
-            "token": "token-1",
+            "token_fingerprint": token_fingerprint("token-1", "t1"),
             "part_size": 4,
             "file_size": 10,
             "file_mtime_ns": file_path.stat().st_mtime_ns,
@@ -130,11 +229,29 @@ def test_upload_file_multipart_resumes_completed_manifest_parts(
                     "number": 1,
                     "offset": 0,
                     "size": 4,
+                    "md5_base64": md5_1,
+                    "md5_hex": md5_1_hex,
                     "part_string": "part-1-old",
+                    "server_hash_checked": False,
+                    "server_hash_value": None,
                     "status": "completed",
                 },
-                {"number": 2, "offset": 4, "size": 4, "status": "pending"},
-                {"number": 3, "offset": 8, "size": 2, "status": "pending"},
+                {
+                    "number": 2,
+                    "offset": 4,
+                    "size": 4,
+                    "md5_base64": md5_2,
+                    "md5_hex": md5_2_hex,
+                    "status": "pending",
+                },
+                {
+                    "number": 3,
+                    "offset": 8,
+                    "size": 2,
+                    "md5_base64": md5_3,
+                    "md5_hex": md5_3_hex,
+                    "status": "pending",
+                },
             ],
         },
     )

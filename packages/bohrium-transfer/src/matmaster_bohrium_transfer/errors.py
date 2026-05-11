@@ -13,12 +13,13 @@ class TransferError(Exception):
     bytes_total: int | None = None
     resume_available: bool = False
     redacted_detail: str = ""
+    diagnostics: dict[str, object] | None = None
 
     def __str__(self) -> str:
         return self.safe_message
 
     def to_payload(self) -> dict[str, object]:
-        return {
+        payload: dict[str, object] = {
             "ok": False,
             "stage": self.stage,
             "retryable": self.retryable,
@@ -29,9 +30,20 @@ class TransferError(Exception):
             "resume_available": self.resume_available,
             "redacted_detail": self.redacted_detail,
         }
+        if self.diagnostics:
+            payload["diagnostics"] = self.diagnostics
+        return payload
 
 
 class ArchiveError(TransferError):
+    pass
+
+
+class RetryableTransferError(TransferError):
+    pass
+
+
+class NonRetryableTransferError(TransferError):
     pass
 
 
