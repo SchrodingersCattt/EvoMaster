@@ -9,6 +9,8 @@ from matmaster_bohrium_transfer.manifest import ManifestStore
 from matmaster_bohrium_transfer.multipart import upload_file_multipart
 from matmaster_bohrium_transfer.transport import build_download_url
 
+_SUBMIT_UPLOAD_CONCURRENCY = 1
+
 
 @dataclass(frozen=True)
 class UploadedArchive:
@@ -45,6 +47,7 @@ def _upload_input_archive_sdk_free(
         object_key=oss_key,
         manifest_store=ManifestStore(root),
         transfer_id=f"submit-{uuid4().hex}",
+        concurrency=_SUBMIT_UPLOAD_CONCURRENCY,
     )
     return UploadedArchive(
         oss_key=oss_key,

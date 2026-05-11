@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+import matmaster.bohrium.upload as upload_module
 from matmaster.bohrium.upload import UploadedArchive, upload_input_archive
 
 
@@ -122,3 +123,34 @@ def test_upload_input_archive_legacy_flag_still_uses_sdk_free_path(
 
     assert uploaded.oss_key == "sdk-free/input.zip"
     assert calls == [zip_path]
+
+
+def test_submit_archive_upload_uses_serial_multipart(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    zip_path = tmp_path / "input.zip"
+    zip_path.write_bytes(b"zip-bytes")
+    captured: dict = {}
+
+    def fake_upload_file_multipart(**kwargs):
+        captured.update(kwargs)
+        return {"ok": True}
+
+    monkeypatch.setattr(
+        upload_module,
+        "upload_file_multipart",
+        fake_upload_file_multipart,
+    )
+
+    uploaded = upload_module._upload_input_archive_sdk_free(
+        create_data={
+            "storePath": "sandbox/jobs/run-3/",
+            "storeHost": "https://store.example.com",
+            "token": "token-789",
+        },
+        zip_path=zip_path,
+    )
+
+    assert uploaded.oss_key == "sandbox/jobs/run-3/input.zip"
+    assert captured.get("concurrency") == 1
