@@ -430,6 +430,77 @@ class _BarrierFailureCompactor(_DurablePreflightCompactor):
         return await super().apply_compaction_plan(plan, messages)
 
 
+class _BoundaryOverrideCompactor(_DurablePreflightCompactor):
+    async def apply_compaction_plan(self, plan, messages: list[Any]):
+        from matmaster.core.context_compactor import CompactionResult
+
+        bundle = ContextBuilder().build_compact_bundle(summary="summary")
+        compact_message = UserMessage(content=bundle)
+        base_snapshot = [
+            compact_message.model_dump(mode="json"),
+        ]
+        messages[:] = [
+            messages[0],
+            compact_message,
+        ]
+        return CompactionResult(
+            compaction_id=plan.compaction_id,
+            compaction_count=plan.compaction_count,
+            phase=plan.phase,
+            strategy="summary",
+            durability="durable",
+            trigger_tokens=plan.trigger_tokens,
+            retained_turns=1,
+            failure_reason=None,
+            base_snapshot=base_snapshot,
+            checkpoint_covered_until_event_id=41,
+        )
+
+
+@pytest.mark.asyncio
+async def test_kernel_passes_checkpoint_covered_until_override_to_sink() -> None:
+    from matmaster.core.agent import AgentKernel
+
+    checkpoint_calls: list[dict[str, Any]] = []
+
+    async def checkpoint_sink(
+        *, payload: dict[str, Any], base_messages: list[dict[str, Any]]
+    ) -> int | None:
+        checkpoint_calls.append(
+            {
+                "payload": payload,
+                "base_messages": base_messages,
+            }
+        )
+        return payload.get("covered_until_event_id")
+
+    spec = _make_spec(provider=ContentOnlyProvider()).model_copy(
+        update={
+            "compactor": _BoundaryOverrideCompactor(),
+            "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
+        }
+    )
+
+    events = [
+        event
+        async for event in AgentKernel().run_stream(
+            spec,
+            "test task",
+            history=[
+                UserMessage(content="old question"),
+                AssistantMessage(content="old answer"),
+            ],
+        )
+    ]
+
+    assert checkpoint_calls[0]["payload"] == {
+        "durability": "durable",
+        "strategy": "summary",
+        "covered_until_event_id": 41,
+    }
+    assert any(getattr(event, "covered_until_event_id", None) == 41 for event in events)
+
+
 @pytest.mark.asyncio
 async def test_kernel_sync_pre_compaction_barrier_error_stops_compaction() -> None:
     from matmaster.core.agent import AgentKernel

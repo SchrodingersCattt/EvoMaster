@@ -132,11 +132,16 @@ class AgentKernel:
         )
         if should_checkpoint:
             try:
+                payload = {
+                    "durability": result.durability,
+                    "strategy": result.strategy,
+                }
+                if result.checkpoint_covered_until_event_id is not None:
+                    payload["covered_until_event_id"] = (
+                        result.checkpoint_covered_until_event_id
+                    )
                 covered_until_event_id = await checkpoint_sink(
-                    payload={
-                        "durability": result.durability,
-                        "strategy": result.strategy,
-                    },
+                    payload=payload,
                     base_messages=result.base_snapshot,
                 )
             except Exception as exc:

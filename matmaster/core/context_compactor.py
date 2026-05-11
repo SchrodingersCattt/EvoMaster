@@ -157,6 +157,7 @@ class CompactionResult:
     retained_turns: int
     failure_reason: str | None
     base_snapshot: list[dict[str, Any]] | None
+    checkpoint_covered_until_event_id: int | None = None
 
 
 class ContextCompactor:
