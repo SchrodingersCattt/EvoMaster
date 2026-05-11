@@ -15,7 +15,6 @@ from .manifest import ManifestStore
 from .progress import NoopProgressSink, ProgressSink, TransferProgressEvent
 from .security import redact_secrets, token_fingerprint
 
-PART_CHUNK_SIZE = 1024 * 1024
 DEFAULT_PART_SIZE = 16 * 1024 * 1024
 DEFAULT_CONCURRENCY = 2
 _STOREHOST_PART_LIMITER = threading.BoundedSemaphore(4)
@@ -29,28 +28,8 @@ def _read_part(file_path: Path, offset: int, size: int) -> bytes:
 
 def _hash_part(path: Path, offset: int, size: int) -> tuple[str, str]:
     digest = hashlib.md5(usedforsecurity=False)
-    remaining = size
-    with open(path, "rb") as fh:
-        fh.seek(offset)
-        while remaining > 0:
-            chunk = fh.read(min(PART_CHUNK_SIZE, remaining))
-            if not chunk:
-                break
-            digest.update(chunk)
-            remaining -= len(chunk)
+    digest.update(_read_part(path, offset, size))
     return base64.b64encode(digest.digest()).decode(), digest.hexdigest()
-
-
-def _stream_part(path: Path, offset: int, size: int):
-    remaining = size
-    with open(path, "rb") as fh:
-        fh.seek(offset)
-        while remaining > 0:
-            chunk = fh.read(min(PART_CHUNK_SIZE, remaining))
-            if not chunk:
-                break
-            remaining -= len(chunk)
-            yield chunk
 
 
 def _part_specs(file_size: int, part_size: int) -> list[dict[str, int]]:
@@ -243,7 +222,7 @@ def upload_file_multipart(
                         initial_key=initial_key,
                         number=spec["number"],
                         part_size=spec["size"],
-                        data=lambda: _stream_part(path, spec["offset"], spec["size"]),
+                        data=_read_part(path, spec["offset"], spec["size"]),
                         md5_base64=spec["md5_base64"],
                         md5_hex=spec["md5_hex"],
                     )
