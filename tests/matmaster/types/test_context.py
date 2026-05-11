@@ -415,3 +415,67 @@ class TestPlaygroundContextLLMProvider:
             cache_area=Path("/tmp/cache"),
         )
         assert ctx.llm_provider is None
+
+
+class TestPlaygroundContextRuntimePorts:
+    def test_runtime_ports_default_exists_and_is_excluded_from_dump(self) -> None:
+        from matmaster.types.runtime_ports import PlaygroundRuntimePorts
+
+        ctx = PlaygroundContext(
+            workdir=Path("/tmp/work"),
+            session_type="local",
+            cache_area=Path("/tmp/cache"),
+        )
+
+        assert isinstance(ctx.runtime_ports, PlaygroundRuntimePorts)
+        assert ctx.runtime_ports.compaction.history is None
+        assert "runtime_ports" not in ctx.model_dump()
+        assert "runtime_ports" not in ctx.model_dump(mode="json")
+
+    def test_with_runtime_ports_returns_new_instance_and_preserves_fields(self) -> None:
+        from matmaster.types.runtime_ports import (
+            EmptySessionEventHistory,
+            PlaygroundCompactionPort,
+            PlaygroundRuntimePorts,
+        )
+
+        ports = PlaygroundRuntimePorts(
+            compaction=PlaygroundCompactionPort(
+                history=EmptySessionEventHistory(),
+            )
+        )
+        ctx = PlaygroundContext(
+            workdir=Path("/tmp/work"),
+            session_type="ssh",
+            cache_area=Path("/tmp/cache"),
+            execution_workdir="/remote/work",
+            env_vars={"A": "B"},
+            run_meta={"task_id": "task-1"},
+        )
+
+        updated = ctx.with_runtime_ports(ports)
+
+        assert updated is not ctx
+        assert updated.runtime_ports is ports
+        assert ctx.runtime_ports is not ports
+        assert updated.workdir == ctx.workdir
+        assert updated.session_type == "ssh"
+        assert updated.execution_workdir == "/remote/work"
+        assert updated.env_vars == {"A": "B"}
+        assert updated.run_meta == {"task_id": "task-1"}
+
+    def test_model_validate_accepts_runtime_ports_dataclass(self) -> None:
+        from matmaster.types.runtime_ports import PlaygroundRuntimePorts
+
+        ports = PlaygroundRuntimePorts()
+
+        ctx = PlaygroundContext.model_validate(
+            {
+                "workdir": Path("/tmp/work"),
+                "session_type": "local",
+                "cache_area": Path("/tmp/cache"),
+                "runtime_ports": ports,
+            }
+        )
+
+        assert ctx.runtime_ports == ports

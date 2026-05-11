@@ -16,6 +16,7 @@ from typing import Protocol, runtime_checkable
 
 from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES
 from matmaster.integration.event_payloads import normalize_response_sse_payload
+from matmaster.types.current_input import CurrentInputContext
 from matmaster.utils.event_source import normalize_event_source
 from src.dao.redis_dao import (
     INTERACTION_CANCEL_VALUE,
@@ -272,6 +273,7 @@ class SendStreamContext:
     request_event_queue: asyncio.Queue
     llm: str | None = None  # 本轮使用的 LLM 配置块名，不传则用 agent 默认
     model: str | None = None  # 本轮使用的模型名（覆盖 LLM 配置里的 model）
+    current_input_context: CurrentInputContext | None = None
     bohrium_required: bool = False  # 本轮是否显式依赖 Bohrium access_key / project
     images: list[str] = field(default_factory=list)
     remote_workdir: str | None = None
@@ -340,6 +342,18 @@ class ChatStreamService:
         if reason == 'deploy':
             return '上一轮任务因服务升级中断，请重新发送以继续。'
         return '上一轮任务因服务部署/重启中断，请重新发送以继续。'
+
+    def _get_pre_query_scope_event_id(self, session_id: str) -> int | None:
+        try:
+            value = self._events_service.get_latest_scope_event_id(session_id, None)
+        except Exception:
+            logger.warning(
+                "failed to snapshot pre-query scope event id session_id=%s",
+                session_id,
+                exc_info=True,
+            )
+            return None
+        return value if isinstance(value, int) else None
 
     async def generate_subscribe_stream(
         self, session_id: str
@@ -686,6 +700,14 @@ class ChatStreamService:
         if resolved_directory.source != "none":
             user_msg["session_directory"] = resolved_directory.remote_workdir
             user_msg["session_directory_source"] = resolved_directory.source
+        pre_query_scope_event_id = self._get_pre_query_scope_event_id(sid)
+        current_input_context = CurrentInputContext.from_values(
+            user_text=user_content,
+            files=req.files,
+            images=req.images,
+            workspace_paths=req.workspace_paths,
+            pre_query_scope_event_id=pre_query_scope_event_id,
+        )
         self._events_service.add_history_event(sid, user_msg, user_id=user_id)
 
         dao = get_redis_dao()
@@ -700,6 +722,7 @@ class ChatStreamService:
             request_event_queue=request_event_queue,
             llm=llm,
             model=model,
+            current_input_context=current_input_context,
             bohrium_required=bohrium_required,
             images=list(req.images or []),
             remote_workdir=resolved_directory.remote_workdir,
@@ -835,6 +858,11 @@ class ChatStreamService:
                 'mode': mode,
                 'llm': ctx.llm,
                 'model': ctx.model,
+                'current_input_context': (
+                    ctx.current_input_context.to_payload()
+                    if ctx.current_input_context is not None
+                    else None
+                ),
                 'images': list(ctx.images),
                 'bohrium_required': ctx.bohrium_required,
                 'remote_workdir': ctx.remote_workdir,

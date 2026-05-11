@@ -80,6 +80,15 @@ class ChatEventsService:
         """返回某会话的父级 User/query 历史事件（从数据库读取）。"""
         return self.table.get_session_user_query_events(session_id)
 
+    def get_latest_scope_event_id(
+        self,
+        session_id: str,
+        spawn_id: str | None = None,
+    ) -> int:
+        if not self.table:
+            return 0
+        return self.table.get_latest_scope_event_id(session_id, spawn_id)
+
     def get_last_user_query(self, session_id: str):
         """
         获取该会话最后一次用户输入（User/query），用于部署中断后提示重跑。
