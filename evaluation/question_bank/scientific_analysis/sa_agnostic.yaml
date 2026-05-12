@@ -1108,9 +1108,7 @@ questions:
 
 
     请从这些数据中提取功函数（work function），写入 `work_function.json`，格式为
-    `{"work_function_eV": <数值>, "V_vacuum_eV": <数值>, "E_fermi_eV": <数值>}`。
-
-    注意确认数据文件中的物理量单位。'
+    `{"work_function_eV": <数值>, "V_vacuum_eV": <数值>, "E_fermi_eV": <数值>}`。'
   tags:
   - eng_abacus
   data_files:

@@ -69,7 +69,7 @@ banks:
 - path: input_generation/ig_agnostic_abacus.yaml
   capability: input_generation
   domain: agnostic
-  questions: 24
+  questions: 23
 - path: input_generation/ig_agnostic_gpumd.yaml
   capability: input_generation
   domain: agnostic
@@ -157,4 +157,4 @@ banks:
 - path: platform/ig_agnostic.yaml
   capability: input_generation
   domain: agnostic
-  questions: 2
+  questions: 3
