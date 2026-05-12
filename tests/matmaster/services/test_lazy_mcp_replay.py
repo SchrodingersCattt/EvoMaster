@@ -29,6 +29,31 @@ def _make_cancel_token():
     return CancellationController().token
 
 
+class FakeRemoteSkillSession:
+    def __init__(self, root: str, files: dict[str, str]) -> None:
+        self.remote_user_skills_root = root
+        self.remote_project_root = None
+        self.local_user_skills_root = None
+        self._files = files
+        self._cancel_token = None
+        self.capabilities = MagicMock()
+        self.path_exists = MagicMock(side_effect=self._path_exists)
+
+    def _path_exists(self, path: str) -> bool:
+        prefix = path.rstrip("/") + "/"
+        return any(
+            candidate == path or candidate.startswith(prefix)
+            for candidate in self._files
+        )
+
+    def exec_bash(self, command: str, timeout: int | None = None) -> dict[str, object]:
+        paths = sorted(path for path in self._files if path.endswith("/SKILL.md"))
+        return {"exit_code": 0, "stdout": "\n".join(paths)}
+
+    def read_file(self, path: str, encoding: str = "utf-8") -> str:
+        return self._files.get(path, "")
+
+
 @pytest.mark.asyncio
 async def test_run_agent_uses_hot_cache_when_present(monkeypatch):
     """When the hot cache already has a set, no DB rescan is performed."""
@@ -41,9 +66,9 @@ async def test_run_agent_uses_hot_cache_when_present(monkeypatch):
         called = {"n": 0}
         original = svc._resolve_active_skill_names
 
-        def _spy(session_id, events_table, exp_config):
+        def _spy(session_id, events_table, exp_config, session=None):
             called["n"] += 1
-            return original(session_id, events_table, exp_config)
+            return original(session_id, events_table, exp_config, session)
 
         monkeypatch.setattr(svc, "_resolve_active_skill_names", _spy)
 
@@ -145,3 +170,69 @@ async def test_run_agent_rehydrates_from_db_on_cache_miss(tmp_path, monkeypatch)
     assert svc._active_skills["sess-rehydrate"] == {"pxrd", "sg"}
     snapshot = svc._test_fake_exp.last_ctx.run_meta["active_skills"]
     assert snapshot == frozenset({"pxrd", "sg"})
+
+
+@pytest.mark.asyncio
+async def test_run_agent_rehydrates_remote_skill_from_session_root(
+    tmp_path,
+    monkeypatch,
+):
+    """Skill-hit replay should include skills exposed by the active SSH session."""
+    run_result = RunResultEvent(source="agent", status="completed", reason="natural")
+    remote_root = "/remote/user/skills"
+    session = FakeRemoteSkillSession(
+        remote_root,
+        {
+            f"{remote_root}/remote-skill/SKILL.md": (
+                "---\n"
+                "name: remote-skill\n"
+                "description: Remote user skill\n"
+                "mcp_server: remote_mcp\n"
+                "---\n"
+                "body\n"
+            ),
+        },
+    )
+
+    cache_dir = tmp_path / "cache"
+    cache_dir.mkdir()
+    skills_root = tmp_path / "skills"
+    skills_root.mkdir()
+
+    async with _patched_service([run_result]) as (svc, _, __):
+        svc._active_skills = {}
+        svc._test_pg_ctx.session = session
+
+        from matmaster.config.exp import ExpConfig, ExpSkillsConfig
+
+        cfg = ExpConfig(
+            skills=ExpSkillsConfig(
+                enabled=True,
+                skills_root=str(skills_root),
+                cache_dir=str(cache_dir),
+                config_dir=str(tmp_path),
+                mcp_config_file="mcp_config.json",
+                mcp_runtime_file="mcp.yaml",
+            )
+        )
+        monkeypatch.setattr(
+            "matmaster.config.loader.load_exp_config", lambda _name: cfg
+        )
+        svc._test_events_table.get_session_events = MagicMock(
+            return_value=[
+                {"type": "skill_hit", "content": {"skill_name": "remote-skill"}},
+            ]
+        )
+
+        await svc.run_agent(
+            session_id="sess-remote-rehydrate",
+            user_prompt="hi",
+            send_cb=AsyncMock(),
+            cancel_token=_make_cancel_token(),
+            mode="direct",
+            task_id="t1",
+        )
+
+    assert svc._active_skills["sess-remote-rehydrate"] == {"remote-skill"}
+    snapshot = svc._test_fake_exp.last_ctx.run_meta["active_skills"]
+    assert snapshot == frozenset({"remote-skill"})

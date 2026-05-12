@@ -42,6 +42,28 @@ def _make_mcp_yaml(tmp_path: Path) -> None:
     )
 
 
+class FakeRemoteSkillSession:
+    def __init__(self, root: str, files: dict[str, str]) -> None:
+        self.remote_user_skills_root = root
+        self.remote_project_root = None
+        self.local_user_skills_root = None
+        self._files = files
+
+    def path_exists(self, path: str) -> bool:
+        prefix = path.rstrip("/") + "/"
+        return any(
+            candidate == path or candidate.startswith(prefix)
+            for candidate in self._files
+        )
+
+    def exec_bash(self, command: str, timeout: int | None = None) -> dict[str, object]:
+        paths = sorted(path for path in self._files if path.endswith("/SKILL.md"))
+        return {"exit_code": 0, "stdout": "\n".join(paths)}
+
+    def read_file(self, path: str, encoding: str = "utf-8") -> str:
+        return self._files[path]
+
+
 class TestExpInitSkillTools:
     def test_skill_tools_registered_when_enabled(self, tmp_path):
         skills_root = _make_skill_dir(tmp_path)
@@ -294,6 +316,53 @@ class TestExpInitSkillTools:
         expected_dir = str(user_skill_dir.resolve())
         assert f"Base directory for this skill: {expected_dir}" in result
         assert f"User body with {expected_dir}" in result
+
+    async def test_session_remote_user_skill_root_uses_ssh_registry(self, tmp_path):
+        skills_root = _make_skill_dir(tmp_path)
+        remote_root = "/remote/user/skills"
+        session = FakeRemoteSkillSession(
+            remote_root,
+            {
+                f"{remote_root}/remote-skill/SKILL.md": (
+                    "---\n"
+                    "name: remote-skill\n"
+                    "description: Remote user skill\n"
+                    "---\n"
+                    "Remote body with ${SKILL_DIR}\n"
+                ),
+            },
+        )
+        cache_dir = _make_cache(tmp_path)
+        _make_mcp_yaml(tmp_path)
+        (tmp_path / "mcp_config.json").write_text('{"mcpServers": {}}')
+
+        cfg = ExpConfig.model_validate(
+            {
+                "name": "test",
+                "skills": {
+                    "enabled": True,
+                    "skills_root": str(skills_root),
+                    "cache_dir": str(cache_dir),
+                    "config_dir": str(tmp_path),
+                    "mcp_config_file": "mcp_config.json",
+                    "mcp_runtime_file": "mcp.yaml",
+                },
+            }
+        )
+        exp = Exp(cfg)
+        registry = ToolRegistry()
+        ctx = MagicMock(spec=PlaygroundContext)
+        ctx.session = session
+        ctx.execution_workdir = str(tmp_path)
+
+        exp._init_skill_tools(ctx, registry)
+
+        skill_tool = registry._tools["Skill"]
+        result = await skill_tool.execute({"skill": "remote-skill"})
+
+        expected_dir = f"{remote_root}/remote-skill"
+        assert f"Base directory for this skill: {expected_dir}" in result
+        assert f"Remote body with {expected_dir}" in result
 
     async def test_local_skill_settings_disable_registered_skill(self, tmp_path):
         skills_root = _make_skill_dir(tmp_path)

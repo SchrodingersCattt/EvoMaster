@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 import pytest
 
@@ -52,6 +52,29 @@ Nested body.
 """
 
 SKILL_MD_NO_FRONTMATTER = "No frontmatter here."
+
+
+class FakeRemoteSkillSession:
+    def __init__(self, files: dict[str, str]) -> None:
+        self._files = files
+        self.exec_calls: list[str] = []
+        self.read_calls: list[str] = []
+
+    def path_exists(self, path: str) -> bool:
+        prefix = path.rstrip("/") + "/"
+        return any(
+            candidate == path or candidate.startswith(prefix)
+            for candidate in self._files
+        )
+
+    def exec_bash(self, command: str, timeout: int | None = None) -> dict[str, object]:
+        self.exec_calls.append(command)
+        paths = sorted(path for path in self._files if path.endswith("/SKILL.md"))
+        return {"exit_code": 0, "stdout": "\n".join(paths)}
+
+    def read_file(self, path: str, encoding: str = "utf-8") -> str:
+        self.read_calls.append(path)
+        return self._files[path]
 
 
 @pytest.fixture()
@@ -338,3 +361,59 @@ class TestSkillRegistry:
         assert "A calculation skill" in ctx
         assert "[Skill: search]" in ctx
         assert "Web search skill" in ctx
+
+    def test_remote_root_scan_via_session(self) -> None:
+        """Registry discovers SKILL.md files from session-backed remote roots."""
+        from matmaster.skills.registry import SkillRegistry
+
+        session = FakeRemoteSkillSession(
+            {
+                "/personal/.matmaster/skills/user-skill/SKILL.md": (
+                    "---\n"
+                    "name: user-skill\n"
+                    "description: User remote skill\n"
+                    "---\n"
+                    "Remote body\n"
+                ),
+                "/personal/.matmaster/skills/_internal/SKILL.md": (
+                    "---\n"
+                    "name: hidden\n"
+                    "description: Hidden\n"
+                    "---\n"
+                    "Hidden body\n"
+                ),
+                "/personal/.matmaster/skills/parent/SKILL.md": (
+                    "---\n"
+                    "name: parent\n"
+                    "description: Parent\n"
+                    "---\n"
+                    "Parent body\n"
+                ),
+                "/personal/.matmaster/skills/parent/scripts/SKILL.md": (
+                    "---\n"
+                    "name: nested\n"
+                    "description: Nested\n"
+                    "---\n"
+                    "Nested body\n"
+                ),
+            }
+        )
+
+        reg = SkillRegistry(
+            [],
+            remote_session=session,
+            remote_roots=["/personal/.matmaster/skills"],
+        )
+
+        names = sorted(skill.meta_info.name for skill in reg.get_all_skills())
+        assert names == ["parent", "user-skill"]
+        skill = reg.get_skill("user-skill")
+        assert skill is not None
+        assert skill.skill_path == PurePosixPath(
+            "/personal/.matmaster/skills/user-skill"
+        )
+        assert skill.get_full_info() == "Remote body"
+        assert session.read_calls == [
+            "/personal/.matmaster/skills/parent/SKILL.md",
+            "/personal/.matmaster/skills/user-skill/SKILL.md",
+        ]
