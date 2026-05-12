@@ -6,7 +6,7 @@ skill_type: operator
 
 # VASP Skill
 
-VASP (Vienna Ab initio Simulation Package) is a plane-wave DFT code. This skill
+VASP (Vienna Ab initio Simulation Package) is a widely-used plane-wave DFT code. This skill
 covers **input file generation only** — writing INCAR, KPOINTS, POSCAR. Running
 the VASP binary locally is not allowed (commercial license); use remote
 submission via Bohrium or equivalent.

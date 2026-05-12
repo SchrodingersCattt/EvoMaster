@@ -5,6 +5,7 @@ import pymysql
 from utils.env import SERVICE_ENV, URL_PART  # noqa: E402
 
 AG_UI_EVENT = "ag-ui"
+BUILD_TRIGGER = "20260512-verify-skill-sync-2"
 
 DB_CONFIG = {
     "host": os.getenv("MYSQL_HOST", "localhost"),
