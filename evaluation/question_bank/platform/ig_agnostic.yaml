@@ -13,9 +13,7 @@ questions:
 
     1. 准备 ABACUS LCAO 自洽场计算输入，放入 `fe_scf/` 目录；
 
-    2. 输入文件生成后，验证其正确性；
-
-    3. 生成完整的 Bohrium 提交包，包括 `input_prep_manifest.json`，确保可以直接提交到平台运行。'
+    2. 生成完整的 Bohrium 提交包，包括 `input_prep_manifest.json`，确保可以直接提交到平台运行。'
   tags:
   - eng_abacus
   data_files:

@@ -1157,8 +1157,7 @@ questions:
   domain: agnostic
   intent: Build twisted bilayer graphene structure requiring custom scripting beyond
     standard MCP tools.
-  human_prompt_seed: '请构建一个转角双层石墨烯（Twisted Bilayer Graphene）结构，转角约为
-    21.8°（对应 commensurate indices (2,1)）。
+  human_prompt_seed: '请构建一个转角约 21.8° 的双层石墨烯（Twisted Bilayer Graphene）结构。
 
     要求：
 
