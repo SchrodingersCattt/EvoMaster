@@ -71,6 +71,9 @@ electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE.
 - `cell-relax`: include `force_thr_ev`, `stress_thr`, and `relax_nmax`.
 - Work function / slab potential: `out_pot 2`; add dipole correction when needed.
 - Spin/noncollinear/SOC: keep `nspin`, `noncolin`, and `lspinorb` consistent.
+- For AFM-prone transition-metal oxides under DFT+U (for example NiO), do not default to all-parallel FM initialization unless the task explicitly asks for FM; use a physically reasonable antiferromagnetic or equivalent antiparallel initialization.
+- If Ni/Co/Fe (or similar) spin channels are split into multiple species in `STRU`, ensure `orbital_corr` and `hubbard_u` cover all correlated species consistently.
+- When the task provides source structures (for example POSCAR/CIF), convert lattice and atomic positions faithfully into `STRU` before applying task-specific settings.
 
 ## Bohrium Submission Defaults
 
