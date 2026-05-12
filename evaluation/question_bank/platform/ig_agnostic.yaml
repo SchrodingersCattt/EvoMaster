@@ -9,11 +9,7 @@ questions:
     script execution, and manifest completeness for ABACUS.
   human_prompt_seed: '工作区中提供了 bcc Fe 结构 `STRU_Fe_bcc`（单原子原胞，自旋极化）。
 
-    请完成以下任务：
-
-    1. 准备 ABACUS LCAO 自洽场计算输入，放入 `fe_scf/` 目录；
-
-    2. 生成完整的 Bohrium 提交包，包括 `input_prep_manifest.json`，确保可以直接提交到平台运行。'
+    请准备 ABACUS LCAO 自洽场计算输入，放入 `fe_scf/` 目录，准备好后我要直接提交计算。'
   tags:
   - eng_abacus
   data_files:
@@ -163,11 +159,7 @@ questions:
     image/machine/cmd.
   human_prompt_seed: '工作区中提供了 Si 金刚石结构 `POSCAR_Si`。
 
-    请完成以下任务：
-
-    1. 为其准备 VASP 自洽场计算输入，放入 `si_scf/` 目录；
-
-    2. 生成完整的 Bohrium 提交包，包括 `input_prep_manifest.json`，确保可直接提交计算。'
+    请准备 VASP 自洽场计算输入，放入 `si_scf/` 目录，准备好后我要直接提交计算。'
   tags:
   - eng_vasp
   data_files:
@@ -265,9 +257,7 @@ questions:
     and PP/orbital filename resolution for Bohrium runtime.
   human_prompt_seed: '工作区中有一个 Pd(111) slab 的 CIF 文件 `Pd111_slab.cif`（16 个 Pd 原子，4 层）。
 
-    请将其转换为 ABACUS LCAO STRU 格式并生成对应的 SCF INPUT，确保可以在 Bohrium 上直接运行。
-
-    输出 `STRU` 和 `INPUT` 到当前目录。'
+    请将其转换为 ABACUS LCAO 格式并准备好 SCF 计算输入，我要直接提交跑。'
   tags:
   - eng_abacus
   - struct_surface
@@ -389,7 +379,7 @@ questions:
 
     结构文件 `STRU_BaZrO3` 已放在工作区中（含晶格和原子坐标，但赝势和轨道文件名暂空）。
 
-    请补全并生成可在 Bohrium 上运行的完整 INPUT 和 STRU。'
+    请补全并准备好完整的计算输入，我要直接提交跑。'
   tags:
   - eng_abacus
   data_files:
