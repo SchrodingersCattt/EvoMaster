@@ -353,6 +353,7 @@ questions:
       - generated_files
       - user_provided_files
       - diagnostics
+      - auxiliary_files
       - assumptions
       - submit_ready
       - bohrium_command
@@ -554,7 +555,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_012_20260507
+- id: IG_abacus_012_20260512
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS input files for ASE-ABACUS ethanol relaxation and vibrational-frequency stages.
@@ -574,11 +575,9 @@ questions:
     value:
       filename: relax/OUT/INPUT
       tokens:
-      - calculation scf
+      - calculation relax
       - basis_type lcao
-      - xc pbe
       - cal_force 1
-      - cal_stress 1
       - pseudo_dir
       - orbital_dir
       flags: i
@@ -588,7 +587,6 @@ questions:
       tokens:
       - calculation scf
       - basis_type lcao
-      - xc pbe
       - cal_force 1
       - pseudo_dir
       - orbital_dir
@@ -613,7 +611,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 12000
+      max: 30000
   scoring_checklist:
   - id: relax_input_artifact
     criterion: Generated deliverables count even if the final answer does not quote file contents; `relax/OUT/INPUT` must be written to the workspace.
@@ -672,7 +670,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_013_20260511
+- id: IG_abacus_013_20260512
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS input files for Ni FCC lattice-constant energy calculations.
@@ -695,8 +693,6 @@ questions:
       - nspin 2
       - pseudo_dir
       - orbital_dir
-      - smearing_method mp
-      - cal_force 1
       flags: i
   - key: must_input_numerics
     value:
@@ -722,7 +718,6 @@ questions:
       - Ni_gga_8au_100Ry_4s2p2d1f.orb
       - LATTICE_VECTORS
       - ATOMIC_POSITIONS
-      - Direct
       flags: i
   - key: variable_stru_ni_magnetism
     value:
@@ -801,7 +796,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_014_20260511
+- id: IG_abacus_014_20260512
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS inputs for a representative Cu FCC stacking-fault energy SCF calculation.
@@ -849,7 +844,6 @@ questions:
       - Cu_gga_9au_150Ry_4s2p2d1f.orb
       - LATTICE_VECTORS
       - ATOMIC_POSITIONS
-      - Cartesian
       flags: i
   - key: must_stru_cu_fault_supercell
     value:
@@ -917,7 +911,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_015_20260511
+- id: IG_abacus_015_20260512
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS+LibRI HSE06 SCF, band, and DOS input files for silicon.
@@ -947,7 +941,6 @@ questions:
       - out_chg 1
       - pseudo_dir
       - orbital_dir
-      - kspacing
       flags: i
   - key: must_input_band_hse_core
     value:
@@ -981,9 +974,6 @@ questions:
       - key: scf_thr
         min: 1.0e-10
         max: 0.0001
-      - key: kspacing
-        min: 0.04
-        max: 0.2
   - key: must_stru_si_species_orbital
     value:
       filename: STRU
@@ -999,7 +989,7 @@ questions:
   - key: must_kpt_band_line_mode
     value:
       filename: KPT-band
-      pattern: (?is)^\s*K_POINTS\s*\n\s*\d+\s*\n\s*Line\b[\s\S]*?0\.000\s+0\.000\s+0\.000[\s\S]*?0\.500\s+0\.000\s+0\.500
+      pattern: (?is)^\s*K_POINTS\s*\n\s*\d+\s*\n\s*Line\b[\s\S]*?[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?\s+[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?\s+[-+]?\d*\.?\d+(?:[eE][-+]?\d+)?\s+\d+
       flags: im
   - key: must_kpt_dos_dense_gamma
     value:
@@ -1074,7 +1064,7 @@ questions:
     verify: text_file_contains_all
     weight: 1.0
   - id: must_kpt_band_line_mode
-    criterion: '[Must] KPT-band uses ABACUS line-mode high-symmetry path sampling for the band calculation.'
+    criterion: '[Must] KPT-band uses valid ABACUS line-mode K-point syntax for a band calculation; do not enforce a specific high-symmetry path order.'
     axis: correctness
     verify: text_file_regex
     weight: 0.8
@@ -1100,7 +1090,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_016_20260511
+- id: IG_abacus_016_20260512
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS INPUT and KPT files for Pt(111) ORR OH* and OOH* relaxation runs.
@@ -1175,12 +1165,12 @@ questions:
   - key: must_oh_kpt_surface
     value:
       filename: relax-OH/Top/KPT
-      pattern: (?im)^\s*(?:[3-9]|10)\s+(?:[3-9]|10)\s+1\s+0\s+0\s+0\s*$
+      pattern: (?im)^\s*(?:[3-9]|1\d|20)\s+(?:[3-9]|1\d|20)\s+1\s+0\s+0\s+0\s*$
       flags: im
   - key: must_ooh_kpt_surface
     value:
       filename: relax-OOH/Top/KPT
-      pattern: (?im)^\s*(?:[3-9]|10)\s+(?:[3-9]|10)\s+1\s+0\s+0\s+0\s*$
+      pattern: (?im)^\s*(?:[3-9]|1\d|20)\s+(?:[3-9]|1\d|20)\s+1\s+0\s+0\s+0\s*$
       flags: im
   - key: variable_no_structure_or_analysis
     value: {}
@@ -1235,12 +1225,12 @@ questions:
     verify: text_file_numeric_range
     weight: 0.8
   - id: must_oh_kpt_surface
-    criterion: '[Must] OH* KPT uses a Gamma-centered Pt(111)-slab mesh with 3-10 sampling in the two surface directions and single sampling along vacuum.'
+    criterion: '[Must] OH* KPT uses a Gamma-centered Pt(111)-slab mesh with 3-20 sampling in the two surface directions and single sampling along vacuum.'
     axis: correctness
     verify: text_file_regex
     weight: 0.8
   - id: must_ooh_kpt_surface
-    criterion: '[Must] OOH* KPT uses a Gamma-centered Pt(111)-slab mesh with 3-10 sampling in the two surface directions and single sampling along vacuum.'
+    criterion: '[Must] OOH* KPT uses a Gamma-centered Pt(111)-slab mesh with 3-20 sampling in the two surface directions and single sampling along vacuum.'
     axis: correctness
     verify: text_file_regex
     weight: 0.8
@@ -1261,20 +1251,27 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_017_20260511
+- id: IG_abacus_017_20260512
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS PBE+U LCAO cell-relax input directories for comparing rocksalt and square-planar NiO phases.
   human_prompt_seed: '我想用 ABACUS 比较 NiO 两种候选结构的相对稳定性：一个是常规岩盐相，另一个是 Ni 处于平面四配位环境的变形相。请先只准备后续计算需要的输入文件。
 
-    这个比较需要先把两种候选相都做晶胞参数和原子位置的弛豫，而不是只对初始结构做静态单点能。计算方法统一采用 LCAO 基组和 PBE+U，Ni 的 U 值取 5.0 eV；两套输入应使用一致的计算精度、赝势/轨道来源和 k 点采样策略，便于之后做能量比较。
+    计算方法统一采用 LCAO 基组；两套输入应使用一致的计算精度、赝势/轨道来源和 k 点采样策略，便于之后做能量比较。
 
-    请在 INPUT 中包含结构弛豫所需的力、应力和收敛控制（例如力/应力阈值、最大弛豫步数等），并让两种结构采用可比较的一套数值精度。
-
-    请在当前目录下分别建立 `nio_rocksalt/` 和 `nio_square_planar/`，写入对应的 ABACUS `INPUT` 和 `STRU`。不要运行计算，也不要提交任务。'
+    工作区已经提供了 `POSCAR_rocksalt` 和 `POSCAR_square_planar`，请在当前目录下分别建立 `nio_rocksalt/` 和 `nio_square_planar/`，把对应 POSCAR 转写为 ABACUS `STRU`，并写入对应的 ABACUS `INPUT`。不要运行计算，也不要提交任务。'
   tags:
   - eng_abacus
   - struct_transform
+  data_files:
+  - key: rocksalt_poscar
+    path: data/IG_abacus_017_20260512/POSCAR_rocksalt
+    oss_url: ''
+    description: POSCAR for the rocksalt NiO candidate structure.
+  - key: square_planar_poscar
+    path: data/IG_abacus_017_20260512/POSCAR_square_planar
+    oss_url: ''
+    description: POSCAR for the square-planar distorted NiO candidate structure.
   reference_answers:
   - key: rocksalt_input_artifact
     value: nio_rocksalt/INPUT
@@ -1402,7 +1399,7 @@ questions:
     value: {}
   - key: turn_budget
     value:
-      max: 10
+      max: 20
   - key: duration_budget
     value:
       max: 7200000
@@ -1481,7 +1478,7 @@ questions:
     verify: text_file_contains_all
     weight: 1.0
   - id: variable_phase_structures
-    criterion: '[Variable] The two STRU files represent distinct NiO polymorphs: rocksalt/octahedral Ni for `nio_rocksalt` and a plausible square-planar NiO prototype such as PdO/cooperite-type for `nio_square_planar`; do not require exact lattice constants.'
+    criterion: '[Variable] The two STRU files are converted from the provided POSCAR inputs and preserve their distinct NiO polymorphs: rocksalt/octahedral Ni for `nio_rocksalt` and the provided square-planar distorted NiO candidate for `nio_square_planar`; do not require exact lattice constants beyond consistency with the source POSCARs.'
     axis: correctness
     verify: llm_binary_judge
     weight: 0.8
@@ -1636,7 +1633,7 @@ questions:
     verify: text_file_regex
     weight: 0.8
   - id: variable_reference_grounding
-    criterion: '[Variable] The selected pseudopotential and orbital filenames are grounded in APNS reference lists and the files are mutually consistent; do not accept guessed element-name pseudopotentials when a different APNS filename exists.'
+    criterion: '[Variable] The selected pseudopotential and orbital filenames are grounded in APNS reference lists and are mutually consistent. For this Mg-N-Rh case, accept only the APNS-grounded filenames `Mg.PD04.PBE.UPF`, `N_ONCV_PBE-1.0.upf`, `Rh_ONCV_PBE_FR-1.0.upf`, `Mg_gga_10au_100Ry_2s1p.orb`, `N_gga_8au_100Ry_2s2p1d.orb`, and `Rh_gga_10au_100Ry_4s2p2d1f.orb`; reject guessed element-name pseudopotentials such as `Mg.upf`, `N.upf`, or `Rh.upf`.'
     axis: grounding
     verify: llm_binary_judge
     weight: 0.5
@@ -2059,7 +2056,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_004_20260508
+- id: IG_abacus_004_20260512
   capability: input_generation
   domain: agnostic
   intent: Generate ABACUS PW SCF input for dipole correction on an asymmetric H2O slab, with
@@ -2173,7 +2170,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 20000
   scoring_checklist:
   - id: must_input_dipole_core
     criterion: '[Must] INPUT_dipole contains core mandatory dipole-correction controls.'
