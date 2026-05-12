@@ -9,11 +9,6 @@ skill_type: operator
 ABACUS supports PW and LCAO basis sets. This skill should focus on producing
 correct, runnable files and avoiding silent-failure configurations.
 
-## When to Use
-
-Use this skill for any ABACUS task: SCF, band/DOS, relax/cell-relax, MD,
-electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE.
-
 ## Minimum Workflow
 
 1. Read provided `STRU` first and reuse filenames exactly (PP/orbital/structure).
@@ -95,12 +90,31 @@ Reference-first policy:
 - Prefer local references below for stable and task-aligned guidance.
 - Use official ABACUS/Bohrium web documentation as fallback when local references are insufficient.
 
-- **Pre-flight validator**: `scripts/validate_input.py` — run before every Bohrium submit
-- Input templates and multi-step examples: `references/input_examples.md`
-- STRU format basics: `references/stru_format.md`
-- Multi-species STRU examples: `references/stru_multispecies.md`
-- Electric field and dipole notes: `references/electric_field.md`
-- Troubleshooting: `references/troubleshooting.md`
-- Output parameter guide (files, grep patterns): `references/output_params.md`
-- Advanced tasks (surface energy, vacancy, EOS, DFT+U, phonon, basis-type detection): `references/advanced_tasks.md`
-- Parsed results and plots after the run: `matmaster/skills/playground-skills/result-analysis` (`parse_abacus.py`, etc.)
+Each entry below ends with an `*Applies to*` line that lists the **material systems and task scenarios actually covered inside that file**. Use it to locate the right reference from the task description — do not rely on filenames alone.
+
+- **Pre-flight validator**: `scripts/validate_input.py` — run before every Bohrium submit.
+  - *Applies to*: every ABACUS submission. Universal pre-flight catch for `ntype` mismatch, missing `cal_force`/`cal_stress`, missing `out_chg` for SCF→NSCF, wrong `basis_type`, missing PP/orbital files, and `stru_file`/`kpoint_file` reference errors.
+
+- **Input templates and multi-step examples**: `references/input_examples.md`
+  - *Applies to*: SCF / relax / cell-relax of bulk crystals; SCF→NSCF two-step workflows for **band structure and DOS** (including line-mode KPT for **1D nanoribbons** and **2D materials** such as graphene / MoS₂); **BSSE ghost-atom calculations** (bulk and slab); **work function / electrostatic potential of slabs**; multi-file comparative studies (**surface energy**, **vacancy formation energy**); **low-cost / benchmark mode** parameter reduction.
+
+- **STRU format basics**: `references/stru_format.md`
+  - *Applies to*: any task that writes or edits a STRU file; **LCAO BSSE ghost-atom syntax** (empty species, zero moment, frozen mobility); structures with **initial magnetic moments** or **selective dynamics** (partially frozen atoms, e.g. fixed-bottom-layer slabs).
+
+- **Multi-species STRU examples**: `references/stru_multispecies.md`
+  - *Applies to*: **binary III-V / II-VI semiconductors** (GaAs-style zinc blende); **ternary perovskite oxides** (BaTiO₃-style ABO₃); **semiconductor slab models with vacuum** (Si(100)-style); **spin-polarized magnetic metals** (bcc Fe with `nspin 2` + mixing tuning); converting CIF / POSCAR structures into STRU; element-to-orbital filename lookup for common elements (H, C, N, O, Si, Fe, Cu, Mo, Ti, Ba, Ga, As, Zn, S, Al).
+
+- **Electric field and dipole notes**: `references/electric_field.md`
+  - *Applies to*: **work function and surface electrostatic potential** (asymmetric slabs needing dipole correction); **finite external electric field** for polarization / Stark / field-induced phenomena; **gate-field calculations on 2D materials and slabs** (full INPUT with `gate_flag`, `zgate`, `block_*`, `nelec`); pure dipole correction without applied field.
+
+- **Troubleshooting**: `references/troubleshooting.md`
+  - *Applies to*: every task — top-10 silent-failure catalog, decision tree for picking `calculation` from task description, and pre-flight checklists for general / relaxation / two-step (band-DOS) / supercell-vacancy-BSSE / slab calculations.
+
+- **Output parameter guide (files, grep patterns)**: `references/output_params.md`
+  - *Applies to*: any task that needs to extract results from ABACUS output — total energy, Fermi level, forces, stress, charge density cube, band eigenvalues, DOS, electrostatic potential cube, relaxed structures. Canonical mapping of INPUT keywords (`out_chg` / `out_band` / `out_dos` / `out_pot` / `cal_force` / `cal_stress` / …) to produced files and grep patterns.
+
+- **Advanced tasks**: `references/advanced_tasks.md`
+  - *Applies to*: **surface / interface energy** (bulk + slab workflow); **point defects** (vacancy formation energy with LCAO BSSE); **EOS / bulk modulus** (Birch-Murnaghan fit across scaled volumes); **transition-metal oxides and strongly-correlated systems** (DFT+U Dudarev, worked Fe₂O₃ example with `orbital_corr` / `hubbard_u` / tight SCF / `nspin 2` mixing); **phonon dispersion** via Phonopy finite-displacement; automatic basis-type detection from a provided STRU.
+
+- **Post-run parsing & plots**: `matmaster/skills/playground-skills/result-analysis` (`parse_abacus.py`, etc.)
+  - *Applies to*: automated extraction of energies / forces / band data and publication-quality plotting **after** the ABACUS run finishes on Bohrium.
