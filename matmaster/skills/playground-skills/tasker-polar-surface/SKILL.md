@@ -64,8 +64,8 @@ The `-L` (repeat-layers) parameter equals ASE's `layers` arg — one "layer" = *
 
 ### Step 2 — 运行 build_slab_tasker_fix.py 生成 slab（优先）
 
-- **根据用户或文献需求传参**：用户明确要求的层数、厚度、真空、扩胞、电荷等，必须通过 script_args 传给脚本，不要只用默认值。
-- Invoke `Skill` with `action=run_script`, `script_name=build_slab_tasker_fix.py`, and script args (choose one mode):
+- **根据用户或文献需求传参**：用户明确要求的层数、厚度、真空、扩胞、电荷等，必须作为命令行参数传给脚本，不要只用默认值。
+- Run `python ${SKILL_DIR}/scripts/build_slab_tasker_fix.py` with one of these argument sets:
   - by layers: `-i <bulk_path> -m <h> <k> <l> -L <repeat_layers> -v <vacuum> -o <slab_path>`
   - by thickness: `-i <bulk_path> -m <h> <k> <l> -T <thickness_A> -v <vacuum> -o <slab_path>`
 - Optional tiling (用户或文献要求超胞/最小尺寸时必传):
@@ -80,7 +80,7 @@ The `-L` (repeat-layers) parameter equals ASE's `layers` arg — one "layer" = *
 ### Step 3 — 校验与分型收敛（必做）
 
 - Run **check_slab_tasker.py** on the generated file:
-  Invoke `Skill` … `script_name=check_slab_tasker.py`, `script_args="--file <slab_path> --tasker_type <provisional_type>"` (and `--formula`, `--miller` if known).
+  `python ${SKILL_DIR}/scripts/check_slab_tasker.py --file <slab_path> --tasker_type <provisional_type>` (and `--formula`, `--miller` if known).
   Require `compliant: true`; if not, adjust n_layers or termination (from literature) and rebuild.
 - Run **structure-manager** `assess_structure.py` on the same file for dimensionality and sanity.
 Only after both checks pass (and optionally literature/lookup consistency) proceed to finish.
@@ -105,7 +105,7 @@ All three scripts support batch modes. See **`reference/batch_modes.md`** for fu
 
 ### 1. Run the checker script (required)
 
-Invoke `Skill` with `skill=tasker-polar-surface`, `action=run_script`, `script_name=check_slab_tasker.py`, and script args:
+Run `python ${SKILL_DIR}/scripts/check_slab_tasker.py` with:
 
 - **Minimum**: `--file <path_to_slab_file> --tasker_type <1|2|3>` (same Tasker type used when building).
 - **Recommended when material and surface are known**: add `--formula <formula>` and `--miller "<h k l>"` (e.g. `--formula ZnO --miller "0 0 0 1"`). The script will load `reference/tasker_lookup.yaml` and add `literature_expected_type`, `literature_note`, `literature_ref`, and `literature_consistent` to the JSON. Use this to cross-check that the chosen Tasker type matches known classifications.

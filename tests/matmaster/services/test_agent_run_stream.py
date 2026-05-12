@@ -66,6 +66,13 @@ def _make_mock_pg_ctx() -> MagicMock:
 
     ctx.with_runtime_ports.side_effect = _with_runtime_ports
 
+    def _with_run_meta(**fields: Any) -> MagicMock:
+        if fields:
+            ctx.run_meta = {**ctx.run_meta, **fields}
+        return ctx
+
+    ctx.with_run_meta.side_effect = _with_run_meta
+
     def _model_copy(*, update: dict[str, Any] | None = None, **_: Any) -> MagicMock:
         if update:
             for key, value in update.items():

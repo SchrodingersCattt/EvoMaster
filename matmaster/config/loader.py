@@ -71,6 +71,25 @@ def load_llm_config(source: dict[str, Any] | str | Path) -> LLMConfig:
     return LLMConfig.model_validate(llm_section)
 
 
+def load_agents_general_llm(main_config: Path) -> str | None:
+    """Return ``agents.general.llm`` profile key from a main ``config.yaml``.
+
+    Returns ``None`` when the file is missing or the key is absent/empty.
+    """
+    if not main_config.is_file():
+        return None
+    import yaml
+
+    with open(main_config, encoding="utf-8") as f:
+        data = yaml.safe_load(f) or {}
+    agents = data.get("agents") or {}
+    general = agents.get("general") or {}
+    if not isinstance(general, dict):
+        return None
+    value = general.get("llm")
+    return str(value).strip() if value else None
+
+
 _logger = logging.getLogger(__name__)
 
 

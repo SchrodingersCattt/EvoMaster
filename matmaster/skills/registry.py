@@ -77,14 +77,12 @@ class Skill:
     从磁盘上的 skill 目录加载：
     - SKILL.md frontmatter → meta_info (SkillMetaInfo)
     - SKILL.md body → full_info (延迟缓存)
-    - scripts/ 子目录 → available_scripts
     """
 
     def __init__(self, skill_path: Path) -> None:
         self.skill_path = skill_path
         self.meta_info = self._parse_meta_info()
         self._full_info_cache: str | None = None
-        self.available_scripts: list[Path] = self._scan_scripts()
 
     # -- meta_info parsing --------------------------------------------------
 
@@ -131,43 +129,6 @@ class Skill:
         body_match = re.search(r"^---\s*\n.*?\n---\s*\n(.*)$", content, re.DOTALL)
         self._full_info_cache = body_match.group(1).strip() if body_match else content
         return self._full_info_cache
-
-    # -- references ---------------------------------------------------------
-
-    def get_reference(self, name: str) -> str:
-        """查找参考文档，按优先级搜索多个候选路径。"""
-        candidates = [
-            self.skill_path / name,
-            self.skill_path / "references" / name,
-            self.skill_path / "reference" / name,
-            self.skill_path / "prompts" / name,
-            self.skill_path.parent / "_common" / "reference" / name,
-            self.skill_path.parent / "_common" / name,
-        ]
-        for p in candidates:
-            if p.exists():
-                return p.read_text(encoding="utf-8")
-        raise FileNotFoundError(
-            f"Reference {name!r} not found for skill at {self.skill_path}"
-        )
-
-    # -- scripts ------------------------------------------------------------
-
-    def _scan_scripts(self) -> list[Path]:
-        scripts_dir = self.skill_path / "scripts"
-        if not scripts_dir.exists():
-            return []
-        return [
-            p
-            for p in scripts_dir.iterdir()
-            if p.is_file() and p.suffix in {".py", ".sh", ".js"}
-        ]
-
-    def get_script_path(self, name: str) -> Path | None:
-        for s in self.available_scripts:
-            if s.name == name:
-                return s
-        return None
 
 
 # ---------------------------------------------------------------------------
