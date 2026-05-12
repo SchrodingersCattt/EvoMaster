@@ -1633,7 +1633,7 @@ questions:
     verify: text_file_regex
     weight: 0.8
   - id: variable_reference_grounding
-    criterion: '[Variable] The selected pseudopotential and orbital filenames are grounded in APNS reference lists and the files are mutually consistent; do not accept guessed element-name pseudopotentials when a different APNS filename exists.'
+    criterion: '[Variable] The selected pseudopotential and orbital filenames are grounded in APNS reference lists and are mutually consistent. For this Mg-N-Rh case, accept only the APNS-grounded filenames `Mg.PD04.PBE.UPF`, `N_ONCV_PBE-1.0.upf`, `Rh_ONCV_PBE_FR-1.0.upf`, `Mg_gga_10au_100Ry_2s1p.orb`, `N_gga_8au_100Ry_2s2p1d.orb`, and `Rh_gga_10au_100Ry_4s2p2d1f.orb`; reject guessed element-name pseudopotentials such as `Mg.upf`, `N.upf`, or `Rh.upf`.'
     axis: grounding
     verify: llm_binary_judge
     weight: 0.5
