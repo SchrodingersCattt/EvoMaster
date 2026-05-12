@@ -68,6 +68,7 @@ class SkillTool(BuiltinTool):
             '  - `skill: "pdf"` - invoke the pdf skill\n'
             '  - `skill: "review-pr"` - invoke the review-pr skill\n\n'
             "Important:\n"
+            "Skill scripts live in ${SKILL_DIR}/scripts; reference docs live in ${SKILL_DIR}/reference.\n\n"
             "- Available skills are listed in system-reminder messages in the conversation\n"
             "- When a skill matches the user's request, invoke it before generating "
             "any other response\n"
