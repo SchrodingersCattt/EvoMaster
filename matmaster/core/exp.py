@@ -688,6 +688,31 @@ class Exp:
             root = raw.strip()
             return Path(root) if root else None
 
+        def _remote_skill_roots(session: Any | None) -> list[str]:
+            if session is None:
+                return []
+
+            roots: list[str] = []
+            raw_roots = getattr(session, "remote_skill_roots", None)
+            if isinstance(raw_roots, (list, tuple, set)):
+                roots.extend(
+                    root.strip()
+                    for root in raw_roots
+                    if isinstance(root, str) and root.strip()
+                )
+
+            raw_user_root = getattr(session, "remote_user_skills_root", None)
+            if isinstance(raw_user_root, str) and raw_user_root.strip():
+                roots.append(raw_user_root.strip())
+
+            seen: set[str] = set()
+            unique: list[str] = []
+            for root in roots:
+                if root not in seen:
+                    seen.add(root)
+                    unique.append(root)
+            return unique
+
         def _disabled_skill_names_from_settings(root: Path) -> set[str]:
             settings_path = root / ".settings.json"
             if not settings_path.is_file():
@@ -719,13 +744,18 @@ class Exp:
         local_user_skills_root = _local_user_skills_root(ctx.session)
         if local_user_skills_root is not None:
             roots.append(local_user_skills_root)
-        if not roots:
+        remote_roots = _remote_skill_roots(ctx.session)
+        if not roots and not remote_roots:
             self.logger.warning(
-                "skills.enabled=true but skills_root is empty, skipping skill init"
+                "skills.enabled=true but no skill roots are available, skipping skill init"
             )
             return
 
-        skill_registry = SkillRegistry(roots)
+        skill_registry = SkillRegistry(
+            roots,
+            remote_session=ctx.session if remote_roots else None,
+            remote_roots=remote_roots,
+        )
         disabled_skill_names = set(skills_cfg.disabled_skill_names)
         for root in roots:
             disabled_skill_names.update(_disabled_skill_names_from_settings(root))

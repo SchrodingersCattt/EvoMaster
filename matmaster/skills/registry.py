@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import logging
 import re
-from pathlib import Path
+import shlex
+from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
@@ -94,30 +95,8 @@ class Skill:
             raise FileNotFoundError(f"SKILL.md not found in {self.skill_path}")
 
         content = skill_md.read_text(encoding="utf-8")
-
-        fm_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
-        if not fm_match:
-            raise ValueError(f"Invalid SKILL.md: no frontmatter in {skill_md}")
-
-        known_keys = {"name", "description", "skill_type", "mcp_server", "depends_on"}
-        data: dict[str, str] = {}
-        for line in fm_match.group(1).split("\n"):
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            if ":" in line:
-                key, value = line.split(":", 1)
-                data[key.strip()] = value.strip()
-
-        extras = {k: v for k, v in data.items() if k not in known_keys}
-
-        return SkillMetaInfo(
-            name=data.get("name", self.skill_path.name),
-            description=data.get("description", ""),
-            skill_type=_parse_skill_type(data.get("skill_type")),
-            mcp_server=_optional_strip(data.get("mcp_server")),
-            depends_on=_parse_depends_on_list(data.get("depends_on")),
-            extras=extras,
+        return _parse_meta_info_from_content(
+            content, fallback_name=self.skill_path.name
         )
 
     # -- full_info ----------------------------------------------------------
@@ -128,8 +107,7 @@ class Skill:
             return self._full_info_cache
 
         content = (self.skill_path / "SKILL.md").read_text(encoding="utf-8")
-        body_match = re.search(r"^---\s*\n.*?\n---\s*\n(.*)$", content, re.DOTALL)
-        self._full_info_cache = body_match.group(1).strip() if body_match else content
+        self._full_info_cache = _extract_full_info(content)
         return self._full_info_cache
 
     # -- references ---------------------------------------------------------
@@ -170,6 +148,55 @@ class Skill:
         return None
 
 
+class RemoteSkill:
+    """Skill loaded from a session-backed remote root."""
+
+    is_remote: bool = True
+
+    def __init__(self, skill_path: PurePosixPath, content: str) -> None:
+        self.skill_path = skill_path
+        self.meta_info = _parse_meta_info_from_content(
+            content,
+            fallback_name=skill_path.name,
+        )
+        self._full_info_cache = _extract_full_info(content)
+
+    def get_full_info(self) -> str:
+        return self._full_info_cache
+
+
+def _parse_meta_info_from_content(content: str, *, fallback_name: str) -> SkillMetaInfo:
+    fm_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
+    if not fm_match:
+        raise ValueError("Invalid SKILL.md: no frontmatter")
+
+    known_keys = {"name", "description", "skill_type", "mcp_server", "depends_on"}
+    data: dict[str, str] = {}
+    for line in fm_match.group(1).split("\n"):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if ":" in line:
+            key, value = line.split(":", 1)
+            data[key.strip()] = value.strip()
+
+    extras = {k: v for k, v in data.items() if k not in known_keys}
+
+    return SkillMetaInfo(
+        name=data.get("name", fallback_name),
+        description=data.get("description", ""),
+        skill_type=_parse_skill_type(data.get("skill_type")),
+        mcp_server=_optional_strip(data.get("mcp_server")),
+        depends_on=_parse_depends_on_list(data.get("depends_on")),
+        extras=extras,
+    )
+
+
+def _extract_full_info(content: str) -> str:
+    body_match = re.search(r"^---\s*\n.*?\n---\s*\n(.*)$", content, re.DOTALL)
+    return body_match.group(1).strip() if body_match else content
+
+
 # ---------------------------------------------------------------------------
 # SkillRegistry
 # ---------------------------------------------------------------------------
@@ -188,14 +215,22 @@ class SkillRegistry:
         self,
         skills_root: Path | list[Path],
         skills: list[str] | None = None,
+        *,
+        remote_session: Any | None = None,
+        remote_roots: list[str] | None = None,
     ) -> None:
         if isinstance(skills_root, Path):
             self._roots = [skills_root]
         else:
             self._roots = list(skills_root)
 
-        self._skills: dict[str, Skill] = {}
+        self._skills: dict[str, Skill | RemoteSkill] = {}
         self._load_skills(skills)
+        self._load_remote_skills(
+            remote_session=remote_session,
+            remote_roots=remote_roots or [],
+            name_filter=skills,
+        )
 
     # -- discovery ----------------------------------------------------------
 
@@ -240,8 +275,78 @@ class SkillRegistry:
                 self._skills[skill.meta_info.name] = skill
                 skill_dirs.add(skill_dir)
 
+    def _load_remote_skills(
+        self,
+        *,
+        remote_session: Any | None,
+        remote_roots: list[str],
+        name_filter: list[str] | None = None,
+    ) -> None:
+        if remote_session is None:
+            return
+        for raw_root in remote_roots:
+            root_text = raw_root.strip()
+            if not root_text:
+                continue
+            root = PurePosixPath(root_text)
+            try:
+                if not remote_session.path_exists(str(root)):
+                    continue
+                result = remote_session.exec_bash(
+                    f"find {shlex.quote(str(root))} -type f -name SKILL.md | sort",
+                    timeout=10,
+                )
+            except Exception:
+                logger.warning(
+                    "Failed to scan remote skill root %s", root, exc_info=True
+                )
+                continue
+            if result.get("exit_code") != 0:
+                logger.warning(
+                    "Remote skill scan failed root=%s exit_code=%s",
+                    root,
+                    result.get("exit_code"),
+                )
+                continue
+
+            skill_dirs: set[PurePosixPath] = set()
+            stdout = result.get("stdout") or ""
+            for line in str(stdout).splitlines():
+                md_path_text = line.strip()
+                if not md_path_text:
+                    continue
+                md_path = PurePosixPath(md_path_text)
+                skill_dir = md_path.parent
+                if self._has_underscore_ancestor(skill_dir, root):
+                    continue
+                if self._is_nested_under(skill_dir, skill_dirs):
+                    continue
+                try:
+                    content = remote_session.read_file(str(md_path))
+                    skill = RemoteSkill(skill_dir, content)
+                except Exception:
+                    logger.error(
+                        "Failed to load remote skill from %s",
+                        skill_dir,
+                        exc_info=True,
+                    )
+                    continue
+                if name_filter is not None and skill.meta_info.name not in name_filter:
+                    continue
+                if skill.meta_info.name in self._skills:
+                    logger.warning(
+                        "Skill %r overridden by %s",
+                        skill.meta_info.name,
+                        skill_dir,
+                    )
+                self._skills[skill.meta_info.name] = skill
+                skill_dirs.add(skill_dir)
+
     @staticmethod
-    def _has_underscore_ancestor(skill_dir: Path, root: Path) -> bool:
+    def _has_underscore_ancestor(
+        skill_dir: Path | PurePosixPath,
+        root: Path | PurePosixPath,
+    ) -> bool:
         """skill_dir 到 root 之间是否有以 _ 开头的目录名。"""
         current = skill_dir
         while current != root and current != current.parent:
@@ -251,7 +356,10 @@ class SkillRegistry:
         return False
 
     @staticmethod
-    def _is_nested_under(skill_dir: Path, known_skill_dirs: set[Path]) -> bool:
+    def _is_nested_under(
+        skill_dir: Path | PurePosixPath,
+        known_skill_dirs: set[Path] | set[PurePosixPath],
+    ) -> bool:
         """skill_dir 是否嵌套在某个已知 skill 目录的子目录内。"""
         parent = skill_dir.parent
         while parent != parent.parent:
@@ -262,10 +370,10 @@ class SkillRegistry:
 
     # -- public API ---------------------------------------------------------
 
-    def get_skill(self, name: str) -> Skill | None:
+    def get_skill(self, name: str) -> Skill | RemoteSkill | None:
         return self._skills.get(name)
 
-    def get_all_skills(self) -> list[Skill]:
+    def get_all_skills(self) -> list[Skill | RemoteSkill]:
         return list(self._skills.values())
 
     def remove_skills(self, names: set[str]) -> None:

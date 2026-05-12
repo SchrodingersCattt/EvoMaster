@@ -17,10 +17,7 @@ from matmaster.bohrium.runtime import (
     attach_runtime,
     detach_runtime,
 )
-from matmaster.bohrium.types import (
-    BohriumExecutionContext,
-    BohriumRuntimeSnapshot,
-)
+from matmaster.bohrium.types import BohriumExecutionContext, BohriumRuntimeSnapshot
 from matmaster.sessions.ssh import SSHSession, SSHSessionConfig
 from src.dao.bohrium_nodes_table import get_bohrium_nodes_table
 from src.services.bohrium_node_service import get_bohrium_node_service
@@ -36,6 +33,8 @@ from src.services.user_service import BohriumAccessKeyFetchResult, UserService
 from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID, BOHRIUM_DEFAULT_IMAGE_NAME
 
 logger = logging.getLogger(__name__)
+
+_BOHRIUM_REMOTE_USER_SKILLS_ROOT = '/personal/.matmaster/skills'
 
 
 # Bash snippet for root on Bohrium SSH nodes: wget/curl/git/pip + env.
@@ -128,6 +127,16 @@ def _restore_bohrium_runtime_state(session_id: str, pg: Any | None) -> None:
             )
     if pg is not None:
         _restore_playground_session(pg, orig, orig_owns)
+
+
+def _configure_remote_user_skill_root(ssh_session: Any) -> None:
+    ssh_session.remote_user_skills_root = _BOHRIUM_REMOTE_USER_SKILLS_ROOT
+    roots = getattr(ssh_session, 'remote_skill_roots', None)
+    if isinstance(roots, list):
+        if _BOHRIUM_REMOTE_USER_SKILLS_ROOT not in roots:
+            roots.append(_BOHRIUM_REMOTE_USER_SKILLS_ROOT)
+    else:
+        ssh_session.remote_skill_roots = [_BOHRIUM_REMOTE_USER_SKILLS_ROOT]
 
 
 def _run_clear_remote_proxy(pg: Any, phase: str) -> None:
@@ -692,6 +701,7 @@ def _setup_bohrium_for_run(
             ssh_session = SSHSession(ssh_config)
             swapped = False
             ssh_session.open()
+            _configure_remote_user_skill_root(ssh_session)
             try:
                 attach_local_bohrium_runtime_from_run_credentials(
                     ssh_session, run_creds
