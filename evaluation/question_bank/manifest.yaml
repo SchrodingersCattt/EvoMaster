@@ -157,4 +157,4 @@ banks:
 - path: platform/ig_agnostic.yaml
   capability: input_generation
   domain: agnostic
-  questions: 4
+  questions: 3
