@@ -27,6 +27,19 @@ def _require_admin(user_id: str = Depends(UserService.require_user_id)) -> str:
     return user_id
 
 
+_SORT_COLUMNS = {
+    "last_event_at": "e.last_event_at",
+    "created_at": "s.created_at",
+    "event_count": "e.ec",
+}
+
+
+def _resolve_sort(sort_by: str, order: str) -> str:
+    col = _SORT_COLUMNS.get(sort_by, "e.last_event_at")
+    direction = "ASC" if order.lower() == "asc" else "DESC"
+    return f"{col} {direction}, s.created_at {direction}"
+
+
 # ─── Response Models ──────────────────────────────────────────────────────────
 
 
@@ -72,6 +85,11 @@ def admin_list_sessions(
     until: datetime | None = Query(None, description="截止时间 (ISO 8601)"),
     min_events: int = Query(2, ge=0, description="最少事件数，过滤空会话"),
     user_id: str | None = Query(None, description="按用户 ID 筛选"),
+    sort_by: str = Query(
+        "last_event_at",
+        description="排序字段: last_event_at, created_at, event_count",
+    ),
+    order: str = Query("desc", description="排序方向: asc, desc"),
     limit: int = Query(100, ge=1, le=1000),
     offset: int = Query(0, ge=0),
 ):
@@ -128,7 +146,7 @@ def admin_list_sessions(
                 ) e ON e.session_id = s.session_id
                 WHERE {where_sql}
                   AND COALESCE(e.ec, 0) >= %s
-                ORDER BY e.last_event_at DESC, s.created_at DESC
+                ORDER BY {_resolve_sort(sort_by, order)}
                 LIMIT %s OFFSET %s
             """
             cursor.execute(sql, (*params, min_events, limit, offset))
