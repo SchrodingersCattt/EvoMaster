@@ -33,7 +33,6 @@ _src_services = pytest.importorskip(
 )
 BohriumSetupResult = _src_services.BohriumSetupResult
 BohriumSetupService = _src_services.BohriumSetupService
-SkillSyncSpec = _src_services.SkillSyncSpec
 
 # -- QUAL-04: Workspace upload scenarios -------------------------
 
@@ -118,10 +117,6 @@ class TestBohriumSetupLifecycle:
             event_sink=MagicMock(),
         )
 
-        skill_sync_spec = SkillSyncSpec(
-            project_skill_roots=["/proj/skills"],
-            remote_project_root="/remote/project",
-        )
         expected = BohriumSetupResult(
             ssh_attached=False,
             abort_result=None,
@@ -147,13 +142,11 @@ class TestBohriumSetupLifecycle:
             result = await svc.run_setup(
                 session_id="sess-1",
                 playground=MagicMock(),
-                skill_sync_spec=skill_sync_spec,
                 run_started_at=0.0,
             )
 
         mock_load.assert_called_once_with("sess-1")
         call_kw = mock_setup.call_args.kwargs
-        assert call_kw["skill_sync_spec"] is skill_sync_spec
         assert call_kw["run_creds"] == {"key": "val"}
         assert result.ssh_attached is False
         assert result.execution_workdir == "/remote/exec/wd"

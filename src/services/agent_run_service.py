@@ -46,20 +46,13 @@ from matmaster.types.runtime_ports import (
 from src.dao.chat_events_table import get_chat_events_table
 from src.dao.oss_io import upload_bytes_to_oss
 from src.dao.redis_dao import get_redis_dao
-from src.services.agent_run_bohrium import (
-    BohriumSetupService,
-    derive_skill_sync_spec,
-)
+from src.services.agent_run_bohrium import BohriumSetupService
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.history_restore_service import HistoryRestoreService
 from src.services.image_input_service import get_image_input_service
 from src.services.quota_service import use_quota
 from src.services.response_figures_service import ResponseFiguresAccumulator
 from src.services.sessions_service import get_sessions_service
-from src.services.user_skills_sync import (
-    materialize_user_skills_for_run,
-    merge_user_skill_roots_into_exp_config,
-)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -442,25 +435,6 @@ class AgentRunService:
             from matmaster.config.loader import load_exp_config
 
             exp_config = load_exp_config(exp_name)
-            user_id_for_skills = self._sessions_service.get_session_user_id(session_id)
-            if (
-                exp_config.skills.enabled
-                and user_id_for_skills
-                and user_id_for_skills.strip()
-            ):
-                sync_result = await asyncio.to_thread(
-                    materialize_user_skills_for_run,
-                    user_id_for_skills.strip(),
-                    project_root=_project_root,
-                )
-                exp_config = merge_user_skill_roots_into_exp_config(
-                    exp_config,
-                    sync_result.roots,
-                    disabled_skill_names=sync_result.disabled_builtin_names,
-                )
-            skill_sync_spec = derive_skill_sync_spec(
-                exp_config, project_root=_project_root
-            )
 
             # -- Stage 3: Bohrium credentials + SSH --
             # Thread-safe event sink: Bohrium worker-thread callbacks
@@ -478,7 +452,6 @@ class AgentRunService:
             bohrium_result = await bohrium_svc.run_setup(
                 session_id=session_id,
                 playground=playground,
-                skill_sync_spec=skill_sync_spec,
                 run_started_at=run_started_at,
                 bohrium_required=effective_bohrium_required,
                 remote_workdir=remote_workdir,
