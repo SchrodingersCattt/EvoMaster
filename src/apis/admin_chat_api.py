@@ -137,14 +137,10 @@ def admin_list_sessions(
     sessions = []
     for row in rows:
         created_at_ms = (
-            int(row["created_at"].timestamp() * 1000)
-            if row.get("created_at")
-            else None
+            int(row["created_at"].timestamp() * 1000) if row.get("created_at") else None
         )
         updated_at_ms = (
-            int(row["updated_at"].timestamp() * 1000)
-            if row.get("updated_at")
-            else None
+            int(row["updated_at"].timestamp() * 1000) if row.get("updated_at") else None
         )
         last_event_at_ms = (
             int(row["last_event_at"].timestamp() * 1000)
@@ -180,7 +176,9 @@ def admin_list_sessions(
 def admin_get_session_events(
     session_id: str = Path(..., description="会话 ID"),
     _admin: str = Depends(_require_admin),
-    after_event_id: int = Query(0, ge=0, description="增量拉取：只返回 id > 此值的事件"),
+    after_event_id: int = Query(
+        0, ge=0, description="增量拉取：只返回 id > 此值的事件"
+    ),
     include_spawn: bool = Query(True, description="是否包含子 agent 事件"),
     limit: int | None = Query(None, ge=1, le=10000, description="最大返回条数"),
 ):
