@@ -1101,3 +1101,107 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
+- id: SC_interface_001_20260513
+  capability: structure_construction
+  domain: semiconductor
+  intent: Build a heterostructure interface between two materials with lattice mismatch
+    handling.
+  human_prompt_seed: '请构建 AlN(0001) / MoO₃(010) 异质结界面结构。
+
+    要求：
+
+    1. 分别切出两种材料的合适表面 slab
+
+    2. 进行晶格匹配，应变控制在 5% 以内
+
+    3. 将两个 slab 堆叠形成界面结构
+
+    4. 输出最终结构为 `interface_AlN_MoO3.cif`'
+  tags:
+  - struct_surface
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: interface_artifact
+    value: interface_AlN_MoO3.cif
+  - key: must_atom_count
+    value:
+      filename: interface_AlN_MoO3.cif
+      min: 20
+  - key: turn_budget
+    value:
+      max: 25
+  scoring_checklist:
+  - id: interface_artifact
+    criterion: interface_AlN_MoO3.cif written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_parsable
+    criterion: '[Must] Output CIF is parsable by pymatgen.'
+    axis: correctness
+    verify: struct_file_parsable
+  - id: must_atom_count
+    criterion: '[Must] Interface has at least 20 atoms (reasonable slab thickness).'
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: must_four_elements
+    criterion: '[Must] Interface contains all four elements (Al, N, Mo, O).'
+    axis: correctness
+    verify: struct_file_formula
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: SC_twist_001_20260513
+  capability: structure_construction
+  domain: agnostic
+  intent: Build twisted bilayer graphene structure requiring custom scripting beyond
+    standard MCP tools.
+  human_prompt_seed: '请构建一个转角双层石墨烯（Twisted Bilayer Graphene）结构，转角约为
+    21.8°（对应 commensurate indices (2,1)）。
+
+    要求：
+
+    1. 生成具有周期性边界条件的超胞
+
+    2. 层间距约 3.35 Å
+
+    3. 输出为 `TBG_21.8deg.cif`'
+  tags:
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: tbg_artifact
+    value: TBG_21.8deg.cif
+  - key: must_bilayer_atoms
+    value:
+      filename: TBG_21.8deg.cif
+      min: 20
+  - key: turn_budget
+    value:
+      max: 20
+  scoring_checklist:
+  - id: tbg_artifact
+    criterion: TBG_21.8deg.cif written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_parsable
+    criterion: '[Must] Output CIF is parsable by pymatgen.'
+    axis: correctness
+    verify: struct_file_parsable
+  - id: must_only_carbon
+    criterion: '[Must] Structure contains only carbon atoms.'
+    axis: correctness
+    verify: struct_file_formula
+  - id: must_bilayer_atoms
+    criterion: '[Must] Structure has sufficient atoms for bilayer supercell (>=20).'
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: must_two_layers
+    criterion: '[Must] Structure has two distinct layers separated by ~3.35 Å.'
+    axis: correctness
+    verify: struct_file_layer_count
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
