@@ -29,8 +29,8 @@ Produce a concise, readable Markdown survey report: Executive Summary + Referenc
 After completing ALL retrieval, run `collect_evidence.py` to automatically extract evidence cards from the raw tool outputs and write them to `collected_<topic>.json`. This happens **before** writing the narrative report.
 
 ```
-Skill action=run_script skill="deep-survey" script_name="collect_evidence.py"
-  script_args="--collected_json _tmp/surveys/collected_<topic>.json"
+python ${SKILL_DIR}/scripts/collect_evidence.py \
+  --collected_json _tmp/surveys/collected_<topic>.json
 ```
 
 Replace `<topic>` with the actual topic slug used in Step 1 (e.g. `collected_Perovskite_stability.json`).
@@ -65,7 +65,7 @@ Replace `<topic>` with the actual topic slug used in Step 1 (e.g. `collected_Per
 
 ## De-AIGC rules (compressed — apply to all written sections)
 
-Full guide: `Skill action=get_reference reference_name="de_aigc_style_guide.md"` (in `skills/_common/reference/`).
+Full guide: read `${SKILL_DIR}/../_common/reference/de_aigc_style_guide.md`.
 
 **Core principles:**
 1. Lead with the real problem, not broad context.

@@ -112,3 +112,14 @@ class PlaygroundContext(BaseModel):
     ) -> "PlaygroundContext":
         """Return a new frozen instance with runtime capability ports updated."""
         return self.model_copy(update={"runtime_ports": runtime_ports})
+
+    def with_run_meta(self, **fields: Any) -> "PlaygroundContext":
+        """Return a new frozen instance with ``run_meta`` keys merged.
+
+        Centralizes the ``model_copy(update={'run_meta': {**self.run_meta, ...}})``
+        idiom so callers can add or overwrite metadata without re-spreading the
+        dict at every site.
+        """
+        if not fields:
+            return self
+        return self.model_copy(update={"run_meta": {**self.run_meta, **fields}})

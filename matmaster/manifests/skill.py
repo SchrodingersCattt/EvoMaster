@@ -5,7 +5,8 @@ from typing import Any
 from matmaster.manifests.scanner import scan_skill_hits
 
 
-def _skill_name(skill: Any) -> str:
+def skill_name(skill: Any) -> str:
+    """Best-effort extraction of a skill's display name from name/meta_info."""
     return str(
         getattr(skill, "name", "")
         or getattr(getattr(skill, "meta_info", None), "name", "")
@@ -33,7 +34,7 @@ def format_loaded_skills(skills: list[Any]) -> str:
         return ""
     lines = ["[Loaded skills]"]
     for skill in skills:
-        name = _skill_name(skill)
+        name = skill_name(skill)
         meta = getattr(skill, "meta_info", None)
         description = getattr(meta, "description", "") or ""
         mcp_server = getattr(meta, "mcp_server", None)

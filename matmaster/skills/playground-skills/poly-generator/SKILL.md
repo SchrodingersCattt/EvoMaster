@@ -35,7 +35,7 @@ Use the local wrappers under `matmaster/skills/playground-skills/poly-generator/
 
 - Do not silently modify the user's monomer core.
 - Prefer `[*]` markers over guessed chemistry.
-- Before calling `run_script`, first inspect `build_polymer.py` usage and then fill arguments strictly according to the script interface. Do not invent shorthand flags.
+- Before running `build_polymer.py`, inspect its usage and then fill arguments strictly according to the script interface. Do not invent shorthand flags.
 - `build_polymer.py` accepts `--monomers`, `--sequence`, `--mode`, `--counts`, `--fractions`, `--degree`, `--seed`, `--reaction-name`, `--reaction-smarts`, `--reaction-template`, `--list-reactions`, and `--output-json`.
 - `generate_2d.py` accepts `--monomers`, `--sequence`, `--mode`, `--counts`, `--fractions`, `--degree`, `--seed`, `--output-dir`, `--prefix`, `--title`, `--polymer-title`, `--panel-title`, `--reaction-name`, `--reaction-smarts`, and `--reaction-template`.
 - `generate_3d.py` accepts `--smiles`, `--output`, `--engine`, `--format`, and `--random-seed`.
