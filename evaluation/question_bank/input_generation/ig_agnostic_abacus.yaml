@@ -1515,7 +1515,9 @@ questions:
 
     2) 使用 ABACUS LCAO 和 PBE 单点自洽；显式设置 APNS 赝势目录和轨道目录。
 
-    3 结构只需是一个合理的周期性测试小胞，重点是三种元素、`INPUT`/`STRU`/`KPT` 互相一致；不要运行计算。'
+    3) `STRU` 中的 Mg、N、Rh 三种元素必须使用 skill references 中实际存在的 APNS pseudopotential 和 numerical-orbital 文件名；不要凭元素符号猜成 `元素名.upf`。
+
+    4) 结构只需是一个合理的周期性测试小胞，重点是三种元素、`INPUT`/`STRU`/`KPT` 互相一致；不要运行计算。'
   tags:
   - eng_abacus
   reference_answers:
@@ -1568,6 +1570,8 @@ questions:
       filename: KPT
       pattern: (?im)^\s*[1-9]\d*\s+[1-9]\d*\s+[1-9]\d*(?:\s+0\s+0\s+0)?\s*$
       flags: im
+  - key: variable_reference_grounding
+    value: {}
   - key: turn_budget
     value:
       max: 12
@@ -1628,6 +1632,11 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 0.8
+  - id: variable_reference_grounding
+    criterion: '[Variable] The selected pseudopotential and orbital filenames are grounded in APNS reference lists and the files are mutually consistent; do not accept guessed element-name pseudopotentials when a different APNS filename exists.'
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 0.5
   - id: turn_budget
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
