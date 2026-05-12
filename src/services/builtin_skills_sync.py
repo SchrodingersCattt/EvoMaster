@@ -70,8 +70,15 @@ def _load_tools_from_cache(mcp_server: str | None) -> list[dict[str, str]] | Non
         return None
 
 
+_FIXED_ZIP_DATE = (2024, 1, 1, 0, 0, 0)
+
+
 def _zip_skill_dir(skill_dir: Path) -> tuple[bytes, str, int, int]:
-    """打包技能目录为 zip，返回 (zip_bytes, sha256, byte_size, file_count)。"""
+    """打包技能目录为 zip，返回 (zip_bytes, sha256, byte_size, file_count)。
+
+    使用固定时间戳确保相同文件内容产生相同 sha256，避免不同机器/容器
+    因 mtime 差异导致 sha256 变化从而触发不必要的前端全量同步。
+    """
     buf = io.BytesIO()
     file_count = 0
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -81,7 +88,9 @@ def _zip_skill_dir(skill_dir: Path) -> tuple[bytes, str, int, int]:
             if any(part in _ZIP_EXCLUDE for part in fp.relative_to(skill_dir).parts):
                 continue
             arcname = str(fp.relative_to(skill_dir))
-            zf.write(fp, arcname)
+            info = zipfile.ZipInfo(arcname, date_time=_FIXED_ZIP_DATE)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            zf.writestr(info, fp.read_bytes())
             file_count += 1
     zip_bytes = buf.getvalue()
     sha256 = hashlib.sha256(zip_bytes).hexdigest()
