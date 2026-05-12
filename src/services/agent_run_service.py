@@ -6,7 +6,6 @@ post-processing.
 """
 
 import asyncio
-import gc
 import logging
 import os
 import time
@@ -17,6 +16,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from matmaster.config.loader import load_agents_general_llm
 from matmaster.core.playground import PlaygroundManager
 from matmaster.integration.event_payloads import _normalize_public_source
 from matmaster.integration.fanout import RunEventFanout
@@ -86,52 +86,34 @@ _USER_INSTRUCTIONS_TEMPLATE = (
 )
 
 
+@lru_cache(maxsize=1)
 def _get_agent_default_llm() -> str | None:
-    """Read agents.general.llm from config/config.yaml.
+    """Cached read of ``agents.general.llm`` from ``config/config.yaml``."""
+    return load_agents_general_llm(_MATMASTER_CONFIG_DIR / 'config.yaml')
 
-    Returns None if the file or key is missing.
-    """
-    config_path = _MATMASTER_CONFIG_DIR / 'config.yaml'
-    if not config_path.exists():
-        return None
-    import yaml
 
-    with open(config_path, encoding='utf-8') as f:
-        raw = yaml.safe_load(f) or {}
-    agents = raw.get('agents')
-    if isinstance(agents, dict):
-        general = agents.get('general', {})
-        if isinstance(general, dict):
-            return general.get('llm')
-    return None
+_INVALID_FINISH_MESSAGES: dict[str, str] = {
+    'output_length_exceeded': (
+        '模型输出被 provider 的输出 token 上限截断，'
+        '未形成可提交的最终回答，请稍后重试。'
+    ),
+    'content_filtered': '模型输出被 provider 内容策略截断或拦截，未形成可提交的最终回答。',
+    'reasoning_only': '模型只返回了思考内容，没有生成可见最终回答。请重试。',
+    'empty_response': '模型本轮没有返回可见最终回答。请重试。',
+    'missing_llm_response': '模型流结束但没有返回可验证的响应对象。请重试。',
+    'missing_tool_call_payload': (
+        '模型声明要调用工具，但 provider 流式响应未返回有效工具调用参数。'
+        '系统已重试仍未恢复，请重试或切换模型。'
+    ),
+}
+_INVALID_FINISH_DEFAULT = '模型没有返回有效最终回答。请重试。'
 
 
 def _invalid_finish_error_message(finish_detail: Any) -> str:
-    kind = None
-    if finish_detail is not None:
-        kind = getattr(finish_detail, 'kind', None)
-        if kind is None and isinstance(finish_detail, dict):
-            kind = finish_detail.get('kind')
-
-    if kind == 'output_length_exceeded':
-        return (
-            '模型输出被 provider 的输出 token 上限截断，'
-            '未形成可提交的最终回答，请稍后重试。'
-        )
-    if kind == 'content_filtered':
-        return '模型输出被 provider 内容策略截断或拦截，未形成可提交的最终回答。'
-    if kind == 'reasoning_only':
-        return '模型只返回了思考内容，没有生成可见最终回答。请重试。'
-    if kind == 'empty_response':
-        return '模型本轮没有返回可见最终回答。请重试。'
-    if kind == 'missing_llm_response':
-        return '模型流结束但没有返回可验证的响应对象。请重试。'
-    if kind == 'missing_tool_call_payload':
-        return (
-            '模型声明要调用工具，但 provider 流式响应未返回有效工具调用参数。'
-            '系统已重试仍未恢复，请重试或切换模型。'
-        )
-    return '模型没有返回有效最终回答。请重试。'
+    kind = getattr(finish_detail, 'kind', None)
+    if kind is None and isinstance(finish_detail, dict):
+        kind = finish_detail.get('kind')
+    return _INVALID_FINISH_MESSAGES.get(kind, _INVALID_FINISH_DEFAULT)
 
 
 def _remote_skill_roots_from_session(session: Any | None) -> list[str]:
@@ -358,13 +340,7 @@ class AgentRunService:
 
         registry = self._build_skill_registry(exp_config, session=session)
         skills = skill_manifest.resolve_active_skills(raw_events, registry)
-        names = {
-            str(
-                getattr(skill, "name", "")
-                or getattr(getattr(skill, "meta_info", None), "name", "")
-            )
-            for skill in skills
-        }
+        names = {skill_manifest.skill_name(skill) for skill in skills}
         names.discard("")
         self._active_skills[session_id] = names
         return names
@@ -431,13 +407,8 @@ class AgentRunService:
                 }
             )
             if current_input_context is not None:
-                pg_ctx = pg_ctx.model_copy(
-                    update={
-                        'run_meta': {
-                            **pg_ctx.run_meta,
-                            'current_input_context': current_input_context,
-                        }
-                    }
+                pg_ctx = pg_ctx.with_run_meta(
+                    current_input_context=current_input_context,
                 )
             try:
                 events_table = get_chat_events_table()
@@ -509,20 +480,15 @@ class AgentRunService:
                     session_type=session_type,
                     execution_workdir=execution_workdir,
                 )
-            # Read user instructions from NAS if session is available.
             user_instructions: str | None = None
-            _ui_session = bohrium_result.execution_session if bohrium_result else None
-            if _ui_session is None:
-                _ui_session = pg_ctx.session
+            _ui_session = (
+                bohrium_result.execution_session if bohrium_result else None
+            ) or pg_ctx.session
             if _ui_session is not None:
                 try:
-                    if hasattr(_ui_session, 'path_exists') and _ui_session.path_exists(
-                        _USER_INSTRUCTIONS_PATH
-                    ):
-                        user_instructions = (
-                            _ui_session.read_file(_USER_INSTRUCTIONS_PATH).strip()
-                            or None
-                        )
+                    user_instructions = (
+                        _ui_session.read_file(_USER_INSTRUCTIONS_PATH).strip() or None
+                    )
                 except Exception as _ui_err:
                     logger.debug('read user instructions skipped: %s', _ui_err)
 
@@ -565,14 +531,7 @@ class AgentRunService:
                     if selected_profile.vision_detail is not None:
                         image_part['detail'] = selected_profile.vision_detail
                     image_parts.append(image_part)
-                pg_ctx = pg_ctx.model_copy(
-                    update={
-                        'run_meta': {
-                            **pg_ctx.run_meta,
-                            'current_user_images': image_parts,
-                        }
-                    }
-                )
+                pg_ctx = pg_ctx.with_run_meta(current_user_images=image_parts)
 
             pg_ctx = pg_ctx.model_copy(
                 update={
@@ -685,14 +644,9 @@ class AgentRunService:
                     spawn_id=spawn_id,
                 )
 
-            pg_ctx = pg_ctx.model_copy(
-                update={
-                    'run_meta': {
-                        **pg_ctx.run_meta,
-                        'figure_upload_config': figure_upload_config,
-                        'user_instructions': user_instructions,
-                    }
-                }
+            pg_ctx = pg_ctx.with_run_meta(
+                figure_upload_config=figure_upload_config,
+                user_instructions=user_instructions,
             )
 
             # -- Stage 4b: AskQuestion bridge --
@@ -803,14 +757,7 @@ class AgentRunService:
                 )
             )
 
-            pg_ctx = pg_ctx.model_copy(
-                update={
-                    'run_meta': {
-                        **pg_ctx.run_meta,
-                        'attachment_manifest': attachment_text,
-                    }
-                }
-            )
+            pg_ctx = pg_ctx.with_run_meta(attachment_manifest=attachment_text)
             bohrium_rebuild_events: list[dict] = []
             try:
                 if events_table is not None:
@@ -821,13 +768,8 @@ class AgentRunService:
                     exc_info=True,
                 )
             if bohrium_rebuild_events:
-                pg_ctx = pg_ctx.model_copy(
-                    update={
-                        'run_meta': {
-                            **pg_ctx.run_meta,
-                            'bohrium_rebuild_events': bohrium_rebuild_events,
-                        }
-                    }
+                pg_ctx = pg_ctx.with_run_meta(
+                    bohrium_rebuild_events=bohrium_rebuild_events,
                 )
 
             # -- Stage 5b: Runtime user-instructions injection --
@@ -848,14 +790,7 @@ class AgentRunService:
                 if skill_name:
                     self._active_skills.setdefault(session_id, set()).add(skill_name)
 
-            pg_ctx = pg_ctx.model_copy(
-                update={
-                    'run_meta': {
-                        **pg_ctx.run_meta,
-                        'active_skills': frozenset(active_skills),
-                    }
-                }
-            )
+            pg_ctx = pg_ctx.with_run_meta(active_skills=frozenset(active_skills))
 
             # -- Stage 6: Generator event stream --
             run_result_event = None
@@ -866,7 +801,6 @@ class AgentRunService:
                     history=history,
                     cancel_token=cancel_token,
                     skills=pg_ctx.run_meta.get('skill_config'),
-                    source_override=exp_name,
                 )
             ) as stream:
                 async for event in stream:
@@ -983,7 +917,6 @@ class AgentRunService:
                     )
             get_redis_dao().delete_stop_requested(session_id, task_id)
             self._pg_manager.release(session_id)
-            gc.collect(0)
 
 
 @lru_cache

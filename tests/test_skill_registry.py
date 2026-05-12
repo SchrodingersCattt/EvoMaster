@@ -240,59 +240,16 @@ class TestSkill:
         with pytest.raises(FileNotFoundError):
             Skill(empty_dir)
 
-    def test_scan_scripts(self, skill_tree: dict[str, Path]) -> None:
-        """_scan_scripts finds .py and .sh files but not .md files."""
-        from matmaster.skills.registry import Skill
-
-        skill = Skill(skill_tree["root1"] / "calculator")
-        script_names = sorted(s.name for s in skill.available_scripts)
-        assert script_names == ["helper.sh", "run.py"]
-
-    def test_get_script_path(self, skill_tree: dict[str, Path]) -> None:
-        """get_script_path returns the Path for a known script, None for unknown."""
-        from matmaster.skills.registry import Skill
-
-        skill = Skill(skill_tree["root1"] / "calculator")
-        assert skill.get_script_path("run.py") is not None
-        assert skill.get_script_path("run.py").name == "run.py"
-        assert skill.get_script_path("nonexistent.py") is None
-
-    def test_get_reference_in_references_dir(self, skill_tree: dict[str, Path]) -> None:
-        """get_reference finds a file in the references/ subdirectory."""
-        from matmaster.skills.registry import Skill
-
-        skill = Skill(skill_tree["root1"] / "calculator")
-        content = skill.get_reference("api.md")
-        assert content == "API reference content"
-
-    def test_get_reference_fallback_to_common(
+    def test_skill_exposes_only_active_runtime_helpers(
         self, skill_tree: dict[str, Path]
     ) -> None:
-        """get_reference falls back to _common/reference/ when not found locally."""
-        from matmaster.skills.registry import Skill
-
-        # search skill has no local references — should fall back to _common
-        skill = Skill(skill_tree["root1"] / "search")
-        content = skill.get_reference("shared.md")
-        assert content == "Shared reference content"
-
-    def test_get_reference_fallback_to_common_root(
-        self, skill_tree: dict[str, Path]
-    ) -> None:
-        """get_reference falls back to _common/<name> (no reference/ subdir)."""
-        from matmaster.skills.registry import Skill
-
-        skill = Skill(skill_tree["root1"] / "search")
-        content = skill.get_reference("greeting.md")
-        assert content == "Hello from _common"
-
-    def test_get_reference_not_found_raises(self, skill_tree: dict[str, Path]) -> None:
-        """get_reference raises FileNotFoundError when no candidate exists."""
+        """Skill no longer exposes legacy reference/script dispatch helpers."""
         from matmaster.skills.registry import Skill
 
         skill = Skill(skill_tree["root1"] / "calculator")
-        with pytest.raises(FileNotFoundError):
-            skill.get_reference("does_not_exist.md")
+        assert not hasattr(skill, "available_scripts")
+        assert not hasattr(skill, "get_script_path")
+        assert not hasattr(skill, "get_reference")
 
 
 # ===========================================================================

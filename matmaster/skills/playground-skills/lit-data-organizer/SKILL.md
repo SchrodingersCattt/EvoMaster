@@ -21,7 +21,7 @@ Builds one canonical evidence table from structured literature outputs; exports 
 ## Script: build_lit_table.py
 
 ```
-run_script build_lit_table.py --output <file> --format csv|jsonl \
+python ${SKILL_DIR}/scripts/build_lit_table.py --output <file> --format csv|jsonl \
   [--input_json <files>] [--input_dir <dir>] [--source_type auto|pdf|web|survey] \
   [--schema <config.json>] [--dedup_keys key1,key2] \
   [--state _tmp/lit_data/state.json] [--resume] [--stage ingest|normalize|dedup|conflict|export|all] \

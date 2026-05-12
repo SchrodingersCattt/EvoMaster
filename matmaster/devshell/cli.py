@@ -13,8 +13,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-import yaml
 from dotenv import load_dotenv
+
+from matmaster.config.loader import load_agents_general_llm
 
 if TYPE_CHECKING:
     pass
@@ -22,20 +23,6 @@ if TYPE_CHECKING:
 
 def _project_root() -> Path:
     return Path(__file__).resolve().parent.parent.parent
-
-
-def _load_agents_general_llm(main_config: Path) -> str | None:
-    """``agents.general.llm`` from ``config/config.yaml`` (profile key)."""
-    if not main_config.is_file():
-        return None
-    with open(main_config, encoding="utf-8") as f:
-        data = yaml.safe_load(f) or {}
-    agents = data.get("agents") or {}
-    general = agents.get("general") or {}
-    if isinstance(general, dict):
-        v = general.get("llm")
-        return str(v).strip() if v else None
-    return None
 
 
 def _normalize_argv(argv: list[str] | None) -> list[str]:
@@ -178,7 +165,7 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
     from matmaster.providers.llm_factory import build_provider
 
     llm_config = load_llm_config(llm_yaml)
-    agent_default_llm = _load_agents_general_llm(main_yaml)
+    agent_default_llm = load_agents_general_llm(main_yaml)
 
     model_override = (args.model or "").strip() or None
 

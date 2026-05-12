@@ -58,7 +58,7 @@ When writing for Nature-family journals:
 
 ## De-AIGC rules (mandatory — full apply)
 
-Full guide: `Skill action=get_reference reference_name="de_aigc_style_guide.md"` (in `skills/_common/reference/`).
+Full guide: read `${SKILL_DIR}/../_common/reference/de_aigc_style_guide.md`.
 
 **Non-negotiable for every section:**
 1. Lead with the real problem, not broad context.

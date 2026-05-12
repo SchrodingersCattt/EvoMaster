@@ -47,7 +47,7 @@ The export scripts (`export_docx.py`, `export_latex.py`) apply many of these aut
 
 ## De-AIGC Writing Rules (mandatory for all profiles except patent Claims)
 
-Full reference: `Skill action=get_reference reference_name="de_aigc_style_guide.md"` (in `skills/_common/reference/`).
+Full reference: `${SKILL_DIR}/../_common/reference/de_aigc_style_guide.md`.
 
 **Core rules (apply at every writing step):**
 1. Lead with the real problem, not broad context.

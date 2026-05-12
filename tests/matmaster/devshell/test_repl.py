@@ -312,7 +312,7 @@ class TestCliRunMode:
 
         with (
             patch(
-                "matmaster.devshell.cli._load_agents_general_llm",
+                "matmaster.devshell.cli.load_agents_general_llm",
                 return_value="opus",
             ),
             patch(
