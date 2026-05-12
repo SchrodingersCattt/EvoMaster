@@ -182,25 +182,52 @@ def admin_get_session_events(
     include_spawn: bool = Query(True, description="是否包含子 agent 事件"),
     limit: int | None = Query(None, ge=1, le=10000, description="最大返回条数"),
 ):
+    import json as _json
+
     events_table = ChatEventsTable()
 
-    if after_event_id > 0:
-        events = events_table.get_scope_events_after_id(
-            session_id=session_id,
-            spawn_id=None if include_spawn else "__PARENT_ONLY__",
-            after_id=after_event_id,
-            limit=limit,
-        )
-    else:
-        events = events_table.get_session_events(
-            session_id=session_id,
-            include_spawn=include_spawn,
-            limit=limit,
-        )
+    with events_table.get_connection() as conn:
+        with conn.cursor() as cursor:
+            spawn_filter = "" if include_spawn else " AND spawn_id IS NULL"
+            sql = f"""
+                SELECT id, session_id, source, type, content,
+                       task_id, invocation_id, spawn_id, created_at
+                FROM {events_table.table_name}
+                WHERE session_id = %s
+                  AND id > %s
+                  {spawn_filter}
+                ORDER BY created_at ASC, id ASC
+            """
+            params: list = [session_id, after_event_id]
+            if limit:
+                sql += " LIMIT %s"
+                params.append(limit)
+            cursor.execute(sql, tuple(params))
+            rows = list(cursor.fetchall())
 
+    events = []
     max_event_id = 0
-    if events:
-        max_event_id = max(e.get("id", 0) or 0 for e in events)
+    for row in rows:
+        try:
+            content = _json.loads(row["content"])
+        except (_json.JSONDecodeError, TypeError):
+            content = row["content"]
+        ev = {
+            "id": row.get("id"),
+            "source": row["source"],
+            "type": row["type"],
+            "content": content,
+            "session_id": row["session_id"],
+            "task_id": row.get("task_id"),
+            "invocation_id": row.get("invocation_id"),
+            "spawn_id": row.get("spawn_id"),
+        }
+        if row.get("created_at") is not None:
+            ev["created_at_ms"] = int(row["created_at"].timestamp() * 1000)
+        events.append(ev)
+        eid = row.get("id") or 0
+        if eid > max_event_id:
+            max_event_id = eid
 
     return AdminSessionEventsResponse(
         session_id=session_id,
