@@ -3069,3 +3069,600 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
+- id: IG_abacus_019_20260513
+  capability: input_generation
+  domain: semiconductor
+  intent: Prepare ABACUS LCAO two-step SCF then NSCF workflow for graphene band structure
+    and DOS with separate KPT files.
+  human_prompt_seed: '工作区中提供了石墨烯原胞结构 `STRU_graphene`。请为其准备 ABACUS LCAO
+    能带结构与态密度计算：
+
+    1. SCF 步骤放入 `scf/` 目录，生成 INPUT、STRU、KPT；
+
+    2. NSCF 步骤放入 `nscf/` 目录，生成 INPUT、STRU、KPT；
+
+    3. 能带路径请使用石墨烯常规高对称点；
+
+    4. NSCF 步骤同时输出能带和态密度。'
+  tags:
+  - eng_abacus
+  - struct_surface
+  data_files:
+  - key: stru_graphene
+    path: data/IG_abacus_019_20260513/STRU_graphene
+    oss_url: ''
+    description: Graphene primitive cell STRU (2 C atoms, LCAO).
+  reference_answers:
+  - key: scf_input_artifact
+    value: scf/INPUT
+  - key: scf_stru_artifact
+    value: scf/STRU
+  - key: scf_kpt_artifact
+    value: scf/KPT
+  - key: nscf_input_artifact
+    value: nscf/INPUT
+  - key: nscf_stru_artifact
+    value: nscf/STRU
+  - key: nscf_kpt_artifact
+    value: nscf/KPT
+  - key: must_scf_out_chg
+    value:
+      filename: scf/INPUT
+      pattern: (?im)^\s*out_chg\s+1\s*$
+      flags: im
+  - key: must_scf_calculation
+    value:
+      filename: scf/INPUT
+      tokens:
+      - calculation scf
+      - basis_type lcao
+      flags: i
+  - key: must_nscf_init_chg
+    value:
+      filename: nscf/INPUT
+      pattern: (?im)^\s*init_chg\s+file\s*$
+      flags: im
+  - key: must_nscf_symmetry_off
+    value:
+      filename: nscf/INPUT
+      pattern: (?im)^\s*symmetry\s+(0|-1)\s*$
+      flags: im
+  - key: must_nscf_nbands
+    value:
+      filename: nscf/INPUT
+      pattern: (?im)^\s*nbands\s+\d+\s*$
+      flags: im
+  - key: must_nscf_out_band
+    value:
+      filename: nscf/INPUT
+      pattern: (?im)^\s*out_band\s+1\s*$
+      flags: im
+  - key: must_nscf_out_dos
+    value:
+      filename: nscf/INPUT
+      pattern: (?im)^\s*out_dos\s+1\s*$
+      flags: im
+  - key: must_nscf_calculation
+    value:
+      filename: nscf/INPUT
+      tokens:
+      - calculation nscf
+      - basis_type lcao
+      flags: i
+  - key: must_nscf_kpt_line_mode
+    value:
+      filename: nscf/KPT
+      pattern: (?im)^\s*Line\s*$
+      flags: im
+  - key: must_scf_pseudo_dir
+    value:
+      filename: scf/INPUT
+      pattern: (?im)^\s*pseudo_dir\s+\S+
+      flags: im
+  - key: must_scf_orbital_dir
+    value:
+      filename: scf/INPUT
+      pattern: (?im)^\s*orbital_dir\s+\S+
+      flags: im
+  - key: turn_budget
+    value:
+      max: 14
+  scoring_checklist:
+  - id: scf_input_artifact
+    criterion: SCF directory contains INPUT file.
+    axis: correctness
+    verify: artifact_exists
+  - id: scf_stru_artifact
+    criterion: SCF directory contains STRU file.
+    axis: correctness
+    verify: artifact_exists
+  - id: scf_kpt_artifact
+    criterion: SCF directory contains KPT file.
+    axis: correctness
+    verify: artifact_exists
+  - id: nscf_input_artifact
+    criterion: NSCF directory contains INPUT file.
+    axis: correctness
+    verify: artifact_exists
+  - id: nscf_stru_artifact
+    criterion: NSCF directory contains STRU file.
+    axis: correctness
+    verify: artifact_exists
+  - id: nscf_kpt_artifact
+    criterion: NSCF directory contains KPT file.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_scf_out_chg
+    criterion: '[Must] SCF INPUT sets out_chg 1 so charge density is saved for NSCF.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_scf_calculation
+    criterion: '[Must] SCF INPUT uses LCAO SCF calculation type.'
+    axis: correctness
+    verify: text_file_contains_all
+  - id: must_nscf_init_chg
+    criterion: '[Must] NSCF INPUT loads charge from file (init_chg file).'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_nscf_symmetry_off
+    criterion: '[Must] NSCF INPUT disables symmetry for arbitrary k-path.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_nscf_nbands
+    criterion: '[Must] NSCF INPUT explicitly sets nbands.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_nscf_out_band
+    criterion: '[Must] NSCF INPUT enables band output.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_nscf_out_dos
+    criterion: '[Must] NSCF INPUT enables DOS output.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_nscf_calculation
+    criterion: '[Must] NSCF INPUT uses LCAO NSCF calculation type.'
+    axis: correctness
+    verify: text_file_contains_all
+  - id: must_nscf_kpt_line_mode
+    criterion: '[Must] NSCF KPT uses Line mode for band-structure k-path.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_scf_pseudo_dir
+    criterion: '[Must] SCF INPUT sets pseudo_dir explicitly for Bohrium runtime.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.8
+  - id: must_scf_orbital_dir
+    criterion: '[Must] SCF INPUT sets orbital_dir explicitly for Bohrium runtime.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.8
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+- id: IG_abacus_020_20260513
+  capability: input_generation
+  domain: agnostic
+  intent: Test stru_file and kpoint_file routing when non-default filenames are provided.
+  human_prompt_seed: '工作目录中有如下文件：
+
+    - `Si_diamond.stru`（Si 金刚石结构，含赝势和轨道信息）
+
+    - `kpt_444.txt`（Gamma-centered 4×4×4 网格）
+
+
+    请为其准备 ABACUS PW 单点自洽计算。所有生成的文件放在 `run_si/` 目录下。
+
+    注意：不要重命名或复制已有文件，直接在 INPUT 中引用它们的原始文件名。'
+  tags:
+  - eng_abacus
+  data_files:
+  - key: si_stru
+    path: data/IG_abacus_020_20260513/Si_diamond.stru
+    oss_url: ''
+    description: Si diamond STRU with PP/orbital info (non-default filename).
+  - key: kpt_file
+    path: data/IG_abacus_020_20260513/kpt_444.txt
+    oss_url: ''
+    description: Pre-made KPT file with 4x4x4 Gamma mesh (non-default filename).
+  reference_answers:
+  - key: input_artifact
+    value: run_si/INPUT
+  - key: must_stru_file_set
+    value:
+      filename: run_si/INPUT
+      pattern: (?im)^\s*stru_file\s+.*Si_diamond\.stru
+      flags: im
+  - key: must_kpoint_file_set
+    value:
+      filename: run_si/INPUT
+      pattern: (?im)^\s*kpoint_file\s+.*kpt_444\.txt
+      flags: im
+  - key: must_input_core
+    value:
+      filename: run_si/INPUT
+      tokens:
+      - calculation scf
+      - basis_type pw
+      flags: i
+  - key: must_ntype_1
+    value:
+      filename: run_si/INPUT
+      pattern: (?im)^\s*ntype\s+1\s*$
+      flags: im
+  - key: must_pseudo_dir
+    value:
+      filename: run_si/INPUT
+      pattern: (?im)^\s*pseudo_dir\s+\S+
+      flags: im
+  - key: turn_budget
+    value:
+      max: 8
+  scoring_checklist:
+  - id: input_artifact
+    criterion: run_si/INPUT is written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_stru_file_set
+    criterion: '[Must] INPUT contains stru_file pointing to Si_diamond.stru.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_kpoint_file_set
+    criterion: '[Must] INPUT contains kpoint_file pointing to kpt_444.txt.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_input_core
+    criterion: '[Must] INPUT uses PW SCF mode.'
+    axis: correctness
+    verify: text_file_contains_all
+  - id: must_ntype_1
+    criterion: '[Must] ntype = 1 for single-element Si.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_pseudo_dir
+    criterion: '[Must] INPUT sets pseudo_dir explicitly.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.8
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: IG_abacus_021_20260513
+  capability: input_generation
+  domain: agnostic
+  intent: Test pseudopotential and orbital filename resolution for uncommon elements
+    via reference file lookup.
+  human_prompt_seed: '请为钙钛矿 BaZrO₃ 准备 ABACUS LCAO 自洽场计算。
+
+    结构文件 `STRU_BaZrO3` 已放在工作区中（含晶格和原子坐标，但赝势和轨道文件名暂空）。
+
+    请帮我补全赝势和轨道文件名，确保与 Bohrium 运行时目录中实际文件完全匹配，然后生成完整的
+    INPUT 和 STRU。'
+  tags:
+  - eng_abacus
+  data_files:
+  - key: stru_bazro3
+    path: data/IG_abacus_021_20260513/STRU_BaZrO3
+    oss_url: ''
+    description: BaZrO3 perovskite STRU with empty PP/orbital fields to be resolved.
+  reference_answers:
+  - key: input_artifact
+    value: INPUT
+  - key: stru_artifact
+    value: STRU
+  - key: must_ntype_3
+    value:
+      filename: INPUT
+      pattern: (?im)^\s*ntype\s+3\s*$
+      flags: im
+  - key: must_basis_lcao
+    value:
+      filename: INPUT
+      tokens:
+      - basis_type lcao
+      - calculation scf
+      flags: i
+  - key: must_pseudo_dir
+    value:
+      filename: INPUT
+      pattern: (?im)^\s*pseudo_dir\s+/root/apns-pseudopotentials-v1/?\s*$
+      flags: im
+  - key: must_orbital_dir
+    value:
+      filename: INPUT
+      pattern: (?im)^\s*orbital_dir\s+/root/apns-orbitals-efficiency-v1/?\s*$
+      flags: im
+  - key: must_stru_ba_pp
+    value:
+      filename: STRU
+      pattern: (?im)^\s*Ba\s+[\d.]+\s+\S+\.upf
+      flags: im
+  - key: must_stru_zr_pp
+    value:
+      filename: STRU
+      pattern: (?im)^\s*Zr\s+[\d.]+\s+\S+\.upf
+      flags: im
+  - key: must_stru_o_pp
+    value:
+      filename: STRU
+      pattern: (?im)^\s*O\s+[\d.]+\s+\S+\.upf
+      flags: im
+  - key: must_stru_ba_orb
+    value:
+      filename: STRU
+      pattern: (?i)Ba\S*\.orb
+      flags: i
+  - key: must_stru_zr_orb
+    value:
+      filename: STRU
+      pattern: (?i)Zr\S*\.orb
+      flags: i
+  - key: must_stru_o_orb
+    value:
+      filename: STRU
+      pattern: (?i)O\S*\.orb
+      flags: i
+  - key: must_ecutwfc_reasonable
+    value:
+      filename: INPUT
+      checks:
+      - key: ecutwfc
+        min: 80
+        max: 200
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: input_artifact
+    criterion: INPUT written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: stru_artifact
+    criterion: STRU written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_ntype_3
+    criterion: '[Must] ntype = 3 for Ba, Zr, O.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_basis_lcao
+    criterion: '[Must] INPUT uses LCAO SCF mode.'
+    axis: correctness
+    verify: text_file_contains_all
+  - id: must_pseudo_dir
+    criterion: '[Must] pseudo_dir points to APNS pseudopotential directory.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_orbital_dir
+    criterion: '[Must] orbital_dir points to APNS orbital directory.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_stru_ba_pp
+    criterion: '[Must] STRU Ba species has valid .upf filename.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_stru_zr_pp
+    criterion: '[Must] STRU Zr species has valid .upf filename.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_stru_o_pp
+    criterion: '[Must] STRU O species has valid .upf filename.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_stru_ba_orb
+    criterion: '[Must] STRU has Ba orbital (.orb) entry.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_stru_zr_orb
+    criterion: '[Must] STRU has Zr orbital (.orb) entry.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_stru_o_orb
+    criterion: '[Must] STRU has O orbital (.orb) entry.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_ecutwfc_reasonable
+    criterion: '[Must] ecutwfc within physically reasonable range for LCAO.'
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.8
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: IG_abacus_022_20260513
+  capability: input_generation
+  domain: agnostic
+  intent: Test DFT+U SCF with antiferromagnetic initialization for NiO.
+  human_prompt_seed: '请为 NiO 岩盐结构准备 ABACUS LCAO DFT+U 自洽场计算。
+
+    结构文件 `STRU_NiO` 已在工作区中（conventional cell，4 Ni + 4 O）。
+
+    Ni 的 3d 轨道 Hubbard U 值请用 6.0 eV。
+
+    注意考虑 NiO 基态的磁有序性质。'
+  tags:
+  - eng_abacus
+  data_files:
+  - key: stru_nio
+    path: data/IG_abacus_022_20260513/STRU_NiO
+    oss_url: ''
+    description: NiO rocksalt conventional cell STRU (4 Ni + 4 O).
+  reference_answers:
+  - key: input_artifact
+    value: INPUT
+  - key: stru_artifact
+    value: STRU
+  - key: must_nspin_2
+    value:
+      filename: INPUT
+      pattern: (?im)^\s*nspin\s+2\s*$
+      flags: im
+  - key: must_calculation_scf
+    value:
+      filename: INPUT
+      pattern: (?im)^\s*calculation\s+scf\s*$
+      flags: im
+  - key: must_basis_lcao
+    value:
+      filename: INPUT
+      pattern: (?im)^\s*basis_type\s+lcao\s*$
+      flags: im
+  - key: must_orbital_corr
+    value:
+      filename: INPUT
+      pattern: (?im)^\s*orbital_corr\s+.*2
+      flags: im
+  - key: must_hubbard_u
+    value:
+      filename: INPUT
+      pattern: (?im)^\s*hubbard_u\s+.*6
+      flags: im
+  - key: must_stru_afm_moments
+    value:
+      filename: STRU
+      pattern: (?s)mag\s+-\d
+      flags: s
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: input_artifact
+    criterion: INPUT written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: stru_artifact
+    criterion: STRU written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_nspin_2
+    criterion: '[Must] INPUT enables spin polarization (nspin 2).'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_calculation_scf
+    criterion: '[Must] INPUT sets calculation scf.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_basis_lcao
+    criterion: '[Must] INPUT uses basis_type lcao.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_orbital_corr
+    criterion: '[Must] INPUT sets orbital_corr with d-orbital index (2) for Ni.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_hubbard_u
+    criterion: '[Must] INPUT sets hubbard_u with U=6.0 for Ni d-orbital.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_stru_afm_moments
+    criterion: '[Must] STRU contains negative magnetic moment (AFM, not all-parallel FM).'
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: IG_abacus_023_20260513
+  capability: input_generation
+  domain: catalysis
+  intent: Test metal slab k-point density rule and selective dynamics for bottom-layer
+    freezing.
+  human_prompt_seed: '请为 Cu(111) 表面 slab 准备 ABACUS PW 结构弛豫计算。
+
+    结构文件 `STRU_Cu111` 已在工作区中（4 层 Cu slab + 15 Å 真空层）。
+
+    要求底部两层原子固定不动，只弛豫上面两层。'
+  tags:
+  - eng_abacus
+  - struct_surface
+  data_files:
+  - key: stru_cu111
+    path: data/IG_abacus_023_20260513/STRU_Cu111
+    oss_url: ''
+    description: Cu(111) 4-layer slab STRU with 15 Ang vacuum.
+  reference_answers:
+  - key: input_artifact
+    value: INPUT
+  - key: stru_artifact
+    value: STRU
+  - key: kpt_artifact
+    value: KPT
+  - key: must_calculation_relax
+    value:
+      filename: INPUT
+      pattern: (?im)^\s*calculation\s+relax\s*$
+      flags: im
+  - key: must_cal_force
+    value:
+      filename: INPUT
+      pattern: (?im)^\s*cal_force\s+1\s*$
+      flags: im
+  - key: must_basis_pw
+    value:
+      filename: INPUT
+      pattern: (?im)^\s*basis_type\s+pw\s*$
+      flags: im
+  - key: must_force_thr
+    value:
+      filename: INPUT
+      pattern: (?im)^\s*force_thr_ev\s+[\d.eE-]+
+      flags: im
+  - key: must_kpt_dense_inplane
+    value:
+      filename: KPT
+      pattern: (?m)^\s*(1[2-9]|[2-9]\d|\d{3,})\s+(1[2-9]|[2-9]\d|\d{3,})\s+1\b
+      flags: m
+  - key: must_stru_frozen_atoms
+    value:
+      filename: STRU
+      pattern: \d+\.\d+\s+\d+\.\d+\s+\d+\.\d+\s+0\s+0\s+0
+      flags: m
+  - key: turn_budget
+    value:
+      max: 10
+  scoring_checklist:
+  - id: input_artifact
+    criterion: INPUT written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: stru_artifact
+    criterion: STRU written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: kpt_artifact
+    criterion: KPT written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_calculation_relax
+    criterion: '[Must] INPUT sets calculation relax.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_cal_force
+    criterion: '[Must] INPUT sets cal_force 1.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_basis_pw
+    criterion: '[Must] INPUT uses PW basis.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_force_thr
+    criterion: '[Must] INPUT contains force convergence threshold for relaxation.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.8
+  - id: must_kpt_dense_inplane
+    criterion: '[Must] KPT has at least 12x12 in-plane k-points for metal slab.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_stru_frozen_atoms
+    criterion: '[Must] STRU has frozen atoms (0 0 0 mobility) for bottom layers.'
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
