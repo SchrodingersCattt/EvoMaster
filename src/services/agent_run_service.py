@@ -134,6 +134,30 @@ def _invalid_finish_error_message(finish_detail: Any) -> str:
     return '模型没有返回有效最终回答。请重试。'
 
 
+def _remote_skill_roots_from_session(session: Any | None) -> list[str]:
+    if session is None:
+        return []
+
+    roots: list[str] = []
+    raw_roots = getattr(session, 'remote_skill_roots', None)
+    if isinstance(raw_roots, (list, tuple, set)):
+        roots.extend(
+            root.strip() for root in raw_roots if isinstance(root, str) and root.strip()
+        )
+
+    raw_user_root = getattr(session, 'remote_user_skills_root', None)
+    if isinstance(raw_user_root, str) and raw_user_root.strip():
+        roots.append(raw_user_root.strip())
+
+    seen: set[str] = set()
+    unique: list[str] = []
+    for root in roots:
+        if root not in seen:
+            seen.add(root)
+            unique.append(root)
+    return unique
+
+
 def _strip_user_instructions_prefix(text: str | None) -> str:
     """Remove a leading runtime user-instructions wrapper if present."""
     if not text:
@@ -275,7 +299,11 @@ class AgentRunService:
         """Validate configs at startup -- delegates to PlaygroundManager."""
         self._pg_manager.validate_startup()
 
-    def _build_skill_registry(self, exp_config: Any) -> Any | None:
+    def _build_skill_registry(
+        self,
+        exp_config: Any,
+        session: Any | None = None,
+    ) -> Any | None:
         if getattr(exp_config, "skills", None) is None or not exp_config.skills.enabled:
             return None
         try:
@@ -288,7 +316,14 @@ class AgentRunService:
                 roots = [Path(roots_raw)]
             else:
                 roots = []
-            return SkillRegistry(roots) if roots else None
+            remote_roots = _remote_skill_roots_from_session(session)
+            if not roots and not remote_roots:
+                return None
+            return SkillRegistry(
+                roots,
+                remote_session=session if remote_roots else None,
+                remote_roots=remote_roots,
+            )
         except Exception:
             logger.warning(
                 "active skill rehydrate: building SkillRegistry failed",
@@ -301,6 +336,7 @@ class AgentRunService:
         session_id: str,
         events_table: Any,
         exp_config: Any,
+        session: Any | None = None,
     ) -> set[str]:
         cached = self._active_skills.get(session_id)
         if cached is not None:
@@ -320,7 +356,7 @@ class AgentRunService:
                     exc_info=True,
                 )
 
-        registry = self._build_skill_registry(exp_config)
+        registry = self._build_skill_registry(exp_config, session=session)
         skills = skill_manifest.resolve_active_skills(raw_events, registry)
         names = {
             str(
@@ -805,7 +841,7 @@ class AgentRunService:
             # AFTER history is available so the snapshot frozen below reflects
             # any skills recovered from past turns.
             active_skills = self._resolve_active_skill_names(
-                session_id, events_table, exp_config
+                session_id, events_table, exp_config, pg_ctx.session
             )
 
             def _remember_skill_hit(skill_name: str) -> None:

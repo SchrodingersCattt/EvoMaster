@@ -70,6 +70,7 @@ class SSHSession:
         # Public attributes for external callers (e.g. sync_skills_to_remote)
         self.remote_project_root: str | None = None
         self.remote_user_skills_root: str | None = None
+        self.remote_skill_roots: list[str] = []
         self.local_user_skills_root: str | None = None
 
     # ------------------------------------------------------------------

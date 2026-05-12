@@ -117,6 +117,9 @@ class SkillTool(BuiltinTool):
 
     def _render_skill_dir(self, skill: Skill) -> str:
         skill_path = skill.skill_path
+        if getattr(skill, "is_remote", False):
+            return str(skill_path)
+
         local_abs = skill_path if skill_path.is_absolute() else skill_path.resolve()
 
         session = self._session
