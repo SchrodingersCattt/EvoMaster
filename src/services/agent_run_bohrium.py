@@ -23,7 +23,10 @@ from matmaster.bohrium.types import (
 )
 from matmaster.sessions.ssh import SSHSession, SSHSessionConfig
 from src.dao.bohrium_nodes_table import get_bohrium_nodes_table
-from src.services.bohrium_node_service import get_bohrium_node_service
+from src.services.bohrium_node_service import (
+    get_bohrium_node_service,
+    get_default_node_name,
+)
 from src.services.bohrium_run_support import (
     _build_access_key_failure_reason,
     _creator_id_from_user,
@@ -144,13 +147,7 @@ def _run_clear_remote_proxy(pg: Any, phase: str) -> None:
             'run_agent: clear_remote_proxy (%s) running (wgetrc/curlrc/pip.conf + env)',
             phase,
         )
-        script = _CLEAR_REMOTE_PROXY_SCRIPT
-        env = getattr(session, '_env', None)
-        if env is not None and hasattr(env, 'ssh_bash_noninteractive'):
-            # Avoid tmux send-keys on very long lines (remote tmux: unknown command C-m).
-            result = env.ssh_bash_noninteractive(script, timeout=20)
-        else:
-            result = session.exec_bash(script, timeout=20)
+        result = session.exec_bash(_CLEAR_REMOTE_PROXY_SCRIPT, timeout=20)
         exit_code = result.get('exit_code', -1)
         out = (result.get('output') or result.get('stdout') or '').strip()
         if exit_code == 0:
@@ -183,6 +180,16 @@ class BohriumSetupResult(NamedTuple):
     execution_workdir: str | None
     session_type: str | None
     runtime_snapshot: BohriumRuntimeSnapshot | None
+
+    @classmethod
+    def no_op(cls) -> BohriumSetupResult:
+        """Sentinel for 'no Bohrium setup performed' (e.g. missing creds)."""
+        return cls(False, None, None, None, None, None)
+
+    @classmethod
+    def aborted(cls, reason: str, elapsed_ms: int) -> BohriumSetupResult:
+        """Sentinel for an explicit abort with a user-facing reason."""
+        return cls(False, ((False, reason), elapsed_ms), None, None, None, None)
 
 
 class BohriumSetupService:
@@ -263,7 +270,8 @@ class BohriumSetupService:
         )
 
         sink = self._event_sink
-        assert sink is not None  # noqa: S101 -- caller guarantees
+        if sink is None:
+            raise RuntimeError('event_sink required for _make_event_bridge')
 
         def _cb(source: Any, event_type: str, content: Any, **extra: Any) -> None:
             try:
@@ -343,21 +351,26 @@ class BohriumSetupService:
     ) -> BohriumSetupResult:
         run_creds, user_id_for_ak, org_id = self._load_run_credentials(session_id)
         access_key = str(run_creds.get('access_key') or '').strip()
+        project_id = run_creds.get('project_id')
         if access_key:
             ak_result = BohriumAccessKeyFetchResult(
                 status='success',
                 access_key=access_key,
                 retryable=False,
             )
-        else:
+        elif bohrium_required or project_id is not None:
             ak_result = UserService.fetch_bohrium_access_key_result(
                 user_id_for_ak,
                 org_id,
             )
             if ak_result.access_key:
                 run_creds['access_key'] = ak_result.access_key
-
-        project_id = run_creds.get('project_id')
+        else:
+            # No Bohrium project requested and not required — skip the AK lookup.
+            ak_result = BohriumAccessKeyFetchResult(
+                status='not_attempted',
+                retryable=False,
+            )
         if bohrium_required and project_id is None:
             reason = 'Bohrium project_id 缺失，无法建立 Bohrium 运行环境'
             logger.warning(
@@ -371,14 +384,7 @@ class BohriumSetupService:
             )
             event_callback('System', 'error', reason)
             elapsed_ms = int((time.monotonic() - run_started_at) * 1000)
-            return BohriumSetupResult(
-                False,
-                ((False, reason), elapsed_ms),
-                None,
-                None,
-                None,
-                None,
-            )
+            return BohriumSetupResult.aborted(reason, elapsed_ms)
 
         if bohrium_required and not ak_result.access_key:
             reason = _build_access_key_failure_reason(ak_result)
@@ -397,14 +403,7 @@ class BohriumSetupService:
             )
             event_callback('System', 'error', reason)
             elapsed_ms = int((time.monotonic() - run_started_at) * 1000)
-            return BohriumSetupResult(
-                False,
-                ((False, reason), elapsed_ms),
-                None,
-                None,
-                None,
-                None,
-            )
+            return BohriumSetupResult.aborted(reason, elapsed_ms)
 
         return self._setup_bohrium_for_run(
             session_id=session_id,
@@ -452,14 +451,14 @@ def _setup_bohrium_for_run(
 ) -> BohriumSetupResult:
     """Prepare Bohrium node and SSH session for the run when credentials exist."""
     if not run_creds:
-        return BohriumSetupResult(False, None, None, None, None, None)
+        return BohriumSetupResult.no_op()
 
     project_id = run_creds.get('project_id')
     if project_id is not None:
         project_id = int(project_id)
     access_key = (run_creds.get('access_key') or '').strip()
     if not access_key or project_id is None:
-        return BohriumSetupResult(False, None, None, None, None, None)
+        return BohriumSetupResult.no_op()
 
     attach_local_bohrium_runtime_from_run_credentials(
         getattr(pg, 'session', None), run_creds
@@ -485,7 +484,7 @@ def _setup_bohrium_for_run(
                 tracked_node_ids = nodes_table.list_node_ids_for_user_org(
                     user_id_for_ak, org_id
                 )
-                cleanup_node_name = 'matmaster-session'
+                cleanup_node_name = get_default_node_name()
                 destroyed_node_ids = node_svc.destroy_untracked_nodes_by_name(
                     access_key,
                     tracked_node_ids,
@@ -729,8 +728,11 @@ def _setup_bohrium_for_run(
                     SESSIONS.get(session_id, {}).pop('bohrium_runtime', None)
                 try:
                     ssh_session.close()
-                except Exception:
-                    pass
+                except Exception as close_err:
+                    logger.debug(
+                        'run_agent: ssh_session.close failed during swap rollback: %s',
+                        close_err,
+                    )
                 raise
 
             remote_project_root = getattr(ssh_session, 'remote_project_root', '')
@@ -764,7 +766,7 @@ def _setup_bohrium_for_run(
                 'ssh',
                 runtime.snapshot(),
             )
-        return BohriumSetupResult(False, None, None, None, None, None)
+        return BohriumSetupResult.no_op()
     except Exception as e:
         reason = f'Bohrium 节点创建失败: {e}'
         logger.warning(
@@ -773,20 +775,11 @@ def _setup_bohrium_for_run(
             exc_info=True,
         )
         _emit_node_status(event_callback, node_id, 'failed', reason)
+        # The 'error' bridge mapping emits both ErrorEvent and StreamClosedEvent
+        # (treat_as_failure=True); do not follow up with a separate stream_closed.
         event_callback('System', 'error', reason)
         elapsed_ms = int((time.monotonic() - run_started_at) * 1000)
-        try:
-            event_callback(
-                'System',
-                'stream_closed',
-                'Bohrium 节点创建失败，会话已结束.',
-                elapsed_ms=elapsed_ms,
-            )
-        except Exception:
-            pass
-        return BohriumSetupResult(
-            False, ((False, reason), elapsed_ms), None, None, None, None
-        )
+        return BohriumSetupResult.aborted(reason, elapsed_ms)
 
 
 def _cleanup_bohrium_after_run(
@@ -813,12 +806,15 @@ def _cleanup_bohrium_after_run(
     row = sessions_service.get_session(session_id)
     org_id = ''
     project_id = None
+    user_id: str | None = None
     if row:
         org_id = (row.get('org_id') or '').strip()
         project_id = row.get('project_id')
         if project_id is not None:
             project_id = int(project_id)
-    user_id = sessions_service.get_session_user_id(session_id)
+        raw_uid = row.get('user_id')
+        if raw_uid is not None:
+            user_id = str(raw_uid)
     access_key = ''
     if user_id and org_id:
         access_key = UserService.get_bohrium_access_key(user_id, org_id) or ''

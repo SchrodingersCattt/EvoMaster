@@ -28,6 +28,13 @@ NODE_STATUS_READY = 2
 # 轮询间隔与最大等待时间（秒）
 POLL_INTERVAL = 5
 POLL_TIMEOUT = 600  # 10 分钟
+# 默认节点名（与 create_node 用同一来源，保证 destroy_untracked_nodes_by_name 匹配）
+_DEFAULT_NODE_NAME = 'matmaster-session'
+
+
+def get_default_node_name() -> str:
+    """返回环境覆盖（BOHRIUM_NODE_NAME）后的默认 Bohrium 节点名。"""
+    return os.environ.get('BOHRIUM_NODE_NAME', _DEFAULT_NODE_NAME)
 
 
 class BohriumNodeService:
@@ -51,7 +58,7 @@ class BohriumNodeService:
         创建节点。与 start.sh 中 node/add 请求一致。
         返回 {"node_id": int, "ip": str|None, "password": str|None}，未就绪时 ip/password 可能为空。
         """
-        name = name or os.environ.get('BOHRIUM_NODE_NAME', 'matmaster-session')
+        name = name or get_default_node_name()
         image_id = image_id or int(
             os.environ.get('BOHRIUM_IMAGE_ID', BOHRIUM_DEFAULT_IMAGE_ID)
         )
