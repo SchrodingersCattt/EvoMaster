@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path, PurePosixPath
 
 import pytest
@@ -69,8 +70,12 @@ class FakeRemoteSkillSession:
 
     def exec_bash(self, command: str, timeout: int | None = None) -> dict[str, object]:
         self.exec_calls.append(command)
-        paths = sorted(path for path in self._files if path.endswith("/SKILL.md"))
-        return {"exit_code": 0, "stdout": "\n".join(paths)}
+        payload = [
+            {"path": path, "content": self._files[path]}
+            for path in sorted(self._files)
+            if path.endswith("/SKILL.md")
+        ]
+        return {"exit_code": 0, "stdout": json.dumps(payload)}
 
     def read_file(self, path: str, encoding: str = "utf-8") -> str:
         self.read_calls.append(path)
@@ -413,7 +418,4 @@ class TestSkillRegistry:
             "/personal/.matmaster/skills/user-skill"
         )
         assert skill.get_full_info() == "Remote body"
-        assert session.read_calls == [
-            "/personal/.matmaster/skills/parent/SKILL.md",
-            "/personal/.matmaster/skills/user-skill/SKILL.md",
-        ]
+        assert session.read_calls == []

@@ -11,6 +11,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 import shlex
@@ -20,6 +21,33 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
+
+_REMOTE_SKILL_SCAN_SCRIPT = r"""
+import json
+import os
+import sys
+
+root = sys.argv[1]
+items = []
+for current, dirs, files in os.walk(root):
+    dirs[:] = sorted(dirs)
+    for filename in sorted(files):
+        if filename != "SKILL.md":
+            continue
+        path = os.path.join(current, filename)
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                content = fh.read()
+        except UnicodeDecodeError:
+            with open(path, "r", encoding="utf-8", errors="replace") as fh:
+                content = fh.read()
+        except OSError as exc:
+            items.append({"path": path, "error": str(exc)})
+            continue
+        items.append({"path": path, "content": content})
+items.sort(key=lambda item: item.get("path", ""))
+print(json.dumps(items, ensure_ascii=False))
+""".strip()
 
 
 def _optional_strip(value: str | None) -> str | None:
@@ -158,6 +186,34 @@ def _extract_full_info(content: str) -> str:
     return body_match.group(1).strip() if body_match else content
 
 
+def _remote_skill_scan_command(root: PurePosixPath) -> str:
+    return (
+        "python3 -c "
+        f"{shlex.quote(_REMOTE_SKILL_SCAN_SCRIPT)} "
+        f"{shlex.quote(str(root))}"
+    )
+
+
+def _parse_remote_skill_scan_stdout(stdout: Any) -> list[tuple[PurePosixPath, str]]:
+    payload = json.loads(str(stdout or "[]"))
+    if not isinstance(payload, list):
+        raise ValueError("remote skill scan payload must be a list")
+
+    records: list[tuple[PurePosixPath, str]] = []
+    for item in payload:
+        if not isinstance(item, dict):
+            continue
+        path = item.get("path")
+        content = item.get("content")
+        if item.get("error"):
+            logger.warning("Remote skill scan skipped %s: %s", path, item["error"])
+            continue
+        if not isinstance(path, str) or not isinstance(content, str):
+            continue
+        records.append((PurePosixPath(path), content))
+    return records
+
+
 # ---------------------------------------------------------------------------
 # SkillRegistry
 # ---------------------------------------------------------------------------
@@ -254,7 +310,7 @@ class SkillRegistry:
                 if not remote_session.path_exists(str(root)):
                     continue
                 result = remote_session.exec_bash(
-                    f"find {shlex.quote(str(root))} -type f -name SKILL.md | sort",
+                    _remote_skill_scan_command(root),
                     timeout=10,
                 )
             except Exception:
@@ -271,19 +327,23 @@ class SkillRegistry:
                 continue
 
             skill_dirs: set[PurePosixPath] = set()
-            stdout = result.get("stdout") or ""
-            for line in str(stdout).splitlines():
-                md_path_text = line.strip()
-                if not md_path_text:
-                    continue
-                md_path = PurePosixPath(md_path_text)
+            try:
+                remote_records = _parse_remote_skill_scan_stdout(result.get("stdout"))
+            except Exception:
+                logger.warning(
+                    "Remote skill scan returned invalid payload root=%s",
+                    root,
+                    exc_info=True,
+                )
+                continue
+
+            for md_path, content in remote_records:
                 skill_dir = md_path.parent
                 if self._has_underscore_ancestor(skill_dir, root):
                     continue
                 if self._is_nested_under(skill_dir, skill_dirs):
                     continue
                 try:
-                    content = remote_session.read_file(str(md_path))
                     skill = RemoteSkill(skill_dir, content)
                 except Exception:
                     logger.error(
