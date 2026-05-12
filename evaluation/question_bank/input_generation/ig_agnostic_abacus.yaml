@@ -353,6 +353,7 @@ questions:
       - generated_files
       - user_provided_files
       - diagnostics
+      - auxiliary_files
       - assumptions
       - submit_ready
       - bohrium_command
