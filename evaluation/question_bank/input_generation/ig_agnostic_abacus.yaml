@@ -1257,7 +1257,7 @@ questions:
   intent: Prepare ABACUS PBE+U LCAO cell-relax input directories for comparing rocksalt and square-planar NiO phases.
   human_prompt_seed: '我想用 ABACUS 比较 NiO 两种候选结构的相对稳定性：一个是常规岩盐相，另一个是 Ni 处于平面四配位环境的变形相。请先只准备后续计算需要的输入文件。
 
-    计算方法统一采用 LCAO 基组和 PBE+U，Ni 的 U 值取 5.0 eV；两套输入应使用一致的计算精度、赝势/轨道来源和 k 点采样策略，便于之后做能量比较。
+    计算方法统一采用 LCAO 基组和 PBE+U；两套输入应使用一致的计算精度、赝势/轨道来源和 k 点采样策略，便于之后做能量比较。
 
     工作区已经提供了 `POSCAR_rocksalt` 和 `POSCAR_square_planar`，请在当前目录下分别建立 `nio_rocksalt/` 和 `nio_square_planar/`，把对应 POSCAR 转写为 ABACUS `STRU`，并写入对应的 ABACUS `INPUT`。不要运行计算，也不要提交任务。'
   tags:
