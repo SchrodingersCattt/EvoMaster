@@ -3210,29 +3210,41 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_020_20260513
+- id: IG_abacus_020_20260514
   capability: input_generation
   domain: agnostic
-  intent: Test stru_file and kpoint_file routing when non-default filenames are provided.
+  intent: Test stru_file and kpoint_file routing when multiple non-default filenames coexist.
   human_prompt_seed: '工作目录中有如下文件：
 
-    - `Si_diamond.stru`（Si 金刚石结构，含赝势和轨道信息）
+    - `Si_diamond.stru`（Si 金刚石结构，2 原子原胞）
+
+    - `Si_fcc.stru`（Si FCC 结构，1 原子原胞）
 
     - `kpt_444.txt`（Gamma-centered 4×4×4 网格）
 
+    - `kpt_666.txt`（Gamma-centered 6×6×6 网格）
 
-    请为其准备 ABACUS PW 单点自洽计算。所有生成的文件放在 `run_si/` 目录下。'
+
+    请为 **Si 金刚石结构** 准备 ABACUS PW 单点自洽计算，使用 **4×4×4 k 点网格**。所有生成的文件放在 `run_si/` 目录下。'
   tags:
   - eng_abacus
   data_files:
-  - key: si_stru
-    path: data/IG_abacus_020_20260513/Si_diamond.stru
+  - key: si_diamond_stru
+    path: data/IG_abacus_020_20260514/Si_diamond.stru
     oss_url: ''
-    description: Si diamond STRU with PP/orbital info (non-default filename).
-  - key: kpt_file
-    path: data/IG_abacus_020_20260513/kpt_444.txt
+    description: Si diamond STRU with PP info (non-default filename).
+  - key: si_fcc_stru
+    path: data/IG_abacus_020_20260514/Si_fcc.stru
+    oss_url: ''
+    description: Si FCC STRU with PP info (non-default filename, distractor).
+  - key: kpt_444
+    path: data/IG_abacus_020_20260514/kpt_444.txt
     oss_url: ''
     description: Pre-made KPT file with 4x4x4 Gamma mesh (non-default filename).
+  - key: kpt_666
+    path: data/IG_abacus_020_20260514/kpt_666.txt
+    oss_url: ''
+    description: Pre-made KPT file with 6x6x6 Gamma mesh (non-default filename, distractor).
   reference_answers:
   - key: input_artifact
     value: run_si/INPUT
@@ -3265,18 +3277,18 @@ questions:
       flags: im
   - key: turn_budget
     value:
-      max: 8
+      max: 12
   scoring_checklist:
   - id: input_artifact
     criterion: run_si/INPUT is written to workspace.
     axis: correctness
     verify: artifact_exists
   - id: must_stru_file_set
-    criterion: '[Must] INPUT contains stru_file pointing to Si_diamond.stru.'
+    criterion: '[Must] INPUT contains stru_file pointing to Si_diamond.stru (not Si_fcc.stru).'
     axis: correctness
     verify: text_file_regex
   - id: must_kpoint_file_set
-    criterion: '[Must] INPUT contains kpoint_file pointing to kpt_444.txt.'
+    criterion: '[Must] INPUT contains kpoint_file pointing to kpt_444.txt (not kpt_666.txt).'
     axis: correctness
     verify: text_file_regex
   - id: must_input_core
