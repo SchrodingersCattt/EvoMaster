@@ -69,7 +69,7 @@ banks:
 - path: input_generation/ig_agnostic_abacus.yaml
   capability: input_generation
   domain: agnostic
-  questions: 22
+  questions: 20
 - path: input_generation/ig_agnostic_gpumd.yaml
   capability: input_generation
   domain: agnostic
@@ -113,15 +113,15 @@ banks:
 - path: structure_construction/sc_agnostic.yaml
   capability: structure_construction
   domain: agnostic
-  questions: 15
+  questions: 12
 - path: structure_construction/sc_catalysis.yaml
   capability: structure_construction
   domain: catalysis
-  questions: 2
+  questions: 3
 - path: structure_construction/sc_semiconductor.yaml
   capability: structure_construction
   domain: semiconductor
-  questions: 2
+  questions: 3
 - path: structure_retrieval/rt_agnostic.yaml
   capability: structure_retrieval
   domain: agnostic
@@ -160,5 +160,17 @@ banks:
   questions: 3
 - path: platform/wo_battery.yaml
   capability: workflow_orchestration
+  domain: battery
+  questions: 1
+- path: input_generation/ig_semiconductor_abacus.yaml
+  capability: input_generation
+  domain: semiconductor
+  questions: 1
+- path: input_generation/ig_catalysis_abacus.yaml
+  capability: input_generation
+  domain: catalysis
+  questions: 1
+- path: structure_construction/sc_battery.yaml
+  capability: structure_construction
   domain: battery
   questions: 1

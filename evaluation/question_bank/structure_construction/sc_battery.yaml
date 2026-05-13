@@ -1,0 +1,56 @@
+version: v5
+capability: structure_construction
+domain: battery
+questions:
+- id: SC_solution_box_001_20260513
+  capability: structure_construction
+  domain: battery
+  intent: Build an electrolyte solution box at specified concentration and atom count.
+  human_prompt_seed: 请构建 1 mol/L ZnSO4 水溶液模型，总原子数约 2000 个，输出为 `ZnSO4_solution.cif`。
+  tags:
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: solution_artifact
+    value: ZnSO4_solution.cif
+  - key: must_atom_count
+    value:
+      filename: ZnSO4_solution.cif
+      min: 1500
+      max: 2500
+  - key: turn_budget
+    value:
+      max: 25
+  scoring_checklist:
+  - id: solution_artifact
+    criterion: ZnSO4_solution.cif written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_parsable
+    criterion: '[Must] Output file is parsable.'
+    axis: correctness
+    verify: struct_file_parsable
+  - id: must_atom_count
+    criterion: '[Must] Total atom count is approximately 2000 (1500-2500 acceptable).'
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: must_has_zn
+    criterion: '[Must] Structure contains Zn atoms.'
+    axis: correctness
+    verify: struct_file_formula
+  - id: must_has_s
+    criterion: '[Must] Structure contains S atoms.'
+    axis: correctness
+    verify: struct_file_formula
+  - id: must_has_o
+    criterion: '[Must] Structure contains O atoms.'
+    axis: correctness
+    verify: struct_file_formula
+  - id: must_has_h
+    criterion: '[Must] Structure contains H atoms (water).'
+    axis: correctness
+    verify: struct_file_formula
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
