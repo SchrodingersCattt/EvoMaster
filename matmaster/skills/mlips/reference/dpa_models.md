@@ -2,6 +2,8 @@
 
 ## Available Models
 
+> URLs below are a snapshot. For the current canonical provenance (latest version, byte size, fresh download link) of any DPA checkpoint — and for models not listed here — invoke the **`aissq-explorer`** skill instead of hardcoding URLs.
+
 | Name | Params | URL | Default Head | Notes |
 |------|--------|-----|-------------|-------|
 | DPA2.4-7M | 6.6M | `https://bohrium.oss-cn-zhangjiakou.aliyuncs.com/13756/27666/store/upload/cd12300a-d3e6-4de9-9783-dd9899376cae/dpa-2.4-7M.pt` | OMat24 | 37-head shared fitting, 120GPU pretrain |

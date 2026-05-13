@@ -2685,3 +2685,262 @@ questions:
     criterion: Total token usage within budget.
     axis: efficiency
     verify: token_budget
+- id: WO_mlip_fetch_001_20260513
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Acquire the current latest DPA-3 universal MLIP checkpoint and record machine-verifiable provenance (file name, byte size, modify date, download host).
+  human_prompt_seed: '准备复现一篇用 DPA-3 通用势的工作，请把当前可用的最新一版 DPA-3 检查点准备到本地工作目录，并给我写一份
+    `model_provenance.json`，至少包含字段：`name`、`version_or_modify_date`、`file_name`、`size_bytes`、`download_host`。
+    再在最终回答里简述你是怎么确认这是「当前最新版」的（什么来源、看了哪些候选）。禁止编造文件名、大小或下载链接。
+
+    '
+  tags:
+  - code_mlip
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: provenance_json
+    value: model_provenance.json
+  - key: provenance_required_tokens
+    value:
+      filename: model_provenance.json
+      tokens:
+      - name
+      - version_or_modify_date
+      - file_name
+      - size_bytes
+      - download_host
+      flags: i
+  - key: dpa3_name_tokens
+    value:
+      filename: model_provenance.json
+      tokens:
+      - DPA-3
+      flags: i
+  - key: turn_budget
+    value:
+      max: 10
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 7000
+  scoring_checklist:
+  - id: provenance_json
+    criterion: Agent writes `model_provenance.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: provenance_required_tokens
+    criterion: Provenance JSON includes name, version_or_modify_date, file_name, size_bytes, and download_host fields.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: dpa3_name_tokens
+    criterion: Provenance JSON refers to a DPA-3 family checkpoint.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: grounding_registry_lookup
+    criterion: The reported provenance fields (file name, size, download_host, modifyDate) are grounded in a registry/catalog lookup actually performed by the agent (e.g. a query against an MLIP asset registry returning files[].downloadLink and size). The agent must NOT hand-type a generic OSS URL or invent a byte size from memory.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical lookup/download calls with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock duration within benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: WO_mlip_fetch_002_20260513
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Discover a public DFT-labeled energetic-materials training dataset suitable for fine-tuning a foundation MLIP, with verifiable source provenance.
+  human_prompt_seed: '我们想在含能材料体系上对一个通用 MLIP 做微调。先帮我物色一份**公开的、带 DFT 能量/力标签**、可直接用于训练的含能材料数据集；交付：
+
+    1) `dataset_candidate.json`：至少包含 `name`、`source_platform`、`files`（数组，元素含 fileName 与 size_bytes）、`total_size_bytes`、`downloadable`（布尔，是否能直接下载）；
+
+    2) `notes.md`：一段解释为什么这个候选合适、覆盖什么化学空间、来源平台是哪里。
+
+    禁止编造数据集名、文件清单、大小或下载链接。如果暂时只找到一个候选，也写清楚为什么没有更多。
+
+    '
+  tags:
+  - code_mlip
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: candidate_json
+    value: dataset_candidate.json
+  - key: notes_md
+    value: notes.md
+  - key: candidate_required_tokens
+    value:
+      filename: dataset_candidate.json
+      tokens:
+      - name
+      - source_platform
+      - files
+      - total_size_bytes
+      - downloadable
+      flags: i
+  - key: notes_required_tokens
+    value:
+      filename: notes.md
+      tokens:
+      - 含能
+      - 数据集
+      - DFT
+      flags: i
+  - key: turn_budget
+    value:
+      max: 12
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: candidate_json
+    criterion: Agent writes `dataset_candidate.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: notes_md
+    criterion: Agent writes `notes.md` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: candidate_required_tokens
+    criterion: Candidate JSON includes name, source_platform, files, total_size_bytes, downloadable.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: notes_required_tokens
+    criterion: Notes mention energetic-materials context and DFT labels.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: grounding_registry_lookup
+    criterion: The dataset name, file listing, sizes, and source_platform are grounded in an actual registry / catalog query the agent performed (e.g. a list/search call that returned the dataset object). Hand-typing a dataset name from memory without verifying via a registry call should fail this item.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_fabrication
+    criterion: The agent does not invent dataset file names or sizes; missing fields are reported as null/unknown rather than fabricated.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical lookup calls.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock duration within benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: WO_mlip_fetch_003_20260513
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Prepare a charge/spin-capable universal MLIP checkpoint and a minimal ASE single-point script, with checkpoint provenance grounded in a registry lookup.
+  human_prompt_seed: '我有个带 +1 电荷的小分子吸附体系，想跑单点能。请挑一款**支持 charge/spin 输入**的通用 MLIP 检查点准备到工作目录，
+    并写一段最小可运行的 ASE 单点能脚本（导入对应 calculator，对一个示例结构跑 `atoms.get_potential_energy()`）。最终交付：
+
+    1) `model_card.json`：至少包含 `checkpoint_file_name`、`size_bytes`、`download_host`、`fparam_order`（声明 fparam 输入顺序，例如 `[charge, spin_multiplicity]`）；
+
+    2) `single_point.py`：可运行的 ASE 脚本（不必真的执行，只需正确导入 calculator 并装配 atoms / charge / spin）。
+
+    禁止编造 checkpoint 文件名、字节大小或下载链接。
+
+    '
+  tags:
+  - code_mlip
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: model_card_json
+    value: model_card.json
+  - key: single_point_py
+    value: single_point.py
+  - key: card_required_tokens
+    value:
+      filename: model_card.json
+      tokens:
+      - checkpoint_file_name
+      - size_bytes
+      - download_host
+      - fparam_order
+      flags: i
+  - key: fparam_tokens
+    value:
+      filename: model_card.json
+      tokens:
+      - charge
+      - spin
+      flags: i
+  - key: size_bytes_range
+    value:
+      filename: model_card.json
+      key: size_bytes
+      expected: 70000000
+      tolerance: 20000000
+  - key: turn_budget
+    value:
+      max: 12
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: model_card_json
+    criterion: Agent writes `model_card.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: single_point_py
+    criterion: Agent writes `single_point.py` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: card_required_tokens
+    criterion: Model card JSON includes checkpoint_file_name, size_bytes, download_host, fparam_order.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: fparam_tokens
+    criterion: Model card declares charge and spin support (fparam includes these).
+    axis: correctness
+    verify: text_file_contains_all
+  - id: size_bytes_range
+    criterion: Reported checkpoint size_bytes is in the realistic range for a charge/spin-capable foundation DPA model (50-90 MB).
+    axis: grounding
+    verify: json_file_numeric_range
+  - id: grounding_registry_lookup
+    criterion: The checkpoint provenance (size_bytes, download_host, file name) is grounded in a registry/catalog lookup performed by the agent, not invented or pulled from a hardcoded OSS URL.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical lookup calls.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock duration within benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget

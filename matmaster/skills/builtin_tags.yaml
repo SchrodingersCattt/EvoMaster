@@ -25,6 +25,7 @@ skills:
   gromacs: [molecular-dynamics]
   gpumd: [machine-learning-potential, molecular-dynamics]
   mlips: [machine-learning-potential, molecular-dynamics]
+  aissq-explorer: [machine-learning-potential]
 
   inspect-atomic-structure: [structure]
   build-atomic-structure: [structure]
