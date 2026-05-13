@@ -97,7 +97,7 @@ banks:
 - path: scientific_analysis/sa_battery.yaml
   capability: scientific_analysis
   domain: battery
-  questions: 1
+  questions: 2
 - path: scientific_analysis/sa_catalysis.yaml
   capability: scientific_analysis
   domain: catalysis
@@ -137,7 +137,7 @@ banks:
 - path: workflow_orchestration/wo_agnostic.yaml
   capability: workflow_orchestration
   domain: agnostic
-  questions: 29
+  questions: 30
 - path: workflow_orchestration/wo_agnostic_gpumd_nep_clean.yaml
   capability: workflow_orchestration
   domain: agnostic
@@ -173,4 +173,4 @@ banks:
 - path: structure_construction/sc_battery.yaml
   capability: structure_construction
   domain: battery
-  questions: 1
+  questions: 2

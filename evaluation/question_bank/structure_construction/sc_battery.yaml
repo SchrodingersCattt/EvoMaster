@@ -65,3 +65,59 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
+- id: SC_ec_fluorination_001_20260513
+  capability: structure_construction
+  domain: battery
+  intent: Enumerate fluorine-substituted derivatives of EC molecule and output SMILES
+    list with 3D structures.
+  human_prompt_seed: '以碳酸乙烯酯 EC (SMILES: C1COC(=O)O1) 为母体，枚举所有将 H 替换为
+    F 的衍生物（1 个 F、2 个 F、3 个 F 三种情况），考虑对称性去重。将去重后的所有
+    unique SMILES 写入 `ec_fluorinated.csv`（含列 name, smiles, n_fluorine），并为每个衍生物生成
+    3D 构象文件放入 `structures/` 目录。'
+  tags:
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: csv_artifact
+    value: ec_fluorinated.csv
+  - key: must_csv_header
+    value:
+      filename: ec_fluorinated.csv
+      tokens:
+      - name
+      - smiles
+      - n_fluorine
+      flags: ''
+  - key: turn_budget
+    value:
+      max: 20
+  scoring_checklist:
+  - id: csv_artifact
+    criterion: ec_fluorinated.csv written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_csv_header
+    criterion: '[Must] CSV contains required columns (name, smiles, n_fluorine).'
+    axis: correctness
+    verify: text_file_contains_all
+  - id: correct_count
+    criterion: The total number of unique derivatives after symmetry deduplication is
+      correct. EC has 4 H atoms on 2 symmetry-inequivalent positions (2 on CH2-O and
+      2 on CH2-O), so expected unique counts are approximately 2 (mono-F) + 3 (di-F)
+      + 2 (tri-F) = 7 unique SMILES, though exact count depends on symmetry treatment.
+      Accept 6-10 unique entries.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: valid_smiles
+    criterion: All SMILES in the CSV are valid (parseable by RDKit) and each contains
+      the correct number of F atoms matching n_fluorine column.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: structures_generated
+    criterion: 3D structure files exist in structures/ directory, one per SMILES entry.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget

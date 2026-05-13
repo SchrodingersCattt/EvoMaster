@@ -2685,3 +2685,77 @@ questions:
     criterion: Total token usage within budget.
     axis: efficiency
     verify: token_budget
+- id: WO_finetune_001_20260513
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Set up a real DP model fine-tuning workflow given training data and a base
+    model, producing training config and submission artifacts.
+  human_prompt_seed: '工作区中有 NaCl 体系的 DFT 训练数据 `train_data/`（dpdata 格式，含
+    energy/force/virial），基础模型为 `DPA2-base.pt`。请对该模型进行 fine-tune 以获得
+    NaCl 专用势函数。输出训练配置文件 `finetune_input.json` 和提交配置 `finetune_submit.json`。'
+  tags:
+  - code_mlip
+  data_files:
+  - key: train_data
+    path: data/WO_finetune_001/train_data/type_map.raw
+    oss_url: ''
+    description: Minimal dpdata training set placeholder (type_map.raw with Na Cl).
+  - key: base_model
+    path: data/WO_finetune_001/DPA2-base.pt
+    oss_url: ''
+    description: Dummy base model file (placeholder).
+  reference_answers:
+  - key: config_artifact
+    value: finetune_input.json
+  - key: submit_artifact
+    value: finetune_submit.json
+  - key: must_config_training_data
+    value:
+      filename: finetune_input.json
+      pattern: train_data
+      flags: ''
+  - key: must_config_base_model
+    value:
+      filename: finetune_input.json
+      pattern: DPA2-base
+      flags: ''
+  - key: must_submit_train_cmd
+    value:
+      filename: finetune_submit.json
+      pattern: dp\s+--pt\s+train|dp\s+train|finetune
+      flags: i
+  - key: turn_budget
+    value:
+      max: 15
+  scoring_checklist:
+  - id: config_artifact
+    criterion: finetune_input.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: submit_artifact
+    criterion: finetune_submit.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_config_training_data
+    criterion: '[Must] Training config references the train_data path.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_config_base_model
+    criterion: '[Must] Training config references DPA2-base.pt as the base/pretrained
+      model for fine-tuning.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_submit_train_cmd
+    criterion: '[Must] Submission config cmd includes dp train or finetune command.'
+    axis: correctness
+    verify: text_file_regex
+  - id: config_structure
+    criterion: finetune_input.json has a valid DeePMD-kit training config structure
+      including model, learning_rate, loss, and training sections with finetune-appropriate
+      settings (frozen base model, lower learning rate than from-scratch).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
