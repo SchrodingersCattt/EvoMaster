@@ -77,7 +77,7 @@ banks:
 - path: input_generation/ig_agnostic_lammps.yaml
   capability: input_generation
   domain: agnostic
-  questions: 1
+  questions: 2
 - path: input_generation/ig_agnostic_cp2k.yaml
   capability: input_generation
   domain: agnostic

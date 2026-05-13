@@ -79,3 +79,96 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+- id: IG_lammps_gaff_001_20260513
+  capability: input_generation
+  domain: agnostic
+  intent: Generate LAMMPS input files for polymer structure optimization using GAFF
+    classical force field, testing knowledge of correct units/atom_style/pair_style
+    combination.
+  human_prompt_seed: '工作区中有一个 20 重复单元的聚乙烯链结构 `polyethylene.xyz`。请使用 GAFF
+    力场为该体系准备 LAMMPS 结构优化输入，输出 `in.lammps` 和 `data.lammps`。'
+  tags:
+  - eng_lammps
+  data_files:
+  - key: pe_xyz
+    path: data/IG_lammps_gaff_001/polyethylene.xyz
+    oss_url: ''
+    description: Polyethylene chain (20 repeat units, ~62 atoms).
+  reference_answers:
+  - key: input_artifact
+    value: in.lammps
+  - key: data_artifact
+    value: data.lammps
+  - key: must_units_real
+    value:
+      filename: in.lammps
+      pattern: units\s+real
+      flags: ''
+  - key: must_atom_style_full
+    value:
+      filename: in.lammps
+      pattern: atom_style\s+full
+      flags: ''
+  - key: must_pair_style
+    value:
+      filename: in.lammps
+      pattern: pair_style\s+lj
+      flags: ''
+  - key: must_bond_style
+    value:
+      filename: in.lammps
+      pattern: bond_style\s+harmonic
+      flags: ''
+  - key: must_minimize
+    value:
+      filename: in.lammps
+      pattern: minimize
+      flags: ''
+  - key: must_data_bonds
+    value:
+      filename: data.lammps
+      pattern: Bonds
+      flags: ''
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: input_artifact
+    criterion: in.lammps written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: data_artifact
+    criterion: data.lammps written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_units_real
+    criterion: '[Must] Uses "units real" (kcal/mol, Angstrom, fs) appropriate for
+      organic/GAFF systems.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_atom_style_full
+    criterion: '[Must] Uses "atom_style full" (required for bonded interactions with
+      charges).'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_pair_style
+    criterion: '[Must] pair_style includes lj (Lennard-Jones for GAFF van der Waals).'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_bond_style
+    criterion: '[Must] bond_style harmonic (standard for GAFF).'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_minimize
+    criterion: '[Must] Input includes minimize command for structure optimization.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_data_bonds
+    criterion: '[Must] data.lammps contains Bonds section (bonded topology required
+      for polymer).'
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
