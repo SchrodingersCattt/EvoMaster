@@ -61,7 +61,7 @@ banks:
 - path: execution_contract/ec_agnostic.yaml
   capability: execution_contract
   domain: agnostic
-  questions: 9
+  questions: 10
 - path: input_generation/ig_agnostic_vasp.yaml
   capability: input_generation
   domain: agnostic
@@ -125,7 +125,7 @@ banks:
 - path: structure_retrieval/rt_agnostic.yaml
   capability: structure_retrieval
   domain: agnostic
-  questions: 7
+  questions: 8
 - path: structure_retrieval/rt_battery.yaml
   capability: structure_retrieval
   domain: battery
