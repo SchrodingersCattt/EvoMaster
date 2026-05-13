@@ -6,6 +6,7 @@ import tempfile
 import zipfile
 from contextlib import contextmanager
 from pathlib import Path
+from uuid import uuid4
 
 from matmaster.bohrium.client import get_file_token
 from matmaster.bohrium.types import BohriumContext
@@ -20,6 +21,10 @@ from .models import BohriumDownloadTarget, BohriumInputSource
 from .remote_runner import run_remote_transfer
 
 logger = logging.getLogger(__name__)
+
+
+def _new_transfer_id(prefix: str) -> str:
+    return f"{prefix}-{uuid4().hex}"
 
 
 def _zip_local_dir(input_dir: Path, zip_path: Path) -> None:
@@ -53,6 +58,7 @@ def upload_input_source(
         store_host = str(create_data["storeHost"]).rstrip("/")
         token = str(create_data["token"]).strip()
         payload = {
+            "transfer_id": _new_transfer_id("submit"),
             "input_dir": source.resolved_path,
             "store_host": store_host,
             "store_path": store_path,
@@ -104,6 +110,7 @@ def download_remote_results(
     session,
 ) -> tuple[list[str], str, str]:
     payload: dict = {
+        "transfer_id": _new_transfer_id("download"),
         "job_id": str(job_id),
         "result_dir": target.resolved_path,
         "sandbox": ctx.sandbox,

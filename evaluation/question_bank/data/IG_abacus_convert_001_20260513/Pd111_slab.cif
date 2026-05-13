@@ -1,0 +1,32 @@
+data_Pd111_slab
+_cell_length_a   5.481
+_cell_length_b   5.481
+_cell_length_c   26.713
+_cell_angle_alpha   90.000
+_cell_angle_beta   90.000
+_cell_angle_gamma   120.000
+_symmetry_space_group_name_H-M   'P 1'
+_symmetry_Int_Tables_number   1
+
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+Pd1  Pd  0.00000  0.00000  0.09402
+Pd2  Pd  0.50000  0.00000  0.09402
+Pd3  Pd  0.00000  0.50000  0.09402
+Pd4  Pd  0.50000  0.50000  0.09402
+Pd5  Pd  0.16667  0.33333  0.17094
+Pd6  Pd  0.66667  0.33333  0.17094
+Pd7  Pd  0.16667  0.83333  0.17094
+Pd8  Pd  0.66667  0.83333  0.17094
+Pd9  Pd  0.33333  0.66667  0.24786
+Pd10 Pd  0.83333  0.66667  0.24786
+Pd11 Pd  0.33333  0.16667  0.24786
+Pd12 Pd  0.83333  0.16667  0.24786
+Pd13 Pd  0.00000  0.00000  0.32479
+Pd14 Pd  0.50000  0.00000  0.32479
+Pd15 Pd  0.00000  0.50000  0.32479
+Pd16 Pd  0.50000  0.50000  0.32479

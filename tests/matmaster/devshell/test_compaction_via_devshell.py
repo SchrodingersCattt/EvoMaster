@@ -93,7 +93,7 @@ class FailingSummaryProvider:
 
 
 class _EmptyRehydrator:
-    async def build(self) -> str:
+    async def build(self, *, until_event_id: int | None = None) -> str:
         return ""
 
 

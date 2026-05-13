@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+import json
+from pathlib import Path, PurePosixPath
 
 import pytest
 
@@ -52,6 +53,33 @@ Nested body.
 """
 
 SKILL_MD_NO_FRONTMATTER = "No frontmatter here."
+
+
+class FakeRemoteSkillSession:
+    def __init__(self, files: dict[str, str]) -> None:
+        self._files = files
+        self.exec_calls: list[str] = []
+        self.read_calls: list[str] = []
+
+    def path_exists(self, path: str) -> bool:
+        prefix = path.rstrip("/") + "/"
+        return any(
+            candidate == path or candidate.startswith(prefix)
+            for candidate in self._files
+        )
+
+    def exec_bash(self, command: str, timeout: int | None = None) -> dict[str, object]:
+        self.exec_calls.append(command)
+        payload = [
+            {"path": path, "content": self._files[path]}
+            for path in sorted(self._files)
+            if path.endswith("/SKILL.md")
+        ]
+        return {"exit_code": 0, "stdout": json.dumps(payload)}
+
+    def read_file(self, path: str, encoding: str = "utf-8") -> str:
+        self.read_calls.append(path)
+        return self._files[path]
 
 
 @pytest.fixture()
@@ -217,59 +245,16 @@ class TestSkill:
         with pytest.raises(FileNotFoundError):
             Skill(empty_dir)
 
-    def test_scan_scripts(self, skill_tree: dict[str, Path]) -> None:
-        """_scan_scripts finds .py and .sh files but not .md files."""
-        from matmaster.skills.registry import Skill
-
-        skill = Skill(skill_tree["root1"] / "calculator")
-        script_names = sorted(s.name for s in skill.available_scripts)
-        assert script_names == ["helper.sh", "run.py"]
-
-    def test_get_script_path(self, skill_tree: dict[str, Path]) -> None:
-        """get_script_path returns the Path for a known script, None for unknown."""
-        from matmaster.skills.registry import Skill
-
-        skill = Skill(skill_tree["root1"] / "calculator")
-        assert skill.get_script_path("run.py") is not None
-        assert skill.get_script_path("run.py").name == "run.py"
-        assert skill.get_script_path("nonexistent.py") is None
-
-    def test_get_reference_in_references_dir(self, skill_tree: dict[str, Path]) -> None:
-        """get_reference finds a file in the references/ subdirectory."""
-        from matmaster.skills.registry import Skill
-
-        skill = Skill(skill_tree["root1"] / "calculator")
-        content = skill.get_reference("api.md")
-        assert content == "API reference content"
-
-    def test_get_reference_fallback_to_common(
+    def test_skill_exposes_only_active_runtime_helpers(
         self, skill_tree: dict[str, Path]
     ) -> None:
-        """get_reference falls back to _common/reference/ when not found locally."""
-        from matmaster.skills.registry import Skill
-
-        # search skill has no local references — should fall back to _common
-        skill = Skill(skill_tree["root1"] / "search")
-        content = skill.get_reference("shared.md")
-        assert content == "Shared reference content"
-
-    def test_get_reference_fallback_to_common_root(
-        self, skill_tree: dict[str, Path]
-    ) -> None:
-        """get_reference falls back to _common/<name> (no reference/ subdir)."""
-        from matmaster.skills.registry import Skill
-
-        skill = Skill(skill_tree["root1"] / "search")
-        content = skill.get_reference("greeting.md")
-        assert content == "Hello from _common"
-
-    def test_get_reference_not_found_raises(self, skill_tree: dict[str, Path]) -> None:
-        """get_reference raises FileNotFoundError when no candidate exists."""
+        """Skill no longer exposes legacy reference/script dispatch helpers."""
         from matmaster.skills.registry import Skill
 
         skill = Skill(skill_tree["root1"] / "calculator")
-        with pytest.raises(FileNotFoundError):
-            skill.get_reference("does_not_exist.md")
+        assert not hasattr(skill, "available_scripts")
+        assert not hasattr(skill, "get_script_path")
+        assert not hasattr(skill, "get_reference")
 
 
 # ===========================================================================
@@ -381,3 +366,56 @@ class TestSkillRegistry:
         assert "A calculation skill" in ctx
         assert "[Skill: search]" in ctx
         assert "Web search skill" in ctx
+
+    def test_remote_root_scan_via_session(self) -> None:
+        """Registry discovers SKILL.md files from session-backed remote roots."""
+        from matmaster.skills.registry import SkillRegistry
+
+        session = FakeRemoteSkillSession(
+            {
+                "/personal/.matmaster/skills/user-skill/SKILL.md": (
+                    "---\n"
+                    "name: user-skill\n"
+                    "description: User remote skill\n"
+                    "---\n"
+                    "Remote body\n"
+                ),
+                "/personal/.matmaster/skills/_internal/SKILL.md": (
+                    "---\n"
+                    "name: hidden\n"
+                    "description: Hidden\n"
+                    "---\n"
+                    "Hidden body\n"
+                ),
+                "/personal/.matmaster/skills/parent/SKILL.md": (
+                    "---\n"
+                    "name: parent\n"
+                    "description: Parent\n"
+                    "---\n"
+                    "Parent body\n"
+                ),
+                "/personal/.matmaster/skills/parent/scripts/SKILL.md": (
+                    "---\n"
+                    "name: nested\n"
+                    "description: Nested\n"
+                    "---\n"
+                    "Nested body\n"
+                ),
+            }
+        )
+
+        reg = SkillRegistry(
+            [],
+            remote_session=session,
+            remote_roots=["/personal/.matmaster/skills"],
+        )
+
+        names = sorted(skill.meta_info.name for skill in reg.get_all_skills())
+        assert names == ["parent", "user-skill"]
+        skill = reg.get_skill("user-skill")
+        assert skill is not None
+        assert skill.skill_path == PurePosixPath(
+            "/personal/.matmaster/skills/user-skill"
+        )
+        assert skill.get_full_info() == "Remote body"
+        assert session.read_calls == []

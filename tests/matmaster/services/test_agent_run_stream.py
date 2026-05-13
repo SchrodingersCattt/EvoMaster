@@ -30,12 +30,6 @@ from matmaster.types.events import (
 # ---------------------------------------------------------------------------
 
 
-def _make_empty_sync_result():
-    from src.services.user_skills_sync import UserSkillsSyncResult
-
-    return UserSkillsSyncResult()
-
-
 def _make_mock_playground(pg_ctx: Any) -> Any:
     """Build a mock Playground that returns the given PlaygroundContext."""
     pg = MagicMock()
@@ -50,6 +44,8 @@ def _make_mock_playground(pg_ctx: Any) -> Any:
 
 def _make_mock_pg_ctx() -> MagicMock:
     """Build a mock PlaygroundContext with minimum viable fields."""
+    from matmaster.types.runtime_ports import PlaygroundRuntimePorts
+
     ctx = MagicMock()
     ctx.workdir = '/tmp/workspace'
     ctx.execution_workdir = '/tmp/workspace'
@@ -60,8 +56,22 @@ def _make_mock_pg_ctx() -> MagicMock:
     ctx.session.read_file.return_value = ''
     ctx.archival = None
     ctx.run_meta = {}
+    ctx.runtime_ports = PlaygroundRuntimePorts()
     ctx.with_bohrium.return_value = ctx
     ctx.with_execution.return_value = ctx
+
+    def _with_runtime_ports(runtime_ports: PlaygroundRuntimePorts) -> MagicMock:
+        ctx.runtime_ports = runtime_ports
+        return ctx
+
+    ctx.with_runtime_ports.side_effect = _with_runtime_ports
+
+    def _with_run_meta(**fields: Any) -> MagicMock:
+        if fields:
+            ctx.run_meta = {**ctx.run_meta, **fields}
+        return ctx
+
+    ctx.with_run_meta.side_effect = _with_run_meta
 
     def _model_copy(*, update: dict[str, Any] | None = None, **_: Any) -> MagicMock:
         if update:
@@ -147,11 +157,6 @@ def _standard_patches():
         patch('src.services.agent_run_service.PersistenceHandler'),
         patch('src.services.agent_run_service.WorkspaceHandler'),
         patch('src.services.agent_run_service.BohriumSetupService'),
-        patch('src.services.agent_run_service.derive_skill_sync_spec'),
-        patch(
-            'src.services.agent_run_service.materialize_user_skills_for_run',
-            return_value=_make_empty_sync_result(),
-        ),
         patch(
             'src.services.agent_run_service.HistoryRestoreService',
             create=True,
@@ -182,10 +187,8 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
         persistence_handler_cls = mocks[3]
         workspace_handler_cls = mocks[4]
         bohrium_cls = mocks[5]
-        mocks[6]  # derive_skill_sync_spec
-        mocks[7]  # materialize_user_skills_for_run
-        history_restore_cls = mocks[8]
-        redis_fn = mocks[9]
+        history_restore_cls = mocks[6]
+        redis_fn = mocks[7]
 
         # PlaygroundManager mock
         pg_ctx = _make_mock_pg_ctx()
@@ -350,7 +353,7 @@ async def test_run_agent_injects_cancel_token_into_session_and_exp():
 
 
 @pytest.mark.asyncio
-async def test_run_agent_injects_event_sink_into_pg_ctx_run_meta():
+async def test_run_agent_injects_child_event_forward_sink_into_runtime_ports():
     run_result = RunResultEvent(source='agent', status='completed', reason='natural')
 
     async with _patched_service([run_result]) as (svc, _sse, _persist):
@@ -364,7 +367,8 @@ async def test_run_agent_injects_event_sink_into_pg_ctx_run_meta():
         )
 
     assert ok is True
-    injected = svc._test_fake_exp.last_ctx.run_meta['event_sink']
+    ports = svc._test_fake_exp.last_ctx.runtime_ports
+    injected = ports.child_event_forward_sink
     assert callable(injected)
     assert svc._test_fake_exp.last_ctx.run_meta['task_id'] == 'task-1'
 
@@ -393,6 +397,35 @@ async def test_run_agent_injects_figure_upload_config_into_pg_ctx_run_meta():
     assert figure_cfg.session_id == 'sess-1'
     assert figure_cfg.task_id == 'task-1'
     assert callable(figure_cfg.upload_bytes)
+
+
+@pytest.mark.asyncio
+async def test_run_agent_injects_current_input_context_into_pg_ctx_run_meta():
+    from matmaster.types.current_input import CurrentInputContext
+
+    run_result = RunResultEvent(source="agent", status="completed", reason="natural")
+    current_input_context = CurrentInputContext.from_values(
+        user_text="current prompt",
+        files=["https://oss.example.com/chat/current.cif"],
+        pre_query_scope_event_id=21,
+    )
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        ok, _elapsed = await svc.run_agent(
+            session_id="sess-1",
+            user_prompt="current prompt",
+            send_cb=AsyncMock(),
+            cancel_token=_make_cancel_token(),
+            mode="direct",
+            task_id="task-1",
+            current_input_context=current_input_context,
+        )
+
+    assert ok is True
+    assert (
+        svc._test_fake_exp.last_ctx.run_meta["current_input_context"]
+        == current_input_context
+    )
 
 
 @pytest.mark.asyncio
@@ -426,10 +459,14 @@ async def test_agent_run_service_injects_full_attachment_manifest_before_exp_run
         "file_1 data.csv https://oss.example.com/chat/data.csv"
         in run_meta["attachment_manifest"]
     )
-    assert callable(run_meta["get_query_events"])
-    assert callable(run_meta["get_all_events"])
-    assert callable(run_meta["get_latest_checkpoint_covered_until_event_id"])
-    assert callable(run_meta["pre_compaction_barrier"])
+    history = svc._test_fake_exp.last_ctx.runtime_ports.compaction.history
+    assert history is not None
+    assert callable(history.query_events)
+    assert callable(history.all_events)
+    assert callable(history.latest_checkpoint_covered_until_event_id)
+    assert callable(
+        svc._test_fake_exp.last_ctx.runtime_ports.compaction.pre_compaction_barrier
+    )
 
 
 @pytest.mark.asyncio
@@ -479,9 +516,9 @@ async def test_run_agent_uses_history_restore_service_and_injects_spawn_aware_ch
         assert svc._test_fake_exp.last_run_kwargs['history'] == restored_history
 
         checkpoint_cls.assert_called_once_with(svc._test_events_table)
-        checkpoint_sink_factory = svc._test_fake_exp.last_ctx.run_meta[
-            'checkpoint_sink_factory'
-        ]
+        checkpoint_sink_factory = (
+            svc._test_fake_exp.last_ctx.runtime_ports.compaction.checkpoint_sink_factory
+        )
         assert callable(checkpoint_sink_factory)
 
         built_sink = checkpoint_sink_factory(spawn_id='spawn-child-1')
@@ -563,7 +600,7 @@ async def test_stream_events_reach_handlers_via_fanout():
 @pytest.mark.asyncio
 async def test_child_event_sink_reaches_sse_and_persistence():
     async def child_then_parent(ctx):
-        await ctx.run_meta['event_sink'](
+        await ctx.runtime_ports.child_event_forward_sink(
             ResponseEvent(
                 source='MatMaster:direct',
                 spawn_id='childdeadbeef123',
@@ -593,6 +630,33 @@ async def test_child_event_sink_reaches_sse_and_persistence():
         getattr(event, 'spawn_id', None) == 'childdeadbeef123'
         for event in persist_events
     )
+
+
+@pytest.mark.asyncio
+async def test_run_agent_does_not_store_callback_ports_in_run_meta():
+    run_result = RunResultEvent(source="agent", status="completed", reason="natural")
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        await svc.run_agent(
+            session_id="session-1",
+            user_prompt="hello",
+            send_cb=AsyncMock(),
+            cancel_token=_make_cancel_token(),
+            mode="direct",
+            task_id="task-1",
+            invocation_id="inv-1",
+        )
+
+    run_meta = svc._test_fake_exp.last_ctx.run_meta
+    forbidden = {
+        "event_sink",
+        "checkpoint_sink_factory",
+        "get_query_events",
+        "get_all_events",
+        "get_latest_checkpoint_covered_until_event_id",
+        "pre_compaction_barrier",
+    }
+    assert forbidden.isdisjoint(run_meta)
 
 
 @pytest.mark.asyncio

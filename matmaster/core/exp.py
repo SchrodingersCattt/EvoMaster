@@ -17,6 +17,7 @@ even when the kernel raises.
 from __future__ import annotations
 
 import inspect
+import json
 import logging
 import uuid
 from collections.abc import AsyncIterator, Callable
@@ -30,9 +31,122 @@ from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec
+from matmaster.types.runtime_ports import EmptySessionEventHistory, KernelRuntimePorts
 
 if TYPE_CHECKING:
     from matmaster.types.messages import Message
+
+
+_LOGGER = logging.getLogger(__name__)
+
+
+# Builtin tools whose execution reaches outside the workspace.
+# Presence of any of these names in the configured builtin list activates
+# the EXTERNAL_SERVICE plane in RuntimeTopology.
+_EXTERNAL_EFFECT_TOOL_NAMES: frozenset[str] = frozenset(
+    {
+        "WebSearch",
+        "WebFetch",
+        "PaperSearch",
+        "Bohrium",
+        # Aliases surfaced by evaluation tooling.
+        "mm_web_search",
+        "web_fetch",
+    }
+)
+
+# Builtin tool names that require an active session for execution.
+_SESSION_REQUIRING_TOOL_NAMES: frozenset[str] = frozenset(
+    {
+        "execute_bash",
+        "Bash",
+        "read_file",
+        "Read",
+        "write_file",
+        "Write",
+        "edit_file",
+        "Edit",
+        "glob",
+        "Glob",
+        "grep",
+        "Grep",
+    }
+)
+
+
+def _resolve_skill_config_dir(raw_dir: str) -> Path:
+    """Map legacy ``matmaster_config`` references onto this repo's ``config`` dir."""
+    candidate = Path(raw_dir)
+    if candidate.exists():
+        return candidate
+    if raw_dir == "matmaster_config":
+        compat = Path("config")
+        if compat.exists():
+            return compat
+    return candidate
+
+
+def _deep_merge_dict(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in patch.items():
+        if isinstance(value, dict) and isinstance(merged.get(key), dict):
+            merged[key] = _deep_merge_dict(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
+
+def _local_user_skills_root(session: Any | None) -> Path | None:
+    if session is None:
+        return None
+    raw = getattr(session, "local_user_skills_root", None)
+    if not isinstance(raw, str):
+        return None
+    root = raw.strip()
+    return Path(root) if root else None
+
+
+def _remote_skill_roots(session: Any | None) -> list[str]:
+    if session is None:
+        return []
+
+    roots: list[str] = []
+    raw_roots = getattr(session, "remote_skill_roots", None)
+    if isinstance(raw_roots, (list, tuple, set)):
+        roots.extend(
+            root.strip() for root in raw_roots if isinstance(root, str) and root.strip()
+        )
+
+    raw_user_root = getattr(session, "remote_user_skills_root", None)
+    if isinstance(raw_user_root, str) and raw_user_root.strip():
+        roots.append(raw_user_root.strip())
+
+    seen: set[str] = set()
+    unique: list[str] = []
+    for root in roots:
+        if root not in seen:
+            seen.add(root)
+            unique.append(root)
+    return unique
+
+
+def _disabled_skill_names_from_settings(root: Path) -> set[str]:
+    settings_path = root / ".settings.json"
+    if not settings_path.is_file():
+        return set()
+    try:
+        payload = json.loads(settings_path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        _LOGGER.warning(
+            "Failed to read skill settings: %s",
+            settings_path,
+            exc_info=True,
+        )
+        return set()
+    disabled = payload.get("disabled") if isinstance(payload, dict) else None
+    if not isinstance(disabled, list):
+        return set()
+    return {name.strip() for name in disabled if isinstance(name, str) and name.strip()}
 
 
 class Exp:
@@ -118,7 +232,7 @@ class Exp:
             child_source = f"{source_prefix}:{exp_name}"
             child_spawn_id = uuid.uuid4().hex[:16]
             parent_session_id = ctx.run_meta.get("session_id", "")
-            event_sink = ctx.run_meta.get("event_sink")
+            event_sink = ctx.runtime_ports.child_event_forward_sink
 
             async def _forward_child_event(event: Any) -> None:
                 if event_sink is None:
@@ -157,7 +271,6 @@ class Exp:
                         ctx,
                         task,
                         cancel_token=cancel_token,
-                        source_override=child_source,
                         spawn_id=child_spawn_id,
                     ),
                     on_event=_forward_child_event,
@@ -193,6 +306,25 @@ class Exp:
             meta={},
         )
 
+    @staticmethod
+    def _build_kernel_meta(
+        base_meta: dict[str, Any],
+        run_meta: dict[str, Any],
+        *,
+        spawn_id: str | None,
+    ) -> dict[str, Any]:
+        meta = {
+            **base_meta,
+            "task_id": run_meta.get("task_id", ""),
+            "session_id": run_meta.get("session_id", ""),
+            "spawn_id": spawn_id,
+            "attachment_manifest": run_meta.get("attachment_manifest", ""),
+        }
+        current_input_context = run_meta.get("current_input_context")
+        if current_input_context is not None:
+            meta["current_input_context"] = current_input_context
+        return meta
+
     # ── Active planes derivation ────────────────────────
 
     @staticmethod
@@ -213,16 +345,8 @@ class Exp:
         planes: set[ToolPlane] = {ToolPlane.CONTROL_PLANE}
         if has_session:
             planes |= {ToolPlane.SESSION_SHELL, ToolPlane.SESSION_FS}
-        if skills_enabled or any(
-            name in builtin_cfg or "*" in builtin_cfg
-            for name in (
-                "WebSearch",
-                "WebFetch",
-                "PaperSearch",
-                "mm_web_search",
-                "web_fetch",
-            )
-        ):
+        cfg_set = set(builtin_cfg)
+        if skills_enabled or "*" in cfg_set or cfg_set & _EXTERNAL_EFFECT_TOOL_NAMES:
             planes.add(ToolPlane.EXTERNAL_SERVICE)
         return frozenset(planes)
 
@@ -233,23 +357,24 @@ class Exp:
         ctx: PlaygroundContext,
         *,
         skills: dict[str, Any] | None = None,
-        source_override: str | None = None,
         spawn_id: str | None = None,
     ) -> AgentRuntime:
         """Resource creation: assemble -> tools -> prompt -> kernel.
 
-        Phase 34 ESIN-04: Constructs FullToolRunner + ToolCatalog +
-        RuntimeTopology as the default execution path.
+        Constructs FullToolRunner + ToolCatalog + RuntimeTopology as the
+        default execution path.
         """
         spec = await self.assemble(ctx)
 
-        # 1. Register ALL builtin tools
+        # Discard any registry from a prior run so a turn that turns skills off
+        # cannot expose stale state to the prompt builder.
+        self._skill_registry = None
+
         registry = ToolRegistry()
         builtin_cfg = self._config.tools.builtin
         if builtin_cfg:
             self._init_builtin_tools(ctx, registry, builtin_cfg, spawn_id=spawn_id)
 
-        # 2. Build ToolCatalog wrapping registry (before skill init for overlay)
         from matmaster.core.capability_policy import DefaultCapabilityPolicy
         from matmaster.core.structural_validation import StructuralValidation
         from matmaster.core.tool_runner import FullToolRunner
@@ -271,7 +396,7 @@ class Exp:
         )
 
         topology = RuntimeTopology(
-            session_kind=getattr(ctx, "session_type", None) or "local",
+            session_kind=ctx.session_type or "local",
             control_root=str(ctx.workdir),
             workspace_root=str(ctx.execution_workdir),
             active_planes=active_planes,
@@ -282,14 +407,12 @@ class Exp:
         catalog = ToolCatalog(registry, compiler=compiler, topology=topology)
         hook_executor = HookExecutor()
 
-        # 3. Skills: runtime-injected (pass catalog for overlay registration)
         if skills or self._config.skills.enabled:
             self._init_skill_tools(ctx, registry, skills_config=skills, catalog=catalog)
 
-        # 4. AgentTool: register after skills but before system prompt.
-        # AgentTool replaces the legacy SpawnTool. When allow_spawn is False
-        # (child Exp), spawn_fn is None which causes AgentTool to set
-        # exposed_to_model=False (hidden from LLM but still in catalog).
+        # When allow_spawn is False (child Exp), spawn_fn is None, which causes
+        # AgentTool to set exposed_to_model=False (hidden from LLM but still
+        # in catalog).
         if "Agent" in builtin_cfg or "*" in builtin_cfg:
             from matmaster.config.loader import list_model_visible_exps
             from matmaster.tools.builtin import AgentTool
@@ -315,7 +438,6 @@ class Exp:
             )
             registry.register(agent_tool, source="builtin")
 
-        # 5. System prompt via ContextBuilder
         builder = ContextBuilder()
         system_prompt = builder.build_system_prompt(
             ctx,
@@ -330,7 +452,7 @@ class Exp:
 
         run_meta = getattr(ctx, "run_meta", {}) or {}
 
-        # 6. Compaction: event_sink=None, _run_items() injects local sink at runtime
+        # Compactor uses event_sink=None; _run_items() injects a local sink at runtime.
         compactor = None
         if spec.llm_provider is not None:
             from matmaster.core.context_compactor import ContextCompactor
@@ -358,25 +480,15 @@ class Exp:
                         spec.compaction.compaction_llm,
                     )
 
-            def empty_events():
-                return []
+            history_port = ctx.runtime_ports.compaction.history
+            if history_port is None:
+                history_port = EmptySessionEventHistory()
 
-            get_query_events = run_meta.get("get_query_events")
-            if not callable(get_query_events):
-                get_query_events = empty_events
-            get_all_events = run_meta.get("get_all_events")
-            if not callable(get_all_events):
-                get_all_events = empty_events
-            get_latest_checkpoint_covered_until_event_id = run_meta.get(
-                "get_latest_checkpoint_covered_until_event_id"
-            )
             rehydrator = CompactionRehydrator(
-                get_query_events=get_query_events,
-                get_all_events=get_all_events,
+                get_query_events=history_port.query_events,
+                get_all_events=history_port.all_events,
                 get_latest_checkpoint_covered_until_event_id=(
-                    get_latest_checkpoint_covered_until_event_id
-                    if callable(get_latest_checkpoint_covered_until_event_id)
-                    else None
+                    history_port.latest_checkpoint_covered_until_event_id
                 ),
                 skill_registry=self._skill_registry,
                 playground_ctx=ctx,
@@ -395,7 +507,6 @@ class Exp:
                 ),
             )
 
-        # 7. Build FullToolRunner (ESIN-04: default execution path)
         structural_validation = StructuralValidation()
         capability_policy = DefaultCapabilityPolicy()
         scheduler = ToolScheduler()
@@ -419,11 +530,11 @@ class Exp:
             state=runner_state,
         )
 
-        # 9. Assemble final spec with all v2 fields
-        checkpoint_sink_factory = run_meta.get("checkpoint_sink_factory")
+        checkpoint_sink_factory = ctx.runtime_ports.compaction.checkpoint_sink_factory
         checkpoint_sink = None
         if callable(checkpoint_sink_factory):
             checkpoint_sink = checkpoint_sink_factory(spawn_id=spawn_id)
+        pre_compaction_barrier = ctx.runtime_ports.compaction.pre_compaction_barrier
         spec = spec.model_copy(
             update={
                 "tool_catalog": catalog,
@@ -435,16 +546,15 @@ class Exp:
                 "context_builder": builder,
                 "hook_executor": hook_executor,
                 "compactor": compactor,
-                "meta": {
-                    **spec.meta,
-                    "task_id": run_meta.get("task_id", ""),
-                    "session_id": run_meta.get("session_id", ""),
-                    "spawn_id": spawn_id,
-                    "checkpoint_sink_factory": checkpoint_sink_factory,
-                    "checkpoint_sink": checkpoint_sink,
-                    "attachment_manifest": run_meta.get("attachment_manifest", ""),
-                    "pre_compaction_barrier": run_meta.get("pre_compaction_barrier"),
-                },
+                "runtime_ports": KernelRuntimePorts(
+                    checkpoint_sink=checkpoint_sink,
+                    pre_compaction_barrier=pre_compaction_barrier,
+                ),
+                "meta": self._build_kernel_meta(
+                    spec.meta,
+                    run_meta,
+                    spawn_id=spawn_id,
+                ),
             }
         )
 
@@ -468,7 +578,6 @@ class Exp:
         history: list[Message] | None = None,
         cancel_token: CancellationToken | None = None,
         skills: dict[str, Any] | None = None,
-        source_override: str | None = None,
         spawn_id: str | None = None,
     ) -> AsyncIterator[Any]:
         """build_runtime -> kernel.run_stream -> cleanup.
@@ -481,7 +590,6 @@ class Exp:
             runtime = await self.build_runtime(
                 ctx,
                 skills=skills,
-                source_override=source_override,
                 spawn_id=spawn_id,
             )
             spec = runtime.spec
@@ -558,7 +666,6 @@ class Exp:
         exec_wd = Path(ctx.execution_workdir)
         has_session = ctx.session is not None
 
-        # 1. Session-requiring tools (only when session is present)
         session_tools: list[Any] = []
         if has_session:
             session_tools = [
@@ -569,30 +676,13 @@ class Exp:
                 GlobTool(session=ctx.session, workdir=exec_wd),
                 GrepTool(session=ctx.session, workdir=exec_wd),
             ]
-        elif (
-            allow_all
-            or allowed
-            and allowed
-            & {
-                "execute_bash",
-                "Bash",
-                "read_file",
-                "Read",
-                "write_file",
-                "Write",
-                "edit_file",
-                "Edit",
-                "glob",
-                "Glob",
-                "grep",
-                "Grep",
-            }
+        elif allow_all or (
+            allowed is not None and allowed & _SESSION_REQUIRING_TOOL_NAMES
         ):
             self.logger.debug(
                 "No session in PlaygroundContext, skipping session-requiring tools"
             )
 
-        # 2. Sessionless tools (always available)
         sessionless_tools: list[Any] = [
             TodoWriteTool(workdir=ctx.workdir),
             WebSearchTool(),
@@ -632,42 +722,17 @@ class Exp:
         """Initialize skill tools with lazy MCP schema injection.
 
         When catalog is provided, on_skill_hit uses catalog.register_overlay()
-        for version-bumped tool injection (ESIN-05). Falls back to
-        registry.register() when catalog is None (backward compat).
+        for version-bumped tool injection. Falls back to registry.register()
+        when catalog is None.
         """
         skills_cfg = self._config.skills
         if not skills_cfg.enabled:
             return
 
-        import json as _json
-        from pathlib import Path
-
         from matmaster.skills.registry import SkillRegistry
         from matmaster.tools.builtin.skill_tool import LegacyUseSkillTool, SkillTool
         from matmaster.tools.lazy_mcp import LazyMCPConnector, LazyMCPTool
         from matmaster.tools.schema_cache import ToolSchemaCache
-
-        def _resolve_skill_config_dir(raw_dir: str) -> Path:
-            """Map legacy ``matmaster_config`` references onto this repo's ``config`` dir."""
-            candidate = Path(raw_dir)
-            if candidate.exists():
-                return candidate
-            if raw_dir == "matmaster_config":
-                compat = Path("config")
-                if compat.exists():
-                    return compat
-            return candidate
-
-        def _deep_merge_dict(
-            base: dict[str, Any], patch: dict[str, Any]
-        ) -> dict[str, Any]:
-            merged = dict(base)
-            for key, value in patch.items():
-                if isinstance(value, dict) and isinstance(merged.get(key), dict):
-                    merged[key] = _deep_merge_dict(merged[key], value)
-                else:
-                    merged[key] = value
-            return merged
 
         # Build root list from str | list[str]
         roots_raw = skills_cfg.skills_root
@@ -675,15 +740,26 @@ class Exp:
             roots = [Path(r) for r in roots_raw if r]
         else:
             roots = [Path(roots_raw)] if roots_raw else []
-        if not roots:
+        local_user_skills_root = _local_user_skills_root(ctx.session)
+        if local_user_skills_root is not None:
+            roots.append(local_user_skills_root)
+        remote_roots = _remote_skill_roots(ctx.session)
+        if not roots and not remote_roots:
             self.logger.warning(
-                "skills.enabled=true but skills_root is empty, skipping skill init"
+                "skills.enabled=true but no skill roots are available, skipping skill init"
             )
             return
 
-        skill_registry = SkillRegistry(roots)
-        if skills_cfg.disabled_skill_names:
-            skill_registry.remove_skills(set(skills_cfg.disabled_skill_names))
+        skill_registry = SkillRegistry(
+            roots,
+            remote_session=ctx.session if remote_roots else None,
+            remote_roots=remote_roots,
+        )
+        disabled_skill_names = set(skills_cfg.disabled_skill_names)
+        for root in roots:
+            disabled_skill_names.update(_disabled_skill_names_from_settings(root))
+        if disabled_skill_names:
+            skill_registry.remove_skills(disabled_skill_names)
         schema_cache = ToolSchemaCache(Path(skills_cfg.cache_dir))
 
         # MCP runtime config: ALWAYS self-load from config_dir.
@@ -715,13 +791,18 @@ class Exp:
 
                 config_path = resolve_mcp_config_path(config_path)
             except ImportError:
-                pass
+                self.logger.warning(
+                    "calculation_preflight=calculation but "
+                    "matmaster.mcp.calculation.config_env is unavailable; "
+                    "using config_path as-is: %s",
+                    config_path,
+                )
 
         # Load server connection config from JSON
         server_config: dict = {}
         if config_path.exists():
             try:
-                raw = _json.loads(config_path.read_text(encoding="utf-8"))
+                raw = json.loads(config_path.read_text(encoding="utf-8"))
                 server_config = raw.get("mcpServers", {})
             except Exception as e:
                 self.logger.warning("Failed to load MCP server config: %s", e)
@@ -808,7 +889,6 @@ class Exp:
                     connector=connector,
                     timeout=tool_timeout,
                 )
-                # ESIN-05: Use catalog.register_overlay() for version-bumped injection
                 if catalog is not None:
                     catalog.register_overlay(lazy_tool, source="mcp")
                 else:

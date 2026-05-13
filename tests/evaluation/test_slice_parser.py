@@ -113,3 +113,55 @@ def test_tag_only_mixed_with_capability() -> None:
     assert out[0].capability is None and out[0].tags == ['vasp']
     assert out[1].capability == 'input_generation' and out[1].tags == ['abacus']
     assert out[2].capability == 'data_diagnosis' and out[2].tags is None
+
+
+# ── scope (#platform / #knowledge) ──────────────────────────────────────────
+
+
+def test_scope_only() -> None:
+    out = parse_slices_expression('#platform')
+    assert len(out) == 1
+    assert out[0].capability is None
+    assert out[0].scope == 'platform'
+
+
+def test_scope_with_capability() -> None:
+    out = parse_slices_expression('input_generation#knowledge')
+    assert len(out) == 1
+    assert out[0].capability == 'input_generation'
+    assert out[0].scope == 'knowledge'
+
+
+def test_scope_with_tags() -> None:
+    out = parse_slices_expression('@eng_vasp#platform')
+    assert len(out) == 1
+    assert out[0].capability is None
+    assert out[0].tags == ['eng_vasp']
+    assert out[0].scope == 'platform'
+
+
+def test_scope_with_capability_domain_tags() -> None:
+    out = parse_slices_expression('input_generation[agnostic]@eng_vasp#knowledge')
+    assert len(out) == 1
+    assert out[0].capability == 'input_generation'
+    assert out[0].domains == ['agnostic']
+    assert out[0].tags == ['eng_vasp']
+    assert out[0].scope == 'knowledge'
+
+
+def test_scope_mixed_with_other_slices() -> None:
+    out = parse_slices_expression('#platform input_generation#knowledge @eng_vasp')
+    assert len(out) == 3
+    assert out[0].scope == 'platform' and out[0].capability is None
+    assert out[1].scope == 'knowledge' and out[1].capability == 'input_generation'
+    assert out[2].scope is None and out[2].tags == ['eng_vasp']
+
+
+def test_rejects_invalid_scope() -> None:
+    with pytest.raises(ValueError, match='unknown scope'):
+        parse_slices_expression('#invalid')
+
+
+def test_rejects_double_scope() -> None:
+    with pytest.raises(ValueError, match='at most one'):
+        parse_slices_expression('cap#platform#knowledge')

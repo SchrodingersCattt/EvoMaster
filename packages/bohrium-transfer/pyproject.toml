@@ -4,7 +4,9 @@ version = "0.1.0"
 description = "MatMaster Bohrium large-file transfer runtime"
 requires-python = ">=3.11"
 dependencies = [
+    "filelock",
     "requests",
+    "tenacity",
 ]
 
 [build-system]

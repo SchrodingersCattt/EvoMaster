@@ -80,6 +80,14 @@ MatMaster 的对话与任务执行以 **根目录 `app.py` + `src/`（API）** �
 
 **`run_agent_sync`：** 当前以 `AgentRunService.run_agent_sync`（`src/services/agent_run_service.py`）为准。若检出中包含 [docs/mat_master/run_agent_sync_comparison.md](docs/mat_master/run_agent_sync_comparison.md)，其中可能保留与历史本地 Web 栈的对照说明。
 
+## RuntimePorts、run_meta 与 HookExecutor 边界
+
+- `run_meta` 只承载被动运行 metadata，例如 `task_id`、`session_id`、`active_skills`、`attachment_manifest`。不得向 `run_meta` 注入服务能力 callback、sink、factory、barrier 或外部 service 对象。
+- 服务能力 callback 必须通过 `PlaygroundContext.runtime_ports` / `AgentRuntimeSpec.runtime_ports` 传递。`RuntimePorts` 是窄能力端口，不是 typed 版 `run_meta`。
+- `RuntimePorts` 及其子端口不得包含 `extra`、`metadata`、`state`、`context`、`services`、`payload` 或 `dict[str, Any]` 这类兜底字段；也不得用允许任意 extra fields 的 typed model 绕过该限制。
+- 新增 RuntimePorts 字段前必须说明消费者、调用时机、返回值语义和异常语义。
+- `HookExecutor` 专指事件扩展系统，用于 observe/intercept/rewrite 运行过程事件。不得把需要返回业务数据或承担顺序屏障语义的服务端口伪装成 `HookExecutor` handler。
+
 ---
 
 ## Python 与运行环境

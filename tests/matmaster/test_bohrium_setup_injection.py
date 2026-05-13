@@ -70,7 +70,6 @@ class TestBohriumSetupServiceOrchestration:
             result = await svc.run_setup(
                 session_id="session-123",
                 playground=object(),
-                skill_sync_spec=None,
                 run_started_at=1000.0,
             )
 
@@ -130,7 +129,6 @@ class TestBohriumSetupServiceOrchestration:
             await svc.run_setup(
                 session_id='sess-1',
                 playground=object(),
-                skill_sync_spec=None,
                 run_started_at=1.0,
                 bohrium_required=True,
             )
@@ -166,7 +164,6 @@ class TestBohriumSetupServiceOrchestration:
             result = svc._run_setup_sync(
                 session_id='sess-1',
                 pg=object(),
-                skill_sync_spec=None,
                 event_callback=sink,
                 run_started_at=1.0,
                 bohrium_required=True,
@@ -174,6 +171,19 @@ class TestBohriumSetupServiceOrchestration:
 
         assert result.abort_result is not None
         mock_setup.assert_not_called()
+
+    def test_configure_remote_user_skill_root_on_ssh_session(self):
+        from src.services.agent_run_bohrium import (
+            _BOHRIUM_REMOTE_USER_SKILLS_ROOT,
+            _configure_remote_user_skill_root,
+        )
+
+        session = SimpleNamespace()
+
+        _configure_remote_user_skill_root(session)
+
+        assert session.remote_user_skills_root == _BOHRIUM_REMOTE_USER_SKILLS_ROOT
+        assert session.remote_skill_roots == [_BOHRIUM_REMOTE_USER_SKILLS_ROOT]
 
 
 class TestBohriumEventBridgeMapping:

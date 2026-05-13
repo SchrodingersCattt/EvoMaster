@@ -5,9 +5,11 @@ questions:
 - id: SC_struct_hetero_20260507v3
   capability: structure_construction
   domain: semiconductor
-  intent: Build a graphene/h-BN vertical van der Waals heterostructure with controlled lattice
-    mismatch.
-  human_prompt_seed: '读取 `hetero_spec.json`，构建 graphene/h-BN 垂直范德华异质结：晶格失配 < 2%，AB 堆叠，层间距 3.35 Å，z 方向 15 Å 真空层。输出 `hetero_graphene_hBN.cif` 和 `hetero_graphene_hBN_POSCAR`。最终答案中包含 `<eval_results>{"lattice_mismatch_percent": <number>}</eval_results>`。'
+  intent: Build a graphene/h-BN vertical van der Waals heterostructure with controlled
+    lattice mismatch.
+  human_prompt_seed: '读取 `hetero_spec.json`，构建 graphene/h-BN 垂直范德华异质结：晶格失配 < 2%，AB
+    堆叠，层间距 3.35 Å，z 方向 15 Å 真空层。输出 `hetero_graphene_hBN.cif` 和 `hetero_graphene_hBN_POSCAR`。最终答案中包含
+    `<eval_results>{"lattice_mismatch_percent": <number>}</eval_results>`。'
   tags:
   - struct_surface
   data_files:
@@ -75,7 +77,8 @@ questions:
     axis: correctness
     verify: struct_file_parsable
   - id: mismatch_percent
-    criterion: Lattice mismatch reported in `<eval_results>` is below 2% and close to the reference.
+    criterion: Lattice mismatch reported in `<eval_results>` is below 2% and close
+      to the reference.
     axis: correctness
     verify: answer_json_numeric
   - id: b_n_ratio
@@ -83,25 +86,27 @@ questions:
     axis: correctness
     verify: struct_file_stoichiometry_ratio
   - id: c_b_ratio
-    criterion: The output CIF preserves C:B = 2:1, equivalent to graphene/h-BN composition BC2N up to supercell scaling.
+    criterion: The output CIF preserves C:B = 2:1, equivalent to graphene/h-BN composition
+      BC2N up to supercell scaling.
     axis: correctness
     verify: struct_file_stoichiometry_ratio
   - id: interlayer_distance_A
-    criterion: The mean C-B interlayer distance read from the output CIF is near 3.35 A.
+    criterion: The mean C-B interlayer distance read from the output CIF is near 3.35
+      A.
     axis: correctness
     verify: struct_file_bond_length
   - id: required_fields
-    criterion: Output includes structure file, lattice mismatch percentage below 2%, interlayer
-      distance near 3.35 A, AB stacking, and vacuum thickness near 15 A. Element ratios are evaluated
-      only by deterministic structure-file checks.
+    criterion: Output includes structure file, lattice mismatch percentage below 2%,
+      interlayer distance near 3.35 A, AB stacking, and vacuum thickness near 15 A.
+      Element ratios are evaluated only by deterministic structure-file checks.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The answer states the physical picture (lattice matching, AB stacking, interlayer
-      spacing, vacuum, how mismatch is defined) and ties it to the delivered POSCAR/CIF, not
-      generic claims disconnected from those files. Judge solely from the final answer and
-      named deliverables; do not fail because the tool-call log omits MCP, web_search, or
-      any specific tool.
+    criterion: The answer states the physical picture (lattice matching, AB stacking,
+      interlayer spacing, vacuum, how mismatch is defined) and ties it to the delivered
+      POSCAR/CIF, not generic claims disconnected from those files. Judge solely from
+      the final answer and named deliverables; do not fail because the tool-call log
+      omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -113,26 +118,28 @@ questions:
     axis: efficiency
     verify: turn_budget
   - id: efficiency_judge
-    criterion: Heterostructure construction completes in a direct workflow without redundant
-      structure rebuilds.
+    criterion: Heterostructure construction completes in a direct workflow without
+      redundant structure rebuilds.
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous
-      benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling
-      (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_SiH_20260507v4
+- id: SC_struct_SiH_20260512v7
   capability: structure_construction
   domain: semiconductor
-  intent: Passivate dangling bonds on both top and bottom surfaces of a Si(100) slab with
-    hydrogen atoms.
-  human_prompt_seed: '读取 `hydrogen_cap_spec.json`，对 Si(100) slab 上下表面的悬挂键进行氢饱和，使所有表面 Si 达到四配位。输出为 `Si100_H_passivated_POSCAR`。'
+  intent: Passivate dangling bonds on both top and bottom surfaces of a Si(100) slab
+    with hydrogen atoms.
+  human_prompt_seed: 读取 `hydrogen_cap_spec.json`，按 spec 中给出的三步构造流程（bulk-terminated
+    slab → 2×1 dimer 重构 → 对剩余悬挂键氢饱和）建模 Si(100) 表面，使每个 Si 原子最终都达到 sp3 四配位。注意采用 spec
+    指定的最小 in-plane 周期（每 surface 仅暴露一对 dimer），不要放大 in-plane supercell。输出为 `Si100_H_passivated_POSCAR`。
   tags:
   - struct_surface
   data_files:
@@ -165,7 +172,18 @@ questions:
       - H
       expected_deg: 109.47
       tolerance_deg: 8.0
-      cutoff_A: 2.6
+      cutoff_a_b_min_A: 2.0
+      cutoff_a_b_A: 2.5
+      cutoff_c_b_min_A: 1.0
+      cutoff_c_b_A: 1.7
+  - key: si_si_bond_length_range_A
+    value:
+      filename: Si100_H_passivated_POSCAR
+      element_a: Si
+      element_b: Si
+      cutoff_A: 2.7
+      expected_min: 2.2
+      expected_max: 2.5
   - key: h_atom_count
     value:
       filename: Si100_H_passivated_POSCAR
@@ -186,38 +204,48 @@ questions:
     value: *id003
   scoring_checklist:
   - id: si_h_bond_length_A
-    criterion: A representative Si-H bond length in the POSCAR output is near 1.48 A.
+    criterion: A representative Si-H bond length in the POSCAR output is near 1.48
+      A.
     axis: correctness
     verify: struct_file_bond_length
   - id: si_coordination
-    criterion: The mean coordination number of ALL Si atoms in the POSCAR (cutoff 2.6 A) is
-      approximately 4 (within ±0.5), confirming that dangling bonds on both top and bottom
-      surfaces are predominantly saturated.
+    criterion: The mean coordination number of ALL Si atoms in the POSCAR (cutoff
+      2.6 A) is approximately 4 (within ±0.5), confirming that dangling bonds on both
+      top and bottom surfaces are predominantly saturated.
     axis: correctness
     verify: struct_file_coordination
   - id: si_si_h_angle_deg
-    criterion: The mean Si-Si-H angle read from the POSCAR is close to tetrahedral 109.47
-      degrees (tolerance 8 degrees), confirming that passivating H atoms sit at tetrahedral
-      positions around the surface Si atoms.
+    criterion: The mean Si-Si-H angle read from the POSCAR is close to tetrahedral
+      109.47 degrees (tolerance 8 degrees), confirming that passivating H atoms sit
+      at tetrahedral positions around the surface Si atoms. Only physical Si-Si and
+      Si-H bonds are counted (Si-Si in [2.0, 2.5] Å, Si-H in [1.0, 1.7] Å) so squeezed
+      back-bonds and next-neighbour H pairs do not pollute the statistic.
     axis: correctness
     verify: struct_file_bond_angle
+  - id: si_si_bond_length_range_A
+    criterion: Every Si-Si bond shorter than 2.7 Å in the POSCAR lies in the physical
+      bulk-Si range [2.20, 2.50] Å. This catches over-aggressive dimer moves that
+      squeeze a back-bond (e.g. down to 1.81 Å) or unrelaxed bulk-spaced surface pairs.
+    axis: correctness
+    verify: struct_file_bond_length_range
   - id: h_atom_count
-    criterion: The final POSCAR contains exactly 4 H atoms, matching top-and-bottom passivation
-      of the 2x1 Si(100) slab background.
+    criterion: The final POSCAR contains exactly 4 H atoms, matching top-and-bottom
+      passivation of the 2x1 Si(100) slab background.
     axis: correctness
     verify: struct_file_atom_count
   - id: required_fields
-    criterion: Output includes structure file, representative Si-H bond length, and an explicit
-      check that all Si atoms (top and bottom) reach four coordination. H loading is evaluated
-      only by deterministic structure-file checks.
+    criterion: Output includes structure file, representative Si-H bond length, and
+      an explicit check that all Si atoms (top and bottom) reach four coordination.
+      H loading is evaluated only by deterministic structure-file checks.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The answer cites the structural physics (Si(100) facets, dangling bonds on
-      both surfaces, target coordination, Si-H bond length) and ties passivation checks to
-      the delivered POSCAR, not only generic semiconductor chemistry recall disconnected from
-      that file. Judge solely from the final answer and named deliverables; do not fail because
-      the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The answer cites the structural physics (Si(100) facets, dangling bonds
+      on both surfaces, target coordination, Si-H bond length) and ties passivation
+      checks to the delivered POSCAR, not only generic semiconductor chemistry recall
+      disconnected from that file. Judge solely from the final answer and named deliverables;
+      do not fail because the tool-call log omits MCP, web_search, or any specific
+      tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -229,17 +257,68 @@ questions:
     axis: efficiency
     verify: turn_budget
   - id: efficiency_judge
-    criterion: Passivation workflow completes in a direct pipeline without unnecessary intermediate
-      structure rebuilds.
+    criterion: Passivation workflow completes in a direct pipeline without unnecessary
+      intermediate structure rebuilds.
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous
-      benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling
-      (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
+- id: SC_interface_001_20260513
+  capability: structure_construction
+  domain: semiconductor
+  intent: Build a heterostructure interface between two materials with lattice mismatch
+    handling.
+  human_prompt_seed: '请构建 AlN(0001) / MoO₃(010) 异质结界面结构。
+
+    要求：
+
+    1. 分别切出两种材料的合适表面 slab
+
+    2. 进行晶格匹配，应变控制在 5% 以内
+
+    3. 将两个 slab 堆叠形成界面结构
+
+    4. 输出最终结构为 `interface_AlN_MoO3.cif`'
+  tags:
+  - struct_surface
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: interface_artifact
+    value: interface_AlN_MoO3.cif
+  - key: must_atom_count
+    value:
+      filename: interface_AlN_MoO3.cif
+      min: 20
+  - key: turn_budget
+    value:
+      max: 25
+  scoring_checklist:
+  - id: interface_artifact
+    criterion: interface_AlN_MoO3.cif written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_parsable
+    criterion: '[Must] Output CIF is parsable by pymatgen.'
+    axis: correctness
+    verify: struct_file_parsable
+  - id: must_atom_count
+    criterion: '[Must] Interface has at least 20 atoms (reasonable slab thickness).'
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: must_four_elements
+    criterion: '[Must] Interface contains all four elements (Al, N, Mo, O).'
+    axis: correctness
+    verify: struct_file_formula
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget

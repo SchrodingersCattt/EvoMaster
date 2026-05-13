@@ -55,6 +55,7 @@ VerifyLiteral = Literal[
     'struct_file_formula',
     'struct_file_bond_count',
     'struct_file_bond_length',
+    'struct_file_bond_length_range',
     'struct_file_bond_angle',
     'struct_file_cell_param',
     'struct_file_stoichiometry_ratio',
@@ -107,6 +108,8 @@ DomainLiteral = Literal[
     'semiconductor',
     'agnostic',
 ]
+
+ScopeLiteral = Literal['platform', 'knowledge']
 
 GENERIC_PROCESS_TAGS = {
     'workflow',
@@ -239,6 +242,7 @@ class QuestionItem(BaseModel):
     id: str
     capability: CapabilityLiteral
     domain: DomainLiteral
+    scope: ScopeLiteral = 'knowledge'
     intent: str
     human_prompt_seed: str
     tags: list[QuestionTag] = Field(default_factory=list)
@@ -393,6 +397,7 @@ class CapabilitySlice(BaseModel):
     capability: str | None = None
     domains: list[str] | None = None
     tags: list[str] | None = None
+    scope: str | None = None
 
     @field_validator('capability')
     @classmethod

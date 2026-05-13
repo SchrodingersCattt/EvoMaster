@@ -5,6 +5,7 @@ import pymysql
 from utils.env import SERVICE_ENV, URL_PART  # noqa: E402
 
 AG_UI_EVENT = "ag-ui"
+BUILD_TRIGGER = "20260512-verify-skill-sync-2"
 
 DB_CONFIG = {
     "host": os.getenv("MYSQL_HOST", "localhost"),
@@ -56,9 +57,9 @@ BOHRIUM_CORE_BASE_URL = os.getenv(
 
 # Bohrium 节点默认镜像 ID，按环境区分（创建节点时未指定且无 BOHRIUM_IMAGE_ID 时使用）
 BOHRIUM_ENV_DEFAULT_IMAGE_IDS: dict[str, int] = {
-    "test": 49042,
-    "uat": 1565,
-    "prod": 122779,
+    "test": 49056,
+    "uat": 1570,
+    "prod": 122878,
 }
 BOHRIUM_DEFAULT_IMAGE_ID = (
     BOHRIUM_ENV_DEFAULT_IMAGE_IDS.get(SERVICE_ENV)
@@ -67,9 +68,9 @@ BOHRIUM_DEFAULT_IMAGE_ID = (
 
 # 镜像 name 也在构建时写入仓库，运行期不用再调 image/private 获取
 BOHRIUM_ENV_DEFAULT_IMAGE_NAMES: dict[str, str] = {
-    "test": "matmaster:5b6f961a-20260507-015900",
-    "uat": "matmaster:5b6f961a-20260507-015857",
-    "prod": "matmaster:5b6f961a-20260507-015858",
+    "test": "matmaster:f28e999b-20260512-085335",
+    "uat": "matmaster:f28e999b-20260512-085325",
+    "prod": "matmaster:f28e999b-20260512-085325",
 }
 BOHRIUM_DEFAULT_IMAGE_NAME = (
     BOHRIUM_ENV_DEFAULT_IMAGE_NAMES.get(SERVICE_ENV)

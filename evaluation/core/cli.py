@@ -65,8 +65,10 @@ def main() -> int:
         metavar='EXPR',
         help=(
             'OR-of-slices: whitespace between slices; cap; cap[dom]; cap[d1,d2]; '
-            'cap@tag or cap[dom]@t1,t2 (one @ per slice; tags AND). No spaces in '
-            '[...] or after @ (e.g. "workflow_orchestration[polymer]@wf_batch input_gen")'
+            'cap@tag or cap[dom]@t1,t2 (one @ per slice; tags AND); '
+            '#platform or #knowledge for scope filter (one # per slice). '
+            'No spaces in [...] or after @. '
+            'e.g. "input_generation#knowledge @eng_vasp#platform"'
         ),
     )
     parser.add_argument(

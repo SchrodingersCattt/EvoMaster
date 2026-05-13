@@ -14,6 +14,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from matmaster.types.runtime_ports import PlaygroundRuntimePorts
 from matmaster.types.session import Session
 
 
@@ -56,6 +57,11 @@ class PlaygroundContext(BaseModel):
     env_vars: dict[str, str] = Field(default_factory=dict)
     archival: WorkspaceArchivalConfig | None = None
     run_meta: dict[str, Any] = Field(default_factory=dict)
+    runtime_ports: PlaygroundRuntimePorts = Field(
+        default_factory=PlaygroundRuntimePorts,
+        repr=False,
+        exclude=True,
+    )
     interaction_bridge: Any = Field(default=None, repr=False, exclude=True)
     session: Session | None = None
     config_dir: Path | None = None  # Playground config directory (per D-10)
@@ -99,3 +105,21 @@ class PlaygroundContext(BaseModel):
         """
         updated_meta = {**self.run_meta, "bohrium": snapshot}
         return self.model_copy(update={"run_meta": updated_meta})
+
+    def with_runtime_ports(
+        self,
+        runtime_ports: PlaygroundRuntimePorts,
+    ) -> "PlaygroundContext":
+        """Return a new frozen instance with runtime capability ports updated."""
+        return self.model_copy(update={"runtime_ports": runtime_ports})
+
+    def with_run_meta(self, **fields: Any) -> "PlaygroundContext":
+        """Return a new frozen instance with ``run_meta`` keys merged.
+
+        Centralizes the ``model_copy(update={'run_meta': {**self.run_meta, ...}})``
+        idiom so callers can add or overwrite metadata without re-spreading the
+        dict at every site.
+        """
+        if not fields:
+            return self
+        return self.model_copy(update={"run_meta": {**self.run_meta, **fields}})

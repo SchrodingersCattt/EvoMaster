@@ -1,6 +1,6 @@
 ---
 name: vaspkit-postprocess
-description: "VASPKIT post-processing for VASP outputs: K-path (303/302), band structure (211), hybrid-DFT band (252/253), DOS/PDOS (116-120), Fermi surface (262), elastic from file (202), EOS fitting (205), optical (710/711), etc. Use when user has VASP result files (POSCAR, INCAR, EIGENVAL, DOSCAR, KPOINTS, KPATH.in, PROCAR, vasprun.xml as needed) and needs analysis or derived files. Call via Skill run_script with script_name='run_vaspkit.py' and script_args='--task <N>' (e.g. '--task 303'). Does NOT generate POTCAR; pseudopotential not required."
+description: "VASPKIT post-processing for VASP outputs: K-path (303/302), band structure (211), hybrid-DFT band (252/253), DOS/PDOS (116-120), Fermi surface (262), elastic from file (202), EOS fitting (205), optical (710/711), etc. Use when user has VASP result files (POSCAR, INCAR, EIGENVAL, DOSCAR, KPOINTS, KPATH.in, PROCAR, vasprun.xml as needed) and needs analysis or derived files. Run scripts/run_vaspkit.py with '--task <N>' (e.g. '--task 303'). Does NOT generate POTCAR; pseudopotential not required."
 skill_type: operator
 ---
 
@@ -60,9 +60,9 @@ VASPKIT reads Fermi level from DOSCAR and calculation parameters from INCAR. Mos
 * "Fermi surface" -> ensure POSCAR, INCAR, EIGENVAL, DOSCAR, KPOINTS exist, then `run_vaspkit.py --task 262`.
 * "Hybrid band structure" -> ensure POSCAR, INCAR, EIGENVAL, DOSCAR, KPOINTS, KPATH.in exist, then `run_vaspkit.py --task 252`.
 
-## Tool (via Skill)
+## Script
 
-- **run_script** with **script_name**: `run_vaspkit.py`; **script_args**: e.g. `--task 303 --symprec 1E-5` or `--task 211`.
+- Run `python ${SKILL_DIR}/scripts/run_vaspkit.py` with arguments such as `--task 303 --symprec 1E-5` or `--task 211`.
 
 ## Rules
 

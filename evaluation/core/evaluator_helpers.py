@@ -19,6 +19,7 @@ from evaluation.validators.structure_general import (
     check_bond_angle,
     check_bond_count,
     check_bond_length,
+    check_bond_length_range,
     check_cell_param,
     check_coordination_number,
     check_file_count,
@@ -511,6 +512,24 @@ def check_struct_file_bond_length(
     )
 
 
+def check_struct_file_bond_length_range(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_bond_length_range(
+        ws,
+        filename=cfg.get('filename', '*.cif'),
+        element_a=str(cfg.get('element_a', '')),
+        element_b=str(cfg.get('element_b', '')),
+        cutoff_A=float(cfg.get('cutoff_A', 3.0)),
+        expected_min=float(cfg.get('expected_min', 0.0)),
+        expected_max=float(cfg.get('expected_max', 0.0)),
+    )
+
+
 def check_struct_file_bond_angle(
     *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
 ) -> tuple[bool, str]:
@@ -518,6 +537,11 @@ def check_struct_file_bond_angle(
     if err:
         return False, err
     cfg = _cfg(ref)
+
+    def _opt(name: str) -> float | None:
+        val = cfg.get(name)
+        return None if val is None else float(val)
+
     return check_bond_angle(
         ws,
         filename=cfg.get('filename', '*.cif'),
@@ -525,6 +549,10 @@ def check_struct_file_bond_angle(
         expected_deg=float(cfg.get('expected_deg', 0)),
         tolerance_deg=float(cfg.get('tolerance_deg', 5.0)),
         cutoff_A=float(cfg.get('cutoff_A', 3.0)),
+        cutoff_a_b_A=_opt('cutoff_a_b_A'),
+        cutoff_c_b_A=_opt('cutoff_c_b_A'),
+        cutoff_a_b_min_A=float(cfg.get('cutoff_a_b_min_A', 0.0)),
+        cutoff_c_b_min_A=float(cfg.get('cutoff_c_b_min_A', 0.0)),
     )
 
 

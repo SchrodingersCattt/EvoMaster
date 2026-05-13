@@ -6,11 +6,22 @@ import shlex
 from typing import Any
 
 from matmaster_bohrium_transfer.security import redact_secrets
-from matmaster_bohrium_transfer.version import SCHEMA_VERSION
+from matmaster_bohrium_transfer.version import PROTOCOL_VERSION, SCHEMA_VERSION
 
 from matmaster.bohrium.errors import BohriumTransferError
 
 REMOTE_PROTOCOL_MAJOR = "1"
+REQUIRED_REMOTE_CAPABILITIES = {
+    "transfer_id_path_isolation",
+    "strict_business_code",
+    "single_retry_budget",
+    "streaming_part_upload",
+    "part_content_md5",
+    "storehost_tiefblue_part_contract",
+    "manifest_resume_v2",
+    "download_sha256",
+    "download_zip_verify",
+}
 
 
 def _run_checked(session, command: str, *, purpose: str, timeout: int = 30) -> dict:
@@ -68,6 +79,21 @@ def probe_remote_transfer(session) -> dict[str, Any]:
         raise BohriumTransferError(
             "remote transfer protocol mismatch: "
             f"expected major {REMOTE_PROTOCOL_MAJOR}, got {protocol!r}"
+        )
+    capabilities = {str(item) for item in payload.get("capabilities") or []}
+    missing = sorted(REQUIRED_REMOTE_CAPABILITIES - capabilities)
+    if missing:
+        package = str(payload.get("package") or "matmaster-bohrium-transfer")
+        version = str(payload.get("package_version") or "unknown")
+        build_id = str(
+            payload.get("build_id") or payload.get("git_commit") or "unknown"
+        )
+        raise BohriumTransferError(
+            "remote transfer capability mismatch: "
+            f"package={package} version={version} build={build_id} "
+            f"missing={','.join(missing)}; update the Bohrium remote image so "
+            f"matmaster_bohrium_transfer includes protocol {PROTOCOL_VERSION} "
+            "capabilities"
         )
     return payload
 
@@ -130,7 +156,7 @@ def run_remote_transfer(
         q_payload_path = shlex.quote(payload_path)
         payload_with_schema = dict(payload)
         payload_with_schema.setdefault("schema_version", SCHEMA_VERSION)
-        payload_with_schema.setdefault("protocol_version", "1.0")
+        payload_with_schema.setdefault("protocol_version", PROTOCOL_VERSION)
         _run_checked(
             session,
             f"umask 077; : > {q_payload_path}",

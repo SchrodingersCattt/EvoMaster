@@ -1096,3 +1096,75 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+- id: SA_abacus_wf_001_20260513
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Extract work function from ABACUS output with correct unit conversion (Ry to eV).
+  human_prompt_seed: '工作区中有一个已完成的 ABACUS slab 计算结果：
+
+    - `mock_running_scf.log`：SCF 收敛日志（含费米能级）
+
+    - `mock_ElecStaticPot_z_avg.dat`：沿 z 方向平均的静电势（两列：z 分数坐标 + 势能值）
+
+
+    请从这些数据中提取功函数（work function），写入 `work_function.json`，格式为
+    `{"work_function_eV": <数值>, "V_vacuum_eV": <数值>, "E_fermi_eV": <数值>}`。'
+  tags:
+  - eng_abacus
+  data_files:
+  - key: scf_log
+    path: data/SA_abacus_wf_001_20260513/mock_running_scf.log
+    oss_url: ''
+    description: ABACUS SCF log with converged Fermi energy.
+  - key: pot_data
+    path: data/SA_abacus_wf_001_20260513/mock_ElecStaticPot_z_avg.dat
+    oss_url: ''
+    description: Z-averaged electrostatic potential (z_frac, potential in Ry).
+  reference_answers:
+  - key: result_artifact
+    value: work_function.json
+  - key: must_v_vacuum_eV
+    value:
+      filename: work_function.json
+      checks:
+      - key: V_vacuum_eV
+        min: 8.2
+        max: 9.0
+  - key: must_e_fermi_eV
+    value:
+      filename: work_function.json
+      checks:
+      - key: E_fermi_eV
+        min: 3.0
+        max: 3.9
+  - key: must_work_function_eV
+    value:
+      filename: work_function.json
+      checks:
+      - key: work_function_eV
+        min: 4.5
+        max: 5.8
+  - key: turn_budget
+    value:
+      max: 10
+  scoring_checklist:
+  - id: result_artifact
+    criterion: work_function.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_v_vacuum_eV
+    criterion: '[Must] V_vacuum correctly converted from Ry to eV (plateau ~0.629 Ry → ~8.56 eV).'
+    axis: correctness
+    verify: answer_json_numeric
+  - id: must_e_fermi_eV
+    criterion: '[Must] E_fermi correctly read from log (3.43 eV).'
+    axis: correctness
+    verify: answer_json_numeric
+  - id: must_work_function_eV
+    criterion: '[Must] Work function = V_vacuum - E_fermi is physically reasonable (~5.1 eV).'
+    axis: correctness
+    verify: answer_json_numeric
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget

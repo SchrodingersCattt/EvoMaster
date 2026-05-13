@@ -2,6 +2,7 @@ from matmaster.manifests.attachment import (
     AttachmentEntry,
     build_available_attachments,
     filter_entries_after_event_id,
+    filter_entries_in_event_range,
     format_available_attachments,
 )
 
@@ -344,6 +345,38 @@ def test_filter_entries_after_event_id_none_keeps_all_entries() -> None:
     ]
 
     assert filter_entries_after_event_id(entries, None) == entries
+
+
+def test_filter_entries_in_event_range_applies_upper_bound_and_drops_unscoped() -> None:
+    entries = [
+        AttachmentEntry(
+            kind="file",
+            label="file_1",
+            name="old.csv",
+            value="https://oss.example.com/chat/old.csv",
+            source_event_id=10,
+        ),
+        AttachmentEntry(
+            kind="file",
+            label="file_2",
+            name="current.csv",
+            value="https://oss.example.com/chat/current.csv",
+            source_event_id=20,
+        ),
+        AttachmentEntry(
+            kind="file",
+            label="file_3",
+            name="unscoped.csv",
+            value="https://oss.example.com/chat/unscoped.csv",
+            source_event_id=None,
+        ),
+    ]
+
+    filtered = filter_entries_in_event_range(entries, after_id=None, until_id=10)
+
+    assert [(entry.label, entry.value) for entry in filtered] == [
+        ("file_1", "https://oss.example.com/chat/old.csv")
+    ]
 
 
 def test_attachment_module_does_not_expose_prompt_append_shortcut() -> None:

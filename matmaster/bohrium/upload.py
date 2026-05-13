@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import quote
+from uuid import uuid4
 
 from matmaster_bohrium_transfer.client import StoreHostClient
 from matmaster_bohrium_transfer.manifest import ManifestStore
 from matmaster_bohrium_transfer.multipart import upload_file_multipart
+from matmaster_bohrium_transfer.transport import build_download_url
+
+_SUBMIT_UPLOAD_CONCURRENCY = 1
 
 
 @dataclass(frozen=True)
@@ -26,11 +29,7 @@ def _archive_location(create_data: dict) -> tuple[str, str, str, str]:
 
 
 def _build_download_url(store_host: str, oss_key: str, token: str) -> str:
-    encoded_key = quote(oss_key, safe="/")
-    return (
-        f"{store_host}/api/download/{encoded_key}?token={token}"
-        "&Response-Content-Type=application/octet-stream"
-    )
+    return build_download_url(store_host, oss_key, token)
 
 
 def _upload_input_archive_sdk_free(
@@ -47,7 +46,8 @@ def _upload_input_archive_sdk_free(
         file_path=zip_path,
         object_key=oss_key,
         manifest_store=ManifestStore(root),
-        transfer_id=f"submit-input-{abs(hash(oss_key))}",
+        transfer_id=f"submit-{uuid4().hex}",
+        concurrency=_SUBMIT_UPLOAD_CONCURRENCY,
     )
     return UploadedArchive(
         oss_key=oss_key,

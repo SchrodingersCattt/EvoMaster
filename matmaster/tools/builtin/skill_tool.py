@@ -68,6 +68,7 @@ class SkillTool(BuiltinTool):
             '  - `skill: "pdf"` - invoke the pdf skill\n'
             '  - `skill: "review-pr"` - invoke the review-pr skill\n\n'
             "Important:\n"
+            "Skill scripts live in ${SKILL_DIR}/scripts; reference docs live in ${SKILL_DIR}/reference.\n\n"
             "- Available skills are listed in system-reminder messages in the conversation\n"
             "- When a skill matches the user's request, invoke it before generating "
             "any other response\n"
@@ -117,6 +118,9 @@ class SkillTool(BuiltinTool):
 
     def _render_skill_dir(self, skill: Skill) -> str:
         skill_path = skill.skill_path
+        if getattr(skill, "is_remote", False):
+            return str(skill_path)
+
         local_abs = skill_path if skill_path.is_absolute() else skill_path.resolve()
 
         session = self._session

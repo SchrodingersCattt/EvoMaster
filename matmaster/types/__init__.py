@@ -44,6 +44,17 @@ from .messages import (
     UserMessage,
 )
 from .runtime import AgentRuntimeSpec, CompactionConfig
+from .runtime_ports import (
+    BusEventSink,
+    CheckpointSink,
+    CheckpointSinkFactory,
+    EmptySessionEventHistory,
+    KernelRuntimePorts,
+    PlaygroundCompactionPort,
+    PlaygroundRuntimePorts,
+    PreCompactionBarrier,
+    SessionEventHistoryPort,
+)
 from .session import LocalSessionConfig, Session, SessionConfig, SSHSessionConfig
 from .tool_decision import ToolDecision
 from .tool_spec import ResourceClaim, ToolBinding, ToolInstance, ToolSpec
@@ -102,7 +113,16 @@ __all__ = [
     "UserMessage",
     # runtime
     "AgentRuntimeSpec",
+    "BusEventSink",
+    "CheckpointSink",
+    "CheckpointSinkFactory",
     "CompactionConfig",
+    "EmptySessionEventHistory",
+    "KernelRuntimePorts",
+    "PlaygroundCompactionPort",
+    "PlaygroundRuntimePorts",
+    "PreCompactionBarrier",
+    "SessionEventHistoryPort",
     # tool runtime v2
     "ToolPlane",
     "SessionCapabilities",

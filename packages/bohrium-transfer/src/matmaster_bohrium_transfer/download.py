@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import base64
+import hashlib
 import os
 import shutil
 import time
@@ -8,13 +10,15 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from urllib.parse import parse_qs, quote, unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 from uuid import uuid4
 
 import requests
 
-from .errors import ExtractError
+from .errors import ExtractError, TransferError
 from .progress import NoopProgressSink, ProgressSink, TransferProgressEvent
+from .security import redact_secrets
+from .transport import build_download_url
 from .version import PROTOCOL_VERSION, SCHEMA_VERSION
 
 
@@ -31,6 +35,92 @@ class DownloadSummary:
     bytes_total: int | None
     bytes_done: int
     resume_supported: bool
+    sha256: str
+    server_hash_checked: bool
+    server_hash_value: str | None
+    hash_validation_skipped: bool
+
+
+def sha256_file(path: str | Path, *, chunk_size: int = 1024 * 1024) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(chunk_size), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _md5_file(path: Path, *, as_base64: bool) -> str:
+    digest = hashlib.md5(usedforsecurity=False)
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            digest.update(chunk)
+    if as_base64:
+        return base64.b64encode(digest.digest()).decode()
+    return digest.hexdigest()
+
+
+def _first_header(
+    headers: dict[str, str], *names: str
+) -> tuple[str | None, str | None]:
+    lowered = {key.lower(): value for key, value in headers.items()}
+    for name in names:
+        value = lowered.get(name.lower())
+        if value:
+            return name, str(value).strip()
+    return None, None
+
+
+def _validate_download_hash(
+    path: Path,
+    headers: dict[str, str],
+) -> tuple[bool, str | None, bool]:
+    _name, md5_base64 = _first_header(headers, "Content-MD5", "X-OSS-Content-Md5")
+    if md5_base64:
+        expected = _md5_file(path, as_base64=True)
+        if md5_base64.strip() != expected:
+            raise TransferError("download_verify", "download Content-MD5 mismatch")
+        return True, md5_base64.strip(), False
+
+    _name, etag = _first_header(headers, "ETag")
+    if etag:
+        normalized = etag.strip().strip('"')
+        if len(normalized) == 32 and all(
+            char in "0123456789abcdefABCDEF" for char in normalized
+        ):
+            expected = _md5_file(path, as_base64=False)
+            if normalized.lower() != expected:
+                raise TransferError("download_verify", "download ETag MD5 mismatch")
+            return True, etag.strip(), False
+        return False, etag.strip(), True
+
+    _name, crc64 = _first_header(headers, "X-OSS-Hash-Crc64ecma")
+    if crc64:
+        return False, crc64.strip(), True
+    return False, None, True
+
+
+def _summary_with_integrity(
+    *,
+    dest: Path,
+    bytes_total: int | None,
+    bytes_done: int,
+    resume_supported: bool,
+    headers: dict[str, str],
+) -> DownloadSummary:
+    digest = sha256_file(dest)
+    server_hash_checked, server_hash_value, hash_validation_skipped = (
+        _validate_download_hash(dest, headers)
+    )
+    return DownloadSummary(
+        path=dest,
+        bytes_total=bytes_total,
+        bytes_done=bytes_done,
+        resume_supported=resume_supported,
+        sha256=digest,
+        server_hash_checked=server_hash_checked,
+        server_hash_value=server_hash_value,
+        hash_validation_skipped=hash_validation_skipped,
+    )
 
 
 def probe_range(response) -> RangeCapability:
@@ -110,11 +200,12 @@ def _download_stream(
             resume_supported=False,
         )
     )
-    return DownloadSummary(
-        path=dest,
+    return _summary_with_integrity(
+        dest=dest,
         bytes_total=bytes_total,
         bytes_done=bytes_done,
         resume_supported=False,
+        headers=dict(getattr(response, "headers", {}) or {}),
     )
 
 
@@ -162,6 +253,7 @@ def _download_ranges(
     timeout: int,
     progress_sink: ProgressSink,
     transfer_id: str,
+    server_headers: dict[str, str] | None = None,
 ) -> DownloadSummary:
     specs = _range_specs(bytes_total, part_size)
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -220,11 +312,12 @@ def _download_ranges(
             resume_supported=True,
         )
     )
-    return DownloadSummary(
-        path=dest,
+    return _summary_with_integrity(
+        dest=dest,
         bytes_total=bytes_total,
         bytes_done=bytes_done,
         resume_supported=True,
+        headers=server_headers or {},
     )
 
 
@@ -245,8 +338,10 @@ def download_file(
     try:
         head = http.head(url, allow_redirects=True, timeout=30)
         capability = probe_range(head)
+        head_headers = dict(getattr(head, "headers", {}) or {})
     except Exception:
         capability = RangeCapability(False, None, "head_failed")
+        head_headers = {}
     sink.emit(
         TransferProgressEvent(
             event_type="download_started",
@@ -273,6 +368,7 @@ def download_file(
             timeout=timeout,
             progress_sink=sink,
             transfer_id=transfer_id,
+            server_headers=head_headers,
         )
     return _download_stream(
         http,
@@ -420,11 +516,7 @@ def _iterate_objects(
 
 
 def _download_object_url(host: str, token: str, object_path: str) -> str:
-    encoded_path = quote(object_path, safe="/")
-    return (
-        f"{host.rstrip('/')}/api/download/{encoded_path}?token={token}"
-        "&Response-Content-Type=application/octet-stream"
-    )
+    return build_download_url(host, object_path, token)
 
 
 def _download_object(
@@ -455,11 +547,44 @@ def _sandbox_relative_object_path(object_path: str, root_prefix: str) -> str:
     return path.lstrip("/")
 
 
+def _record_fallback_attempt(
+    attempts: list[dict[str, object]],
+    name: str,
+    *,
+    ok: bool,
+    error: BaseException | str | None = None,
+) -> None:
+    item: dict[str, object] = {"name": name, "ok": ok}
+    if error is not None:
+        item["error"] = redact_secrets(str(error))
+    attempts.append(item)
+
+
+def _transfer_metadata_from_summary(summary: DownloadSummary) -> dict[str, object]:
+    return {
+        "download_sha256": summary.sha256,
+        "server_hash_checked": summary.server_hash_checked,
+        "server_hash_value": summary.server_hash_value,
+        "hash_validation_skipped": summary.hash_validation_skipped,
+    }
+
+
 def _extract_result_zip(zip_path: Path, staging: Path) -> list[str]:
-    try:
-        return extract_zip_safe(zip_path, staging)
-    except zipfile.BadZipFile:
-        return [f"(bad zip: {zip_path.name})"]
+    verify_zip_archive(zip_path)
+    return extract_zip_safe(zip_path, staging)
+
+
+def verify_zip_archive(path: str | Path) -> None:
+    archive_path = Path(path)
+    if not zipfile.is_zipfile(archive_path):
+        raise TransferError("download_verify", "invalid zip archive")
+    with zipfile.ZipFile(archive_path, "r") as zf:
+        bad_member = zf.testzip()
+    if bad_member:
+        raise TransferError(
+            "download_verify",
+            f"zip archive CRC check failed for {bad_member}",
+        )
 
 
 def _download_sandbox_log(
@@ -503,8 +628,9 @@ def _download_sandbox_results(
     *,
     payload: dict[str, Any],
     staging: Path,
+    fallback_attempts: list[dict[str, object]],
     session=None,
-) -> tuple[list[str], str, int]:
+) -> tuple[list[str], str, int, dict[str, object]]:
     job_id = _required_str(payload, "job_id")
     detail_data = payload.get("detail_data") or {}
     if not isinstance(detail_data, dict):
@@ -515,6 +641,8 @@ def _download_sandbox_results(
     root_token = ""
     root_prefix = ""
     bytes_transferred = 0
+    transfer_metadata: dict[str, object] = {}
+    first_transfer_error: TransferError | None = None
 
     if result_url:
         try:
@@ -524,7 +652,11 @@ def _download_sandbox_results(
             objects = _iterate_objects(
                 root_host, root_token, root_prefix, session=session
             )
+            _record_fallback_attempt(fallback_attempts, "sandbox_iterate", ok=True)
         except Exception:
+            _record_fallback_attempt(
+                fallback_attempts, "sandbox_iterate", ok=False, error="failed"
+            )
             objects = []
 
     log_downloaded, log_bytes = _download_sandbox_log(
@@ -546,13 +678,20 @@ def _download_sandbox_results(
             )
             bytes_transferred += summary.bytes_done
             files = _extract_result_zip(zip_path, staging)
+            transfer_metadata.update(_transfer_metadata_from_summary(summary))
+            _record_fallback_attempt(fallback_attempts, "sandbox_zip_object", ok=True)
             return (
                 _merge_log_file(files, log_downloaded),
                 read_log(staging),
                 bytes_transferred,
+                transfer_metadata,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            _record_fallback_attempt(
+                fallback_attempts, "sandbox_zip_object", ok=False, error=exc
+            )
+            if isinstance(exc, TransferError) and first_transfer_error is None:
+                first_transfer_error = exc
 
     if result_url:
         try:
@@ -560,13 +699,20 @@ def _download_sandbox_results(
             summary = download_file(result_url, zip_path, session=session)
             bytes_transferred += summary.bytes_done
             files = _extract_result_zip(zip_path, staging)
+            transfer_metadata.update(_transfer_metadata_from_summary(summary))
+            _record_fallback_attempt(fallback_attempts, "sandbox_result_url", ok=True)
             return (
                 _merge_log_file(files, log_downloaded),
                 read_log(staging),
                 bytes_transferred,
+                transfer_metadata,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            _record_fallback_attempt(
+                fallback_attempts, "sandbox_result_url", ok=False, error=exc
+            )
+            if isinstance(exc, TransferError) and first_transfer_error is None:
+                first_transfer_error = exc
 
     if objects and root_host and root_token:
         downloaded: list[str] = []
@@ -594,13 +740,24 @@ def _download_sandbox_results(
             count += 1
         downloaded = _merge_log_file(downloaded, log_downloaded)
         if downloaded:
-            return downloaded, read_log(staging), bytes_transferred
+            _record_fallback_attempt(
+                fallback_attempts, "sandbox_individual_objects", ok=True
+            )
+            return downloaded, read_log(staging), bytes_transferred, transfer_metadata
 
     if log_downloaded:
-        return ["log"], read_log(staging), bytes_transferred
+        return ["log"], read_log(staging), bytes_transferred, transfer_metadata
+    if first_transfer_error:
+        first_transfer_error.diagnostics = {"fallback_attempts": fallback_attempts}
+        raise first_transfer_error
     if result_url:
-        return [], "(sandbox resultUrl download failed)", bytes_transferred
-    return [], "(no resultUrl in job detail)", bytes_transferred
+        return (
+            [],
+            "(sandbox resultUrl download failed)",
+            bytes_transferred,
+            transfer_metadata,
+        )
+    return [], "(no resultUrl in job detail)", bytes_transferred, transfer_metadata
 
 
 def _download_standard_results(
@@ -608,18 +765,23 @@ def _download_standard_results(
     detail_data: dict[str, Any],
     staging: Path,
     session=None,
-) -> tuple[list[str], str, int]:
+) -> tuple[list[str], str, int, dict[str, object]]:
     result_url = str(detail_data.get("resultUrl") or detail_data.get("result") or "")
     if not result_url:
         out_files = (detail_data.get("jobFiles") or {}).get("outFiles") or []
         if out_files and isinstance(out_files[0], dict):
             result_url = str(out_files[0].get("url") or "")
     if not result_url:
-        return [], "(no resultUrl in job detail)", 0
+        return [], "(no resultUrl in job detail)", 0, {}
     zip_path = staging / "out.zip"
     summary = download_file(result_url, zip_path, session=session)
     files = _extract_result_zip(zip_path, staging)
-    return files, read_log(staging), summary.bytes_done
+    return (
+        files,
+        read_log(staging),
+        summary.bytes_done,
+        _transfer_metadata_from_summary(summary),
+    )
 
 
 def run_download_results_payload(
@@ -629,30 +791,53 @@ def run_download_results_payload(
 ) -> dict[str, Any]:
     started = time.monotonic()
     result_dir = Path(_required_str(payload, "result_dir"))
+    transfer_id = str(payload.get("transfer_id") or "download").strip() or "download"
     staging = result_dir.with_name(result_dir.name + f".tmp.{uuid4().hex}")
     detail_data = payload.get("detail_data") or {}
     if not isinstance(detail_data, dict):
         raise ValueError("detail_data must be a JSON object")
+    fallback_attempts: list[dict[str, object]] = []
     try:
         staging.mkdir(parents=True, exist_ok=False)
         if bool(payload.get("sandbox")):
-            files, log_tail, bytes_transferred = _download_sandbox_results(
-                payload=payload,
-                staging=staging,
-                session=session,
+            files, log_tail, bytes_transferred, transfer_metadata = (
+                _download_sandbox_results(
+                    payload=payload,
+                    staging=staging,
+                    fallback_attempts=fallback_attempts,
+                    session=session,
+                )
             )
         else:
-            files, log_tail, bytes_transferred = _download_standard_results(
-                detail_data=detail_data,
-                staging=staging,
-                session=session,
+            files, log_tail, bytes_transferred, transfer_metadata = (
+                _download_standard_results(
+                    detail_data=detail_data,
+                    staging=staging,
+                    session=session,
+                )
             )
         publish_result_dir(staging, result_dir)
+    except TransferError as exc:
+        if staging.exists():
+            shutil.rmtree(staging, ignore_errors=True)
+        if fallback_attempts and not exc.diagnostics:
+            exc.diagnostics = {"fallback_attempts": fallback_attempts}
+        raise
     except Exception:
         if staging.exists():
             shutil.rmtree(staging, ignore_errors=True)
         raise
     elapsed = max(time.monotonic() - started, 0.001)
+    transfer_metadata = {
+        "transfer_id": transfer_id,
+        "download_sha256": transfer_metadata.get("download_sha256"),
+        "server_hash_checked": transfer_metadata.get("server_hash_checked", False),
+        "server_hash_value": transfer_metadata.get("server_hash_value"),
+        "hash_validation_skipped": transfer_metadata.get(
+            "hash_validation_skipped", True
+        ),
+        "fallback_attempts": fallback_attempts,
+    }
     return {
         "schema_version": SCHEMA_VERSION,
         "protocol_version": PROTOCOL_VERSION,
@@ -662,4 +847,5 @@ def run_download_results_payload(
         "log_tail": log_tail,
         "bytes_transferred": bytes_transferred,
         "transfer_rate_mbps": round(bytes_transferred * 8 / elapsed / 1_000_000, 3),
+        "metadata": {"transfer": transfer_metadata},
     }

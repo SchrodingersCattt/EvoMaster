@@ -22,7 +22,6 @@ _src_services = pytest.importorskip(
 )
 arb = _src_services
 BohriumSetupResult = _src_services.BohriumSetupResult
-SkillSyncSpec = _src_services.SkillSyncSpec
 BohriumSetupService = _src_services.BohriumSetupService
 SESSIONS = pytest.importorskip(
     "src.services.sessions_service",
@@ -55,7 +54,6 @@ def _make_bohrium_service(sessions_service: Any | None = None) -> BohriumSetupSe
     )
 
 
-@patch.object(arb, '_sync_skills_to_ssh_session', MagicMock())
 @patch.object(arb, '_run_clear_remote_proxy', MagicMock())
 @patch.object(arb, '_remote_session_workspace_root', return_value='/share')
 @patch('src.services.agent_run_bohrium.get_bohrium_nodes_table')
@@ -94,10 +92,6 @@ def test_successful_setup_returns_execution_binding_and_stores_runtime(
         result = svc._setup_bohrium_for_run(
             session_id='sess-ok',
             pg=pg,
-            skill_sync_spec=SkillSyncSpec(
-                project_skill_roots=['/tmp/proj_skills'],
-                remote_project_root='/remote/proj',
-            ),
             run_creds={
                 'access_key': 'ak',
                 'project_id': 99,
@@ -136,12 +130,12 @@ def test_successful_setup_returns_execution_binding_and_stores_runtime(
 @patch.object(arb, '_remote_session_workspace_root', return_value='/share')
 @patch('src.services.agent_run_bohrium.get_bohrium_nodes_table')
 @patch('src.services.agent_run_bohrium.get_bohrium_node_service')
-def test_setup_skips_skills_synced_event_when_skill_sync_returns_false(
+def test_setup_does_not_emit_skills_synced_event(
     mock_node_svc_factory: MagicMock,
     mock_nodes_table_factory: MagicMock,
     mock_remote_workspace_root: MagicMock,
 ) -> None:
-    """No skills_synced telemetry should be emitted when skill sync is skipped."""
+    """Bohrium setup no longer owns skill directory sync telemetry."""
     node_svc = MagicMock()
     mock_node_svc_factory.return_value = node_svc
     nodes_table = MagicMock()
@@ -176,7 +170,6 @@ def test_setup_skips_skills_synced_event_when_skill_sync_returns_false(
         result = svc._setup_bohrium_for_run(
             session_id='sess-no-skill-sync',
             pg=pg,
-            skill_sync_spec=None,
             run_creds={
                 'access_key': 'ak',
                 'project_id': 99,
@@ -231,17 +224,13 @@ def test_setup_failure_after_open_restores_original_and_clears_runtime(
         if phase == 'post_ssh':
             raise RuntimeError('post-store failure')
 
-    with (
-        patch.object(arb, 'SSHSession', return_value=mock_ssh),
-        patch.object(arb, '_sync_skills_to_ssh_session', MagicMock()),
-    ):
+    with patch.object(arb, 'SSHSession', return_value=mock_ssh):
         mock_run_clear_remote_proxy.side_effect = _raise_after_store
         event_callback = MagicMock()
         svc = _make_bohrium_service()
         result = svc._setup_bohrium_for_run(
             session_id='sess-fail',
             pg=pg,
-            skill_sync_spec=None,
             run_creds={
                 'access_key': 'ak',
                 'project_id': 99,
@@ -350,7 +339,6 @@ def test_setup_with_required_bohrium_can_continue_after_retry_success() -> None:
             svc.run_setup(
                 session_id='sess-ok',
                 playground=MagicMock(),
-                skill_sync_spec=None,
                 run_started_at=1.0,
                 bohrium_required=True,
             )
@@ -380,12 +368,12 @@ def _make_no_attach_bohrium_result() -> MagicMock:
 
 @patch('matmaster.providers.llm_factory.build_provider')
 @patch('matmaster.config.loader.load_llm_config')
-def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
+def test_run_agent_loads_exp_config_without_passing_skill_sync_to_bohrium_setup(
     mock_load_llm: MagicMock,
     mock_build_provider: MagicMock,
     tmp_path: Path,
 ) -> None:
-    """load_exp_config runs before Bohrium setup; derived SkillSyncSpec is passed to setup."""
+    """run_agent loads Exp config but does not own skill directory sync."""
     AgentRunService = pytest.importorskip(
         "src.services.agent_run_service",
         reason="src not available (isolation test)",
@@ -394,9 +382,9 @@ def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
     order: list[str] = []
     _real_load_exp = matmaster_loader.load_exp_config
 
-    def tracked_load_exp(name: str) -> Any:
+    def tracked_load_exp(name: str, **kwargs: Any) -> Any:
         order.append('load_exp_config')
-        return _real_load_exp(name)
+        return _real_load_exp(name, **kwargs)
 
     mock_sessions_svc = MagicMock()
     mock_sessions_svc.get_session_user_id.return_value = 'user-123'
@@ -412,12 +400,12 @@ def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
     mock_pg.prepare.return_value = mock_pg_ctx
     mock_pg.config_path = Path('config/config.yaml')
     mock_pg.session = None
-    captured_spec: dict[str, Any] = {}
+    captured_setup_kwargs: dict[str, Any] = {}
     mock_bohrium_result = _make_no_attach_bohrium_result()
 
     def tracked_setup(**kwargs: Any) -> MagicMock:
         order.append('setup')
-        captured_spec['skill_sync_spec'] = kwargs.get('skill_sync_spec')
+        captured_setup_kwargs.update(kwargs)
         return mock_bohrium_result
 
     mock_llm = MockLLMProvider()
@@ -449,7 +437,7 @@ def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
         mock_events_fn.return_value = mock_events_table
         mock_redis_fn.return_value = MagicMock()
 
-        async def _mock_use_quota(uid: str) -> None:
+        async def _mock_use_quota(uid: str, **_: Any) -> None:
             pass
 
         mock_use_quota.side_effect = _mock_use_quota
@@ -466,12 +454,7 @@ def test_skill_sync_spec_load_exp_config_before_bohrium_setup(
         )
 
     assert order.index('load_exp_config') < order.index('setup')
-    spec = captured_spec.get('skill_sync_spec')
-    assert spec is not None
-    assert isinstance(spec, SkillSyncSpec)
-    assert spec.remote_project_root == '/share/.matmaster'
-    assert spec.project_skill_roots
-    assert spec.project_skill_roots[0].endswith(str(Path('matmaster/skills')))
+    assert 'skill_sync_spec' not in captured_setup_kwargs
 
 
 @patch('matmaster.providers.llm_factory.build_provider')
@@ -587,37 +570,6 @@ def test_execution_binding_before_build_runtime(
     assert bmeta.get('session_type') == 'ssh'
 
 
-def test_skill_sync_upload_exclude_set_does_not_exclude_skill_md(
-    tmp_path: Path,
-) -> None:
-    """Skill tree upload must not exclude SKILL.md (contract files sync to the node)."""
-    SSHSession = pytest.importorskip(
-        "evomaster.agent.session.ssh",
-        reason="evomaster not available (isolation test)",
-    ).SSHSession
-
-    root = tmp_path / 'proj_skills'
-    root.mkdir()
-    spec = SkillSyncSpec(
-        project_skill_roots=[str(root)],
-        remote_project_root='/remote/proj',
-    )
-    ssh = SSHSession()
-    excludes: list[set[str]] = []
-
-    def _capture_upload(
-        _local_dir: str, _remote_dir: str, exclude: set[str] | None = None
-    ) -> None:
-        excludes.append(set(exclude) if exclude is not None else set())
-
-    with patch.object(ssh, 'upload_directory', side_effect=_capture_upload):
-        arb._sync_skills_to_ssh_session(ssh, spec)
-
-    assert excludes
-    assert all('SKILL.md' not in ex for ex in excludes)
-
-
-@patch.object(arb, "_sync_skills_to_ssh_session", MagicMock())
 @patch.object(arb, "_run_clear_remote_proxy", MagicMock())
 @patch.object(arb, "_remote_session_workspace_root", return_value="/share")
 @patch("src.services.agent_run_bohrium.get_bohrium_nodes_table")
@@ -651,10 +603,6 @@ def test_setup_uses_remote_workdir_for_ssh_and_execution_context(
         result = svc._setup_bohrium_for_run(
             session_id="sess-dir",
             pg=pg,
-            skill_sync_spec=SkillSyncSpec(
-                project_skill_roots=["/tmp/proj_skills"],
-                remote_project_root="/remote/proj",
-            ),
             run_creds={"access_key": "ak", "project_id": 99},
             user_id_for_ak="u1",
             org_id="o1",
@@ -705,7 +653,6 @@ def test_run_setup_forwards_remote_workdir_to_setup() -> None:
             svc.run_setup(
                 session_id="sess-dir",
                 playground=MagicMock(),
-                skill_sync_spec=None,
                 run_started_at=1.0,
                 bohrium_required=True,
                 remote_workdir="/share/case",

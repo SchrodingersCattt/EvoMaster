@@ -29,7 +29,7 @@ from src.models.chat import (
 from src.services.agent_run_service import _get_agent_default_llm
 from src.services.events_service import ChatEventsService, get_events_service
 from src.services.image_input_service import ImageInputError, get_image_input_service
-from src.services.quota_service import check_quota
+from src.services.quota_service import check_model_quota, check_quota
 from src.services.session_directory_service import (
     SessionDirectoryError,
     normalize_session_directory_for_storage,
@@ -95,7 +95,7 @@ def _session_directory_error(exc: SessionDirectoryError) -> BaseErrorResponse:
         http_status=exc.http_status,
         code=exc.http_status,
         msg=exc.message,
-        data={'error_code': exc.error_code},
+        data={"error_code": exc.error_code},
     )
 
 
@@ -298,6 +298,31 @@ async def chat_stream(
                 msg="当日免费额度已用完。请填写问卷申请额度，审核通过后再试。",
             )
 
+    # Model-level quota check (e.g. bedrock-claude-opus: 3/day)
+    model_route_key = (req.model or "").strip() if req else ""
+    if user_id and model_route_key:
+        try:
+            model_remaining = await check_model_quota(user_id, model_route_key)
+            logger.info(
+                "stream model_quota check: session_id=%s user_id=%s model=%s remaining=%s",
+                sid,
+                user_id,
+                model_route_key,
+                model_remaining,
+            )
+            if model_remaining == 0:
+                raise ForbiddenErrorResponse(
+                    msg="当前模型今日免费次数已用完，请切换其他模型或明天再试。",
+                )
+        except ForbiddenErrorResponse:
+            raise
+        except Exception as e:
+            logger.warning(
+                "stream model_quota check failed (allowing): session_id=%s error=%s",
+                sid,
+                e,
+            )
+
     # 仅 Worker 队列模式：发送消息需 REDIS_URL，否则返回 503
     if not REDIS_URL:
         logger.warning(
@@ -403,19 +428,19 @@ def _submit_interaction_reply(
     reply_queue = stream_svc.get_reply_queue(sid)
     if reply_queue is None:
         raise ConflictErrorResponse(
-            msg='当前无活跃任务，或任务已结束',
+            msg="当前无活跃任务，或任务已结束",
         )
 
     payload = {
-        'source': 'User',
-        'type': event_type,
-        'content': content,
-        'session_id': sid,
+        "source": "User",
+        "type": event_type,
+        "content": content,
+        "session_id": sid,
     }
     run_ctx = stream_svc.get_run_context(sid)
     if run_ctx:
-        payload['task_id'] = run_ctx.get('task_id')
-        payload['invocation_id'] = run_ctx.get('invocation_id')
+        payload["task_id"] = run_ctx.get("task_id")
+        payload["invocation_id"] = run_ctx.get("invocation_id")
 
     stream_svc.publish_reply_event(sid, payload)
     reply_queue.put_content(queue_value)

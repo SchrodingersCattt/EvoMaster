@@ -9,12 +9,14 @@ from unittest.mock import patch
 import pytest
 
 from matmaster.core.context_builder import ContextBuilder
+from matmaster.types.current_input import CurrentInputContext
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
     StreamChunk,
     UserMessage,
 )
+from matmaster.types.runtime_ports import KernelRuntimePorts
 
 from .agent_kernel_test_helpers import _make_spec
 
@@ -68,7 +70,13 @@ class _DurablePreflightCompactor:
     async def preflight_if_needed(self, messages: list[Any]) -> None:
         return None
 
-    async def apply_compaction_plan(self, plan, messages: list[Any]):
+    async def apply_compaction_plan(
+        self,
+        plan,
+        messages: list[Any],
+        *,
+        current_input_context=None,
+    ):
         from matmaster.core.context_compactor import CompactionResult
 
         bundle = ContextBuilder().build_compact_bundle(summary="summary")
@@ -132,7 +140,13 @@ class _LifecycleCompactor:
             turn=turn,
         )
 
-    async def apply_compaction_plan(self, plan, messages: list[Any]):
+    async def apply_compaction_plan(
+        self,
+        plan,
+        messages: list[Any],
+        *,
+        current_input_context=None,
+    ):
         from matmaster.core.context_compactor import CompactionResult
 
         self.apply_calls += 1
@@ -168,14 +182,16 @@ def _build_long_history() -> list[Any]:
 
 
 def build_runtime_spec_with_compaction(*, checkpoint_sink: Any, summary_text: str):
+    from matmaster.types.runtime_ports import KernelRuntimePorts
+
     spec = _make_spec(provider=ContentOnlyProvider())
     return spec.model_copy(
         update={
             "compactor": _LifecycleCompactor(summary_text),
             "meta": {
                 "task_id": "task-1",
-                "checkpoint_sink": checkpoint_sink,
             },
+            "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
         }
     )
 
@@ -266,9 +282,7 @@ class TestCheckpointAwareCompaction:
         spec = _make_spec(provider=provider).model_copy(
             update={
                 "compactor": compactor,
-                "meta": {
-                    "checkpoint_sink": checkpoint_sink,
-                },
+                "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
             }
         )
 
@@ -313,9 +327,7 @@ class TestCheckpointAwareCompaction:
         spec = _make_spec(provider=provider).model_copy(
             update={
                 "compactor": compactor,
-                "meta": {
-                    "checkpoint_sink": checkpoint_sink,
-                },
+                "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
             }
         )
 
@@ -353,9 +365,7 @@ class TestCheckpointAwareCompaction:
         spec = _make_spec(provider=provider).model_copy(
             update={
                 "compactor": compactor,
-                "meta": {
-                    "checkpoint_sink": checkpoint_sink,
-                },
+                "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
             }
         )
 
@@ -379,15 +389,335 @@ class TestCheckpointAwareCompaction:
         assert compaction_event.failure_reason == "checkpoint unavailable"
 
 
+@pytest.mark.asyncio
+async def test_kernel_reads_checkpoint_sink_from_runtime_ports() -> None:
+    from matmaster.core.agent import AgentKernel
+    from matmaster.types.runtime_ports import KernelRuntimePorts
+
+    provider = ContentOnlyProvider()
+    compactor = _DurablePreflightCompactor()
+    checkpoint_calls: list[dict[str, Any]] = []
+
+    async def checkpoint_sink(
+        *, payload: dict[str, Any], base_messages: list[dict[str, Any]]
+    ) -> int | None:
+        checkpoint_calls.append(
+            {
+                "payload": payload,
+                "base_messages": base_messages,
+            }
+        )
+        return 99
+
+    spec = _make_spec(provider=provider).model_copy(
+        update={
+            "compactor": compactor,
+            "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
+            "meta": {},
+        }
+    )
+
+    events = [
+        event
+        async for event in AgentKernel().run_stream(
+            spec,
+            "test task",
+            history=[
+                UserMessage(content="old question"),
+                AssistantMessage(content="old answer"),
+            ],
+        )
+    ]
+
+    assert checkpoint_calls
+    assert any(getattr(event, "covered_until_event_id", None) == 99 for event in events)
+
+
+class _BarrierFailureCompactor(_DurablePreflightCompactor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.apply_calls = 0
+
+    async def apply_compaction_plan(
+        self,
+        plan,
+        messages,
+        *,
+        current_input_context=None,
+    ):
+        self.apply_calls += 1
+        return await super().apply_compaction_plan(
+            plan,
+            messages,
+            current_input_context=current_input_context,
+        )
+
+
+class _BoundaryOverrideCompactor(_DurablePreflightCompactor):
+    async def apply_compaction_plan(
+        self,
+        plan,
+        messages: list[Any],
+        *,
+        current_input_context=None,
+    ):
+        from matmaster.core.context_compactor import CompactionResult
+
+        bundle = ContextBuilder().build_compact_bundle(summary="summary")
+        compact_message = UserMessage(content=bundle)
+        base_snapshot = [
+            compact_message.model_dump(mode="json"),
+        ]
+        messages[:] = [
+            messages[0],
+            compact_message,
+        ]
+        return CompactionResult(
+            compaction_id=plan.compaction_id,
+            compaction_count=plan.compaction_count,
+            phase=plan.phase,
+            strategy="summary",
+            durability="durable",
+            trigger_tokens=plan.trigger_tokens,
+            retained_turns=1,
+            failure_reason=None,
+            base_snapshot=base_snapshot,
+            checkpoint_covered_until_event_id=41,
+        )
+
+
+class _RecordingCurrentInputCompactor(_DurablePreflightCompactor):
+    def __init__(self) -> None:
+        super().__init__()
+        self.seen_current_input_context: Any = None
+        self.apply_calls = 0
+
+    async def apply_compaction_plan(
+        self,
+        plan,
+        messages: list[Any],
+        *,
+        current_input_context=None,
+    ):
+        self.apply_calls += 1
+        self.seen_current_input_context = current_input_context
+        return await super().apply_compaction_plan(
+            plan,
+            messages,
+            current_input_context=current_input_context,
+        )
+
+
+@pytest.mark.asyncio
+async def test_kernel_passes_effective_current_input_context_to_preflight_compactor():
+    from matmaster.core.agent import AgentKernel
+
+    compactor = _RecordingCurrentInputCompactor()
+
+    async def checkpoint_sink(**kwargs):
+        return 42
+
+    spec = _make_spec(provider=ContentOnlyProvider()).model_copy(
+        update={
+            "compactor": compactor,
+            "meta": {
+                "current_input_context": CurrentInputContext.from_values(
+                    user_text="original before rewrite",
+                    files=["https://oss.example.com/chat/current.cif"],
+                    pre_query_scope_event_id=42,
+                )
+            },
+            "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
+        }
+    )
+
+    [
+        event
+        async for event in AgentKernel().run_stream(
+            spec,
+            "effective task text",
+            history=[
+                UserMessage(content="old question"),
+                AssistantMessage(content="old answer"),
+            ],
+        )
+    ]
+
+    assert compactor.seen_current_input_context.user_text == "effective task text"
+    assert compactor.seen_current_input_context.files == (
+        "https://oss.example.com/chat/current.cif",
+    )
+    assert compactor.seen_current_input_context.pre_query_scope_event_id == 42
+
+
+@pytest.mark.asyncio
+async def test_kernel_skips_preflight_current_split_when_history_is_empty() -> None:
+    from matmaster.core.agent import AgentKernel
+
+    compactor = _RecordingCurrentInputCompactor()
+
+    async def checkpoint_sink(**kwargs):
+        return 42
+
+    spec = _make_spec(provider=ContentOnlyProvider()).model_copy(
+        update={
+            "compactor": compactor,
+            "meta": {
+                "current_input_context": CurrentInputContext.from_values(
+                    user_text="current task",
+                    files=["https://oss.example.com/chat/current.cif"],
+                    pre_query_scope_event_id=42,
+                )
+            },
+            "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
+        }
+    )
+
+    [
+        event
+        async for event in AgentKernel().run_stream(
+            spec,
+            "current task",
+            history=None,
+        )
+    ]
+
+    assert compactor.preflight_calls == 0
+    assert compactor.apply_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_kernel_passes_checkpoint_covered_until_override_to_sink() -> None:
+    from matmaster.core.agent import AgentKernel
+
+    checkpoint_calls: list[dict[str, Any]] = []
+
+    async def checkpoint_sink(
+        *, payload: dict[str, Any], base_messages: list[dict[str, Any]]
+    ) -> int | None:
+        checkpoint_calls.append(
+            {
+                "payload": payload,
+                "base_messages": base_messages,
+            }
+        )
+        return payload.get("covered_until_event_id")
+
+    spec = _make_spec(provider=ContentOnlyProvider()).model_copy(
+        update={
+            "compactor": _BoundaryOverrideCompactor(),
+            "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
+        }
+    )
+
+    events = [
+        event
+        async for event in AgentKernel().run_stream(
+            spec,
+            "test task",
+            history=[
+                UserMessage(content="old question"),
+                AssistantMessage(content="old answer"),
+            ],
+        )
+    ]
+
+    assert checkpoint_calls[0]["payload"] == {
+        "durability": "durable",
+        "strategy": "summary",
+        "covered_until_event_id": 41,
+    }
+    assert any(getattr(event, "covered_until_event_id", None) == 41 for event in events)
+
+
+@pytest.mark.asyncio
+async def test_kernel_sync_pre_compaction_barrier_error_stops_compaction() -> None:
+    from matmaster.core.agent import AgentKernel
+    from matmaster.types.runtime_ports import KernelRuntimePorts
+
+    provider = ContentOnlyProvider()
+    compactor = _BarrierFailureCompactor()
+
+    def barrier() -> None:
+        raise RuntimeError("barrier failed")
+
+    spec = _make_spec(provider=provider).model_copy(
+        update={
+            "compactor": compactor,
+            "runtime_ports": KernelRuntimePorts(pre_compaction_barrier=barrier),
+            "meta": {},
+        }
+    )
+
+    with pytest.raises(RuntimeError, match="barrier failed"):
+        [
+            event
+            async for event in AgentKernel().run_stream(
+                spec,
+                "test task",
+                history=[
+                    UserMessage(content="old question"),
+                    AssistantMessage(content="old answer"),
+                ],
+            )
+        ]
+
+    assert compactor.preflight_calls == 1
+    assert compactor.apply_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_kernel_async_pre_compaction_barrier_error_stops_compaction() -> None:
+    from matmaster.core.agent import AgentKernel
+    from matmaster.types.runtime_ports import KernelRuntimePorts
+
+    provider = ContentOnlyProvider()
+    compactor = _BarrierFailureCompactor()
+
+    async def barrier() -> None:
+        raise RuntimeError("async barrier failed")
+
+    spec = _make_spec(provider=provider).model_copy(
+        update={
+            "compactor": compactor,
+            "runtime_ports": KernelRuntimePorts(pre_compaction_barrier=barrier),
+            "meta": {},
+        }
+    )
+
+    with pytest.raises(RuntimeError, match="async barrier failed"):
+        [
+            event
+            async for event in AgentKernel().run_stream(
+                spec,
+                "test task",
+                history=[
+                    UserMessage(content="old question"),
+                    AssistantMessage(content="old answer"),
+                ],
+            )
+        ]
+
+    assert compactor.preflight_calls == 1
+    assert compactor.apply_calls == 0
+
+
 # ── TestExpCheckpointSinkScopeResolution ─────────────────────
 
 
 class TestExpCheckpointSinkScopeResolution:
     @pytest.mark.asyncio
-    async def test_build_runtime_resolves_checkpoint_sink_by_spawn_scope(self) -> None:
+    async def test_build_runtime_resolves_checkpoint_sink_by_spawn_scope(
+        self,
+        tmp_path: Path,
+    ) -> None:
         from matmaster.config.exp import ExpConfig
         from matmaster.core.exp import Exp
         from matmaster.types.context import PlaygroundContext
+        from matmaster.types.runtime_ports import (
+            PlaygroundCompactionPort,
+            PlaygroundRuntimePorts,
+        )
 
         parent_sink = object()
         child_sink = object()
@@ -400,12 +730,17 @@ class TestExpCheckpointSinkScopeResolution:
             return parent_sink
 
         ctx = PlaygroundContext(
-            workdir=Path("/tmp/test-exp"),
+            workdir=tmp_path,
             session_type="local",
-            cache_area=Path("/tmp/test-exp-cache"),
-            execution_workdir="/tmp/test-exp",
+            cache_area=tmp_path / "cache",
+            execution_workdir=str(tmp_path),
             llm_provider=ContentOnlyProvider(),
-            run_meta={"checkpoint_sink_factory": checkpoint_sink_factory},
+            run_meta={},
+            runtime_ports=PlaygroundRuntimePorts(
+                compaction=PlaygroundCompactionPort(
+                    checkpoint_sink_factory=checkpoint_sink_factory,
+                )
+            ),
         )
         exp = Exp(ExpConfig(name="test"))
 
@@ -414,28 +749,31 @@ class TestExpCheckpointSinkScopeResolution:
             child_runtime = await exp.build_runtime(ctx, spawn_id="child-1")
 
         assert seen_spawn_ids == [None, "child-1"]
-        assert (
-            parent_runtime.spec.meta["checkpoint_sink_factory"]
-            is checkpoint_sink_factory
-        )
-        assert (
-            child_runtime.spec.meta["checkpoint_sink_factory"]
-            is checkpoint_sink_factory
-        )
-        assert parent_runtime.spec.meta["checkpoint_sink"] is parent_sink
-        assert child_runtime.spec.meta["checkpoint_sink"] is child_sink
+        assert parent_runtime.spec.runtime_ports.checkpoint_sink is parent_sink
+        assert child_runtime.spec.runtime_ports.checkpoint_sink is child_sink
 
 
 @pytest.mark.asyncio
 async def test_kernel_runs_pre_compaction_barrier_before_compactor() -> None:
     from matmaster.core.agent import AgentKernel
+    from matmaster.types.runtime_ports import KernelRuntimePorts
 
     sequence: list[str] = []
 
     class BarrierCompactor(_DurablePreflightCompactor):
-        async def apply_compaction_plan(self, plan, messages):
+        async def apply_compaction_plan(
+            self,
+            plan,
+            messages,
+            *,
+            current_input_context=None,
+        ):
             sequence.append("apply")
-            return await super().apply_compaction_plan(plan, messages)
+            return await super().apply_compaction_plan(
+                plan,
+                messages,
+                current_input_context=current_input_context,
+            )
 
     async def barrier() -> None:
         sequence.append("barrier")
@@ -443,10 +781,10 @@ async def test_kernel_runs_pre_compaction_barrier_before_compactor() -> None:
     spec = _make_spec(provider=ContentOnlyProvider()).model_copy(
         update={
             "compactor": BarrierCompactor(),
-            "meta": {
-                "pre_compaction_barrier": barrier,
-                "checkpoint_sink": lambda **kwargs: None,
-            },
+            "runtime_ports": KernelRuntimePorts(
+                pre_compaction_barrier=barrier,
+                checkpoint_sink=lambda **kwargs: None,
+            ),
         }
     )
 
