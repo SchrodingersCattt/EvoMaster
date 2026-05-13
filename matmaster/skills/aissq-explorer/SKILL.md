@@ -1,26 +1,37 @@
 ---
 name: aissq-explorer
-description: "MUST use this skill whenever the task involves finding, downloading, looking up, listing, comparing, or version-checking a pretrained MLIP / universal interatomic potential model checkpoint (DPA, DPA-3, DPA-3.1-3M, DPA-3.2-5M, DPA-2.4-7M, MACE-MP, MACE-MP-0, SevenNet, MatterSim, etc.) or an open MLIP training dataset (e.g. DeepEMs, OMat24-style, organic reactions, ODAC23) — including: resolving the current latest model version; listing or searching available pretrained models / datasets; obtaining a .pt / .pth / .ckpt / .model file before running ASE / LAMMPS / phonon / NEB workflows; getting authoritative provenance (file size, modify date, download URL, downloadCount) for an MLIP asset; or finding a public DFT-labeled energy/force training set for fine-tuning a foundation model. ALWAYS invoke this skill BEFORE hand-typing an OSS object URL for an MLIP checkpoint."
+description: "Use this skill to query AIS Square (https://aissquare.com), a public registry that primarily hosts DP-family MLIP checkpoints (DPA, DPA-2, DPA-3, DPA-3.x-NM variants, and related DP forks) and a curated set of open MLIP training datasets (e.g. DeepEMs, OpenLAM, organic-reactions sets). AIS Square is ONE possible source - not exhaustive - and most non-DP MLIP families (e.g. MACE-MP, SevenNet, MatterSim, Orb) are typically NOT mirrored here. Reach for this skill when (a) the task plausibly needs an MLIP `.pt`/`.pth`/`.ckpt`/`.model` checkpoint or a public DFT-labeled training dataset, (b) the user has NOT pinned an external source (Hugging Face / a specific URL / a paper's project page), and (c) you would otherwise have to guess a download URL or version from memory. The skill exposes list / search / info / download against the registry's public API; if nothing is found there, report it honestly and point at the family's canonical mirror. ALWAYS invoke this skill BEFORE hand-typing an OSS object URL for an MLIP checkpoint."
 skill_type: operator
 ---
 
-# aissq-explorer — MLIP Asset Discovery & Download
+# aissq-explorer - MLIP Asset Discovery & Download
 
-Discover, look up and download MLIP model checkpoints and training datasets from the public AIS Square registry. No authentication is required — the listing, detail and download endpoints are all public.
+Discover, look up and download MLIP model checkpoints and training datasets from the public AIS Square registry. No authentication is required - the listing, detail and download endpoints are all public.
 
-> **Scope.** This skill is for **fetching the artifact** (the `.pt`/`.pth`/`.ckpt`/`.model` file or a dataset bundle). After download, hand off to the `mlips` skill (run ASE / LAMMPS / phonon / NEB) or to a local fine-tuning workflow. This skill does NOT run inference.
+> **Scope.** AIS Square is **one** of several places that host MLIP assets; it is **primarily a DP-family registry** (DPA-2.x, DPA-3, DPA-3.x-NM, and related DP variants) plus a curated set of open training datasets. Most non-DP MLIP families (MACE-MP, SevenNet, MatterSim, Orb, etc.) are NOT typically mirrored here. If the user is after one of those families, this skill is still useful for *confirming* their absence on AIS Square, but the asset itself will live elsewhere.
+
+> **Hand-off.** This skill is for **fetching the artifact** (the `.pt`/`.pth`/`.ckpt`/`.model` file or a dataset bundle). After download, hand off to the `mlips` skill (run ASE / LAMMPS / phonon / NEB) or to a local fine-tuning workflow. This skill does NOT run inference.
 
 ## When to use
 
-Invoke this skill whenever the user mentions any of:
+Invoke this skill when the user's task involves one of the following, **and** the source has not been pinned externally:
 
-- "DPA / DPA-3 / DPA-3.1 / DPA-3.2 / DPA-2.4 / 通用 MLIP / 通用势 / universal potential / foundation model checkpoint"
-- "MACE-MP / MACE-MP-0 / SevenNet / 7net / MatterSim"
-- "下载 / fetch / get / 拿一份 / 准备好 ... 检查点 / weights / checkpoint / .pt / .pth"
-- "最新一版 / latest version / current release of an MLIP"
-- "训练集 / training dataset / energy-force dataset / DFT-labeled dataset / fine-tune dataset (含能材料 / energetic materials / catalysis / organic reactions / MOF)"
+- A DP-family checkpoint by family name (DPA, DPA-2, DPA-3, DPA-3.x, dpa3, DPA-3.2-5M, etc.) - these are the registry's main inventory.
+- A "universal", "foundation", "pretrained" or "general-purpose" MLIP checkpoint where the source is unspecified.
+- Any `.pt` / `.pth` / `.ckpt` / `.model` weights file for an MLIP, source unspecified.
+- "Latest version" / "current release" / "newest" of an MLIP family - discoverable from the registry's `modifyDate` field.
+- A public DFT-labeled energy/force training dataset for fine-tuning a foundation model (energetic materials, organic reactions, catalysis, MOFs, etc.) where the source is unspecified.
+- Confirming whether a specific non-DP family (MACE-MP, SevenNet, MatterSim, Orb, ...) is *also* mirrored on AIS Square - search first, then honestly report present or absent.
 
-Do NOT use this skill when the user only wants to *run* an MLIP they already have on disk (use `mlips`), or when they want a crystal-structure database (use `mcp-mat-struct-db`).
+## When NOT to fabricate
+
+If `info <name>` returns nothing and `search <keyword>` also returns nothing, do NOT invent an OSS URL or a download host. Report "not present on AIS Square" and, if relevant, point the user at the family's canonical mirror (Hugging Face / a paper's project page / official GitHub release).
+
+## When NOT to use
+
+- The user only wants to *run* an MLIP they already have on disk - use `mlips`.
+- The user wants a crystal-structure database - use `mcp-mat-struct-db`.
+- The user has already pinned a non-AIS-Square URL or a Hugging Face model ID - download from that source directly.
 
 ## API endpoints (public, no auth)
 
@@ -56,16 +67,17 @@ Add `--insecure` to disable SSL verify if the environment has cert issues.
 
 ## Standard workflow
 
-1. **Discover** — call `list` (sort by `downloads`) or `search <keyword>` to find candidates. Take note of `name`, `ID`, `modifyDate`, `downloadCount`.
-2. **Inspect** — call `info <name> --type <...>` to get the file list with `downloadLink` and authoritative byte `size`. Record the **host** of the download URL (typically `store.aissquare.com`) as provenance evidence.
-3. **Decide latest** — among multiple versions (e.g. DPA-2.4-7M vs DPA-3.1-3M vs DPA-3.2-5M), the highest version string is the latest; cross-check `modifyDate`.
-4. **Download** — call `download <name> --type <...> --output <workdir>` and save the result. The download is streamed in 8 KB chunks; large checkpoints (>50 MB) are normal.
-5. **Hand off** — for inference, use the `mlips` skill with the downloaded `.pt` path. For LAMMPS, freeze a single head first (see the `mlips` skill's "DPA + LAMMPS" section).
+1. **Discover** - call `list` (sort by `downloads` or `modified`) or `search <keyword>` to find candidates. Take note of `name`, `ID`, `modifyDate`, `downloadCount`.
+2. **Inspect** - call `info <name> --type <...>` to get the file list with `downloadLink` and authoritative byte `size`. Record the **host** of the download URL (typically `store.aissquare.com`) as provenance evidence.
+3. **Decide latest** - among multiple versions (e.g. DPA-2.4-7M vs DPA-3.1-3M vs DPA-3.2-5M), the highest version string is usually the latest; cross-check `modifyDate`.
+4. **Download** - call `download <name> --type <...> --output <workdir>` and save the result. The download is streamed in 8 KB chunks; large checkpoints (>50 MB) are normal.
+5. **Hand off** - for inference, use the `mlips` skill with the downloaded `.pt` path. For LAMMPS, freeze a single head first (see the `mlips` skill's "DPA + LAMMPS" section).
 
 ## Honesty constraints
 
 - Do NOT fabricate `downloadLink`, `size`, `modifyDate`, version numbers, or DPA head lists. Every claim about an asset must come from a `list` or `info` call (or be honestly marked unknown).
-- If `find_by_name` returns `None`, fall back to `search <keyword>`; if that also returns nothing, report "not found" — do NOT guess an OSS URL.
+- If `info <name>` returns nothing, fall back to `search <keyword>`; if that also returns nothing, report "not found on AIS Square" - do NOT guess an OSS URL.
+- If a non-DP family is asked for (MACE-MP, SevenNet, MatterSim, Orb, ...), still run a search to confirm current registry state, but if absent, say so and point at the family's canonical mirror rather than inventing a link.
 - If the network is unreachable, report it explicitly. Do not hand-type `https://...oss-cn-zhangjiakou.aliyuncs.com/...` URLs as a substitute.
 
 ## Concrete examples
@@ -75,26 +87,26 @@ Add `--insecure` to disable SSL verify if the environment has cert issues.
 ```bash
 python3 "$CLIENT" search DPA-3 --type models > /tmp/dpa3_candidates.json
 python3 "$CLIENT" info "DPA-3.2-5M" --type models > /tmp/dpa3_5m_detail.json
-# Now /tmp/dpa3_5m_detail.json["files"][0] has fileName, downloadLink, size
+# /tmp/dpa3_5m_detail.json["files"][0] has fileName, downloadLink, size
 ```
 
-### List top-10 downloaded MLIP models
+### List MLIP models sorted by recency
 
 ```bash
-python3 "$CLIENT" list models --sort downloads --limit 10
+python3 "$CLIENT" list models --sort modified --limit 20
 ```
 
-### Download a dataset for fine-tuning
+### Search for an energetic-materials training dataset
 
 ```bash
-python3 "$CLIENT" search energetic --type datasets   # e.g. finds DeepEMs-25
+python3 "$CLIENT" search energetic --type datasets
 python3 "$CLIENT" info DeepEMs-25 --type datasets
 python3 "$CLIENT" download DeepEMs-25 --type datasets --output ./assets
 ```
 
 ## Output JSON shape
 
-All subcommands emit a single JSON object on stdout, e.g. `info`:
+All subcommands emit a single JSON object on stdout. Example `info`:
 
 ```json
 {
@@ -117,6 +129,6 @@ Always include `download_host` (parsed from `downloadLink`) so downstream artifa
 
 ## Errors
 
-- `HTTP 4xx/5xx` from `backend.aissquare.com` → retry once with `--insecure`; if still failing, honestly report the error.
-- `code != 0` in the response body → surface `message` field as the error.
-- Download interrupted → the client retries up to 3 times with exponential backoff; if still failing, the partial file is left on disk and the error is reported.
+- `HTTP 4xx/5xx` from `backend.aissquare.com` -> retry once with `--insecure`; if still failing, honestly report the error.
+- `code != 0` in the response body -> surface the `message` field as the error.
+- Download interrupted -> the client retries up to 3 times with exponential backoff; if still failing, the partial file is left on disk and the error is reported.
