@@ -81,6 +81,8 @@ The goal is to identify *smoothness* issues — not just whether the task comple
 
 For each friction point: consider whether an eval question with a tight turn_budget would force the agent to get it right on the first try. These questions directly reduce wasted turns in production.
 
+**Skill documentation does not guarantee compliance.** Even if a skill clearly documents the correct approach (e.g., "use OC22 head for surface adsorption"), assume the agent might not follow it. Every critical decision point documented in skills should have a corresponding eval question to verify the agent actually applies that knowledge. The eval question ensures the skill works end-to-end, not just exists on paper.
+
 ### 2. Analyze Session
 
 For each session, pull full events and assess:

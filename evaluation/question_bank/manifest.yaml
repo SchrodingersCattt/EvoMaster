@@ -162,6 +162,10 @@ banks:
   capability: workflow_orchestration
   domain: agnostic
   questions: 1
+- path: platform/wo_catalysis.yaml
+  capability: workflow_orchestration
+  domain: catalysis
+  questions: 1
 - path: platform/wo_battery.yaml
   capability: workflow_orchestration
   domain: battery
