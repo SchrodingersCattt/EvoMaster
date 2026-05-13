@@ -60,6 +60,19 @@ Filter criteria:
 - Skip sessions already in local analysis records
 - Prioritize: non-developer users, recent dates, high event counts
 
+**Important: Do NOT skip sessions before analysis.** Every session that passes the filter above must be fully pulled and analyzed — including developer sessions and non-materials-science sessions. The verdict (`skip`/`informational`/`actionable`) is an *output* of analysis, not a pre-filter. Even a "simple Q&A" or "off-topic" session can reveal agent behavior problems (hallucination, unnecessary tool calls, poor refusal handling).
+
+**Analyze in strict chronological order.** Always continue from where the last analysis left off (check existing `traj_analysis/{env}/` files for the latest `max_event_id` or session timestamp). Never jump to recent months while older sessions remain unanalyzed.
+
+**Analyze thoroughly.** Do not just glance at tool call names and final responses. For each session, read through the intermediate tool call arguments and results to assess:
+- Did the agent pick the right tool/approach on the first try, or did it fumble?
+- Were there unnecessary detours (loading irrelevant skills, redundant reads, exploratory commands that led nowhere)?
+- Did the agent waste turns on think/deliberation without acting?
+- Was the tool call sequence logical and direct, or did the agent backtrack?
+- For multi-step workflows, did the agent plan ahead or repeatedly discover what to do next?
+
+The goal is to identify *smoothness* issues — not just whether the task completed, but whether it completed efficiently and without friction.
+
 ### 2. Analyze Session
 
 For each session, pull full events and assess:

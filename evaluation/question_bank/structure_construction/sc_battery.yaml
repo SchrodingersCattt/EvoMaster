@@ -21,6 +21,10 @@ questions:
       filename: ZnSO4_solution.cif
       min: 1500
       max: 2500
+  - key: min_distance
+    value:
+      filename: ZnSO4_solution.cif
+      min_distance_A: 0.8
   - key: turn_budget
     value:
       max: 25
@@ -53,6 +57,10 @@ questions:
     criterion: '[Must] Structure contains H atoms (water).'
     axis: correctness
     verify: struct_file_formula
+  - id: min_distance
+    criterion: '[Must] No overlapping atoms — minimum interatomic distance at least 0.8 Å.'
+    axis: correctness
+    verify: struct_file_min_interatomic_distance
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
