@@ -19,7 +19,6 @@ from __future__ import annotations
 import inspect
 import json
 import logging
-import posixpath
 import uuid
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
@@ -28,6 +27,7 @@ from typing import TYPE_CHECKING, Any
 from matmaster.config.exp import ExpConfig
 from matmaster.core.context_builder import ContextBuilder
 from matmaster.core.hooks import HookEvent, HookExecutor, SubagentContext
+from matmaster.core.path_access import derive_path_access_roots
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.context import PlaygroundContext
@@ -351,56 +351,6 @@ class Exp:
             planes.add(ToolPlane.EXTERNAL_SERVICE)
         return frozenset(planes)
 
-    @staticmethod
-    def _derive_path_access_roots(ctx: PlaygroundContext) -> tuple:
-        """Derive extra read/search roots exposed by the runtime.
-
-        The session workspace remains the primary writable root. Extra roots
-        are for runtime-owned locations outside that workspace, such as the
-        remote skill mirror exposed through SkillTool and project-level
-        ``.matmaster`` state under a Bohrium shared workspace.
-        """
-        from matmaster.types.topology import PathAccessRoot
-
-        roots: list[PathAccessRoot] = []
-        workspace_root = posixpath.normpath(str(ctx.execution_workdir))
-        seen = {workspace_root}
-        read_search = frozenset({"read", "search"})
-
-        def _add(raw_root: Any, kind: str) -> None:
-            if not isinstance(raw_root, str):
-                return
-            stripped = raw_root.strip()
-            if not stripped:
-                return
-            normalized = posixpath.normpath(stripped)
-            if normalized == "." or normalized in seen:
-                return
-            roots.append(
-                PathAccessRoot(
-                    root=normalized,
-                    kind=kind,
-                    permissions=read_search,
-                )
-            )
-            seen.add(normalized)
-
-        session = getattr(ctx, "session", None)
-        _add(getattr(session, "remote_project_root", None), "runtime")
-
-        run_meta = getattr(ctx, "run_meta", {}) or {}
-        bohrium = run_meta.get("bohrium") if isinstance(run_meta, dict) else None
-        if isinstance(bohrium, dict):
-            _add(bohrium.get("remote_project_root"), "runtime")
-            remote_workspace_root = bohrium.get("remote_workspace_root")
-            if isinstance(remote_workspace_root, str) and remote_workspace_root.strip():
-                _add(
-                    posixpath.join(remote_workspace_root, ".matmaster"),
-                    "project_runtime",
-                )
-
-        return tuple(roots)
-
     # ── Phase 2: build_runtime ───────────────────────────
 
     async def build_runtime(
@@ -423,7 +373,7 @@ class Exp:
 
         registry = ToolRegistry()
         builtin_cfg = self._config.tools.builtin
-        path_access_roots = self._derive_path_access_roots(ctx)
+        path_access_roots = derive_path_access_roots(ctx)
         if builtin_cfg:
             self._init_builtin_tools(
                 ctx,
