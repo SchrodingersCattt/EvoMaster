@@ -259,6 +259,15 @@ questions:
     value: Zn_10-10.cif
   - key: slab_1120
     value: Zn_11-20.cif
+  - key: must_parsable_0001
+    value:
+      filename: Zn_0001.cif
+  - key: must_parsable_1010
+    value:
+      filename: Zn_10-10.cif
+  - key: must_parsable_1120
+    value:
+      filename: Zn_11-20.cif
   - key: must_atom_count_0001
     value:
       filename: Zn_0001.cif
