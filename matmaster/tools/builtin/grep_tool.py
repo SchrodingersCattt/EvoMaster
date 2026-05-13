@@ -194,7 +194,11 @@ class GrepTool(BuiltinTool):
         offset: int = arguments.get("offset", 0)
 
         workdir = str(self._workdir) if self._workdir else "/workspace"
-        safe_path = resolve_safe_path(path, workdir)
+        safe_path = resolve_safe_path(
+            path,
+            workdir,
+            allowed_roots=self._path_access_roots,
+        )
         use_rg = self._detect_rg()
 
         if use_rg:

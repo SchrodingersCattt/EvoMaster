@@ -31,7 +31,7 @@ import jsonschema
 
 from matmaster.types.tool_decision import ToolDecision
 from matmaster.types.tool_spec import ToolInstance
-from matmaster.types.topology import RuntimeTopology, ToolPlane
+from matmaster.types.topology import PathAccessOperation, RuntimeTopology, ToolPlane
 
 _PATH_KEYS = ("file_path", "path")
 
@@ -80,7 +80,9 @@ class StructuralValidation:
         if plane in _WORKSPACE_PLANES:
             try:
                 modified_args = self._normalize_path_args(
-                    runtime_topology.workspace_root, tool_args
+                    runtime_topology,
+                    tool_instance,
+                    tool_args,
                 )
             except ValueError as exc:
                 return ToolDecision(
@@ -105,8 +107,72 @@ class StructuralValidation:
         return str(normalized)
 
     @staticmethod
+    def _operation_for_tool(tool_instance: ToolInstance) -> PathAccessOperation:
+        """Infer path access operation from the tool's declared capabilities."""
+        capabilities = tool_instance.tool_spec.capabilities
+        if "workspace.write" in capabilities:
+            return "write"
+        if any(cap.startswith("workspace.search") for cap in capabilities):
+            return "search"
+        return "read"
+
+    @staticmethod
+    def _allowed_roots_for_operation(
+        runtime_topology: RuntimeTopology,
+        operation: PathAccessOperation,
+    ) -> list[PurePosixPath]:
+        roots: list[PurePosixPath] = [
+            PurePosixPath(posixpath.normpath(runtime_topology.workspace_root))
+        ]
+        seen = {str(roots[0])}
+        for root in runtime_topology.path_access_roots:
+            if operation not in root.permissions:
+                continue
+            normalized = posixpath.normpath(root.root)
+            if not normalized or normalized == "." or normalized in seen:
+                continue
+            roots.append(PurePosixPath(normalized))
+            seen.add(normalized)
+        return roots
+
+    @staticmethod
+    def _normalize_access_path(
+        runtime_topology: RuntimeTopology,
+        raw_path: str,
+        operation: PathAccessOperation,
+    ) -> str:
+        """Resolve and validate a path against workspace plus access roots.
+
+        Relative paths are still scoped strictly to ``workspace_root``. Extra
+        access roots only apply to absolute paths that the runtime has already
+        exposed to the model, such as SkillTool-rendered directories.
+        """
+        workspace_root = PurePosixPath(
+            posixpath.normpath(runtime_topology.workspace_root)
+        )
+        if raw_path.startswith("/"):
+            normalized = PurePosixPath(posixpath.normpath(raw_path))
+            allowed_roots = StructuralValidation._allowed_roots_for_operation(
+                runtime_topology,
+                operation,
+            )
+        else:
+            normalized = PurePosixPath(
+                posixpath.normpath(
+                    posixpath.join(runtime_topology.workspace_root, raw_path)
+                )
+            )
+            allowed_roots = [workspace_root]
+
+        if not any(normalized.is_relative_to(root) for root in allowed_roots):
+            raise ValueError("outside workspace boundary")
+        return str(normalized)
+
+    @staticmethod
     def _normalize_path_args(
-        workspace_root: str, tool_args: dict[str, Any]
+        runtime_topology: RuntimeTopology,
+        tool_instance: ToolInstance,
+        tool_args: dict[str, Any],
     ) -> dict[str, Any] | None:
         """Normalize file_path / path keys in tool_args.
 
@@ -115,11 +181,14 @@ class StructuralValidation:
         any path escapes the workspace boundary.
         """
         updated: dict[str, Any] = {}
+        operation = StructuralValidation._operation_for_tool(tool_instance)
         for key in _PATH_KEYS:
             raw = tool_args.get(key)
             if raw is not None and isinstance(raw, str):
-                resolved = StructuralValidation._normalize_workspace_path(
-                    workspace_root, raw
+                resolved = StructuralValidation._normalize_access_path(
+                    runtime_topology,
+                    raw,
+                    operation,
                 )
                 if resolved != raw:
                     updated[key] = resolved
