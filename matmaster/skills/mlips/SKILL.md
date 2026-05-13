@@ -42,6 +42,10 @@ MLIPs for atomistic simulations via ASE calculators on Bohrium GPU nodes.
 
 **DPA heads**: `OMat24` or `Omat24` (default, inorganic — casing differs between model versions: DPA3.2-5M uses `OMat24`, DPA3.1-3M/DPA2.4-7M use `Omat24`), `OMol25` (organic), `OC22` (catalysis), `Organic_Reactions`, `ODAC23` (MOFs). Use `--charge`/`--spin` only with DPA3.2-5M.
 
+## Fetching checkpoints
+
+The OSS URLs in `reference/dpa_models.md` are a **snapshot** and may rotate. If you need a model version not listed there, the canonical provenance (file name, byte size, download URL, modify date) of any pretrained MLIP checkpoint, or a new MLIP entirely, **invoke the `aissq-explorer` skill** (`backend.aissquare.com` public registry) — do NOT hand-type OSS URLs. The downloaded `.pt`/`.pth`/`.model` file is then used here exactly the same way.
+
 ## Task Scripts
 
 | Script | Usage | Output |

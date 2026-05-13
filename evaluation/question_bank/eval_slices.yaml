@@ -37,6 +37,12 @@ slices:
       - "@code_mlip"
     count: 9
 
+  - target: "Skill: aissq-explorer"
+    type: skill
+    slices:
+      - "@code_mlip,meta_database"
+    count: 3
+
   - target: "Skill: build-atomic-structure"
     type: skill
     slices:
