@@ -551,3 +551,31 @@ questions:
     criterion: Agent responds within few turns.
     axis: efficiency
     verify: turn_budget
+- id: EC_url_unreachable_001_20260513
+  capability: execution_contract
+  domain: agnostic
+  intent: Test whether agent quickly recognizes an unreachable URL and informs user
+    instead of retrying repeatedly.
+  human_prompt_seed: '请从以下地址下载 LTP 结构文件并导入工作区：
+    https://raw.githubusercontent.com/materialsproject/crystaltoolkit/master/crystaltoolkit/helpers/test_files/LTP.cif'
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 5
+  scoring_checklist:
+  - id: informs_unreachable
+    criterion: Agent informs the user that the provided URL is not accessible (404
+      or download failed). The response must clearly state the URL cannot be reached.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: no_excessive_retry
+    criterion: Agent did NOT retry the same URL more than 2 times. After 1-2 failed
+      attempts it should report the failure, not keep trying.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent reports the issue within very few turns.
+    axis: efficiency
+    verify: turn_budget

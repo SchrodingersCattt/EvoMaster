@@ -613,3 +613,42 @@ questions:
     criterion: Token usage within budget.
     axis: efficiency
     verify: token_budget
+- id: SR_nasicon_001_20260513
+  capability: structure_retrieval
+  domain: agnostic
+  intent: Retrieve LiTi2(PO4)3 (LTP) NASICON structure for downstream LATP doping
+    work — tests whether agent can locate this structure via database or Wyckoff
+    construction without excessive retries.
+  human_prompt_seed: '请获取 LiTi₂(PO₄)₃（LTP）的晶体结构，空间群 R-3c，用于后续
+    LATP 掺杂建模。输出为 `LTP.cif`。'
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: ltp_artifact
+    value: LTP.cif
+  - key: must_parsable
+    value:
+      filename: LTP.cif
+  - key: turn_budget
+    value:
+      max: 10
+  scoring_checklist:
+  - id: ltp_artifact
+    criterion: LTP.cif written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_parsable
+    criterion: '[Must] LTP.cif is parsable as a structure file.'
+    axis: correctness
+    verify: struct_file_parsable
+  - id: correct_composition
+    criterion: The structure contains Li, Ti, P, and O with stoichiometry consistent
+      with LiTi2(PO4)3 (NASICON framework). Acceptable compositions include LTP
+      unit cell or supercell.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent retrieves or constructs the structure efficiently.
+    axis: efficiency
+    verify: turn_budget
