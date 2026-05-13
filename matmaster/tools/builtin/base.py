@@ -15,6 +15,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from abc import ABC, abstractmethod
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any, ClassVar
 
@@ -53,9 +54,11 @@ class BuiltinTool(ABC):
         *,
         session: Any | None = None,
         workdir: str | Path | None = None,
+        path_access_roots: Sequence[str] = (),
     ) -> None:
         self._session = session
         self._workdir = Path(workdir) if workdir is not None else None
+        self._path_access_roots = tuple(str(root) for root in path_access_roots)
         self.logger = logging.getLogger(self.__class__.__name__)
 
     async def execute(self, arguments: dict[str, Any]) -> str | ToolResult:

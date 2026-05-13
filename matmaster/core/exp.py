@@ -19,6 +19,7 @@ from __future__ import annotations
 import inspect
 import json
 import logging
+import posixpath
 import uuid
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
@@ -350,6 +351,56 @@ class Exp:
             planes.add(ToolPlane.EXTERNAL_SERVICE)
         return frozenset(planes)
 
+    @staticmethod
+    def _derive_path_access_roots(ctx: PlaygroundContext) -> tuple:
+        """Derive extra read/search roots exposed by the runtime.
+
+        The session workspace remains the primary writable root. Extra roots
+        are for runtime-owned locations outside that workspace, such as the
+        remote skill mirror exposed through SkillTool and project-level
+        ``.matmaster`` state under a Bohrium shared workspace.
+        """
+        from matmaster.types.topology import PathAccessRoot
+
+        roots: list[PathAccessRoot] = []
+        workspace_root = posixpath.normpath(str(ctx.execution_workdir))
+        seen = {workspace_root}
+        read_search = frozenset({"read", "search"})
+
+        def _add(raw_root: Any, kind: str) -> None:
+            if not isinstance(raw_root, str):
+                return
+            stripped = raw_root.strip()
+            if not stripped:
+                return
+            normalized = posixpath.normpath(stripped)
+            if normalized == "." or normalized in seen:
+                return
+            roots.append(
+                PathAccessRoot(
+                    root=normalized,
+                    kind=kind,
+                    permissions=read_search,
+                )
+            )
+            seen.add(normalized)
+
+        session = getattr(ctx, "session", None)
+        _add(getattr(session, "remote_project_root", None), "runtime")
+
+        run_meta = getattr(ctx, "run_meta", {}) or {}
+        bohrium = run_meta.get("bohrium") if isinstance(run_meta, dict) else None
+        if isinstance(bohrium, dict):
+            _add(bohrium.get("remote_project_root"), "runtime")
+            remote_workspace_root = bohrium.get("remote_workspace_root")
+            if isinstance(remote_workspace_root, str) and remote_workspace_root.strip():
+                _add(
+                    posixpath.join(remote_workspace_root, ".matmaster"),
+                    "project_runtime",
+                )
+
+        return tuple(roots)
+
     # ── Phase 2: build_runtime ───────────────────────────
 
     async def build_runtime(
@@ -372,8 +423,15 @@ class Exp:
 
         registry = ToolRegistry()
         builtin_cfg = self._config.tools.builtin
+        path_access_roots = self._derive_path_access_roots(ctx)
         if builtin_cfg:
-            self._init_builtin_tools(ctx, registry, builtin_cfg, spawn_id=spawn_id)
+            self._init_builtin_tools(
+                ctx,
+                registry,
+                builtin_cfg,
+                spawn_id=spawn_id,
+                path_access_roots=path_access_roots,
+            )
 
         from matmaster.core.capability_policy import DefaultCapabilityPolicy
         from matmaster.core.structural_validation import StructuralValidation
@@ -401,6 +459,7 @@ class Exp:
             workspace_root=str(ctx.execution_workdir),
             active_planes=active_planes,
             session_capabilities=session_caps,
+            path_access_roots=path_access_roots,
         )
 
         compiler = ToolCompiler()
@@ -627,6 +686,7 @@ class Exp:
         builtin_cfg: list[str],
         *,
         spawn_id: str | None = None,
+        path_access_roots: tuple[Any, ...] = (),
     ) -> None:
         """Register builtin tools filtered by *builtin_cfg*.
 
@@ -665,6 +725,11 @@ class Exp:
 
         exec_wd = Path(ctx.execution_workdir)
         has_session = ctx.session is not None
+        search_path_roots = tuple(
+            root.root
+            for root in path_access_roots
+            if "search" in getattr(root, "permissions", frozenset())
+        )
 
         session_tools: list[Any] = []
         if has_session:
@@ -673,8 +738,16 @@ class Exp:
                 ReadTool(session=ctx.session, workdir=exec_wd),
                 WriteTool(session=ctx.session, workdir=exec_wd),
                 EditTool(session=ctx.session, workdir=exec_wd),
-                GlobTool(session=ctx.session, workdir=exec_wd),
-                GrepTool(session=ctx.session, workdir=exec_wd),
+                GlobTool(
+                    session=ctx.session,
+                    workdir=exec_wd,
+                    path_access_roots=search_path_roots,
+                ),
+                GrepTool(
+                    session=ctx.session,
+                    workdir=exec_wd,
+                    path_access_roots=search_path_roots,
+                ),
             ]
         elif allow_all or (
             allowed is not None and allowed & _SESSION_REQUIRING_TOOL_NAMES

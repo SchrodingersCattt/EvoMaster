@@ -19,6 +19,26 @@ class TestResolveSafePath:
     def test_absolute_outside_workdir_fallback(self):
         assert resolve_safe_path("/etc/passwd", "/workspace") == "/workspace"
 
+    def test_absolute_under_allowed_extra_root(self):
+        assert (
+            resolve_safe_path(
+                "/personnal/.matmaster/skills/abacus",
+                "/workspace",
+                allowed_roots=("/personnal/.matmaster/skills",),
+            )
+            == "/personnal/.matmaster/skills/abacus"
+        )
+
+    def test_prefix_collision_with_extra_root_not_subdir(self):
+        assert (
+            resolve_safe_path(
+                "/personnal/.matmaster/skills2/abacus",
+                "/workspace",
+                allowed_roots=("/personnal/.matmaster/skills",),
+            )
+            == "/workspace"
+        )
+
     def test_traversal_blocked(self):
         assert resolve_safe_path("../../etc/passwd", "/workspace") == "/workspace"
 

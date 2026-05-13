@@ -11,6 +11,7 @@ from typing import Any
 from matmaster.core.structural_validation import StructuralValidation
 from matmaster.types.tool_spec import ToolBinding, ToolInstance, ToolSpec
 from matmaster.types.topology import (
+    PathAccessRoot,
     RuntimeTopology,
     SessionCapabilities,
     ToolPlane,
@@ -53,6 +54,7 @@ def _make_instance(
 def _make_topology(
     active_planes: frozenset[ToolPlane] | None = None,
     session_capabilities: SessionCapabilities | None = None,
+    path_access_roots: tuple[PathAccessRoot, ...] = (),
 ) -> RuntimeTopology:
     if active_planes is None:
         active_planes = frozenset({ToolPlane.CONTROL_PLANE})
@@ -62,6 +64,7 @@ def _make_topology(
         workspace_root="/tmp/workspace",
         active_planes=active_planes,
         session_capabilities=session_capabilities,
+        path_access_roots=path_access_roots,
     )
 
 
@@ -336,3 +339,105 @@ class TestPathNormalization:
         assert result.decision == "allow"
         assert result.modified_args is not None
         assert result.modified_args["path"] == "/tmp/workspace/subdir"
+
+    def test_allows_read_under_extra_read_root(self) -> None:
+        """Absolute file_path under a read/search extra root is allowed."""
+        instance = _make_instance(
+            tool_name="Read",
+            plane=ToolPlane.SESSION_FS,
+            capabilities=frozenset({"workspace.read"}),
+        )
+        topo = _make_topology(
+            active_planes=frozenset({ToolPlane.SESSION_FS, ToolPlane.CONTROL_PLANE}),
+            path_access_roots=(
+                PathAccessRoot(
+                    root="/personnal/.matmaster/skills",
+                    kind="skill",
+                    permissions=frozenset({"read", "search"}),
+                ),
+            ),
+        )
+        result = self.validator.validate(
+            topo,
+            instance,
+            {"file_path": "/personnal/.matmaster/skills/abacus/SKILL.md"},
+        )
+
+        assert result.decision == "allow"
+
+    def test_allows_glob_under_extra_search_root(self) -> None:
+        """Absolute path under a read/search extra root is allowed for Glob."""
+        instance = _make_instance(
+            tool_name="Glob",
+            plane=ToolPlane.SESSION_SHELL,
+            capabilities=frozenset({"workspace.search.path"}),
+        )
+        topo = _make_topology(
+            active_planes=frozenset(ToolPlane),
+            path_access_roots=(
+                PathAccessRoot(
+                    root="/personnal/.matmaster/skills",
+                    kind="skill",
+                    permissions=frozenset({"read", "search"}),
+                ),
+            ),
+        )
+        result = self.validator.validate(
+            topo,
+            instance,
+            {"path": "/personnal/.matmaster/skills"},
+        )
+
+        assert result.decision == "allow"
+
+    def test_denies_write_under_read_only_extra_root(self) -> None:
+        """Extra read/search roots do not grant Write/Edit access."""
+        instance = _make_instance(
+            tool_name="Write",
+            plane=ToolPlane.SESSION_FS,
+            capabilities=frozenset({"workspace.write"}),
+        )
+        topo = _make_topology(
+            active_planes=frozenset({ToolPlane.SESSION_FS, ToolPlane.CONTROL_PLANE}),
+            path_access_roots=(
+                PathAccessRoot(
+                    root="/personnal/.matmaster/skills",
+                    kind="skill",
+                    permissions=frozenset({"read", "search"}),
+                ),
+            ),
+        )
+        result = self.validator.validate(
+            topo,
+            instance,
+            {"file_path": "/personnal/.matmaster/skills/abacus/SKILL.md"},
+        )
+
+        assert result.decision == "deny"
+        assert "outside" in result.reason
+
+    def test_denies_relative_traversal_into_extra_root(self) -> None:
+        """Relative paths cannot escape workspace even if the target root is allowed."""
+        instance = _make_instance(
+            tool_name="Read",
+            plane=ToolPlane.SESSION_FS,
+            capabilities=frozenset({"workspace.read"}),
+        )
+        topo = _make_topology(
+            active_planes=frozenset({ToolPlane.SESSION_FS, ToolPlane.CONTROL_PLANE}),
+            path_access_roots=(
+                PathAccessRoot(
+                    root="/personnal/.matmaster/skills",
+                    kind="skill",
+                    permissions=frozenset({"read", "search"}),
+                ),
+            ),
+        )
+        result = self.validator.validate(
+            topo,
+            instance,
+            {"file_path": "../../../personnal/.matmaster/skills/abacus/SKILL.md"},
+        )
+
+        assert result.decision == "deny"
+        assert "outside workspace boundary" in result.reason

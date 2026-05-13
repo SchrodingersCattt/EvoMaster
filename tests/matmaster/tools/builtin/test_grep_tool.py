@@ -127,6 +127,30 @@ class TestGrepExecution:
         )
         assert "$(" not in cmd.split("'")[0]  # pattern should be escaped
 
+    def test_extra_path_root_is_preserved(self, monkeypatch):
+        session = make_session(output="/personnal/.matmaster/skills/abacus/SKILL.md")
+        tool = GrepTool(
+            session=session,
+            workdir="/workspace",
+            path_access_roots=("/personnal/.matmaster/skills",),
+        )
+        monkeypatch.setattr(tool, "_detect_rg", lambda: True)
+        asyncio.run(
+            tool.execute(
+                {
+                    "pattern": "ABACUS",
+                    "path": "/personnal/.matmaster/skills",
+                    "output_mode": "files_with_matches",
+                }
+            )
+        )
+        cmd = (
+            session.exec_bash.call_args[1].get("command")
+            or session.exec_bash.call_args[0][0]
+        )
+        assert "/personnal/.matmaster/skills" in cmd
+        assert "/workspace" not in cmd
+
 
 class TestGrepEnvInjection:
     def test_grep_reads_runtime_env(self):

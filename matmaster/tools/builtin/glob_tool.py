@@ -89,7 +89,11 @@ class GlobTool(BuiltinTool):
 
         path: str = arguments.get("path", "") or ""
         workdir = str(self._workdir) if self._workdir else "/workspace"
-        safe_path = resolve_safe_path(path, workdir)
+        safe_path = resolve_safe_path(
+            path,
+            workdir,
+            allowed_roots=self._path_access_roots,
+        )
 
         command = self._build_find_command(pattern, safe_path)
 
