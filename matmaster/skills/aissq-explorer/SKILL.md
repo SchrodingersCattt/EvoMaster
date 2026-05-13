@@ -1,6 +1,6 @@
 ---
 name: aissq-explorer
-description: "Use when the task needs an MLIP checkpoint (.pt/.pth/.ckpt/.model) or a public DFT-labeled training dataset and the source has not been pinned externally. Looks up the AIS Square public registry (https://aissquare.com), which primarily hosts DP-family checkpoints (DPA, DPA-2, DPA-3, DPA-3.x-NM, ...) and a curated set of open training datasets - one source among many, not exhaustive. Triggers on: latest/newest version of an MLIP family, DP-family checkpoint by name, universal/foundation MLIP weights with unspecified source, public DFT energy/force fine-tuning datasets, or *confirming* whether a non-DP family (MACE-MP, SevenNet, MatterSim, Orb, ...) is mirrored here. NOT for: running an MLIP already on disk (use `mlips`); crystal-structure lookup (use `mcp-mat-struct-db`); a URL/HF model-ID already pinned by the user."
+description: "Use when the task needs an MLIP checkpoint (.pt/.pth/.ckpt) or a public DFT-labeled training dataset and the source has not been pinned externally. Looks up the AIS Square public registry - primarily a DP-family hub, one source among many, not exhaustive. Triggers on: latest/newest version of an MLIP family; DP-family checkpoint by name; universal/foundation MLIP weights with unspecified source; public DFT energy/force fine-tuning datasets; or confirming whether a specific non-DP family is mirrored here. NOT for: running an MLIP already on disk (use `mlips`); structure-database lookup (use `mcp-mat-struct-db`); a URL or HF model-ID already pinned by the user."
 skill_type: operator
 ---
 
