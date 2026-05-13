@@ -1,6 +1,6 @@
 ---
 name: aissq-explorer
-description: "Use this skill to query AIS Square (https://aissquare.com), a public registry that primarily hosts DP-family MLIP checkpoints (DPA, DPA-2, DPA-3, DPA-3.x-NM variants, and related DP forks) and a curated set of open MLIP training datasets (e.g. DeepEMs, OpenLAM, organic-reactions sets). AIS Square is ONE possible source - not exhaustive - and most non-DP MLIP families (e.g. MACE-MP, SevenNet, MatterSim, Orb) are typically NOT mirrored here. Reach for this skill when (a) the task plausibly needs an MLIP `.pt`/`.pth`/`.ckpt`/`.model` checkpoint or a public DFT-labeled training dataset, (b) the user has NOT pinned an external source (Hugging Face / a specific URL / a paper's project page), and (c) you would otherwise have to guess a download URL or version from memory. The skill exposes list / search / info / download against the registry's public API; if nothing is found there, report it honestly and point at the family's canonical mirror. ALWAYS invoke this skill BEFORE hand-typing an OSS object URL for an MLIP checkpoint."
+description: "Use when the task needs an MLIP checkpoint (.pt/.pth/.ckpt/.model) or a public DFT-labeled training dataset and the source has not been pinned externally. Looks up the AIS Square public registry (https://aissquare.com), which primarily hosts DP-family checkpoints (DPA, DPA-2, DPA-3, DPA-3.x-NM, ...) and a curated set of open training datasets - one source among many, not exhaustive. Triggers on: latest/newest version of an MLIP family, DP-family checkpoint by name, universal/foundation MLIP weights with unspecified source, public DFT energy/force fine-tuning datasets, or *confirming* whether a non-DP family (MACE-MP, SevenNet, MatterSim, Orb, ...) is mirrored here. NOT for: running an MLIP already on disk (use `mlips`); crystal-structure lookup (use `mcp-mat-struct-db`); a URL/HF model-ID already pinned by the user."
 skill_type: operator
 ---
 
@@ -11,27 +11,6 @@ Discover, look up and download MLIP model checkpoints and training datasets from
 > **Scope.** AIS Square is **one** of several places that host MLIP assets; it is **primarily a DP-family registry** (DPA-2.x, DPA-3, DPA-3.x-NM, and related DP variants) plus a curated set of open training datasets. Most non-DP MLIP families (MACE-MP, SevenNet, MatterSim, Orb, etc.) are NOT typically mirrored here. If the user is after one of those families, this skill is still useful for *confirming* their absence on AIS Square, but the asset itself will live elsewhere.
 
 > **Hand-off.** This skill is for **fetching the artifact** (the `.pt`/`.pth`/`.ckpt`/`.model` file or a dataset bundle). After download, hand off to the `mlips` skill (run ASE / LAMMPS / phonon / NEB) or to a local fine-tuning workflow. This skill does NOT run inference.
-
-## When to use
-
-Invoke this skill when the user's task involves one of the following, **and** the source has not been pinned externally:
-
-- A DP-family checkpoint by family name (DPA, DPA-2, DPA-3, DPA-3.x, dpa3, DPA-3.2-5M, etc.) - these are the registry's main inventory.
-- A "universal", "foundation", "pretrained" or "general-purpose" MLIP checkpoint where the source is unspecified.
-- Any `.pt` / `.pth` / `.ckpt` / `.model` weights file for an MLIP, source unspecified.
-- "Latest version" / "current release" / "newest" of an MLIP family - discoverable from the registry's `modifyDate` field.
-- A public DFT-labeled energy/force training dataset for fine-tuning a foundation model (energetic materials, organic reactions, catalysis, MOFs, etc.) where the source is unspecified.
-- Confirming whether a specific non-DP family (MACE-MP, SevenNet, MatterSim, Orb, ...) is *also* mirrored on AIS Square - search first, then honestly report present or absent.
-
-## When NOT to fabricate
-
-If `info <name>` returns nothing and `search <keyword>` also returns nothing, do NOT invent an OSS URL or a download host. Report "not present on AIS Square" and, if relevant, point the user at the family's canonical mirror (Hugging Face / a paper's project page / official GitHub release).
-
-## When NOT to use
-
-- The user only wants to *run* an MLIP they already have on disk - use `mlips`.
-- The user wants a crystal-structure database - use `mcp-mat-struct-db`.
-- The user has already pinned a non-AIS-Square URL or a Hugging Face model ID - download from that source directly.
 
 ## API endpoints (public, no auth)
 
