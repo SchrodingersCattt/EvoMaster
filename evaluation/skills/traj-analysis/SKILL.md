@@ -73,12 +73,13 @@ Filter criteria:
 
 The goal is to identify *smoothness* issues — not just whether the task completed, but whether it completed efficiently and without friction.
 
-**Pay special attention to retries.** Any time the same tool is called 3+ times with different parameters, this is a signal worth investigating. Possible causes:
-- Agent doesn't know the correct parameter combination (knowledge gap → candidate for eval question)
-- Tool is genuinely flaky (platform issue → not actionable)
-- Agent is exploring alternatives (may be acceptable if converges quickly)
+**Pay special attention to retries and non-smooth behavior.** Any time a session is not smooth — retries, backtracking, parameter guessing, unnecessary detours — analyze why and consider whether an eval question could expose and drive improvement. Don't limit yourself to "knowledge gaps"; any friction point is a candidate:
+- Agent retried the same tool 3+ times with different parameters
+- Agent took a roundabout path when a direct one existed
+- Agent wasted turns on exploration before acting
+- Agent used wrong tool/approach first, then corrected
 
-For knowledge-gap retries: consider whether an eval question could test "does agent know the right parameters on the first try?" These are high-value questions because they directly reduce wasted turns in production.
+For each friction point: consider whether an eval question with a tight turn_budget would force the agent to get it right on the first try. These questions directly reduce wasted turns in production.
 
 ### 2. Analyze Session
 
