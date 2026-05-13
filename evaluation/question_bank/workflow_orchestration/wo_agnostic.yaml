@@ -2688,10 +2688,8 @@ questions:
 - id: WO_mlip_fetch_001_20260513
   capability: workflow_orchestration
   domain: agnostic
-  intent: Acquire the current latest DPA-3 universal MLIP checkpoint and record machine-verifiable provenance (file name, byte size, modify date, download host).
-  human_prompt_seed: '准备复现一篇用 DPA-3 通用势的工作，请把当前可用的最新一版 DPA-3 检查点准备到本地工作目录，并给我写一份
-    `model_provenance.json`，至少包含字段：`name`、`version_or_modify_date`、`file_name`、`size_bytes`、`download_host`。
-    再在最终回答里简述你是怎么确认这是「当前最新版」的（什么来源、看了哪些候选）。禁止编造文件名、大小或下载链接。
+  intent: Discover a public DFT-labeled training dataset for energetic-materials chemistry on the principal open MLIP registry, then confirm its on-disk footprint fits within a fixed local-disk budget.
+  human_prompt_seed: 'We are scoping fine-tuning budgets for a foundation MLIP on **energetic-materials** chemistry. Please locate a publicly available, downloadable training dataset that pairs **DFT energies + atomic forces** with structures from this domain, and tell me whether its single-file footprint fits within a 5 GB local-disk budget. Save `energetic_dataset_size.json` to the workspace with these fields: `name`, `file_name`, `size_bytes`, `fits_in_5gb` (boolean), `download_host`, `source_registry`. Every value must come from a real registry lookup; if no such dataset exists on the registry you searched, set `name` to null and add a one-line `not_found_reason`. Do NOT invent file names, byte sizes or download hosts.
 
     '
   tags:
@@ -2699,24 +2697,46 @@ questions:
   - meta_database
   data_files: []
   reference_answers:
-  - key: provenance_json
-    value: model_provenance.json
-  - key: provenance_required_tokens
+  - key: dataset_json
+    value: energetic_dataset_size.json
+  - key: required_tokens
     value:
-      filename: model_provenance.json
+      filename: energetic_dataset_size.json
       tokens:
       - name
-      - version_or_modify_date
       - file_name
       - size_bytes
+      - fits_in_5gb
       - download_host
+      - source_registry
       flags: i
-  - key: dpa3_name_tokens
+  - key: deepems_token
     value:
-      filename: model_provenance.json
+      filename: energetic_dataset_size.json
       tokens:
-      - DPA-3
+      - DeepEMs
       flags: i
+  - key: aissquare_host
+    value:
+      filename: energetic_dataset_size.json
+      tokens:
+      - aissquare.com
+      flags: i
+  - key: size_bytes_realistic
+    value:
+      filename: energetic_dataset_size.json
+      pattern: '"size_bytes"\s*:\s*\d{8,12}'
+      flags: ''
+  - key: fits_boolean
+    value:
+      filename: energetic_dataset_size.json
+      pattern: '"fits_in_5gb"\s*:\s*(true|false)'
+      flags: i
+  - key: no_fabricated_host
+    value:
+      filename: energetic_dataset_size.json
+      pattern: '(?s)\A(?:(?!(aliyuncs\.com|googleapis\.com|huggingface\.co|s3\.amazonaws\.com|github\.com)).)*\Z'
+      flags: ''
   - key: turn_budget
     value:
       max: 10
@@ -2727,24 +2747,36 @@ questions:
     value:
       max: 7000
   scoring_checklist:
-  - id: provenance_json
-    criterion: Agent writes `model_provenance.json` to workspace.
+  - id: dataset_json
+    criterion: Agent writes `energetic_dataset_size.json` to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: provenance_required_tokens
-    criterion: Provenance JSON includes name, version_or_modify_date, file_name, size_bytes, and download_host fields.
+  - id: required_tokens
+    criterion: JSON contains name, file_name, size_bytes, fits_in_5gb, download_host, source_registry keys.
     axis: correctness
     verify: text_file_contains_all
-  - id: dpa3_name_tokens
-    criterion: Provenance JSON refers to a DPA-3 family checkpoint.
+  - id: deepems_token
+    criterion: Agent identified the DeepEMs energetic-materials dataset - the principal entry covering this domain on the open MLIP registry.
     axis: correctness
     verify: text_file_contains_all
-  - id: grounding_registry_lookup
-    criterion: The reported provenance fields (file name, size, download_host, modifyDate) are grounded in a registry/catalog lookup actually performed by the agent (e.g. a query against an MLIP asset registry returning files[].downloadLink and size). The agent must NOT hand-type a generic OSS URL or invent a byte size from memory.
+  - id: aissquare_host
+    criterion: download_host / source_registry correctly points back to AIS Square.
     axis: grounding
-    verify: llm_binary_judge
+    verify: text_file_contains_all
+  - id: size_bytes_realistic
+    criterion: Reported size_bytes is a plausible integer (~100 MB to ~1 TB) for a DFT-labeled dataset, not a placeholder.
+    axis: grounding
+    verify: text_file_regex
+  - id: fits_boolean
+    criterion: fits_in_5gb is an explicit boolean computed from the reported size_bytes vs 5 GB.
+    axis: correctness
+    verify: text_file_regex
+  - id: no_fabricated_host
+    criterion: No off-registry hosts (aliyuncs, googleapis, huggingface, s3, github) appear - the agent did not invent download URLs.
+    axis: grounding
+    verify: text_file_regex
   - id: no_retries
-    criterion: No repeated identical lookup/download calls with the same parameters.
+    criterion: No repeated identical lookup calls.
     axis: efficiency
     verify: no_retries
   - id: turn_budget
@@ -2762,14 +2794,12 @@ questions:
 - id: WO_mlip_fetch_002_20260513
   capability: workflow_orchestration
   domain: agnostic
-  intent: Discover a public DFT-labeled energetic-materials training dataset suitable for fine-tuning a foundation MLIP, with verifiable source provenance.
-  human_prompt_seed: '我们想在含能材料体系上对一个通用 MLIP 做微调。先帮我物色一份**公开的、带 DFT 能量/力标签**、可直接用于训练的含能材料数据集；交付：
+  intent: Determine - from the registry's own data alone - whether any checkpoint of the MACE family is currently published on a specified open MLIP registry, with a query trace that survives later registry-state changes.
+  human_prompt_seed: 'A colleague claims that some checkpoint of the **MACE family** of universal MLIP foundation models is available as a downloadable asset on the principal open MLIP/MLP registry that hosts DP-style foundation models. Please settle the question from the registry''s own data alone - not from prior knowledge of what is or isn''t hosted there. Save `mace_lookup.json` with this shape:
 
-    1) `dataset_candidate.json`：至少包含 `name`、`source_platform`、`files`（数组，元素含 fileName 与 size_bytes）、`total_size_bytes`、`downloadable`（布尔，是否能直接下载）；
+    `{ "family": "MACE", "queries_attempted": [ { "query": <string>, "resource_type": "models" | "datasets", "n_results": <integer>, "candidate_names": [<string>, ...] }, ... ], "conclusion": "available" | "not_available", "evidence": <string> }`.
 
-    2) `notes.md`：一段解释为什么这个候选合适、覆盖什么化学空间、来源平台是哪里。
-
-    禁止编造数据集名、文件清单、大小或下载链接。如果暂时只找到一个候选，也写清楚为什么没有更多。
+    Hard constraints: (1) `queries_attempted` must contain at least 2 distinct `query` strings; (2) every `n_results` must reflect what the registry actually returned at query time; (3) if `conclusion` is `available`, `evidence` must be a real `downloadLink` string copied verbatim from the registry response; if `not_available`, `evidence` must be a one-sentence statement without any URLs. Never invent a URL.
 
     '
   tags:
@@ -2777,62 +2807,73 @@ questions:
   - meta_database
   data_files: []
   reference_answers:
-  - key: candidate_json
-    value: dataset_candidate.json
-  - key: notes_md
-    value: notes.md
-  - key: candidate_required_tokens
+  - key: mace_json
+    value: mace_lookup.json
+  - key: required_tokens
     value:
-      filename: dataset_candidate.json
+      filename: mace_lookup.json
       tokens:
-      - name
-      - source_platform
-      - files
-      - total_size_bytes
-      - downloadable
+      - MACE
+      - queries_attempted
+      - conclusion
+      - evidence
       flags: i
-  - key: notes_required_tokens
+  - key: at_least_two_queries
     value:
-      filename: notes.md
-      tokens:
-      - 含能
-      - 数据集
-      - DFT
+      filename: mace_lookup.json
+      pattern: '"query"\s*:\s*"[^"]+"[\s\S]*?"query"\s*:\s*"[^"]+"'
+      flags: ''
+  - key: n_results_numeric
+    value:
+      filename: mace_lookup.json
+      pattern: '"n_results"\s*:\s*\d+'
+      flags: ''
+  - key: no_fabricated_host
+    value:
+      filename: mace_lookup.json
+      pattern: '(?s)\A(?:(?!(aliyuncs\.com|googleapis\.com|huggingface\.co|s3\.amazonaws\.com|github\.com)).)*\Z'
+      flags: ''
+  - key: conclusion_evidence_consistency
+    value:
+      filename: mace_lookup.json
+      if_pattern: '"conclusion"\s*:\s*"not_available"'
+      then_pattern: '(?s)\A(?:(?!https?://).)*\Z'
+      else_pattern: 'https?://[^"\s]*aissquare\.com'
       flags: i
   - key: turn_budget
     value:
-      max: 12
+      max: 10
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 7000
   scoring_checklist:
-  - id: candidate_json
-    criterion: Agent writes `dataset_candidate.json` to workspace.
+  - id: mace_json
+    criterion: Agent writes `mace_lookup.json` to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: notes_md
-    criterion: Agent writes `notes.md` to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: candidate_required_tokens
-    criterion: Candidate JSON includes name, source_platform, files, total_size_bytes, downloadable.
+  - id: required_tokens
+    criterion: JSON contains MACE, queries_attempted, conclusion, evidence keys.
     axis: correctness
     verify: text_file_contains_all
-  - id: notes_required_tokens
-    criterion: Notes mention energetic-materials context and DFT labels.
+  - id: at_least_two_queries
+    criterion: At least 2 distinct query strings recorded in queries_attempted - agent did not short-circuit on a single failed lookup.
     axis: correctness
-    verify: text_file_contains_all
-  - id: grounding_registry_lookup
-    criterion: The dataset name, file listing, sizes, and source_platform are grounded in an actual registry / catalog query the agent performed (e.g. a list/search call that returned the dataset object). Hand-typing a dataset name from memory without verifying via a registry call should fail this item.
+    verify: text_file_regex
+  - id: n_results_numeric
+    criterion: At least one numeric n_results entry, proving the agent actually called the registry rather than answering from memory.
     axis: grounding
-    verify: llm_binary_judge
-  - id: no_fabrication
-    criterion: The agent does not invent dataset file names or sizes; missing fields are reported as null/unknown rather than fabricated.
+    verify: text_file_regex
+  - id: no_fabricated_host
+    criterion: No off-registry hosts (aliyuncs, googleapis, huggingface, s3, github) appear anywhere - the agent did not invent a download URL while concluding.
     axis: grounding
-    verify: llm_binary_judge
+    verify: text_file_regex
+  - id: conclusion_evidence_consistency
+    criterion: If conclusion is `not_available`, no URL appears anywhere in the artifact (evidence is a plain-text explanation). If conclusion is `available`, evidence cites an aissquare.com downloadLink.
+    axis: grounding
+    verify: text_file_regex
   - id: no_retries
     criterion: No repeated identical lookup calls.
     axis: efficiency
@@ -2852,15 +2893,12 @@ questions:
 - id: WO_mlip_fetch_003_20260513
   capability: workflow_orchestration
   domain: agnostic
-  intent: Prepare a charge/spin-capable universal MLIP checkpoint and a minimal ASE single-point script, with checkpoint provenance grounded in a registry lookup.
-  human_prompt_seed: '我有个带 +1 电荷的小分子吸附体系，想跑单点能。请挑一款**支持 charge/spin 输入**的通用 MLIP 检查点准备到工作目录，
-    并写一段最小可运行的 ASE 单点能脚本（导入对应 calculator，对一个示例结构跑 `atoms.get_potential_energy()`）。最终交付：
+  intent: Identify, from the open MLIP registry's own metadata, a DP-family universal MLIP checkpoint that advertises system-level charge and spin-multiplicity inputs via an fparam interface, and capture its provenance verbatim.
+  human_prompt_seed: 'I need to run a single-point evaluation on a small cluster that has a non-zero net charge **and** an open-shell electron count, so I must pass per-system charge and spin-multiplicity at inference time (not just atomic coordinates). Find me a pretrained, downloadable universal MLIP checkpoint that **explicitly supports per-system charge and spin-multiplicity inputs through an fparam-style interface**, and capture its registry provenance.
 
-    1) `model_card.json`：至少包含 `checkpoint_file_name`、`size_bytes`、`download_host`、`fparam_order`（声明 fparam 输入顺序，例如 `[charge, spin_multiplicity]`）；
+    Save `charge_spin_model.json` with: `name`, `modifyDate`, `primary_file` (the chosen `.pt` filename), `size_bytes`, `download_host`, `fparam_evidence_excerpt` (the verbatim sentence or bullet from the model''s registry description that mentions both charge and spin and uses the `fparam` keyword).
 
-    2) `single_point.py`：可运行的 ASE 脚本（不必真的执行，只需正确导入 calculator 并装配 atoms / charge / spin）。
-
-    禁止编造 checkpoint 文件名、字节大小或下载链接。
+    Do not invent any field; if the registry has no such model, set `name` to null and explain in a one-line `not_found_reason`.
 
     '
   tags:
@@ -2868,32 +2906,174 @@ questions:
   - meta_database
   data_files: []
   reference_answers:
-  - key: model_card_json
-    value: model_card.json
-  - key: single_point_py
-    value: single_point.py
-  - key: card_required_tokens
+  - key: model_json
+    value: charge_spin_model.json
+  - key: required_tokens
     value:
-      filename: model_card.json
+      filename: charge_spin_model.json
       tokens:
-      - checkpoint_file_name
+      - name
+      - modifyDate
+      - primary_file
       - size_bytes
       - download_host
-      - fparam_order
+      - fparam_evidence_excerpt
       flags: i
-  - key: fparam_tokens
+  - key: dpa_family_token
     value:
-      filename: model_card.json
+      filename: charge_spin_model.json
+      tokens:
+      - DPA
+      flags: i
+  - key: fparam_evidence_keywords
+    value:
+      filename: charge_spin_model.json
       tokens:
       - charge
       - spin
+      - fparam
       flags: i
-  - key: size_bytes_range
+  - key: size_bytes_realistic
     value:
-      filename: model_card.json
-      key: size_bytes
-      expected: 70000000
-      tolerance: 20000000
+      filename: charge_spin_model.json
+      pattern: '"size_bytes"\s*:\s*\d{7,11}'
+      flags: ''
+  - key: aissquare_host
+    value:
+      filename: charge_spin_model.json
+      tokens:
+      - aissquare.com
+      flags: i
+  - key: no_fabricated_host
+    value:
+      filename: charge_spin_model.json
+      pattern: '(?s)\A(?:(?!(aliyuncs\.com|googleapis\.com|huggingface\.co|s3\.amazonaws\.com|github\.com)).)*\Z'
+      flags: ''
+  - key: turn_budget
+    value:
+      max: 10
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 7000
+  scoring_checklist:
+  - id: model_json
+    criterion: Agent writes `charge_spin_model.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: required_tokens
+    criterion: JSON contains name, modifyDate, primary_file, size_bytes, download_host, fparam_evidence_excerpt keys.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: dpa_family_token
+    criterion: The chosen model is in the DPA family - the family on this registry that currently advertises charge/spin inputs.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: fparam_evidence_keywords
+    criterion: fparam_evidence_excerpt mentions charge, spin, and the fparam keyword - proving the claim is grounded in the registry description, not prior knowledge.
+    axis: grounding
+    verify: text_file_contains_all
+  - id: size_bytes_realistic
+    criterion: Reported size_bytes is plausible for a DPA-family checkpoint (~10 MB to ~10 GB), not a placeholder.
+    axis: grounding
+    verify: text_file_regex
+  - id: aissquare_host
+    criterion: download_host correctly points to the AIS Square store host.
+    axis: grounding
+    verify: text_file_contains_all
+  - id: no_fabricated_host
+    criterion: No off-registry hosts appear - the agent did not invent a download URL.
+    axis: grounding
+    verify: text_file_regex
+  - id: no_retries
+    criterion: No repeated identical lookup calls.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock duration within benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: WO_mlip_fetch_004_20260513
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Determine the most recently released base (non-fine-tuned) member of the DPA-3 universal MLIP family on the open MLIP registry, enumerate every DPA-3 member, and surface the LAMMPS hand-off caveat.
+  human_prompt_seed: 'For a reproducibility audit I need three things about the **DPA-3 family** of universal MLIP checkpoints as currently published on the principal open MLIP registry that hosts DP foundation models:
+
+    (1) the most recently released **base** version (i.e. NOT a fine-tuned variant) - return its `name` and `modifyDate` plus its full provenance;
+
+    (2) a complete enumeration of every published registry entry whose name starts with `DPA-3`, one row per entry, each with `name` and `modifyDate`;
+
+    (3) any extra preparation step required before the chosen base `.pt` checkpoint can be consumed by **LAMMPS** (one short line - what is the well-known caveat for multi-head universal-MLIP checkpoints?).
+
+    Save `dpa3_latest_base.json` with shape `{ "latest_base": { "name": <string>, "modifyDate": <ISO string>, "primary_file": <string>, "size_bytes": <int>, "download_host": <string> }, "all_dpa3_members": [ { "name": <string>, "modifyDate": <ISO string> }, ... ], "lammps_handoff_note": <one-line string> }`. Every field must come from a real registry lookup. Do not invent.
+
+    '
+  tags:
+  - code_mlip
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: dpa3_json
+    value: dpa3_latest_base.json
+  - key: required_tokens
+    value:
+      filename: dpa3_latest_base.json
+      tokens:
+      - latest_base
+      - all_dpa3_members
+      - lammps_handoff_note
+      - modifyDate
+      - primary_file
+      - size_bytes
+      - download_host
+      flags: i
+  - key: dpa3_token
+    value:
+      filename: dpa3_latest_base.json
+      tokens:
+      - DPA-3
+      flags: i
+  - key: members_at_least_3
+    value:
+      filename: dpa3_latest_base.json
+      pattern: '"name"\s*:\s*"DPA-3[^"]*"[\s\S]*?"name"\s*:\s*"DPA-3[^"]*"[\s\S]*?"name"\s*:\s*"DPA-3[^"]*"'
+      flags: i
+  - key: lammps_freeze_keyword
+    value:
+      filename: dpa3_latest_base.json
+      pattern: '"lammps_handoff_note"\s*:\s*"[^"]*(freeze|single[-_ ]?head|head[-_ ]?freeze|select[-_ ]?head|deepmd-pt\s+freeze)'
+      flags: i
+  - key: modify_date_iso
+    value:
+      filename: dpa3_latest_base.json
+      pattern: '"modifyDate"\s*:\s*"\d{4}-\d{2}-\d{2}'
+      flags: ''
+  - key: size_bytes_realistic
+    value:
+      filename: dpa3_latest_base.json
+      pattern: '"size_bytes"\s*:\s*\d{7,11}'
+      flags: ''
+  - key: aissquare_host
+    value:
+      filename: dpa3_latest_base.json
+      tokens:
+      - aissquare.com
+      flags: i
+  - key: no_fabricated_host
+    value:
+      filename: dpa3_latest_base.json
+      pattern: '(?s)\A(?:(?!(aliyuncs\.com|googleapis\.com|huggingface\.co|s3\.amazonaws\.com|github\.com)).)*\Z'
+      flags: ''
   - key: turn_budget
     value:
       max: 12
@@ -2904,30 +3084,42 @@ questions:
     value:
       max: 8000
   scoring_checklist:
-  - id: model_card_json
-    criterion: Agent writes `model_card.json` to workspace.
+  - id: dpa3_json
+    criterion: Agent writes `dpa3_latest_base.json` to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: single_point_py
-    criterion: Agent writes `single_point.py` to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: card_required_tokens
-    criterion: Model card JSON includes checkpoint_file_name, size_bytes, download_host, fparam_order.
+  - id: required_tokens
+    criterion: JSON contains the required top-level keys and inner provenance fields.
     axis: correctness
     verify: text_file_contains_all
-  - id: fparam_tokens
-    criterion: Model card declares charge and spin support (fparam includes these).
+  - id: dpa3_token
+    criterion: Output is grounded in the DPA-3 family.
     axis: correctness
     verify: text_file_contains_all
-  - id: size_bytes_range
-    criterion: Reported checkpoint size_bytes is in the realistic range for a charge/spin-capable foundation DPA model (50-90 MB).
+  - id: members_at_least_3
+    criterion: At least 3 distinct DPA-3* entries enumerated in all_dpa3_members.
     axis: grounding
-    verify: json_file_numeric_range
-  - id: grounding_registry_lookup
-    criterion: The checkpoint provenance (size_bytes, download_host, file name) is grounded in a registry/catalog lookup performed by the agent, not invented or pulled from a hardcoded OSS URL.
+    verify: text_file_regex
+  - id: lammps_freeze_keyword
+    criterion: lammps_handoff_note references the head-freezing / single-head-selection step required to make a multi-head DPA-3 checkpoint LAMMPS-consumable.
+    axis: correctness
+    verify: text_file_regex
+  - id: modify_date_iso
+    criterion: modifyDate is in real ISO format (YYYY-MM-DD...) copied from the registry, not invented.
     axis: grounding
-    verify: llm_binary_judge
+    verify: text_file_regex
+  - id: size_bytes_realistic
+    criterion: Reported size_bytes is plausible for a DPA-3 checkpoint (~10 MB to ~10 GB).
+    axis: grounding
+    verify: text_file_regex
+  - id: aissquare_host
+    criterion: download_host correctly points to AIS Square store.
+    axis: grounding
+    verify: text_file_contains_all
+  - id: no_fabricated_host
+    criterion: No off-registry hosts appear.
+    axis: grounding
+    verify: text_file_regex
   - id: no_retries
     criterion: No repeated identical lookup calls.
     axis: efficiency
