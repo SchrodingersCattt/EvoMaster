@@ -3308,7 +3308,7 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
-- id: IG_abacus_022_20260513
+- id: IG_abacus_022_20260514
   capability: input_generation
   domain: agnostic
   intent: Test DFT+U SCF with antiferromagnetic initialization for NiO.
@@ -3323,7 +3323,7 @@ questions:
   - eng_abacus
   data_files:
   - key: stru_nio
-    path: data/IG_abacus_022_20260513/STRU_NiO
+    path: data/IG_abacus_022_20260514/STRU_NiO
     oss_url: ''
     description: NiO rocksalt conventional cell STRU (4 Ni + 4 O).
   reference_answers:
@@ -3359,8 +3359,8 @@ questions:
   - key: must_stru_afm_moments
     value:
       filename: STRU
-      pattern: (?s)mag\s+-\d
-      flags: s
+      check: magnetic_order
+      expected: afm
   - key: turn_budget
     value:
       max: 12
@@ -3394,10 +3394,9 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: must_stru_afm_moments
-    criterion: '[Must] STRU contains negative magnetic moment (AFM, not all-parallel
-      FM).'
+    criterion: '[Must] STRU sets antiferromagnetic initialization (not all-parallel FM).'
     axis: correctness
-    verify: text_file_regex
+    verify: stru_file_check
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency

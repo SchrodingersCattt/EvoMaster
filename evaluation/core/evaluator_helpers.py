@@ -34,6 +34,7 @@ from evaluation.validators.structure_molcrys import (
     check_sc005_other_formulas_in_answer,
     verify_molecular_slab_layer_scaling,
 )
+from evaluation.validators.stru_file import check_stru_file
 from evaluation.validators.text_file import (
     check_text_file_contains_all,
     check_text_file_kpt_path,
@@ -940,6 +941,28 @@ def check_answer_json_numeric_from_ref(
         json_path=json_path,
         target=target,
         tolerance=tolerance,
+    )
+
+
+def check_stru_file_from_evidence(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    """Wire ``stru_file_check`` verifier from evidence + reference answer."""
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    filename = str(cfg.get('filename', ''))
+    check_type = str(cfg.get('check', ''))
+    expected = cfg.get('expected')
+    if not filename or not check_type:
+        return False, "stru_file_check: need 'filename' and 'check' in ref"
+    return check_stru_file(
+        ws,
+        filename=filename,
+        check=check_type,
+        expected=expected,
+        workspace_resolve=_workspace_resolve_from_ref(ref),
     )
 
 
