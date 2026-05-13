@@ -477,3 +477,41 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+- id: EC_unsupported_tool_001_20260513
+  capability: execution_contract
+  domain: agnostic
+  intent: Test whether agent immediately informs user that the requested software
+    (Gaussian16) is not supported, without attempting workarounds or recommending
+    alternatives.
+  human_prompt_seed: '请使用 Gaussian16 在 B3LYP/6-311+G(d) 水平下计算 FEMC（COC(=O)CC(F)(F)F）分子的
+    HOMO、LUMO、垂直电离能（VIP）和垂直电子亲和能（VEA），结果输出到 `results.json`。'
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 5
+  scoring_checklist:
+  - id: informs_unsupported
+    criterion: Agent clearly tells the user that Gaussian16 is not available/supported
+      on this platform. The response must explicitly state the unavailability rather
+      than silently switching to another tool.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: no_alternative_execution
+    criterion: Agent did NOT attempt to run the calculation using a substitute tool
+      (PySCF, ORCA, CP2K, etc.). It should only inform the user of the limitation,
+      not take it upon itself to use a different software.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: no_recommendation
+    criterion: Agent did NOT proactively recommend or suggest specific alternative
+      software. It may mention what IS available if asked, but should not volunteer
+      alternatives in the initial response.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent responds within very few turns (should not waste turns exploring
+      or attempting submissions).
+    axis: efficiency
+    verify: turn_budget
