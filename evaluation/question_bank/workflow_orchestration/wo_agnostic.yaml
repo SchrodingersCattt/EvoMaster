@@ -2951,7 +2951,7 @@ questions:
       flags: ''
   - key: turn_budget
     value:
-      max: 18
+      max: 20
   - key: duration_budget
     value:
       max: 7200000
