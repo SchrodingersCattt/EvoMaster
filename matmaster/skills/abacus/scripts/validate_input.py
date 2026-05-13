@@ -244,7 +244,9 @@ def validate_workspace(workspace: Path) -> list[str]:
                         f"FAIL {prefix}: pseudo_dir points to APNS, but '{pp_file}' is not in "
                         f"references/apns_pseudopotentials_v1.list."
                     )
-                guessed_pp = bool(re.fullmatch(rf"{re.escape(species)}\.upf", pp_file, re.IGNORECASE))
+                guessed_pp = bool(
+                    re.fullmatch(rf"{re.escape(species)}\.upf", pp_file, re.IGNORECASE)
+                )
                 has_better_pp = any(
                     cand.lower() != pp_file.lower()
                     for cand in apns_pseudo_by_element.get(species, set())
@@ -271,7 +273,12 @@ def validate_workspace(workspace: Path) -> list[str]:
                 if species:
                     has_element_orb = species in apns_orb_by_element
                     guessed_orb = orb_file.lower().startswith(f"{species.lower()}_")
-                    if using_apns_orb and guessed_orb and not orb_in_apns_list and has_element_orb:
+                    if (
+                        using_apns_orb
+                        and guessed_orb
+                        and not orb_in_apns_list
+                        and has_element_orb
+                    ):
                         messages.append(
                             f"FAIL {prefix}: '{orb_file}' looks guessed for element {species}; use the APNS "
                             f"filename listed in references/apns_orbitals_efficiency_v1.list."
