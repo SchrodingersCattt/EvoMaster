@@ -76,3 +76,66 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
+- id: WO_mace_001_20260513
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Test whether agent knows MACE-MP-0 can be used directly by name via mlips
+    skill without manually downloading the model file.
+  human_prompt_seed: '请使用 MACE-MP-0 势函数对工作区中的 `nacl_bulk.cif`（NaCl 岩盐结构，64
+    原子超胞）进行结构优化，输出提交配置 `opt_submit.json`。'
+  tags:
+  - code_mlip
+  data_files:
+  - key: nacl_cif
+    path: data/WO_mace_001/nacl_bulk.cif
+    oss_url: ''
+    description: NaCl rock-salt 2x2x2 supercell (64 atoms).
+  reference_answers:
+  - key: submit_artifact
+    value: opt_submit.json
+  - key: must_model_mace
+    value:
+      filename: opt_submit.json
+      pattern: MACE-MP-0|mace
+      flags: i
+  - key: must_optimize_script
+    value:
+      filename: opt_submit.json
+      pattern: optimize_structure
+      flags: ''
+  - key: must_image_mlips
+    value:
+      filename: opt_submit.json
+      pattern: mlips
+      flags: i
+  - key: turn_budget
+    value:
+      max: 10
+  scoring_checklist:
+  - id: submit_artifact
+    criterion: opt_submit.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_model_mace
+    criterion: '[Platform] cmd references MACE-MP-0 model by name.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_optimize_script
+    criterion: '[Platform] cmd uses optimize_structure script from mlips skill.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_image_mlips
+    criterion: '[Platform] image references the multi-family mlips image (not the
+      DPA-only image).'
+    axis: correctness
+    verify: text_file_regex
+  - id: no_download_attempt
+    criterion: Agent did NOT attempt to manually download the MACE model file from
+      GitHub or other URLs. It should know that MACE-MP-0 is a known model name
+      supported directly by the mlips skill scripts.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
