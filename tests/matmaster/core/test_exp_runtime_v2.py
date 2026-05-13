@@ -324,7 +324,7 @@ class TestBuildRuntimeFullToolRunner:
         from matmaster.core.exp import Exp
 
         session = _MockSession()
-        session.remote_project_root = "/personnal/.matmaster/skills"
+        session.remote_project_root = "/personal/.matmaster/skills"
         config = _make_exp_config()
         exp = Exp(config)
         ctx = _make_playground_context(session=session)
@@ -333,7 +333,28 @@ class TestBuildRuntimeFullToolRunner:
         roots = runtime.spec.runtime_topology.path_access_roots
 
         assert any(
-            root.root == "/personnal/.matmaster/skills"
+            root.root == "/personal/.matmaster/skills"
+            and root.permissions == frozenset({"read", "search"})
+            for root in roots
+        )
+
+    @pytest.mark.asyncio
+    async def test_topology_includes_session_remote_skill_roots(self) -> None:
+        """RuntimeTopology allows read/search access to scanned remote skills."""
+        from matmaster.core.exp import Exp
+
+        session = _MockSession()
+        session.remote_project_root = None
+        session.remote_skill_roots = ["/personal/.matmaster/skills"]
+        config = _make_exp_config()
+        exp = Exp(config)
+        ctx = _make_playground_context(session=session)
+
+        runtime = await exp.build_runtime(ctx)
+        roots = runtime.spec.runtime_topology.path_access_roots
+
+        assert any(
+            root.root == "/personal/.matmaster/skills"
             and root.permissions == frozenset({"read", "search"})
             for root in roots
         )
@@ -370,7 +391,8 @@ class TestBuildRuntimeFullToolRunner:
         from matmaster.core.exp import Exp
 
         session = _MockSession()
-        session.remote_project_root = "/personnal/.matmaster/skills"
+        session.remote_project_root = None
+        session.remote_skill_roots = ["/personal/.matmaster/skills"]
         config = _make_exp_config(tools={"builtin": ["Glob", "Grep"]})
         exp = Exp(config)
         ctx = _make_playground_context(session=session)
@@ -382,8 +404,8 @@ class TestBuildRuntimeFullToolRunner:
 
         assert glob_tool is not None
         assert grep_tool is not None
-        assert "/personnal/.matmaster/skills" in glob_tool._path_access_roots
-        assert "/personnal/.matmaster/skills" in grep_tool._path_access_roots
+        assert "/personal/.matmaster/skills" in glob_tool._path_access_roots
+        assert "/personal/.matmaster/skills" in grep_tool._path_access_roots
 
     def test_build_runtime_seeds_bohrium_registry_from_run_meta(self) -> None:
         from matmaster.core.exp import Exp

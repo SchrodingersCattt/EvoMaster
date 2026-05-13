@@ -128,18 +128,18 @@ class TestGrepExecution:
         assert "$(" not in cmd.split("'")[0]  # pattern should be escaped
 
     def test_extra_path_root_is_preserved(self, monkeypatch):
-        session = make_session(output="/personnal/.matmaster/skills/abacus/SKILL.md")
+        session = make_session(output="/personal/.matmaster/skills/abacus/SKILL.md")
         tool = GrepTool(
             session=session,
             workdir="/workspace",
-            path_access_roots=("/personnal/.matmaster/skills",),
+            path_access_roots=("/personal/.matmaster/skills",),
         )
         monkeypatch.setattr(tool, "_detect_rg", lambda: True)
         asyncio.run(
             tool.execute(
                 {
                     "pattern": "ABACUS",
-                    "path": "/personnal/.matmaster/skills",
+                    "path": "/personal/.matmaster/skills",
                     "output_mode": "files_with_matches",
                 }
             )
@@ -148,7 +148,7 @@ class TestGrepExecution:
             session.exec_bash.call_args[1].get("command")
             or session.exec_bash.call_args[0][0]
         )
-        assert "/personnal/.matmaster/skills" in cmd
+        assert "/personal/.matmaster/skills" in cmd
         assert "/workspace" not in cmd
 
 

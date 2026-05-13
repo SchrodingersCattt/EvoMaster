@@ -42,6 +42,11 @@ def derive_path_access_roots(ctx: PlaygroundContext) -> tuple[PathAccessRoot, ..
 
     session = getattr(ctx, "session", None)
     _add(getattr(session, "remote_project_root", None), "runtime")
+    remote_skill_roots = getattr(session, "remote_skill_roots", None)
+    if isinstance(remote_skill_roots, (list, tuple, set)):
+        for root in remote_skill_roots:
+            _add(root, "skill")
+    _add(getattr(session, "remote_user_skills_root", None), "skill")
 
     run_meta = getattr(ctx, "run_meta", {}) or {}
     bohrium = run_meta.get("bohrium") if isinstance(run_meta, dict) else None

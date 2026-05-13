@@ -261,22 +261,22 @@ class TestGlobExecution:
         assert "/workspace/sub" in cmd
 
     def test_extra_path_root_is_preserved(self):
-        session = make_session(output="/personnal/.matmaster/skills/abacus/SKILL.md")
+        session = make_session(output="/personal/.matmaster/skills/abacus/SKILL.md")
         tool = GlobTool(
             session=session,
             workdir="/workspace",
-            path_access_roots=("/personnal/.matmaster/skills",),
+            path_access_roots=("/personal/.matmaster/skills",),
         )
         asyncio.run(
             tool.execute(
                 {
                     "pattern": "**/*.md",
-                    "path": "/personnal/.matmaster/skills",
+                    "path": "/personal/.matmaster/skills",
                 }
             )
         )
         cmd = session.exec_bash.call_args[1].get("command", "")
-        assert "find /personnal/.matmaster/skills" in cmd
+        assert "find /personal/.matmaster/skills" in cmd
         assert "find /workspace" not in cmd
 
     def test_glob_returns_meta_when_paths_are_skipped(self):

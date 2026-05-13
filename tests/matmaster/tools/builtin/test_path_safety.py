@@ -22,19 +22,19 @@ class TestResolveSafePath:
     def test_absolute_under_allowed_extra_root(self):
         assert (
             resolve_safe_path(
-                "/personnal/.matmaster/skills/abacus",
+                "/personal/.matmaster/skills/abacus",
                 "/workspace",
-                allowed_roots=("/personnal/.matmaster/skills",),
+                allowed_roots=("/personal/.matmaster/skills",),
             )
-            == "/personnal/.matmaster/skills/abacus"
+            == "/personal/.matmaster/skills/abacus"
         )
 
     def test_prefix_collision_with_extra_root_not_subdir(self):
         assert (
             resolve_safe_path(
-                "/personnal/.matmaster/skills2/abacus",
+                "/personal/.matmaster/skills2/abacus",
                 "/workspace",
-                allowed_roots=("/personnal/.matmaster/skills",),
+                allowed_roots=("/personal/.matmaster/skills",),
             )
             == "/workspace"
         )

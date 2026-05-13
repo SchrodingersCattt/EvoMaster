@@ -351,7 +351,7 @@ class TestPathNormalization:
             active_planes=frozenset({ToolPlane.SESSION_FS, ToolPlane.CONTROL_PLANE}),
             path_access_roots=(
                 PathAccessRoot(
-                    root="/personnal/.matmaster/skills",
+                    root="/personal/.matmaster/skills",
                     kind="skill",
                     permissions=frozenset({"read", "search"}),
                 ),
@@ -360,7 +360,12 @@ class TestPathNormalization:
         result = self.validator.validate(
             topo,
             instance,
-            {"file_path": "/personnal/.matmaster/skills/abacus/SKILL.md"},
+            {
+                "file_path": (
+                    "/personal/.matmaster/skills/builtin/abacus/"
+                    "references/input_examples.md"
+                )
+            },
         )
 
         assert result.decision == "allow"
@@ -376,7 +381,7 @@ class TestPathNormalization:
             active_planes=frozenset(ToolPlane),
             path_access_roots=(
                 PathAccessRoot(
-                    root="/personnal/.matmaster/skills",
+                    root="/personal/.matmaster/skills",
                     kind="skill",
                     permissions=frozenset({"read", "search"}),
                 ),
@@ -385,7 +390,7 @@ class TestPathNormalization:
         result = self.validator.validate(
             topo,
             instance,
-            {"path": "/personnal/.matmaster/skills"},
+            {"path": "/personal/.matmaster/skills"},
         )
 
         assert result.decision == "allow"
@@ -401,7 +406,7 @@ class TestPathNormalization:
             active_planes=frozenset({ToolPlane.SESSION_FS, ToolPlane.CONTROL_PLANE}),
             path_access_roots=(
                 PathAccessRoot(
-                    root="/personnal/.matmaster/skills",
+                    root="/personal/.matmaster/skills",
                     kind="skill",
                     permissions=frozenset({"read", "search"}),
                 ),
@@ -410,7 +415,7 @@ class TestPathNormalization:
         result = self.validator.validate(
             topo,
             instance,
-            {"file_path": "/personnal/.matmaster/skills/abacus/SKILL.md"},
+            {"file_path": "/personal/.matmaster/skills/abacus/SKILL.md"},
         )
 
         assert result.decision == "deny"
@@ -427,7 +432,7 @@ class TestPathNormalization:
             active_planes=frozenset({ToolPlane.SESSION_FS, ToolPlane.CONTROL_PLANE}),
             path_access_roots=(
                 PathAccessRoot(
-                    root="/personnal/.matmaster/skills",
+                    root="/personal/.matmaster/skills",
                     kind="skill",
                     permissions=frozenset({"read", "search"}),
                 ),
@@ -436,7 +441,7 @@ class TestPathNormalization:
         result = self.validator.validate(
             topo,
             instance,
-            {"file_path": "../../../personnal/.matmaster/skills/abacus/SKILL.md"},
+            {"file_path": "../../../personal/.matmaster/skills/abacus/SKILL.md"},
         )
 
         assert result.decision == "deny"
