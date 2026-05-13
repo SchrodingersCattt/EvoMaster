@@ -39,15 +39,23 @@ def _ssl_ctx(insecure: bool) -> ssl.SSLContext | None:
     return ctx
 
 
-def _http_get_json(url: str, *, insecure: bool, timeout: int = DEFAULT_TIMEOUT) -> dict[str, Any]:
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+def _http_get_json(
+    url: str, *, insecure: bool, timeout: int = DEFAULT_TIMEOUT
+) -> dict[str, Any]:
+    req = urllib.request.Request(
+        url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"}
+    )
     last_exc: Exception | None = None
     for attempt in range(3):
         try:
-            with urllib.request.urlopen(req, timeout=timeout, context=_ssl_ctx(insecure)) as resp:
+            with urllib.request.urlopen(
+                req, timeout=timeout, context=_ssl_ctx(insecure)
+            ) as resp:
                 payload = json.loads(resp.read().decode("utf-8"))
             if isinstance(payload, dict) and payload.get("code", 0) != 0:
-                raise RuntimeError(f"AIS Square API error code={payload.get('code')} msg={payload.get('message')}")
+                raise RuntimeError(
+                    f"AIS Square API error code={payload.get('code')} msg={payload.get('message')}"
+                )
             return payload
         except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
             last_exc = exc
@@ -55,12 +63,18 @@ def _http_get_json(url: str, *, insecure: bool, timeout: int = DEFAULT_TIMEOUT) 
     raise RuntimeError(f"GET {url} failed after 3 attempts: {last_exc}")
 
 
-def _list_page(resource_type: str, page: int, page_size: int, *, insecure: bool) -> dict[str, Any]:
+def _list_page(
+    resource_type: str, page: int, page_size: int, *, insecure: bool
+) -> dict[str, Any]:
     qs = urllib.parse.urlencode({"page": page, "pageSize": page_size})
-    return _http_get_json(f"{BASE_URL}/content/{resource_type}?{qs}", insecure=insecure).get("data", {})
+    return _http_get_json(
+        f"{BASE_URL}/content/{resource_type}?{qs}", insecure=insecure
+    ).get("data", {})
 
 
-def _list_all(resource_type: str, *, insecure: bool, page_size: int = DEFAULT_PAGE_SIZE) -> list[dict[str, Any]]:
+def _list_all(
+    resource_type: str, *, insecure: bool, page_size: int = DEFAULT_PAGE_SIZE
+) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     page = 1
     while True:
@@ -74,9 +88,13 @@ def _list_all(resource_type: str, *, insecure: bool, page_size: int = DEFAULT_PA
     return items
 
 
-def _detail(resource_id: int, resource_type: str, name: str, *, insecure: bool) -> dict[str, Any]:
+def _detail(
+    resource_id: int, resource_type: str, name: str, *, insecure: bool
+) -> dict[str, Any]:
     qs = urllib.parse.urlencode({"id": resource_id, "name": name})
-    data = _http_get_json(f"{BASE_URL}/dpa/detail/{resource_type}?{qs}", insecure=insecure).get("data", {})
+    data = _http_get_json(
+        f"{BASE_URL}/dpa/detail/{resource_type}?{qs}", insecure=insecure
+    ).get("data", {})
     for f in data.get("files", []) or []:
         link = f.get("downloadLink") or ""
         if link:
@@ -84,13 +102,20 @@ def _detail(resource_id: int, resource_type: str, name: str, *, insecure: bool) 
     return data
 
 
-def _stream_download(url: str, out_path: Path, *, insecure: bool, chunk: int = 8192) -> int:
+def _stream_download(
+    url: str, out_path: Path, *, insecure: bool, chunk: int = 8192
+) -> int:
     out_path.parent.mkdir(parents=True, exist_ok=True)
     req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     last_exc: Exception | None = None
     for attempt in range(3):
         try:
-            with urllib.request.urlopen(req, timeout=DEFAULT_TIMEOUT * 4, context=_ssl_ctx(insecure)) as resp, out_path.open("wb") as fh:
+            with (
+                urllib.request.urlopen(
+                    req, timeout=DEFAULT_TIMEOUT * 4, context=_ssl_ctx(insecure)
+                ) as resp,
+                out_path.open("wb") as fh,
+            ):
                 total = 0
                 while True:
                     buf = resp.read(chunk)
@@ -118,23 +143,40 @@ def _slim(item: dict[str, Any]) -> dict[str, Any]:
 
 
 def cmd_list(args: argparse.Namespace) -> dict[str, Any]:
-    items = _list_all(args.resource_type, insecure=args.insecure, page_size=args.page_size)
+    items = _list_all(
+        args.resource_type, insecure=args.insecure, page_size=args.page_size
+    )
     if args.sort == "downloads":
         items.sort(key=lambda x: int(x.get("downloadCount") or 0), reverse=True)
     elif args.sort == "modified":
         items.sort(key=lambda x: str(x.get("modifyDate") or ""), reverse=True)
     if args.limit:
         items = items[: args.limit]
-    return {"resource_type": args.resource_type, "count": len(items), "items": [_slim(x) for x in items]}
+    return {
+        "resource_type": args.resource_type,
+        "count": len(items),
+        "items": [_slim(x) for x in items],
+    }
 
 
 def cmd_search(args: argparse.Namespace) -> dict[str, Any]:
     needle = args.keyword.lower()
-    matches = [x for x in _list_all(args.type, insecure=args.insecure) if needle in (x.get("name") or "").lower()]
-    return {"keyword": args.keyword, "resource_type": args.type, "count": len(matches), "items": [_slim(x) for x in matches]}
+    matches = [
+        x
+        for x in _list_all(args.type, insecure=args.insecure)
+        if needle in (x.get("name") or "").lower()
+    ]
+    return {
+        "keyword": args.keyword,
+        "resource_type": args.type,
+        "count": len(matches),
+        "items": [_slim(x) for x in matches],
+    }
 
 
-def _find_by_name(name: str, resource_type: str, *, insecure: bool) -> dict[str, Any] | None:
+def _find_by_name(
+    name: str, resource_type: str, *, insecure: bool
+) -> dict[str, Any] | None:
     for item in _list_all(resource_type, insecure=insecure):
         if item.get("name") == name:
             return item
@@ -158,7 +200,9 @@ def cmd_info(args: argparse.Namespace) -> dict[str, Any]:
 
 
 def cmd_download(args: argparse.Namespace) -> dict[str, Any]:
-    info = cmd_info(argparse.Namespace(name=args.name, type=args.type, insecure=args.insecure))
+    info = cmd_info(
+        argparse.Namespace(name=args.name, type=args.type, insecure=args.insecure)
+    )
     out_root = Path(args.output) / args.name
     saved: list[dict[str, Any]] = []
     for f in info.get("files", []):
@@ -167,19 +211,34 @@ def cmd_download(args: argparse.Namespace) -> dict[str, Any]:
             continue
         target = out_root / f.get("fileName", "asset.bin")
         n = _stream_download(link, target, insecure=args.insecure)
-        saved.append({
-            "fileName": f.get("fileName"),
-            "local_path": str(target.resolve()),
-            "size_bytes": n,
-            "expected_size_bytes": f.get("size"),
-            "download_host": f.get("download_host") or urllib.parse.urlparse(link).netloc,
-        })
-    return {"name": args.name, "type": args.type, "output_dir": str(out_root.resolve()), "files": saved}
+        saved.append(
+            {
+                "fileName": f.get("fileName"),
+                "local_path": str(target.resolve()),
+                "size_bytes": n,
+                "expected_size_bytes": f.get("size"),
+                "download_host": f.get("download_host")
+                or urllib.parse.urlparse(link).netloc,
+            }
+        )
+    return {
+        "name": args.name,
+        "type": args.type,
+        "output_dir": str(out_root.resolve()),
+        "files": saved,
+    }
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="aissq_client", description="Stdlib client for the public AIS Square registry.")
-    p.add_argument("--insecure", action="store_true", help="Disable SSL verification (last-resort fallback)")
+    p = argparse.ArgumentParser(
+        prog="aissq_client",
+        description="Stdlib client for the public AIS Square registry.",
+    )
+    p.add_argument(
+        "--insecure",
+        action="store_true",
+        help="Disable SSL verification (last-resort fallback)",
+    )
     sub = p.add_subparsers(dest="cmd", required=True)
 
     pl = sub.add_parser("list", help="List models or datasets")
@@ -189,17 +248,23 @@ def build_parser() -> argparse.ArgumentParser:
     pl.add_argument("--sort", choices=["downloads", "modified"], default=None)
     pl.set_defaults(func=cmd_list)
 
-    ps = sub.add_parser("search", help="Search by keyword (substring, case-insensitive)")
+    ps = sub.add_parser(
+        "search", help="Search by keyword (substring, case-insensitive)"
+    )
     ps.add_argument("keyword")
     ps.add_argument("--type", required=True, choices=["models", "datasets"])
     ps.set_defaults(func=cmd_search)
 
-    pi = sub.add_parser("info", help="Get detail (files, downloadLink, size) for a resource by name")
+    pi = sub.add_parser(
+        "info", help="Get detail (files, downloadLink, size) for a resource by name"
+    )
     pi.add_argument("name")
     pi.add_argument("--type", required=True, choices=["models", "datasets"])
     pi.set_defaults(func=cmd_info)
 
-    pd = sub.add_parser("download", help="Download all files of a resource into <output>/<name>/")
+    pd = sub.add_parser(
+        "download", help="Download all files of a resource into <output>/<name>/"
+    )
     pd.add_argument("name")
     pd.add_argument("--type", required=True, choices=["models", "datasets"])
     pd.add_argument("--output", default="./downloads")
