@@ -2739,13 +2739,13 @@ questions:
       flags: ''
   - key: turn_budget
     value:
-      max: 10
+      max: 12
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 7000
+      max: 25000
   scoring_checklist:
   - id: dataset_json
     criterion: Agent writes `energetic_dataset_size.json` to workspace.
@@ -2842,13 +2842,13 @@ questions:
       flags: i
   - key: turn_budget
     value:
-      max: 10
+      max: 14
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 7000
+      max: 27000
   scoring_checklist:
   - id: mace_json
     criterion: Agent writes `mace_lookup.json` to workspace.
@@ -2951,13 +2951,13 @@ questions:
       flags: ''
   - key: turn_budget
     value:
-      max: 10
+      max: 18
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 7000
+      max: 40000
   scoring_checklist:
   - id: model_json
     criterion: Agent writes `charge_spin_model.json` to workspace.
@@ -3076,13 +3076,13 @@ questions:
       flags: ''
   - key: turn_budget
     value:
-      max: 12
+      max: 16
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 30000
   scoring_checklist:
   - id: dpa3_json
     criterion: Agent writes `dpa3_latest_base.json` to workspace.
