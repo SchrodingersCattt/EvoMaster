@@ -61,7 +61,7 @@ banks:
 - path: execution_contract/ec_agnostic.yaml
   capability: execution_contract
   domain: agnostic
-  questions: 10
+  questions: 11
 - path: input_generation/ig_agnostic_vasp.yaml
   capability: input_generation
   domain: agnostic

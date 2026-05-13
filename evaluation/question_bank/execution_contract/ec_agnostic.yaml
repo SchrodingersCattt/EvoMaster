@@ -579,3 +579,46 @@ questions:
     criterion: Agent reports the issue within very few turns.
     axis: efficiency
     verify: turn_budget
+- id: EC_resource_limit_001_20260513
+  capability: execution_contract
+  domain: agnostic
+  intent: Test whether agent informs user of resource limitation after a single MD
+    failure, rather than repeatedly retrying with smaller systems.
+  human_prompt_seed: '工作区中有一个 2000 原子的 ZnSO4 水溶液模型 `znso4_2000.xyz`。请使用 DPA3
+    模型对其进行 1 ns NVT 300K MD 模拟。'
+  tags:
+  - code_mlip
+  data_files:
+  - key: znso4_box
+    path: data/EC_resource_limit_001/znso4_2000.xyz
+    oss_url: ''
+    description: ZnSO4 solution box (~2000 atoms) that exceeds typical single-GPU
+      MD resource budget.
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: submitted_md
+    criterion: Agent attempted to submit the MD task (shows it tried rather than
+      refusing upfront without reason).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: informs_resource_limit
+    criterion: After MD submission fails, agent informs user that the task likely
+      exceeds resource limits (memory, time, or GPU capacity) for the given system
+      size. Agent does NOT silently shrink the system or retry with different
+      parameters multiple times.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: no_repeated_shrink
+    criterion: Agent did NOT repeatedly try smaller system sizes (e.g. 1000, 500,
+      100 atoms) on its own. At most one retry with adjusted parameters is acceptable
+      before reporting the issue to user.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent reports the issue within budget rather than spending many turns
+      on trial-and-error.
+    axis: efficiency
+    verify: turn_budget
