@@ -1204,3 +1204,42 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
+- id: SC_cnt_001_20260513
+  capability: structure_construction
+  domain: agnostic
+  intent: Build a single-walled carbon nanotube from chiral indices.
+  human_prompt_seed: '请构建一个 (6,6) armchair 型单壁碳纳米管，长度约 2 nm，输出为 `CNT_6_6.cif`。'
+  tags:
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: cnt_artifact
+    value: CNT_6_6.cif
+  - key: must_atom_count
+    value:
+      filename: CNT_6_6.cif
+      min: 100
+  - key: turn_budget
+    value:
+      max: 20
+  scoring_checklist:
+  - id: cnt_artifact
+    criterion: CNT_6_6.cif written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_parsable
+    criterion: '[Must] Output file is parsable by pymatgen/ASE.'
+    axis: correctness
+    verify: struct_file_parsable
+  - id: must_only_carbon
+    criterion: '[Must] Structure contains only carbon atoms.'
+    axis: correctness
+    verify: struct_file_formula
+  - id: must_atom_count
+    criterion: '[Must] Structure has at least 100 atoms (2nm armchair 6,6 ~ 120+ atoms).'
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
