@@ -11,6 +11,7 @@ def test_build_bohrium_transfer_bundle_dry_run_outputs_metadata() -> None:
         [
             "uv",
             "run",
+            "--quiet",
             "python",
             "scripts/build_bohrium_transfer_bundle.py",
             "--dry-run",

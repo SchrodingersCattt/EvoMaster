@@ -332,7 +332,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_010_20260511
+- id: IG_abacus_010_20260513
   capability: input_generation
   domain: agnostic
   intent: Package an ABACUS input directory with auxiliary files and engine-skill
@@ -344,9 +344,7 @@ questions:
 
     2. 验证主输入并保存 machine-readable diagnostics 到 `diagnosis.json`。
 
-    3. 写 `input_prep_manifest.json`。它必须是 JSON object，至少包含这些顶层字段：software、task、input_dir、generated_files、user_provided_files、diagnostics、auxiliary_files、assumptions、submit_ready、bohrium_command；其中
-    `diagnostics.file` 必须是 `diagnosis.json`，`submit_ready` 必须是 JSON boolean。如果没有可靠提交资源信息，`bohrium_command`
-    可以为空字符串。
+    3. 写 `input_prep_manifest.json`。它必须是 JSON object，至少包含这些顶层字段：software、task、input_dir、generated_files、user_provided_files、diagnostics、auxiliary_files、assumptions、submit_ready、bohrium_command；其中 `diagnostics.file` 必须是 `diagnosis.json`，`submit_ready` 必须是 JSON boolean，`auxiliary_files` 必须是 JSON array（即使为空也必须写成 `[]`）。如果没有可靠提交资源信息，`bohrium_command` 可以为空字符串。
 
     4. 本题不要真正提交，只输出目录和说明；不要臆造 Bohrium image、machine 或 command 默认值。
 
@@ -582,13 +580,12 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_012_20260512
+- id: IG_abacus_012_20260513
   capability: input_generation
   domain: agnostic
-  intent: Prepare ABACUS input files for ASE-ABACUS ethanol relaxation and vibrational-frequency
-    stages.
-  human_prompt_seed: 请为 ASE-ABACUS 的孤立乙醇分子结构弛豫与振动频率计算准备 ABACUS 输入文件。体系使用 LCAO 基组、PBE
-    泛函和 Gamma 点；弛豫阶段和振动阶段都只需要保留实际 ABACUS 输入，不需要执行计算或输出频率结果。请固定输出位置：`relax/OUT/INPUT`、`relax/OUT/KPT`、`vib/OUT/INPUT`、`vib/OUT/KPT`。
+  intent: Prepare ABACUS input files for ASE-ABACUS ethanol relaxation and vibrational-frequency stages.
+  human_prompt_seed: 请为 ASE-ABACUS 的孤立乙醇分子结构弛豫与振动频率静态计算准备 ABACUS 输入文件。体系使用 LCAO 基组、PBE 泛函和 Gamma 点；弛豫阶段和振动阶段都只需要保留实际 ABACUS 输入，不需要执行计算或输出频率结果。请固定输出位置：`relax/OUT/INPUT`、`relax/OUT/KPT`、`vib/OUT/INPUT`、`vib/OUT/KPT`。
+
   tags:
   - eng_abacus
   reference_answers:
@@ -667,14 +664,12 @@ questions:
     verify: artifact_exists
     weight: 0.8
   - id: must_relax_input_core
-    criterion: '[Must] relax/OUT/INPUT uses ABACUS LCAO/PBE SCF settings with force
-      and stress output for ASE-driven relaxation.'
+    criterion: '[Must] relax/OUT/INPUT uses structure-optimization settings (not static single-point) with LCAO/PBE, force output, and explicit pseudo/orbital directories for ASE-driven relaxation.'
     axis: correctness
     verify: text_file_contains_all
     weight: 1.0
   - id: must_vib_input_core
-    criterion: '[Must] vib/OUT/INPUT uses ABACUS LCAO/PBE SCF settings with force
-      output for ASE finite-displacement vibrations.'
+    criterion: '[Must] vib/OUT/INPUT uses static single-point settings on fixed geometry with LCAO/PBE, force output, and explicit pseudo/orbital directories for ASE finite-displacement vibrations.'
     axis: correctness
     verify: text_file_contains_all
     weight: 1.0
@@ -849,7 +844,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_014_20260512
+- id: IG_abacus_014_20260513
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS inputs for a representative Cu FCC stacking-fault energy
@@ -888,7 +883,7 @@ questions:
         min: 0.001
         max: 0.05
       - key: kspacing
-        min: 0.08
+        min: 0.01
         max: 1
   - key: must_stru_cu_species_orbital
     value:
@@ -1356,7 +1351,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_017_20260512
+- id: IG_abacus_017_20260513
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS PBE+U LCAO cell-relax input directories for comparing rocksalt
@@ -1365,8 +1360,9 @@ questions:
 
     计算方法统一采用 LCAO 基组；两套输入应使用一致的计算精度、赝势/轨道来源和 k 点采样策略，便于之后做能量比较。
 
-    工作区已经提供了 `POSCAR_rocksalt` 和 `POSCAR_square_planar`，请在当前目录下分别建立 `nio_rocksalt/`
-    和 `nio_square_planar/`，把对应 POSCAR 转写为 ABACUS `STRU`，并写入对应的 ABACUS `INPUT`。不要运行计算，也不要提交任务。'
+    这一步应先完成可变晶胞的结构优化：同时优化晶胞参数和原子位置。
+
+    工作区已经提供了 `POSCAR_rocksalt` 和 `POSCAR_square_planar`，请在当前目录下分别建立 `nio_rocksalt/` 和 `nio_square_planar/`，把对应 POSCAR 转写为 ABACUS `STRU`，并写入对应的 ABACUS `INPUT`。不要运行计算，也不要提交任务。'
   tags:
   - eng_abacus
   - struct_transform
@@ -1396,8 +1392,6 @@ questions:
       - basis_type lcao
       - dft_plus_u 1
       - nspin 2
-      - cal_force 1
-      - cal_stress 1
       flags: i
   - key: must_square_input_core
     value:
@@ -1407,8 +1401,6 @@ questions:
       - basis_type lcao
       - dft_plus_u 1
       - nspin 2
-      - cal_force 1
-      - cal_stress 1
       flags: i
   - key: must_rocksalt_u_ni
     value:
@@ -1440,9 +1432,6 @@ questions:
       - key: scf_thr
         min: 1.0e-10
         max: 1.0e-05
-      - key: stress_thr
-        min: 0.01
-        max: 5.0
       - key: relax_nmax
         min: 20
         max: 300
@@ -1462,9 +1451,6 @@ questions:
       - key: scf_thr
         min: 1.0e-10
         max: 1.0e-05
-      - key: stress_thr
-        min: 0.01
-        max: 5.0
       - key: relax_nmax
         min: 20
         max: 300
@@ -1913,7 +1899,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_008_20260511
+- id: IG_abacus_008_20260512
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS Si PW-SCF inputs and Bohrium submission configuration.
@@ -1933,7 +1919,7 @@ questions:
   - key: must_submit_json_core
     value:
       filename: submit_job.json
-      pattern: (?is)"image"\s*:\s*"registry\.dp\.tech/dptech/dp/native/hub/mrdic2/abacusp:1\.0\.1-1778080680".*"machine"\s*:\s*"c32_m128_cpu".*"cmd"\s*:\s*"[^"]*abacus[^"]*"
+      pattern: (?is)(?=.*"image"\s*:\s*"registry\.dp\.tech/dptech/dp/native/hub/mrdic2/abacusp:1\.0\.1-1778080680")(?=.*"machine"\s*:\s*"c32_m128_cpu")(?=.*"cmd"\s*:\s*"[^"]*abacus[^"]*")
       flags: im
   - key: must_input_pw_core
     value:
