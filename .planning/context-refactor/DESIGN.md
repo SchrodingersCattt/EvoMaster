@@ -11,15 +11,15 @@
 
 | 项 | v2 | v3 |
 |----|-----|-----|
-| 事件模型 | `user_context_snapshot`（每次 LLM 调用前一帧） | `model_user_input`（每个真实用户 turn 一条），无 snapshot 概念 |
-| AGENT.md 响应性 | 冻结到 anchor，下次压缩才更新 | hash 变化即触发新 anchor model_user_input，**下一轮立即生效** |
+| 事件模型 | `user_context_snapshot`（每次 LLM 调用前一帧） | `user_turn_context`（每个真实用户 turn 一条），无 snapshot 概念 |
+| AGENT.md 响应性 | 冻结到 anchor，下次压缩才更新 | hash 变化即触发新 anchor user_turn_context，**下一轮立即生效** |
 | DAO 改造 | 隐含 | 显式前置为 Phase 0 |
 | 文件拆分 | 未考虑 1000 行限制 | 显式前置为 Phase 0 |
 | Case 3（oversized input） | 阶段 2 硬目标 | 拆出，本 spec 仅在 `transform` 字段预留 |
 | Fallback (`sliding_window` / `tool_truncation`) | 删除 | 保留，先埋点 |
-| Prompt 形态（`<turn_materials>` 拆分） | 阶段 2 直接落地 | 阶段 2 完成后做 offline A/B，通过再启用 |
+| Prompt 形态（`<turn_attachments>` 拆分） | 阶段 2 直接落地 | 阶段 2 完成后做 offline A/B，通过再启用 |
 | Restore 路径 | 单一新算法 | v0/v1 schema-aware 分流 |
-| Sink 错误处理 | 未规定 | model_user_input fail-fast；history_checkpoint best-effort |
+| Sink 错误处理 | 未规定 | user_turn_context fail-fast；history_checkpoint best-effort |
 | 不变量校验 | 文档级 | dataclass `__post_init__` + `from_sources` 运行时校验 |
 | `UserContextSnapshot` 类型 | 存在 | 删除 |
 
@@ -57,8 +57,8 @@
 1. User/query 永远只保存用户原始输入（user_text + files + images + workspace_paths），
    服务前端回放和审计。不承载系统改造后的 LLM prompt。
 
-2. model_user_input 是一个真实用户 turn 对应的 provider-facing UserMessage 的事实记录。
-   每个 source_query_event_id 对应**最多一条** model_user_input。
+2. user_turn_context 是一个真实用户 turn 对应的 provider-facing UserMessage 的事实记录。
+   每个 source_query_event_id 对应**最多一条** user_turn_context。
    不是「每次 LLM 调用前快照」，工具循环内不再写入新事件。
 
 3. history_checkpoint.base_messages 保存压缩生成的 anchor user message。
@@ -71,7 +71,7 @@
      消费现有 ChatHistoryConverter 即可，不引入新路径。
    - backend model restore: schema-aware 分流。
      - v1 checkpoint 存在: checkpoint.base_messages
-                          + 后续 model_user_input + assistant_state
+                          + 后续 user_turn_context + assistant_state
                           + response/run_result + tool_result
      - 无 v1 检查点: 沿用 ChatHistoryConverter.events_to_dialog_messages
 ```
@@ -89,19 +89,19 @@
 | 事件 | 来源 | 频率 | 用途 |
 |------|------|------|------|
 | `User/query` | API/stream 层 | 每个真实用户请求一条 | 前端回放、审计 |
-| `model_user_input` | service 层（kernel 调用前） | 每个真实用户请求**最多**一条 | backend model restore |
+| `user_turn_context` | service 层（kernel 调用前） | 每个真实用户请求**最多**一条 | backend model restore |
 | `assistant_state` | kernel（有 tool_calls 时） | 每次 tool-call 轮一条 | model restore（assistant 侧） |
 | `response` / `run_result` | kernel（自然结束时） | 每次自然结束一条 | model restore（assistant 侧）+ 前端回放 |
 | `tool_result` | tool runner | 每次 tool 调用一条 | model restore + 前端回放 |
 | `history_checkpoint` | compactor（扩展 payload） | 压缩触发时 | model restore 的重启锚点 |
 
-**注意**：`model_user_input` 写入在 kernel `run_stream` 之前（service 层负责），不在 kernel 内部。kernel 不感知该事件。
+**注意**：`user_turn_context` 写入在 kernel `run_stream` 之前（service 层负责），不在 kernel 内部。kernel 不感知该事件。
 
-### 3.2 `model_user_input` payload
+### 3.2 `user_turn_context` payload
 
 ```json
 {
-  "schema_version": "model_user_input.v1",
+  "schema_version": "user_turn_context.v1",
   "kind": "anchor",
   "message": {
     "role": "user",
@@ -118,8 +118,8 @@
 字段说明：
 
 - `kind`: `"anchor"` | `"continuation"`
-  - `anchor`：装配了完整长尾 sections（UserInstructions + SessionContext sections + ActiveTurn）。session 首轮 + AGENT.md hash 变化的轮，都生成 anchor。
-  - `continuation`：只装配 ActiveTurn。后续未触发 hash 变化的轮。
+  - `anchor`：装配了完整长尾 sections（UserInstructions + SessionContext sections + TurnInput）。session 首轮 + AGENT.md hash 变化的轮，都生成 anchor。
+  - `continuation`：只装配 TurnInput。后续未触发 hash 变化的轮。
 - `message`: `UserMessage.model_dump(mode="json")`，含 content + images 全部字段。多模态附件必须完整保留。
 - `source_query_event_id`: 关联的 `User/query` 事件 id。**必填**，由 service 层从 DAO 改造后的返回值取得（见 §14 Phase 0）。
 - `user_instructions_hash`: AGENT.md 文本的 sha256 hash。anchor 时必填；continuation 时可选（continuation 隐含与最近 anchor 同 hash）。
@@ -156,8 +156,8 @@
 
 **`covered_until_event_id` 语义**：checkpoint 等价于「从 session 起点重放到该 event_id 为止的所有 LLM 可见消息」。具体到本 spec：
 
-- 普通 runtime compaction：`covered_until_event_id` 指向当前事件流末尾（含 assistant_state / tool_result，**不含**尚未写入的下一轮 model_user_input）。
-- Preflight compaction（运行时触发，对应 `transform=preflight_compacted` 的 model_user_input）：`covered_until_event_id` 指向 `ActiveTurnContext.pre_turn_history_event_id`，**不包含**当前轮的 User/query 和 model_user_input；checkpoint 之后会有对应的 model_user_input 事件被恢复追加。
+- 普通 runtime compaction：`covered_until_event_id` 指向当前事件流末尾（含 assistant_state / tool_result，**不含**尚未写入的下一轮 user_turn_context）。
+- Preflight compaction（运行时触发，对应 `transform=preflight_compacted` 的 user_turn_context）：`covered_until_event_id` 指向 `TurnInput.pre_turn_history_event_id`，**不包含**当前轮的 User/query 和 user_turn_context；checkpoint 之后会有对应的 user_turn_context 事件被恢复追加。
 
 ### 3.4 写入时序
 
@@ -165,28 +165,28 @@
 
 ```
 普通延续轮（hash 未变）：
-  User/query (id=N) → model_user_input(kind=continuation, source_query=N) → kernel.run_stream → [assistant_state | response/run_result + tool_result]*
+  User/query (id=N) → user_turn_context(kind=continuation, source_query=N) → kernel.run_stream → [assistant_state | response/run_result + tool_result]*
 
 AGENT.md 改动后第一轮：
-  User/query (id=N) → model_user_input(kind=anchor, source_query=N, user_instructions_hash=NEW) → kernel.run_stream → ...
+  User/query (id=N) → user_turn_context(kind=anchor, source_query=N, user_instructions_hash=NEW) → kernel.run_stream → ...
 
 Session 首轮：
-  User/query (id=N) → model_user_input(kind=anchor, source_query=N, user_instructions_hash=...) → kernel.run_stream → ...
+  User/query (id=N) → user_turn_context(kind=anchor, source_query=N, user_instructions_hash=...) → kernel.run_stream → ...
 
 运行中触发 preflight compaction：
-  User/query (id=N) → history_checkpoint (covered_until < N) → model_user_input(kind=anchor, transform=preflight_compacted, source_query=N) → kernel.run_stream → ...
+  User/query (id=N) → history_checkpoint (covered_until < N) → user_turn_context(kind=anchor, transform=preflight_compacted, source_query=N) → kernel.run_stream → ...
 
 运行中触发 runtime compaction（无新用户输入，kernel 工具循环内）：
   ... → history_checkpoint (covered_until=末尾) → (kernel 继续 LLM 调用) → assistant_state/response/tool_result ...
 ```
 
-**关键约束**：tool 循环内不再写任何 `model_user_input` —— v2 的"每次 LLM 调用前一帧"语义彻底废止。
+**关键约束**：tool 循环内不再写任何 `user_turn_context` —— v2 的"每次 LLM 调用前一帧"语义彻底废止。
 
 ### 3.5 SSE replay 与 live handler 改造
 
-新增事件 `model_user_input` 必须同时加到两个过滤器：
+新增事件 `user_turn_context` 必须同时加到两个过滤器：
 
-- 历史回放：[stream_service.py:_should_emit_event_to_sse](../../src/services/stream_service.py:66) 加 `model_user_input` 到 hidden list（与现有的 `assistant_state` / `skill_hit` / checkpoint events 一起）。
+- 历史回放：[stream_service.py:_should_emit_event_to_sse](../../src/services/stream_service.py:66) 加 `user_turn_context` 到 hidden list（与现有的 `assistant_state` / `skill_hit` / checkpoint events 一起）。
 - 实时流：现有 `matmaster.integration.event_router.SSEHandler._should_skip()` 同步加。
 
 `display_history_restore_service.py` 不建 stub。前端 replay 现状是 `generate_subscribe_stream → get_session_events + filter`，本次不改这条路径，只更新 filter 即可。
@@ -196,7 +196,7 @@ Session 首轮：
 | 写入 | 失败策略 | 理由 |
 |------|----------|------|
 | `User/query` 写入失败 | fail-fast | API 层已有处理，本次不动 |
-| `model_user_input` 写入失败 | **fail-fast，本轮终止** | 是 model restore 的权威输入；继续跑 LLM 会制造未来无法正确恢复的会话 |
+| `user_turn_context` 写入失败 | **fail-fast，本轮终止** | 是 model restore 的权威输入；继续跑 LLM 会制造未来无法正确恢复的会话 |
 | `history_checkpoint` 写入失败 | **best-effort，记录 failure_reason** | 失败后最多从更老 checkpoint 或 raw events 重放，不影响本轮 LLM 调用 |
 | `assistant_state` 写入失败 | best-effort，log | 同上 |
 
@@ -208,16 +208,16 @@ Session 首轮：
 
 放在显眼位置，所有 reviewer 与实现者必读。
 
-1. 每个 `source_query_event_id` 在 events 表中对应**最多一条** `model_user_input` 事件。多于一条是 bug，不是 dedup 常态。
-2. `model_user_input` 写入失败时，本轮 fail-fast；不允许继续 LLM 调用。
+1. 每个 `source_query_event_id` 在 events 表中对应**最多一条** `user_turn_context` 事件。多于一条是 bug，不是 dedup 常态。
+2. `user_turn_context` 写入失败时，本轮 fail-fast；不允许继续 LLM 调用。
 3. `history_checkpoint` 写入失败时，本轮可继续；compaction 路径必须记录 `failure_reason`。
-4. 前端 SSE 回放与实时流永远不发 `model_user_input` / `assistant_state` / `history_checkpoint`。
+4. 前端 SSE 回放与实时流永远不发 `user_turn_context` / `assistant_state` / `history_checkpoint`。
 5. `invocation_id` 明确为一次用户请求的标识，**不是**一次 LLM API call 的标识。
 6. `spawn_id` 在本次重构中只保持现有 root/child 过滤语义，不扩展 child checkpoint 语义。
 7. AGENT.md 读取设置 size cap（建议 **50KB**），超限走 truncate + warning（不 fail-fast，保持 UX）。
 8. `schema_version` 决定 payload codec，`render_version` 决定 message content 的解释方式；restore 优先按 schema 分发，不重新渲染历史 sections。
 9. ContextSection 的 view 不变量 `RUNTIME ⊇ CHECKPOINT` 必须在 dataclass `__post_init__` 中校验。
-10. `UserContextMessage.from_sources` 必须校验 section `key` 唯一性，冲突时 raise。
+10. `UserTurnContext.from_sources` 必须校验 section `key` 唯一性，冲突时 raise。
 11. 渲染层 `wrap_tag` 必须对用户可控内容做最小 escape，防止 `</tag>` 注入破坏 section 边界（具体见 §6.4）。
 
 ---
@@ -230,7 +230,7 @@ Session 首轮：
 matmaster/context/
   __init__.py
   sections.py              # ContextSection, ContextView, SectionOrder
-  user_message.py          # UserContextMessage 聚合根
+  turn_context.py          # UserTurnContext 聚合根
   rendering.py             # wrap_tag (含 escape), render_sections
   system_prompt.py         # 原 ContextBuilder.build_system_prompt
   compaction.py            # 原 core/context_compactor.py（保留 fallback）
@@ -240,7 +240,7 @@ matmaster/context/
   sources/
     __init__.py
     user_instructions.py
-    active_turn.py         # TurnRequestContext / TurnMaterialsContext / ActiveTurnContext
+    turn_input.py         # TurnInstructionSource / TurnAttachmentsSource / TurnInput
     compacted_history.py
     attachments.py
     skills.py
@@ -250,7 +250,7 @@ matmaster/context/
     artifacts.py           # 占位
 ```
 
-**v3 不包含 `snapshot.py`**。`UserContextSnapshot` 类型废弃，事件落到 events 表的 `model_user_input` 直接序列化 UserMessage。
+**v3 不包含 `snapshot.py`**。`UserContextSnapshot` 类型废弃，事件落到 events 表的 `user_turn_context` 直接序列化 UserMessage。
 
 ### 5.2 `matmaster/core/` 收缩后
 
@@ -279,7 +279,7 @@ matmaster/core/
 | 旧路径 | 处理 |
 |--------|------|
 | `matmaster/types/context.py` | 阶段 3 删除。`PlaygroundContext` / `WorkspaceArchivalConfig` 迁入**已有的** `core/playground.py`（注意：v2 误标"新建"，实际为已有文件，需处理反向 import 循环）。阶段 1-2 保留 shim re-export |
-| `matmaster/types/current_input.py` | 迁到 `context/sources/active_turn.py`，类型一并重命名 |
+| `matmaster/types/current_input.py` | 迁到 `context/sources/turn_input.py`，类型一并重命名 |
 | `matmaster/manifests/` | 整目录重写为 `matmaster/context/` 内部模块 |
 | `matmaster/core/context_builder.py` | 拆三段（见 §13）|
 | `matmaster/core/context_compactor.py` | 迁到 `context/compaction.py`，**保留 fallback 路径** |
@@ -300,14 +300,14 @@ class ContextView(str, Enum):
     """同一组 sections 投影到 user message 时的视图选择。
 
     用于 *渲染时机*。一旦渲染产出 UserMessage 字符串，
-    结果立即冻结（写入 model_user_input 事件或 history_checkpoint），
+    结果立即冻结（写入 user_turn_context 事件或 history_checkpoint），
     任何后续恢复都不得依赖 view 重渲染。
 
     不变量: RUNTIME ⊇ CHECKPOINT。任何在 CHECKPOINT 视图中出现的 section
     必然也在 RUNTIME 视图中出现。
     """
-    RUNTIME = "runtime"        # 下一轮 LLM 调用要看到的完整内容（含本轮 ActiveTurn）
-    CHECKPOINT = "checkpoint"  # 写 checkpoint 时的视图（剥离本轮 ActiveTurn）
+    RUNTIME = "runtime"        # 下一轮 LLM 调用要看到的完整内容（含本轮 TurnInput）
+    CHECKPOINT = "checkpoint"  # 写 checkpoint 时的视图（剥离本轮 TurnInput）
 ```
 
 ### 6.2 `ContextSection`（含 `__post_init__` 不变量校验）
@@ -327,8 +327,8 @@ class SectionOrder(IntEnum):
     PAST_ATTACHMENTS = 500
     WORKSPACE = 600
     ARTIFACTS = 700
-    TURN_MATERIALS = 1000
-    TURN_REQUEST = 1100
+    TURN_ATTACHMENTS = 1000
+    TURN_INSTRUCTION = 1100
 
 
 @dataclass(frozen=True)
@@ -351,10 +351,10 @@ class ContextSection:
             raise ValueError("ContextSection.tag must be non-empty")
 ```
 
-### 6.3 `UserContextMessage`（含 key 唯一性校验）
+### 6.3 `UserTurnContext`（含 key 唯一性校验）
 
 ```python
-# matmaster/context/user_message.py
+# matmaster/context/turn_context.py
 from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
@@ -365,7 +365,7 @@ from matmaster.types.messages import ImageContentPart, UserMessage
 
 
 @dataclass(frozen=True)
-class UserContextMessage:
+class UserTurnContext:
     """用户侧模型可见上下文的聚合根。
 
     组合若干 ContextSection,最终投影为 provider-facing
@@ -380,14 +380,14 @@ class UserContextMessage:
         cls,
         *section_groups: Iterable[ContextSection],
         images: Iterable[ImageContentPart] = (),
-    ) -> "UserContextMessage":
+    ) -> "UserTurnContext":
         merged: list[ContextSection] = []
         seen_keys: set[str] = set()
         for group in section_groups:
             for section in group:
                 if section.key in seen_keys:
                     raise ValueError(
-                        f"Duplicate section key {section.key!r} in UserContextMessage "
+                        f"Duplicate section key {section.key!r} in UserTurnContext "
                         f"sources. Keys must be unique across all sources."
                     )
                 seen_keys.add(section.key)
@@ -456,21 +456,21 @@ def render_sections(
 
 ### 6.5 Prompt 形态决策（v3 改动）
 
-v2 把当前 `<current_instruction>` 含 `user_text + [Current attachments]` 拆为 `<turn_materials>` + `<current_instruction>` 两个顶级 XML 块。这是 prompt 形态变化，有 quality regression 风险。
+v2 把当前 `<current_instruction>` 含 `user_text + [Current attachments]` 拆为 `<turn_attachments>` + `<current_instruction>` 两个顶级 XML 块。这是 prompt 形态变化，有 quality regression 风险。
 
 v3 决策：
 - **Phase 1/2 期间保留现状 prompt 形态**（即沿用 `<current_instruction>` 含 attachments 列表的单 block）
 - **Phase 3 前**做 offline A/B：
   - A: 现状 `<current_instruction>` 内含 user_text + `[Current attachments]`
-  - B: 拆分版 `<turn_materials>` + `<current_instruction>`
+  - B: 拆分版 `<turn_attachments>` + `<current_instruction>`
 - 评估维度：
   - 是否正确引用本轮附件
   - 是否正确选择 tool
   - 是否把附件当作任务而不是背景
   - 多图片输入是否还能稳定进入 provider
-- A/B 通过再切换；不通过则 spec 中关于 `<turn_materials>` 的设计可选放弃或调整 tag 名
+- A/B 通过再切换；不通过则 spec 中关于 `<turn_attachments>` 的设计可选放弃或调整 tag 名
 
-为支持兼容，`TurnMaterialsContext` 在 sources 中作为独立类型存在（见 §7.3），但默认渲染合并到 `<current_instruction>`，由一个 feature flag 控制是否拆分。flag 默认关闭。
+为支持兼容，`TurnAttachmentsSource` 在 sources 中作为独立类型存在（见 §7.3），但默认渲染合并到 `<current_instruction>`，由一个 feature flag 控制是否拆分。flag 默认关闭。
 
 ### 6.6 `schema_version` / `render_version` 演化策略
 
@@ -508,22 +508,22 @@ class ContextSource(Protocol):
 
 | Source | 文件 | order | 视图 | 备注 |
 |--------|------|-------|------|------|
-| `UserInstructionsContext` | `sources/user_instructions.py` | `SectionOrder.USER_INSTRUCTIONS` (10) | RUNTIME + CHECKPOINT | 通过 DI 注入 AGENT.md 文本 |
-| `CompactedHistoryContext` | `sources/compacted_history.py` | `SectionOrder.COMPACTED_HISTORY` (100) | RUNTIME + CHECKPOINT | summary LLM 产物 |
-| `SessionJobsContext` | `sources/session_jobs.py` | `SectionOrder.SESSION_JOBS` (200) | RUNTIME + CHECKPOINT | 占位 |
-| `LoadedSkillsContext` | `sources/skills.py` | `SectionOrder.LOADED_SKILLS` (300) | RUNTIME + CHECKPOINT | 从 events 重建 |
-| `ActiveToolsContext` | `sources/tools.py` | `SectionOrder.ACTIVE_TOOLS` (400) | RUNTIME + CHECKPOINT | 替代 `<active_tools>` |
-| `PastAttachmentsContext` | `sources/attachments.py` | `SectionOrder.PAST_ATTACHMENTS` (500) | RUNTIME + CHECKPOINT | 跨轮累积附件清单 |
-| `WorkspaceContext` | `sources/workspace.py` | `SectionOrder.WORKSPACE` (600) | RUNTIME + CHECKPOINT | 占位 |
-| `ArtifactsContext` | `sources/artifacts.py` | `SectionOrder.ARTIFACTS` (700) | RUNTIME + CHECKPOINT | 占位 |
-| `TurnMaterialsContext` | `sources/active_turn.py` | `SectionOrder.TURN_MATERIALS` (1000) | **RUNTIME only** | 本轮附件清单 |
-| `TurnRequestContext` | `sources/active_turn.py` | `SectionOrder.TURN_REQUEST` (1100) | **RUNTIME only** | 本轮 user_text |
+| `UserInstructionsSource` | `sources/user_instructions.py` | `SectionOrder.USER_INSTRUCTIONS` (10) | RUNTIME + CHECKPOINT | 通过 DI 注入 AGENT.md 文本 |
+| `CompactedHistorySource` | `sources/compacted_history.py` | `SectionOrder.COMPACTED_HISTORY` (100) | RUNTIME + CHECKPOINT | summary LLM 产物 |
+| `SessionJobsSource` | `sources/session_jobs.py` | `SectionOrder.SESSION_JOBS` (200) | RUNTIME + CHECKPOINT | 占位 |
+| `LoadedSkillsSource` | `sources/skills.py` | `SectionOrder.LOADED_SKILLS` (300) | RUNTIME + CHECKPOINT | 从 events 重建 |
+| `ActiveToolsSource` | `sources/tools.py` | `SectionOrder.ACTIVE_TOOLS` (400) | RUNTIME + CHECKPOINT | 替代 `<active_tools>` |
+| `PastAttachmentsSource` | `sources/attachments.py` | `SectionOrder.PAST_ATTACHMENTS` (500) | RUNTIME + CHECKPOINT | 跨轮累积附件清单 |
+| `WorkspaceSource` | `sources/workspace.py` | `SectionOrder.WORKSPACE` (600) | RUNTIME + CHECKPOINT | 占位 |
+| `ArtifactsSource` | `sources/artifacts.py` | `SectionOrder.ARTIFACTS` (700) | RUNTIME + CHECKPOINT | 占位 |
+| `TurnAttachmentsSource` | `sources/turn_input.py` | `SectionOrder.TURN_ATTACHMENTS` (1000) | **RUNTIME only** | 本轮附件清单 |
+| `TurnInstructionSource` | `sources/turn_input.py` | `SectionOrder.TURN_INSTRUCTION` (1100) | **RUNTIME only** | 本轮 user_text |
 
-CHECKPOINT 视图自动剥离 `TurnMaterialsContext` 和 `TurnRequestContext`。
+CHECKPOINT 视图自动剥离 `TurnAttachmentsSource` 和 `TurnInstructionSource`。
 
 ### 7.3 关键 source 实现
 
-#### `UserInstructionsContext`
+#### `UserInstructionsSource`
 
 ```python
 # matmaster/context/sources/user_instructions.py
@@ -539,7 +539,7 @@ USER_INSTRUCTIONS_MAX_BYTES = 50 * 1024  # 50KB
 
 
 @dataclass(frozen=True)
-class UserInstructionsContext:
+class UserInstructionsSource:
     """工作空间级用户指令(AGENT.md)的模型可见上下文 source。
 
     text 字段由 service 层通过 loader 注入。matmaster/ 不感知任何文件路径,
@@ -565,7 +565,7 @@ service 层调用示例：
 # src/services/agent_run_service.py 改造后片段
 import hashlib
 from matmaster.context.sources.user_instructions import (
-    UserInstructionsContext,
+    UserInstructionsSource,
     USER_INSTRUCTIONS_MAX_BYTES,
 )
 
@@ -596,10 +596,10 @@ def _hash(text: str) -> str:
     return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
 ```
 
-#### `active_turn.py`（v3 保留双 source 设计，但默认合并渲染）
+#### `turn_input.py`（v3 保留双 source 设计，但默认合并渲染）
 
 ```python
-# matmaster/context/sources/active_turn.py
+# matmaster/context/sources/turn_input.py
 from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
@@ -617,7 +617,7 @@ def _display_name(value: str) -> str:
 
 
 @dataclass(frozen=True)
-class TurnRequestContext:
+class TurnInstructionSource:
     """本轮用户文本指令。仅 RUNTIME 可见。"""
     user_text: str = ""
 
@@ -628,16 +628,16 @@ class TurnRequestContext:
             key="current_instruction",
             tag="current_instruction",
             content=self.user_text.strip(),
-            order=SectionOrder.TURN_REQUEST,
+            order=SectionOrder.TURN_INSTRUCTION,
             views=_RUNTIME,
         ),)
 
 
 @dataclass(frozen=True)
-class TurnMaterialsContext:
+class TurnAttachmentsSource:
     """本轮附带的文件 / 图片 / workspace 路径。仅 RUNTIME 可见。
 
-    Phase 3 前的过渡期: 这里渲染出的 section 与 TurnRequestContext 输出可以
+    Phase 3 前的过渡期: 这里渲染出的 section 与 TurnInstructionSource 输出可以
     合并到同一个 <current_instruction> block。具体由 feature flag 控制
     (见 §6.5 的 A/B 决策)。
     """
@@ -656,10 +656,10 @@ class TurnMaterialsContext:
         for i, v in enumerate(self.images, 1):
             lines.append(f"image_{i} {_display_name(v)} {v}")
         return (ContextSection(
-            key="turn_materials",
-            tag="turn_materials",
+            key="turn_attachments",
+            tag="turn_attachments",
             content="\n".join(lines),
-            order=SectionOrder.TURN_MATERIALS,
+            order=SectionOrder.TURN_ATTACHMENTS,
             views=_RUNTIME,
         ),)
 
@@ -668,22 +668,22 @@ class TurnMaterialsContext:
 
 
 @dataclass(frozen=True)
-class ActiveTurnContext:
+class TurnInput:
     """本轮请求的原子单元。"""
-    request: TurnRequestContext = field(default_factory=TurnRequestContext)
-    materials: TurnMaterialsContext = field(default_factory=TurnMaterialsContext)
+    instruction: TurnInstructionSource = field(default_factory=TurnInstructionSource)
+    attachments: TurnAttachmentsSource = field(default_factory=TurnAttachmentsSource)
     pre_turn_history_event_id: int | None = None
     source_query_event_id: int | None = None  # 必填(由 service 层从 DAO 返回值取)
 
     def to_sections(self) -> tuple[ContextSection, ...]:
-        return (*self.materials.to_sections(), *self.request.to_sections())
+        return (*self.attachments.to_sections(), *self.instruction.to_sections())
 
     def has_effective_input(self) -> bool:
         return bool(
-            self.request.user_text.strip()
-            or self.materials.files
-            or self.materials.images
-            or self.materials.workspace_paths
+            self.instruction.user_text.strip()
+            or self.attachments.files
+            or self.attachments.images
+            or self.attachments.workspace_paths
         )
 ```
 
@@ -714,7 +714,7 @@ v3 核心新设计章节。回应"AGENT.md 改动响应性回退"的 review 意�
 
 async def _prepare_and_dispatch(req: SendMessageRequest) -> ...:
     # 1. 读 AGENT.md
-    current_instr_text, current_instr_hash = _load_user_instructions(workspace_root)
+    instructions_text, instructions_hash = _load_user_instructions(workspace_root)
 
     # 2. 写 raw User/query, 拿到 event id (依赖 Phase 0 DAO 改造)
     user_query_event_id = await events_service.add_history_event(
@@ -738,15 +738,15 @@ async def _prepare_and_dispatch(req: SendMessageRequest) -> ...:
     )
     is_first_turn_of_session = last_anchor_hash is None
 
-    if is_first_turn_of_session or current_instr_hash != last_anchor_hash:
+    if is_first_turn_of_session or instructions_hash != last_anchor_hash:
         kind = "anchor"
     else:
         kind = "continuation"
 
-    # 4. 构造 ActiveTurnContext
-    active_turn = ActiveTurnContext(
-        request=TurnRequestContext(user_text=req.content),
-        materials=TurnMaterialsContext(
+    # 4. 构造 TurnInput
+    turn_input = TurnInput(
+        instruction=TurnInstructionSource(user_text=req.content),
+        attachments=TurnAttachmentsSource(
             files=tuple(req.files),
             images=tuple(req.images),
             workspace_paths=tuple(req.workspace_paths),
@@ -755,41 +755,41 @@ async def _prepare_and_dispatch(req: SendMessageRequest) -> ...:
         source_query_event_id=user_query_event_id,
     )
 
-    # 5. 装配 user_ctx
+    # 5. 装配 user_context
     if kind == "anchor":
-        # 完整 sections + ActiveTurn
+        # 完整 sections + TurnInput
         session_sections = session_context_builder.build_sections(
             until_event_id=pre_query_scope_event_id,
         )
-        user_ctx = UserContextMessage.from_sources(
-            UserInstructionsContext(text=current_instr_text).to_sections(),
-            SessionJobsContext.empty().to_sections(),
+        user_context = UserTurnContext.from_sources(
+            UserInstructionsSource(text=instructions_text).to_sections(),
+            SessionJobsSource.empty().to_sections(),
             session_sections,
-            active_turn.to_sections(),
-            images=active_turn.materials.images_as_parts(),
+            turn_input.to_sections(),
+            images=turn_input.attachments.images_as_parts(),
         )
     else:
-        # 仅 ActiveTurn
-        user_ctx = UserContextMessage.from_sources(
-            active_turn.to_sections(),
-            images=active_turn.materials.images_as_parts(),
+        # 仅 TurnInput
+        user_context = UserTurnContext.from_sources(
+            turn_input.to_sections(),
+            images=turn_input.attachments.images_as_parts(),
         )
 
-    rendered_message = user_ctx.to_message(ContextView.RUNTIME)
+    rendered_message = user_context.to_message(ContextView.RUNTIME)
 
-    # 6. 写 model_user_input (fail-fast)
+    # 6. 写 user_turn_context (fail-fast)
     try:
         await events_service.add_history_event(
             session_id,
             payload={
                 "source": "matmaster",
-                "type": "model_user_input",
+                "type": "user_turn_context",
                 "content": {
-                    "schema_version": "model_user_input.v1",
+                    "schema_version": "user_turn_context.v1",
                     "kind": kind,
                     "message": rendered_message.model_dump(mode="json"),
                     "source_query_event_id": user_query_event_id,
-                    "user_instructions_hash": current_instr_hash if kind == "anchor" else None,
+                    "user_instructions_hash": instructions_hash if kind == "anchor" else None,
                     "transform": "raw",
                     "render_version": "user_context_render.v1",
                 },
@@ -799,15 +799,15 @@ async def _prepare_and_dispatch(req: SendMessageRequest) -> ...:
             user_id=user_id,
         )
     except Exception:
-        logger.exception("model_user_input write failed; aborting turn")
+        logger.exception("user_turn_context write failed; aborting turn")
         raise  # 硬约束 #2: fail-fast
 
     # 7. 调 kernel
     history = await model_history_restore_service.restore(
         session_id, spawn_id=spawn_id,
     )
-    # history 已包含本轮的 model_user_input 渲染后的 UserMessage 作为最后一条
-    # kernel 不再做 active_turn 装配,直接用 history
+    # history 已包含本轮的 user_turn_context 渲染后的 UserMessage 作为最后一条
+    # kernel 不再做 turn_input 装配,直接用 history
 
     async for event in exp.run_stream(
         pg_ctx,
@@ -828,7 +828,7 @@ async def _latest_anchor_user_instructions_hash(
     session_id: str,
     spawn_id: str | None,
 ) -> str | None:
-    """返回最近一次 anchor 来源(model_user_input.kind=anchor 或 history_checkpoint)
+    """返回最近一次 anchor 来源(user_turn_context.kind=anchor 或 history_checkpoint)
     的 user_instructions_hash。无 anchor 时返回 None。
 
     优化: 实际实现应通过 SQL ORDER BY id DESC LIMIT N 取最近 N 条
@@ -838,7 +838,7 @@ async def _latest_anchor_user_instructions_hash(
         session_id, spawn_id=spawn_id, limit=50,
     )
     for ev in reversed(recent_events):
-        if ev["type"] == "model_user_input":
+        if ev["type"] == "user_turn_context":
             content = ev["content"]
             if content.get("kind") == "anchor":
                 return content.get("user_instructions_hash")
@@ -853,11 +853,11 @@ async def _latest_anchor_user_instructions_hash(
 
 | 场景 | events 序列 | restore 后 messages |
 |------|-------------|---------------------|
-| Session 首轮，AGENT.md v1 | User/query, model_user_input(anchor, hash=v1) | [Sys, anchor_v1+turn] |
-| 第 2 轮，AGENT.md 未变 | + User/query, model_user_input(continuation) | [Sys, anchor_v1+turn1, Asst1, anchor_v1 序列, turn2] |
-| 第 3 轮，AGENT.md 改到 v2 | + User/query, model_user_input(anchor, hash=v2) | [Sys, anchor_v1+turn1, Asst1, turn2, ..., anchor_v2+turn3] |
-| 第 4 轮，AGENT.md 仍 v2 | + User/query, model_user_input(continuation) | 同上 + turn4 |
-| 第 5 轮，触发 preflight compaction | + User/query, history_checkpoint(...), model_user_input(anchor, transform=preflight_compacted, hash=v2) | [Sys, base_anchor_v2+turn5] |
+| Session 首轮，AGENT.md v1 | User/query, user_turn_context(anchor, hash=v1) | [Sys, anchor_v1+turn] |
+| 第 2 轮，AGENT.md 未变 | + User/query, user_turn_context(continuation) | [Sys, anchor_v1+turn1, Asst1, anchor_v1 序列, turn2] |
+| 第 3 轮，AGENT.md 改到 v2 | + User/query, user_turn_context(anchor, hash=v2) | [Sys, anchor_v1+turn1, Asst1, turn2, ..., anchor_v2+turn3] |
+| 第 4 轮，AGENT.md 仍 v2 | + User/query, user_turn_context(continuation) | 同上 + turn4 |
+| 第 5 轮，触发 preflight compaction | + User/query, history_checkpoint(...), user_turn_context(anchor, transform=preflight_compacted, hash=v2) | [Sys, base_anchor_v2+turn5] |
 
 **关键观察**：anchor 在 messages 中**不一定是第一条**。第 3 轮之后，messages 序列里同时存在 `anchor_v1` 和 `anchor_v2`。LLM 自然理解"更靠近末尾的 instructions 是最新版"（近端 attention 偏向）。
 
@@ -867,7 +867,7 @@ async def _latest_anchor_user_instructions_hash(
 
 压缩触发时，compactor 写 `history_checkpoint`，payload 包含 `user_instructions_text` / `user_instructions_hash`（service 层在调 compactor 前传入）。compactor 内部装配的 anchor base_messages[0] 用的就是这个 hash 对应的 AGENT.md 内容。
 
-下一轮请求时，`_latest_anchor_user_instructions_hash` 会找到 `history_checkpoint.user_instructions_hash`，并与 service 层当前读到的 AGENT.md hash 比对。如果用户在压缩后又改了 AGENT.md，下一轮会再写一条 `model_user_input(kind=anchor, hash=新)`。
+下一轮请求时，`_latest_anchor_user_instructions_hash` 会找到 `history_checkpoint.user_instructions_hash`，并与 service 层当前读到的 AGENT.md hash 比对。如果用户在压缩后又改了 AGENT.md，下一轮会再写一条 `user_turn_context(kind=anchor, hash=新)`。
 
 ### 8.6 hash 计算细节
 
@@ -885,7 +885,7 @@ empty AGENT.md（不存在或全空白）也要算 hash（sha256("")），保证
 ### 9.1 v3 改造原则
 
 - 改造前后行为等价（保留 fallback、保留 strategy 字段、保留 retained_turns 字段）
-- 装配方式从手写字符串改为 `UserContextMessage` + view 投影
+- 装配方式从手写字符串改为 `UserTurnContext` + view 投影
 - 接受 service 层注入的 `user_instructions_text` 和 `user_instructions_hash`
 - 写入的 `history_checkpoint` payload 含新字段
 
@@ -897,11 +897,11 @@ async def apply_compaction_plan(
     plan: CompactionPlan,
     messages: list[Message],
     *,
-    active_turn: ActiveTurnContext | None = None,
+    turn_input: TurnInput | None = None,
     user_instructions_text: str = "",
     user_instructions_hash: str = "",
     preset_summary: str | None = None,  # 预留供 oversized input (Phase 4) 用
-    preset_past_attachments: PastAttachmentsContext | None = None,  # 同上
+    preset_past_attachments: PastAttachmentsSource | None = None,  # 同上
 ) -> CompactionResult:
     """执行压缩并替换 messages。
 
@@ -922,7 +922,7 @@ async def apply_compaction_plan(
         durability = "durable"
         failure_reason = None
     else:
-        summary_input = self._select_summary_input(messages, active_turn)
+        summary_input = self._select_summary_input(messages, turn_input)
         if not summary_input:
             raise ValueError("Cannot compact messages without history")
         try:
@@ -938,7 +938,7 @@ async def apply_compaction_plan(
 
     # === 装配 anchor user message ===
     until_event_id = (
-        active_turn.pre_turn_history_event_id if active_turn else None
+        turn_input.pre_turn_history_event_id if turn_input else None
     )
 
     if preset_past_attachments is not None:
@@ -953,21 +953,21 @@ async def apply_compaction_plan(
             until_event_id=until_event_id,
         )
 
-    user_ctx = UserContextMessage.from_sources(
-        UserInstructionsContext(text=user_instructions_text).to_sections(),
-        CompactedHistoryContext(summary=summary).to_sections(),
-        SessionJobsContext.empty().to_sections(),
+    user_context = UserTurnContext.from_sources(
+        UserInstructionsSource(text=user_instructions_text).to_sections(),
+        CompactedHistorySource(summary=summary).to_sections(),
+        SessionJobsSource.empty().to_sections(),
         past_attachments_sections,
         other_session_sections,
-        active_turn.to_sections() if active_turn else (),
-        images=active_turn.materials.images_as_parts() if active_turn else (),
+        turn_input.to_sections() if turn_input else (),
+        images=turn_input.attachments.images_as_parts() if turn_input else (),
     )
 
-    runtime_msg = user_ctx.to_message(ContextView.RUNTIME)
-    messages[:] = [system_msg, runtime_msg]
+    runtime_message = user_context.to_message(ContextView.RUNTIME)
+    messages[:] = [system_msg, runtime_message]
 
-    checkpoint_msg = user_ctx.to_message(ContextView.CHECKPOINT)
-    base_snapshot = [checkpoint_msg.model_dump(mode="json")]
+    checkpoint_message = user_context.to_message(ContextView.CHECKPOINT)
+    base_snapshot = [checkpoint_message.model_dump(mode="json")]
 
     return CompactionResult(
         compaction_id=plan.compaction_id,
@@ -1003,7 +1003,7 @@ def _fallback(
 ```
 
 **关键点**：
-- `runtime_msg` 与 `checkpoint_msg` 的差异完全靠 view 过滤实现：同一份 `user_ctx` 投影两次
+- `runtime_message` 与 `checkpoint_message` 的差异完全靠 view 过滤实现：同一份 `user_context` 投影两次
 - `user_instructions_text` / `user_instructions_hash` 通过参数注入，service 层负责读盘并传入
 - **fallback 路径保留**。`sliding_window` / `tool_truncation` 删除决策延后到 Phase 3 完成、有埋点数据后单独评估
 - `CompactionResult` 新增 `user_instructions_text` / `user_instructions_hash` 字段，sink 写 history_checkpoint payload 时一并写入
@@ -1031,11 +1031,11 @@ from matmaster.context.compaction import (  # noqa: F401
 
 ### 10.1 v3 关键变化
 
-v3 把 v2 的 snapshot_sink 整套机制**从 kernel 删除**。kernel 不再感知 `model_user_input` 事件。
+v3 把 v2 的 snapshot_sink 整套机制**从 kernel 删除**。kernel 不再感知 `user_turn_context` 事件。
 
-- service 层在调 `kernel.run_stream` 之前已经写完 `User/query` + `model_user_input` 两条事件
-- service 层调 `ModelHistoryRestoreService.restore(...)` 拿到完整 `history`（含本轮 model_user_input 渲染后的 UserMessage 作为最后一条）
-- kernel.run_stream 直接用 history，不做 active_turn 装配
+- service 层在调 `kernel.run_stream` 之前已经写完 `User/query` + `user_turn_context` 两条事件
+- service 层调 `ModelHistoryRestoreService.restore(...)` 拿到完整 `history`（含本轮 user_turn_context 渲染后的 UserMessage 作为最后一条）
+- kernel.run_stream 直接用 history，不做 turn_input 装配
 - kernel.run_stream 的 `task` 参数语义改变：v3 中 task 可以是空字符串（因为 user message 已经在 history 末尾），或 deprecated
 
 ### 10.2 kernel 入口简化
@@ -1045,7 +1045,7 @@ v3 把 v2 的 snapshot_sink 整套机制**从 kernel 删除**。kernel 不再感
 
 async def _run_items(self, spec, task, history, ...):
     """v3: history 已经是完整的 LLM 视图,包含本轮 user message。
-    kernel 不再装配 active_turn。
+    kernel 不再装配 turn_input。
     """
     if not history:
         raise ValueError("v3 kernel.run_stream requires non-empty history")
@@ -1088,7 +1088,7 @@ async def _run_items(self, spec, task, history, ...):
 | 字段 | v2 | v3 |
 |------|-----|-----|
 | `context_builder: ContextBuilder` | 必填 | 保持（Phase 3 才改名为 `system_prompt_builder`） |
-| `active_turn: ActiveTurnContext` | 新增 | **删除**（kernel 不再装配 active_turn） |
+| `turn_input: TurnInput` | 新增 | **删除**（kernel 不再装配 turn_input） |
 | `user_instructions_text: str` | 新增 | 保留（compactor 在 runtime compaction 时需要） |
 | `user_instructions_hash: str` | 未规定 | **新增**（compactor 写 checkpoint 时需要） |
 | `runtime_ports.snapshot_sink` | 新增 | **删除** |
@@ -1099,7 +1099,7 @@ async def _run_items(self, spec, task, history, ...):
 - `spec.meta["current_input_context"]`
 - `spec.meta["attachment_manifest"]`
 - `spec.meta["current_user_images"]`
-- service 层的 `_apply_user_instructions_to_initial_user_query`（不再需要，AGENT.md 通过 `UserInstructionsContext` 经 service 层装配）
+- service 层的 `_apply_user_instructions_to_initial_user_query`（不再需要，AGENT.md 通过 `UserInstructionsSource` 经 service 层装配）
 
 ---
 
@@ -1162,10 +1162,10 @@ class ModelHistoryRestorer:
             and checkpoint.get("content", {}).get("schema_version") == "history_checkpoint.v1"
         )
 
-        # 判断是否走 v1: 有 v1 checkpoint OR (无 checkpoint 但 events 含 model_user_input)
+        # 判断是否走 v1: 有 v1 checkpoint OR (无 checkpoint 但 events 含 user_turn_context)
         if not schema_v1:
-            has_model_user_input = self._session_has_model_user_input(session_id, spawn_id)
-            if not has_model_user_input:
+            has_user_turn_context = self._session_has_user_turn_context(session_id, spawn_id)
+            if not has_user_turn_context:
                 return self._legacy_restore(session_id, spawn_id)
 
         return self._restore_v1(session_id, spawn_id, checkpoint)
@@ -1190,7 +1190,7 @@ class ModelHistoryRestorer:
             etype = event.get("type")
             payload = event.get("content", {})
 
-            if etype == "model_user_input":
+            if etype == "user_turn_context":
                 msg_dict = payload.get("message", {})
                 messages.append(UserMessage.model_validate(msg_dict))
 
@@ -1225,17 +1225,17 @@ class ModelHistoryRestorer:
 
         return messages
 
-    def _session_has_model_user_input(
+    def _session_has_user_turn_context(
         self,
         session_id: str,
         spawn_id: str | None,
     ) -> bool:
-        """Quick scan: 检查 session 是否有任何 model_user_input 事件。
+        """Quick scan: 检查 session 是否有任何 user_turn_context 事件。
 
         用于无 checkpoint 时判定走 v1 还是 v0。实现可以查 events 表 EXISTS。
         """
         events = self._get_events_after(session_id, None, spawn_id)
-        return any(e.get("type") == "model_user_input" for e in events[:200])
+        return any(e.get("type") == "user_turn_context" for e in events[:200])
 
     @staticmethod
     def _deserialize_messages(raw: list[dict[str, Any]]) -> list[Message]:
@@ -1340,14 +1340,14 @@ v0 marker 退役在 Phase 4（独立 phase，30+ 天后评估）。
 
 ## 12. 四个 Case 的 source 装配（v3 修订）
 
-| Case | 触发点 | 装配的 sources | model_user_input.kind |
+| Case | 触发点 | 装配的 sources | user_turn_context.kind |
 |------|--------|---------------|------------------------|
-| **1. 首轮无压缩** | service 层 stage X | UserInstructions + SessionJobs(empty) + SessionContextBuilder(skills/tools, 无 past_attachments) + ActiveTurn | `anchor` |
-| **1b. 普通延续轮，hash 未变** | service 层 stage X | **仅 ActiveTurn** | `continuation` |
-| **1c. 延续轮，hash 变了** | service 层 stage X | 完整 sections + ActiveTurn | `anchor` |
-| **2. 运行中 runtime compaction（无新输入）** | kernel 内 compactor | UserInstructions + CompactedHistory + SessionJobs + SessionContextBuilder | （不写 model_user_input，只写 history_checkpoint）|
+| **1. 首轮无压缩** | service 层 stage X | UserInstructions + SessionJobs(empty) + SessionContextBuilder(skills/tools, 无 past_attachments) + TurnInput | `anchor` |
+| **1b. 普通延续轮，hash 未变** | service 层 stage X | **仅 TurnInput** | `continuation` |
+| **1c. 延续轮，hash 变了** | service 层 stage X | 完整 sections + TurnInput | `anchor` |
+| **2. 运行中 runtime compaction（无新输入）** | kernel 内 compactor | UserInstructions + CompactedHistory + SessionJobs + SessionContextBuilder | （不写 user_turn_context，只写 history_checkpoint）|
 | **3. Oversized input（Case 3）** | **本 spec 不实现，Phase 4 独立 spec** | 预留 `transform="oversized_summary"` | 预留 |
-| **4. Preflight compaction（新输入 + 立即压缩）** | service 层（kernel 内调用 compactor） | 完整 sections + ActiveTurn | `anchor` + `transform="preflight_compacted"` |
+| **4. Preflight compaction（新输入 + 立即压缩）** | service 层（kernel 内调用 compactor） | 完整 sections + TurnInput | `anchor` + `transform="preflight_compacted"` |
 
 最终渲染顺序：长期约束 → 历史摘要 → 会话状态 → 可用能力 → 过去材料 → 本轮材料 → 本轮任务。
 
@@ -1360,12 +1360,12 @@ v0 marker 退役在 Phase 4（独立 phase，30+ 天后评估）。
 | 旧名 | 新名 | 原因 |
 |------|------|------|
 | `ContextVisibility` | `ContextView` | 表达"视图选择"，不是"可见性" |
-| ~~`ModelVisibleUserContext`~~ ~~`UserContextSnapshot`~~ | `UserContextMessage` + `model_user_input` event | snapshot 概念废弃 |
+| ~~`ModelVisibleUserContext`~~ ~~`UserContextSnapshot`~~ | `UserTurnContext` + `user_turn_context` event | snapshot 概念废弃 |
 | `CompactionRehydrator` | `SessionContextBuilder` | 不是 hydration，是 session context collection |
 | `pre_query_scope_event_id` | `pre_turn_history_event_id` | 实现细节剥离，语义直接 |
-| `attachment_manifest` | `attachment_context` | 不是 manifest，是 context |
-| `skill_manifest` | `skill_context` | 同上 |
-| `mcp_manifest` | `tool_context` | 同上 + "tools" 是模型可见语义 |
+| `attachment_manifest` | `past_attachments` | 不是 manifest，是 source |
+| `skill_manifest` | `loaded_skills` | 同上 |
+| `mcp_manifest` | `active_tools` | 同上 + "tools" 是模型可见语义 |
 | `HistoryRestoreService` | `ModelHistoryRestoreService` | 当前名字暗示"通用历史恢复"，实际只服务 model restore 路径 |
 
 ### 文件与目录
@@ -1382,7 +1382,7 @@ v0 marker 退役在 Phase 4（独立 phase，30+ 天后评估）。
 | `matmaster/manifests/bohrium.py` | `matmaster/context/sources/session_jobs.py` |
 | `matmaster/manifests/workspace.py` | `matmaster/context/sources/workspace.py` |
 | `matmaster/types/context.py` | 阶段 3 删除；定义迁回**已有的** `matmaster/core/playground.py`；shim 保留至阶段 3 |
-| `matmaster/types/current_input.py` | `matmaster/context/sources/active_turn.py` |
+| `matmaster/types/current_input.py` | `matmaster/context/sources/turn_input.py` |
 | `matmaster/core/context_builder.py` | 拆三段（见 §15） |
 | `matmaster/core/context_compactor.py` | `matmaster/context/compaction.py`（shim 路径保留至阶段 3） |
 | `src/services/history_restore_service.py` | `src/services/model_history_restore_service.py` |
@@ -1420,12 +1420,12 @@ v0 marker 退役在 Phase 4（独立 phase，30+ 天后评估）。
 **目标**: 落地两事件模型 + v0/v1 restore 分流 + SSE filter 改造 + AGENT.md hash anchor 决策。**不**改 prompt 形态，**不**做 Case 3，**不**动 ContextSection 内核（保留现 ContextBuilder 内的字符串拼接为现状渲染）。
 
 **1a. 新事件类型注册**:
-- 在 `ChatEventsTable` 接受 `event_type = "model_user_input"` 的写入
-- SSE filter [stream_service.py:_should_emit_event_to_sse](../../src/services/stream_service.py:66) 加 `model_user_input` 到 hidden list
+- 在 `ChatEventsTable` 接受 `event_type = "user_turn_context"` 的写入
+- SSE filter [stream_service.py:_should_emit_event_to_sse](../../src/services/stream_service.py:66) 加 `user_turn_context` 到 hidden list
 - live SSE handler `SSEHandler._should_skip()` 同步加
 
 **1b. AGENT.md hash anchor 决策**:
-- 实现 §8.2 的 service 层装配决策（is_anchor 判定 + 写 model_user_input）
+- 实现 §8.2 的 service 层装配决策（is_anchor 判定 + 写 user_turn_context）
 - 实现 `_latest_anchor_user_instructions_hash` 查询
 - 实现 size cap (50KB) + hash 计算
 - **保留** `_apply_user_instructions_to_initial_user_query` 共存一段时间，behind flag 控制
@@ -1440,7 +1440,7 @@ v0 marker 退役在 Phase 4（独立 phase，30+ 天后评估）。
 - 改名 [history_restore_service.py](../../src/services/history_restore_service.py) → `model_history_restore_service.py`
 - 内部实现 §11.1 的 schema-aware 分流
 - v0 路径委托 `ChatHistoryConverter.events_to_dialog_messages`
-- v1 路径同时消费 `model_user_input` + `assistant_state` + `response`/`run_result` + `tool_result`
+- v1 路径同时消费 `user_turn_context` + `assistant_state` + `response`/`run_result` + `tool_result`
 
 **1e. 测试目标**:
 - 单元测试：`ModelHistoryRestorer._restore_v1` 各分支
@@ -1459,8 +1459,8 @@ v0 marker 退役在 Phase 4（独立 phase，30+ 天后评估）。
 按依赖顺序：
 1. `matmaster/context/sections.py`（含 `__post_init__` 校验）
 2. `matmaster/context/rendering.py`（含 tag escape）
-3. `matmaster/context/user_message.py`（含 key 唯一性校验）
-4. `matmaster/context/sources/active_turn.py`
+3. `matmaster/context/turn_context.py`（含 key 唯一性校验）
+4. `matmaster/context/sources/turn_input.py`
 5. `matmaster/context/sources/user_instructions.py`
 6. `matmaster/context/sources/attachments.py`
 7. `matmaster/context/sources/skills.py`
@@ -1476,16 +1476,16 @@ v0 marker 退役在 Phase 4（独立 phase，30+ 天后评估）。
 
 **2b. shim 改造**:
 - `matmaster/manifests/*` 改为薄 shim 委托新 source
-- `matmaster/types/current_input.py` re-export `ActiveTurnContext`
+- `matmaster/types/current_input.py` re-export `TurnInput`
 - `matmaster/types/context.py` re-export `PlaygroundContext`（迁回 `core/playground.py`，注意现有反向 import 循环：[playground.py:26](../../matmaster/core/playground.py:26) 现 import from types/context；要小心拆环）
 
 **2c. 业务代码切换 import**:
 - [matmaster/core/agent.py](../../matmaster/core/agent.py) import 从 `matmaster.manifests` 切到 `matmaster.context`
-- [src/services/agent_run_service.py](../../src/services/agent_run_service.py) 装配 `ActiveTurnContext`（含 `source_query_event_id`），调 `UserContextMessage.from_sources`，再投影为 UserMessage，再写 model_user_input
+- [src/services/agent_run_service.py](../../src/services/agent_run_service.py) 装配 `TurnInput`（含 `source_query_event_id`），调 `UserTurnContext.from_sources`，再投影为 UserMessage，再写 user_turn_context
 - **此时**可以移除 Phase 1 的 flag：service 层完全走新路径，删除 `_apply_user_instructions_to_initial_user_query`
 
 **2d. Prompt 形态**:
-- **沿用现状**: `TurnRequestContext` 和 `TurnMaterialsContext` 合并到一个 `<current_instruction>` block（兼容当前 `[Current attachments]` 拼接方式）
+- **沿用现状**: `TurnInstructionSource` 和 `TurnAttachmentsSource` 合并到一个 `<current_instruction>` block（兼容当前 `[Current attachments]` 拼接方式）
 - 拆分版可由 `__init__` 参数或 feature flag 切换，但**默认关闭**
 
 **2e. 测试目标**:
@@ -1504,7 +1504,7 @@ v0 marker 退役在 Phase 4（独立 phase，30+ 天后评估）。
 **3a. compaction.py 迁移**:
 - 把 `core/context_compactor.py` 内容迁到 `context/compaction.py`
 - `core/context_compactor.py` 改为薄 shim
-- 装配方式从手写字符串改为 `UserContextMessage` + view 投影
+- 装配方式从手写字符串改为 `UserTurnContext` + view 投影
 - **fallback 保留**（`sliding_window` / `tool_truncation`），但加埋点（命中率、成功率）
 
 **3b. checkpoint payload 切到 v1**:
@@ -1513,7 +1513,7 @@ v0 marker 退役在 Phase 4（独立 phase，30+ 天后评估）。
 
 **3c. Prompt 形态 A/B**:
 - 在 Phase 2 末或 Phase 3 起手时做 offline eval（见 §6.5 评估维度）
-- 通过则启用 `<turn_materials>` 拆分（默认）
+- 通过则启用 `<turn_attachments>` 拆分（默认）
 - 不通过则保留合并形态，调整 tag 名后再 A/B
 
 **3d. 测试目标**:
@@ -1538,7 +1538,7 @@ v0 marker 退役在 Phase 4（独立 phase，30+ 天后评估）。
 **4c. Oversized Input 独立 spec**:
 - 不在本 spec 范围
 - 需要单独设计 `InputSummaryConfig`、原文写盘策略、路径安全、失败处理
-- 接口预留点：`ContextCompactor.apply_compaction_plan(preset_summary, preset_past_attachments)` + `model_user_input.transform="oversized_summary"` 已就位
+- 接口预留点：`ContextCompactor.apply_compaction_plan(preset_summary, preset_past_attachments)` + `user_turn_context.transform="oversized_summary"` 已就位
 
 **4d. Fallback 删除决策**:
 - 基于 Phase 3 埋点的命中率与成功率数据
@@ -1553,8 +1553,8 @@ v0 marker 退役在 Phase 4（独立 phase，30+ 天后评估）。
 | 旧方法 | 新位置 |
 |--------|--------|
 | `build_system_prompt(...)` | `matmaster/context/system_prompt.py` 中的 `SystemPromptBuilder` 类 |
-| `build_user_request(...)` | `matmaster/context/user_message.py` (`UserContextMessage.from_sources`) + `sources/active_turn.py` + `sources/attachments.py` |
-| `build_compact_bundle(...)` | `matmaster/context/sources/compacted_history.py` + `user_message.py` |
+| `build_user_request(...)` | `matmaster/context/turn_context.py` (`UserTurnContext.from_sources`) + `sources/turn_input.py` + `sources/attachments.py` |
+| `build_compact_bundle(...)` | `matmaster/context/sources/compacted_history.py` + `turn_context.py` |
 | `_tag(...)` 等 helper | `matmaster/context/rendering.py` (`wrap_tag`) |
 
 `AgentRuntimeSpec.context_builder` 字段演化（与 v2 保持一致）：
@@ -1579,11 +1579,11 @@ tests/matmaster/context/
     - wrap_tag basic
     - wrap_tag escape: content 含 </tag> 时被替换
     - render_sections multi-section ordering
-  test_user_message.py
+  test_turn_context.py
     - from_sources key 唯一性校验（负向 case）
     - render(view) 输出等价（双视图对比）
   test_compaction.py
-    - apply_compaction_plan with active_turn / without
+    - apply_compaction_plan with turn_input / without
     - summary 成功 → durable
     - summary 失败 → ephemeral + fallback strategy
     - preset_summary 旁路
@@ -1592,11 +1592,11 @@ tests/matmaster/context/
     - build_sections include / exclude attachments
     - until_event_id 边界
   test_history_restore.py
-    - 无 checkpoint + 无 model_user_input → legacy_restore 委托
-    - 无 checkpoint + 有 model_user_input → v1 路径
+    - 无 checkpoint + 无 user_turn_context → legacy_restore 委托
+    - 无 checkpoint + 有 user_turn_context → v1 路径
     - v1 checkpoint → v1 路径
     - v0 checkpoint → legacy_restore 委托
-    - 多 model_user_input 顺序追加
+    - 多 user_turn_context 顺序追加
     - response 与 assistant_state 同 turn 不冲突（不存在该情况，但 defensive）
     - tool_result restore
     - spawn_id 过滤
@@ -1606,7 +1606,7 @@ tests/matmaster/context/
       - size cap truncate + warning
       - empty 返回空 sections
       - hash 计算稳定（同输入同 hash）
-    test_active_turn.py
+    test_turn_input.py
       - has_effective_input 边界
       - images_as_parts 转换
       - source_query_event_id 必填
@@ -1621,7 +1621,7 @@ tests/matmaster/context/
   integration/
     test_compaction_roundtrip.py
       - Case 1 / 1b / 1c / 2 / 4 端到端
-      - 写 model_user_input → restore_v1 等价
+      - 写 user_turn_context → restore_v1 等价
     test_multi_compaction.py
       - 两次压缩链路
     test_codec_v0_v1_compat.py
@@ -1631,7 +1631,7 @@ tests/matmaster/context/
       - 首轮 → 改 AGENT.md → 第 2 轮立即反映
       - 改 AGENT.md → 压缩触发 → anchor 含新内容
     test_sse_filter.py
-      - model_user_input 不出现在 replay
+      - user_turn_context 不出现在 replay
       - assistant_state 不出现在 replay
       - history_checkpoint 不出现在 replay
 ```
@@ -1644,19 +1644,19 @@ Phase 1 内 `tests/matmaster/manifests/` 保留并继续通过（验证 shim 等
 
 ### 高优先级
 
-1. **Phase 0 DAO 改造的并发安全**: `INSERT ... RETURNING id` 与现有事务边界的兼容性需在 Phase 0 落地时验证。`prepare_send_message` 流程中 User/query 与 model_user_input 是否需要同事务？建议**同事务**，防止部分失败导致孤立的 User/query 没有 model_user_input。
+1. **Phase 0 DAO 改造的并发安全**: `INSERT ... RETURNING id` 与现有事务边界的兼容性需在 Phase 0 落地时验证。`prepare_send_message` 流程中 User/query 与 user_turn_context 是否需要同事务？建议**同事务**，防止部分失败导致孤立的 User/query 没有 user_turn_context。
 
 2. **Phase 1 灰度策略**: Phase 1 默认 flag 关闭（仍走 `_apply_user_instructions_to_initial_user_query`）。如何评估"可以默认打开"？建议：
    - 灰度 5% 用户 7 天
-   - 监控 model_user_input 写入失败率（应 < 0.1%）
+   - 监控 user_turn_context 写入失败率（应 < 0.1%）
    - 监控 restore_v1 vs legacy_restore 的 messages 序列等价性（offline diff）
    - 监控 AGENT.md 修改后首轮生效率
 
-3. **多次压缩 + AGENT.md 变更的边界**: 用户在两次压缩之间多次改 AGENT.md，会生成多条 anchor model_user_input。如果其中夹杂 continuation，messages 序列中会有多个 anchor。预期 LLM 自然理解，但需要 prompt 评估验证。Phase 1 末做一次小规模 case study。
+3. **多次压缩 + AGENT.md 变更的边界**: 用户在两次压缩之间多次改 AGENT.md，会生成多条 anchor user_turn_context。如果其中夹杂 continuation，messages 序列中会有多个 anchor。预期 LLM 自然理解，但需要 prompt 评估验证。Phase 1 末做一次小规模 case study。
 
 ### 中优先级
 
-4. **`SessionJobsContext` 占位与未来接入的接口契约**: 数据接入留待 bohrium tool job table + hot cache 系统建好。接入时只需修改 `SessionJobsContext`（增加 classmethod 如 `from_job_ledger(...)`），不动 source 接口和 order 表。
+4. **`SessionJobsSource` 占位与未来接入的接口契约**: 数据接入留待 bohrium tool job table + hot cache 系统建好。接入时只需修改 `SessionJobsSource`（增加 classmethod 如 `from_job_ledger(...)`），不动 source 接口和 order 表。
 
 5. **fallback 命中率埋点**: Phase 3 加埋点，30 天后评估是否删 `sliding_window` / `tool_truncation`。在没有数据前**不删**。
 
@@ -1664,7 +1664,7 @@ Phase 1 内 `tests/matmaster/manifests/` 保留并继续通过（验证 shim 等
 
 ### 低优先级
 
-7. **`UserContextMessage` 与未来 sub-agent handoff 视图**: 当前 ContextView 只有 RUNTIME / CHECKPOINT。未来 sub-agent 可能需要新视图（如 SUBAGENT_HANDOFF），届时再加。本 spec 不预留。
+7. **`UserTurnContext` 与未来 sub-agent handoff 视图**: 当前 ContextView 只有 RUNTIME / CHECKPOINT。未来 sub-agent 可能需要新视图（如 SUBAGENT_HANDOFF），届时再加。本 spec 不预留。
 
 8. **`schema_version` / `render_version` 演化矩阵**: Phase 1 后只有 v1，未引入 v2。未来 v2 升级时再单独设计 codec 分发表。
 
@@ -1674,7 +1674,7 @@ Phase 1 内 `tests/matmaster/manifests/` 保留并继续通过（验证 shim 等
 
 ## 18. 不在本次范围
 
-- bohrium job table + hot cache 系统的搭建（`SessionJobsContext` 只占位）
+- bohrium job table + hot cache 系统的搭建（`SessionJobsSource` 只占位）
 - Oversized input offload（Case 3 / Phase 4 独立 spec）
 - `run_meta` 整体 typed 化
 - LLM provider 抽象层重构
@@ -1692,18 +1692,18 @@ Phase 1 内 `tests/matmaster/manifests/` 保留并继续通过（验证 shim 等
 | 概念 | 描述 |
 |------|------|
 | Raw transcript history | 由 User/query / response / tool_result 等原始事件组成的对话流，前端回放与审计的数据源 |
-| Model-visible history | 后端发给 LLM 的真实消息序列，由 system prompt + base_messages (from checkpoint) + 后续 model_user_input / assistant_state / response / tool_result 重建 |
-| `model_user_input` | 新事件类型，每个真实用户 turn 最多一条，记录 provider-facing UserMessage 事实 |
-| Anchor | 装配了完整长尾 sources（UserInstructions / SessionContext / ActiveTurn）的 user message。出现条件：session 首轮 OR AGENT.md hash 变化的轮 OR 压缩触发后的轮 |
-| Continuation | 只装配 ActiveTurn 的 user message，依赖更早 anchor 提供长尾 sections |
+| Model-visible history | 后端发给 LLM 的真实消息序列，由 system prompt + base_messages (from checkpoint) + 后续 user_turn_context / assistant_state / response / tool_result 重建 |
+| `user_turn_context` | 新事件类型，每个真实用户 turn 最多一条，记录 provider-facing UserMessage 事实 |
+| Anchor | 装配了完整长尾 sources（UserInstructions / SessionContext / TurnInput）的 user message。出现条件：session 首轮 OR AGENT.md hash 变化的轮 OR 压缩触发后的轮 |
+| Continuation | 只装配 TurnInput 的 user message，依赖更早 anchor 提供长尾 sections |
 | Source | `matmaster/context/sources/` 下的 frozen dataclass，自带 `to_sections() -> tuple[ContextSection, ...]`，互相独立不依赖 |
 | Section | `ContextSection` 实例，渲染单元 |
 | View | `ContextView`，渲染时的视图选择（RUNTIME / CHECKPOINT），不参与恢复。不变量 `RUNTIME ⊇ CHECKPOINT` |
 | Checkpoint | `history_checkpoint` event 的 v1 payload，含 base_messages、user_instructions_text/hash、schema_version、render_version、covered_until_event_id |
-| `source_query_event_id` | 关联 `User/query` 事件的 id，每个 `model_user_input` 必填 |
-| `pre_turn_history_event_id` | 本轮 User/query 和 model_user_input 事件写入前的最后 event id，用于 preflight compaction 划定 checkpoint 覆盖边界 |
+| `source_query_event_id` | 关联 `User/query` 事件的 id，每个 `user_turn_context` 必填 |
+| `pre_turn_history_event_id` | 本轮 User/query 和 user_turn_context 事件写入前的最后 event id，用于 preflight compaction 划定 checkpoint 覆盖边界 |
 | `user_instructions_hash` | AGENT.md 文本的 sha256，service 层用于判定是否需要新 anchor |
-| `transform` | model_user_input.payload 字段，`"raw"` / `"preflight_compacted"` / `"oversized_summary"`（最后一个 Phase 4 落地）|
+| `transform` | user_turn_context.payload 字段，`"raw"` / `"preflight_compacted"` / `"oversized_summary"`（最后一个 Phase 4 落地）|
 
 ---
 
@@ -1719,7 +1719,7 @@ Phase 1 内 `tests/matmaster/manifests/` 保留并继续通过（验证 shim 等
 
 ### Phase 1 改动
 
-- [src/services/stream_service.py:66](../../src/services/stream_service.py:66) `_should_emit_event_to_sse`: 加 `model_user_input` hidden
+- [src/services/stream_service.py:66](../../src/services/stream_service.py:66) `_should_emit_event_to_sse`: 加 `user_turn_context` hidden
 - `matmaster.integration.event_router.SSEHandler._should_skip()`: 同步加
 - [src/services/agent_run_service.py:775-780](../../src/services/agent_run_service.py:775) `_apply_user_instructions_to_initial_user_query`: 保留共存，behind flag
 - [src/services/agent_run_service.py:182-209](../../src/services/agent_run_service.py:182) `_apply_user_instructions_to_initial_user_query` 实现: Phase 2 后删除
@@ -1733,7 +1733,7 @@ Phase 1 内 `tests/matmaster/manifests/` 保留并继续通过（验证 shim 等
 - [matmaster/manifests/](../../matmaster/manifests/) 整目录改 shim
 - [matmaster/types/current_input.py](../../matmaster/types/current_input.py) shim
 - [matmaster/types/context.py](../../matmaster/types/context.py) shim（注意拆解 [playground.py:26](../../matmaster/core/playground.py:26) 的反向 import 循环）
-- [matmaster/core/agent.py:336-347](../../matmaster/core/agent.py:336) kernel 入口改造：用 history 末尾的 UserMessage，不再装配 active_turn
+- [matmaster/core/agent.py:336-347](../../matmaster/core/agent.py:336) kernel 入口改造：用 history 末尾的 UserMessage，不再装配 turn_input
 - [src/services/agent_run_service.py](../../src/services/agent_run_service.py) 完整切到新路径，删除 `_apply_user_instructions_to_initial_user_query`
 
 ### Phase 3 改动
