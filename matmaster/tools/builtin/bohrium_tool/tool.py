@@ -25,6 +25,7 @@ from matmaster.bohrium.client import (
     add_job,
     confirm_terminal_status,
     create_job,
+    get_file_token,
     get_job_detail,
     list_images,
     list_machines,
@@ -274,7 +275,8 @@ class BohriumTool(BuiltinTool):
             'cmd runs in the directory where input files are unpacked — do NOT '
             'prepend "cd <path> &&" or any directory change. '
             'cmd MUST end with "> log 2>&1" (auto-appended if missing).\n'
-            '- **poll**: single-shot job status check, returns current status immediately.\n'
+            '- **poll**: single-shot job status check, returns current status immediately. '
+            'It does not download artifacts.\n'
             '- **download**: download artifacts for a finished or failed job into result_dir. '
             'Use only after poll reports Finished or Failed. Requires result_dir; '
             'retrieves logs and artifacts for analysis.\n'
@@ -611,13 +613,16 @@ class BohriumTool(BuiltinTool):
             )
             return ToolResult(status='error', content=f'Poll failed: {exc}')
 
-    def _fetch_log_tail(self, ctx: BohriumContext, job_id: str, max_lines: int = 15) -> str:
+    def _fetch_log_tail(
+        self, ctx: BohriumContext, job_id: str, max_lines: int = 15
+    ) -> str:
         """Best-effort fetch of live log tail from a sandbox job."""
         host, path, token = get_file_token(ctx, file_path='log', bohr_job_id=job_id)
         if not (host and path and token):
             return ''
         import urllib.request
         from urllib.parse import quote
+
         encoded_path = quote(path, safe='/')
         url = f"{host.rstrip('/')}/api/download/{encoded_path}?token={token}"
         req = urllib.request.Request(url)
