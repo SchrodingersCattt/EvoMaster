@@ -8,6 +8,7 @@ CC name: Glob
 
 from __future__ import annotations
 
+import posixpath
 from typing import Any, ClassVar
 
 from matmaster.bohrium.runtime import get_runtime
@@ -87,13 +88,28 @@ class GlobTool(BuiltinTool):
         if not pattern:
             return "Error: pattern is required and must not be empty."
 
+        requested_pattern = pattern
         path: str = arguments.get("path", "") or ""
         workdir = str(self._workdir) if self._workdir else "/workspace"
-        safe_path = resolve_safe_path(
-            path,
-            workdir,
-            allowed_roots=self._path_access_roots,
-        )
+        if pattern.startswith("/"):
+            path, pattern = self._split_absolute_pattern(pattern)
+            safe_path = resolve_safe_path(
+                path,
+                workdir,
+                allowed_roots=self._path_access_roots,
+            )
+            if safe_path != posixpath.normpath(path):
+                return ToolResult(
+                    status="error",
+                    content=f"Path outside workspace boundary: {path}",
+                    meta={"skipped_paths": 0},
+                )
+        else:
+            safe_path = resolve_safe_path(
+                path,
+                workdir,
+                allowed_roots=self._path_access_roots,
+            )
 
         command = self._build_find_command(pattern, safe_path)
 
@@ -116,7 +132,10 @@ class GlobTool(BuiltinTool):
         if not output.strip():
             return ToolResult(
                 status="success",
-                content=f"No files matching pattern '{pattern}' found in {safe_path}",
+                content=(
+                    f"No files matching pattern '{requested_pattern}' "
+                    f"found in {safe_path}"
+                ),
                 meta=meta,
             )
 
@@ -128,6 +147,25 @@ class GlobTool(BuiltinTool):
             )
 
         return ToolResult(status="success", content=output, meta=meta)
+
+    @staticmethod
+    def _split_absolute_pattern(pattern: str) -> tuple[str, str]:
+        """Split an absolute glob into search root and relative pattern."""
+        normalized = posixpath.normpath(pattern)
+        parts = normalized.split("/")
+        glob_index = None
+        for index, part in enumerate(parts[1:], start=1):
+            if any(char in part for char in "*?["):
+                glob_index = index
+                break
+
+        if glob_index is None:
+            return posixpath.dirname(normalized), posixpath.basename(normalized)
+
+        base_parts = parts[1:glob_index]
+        base_dir = "/" + "/".join(base_parts) if base_parts else "/"
+        relative_pattern = "/".join(parts[glob_index:])
+        return base_dir, relative_pattern
 
     @staticmethod
     def _build_find_command(pattern: str, safe_path: str) -> str:
@@ -189,12 +227,15 @@ class GlobTool(BuiltinTool):
         ]
         find_cmd = " ".join(parts)
 
-        # Sort by mtime (newest first) and limit results.
-        # xargs ls -1td is portable; -r (--no-run-if-empty) is a GNU
-        # extension but harmless on macOS where xargs already skips empty.
+        # Sort by mtime (newest first) and limit results. Buffer the bounded
+        # find output before xargs so GNU xargs does not run bare `ls` when
+        # there are no matches.
         return (
             f"{find_cmd} | "
             f"head -{MAX_GLOB_RESULTS} | "
-            f"xargs ls -1td 2>/dev/null | "
-            f"head -{MAX_GLOB_RESULTS}"
+            "{ matches=$(cat); "
+            'if [ -n "$matches" ]; then '
+            'printf "%s\\n" "$matches" | '
+            f"xargs ls -1td 2>/dev/null | head -{MAX_GLOB_RESULTS}; "
+            "fi; }"
         )
