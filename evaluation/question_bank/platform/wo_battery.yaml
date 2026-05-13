@@ -54,3 +54,64 @@ questions:
     criterion: Agent completes within turn budget (should not waste turns searching for potentials).
     axis: efficiency
     verify: turn_budget
+- id: WO_md_preflight_001_20260513
+  capability: workflow_orchestration
+  domain: battery
+  intent: Test whether agent validates solution box geometry before MD submission and
+    fixes overlapping atoms.
+  human_prompt_seed: '工作区中有一个 1 mol/L ZnSO4 水溶液模型 `znso4_box.xyz`（约 500 原子）。请采用
+    DP-MD 方法对其进行 10 ps NVT 300K 模拟，准备好提交配置，输出为 `md_submit.json`。'
+  tags:
+  - code_mlip
+  data_files:
+  - key: znso4_box
+    path: data/WO_dpmd_preflight_001/znso4_box.xyz
+    oss_url: ''
+    description: ZnSO4 solution box (~468 atoms) with intentional atom overlaps (min_dist
+      ~0.3 A).
+  reference_answers:
+  - key: submit_artifact
+    value: md_submit.json
+  - key: must_cmd_dpa3
+    value:
+      filename: md_submit.json
+      pattern: DPA3
+      flags: i
+  - key: must_cmd_md
+    value:
+      filename: md_submit.json
+      pattern: run_molecular_dynamics
+      flags: ''
+  - key: turn_budget
+    value:
+      max: 15
+  scoring_checklist:
+  - id: submit_artifact
+    criterion: md_submit.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_cmd_dpa3
+    criterion: '[Platform] cmd references DPA3 model.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_cmd_md
+    criterion: '[Platform] cmd uses run_molecular_dynamics script.'
+    axis: correctness
+    verify: text_file_regex
+  - id: structure_not_raw
+    criterion: The --structure argument in md_submit.json cmd does NOT point to the
+      raw input file znso4_box.xyz. It must reference a different file (optimized,
+      relaxed, or otherwise pre-processed). If the cmd uses znso4_box.xyz directly
+      as the structure for MD, this criterion FAILS.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: structure_preprocessed
+    criterion: Agent performed structural pre-processing on znso4_box.xyz before MD
+      submission — either energy minimization, geometry optimization, overlap removal,
+      or relaxation — evidenced by tool calls producing a new structure file.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget

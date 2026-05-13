@@ -145,7 +145,7 @@ banks:
 - path: workflow_orchestration/wo_battery.yaml
   capability: workflow_orchestration
   domain: battery
-  questions: 3
+  questions: 2
 - path: workflow_orchestration/wo_catalysis.yaml
   capability: workflow_orchestration
   domain: catalysis
@@ -161,7 +161,7 @@ banks:
 - path: platform/wo_battery.yaml
   capability: workflow_orchestration
   domain: battery
-  questions: 1
+  questions: 2
 - path: input_generation/ig_semiconductor_abacus.yaml
   capability: input_generation
   domain: semiconductor
