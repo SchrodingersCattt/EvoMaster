@@ -15,8 +15,8 @@ correct, runnable files and avoiding silent-failure configurations.
    Pseudopotentials (`.upf`) default path: `/root/apns-pseudopotentials-v1/`.
    Orbitals (`.orb`) default path: `/root/apns-orbitals-efficiency-v1/`.
 2. Generate `INPUT` (and `KPT` when needed).
-3. For Bohrium jobs:
-   - Set `pseudo_dir` and `orbital_dir` explicitly in `INPUT`.
+3. **Always** set `pseudo_dir` explicitly in `INPUT`. For `basis_type lcao`, also set `orbital_dir` explicitly. These are required regardless of whether the task mentions Bohrium — ABACUS needs them at runtime to locate PP/orbital files.
+4. For Bohrium jobs additionally:
    - Ensure filenames in `STRU` exactly match files in those directories.
    - Pseudopotential lookup order:
      `references/apns_pseudopotentials_v1.list` -> `references/stru_multispecies.md`.
@@ -26,14 +26,15 @@ correct, runnable files and avoiding silent-failure configurations.
      2) Resolve APNS orbital filename from `references/apns_orbitals_efficiency_v1.list` (for LCAO).
      3) Write resolved filenames into `STRU`.
      4) If any element cannot be resolved, stop and report uncertainty; do not guess names like `Element.upf`.
-4. For uncertain params/workflows, check local `references/*` first.
-5. If references are insufficient or ambiguous, use official ABACUS docs on web as fallback.
-6. For complex tasks, do not rely only on pretrained priors; gather relevant knowledge from multiple sources to enrich context before finalizing inputs.
+5. For uncertain params/workflows, check local `references/*` first.
+6. If references are insufficient or ambiguous, use official ABACUS docs on web as fallback.
+7. For complex tasks, do not rely only on pretrained priors; gather relevant knowledge from multiple sources to enrich context before finalizing inputs.
 
 ## Hard Guards (Must Pass)
 
 - `ntype` in `INPUT` must equal species count in `STRU` `ATOMIC_SPECIES`.
-- For Bohrium jobs, `INPUT` must include explicit `pseudo_dir` and `orbital_dir`, and PP/orbital filenames in `STRU` must exist in those directories.
+- `INPUT` must always include `pseudo_dir`. For `basis_type lcao`, `INPUT` must also include `orbital_dir`. This applies to all environments (local, Bohrium, ASE-driven, etc.).
+- For Bohrium jobs, PP/orbital filenames in `STRU` must exist in those directories.
 - If `pseudo_dir`/`orbital_dir` point to APNS defaults, filenames in `STRU` must be present in the corresponding APNS reference lists; guessed fallback names are not acceptable.
 - For `relax`/`cell-relax`/`md`, set `cal_force 1` explicitly.
 - For `cell-relax`, also set `cal_stress 1` explicitly.

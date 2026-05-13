@@ -78,6 +78,46 @@ for line in repeat['score_reason'].split('\n'):
         print(line)
 ```
 
+### Retrieve Agent Trajectory (Events Log)
+
+Each eval repeat stores an artifact bundle with logs and workspace files. Use the artifact API to inspect what the agent actually did:
+
+```bash
+# 1. Get artifact_id from the overview response (per repeat)
+ARTIFACT_ID="<from overview response>.repeats[N].artifact_id"
+
+# 2. List files in the artifact
+curl -s -H "Authorization: Bearer $MATMASTER_TOOLS_EVALUATION_BEARER" \
+  "$MATMASTER_TOOLS_SERVER/api/v1/artifacts/$ARTIFACT_ID/files?path=logs" \
+  | python3 -m json.tool
+
+# 3. Navigate into the task log directory (named like {question_id}_{mode}_r{N})
+curl -s -H "Authorization: Bearer $MATMASTER_TOOLS_EVALUATION_BEARER" \
+  "$MATMASTER_TOOLS_SERVER/api/v1/artifacts/$ARTIFACT_ID/files?path=logs/{task_id}" \
+  | python3 -m json.tool
+# Returns: devshell_console.log + events_*.jsonl
+
+# 4. Download the events JSONL (the full agent trajectory)
+curl -s -H "Authorization: Bearer $MATMASTER_TOOLS_EVALUATION_BEARER" \
+  "$MATMASTER_TOOLS_SERVER/api/v1/artifacts/$ARTIFACT_ID/content?path=logs/{task_id}/events_*.jsonl"
+```
+
+Events JSONL structure (one JSON object per line):
+- `type: "tool_call"` — agent invoked a tool (`tool`, `args`, `call_id`)
+- `type: "tool_result"` — tool returned (`content`, `call_id`)
+- `type: "response"` — assistant text output (`content`)
+- `type: "run_result"` — final status (`status`, `reason`)
+
+```bash
+# 5. Get workspace files the agent produced
+curl -s -H "Authorization: Bearer $MATMASTER_TOOLS_EVALUATION_BEARER" \
+  "$MATMASTER_TOOLS_SERVER/api/v1/artifacts/$ARTIFACT_ID/files?path=workspaces/{task_id}"
+
+# 6. Read a specific output file
+curl -s -H "Authorization: Bearer $MATMASTER_TOOLS_EVALUATION_BEARER" \
+  "$MATMASTER_TOOLS_SERVER/api/v1/artifacts/$ARTIFACT_ID/content?path=workspaces/{task_id}/relax/OUT/INPUT"
+```
+
 ## Failure Analysis Workflow
 
 1. **Get the run result** via the overview API

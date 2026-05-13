@@ -580,7 +580,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_012_20260513
+- id: IG_abacus_012_20260514
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS input files for ASE-ABACUS ethanol relaxation and vibrational-frequency stages.
@@ -601,7 +601,7 @@ questions:
     value:
       filename: relax/OUT/INPUT
       tokens:
-      - calculation relax
+      - calculation scf
       - basis_type lcao
       - cal_force 1
       - pseudo_dir
@@ -664,7 +664,7 @@ questions:
     verify: artifact_exists
     weight: 0.8
   - id: must_relax_input_core
-    criterion: '[Must] relax/OUT/INPUT uses structure-optimization settings (not static single-point) with LCAO/PBE, force output, and explicit pseudo/orbital directories for ASE-driven relaxation.'
+    criterion: '[Must] relax/OUT/INPUT uses SCF single-point with force output (calculation scf + cal_force 1) for ASE-driven relaxation, with LCAO basis and explicit pseudo/orbital directories.'
     axis: correctness
     verify: text_file_contains_all
     weight: 1.0
