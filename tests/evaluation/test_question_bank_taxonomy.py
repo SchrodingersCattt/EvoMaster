@@ -286,7 +286,7 @@ def test_input_manual_helper_coverage_questions_are_outcome_based() -> None:
     bank_root = repo_root / "evaluation" / "question_bank" / "input_generation"
     question_ids = {
         "IG_abacus_009_20260508",
-        "IG_abacus_010_20260511",
+        "IG_abacus_010_20260513",
         "IG_cp2k_002_20260508",
         "IG_cp2k_003_20260508",
         "IG_gromacs_002_20260508",
@@ -361,7 +361,14 @@ def test_bank_yaml_filename_matches_capability_and_domain() -> None:
         if cap_dir == "platform":
             continue
         raw_bank = yaml.safe_load(bank_path.read_text(encoding="utf-8"))
-        assert raw_bank["capability"] == cap_dir, bank_path.as_posix()
+        if cap_dir == "platform":
+            # platform/ groups cross-capability platform-check questions.
+            assert raw_bank["capability"] in {
+                "input_generation",
+                "workflow_orchestration",
+            }, bank_path.as_posix()
+        else:
+            assert raw_bank["capability"] == cap_dir, bank_path.as_posix()
         assert _bank_yaml_filename_matches_capability_domain(
             capability=raw_bank["capability"],
             domain=raw_bank["domain"],
@@ -422,4 +429,4 @@ def test_manifest_active_totals_after_phase2_splits() -> None:
     manifest = yaml.safe_load((bank_root / "manifest.yaml").read_text(encoding="utf-8"))
 
     assert len(manifest["banks"]) == 38
-    assert sum(int(entry["questions"]) for entry in manifest["banks"]) == 193
+    assert sum(int(entry["questions"]) for entry in manifest["banks"]) == 194

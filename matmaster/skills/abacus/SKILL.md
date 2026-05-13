@@ -21,6 +21,11 @@ correct, runnable files and avoiding silent-failure configurations.
    - Pseudopotential lookup order:
      `references/apns_pseudopotentials_v1.list` -> `references/stru_multispecies.md`.
    - Orbital lookup: `references/apns_orbitals_efficiency_v1.list`.
+   - REQUIRED lookup flow for each element in `ATOMIC_SPECIES`:
+     1) Resolve APNS pseudopotential filename from `references/apns_pseudopotentials_v1.list`.
+     2) Resolve APNS orbital filename from `references/apns_orbitals_efficiency_v1.list` (for LCAO).
+     3) Write resolved filenames into `STRU`.
+     4) If any element cannot be resolved, stop and report uncertainty; do not guess names like `Element.upf`.
 4. For uncertain params/workflows, check local `references/*` first.
 5. If references are insufficient or ambiguous, use official ABACUS docs on web as fallback.
 6. For complex tasks, do not rely only on pretrained priors; gather relevant knowledge from multiple sources to enrich context before finalizing inputs.
@@ -29,6 +34,7 @@ correct, runnable files and avoiding silent-failure configurations.
 
 - `ntype` in `INPUT` must equal species count in `STRU` `ATOMIC_SPECIES`.
 - For Bohrium jobs, `INPUT` must include explicit `pseudo_dir` and `orbital_dir`, and PP/orbital filenames in `STRU` must exist in those directories.
+- If `pseudo_dir`/`orbital_dir` point to APNS defaults, filenames in `STRU` must be present in the corresponding APNS reference lists; guessed fallback names are not acceptable.
 - For `relax`/`cell-relax`/`md`, set `cal_force 1` explicitly.
 - For `cell-relax`, also set `cal_stress 1` explicitly.
 - For SCF -> NSCF workflows:
@@ -92,7 +98,7 @@ After generating all INPUT/STRU/KPT files, run the validation script before Bohr
 ```bash
 python ${SKILL_DIR}/scripts/validate_input.py --dir <input_dir>
 ```
-It catches the most common silent failures: ntype mismatch, missing cal_force/cal_stress, missing out_chg for SCF→NSCF, wrong basis_type, missing PP/orbital files, and stru_file/kpoint_file reference errors. Fix any FAIL items before submitting.
+It catches the most common silent failures: ntype mismatch, missing cal_force/cal_stress, missing out_chg for SCF→NSCF, wrong basis_type, APNS PP/orbital filename mismatches, guessed pseudopotential names, missing PP/orbital files, and stru_file/kpoint_file reference errors. Fix any FAIL items before submitting.
 
 ## References
 
