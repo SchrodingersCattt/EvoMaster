@@ -22,6 +22,39 @@ import sys
 from pathlib import Path
 
 
+def _load_reference_set(path: Path) -> set[str]:
+    """Load a one-item-per-line reference list, skipping metadata files."""
+    refs: set[str] = set()
+    if not path.is_file():
+        return refs
+    for raw in path.read_text().splitlines():
+        item = raw.strip()
+        if not item or item.startswith("#"):
+            continue
+        lowered = item.lower()
+        if lowered.endswith(".json") or lowered.endswith(".txt"):
+            continue
+        refs.add(item)
+    return refs
+
+
+def _extract_element(token: str) -> str:
+    """Extract element symbol prefix from a filename-like token."""
+    match = re.match(r"^([A-Z][a-z]?)", token.strip())
+    return match.group(1) if match else ""
+
+
+def _build_element_index(filenames: set[str]) -> dict[str, set[str]]:
+    """Build element -> candidate filenames map from a reference set."""
+    index: dict[str, set[str]] = {}
+    for name in filenames:
+        element = _extract_element(name)
+        if not element:
+            continue
+        index.setdefault(element, set()).add(name)
+    return index
+
+
 def _parse_input(path: Path) -> dict[str, str]:
     """Parse an ABACUS INPUT file into a key-value dict."""
     params: dict[str, str] = {}
@@ -39,15 +72,18 @@ def _parse_input(path: Path) -> dict[str, str]:
     return params
 
 
-def _count_stru_species(stru_path: Path) -> tuple[int, bool, list[str]]:
-    """Count species in STRU, detect NUMERICAL_ORBITAL presence, and list PP filenames."""
+def _count_stru_species(
+    stru_path: Path,
+) -> tuple[int, bool, list[tuple[str, str]], list[tuple[str, str]]]:
+    """Count species and return PP/orbital entries as (element, filename)."""
     text = stru_path.read_text()
     lines = text.splitlines()
 
     species_count = 0
     has_orbital = False
-    pp_files: list[str] = []
-    orb_files: list[str] = []
+    pp_entries: list[tuple[str, str]] = []
+    orbital_raw: list[str] = []
+    species_order: list[str] = []
 
     in_atomic_species = False
     in_numerical_orbital = False
@@ -78,17 +114,32 @@ def _count_stru_species(stru_path: Path) -> tuple[int, bool, list[str]]:
             parts = stripped.split()
             if len(parts) >= 3:
                 species_count += 1
-                pp_files.append(parts[2])
+                species = parts[0]
+                pp_file = parts[2]
+                species_order.append(species)
+                pp_entries.append((species, pp_file))
 
         if in_numerical_orbital and stripped and not stripped.startswith("#"):
-            orb_files.append(stripped.split()[0])
+            orbital_raw.append(stripped.split()[0])
 
-    return species_count, has_orbital, pp_files + orb_files
+    orb_entries: list[tuple[str, str]] = []
+    if species_order and len(orbital_raw) == len(species_order):
+        orb_entries = list(zip(species_order, orbital_raw))
+    else:
+        orb_entries = [("", orb) for orb in orbital_raw]
+
+    return species_count, has_orbital, pp_entries, orb_entries
 
 
 def validate_workspace(workspace: Path) -> list[str]:
     """Validate all INPUT* files in workspace. Returns list of messages."""
     messages: list[str] = []
+    ref_dir = Path(__file__).resolve().parent.parent / "references"
+    apns_pseudo_refs = _load_reference_set(ref_dir / "apns_pseudopotentials_v1.list")
+    apns_orb_refs = _load_reference_set(ref_dir / "apns_orbitals_efficiency_v1.list")
+    apns_pseudo_by_element = _build_element_index(apns_pseudo_refs)
+    apns_orb_by_element = _build_element_index(apns_orb_refs)
+
     input_files = sorted(workspace.glob("INPUT*"))
     # Filter out non-files and backup files
     input_files = [f for f in input_files if f.is_file() and not f.name.endswith("~")]
@@ -108,6 +159,10 @@ def validate_workspace(workspace: Path) -> list[str]:
             continue
 
         calc = params.get("calculation", "scf")
+        pseudo_dir = params.get("pseudo_dir", "")
+        orbital_dir = params.get("orbital_dir", "")
+        using_apns_pseudo = "apns-pseudopotentials-v1" in pseudo_dir
+        using_apns_orb = "apns-orbitals-efficiency-v1" in orbital_dir
 
         # --- Check stru_file / kpoint_file references ---
         stru_name = params.get("stru_file", "STRU")
@@ -121,7 +176,7 @@ def validate_workspace(workspace: Path) -> list[str]:
             )
         elif stru_path.is_file():
             # Validate ntype
-            species_count, has_orbital, referenced_files = _count_stru_species(
+            species_count, has_orbital, pp_entries, orb_entries = _count_stru_species(
                 stru_path
             )
             ntype_str = params.get("ntype", "")
@@ -175,12 +230,59 @@ def validate_workspace(workspace: Path) -> list[str]:
                 except ValueError:
                     pass
 
-            # Check referenced PP/orbital files exist
-            for ref_file in referenced_files:
-                if ref_file not in all_files:
+            # Check referenced PP/orbital files exist (workspace or configured runtime lists)
+            for species, pp_file in pp_entries:
+                pp_in_workspace = pp_file in all_files
+                pp_in_apns_list = pp_file in apns_pseudo_refs
+                if not pp_in_workspace and not (using_apns_pseudo and pp_in_apns_list):
                     messages.append(
-                        f"FAIL {prefix}: STRU references '{ref_file}' but file not found in workspace."
+                        f"FAIL {prefix}: STRU references pseudopotential '{pp_file}' but it is not found "
+                        f"in workspace and not validated by APNS pseudopotential list."
                     )
+                if using_apns_pseudo and not pp_in_apns_list:
+                    messages.append(
+                        f"FAIL {prefix}: pseudo_dir points to APNS, but '{pp_file}' is not in "
+                        f"references/apns_pseudopotentials_v1.list."
+                    )
+                guessed_pp = bool(
+                    re.fullmatch(rf"{re.escape(species)}\.upf", pp_file, re.IGNORECASE)
+                )
+                has_better_pp = any(
+                    cand.lower() != pp_file.lower()
+                    for cand in apns_pseudo_by_element.get(species, set())
+                )
+                if using_apns_pseudo and guessed_pp and has_better_pp:
+                    messages.append(
+                        f"FAIL {prefix}: '{pp_file}' looks guessed for element {species}; use the APNS "
+                        f"filename listed in references/apns_pseudopotentials_v1.list."
+                    )
+
+            for species, orb_file in orb_entries:
+                orb_in_workspace = orb_file in all_files
+                orb_in_apns_list = orb_file in apns_orb_refs
+                if not orb_in_workspace and not (using_apns_orb and orb_in_apns_list):
+                    messages.append(
+                        f"FAIL {prefix}: STRU references orbital '{orb_file}' but it is not found "
+                        f"in workspace and not validated by APNS orbital list."
+                    )
+                if using_apns_orb and not orb_in_apns_list:
+                    messages.append(
+                        f"FAIL {prefix}: orbital_dir points to APNS, but '{orb_file}' is not in "
+                        f"references/apns_orbitals_efficiency_v1.list."
+                    )
+                if species:
+                    has_element_orb = species in apns_orb_by_element
+                    guessed_orb = orb_file.lower().startswith(f"{species.lower()}_")
+                    if (
+                        using_apns_orb
+                        and guessed_orb
+                        and not orb_in_apns_list
+                        and has_element_orb
+                    ):
+                        messages.append(
+                            f"FAIL {prefix}: '{orb_file}' looks guessed for element {species}; use the APNS "
+                            f"filename listed in references/apns_orbitals_efficiency_v1.list."
+                        )
 
         # Check kpoint_file if not using kspacing
         has_kspacing = "kspacing" in params
