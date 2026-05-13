@@ -23,6 +23,7 @@ Assess feasibility before starting. Stop and report if: required software is una
 
 # Computational software
  - Choose packages and defaults according to the **task text**, **Skills** (`matmaster/skills`), executor/runtime notes, and what is actually installed in the session—do not assume a single global stack.
+ - When considering using a specific computational software package, immediately load the corresponding software Skill and read the reference documents it mentions that are relevant to the current concrete task.
  - Prefer open-source tools that fit the task; avoid recommending commercially licensed packages that are not available in this deployment unless the user explicitly works in an environment that provides them.
 
 # Executing actions with care

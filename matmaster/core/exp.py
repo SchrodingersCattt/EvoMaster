@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING, Any
 from matmaster.config.exp import ExpConfig
 from matmaster.core.context_builder import ContextBuilder
 from matmaster.core.hooks import HookEvent, HookExecutor, SubagentContext
+from matmaster.core.path_access import derive_path_access_roots
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.context import PlaygroundContext
@@ -372,8 +373,15 @@ class Exp:
 
         registry = ToolRegistry()
         builtin_cfg = self._config.tools.builtin
+        path_access_roots = derive_path_access_roots(ctx)
         if builtin_cfg:
-            self._init_builtin_tools(ctx, registry, builtin_cfg, spawn_id=spawn_id)
+            self._init_builtin_tools(
+                ctx,
+                registry,
+                builtin_cfg,
+                spawn_id=spawn_id,
+                path_access_roots=path_access_roots,
+            )
 
         from matmaster.core.capability_policy import DefaultCapabilityPolicy
         from matmaster.core.structural_validation import StructuralValidation
@@ -401,6 +409,7 @@ class Exp:
             workspace_root=str(ctx.execution_workdir),
             active_planes=active_planes,
             session_capabilities=session_caps,
+            path_access_roots=path_access_roots,
         )
 
         compiler = ToolCompiler()
@@ -627,6 +636,7 @@ class Exp:
         builtin_cfg: list[str],
         *,
         spawn_id: str | None = None,
+        path_access_roots: tuple[Any, ...] = (),
     ) -> None:
         """Register builtin tools filtered by *builtin_cfg*.
 
@@ -665,6 +675,11 @@ class Exp:
 
         exec_wd = Path(ctx.execution_workdir)
         has_session = ctx.session is not None
+        search_path_roots = tuple(
+            root.root
+            for root in path_access_roots
+            if "search" in getattr(root, "permissions", frozenset())
+        )
 
         session_tools: list[Any] = []
         if has_session:
@@ -673,8 +688,16 @@ class Exp:
                 ReadTool(session=ctx.session, workdir=exec_wd),
                 WriteTool(session=ctx.session, workdir=exec_wd),
                 EditTool(session=ctx.session, workdir=exec_wd),
-                GlobTool(session=ctx.session, workdir=exec_wd),
-                GrepTool(session=ctx.session, workdir=exec_wd),
+                GlobTool(
+                    session=ctx.session,
+                    workdir=exec_wd,
+                    path_access_roots=search_path_roots,
+                ),
+                GrepTool(
+                    session=ctx.session,
+                    workdir=exec_wd,
+                    path_access_roots=search_path_roots,
+                ),
             ]
         elif allow_all or (
             allowed is not None and allowed & _SESSION_REQUIRING_TOOL_NAMES

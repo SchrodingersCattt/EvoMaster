@@ -318,6 +318,95 @@ class TestBuildRuntimeFullToolRunner:
         assert topology.control_root == "/tmp/ctrl"
         assert topology.workspace_root == "/tmp/exec"
 
+    @pytest.mark.asyncio
+    async def test_topology_includes_session_remote_project_root(self) -> None:
+        """RuntimeTopology allows read/search access to the remote skill mirror."""
+        from matmaster.core.exp import Exp
+
+        session = _MockSession()
+        session.remote_project_root = "/personal/.matmaster/skills"
+        config = _make_exp_config()
+        exp = Exp(config)
+        ctx = _make_playground_context(session=session)
+
+        runtime = await exp.build_runtime(ctx)
+        roots = runtime.spec.runtime_topology.path_access_roots
+
+        assert any(
+            root.root == "/personal/.matmaster/skills"
+            and root.permissions == frozenset({"read", "search"})
+            for root in roots
+        )
+
+    @pytest.mark.asyncio
+    async def test_topology_includes_session_remote_skill_roots(self) -> None:
+        """RuntimeTopology allows read/search access to scanned remote skills."""
+        from matmaster.core.exp import Exp
+
+        session = _MockSession()
+        session.remote_project_root = None
+        session.remote_skill_roots = ["/personal/.matmaster/skills"]
+        config = _make_exp_config()
+        exp = Exp(config)
+        ctx = _make_playground_context(session=session)
+
+        runtime = await exp.build_runtime(ctx)
+        roots = runtime.spec.runtime_topology.path_access_roots
+
+        assert any(
+            root.root == "/personal/.matmaster/skills"
+            and root.permissions == frozenset({"read", "search"})
+            for root in roots
+        )
+
+    @pytest.mark.asyncio
+    async def test_topology_includes_remote_workspace_matmaster_root(self) -> None:
+        """Project-level .matmaster under remote workspace is allowed for read/search."""
+        from matmaster.core.exp import Exp
+
+        config = _make_exp_config()
+        exp = Exp(config)
+        ctx = _make_playground_context().model_copy(
+            update={
+                "run_meta": {
+                    "bohrium": {
+                        "remote_workspace_root": "/share",
+                    }
+                }
+            }
+        )
+
+        runtime = await exp.build_runtime(ctx)
+        roots = runtime.spec.runtime_topology.path_access_roots
+
+        assert any(
+            root.root == "/share/.matmaster"
+            and root.permissions == frozenset({"read", "search"})
+            for root in roots
+        )
+
+    @pytest.mark.asyncio
+    async def test_glob_and_grep_receive_path_access_roots(self) -> None:
+        """Shell-backed search tools receive the same extra roots as topology."""
+        from matmaster.core.exp import Exp
+
+        session = _MockSession()
+        session.remote_project_root = None
+        session.remote_skill_roots = ["/personal/.matmaster/skills"]
+        config = _make_exp_config(tools={"builtin": ["Glob", "Grep"]})
+        exp = Exp(config)
+        ctx = _make_playground_context(session=session)
+
+        runtime = await exp.build_runtime(ctx)
+        registry = runtime.spec.tool_catalog.registry
+        glob_tool = registry.get_raw("Glob")
+        grep_tool = registry.get_raw("Grep")
+
+        assert glob_tool is not None
+        assert grep_tool is not None
+        assert "/personal/.matmaster/skills" in glob_tool._path_access_roots
+        assert "/personal/.matmaster/skills" in grep_tool._path_access_roots
+
     def test_build_runtime_seeds_bohrium_registry_from_run_meta(self) -> None:
         from matmaster.core.exp import Exp
 

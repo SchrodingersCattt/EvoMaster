@@ -1,6 +1,9 @@
 """tests/matmaster/tools/builtin/test_glob_tool.py"""
 
 import asyncio
+import os
+import subprocess
+from pathlib import Path
 from unittest.mock import MagicMock
 
 from matmaster.bohrium.runtime import BohriumRuntimeHandle, attach_runtime
@@ -166,6 +169,25 @@ class TestBuildFindCommand:
         cmd = GlobTool._build_find_command("**/*.py", "/workspace")
         assert f"head -{MAX_GLOB_RESULTS}" in cmd
 
+    def test_no_matches_do_not_run_bare_ls_on_gnu_xargs(self, tmp_path: Path):
+        fake_bin = tmp_path / "bin"
+        fake_bin.mkdir()
+        fake_xargs = fake_bin / "xargs"
+        fake_xargs.write_text("#!/bin/sh\nexec \"$@\"\n", encoding="utf-8")
+        fake_xargs.chmod(0o755)
+
+        cmd = GlobTool._build_find_command("*.missing", str(tmp_path))
+        result = subprocess.run(
+            cmd,
+            shell=True,
+            cwd=tmp_path,
+            text=True,
+            capture_output=True,
+            env={**os.environ, "PATH": f"{fake_bin}{os.pathsep}{os.environ['PATH']}"},
+        )
+
+        assert result.stdout == ""
+
     # -- type f --
 
     def test_always_type_f(self):
@@ -259,6 +281,59 @@ class TestGlobExecution:
         asyncio.run(tool.execute({"pattern": "*.py", "path": "sub"}))
         cmd = session.exec_bash.call_args[1].get("command", "")
         assert "/workspace/sub" in cmd
+
+    def test_extra_path_root_is_preserved(self):
+        session = make_session(output="/personal/.matmaster/skills/abacus/SKILL.md")
+        tool = GlobTool(
+            session=session,
+            workdir="/workspace",
+            path_access_roots=("/personal/.matmaster/skills",),
+        )
+        asyncio.run(
+            tool.execute(
+                {
+                    "pattern": "**/*.md",
+                    "path": "/personal/.matmaster/skills",
+                }
+            )
+        )
+        cmd = session.exec_bash.call_args[1].get("command", "")
+        assert "find /personal/.matmaster/skills" in cmd
+        assert "find /workspace" not in cmd
+
+    def test_absolute_pattern_uses_allowed_literal_parent(self):
+        session = make_session(output="")
+        tool = GlobTool(
+            session=session,
+            workdir="/share",
+            path_access_roots=("/personal/.matmaster/skills",),
+        )
+        asyncio.run(
+            tool.execute(
+                {
+                    "pattern": "/personal/.matmaster/skills/builtin/abacus/references/*",
+                }
+            )
+        )
+        cmd = session.exec_bash.call_args[1].get("command", "")
+
+        assert "find /personal/.matmaster/skills/builtin/abacus/references" in cmd
+        assert "find /share" not in cmd
+        assert ".//personal" not in cmd
+
+    def test_absolute_pattern_outside_allowed_roots_is_denied(self):
+        session = make_session(output="")
+        tool = GlobTool(
+            session=session,
+            workdir="/share",
+            path_access_roots=("/personal/.matmaster/skills",),
+        )
+        result = asyncio.run(tool.execute({"pattern": "/etc/*"}))
+
+        assert isinstance(result, ToolResult)
+        assert result.status == "error"
+        assert "outside workspace boundary" in result.content
+        session.exec_bash.assert_not_called()
 
     def test_glob_returns_meta_when_paths_are_skipped(self):
         session = make_session(
