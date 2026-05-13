@@ -124,7 +124,7 @@ baseline-eval-build:
       MAIN_TAG="ci${CI_PIPELINE_ID}"
       MAIN_IMAGE="${REGISTRY}/flow/matmaster-evo:${MAIN_TAG}"
       MAIN_CACHE="${REGISTRY}/flow/matmaster-evo:latest"
-      git rev-parse HEAD > ${CI_PROJECT_DIR}/.build-version
+      echo "$(git rev-parse HEAD):${CI_PIPELINE_ID}" > ${CI_PROJECT_DIR}/.build-version
       docker pull "${MAIN_CACHE}" || true
       docker buildx build --progress=plain \
         -f ${CI_PROJECT_DIR}/Dockerfile \

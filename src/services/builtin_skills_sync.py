@@ -51,6 +51,15 @@ def _get_version() -> str:
         return "unknown"
 
 
+def _get_build_seq() -> int:
+    try:
+        from src.utils.build_info import get_build_seq
+
+        return get_build_seq()
+    except Exception:
+        return 0
+
+
 def _load_tools_from_cache(mcp_server: str | None) -> list[dict[str, str]] | None:
     """Load tool name+description from cached MCP schema for an mcp-loader skill."""
     if not mcp_server:
@@ -190,6 +199,7 @@ def sync_builtin_skills_to_tools_server() -> bool:
 
     tag_definitions = tags_config.get("tag_definitions") or {}
     version = _get_version()
+    build_seq = _get_build_seq()
 
     sync_items: list[dict[str, Any]] = []
     with httpx.Client(timeout=httpx.Timeout(120.0, connect=15.0)) as client:
@@ -221,6 +231,7 @@ def sync_builtin_skills_to_tools_server() -> bool:
 
     payload = {
         "version": version,
+        "build_seq": build_seq,
         "tag_definitions": tag_definitions,
         "skills": sync_items,
     }
