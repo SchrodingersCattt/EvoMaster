@@ -25,6 +25,7 @@ from matmaster.bohrium.client import (
     add_job,
     confirm_terminal_status,
     create_job,
+    get_file_token,
     get_job_detail,
     list_images,
     list_machines,
@@ -181,7 +182,7 @@ class BohriumTool(BuiltinTool):
             # --- submit ---
             'input_dir': {
                 'type': 'string',
-                'description': 'Directory containing all input files to upload. (submit)',
+                'description': 'Directory containing and only containing all input files to upload. (submit)',
             },
             'image': {
                 'type': 'string',
@@ -263,6 +264,14 @@ class BohriumTool(BuiltinTool):
             '\n'
             '### Actions\n'
             '- **submit**: package input directory and submit a job, returns job_id. '
+            'input_dir MUST be a dedicated directory that contains ONLY the files '
+            'required by this job. NEVER pass a shared / catch-all directory (e.g. '
+            '`/share`, the workspace root, or any folder holding unrelated structures, '
+            'prior outputs, or other jobs\' inputs) — the whole directory is packaged '
+            'and uploaded as-is. If the needed inputs are scattered in a shared '
+            'location, first create a fresh job-specific subdirectory, copy or '
+            'symlink ONLY the necessary files into it, then use that path as '
+            'input_dir. '
             'cmd runs in the directory where input files are unpacked — do NOT '
             'prepend "cd <path> &&" or any directory change. '
             'cmd MUST end with "> log 2>&1" (auto-appended if missing).\n'
@@ -274,12 +283,9 @@ class BohriumTool(BuiltinTool):
             '- **kill**: request termination of a previously submitted job. Use only when '
             'the user explicitly wants to stop a running job. The call is '
             'asynchronous; follow up with poll to confirm terminal state.\n'
-            '- **list_images**: query available Docker images by keyword.\n'
+            '- **list_images**: list the user\'s own private Docker images (filtered by keyword).\n'
             '- **list_machines**: query available machine types (cpu / gpu).\n'
             '\n'
-            'Python that imports ASE or uses DPA/MACE/deepmd calculators must use the '
-            'dpa-calculator image from the mlips skill; ABACUS/CP2K/QE images lack '
-            'ASE/deepmd.\n'
         )
 
     def _build_context(self, *, require_project: bool = False) -> BohriumContext:
@@ -607,13 +613,16 @@ class BohriumTool(BuiltinTool):
             )
             return ToolResult(status='error', content=f'Poll failed: {exc}')
 
-    def _fetch_log_tail(self, ctx: BohriumContext, job_id: str, max_lines: int = 15) -> str:
+    def _fetch_log_tail(
+        self, ctx: BohriumContext, job_id: str, max_lines: int = 15
+    ) -> str:
         """Best-effort fetch of live log tail from a sandbox job."""
         host, path, token = get_file_token(ctx, file_path='log', bohr_job_id=job_id)
         if not (host and path and token):
             return ''
         import urllib.request
         from urllib.parse import quote
+
         encoded_path = quote(path, safe='/')
         url = f"{host.rstrip('/')}/api/download/{encoded_path}?token={token}"
         req = urllib.request.Request(url)
