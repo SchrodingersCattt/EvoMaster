@@ -1243,3 +1243,136 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
+- id: SC_zn_slab_001_20260513
+  capability: structure_construction
+  domain: catalysis
+  intent: Build Zn HCP surface slabs for multiple low-index facets.
+  human_prompt_seed: '请构建金属 Zn 的三个低指数表面 slab 模型：(0001)、(10-10)、(11-20)，每个
+    slab 4 层原子，添加 15 Å 真空层。分别输出为 `Zn_0001.cif`、`Zn_10-10.cif`、`Zn_11-20.cif`。'
+  tags:
+  - struct_surface
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: slab_0001
+    value: Zn_0001.cif
+  - key: slab_1010
+    value: Zn_10-10.cif
+  - key: slab_1120
+    value: Zn_11-20.cif
+  - key: must_atom_count_0001
+    value:
+      filename: Zn_0001.cif
+      min: 4
+  - key: must_atom_count_1010
+    value:
+      filename: Zn_10-10.cif
+      min: 4
+  - key: must_atom_count_1120
+    value:
+      filename: Zn_11-20.cif
+      min: 4
+  - key: turn_budget
+    value:
+      max: 20
+  scoring_checklist:
+  - id: slab_0001
+    criterion: Zn_0001.cif written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: slab_1010
+    criterion: Zn_10-10.cif written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: slab_1120
+    criterion: Zn_11-20.cif written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_parsable_0001
+    criterion: '[Must] Zn_0001.cif is parsable by pymatgen.'
+    axis: correctness
+    verify: struct_file_parsable
+  - id: must_parsable_1010
+    criterion: '[Must] Zn_10-10.cif is parsable by pymatgen.'
+    axis: correctness
+    verify: struct_file_parsable
+  - id: must_parsable_1120
+    criterion: '[Must] Zn_11-20.cif is parsable by pymatgen.'
+    axis: correctness
+    verify: struct_file_parsable
+  - id: must_only_zn_0001
+    criterion: '[Must] Zn_0001.cif contains only Zn atoms.'
+    axis: correctness
+    verify: struct_file_formula
+  - id: must_only_zn_1010
+    criterion: '[Must] Zn_10-10.cif contains only Zn atoms.'
+    axis: correctness
+    verify: struct_file_formula
+  - id: must_atom_count_0001
+    criterion: '[Must] Zn_0001.cif has at least 4 atoms (4 layers).'
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: must_atom_count_1010
+    criterion: '[Must] Zn_10-10.cif has at least 4 atoms.'
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: must_atom_count_1120
+    criterion: '[Must] Zn_11-20.cif has at least 4 atoms.'
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: SC_solution_box_001_20260513
+  capability: structure_construction
+  domain: battery
+  intent: Build an electrolyte solution box at specified concentration and atom count.
+  human_prompt_seed: '请构建 1 mol/L ZnSO4 水溶液模型，总原子数约 2000 个，输出为 `ZnSO4_solution.cif`。'
+  tags:
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: solution_artifact
+    value: ZnSO4_solution.cif
+  - key: must_atom_count
+    value:
+      filename: ZnSO4_solution.cif
+      min: 1500
+      max: 2500
+  - key: turn_budget
+    value:
+      max: 25
+  scoring_checklist:
+  - id: solution_artifact
+    criterion: ZnSO4_solution.cif written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_parsable
+    criterion: '[Must] Output file is parsable.'
+    axis: correctness
+    verify: struct_file_parsable
+  - id: must_atom_count
+    criterion: '[Must] Total atom count is approximately 2000 (1500-2500 acceptable).'
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: must_has_zn
+    criterion: '[Must] Structure contains Zn atoms.'
+    axis: correctness
+    verify: struct_file_formula
+  - id: must_has_s
+    criterion: '[Must] Structure contains S atoms.'
+    axis: correctness
+    verify: struct_file_formula
+  - id: must_has_o
+    criterion: '[Must] Structure contains O atoms.'
+    axis: correctness
+    verify: struct_file_formula
+  - id: must_has_h
+    criterion: '[Must] Structure contains H atoms (water).'
+    axis: correctness
+    verify: struct_file_formula
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget

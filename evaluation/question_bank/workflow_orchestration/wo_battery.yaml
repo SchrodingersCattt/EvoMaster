@@ -149,3 +149,55 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+- id: WO_dpmd_001_20260513
+  capability: workflow_orchestration
+  domain: battery
+  intent: Test whether agent uses DPA3 default model for DP-MD without searching for
+    system-specific potentials.
+  human_prompt_seed: '采用 DP-MD 模拟方法，对 2 mol/L LiCl 水溶液（约 1000 原子）进行
+    200 ps NVT 模拟，分析 Li⁺ 的溶剂化结构。请准备好提交配置，输出为 `md_submit.json`。'
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: submit_artifact
+    value: md_submit.json
+  - key: must_cmd_dpa3
+    value:
+      filename: md_submit.json
+      pattern: DPA3
+      flags: i
+  - key: must_cmd_md_script
+    value:
+      filename: md_submit.json
+      pattern: run_molecular_dynamics
+      flags: ''
+  - key: must_image_dpa
+    value:
+      filename: md_submit.json
+      pattern: dpa-calculator
+      flags: ''
+  - key: turn_budget
+    value:
+      max: 15
+  scoring_checklist:
+  - id: submit_artifact
+    criterion: md_submit.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_cmd_dpa3
+    criterion: '[Must] cmd references DPA3 model (default for DP-MD).'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_cmd_md_script
+    criterion: '[Must] cmd uses run_molecular_dynamics script.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_image_dpa
+    criterion: '[Must] image references dpa-calculator container.'
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget (should not waste turns searching for potentials).
+    axis: efficiency
+    verify: turn_budget
