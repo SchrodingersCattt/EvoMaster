@@ -10,14 +10,26 @@ from __future__ import annotations
 
 import posixpath
 import shlex
+from collections.abc import Sequence
+from pathlib import PurePosixPath
 
 
-def resolve_safe_path(user_path: str, workdir: str) -> str:
+def _is_under(path: str, root: str) -> bool:
+    return PurePosixPath(path).is_relative_to(PurePosixPath(root))
+
+
+def resolve_safe_path(
+    user_path: str,
+    workdir: str,
+    *,
+    allowed_roots: Sequence[str] = (),
+) -> str:
     """Resolve user-provided path to a safe absolute path within workdir.
 
     - Empty or '.' -> workdir
     - Absolute path within workdir -> normalized
-    - Absolute path outside workdir -> fallback to workdir
+    - Absolute path within an allowed extra root -> normalized
+    - Absolute path outside allowed roots -> fallback to workdir
     - Relative path -> joined with workdir, checked for containment
 
     The outside-workdir fallback is defense-in-depth; StructuralValidation
@@ -25,13 +37,18 @@ def resolve_safe_path(user_path: str, workdir: str) -> str:
     """
     # Normalize workdir first to handle trailing slashes and dot segments
     workdir = posixpath.normpath(workdir)
+    roots = [workdir]
+    for root in allowed_roots:
+        normalized_root = posixpath.normpath(str(root))
+        if normalized_root and normalized_root != "." and normalized_root not in roots:
+            roots.append(normalized_root)
 
     if not user_path or user_path == ".":
         return workdir
 
     if user_path.startswith("/"):
         normalized = posixpath.normpath(user_path)
-        if normalized == workdir or normalized.startswith(workdir + "/"):
+        if any(_is_under(normalized, root) for root in roots):
             return normalized
         return workdir
 

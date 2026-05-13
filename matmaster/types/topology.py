@@ -21,7 +21,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ToolPlane(str, Enum):
@@ -31,6 +31,26 @@ class ToolPlane(str, Enum):
     SESSION_FS = "session_fs"
     CONTROL_PLANE = "control_plane"
     EXTERNAL_SERVICE = "external_service"
+
+
+PathAccessOperation = Literal["read", "search", "write"]
+
+
+class PathAccessRoot(BaseModel):
+    """Additional absolute root a session tool may access.
+
+    ``workspace_root`` is always allowed by RuntimeTopology consumers. This
+    model captures runtime-approved roots outside that workspace, such as a
+    remote skill mirror or a project-level ``.matmaster`` directory.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    root: str
+    kind: str = "runtime"
+    permissions: frozenset[PathAccessOperation] = Field(
+        default_factory=lambda: frozenset({"read", "search"})
+    )
 
 
 class SessionCapabilities(BaseModel):
@@ -65,3 +85,4 @@ class RuntimeTopology(BaseModel):
     workspace_root: str  # session workspace root path
     active_planes: frozenset[ToolPlane] = frozenset()
     session_capabilities: SessionCapabilities | None = None
+    path_access_roots: tuple[PathAccessRoot, ...] = ()
