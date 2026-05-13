@@ -115,3 +115,61 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
+- id: WO_dpmd_custom_model_001_20260513
+  capability: workflow_orchestration
+  domain: battery
+  intent: Test whether agent correctly passes a user-provided local DP model path to
+    the MD submission command instead of parsing the file or searching for models.
+  human_prompt_seed: '我在工作区训练了一个针对 LiFSI/DME 电解液的 DP 模型 `lifsi_dme.pt`。请用该模型对
+    工作区中的 `electrolyte_box.xyz` 进行 50 ps NPT 300K MD 模拟，输出提交配置 `md_submit.json`。'
+  tags:
+  - code_mlip
+  data_files:
+  - key: model_file
+    path: data/WO_dpmd_custom_model_001/lifsi_dme.pt
+    oss_url: ''
+    description: Dummy DP model file (placeholder for user-trained potential).
+  - key: structure_file
+    path: data/WO_dpmd_custom_model_001/electrolyte_box.xyz
+    oss_url: ''
+    description: LiFSI/DME electrolyte box (~800 atoms).
+  reference_answers:
+  - key: submit_artifact
+    value: md_submit.json
+  - key: must_cmd_custom_model
+    value:
+      filename: md_submit.json
+      pattern: lifsi_dme\.pt
+      flags: ''
+  - key: must_cmd_md
+    value:
+      filename: md_submit.json
+      pattern: run_molecular_dynamics
+      flags: ''
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: submit_artifact
+    criterion: md_submit.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_cmd_custom_model
+    criterion: '[Platform] cmd references the user-provided model file lifsi_dme.pt
+      (not DPA3 or other default model).'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_cmd_md
+    criterion: '[Platform] cmd uses run_molecular_dynamics script.'
+    axis: correctness
+    verify: text_file_regex
+  - id: no_model_search
+    criterion: Agent did NOT spend turns searching the web or papers for DP models,
+      downloading alternative models, or attempting to parse the .pt file contents.
+      It should directly use the provided lifsi_dme.pt path.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
