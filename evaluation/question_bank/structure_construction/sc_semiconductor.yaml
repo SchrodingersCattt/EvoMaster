@@ -294,6 +294,9 @@ questions:
   reference_answers:
   - key: interface_artifact
     value: interface_AlN_MoO3.cif
+  - key: must_parsable
+    value:
+      filename: interface_AlN_MoO3.cif
   - key: must_atom_count
     value:
       filename: interface_AlN_MoO3.cif

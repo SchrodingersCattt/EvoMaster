@@ -1225,6 +1225,9 @@ questions:
   reference_answers:
   - key: tbg_artifact
     value: TBG_21.8deg.cif
+  - key: must_parsable
+    value:
+      filename: TBG_21.8deg.cif
   - key: must_bilayer_atoms
     value:
       filename: TBG_21.8deg.cif
@@ -1268,6 +1271,9 @@ questions:
   reference_answers:
   - key: cnt_artifact
     value: CNT_6_6.cif
+  - key: must_parsable
+    value:
+      filename: CNT_6_6.cif
   - key: must_atom_count
     value:
       filename: CNT_6_6.cif

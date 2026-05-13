@@ -13,6 +13,9 @@ questions:
   reference_answers:
   - key: solution_artifact
     value: ZnSO4_solution.cif
+  - key: must_parsable
+    value:
+      filename: ZnSO4_solution.cif
   - key: must_atom_count
     value:
       filename: ZnSO4_solution.cif

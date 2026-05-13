@@ -358,7 +358,14 @@ def test_bank_yaml_filename_matches_capability_and_domain() -> None:
             continue
         cap_dir = bank_path.parent.name
         raw_bank = yaml.safe_load(bank_path.read_text(encoding="utf-8"))
-        assert raw_bank["capability"] == cap_dir, bank_path.as_posix()
+        if cap_dir == "platform":
+            # platform/ groups cross-capability platform-check questions.
+            assert raw_bank["capability"] in {
+                "input_generation",
+                "workflow_orchestration",
+            }, bank_path.as_posix()
+        else:
+            assert raw_bank["capability"] == cap_dir, bank_path.as_posix()
         assert _bank_yaml_filename_matches_capability_domain(
             capability=raw_bank["capability"],
             domain=raw_bank["domain"],
