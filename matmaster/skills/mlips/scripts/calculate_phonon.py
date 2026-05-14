@@ -3,7 +3,7 @@
 Usage::
 
     python calculate_phonon.py --structure input.cif --model DPA3.1-3M \\
-        [--supercell 5 5 1] --temperatures 300 600 900 [--head OMat24] \\
+        [--supercell 5 5 1] --temperatures 300 600 900 [--head head_name] \\
         [--displacement 0.005] [--calc-tdos] [--calc-pdos] [--mesh 40] \\
         [--charge 0] [--spin 1]
 

@@ -3,7 +3,7 @@
 Usage::
 
     python run_neb.py --initial initial.cif --final final.cif \\
-        --model DPA3.1-3M [--head OMat24] [--images 5] \\
+        --model DPA3.1-3M [--head head_name] [--images 5] \\
         [--fmax 0.05] [--steps 500] [--charge 0] [--spin 1]
 
 Both initial and final structures must be **fully relaxed** beforehand.

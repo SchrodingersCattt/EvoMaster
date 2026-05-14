@@ -8,7 +8,7 @@ Usage (inside other scripts in this directory)::
 
     from _calculator import build_calculator, build_fparam, set_fparam
 
-    calc = build_calculator("DPA3.1-3M", head="OMat24")
+    calc = build_calculator("DPA3.1-3M", head="head_name")
     atoms.calc = calc
 """
 
@@ -238,7 +238,7 @@ def build_calculator(
         One of: a known model name (e.g. ``"DPA3.1-3M"``), a URL, or a
         local file path.
     head
-        Model head (DP family only). E.g. ``"OMat24"``, ``"OMol25"``.
+        Model head (DP family only). E.g. ``"OC22"``, ``"OMol25"``, ``"OMat24"``.
         Ignored for non-DP families.
 
     Returns
@@ -260,7 +260,7 @@ def build_calculator(
         )
 
     if family == "DP":
-        # Head: explicit arg > model metadata > "OMat24"
+        # Head: explicit arg > model metadata default
         if head is None and model_name_or_path in KNOWN_MODELS:
             head = KNOWN_MODELS[model_name_or_path].get("default_head")
         return init_fn(resolved, head=head)

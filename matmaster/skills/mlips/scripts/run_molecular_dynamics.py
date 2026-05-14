@@ -3,7 +3,7 @@
 Usage::
 
     python run_molecular_dynamics.py --structure input.cif --model DPA3.1-3M \\
-        --stages stages.json [--head OMat24] [--save-interval 100] \\
+        --stages stages.json [--head head_name] [--save-interval 100] \\
         [--seed 42] [--charge 0] [--spin 1]
 
 The ``--stages`` JSON file is a list of stage dicts, e.g.::
