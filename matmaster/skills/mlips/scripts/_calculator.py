@@ -238,7 +238,7 @@ def build_calculator(
         One of: a known model name (e.g. ``"DPA3.1-3M"``), a URL, or a
         local file path.
     head
-        Model head (DP family only). E.g. ``"OC22"``, ``"OMol25"``, ``"OMat24"``.
+        Model head (DP family only). Choose by domain: ``"OC22"`` for surface/adsorbate catalysis, ``"OMol25"`` for organics, ``"OMat24"`` for general inorganic.
         Ignored for non-DP families.
 
     Returns

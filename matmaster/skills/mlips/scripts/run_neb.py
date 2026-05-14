@@ -6,6 +6,8 @@ Usage::
         --model DPA3.1-3M [--head head_name] [--images 5] \\
         [--fmax 0.05] [--steps 500] [--charge 0] [--spin 1]
 
+Choose a domain-matched DPA head before running. For surface/adsorbate catalysis or catalytic NEB, check/use ``--head OC22`` instead of the inorganic default.
+
 Both initial and final structures must be **fully relaxed** beforehand.
 
 Outputs:

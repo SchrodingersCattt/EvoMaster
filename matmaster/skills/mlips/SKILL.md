@@ -40,7 +40,7 @@ MLIPs for atomistic simulations via ASE calculators on Bohrium GPU nodes.
 
 > Non-DPA families require the multi-family image. Do NOT use the multi-family image for pure DPA tasks.
 
-**DPA heads**: `OMat24` or `Omat24` (default, inorganic — casing differs between model versions: DPA3.2-5M uses `OMat24`, DPA3.1-3M/DPA2.4-7M use `Omat24`), `OMol25` (organic), `OC22` (catalysis), `Organic_Reactions`, `ODAC23` (MOFs). Use `--charge`/`--spin` only with DPA3.2-5M.
+**DPA heads**: `OMat24` or `Omat24` (default, inorganic — casing differs between model versions: DPA3.2-5M uses `OMat24`, DPA3.1-3M/DPA2.4-7M use `Omat24`), `OMol25` (organic), `OC22` (surface/adsorbate catalysis — required first check for Pt(111), CO/O/CO2, adsorption, surface reaction, and catalytic NEB), `Organic_Reactions`, `ODAC23` (MOFs). Use `--charge`/`--spin` only with DPA3.2-5M.
 
 ## Decision Boundaries
 

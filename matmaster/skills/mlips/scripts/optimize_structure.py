@@ -6,6 +6,8 @@ Usage::
         [--head head_name] [--relax-cell] [--fmax 0.01] [--steps 100] \\
         [--charge 0] [--spin 1]
 
+Choose a domain-matched DPA head before running. For surface/adsorbate catalysis or catalytic NEB, check/use ``--head OC22`` instead of the inorganic default.
+
 Outputs (in working directory):
     {stem}_optimized.cif / .xyz   — optimized structure
     {stem}_traj.traj              — optimization trajectory
