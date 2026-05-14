@@ -1671,10 +1671,10 @@ def _fallback(
 
 `ContextCompactor` 类名保留，文件名用 `compaction.py`。命名一致性见 §13。
 
-阶段 2 期间，旧路径 `matmaster/core/context_compactor.py` 改为薄 shim：
+Phase 3 期间，旧路径 `matmaster/core/context_compactor.py` 改为薄 shim（与 `core/context_compactor.py` → `context/compaction.py` 的真实迁移**同一阶段**完成；Phase 2 不触碰 compactor 主路径）：
 
 ```python
-# matmaster/core/context_compactor.py (Phase 2 shim)
+# matmaster/core/context_compactor.py (Phase 3 shim)
 from matmaster.context.compaction import (  # noqa: F401
     ContextCompactor,
     CompactionPlan,
@@ -2094,7 +2094,7 @@ v3 在此用 "装配的 sources" 列表描述每个 case。v3.1 把它改为 cal
 
 ---
 
-## 14. 阶段迁移路线（v3：4 阶段 + Phase 0 前置）
+## 14. 阶段迁移路线（v3.2：Phase 0/0.5 前置 + 4 主阶段，Phase 2 内含 2A/2B/2C 子阶段）
 
 ### Phase 0: 前置改造（独立 PR，无功能变化）
 
@@ -2115,6 +2115,24 @@ v3 在此用 "装配的 sources" 列表描述每个 case。v3.1 把它改为 cal
 
 ---
 
+### Phase 0.5: PlaygroundContext import cycle cleanup（独立小 PR）
+
+**目标**: 解除 [matmaster/core/playground.py:26](../../matmaster/core/playground.py:26) 与 `matmaster/types/context.py` 的反向 import 循环，为 Phase 2C 的 shim 化扫清依赖障碍。该阶段与 Phase 0 一样是纯 mechanical refactor，可以**任何时候并行**于其他工作推进。
+
+**0.5a. 归位**:
+- `PlaygroundContext` / `WorkspaceArchivalConfig` 定义归位到 `matmaster/core/playground.py`
+- `matmaster/types/context.py` 改为薄 re-export shim，指向 `matmaster/core/playground.py`
+- 检查所有 `from matmaster.types.context import ...` 与 `from matmaster.core.playground import ...` 的方向一致性
+
+**0.5b. 不在本阶段做**:
+- 不改 context assembly
+- 不改 runtime behavior
+- 不引入 v3.1 新类型
+
+**测试目标**: 所有现有测试通过；import 顺序敏感的测试不再受 partial init 影响（必要时新增一组按不同顺序 import 的烟雾测试）。
+
+---
+
 ### Phase 1: 事件语义阶段（核心）
 
 **目标**: 落地两事件模型 + v0/v1 restore 分流 + SSE filter 改造 + AGENT.md hash anchor 决策。**不**改 prompt 形态，**不**做 Case 3，**不**动 ContextSection 内核（保留现 ContextBuilder 内的字符串拼接为现状渲染）。
@@ -2129,7 +2147,7 @@ v3 在此用 "装配的 sources" 列表描述每个 case。v3.1 把它改为 cal
 - 实现 `_latest_anchor_user_instructions_hash` 查询
 - 实现 size cap (50KB) + hash 计算
 - Phase 1 不引入 runtime 分流开关；新 turn 一律走 `user_turn_context` 写入路径
-- `_apply_user_instructions_to_initial_user_query` 从 runtime 主路径移除；若因过渡需要短暂保留函数体，标记为 `COMPAT:legacy-runtime-injection-helper`，Phase 2 前删除
+- `_apply_user_instructions_to_initial_user_query` 从 runtime 主路径移除；若因过渡需要短暂保留函数体，标记为 `COMPAT:legacy-runtime-injection-helper`，**最迟在 Phase 2C cutover 时删除**（2A / 2B 不动该函数体，2C 与 service 路径切换一起清理）
 
 **1c. history_checkpoint payload 扩展**:
 - `HistoryCheckpointService.build_checkpoint_sink` payload 加 `schema_version`、`render_version`、`user_instructions_text`、`user_instructions_hash`
@@ -2145,7 +2163,7 @@ v3 在此用 "装配的 sources" 列表描述每个 case。v3.1 把它改为 cal
 **1e. 兼容项标记（便于后续移除）**:
 - `COMPAT:v0-restore`: 旧 session 没有 `user_turn_context` / v1 checkpoint 时，restore 委托 legacy `ChatHistoryConverter.events_to_dialog_messages`。后续删除条件：活跃 session 已迁移或产品确认不再恢复旧 session。
 - `COMPAT:v0-checkpoint-marker`: `history_checkpoint_codec.py` 暂时接受 `<previous_session_summary>`。后续删除条件：写入切到 v1 marker 后，旧 checkpoint 观察窗口结束。
-- `COMPAT:legacy-runtime-injection-helper`: 如 Phase 1 为降低 diff 暂时保留 `_apply_user_instructions_to_initial_user_query` 函数体，必须无 runtime caller，并在 Phase 2 前删除。
+- `COMPAT:legacy-runtime-injection-helper`: 如 Phase 1 为降低 diff 暂时保留 `_apply_user_instructions_to_initial_user_query` 函数体，必须无 runtime caller，并**在 Phase 2C cutover 时删除**。
 
 **1f. 测试目标**:
 - 单元测试：`ModelHistoryRestorer._restore_v1` 各分支
@@ -2158,61 +2176,66 @@ v3 在此用 "装配的 sources" 列表描述每个 case。v3.1 把它改为 cal
 
 ### Phase 2: Context 模块阶段（v3.1 含装配三件套）
 
-**目标**: 新建 `matmaster/context/` 内核 + 装配三件套（ports / compositions / assembly），让输出**等价于现状**。不改任何业务行为，只重组渲染路径。
+**整体目标**: 建立新 context 内核与装配三件套，并完成普通 user turn 的 runtime cutover。输出**等价于现状**。
 
-**2a. 新增文件**:
+**整体约束**:
+- 不改 prompt 形态（拆分版默认关闭）
+- **不**迁移 `ContextCompactor` 主路径（留给 Phase 3）
+- **不**触碰 `core/context_compactor.py`（留给 Phase 3）
+- **不**切 checkpoint v1 marker（留给 Phase 3）
+- **不**做 prompt 形态 A/B（留给 Phase 3）
 
-按依赖顺序：
+**拆分原则**: 按验证门分类，而不是按文件目录分类。三个子阶段对应三种独立的验证方式与风险类型：
+
+| 子阶段 | 验证门 | 主导风险类型 |
+|--------|--------|--------------|
+| 2A | 单元测试 + mock ports | 代码结构风险 |
+| 2B | events fixture golden master | 行为等价风险 |
+| 2C | snapshot + 集成 + 端到端 session | 运行路径风险 |
+
+---
+
+#### Phase 2A: 内核 + 简单 source + 装配三件套（mock-testable）
+
+**目标**: 建立 `matmaster/context/` 的最小可单测内核与 v3.1 装配三件套。所有新代码对运行时为 **dead code**，不进入任何业务路径。
+
+**新增文件**（按依赖顺序）：
+
+内核类型与渲染原语：
 
 1. `matmaster/context/sections.py`（含 `__post_init__` 校验）
 2. `matmaster/context/rendering.py`（含 tag escape）
 3. `matmaster/context/turn_context.py`（含 key 唯一性校验）
+
+简单 source（纯函数 / 直接输入，不依赖 events 重放）：
+
 4. `matmaster/context/sources/turn_input.py`
 5. `matmaster/context/sources/user_instructions.py`
-6. `matmaster/context/sources/attachments.py`
-7. `matmaster/context/sources/skills.py`
-8. `matmaster/context/sources/tools.py`
-9. `matmaster/context/sources/compacted_history.py`
-10. `matmaster/context/sources/session_jobs.py`（占位，含 `SessionJobsSource.from_jobs`）
-11. `matmaster/context/sources/workspace.py`（占位）
-12. `matmaster/context/sources/artifacts.py`（占位）
-13. `matmaster/context/scanner.py`
-14. `matmaster/context/session.py`（构造参数从 `events: list[dict]` 改为 `events: tuple[SessionEvent, ...]`）
-15. `matmaster/context/history_restore.py`（Phase 1 接口骨架的完整实现）
-16. `matmaster/context/system_prompt.py`
-17. **`matmaster/context/ports.py`** ← v3.1 新增（`UserInstructions` / `SessionEvent` / `JsonObject` / 三个 Port Protocol / `ContextAssemblyPorts`）
-18. **`matmaster/context/compositions.py`** ← v3.1 新增（`ContextCompositionInputs` / `ContextComposition` / step 函数 / 三个 composition 常量 / `_INTENT_COMPOSITION_MAP`）
-19. **`matmaster/context/assembly.py`** ← v3.1 新增（`ContextAssemblyIntent` / `TurnAssemblyRequest` / `CompactionAssemblyRequest` / `AssemblyResult` / `ContextAssembler`）
-20. **`matmaster/context/turn_intent.py`** ← v3.1 新增（纯函数 `decide_turn_context_intent`）
+6. `matmaster/context/sources/compacted_history.py`
+7. `matmaster/context/sources/session_jobs.py`（占位，含 `SessionJobsSource.from_jobs`）
+8. `matmaster/context/sources/workspace.py`（占位）
+9. `matmaster/context/sources/artifacts.py`（占位）
 
-平台侧新增：
+v3.1 装配三件套（核心层）：
 
-21. **`src/services/context_assembly_ports.py`** ← v3.1 新增（`AppUserInstructionsPort` / `AppSessionEventsPort` / `AppSessionJobsPort`）
-22. **`src/services/context_turn_intent.py`** ← v3.1 新增（`resolve_turn_context_intent` helper，events 查询 + 调纯函数；无 runtime 分流）
+10. **`matmaster/context/ports.py`** ← v3.1 新增（`UserInstructions` / `SessionEvent` / `JsonObject` / 三个 Port Protocol / `ContextAssemblyPorts`）
+11. **`matmaster/context/compositions.py`** ← v3.1 新增（`ContextCompositionInputs` / `ContextComposition` / step 函数 / 三个 composition 常量 / `_INTENT_COMPOSITION_MAP`）
+12. **`matmaster/context/assembly.py`** ← v3.1 新增（`ContextAssemblyIntent` / `TurnAssemblyRequest` / `CompactionAssemblyRequest` / `AssemblyResult` / `ContextAssembler`；`assemble_compaction` 接口可同时落地，但只通过 mock ports 验证，**不**接真实 compactor）
+13. **`matmaster/context/turn_intent.py`** ← v3.1 新增（纯函数 `decide_turn_context_intent`）
 
-**2b. shim 改造**:
-- `matmaster/manifests/*` 改为薄 shim 委托新 source
-- `matmaster/types/current_input.py` re-export `TurnInput`
-- `matmaster/types/context.py` re-export `PlaygroundContext`（迁回 `core/playground.py`，注意现有反向 import 循环：[playground.py:26](../../matmaster/core/playground.py:26) 现 import from types/context；要小心拆环）
+平台侧：
 
-**2c. 业务代码切换 import 与调用入口**:
-- [matmaster/core/agent.py](../../matmaster/core/agent.py) import 从 `matmaster.manifests` 切到 `matmaster.context`
-- [src/services/agent_run_service.py](../../src/services/agent_run_service.py) **不再直接装配** `TurnInput` + `UserTurnContext.from_sources`，改为：
-  - 装配 `TurnInput`
-  - 调 `user_instructions_port.load_user_instructions` 拿 `UserInstructions`
-  - 调 `resolve_turn_context_intent` 判定 intent
-  - 调 `context_assembler.assemble_turn(intent, request)` 装配
-  - 调 `events_service.add_history_event` 写 `user_turn_context`
-- `AgentRuntimeSpec` 注入：新增 `context_assembler: ContextAssembler`、`user_instructions_port: UserInstructionsPort`、`session_events_port: SessionEventsPort`
-- 如果 Phase 1 为降低 diff 暂时保留了 `COMPAT:legacy-runtime-injection-helper`，此时必须删除；service 层保持完全走新路径
+14. **`src/services/context_assembly_ports.py`** ← v3.1 新增（`AppUserInstructionsPort` / `AppSessionEventsPort` / `AppSessionJobsPort`）
+15. **`src/services/context_turn_intent.py`** ← v3.1 新增（`resolve_turn_context_intent` helper，events 查询 + 调纯函数；无 runtime 分流）
 
-**2d. Prompt 形态**:
-- **沿用现状**: `TurnInstructionSource` 和 `TurnAttachmentsSource` 合并到一个 `<current_instruction>` block（兼容当前 `[Current attachments]` 拼接方式）
-- 拆分版可由 `__init__` 参数或 feature flag 切换，但**默认关闭**
+**不在 2A 做**:
+- `attachments.py` / `skills.py` / `tools.py` / `scanner.py` / `session.py` / `history_restore.py`（依赖 events 重放，留给 2B）
+- `system_prompt.py`（与 `ContextBuilder.build_system_prompt` 行为绑定，可放 2C 或单独 PR）
+- 任何 manifests / 业务路径 / runtime 切换
 
-**2e. 测试目标**:
-- Phase 1 测试全部仍通过
-- 单元测试覆盖每个 source 的 `to_sections`
+**测试目标**:
+- Phase 0.5 + Phase 1 测试全部仍通过
+- 单元测试覆盖每个简单 source 的 `to_sections`
 - 单元测试覆盖 `wrap_tag` escape（含 `</tag>` 注入用例）
 - 单元测试覆盖 `from_sources` 的 key 唯一性校验
 - 单元测试覆盖 `__post_init__` 不变量校验
@@ -2220,12 +2243,98 @@ v3 在此用 "装配的 sources" 列表描述每个 case。v3.1 把它改为 cal
 - 单元测试覆盖 `ContextAssembler.assemble_turn` / `assemble_compaction`（mock ports，verify bundle 透传 / Optional port skip / 双视图）
 - 单元测试覆盖 `decide_turn_context_intent` 纯函数
 - 集成测试覆盖 `resolve_turn_context_intent`（mock events port；无 runtime 分流路径）
+- 静态校验：grep `from matmaster.context` 在 `src/services/` 中仅出现在 `context_assembly_ports.py` 和 `context_turn_intent.py` 自身，无其他 runtime caller
+
+---
+
+#### Phase 2B: Session source 迁移与 manifests 等价（fixture-equivalence）
+
+**目标**: 把从 events 重建 session context 的逻辑迁进新 source 和 `SessionContextBuilder`，与旧 manifests 行为**逐 fixture 等价**。仍**不**切运行时主路径。
+
+**新增文件**:
+- `matmaster/context/scanner.py`
+- `matmaster/context/session.py`（构造参数从 `events: list[dict]` 改为 `events: tuple[SessionEvent, ...]`）
+- `matmaster/context/history_restore.py`（Phase 1 接口骨架的完整实现）
+- `matmaster/context/sources/attachments.py`
+- `matmaster/context/sources/skills.py`
+- `matmaster/context/sources/tools.py`
+
+**shim 改造**:
+- `matmaster/manifests/*` 改为薄 shim 委托新 source（**必须与新 source 同 PR**，因为 shim 正确性依赖"旧出口 == 新出口"的对照测试）
+
+**测试目标**（重点是 golden master 等价对照，**不是**仅靠普通单测）:
+- Phase 2A 测试全部仍通过
+- 至少准备以下几类 events fixture，逐组对比旧 manifests 输出与新 source 输出：
+  - 普通附件累积（单轮 / 多轮）
+  - 多轮 skill 激活 / 变化
+  - tool catalog 演化
+  - 带 `until_event_id` 的边界截断
+  - 带 `spawn_id` 的过滤
+  - checkpoint 前后事件混合
+  - hash anchor 与 checkpoint 交错
+- `SessionContextBuilder(events=tuple[SessionEvent, ...])` 的 `until_event_id` 边界测试
+- include / exclude attachments 测试
+
+**验收**:
+- 新 session builder 能从 typed events 生成与旧 manifests 等价的 sections
+- 生产路径暂时不使用它（仍然继续走旧 manifests 链路）
+
+---
+
+#### Phase 2C: Runtime cutover 与 legacy helper 清理（snapshot + integration）
+
+**目标**: 把普通 user turn 的运行路径切到新 assembler，删除 Phase 1 残留的 legacy injection helper。这是 Phase 2 唯一**会改变生产路径**的子阶段，PR diff 必须保持最小。
+
+**业务代码切换**:
+- [matmaster/core/agent.py](../../matmaster/core/agent.py) import 从 `matmaster.manifests` 切到 `matmaster.context`
+- [matmaster/core/agent.py:336-347](../../matmaster/core/agent.py:336) kernel 入口改造：用 history 末尾的 UserMessage，不再装配 turn_input
+- [src/services/agent_run_service.py](../../src/services/agent_run_service.py) **不再直接装配** `TurnInput` + `UserTurnContext.from_sources`，改为：
+  - 装配 `TurnInput`
+  - 调 `user_instructions_port.load_user_instructions` 拿 `UserInstructions`
+  - 调 `resolve_turn_context_intent` 判定 intent
+  - 调 `context_assembler.assemble_turn(intent, request)` 装配
+  - 调 `events_service.add_history_event` 写 `user_turn_context`
+
+**AgentRuntimeSpec 注入**（字段演化见 §15）:
+- `context_assembler: ContextAssembler`
+- `user_instructions_port: UserInstructionsPort`
+- `session_events_port: SessionEventsPort`
+- `session_jobs_port: SessionJobsPort | None`（Optional）
+
+**Shim 改造**:
+- `matmaster/types/current_input.py` re-export `TurnInput`
+- 注：`matmaster/types/context.py` 的 shim 化已在 **Phase 0.5** 完成，本阶段不再重复处理 import 环
+
+**清理**:
+- 删除 `_apply_user_instructions_to_initial_user_query`
+- 清理 `COMPAT:legacy-runtime-injection-helper` 标记
+
+**不在 2C 做**（重申整体约束）:
+- `core/context_compactor.py` shim → Phase 3
+- 真实 `ContextCompactor` 迁移 → Phase 3
+- checkpoint v1 marker 切换 → Phase 3
+- prompt 形态 A/B → Phase 3
+
+**Prompt 形态**:
+- **沿用现状**: `TurnInstructionSource` 和 `TurnAttachmentsSource` 合并到一个 `<current_instruction>` block（兼容当前 `[Current attachments]` 拼接方式）
+- 拆分版可由 `__init__` 参数或 feature flag 切换，但**默认关闭**
+
+**测试目标**:
+- Phase 2A + 2B 测试全部仍通过
+- Snapshot test: 关键 case 的 prompt 字符串与 Phase 1 末态等价
+- 完整 session 写入 + restore 集成测试
+- AGENT.md 首轮 / 未变 / 改动后下一轮立即生效
+- `user_turn_context` 写入失败 fail-fast
+- SSE 不暴露内部事件
+- bundle 防竞态：service 读完 AGENT.md 后文件变化，assembler 仍使用传入对象
 
 ---
 
 ### Phase 3: Compaction 接入 + Prompt 形态决策
 
 **目标**: 把 preflight / runtime compaction 接入新 renderer，切到 v1 marker，做 prompt 形态 A/B。
+
+**前置约束**: Phase 2 期间 `core/context_compactor.py` 维持真实代码不变（不做 shim 化），本阶段才把 compactor 迁移到 `context/compaction.py` 并将原文件 shim 化。Phase 2 / Phase 3 边界严格按"compaction 主路径是否触碰"切分。
 
 **3a. compaction.py 迁移**:
 - 把 `core/context_compactor.py` 内容迁到 `context/compaction.py`
@@ -2284,10 +2393,10 @@ v3 在此用 "装配的 sources" 列表描述每个 case。v3.1 把它改为 cal
 | `build_compact_bundle(...)` | **v3.1**: `matmaster/context/assembly.py` 的 `ContextAssembler.assemble_compaction`；底层使用 `compositions.py` (`COMPACTED_COMPOSITION`) + `sources/compacted_history.py` |
 | `_tag(...)` 等 helper | `matmaster/context/rendering.py` (`wrap_tag`) |
 
-`AgentRuntimeSpec` 字段演化：
+`AgentRuntimeSpec` 字段演化（注：所有 v3.1 新增字段的**实际注入**都发生在 Phase 2C cutover，不在 2A / 2B）：
 
-| 字段 | Phase 1 | Phase 2 (v3.1) | Phase 4 |
-|------|---------|----------------|---------|
+| 字段 | Phase 1 | Phase 2C (v3.1) | Phase 4 |
+|------|---------|------------------|---------|
 | `context_builder: ContextBuilder` | 不变 | 退化为 `build_system_prompt` 的 wrapper | 重命名为 `system_prompt_builder: SystemPromptBuilder`，删除 shim |
 | `context_assembler: ContextAssembler` | — | **新增**（v3.1） | 保留 |
 | `user_instructions_port: UserInstructionsPort` | — | **新增**（v3.1） | 保留 |
@@ -2525,28 +2634,52 @@ Phase 1 内 `tests/matmaster/manifests/` 保留并继续通过（验证 shim 等
 - [src/services/events_service.py:24-73](../../src/services/events_service.py:24) `add_history_event`: 返回 inserted id
 - 所有 caller: `prepare_send_message`、worker entry、其他 `add_event(` 调用点
 
+### Phase 0.5 改动
+
+- [matmaster/core/playground.py:26](../../matmaster/core/playground.py:26) 反向 import 循环拆解
+- `PlaygroundContext` / `WorkspaceArchivalConfig` 定义归位到 `core/playground.py`
+- [matmaster/types/context.py](../../matmaster/types/context.py) 改为薄 re-export shim
+- 不动 context assembly 与 runtime behavior
+
 ### Phase 1 改动
 
 - [src/services/stream_service.py:66](../../src/services/stream_service.py:66) `_should_emit_event_to_sse`: 加 `user_turn_context` hidden
 - `matmaster.integration.event_router.SSEHandler._should_skip()`: 同步加
 - [src/services/agent_run_service.py:775-780](../../src/services/agent_run_service.py:775) `_apply_user_instructions_to_initial_user_query`: 从 runtime 主路径移除；如为降低 diff 暂留函数体，标记 `COMPAT:legacy-runtime-injection-helper`
-- [src/services/agent_run_service.py:182-209](../../src/services/agent_run_service.py:182) `_apply_user_instructions_to_initial_user_query` 实现: 若暂留，Phase 2 前删除
+- [src/services/agent_run_service.py:182-209](../../src/services/agent_run_service.py:182) `_apply_user_instructions_to_initial_user_query` 实现: 若暂留，最迟在 Phase 2C cutover 时删除
 - [src/services/history_checkpoint_service.py:26-55](../../src/services/history_checkpoint_service.py:26) `build_checkpoint_sink`: payload 加新字段
 - [src/services/history_checkpoint_codec.py:89-91](../../src/services/history_checkpoint_codec.py:89) marker 校验: 接受 v0 + v1 双 marker（`COMPAT:v0-checkpoint-marker`）
 - [src/dao/chat_events_table.py:327-](../../src/dao/chat_events_table.py:327) `add_history_checkpoint`: content payload 加新字段
 - [src/services/history_restore_service.py](../../src/services/history_restore_service.py) 改名 + 内部委托新模块；旧 session legacy restore 标记 `COMPAT:v0-restore`
 
-### Phase 2 改动
+### Phase 2A 改动
 
-- [matmaster/manifests/](../../matmaster/manifests/) 整目录改 shim
-- [matmaster/types/current_input.py](../../matmaster/types/current_input.py) shim
-- [matmaster/types/context.py](../../matmaster/types/context.py) shim（注意拆解 [playground.py:26](../../matmaster/core/playground.py:26) 的反向 import 循环）
+- 新增 `matmaster/context/sections.py` / `rendering.py` / `turn_context.py`
+- 新增简单 source: `turn_input.py` / `user_instructions.py` / `compacted_history.py` / `session_jobs.py` / `workspace.py` / `artifacts.py`
+- 新增装配三件套: `ports.py` / `compositions.py` / `assembly.py` / `turn_intent.py`
+- 新增平台 ports 实现: `src/services/context_assembly_ports.py` / `src/services/context_turn_intent.py`
+- 所有新代码对运行时为 dead code，不切 import，不动业务路径
+
+### Phase 2B 改动
+
+- 新增 `matmaster/context/scanner.py` / `session.py` / `history_restore.py`
+- 新增 session source: `attachments.py` / `skills.py` / `tools.py`
+- [matmaster/manifests/](../../matmaster/manifests/) 整目录改薄 shim 委托新 source（与新 source 同 PR）
+- 新增 events fixture golden master 等价对照测试
+
+### Phase 2C 改动
+
 - [matmaster/core/agent.py:336-347](../../matmaster/core/agent.py:336) kernel 入口改造：用 history 末尾的 UserMessage，不再装配 turn_input
-- [src/services/agent_run_service.py](../../src/services/agent_run_service.py) 完整切到新路径，删除 `_apply_user_instructions_to_initial_user_query`
+- [matmaster/core/agent.py](../../matmaster/core/agent.py) import 从 `matmaster.manifests` 切到 `matmaster.context`
+- [src/services/agent_run_service.py](../../src/services/agent_run_service.py) 完整切到新路径
+- [matmaster/types/current_input.py](../../matmaster/types/current_input.py) shim（types/context.py 的 shim 已在 Phase 0.5 完成）
+- `AgentRuntimeSpec` 注入 `context_assembler` / `user_instructions_port` / `session_events_port` / `session_jobs_port | None`
+- 删除 `_apply_user_instructions_to_initial_user_query`，清理 `COMPAT:legacy-runtime-injection-helper`
+- **不**触碰 `core/context_compactor.py`（留给 Phase 3）
 
 ### Phase 3 改动
 
-- [matmaster/core/context_compactor.py](../../matmaster/core/context_compactor.py) → shim
+- [matmaster/core/context_compactor.py](../../matmaster/core/context_compactor.py) → shim（与真实迁移到 `context/compaction.py` 同阶段完成）
 - [matmaster/core/context_builder.py](../../matmaster/core/context_builder.py) → shim
 - Checkpoint 写入切到 v1 marker
 - prompt 形态 A/B 评估 + 切换
