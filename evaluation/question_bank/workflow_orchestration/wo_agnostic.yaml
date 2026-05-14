@@ -3270,7 +3270,7 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: checks_heads_or_registry
-    criterion: Agent checks documented DPA heads/branches and performs or explicitly plans an internal `aissq-explorer` lookup for suitable organic, biomolecular, or solvated-system models before deciding.
+    criterion: Agent checks documented DPA heads/branches or performs/plans an internal `aissq-explorer` lookup for suitable organic, biomolecular, or solvated-system models before deciding.
     axis: grounding
     verify: llm_binary_judge
   - id: offers_valid_routes
