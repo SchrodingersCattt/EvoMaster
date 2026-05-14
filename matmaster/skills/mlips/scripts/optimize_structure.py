@@ -41,7 +41,9 @@ def parse_args() -> argparse.Namespace:
         help="Model name, path, or URL (default: DPA3.1-3M)",
     )
     p.add_argument(
-        "--head", default=None, help="Model head for DP family (e.g. OC22, OMol25, OMat24)"
+        "--head",
+        default=None,
+        help="Model head for DP family (e.g. OC22, OMol25, OMat24)",
     )
     p.add_argument(
         "--relax-cell", action="store_true", help="Also relax cell shape/volume"
