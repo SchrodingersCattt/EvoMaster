@@ -137,7 +137,7 @@ banks:
 - path: workflow_orchestration/wo_agnostic.yaml
   capability: workflow_orchestration
   domain: agnostic
-  questions: 33
+  questions: 38
 - path: workflow_orchestration/wo_agnostic_gpumd_nep_clean.yaml
   capability: workflow_orchestration
   domain: agnostic
@@ -157,7 +157,7 @@ banks:
 - path: platform/ig_agnostic.yaml
   capability: input_generation
   domain: agnostic
-  questions: 3
+  questions: 2
 - path: platform/wo_agnostic.yaml
   capability: workflow_orchestration
   domain: agnostic

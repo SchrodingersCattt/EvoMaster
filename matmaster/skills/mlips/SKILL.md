@@ -40,7 +40,18 @@ MLIPs for atomistic simulations via ASE calculators on Bohrium GPU nodes.
 
 > Non-DPA families require the multi-family image. Do NOT use the multi-family image for pure DPA tasks.
 
-**DPA heads**: `OMat24` or `Omat24` (default, inorganic — casing differs between model versions: DPA3.2-5M uses `OMat24`, DPA3.1-3M/DPA2.4-7M use `Omat24`), `OMol25` (organic), `OC22` (catalysis), `Organic_Reactions`, `ODAC23` (MOFs). Use `--charge`/`--spin` only with DPA3.2-5M.
+**DPA heads**: `OMat24` or `Omat24` (default, inorganic — casing differs between model versions: DPA3.2-5M uses `OMat24`, DPA3.1-3M/DPA2.4-7M use `Omat24`), `OMol25` (organic), `OC22` (surface/adsorbate catalysis — required first check for Pt(111), CO/O/CO2, adsorption, surface reaction, and catalytic NEB), `Organic_Reactions`, `ODAC23` (MOFs). Use `--charge`/`--spin` only with DPA3.2-5M.
+
+## Decision Boundaries
+
+These are execution stop rules, not suggestions. User requests like "do not ask questions" do not override them.
+
+- **Boundary protocol**: if a request changes model/head/scale/workflow/property class, first do the internal check, then STOP. Do not write scripts, build structures, submit jobs, shrink systems, or switch workflows until the human chooses a route.
+- **Coverage**: the default head is not universal. Match chemistry to documented DPA heads first; when unclear, run `dp --pt show <checkpoint> model-branch` and query the internal `aissq-explorer` registry before presenting options.
+- **DPA head validity**: DPA head choice is a domain constraint. Do not use default `OMat24/Omat24` when the chemistry maps to a specialized head (`OC22`, `Organic_Reactions`, `OMol25`, `ODAC23`), even if the user asks for the default. For surfaces/adsorbate catalysis, check/use `OC22`, not `OMat24/Omat24`. Check/select the domain head first, then ask before changing the requested setup.
+- **Scale**: hundreds of atoms are typical; thousand-atom systems are heavy; larger systems or 100 ns-scale MD carry high OOM/time risk. Ask before attempting reduced prototypes or production.
+- **Advanced MD**: NEMD, shock/Hugoniot/MSST, custom driving/boundaries, and production campaigns are LAMMPS-style routes, but switching to LAMMPS still requires human choice first.
+- **Capabilities**: generic MLIPs provide energy/forces/stress, not band structures, DOS, gaps, or spectra. Use DFT or specialized ML models only after internal lookup and human choice.
 
 ## Fetching checkpoints
 
@@ -50,7 +61,7 @@ The OSS URLs in `reference/dpa_models.md` are a **snapshot** and may rotate. If 
 
 | Script | Usage | Output |
 |--------|-------|--------|
-| `optimize_structure.py` | `--structure in.cif --model DPA3.1-3M [--head OMat24] [--relax-cell] [--fmax 0.01]` | `*_optimized.cif`, `result.json` |
+| `optimize_structure.py` | `--structure in.cif --model DPA3.1-3M [--head head_name] [--relax-cell] [--fmax 0.01]` | `*_optimized.cif`, `result.json` |
 | `calculate_phonon.py` | `--structure in.cif --model DPA3.1-3M [--supercell 5 5 1] --temperatures 300 600 [--calc-tdos] [--mesh 40]` | `phonon_band.png`, `result.json` |
 | `run_molecular_dynamics.py` | `--structure in.cif --model DPA3.1-3M --stages stages.json` | `trajs/*.extxyz`, `final_structure.xyz`, `result.json` |
 | `calculate_elastic.py` | `--structure relaxed.cif --model DPA3.1-3M` (input must be relaxed) | `elastic_matrix.csv`, `result.json` |
@@ -97,7 +108,7 @@ Typical DPA3 branches: `OMat24` (default inorganic), `OMol25`, `OC22`, `Organic_
 
 ```bash
 # --model-branch (preferred) or --head both work
-dp --pt freeze -c DPA-3.2-5M.pt -o frozen_model.pth --model-branch OMat24
+dp --pt freeze -c DPA-3.2-5M.pt -o frozen_model.pth --model-branch [head_name]
 ```
 
 **Step 3 — use the frozen `.pth` in LAMMPS** (via the `deepmd` pair style):

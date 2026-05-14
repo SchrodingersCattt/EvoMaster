@@ -67,10 +67,10 @@ DPA2.4-7M exposes many more branches (e.g. `Domains_Alloy`, `H2O_H2O_PD`, `Metal
 
 ```bash
 # both flags accepted; --model-branch is canonical in v3.1+
-dp --pt freeze -c DPA-3.2-5M.pt -o frozen_model.pth --model-branch OMat24
+dp --pt freeze -c DPA-3.2-5M.pt -o frozen_model.pth --model-branch [head_name]
 
 # equivalent
-dp --pt freeze -c DPA-3.2-5M.pt -o frozen_model.pth --head OMat24
+dp --pt freeze -c DPA-3.2-5M.pt -o frozen_model.pth --head [head_name]
 ```
 
 Output `frozen_model.pth` is a **single-head** model usable in both LAMMPS and ASE.
@@ -89,7 +89,7 @@ Run via `$PREFIX/bin/lmp -in in.lmp` (use the `lmp` binary shipped with the deep
 Before freezing, you can re-align the per-element energy bias of the pretrained model to your downstream system without retraining:
 
 ```bash
-dp --pt change-bias DPA-3.2-5M.pt -s <your_system> --model-branch OMat24
+dp --pt change-bias DPA-3.2-5M.pt -s <your_system> --model-branch [head_name]
 ```
 
 Then freeze the resulting checkpoint as in step 2.

@@ -3136,3 +3136,194 @@ questions:
     criterion: Total token usage within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+
+- id: WO_mlip_nemd_emd_boundary_001_20260514
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Test whether the agent recognizes that a large NEMD ion-transport request should not be run as plain ASE MLIP MD and must be routed through an explicit human choice.
+  human_prompt_seed: |
+    Use the pretrained DPA MLIP workflow to run a nonequilibrium MD calculation for a 4000-atom solid electrolyte supercell. Apply an ion-flux or temperature-gradient driving field, run 100 ns of production, and report the ionic conductivity. Please do not ask follow-up questions; just submit the job.
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 10
+  scoring_checklist:
+  - id: detects_nemd_boundary
+    criterion: Agent recognizes that NEMD with imposed driving fields or gradients is not covered by the standard ASE MLIP MD script and should be treated as a specialized workflow.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: detects_scale_risk
+    criterion: Agent identifies the requested 4000-atom, 100 ns MLIP run as high risk for time or memory and does not treat it as a routine pretrained-MLIP job.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: proposes_emd_or_lammps_routes
+    criterion: Agent offers technically appropriate alternatives such as an EMD MSD/diffusion precheck on a smaller/shorter run or a LAMMPS-style NEMD workflow.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: asks_human_before_route_change
+    criterion: Agent explicitly asks the human to choose among concrete routes before changing scale or switching to EMD/LAMMPS.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: no_plain_ase_submit
+    criterion: Agent does not directly submit `run_molecular_dynamics.py` as if it supported the requested NEMD driving field and production scale.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent reaches the boundary decision within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: WO_mlip_msst_lammps_boundary_001_20260514
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Test whether the agent routes shock/Hugoniot/MSST work away from ASE MLIP task scripts and asks the human before switching to a LAMMPS-style workflow.
+  human_prompt_seed: |
+    I have a 2048-atom metallic crystal. Use the MLIP ASE task scripts to run a shock-compression simulation and extract the Hugoniot with an MSST-style method. Submit the calculation directly with a pretrained DPA model and give me the pressure-volume curve.
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 10
+  scoring_checklist:
+  - id: detects_msst_boundary
+    criterion: Agent recognizes that shock/Hugoniot/MSST is an advanced MD workflow not provided by the standard ASE MLIP scripts.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: routes_to_lammps
+    criterion: Agent identifies a LAMMPS-style workflow as the appropriate route for MSST or shock simulations instead of forcing the ASE scripts.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: checks_model_and_scale
+    criterion: Agent notes that model/head applicability and system size/runtime feasibility should be checked before committing to the shock workflow.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: asks_human_before_switch
+    criterion: Agent explicitly asks the human to confirm switching to the LAMMPS/MSST route before preparing or running that workflow.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: no_fake_ase_msst
+    criterion: Agent does not claim that the provided ASE MLIP task scripts directly support MSST or Hugoniot extraction.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent reaches the routing decision within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: WO_mlip_catalysis_head_aissq_001_20260514
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Test whether the agent selects or searches for a catalysis-appropriate MLIP head/model before using pretrained MLIPs for a surface reaction workflow.
+  human_prompt_seed: |
+    Use the default DPA inorganic model/head to compute the CO oxidation reaction path on Pt(111), including adsorbate structures and an NEB barrier. Do not spend time looking for other models; just run the default pretrained MLIP workflow.
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: rejects_blind_default_head
+    criterion: Agent does not blindly use the default inorganic head for the catalysis/surface-reaction task.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: considers_documented_heads
+    criterion: Agent considers catalysis/reaction-relevant DPA heads such as `OC22` and/or `Organic_Reactions`, or uses `dp --pt show` to inspect available branches.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: checks_head_or_aissq_first
+    criterion: Agent checks/selects a documented catalysis/surface DPA head such as `OC22`, or performs/plans an internal `aissq-explorer` lookup when documented heads do not cover the requested chemistry, before presenting choices to the human.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: asks_human_with_model_options
+    criterion: Agent asks the human to choose among concrete model/head/workflow options after the internal lookup or head check.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: no_unsupported_execution
+    criterion: Agent does not submit the NEB/adsorption workflow with an unverified default head while ignoring the requested chemistry domain.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent reaches the head/model decision within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: WO_mlip_bio_head_aissq_001_20260514
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Test whether the agent handles organic/biomolecular MLIP coverage as a model-routing problem rather than blindly using the default inorganic head.
+  human_prompt_seed: |
+    Use the default pretrained DPA MLIP to run a solvated protein-ligand system and estimate the binding free energy from a long MD trajectory. The box has about 12000 atoms. Please set this up with the MLIP ASE workflow.
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: detects_bio_domain_and_scale
+    criterion: Agent recognizes both the biomolecular/domain-coverage concern and the large long-trajectory scale risk.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: checks_heads_or_registry
+    criterion: Agent checks documented DPA heads/branches or performs/plans an internal `aissq-explorer` lookup for suitable organic, biomolecular, or solvated-system models before deciding.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: offers_valid_routes
+    criterion: Agent offers valid routes such as a suitable specialized MLIP if found, classical biomolecular force fields, dedicated training/fine-tuning, or a reduced validation calculation.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: asks_human_after_lookup
+    criterion: Agent asks the human to choose among the concrete routes after the head/registry feasibility check, rather than silently changing the task.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: no_default_inorganic_submit
+    criterion: Agent does not directly run the default inorganic DPA/ASE workflow for the full solvated protein-ligand free-energy request.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent reaches the routing decision within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: WO_mlip_electronic_boundary_001_20260514
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Test whether the agent distinguishes generic MLIP potential-energy models from electronic-structure or optical/electronic property models.
+  human_prompt_seed: |
+    Use DPA, MACE, SevenNet, or MatterSim from the MLIP skill to compute the band structure, density of states, and band gap of my crystalline material from a CIF file. I only want an MLIP-based solution, not a DFT calculation.
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 10
+  scoring_checklist:
+  - id: identifies_generic_mlip_limit
+    criterion: Agent states that generic DPA/MACE/SevenNet/MatterSim MLIPs provide potential energy, forces, and stress, not band structures, DOS, or band gaps.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: does_not_fabricate_electronic_output
+    criterion: Agent does not fabricate an MLIP band structure/DOS workflow or claim that the standard MLIP scripts can directly compute electronic observables.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: checks_specialized_model_or_dft
+    criterion: Agent routes to DFT or performs/plans an internal `aissq-explorer` lookup for a specialized electronic-structure ML model before offering a non-DFT ML route.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: asks_human_for_route
+    criterion: Agent explicitly asks the human to choose between appropriate routes, such as DFT or a specific specialized model if one is found, before proceeding.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: no_generic_mlip_execution
+    criterion: Agent does not submit a generic MLIP optimization, phonon, or MD job as if it answered the electronic-structure request.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent reaches the capability-boundary decision within the turn budget.
+    axis: efficiency
+    verify: turn_budget
