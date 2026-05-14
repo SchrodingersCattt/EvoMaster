@@ -154,7 +154,7 @@ v3.1 的核心目标是消除 v3 末尾仍然散落在 §7.3 / §8.2 / §9.2 的
   "covered_until_event_id": 123,
   "base_messages": [
     {"role": "user",
-     "content": "<user_instructions>...</user_instructions>\n\n<compacted_history>...</compacted_history>\n\n<loaded_skills>...</loaded_skills>\n\n<active_tools>...</active_tools>\n\n<past_attached_files>...</past_attached_files>",
+     "content": "<user_instructions>...</user_instructions>\n\n<compacted_history>...</compacted_history>\n\n<session_skills>...</session_skills>\n\n<session_tools>...</session_tools>\n\n<session_attachments>...</session_attachments>",
      "images": []}
   ],
   "reason": "summary",
@@ -378,11 +378,11 @@ from enum import IntEnum
 class SectionOrder(IntEnum):
     USER_INSTRUCTIONS = 10
     COMPACTED_HISTORY = 100
-    LOADED_SKILLS = 300
-    ACTIVE_TOOLS = 400
-    PAST_ATTACHMENTS = 500
-    WORKSPACE = 600
-    ARTIFACTS = 700
+    SESSION_SKILLS = 300
+    SESSION_TOOLS = 400
+    SESSION_ATTACHMENTS = 500
+    SESSION_WORKSPACE = 600
+    SESSION_ARTIFACTS = 700
     TURN_INSTRUCTION = 1000        # 普通轮：instruction 在前
     TURN_ATTACHMENTS = 1100
     SESSION_JOBS = 1200
@@ -586,7 +586,7 @@ from dataclasses import dataclass, field
 
 from matmaster.context.sections import ContextSection
 from matmaster.context.ports import SessionJobs
-from matmaster.context.sources.attachments import PastAttachmentsSource
+from matmaster.context.sources.attachments import SessionAttachmentsSource
 from matmaster.context.sources.turn_input import TurnInput
 
 
@@ -601,7 +601,7 @@ class ContextRecipeInputs:
     turn_input: TurnInput | None = None
     session_sections: tuple[ContextSection, ...] = ()   # 由 SessionContextBuilder 预装配
     session_jobs: SessionJobs = field(default_factory=SessionJobs.empty)
-    past_attachments_override: PastAttachmentsSource | None = None
+    session_attachments_override: SessionAttachmentsSource | None = None
     defer_turn_instruction: bool = False
 ```
 
@@ -660,10 +660,10 @@ def _step_session_sections(inp: ContextRecipeInputs) -> tuple[ContextSection, ..
     return inp.session_sections   # 已由 SessionContextBuilder 装配
 
 
-def _step_past_attachments_override(inp: ContextRecipeInputs) -> tuple[ContextSection, ...]:
-    if inp.past_attachments_override is None:
+def _step_session_attachments_override(inp: ContextRecipeInputs) -> tuple[ContextSection, ...]:
+    if inp.session_attachments_override is None:
         return ()
-    return inp.past_attachments_override.to_sections()
+    return inp.session_attachments_override.to_sections()
 
 
 def _step_turn_input(inp: ContextRecipeInputs) -> tuple[ContextSection, ...]:
@@ -710,7 +710,7 @@ COMPACTED_RECIPE = ContextRecipe(
     steps=(
         _step_user_instructions,
         _step_compacted_history,
-        _step_past_attachments_override,
+        _step_session_attachments_override,
         _step_session_sections,
         _step_turn_input,
         _step_session_jobs,
@@ -755,11 +755,11 @@ class ContextSource(Protocol):
 | `UserInstructionsSource` | `sources/user_instructions.py` | `SectionOrder.USER_INSTRUCTIONS` (10) | RUNTIME + CHECKPOINT | 通过 DI 注入 AGENT.md 文本 |
 | `CompactedHistorySource` | `sources/compacted_history.py` | `SectionOrder.COMPACTED_HISTORY` (100) | RUNTIME + CHECKPOINT | summary LLM 产物 |
 | `SessionJobsSource` | `sources/session_jobs.py` | `SectionOrder.SESSION_JOBS` (1200) | RUNTIME + CHECKPOINT | 每轮刷新，末尾附加；无活跃 job 时返回空 |
-| `LoadedSkillsSource` | `sources/skills.py` | `SectionOrder.LOADED_SKILLS` (300) | RUNTIME + CHECKPOINT | 从 events 重建 |
-| `ActiveToolsSource` | `sources/tools.py` | `SectionOrder.ACTIVE_TOOLS` (400) | RUNTIME + CHECKPOINT | 替代 `<active_tools>` |
-| `PastAttachmentsSource` | `sources/attachments.py` | `SectionOrder.PAST_ATTACHMENTS` (500) | RUNTIME + CHECKPOINT | 跨轮累积附件清单 |
-| `WorkspaceSource` | `sources/workspace.py` | `SectionOrder.WORKSPACE` (600) | RUNTIME + CHECKPOINT | 占位 |
-| `ArtifactsSource` | `sources/artifacts.py` | `SectionOrder.ARTIFACTS` (700) | RUNTIME + CHECKPOINT | 占位 |
+| `SessionSkillsSource` | `sources/skills.py` | `SectionOrder.SESSION_SKILLS` (300) | RUNTIME + CHECKPOINT | 从 events 重建 |
+| `SessionToolsSource` | `sources/tools.py` | `SectionOrder.SESSION_TOOLS` (400) | RUNTIME + CHECKPOINT | 模型可见工具集 |
+| `SessionAttachmentsSource` | `sources/attachments.py` | `SectionOrder.SESSION_ATTACHMENTS` (500) | RUNTIME + CHECKPOINT | 跨轮累积附件清单 |
+| `SessionWorkspaceSource` | `sources/workspace.py` | `SectionOrder.SESSION_WORKSPACE` (600) | RUNTIME + CHECKPOINT | 占位 |
+| `SessionArtifactsSource` | `sources/artifacts.py` | `SectionOrder.SESSION_ARTIFACTS` (700) | RUNTIME + CHECKPOINT | 占位 |
 | `TurnInstructionSource` | `sources/turn_input.py` | `SectionOrder.TURN_INSTRUCTION` (1000) / `TURN_INSTRUCTION_LAST` (1300) | **RUNTIME only** | 本轮 user_text，`deferred=True` 时排到末尾 |
 | `TurnAttachmentsSource` | `sources/turn_input.py` | `SectionOrder.TURN_ATTACHMENTS` (1100) | **RUNTIME only** | 本轮附件清单 |
 
@@ -1052,7 +1052,7 @@ from matmaster.context.recipes import (
     ContextRecipe, ContextRecipeInputs,
 )
 from matmaster.context.session import SessionContextBuilder
-from matmaster.context.sources.attachments import PastAttachmentsSource
+from matmaster.context.sources.attachments import SessionAttachmentsSource
 from matmaster.context.sources.turn_input import TurnInput
 from matmaster.context.turn_context import UserTurnContext
 
@@ -1098,7 +1098,7 @@ class CompactionAssemblyRequest:
     compacted_history_summary: str
     covered_until_event_id: int | None
     turn_input: TurnInput | None = None
-    past_attachments_override: PastAttachmentsSource | None = None
+    session_attachments_override: SessionAttachmentsSource | None = None
 
 
 @dataclass(frozen=True)
@@ -1180,7 +1180,7 @@ class ContextAssembler:
         ))
         session_sections = SessionContextBuilder(events=events).build_sections(
             until_event_id=request.covered_until_event_id,
-            include_attachments=(request.past_attachments_override is None),
+            include_attachments=(request.session_attachments_override is None),
         )
         jobs = await self._load_jobs_or_empty(request.session_id)
 
@@ -1190,7 +1190,7 @@ class ContextAssembler:
             turn_input=request.turn_input,
             session_sections=session_sections,
             session_jobs=jobs,
-            past_attachments_override=request.past_attachments_override,
+            session_attachments_override=request.session_attachments_override,
             defer_turn_instruction=True,   # 压缩后 instruction 移末尾, recency bias
         )
         user_turn_context = recipe.apply(inputs)
@@ -1576,7 +1576,7 @@ async def apply_compaction_plan(
     user_instructions: UserInstructions,
     turn_input: TurnInput | None = None,
     summary_override: str | None = None,
-    past_attachments_override: PastAttachmentsSource | None = None,
+    session_attachments_override: SessionAttachmentsSource | None = None,
 ) -> CompactionResult:
     """执行压缩并替换 messages。
 
@@ -1622,7 +1622,7 @@ async def apply_compaction_plan(
             compacted_history_summary=summary,    # compactor 内部局部变量 summary 透传
             covered_until_event_id=covered_until_event_id,
             turn_input=turn_input,
-            past_attachments_override=past_attachments_override,
+            session_attachments_override=session_attachments_override,
         ),
     )
 
@@ -2033,9 +2033,9 @@ v3 在此用 "装配的 sources" 列表描述每个 case。v3.1 把它改为 cal
 | ~~`ModelVisibleUserContext`~~ ~~`UserContextSnapshot`~~ | `UserTurnContext` + `user_turn_context` event | snapshot 概念废弃 |
 | `CompactionRehydrator` | `SessionContextBuilder` | 不是 hydration，是 session context collection |
 | `pre_query_scope_event_id` | `pre_turn_history_event_id` | 实现细节剥离，语义直接 |
-| `attachment_manifest` | `past_attachments` | 不是 manifest，是 source |
-| `skill_manifest` | `loaded_skills` | 同上 |
-| `mcp_manifest` | `active_tools` | 同上 + "tools" 是模型可见语义 |
+| `attachment_manifest` | `session_attachments` | 不是 manifest，是 source；时间作用域统一为 `Session-` 前缀 |
+| `skill_manifest` | `session_skills` | 同上 |
+| `mcp_manifest` | `session_tools` | 同上 + "tools" 是模型可见语义 |
 | `HistoryRestoreService` | `ModelHistoryRestoreService` | 当前名字暗示"通用历史恢复"，实际只服务 model restore 路径 |
 
 ### 文件与目录
@@ -2259,7 +2259,7 @@ v3 在此用 "装配的 sources" 列表描述每个 case。v3.1 把它改为 cal
 **4c. Oversized Input 独立 spec**:
 - 不在本 spec 范围
 - 需要单独设计 `InputSummaryConfig`、原文写盘策略、路径安全、失败处理
-- 接口预留点：`ContextCompactor.apply_compaction_plan(summary_override, past_attachments_override)` + `user_turn_context.transform="oversized_summary"` 已就位
+- 接口预留点：`ContextCompactor.apply_compaction_plan(summary_override, session_attachments_override)` + `user_turn_context.transform="oversized_summary"` 已就位
 
 **4d. Fallback 删除决策**:
 - 基于 Phase 3 埋点的命中率与成功率数据
@@ -2320,7 +2320,7 @@ tests/matmaster/context/
     - COMPACTED_RECIPE.apply 等价于手写 from_sources
     - defer_turn_instruction=True → instruction order = TURN_INSTRUCTION_LAST
     - 空 session_jobs → SessionJobsSource 返回空 sections
-    - past_attachments_override → 命中 _step_past_attachments_override
+    - session_attachments_override → 命中 _step_session_attachments_override
   test_assembly.py
     - ContextAssembler.assemble_turn(ANCHOR_TURN) 调 events port + session_builder
     - ContextAssembler.assemble_turn(CONTINUATION_TURN) 不调 events port（performance 断言）
