@@ -1,13 +1,31 @@
-# Context 模块统一重构 — Design v3
+# Context 模块统一重构 — Design v3.1
 
-- 日期: 2026-05-12
-- 状态: 草稿 v3（根据 spec review + 源码对照 review 重写），待作者复核
-- 作者: kealdoom + Claude
+- 日期: 2026-05-14（v3.1 修订）
+- 状态: 草稿 v3.1（在 v3 基础上引入 Context Assembly Ports + Recipes + Assembler 三层），待作者复核
+- 作者: kealdoom + Claude + GPT
 - 范围: `matmaster/` 与 `src/services/` 中所有模型可见上下文相关的代码与数据流
 
 ---
 
-## 0. v3 相对 v2 的关键变化
+## 0. 关键变化日志
+
+### 0.1 v3.1 相对 v3 的关键变化
+
+v3.1 的核心目标是消除 v3 末尾仍然散落在 §7.3 / §8.2 / §9.2 的"该用哪些 source 装配 user_turn_context"决策。引入 **Context Assembly Ports + Recipes + Assembler** 三层架构：
+
+| 项 | v3 | v3.1 |
+|----|-----|------|
+| Source 装配决策 | service 与 compactor 各自手写 `from_sources(...)` 拼装 | 收口到 `matmaster/context/recipes.py`，业务代码不再直接拼 |
+| 平台数据获取 | service 与 compactor 各自调 DAO / 文件 / Redis | 通过 `matmaster/context/ports.py` 声明的窄能力 Protocol 注入，`src/services` 实现 |
+| AGENT.md 读取 | service helper `_load_user_instructions` 私有读 | `UserInstructionsPort.load_user_instructions` 声明在核心模块，`src/services/context_assembly_ports.py` 实现；同一 turn 内 bundle 必须原样传给 assembler，**禁止二次读取** |
+| anchor / continuation 判定 | service 内 inline 判定 | 仍在 service（不让核心模块感知灰度 flag），但抽出 `matmaster/context/turn_intent.py` 提供纯函数 + `src/services/context_turn_intent.py` 包灰度 |
+| SessionContextBuilder 归属 | `matmaster/context/session.py`（v3 已定） | 不变，但**重申**：events → sections 的装配规则必须由核心模块完成，不能挪到 port 实现 |
+| 装配入口 | `UserTurnContext.from_sources(...)` 直接调用 | `ContextAssembler.assemble_turn` / `assemble_compaction`，内部走 recipe；`from_sources` 降级为底层机械合并器，仅 `ContextRecipe.apply()` 调用 |
+| 硬约束条数 | 11 条 | 12 条（新增"装配产物不得作为 port 返回值"等） |
+
+如果你只读 v3 留下的差异，请直接跳到 §6bis（Recipe 装配层）、§7bis（Context Assembly Ports + Assembler）、§8.2、§9.2。
+
+### 0.2 v3 相对 v2 的关键变化（保留）
 
 | 项 | v2 | v3 |
 |----|-----|-----|
@@ -22,8 +40,6 @@
 | Sink 错误处理 | 未规定 | user_turn_context fail-fast；history_checkpoint best-effort |
 | 不变量校验 | 文档级 | dataclass `__post_init__` + `from_sources` 运行时校验 |
 | `UserContextSnapshot` 类型 | 存在 | 删除 |
-
-如果你只读 v2 留下的差异，请直接跳到 §3（事件模型）与 §8（AGENT.md hash-triggered anchor），其余章节是连带修订。
 
 ---
 
@@ -208,6 +224,8 @@ Session 首轮：
 
 放在显眼位置，所有 reviewer 与实现者必读。
 
+### 4.1 事件与编排不变量（v3 保留）
+
 1. 每个 `source_query_event_id` 在 events 表中对应**最多一条** `user_turn_context` 事件。多于一条是 bug，不是 dedup 常态。
 2. `user_turn_context` 写入失败时，本轮 fail-fast；不允许继续 LLM 调用。
 3. `history_checkpoint` 写入失败时，本轮可继续；compaction 路径必须记录 `failure_reason`。
@@ -220,6 +238,23 @@ Session 首轮：
 10. `UserTurnContext.from_sources` 必须校验 section `key` 唯一性，冲突时 raise。
 11. 渲染层 `wrap_tag` 必须对用户可控内容做最小 escape，防止 `</tag>` 注入破坏 section 边界（具体见 §6.4）。
 
+### 4.2 装配分层不变量（v3.1 新增）
+
+以下 12 条原则定义 `matmaster/context/` 与 `src/services/` 的硬边界，**任一违反都需要先改 spec 再改代码**。
+
+1. 生产代码不得直接手写 `UserTurnContext.from_sources(...)`；唯一例外是 `ContextRecipe.apply()`。
+2. 生产代码不得直接组合多个 `Source(...)` 实例并拼装；唯一例外是 `matmaster/context/recipes.py` 内的 step 函数与 source 单测。
+3. `agent_run_service` 不得知道 anchor / continuation 分别包含哪些 source。
+4. `ContextCompactor` 不得知道 compacted context 包含哪些 source。
+5. `ContextAssembler` 不负责 anchor / continuation 判定；它只执行 caller 给定的 `ContextAssemblyIntent`。
+6. `ContextAssembler` 不读取 latest anchor hash，不处理灰度 flag，不写 events。
+7. 同一 turn 内，intent 判定使用的 `UserInstructions` 必须原样传给 assembler，**禁止二次读取 AGENT.md**（防止 hash 与文本竞态）。
+8. `ContextRecipeInputs` 是 `recipes.py` 内部类型，不作为 service / compactor 的公共调用接口。
+9. Port 返回 typed snapshot / bundle / event sequence，**不返回**平台 service 对象，**不使用** `Any` / `dict[str, Any]`，也**不返回**核心装配产物：`ContextSection`、`UserMessage`、`UserTurnContext`。装配规则属于 `matmaster/context/`。
+10. Event payload 作为存储边界只能用受限的 `JsonObject` 类型别名表达（`JsonValue = str | int | float | bool | None | tuple[JsonValue, ...] | Mapping[str, JsonValue]`），解析与装配规则属于 `matmaster/context/`。
+11. Optional port（如 `SessionJobsPort | None`）只表示该 section 能力不可用；assembler 不判断 Bohrium 等具体产品功能是否启用。
+12. `SessionContextBuilder` 属于 `matmaster/context/session.py`，负责从 `SessionEvent` 序列装配 session-level sections。port 实现层**不得**返回已装配的 sections。
+
 ---
 
 ## 5. 模块边界与目录结构
@@ -230,13 +265,24 @@ Session 首轮：
 matmaster/context/
   __init__.py
   sections.py              # ContextSection, ContextView, SectionOrder
-  turn_context.py          # UserTurnContext 聚合根
+  turn_context.py          # UserTurnContext 聚合根（from_sources 仅 ContextRecipe.apply 调用）
   rendering.py             # wrap_tag (含 escape), render_sections
   system_prompt.py         # 原 ContextBuilder.build_system_prompt
-  compaction.py            # 原 core/context_compactor.py（保留 fallback）
-  session.py               # 替代 manifests/rehydrator.py 的 SessionContextBuilder
+  compaction.py            # 原 core/context_compactor.py（保留 fallback；不再自己拼 source）
+  session.py               # SessionContextBuilder：从 SessionEvent 序列装配 session-level sections
   history_restore.py       # ModelHistoryRestorer (DI 注入 events 访问)
   scanner.py               # 从 manifests/scanner.py 迁移，底层 events 扫描工具
+
+  # v3.1 新增三件 ── 装配标准化
+  ports.py                 # UserInstructions / SessionEvent / SessionEventQuery /
+                           # JsonObject 等 typed 数据载体，以及对应 Port Protocol
+  recipes.py               # ContextRecipeInputs / ContextRecipe / ANCHOR / CONTINUATION /
+                           # COMPACTED 三个常量 + step 函数
+  assembly.py              # ContextAssemblyIntent / TurnAssemblyRequest /
+                           # CompactionAssemblyRequest / AssemblyResult /
+                           # ContextAssembler
+  turn_intent.py           # 纯函数 decide_turn_context_intent(...)（不读 events、不知灰度）
+
   sources/
     __init__.py
     user_instructions.py
@@ -251,6 +297,16 @@ matmaster/context/
 ```
 
 **v3 不包含 `snapshot.py`**。`UserContextSnapshot` 类型废弃，事件落到 events 表的 `user_turn_context` 直接序列化 UserMessage。
+
+平台侧新增：
+
+```
+src/services/
+  context_assembly_ports.py    # AppUserInstructionsPort / AppSessionEventsPort / AppSessionJobsPort
+                               # 实现 matmaster/context/ports.py 声明的 Protocol
+  context_turn_intent.py       # resolve_turn_context_intent(events_port, ..., flag)
+                               # 包灰度 flag + events 查询；内部委托 turn_intent 纯函数
+```
 
 ### 5.2 `matmaster/core/` 收缩后
 
@@ -282,8 +338,9 @@ matmaster/core/
 | `matmaster/types/current_input.py` | 迁到 `context/sources/turn_input.py`，类型一并重命名 |
 | `matmaster/manifests/` | 整目录重写为 `matmaster/context/` 内部模块 |
 | `matmaster/core/context_builder.py` | 拆三段（见 §13）|
-| `matmaster/core/context_compactor.py` | 迁到 `context/compaction.py`，**保留 fallback 路径** |
+| `matmaster/core/context_compactor.py` | 迁到 `context/compaction.py`，**保留 fallback 路径**；装配走 `ContextAssembler`（v3.1） |
 | `src/services/history_restore_service.py` | 改名 `model_history_restore_service.py`，内部委托 `matmaster/context/history_restore.py` 的 schema-aware 分流。**不**新建 `display_history_restore_service.py`（见 §3.5）|
+| `src/services/agent_run_service.py` 的 `_load_user_instructions` helper（v3 §7.3 给的私有函数） | 删除。等价能力迁入 `src/services/context_assembly_ports.py` 的 `AppUserInstructionsPort.load_user_instructions`。AGENT.md 路径约定、size cap 与 hash 计算都属于 port 实现（v3.1） |
 
 ---
 
@@ -321,14 +378,15 @@ from enum import IntEnum
 class SectionOrder(IntEnum):
     USER_INSTRUCTIONS = 10
     COMPACTED_HISTORY = 100
-    SESSION_JOBS = 200
     LOADED_SKILLS = 300
     ACTIVE_TOOLS = 400
     PAST_ATTACHMENTS = 500
     WORKSPACE = 600
     ARTIFACTS = 700
-    TURN_ATTACHMENTS = 1000
-    TURN_INSTRUCTION = 1100
+    TURN_INSTRUCTION = 1000        # 普通轮：instruction 在前
+    TURN_ATTACHMENTS = 1100
+    SESSION_JOBS = 1200
+    TURN_INSTRUCTION_LAST = 1300   # 压缩后：instruction 移到末尾，利用 recency bias
 
 
 @dataclass(frozen=True)
@@ -472,6 +530,8 @@ v3 决策：
 
 为支持兼容，`TurnAttachmentsSource` 在 sources 中作为独立类型存在（见 §7.3），但默认渲染合并到 `<current_instruction>`，由一个 feature flag 控制是否拆分。flag 默认关闭。
 
+注意：`<session_jobs>` 从 Phase 1 起即作为独立顶级 XML 块存在，不受上述 A/B 测试和 feature flag 影响。它始终以 `SessionJobsSource` 的形式按 `SectionOrder.SESSION_JOBS`（1200）排序，每轮附加在 user context 中。
+
 ### 6.6 `schema_version` / `render_version` 演化策略
 
 两个版本号独立演化：
@@ -488,6 +548,190 @@ v3 决策：
 3. **不**重新渲染历史。content 字符串始终被当作权威字节使用
 
 (schema_version, render_version) 不匹配时（例如 schema v2 配 render v1），按各自版本独立处理；不允许混合 codec。
+
+---
+
+## 6bis. Recipe 装配层（v3.1 新增）
+
+v3.1 引入。Recipe 把 "在某场景下用哪些 source" 的决策从 service 与 compactor 收回到 `matmaster/context/recipes.py`，与 §7bis 的 `ContextAssembler` 配合使用。
+
+### 6bis.1 定位
+
+`UserTurnContext.from_sources(...)`（v3 §6.3）继续存在，但**降级为底层机械合并器**。生产代码不再直接调用它（硬约束 §4.2 #1）。recipe 是唯一调用方。
+
+层次：
+
+```
+caller (service / compactor)
+        |
+        v   intent + typed request
+[ContextAssembler.assemble_turn / assemble_compaction]  (§7bis)
+        |   1. 调 ports 拉数据 (UserInstructions / SessionEvent[] / SessionJobs)
+        |   2. 调 SessionContextBuilder 装配 session-level sections
+        |   3. 构造 ContextRecipeInputs
+        |   4. recipe.apply(inputs) -> UserTurnContext
+        v
+[ContextRecipe.apply]
+        |   按 step 顺序收集 sections, 调 UserTurnContext.from_sources
+        v
+[UserTurnContext] -> caller 自己 to_message(view) 取 RUNTIME / CHECKPOINT
+```
+
+### 6bis.2 `ContextRecipeInputs`（recipe 内部输入类型）
+
+```python
+# matmaster/context/recipes.py
+from __future__ import annotations
+from dataclasses import dataclass, field
+
+from matmaster.context.sections import ContextSection
+from matmaster.context.ports import SessionJobs
+from matmaster.context.sources.attachments import PastAttachmentsSource
+from matmaster.context.sources.turn_input import TurnInput
+
+
+@dataclass(frozen=True)
+class ContextRecipeInputs:
+    """Recipe step 函数消费的纯数据载体, 不持有 builder / service / port 对象。
+
+    硬约束 #8: 不是 service / compactor 的公共调用接口, 由 ContextAssembler 内部构造。
+    """
+    user_instructions_text: str = ""
+    compacted_history_summary: str = ""
+    turn_input: TurnInput | None = None
+    session_sections: tuple[ContextSection, ...] = ()   # 由 SessionContextBuilder 预装配
+    session_jobs: SessionJobs = field(default_factory=SessionJobs.empty)
+    past_attachments_override: PastAttachmentsSource | None = None
+    defer_turn_instruction: bool = False
+```
+
+**关键变化（相对早期讨论稿）**：
+
+- 去掉 `session_builder` / `job_ledger`（recipe 不持有 builder/service 对象）
+- 去掉 `pre_turn_history_event_id` / `include_session_attachments`（这些是 assembler 调 `SessionContextBuilder.build_sections` 时的参数，不是 recipe concern）
+- `session_sections` 接收已装配 sections（由核心模块的 `SessionContextBuilder` 生成，符合硬约束 §4.2 #12）
+- `session_jobs` 是 typed `SessionJobs` 而非裸 `object`（符合硬约束 §4.2 #9）
+
+### 6bis.3 `ContextRecipe`
+
+```python
+from collections.abc import Callable
+
+RecipeStep = Callable[[ContextRecipeInputs], tuple[ContextSection, ...]]
+
+
+@dataclass(frozen=True)
+class ContextRecipe:
+    """声明 "在某场景下,该用哪些 source 装配 user_turn_context"。
+
+    顺序: step 元组的执行顺序只决定 ContextSection 在 sections tuple 中的出生顺序。
+    最终渲染顺序由 SectionOrder enum 在 render_sections 内部 sort 决定。
+    改 step 顺序不影响最终 prompt 文本; 改 SectionOrder 才影响。
+    """
+    name: str
+    steps: tuple[RecipeStep, ...]
+
+    def apply(self, inputs: ContextRecipeInputs) -> UserTurnContext:
+        section_groups = tuple(step(inputs) for step in self.steps)
+        images = ()
+        if inputs.turn_input is not None:
+            images = inputs.turn_input.attachments.images_as_parts()
+        return UserTurnContext.from_sources(*section_groups, images=images)
+```
+
+### 6bis.4 Step 函数（recipe 内部，文件私有）
+
+```python
+import dataclasses
+from matmaster.context.sources.user_instructions import UserInstructionsSource
+from matmaster.context.sources.compacted_history import CompactedHistorySource
+from matmaster.context.sources.session_jobs import SessionJobsSource
+
+
+def _step_user_instructions(inp: ContextRecipeInputs) -> tuple[ContextSection, ...]:
+    return UserInstructionsSource(text=inp.user_instructions_text).to_sections()
+
+
+def _step_compacted_history(inp: ContextRecipeInputs) -> tuple[ContextSection, ...]:
+    return CompactedHistorySource(summary=inp.compacted_history_summary).to_sections()
+
+
+def _step_session_sections(inp: ContextRecipeInputs) -> tuple[ContextSection, ...]:
+    return inp.session_sections   # 已由 SessionContextBuilder 装配
+
+
+def _step_past_attachments_override(inp: ContextRecipeInputs) -> tuple[ContextSection, ...]:
+    if inp.past_attachments_override is None:
+        return ()
+    return inp.past_attachments_override.to_sections()
+
+
+def _step_turn_input(inp: ContextRecipeInputs) -> tuple[ContextSection, ...]:
+    if inp.turn_input is None:
+        return ()
+    ti = inp.turn_input
+    if inp.defer_turn_instruction:
+        ti = dataclasses.replace(
+            ti,
+            instruction=dataclasses.replace(ti.instruction, deferred=True),
+        )
+    return ti.to_sections()
+
+
+def _step_session_jobs(inp: ContextRecipeInputs) -> tuple[ContextSection, ...]:
+    return SessionJobsSource.from_jobs(inp.session_jobs).to_sections()
+```
+
+`_step_session_jobs` 不再检查 `is None`：assembler 在 port 缺失时传入 `SessionJobs.empty()`，`SessionJobsSource.from_jobs` 对空 `SessionJobs` 自然返回空 sections。
+
+### 6bis.5 三个 recipe 常量
+
+```python
+ANCHOR_RECIPE = ContextRecipe(
+    name="anchor",
+    steps=(
+        _step_user_instructions,
+        _step_session_sections,
+        _step_turn_input,
+        _step_session_jobs,
+    ),
+)
+
+CONTINUATION_RECIPE = ContextRecipe(
+    name="continuation",
+    steps=(
+        _step_turn_input,
+        _step_session_jobs,
+    ),
+)
+
+COMPACTED_RECIPE = ContextRecipe(
+    name="compacted",
+    steps=(
+        _step_user_instructions,
+        _step_compacted_history,
+        _step_past_attachments_override,
+        _step_session_sections,
+        _step_turn_input,
+        _step_session_jobs,
+    ),
+)
+```
+
+**关键性质**：
+
+- 三个常量是项目里**唯一**声明 "该用哪些 source" 的地方
+- 添加新场景（sub-agent handoff、oversized input、…）= 添加一个新 `XXX_RECIPE = ContextRecipe(...)`，**不改** `apply()` 也**不改** step 函数
+- 添加新 source = 在 `sources/` 加 source、在 `recipes.py` 加 step 函数、把 step 写进相应 recipe；**可能**需要扩 `ContextRecipeInputs` 字段
+
+### 6bis.6 与 SectionOrder 的关系
+
+step 元组顺序只决定 sections 进入 `UserTurnContext.from_sources` 的参数顺序。最终 prompt 中 section 排布由 `SectionOrder` enum 与 `render_sections` 内部的 sort 决定（v3 §6.4 / §7.2）。
+
+这一解耦意味着：
+
+- 调整 prompt 顺序（如 Phase 3 的 `<turn_attachments>` A/B）只改 `SectionOrder`，不改 recipe
+- 调整 "哪些 section 出现"（如 sub-agent handoff 需要新 ingredients）只改 recipe，不改 SectionOrder
 
 ---
 
@@ -510,14 +754,14 @@ class ContextSource(Protocol):
 |--------|------|-------|------|------|
 | `UserInstructionsSource` | `sources/user_instructions.py` | `SectionOrder.USER_INSTRUCTIONS` (10) | RUNTIME + CHECKPOINT | 通过 DI 注入 AGENT.md 文本 |
 | `CompactedHistorySource` | `sources/compacted_history.py` | `SectionOrder.COMPACTED_HISTORY` (100) | RUNTIME + CHECKPOINT | summary LLM 产物 |
-| `SessionJobsSource` | `sources/session_jobs.py` | `SectionOrder.SESSION_JOBS` (200) | RUNTIME + CHECKPOINT | 占位 |
+| `SessionJobsSource` | `sources/session_jobs.py` | `SectionOrder.SESSION_JOBS` (1200) | RUNTIME + CHECKPOINT | 每轮刷新，末尾附加；无活跃 job 时返回空 |
 | `LoadedSkillsSource` | `sources/skills.py` | `SectionOrder.LOADED_SKILLS` (300) | RUNTIME + CHECKPOINT | 从 events 重建 |
 | `ActiveToolsSource` | `sources/tools.py` | `SectionOrder.ACTIVE_TOOLS` (400) | RUNTIME + CHECKPOINT | 替代 `<active_tools>` |
 | `PastAttachmentsSource` | `sources/attachments.py` | `SectionOrder.PAST_ATTACHMENTS` (500) | RUNTIME + CHECKPOINT | 跨轮累积附件清单 |
 | `WorkspaceSource` | `sources/workspace.py` | `SectionOrder.WORKSPACE` (600) | RUNTIME + CHECKPOINT | 占位 |
 | `ArtifactsSource` | `sources/artifacts.py` | `SectionOrder.ARTIFACTS` (700) | RUNTIME + CHECKPOINT | 占位 |
-| `TurnAttachmentsSource` | `sources/turn_input.py` | `SectionOrder.TURN_ATTACHMENTS` (1000) | **RUNTIME only** | 本轮附件清单 |
-| `TurnInstructionSource` | `sources/turn_input.py` | `SectionOrder.TURN_INSTRUCTION` (1100) | **RUNTIME only** | 本轮 user_text |
+| `TurnInstructionSource` | `sources/turn_input.py` | `SectionOrder.TURN_INSTRUCTION` (1000) / `TURN_INSTRUCTION_LAST` (1300) | **RUNTIME only** | 本轮 user_text，`deferred=True` 时排到末尾 |
+| `TurnAttachmentsSource` | `sources/turn_input.py` | `SectionOrder.TURN_ATTACHMENTS` (1100) | **RUNTIME only** | 本轮附件清单 |
 
 CHECKPOINT 视图自动剥离 `TurnAttachmentsSource` 和 `TurnInstructionSource`。
 
@@ -559,42 +803,9 @@ class UserInstructionsSource:
         ),)
 ```
 
-service 层调用示例：
+**v3.1 变化**：v3 这一节原有的 service 私有 helper `_load_user_instructions` **已删除**。AGENT.md 路径约定、size cap、hash 计算 都属于平台 port 实现 `src/services/context_assembly_ports.py::AppUserInstructionsPort`（见 §7bis.4）。
 
-```python
-# src/services/agent_run_service.py 改造后片段
-import hashlib
-from matmaster.context.sources.user_instructions import (
-    UserInstructionsSource,
-    USER_INSTRUCTIONS_MAX_BYTES,
-)
-
-
-def _load_user_instructions(workspace_root: Path) -> tuple[str, str]:
-    """读 AGENT.md, 返回 (text, hash)。
-
-    Size cap (硬约束 #7): 超过 50KB truncate 并 log warning。
-    """
-    path = workspace_root / ".matmaster" / "AGENT.md"
-    try:
-        raw = path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return "", _hash("")
-
-    if len(raw.encode("utf-8")) > USER_INSTRUCTIONS_MAX_BYTES:
-        logger.warning(
-            "AGENT.md exceeds %d bytes, truncating",
-            USER_INSTRUCTIONS_MAX_BYTES,
-        )
-        raw = raw.encode("utf-8")[:USER_INSTRUCTIONS_MAX_BYTES].decode(
-            "utf-8", errors="ignore"
-        )
-    return raw, _hash(raw)
-
-
-def _hash(text: str) -> str:
-    return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
-```
+`UserInstructionsSource` 自身保持纯净：只接受已加载的 `text`，把它装配成 section。`matmaster/context/` 仍然不感知 `.matmaster/AGENT.md` 路径，不感知 50KB 上限。
 
 #### `turn_input.py`（v3 保留双 source 设计，但默认合并渲染）
 
@@ -620,15 +831,19 @@ def _display_name(value: str) -> str:
 class TurnInstructionSource:
     """本轮用户文本指令。仅 RUNTIME 可见。"""
     user_text: str = ""
+    deferred: bool = False  # True → 排到末尾（压缩后 recency bias）
 
     def to_sections(self) -> tuple[ContextSection, ...]:
         if not self.user_text.strip():
             return ()
+        order = (SectionOrder.TURN_INSTRUCTION_LAST
+                 if self.deferred
+                 else SectionOrder.TURN_INSTRUCTION)
         return (ContextSection(
             key="current_instruction",
             tag="current_instruction",
             content=self.user_text.strip(),
-            order=SectionOrder.TURN_INSTRUCTION,
+            order=order,
             views=_RUNTIME,
         ),)
 
@@ -676,7 +891,7 @@ class TurnInput:
     source_query_event_id: int | None = None  # 必填(由 service 层从 DAO 返回值取)
 
     def to_sections(self) -> tuple[ContextSection, ...]:
-        return (*self.attachments.to_sections(), *self.instruction.to_sections())
+        return (*self.instruction.to_sections(), *self.attachments.to_sections())
 
     def has_effective_input(self) -> bool:
         return bool(
@@ -693,6 +908,481 @@ class TurnInput:
 - 替代 `manifests/rehydrator.py` 的 `CompactionRehydrator`
 - 删除 v2 标记的 unused `playground_ctx` 参数
 - 暴露 `build_sections(until_event_id, include_attachments)` 方法支持 Case 3 旁路
+- **v3.1**：构造参数从 `events: list[dict]` 改为 typed `events: tuple[SessionEvent, ...]`（SessionEvent 定义见 §7bis.2）。归属仍在 `matmaster/context/session.py`（硬约束 §4.2 #12）
+
+---
+
+## 7bis. Context Assembly Ports + Assembler（v3.1 新增）
+
+v3.1 引入。本节定义"装配核心模块需要的平台数据入口"以及"装配执行器"。
+
+### 7bis.1 设计原则（重申硬约束 §4.2 #9 / #10 / #11 / #12）
+
+- Port 返回 typed snapshot / bundle / event sequence，**不返回**核心装配产物（`ContextSection` / `UserMessage` / `UserTurnContext`），**不返回**平台 service 对象，**不使用** `Any` / `dict[str, Any]`
+- Event payload 作为存储边界用受限的 `JsonObject` 类型表达
+- Optional port = "该 section 能力不可用"，不做产品功能开关判定
+- 装配规则（events → sections）属于 `matmaster/context/`
+
+### 7bis.2 类型定义
+
+```python
+# matmaster/context/ports.py
+from __future__ import annotations
+from collections.abc import Mapping
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Literal, Protocol
+
+
+# ---- 受限 JSON 类型（硬约束 #10）----
+
+JsonScalar = str | int | float | bool | None
+JsonValue = JsonScalar | tuple["JsonValue", ...] | Mapping[str, "JsonValue"]
+JsonObject = Mapping[str, JsonValue]
+
+
+# ---- user_instructions ----
+
+@dataclass(frozen=True)
+class UserInstructions:
+    text: str
+    hash: str            # "sha256:..."
+    truncated: bool = False
+
+
+class UserInstructionsPort(Protocol):
+    async def load_user_instructions(
+        self,
+        workspace_root: Path,
+    ) -> UserInstructions: ...
+
+
+# ---- session events (typed JSON envelope) ----
+
+@dataclass(frozen=True)
+class SessionEvent:
+    """DB events 行的 typed envelope。
+
+    content 是 JsonObject 而非 dict[str, Any]; 装配规则属于 matmaster/context (硬约束 #10)。
+    """
+    id: int
+    event_type: str
+    source: str | None
+    content: JsonObject
+    task_id: str | None = None
+    invocation_id: str | None = None
+    spawn_id: str | None = None
+
+
+@dataclass(frozen=True)
+class SessionEventQuery:
+    session_id: str
+    spawn_id: str | None
+    until_event_id: int | None = None
+    event_types: tuple[str, ...] | None = None
+    limit: int | None = None
+    order: Literal["asc", "desc"] = "asc"
+
+
+class SessionEventsPort(Protocol):
+    async def load_events(
+        self,
+        query: SessionEventQuery,
+    ) -> tuple[SessionEvent, ...]: ...
+
+
+# ---- session jobs (Optional)----
+
+@dataclass(frozen=True)
+class SessionJobs:
+    """本 session 当前可见的 job 列表 (从 job-events 表按边界点查询得出)。
+
+    占位实现, 实际字段在 bohrium job ledger 接入时确定。不是 "snapshot": jobs
+    通过事件流持久化, 不存在 "拍照" 这种主动行为。
+    """
+    active_jobs: tuple[JsonObject, ...] = ()
+
+    @classmethod
+    def empty(cls) -> "SessionJobs":
+        return cls(active_jobs=())
+
+
+@dataclass(frozen=True)
+class SessionJobsQuery:
+    session_id: str
+
+
+class SessionJobsPort(Protocol):
+    async def load_session_jobs(
+        self,
+        query: SessionJobsQuery,
+    ) -> SessionJobs: ...
+
+
+# ---- assembly ports 组合 ----
+
+@dataclass(frozen=True)
+class ContextAssemblyPorts:
+    """ContextAssembler 持有的窄能力组合。
+
+    注意: user_instructions 不在此处。原因: service 在 intent 判定时已读一次 bundle,
+    必须原样传给 assembler (硬约束 #7), 不允许 assembler 二次读取。
+    """
+    session_events: SessionEventsPort
+    session_jobs: SessionJobsPort | None = None
+```
+
+### 7bis.3 Assembler API
+
+```python
+# matmaster/context/assembly.py
+from __future__ import annotations
+from dataclasses import dataclass
+from enum import Enum
+
+from matmaster.context.ports import (
+    ContextAssemblyPorts,
+    SessionEventQuery,
+    SessionJobsQuery,
+    SessionJobs,
+    UserInstructions,
+)
+from matmaster.context.recipes import (
+    ANCHOR_RECIPE, CONTINUATION_RECIPE, COMPACTED_RECIPE,
+    ContextRecipe, ContextRecipeInputs,
+)
+from matmaster.context.session import SessionContextBuilder
+from matmaster.context.sources.attachments import PastAttachmentsSource
+from matmaster.context.sources.turn_input import TurnInput
+from matmaster.context.turn_context import UserTurnContext
+
+
+class ContextAssemblyIntent(str, Enum):
+    ANCHOR_TURN = "anchor_turn"
+    CONTINUATION_TURN = "continuation_turn"
+    PREFLIGHT_COMPACTION = "preflight_compaction"
+    RUNTIME_COMPACTION = "runtime_compaction"
+
+    @property
+    def is_anchor_turn(self) -> bool:
+        return self == ContextAssemblyIntent.ANCHOR_TURN
+
+    @property
+    def is_compaction(self) -> bool:
+        return self in {
+            ContextAssemblyIntent.PREFLIGHT_COMPACTION,
+            ContextAssemblyIntent.RUNTIME_COMPACTION,
+        }
+
+
+@dataclass(frozen=True)
+class TurnAssemblyRequest:
+    """普通 turn (anchor / continuation) 的装配 request。"""
+    session_id: str
+    spawn_id: str | None
+    turn_input: TurnInput
+    user_instructions: UserInstructions  # 硬约束 #7: UserInstructions 原样传入
+    pre_turn_history_event_id: int | None
+
+
+@dataclass(frozen=True)
+class CompactionAssemblyRequest:
+    """Compaction 装配 request。
+
+    compacted_history_summary 必填 (compactor 自己产生, 可能来自 LLM 或 fallback)。
+    turn_input 在 runtime compaction (kernel 内循环) 时可 None。
+    """
+    session_id: str
+    spawn_id: str | None
+    user_instructions: UserInstructions
+    compacted_history_summary: str
+    covered_until_event_id: int | None
+    turn_input: TurnInput | None = None
+    past_attachments_override: PastAttachmentsSource | None = None
+
+
+@dataclass(frozen=True)
+class AssemblyResult:
+    user_turn_context: UserTurnContext          # caller 自己 to_message(view)
+    user_instructions_text: str                 # compactor 写 history_checkpoint payload 用
+    user_instructions_hash: str                 # service 写 user_turn_context payload 用
+    used_recipe: str                            # 调试 / 埋点
+
+
+_INTENT_RECIPE_MAP: dict[ContextAssemblyIntent, ContextRecipe] = {
+    ContextAssemblyIntent.ANCHOR_TURN: ANCHOR_RECIPE,
+    ContextAssemblyIntent.CONTINUATION_TURN: CONTINUATION_RECIPE,
+    ContextAssemblyIntent.PREFLIGHT_COMPACTION: COMPACTED_RECIPE,
+    ContextAssemblyIntent.RUNTIME_COMPACTION: COMPACTED_RECIPE,
+}
+
+
+class ContextAssembler:
+    def __init__(self, ports: ContextAssemblyPorts) -> None:
+        self._ports = ports
+
+    async def assemble_turn(
+        self,
+        intent: ContextAssemblyIntent,
+        request: TurnAssemblyRequest,
+    ) -> AssemblyResult:
+        if intent not in {
+            ContextAssemblyIntent.ANCHOR_TURN,
+            ContextAssemblyIntent.CONTINUATION_TURN,
+        }:
+            raise ValueError(f"assemble_turn does not accept intent {intent!r}")
+
+        recipe = _INTENT_RECIPE_MAP[intent]
+        session_sections: tuple = ()
+        jobs = await self._load_jobs_or_empty(request.session_id)
+
+        if intent == ContextAssemblyIntent.ANCHOR_TURN:
+            events = await self._ports.session_events.load_events(SessionEventQuery(
+                session_id=request.session_id,
+                spawn_id=request.spawn_id,
+                until_event_id=request.pre_turn_history_event_id,
+                order="asc",
+            ))
+            session_sections = SessionContextBuilder(events=events).build_sections(
+                until_event_id=request.pre_turn_history_event_id,
+                include_attachments=True,
+            )
+
+        inputs = ContextRecipeInputs(
+            user_instructions_text=request.user_instructions.text,
+            turn_input=request.turn_input,
+            session_sections=session_sections,
+            session_jobs=jobs,
+        )
+        user_turn_context = recipe.apply(inputs)
+
+        return AssemblyResult(
+            user_turn_context=user_turn_context,
+            user_instructions_text=request.user_instructions.text,
+            user_instructions_hash=request.user_instructions.hash,
+            used_recipe=recipe.name,
+        )
+
+    async def assemble_compaction(
+        self,
+        intent: ContextAssemblyIntent,
+        request: CompactionAssemblyRequest,
+    ) -> AssemblyResult:
+        if not intent.is_compaction:
+            raise ValueError(f"assemble_compaction does not accept intent {intent!r}")
+
+        recipe = _INTENT_RECIPE_MAP[intent]
+        events = await self._ports.session_events.load_events(SessionEventQuery(
+            session_id=request.session_id,
+            spawn_id=request.spawn_id,
+            until_event_id=request.covered_until_event_id,
+            order="asc",
+        ))
+        session_sections = SessionContextBuilder(events=events).build_sections(
+            until_event_id=request.covered_until_event_id,
+            include_attachments=(request.past_attachments_override is None),
+        )
+        jobs = await self._load_jobs_or_empty(request.session_id)
+
+        inputs = ContextRecipeInputs(
+            user_instructions_text=request.user_instructions.text,
+            compacted_history_summary=request.compacted_history_summary,
+            turn_input=request.turn_input,
+            session_sections=session_sections,
+            session_jobs=jobs,
+            past_attachments_override=request.past_attachments_override,
+            defer_turn_instruction=True,   # 压缩后 instruction 移末尾, recency bias
+        )
+        user_turn_context = recipe.apply(inputs)
+
+        return AssemblyResult(
+            user_turn_context=user_turn_context,
+            user_instructions_text=request.user_instructions.text,
+            user_instructions_hash=request.user_instructions.hash,
+            used_recipe=recipe.name,
+        )
+
+    async def _load_jobs_or_empty(self, session_id: str) -> SessionJobs:
+        """Optional port 语义: 无 port = 空 SessionJobs, 不判断 Bohrium 是否启用 (硬约束 #11)。"""
+        if self._ports.session_jobs is None:
+            return SessionJobs.empty()
+        return await self._ports.session_jobs.load_session_jobs(
+            SessionJobsQuery(session_id=session_id),
+        )
+```
+
+### 7bis.4 Port 平台实现（`src/services/context_assembly_ports.py`）
+
+```python
+# src/services/context_assembly_ports.py
+import hashlib
+import logging
+from pathlib import Path
+
+from matmaster.context.ports import (
+    SessionEvent, SessionEventQuery, SessionEventsPort,
+    SessionJobsQuery, SessionJobs, SessionJobsPort,
+    UserInstructions, UserInstructionsPort,
+)
+
+logger = logging.getLogger(__name__)
+USER_INSTRUCTIONS_MAX_BYTES = 50 * 1024
+
+
+class AppUserInstructionsPort:
+    """AGENT.md 路径约定, size cap, hash 计算的归属。"""
+
+    async def load_user_instructions(
+        self, workspace_root: Path,
+    ) -> UserInstructions:
+        path = workspace_root / ".matmaster" / "AGENT.md"
+        try:
+            raw = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return UserInstructions(text="", hash=_hash(""), truncated=False)
+
+        truncated = False
+        if len(raw.encode("utf-8")) > USER_INSTRUCTIONS_MAX_BYTES:
+            logger.warning(
+                "AGENT.md exceeds %d bytes, truncating", USER_INSTRUCTIONS_MAX_BYTES,
+            )
+            raw = raw.encode("utf-8")[:USER_INSTRUCTIONS_MAX_BYTES].decode(
+                "utf-8", errors="ignore",
+            )
+            truncated = True
+        return UserInstructions(text=raw, hash=_hash(raw), truncated=truncated)
+
+
+def _hash(text: str) -> str:
+    return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+class AppSessionEventsPort:
+    def __init__(self, events_service: "ChatEventsService") -> None:
+        self._events_service = events_service
+
+    async def load_events(
+        self, query: SessionEventQuery,
+    ) -> tuple[SessionEvent, ...]:
+        rows = self._events_service.query(
+            session_id=query.session_id,
+            spawn_id=query.spawn_id,
+            until_event_id=query.until_event_id,
+            event_types=query.event_types,
+            limit=query.limit,
+            order=query.order,
+        )
+        return tuple(
+            SessionEvent(
+                id=r.id,
+                event_type=r.event_type,
+                source=r.source,
+                content=r.content,        # ChatEventsTable 已返回 JSON dict
+                task_id=r.task_id,
+                invocation_id=r.invocation_id,
+                spawn_id=r.spawn_id,
+            )
+            for r in rows
+        )
+
+
+class AppSessionJobsPort:
+    """占位: bohrium job ledger 接入时实现。"""
+    async def load_session_jobs(
+        self, query: SessionJobsQuery,
+    ) -> SessionJobs:
+        return SessionJobs.empty()
+```
+
+### 7bis.5 `turn_intent.py` 双层（核心纯函数 + service helper）
+
+```python
+# matmaster/context/turn_intent.py
+from matmaster.context.assembly import ContextAssemblyIntent
+
+
+def decide_turn_context_intent(
+    *,
+    current_hash: str,
+    latest_anchor_hash: str | None,
+) -> ContextAssemblyIntent:
+    """纯函数: 仅依据 hash 比对判定 anchor / continuation。
+
+    不读 events, 不知灰度 flag。
+    """
+    if latest_anchor_hash is None or latest_anchor_hash != current_hash:
+        return ContextAssemblyIntent.ANCHOR_TURN
+    return ContextAssemblyIntent.CONTINUATION_TURN
+```
+
+```python
+# src/services/context_turn_intent.py
+from matmaster.context.assembly import ContextAssemblyIntent
+from matmaster.context.ports import SessionEvent, SessionEventQuery, SessionEventsPort
+from matmaster.context.turn_intent import decide_turn_context_intent
+
+
+async def resolve_turn_context_intent(
+    *,
+    instructions_hash: str,
+    session_id: str,
+    spawn_id: str | None,
+    events_port: SessionEventsPort,
+    use_new_context_path: bool,
+) -> ContextAssemblyIntent:
+    """Service-side helper: events 查询 + 灰度 flag + 纯判定。"""
+    if not use_new_context_path:
+        # 灰度兜底: 走旧路径时强制 anchor, 不依赖新 hash 比对
+        return ContextAssemblyIntent.ANCHOR_TURN
+
+    events = await events_port.load_events(SessionEventQuery(
+        session_id=session_id,
+        spawn_id=spawn_id,
+        event_types=("user_turn_context", "history_checkpoint"),
+        limit=50,
+        order="desc",
+    ))
+    latest_hash = _latest_anchor_hash_from_events(events)
+    return decide_turn_context_intent(
+        current_hash=instructions_hash,
+        latest_anchor_hash=latest_hash,
+    )
+
+
+def _latest_anchor_hash_from_events(
+    events: tuple[SessionEvent, ...],
+) -> str | None:
+    for ev in events:    # already DESC
+        if ev.event_type == "user_turn_context":
+            if ev.content.get("kind") == "anchor":
+                return ev.content.get("user_instructions_hash")
+        elif ev.event_type == "history_checkpoint":
+            return ev.content.get("user_instructions_hash")
+    return None
+```
+
+### 7bis.6 调用图
+
+```
+agent_run_service._prepare_and_dispatch:
+  1. events_service.add_history_event(User/query)  → user_query_event_id
+  2. ports.user_instructions.load(workspace_root)   → UserInstructions  ← 一次读取
+  3. context_turn_intent.resolve_turn_context_intent(bundle.hash, events_port, flag)
+                                                    → ContextAssemblyIntent
+  4. assembler.assemble_turn(intent, TurnAssemblyRequest(..., user_instructions=bundle))
+                                                    → AssemblyResult (assembler 不再读 AGENT.md)
+  5. events_service.add_history_event(user_turn_context, fail-fast)
+
+ContextCompactor.apply_compaction_plan:
+  1. compactor 自己产生 summary (LLM 或 fallback)
+  2. assembler.assemble_compaction(intent, CompactionAssemblyRequest(..., user_instructions=bundle))
+                                                    → AssemblyResult
+  3. messages[:] = [system_msg, result.to_message(RUNTIME)]
+  4. base_snapshot = [result.to_message(CHECKPOINT).model_dump(...)]
+  5. 写 history_checkpoint 含 user_instructions_text / hash
+```
+
+注意 service 调 events_port 两次（intent resolver 一次扫最近 50 条；assembler 内部一次按时间升序取全部），两次查询字段不同（前者过滤 type + 倒序 + limit；后者完整 + 升序），重叠不可避免。可以在 port 实现层加 per-request 简单 cache，但属于平台优化，不在 spec 范围。
 
 ---
 
@@ -707,16 +1397,22 @@ v3 核心新设计章节。回应"AGENT.md 改动响应性回退"的 review 意�
 - 不每轮都重复装载长 prefix（hash 未变时复用旧 anchor）
 - restore 路径自然 work，不需要状态机或字符串替换魔法
 
-### 8.2 写入决策（service 层每轮）
+### 8.2 写入决策（service 层每轮，v3.1 改写）
+
+v3 这一节展示了 service 内 inline 拼装。v3.1 改为：service 只判定 intent + 调 assembler + 写事件，不感知 source 拼装细节。
 
 ```python
 # src/services/agent_run_service.py 改造后片段
 
-async def _prepare_and_dispatch(req: SendMessageRequest) -> ...:
-    # 1. 读 AGENT.md
-    instructions_text, instructions_hash = _load_user_instructions(workspace_root)
+from matmaster.context.assembly import (
+    ContextAssembler, ContextAssemblyIntent, TurnAssemblyRequest,
+)
+from matmaster.context.sections import ContextView
+from src.services.context_turn_intent import resolve_turn_context_intent
 
-    # 2. 写 raw User/query, 拿到 event id (依赖 Phase 0 DAO 改造)
+
+async def _prepare_and_dispatch(req: SendMessageRequest) -> ...:
+    # 1. 写 raw User/query, 拿到 event id (依赖 Phase 0 DAO 改造)
     user_query_event_id = await events_service.add_history_event(
         session_id,
         payload={
@@ -730,18 +1426,19 @@ async def _prepare_and_dispatch(req: SendMessageRequest) -> ...:
             "invocation_id": invocation_id,
         },
         user_id=user_id,
-    )  # 返回 inserted event id
-
-    # 3. 决定 kind
-    last_anchor_hash = await _latest_anchor_user_instructions_hash(
-        events_service, session_id, spawn_id,
     )
-    is_first_turn_of_session = last_anchor_hash is None
 
-    if is_first_turn_of_session or instructions_hash != last_anchor_hash:
-        kind = "anchor"
-    else:
-        kind = "continuation"
+    # 2. 读 AGENT.md (一次读取贯穿整个 turn, 硬约束 #7)
+    instructions = await user_instructions_port.load_user_instructions(workspace_root)
+
+    # 3. 判定 intent (service helper, 含灰度 flag)
+    intent = await resolve_turn_context_intent(
+        instructions_hash=instructions.hash,
+        session_id=session_id,
+        spawn_id=spawn_id,
+        events_port=session_events_port,
+        use_new_context_path=settings.use_new_context_path,
+    )
 
     # 4. 构造 TurnInput
     turn_input = TurnInput(
@@ -755,29 +1452,20 @@ async def _prepare_and_dispatch(req: SendMessageRequest) -> ...:
         source_query_event_id=user_query_event_id,
     )
 
-    # 5. 装配 user_context
-    if kind == "anchor":
-        # 完整 sections + TurnInput
-        session_sections = session_context_builder.build_sections(
-            until_event_id=pre_query_scope_event_id,
-        )
-        user_context = UserTurnContext.from_sources(
-            UserInstructionsSource(text=instructions_text).to_sections(),
-            SessionJobsSource.empty().to_sections(),
-            session_sections,
-            turn_input.to_sections(),
-            images=turn_input.attachments.images_as_parts(),
-        )
-    else:
-        # 仅 TurnInput
-        user_context = UserTurnContext.from_sources(
-            turn_input.to_sections(),
-            images=turn_input.attachments.images_as_parts(),
-        )
+    # 5. 调 assembler 装配 (instructions bundle 原样传入, 禁止二次读)
+    assembly = await context_assembler.assemble_turn(
+        intent=intent,
+        request=TurnAssemblyRequest(
+            session_id=session_id,
+            spawn_id=spawn_id,
+            turn_input=turn_input,
+            user_instructions=instructions,
+            pre_turn_history_event_id=pre_query_scope_event_id,
+        ),
+    )
 
-    rendered_message = user_context.to_message(ContextView.RUNTIME)
-
-    # 6. 写 user_turn_context (fail-fast)
+    # 6. 写 user_turn_context (fail-fast, 硬约束 #2)
+    rendered_message = assembly.user_turn_context.to_message(ContextView.RUNTIME)
     try:
         await events_service.add_history_event(
             session_id,
@@ -786,10 +1474,13 @@ async def _prepare_and_dispatch(req: SendMessageRequest) -> ...:
                 "type": "user_turn_context",
                 "content": {
                     "schema_version": "user_turn_context.v1",
-                    "kind": kind,
+                    "kind": "anchor" if intent.is_anchor_turn else "continuation",
                     "message": rendered_message.model_dump(mode="json"),
                     "source_query_event_id": user_query_event_id,
-                    "user_instructions_hash": instructions_hash if kind == "anchor" else None,
+                    "user_instructions_hash": (
+                        assembly.user_instructions_hash
+                        if intent.is_anchor_turn else None
+                    ),
                     "transform": "raw",
                     "render_version": "user_context_render.v1",
                 },
@@ -800,54 +1491,37 @@ async def _prepare_and_dispatch(req: SendMessageRequest) -> ...:
         )
     except Exception:
         logger.exception("user_turn_context write failed; aborting turn")
-        raise  # 硬约束 #2: fail-fast
+        raise
 
     # 7. 调 kernel
-    history = await model_history_restore_service.restore(
+    model_messages = await model_history_restore_service.restore(
         session_id, spawn_id=spawn_id,
     )
-    # history 已包含本轮的 user_turn_context 渲染后的 UserMessage 作为最后一条
-    # kernel 不再做 turn_input 装配,直接用 history
-
     async for event in exp.run_stream(
         pg_ctx,
-        history=history,
+        model_messages=model_messages,
         cancel_token=cancel_token,
         skills=...,
     ):
         ...
 ```
 
-### 8.3 `_latest_anchor_user_instructions_hash` 查询
+关键变化（相对 v3）：
 
-扫最近 N 条事件，找最近的 anchor 事件的 hash：
+- 步骤 1（读 AGENT.md）拆出去, 走 `UserInstructionsPort` → 一份 typed `UserInstructions`
+- 步骤 3（判定 kind）改为调 `resolve_turn_context_intent` helper（在 `src/services/context_turn_intent.py`），含灰度 flag
+- 步骤 5（装配）消失，改为 `assembler.assemble_turn(intent, request)`；service 不再知道 source 列表
+- `instructions_text` / `instructions_hash` 不再单独传，统一打包为 `UserInstructions`，原样传入 assembler（硬约束 §4.2 #7）
 
-```python
-async def _latest_anchor_user_instructions_hash(
-    events_service: ChatEventsService,
-    session_id: str,
-    spawn_id: str | None,
-) -> str | None:
-    """返回最近一次 anchor 来源(user_turn_context.kind=anchor 或 history_checkpoint)
-    的 user_instructions_hash。无 anchor 时返回 None。
+### 8.3 latest anchor hash 查询（v3.1 改写）
 
-    优化: 实际实现应通过 SQL ORDER BY id DESC LIMIT N 取最近 N 条
-    (N=50 已足够覆盖典型 session),在 Python 端按时间倒序找首个 anchor。
-    """
-    recent_events = events_service.get_recent_events(
-        session_id, spawn_id=spawn_id, limit=50,
-    )
-    for ev in reversed(recent_events):
-        if ev["type"] == "user_turn_context":
-            content = ev["content"]
-            if content.get("kind") == "anchor":
-                return content.get("user_instructions_hash")
-        elif ev["type"] == "history_checkpoint":
-            return ev["content"].get("user_instructions_hash")
-    return None
-```
+v3 在此节展示了 service 私有 helper `_latest_anchor_user_instructions_hash` 的实现。v3.1 把这部分逻辑移到 `src/services/context_turn_intent.py`（见 §7bis.5）的 `resolve_turn_context_intent` 与 `_latest_anchor_hash_from_events`。
 
-如果扫 50 条仍未找到 anchor（极少见，意味着有 50+ 条 continuation 没有压缩），降级为"按 first turn 处理"（生成 anchor）。这是防御性兜底，不应在实践中触发。
+要点：
+
+- 复用 `SessionEventsPort.load_events`（`limit=50`、`order="desc"`、`event_types=("user_turn_context", "history_checkpoint")`），不引入独立 `LatestAnchorHashPort`
+- 兜底逻辑相同：扫 50 条仍未找到 anchor → 按首轮处理（返回 `ANCHOR_TURN`）
+- 灰度 flag 处理：`use_new_context_path=False` 时直接返回 `ANCHOR_TURN`，兼容旧路径
 
 ### 8.4 几个场景演化
 
@@ -865,9 +1539,9 @@ async def _latest_anchor_user_instructions_hash(
 
 ### 8.5 与 history_checkpoint 的交互
 
-压缩触发时，compactor 写 `history_checkpoint`，payload 包含 `user_instructions_text` / `user_instructions_hash`（service 层在调 compactor 前传入）。compactor 内部装配的 anchor base_messages[0] 用的就是这个 hash 对应的 AGENT.md 内容。
+压缩触发时，compactor 写 `history_checkpoint`，payload 包含 `user_instructions_text` / `user_instructions_hash`（v3.1：service 层调 compactor 前已读取一次 `UserInstructions` 并原样传给 compactor，实例内 text 与 hash 一致）。compactor 内部通过 `ContextAssembler.assemble_compaction` 装配的 anchor base_messages[0] 用的就是这个 hash 对应的 AGENT.md 内容。
 
-下一轮请求时，`_latest_anchor_user_instructions_hash` 会找到 `history_checkpoint.user_instructions_hash`，并与 service 层当前读到的 AGENT.md hash 比对。如果用户在压缩后又改了 AGENT.md，下一轮会再写一条 `user_turn_context(kind=anchor, hash=新)`。
+下一轮请求时，v3.1 的 `resolve_turn_context_intent` helper（在 `src/services/context_turn_intent.py`，参见 §7bis.5）会查询最近 events 找到 `history_checkpoint.user_instructions_hash`，并与 service 层当前读到的 AGENT.md hash 比对。如果用户在压缩后又改了 AGENT.md，下一轮会再写一条 `user_turn_context(kind=anchor, hash=新)`。
 
 ### 8.6 hash 计算细节
 
@@ -882,14 +1556,15 @@ empty AGENT.md（不存在或全空白）也要算 hash（sha256("")），保证
 
 ## 9. `compaction.py` — `ContextCompactor` 改造
 
-### 9.1 v3 改造原则
+### 9.1 v3.1 改造原则
 
 - 改造前后行为等价（保留 fallback、保留 strategy 字段、保留 retained_turns 字段）
-- 装配方式从手写字符串改为 `UserTurnContext` + view 投影
-- 接受 service 层注入的 `user_instructions_text` 和 `user_instructions_hash`
+- 装配方式从手写字符串 / 手写 source 拼装 改为调用 `ContextAssembler.assemble_compaction`
+- 接受 service 层注入的 `user_instructions: UserInstructions`（统一对象，禁止 text/hash 拆传）
+- compactor 内部**不持有** `SessionContextBuilder`，**不直接 import** `UserInstructionsSource` / `CompactedHistorySource` / `SessionJobsSource` 等 source（硬约束 §4.2 #2 / #4）
 - 写入的 `history_checkpoint` payload 含新字段
 
-### 9.2 改造后 `apply_compaction_plan`
+### 9.2 改造后 `apply_compaction_plan`（v3.1）
 
 ```python
 async def apply_compaction_plan(
@@ -897,11 +1572,11 @@ async def apply_compaction_plan(
     plan: CompactionPlan,
     messages: list[Message],
     *,
+    intent: ContextAssemblyIntent,           # PREFLIGHT_COMPACTION 或 RUNTIME_COMPACTION
+    user_instructions: UserInstructions,
     turn_input: TurnInput | None = None,
-    user_instructions_text: str = "",
-    user_instructions_hash: str = "",
-    preset_summary: str | None = None,  # 预留供 oversized input (Phase 4) 用
-    preset_past_attachments: PastAttachmentsSource | None = None,  # 同上
+    summary_override: str | None = None,
+    past_attachments_override: PastAttachmentsSource | None = None,
 ) -> CompactionResult:
     """执行压缩并替换 messages。
 
@@ -912,61 +1587,50 @@ async def apply_compaction_plan(
         raise ValueError("Cannot compact an empty message list")
     if not isinstance(messages[0], SystemMessage):
         raise TypeError(f"messages[0] must be SystemMessage, got {type(messages[0])}")
+    if not intent.is_compaction:
+        raise ValueError(f"apply_compaction_plan requires compaction intent, got {intent!r}")
 
     system_msg = messages[0]
 
-    # === Summary 阶段 (保留 fallback) ===
-    if preset_summary is not None:
-        summary = preset_summary
-        strategy = "summary"
-        durability = "durable"
-        failure_reason = None
+    # === Summary 阶段 (保留 fallback, 不进 assembler) ===
+    if summary_override is not None:
+        summary = summary_override
+        strategy, durability, failure_reason = "summary", "durable", None
     else:
         summary_input = self._select_summary_input(messages, turn_input)
         if not summary_input:
             raise ValueError("Cannot compact messages without history")
         try:
             summary = await self._summarize(summary_input)
-            strategy = "summary"
-            durability = "durable"
-            failure_reason = None
+            strategy, durability, failure_reason = "summary", "durable", None
         except Exception as e:
-            # Fallback 保留: 不删除 sliding_window / tool_truncation
             logger.warning("Summary failed, falling back: %s", e)
             summary, strategy, failure_reason = self._fallback(messages, e)
             durability = "ephemeral"
 
-    # === 装配 anchor user message ===
-    until_event_id = (
+    # === 装配走 ContextAssembler (硬约束 §4.2 #4) ===
+    covered_until_event_id = (
         turn_input.pre_turn_history_event_id if turn_input else None
     )
 
-    if preset_past_attachments is not None:
-        past_attachments_sections = preset_past_attachments.to_sections()
-        other_session_sections = self._session_builder.build_sections(
-            until_event_id=until_event_id,
-            include_attachments=False,
-        )
-    else:
-        past_attachments_sections = ()
-        other_session_sections = self._session_builder.build_sections(
-            until_event_id=until_event_id,
-        )
-
-    user_context = UserTurnContext.from_sources(
-        UserInstructionsSource(text=user_instructions_text).to_sections(),
-        CompactedHistorySource(summary=summary).to_sections(),
-        SessionJobsSource.empty().to_sections(),
-        past_attachments_sections,
-        other_session_sections,
-        turn_input.to_sections() if turn_input else (),
-        images=turn_input.attachments.images_as_parts() if turn_input else (),
+    assembly = await self._context_assembler.assemble_compaction(
+        intent=intent,
+        request=CompactionAssemblyRequest(
+            session_id=self._session_id,
+            spawn_id=self._spawn_id,
+            user_instructions=user_instructions,
+            compacted_history_summary=summary,    # compactor 内部局部变量 summary 透传
+            covered_until_event_id=covered_until_event_id,
+            turn_input=turn_input,
+            past_attachments_override=past_attachments_override,
+        ),
     )
 
-    runtime_message = user_context.to_message(ContextView.RUNTIME)
+    # === 双视图渲染 (assembler 不渲染, caller 选 view) ===
+    runtime_message = assembly.user_turn_context.to_message(ContextView.RUNTIME)
     messages[:] = [system_msg, runtime_message]
 
-    checkpoint_message = user_context.to_message(ContextView.CHECKPOINT)
+    checkpoint_message = assembly.user_turn_context.to_message(ContextView.CHECKPOINT)
     base_snapshot = [checkpoint_message.model_dump(mode="json")]
 
     return CompactionResult(
@@ -979,10 +1643,10 @@ async def apply_compaction_plan(
         retained_turns=0,
         failure_reason=failure_reason,
         base_snapshot=base_snapshot,
-        checkpoint_covered_until_event_id=until_event_id,
+        checkpoint_covered_until_event_id=covered_until_event_id,
         # 新字段 (会被 sink 写到 history_checkpoint payload)
-        user_instructions_text=user_instructions_text,
-        user_instructions_hash=user_instructions_hash,
+        user_instructions_text=assembly.user_instructions_text,
+        user_instructions_hash=assembly.user_instructions_hash,
     )
 
 
@@ -991,22 +1655,19 @@ def _fallback(
     messages: list[Message],
     error: Exception,
 ) -> tuple[str, str, str]:
-    """Summary LLM 失败时的降级。
-
-    保留为 Phase 3 默认行为,不在本 spec 删除。删除决策延后至有埋点数据后单独评估。
-
-    返回 (summary_str, strategy, failure_reason)。
-    strategy 可能是 "sliding_window" 或 "tool_truncation"。
-    """
-    # 实现等价于现 context_compactor.py:364-385,本节略
+    """Summary LLM 失败时的降级。保留为 Phase 3 默认行为,不在本 spec 删除。"""
+    # 实现等价于现 context_compactor.py:364-385, 本节略
     ...
 ```
 
-**关键点**：
-- `runtime_message` 与 `checkpoint_message` 的差异完全靠 view 过滤实现：同一份 `user_context` 投影两次
-- `user_instructions_text` / `user_instructions_hash` 通过参数注入，service 层负责读盘并传入
+**关键点（v3.1）**：
+
+- compactor 入口的 `user_instructions_text` / `user_instructions_hash` 两个 str 参数**合并**为 `user_instructions: UserInstructions`，避免 text/hash 拆开传可能出现的不一致（硬约束 §4.2 #7 在 compactor 路径的延伸；text 与 hash 在 `UserInstructions` 实例内保证一致）
+- compactor 新增 `intent` 必填参数。caller 必须明确传 `PREFLIGHT_COMPACTION` 或 `RUNTIME_COMPACTION`，由 caller 决定语义
+- `runtime_message` 与 `checkpoint_message` 的差异完全靠 view 过滤实现：同一份 `assembly.user_turn_context` 投影两次
+- compactor `__init__` 注入 `context_assembler: ContextAssembler`（取代 v3 注入 `session_builder`）
 - **fallback 路径保留**。`sliding_window` / `tool_truncation` 删除决策延后到 Phase 3 完成、有埋点数据后单独评估
-- `CompactionResult` 新增 `user_instructions_text` / `user_instructions_hash` 字段，sink 写 history_checkpoint payload 时一并写入
+- summary 生成仍在 compactor 内部（涉及 LLM 调用、token 预算、fallback 策略），不进 assembler；assembler 拿到 summary 字符串后只负责 section 组装
 
 ### 9.3 类型保留 + shim 链路
 
@@ -1034,28 +1695,28 @@ from matmaster.context.compaction import (  # noqa: F401
 v3 把 v2 的 snapshot_sink 整套机制**从 kernel 删除**。kernel 不再感知 `user_turn_context` 事件。
 
 - service 层在调 `kernel.run_stream` 之前已经写完 `User/query` + `user_turn_context` 两条事件
-- service 层调 `ModelHistoryRestoreService.restore(...)` 拿到完整 `history`（含本轮 user_turn_context 渲染后的 UserMessage 作为最后一条）
-- kernel.run_stream 直接用 history，不做 turn_input 装配
-- kernel.run_stream 的 `task` 参数语义改变：v3 中 task 可以是空字符串（因为 user message 已经在 history 末尾），或 deprecated
+- service 层调 `ModelHistoryRestoreService.restore(...)` 拿到完整 `model_messages`（含本轮 user_turn_context 渲染后的 UserMessage 作为最后一条）
+- kernel.run_stream 直接用 model_messages，不做 turn_input 装配
+- kernel.run_stream 的 `task` 参数语义改变：v3 中 task 可以是空字符串（因为 user message 已经在 model_messages 末尾），或 deprecated
 
 ### 10.2 kernel 入口简化
 
 ```python
 # matmaster/core/agent.py 改造后伪代码
 
-async def _run_items(self, spec, task, history, ...):
-    """v3: history 已经是完整的 LLM 视图,包含本轮 user message。
+async def _run_items(self, spec, task, model_messages, ...):
+    """v3: model_messages 已经是完整的 LLM 视图,包含本轮 user message。
     kernel 不再装配 turn_input。
     """
-    if not history:
-        raise ValueError("v3 kernel.run_stream requires non-empty history")
-    if not isinstance(history[-1], UserMessage):
-        raise ValueError("history[-1] must be UserMessage in v3")
+    if not model_messages:
+        raise ValueError("v3 kernel.run_stream requires non-empty model_messages")
+    if not isinstance(model_messages[-1], UserMessage):
+        raise ValueError("model_messages[-1] must be UserMessage in v3")
 
     state = _KernelState(
         messages=[
             SystemMessage(content=spec.system_prompt),
-            *history,
+            *model_messages,
         ]
     )
 
@@ -1085,21 +1746,26 @@ async def _run_items(self, spec, task, history, ...):
 
 ### 10.3 `AgentRuntimeSpec` 字段变更
 
-| 字段 | v2 | v3 |
-|------|-----|-----|
-| `context_builder: ContextBuilder` | 必填 | 保持（Phase 3 才改名为 `system_prompt_builder`） |
-| `turn_input: TurnInput` | 新增 | **删除**（kernel 不再装配 turn_input） |
-| `user_instructions_text: str` | 新增 | 保留（compactor 在 runtime compaction 时需要） |
-| `user_instructions_hash: str` | 未规定 | **新增**（compactor 写 checkpoint 时需要） |
-| `runtime_ports.snapshot_sink` | 新增 | **删除** |
-| `runtime_ports.checkpoint_sink` | 已有 | 保留，payload 扩展（见 §3.3） |
+| 字段 | v2 | v3 | v3.1 |
+|------|-----|-----|-----|
+| `context_builder: ContextBuilder` | 必填 | 保持（Phase 3 才改名为 `system_prompt_builder`） | 同 v3 |
+| `turn_input: TurnInput` | 新增 | **删除**（kernel 不再装配 turn_input） | 同 v3 |
+| `user_instructions_text: str` | 新增 | 保留（compactor 在 runtime compaction 时需要） | **删除**，由 `user_instructions: UserInstructions` 替代（通过 compactor 入口传入） |
+| `user_instructions_hash: str` | 未规定 | **新增**（compactor 写 checkpoint 时需要） | **删除**（合并到 `UserInstructions`） |
+| `runtime_ports.snapshot_sink` | 新增 | **删除** | 同 v3 |
+| `runtime_ports.checkpoint_sink` | 已有 | 保留，payload 扩展（见 §3.3） | 同 v3 |
+| `context_assembler: ContextAssembler` | — | — | **新增** |
+| `user_instructions_port: UserInstructionsPort` | — | — | **新增** |
+| `session_events_port: SessionEventsPort` | — | — | **新增** |
+| `session_jobs_port: SessionJobsPort \| None` | — | — | **新增**（Optional） |
 
 废除散落字段：
 
 - `spec.meta["current_input_context"]`
 - `spec.meta["attachment_manifest"]`
 - `spec.meta["current_user_images"]`
-- service 层的 `_apply_user_instructions_to_initial_user_query`（不再需要，AGENT.md 通过 `UserInstructionsSource` 经 service 层装配）
+- service 层的 `_apply_user_instructions_to_initial_user_query`（不再需要，AGENT.md 通过 `UserInstructionsPort` + `ContextAssembler` 装配）
+- service 层的 `_load_user_instructions` 私有 helper（v3.1：等价能力进 `AppUserInstructionsPort`，见 §7bis.4）
 
 ---
 
@@ -1338,18 +2004,22 @@ v0 marker 退役在 Phase 4（独立 phase，30+ 天后评估）。
 
 ---
 
-## 12. 四个 Case 的 source 装配（v3 修订）
+## 12. 四个 Case 的装配视图（v3.1 改为 intent / recipe / port 数据流）
 
-| Case | 触发点 | 装配的 sources | user_turn_context.kind |
-|------|--------|---------------|------------------------|
-| **1. 首轮无压缩** | service 层 stage X | UserInstructions + SessionJobs(empty) + SessionContextBuilder(skills/tools, 无 past_attachments) + TurnInput | `anchor` |
-| **1b. 普通延续轮，hash 未变** | service 层 stage X | **仅 TurnInput** | `continuation` |
-| **1c. 延续轮，hash 变了** | service 层 stage X | 完整 sections + TurnInput | `anchor` |
-| **2. 运行中 runtime compaction（无新输入）** | kernel 内 compactor | UserInstructions + CompactedHistory + SessionJobs + SessionContextBuilder | （不写 user_turn_context，只写 history_checkpoint）|
-| **3. Oversized input（Case 3）** | **本 spec 不实现，Phase 4 独立 spec** | 预留 `transform="oversized_summary"` | 预留 |
-| **4. Preflight compaction（新输入 + 立即压缩）** | service 层（kernel 内调用 compactor） | 完整 sections + TurnInput | `anchor` + `transform="preflight_compacted"` |
+v3 在此用 "装配的 sources" 列表描述每个 case。v3.1 把它改为 caller / intent / recipe / port 的数据流视图，更贴近实现细节。
 
-最终渲染顺序：长期约束 → 历史摘要 → 会话状态 → 可用能力 → 过去材料 → 本轮材料 → 本轮任务。
+| Case | 触发点 caller | intent | recipe (assembler 内部选) | 必需 ports | user_turn_context.kind |
+|------|---------------|--------|-----------------|-----------|------------------------|
+| **1. 首轮无压缩** | `agent_run_service._prepare_and_dispatch` | `ANCHOR_TURN` | `ANCHOR_RECIPE` | UserInstructions(service 调) + SessionEvents + SessionJobs? | `anchor` |
+| **1b. 普通延续轮，hash 未变** | 同上 | `CONTINUATION_TURN` | `CONTINUATION_RECIPE` | UserInstructions(service 调) + SessionJobs?；assembler 内部不查 events（continuation 不需要 session sections） | `continuation` |
+| **1c. 延续轮，hash 变了** | 同上 | `ANCHOR_TURN` | `ANCHOR_RECIPE` | 同 case 1 | `anchor` |
+| **2. 运行中 runtime compaction（无新输入）** | `ContextCompactor.apply_compaction_plan` | `RUNTIME_COMPACTION` | `COMPACTED_RECIPE` | UserInstructions(service 调，传 bundle 给 compactor) + SessionEvents + SessionJobs? | （不写 user_turn_context，只写 history_checkpoint） |
+| **3. Oversized input** | **本 spec 不实现，Phase 4 独立 spec** | 预留 `transform="oversized_summary"` | 预留 | — | 预留 |
+| **4. Preflight compaction（新输入 + 立即压缩）** | `ContextCompactor.apply_compaction_plan`（service 触发） | `PREFLIGHT_COMPACTION` | `COMPACTED_RECIPE` | 同 case 2 | （compactor 写 history_checkpoint；service 写 `user_turn_context(transform="preflight_compacted")`）|
+
+> 注：`UserInstructions` 只由 service 通过 `UserInstructionsPort.load_user_instructions` 读取一次（硬约束 §4.2 #7），然后原样传给 assembler / compactor。`UserInstructionsPort` 不在 `ContextAssemblyPorts` 中。
+
+最终渲染顺序：长期约束 → 历史摘要 → 可用能力 → 过去材料 → 本轮材料 → 本轮任务 → 当前 job 状态（由 `SectionOrder` enum 在 `render_sections` 内部 sort 控制，不依赖 recipe step 顺序）。
 
 ---
 
@@ -1391,6 +2061,37 @@ v0 marker 退役在 Phase 4（独立 phase，30+ 天后评估）。
 ### `legal_mcp_servers` 重命名
 
 `SessionContextBuilder.__init__` 的参数 `legal_mcp_servers` 改名 `allowed_mcp_servers`。原命名暗示"法律合规"，实际是"已注册"语义。
+
+### v3.1 新引入的类型与变量
+
+| 名字 | 位置 | 用途 |
+|------|------|------|
+| `ContextAssemblyIntent` | `matmaster/context/assembly.py` | enum: ANCHOR_TURN / CONTINUATION_TURN / PREFLIGHT_COMPACTION / RUNTIME_COMPACTION |
+| `TurnAssemblyRequest` | `matmaster/context/assembly.py` | 普通 turn 装配 request |
+| `CompactionAssemblyRequest` | `matmaster/context/assembly.py` | 压缩装配 request |
+| `AssemblyResult` | `matmaster/context/assembly.py` | 装配结果（含 user_turn_context + `UserInstructions` 透传） |
+| `ContextAssembler` | `matmaster/context/assembly.py` | 装配执行器 |
+| `ContextAssemblyPorts` | `matmaster/context/ports.py` | port 组合 dataclass |
+| `UserInstructionsPort` / `UserInstructions` | `matmaster/context/ports.py` | AGENT.md 读取 protocol + typed 数据 (text/hash/truncated) |
+| `SessionEventsPort` / `SessionEvent` / `SessionEventQuery` | `matmaster/context/ports.py` | events 读取 protocol + typed envelope |
+| `SessionJobsPort` / `SessionJobs` / `SessionJobsQuery` | `matmaster/context/ports.py` | jobs 读取 protocol + typed 数据载体（Optional port） |
+| `JsonScalar` / `JsonValue` / `JsonObject` | `matmaster/context/ports.py` | 受限 JSON 类型别名（硬约束 §4.2 #10） |
+| `ContextRecipe` / `ContextRecipeInputs` / `RecipeStep` | `matmaster/context/recipes.py` | recipe 装配层 |
+| `ANCHOR_RECIPE` / `CONTINUATION_RECIPE` / `COMPACTED_RECIPE` | `matmaster/context/recipes.py` | 三个 recipe 常量 |
+| `decide_turn_context_intent` | `matmaster/context/turn_intent.py` | 纯函数（hash 比对） |
+| `resolve_turn_context_intent` | `src/services/context_turn_intent.py` | service helper（含灰度 flag + events 查询） |
+| `AppUserInstructionsPort` / `AppSessionEventsPort` / `AppSessionJobsPort` | `src/services/context_assembly_ports.py` | port 平台实现 |
+
+### v3.1 新增的文件
+
+| 路径 | 用途 |
+|------|------|
+| `matmaster/context/ports.py` | 核心模块对外的窄能力 Protocol + typed 数据载体 |
+| `matmaster/context/recipes.py` | Recipe + step 函数 + 三个 recipe 常量 |
+| `matmaster/context/assembly.py` | Intent / Request / Result / Assembler |
+| `matmaster/context/turn_intent.py` | 纯函数 `decide_turn_context_intent` |
+| `src/services/context_assembly_ports.py` | Port 协议的平台实现 |
+| `src/services/context_turn_intent.py` | service-side intent resolver（含灰度 flag） |
 
 ---
 
@@ -1450,13 +2151,14 @@ v0 marker 退役在 Phase 4（独立 phase，30+ 天后评估）。
 
 ---
 
-### Phase 2: Context 模块阶段
+### Phase 2: Context 模块阶段（v3.1 含装配三件套）
 
-**目标**: 新建 `matmaster/context/` 内核，让输出**等价于现状**。不改任何业务行为，只重组渲染路径。
+**目标**: 新建 `matmaster/context/` 内核 + 装配三件套（ports / recipes / assembly），让输出**等价于现状**。不改任何业务行为，只重组渲染路径。
 
 **2a. 新增文件**:
 
 按依赖顺序：
+
 1. `matmaster/context/sections.py`（含 `__post_init__` 校验）
 2. `matmaster/context/rendering.py`（含 tag escape）
 3. `matmaster/context/turn_context.py`（含 key 唯一性校验）
@@ -1466,22 +2168,37 @@ v0 marker 退役在 Phase 4（独立 phase，30+ 天后评估）。
 7. `matmaster/context/sources/skills.py`
 8. `matmaster/context/sources/tools.py`
 9. `matmaster/context/sources/compacted_history.py`
-10. `matmaster/context/sources/session_jobs.py`（占位）
+10. `matmaster/context/sources/session_jobs.py`（占位，含 `SessionJobsSource.from_jobs`）
 11. `matmaster/context/sources/workspace.py`（占位）
 12. `matmaster/context/sources/artifacts.py`（占位）
 13. `matmaster/context/scanner.py`
-14. `matmaster/context/session.py`
+14. `matmaster/context/session.py`（构造参数从 `events: list[dict]` 改为 `events: tuple[SessionEvent, ...]`）
 15. `matmaster/context/history_restore.py`（Phase 1 接口骨架的完整实现）
 16. `matmaster/context/system_prompt.py`
+17. **`matmaster/context/ports.py`** ← v3.1 新增（`UserInstructions` / `SessionEvent` / `JsonObject` / 三个 Port Protocol / `ContextAssemblyPorts`）
+18. **`matmaster/context/recipes.py`** ← v3.1 新增（`ContextRecipeInputs` / `ContextRecipe` / step 函数 / 三个 recipe 常量 / `_INTENT_RECIPE_MAP`）
+19. **`matmaster/context/assembly.py`** ← v3.1 新增（`ContextAssemblyIntent` / `TurnAssemblyRequest` / `CompactionAssemblyRequest` / `AssemblyResult` / `ContextAssembler`）
+20. **`matmaster/context/turn_intent.py`** ← v3.1 新增（纯函数 `decide_turn_context_intent`）
+
+平台侧新增：
+
+21. **`src/services/context_assembly_ports.py`** ← v3.1 新增（`AppUserInstructionsPort` / `AppSessionEventsPort` / `AppSessionJobsPort`）
+22. **`src/services/context_turn_intent.py`** ← v3.1 新增（`resolve_turn_context_intent` helper，含灰度 flag + events 查询）
 
 **2b. shim 改造**:
 - `matmaster/manifests/*` 改为薄 shim 委托新 source
 - `matmaster/types/current_input.py` re-export `TurnInput`
 - `matmaster/types/context.py` re-export `PlaygroundContext`（迁回 `core/playground.py`，注意现有反向 import 循环：[playground.py:26](../../matmaster/core/playground.py:26) 现 import from types/context；要小心拆环）
 
-**2c. 业务代码切换 import**:
+**2c. 业务代码切换 import 与调用入口**:
 - [matmaster/core/agent.py](../../matmaster/core/agent.py) import 从 `matmaster.manifests` 切到 `matmaster.context`
-- [src/services/agent_run_service.py](../../src/services/agent_run_service.py) 装配 `TurnInput`（含 `source_query_event_id`），调 `UserTurnContext.from_sources`，再投影为 UserMessage，再写 user_turn_context
+- [src/services/agent_run_service.py](../../src/services/agent_run_service.py) **不再直接装配** `TurnInput` + `UserTurnContext.from_sources`，改为：
+  - 装配 `TurnInput`
+  - 调 `user_instructions_port.load_user_instructions` 拿 `UserInstructions`
+  - 调 `resolve_turn_context_intent` 判定 intent
+  - 调 `context_assembler.assemble_turn(intent, request)` 装配
+  - 调 `events_service.add_history_event` 写 `user_turn_context`
+- `AgentRuntimeSpec` 注入：新增 `context_assembler: ContextAssembler`、`user_instructions_port: UserInstructionsPort`、`session_events_port: SessionEventsPort`
 - **此时**可以移除 Phase 1 的 flag：service 层完全走新路径，删除 `_apply_user_instructions_to_initial_user_query`
 
 **2d. Prompt 形态**:
@@ -1494,6 +2211,10 @@ v0 marker 退役在 Phase 4（独立 phase，30+ 天后评估）。
 - 单元测试覆盖 `wrap_tag` escape（含 `</tag>` 注入用例）
 - 单元测试覆盖 `from_sources` 的 key 唯一性校验
 - 单元测试覆盖 `__post_init__` 不变量校验
+- 单元测试覆盖 `ContextRecipe.apply` 三个 recipe 与 `_INTENT_RECIPE_MAP` dispatch
+- 单元测试覆盖 `ContextAssembler.assemble_turn` / `assemble_compaction`（mock ports，verify bundle 透传 / Optional port skip / 双视图）
+- 单元测试覆盖 `decide_turn_context_intent` 纯函数
+- 集成测试覆盖 `resolve_turn_context_intent`（mock events port，灰度 flag 路径）
 
 ---
 
@@ -1538,7 +2259,7 @@ v0 marker 退役在 Phase 4（独立 phase，30+ 天后评估）。
 **4c. Oversized Input 独立 spec**:
 - 不在本 spec 范围
 - 需要单独设计 `InputSummaryConfig`、原文写盘策略、路径安全、失败处理
-- 接口预留点：`ContextCompactor.apply_compaction_plan(preset_summary, preset_past_attachments)` + `user_turn_context.transform="oversized_summary"` 已就位
+- 接口预留点：`ContextCompactor.apply_compaction_plan(summary_override, past_attachments_override)` + `user_turn_context.transform="oversized_summary"` 已就位
 
 **4d. Fallback 删除决策**:
 - 基于 Phase 3 埋点的命中率与成功率数据
@@ -1553,15 +2274,19 @@ v0 marker 退役在 Phase 4（独立 phase，30+ 天后评估）。
 | 旧方法 | 新位置 |
 |--------|--------|
 | `build_system_prompt(...)` | `matmaster/context/system_prompt.py` 中的 `SystemPromptBuilder` 类 |
-| `build_user_request(...)` | `matmaster/context/turn_context.py` (`UserTurnContext.from_sources`) + `sources/turn_input.py` + `sources/attachments.py` |
-| `build_compact_bundle(...)` | `matmaster/context/sources/compacted_history.py` + `turn_context.py` |
+| `build_user_request(...)` | **v3.1**: `matmaster/context/assembly.py` 的 `ContextAssembler.assemble_turn`；底层使用 `recipes.py` (`ANCHOR_RECIPE` / `CONTINUATION_RECIPE`) + `turn_context.py` (`UserTurnContext.from_sources`，仅 recipe 内部调用) + `sources/turn_input.py` |
+| `build_compact_bundle(...)` | **v3.1**: `matmaster/context/assembly.py` 的 `ContextAssembler.assemble_compaction`；底层使用 `recipes.py` (`COMPACTED_RECIPE`) + `sources/compacted_history.py` |
 | `_tag(...)` 等 helper | `matmaster/context/rendering.py` (`wrap_tag`) |
 
-`AgentRuntimeSpec.context_builder` 字段演化（与 v2 保持一致）：
+`AgentRuntimeSpec` 字段演化：
 
-- Phase 1: 字段不变
-- Phase 2: 字段不变，`ContextBuilder` 内部退化为只暴露 `build_system_prompt(...)` 的 wrapper
-- Phase 4: 字段重命名为 `system_prompt_builder: SystemPromptBuilder`，删除 shim
+| 字段 | Phase 1 | Phase 2 (v3.1) | Phase 4 |
+|------|---------|----------------|---------|
+| `context_builder: ContextBuilder` | 不变 | 退化为 `build_system_prompt` 的 wrapper | 重命名为 `system_prompt_builder: SystemPromptBuilder`，删除 shim |
+| `context_assembler: ContextAssembler` | — | **新增**（v3.1） | 保留 |
+| `user_instructions_port: UserInstructionsPort` | — | **新增**（v3.1） | 保留 |
+| `session_events_port: SessionEventsPort` | — | **新增**（v3.1） | 保留 |
+| `session_jobs_port: SessionJobsPort \| None` | — | **新增**（v3.1，Optional） | 保留 |
 
 ---
 
@@ -1582,15 +2307,46 @@ tests/matmaster/context/
   test_turn_context.py
     - from_sources key 唯一性校验（负向 case）
     - render(view) 输出等价（双视图对比）
+
+  # v3.1 新增
+  test_ports.py
+    - UserInstructions / SessionEvent / SessionEventQuery / SessionJobs 构造
+    - SessionJobs.empty() 返回空 active_jobs
+    - JsonObject 类型边界（typed JSON envelope）
+  test_recipes.py
+    - ContextRecipeInputs 默认值
+    - ANCHOR_RECIPE.apply 等价于手写 from_sources（snapshot 测试）
+    - CONTINUATION_RECIPE.apply 等价于手写 from_sources
+    - COMPACTED_RECIPE.apply 等价于手写 from_sources
+    - defer_turn_instruction=True → instruction order = TURN_INSTRUCTION_LAST
+    - 空 session_jobs → SessionJobsSource 返回空 sections
+    - past_attachments_override → 命中 _step_past_attachments_override
+  test_assembly.py
+    - ContextAssembler.assemble_turn(ANCHOR_TURN) 调 events port + session_builder
+    - ContextAssembler.assemble_turn(CONTINUATION_TURN) 不调 events port（performance 断言）
+    - ContextAssembler.assemble_compaction(RUNTIME_COMPACTION) / (PREFLIGHT_COMPACTION)
+    - AssemblyResult.user_instructions_text/hash 来自 bundle 透传（mock UserInstructions）
+    - 同一 UserInstructions 进入 assembler 后不被二次读取（mock port，assert call_count=0）
+    - Optional SessionJobsPort = None → 空 SessionJobs, recipe skip
+    - intent 类型错误（如 assemble_turn 传 RUNTIME_COMPACTION）→ ValueError
+    - 双视图: result.user_turn_context.to_message(RUNTIME) 含 turn_input section,
+                                     to_message(CHECKPOINT) 不含
+  test_turn_intent.py
+    - decide_turn_context_intent: hash 相等 → CONTINUATION_TURN
+    - decide_turn_context_intent: hash 不等 → ANCHOR_TURN
+    - decide_turn_context_intent: latest_anchor_hash=None → ANCHOR_TURN
+
   test_compaction.py
     - apply_compaction_plan with turn_input / without
     - summary 成功 → durable
     - summary 失败 → ephemeral + fallback strategy
-    - preset_summary 旁路
-    - user_instructions_text / hash 传递到 CompactionResult
+    - summary_override 旁路
+    - user_instructions_text / hash 通过 bundle 传递到 CompactionResult
+    - apply_compaction_plan 调 context_assembler.assemble_compaction（不直接拼 source）
   test_session.py
     - build_sections include / exclude attachments
     - until_event_id 边界
+    - 构造参数为 tuple[SessionEvent, ...]，从 events: list[dict] 改造后向后兼容
   test_history_restore.py
     - 无 checkpoint + 无 user_turn_context → legacy_restore 委托
     - 无 checkpoint + 有 user_turn_context → v1 路径
@@ -1603,9 +2359,8 @@ tests/matmaster/context/
     - ImageContentPart 嵌套反序列化
   sources/
     test_user_instructions.py
-      - size cap truncate + warning
       - empty 返回空 sections
-      - hash 计算稳定（同输入同 hash）
+      - hash 计算稳定（同输入同 hash）  ← 现移到 src/services/context_assembly_ports 测试
     test_turn_input.py
       - has_effective_input 边界
       - images_as_parts 转换
@@ -1616,6 +2371,9 @@ tests/matmaster/context/
     test_skills.py / test_tools.py
       - 从 events 重建 skill 列表
       - allowed_mcp_servers 过滤
+    test_session_jobs.py
+      - from_jobs 空 → 空 sections
+      - from_jobs 含 active_jobs → 渲染 section
     test_compacted_history.py
       - empty summary → 空 section
   integration/
@@ -1630,10 +2388,26 @@ tests/matmaster/context/
     test_agent_md_responsiveness.py
       - 首轮 → 改 AGENT.md → 第 2 轮立即反映
       - 改 AGENT.md → 压缩触发 → anchor 含新内容
+      - **bundle 防竞态: service 读 bundle 后改 AGENT.md, assembler 仍用旧 bundle (v3.1)**
     test_sse_filter.py
       - user_turn_context 不出现在 replay
       - assistant_state 不出现在 replay
       - history_checkpoint 不出现在 replay
+
+tests/src/services/
+  test_context_assembly_ports.py    ← v3.1 新增
+    - AppUserInstructionsPort: size cap truncate + warning
+    - AppUserInstructionsPort: 文件不存在 → 空 bundle
+    - AppUserInstructionsPort: hash 计算稳定
+    - AppSessionEventsPort: 字段映射正确 (id / event_type / source / content / ...)
+    - AppSessionEventsPort: limit / order / event_types 过滤
+  test_context_turn_intent.py       ← v3.1 新增
+    - resolve_turn_context_intent: use_new_context_path=False → ANCHOR_TURN（兜底）
+    - resolve_turn_context_intent: 无 events → ANCHOR_TURN
+    - resolve_turn_context_intent: 找到 anchor + hash 匹配 → CONTINUATION_TURN
+    - resolve_turn_context_intent: 找到 anchor + hash 不匹配 → ANCHOR_TURN
+    - resolve_turn_context_intent: 找到 history_checkpoint → 取其 hash
+    - resolve_turn_context_intent: 扫 50 条仍未找 anchor → ANCHOR_TURN（防御性兜底）
 ```
 
 Phase 1 内 `tests/matmaster/manifests/` 保留并继续通过（验证 shim 等价性）；Phase 4 删除并迁到 `tests/matmaster/context/`。
@@ -1656,19 +2430,26 @@ Phase 1 内 `tests/matmaster/manifests/` 保留并继续通过（验证 shim 等
 
 ### 中优先级
 
-4. **`SessionJobsSource` 占位与未来接入的接口契约**: 数据接入留待 bohrium tool job table + hot cache 系统建好。接入时只需修改 `SessionJobsSource`（增加 classmethod 如 `from_job_ledger(...)`），不动 source 接口和 order 表。
+4. **`SessionJobsSource` 占位与未来接入的接口契约**: 数据接入留待 bohrium tool job table + hot cache 系统建好。接入时只需修改 `SessionJobsSource.from_jobs(...)`（`SessionJobs` 字段由 `SessionJobsPort` 定义），不动 source 接口和 order 表。
 
 5. **fallback 命中率埋点**: Phase 3 加埋点，30 天后评估是否删 `sliding_window` / `tool_truncation`。在没有数据前**不删**。
 
 6. **prompt cache 命中率**: AGENT.md hash 变化产生新 anchor 会让 prompt prefix 变化，cache miss。当前实现每轮都重写 first user message，cache miss 是已有现实。新设计在 cache 维度**至少不退步**。Phase 3 可加埋点对比。
 
+7. **v3.1 events port 在 service 与 assembler 同时被调用的事务一致性** (新增): 同一 turn 内 `resolve_turn_context_intent` 调用 `SessionEventsPort.load_events`（最近 50 条倒序）后, `ContextAssembler.assemble_turn` 又会调用一次（按 `until_event_id` 升序）. 若 turn 处理时间较长, 中间可能有 background 写入新事件. 需评估:
+   - 是否同事务/同 snapshot 读取（强一致 vs 性能）
+   - 是否在 Phase 0 一次性把 `assemble_turn` 内的 events 查询挪到 service, 由 service 一次读取后传给 assembler（去掉一次查询）
+   - Phase 2 落地时实测查询次数与延迟, 决定是否优化
+
 ### 低优先级
 
-7. **`UserTurnContext` 与未来 sub-agent handoff 视图**: 当前 ContextView 只有 RUNTIME / CHECKPOINT。未来 sub-agent 可能需要新视图（如 SUBAGENT_HANDOFF），届时再加。本 spec 不预留。
+8. **`UserTurnContext` 与未来 sub-agent handoff 视图**: 当前 ContextView 只有 RUNTIME / CHECKPOINT。未来 sub-agent 可能需要新视图（如 SUBAGENT_HANDOFF），届时再加。本 spec 不预留。
 
-8. **`schema_version` / `render_version` 演化矩阵**: Phase 1 后只有 v1，未引入 v2。未来 v2 升级时再单独设计 codec 分发表。
+9. **`schema_version` / `render_version` 演化矩阵**: Phase 1 后只有 v1，未引入 v2。未来 v2 升级时再单独设计 codec 分发表。
 
-9. **`run_meta` 字段整改**: `run_meta` 字典本身仍是 god bag。后续重构应考虑把 `run_meta` 替换为 typed dataclass（如 `AgentRunMeta`），但**不在本次范围内**。
+10. **`run_meta` 字段整改**: `run_meta` 字典本身仍是 god bag。后续重构应考虑把 `run_meta` 替换为 typed dataclass（如 `AgentRunMeta`），但**不在本次范围内**。
+
+11. **v3.1 ContextAssembler 中 events 查询是否需要预读上一轮 cache** (新增): 长会话时每轮调 `assemble_turn(ANCHOR_TURN)` 都要拉全部 events 重新装配 session sections, 数据量随 turn 数线性增长. 是否在 Phase 2 后单独评估"按 turn 增量缓存 session_sections"; 不在本 spec 范围, 先按全量查实现.
 
 ---
 
@@ -1704,6 +2485,23 @@ Phase 1 内 `tests/matmaster/manifests/` 保留并继续通过（验证 shim 等
 | `pre_turn_history_event_id` | 本轮 User/query 和 user_turn_context 事件写入前的最后 event id，用于 preflight compaction 划定 checkpoint 覆盖边界 |
 | `user_instructions_hash` | AGENT.md 文本的 sha256，service 层用于判定是否需要新 anchor |
 | `transform` | user_turn_context.payload 字段，`"raw"` / `"preflight_compacted"` / `"oversized_summary"`（最后一个 Phase 4 落地）|
+
+### v3.1 新增名词
+
+| 概念 | 描述 |
+|------|------|
+| Port | `matmaster/context/ports.py` 声明的窄能力 Protocol。返回 typed snapshot / bundle / event sequence。不返回核心装配产物 |
+| typed 数据载体 | Port 返回的 frozen dataclass，承载从外部数据源读出的值（如 `UserInstructions`、`SessionJobs`、`SessionEvent`）。不使用 "Bundle" / "Snapshot" 后缀避免误导（jobs 不存在拍照行为；instructions 不是 bundle 而是数据本体） |
+| `SessionEvent` | DB events 行的 typed envelope。`content: JsonObject`（受限 JSON 类型），不使用 `dict[str, Any]` |
+| `JsonObject` / `JsonValue` | 受限 JSON 类型别名（不含 `Any`），用于 typed JSON envelope |
+| Recipe | `matmaster/context/recipes.py` 声明的 step 元组，决定在某场景下装配哪些 source |
+| `ContextRecipe` / `ContextRecipeInputs` | Recipe 类型与输入载体；`ContextRecipeInputs` 是 recipe 内部类型，不作公共 API |
+| Step | Recipe 内部的纯函数 `(ContextRecipeInputs) -> tuple[ContextSection, ...]` |
+| `ContextAssemblyIntent` | enum: `ANCHOR_TURN` / `CONTINUATION_TURN` / `PREFLIGHT_COMPACTION` / `RUNTIME_COMPACTION` |
+| `TurnAssemblyRequest` / `CompactionAssemblyRequest` | 两个 typed request 类型，分别给 `assemble_turn` / `assemble_compaction` |
+| `AssemblyResult` | 装配结果，含 `user_turn_context: UserTurnContext` + `user_instructions_text/hash` 透传 |
+| `ContextAssembler` | 装配执行器，持有 `ContextAssemblyPorts`。不读 AGENT.md、不判 intent、不写事件 |
+| Intent resolver | `matmaster/context/turn_intent.py` 的纯函数 + `src/services/context_turn_intent.py` 的 helper（含灰度 flag + events 查询） |
 
 ---
 
