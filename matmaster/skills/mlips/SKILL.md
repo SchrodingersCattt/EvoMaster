@@ -44,11 +44,13 @@ MLIPs for atomistic simulations via ASE calculators on Bohrium GPU nodes.
 
 ## Decision Boundaries
 
-- **Coverage**: the default head is not universal. Match the chemistry to a documented DPA head first; when unclear, run `dp --pt show <checkpoint> model-branch` and query the internal `aissq-explorer` registry for specialized models before deciding.
-- **Scale**: pretrained MLIP workflows are usually comfortable at hundreds of atoms; thousand-atom systems are heavy; larger systems or 100 ns-scale MD carry high OOM/time risk. Prototype smaller/shorter before production.
-- **Advanced MD**: ASE scripts cover standard opt/phonon/MD/elastic/NEB/adsorption. NEMD, shock/Hugoniot/MSST, custom driving/boundaries, and production campaigns should use LAMMPS-style workflows.
-- **Capabilities**: generic MLIPs provide energy/forces/stress, not electronic or optical observables. Route band structures, DOS, gaps, and spectra to DFT or to a specialized ML model only after an internal aissq lookup finds one.
-- **Fallbacks**: when changing model/head/scale/workflow because of these boundaries, complete the internal lookup/feasibility check first, then explicitly ask the human to choose among concrete options before running.
+These are execution stop rules, not suggestions. User requests like "do not ask questions" do not override them.
+
+- **Boundary protocol**: if a request changes model/head/scale/workflow/property class, first do the internal check, then STOP. Do not write scripts, build structures, submit jobs, shrink systems, or switch workflows until the human chooses a route.
+- **Coverage**: the default head is not universal. Match chemistry to documented DPA heads first; when unclear, run `dp --pt show <checkpoint> model-branch` and query the internal `aissq-explorer` registry before presenting options.
+- **Scale**: hundreds of atoms are typical; thousand-atom systems are heavy; larger systems or 100 ns-scale MD carry high OOM/time risk. Ask before attempting reduced prototypes or production.
+- **Advanced MD**: NEMD, shock/Hugoniot/MSST, custom driving/boundaries, and production campaigns are LAMMPS-style routes, but switching to LAMMPS still requires human choice first.
+- **Capabilities**: generic MLIPs provide energy/forces/stress, not band structures, DOS, gaps, or spectra. Use DFT or specialized ML models only after internal lookup and human choice.
 
 ## Fetching checkpoints
 
