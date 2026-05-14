@@ -2,16 +2,8 @@ from __future__ import annotations
 
 import json
 import subprocess
-import sys
-from pathlib import Path
 
-try:
-    from matmaster_bohrium_transfer.version import PROTOCOL_VERSION, SCHEMA_VERSION
-except ModuleNotFoundError:
-    _ROOT = Path(__file__).resolve().parents[2]
-    _TRANSFER_SRC = _ROOT / "packages" / "bohrium-transfer" / "src"
-    sys.path.insert(0, str(_TRANSFER_SRC))
-    from matmaster_bohrium_transfer.version import PROTOCOL_VERSION, SCHEMA_VERSION
+from matmaster_bohrium_transfer.version import PROTOCOL_VERSION, SCHEMA_VERSION
 
 
 def test_build_bohrium_transfer_bundle_dry_run_outputs_metadata() -> None:
