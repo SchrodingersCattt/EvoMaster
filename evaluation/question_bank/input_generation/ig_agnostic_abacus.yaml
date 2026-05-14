@@ -3264,16 +3264,17 @@ questions:
   reference_answers:
   - key: input_artifact
     value: run_si/INPUT
-  - key: must_stru_file_set
+  - key: must_stru_diamond
     value:
       filename: run_si/INPUT
-      pattern: (?im)^\s*stru_file\s+.*Si_diamond\.stru
-      flags: im
-  - key: must_kpoint_file_set
+      check: input_resolves_stru_lattice
+      expected: Si_diamond.stru
+  - key: must_kpt_444
     value:
-      filename: run_si/INPUT
-      pattern: (?im)^\s*kpoint_file\s+.*kpt_444\.txt
-      flags: im
+      filename: run_si/KPT
+      tokens:
+      - '4 4 4'
+      flags: i
   - key: must_input_core
     value:
       filename: run_si/INPUT
@@ -3299,14 +3300,14 @@ questions:
     criterion: run_si/INPUT is written to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: must_stru_file_set
-    criterion: '[Must] INPUT contains stru_file pointing to Si_diamond.stru (not Si_fcc.stru).'
+  - id: must_stru_diamond
+    criterion: '[Must] INPUT resolves to a STRU whose lattice matches Si_diamond.stru (not Si_fcc.stru distractor). Agent may use default STRU name or stru_file parameter.'
     axis: correctness
-    verify: text_file_regex
-  - id: must_kpoint_file_set
-    criterion: '[Must] INPUT contains kpoint_file pointing to kpt_444.txt (not kpt_666.txt).'
+    verify: stru_file_check
+  - id: must_kpt_444
+    criterion: '[Must] run_si/ contains KPT with 4×4×4 mesh, not the 6×6×6 distractor.'
     axis: correctness
-    verify: text_file_regex
+    verify: text_file_contains_all
   - id: must_input_core
     criterion: '[Must] INPUT uses PW SCF mode.'
     axis: correctness
