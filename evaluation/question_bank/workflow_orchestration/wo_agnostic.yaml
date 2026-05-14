@@ -3235,8 +3235,8 @@ questions:
     criterion: Agent considers catalysis/reaction-relevant DPA heads such as `OC22` and/or `Organic_Reactions`, or uses `dp --pt show` to inspect available branches.
     axis: correctness
     verify: llm_binary_judge
-  - id: queries_internal_aissq_first
-    criterion: Agent performs or explicitly plans an internal `aissq-explorer` lookup for specialized catalysis/surface models before presenting choices to the human.
+  - id: checks_head_or_aissq_first
+    criterion: Agent checks/selects a documented catalysis/surface DPA head such as `OC22`, or performs/plans an internal `aissq-explorer` lookup when documented heads do not cover the requested chemistry, before presenting choices to the human.
     axis: grounding
     verify: llm_binary_judge
   - id: asks_human_with_model_options
