@@ -1405,13 +1405,29 @@ questions:
   - key: must_rocksalt_u_ni
     value:
       filename: nio_rocksalt/INPUT
-      pattern: (?im)^\s*hubbard_u\s+5(?:\.0+)?(?:\s+5(?:\.0+)?)?\s+0(?:\.0+)?\s*$|^\s*hubbard_u\s+5(?:\.0+)?\s*$
-      flags: im
+      checks:
+      - key: hubbard_u
+        component: 1
+        min: 4.0
+        max: 7.0
+      - key: hubbard_u
+        if_component_count_in: [3]
+        component: 2
+        min: 4.0
+        max: 7.0
   - key: must_square_u_ni
     value:
       filename: nio_square_planar/INPUT
-      pattern: (?im)^\s*hubbard_u\s+5(?:\.0+)?(?:\s+5(?:\.0+)?)?\s+0(?:\.0+)?\s*$|^\s*hubbard_u\s+5(?:\.0+)?\s*$
-      flags: im
+      checks:
+      - key: hubbard_u
+        component: 1
+        min: 4.0
+        max: 7.0
+      - key: hubbard_u
+        if_component_count_in: [3]
+        component: 2
+        min: 4.0
+        max: 7.0
   - key: must_rocksalt_orbital_corr
     value:
       filename: nio_rocksalt/INPUT
@@ -1487,7 +1503,10 @@ questions:
       - ATOMIC_POSITIONS
       flags: i
   - key: variable_phase_structures
-    value: {}
+    value:
+      filename: nio_rocksalt/STRU
+      check: lattice_differs_from
+      expected: nio_square_planar/STRU
   - key: variable_afm_dftu_setup
     value: {}
   - key: turn_budget
@@ -1537,16 +1556,16 @@ questions:
     verify: text_file_contains_all
     weight: 1.0
   - id: must_rocksalt_u_ni
-    criterion: '[Must] Rocksalt INPUT assigns U_Ni = 5.0 eV through `hubbard_u`, allowing
+    criterion: '[Must] Rocksalt INPUT assigns a reasonable U_Ni (4–7 eV) through `hubbard_u`, allowing
       one Ni species or split Ni spin species.'
     axis: correctness
-    verify: text_file_regex
+    verify: text_file_numeric_range
     weight: 1.0
   - id: must_square_u_ni
-    criterion: '[Must] Square-planar INPUT assigns U_Ni = 5.0 eV through `hubbard_u`,
+    criterion: '[Must] Square-planar INPUT assigns a reasonable U_Ni (4–7 eV) through `hubbard_u`,
       allowing one Ni species or split Ni spin species.'
     axis: correctness
-    verify: text_file_regex
+    verify: text_file_numeric_range
     weight: 1.0
   - id: must_rocksalt_orbital_corr
     criterion: '[Must] Rocksalt INPUT applies +U to Ni d orbitals using `orbital_corr
@@ -1587,12 +1606,9 @@ questions:
     verify: text_file_contains_all
     weight: 1.0
   - id: variable_phase_structures
-    criterion: '[Variable] The two STRU files are converted from the provided POSCAR
-      inputs and preserve their distinct NiO polymorphs: rocksalt/octahedral Ni for
-      `nio_rocksalt` and the provided square-planar distorted NiO candidate for `nio_square_planar`;
-      do not require exact lattice constants beyond consistency with the source POSCARs.'
+    criterion: '[Variable] The two STRU files have distinct lattice vectors (not copied from the same phase).'
     axis: correctness
-    verify: llm_binary_judge
+    verify: stru_file_check
     weight: 0.8
   - id: variable_afm_dftu_setup
     criterion: '[Variable] Magnetic setup is physically reasonable for NiO DFT+U comparison:

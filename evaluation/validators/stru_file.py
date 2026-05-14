@@ -91,6 +91,20 @@ def _classify_magnetic_order(moments: list[float]) -> str:
         return 'nonmagnetic'
 
 
+def _parse_lattice_vectors(content: str) -> list[float] | None:
+    """Extract 9 lattice vector components from STRU LATTICE_VECTORS section."""
+    match = re.search(
+        r'LATTICE_VECTORS\s*\n\s*([-+\d.eE\s]+)',
+        content,
+    )
+    if not match:
+        return None
+    nums = re.findall(r'[-+]?\d+\.?\d*(?:[eE][-+]?\d+)?', match.group(1))
+    if len(nums) < 9:
+        return None
+    return [float(x) for x in nums[:9]]
+
+
 def check_stru_file(
     workspace_dir: str | Path,
     *,
@@ -177,6 +191,34 @@ def check_stru_file(
         if total == int(expected or 0):
             return True, f'{fpath.name}: total_atoms={total}'
         return False, f'{fpath.name}: total_atoms={total}, expected {expected}'
+
+    elif check == 'lattice_differs_from':
+        other_filename = str(expected or '')
+        if not other_filename:
+            return False, "stru_file_check lattice_differs_from: 'expected' must be the other STRU filename"
+        other_path = _resolve_file(root, other_filename, workspace_resolve=workspace_resolve)
+        if other_path is None:
+            return False, f'no file matching {other_filename!r} in {root}'
+        try:
+            other_content = other_path.read_text(encoding='utf-8')
+        except Exception as exc:
+            return False, f'failed reading {other_path.name}: {exc}'
+        vecs_a = _parse_lattice_vectors(content)
+        vecs_b = _parse_lattice_vectors(other_content)
+        if vecs_a is None:
+            return False, f'{fpath.name}: LATTICE_VECTORS not found'
+        if vecs_b is None:
+            return False, f'{other_path.name}: LATTICE_VECTORS not found'
+        diff = max(abs(a - b) for a, b in zip(vecs_a, vecs_b))
+        if diff > 0.01:
+            return True, (
+                f'{fpath.name} vs {other_path.name}: lattice vectors differ '
+                f'(max component diff={diff:.4f} Å)'
+            )
+        return False, (
+            f'{fpath.name} vs {other_path.name}: lattice vectors are identical '
+            f'(max component diff={diff:.6f} Å) — structures appear to be the same phase'
+        )
 
     else:
         return False, f'unknown stru_file_check check type: {check!r}'
