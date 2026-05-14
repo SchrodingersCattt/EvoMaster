@@ -42,6 +42,14 @@ MLIPs for atomistic simulations via ASE calculators on Bohrium GPU nodes.
 
 **DPA heads**: `OMat24` or `Omat24` (default, inorganic — casing differs between model versions: DPA3.2-5M uses `OMat24`, DPA3.1-3M/DPA2.4-7M use `Omat24`), `OMol25` (organic), `OC22` (catalysis), `Organic_Reactions`, `ODAC23` (MOFs). Use `--charge`/`--spin` only with DPA3.2-5M.
 
+## Decision Boundaries
+
+- **Coverage**: the default head is not universal. Match the chemistry to a documented DPA head first; when unclear, run `dp --pt show <checkpoint> model-branch` and query the internal `aissq-explorer` registry for specialized models before deciding.
+- **Scale**: pretrained MLIP workflows are usually comfortable at hundreds of atoms; thousand-atom systems are heavy; larger systems or 100 ns-scale MD carry high OOM/time risk. Prototype smaller/shorter before production.
+- **Advanced MD**: ASE scripts cover standard opt/phonon/MD/elastic/NEB/adsorption. NEMD, shock/Hugoniot/MSST, custom driving/boundaries, and production campaigns should use LAMMPS-style workflows.
+- **Capabilities**: generic MLIPs provide energy/forces/stress, not electronic or optical observables. Route band structures, DOS, gaps, and spectra to DFT or to a specialized ML model only after an internal aissq lookup finds one.
+- **Fallbacks**: when changing model/head/scale/workflow because of these boundaries, complete the internal lookup/feasibility check first, then explicitly ask the human to choose among concrete options before running.
+
 ## Fetching checkpoints
 
 The OSS URLs in `reference/dpa_models.md` are a **snapshot** and may rotate. If you need a model version not listed there, the canonical provenance (file name, byte size, download URL, modify date) of any pretrained MLIP checkpoint, or a new MLIP entirely, **invoke the `aissq-explorer` skill** (`backend.aissquare.com` public registry) — do NOT hand-type OSS URLs. The downloaded `.pt`/`.pth`/`.model` file is then used here exactly the same way.

@@ -35,7 +35,7 @@ slices:
     type: skill
     slices:
       - "@code_mlip"
-    count: 9
+    count: 14
 
   - target: "Skill: aissq-explorer"
     type: skill
