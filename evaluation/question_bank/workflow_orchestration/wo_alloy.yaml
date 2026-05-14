@@ -471,25 +471,27 @@ questions:
     2. 用 DPA-2.4-7M 与 LAMMPS 完成结构优化。
     3. 解析 LAMMPS 输出，整理结果。
 
-    请按下列**精确文件名**（不允许重命名、不允许加路径前缀，必须落在 workspace 根目录）交付：
+    请按下列要求交付到 workspace 根目录：模型文件的文件名自定但必须以 `.pth` 结尾；其余文件名必须精确匹配，不允许加路径前缀。
 
     | 文件名 | 内容 |
     |---|---|
-    | `frozen_model.pth` | 用于 LAMMPS 的 frozen 模型 |
+    | `*.pth` | 一个 `.pth` 后缀的 LAMMPS 模型文件 |
     | `conf.lmp` | LAMMPS 数据文件 |
     | `in.lmp` | LAMMPS 输入脚本 |
     | `relaxed.cif` | 优化后的结构 |
-    | `relax_summary.json` | 至少包含字段：`model`、`head`、`engine`、`n_atoms`、`composition`、`notes`，并写明所用 frozen 模型文件名 |
+    | `relax_summary.json` | 至少包含字段：`model`、`head`、`engine`、`n_atoms`、`composition`、`notes` |
 
-    任何重命名（如 `FeNi_relaxed.cif`、`lammps.in`、`model.pth`）或放入子目录都会导致评测失败。
+    除 `.pth` 模型文件可自定文件名外，任何重命名（如 `FeNi_relaxed.cif`、`lammps.in`）或放入子目录都会导致评测失败。
   tags:
   - code_mlip
   - eng_lammps
   data_files: []
   reference_answers:
-  - key: frozen_model_exists
-    value: frozen_model.pth
-    workspace_resolve: root
+  - key: pth_model_exists
+    value:
+      pattern: "*.pth"
+      expected: 1
+      tolerance: 0
   - key: conf_lmp_exists
     value: conf.lmp
     workspace_resolve: root
@@ -544,7 +546,6 @@ questions:
       tokens:
       - DPA-2.4-7M
       - Omat24
-      - frozen_model.pth
       - lammps
       flags: i
     workspace_resolve: root
@@ -575,10 +576,10 @@ questions:
     value:
       max: 12000
   scoring_checklist:
-  - id: frozen_model_exists
-    criterion: Agent writes `frozen_model.pth` at the workspace root.
+  - id: pth_model_exists
+    criterion: Agent writes exactly one `.pth` model file somewhere under the workspace.
     axis: correctness
-    verify: artifact_exists
+    verify: struct_file_count
   - id: conf_lmp_exists
     criterion: Agent writes `conf.lmp` at the workspace root.
     axis: correctness
