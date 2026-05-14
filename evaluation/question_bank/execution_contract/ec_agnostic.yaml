@@ -633,7 +633,6 @@ questions:
   human_prompt_seed: '请帮我分析 Fe₂O₃ 中 Fe-O 键的共价/离子特征。我想做 COHP（Crystal Orbital
     Hamilton Population）计算，看看 Fe 3d 和 O 2p 之间的成键/反键贡献。请准备好计算输入并提交。'
   tags:
-  - eng_abacus
   - meta_grounding
   data_files: []
   reference_answers:
