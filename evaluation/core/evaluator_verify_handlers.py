@@ -12,6 +12,7 @@ at module bottom; do not import this file from anywhere else.
 
 from .evaluator import BinaryEvaluator
 from .evaluator_helpers import (
+    check_abacus_input_from_evidence,
     check_answer_json_numeric_from_ref,
     check_stru_file_from_evidence,
     check_checkcif_alerts,
@@ -165,6 +166,7 @@ for _name, _fn in [
     ("json_file_numeric_range", check_json_file_numeric_range),
     ("json_file_artifacts", check_json_file_artifacts),
     ("stru_file_check", check_stru_file_from_evidence),
+    ("abacus_input_check", check_abacus_input_from_evidence),
 ]:
     BinaryEvaluator._VERIFY_REGISTRY[_name] = (_evidence_ref_handler(_fn), True)
 

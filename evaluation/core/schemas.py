@@ -86,6 +86,8 @@ VerifyLiteral = Literal[
     'json_file_artifacts',
     # STRU file checks
     'stru_file_check',
+    # ABACUS INPUT resolution checks
+    'abacus_input_check',
 ]
 
 AxisLiteral = Literal['correctness', 'grounding', 'efficiency']
@@ -324,6 +326,7 @@ class QuestionItem(BaseModel):
             'json_file_numeric_range',
             'json_file_artifacts',
             'stru_file_check',
+            'abacus_input_check',
         }
         for item in self.scoring_checklist:
             if item.verify in _needs_ref and item.id not in ref_keys:

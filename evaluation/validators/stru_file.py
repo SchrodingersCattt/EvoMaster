@@ -192,48 +192,6 @@ def check_stru_file(
             return True, f'{fpath.name}: total_atoms={total}'
         return False, f'{fpath.name}: total_atoms={total}, expected {expected}'
 
-    elif check == 'input_resolves_stru_lattice':
-        ref_filename = str(expected or '')
-        if not ref_filename:
-            return False, "stru_file_check input_resolves_stru_lattice: 'expected' must be the reference STRU filename"
-        ref_path = _resolve_file(root, ref_filename, workspace_resolve=workspace_resolve)
-        if ref_path is None:
-            return False, f'no file matching {ref_filename!r} in {root}'
-        try:
-            ref_content = ref_path.read_text(encoding='utf-8')
-        except Exception as exc:
-            return False, f'failed reading {ref_path.name}: {exc}'
-        # `filename` here is the INPUT file; parse stru_file from it
-        stru_name_match = re.search(r'(?im)^\s*stru_file\s+(\S+)', content)
-        stru_name = stru_name_match.group(1) if stru_name_match else 'STRU'
-        # Resolve stru relative to INPUT's directory
-        input_dir = fpath.parent
-        stru_path = input_dir / stru_name
-        if not stru_path.is_file():
-            return False, (
-                f'{fpath.name}: stru_file={stru_name!r} but {stru_path} not found'
-            )
-        try:
-            stru_content = stru_path.read_text(encoding='utf-8')
-        except Exception as exc:
-            return False, f'failed reading {stru_path.name}: {exc}'
-        vecs_a = _parse_lattice_vectors(stru_content)
-        vecs_b = _parse_lattice_vectors(ref_content)
-        if vecs_a is None:
-            return False, f'{stru_path.name}: LATTICE_VECTORS not found'
-        if vecs_b is None:
-            return False, f'{ref_path.name}: LATTICE_VECTORS not found'
-        diff = max(abs(a - b) for a, b in zip(vecs_a, vecs_b))
-        if diff < 0.01:
-            return True, (
-                f'{stru_path.name} (resolved from {fpath.name}) matches reference '
-                f'{ref_path.name} (max diff={diff:.6f} Å)'
-            )
-        return False, (
-            f'{stru_path.name} (resolved from {fpath.name}) does NOT match reference '
-            f'{ref_path.name} (max diff={diff:.4f} Å) — wrong structure selected'
-        )
-
     elif check == 'lattice_matches':
         ref_filename = str(expected or '')
         if not ref_filename:
