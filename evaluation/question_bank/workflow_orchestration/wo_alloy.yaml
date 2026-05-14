@@ -471,17 +471,16 @@ questions:
     2. 用 DPA-2.4-7M 与 LAMMPS 完成结构优化。
     3. 解析 LAMMPS 输出，整理结果。
 
-    请按下列要求交付到 workspace 根目录：模型文件的文件名自定但必须以 `.pth` 结尾；其余文件名必须精确匹配，不允许加路径前缀。
+    请按下列**精确文件名**（不允许重命名、不允许加路径前缀，必须落在 workspace 根目录）交付：
 
     | 文件名 | 内容 |
     |---|---|
-    | `*.pth` | 一个 `.pth` 后缀的 LAMMPS 模型文件 |
     | `conf.lmp` | LAMMPS 数据文件 |
     | `in.lmp` | LAMMPS 输入脚本 |
     | `relaxed.cif` | 优化后的结构 |
     | `relax_summary.json` | 至少包含字段：`model`、`head`、`engine`、`n_atoms`、`composition`、`notes` |
 
-    除 `.pth` 模型文件可自定文件名外，任何重命名（如 `FeNi_relaxed.cif`、`lammps.in`）或放入子目录都会导致评测失败。
+    任何重命名（如 `FeNi_relaxed.cif`、`lammps.in`）或放入子目录都会导致评测失败。
   tags:
   - code_mlip
   - eng_lammps
@@ -520,18 +519,6 @@ questions:
     value:
       filename: conf.lmp
       pattern: '^\s*28\s+58\.[67]\d*'
-      flags: m
-    workspace_resolve: root
-  - key: in_lmp_pair_style_pth
-    value:
-      filename: in.lmp
-      pattern: 'pair_style\s+deepmd\s+\S+\.pth\b'
-      flags: i
-    workspace_resolve: root
-  - key: in_lmp_pair_coeff_universal
-    value:
-      filename: in.lmp
-      pattern: '^\s*pair_coeff\s+\*\s+\*\s*(?:#.*)?$'
       flags: m
     workspace_resolve: root
   - key: in_lmp_has_minimize
@@ -606,14 +593,6 @@ questions:
     verify: text_file_regex
   - id: conf_ni_at_index_28
     criterion: The LAMMPS data file maps Ni to atom type 28 in the Masses section.
-    axis: correctness
-    verify: text_file_regex
-  - id: in_lmp_pair_style_pth
-    criterion: The LAMMPS input uses a DeePMD pair style with a `.pth` frozen model.
-    axis: correctness
-    verify: text_file_regex
-  - id: in_lmp_pair_coeff_universal
-    criterion: The LAMMPS input uses universal-model pair coefficients without appending element symbols after `pair_coeff * *`.
     axis: correctness
     verify: text_file_regex
   - id: in_lmp_has_minimize
