@@ -1,6 +1,6 @@
 STEP: 0  Cubefile created from ABACUS. Inner loop is z, followed by y and x
 1 (nspin) 0.867727 (fermi energy, in Ry)
-30 0.0 0.0 0.0 
+30 0.0 0.0 0.0
 60 0.151336 0.000000 0.000000
 60 -0.075668 0.131046 0.000000
 160 0.000000 0.000000 0.154913
