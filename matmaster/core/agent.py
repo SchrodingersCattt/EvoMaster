@@ -20,15 +20,20 @@ from collections.abc import AsyncIterator
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
-from matmaster.core.finish_diagnostics import (
-    build_finish_detail,
-    is_incomplete_response,
-    is_valid_natural_finish,
-)
 from matmaster.core.agent_compaction import (
     run_compaction_plan,
     run_preflight_compaction_if_needed,
     run_runtime_compaction_if_needed,
+)
+from matmaster.core.agent_tool_dispatch import (
+    accumulate_usage,
+    dispatch_tool_calls,
+    validate_tool_call_ids,
+)
+from matmaster.core.finish_diagnostics import (
+    build_finish_detail,
+    is_incomplete_response,
+    is_valid_natural_finish,
 )
 from matmaster.core.kernel_items import (
     _KernelItem,
@@ -43,10 +48,8 @@ from matmaster.types.events import (
     AssistantStateEvent,
     FinishDetail,
     ResponseEvent,
-    SkillHitEvent,
     ThoughtEvent,
     ToolCallEvent,
-    ToolResultEvent,
 )
 
 if TYPE_CHECKING:
@@ -73,7 +76,6 @@ from matmaster.types.messages import (
     Message,
     SystemMessage,
     ToolCallData,
-    ToolMessage,
     UserMessage,
     parse_tool_arguments,
 )
@@ -236,8 +238,6 @@ class AgentKernel:
 
         Yields events for streaming, AssistantState, and SkillHit.
         """
-        from matmaster.core.tool_runner import ToolExecutionContext
-
         if spec.hook_executor is not None:
             session_id = spec.meta.get("session_id", "")
             prompt_ctx = UserPromptContext(prompt=task, session_id=session_id)
@@ -363,7 +363,7 @@ class AgentKernel:
 
             response = llm_response
             turn_usage = response.usage
-            self._accumulate_usage(state.total_usage, response.usage)
+            accumulate_usage(state.total_usage, response.usage)
             state.usage_vendor_by_turn.append(
                 dict(response.usage_vendor) if response.usage_vendor else {}
             )
@@ -393,7 +393,7 @@ class AgentKernel:
                 spec.compactor.update_message_count(len(state.messages))
 
             if response.tool_calls:
-                self._validate_tool_call_ids(response.tool_calls)
+                validate_tool_call_ids(response.tool_calls)
 
             if not response.tool_calls:
                 if not is_valid_natural_finish(response):
@@ -454,48 +454,15 @@ class AgentKernel:
                     )
                 )
 
-            if spec.tool_runner is None:
-                raise RuntimeError("No tool_runner in AgentRuntimeSpec")
-
-            exec_ctx = ToolExecutionContext(
-                turn=state.turn,
-                max_turns=spec.max_turns,
+            async for item in dispatch_tool_calls(
+                spec=spec,
+                state=state,
+                tool_calls=response.tool_calls,
+                turn_usage=turn_usage,
+                turn_index=turn_index,
                 cancel_token=cancel_token,
-            )
-            runner_results = await spec.tool_runner.execute_batch(
-                response.tool_calls, exec_ctx
-            )
-
-            for tc, tool_result in runner_results:
-                state.messages.append(
-                    ToolMessage(
-                        tool_call_id=tc.id,
-                        tool_name=tc.name,
-                        content=tool_result.content,
-                    )
-                )
-                yield _KernelItem(
-                    event=ToolResultEvent(
-                        source="agent",
-                        call_id=tc.id,
-                        tool_name=tc.name,
-                        result=tool_result.content,
-                        status=tool_result.status,
-                        payload=tool_result.payload,
-                        turn_index=turn_index,
-                        turn_usage=dict(turn_usage),
-                        total_usage=dict(state.total_usage),
-                    )
-                )
-                if tc.name == "Skill":
-                    skill_name = tc.arguments.get("skill")
-                    if isinstance(skill_name, str) and skill_name:
-                        yield _KernelItem(
-                            event=SkillHitEvent(
-                                source="agent",
-                                skill_name=skill_name,
-                            )
-                        )
+            ):
+                yield item
 
         yield self._terminal(state, "max_turns")
 
@@ -851,25 +818,3 @@ class AgentKernel:
                 stream_id=stream_id,
             )
         )
-
-    @staticmethod
-    def _validate_tool_call_ids(tool_calls: list[ToolCallData]) -> None:
-        seen: set[str] = set()
-        duplicates: list[str] = []
-        for tc in tool_calls:
-            if tc.id in seen:
-                duplicates.append(tc.id)
-            else:
-                seen.add(tc.id)
-        if duplicates:
-            raise LLMError(
-                f"duplicate tool_call ids in assembled response: {sorted(set(duplicates))}",
-                retryable=False,
-                error_category="bad_request",
-            )
-
-    @staticmethod
-    def _accumulate_usage(total: dict[str, int], delta: dict[str, int]) -> None:
-        """Accumulate per-turn usage into running total."""
-        for k, v in delta.items():
-            total[k] = total.get(k, 0) + v
