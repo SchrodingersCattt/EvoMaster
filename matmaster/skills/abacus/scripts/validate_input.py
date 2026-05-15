@@ -196,6 +196,11 @@ def validate_workspace(workspace: Path) -> list[str]:
                     messages.append(
                         f"WARN {prefix}: ntype='{ntype_str}' is not an integer."
                     )
+            else:
+                messages.append(
+                    f"FAIL {prefix}: ntype is missing from INPUT. "
+                    f"Must set ntype={species_count} to match STRU ATOMIC_SPECIES count."
+                )
 
             # Validate basis_type vs NUMERICAL_ORBITAL
             basis = params.get("basis_type", "pw")

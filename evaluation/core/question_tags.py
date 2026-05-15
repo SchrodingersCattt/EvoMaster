@@ -10,6 +10,8 @@ class QuestionTag(StrEnum):
 
     # 数据来源
     meta_database = 'meta_database'
+    # 行为合约：基于证据回答、不编造
+    meta_grounding = 'meta_grounding'
     # 计算引擎
     eng_vasp = 'eng_vasp'
     eng_abacus = 'eng_abacus'

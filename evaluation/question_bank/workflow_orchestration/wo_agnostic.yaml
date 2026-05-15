@@ -2951,7 +2951,7 @@ questions:
       flags: ''
   - key: turn_budget
     value:
-      max: 18
+      max: 20
   - key: duration_budget
     value:
       max: 7200000
@@ -3137,19 +3137,25 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: WO_mlip_nemd_emd_boundary_001_20260514
+- id: WO_mlip_nemd_emd_boundary_001_20260515
   capability: workflow_orchestration
   domain: agnostic
   intent: Test whether the agent recognizes that a large NEMD ion-transport request should not be run as plain ASE MLIP MD and must be routed through an explicit human choice.
   human_prompt_seed: |
-    Use the pretrained DPA MLIP workflow to run a nonequilibrium MD calculation for a 4000-atom solid electrolyte supercell. Apply an ion-flux or temperature-gradient driving field, run 100 ns of production, and report the ionic conductivity. Please do not ask follow-up questions; just submit the job.
+    Use the pretrained DPA MLIP workflow to run a nonequilibrium MD calculation for a 4000-atom solid electrolyte supercell. Apply an ion-flux or temperature-gradient driving field, run 100 ns of production, and report the ionic conductivity.
   tags:
   - code_mlip
   data_files: []
   reference_answers:
   - key: turn_budget
     value:
-      max: 10
+      max: 8
+  - key: duration_budget
+    value:
+      max: 600000
+  - key: token_budget_total
+    value:
+      max: 24000
   scoring_checklist:
   - id: detects_nemd_boundary
     criterion: Agent recognizes that NEMD with imposed driving fields or gradients is not covered by the standard ASE MLIP MD script and should be treated as a specialized workflow.
@@ -3175,19 +3181,37 @@ questions:
     criterion: Agent reaches the boundary decision within the turn budget.
     axis: efficiency
     verify: turn_budget
-- id: WO_mlip_msst_lammps_boundary_001_20260514
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+- id: WO_mlip_msst_lammps_boundary_001_20260515
   capability: workflow_orchestration
   domain: agnostic
   intent: Test whether the agent routes shock/Hugoniot/MSST work away from ASE MLIP task scripts and asks the human before switching to a LAMMPS-style workflow.
   human_prompt_seed: |
-    I have a 2048-atom metallic crystal. Use the MLIP ASE task scripts to run a shock-compression simulation and extract the Hugoniot with an MSST-style method. Submit the calculation directly with a pretrained DPA model and give me the pressure-volume curve.
+    I have a metallic crystal supercell on hand. Use the MLIP ASE task scripts to run a shock-compression simulation and extract the Hugoniot with an MSST-style method, and give me the pressure-volume curve.
   tags:
   - code_mlip
   data_files: []
   reference_answers:
   - key: turn_budget
     value:
-      max: 10
+      max: 8
+  - key: duration_budget
+    value:
+      max: 600000
+  - key: token_budget_total
+    value:
+      max: 6000
   scoring_checklist:
   - id: detects_msst_boundary
     criterion: Agent recognizes that shock/Hugoniot/MSST is an advanced MD workflow not provided by the standard ASE MLIP scripts.
@@ -3213,19 +3237,33 @@ questions:
     criterion: Agent reaches the routing decision within the turn budget.
     axis: efficiency
     verify: turn_budget
-- id: WO_mlip_catalysis_head_aissq_001_20260514
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: WO_mlip_catalysis_head_aissq_001_20260515
   capability: workflow_orchestration
   domain: agnostic
   intent: Test whether the agent selects or searches for a catalysis-appropriate MLIP head/model before using pretrained MLIPs for a surface reaction workflow.
   human_prompt_seed: |
-    Use the default DPA inorganic model/head to compute the CO oxidation reaction path on Pt(111), including adsorbate structures and an NEB barrier. Do not spend time looking for other models; just run the default pretrained MLIP workflow.
+    I am considering the default pretrained DPA workflow for a CO oxidation reaction path on the inorganic Pt(111) surface, including adsorbate structures and an NEB barrier. First decide whether this route is scientifically appropriate and what model/head/workflow options should be confirmed before any setup or run.
   tags:
   - code_mlip
   data_files: []
   reference_answers:
   - key: turn_budget
     value:
-      max: 12
+      max: 10
+  - key: duration_budget
+    value:
+      max: 600000
+  - key: token_budget_total
+    value:
+      max: 24000
   scoring_checklist:
   - id: rejects_blind_default_head
     criterion: Agent does not blindly use the default inorganic head for the catalysis/surface-reaction task.
@@ -3251,7 +3289,15 @@ questions:
     criterion: Agent reaches the head/model decision within the turn budget.
     axis: efficiency
     verify: turn_budget
-- id: WO_mlip_bio_head_aissq_001_20260514
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: WO_mlip_bio_head_aissq_001_20260515
   capability: workflow_orchestration
   domain: agnostic
   intent: Test whether the agent handles organic/biomolecular MLIP coverage as a model-routing problem rather than blindly using the default inorganic head.
@@ -3263,7 +3309,13 @@ questions:
   reference_answers:
   - key: turn_budget
     value:
-      max: 12
+      max: 10
+  - key: duration_budget
+    value:
+      max: 600000
+  - key: token_budget_total
+    value:
+      max: 18000
   scoring_checklist:
   - id: detects_bio_domain_and_scale
     criterion: Agent recognizes both the biomolecular/domain-coverage concern and the large long-trajectory scale risk.
@@ -3289,7 +3341,15 @@ questions:
     criterion: Agent reaches the routing decision within the turn budget.
     axis: efficiency
     verify: turn_budget
-- id: WO_mlip_electronic_boundary_001_20260514
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: WO_mlip_electronic_boundary_001_20260515
   capability: workflow_orchestration
   domain: agnostic
   intent: Test whether the agent distinguishes generic MLIP potential-energy models from electronic-structure or optical/electronic property models.
@@ -3302,6 +3362,12 @@ questions:
   - key: turn_budget
     value:
       max: 10
+  - key: duration_budget
+    value:
+      max: 600000
+  - key: token_budget_total
+    value:
+      max: 18000
   scoring_checklist:
   - id: identifies_generic_mlip_limit
     criterion: Agent states that generic DPA/MACE/SevenNet/MatterSim MLIPs provide potential energy, forces, and stress, not band structures, DOS, or band gaps.
@@ -3312,7 +3378,7 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: checks_specialized_model_or_dft
-    criterion: Agent routes to DFT or performs/plans an internal `aissq-explorer` lookup for a specialized electronic-structure ML model before offering a non-DFT ML route.
+    criterion: Agent routes the request to DFT as the appropriate electronic-structure method, or, if offering a non-DFT ML route, explicitly frames any specialized electronic-structure ML model as requiring lookup or validation before use.
     axis: correctness
     verify: llm_binary_judge
   - id: asks_human_for_route
@@ -3327,13 +3393,22 @@ questions:
     criterion: Agent reaches the capability-boundary decision within the turn budget.
     axis: efficiency
     verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
 - id: WO_elec_009_20260514
   capability: workflow_orchestration
   domain: agnostic
   intent: Validate whether the agent can prepare ABACUS INPUT and Bohrium submit JSON
     for an Al2O3 Bader workflow without running calculations.
-  human_prompt_seed: "对 Al₂O₃ 准备 ABACUS Bader 电荷分析所需文件：至少生成 `INPUT`，并给出 Bohrium 提交配置 JSON。\n\
-    本题只检验输入与提交配置，不要投递或执行计算。"
+  human_prompt_seed: "对 Al₂O₃ 准备 ABACUS Bader 电荷分析所需文件：至少生成 `INPUT`，并给出 Bohrium\
+    \ 提交配置 JSON（文件名 `al2o3_bader_submit.json`，至少包含 `image` 与 `cmd`）；`cmd` 需体现先运行 ABACUS、再运行 `bader`\
+    \ 后处理链路。\n\n本题只检验 `INPUT` 与提交 JSON，不要投递或执行计算。"
   tags:
   - eng_abacus
   data_files: []

@@ -43,6 +43,7 @@ correct, runnable files and avoiding silent-failure configurations.
   - NSCF: `init_chg file`, `symmetry 0`, `nbands <N>`, plus `out_band 1` or `out_dos 1`
 - If file names are not defaults, set `stru_file` and `kpoint_file` to real names.
 - Every referenced file must exist either in workspace or in the configured runtime directories.
+- **ASE-ABACUS Calculator mode**: when ABACUS is used as an ASE Calculator (e.g., ASE-driven relaxation, finite-displacement vibrations, NEB), the INPUT must use `calculation scf`. ASE handles the optimization/displacement loop externally; ABACUS only computes single-point energy and forces per step. Using `calculation relax` or `calculation md` in this scenario causes the ABACUS internal optimizer to conflict with ASE.
 
 ## K-point Rules
 

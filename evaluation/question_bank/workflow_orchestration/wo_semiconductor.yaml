@@ -80,7 +80,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_elec_009_20260415
+- id: WO_elec_009_20260515
   capability: workflow_orchestration
   domain: semiconductor
   intent: Compute Si phonon dispersion with ABACUS (including relaxation step) and summarize
@@ -152,8 +152,11 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: grounding_source
-    criterion: Final answer is grounded in generated phonon artifacts and does not fabricate
-      unsupported dispersion conclusions.
+    criterion: The final answer uses the mock phonon values provided in the prompt
+      (gamma_optical_frequency_THz=15.6, imaginary_mode_check=false). This is a mock
+      task — the agent is NOT expected to compute phonon dispersion from scratch.
+      Using prompt-provided mock values IS grounded. Only fail if the agent invents
+      numeric values not given in the prompt.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries

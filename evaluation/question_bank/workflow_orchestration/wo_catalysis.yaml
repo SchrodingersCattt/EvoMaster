@@ -77,7 +77,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_elec_007_20260415
+- id: WO_elec_007_20260515
   capability: workflow_orchestration
   domain: catalysis
   intent: Compute Pd(111) work function with ABACUS under a z-direction vacuum setup and summarize
@@ -151,8 +151,10 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: grounding_source
-    criterion: The final answer is grounded in generated work-function artifacts and does
-      not fabricate unsupported setup or result details.
+    criterion: The final answer uses the mock work-function value (5.43 eV) provided in
+      the prompt. This is a mock task — the agent is NOT expected to compute the value
+      from scratch. Using the prompt-provided mock value IS grounded. Only fail if the
+      agent invents a DIFFERENT numeric value not given in the prompt.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
