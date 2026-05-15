@@ -3,9 +3,11 @@
 
 Subcommands:
   list     <models|datasets> [--page-size N] [--limit N] [--sort downloads|modified]
-  search   <keyword> --type <models|datasets>
-  info     <name>    --type <models|datasets>
-  download <name>    --type <models|datasets> --output <dir>
+  search   <keyword>          --type <models|datasets>
+  info     <name>             --type <models|datasets> [--full | --grep PAT [--context N]]
+  grep     <pattern>          --type <models|datasets> [--name-filter REGEX]
+                              [--max-items N] [--max-excerpts N] [--context N] [--jobs N]
+  download <name>             --type <models|datasets> --output <dir>
 
 All output is a single JSON object on stdout; errors go to stderr with exit code 1.
 No authentication is required for any endpoint.
@@ -14,7 +16,9 @@ No authentication is required for any endpoint.
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import json
+import re
 import ssl
 import sys
 import time
@@ -183,19 +187,138 @@ def _find_by_name(
     return None
 
 
+DEFAULT_INFO_SUMMARY_CHARS = 1200
+
+
+def _grep_text(
+    text: str,
+    pattern: str,
+    *,
+    context: int = 1,
+    max_excerpts: int = 10,
+    ignore_case: bool = True,
+) -> list[dict[str, Any]]:
+    """Return up to max_excerpts {line, context} hits of *pattern* in *text*."""
+    if not text:
+        return []
+    flag_mask = re.IGNORECASE if ignore_case else 0
+    try:
+        compiled = re.compile(pattern, flag_mask)
+    except re.error as exc:
+        return [{"error": f"invalid regex: {exc}"}]
+    lines = text.split("\n")
+    excerpts: list[dict[str, Any]] = []
+    for i, line in enumerate(lines):
+        if compiled.search(line):
+            start = max(0, i - context)
+            end = min(len(lines), i + context + 1)
+            excerpts.append(
+                {
+                    "line": i + 1,
+                    "context": "\n".join(lines[start:end]),
+                }
+            )
+            if len(excerpts) >= max_excerpts:
+                break
+    return excerpts
+
+
 def cmd_info(args: argparse.Namespace) -> dict[str, Any]:
     item = _find_by_name(args.name, args.type, insecure=args.insecure)
     if item is None:
         raise RuntimeError(f"resource {args.name!r} not found in {args.type}")
     detail = _detail(int(item["ID"]), args.type, args.name, insecure=args.insecure)
-    return {
+    full_desc = detail.get("description") or ""
+    out: dict[str, Any] = {
         "ID": item["ID"],
         "name": item.get("name"),
         "type": args.type,
         "modifyDate": item.get("modifyDate"),
         "downloadCount": item.get("downloadCount"),
         "files": detail.get("files", []),
-        "description_preview": (detail.get("description") or "")[:400],
+        "description_length": len(full_desc),
+    }
+    grep_pattern = getattr(args, "grep", None)
+    if grep_pattern:
+        out["description_grep_pattern"] = grep_pattern
+        out["description_matches"] = _grep_text(
+            full_desc,
+            grep_pattern,
+            context=getattr(args, "context", 1),
+            max_excerpts=getattr(args, "max_excerpts", 10),
+        )
+        return out
+    if getattr(args, "full", False):
+        out["description"] = full_desc
+        return out
+    summary_chars = getattr(args, "summary_chars", DEFAULT_INFO_SUMMARY_CHARS)
+    out["description_summary"] = full_desc[:summary_chars]
+    out["description_truncated"] = len(full_desc) > summary_chars
+    return out
+
+
+def cmd_grep(args: argparse.Namespace) -> dict[str, Any]:
+    """Cross-corpus regex search over registry descriptions."""
+    items = _list_all(args.type, insecure=args.insecure)
+    if args.name_filter:
+        try:
+            name_re = re.compile(args.name_filter, re.IGNORECASE)
+        except re.error as exc:
+            raise RuntimeError(f"invalid --name-filter regex: {exc}") from exc
+        items = [it for it in items if name_re.search(it.get("name") or "")]
+    if args.max_items and args.max_items > 0:
+        items = items[: args.max_items]
+
+    def _scan(item: dict[str, Any]) -> dict[str, Any] | None:
+        try:
+            detail = _detail(
+                int(item["ID"]),
+                args.type,
+                item.get("name") or "",
+                insecure=args.insecure,
+            )
+        except Exception as exc:
+            return {
+                "ID": item.get("ID"),
+                "name": item.get("name"),
+                "error": str(exc),
+            }
+        desc = detail.get("description") or ""
+        excerpts = _grep_text(
+            desc,
+            args.pattern,
+            context=args.context,
+            max_excerpts=args.max_excerpts,
+        )
+        if not excerpts:
+            return None
+        return {
+            "ID": item.get("ID"),
+            "name": item.get("name"),
+            "modifyDate": item.get("modifyDate"),
+            "description_length": len(desc),
+            "n_hits": len(excerpts),
+            "excerpts": excerpts,
+        }
+
+    results: list[dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(args.jobs, 1)) as ex:
+        for res in ex.map(_scan, items):
+            if res is None:
+                continue
+            if "error" in res:
+                errors.append(res)
+                continue
+            results.append(res)
+    return {
+        "pattern": args.pattern,
+        "type": args.type,
+        "items_scanned": len(items),
+        "n_matches": len(results),
+        "n_errors": len(errors),
+        "results": results,
+        "errors": errors,
     }
 
 
@@ -256,11 +379,89 @@ def build_parser() -> argparse.ArgumentParser:
     ps.set_defaults(func=cmd_search)
 
     pi = sub.add_parser(
-        "info", help="Get detail (files, downloadLink, size) for a resource by name"
+        "info",
+        help="Get detail (files, downloadLink, size, description) for a resource",
     )
     pi.add_argument("name")
     pi.add_argument("--type", required=True, choices=["models", "datasets"])
+    pi.add_argument(
+        "--full",
+        action="store_true",
+        help="Return the full markdown description (may be many KB).",
+    )
+    pi.add_argument(
+        "--grep",
+        type=str,
+        default=None,
+        help=(
+            "Regex to search inside the description; returns only matching "
+            "context lines instead of the full text."
+        ),
+    )
+    pi.add_argument(
+        "--context",
+        type=int,
+        default=1,
+        help="Number of context lines around each --grep match (default: 1)",
+    )
+    pi.add_argument(
+        "--max-excerpts",
+        type=int,
+        default=10,
+        help="Maximum number of --grep excerpts to return (default: 10)",
+    )
+    pi.add_argument(
+        "--summary-chars",
+        type=int,
+        default=DEFAULT_INFO_SUMMARY_CHARS,
+        help=(
+            "Characters of description to include as description_summary when "
+            "neither --full nor --grep is given (default: 1200)."
+        ),
+    )
     pi.set_defaults(func=cmd_info)
+
+    pg = sub.add_parser(
+        "grep",
+        help=(
+            "Regex-search descriptions across all resources of a type; returns "
+            "[{name, excerpts}, ...]. Use before info/download when looking for "
+            "a feature (e.g. 'fparam', 'charge') rather than a known name."
+        ),
+    )
+    pg.add_argument("pattern", help="Regex pattern (case-insensitive)")
+    pg.add_argument("--type", required=True, choices=["models", "datasets"])
+    pg.add_argument(
+        "--name-filter",
+        type=str,
+        default=None,
+        help="Pre-filter items by name regex before fetching descriptions.",
+    )
+    pg.add_argument(
+        "--max-items",
+        type=int,
+        default=0,
+        help="Cap on items scanned (default: 0 = no cap).",
+    )
+    pg.add_argument(
+        "--max-excerpts",
+        type=int,
+        default=5,
+        help="Maximum excerpts per matching item (default: 5).",
+    )
+    pg.add_argument(
+        "--context",
+        type=int,
+        default=1,
+        help="Number of context lines around each match (default: 1).",
+    )
+    pg.add_argument(
+        "--jobs",
+        type=int,
+        default=8,
+        help="Parallel HTTP workers for description fetching (default: 8).",
+    )
+    pg.set_defaults(func=cmd_grep)
 
     pd = sub.add_parser(
         "download", help="Download all files of a resource into <output>/<name>/"
