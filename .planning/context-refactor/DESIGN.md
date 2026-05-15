@@ -18,7 +18,10 @@ v3.2 的核心修正是按"该字段是否影响 provider-facing 输出或 resto
 | `user_turn_context` 与 `User/query` 关联 | payload 内保存 `source_query_event_id`，依赖 DAO inserted id 返回链路 | 通过 events 表顶层 `session_id + spawn_id + invocation_id` 关联，同一 root 用户请求最多一条 `user_turn_context` |
 | `TurnInput` 字段 | 含 `source_query_event_id` | 删除；`TurnInput` 只承载会影响 provider-facing user message 的输入与 preflight 边界 |
 | `TurnAssemblyRequest` 字段 | 含 `pre_turn_history_event_id`（与 `turn_input.pre_turn_history_event_id` 重复） | 删除该字段；assembler 内部直接读 `request.turn_input.pre_turn_history_event_id`，消除 caller 双写不一致风险 |
-| `CompactionAssemblyRequest.covered_until_event_id` | 必填；caller（compactor）本地派生后显式传入 | 默认 `None`；派生规则集中在 `assemble_compaction` 内（`显式值 > turn_input.pre_turn_history_event_id > None`），真实边界通过 `AssemblyResult.covered_until_event_id` 回传给 caller 写 checkpoint payload |
+| `TurnInput.pre_turn_history_event_id` 类型 | `int \| None = None`（用 None 同时表达"无历史"与"无上界"，语义冲突） | `int = 0`；`0` 表示 session 首轮前无任何 event，`N>0` 表示历史最后一个 event id。"无上界"只能通过 `SessionEventQuery.until_event_id=None` 表达，不再与"无历史"共享 None |
+| `CompactionAssemblyRequest.covered_until_event_id` | 必填；caller（compactor）本地派生后显式传入 | 按 intent 分流，assembler 校验：`PREFLIGHT` 可省略，从 `turn_input.pre_turn_history_event_id` 派生；`RUNTIME` **必须**显式传入非 None int（caller/kernel 提供当前事件流 high-water id）。assembler 不为 runtime 隐式派生，避免 checkpoint payload 写出 null 边界破坏 restore |
+| `history_checkpoint.v1.covered_until_event_id` | 写入路径未约束（可能 null） | 必须非 null int；restore 端遇 null 视为 checkpoint 损坏，回退 `COMPAT:v0-restore` |
+| `AssemblyResult.covered_until_event_id` | — | 新增字段；compaction 路径下 assembler 保证非 None；turn 路径下保持 None。compactor 从该字段读真实边界写入 checkpoint payload，消除"派生规则在两处实现"风险 |
 | Phase 0 硬依赖 | DAO 返回 inserted event id + 文件拆分 | 仅保留文件拆分；DAO inserted id 不再是本 spec 前置依赖 |
 
 ### 0.2 v3.1 相对 v3 的关键变化
@@ -184,8 +187,10 @@ v3.1 的核心目标是消除 v3 末尾仍然散落在 §7.3 / §8.2 / §9.2 的
 
 **`covered_until_event_id` 语义**：checkpoint 等价于「从 session 起点重放到该 event_id 为止的所有 provider-facing 消息」。具体到本 spec：
 
-- 普通 runtime compaction：`covered_until_event_id` 指向当前事件流末尾（含 assistant_state / tool_result，**不含**尚未写入的下一轮 user_turn_context）。
+- 普通 runtime compaction：`covered_until_event_id` 指向当前事件流末尾（含 assistant_state / tool_result，**不含**尚未写入的下一轮 user_turn_context）。由 caller (kernel) 显式提供该 id（kernel 自己写过这些事件、持有 high-water id）；assembler 不查 DB 派生。
 - Preflight compaction（运行时触发，对应 `transform=preflight_compacted` 的 user_turn_context）：`covered_until_event_id` 指向 `TurnInput.pre_turn_history_event_id`，**不包含**当前轮的 User/query 和 user_turn_context；checkpoint 之后会有对应的 user_turn_context 事件被恢复追加。
+
+**v1 checkpoint 不允许 null**：写入时 `covered_until_event_id` 必须是确定的事件 id（`int`，可以为 `0` 表示 session 起点）。若 compactor 无法拿到确定边界（理论上不应出现：runtime 由 caller 显式提供，preflight 从 `turn_input` 派生），则不应落 durable v1 checkpoint。restore 端遇到 null `covered_until_event_id` 视为 checkpoint 损坏，回退到 legacy restore 路径（`COMPAT:v0-restore`）。
 
 ### 3.4 写入时序
 
@@ -193,20 +198,22 @@ v3.1 的核心目标是消除 v3 末尾仍然散落在 §7.3 / §8.2 / §9.2 的
 
 ```
 普通延续轮（hash 未变）：
-  User/query (id=N) → user_turn_context(kind=continuation, source_query=N) → kernel.run_stream → [assistant_state | response/run_result + tool_result]*
+  User/query (invocation_id=I) → user_turn_context(kind=continuation, invocation_id=I) → kernel.run_stream → [assistant_state | response/run_result + tool_result]*
 
 AGENT.md 改动后第一轮：
-  User/query (id=N) → user_turn_context(kind=anchor, source_query=N, user_instructions_hash=NEW) → kernel.run_stream → ...
+  User/query (invocation_id=I) → user_turn_context(kind=anchor, invocation_id=I, user_instructions_hash=NEW) → kernel.run_stream → ...
 
 Session 首轮：
-  User/query (id=N) → user_turn_context(kind=anchor, source_query=N, user_instructions_hash=...) → kernel.run_stream → ...
+  User/query (invocation_id=I) → user_turn_context(kind=anchor, invocation_id=I, user_instructions_hash=...) → kernel.run_stream → ...
 
 运行中触发 preflight compaction：
-  User/query (id=N) → history_checkpoint (covered_until < N) → user_turn_context(kind=anchor, transform=preflight_compacted, source_query=N) → kernel.run_stream → ...
+  User/query (invocation_id=I) → history_checkpoint (covered_until_event_id < User/query.event_id) → user_turn_context(kind=anchor, transform=preflight_compacted, invocation_id=I) → kernel.run_stream → ...
 
 运行中触发 runtime compaction（无新用户输入，kernel 工具循环内）：
-  ... → history_checkpoint (covered_until=末尾) → (kernel 继续 LLM 调用) → assistant_state/response/tool_result ...
+  ... → history_checkpoint (covered_until_event_id = kernel 持有的当前事件流 high-water id) → (kernel 继续 LLM 调用) → assistant_state/response/tool_result ...
 ```
+
+注：v3.2 起 `user_turn_context` 与对应 `User/query` 的关联**不**通过 payload 内的外键，而是 events 表顶层 `session_id + spawn_id + invocation_id` 匹配。上面图示中 `invocation_id=I` 是 events 表 metadata 字段，不是 payload 字段。
 
 **关键约束**：tool 循环内不再写任何 `user_turn_context` —— v2 的"每次 LLM 调用前一帧"语义彻底废止。
 
@@ -896,10 +903,18 @@ class TurnAttachmentsSource:
 
 @dataclass(frozen=True)
 class TurnInput:
-    """本轮请求的原子单元。"""
+    """本轮请求的原子单元。
+
+    pre_turn_history_event_id 语义 (v3.2 收紧):
+    - 类型 int (非 Optional), service 层必须提供具体值
+    - 0 = 本轮 User/query 写入前 session 内无任何 event (session 首轮)
+    - N>0 = 本轮 User/query 写入前最后一个 event 的 id; 历史视图查询应当返回 event_id <= N
+
+    禁止用 None 同时表达 "无历史" 和 "无上界" - 后者在 SessionEventQuery 里独立表示。
+    """
     instruction: TurnInstructionSource = field(default_factory=TurnInstructionSource)
     attachments: TurnAttachmentsSource = field(default_factory=TurnAttachmentsSource)
-    pre_turn_history_event_id: int | None = None
+    pre_turn_history_event_id: int = 0
 
     def to_sections(self) -> tuple[ContextSection, ...]:
         return (*self.instruction.to_sections(), *self.attachments.to_sections())
@@ -1106,20 +1121,24 @@ class CompactionAssemblyRequest:
     compacted_history_summary 必填 (compactor 自己产生, 可能来自 LLM 或 fallback)。
     turn_input 在 runtime compaction (kernel 内循环) 时可 None。
 
-    covered_until_event_id 语义 (assembler 内部派生, 调用方通常不必显式传):
-    - 显式 int: caller 主动覆盖边界 (未来 Case 3 oversized input 等场景预留)
-    - None + turn_input 非 None: 取 turn_input.pre_turn_history_event_id (preflight 默认)
-    - None + turn_input None: 表示无显式上界, port 解释为"当前事件流末尾" (runtime 默认)
+    covered_until_event_id 按 intent 不同有不同要求 (assembler 校验):
+    - PREFLIGHT_COMPACTION:
+        可省略 (None); assembler 从 turn_input.pre_turn_history_event_id 派生.
+        显式 int 时优先使用 (Case 3 oversized 等场景预留).
+    - RUNTIME_COMPACTION:
+        **必须**显式传入非 None int; caller (kernel) 提供当前事件流 high-water id.
+        assembler **不**为 runtime 隐式派生 - 否则 checkpoint payload 写出 null 边界,
+        restore 时无法判断覆盖范围, 会重复 replay 已被 summary 覆盖的事件.
 
-    派生后的真实值会写入 AssemblyResult.covered_until_event_id, caller (compactor) 从中
-    取出写入 checkpoint payload, 保证 assembler 与 checkpoint 看到同一个边界值。
+    派生后的真实值会写入 AssemblyResult.covered_until_event_id (compaction 路径下保证非 None),
+    caller (compactor) 从中取出写入 history_checkpoint.v1 payload (该 payload 字段不允许 null).
     """
     session_id: str
     spawn_id: str | None
     user_instructions: UserInstructions
     compacted_history_summary: str
     turn_input: TurnInput | None = None
-    covered_until_event_id: int | None = None  # 默认 None, 由 assembler 派生
+    covered_until_event_id: int | None = None  # PREFLIGHT 可省略; RUNTIME 必填
     session_attachments_override: SessionAttachmentsSource | None = None
 
 
@@ -1129,7 +1148,7 @@ class AssemblyResult:
     user_instructions_text: str                 # compactor 写 history_checkpoint payload 用
     user_instructions_hash: str                 # service 写 user_turn_context payload 用
     used_composition: str                       # 调试 / 埋点
-    covered_until_event_id: int | None = None   # compaction 路径下 assembler 派生的真实边界; turn 路径下保持 None
+    covered_until_event_id: int | None = None   # compaction 路径下 assembler 保证非 None; turn 路径下保持 None
 
 
 _INTENT_COMPOSITION_MAP: dict[ContextAssemblyIntent, ContextComposition] = {
@@ -1196,13 +1215,27 @@ class ContextAssembler:
             raise ValueError(f"assemble_compaction does not accept intent {intent!r}")
 
         composition = _INTENT_COMPOSITION_MAP[intent]
-        # 派生 covered_until: 显式值 > turn_input.pre_turn_history_event_id > None
-        # 派生规则集中在此处, 调用方 (compactor) 不必重复实现
-        covered_until = (
-            request.covered_until_event_id
-            if request.covered_until_event_id is not None
-            else (request.turn_input.pre_turn_history_event_id if request.turn_input else None)
-        )
+        # 派生 covered_until 按 intent 分流, 不允许隐式 None (会破坏 checkpoint restore):
+        #   PREFLIGHT: 显式值 > turn_input.pre_turn_history_event_id (后者 0 即首轮空历史, 合法)
+        #   RUNTIME: caller 必须显式传入当前事件流 high-water id (assembler 不查 DB 派生)
+        if intent == ContextAssemblyIntent.RUNTIME_COMPACTION:
+            if request.covered_until_event_id is None:
+                raise ValueError(
+                    "RUNTIME_COMPACTION requires explicit covered_until_event_id "
+                    "(kernel must pass current event stream high-water mark); "
+                    "implicit None would write a null boundary into history_checkpoint payload "
+                    "and break restore coverage semantics."
+                )
+            covered_until = request.covered_until_event_id
+        else:  # PREFLIGHT_COMPACTION
+            if request.covered_until_event_id is not None:
+                covered_until = request.covered_until_event_id
+            elif request.turn_input is not None:
+                covered_until = request.turn_input.pre_turn_history_event_id
+            else:
+                raise ValueError(
+                    "PREFLIGHT_COMPACTION requires turn_input or explicit covered_until_event_id"
+                )
         events = await self._ports.session_events.load_events(SessionEventQuery(
             session_id=request.session_id,
             spawn_id=request.spawn_id,
@@ -1872,8 +1905,17 @@ class ModelHistoryRestorer:
     ) -> list[Message]:
         if checkpoint is not None and checkpoint.get("content", {}).get("schema_version") == "history_checkpoint.v1":
             content = checkpoint["content"]
+            after = content.get("covered_until_event_id")
+            if after is None:
+                # v1 checkpoint 必须有确定边界 (见 §3.3); null 视为 checkpoint 损坏,
+                # 回退到 legacy restore 比 silently replay 全量更安全
+                # COMPAT:v0-restore
+                logger.warning(
+                    "history_checkpoint.v1 has null covered_until_event_id; "
+                    "falling back to legacy restore (COMPAT:v0-restore)"
+                )
+                return self._legacy_restore(session_id, spawn_id)
             messages = self._deserialize_messages(content["base_messages"])
-            after = content["covered_until_event_id"]
         else:
             messages = []
             after = None
@@ -2625,7 +2667,7 @@ Phase 1 内 `tests/matmaster/manifests/` 保留并继续通过（验证 shim 等
 | View | `ContextView`，渲染时的视图选择（RUNTIME / CHECKPOINT），不参与恢复。不变量 `RUNTIME ⊇ CHECKPOINT` |
 | Checkpoint | `history_checkpoint` event 的 v1 payload，含 base_messages、user_instructions_text/hash、schema_version、render_version、covered_until_event_id |
 | `invocation_id` | events 表顶层字段，一次真实用户请求的标识；`User/query` 与 `user_turn_context` 通过 `session_id + spawn_id + invocation_id` 关联 |
-| `pre_turn_history_event_id` | 本轮 User/query 和 user_turn_context 事件写入前的最后 event id，用于 preflight compaction 划定 checkpoint 覆盖边界 |
+| `pre_turn_history_event_id` | 本轮 User/query 和 user_turn_context 事件写入前的最后 event id，`int` 类型；`0` 表示本轮前 session 内无任何 event（首轮）。用于 `assemble_turn` 的历史 view cutoff 与 preflight compaction 的 checkpoint 覆盖边界。**不**用 `None` 表达"无历史"（避免与 `SessionEventQuery.until_event_id=None` 的"无上界"语义混淆） |
 | `user_instructions_hash` | AGENT.md 文本的 sha256，service 层用于判定是否需要新 anchor |
 | `transform` | user_turn_context.payload 字段，`"raw"` / `"preflight_compacted"` / `"oversized_summary"`（最后一个 Phase 4 落地）|
 
