@@ -108,6 +108,14 @@ def _h_duration_budget(ctx):
     return check_duration_budget(evidence=ctx["evidence"], expected=ctx["ref"].value)
 
 
+@_R("call_count_range")
+def _h_call_count_range(ctx):
+    return BinaryEvaluator._check_call_count_range(
+        evidence=ctx["evidence"],
+        expected=ctx["ref"].value,
+    )
+
+
 @_R("molcrys_slab_molecular_integrity")
 def _h_molcrys_slab(ctx):
     return check_molcrys_slab_integrity(evidence=ctx["evidence"], ref=ctx["ref"])
