@@ -84,6 +84,7 @@ async def test_run_agent_uses_hot_cache_when_present(monkeypatch):
             cancel_token=_make_cancel_token(),
             mode="direct",
             task_id="t1",
+            invocation_id="inv-hot-cache",
         )
 
     snapshot = svc._test_fake_exp.last_ctx.run_meta["active_skills"]
@@ -109,6 +110,7 @@ async def test_run_agent_skill_hit_event_writes_back_to_hot_cache():
             cancel_token=_make_cancel_token(),
             mode="direct",
             task_id="t1",
+            invocation_id="inv-skill-hit",
         )
 
     assert "record_active_mcp_server" not in svc._test_fake_exp.last_ctx.run_meta
@@ -170,6 +172,7 @@ async def test_run_agent_rehydrates_from_db_on_cache_miss(tmp_path, monkeypatch)
             cancel_token=_make_cancel_token(),
             mode="direct",
             task_id="t1",
+            invocation_id="inv-rehydrate",
         )
 
     assert svc._active_skills["sess-rehydrate"] == {"pxrd", "sg"}
@@ -236,6 +239,7 @@ async def test_run_agent_rehydrates_remote_skill_from_session_root(
             cancel_token=_make_cancel_token(),
             mode="direct",
             task_id="t1",
+            invocation_id="inv-remote-rehydrate",
         )
 
     assert svc._active_skills["sess-remote-rehydrate"] == {"remote-skill"}
