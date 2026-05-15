@@ -24,6 +24,7 @@ def _checkpoint(
     return {
         "id": checkpoint_id,
         "content": {
+            "schema_version": "history_checkpoint.v1",
             "covered_until_event_id": covered_until_event_id,
             "base_messages": serialize_base_messages(base_messages),
         },
@@ -34,6 +35,7 @@ def _invalid_checkpoint(*, checkpoint_id: int, covered_until_event_id: int) -> d
     return {
         "id": checkpoint_id,
         "content": {
+            "schema_version": "history_checkpoint.v1",
             "covered_until_event_id": covered_until_event_id,
             "base_messages": serialize_base_messages([AssistantMessage(content="bad")]),
         },
@@ -56,6 +58,24 @@ def _user_event(
     if images is not None:
         event["images"] = images
     return event
+
+
+def _utc_event(content: str, *, invocation_id: str = "inv-utc") -> dict:
+    return {
+        "source": "MatMaster",
+        "type": "user_turn_context",
+        "content": {
+            "schema_version": "user_turn_context.v1",
+            "kind": "anchor",
+            "message": UserMessage(content=content).model_dump(mode="json"),
+            "user_instructions_hash": "sha256:abc",
+            "transform": "raw",
+            "render_version": "user_context_render.v1",
+        },
+        "task_id": None,
+        "invocation_id": invocation_id,
+        "spawn_id": None,
+    }
 
 
 def _response_event(content: str, *, task_id: str | None = None) -> dict:
@@ -91,7 +111,7 @@ class FakeEventsTable:
         self,
         session_id: str,
         spawn_id: str | None,
-        after_id: int,
+        after_id: int | None,
         limit: int | None = None,
     ) -> list[dict]:
         self.calls.append(
@@ -107,6 +127,14 @@ class FakeEventsTable:
     ) -> list[dict]:
         self.calls.append(("get_session_events", session_id, limit, include_spawn))
         return list(self.session_events)
+
+    def has_user_turn_context(
+        self,
+        session_id: str,
+        spawn_id: str | None,
+    ) -> bool:
+        self.calls.append(("has_user_turn_context", session_id, spawn_id))
+        return False
 
 
 def test_row_to_event_includes_event_id() -> None:
@@ -137,7 +165,7 @@ def test_restore_uses_latest_valid_checkpoint() -> None:
             )
         ],
         scope_events=[
-            _user_event("follow up question"),
+            _utc_event("follow up question"),
             _response_event("follow up answer"),
         ],
     )
@@ -172,7 +200,7 @@ def test_restore_falls_back_to_older_checkpoint_when_latest_is_invalid() -> None
             ),
         ],
         scope_events=[
-            _user_event("question from older checkpoint"),
+            _utc_event("question from older checkpoint"),
             _response_event("answer from older checkpoint"),
         ],
     )

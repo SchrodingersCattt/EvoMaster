@@ -177,24 +177,29 @@ class ChatEventsTable(BaseTable):
         self,
         session_id: str,
         spawn_id: str | None,
-        after_id: int,
+        after_id: int | None,
         limit: int | None = None,
     ) -> list[dict]:
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 if spawn_id is None:
                     spawn_filter = ' AND spawn_id IS NULL'
-                    params = (session_id, after_id)
+                    params: tuple = (session_id,)
                 else:
                     spawn_filter = ' AND spawn_id = %s'
-                    params = (session_id, spawn_id, after_id)
+                    params = (session_id, spawn_id)
+
+                after_filter = ''
+                if after_id is not None:
+                    after_filter = ' AND id > %s'
+                    params = (*params, after_id)
 
                 sql = f'''
                     SELECT id, session_id, source, type, content, task_id, invocation_id, spawn_id, created_at
                     FROM {self.table_name}
                     WHERE session_id = %s
                       {spawn_filter}
-                      AND id > %s
+                      {after_filter}
                       AND type NOT IN ('history_checkpoint', 'compaction', 'context_compaction')
                     ORDER BY created_at ASC, id ASC
                 '''

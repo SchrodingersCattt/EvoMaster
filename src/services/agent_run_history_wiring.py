@@ -23,7 +23,7 @@ from matmaster.types.runtime_ports import (
     PlaygroundCompactionPort,
     PlaygroundRuntimePorts,
 )
-from src.services.history_restore_service import HistoryRestoreService
+from src.services.model_history_restore_service import ModelHistoryRestoreService
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ def build_history_wiring(
 ) -> HistoryWiringResult:
     """Assemble history + attachments + runtime_ports for a single run."""
     history = (
-        HistoryRestoreService(events_table).restore_history(
+        ModelHistoryRestoreService(events_table).restore_history(
             session_id=session_id,
             spawn_id=None,
             task_id=task_id,

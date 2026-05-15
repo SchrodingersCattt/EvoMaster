@@ -76,6 +76,23 @@ def _response_event(
     }
 
 
+def _user_turn_context_event(content: str) -> dict[str, Any]:
+    return {
+        "source": "MatMaster",
+        "type": "user_turn_context",
+        "content": {
+            "schema_version": "user_turn_context.v1",
+            "kind": "anchor",
+            "message": UserMessage(content=content).model_dump(mode="json"),
+            "user_instructions_hash": "sha256:abc",
+            "transform": "raw",
+            "render_version": "user_context_render.v1",
+        },
+        "task_id": None,
+        "spawn_id": None,
+    }
+
+
 class InMemoryEventsTable:
     def __init__(self) -> None:
         self._events: list[dict[str, Any]] = []
@@ -117,6 +134,10 @@ class InMemoryEventsTable:
         covered_until_event_id: int,
         base_messages: list[dict[str, Any]],
         reason: str = "summary",
+        schema_version: str | None = None,
+        render_version: str | None = None,
+        user_instructions_text: str | None = None,
+        user_instructions_hash: str | None = None,
     ) -> bool:
         self.calls.append(
             (
@@ -129,15 +150,25 @@ class InMemoryEventsTable:
                 reason,
             )
         )
+        content = {
+            "covered_until_event_id": covered_until_event_id,
+            "base_messages": base_messages,
+            "reason": reason,
+        }
+        if schema_version is not None:
+            content["schema_version"] = schema_version
+        if render_version is not None:
+            content["render_version"] = render_version
+        if user_instructions_text is not None:
+            content["user_instructions_text"] = user_instructions_text
+        if user_instructions_hash is not None:
+            content["user_instructions_hash"] = user_instructions_hash
+
         self.add_event(
             session_id,
             "System",
             "history_checkpoint",
-            {
-                "covered_until_event_id": covered_until_event_id,
-                "base_messages": base_messages,
-                "reason": reason,
-            },
+            content,
             task_id=task_id,
             invocation_id=invocation_id,
             spawn_id=spawn_id,
@@ -165,7 +196,7 @@ class InMemoryEventsTable:
         self,
         session_id: str,
         spawn_id: str | None,
-        after_id: int,
+        after_id: int | None,
         limit: int | None = None,
     ) -> list[dict[str, Any]]:
         self.calls.append(
@@ -176,7 +207,7 @@ class InMemoryEventsTable:
             for event in self._events
             if event["session_id"] == session_id
             and event.get("spawn_id") == spawn_id
-            and int(event["id"]) > after_id
+            and (after_id is None or int(event["id"]) > after_id)
             and event["type"]
             not in {"history_checkpoint", "compaction", "context_compaction"}
         ]
@@ -215,6 +246,19 @@ class InMemoryEventsTable:
             return rows[:limit]
         return rows
 
+    def has_user_turn_context(
+        self,
+        session_id: str,
+        spawn_id: str | None,
+    ) -> bool:
+        self.calls.append(("has_user_turn_context", session_id, spawn_id))
+        return any(
+            event["session_id"] == session_id
+            and event.get("spawn_id") == spawn_id
+            and event["type"] == "user_turn_context"
+            for event in self._events
+        )
+
     def history_checkpoints(self, *, spawn_id: str | None) -> list[dict[str, Any]]:
         return [
             event
@@ -239,6 +283,7 @@ def _seed_scope_events(
     task_id: str | None = None,
     user_content: str,
     response_content: str,
+    write_user_turn_context: bool = False,
 ) -> None:
     user_event = _user_event(user_content, task_id=task_id, spawn_id=spawn_id)
     events_table.add_event(
@@ -249,6 +294,17 @@ def _seed_scope_events(
         task_id=task_id,
         spawn_id=spawn_id,
     )
+    if write_user_turn_context:
+        utc_event = _user_turn_context_event(user_content)
+        events_table.add_event(
+            session_id,
+            utc_event["source"],
+            utc_event["type"],
+            utc_event["content"],
+            task_id=task_id,
+            invocation_id=f"{task_id or 'task'}:utc",
+            spawn_id=spawn_id,
+        )
     response_event = _response_event(
         response_content, task_id=task_id, spawn_id=spawn_id
     )
@@ -290,7 +346,11 @@ async def test_restore_with_checkpoint_plus_incremental_events() -> None:
     )
 
     await checkpoint_sink(
-        payload={"durability": "durable", "strategy": "summary"},
+        payload={
+            "durability": "durable",
+            "strategy": "summary",
+            "schema_version": "history_checkpoint.v1",
+        },
         base_messages=checkpoint_base_messages,
     )
 
@@ -300,6 +360,7 @@ async def test_restore_with_checkpoint_plus_incremental_events() -> None:
         task_id="task-follow-up",
         user_content="incremental follow-up question",
         response_content="incremental follow-up answer",
+        write_user_turn_context=True,
     )
 
     history = HistoryRestoreService(events_table).restore_history(
@@ -409,7 +470,11 @@ async def test_compaction_checkpoint_rehydrates_only_attachment_delta(
         spawn_id=None,
     )
     await checkpoint_sink(
-        payload={"durability": "durable", "strategy": "summary"},
+        payload={
+            "durability": "durable",
+            "strategy": "summary",
+            "schema_version": "history_checkpoint.v1",
+        },
         base_messages=result.base_snapshot,
     )
 
@@ -503,7 +568,11 @@ async def test_spawn_id_checkpoint_does_not_affect_parent_restore() -> None:
     )
 
     await child_sink(
-        payload={"durability": "durable", "strategy": "summary"},
+        payload={
+            "durability": "durable",
+            "strategy": "summary",
+            "schema_version": "history_checkpoint.v1",
+        },
         base_messages=child_base_messages,
     )
 
@@ -514,6 +583,7 @@ async def test_spawn_id_checkpoint_does_not_affect_parent_restore() -> None:
         task_id="task-child-follow-up",
         user_content="child incremental question",
         response_content="child incremental answer",
+        write_user_turn_context=True,
     )
 
     restore_service = HistoryRestoreService(events_table)
@@ -578,7 +648,11 @@ async def test_restore_after_midrun_crash_uses_written_checkpoint() -> None:
     )
 
     await checkpoint_sink(
-        payload={"durability": "durable", "strategy": "summary"},
+        payload={
+            "durability": "durable",
+            "strategy": "summary",
+            "schema_version": "history_checkpoint.v1",
+        },
         base_messages=checkpoint_base_messages,
     )
 
@@ -588,6 +662,7 @@ async def test_restore_after_midrun_crash_uses_written_checkpoint() -> None:
         task_id="task-crashed-run",
         user_content="question emitted before crash",
         response_content="partial answer emitted before crash",
+        write_user_turn_context=True,
     )
 
     history = HistoryRestoreService(events_table).restore_history(
@@ -608,6 +683,7 @@ async def test_restore_after_midrun_crash_uses_written_checkpoint() -> None:
     ]
     assert fanout.flush_persistence_barrier.await_count == 1
     assert events_table.history_checkpoints(spawn_id=None)[0]["content"] == {
+        "schema_version": "history_checkpoint.v1",
         "covered_until_event_id": 2,
         "base_messages": checkpoint_base_messages,
         "reason": "summary",
@@ -637,7 +713,11 @@ async def test_compaction_events_replay_but_do_not_enter_restore_tail() -> None:
     )
 
     covered_until = await checkpoint_sink(
-        payload={"durability": "durable", "strategy": "summary"},
+        payload={
+            "durability": "durable",
+            "strategy": "summary",
+            "schema_version": "history_checkpoint.v1",
+        },
         base_messages=serialize_base_messages(
             [
                 _compact_user_message("summary"),
