@@ -3330,16 +3330,13 @@ questions:
 - id: WO_elec_009_20260514
   capability: workflow_orchestration
   domain: agnostic
-  intent: Validate whether the agent can report Al2O3 Bader post-processing conclusions
-    from provided context with correct target statistics and caveats.
-  human_prompt_seed: "对 Al₂O₃ 做 ABACUS Bader 电荷分析，只生成输入文件相关，INPUT，不投递计算，最后直接读取SPIN1_CHG.cube，进行bader电荷分析。"
+  intent: Validate whether the agent can prepare ABACUS INPUT and Bohrium submit JSON
+    for an Al2O3 Bader workflow without running calculations.
+  human_prompt_seed: "对 Al₂O₃ 准备 ABACUS Bader 电荷分析所需文件：至少生成 `INPUT`，并给出 Bohrium 提交配置 JSON。\n\
+    本题只检验输入与提交配置，不要投递或执行计算。"
   tags:
   - eng_abacus
-  data_files:
-  - key: spin1_chg_cube
-    path: data/WO_elec_009_20260514/SPIN1_CHG.cube
-    oss_url: ''
-    description: ABACUS charge-density cube for Al2O3 Bader post-processing.
+  data_files: []
   reference_answers:
   - key: input_artifact
     value: INPUT
@@ -3350,12 +3347,18 @@ questions:
       - calculation scf
       - basis_type pw
       - out_chg 1
-  - key: target_al_avg_charge_transfer
-    value: 3.0
-    tolerance: 0.2
-  - key: target_o_avg_bader_charge
-    value: 8.0
-    tolerance: 0.1
+  - key: submit_json_artifact
+    value: al2o3_bader_submit.json
+  - key: must_submit_json_image
+    value:
+      filename: al2o3_bader_submit.json
+      pattern: '"image"\s*:\s*"registry\.dp\.tech/dptech/dp/native/hub/mrdic2/abacusp:1\.0\.3-1778742780"'
+      flags: i
+  - key: must_submit_json_cmd_bader
+    value:
+      filename: al2o3_bader_submit.json
+      pattern: '"cmd"\s*:\s*".*bader.*"'
+      flags: i
   - key: turn_budget
     value:
       max: 14
@@ -3375,20 +3378,18 @@ questions:
       `basis_type pw`, `out_chg 1`).'
     axis: correctness
     verify: llm_binary_judge
-  - id: target_al_avg_charge_transfer
-    criterion: Final context reports Al average charge transfer near +3.000 e.
+  - id: submit_json_artifact
+    criterion: Agent writes Bohrium submit config `al2o3_bader_submit.json` to workspace.
     axis: correctness
-    verify: numerical_range
-  - id: target_o_avg_bader_charge
-    criterion: Final context reports O average Bader charge near 8.000 e (close to
-      8.000 ± 0.014 e target spread).
+    verify: artifact_exists
+  - id: must_submit_json_image
+    criterion: '[Must] submit JSON includes required Bohrium image.'
     axis: correctness
-    verify: numerical_range
-  - id: grounding_source
-    criterion: Final context explicitly states the Al/O charge-transfer trend and includes
-      an interpretation-boundary caveat (e.g., pseudopotential/valence-charge semantics).
-    axis: grounding
-    verify: llm_binary_judge
+    verify: text_file_regex
+  - id: must_submit_json_cmd_bader
+    criterion: '[Must] submit JSON `cmd` contains ABACUS then Bader post-processing chain.'
+    axis: correctness
+    verify: text_file_regex
   - id: no_retries
     criterion: No repeated identical tool calls with the same parameter set.
     axis: efficiency
