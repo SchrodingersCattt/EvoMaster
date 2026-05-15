@@ -158,7 +158,7 @@ def _standard_patches():
         patch('src.services.agent_run_service.WorkspaceHandler'),
         patch('src.services.agent_run_service.BohriumSetupService'),
         patch(
-            'src.services.agent_run_service.HistoryRestoreService',
+            'src.services.agent_run_history_wiring.HistoryRestoreService',
             create=True,
         ),
         patch('src.services.agent_run_service.get_redis_dao'),
@@ -478,7 +478,7 @@ async def test_run_agent_uses_history_restore_service_and_injects_spawn_aware_ch
     async with _patched_service([run_result]) as (svc, _sse, _persist):
         with (
             patch(
-                'src.services.agent_run_service.HistoryRestoreService',
+                'src.services.agent_run_history_wiring.HistoryRestoreService',
                 create=True,
             ) as restore_cls,
             patch(

@@ -23,7 +23,6 @@ from matmaster.integration.fanout import RunEventFanout
 from matmaster.integration.persistence_handler import PersistenceHandler
 from matmaster.integration.sse_handler import SSEHandler
 from matmaster.integration.workspace_handler import WorkspaceHandler
-from matmaster.manifests import attachment as attachment_manifest
 from matmaster.manifests import skill as skill_manifest
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.context import WorkspaceArchivalConfig
@@ -38,10 +37,6 @@ from matmaster.types.events import (
     ToolResultEvent,
 )
 from matmaster.types.figures import FigureUploadConfig
-from matmaster.types.runtime_ports import (
-    PlaygroundCompactionPort,
-    PlaygroundRuntimePorts,
-)
 from src.dao.chat_events_table import get_chat_events_table
 from src.dao.oss_io import upload_bytes_to_oss
 from src.dao.redis_dao import get_redis_dao
@@ -56,8 +51,8 @@ from src.services.agent_run_instructions import (  # noqa: F401
     _render_user_instructions_block,
     _strip_user_instructions_prefix,
 )
+from src.services.agent_run_history_wiring import build_history_wiring
 from src.services.history_checkpoint_service import HistoryCheckpointService
-from src.services.history_restore_service import HistoryRestoreService
 from src.services.image_input_service import get_image_input_service
 from src.services.quota_service import use_quota
 from src.services.response_figures_service import ResponseFiguresAccumulator
@@ -575,112 +570,22 @@ class AgentRunService:
             )
             pg_ctx = pg_ctx.model_copy(update={'interaction_bridge': bridge})
             # -- Stage 5: History --
-            history = (
-                HistoryRestoreService(events_table).restore_history(
-                    session_id=session_id,
-                    spawn_id=None,
-                    task_id=task_id,
-                    raw_limit=_DIALOG_HISTORY_MAX_EVENTS,
-                )
-                if events_table is not None
-                else []
+            wiring = build_history_wiring(
+                events_table=events_table,
+                session_id=session_id,
+                task_id=task_id,
+                raw_history_limit=_DIALOG_HISTORY_MAX_EVENTS,
+                child_event_sink=_child_event_sink,
+                checkpoint_sink_factory=_checkpoint_sink_factory,
+                pre_compaction_barrier=fanout.flush_persistence_barrier,
             )
-            query_events: list[dict] = []
-            if events_table is not None:
-                try:
-                    raw_query_events = events_table.get_session_user_query_events(
-                        session_id
-                    )
-                    query_events = (
-                        raw_query_events if isinstance(raw_query_events, list) else []
-                    )
-                except Exception:
-                    logger.warning(
-                        "attachment manifest: get_session_user_query_events failed for session_id=%s",
-                        session_id,
-                        exc_info=True,
-                    )
-            entries = attachment_manifest.build_available_attachments(query_events)
-            attachment_text = attachment_manifest.format_available_attachments(entries)
-
-            def _get_query_events() -> list[dict]:
-                return list(query_events)
-
-            def _get_all_events() -> list[dict]:
-                if events_table is None:
-                    return []
-                try:
-                    events = events_table.get_session_events(
-                        session_id,
-                        limit=_DIALOG_HISTORY_MAX_EVENTS,
-                    )
-                    return events if isinstance(events, list) else []
-                except Exception:
-                    logger.warning("manifest: get_session_events failed", exc_info=True)
-                    return []
-
-            def _get_latest_checkpoint_covered_until_event_id() -> int | None:
-                if events_table is None:
-                    return None
-                try:
-                    checkpoints = events_table.get_history_checkpoints(
-                        session_id, None, limit=1
-                    )
-                except Exception:
-                    logger.warning(
-                        "manifest: get_history_checkpoints failed",
-                        exc_info=True,
-                    )
-                    return None
-                if not isinstance(checkpoints, list):
-                    return None
-                for checkpoint in checkpoints:
-                    if not isinstance(checkpoint, dict):
-                        continue
-                    content = checkpoint.get("content")
-                    if isinstance(content, dict):
-                        raw = content.get("covered_until_event_id")
-                        if raw is not None:
-                            try:
-                                return int(raw)
-                            except (TypeError, ValueError):
-                                return None
-                return None
-
-            class _RunSessionEventHistory:
-                def query_events(self) -> list[dict[str, Any]]:
-                    return _get_query_events()
-
-                def all_events(self) -> list[dict[str, Any]]:
-                    return _get_all_events()
-
-                def latest_checkpoint_covered_until_event_id(self) -> int | None:
-                    return _get_latest_checkpoint_covered_until_event_id()
-
-            pg_ctx = pg_ctx.with_runtime_ports(
-                PlaygroundRuntimePorts(
-                    child_event_forward_sink=_child_event_sink,
-                    compaction=PlaygroundCompactionPort(
-                        history=_RunSessionEventHistory(),
-                        checkpoint_sink_factory=_checkpoint_sink_factory,
-                        pre_compaction_barrier=fanout.flush_persistence_barrier,
-                    ),
-                )
-            )
-
+            history = wiring.history
+            attachment_text = wiring.attachment_text
+            pg_ctx = pg_ctx.with_runtime_ports(wiring.runtime_ports)
             pg_ctx = pg_ctx.with_run_meta(attachment_manifest=attachment_text)
-            bohrium_rebuild_events: list[dict] = []
-            try:
-                if events_table is not None:
-                    bohrium_rebuild_events = events_table.get_bohrium_events(session_id)
-            except Exception:
-                logger.warning(
-                    'Failed to load Bohrium events for registry rebuild',
-                    exc_info=True,
-                )
-            if bohrium_rebuild_events:
+            if wiring.bohrium_rebuild_events:
                 pg_ctx = pg_ctx.with_run_meta(
-                    bohrium_rebuild_events=bohrium_rebuild_events,
+                    bohrium_rebuild_events=wiring.bohrium_rebuild_events,
                 )
 
             # -- Stage 5b: Runtime user-instructions injection --
