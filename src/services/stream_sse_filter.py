@@ -38,9 +38,7 @@ def _should_emit_event_to_sse(event: dict) -> bool:
     t = event.get('type')
     if t == 'log_line':
         return False
-    if t == 'assistant_state':
-        return False
-    if t == 'skill_hit':
+    if t in {'assistant_state', 'skill_hit', 'user_turn_context'}:
         return False
     if t in {'compact_boundary', 'history_checkpoint'}:
         return False
