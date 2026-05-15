@@ -139,3 +139,85 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
+- id: PWO_elec_009_20260516
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Validate whether the agent can prepare ABACUS INPUT and Bohrium submit JSON
+    for an Al2O3 Bader workflow without running calculations.
+  human_prompt_seed: "对 Al₂O₃ 准备 ABACUS Bader 电荷分析所需文件：至少生成 `INPUT`，并给出 Bohrium\
+    \ 提交配置 JSON（文件名 `al2o3_bader_submit.json`，至少包含 `image` 与 `cmd`）；`cmd` 需体现先运行 ABACUS、再运行 `bader`\
+    \ 后处理链路。\n\n本题只检验 `INPUT` 与提交 JSON，不要投递或执行计算。"
+  tags:
+  - eng_abacus
+  data_files: []
+  reference_answers:
+  - key: input_artifact
+    value: INPUT
+  - key: must_input_core
+    value:
+      filename: INPUT
+      must_cover:
+      - calculation scf
+      - basis_type pw
+      - out_chg 1
+  - key: submit_json_artifact
+    value: al2o3_bader_submit.json
+  - key: must_submit_json_image
+    value:
+      filename: al2o3_bader_submit.json
+      pattern: '"image"\s*:\s*"registry\.dp\.tech/dptech/dp/native/hub/mrdic2/abacusp:1\.0\.3-1778742780"'
+      flags: i
+  - key: must_submit_json_cmd_bader
+    value:
+      filename: al2o3_bader_submit.json
+      pattern: '"cmd"\s*:\s*".*bader.*"'
+      flags: i
+  - key: turn_budget
+    value:
+      max: 14
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 18000
+  scoring_checklist:
+  - id: input_artifact
+    criterion: Agent writes ABACUS `INPUT` file to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_input_core
+    criterion: '[Must] INPUT contains ABACUS Bader prerequisite keys (`calculation scf`,
+      `basis_type pw`, `out_chg 1`).'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: submit_json_artifact
+    criterion: Agent writes Bohrium submit config `al2o3_bader_submit.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_submit_json_image
+    criterion: '[Must] submit JSON includes required Bohrium image.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_submit_json_cmd_bader
+    criterion: '[Must] submit JSON `cmd` contains ABACUS then Bader post-processing chain.'
+    axis: correctness
+    verify: text_file_regex
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
+    axis: efficiency
+    verify: token_budget
