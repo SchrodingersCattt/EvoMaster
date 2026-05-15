@@ -42,22 +42,21 @@ from src.services.agent_run_bohrium_stage import (  # noqa: F401
     run_bohrium_stage,
 )
 from src.services.agent_run_history_wiring import build_history_wiring
-from src.services.agent_run_instructions import (  # noqa: F401
-    _USER_INSTRUCTIONS_END,
-    _USER_INSTRUCTIONS_PATH,
-    _USER_INSTRUCTIONS_START,
-    _USER_INSTRUCTIONS_TEMPLATE,
-    _apply_user_instructions_to_initial_user_query,
-    _find_first_user_message_index,
-    _render_user_instructions_block,
-    _strip_user_instructions_prefix,
-)
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.image_input_service import get_image_input_service
 from src.services.quota_service import use_quota
 from src.services.response_figures_service import ResponseFiguresAccumulator
 from src.services.sessions_service import get_sessions_service
 from src.services.stream_reply_queue import RedisReplyQueue
+from src.services.user_turn_context_service import (
+    DEFAULT_TURN_TRANSFORM,
+    build_user_turn_context_payload,
+    decide_user_turn_context_kind,
+    latest_anchor_user_instructions_hash,
+    render_provider_facing_current_message_content,
+    render_runtime_task_for_user_turn_context,
+    write_user_turn_context_event,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -360,6 +359,7 @@ class AgentRunService:
                 default_key=agent_default_llm,
             )
             selected_profile = llm_config.get_profile(resolved_llm.profile_key)
+            current_user_images_payload: list[dict[str, Any]] = []
             current_images = list(images or [])
             if current_images:
                 selected_profile = get_image_input_service().ensure_vision_supported(
@@ -374,6 +374,7 @@ class AgentRunService:
                     if selected_profile.vision_detail is not None:
                         image_part['detail'] = selected_profile.vision_detail
                     image_parts.append(image_part)
+                current_user_images_payload = image_parts
                 pg_ctx = pg_ctx.with_run_meta(current_user_images=image_parts)
 
             pg_ctx = pg_ctx.model_copy(
@@ -524,12 +525,60 @@ class AgentRunService:
                     bohrium_rebuild_events=wiring.bohrium_rebuild_events,
                 )
 
-            # -- Stage 5b: Runtime user-instructions injection --
-            user_prompt, history = _apply_user_instructions_to_initial_user_query(
-                user_prompt=user_prompt,
-                user_instructions=user_instructions.text,
-                history=history,
+            # -- Stage 5b: Phase 1 user_turn_context cutover --
+            recent_context_events = []
+            try:
+                recent_context_events = events_table.get_recent_context_anchor_events(
+                    session_id,
+                    None,  # Phase 1 writes only root user turns.
+                    limit=50,
+                )
+            except Exception:
+                logger.warning(
+                    "user_turn_context: latest anchor query failed; "
+                    "treating current turn as anchor",
+                    exc_info=True,
+                )
+            latest_hash = latest_anchor_user_instructions_hash(recent_context_events)
+            user_turn_kind = decide_user_turn_context_kind(
+                user_instructions.hash,
+                latest_hash,
             )
+            rendered_runtime_task = render_runtime_task_for_user_turn_context(
+                user_prompt=user_prompt,
+                user_instructions=user_instructions,
+                kind=user_turn_kind,
+            )
+            rendered_message_content = render_provider_facing_current_message_content(
+                rendered_runtime_task=rendered_runtime_task,
+                attachment_text=attachment_text,
+            )
+            user_turn_payload = build_user_turn_context_payload(
+                kind=user_turn_kind,
+                rendered_message_content=rendered_message_content,
+                images=current_user_images_payload,
+                user_instructions=user_instructions,
+                transform=DEFAULT_TURN_TRANSFORM,
+            )
+            try:
+                await write_user_turn_context_event(
+                    events_table=events_table,
+                    session_id=session_id,
+                    task_id=task_id,
+                    invocation_id=invocation_id,
+                    spawn_id=None,
+                    payload=user_turn_payload,
+                )
+            except Exception as exc:
+                logger.exception(
+                    "user_turn_context write failed; aborting turn "
+                    "session_id=%s invocation_id=%s",
+                    session_id,
+                    invocation_id,
+                )
+                return ((False, str(exc)), _elapsed_ms())
+
+            user_prompt = rendered_runtime_task
 
             # Resolve active skills (hot cache + DB rehydrate). Must run
             # AFTER history is available so the snapshot frozen below reflects

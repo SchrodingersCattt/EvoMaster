@@ -98,11 +98,19 @@ class _FakeExp:
         self._cleanup_callbacks: list = []
         self.last_ctx: Any = None
         self.last_task: str | None = None
+        self.last_attachment_text: str = ""
         self.last_run_kwargs: dict[str, Any] | None = None
 
     async def run_stream(self, *args: Any, **kwargs: Any):
         self.last_ctx = args[0] if args else None
         self.last_task = args[1] if len(args) > 1 else None
+        self.last_attachment_text = (
+            (getattr(self.last_ctx, "run_meta", {}) or {}).get(
+                "attachment_manifest", ""
+            )
+            if self.last_ctx is not None
+            else ""
+        )
         self.last_run_kwargs = kwargs
         try:
             if callable(self._events):
@@ -271,7 +279,13 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
         redis_fn.return_value = redis_mock
 
         # events_table mock
-        events_table_fn.return_value = MagicMock()
+        events_table = MagicMock()
+        events_table.get_recent_context_anchor_events.return_value = []
+        events_table.query_user_turn_context_by_invocation.return_value = None
+        events_table.add_event.return_value = True
+        events_table.get_session_user_query_events.return_value = []
+        events_table.get_bohrium_events.return_value = []
+        events_table_fn.return_value = events_table
 
         # Patch Exp to use our fake events
         fake_exp = _FakeExp(events)
@@ -345,6 +359,7 @@ async def test_run_agent_injects_cancel_token_into_session_and_exp():
             cancel_token=cancel_token,
             mode='direct',
             task_id='t1',
+            invocation_id='inv-cancel-token',
         )
 
     assert svc._test_pg_ctx.session._cancel_token is cancel_token
@@ -364,6 +379,7 @@ async def test_run_agent_injects_child_event_forward_sink_into_runtime_ports():
             cancel_token=_make_cancel_token(),
             mode='direct',
             task_id='task-1',
+            invocation_id='inv-child-sink',
         )
 
     assert ok is True
@@ -391,6 +407,7 @@ async def test_run_agent_injects_figure_upload_config_into_pg_ctx_run_meta():
             cancel_token=controller.token,
             mode='direct',
             task_id='task-1',
+            invocation_id='inv-figure-config',
         )
 
     figure_cfg = svc._test_fake_exp.last_ctx.run_meta['figure_upload_config']
@@ -418,6 +435,7 @@ async def test_run_agent_injects_current_input_context_into_pg_ctx_run_meta():
             cancel_token=_make_cancel_token(),
             mode="direct",
             task_id="task-1",
+            invocation_id="inv-current-input",
             current_input_context=current_input_context,
         )
 
@@ -450,6 +468,7 @@ async def test_agent_run_service_injects_full_attachment_manifest_before_exp_run
             cancel_token=_make_cancel_token(),
             mode='direct',
             task_id='task-1',
+            invocation_id='inv-attachments',
         )
 
     run_meta = svc._test_fake_exp.last_ctx.run_meta
@@ -556,6 +575,7 @@ def test_run_agent_injects_bohrium_rebuild_events_into_pg_ctx_run_meta():
                 cancel_token=_make_cancel_token(),
                 mode='direct',
                 task_id='task-1',
+                invocation_id='inv-bohrium-rebuild',
             )
             return svc, ok
 
@@ -587,6 +607,7 @@ async def test_stream_events_reach_handlers_via_fanout():
             cancel_token=_make_cancel_token(),
             mode='direct',
             task_id='t1',
+            invocation_id='inv-stream-events',
         )
 
     # SSE handler should receive: thought + response + run_result + StreamClosedEvent = 4+
@@ -621,6 +642,7 @@ async def test_child_event_sink_reaches_sse_and_persistence():
             cancel_token=_make_cancel_token(),
             mode='direct',
             task_id='t1',
+            invocation_id='inv-child-events',
         )
 
     assert any(
@@ -660,6 +682,274 @@ async def test_run_agent_does_not_store_callback_ports_in_run_meta():
 
 
 @pytest.mark.asyncio
+async def test_run_agent_writes_user_turn_context_and_passes_same_runtime_task():
+    run_result = RunResultEvent(source="agent", status="completed", reason="natural")
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        svc._test_pg_ctx.session.read_file.return_value = "Prefer concise answers."
+        svc._test_events_table.get_recent_context_anchor_events.return_value = []
+        svc._test_events_table.query_user_turn_context_by_invocation.return_value = None
+
+        ok, _elapsed = await svc.run_agent(
+            session_id="sess-1",
+            user_prompt="first question",
+            send_cb=AsyncMock(),
+            cancel_token=_make_cancel_token(),
+            mode="direct",
+            task_id="task-1",
+            invocation_id="inv-1",
+        )
+
+    assert ok is True
+    svc._test_events_table.add_event.assert_any_call(
+        "sess-1",
+        "MatMaster",
+        "user_turn_context",
+        ANY,
+        task_id="task-1",
+        invocation_id="inv-1",
+        spawn_id=None,
+    )
+    payload = [
+        call.args[3]
+        for call in svc._test_events_table.add_event.call_args_list
+        if call.args[2] == "user_turn_context"
+    ][0]
+    assert payload["schema_version"] == "user_turn_context.v1"
+    assert payload["kind"] == "anchor"
+    assert "Prefer concise answers." in svc._test_fake_exp.last_task
+    assert payload["message"]["content"] == svc._test_fake_exp.last_task
+    assert payload["user_instructions_hash"].startswith("sha256:")
+
+
+@pytest.mark.asyncio
+async def test_run_agent_user_turn_context_records_full_provider_facing_with_attachments():
+    from matmaster.core.context_builder import ContextBuilder
+    from matmaster.types.current_input import CurrentInputContext
+
+    run_result = RunResultEvent(source="agent", status="completed", reason="natural")
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        svc._test_pg_ctx.session.read_file.return_value = "Use SI units."
+        svc._test_events_table.get_recent_context_anchor_events.return_value = []
+        svc._test_events_table.query_user_turn_context_by_invocation.return_value = None
+        svc._test_events_table.get_session_user_query_events.return_value = [
+            {
+                "id": 10,
+                "source": "User",
+                "type": "query",
+                "content": "Compare FeO vs Fe2O3 from these files",
+                "files": [
+                    "https://oss.example.com/input/feo.cif",
+                    "https://oss.example.com/input/fe2o3.cif",
+                ],
+                "images": ["https://oss.example.com/input/struct1.png"],
+                "workspace_paths": ["/workspace/notes.md"],
+            }
+        ]
+        current_input_context = CurrentInputContext.from_values(
+            user_text="Compare FeO vs Fe2O3 from these files",
+            files=[
+                "https://oss.example.com/input/feo.cif",
+                "https://oss.example.com/input/fe2o3.cif",
+            ],
+            images=["https://oss.example.com/input/struct1.png"],
+            workspace_paths=["/workspace/notes.md"],
+        )
+        image_service = MagicMock()
+        image_service.ensure_vision_supported.return_value = MagicMock(
+            vision_detail=None
+        )
+
+        with patch(
+            "src.services.agent_run_service.get_image_input_service",
+            return_value=image_service,
+        ):
+            ok, _elapsed = await svc.run_agent(
+                session_id="sess-1",
+                user_prompt="Compare FeO vs Fe2O3 from these files",
+                images=["https://oss.example.com/input/struct1.png"],
+                current_input_context=current_input_context,
+                send_cb=AsyncMock(),
+                cancel_token=_make_cancel_token(),
+                mode="direct",
+                task_id="task-att",
+                invocation_id="inv-att",
+            )
+
+    assert ok is True
+    payload = [
+        call.args[3]
+        for call in svc._test_events_table.add_event.call_args_list
+        if call.args[2] == "user_turn_context"
+    ][0]
+
+    assert "Use SI units." in payload["message"]["content"]
+    assert "feo.cif" in payload["message"]["content"]
+    assert "notes.md" in payload["message"]["content"]
+    image_urls = [img["url"] for img in payload["message"]["images"]]
+    assert "https://oss.example.com/input/struct1.png" in image_urls
+    assert "Use SI units." in svc._test_fake_exp.last_task
+    assert "feo.cif" not in svc._test_fake_exp.last_task
+    expected_content = ContextBuilder().build_user_request(
+        user_text=svc._test_fake_exp.last_task,
+        attachments=svc._test_fake_exp.last_attachment_text,
+    )
+    assert payload["message"]["content"] == expected_content
+
+
+@pytest.mark.asyncio
+async def test_run_agent_writes_continuation_when_instruction_hash_matches():
+    from src.services.user_turn_context_service import hash_user_instructions
+
+    run_result = RunResultEvent(source="agent", status="completed", reason="natural")
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        svc._test_pg_ctx.session.read_file.return_value = "Stable preference."
+        svc._test_events_table.get_recent_context_anchor_events.return_value = [
+            {
+                "type": "user_turn_context",
+                "content": {
+                    "kind": "anchor",
+                    "user_instructions_hash": hash_user_instructions(
+                        "Stable preference."
+                    ),
+                },
+            }
+        ]
+        svc._test_events_table.query_user_turn_context_by_invocation.return_value = None
+
+        ok, _elapsed = await svc.run_agent(
+            session_id="sess-1",
+            user_prompt="follow up",
+            send_cb=AsyncMock(),
+            cancel_token=_make_cancel_token(),
+            mode="direct",
+            task_id="task-2",
+            invocation_id="inv-2",
+        )
+
+    assert ok is True
+    payload = [
+        call.args[3]
+        for call in svc._test_events_table.add_event.call_args_list
+        if call.args[2] == "user_turn_context"
+    ][0]
+    assert payload["kind"] == "continuation"
+    assert payload["user_instructions_hash"] is None
+    assert svc._test_fake_exp.last_task == "follow up"
+
+
+@pytest.mark.asyncio
+async def test_run_agent_aborts_when_user_turn_context_write_fails():
+    run_result = RunResultEvent(source="agent", status="completed", reason="natural")
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        svc._test_pg_ctx.session.read_file.return_value = "Use SI units."
+        svc._test_events_table.get_recent_context_anchor_events.return_value = []
+        svc._test_events_table.query_user_turn_context_by_invocation.return_value = None
+        svc._test_events_table.add_event.return_value = False
+
+        ok, _elapsed = await svc.run_agent(
+            session_id="sess-1",
+            user_prompt="first question",
+            send_cb=AsyncMock(),
+            cancel_token=_make_cancel_token(),
+            mode="direct",
+            task_id="task-1",
+            invocation_id="inv-1",
+        )
+
+    assert ok[0] is False
+    assert "user_turn_context write returned false" in ok[1]
+    assert svc._test_fake_exp.last_task is None
+
+
+@pytest.mark.asyncio
+async def test_run_agent_aborts_when_invocation_id_missing():
+    run_result = RunResultEvent(source="agent", status="completed", reason="natural")
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        svc._test_pg_ctx.session.read_file.return_value = "Use SI units."
+        svc._test_events_table.get_recent_context_anchor_events.return_value = []
+        svc._test_events_table.query_user_turn_context_by_invocation.return_value = None
+
+        ok, _elapsed = await svc.run_agent(
+            session_id="sess-1",
+            user_prompt="first question",
+            send_cb=AsyncMock(),
+            cancel_token=_make_cancel_token(),
+            mode="direct",
+            task_id="task-1",
+            invocation_id=None,
+        )
+
+    assert ok[0] is False
+    assert "invocation_id" in ok[1]
+    assert svc._test_fake_exp.last_task is None
+
+
+@pytest.mark.asyncio
+async def test_run_agent_idempotent_skip_when_user_turn_context_already_exists():
+    from src.services.user_turn_context_service import (
+        DEFAULT_TURN_TRANSFORM,
+        build_user_turn_context_payload,
+        make_user_instructions_info,
+        render_provider_facing_current_message_content,
+        render_runtime_task_for_user_turn_context,
+    )
+
+    run_result = RunResultEvent(source="agent", status="completed", reason="natural")
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        svc._test_pg_ctx.session.read_file.return_value = "Use SI units."
+        svc._test_events_table.get_recent_context_anchor_events.return_value = []
+
+        info = make_user_instructions_info("Use SI units.")
+        rendered_task = render_runtime_task_for_user_turn_context(
+            user_prompt="first question",
+            user_instructions=info,
+            kind="anchor",
+        )
+        existing_payload = build_user_turn_context_payload(
+            kind="anchor",
+            rendered_message_content=render_provider_facing_current_message_content(
+                rendered_runtime_task=rendered_task,
+                attachment_text="",
+            ),
+            images=[],
+            user_instructions=info,
+            transform=DEFAULT_TURN_TRANSFORM,
+        )
+        svc._test_events_table.query_user_turn_context_by_invocation.return_value = {
+            "id": 99,
+            "type": "user_turn_context",
+            "invocation_id": "inv-1",
+            "content": existing_payload,
+        }
+
+        ok, _elapsed = await svc.run_agent(
+            session_id="sess-1",
+            user_prompt="first question",
+            send_cb=AsyncMock(),
+            cancel_token=_make_cancel_token(),
+            mode="direct",
+            task_id="task-1",
+            invocation_id="inv-1",
+        )
+
+    assert ok is True
+    utc_calls = [
+        call
+        for call in svc._test_events_table.add_event.call_args_list
+        if call.args[2] == "user_turn_context"
+    ]
+    assert utc_calls == []
+    assert svc._test_fake_exp.last_task is not None
+    assert "Use SI units." in svc._test_fake_exp.last_task
+
+
+@pytest.mark.asyncio
 async def test_source_normalization_on_events():
     """Event source is normalized to MatMaster before fanout dispatch."""
     thought = ThoughtEvent(source='agent', content='thinking...')
@@ -673,6 +963,7 @@ async def test_source_normalization_on_events():
             cancel_token=_make_cancel_token(),
             mode='direct',
             task_id='t1',
+            invocation_id='inv-source-normalization',
         )
 
     # All non-System events should be normalized to MatMaster
@@ -695,6 +986,7 @@ async def test_stream_closed_after_run_result():
             cancel_token=_make_cancel_token(),
             mode='direct',
             task_id='t1',
+            invocation_id='inv-stream-closed',
         )
 
     stream_closed = [
@@ -719,6 +1011,7 @@ async def test_cancelled_run_emits_cancelled_and_closed():
             cancel_token=_make_cancel_token(),
             mode='direct',
             task_id='t1',
+            invocation_id='inv-cancelled',
         )
 
     assert result[0] == (False, 'cancelled')
@@ -753,8 +1046,8 @@ async def test_exception_emits_error_and_closed():
         persistence_handler_cls = mocks[3]
         workspace_handler_cls = mocks[4]
         bohrium_cls = mocks[5]
-        history_restore_cls = mocks[7]
-        redis_fn = mocks[8]
+        history_restore_cls = mocks[6]
+        redis_fn = mocks[7]
 
         pg_ctx = _make_mock_pg_ctx()
         pg = _make_mock_playground(pg_ctx)
@@ -798,7 +1091,13 @@ async def test_exception_emits_error_and_closed():
         history_restore_inst.restore_history.return_value = []
         history_restore_cls.return_value = history_restore_inst
         redis_fn.return_value = MagicMock()
-        events_table_fn.return_value = MagicMock()
+        events_table = MagicMock()
+        events_table.get_recent_context_anchor_events.return_value = []
+        events_table.query_user_turn_context_by_invocation.return_value = None
+        events_table.add_event.return_value = True
+        events_table.get_session_user_query_events.return_value = []
+        events_table.get_bohrium_events.return_value = []
+        events_table_fn.return_value = events_table
 
         error_exp = _ErrorExp([])
 
@@ -826,6 +1125,7 @@ async def test_exception_emits_error_and_closed():
                 cancel_token=_make_cancel_token(),
                 mode='direct',
                 task_id='t1',
+                invocation_id='inv-exception',
             )
     finally:
         for p in patches:
@@ -847,6 +1147,7 @@ async def test_successful_run_returns_true():
             cancel_token=_make_cancel_token(),
             mode='direct',
             task_id='t1',
+            invocation_id='inv-success',
         )
 
     assert result[0] is True
@@ -867,6 +1168,7 @@ async def test_failed_run_returns_false_with_reason():
             cancel_token=_make_cancel_token(),
             mode='direct',
             task_id='t1',
+            invocation_id='inv-failed',
         )
 
     assert result[0] == (False, 'max_turns')
@@ -891,6 +1193,7 @@ async def test_worker_mode_send_cb_receives_live_events():
             cancel_token=_make_cancel_token(),
             mode='direct',
             task_id='t1',
+            invocation_id='inv-worker-send',
         )
 
     # SSE handler must receive generator events + terminal events
@@ -916,6 +1219,7 @@ async def test_persistence_receives_events():
             cancel_token=_make_cancel_token(),
             mode='direct',
             task_id='t1',
+            invocation_id='inv-persistence',
         )
 
     # Persistence handler should receive all events including terminal
@@ -937,6 +1241,7 @@ async def test_run_agent_passes_remote_workdir_to_bohrium_setup():
             cancel_token=_make_cancel_token(),
             mode="direct",
             task_id="task-1",
+            invocation_id="inv-remote-workdir",
             remote_workdir="/share/case",
         )
 
@@ -959,6 +1264,7 @@ async def test_run_agent_runs_bohrium_cleanup_after_success():
             cancel_token=_make_cancel_token(),
             mode="direct",
             task_id="t1",
+            invocation_id="inv-cleanup",
         )
 
         bohrium_svc = svc._test_bohrium_svc

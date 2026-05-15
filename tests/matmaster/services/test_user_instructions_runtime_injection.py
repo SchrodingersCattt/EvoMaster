@@ -13,7 +13,7 @@ from matmaster.types.messages import (
     SystemMessage,
     UserMessage,
 )
-from src.services.agent_run_service import (
+from src.services.agent_run_instructions import (
     _USER_INSTRUCTIONS_END,
     _USER_INSTRUCTIONS_START,
     _apply_user_instructions_to_initial_user_query,
@@ -156,7 +156,7 @@ def test_malformed_wrapper_is_left_unchanged() -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_agent_applies_user_instructions_to_current_prompt_when_history_empty():
+async def test_run_agent_user_turn_context_runtime_task_includes_user_instructions_when_history_empty():
     run_result = RunResultEvent(source='agent', status='completed', reason='natural')
 
     async with _patched_service([run_result]) as (svc, _sse, _persist):
@@ -170,6 +170,7 @@ async def test_run_agent_applies_user_instructions_to_current_prompt_when_histor
             cancel_token=_make_cancel_token(),
             mode='direct',
             task_id='task-1',
+            invocation_id='inv-runtime-current',
         )
 
     assert ok is True
@@ -185,7 +186,7 @@ async def test_run_agent_applies_user_instructions_to_current_prompt_when_histor
 
 
 @pytest.mark.asyncio
-async def test_run_agent_applies_user_instructions_to_restored_first_user_message():
+async def test_run_agent_user_turn_context_runtime_task_preserves_restored_history():
     run_result = RunResultEvent(source='agent', status='completed', reason='natural')
     restored_history = [
         SystemMessage(content='[Compacted Context]\nsummary'),
@@ -212,12 +213,12 @@ async def test_run_agent_applies_user_instructions_to_restored_first_user_messag
                 cancel_token=_make_cancel_token(),
                 mode='direct',
                 task_id='task-2',
+                invocation_id='inv-runtime-history',
             )
 
     assert ok is True
-    assert svc._test_fake_exp.last_task == 'follow up'
+    assert svc._test_fake_exp.last_task.startswith(_USER_INSTRUCTIONS_START)
+    assert "Prefer concise answers." in svc._test_fake_exp.last_task
     sent_history = svc._test_fake_exp.last_run_kwargs['history']
-    assert sent_history[1].content.startswith(_USER_INSTRUCTIONS_START)
-    assert 'Prefer concise answers.' in sent_history[1].content
-    assert sent_history[1].content.endswith('first question')
+    assert sent_history == restored_history
     assert restored_history[1].content == 'first question'
