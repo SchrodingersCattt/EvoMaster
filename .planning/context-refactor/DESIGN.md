@@ -3,7 +3,7 @@
 - 日期: 2026-05-15（v3.2 修订）
 - 状态: 草稿 v3.2（移除 `source_query_event_id` 外键语义，`user_turn_context` 通过顶层 `invocation_id` 关联用户请求），待作者复核
 - 作者: kealdoom + Claude + GPT
-- 范围: `matmaster/` 与 `src/services/` 中所有模型可见上下文相关的代码与数据流
+- 范围: `matmaster/` 与 `src/services/` 中所有 provider-facing 上下文相关的代码与数据流
 
 ---
 
@@ -11,12 +11,12 @@
 
 ### 0.1 v3.2 相对 v3.1 的关键变化
 
-v3.2 的核心修正是按"该字段是否影响 model-visible 输出或 restore 正确性"原则清除冗余 event_id 字段。该字段只服务事件审计或与现有字段重复的，全部删除或下沉到 assembler 内部派生。
+v3.2 的核心修正是按"该字段是否影响 provider-facing 输出或 restore 正确性"原则清除冗余 event_id 字段。该字段只服务事件审计或与现有字段重复的，全部删除或下沉到 assembler 内部派生。
 
 | 项 | v3.1 | v3.2 |
 |----|------|------|
 | `user_turn_context` 与 `User/query` 关联 | payload 内保存 `source_query_event_id`，依赖 DAO inserted id 返回链路 | 通过 events 表顶层 `session_id + spawn_id + invocation_id` 关联，同一 root 用户请求最多一条 `user_turn_context` |
-| `TurnInput` 字段 | 含 `source_query_event_id` | 删除；`TurnInput` 只承载会影响 model-visible user message 的输入与 preflight 边界 |
+| `TurnInput` 字段 | 含 `source_query_event_id` | 删除；`TurnInput` 只承载会影响 provider-facing user message 的输入与 preflight 边界 |
 | `TurnAssemblyRequest` 字段 | 含 `pre_turn_history_event_id`（与 `turn_input.pre_turn_history_event_id` 重复） | 删除该字段；assembler 内部直接读 `request.turn_input.pre_turn_history_event_id`，消除 caller 双写不一致风险 |
 | `CompactionAssemblyRequest.covered_until_event_id` | 必填；caller（compactor）本地派生后显式传入 | 默认 `None`；派生规则集中在 `assemble_compaction` 内（`显式值 > turn_input.pre_turn_history_event_id > None`），真实边界通过 `AssemblyResult.covered_until_event_id` 回传给 caller 写 checkpoint payload |
 | Phase 0 硬依赖 | DAO 返回 inserted event id + 文件拆分 | 仅保留文件拆分；DAO inserted id 不再是本 spec 前置依赖 |
@@ -57,23 +57,23 @@ v3.1 的核心目标是消除 v3 末尾仍然散落在 §7.3 / §8.2 / §9.2 的
 
 ## 1. 背景与问题
 
-当前项目里"模型可见 user context"的组装逻辑分散在 6 个位置，命名与边界混乱：
+当前项目里"provider-facing user context"的组装逻辑分散在 6 个位置，命名与边界混乱：
 
 | 位置 | 现状职责 |
 |------|---------|
 | [matmaster/core/context_builder.py](../../matmaster/core/context_builder.py) | 混合 system prompt 装配、user request 装配、compact bundle 装配三种职责 |
 | [matmaster/core/context_compactor.py](../../matmaster/core/context_compactor.py) | 压缩算法 + 手写 tag 字符串 + checkpoint 边界 |
-| [matmaster/manifests/](../../matmaster/manifests/) | 名为 manifests，实际在做"从 events 重建模型可见 context sections" |
+| [matmaster/manifests/](../../matmaster/manifests/) | 名为 manifests，实际在做"从 events 重建 provider-facing context sections" |
 | [matmaster/types/current_input.py](../../matmaster/types/current_input.py) | 当前轮输入的 dataclass，里面写 `<current_instruction>` 标签 |
 | [matmaster/types/context.py](../../matmaster/types/context.py) | `PlaygroundContext`，占用了 `context` 这个名字但实际是 playground 运行环境快照 |
 | [matmaster/core/agent.py:337-347](../../matmaster/core/agent.py) | kernel 入口处直接拼字符串、构造 UserMessage |
 
-更严重的是，**raw transcript history**（前端回放需要）与 **model-visible history**（后端续跑、压缩恢复、prompt cache 需要）这两个不同语义的历史，被混在同一份 `User/query.content` 字段里推导，导致：
+更严重的是，**raw transcript history**（前端回放需要）与 **provider-facing history**（后端续跑、压缩恢复、prompt cache 需要）这两个不同语义的历史，被混在同一份 `User/query.content` 字段里推导，导致：
 
 - UI 想看到原始用户输入；
 - backend 想从同一条记录恢复 provider-facing `UserMessage`；
 - 但 provider-facing `UserMessage` 已经被系统加了 user instructions、available attachments、compacted summary、current instruction、active tools 等内容；
-- 压缩后真实 LLM 可见上下文已经不是原始对话事件的简单回放。
+- 压缩后真实 provider-facing 上下文已经不是原始对话事件的简单回放。
 
 本次重构的目标是把这套混乱的数据流提升为一套**前端回放 / 后端续跑 / 压缩恢复 / prompt cache 四个用例统一的数据模型**。
 
@@ -90,7 +90,7 @@ v3.1 的核心目标是消除 v3 末尾仍然散落在 §7.3 / §8.2 / §9.2 的
    不是「每次 LLM 调用前快照」，工具循环内不再写入新事件。
 
 3. history_checkpoint.base_messages 保存压缩生成的 anchor user message。
-   该 anchor 只包含 model-visible user context（不含 SystemMessage）。
+   该 anchor 只包含 provider-facing user context（不含 SystemMessage）。
    SystemMessage 由 kernel 在恢复时用 spec.system_prompt 重新构造；
    system prompt 不在 checkpoint 中冻结。
 
@@ -182,7 +182,7 @@ v3.1 的核心目标是消除 v3 末尾仍然散落在 §7.3 / §8.2 / §9.2 的
 
 旧字段 (`covered_until_event_id` / `base_messages` / `reason`) 保留语义不变。
 
-**`covered_until_event_id` 语义**：checkpoint 等价于「从 session 起点重放到该 event_id 为止的所有 LLM 可见消息」。具体到本 spec：
+**`covered_until_event_id` 语义**：checkpoint 等价于「从 session 起点重放到该 event_id 为止的所有 provider-facing 消息」。具体到本 spec：
 
 - 普通 runtime compaction：`covered_until_event_id` 指向当前事件流末尾（含 assistant_state / tool_result，**不含**尚未写入的下一轮 user_turn_context）。
 - Preflight compaction（运行时触发，对应 `transform=preflight_compacted` 的 user_turn_context）：`covered_until_event_id` 指向 `TurnInput.pre_turn_history_event_id`，**不包含**当前轮的 User/query 和 user_turn_context；checkpoint 之后会有对应的 user_turn_context 事件被恢复追加。
@@ -436,7 +436,7 @@ from matmaster.types.messages import ImageContentPart, UserMessage
 
 @dataclass(frozen=True)
 class UserTurnContext:
-    """用户侧模型可见上下文的聚合根。
+    """用户侧 provider-facing 上下文的聚合根。
 
     组合若干 ContextSection,最终投影为 provider-facing
     matmaster.types.messages.UserMessage。
@@ -768,7 +768,7 @@ class ContextSource(Protocol):
 | `CompactedHistorySource` | `sources/compacted_history.py` | `SectionOrder.COMPACTED_HISTORY` (100) | RUNTIME + CHECKPOINT | summary LLM 产物 |
 | `SessionJobsSource` | `sources/session_jobs.py` | `SectionOrder.SESSION_JOBS` (1200) | RUNTIME + CHECKPOINT | 每轮刷新，末尾附加；无活跃 job 时返回空 |
 | `SessionSkillsSource` | `sources/skills.py` | `SectionOrder.SESSION_SKILLS` (300) | RUNTIME + CHECKPOINT | 从 events 重建 |
-| `SessionToolsSource` | `sources/tools.py` | `SectionOrder.SESSION_TOOLS` (400) | RUNTIME + CHECKPOINT | 模型可见工具集 |
+| `SessionToolsSource` | `sources/tools.py` | `SectionOrder.SESSION_TOOLS` (400) | RUNTIME + CHECKPOINT | provider-facing 工具集 |
 | `SessionAttachmentsSource` | `sources/attachments.py` | `SectionOrder.SESSION_ATTACHMENTS` (500) | RUNTIME + CHECKPOINT | 跨轮累积附件清单 |
 | `SessionWorkspaceSource` | `sources/workspace.py` | `SectionOrder.SESSION_WORKSPACE` (600) | RUNTIME + CHECKPOINT | 占位 |
 | `SessionArtifactsSource` | `sources/artifacts.py` | `SectionOrder.SESSION_ARTIFACTS` (700) | RUNTIME + CHECKPOINT | 占位 |
@@ -796,7 +796,7 @@ USER_INSTRUCTIONS_MAX_BYTES = 50 * 1024  # 50KB
 
 @dataclass(frozen=True)
 class UserInstructionsSource:
-    """工作空间级用户指令(AGENT.md)的模型可见上下文 source。
+    """工作空间级用户指令 (AGENT.md) 的 provider-facing 上下文 source。
 
     text 字段由 service 层通过 loader 注入。matmaster/ 不感知任何文件路径,
     不感知 .matmaster/AGENT.md 这个具体约定。size cap 由 service 层强制。
@@ -2063,7 +2063,7 @@ v3 在此用 "装配的 sources" 列表描述每个 case。v3.1 把它改为 cal
 | `pre_query_scope_event_id` | `pre_turn_history_event_id` | 实现细节剥离，语义直接 |
 | `attachment_manifest` | `session_attachments` | 不是 manifest，是 source；时间作用域统一为 `Session-` 前缀 |
 | `skill_manifest` | `session_skills` | 同上 |
-| `mcp_manifest` | `session_tools` | 同上 + "tools" 是模型可见语义 |
+| `mcp_manifest` | `session_tools` | 同上 + "tools" 是 provider-facing 语义 |
 | `HistoryRestoreService` | `ModelHistoryRestoreService` | 当前名字暗示"通用历史恢复"，实际只服务 model restore 路径 |
 
 ### 文件与目录
@@ -2555,9 +2555,9 @@ Phase 1 内 `tests/matmaster/manifests/` 保留并继续通过（验证 shim 等
 
 ### 已决验收要点
 
-- **`user_turn_context` 与 `User/query` 的关联方式**: v3.2 不保存 `source_query_event_id`，也不要求 `add_history_event` 返回 inserted row id。关联通过 events 表顶层 metadata 完成：`session_id + spawn_id + invocation_id`。`invocation_id` 是一次真实用户请求的标识，足以把 raw transcript 事件与 model-visible 事件归为同一 turn。该决策避免为了一个 restore 不消费的审计字段，在 API → Redis job → Worker 链路中额外传递 DB 自增 id。
+- **`user_turn_context` 与 `User/query` 的关联方式**: v3.2 不保存 `source_query_event_id`，也不要求 `add_history_event` 返回 inserted row id。关联通过 events 表顶层 metadata 完成：`session_id + spawn_id + invocation_id`。`invocation_id` 是一次真实用户请求的标识，足以把 raw transcript 事件与 provider-facing 事件归为同一 turn。该决策避免为了一个 restore 不消费的审计字段，在 API → Redis job → Worker 链路中额外传递 DB 自增 id。
 - **`User/query` 与 `user_turn_context` 不强求同事务**：
-   - **理由**：v1 restore 路径不消费 User/query（见 §11.1），孤立的 User/query 不污染 model-visible history，最坏后果仅是前端历史多一条"裸用户消息"；v0 兼容退役（Phase 4）后该后果亦消失
+   - **理由**：v1 restore 路径不消费 User/query（见 §11.1），孤立的 User/query 不污染 provider-facing history，最坏后果仅是前端历史多一条"裸用户消息"；v0 兼容退役（Phase 4）后该后果亦消失
    - **同事务代价过高**：DAO 接口需扩散 connection 参数或引入 `events_service.transaction()` context manager；async 下需保证同一 connection 跨 await 不被其他协程拿走；事务窗口扩大到含 AGENT.md 读 + events 查 + UserMessage 渲染，可能引入连接池占用 / 锁竞争
    - **兜底**：fail-fast + SSE 错误事件 + 后台周期按 `session_id + invocation_id` 扫 `User/query 无对应 user_turn_context` 的比率（目标 < 0.1%，与下方 user_turn_context 写入失败率监控对齐）
 
