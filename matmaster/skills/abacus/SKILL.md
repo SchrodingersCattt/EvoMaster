@@ -50,6 +50,7 @@ correct, runnable files and avoiding silent-failure configurations.
 - Supercell/vacancy/defect/BSSE: prefer `kspacing` in `INPUT` (avoid brittle manual meshes).
 - Band structure: use dedicated line-mode KPT for NSCF step.
 - SCF and NSCF should not share a single KPT by default in band/DOS workflows.
+- DOS NSCF requires a denser uniform k-mesh than the SCF step (typically 2-3× denser, minimum 8×8×8 for bulk). A sparse SCF mesh is acceptable for cost reasons (especially with hybrid functionals), but the DOS mesh must remain dense to produce smooth spectra regardless of functional cost.
 - Metal slab calculations: **minimum 12×12 in-plane** k-points (or equivalent `kspacing ≤ 0.10` in-plane). Do not use less.
 
 ## Parameter Baseline (Use Judgment, Not Blind Fixed Values)
