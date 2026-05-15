@@ -21,6 +21,7 @@ from matmaster.types.runtime import CompactionConfig
 from src.services.history_checkpoint_codec import serialize_base_messages
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.history_restore_service import HistoryRestoreService
+from src.services.model_history_restore_service import ModelHistoryRestoreService
 
 
 def _compact_user_message(summary: str) -> UserMessage:
@@ -316,6 +317,154 @@ def _seed_scope_events(
         task_id=task_id,
         spawn_id=spawn_id,
     )
+
+
+def test_restore_v1_roundtrip_from_user_turn_context_event() -> None:
+    table = InMemoryEventsTable()
+    table.add_event(
+        "sess-v1",
+        "MatMaster",
+        "user_turn_context",
+        {
+            "schema_version": "user_turn_context.v1",
+            "kind": "anchor",
+            "message": UserMessage(
+                content="provider-facing question"
+            ).model_dump(mode="json"),
+            "user_instructions_hash": "sha256:abc",
+            "transform": "raw",
+            "render_version": "user_context_render.v1",
+        },
+        task_id="task-1",
+        invocation_id="inv-1",
+        spawn_id=None,
+    )
+    table.add_event(
+        "sess-v1",
+        "MatMaster",
+        "response",
+        {"content": "answer"},
+        task_id="task-1",
+        invocation_id="inv-1",
+        spawn_id=None,
+    )
+
+    history = ModelHistoryRestoreService(table).restore_history(
+        session_id="sess-v1",
+        spawn_id=None,
+        task_id=None,
+    )
+
+    assert [message.role for message in history] == ["user", "assistant"]
+    assert history[0].content == "provider-facing question"
+
+
+def test_restore_v1_dedup_keeps_single_user_message_on_worker_retry() -> None:
+    table = InMemoryEventsTable()
+    table.add_event(
+        "sess-dup",
+        "MatMaster",
+        "user_turn_context",
+        {
+            "schema_version": "user_turn_context.v1",
+            "kind": "anchor",
+            "message": UserMessage(content="single question").model_dump(mode="json"),
+            "user_instructions_hash": "sha256:abc",
+            "transform": "raw",
+            "render_version": "user_context_render.v1",
+        },
+        task_id="task-1",
+        invocation_id="inv-1",
+        spawn_id=None,
+    )
+    table.add_event(
+        "sess-dup",
+        "MatMaster",
+        "response",
+        {"content": "single answer"},
+        task_id="task-1",
+        invocation_id="inv-1",
+        spawn_id=None,
+    )
+
+    history = ModelHistoryRestoreService(table).restore_history(
+        session_id="sess-dup",
+        spawn_id=None,
+        task_id=None,
+    )
+
+    user_messages = [m for m in history if isinstance(m, UserMessage)]
+    assert len(user_messages) == 1
+    assert user_messages[0].content == "single question"
+
+
+def test_restore_v1_hybrid_mixed_session_preserves_pre_phase1_user_query() -> None:
+    table = InMemoryEventsTable()
+    table.add_event(
+        "sess-mix",
+        "User",
+        "query",
+        {"content": "old raw question"},
+        task_id="old-task",
+        invocation_id="inv-old",
+        spawn_id=None,
+    )
+    table.add_event(
+        "sess-mix",
+        "MatMaster",
+        "response",
+        {"content": "old answer"},
+        task_id="old-task",
+        invocation_id="inv-old",
+        spawn_id=None,
+    )
+    table.add_event(
+        "sess-mix",
+        "User",
+        "query",
+        {"content": "new raw question"},
+        task_id="new-task",
+        invocation_id="inv-new",
+        spawn_id=None,
+    )
+    table.add_event(
+        "sess-mix",
+        "MatMaster",
+        "user_turn_context",
+        {
+            "schema_version": "user_turn_context.v1",
+            "kind": "anchor",
+            "message": UserMessage(
+                content="new rendered question with instructions"
+            ).model_dump(mode="json"),
+            "user_instructions_hash": "sha256:new",
+            "transform": "raw",
+            "render_version": "user_context_render.v1",
+        },
+        task_id="new-task",
+        invocation_id="inv-new",
+        spawn_id=None,
+    )
+    table.add_event(
+        "sess-mix",
+        "MatMaster",
+        "response",
+        {"content": "new answer"},
+        task_id="new-task",
+        invocation_id="inv-new",
+        spawn_id=None,
+    )
+
+    history = ModelHistoryRestoreService(table).restore_history(
+        session_id="sess-mix",
+        spawn_id=None,
+        task_id=None,
+    )
+
+    user_messages = [m for m in history if isinstance(m, UserMessage)]
+    assert len(user_messages) == 2
+    assert user_messages[0].content == "old raw question"
+    assert user_messages[1].content == "new rendered question with instructions"
 
 
 @pytest.mark.asyncio

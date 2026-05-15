@@ -154,6 +154,8 @@ def test_prepare_send_message_captures_current_input_context_before_user_event()
     )
     assert ctx.current_input_context.workspace_paths == ("/share/current/POSCAR",)
     assert ctx.current_input_context.pre_query_scope_event_id == 77
+    assert ctx.user_msg["content"] == "analyze current"
+    assert "schema_version" not in ctx.user_msg
     events_service.get_latest_scope_event_id.assert_called_once_with("sess-1", None)
     events_service.add_history_event.assert_called_once()
 
