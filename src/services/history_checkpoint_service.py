@@ -42,6 +42,16 @@ class HistoryCheckpointService:
                     session_id,
                     spawn_id,
                 )
+            checkpoint_kwargs = {
+                key: payload[key]
+                for key in (
+                    "schema_version",
+                    "render_version",
+                    "user_instructions_text",
+                    "user_instructions_hash",
+                )
+                if key in payload
+            }
             await asyncio.to_thread(
                 self.events_table.add_history_checkpoint,
                 session_id,
@@ -51,6 +61,7 @@ class HistoryCheckpointService:
                 covered_until_event_id=covered_until_event_id,
                 base_messages=base_messages,
                 reason=str(payload.get("strategy") or "summary"),
+                **checkpoint_kwargs,
             )
             return covered_until_event_id
 

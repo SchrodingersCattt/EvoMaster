@@ -96,6 +96,37 @@ def test_add_history_checkpoint_writes_correct_column_values(
     assert row["spawn_id"] == "spawn-a"
 
 
+def test_add_history_checkpoint_writes_v1_metadata_fields(
+    chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
+) -> None:
+    table, cursor = chat_events_table_with_mocks
+    cursor.rowcount = 1
+
+    table.add_history_checkpoint(
+        "sess-x",
+        task_id="t1",
+        invocation_id="inv1",
+        spawn_id="spawn-a",
+        covered_until_event_id=42,
+        base_messages=[{"role": "user", "content": "compacted"}],
+        reason="summary",
+        schema_version="history_checkpoint.v1",
+        render_version="user_context_render.v1",
+        user_instructions_text="Use SI units.",
+        user_instructions_hash="sha256:abc",
+    )
+
+    sql, params = cursor.execute.call_args[0]
+    columns = _parse_insert_param_columns(sql)
+    row = dict(zip(columns, params, strict=True))
+    row["content"] = json.loads(row["content"])
+
+    assert row["content"]["schema_version"] == "history_checkpoint.v1"
+    assert row["content"]["render_version"] == "user_context_render.v1"
+    assert row["content"]["user_instructions_text"] == "Use SI units."
+    assert row["content"]["user_instructions_hash"] == "sha256:abc"
+
+
 def test_add_history_checkpoint_sql_format_string_compatible_with_pymysql(
     chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
 ) -> None:
@@ -117,3 +148,138 @@ def test_add_history_checkpoint_sql_format_string_compatible_with_pymysql(
         sql % sanitized
     except TypeError as exc:
         pytest.fail(f"pymysql-style % formatting fails: {exc}")
+
+
+def test_query_user_turn_context_by_invocation_returns_existing_row(
+    chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
+) -> None:
+    table, cursor = chat_events_table_with_mocks
+    cursor.fetchone.return_value = {
+        "id": 42,
+        "session_id": "sess-x",
+        "source": "MatMaster",
+        "type": "user_turn_context",
+        "content": '{"schema_version": "user_turn_context.v1"}',
+        "task_id": "task-1",
+        "invocation_id": "inv-1",
+        "spawn_id": None,
+        "created_at": None,
+    }
+
+    event = table.query_user_turn_context_by_invocation("sess-x", "inv-1", None)
+
+    assert event is not None
+    assert event["id"] == 42
+    assert event["type"] == "user_turn_context"
+    assert event["invocation_id"] == "inv-1"
+    assert event["content"] == {"schema_version": "user_turn_context.v1"}
+    sql, params = cursor.execute.call_args[0]
+    assert "type = 'user_turn_context'" in sql
+    assert "spawn_id IS NULL" in sql
+    assert params == ("sess-x", "inv-1")
+
+
+def test_get_recent_context_anchor_events_returns_checkpoint_and_utc_rows(
+    chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
+) -> None:
+    table, cursor = chat_events_table_with_mocks
+    cursor.fetchall.return_value = [
+        {
+            "id": 43,
+            "session_id": "sess-x",
+            "source": "System",
+            "type": "history_checkpoint",
+            "content": '{"covered_until_event_id": 42}',
+            "task_id": "task-2",
+            "invocation_id": "inv-2",
+            "spawn_id": None,
+            "created_at": None,
+        },
+        {
+            "id": 42,
+            "session_id": "sess-x",
+            "source": "MatMaster",
+            "type": "user_turn_context",
+            "content": '{"schema_version": "user_turn_context.v1"}',
+            "task_id": "task-1",
+            "invocation_id": "inv-1",
+            "spawn_id": None,
+            "created_at": None,
+        },
+    ]
+
+    events = table.get_recent_context_anchor_events("sess-x", None, limit=50)
+
+    assert [event["id"] for event in events] == [43, 42]
+    assert events[0]["content"] == {"covered_until_event_id": 42}
+    assert events[1]["content"] == {"schema_version": "user_turn_context.v1"}
+    sql, params = cursor.execute.call_args[0]
+    assert "type IN ('user_turn_context', 'history_checkpoint')" in sql
+    assert "spawn_id IS NULL" in sql
+    assert "ORDER BY id DESC" in sql
+    assert "LIMIT 50" in sql
+    assert params == ("sess-x",)
+
+
+def test_get_recent_context_anchor_events_filters_non_root_spawn(
+    chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
+) -> None:
+    table, cursor = chat_events_table_with_mocks
+    cursor.fetchall.return_value = []
+
+    events = table.get_recent_context_anchor_events("sess-x", "spawn-a", limit=0)
+
+    assert events == []
+    sql, params = cursor.execute.call_args[0]
+    assert "type IN ('user_turn_context', 'history_checkpoint')" in sql
+    assert "spawn_id = %s" in sql
+    assert "ORDER BY id DESC" in sql
+    assert "LIMIT" not in sql
+    assert params == ("sess-x", "spawn-a")
+
+
+def test_query_user_turn_context_by_invocation_returns_none_when_missing(
+    chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
+) -> None:
+    table, cursor = chat_events_table_with_mocks
+    cursor.fetchone.return_value = None
+
+    event = table.query_user_turn_context_by_invocation("sess-x", "inv-1", "spawn-a")
+
+    assert event is None
+    sql, params = cursor.execute.call_args[0]
+    assert "type = 'user_turn_context'" in sql
+    assert "spawn_id = %s" in sql
+    assert params == ("sess-x", "inv-1", "spawn-a")
+
+
+def test_has_user_turn_context_returns_true_when_row_exists(
+    chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
+) -> None:
+    table, cursor = chat_events_table_with_mocks
+    cursor.fetchone.return_value = {"?column?": 1}
+
+    exists = table.has_user_turn_context("sess-x", None)
+
+    assert exists is True
+    sql, params = cursor.execute.call_args[0]
+    assert "SELECT 1" in sql
+    assert "type = 'user_turn_context'" in sql
+    assert "spawn_id IS NULL" in sql
+    assert params == ("sess-x",)
+
+
+def test_has_user_turn_context_returns_false_when_missing(
+    chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
+) -> None:
+    table, cursor = chat_events_table_with_mocks
+    cursor.fetchone.return_value = None
+
+    exists = table.has_user_turn_context("sess-x", "spawn-a")
+
+    assert exists is False
+    sql, params = cursor.execute.call_args[0]
+    assert "SELECT 1" in sql
+    assert "type = 'user_turn_context'" in sql
+    assert "spawn_id = %s" in sql
+    assert params == ("sess-x", "spawn-a")

@@ -79,6 +79,100 @@ class ChatEventsTable(BaseTable):
                 rows = list(cursor.fetchall())
                 return [self._row_to_event(row) for row in rows]
 
+    def get_recent_context_anchor_events(
+        self,
+        session_id: str,
+        spawn_id: str | None,
+        limit: int = 50,
+    ) -> list[dict]:
+        """Phase 1 临时方法; Phase 2A 由 SessionEventsPort 取代。"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                if spawn_id is None:
+                    spawn_filter = ' AND spawn_id IS NULL'
+                    params = (session_id,)
+                else:
+                    spawn_filter = ' AND spawn_id = %s'
+                    params = (session_id, spawn_id)
+
+                sql = f'''
+                    SELECT id, session_id, source, type, content, task_id, invocation_id, spawn_id, created_at
+                    FROM {self.table_name}
+                    WHERE session_id = %s
+                      AND type IN ('user_turn_context', 'history_checkpoint')
+                      {spawn_filter}
+                    ORDER BY id DESC
+                '''
+                if limit:
+                    sql += f' LIMIT {int(limit)}'
+                cursor.execute(sql, params)
+                return [self._row_to_event(row) for row in list(cursor.fetchall())]
+
+    def query_user_turn_context_by_invocation(
+        self,
+        session_id: str,
+        invocation_id: str,
+        spawn_id: str | None,
+    ) -> dict | None:
+        """Phase 1 dedup 查询: 按 (session_id, invocation_id, spawn_id) 找已写的
+        user_turn_context 事件。命中返回 row dict, 否则 None。
+
+        Phase 1 仅 root spawn 写入, 实际查询固定 spawn_id IS NULL; Phase 2A 起放开。
+        DB 层 unique index 留待 Phase 1.5 / 2A 通过 migration 添加。
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                if spawn_id is None:
+                    spawn_filter = ' AND spawn_id IS NULL'
+                    params = (session_id, invocation_id)
+                else:
+                    spawn_filter = ' AND spawn_id = %s'
+                    params = (session_id, invocation_id, spawn_id)
+
+                sql = f'''
+                    SELECT id, session_id, source, type, content, task_id, invocation_id, spawn_id, created_at
+                    FROM {self.table_name}
+                    WHERE session_id = %s
+                      AND invocation_id = %s
+                      AND type = 'user_turn_context'
+                      {spawn_filter}
+                    ORDER BY id ASC
+                    LIMIT 1
+                '''
+                cursor.execute(sql, params)
+                row = cursor.fetchone()
+                return self._row_to_event(row) if row else None
+
+    def has_user_turn_context(
+        self,
+        session_id: str,
+        spawn_id: str | None,
+    ) -> bool:
+        """Phase 1 restore 分流查询: session/scope 内是否存在 user_turn_context。
+
+        不要用 get_session_events(limit=N) 做探测；该 DAO 返回最早的 N 条事件，
+        长 session 会漏掉后续 Phase 1 写入的 user_turn_context。
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                if spawn_id is None:
+                    spawn_filter = ' AND spawn_id IS NULL'
+                    params = (session_id,)
+                else:
+                    spawn_filter = ' AND spawn_id = %s'
+                    params = (session_id, spawn_id)
+
+                sql = f'''
+                    SELECT 1
+                    FROM {self.table_name}
+                    WHERE session_id = %s
+                      AND type = 'user_turn_context'
+                      {spawn_filter}
+                    LIMIT 1
+                '''
+                cursor.execute(sql, params)
+                return cursor.fetchone() is not None
+
     def get_scope_events_after_id(
         self,
         session_id: str,
@@ -334,12 +428,29 @@ class ChatEventsTable(BaseTable):
         covered_until_event_id: int,
         base_messages: list[dict],
         reason: str = 'summary',
+        schema_version: str | None = None,
+        render_version: str | None = None,
+        user_instructions_text: str | None = None,
+        user_instructions_hash: str | None = None,
     ) -> bool:
         checkpoint_content = {
             'covered_until_event_id': covered_until_event_id,
             'base_messages': base_messages,
             'reason': reason,
         }
+        optional_metadata = {
+            'schema_version': schema_version,
+            'render_version': render_version,
+            'user_instructions_text': user_instructions_text,
+            'user_instructions_hash': user_instructions_hash,
+        }
+        checkpoint_content.update(
+            {
+                key: value
+                for key, value in optional_metadata.items()
+                if value is not None
+            }
+        )
 
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
@@ -372,6 +483,10 @@ class ChatEventsTable(BaseTable):
         covered_until_event_id: int,
         base_messages: list[dict],
         reason: str = 'summary',
+        schema_version: str | None = None,
+        render_version: str | None = None,
+        user_instructions_text: str | None = None,
+        user_instructions_hash: str | None = None,
     ) -> bool:
         return self.add_history_checkpoint(
             session_id,
@@ -381,6 +496,10 @@ class ChatEventsTable(BaseTable):
             covered_until_event_id=covered_until_event_id,
             base_messages=base_messages,
             reason=reason,
+            schema_version=schema_version,
+            render_version=render_version,
+            user_instructions_text=user_instructions_text,
+            user_instructions_hash=user_instructions_hash,
         )
 
     def get_bohrium_events(self, session_id: str) -> list[dict]:
