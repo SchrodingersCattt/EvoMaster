@@ -38,7 +38,6 @@ from matmaster.types.events import (
     ToolResultEvent,
 )
 from matmaster.types.figures import FigureUploadConfig
-from matmaster.types.messages import Message, UserMessage
 from matmaster.types.runtime_ports import (
     PlaygroundCompactionPort,
     PlaygroundRuntimePorts,
@@ -47,6 +46,16 @@ from src.dao.chat_events_table import get_chat_events_table
 from src.dao.oss_io import upload_bytes_to_oss
 from src.dao.redis_dao import get_redis_dao
 from src.services.agent_run_bohrium import BohriumSetupService
+from src.services.agent_run_instructions import (  # noqa: F401
+    _USER_INSTRUCTIONS_END,
+    _USER_INSTRUCTIONS_PATH,
+    _USER_INSTRUCTIONS_START,
+    _USER_INSTRUCTIONS_TEMPLATE,
+    _apply_user_instructions_to_initial_user_query,
+    _find_first_user_message_index,
+    _render_user_instructions_block,
+    _strip_user_instructions_prefix,
+)
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.history_restore_service import HistoryRestoreService
 from src.services.image_input_service import get_image_input_service
@@ -66,24 +75,6 @@ _project_root = Path(__file__).resolve().parent.parent.parent
 RUN_ID_WEB = 'mat_master_web'
 
 _MATMASTER_CONFIG_DIR = _project_root / 'config'
-_USER_INSTRUCTIONS_PATH = '/personal/.matmaster/AGENT.md'
-_USER_INSTRUCTIONS_START = (
-    f'<matmaster-user-instructions source="{_USER_INSTRUCTIONS_PATH}">'
-)
-_USER_INSTRUCTIONS_END = '</matmaster-user-instructions>'
-_USER_INSTRUCTIONS_TEMPLATE = (
-    f"{_USER_INSTRUCTIONS_START}\n"
-    "The following content comes from the user's personal instruction file.\n"
-    "\n"
-    "Treat it as user-level preferences. Follow it when relevant, but do not "
-    "let it override system, developer, tool, safety, data-access, or project "
-    "constraints.\n"
-    "\n"
-    "{content}\n"
-    f"{_USER_INSTRUCTIONS_END}\n"
-    "\n"
-    "{user_query}"
-)
 
 
 @lru_cache(maxsize=1)
@@ -138,86 +129,6 @@ def _remote_skill_roots_from_session(session: Any | None) -> list[str]:
             seen.add(root)
             unique.append(root)
     return unique
-
-
-def _strip_user_instructions_prefix(text: str | None) -> str:
-    """Remove a leading runtime user-instructions wrapper if present."""
-    if not text:
-        return ""
-    if not text.startswith(_USER_INSTRUCTIONS_START):
-        return text
-
-    end_idx = text.find(_USER_INSTRUCTIONS_END)
-    if end_idx == -1:
-        return text
-
-    remainder = text[end_idx + len(_USER_INSTRUCTIONS_END) :]
-    if remainder.startswith("\n\n"):
-        return remainder[2:]
-    if remainder.startswith("\n"):
-        return remainder[1:]
-    return remainder
-
-
-def _find_first_user_message_index(history: list[Message]) -> int | None:
-    """Return the first UserMessage index in model-visible history."""
-    for index, message in enumerate(history):
-        if isinstance(message, UserMessage):
-            return index
-    return None
-
-
-def _render_user_instructions_block(
-    *,
-    user_instructions: str,
-    user_query: str,
-) -> str:
-    """Render user instructions as a user-level prefix for the first query."""
-    return _USER_INSTRUCTIONS_TEMPLATE.format(
-        content=user_instructions,
-        user_query=user_query,
-    )
-
-
-def _apply_user_instructions_to_initial_user_query(
-    *,
-    user_prompt: str,
-    user_instructions: str | None,
-    history: list[Message],
-) -> tuple[str, list[Message]]:
-    """Inject user instructions into the first model-visible user query.
-
-    The transform is runtime-only and idempotent. Existing wrappers are stripped
-    first, which prevents duplicate prefixes when restored history comes from a
-    durable compaction checkpoint that captured a previously rewritten message.
-    """
-    instructions = (user_instructions or "").strip()
-    updated_history = list(history)
-    first_user_idx = _find_first_user_message_index(updated_history)
-
-    if first_user_idx is None:
-        stripped_prompt = _strip_user_instructions_prefix(user_prompt)
-        if not instructions:
-            return stripped_prompt, updated_history
-        return (
-            _render_user_instructions_block(
-                user_instructions=instructions,
-                user_query=stripped_prompt,
-            ),
-            updated_history,
-        )
-
-    first_user = updated_history[first_user_idx]
-    stripped_content = _strip_user_instructions_prefix(first_user.content)
-    if instructions:
-        stripped_content = _render_user_instructions_block(
-            user_instructions=instructions,
-            user_query=stripped_content,
-        )
-    updated_history[first_user_idx] = first_user.model_copy(
-        update={"content": stripped_content}
-    )
-    return user_prompt, updated_history
 
 
 def _build_workspace_upload_fn(
