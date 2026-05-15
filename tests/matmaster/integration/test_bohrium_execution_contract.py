@@ -414,7 +414,7 @@ def test_run_agent_loads_exp_config_without_passing_skill_sync_to_bohrium_setup(
 
     with (
         patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
-        patch('src.services.agent_run_service.BohriumSetupService') as mock_bohrium_cls,
+        patch('src.services.agent_run_bohrium_stage.BohriumSetupService') as mock_bohrium_cls,
         patch('src.services.agent_run_service.get_chat_events_table') as mock_events_fn,
         patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
         patch('src.services.agent_run_service.use_quota') as mock_use_quota,
@@ -528,7 +528,7 @@ def test_execution_binding_before_build_runtime(
 
     with (
         patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
-        patch('src.services.agent_run_service.BohriumSetupService') as mock_bohrium_cls,
+        patch('src.services.agent_run_bohrium_stage.BohriumSetupService') as mock_bohrium_cls,
         patch('src.services.agent_run_service.get_chat_events_table') as mock_events_fn,
         patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
         patch('src.services.agent_run_service.use_quota') as mock_use_quota,

@@ -22,10 +22,8 @@ from matmaster.integration.event_payloads import _normalize_public_source
 from matmaster.integration.fanout import RunEventFanout
 from matmaster.integration.persistence_handler import PersistenceHandler
 from matmaster.integration.sse_handler import SSEHandler
-from matmaster.integration.workspace_handler import WorkspaceHandler
 from matmaster.manifests import skill as skill_manifest
 from matmaster.types.cancellation import CancellationToken
-from matmaster.types.context import WorkspaceArchivalConfig
 from matmaster.types.current_input import CurrentInputContext
 from matmaster.types.events import (
     BusEvent,
@@ -36,11 +34,14 @@ from matmaster.types.events import (
     StreamClosedEvent,
     ToolResultEvent,
 )
-from matmaster.types.figures import FigureUploadConfig
 from src.dao.chat_events_table import get_chat_events_table
-from src.dao.oss_io import upload_bytes_to_oss
 from src.dao.redis_dao import get_redis_dao
-from src.services.agent_run_bohrium import BohriumSetupService
+from src.services.agent_run_bohrium_stage import (
+    _build_figure_upload_config,
+    _build_workspace_upload_fn,  # noqa: F401
+    run_bohrium_stage,
+)
+from src.services.agent_run_history_wiring import build_history_wiring
 from src.services.agent_run_instructions import (  # noqa: F401
     _USER_INSTRUCTIONS_END,
     _USER_INSTRUCTIONS_PATH,
@@ -51,7 +52,6 @@ from src.services.agent_run_instructions import (  # noqa: F401
     _render_user_instructions_block,
     _strip_user_instructions_prefix,
 )
-from src.services.agent_run_history_wiring import build_history_wiring
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.image_input_service import get_image_input_service
 from src.services.quota_service import use_quota
@@ -124,37 +124,6 @@ def _remote_skill_roots_from_session(session: Any | None) -> list[str]:
             seen.add(root)
             unique.append(root)
     return unique
-
-
-def _build_workspace_upload_fn(
-    archival_config: WorkspaceArchivalConfig | None,
-) -> Callable[..., Any] | None:
-    """Build workspace upload closure when archival is enabled.
-
-    Lazy-imports oss_io to avoid hard oss2 dependency when archival
-    is disabled.
-    """
-    if not archival_config or not archival_config.enabled:
-        return None
-    oss_prefix = (archival_config.oss_prefix or '').strip('/')
-
-    def _do_upload(session_id: str, task_id: str, workspace_path: Path) -> None:
-        from src.dao.oss_io import upload_dir_to_oss
-
-        key_prefix = '/'.join(part for part in (oss_prefix, session_id) if part)
-        upload_dir_to_oss(workspace_path, key_prefix)
-
-    return _do_upload
-
-
-def _build_figure_upload_config(*, session_id: str, task_id: str) -> FigureUploadConfig:
-    """Build the per-run figure upload contract injected into tool runtime state."""
-    return FigureUploadConfig(
-        session_id=session_id,
-        task_id=task_id,
-        asset_key_prefix='matmaster/chat_figures',
-        upload_bytes=upload_bytes_to_oss,
-    )
 
 
 async def _emit_error_and_close_fanout(
@@ -357,57 +326,23 @@ class AgentRunService:
             def _dispatch_from_thread(event: BusEvent) -> None:
                 fanout.dispatch_from_thread(loop, event)
 
-            bohrium_svc = BohriumSetupService(
-                self._sessions_service,
-                event_sink=_dispatch_from_thread,
-            )
-            effective_bohrium_required = bool(bohrium_required or remote_workdir)
-            bohrium_result = await bohrium_svc.run_setup(
+            stage_result = await run_bohrium_stage(
+                sessions_service=self._sessions_service,
+                fanout=fanout,
+                dispatch_from_thread=_dispatch_from_thread,
                 session_id=session_id,
+                task_id=task_id,
                 playground=playground,
+                pg_ctx=pg_ctx,
                 run_started_at=run_started_at,
-                bohrium_required=effective_bohrium_required,
+                bohrium_required=bohrium_required,
                 remote_workdir=remote_workdir,
             )
-            ssh_attached = bohrium_result.ssh_attached
-            if bohrium_result.abort_result is not None:
-                return bohrium_result.abort_result
-            bohrium_meta = (
-                bohrium_result.runtime_snapshot.model_dump()
-                if bohrium_result.runtime_snapshot is not None
-                else {}
-            )
-            pg_ctx = pg_ctx.with_bohrium(bohrium_meta)
-            if bohrium_result.execution_session is not None:
-                execution_workdir = bohrium_result.execution_workdir or ''
-                session_type = bohrium_result.session_type or 'ssh'
-                pg_ctx = pg_ctx.with_execution(
-                    session=bohrium_result.execution_session,
-                    session_type=session_type,
-                    execution_workdir=execution_workdir,
-                )
-            user_instructions: str | None = None
-            _ui_session = (
-                bohrium_result.execution_session if bohrium_result else None
-            ) or pg_ctx.session
-            if _ui_session is not None:
-                try:
-                    user_instructions = (
-                        _ui_session.read_file(_USER_INSTRUCTIONS_PATH).strip() or None
-                    )
-                except Exception as _ui_err:
-                    logger.debug('read user instructions skipped: %s', _ui_err)
-
-            # Workspace handling depends on the finalized Bohrium/archival context.
-            fanout.add_handler(
-                WorkspaceHandler(
-                    session_id=session_id,
-                    task_id=task_id,
-                    ssh_attached=ssh_attached,
-                    workspace_path=pg_ctx.workdir,
-                    upload_fn=_build_workspace_upload_fn(pg_ctx.archival),
-                )
-            )
+            if stage_result.abort_result is not None:
+                return stage_result.abort_result
+            pg_ctx = stage_result.pg_ctx
+            ssh_attached = stage_result.ssh_attached
+            user_instructions = stage_result.user_instructions
 
             # -- Stage 4: Exp assembly --
             from matmaster.config.loader import load_llm_config

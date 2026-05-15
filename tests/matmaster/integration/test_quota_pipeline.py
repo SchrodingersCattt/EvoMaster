@@ -185,7 +185,7 @@ def _run_with_quota_mock(
     """Run agent with standard patches and return whether use_quota was called."""
     with (
         patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
-        patch('src.services.agent_run_service.BohriumSetupService') as mock_bohrium_cls,
+        patch('src.services.agent_run_bohrium_stage.BohriumSetupService') as mock_bohrium_cls,
         patch('src.services.agent_run_service.get_chat_events_table') as mock_events_fn,
         patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
         patch('src.services.agent_run_service.use_quota', use_quota_mock),

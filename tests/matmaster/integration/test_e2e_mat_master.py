@@ -271,7 +271,7 @@ class TestMatMasterRunAgentE2E:
         with (
             patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
             patch(
-                'src.services.agent_run_service.BohriumSetupService'
+                'src.services.agent_run_bohrium_stage.BohriumSetupService'
             ) as mock_bohrium_cls,
             patch(
                 'src.services.agent_run_service.get_chat_events_table'
@@ -394,7 +394,7 @@ class TestMatMasterRunAgentE2E:
         with (
             patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
             patch(
-                'src.services.agent_run_service.BohriumSetupService'
+                'src.services.agent_run_bohrium_stage.BohriumSetupService'
             ) as mock_bohrium_cls,
             patch(
                 'src.services.agent_run_service.get_chat_events_table'
@@ -487,7 +487,7 @@ class TestMatMasterRunAgentE2E:
             patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
             patch('src.services.agent_run_service.RunEventFanout') as mock_fanout_cls,
             patch(
-                'src.services.agent_run_service.BohriumSetupService'
+                'src.services.agent_run_bohrium_stage.BohriumSetupService'
             ) as mock_bohrium_cls,
             patch(
                 'src.services.agent_run_service.get_chat_events_table',
@@ -553,7 +553,7 @@ class TestMatMasterRunAgentE2E:
         with (
             patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
             patch(
-                'src.services.agent_run_service.BohriumSetupService'
+                'src.services.agent_run_bohrium_stage.BohriumSetupService'
             ) as mock_bohrium_cls,
             patch(
                 'src.services.agent_run_service.get_chat_events_table'
@@ -687,7 +687,7 @@ class TestMatMasterRunAgentE2E:
         with (
             patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
             patch(
-                'src.services.agent_run_service.BohriumSetupService'
+                'src.services.agent_run_bohrium_stage.BohriumSetupService'
             ) as mock_bohrium_cls,
             patch(
                 'src.services.agent_run_service.get_chat_events_table'
@@ -866,7 +866,7 @@ class TestMatMasterRunAgentE2E:
         with (
             patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
             patch(
-                'src.services.agent_run_service.BohriumSetupService'
+                'src.services.agent_run_bohrium_stage.BohriumSetupService'
             ) as mock_bohrium_cls,
             patch(
                 'src.services.agent_run_service.get_chat_events_table'

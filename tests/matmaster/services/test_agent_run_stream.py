@@ -155,8 +155,8 @@ def _standard_patches():
         patch('src.services.agent_run_service.get_chat_events_table'),
         patch('src.services.agent_run_service.SSEHandler'),
         patch('src.services.agent_run_service.PersistenceHandler'),
-        patch('src.services.agent_run_service.WorkspaceHandler'),
-        patch('src.services.agent_run_service.BohriumSetupService'),
+        patch('src.services.agent_run_bohrium_stage.WorkspaceHandler'),
+        patch('src.services.agent_run_bohrium_stage.BohriumSetupService'),
         patch(
             'src.services.agent_run_history_wiring.HistoryRestoreService',
             create=True,
