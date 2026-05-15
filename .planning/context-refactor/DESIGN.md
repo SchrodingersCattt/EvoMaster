@@ -1,7 +1,7 @@
-# Context 模块统一重构 — Design v3.1
+# Context 模块统一重构 — Design v3.2
 
-- 日期: 2026-05-14（v3.1 修订）
-- 状态: 草稿 v3.1（在 v3 基础上引入 Context Assembly Ports + Compositions + Assembler 三层），待作者复核
+- 日期: 2026-05-15（v3.2 修订）
+- 状态: 草稿 v3.2（移除 `source_query_event_id` 外键语义，`user_turn_context` 通过顶层 `invocation_id` 关联用户请求），待作者复核
 - 作者: kealdoom + Claude + GPT
 - 范围: `matmaster/` 与 `src/services/` 中所有模型可见上下文相关的代码与数据流
 
@@ -9,7 +9,19 @@
 
 ## 0. 关键变化日志
 
-### 0.1 v3.1 相对 v3 的关键变化
+### 0.1 v3.2 相对 v3.1 的关键变化
+
+v3.2 的核心修正是按"该字段是否影响 model-visible 输出或 restore 正确性"原则清除冗余 event_id 字段。该字段只服务事件审计或与现有字段重复的，全部删除或下沉到 assembler 内部派生。
+
+| 项 | v3.1 | v3.2 |
+|----|------|------|
+| `user_turn_context` 与 `User/query` 关联 | payload 内保存 `source_query_event_id`，依赖 DAO inserted id 返回链路 | 通过 events 表顶层 `session_id + spawn_id + invocation_id` 关联，同一 root 用户请求最多一条 `user_turn_context` |
+| `TurnInput` 字段 | 含 `source_query_event_id` | 删除；`TurnInput` 只承载会影响 model-visible user message 的输入与 preflight 边界 |
+| `TurnAssemblyRequest` 字段 | 含 `pre_turn_history_event_id`（与 `turn_input.pre_turn_history_event_id` 重复） | 删除该字段；assembler 内部直接读 `request.turn_input.pre_turn_history_event_id`，消除 caller 双写不一致风险 |
+| `CompactionAssemblyRequest.covered_until_event_id` | 必填；caller（compactor）本地派生后显式传入 | 默认 `None`；派生规则集中在 `assemble_compaction` 内（`显式值 > turn_input.pre_turn_history_event_id > None`），真实边界通过 `AssemblyResult.covered_until_event_id` 回传给 caller 写 checkpoint payload |
+| Phase 0 硬依赖 | DAO 返回 inserted event id + 文件拆分 | 仅保留文件拆分；DAO inserted id 不再是本 spec 前置依赖 |
+
+### 0.2 v3.1 相对 v3 的关键变化
 
 v3.1 的核心目标是消除 v3 末尾仍然散落在 §7.3 / §8.2 / §9.2 的"该用哪些 source 装配 user_turn_context"决策。引入 **Context Assembly Ports + Compositions + Assembler** 三层架构：
 
@@ -25,13 +37,13 @@ v3.1 的核心目标是消除 v3 末尾仍然散落在 §7.3 / §8.2 / §9.2 的
 
 如果你只读 v3 留下的差异，请直接跳到 §6bis（Composition 装配层）、§7bis（Context Assembly Ports + Assembler）、§8.2、§9.2。
 
-### 0.2 v3 相对 v2 的关键变化（保留）
+### 0.3 v3 相对 v2 的关键变化（保留）
 
 | 项 | v2 | v3 |
 |----|-----|-----|
 | 事件模型 | `user_context_snapshot`（每次 LLM 调用前一帧） | `user_turn_context`（每个真实用户 turn 一条），无 snapshot 概念 |
 | AGENT.md 响应性 | 冻结到 anchor，下次压缩才更新 | hash 变化即触发新 anchor user_turn_context，**下一轮立即生效** |
-| DAO 改造 | 隐含 | 显式前置为 Phase 0 |
+| DAO 改造 | 隐含 | v3 曾显式前置；v3.2 后不再作为本 spec 硬依赖，事件关联改用 `invocation_id` |
 | 文件拆分 | 未考虑 1000 行限制 | 显式前置为 Phase 0 |
 | Case 3（oversized input） | 阶段 2 硬目标 | 拆出，本 spec 仅在 `transform` 字段预留 |
 | Fallback (`sliding_window` / `tool_truncation`) | 删除 | 保留，先埋点 |
@@ -74,7 +86,7 @@ v3.1 的核心目标是消除 v3 末尾仍然散落在 §7.3 / §8.2 / §9.2 的
    服务前端回放和审计。不承载系统改造后的 LLM prompt。
 
 2. user_turn_context 是一个真实用户 turn 对应的 provider-facing UserMessage 的事实记录。
-   每个 source_query_event_id 对应**最多一条** user_turn_context。
+   每个 session_id + spawn_id + invocation_id 对应**最多一条** user_turn_context。
    不是「每次 LLM 调用前快照」，工具循环内不再写入新事件。
 
 3. history_checkpoint.base_messages 保存压缩生成的 anchor user message。
@@ -124,7 +136,6 @@ v3.1 的核心目标是消除 v3 末尾仍然散落在 §7.3 / §8.2 / §9.2 的
     "content": "<user_instructions>...</user_instructions>\n\n<current_instruction>...</current_instruction>",
     "images": [{"url": "...", "mime_type": "image/png", "detail": "auto"}]
   },
-  "source_query_event_id": 42,
   "user_instructions_hash": "sha256:abcdef...",
   "transform": "raw",
   "render_version": "user_context_render.v1"
@@ -137,13 +148,14 @@ v3.1 的核心目标是消除 v3 末尾仍然散落在 §7.3 / §8.2 / §9.2 的
   - `anchor`：装配了完整长尾 sections（UserInstructions + SessionContext sections + TurnInput）。session 首轮 + AGENT.md hash 变化的轮，都生成 anchor。
   - `continuation`：只装配 TurnInput。后续未触发 hash 变化的轮。
 - `message`: `UserMessage.model_dump(mode="json")`，含 content + images 全部字段。多模态附件必须完整保留。
-- `source_query_event_id`: 关联的 `User/query` 事件 id。**必填**，由 service 层从 DAO 改造后的返回值取得（见 §14 Phase 0）。
 - `user_instructions_hash`: AGENT.md 文本的 sha256 hash。anchor 时必填；continuation 时可选（continuation 隐含与最近 anchor 同 hash）。
 - `transform`: `"raw"` | `"preflight_compacted"` | `"oversized_summary"`
   - `raw`: 当前轮没触发 preflight，message 是普通装配产物
   - `preflight_compacted`: 当前轮触发了 preflight compaction，message 是压缩后的 runtime user message
   - `oversized_summary`: 当前轮走 oversized 输入路径（Case 3）。**本 spec 阶段不实现，仅预留字段**。
 - `schema_version`/`render_version`: 见 §6.6 的版本号策略。
+
+关联说明：`user_turn_context` 与对应的 `User/query` 不在 payload 内保存 DB 行 id。二者通过 events 表顶层 metadata 关联：`session_id + spawn_id + invocation_id`。本 spec 中 `invocation_id` 是一次真实用户请求的稳定标识，不是一次 LLM API call 的标识。
 
 ### 3.3 `history_checkpoint` payload v1 扩展
 
@@ -226,7 +238,7 @@ Session 首轮：
 
 ### 4.1 事件与编排不变量（v3 保留）
 
-1. 每个 `source_query_event_id` 在 events 表中对应**最多一条** `user_turn_context` 事件。多于一条是 bug，不是 dedup 常态。
+1. 每个 `session_id + spawn_id + invocation_id` 在 events 表中对应**最多一条** `user_turn_context` 事件。多于一条是 bug，不是 dedup 常态。Phase 1 仅 root spawn 写入 `user_turn_context`，因此实际唯一性检查可先按 `session_id + invocation_id + spawn_id IS NULL` 落地。
 2. `user_turn_context` 写入失败时，本轮 fail-fast；不允许继续 LLM 调用。
 3. `history_checkpoint` 写入失败时，本轮可继续；compaction 路径必须记录 `failure_reason`。
 4. 前端 SSE 回放与实时流永远不发 `user_turn_context` / `assistant_state` / `history_checkpoint`。
@@ -888,7 +900,6 @@ class TurnInput:
     instruction: TurnInstructionSource = field(default_factory=TurnInstructionSource)
     attachments: TurnAttachmentsSource = field(default_factory=TurnAttachmentsSource)
     pre_turn_history_event_id: int | None = None
-    source_query_event_id: int | None = None  # 必填(由 service 层从 DAO 返回值取)
 
     def to_sections(self) -> tuple[ContextSection, ...]:
         return (*self.instruction.to_sections(), *self.attachments.to_sections())
@@ -1077,12 +1088,15 @@ class ContextAssemblyIntent(str, Enum):
 
 @dataclass(frozen=True)
 class TurnAssemblyRequest:
-    """普通 turn (anchor / continuation) 的装配 request。"""
+    """普通 turn (anchor / continuation) 的装配 request。
+
+    历史视图边界通过 turn_input.pre_turn_history_event_id 自动获取,
+    不在 request 中重复携带 (避免与 turn_input 字段双写不一致)。
+    """
     session_id: str
     spawn_id: str | None
     turn_input: TurnInput
     user_instructions: UserInstructions  # 硬约束 #7: UserInstructions 原样传入
-    pre_turn_history_event_id: int | None
 
 
 @dataclass(frozen=True)
@@ -1091,13 +1105,21 @@ class CompactionAssemblyRequest:
 
     compacted_history_summary 必填 (compactor 自己产生, 可能来自 LLM 或 fallback)。
     turn_input 在 runtime compaction (kernel 内循环) 时可 None。
+
+    covered_until_event_id 语义 (assembler 内部派生, 调用方通常不必显式传):
+    - 显式 int: caller 主动覆盖边界 (未来 Case 3 oversized input 等场景预留)
+    - None + turn_input 非 None: 取 turn_input.pre_turn_history_event_id (preflight 默认)
+    - None + turn_input None: 表示无显式上界, port 解释为"当前事件流末尾" (runtime 默认)
+
+    派生后的真实值会写入 AssemblyResult.covered_until_event_id, caller (compactor) 从中
+    取出写入 checkpoint payload, 保证 assembler 与 checkpoint 看到同一个边界值。
     """
     session_id: str
     spawn_id: str | None
     user_instructions: UserInstructions
     compacted_history_summary: str
-    covered_until_event_id: int | None
     turn_input: TurnInput | None = None
+    covered_until_event_id: int | None = None  # 默认 None, 由 assembler 派生
     session_attachments_override: SessionAttachmentsSource | None = None
 
 
@@ -1106,7 +1128,8 @@ class AssemblyResult:
     user_turn_context: UserTurnContext          # caller 自己 to_message(view)
     user_instructions_text: str                 # compactor 写 history_checkpoint payload 用
     user_instructions_hash: str                 # service 写 user_turn_context payload 用
-    used_composition: str                            # 调试 / 埋点
+    used_composition: str                       # 调试 / 埋点
+    covered_until_event_id: int | None = None   # compaction 路径下 assembler 派生的真实边界; turn 路径下保持 None
 
 
 _INTENT_COMPOSITION_MAP: dict[ContextAssemblyIntent, ContextComposition] = {
@@ -1137,14 +1160,15 @@ class ContextAssembler:
         jobs = await self._load_jobs_or_empty(request.session_id)
 
         if intent == ContextAssemblyIntent.ANCHOR_TURN:
+            history_boundary = request.turn_input.pre_turn_history_event_id
             events = await self._ports.session_events.load_events(SessionEventQuery(
                 session_id=request.session_id,
                 spawn_id=request.spawn_id,
-                until_event_id=request.pre_turn_history_event_id,
+                until_event_id=history_boundary,
                 order="asc",
             ))
             session_sections = SessionContextBuilder(events=events).build_sections(
-                until_event_id=request.pre_turn_history_event_id,
+                until_event_id=history_boundary,
                 include_attachments=True,
             )
 
@@ -1172,14 +1196,21 @@ class ContextAssembler:
             raise ValueError(f"assemble_compaction does not accept intent {intent!r}")
 
         composition = _INTENT_COMPOSITION_MAP[intent]
+        # 派生 covered_until: 显式值 > turn_input.pre_turn_history_event_id > None
+        # 派生规则集中在此处, 调用方 (compactor) 不必重复实现
+        covered_until = (
+            request.covered_until_event_id
+            if request.covered_until_event_id is not None
+            else (request.turn_input.pre_turn_history_event_id if request.turn_input else None)
+        )
         events = await self._ports.session_events.load_events(SessionEventQuery(
             session_id=request.session_id,
             spawn_id=request.spawn_id,
-            until_event_id=request.covered_until_event_id,
+            until_event_id=covered_until,
             order="asc",
         ))
         session_sections = SessionContextBuilder(events=events).build_sections(
-            until_event_id=request.covered_until_event_id,
+            until_event_id=covered_until,
             include_attachments=(request.session_attachments_override is None),
         )
         jobs = await self._load_jobs_or_empty(request.session_id)
@@ -1200,6 +1231,7 @@ class ContextAssembler:
             user_instructions_text=request.user_instructions.text,
             user_instructions_hash=request.user_instructions.hash,
             used_composition=composition.name,
+            covered_until_event_id=covered_until,  # 派生结果回传, compactor 写入 checkpoint payload
         )
 
     async def _load_jobs_or_empty(self, session_id: str) -> SessionJobs:
@@ -1364,7 +1396,7 @@ def _latest_anchor_hash_from_events(
 
 ```
 agent_run_service._prepare_and_dispatch:
-  1. events_service.add_history_event(User/query)  → user_query_event_id
+  1. events_service.add_history_event(User/query)
   2. ports.user_instructions.load(workspace_root)   → UserInstructions  ← 一次读取
   3. context_turn_intent.resolve_turn_context_intent(bundle.hash, events_port)
                                                     → ContextAssemblyIntent
@@ -1411,8 +1443,9 @@ from src.services.context_turn_intent import resolve_turn_context_intent
 
 
 async def _prepare_and_dispatch(req: SendMessageRequest) -> ...:
-    # 1. 写 raw User/query, 拿到 event id (依赖 Phase 0 DAO 改造)
-    user_query_event_id = await events_service.add_history_event(
+    # 1. 写 raw User/query。user_turn_context 与该事件通过 invocation_id 关联，
+    #    不依赖 DAO 返回 inserted row id。
+    await events_service.add_history_event(
         session_id,
         payload={
             "source": "User",
@@ -1447,10 +1480,11 @@ async def _prepare_and_dispatch(req: SendMessageRequest) -> ...:
             workspace_paths=tuple(req.workspace_paths),
         ),
         pre_turn_history_event_id=pre_query_scope_event_id,
-        source_query_event_id=user_query_event_id,
     )
 
     # 5. 调 assembler 装配 (instructions bundle 原样传入, 禁止二次读)
+    # 注: 历史视图边界 pre_query_scope_event_id 已经塞进 turn_input.pre_turn_history_event_id,
+    # 不再向 TurnAssemblyRequest 重复传递 (v3.2 简化)
     assembly = await context_assembler.assemble_turn(
         intent=intent,
         request=TurnAssemblyRequest(
@@ -1458,7 +1492,6 @@ async def _prepare_and_dispatch(req: SendMessageRequest) -> ...:
             spawn_id=spawn_id,
             turn_input=turn_input,
             user_instructions=instructions,
-            pre_turn_history_event_id=pre_query_scope_event_id,
         ),
     )
 
@@ -1474,7 +1507,6 @@ async def _prepare_and_dispatch(req: SendMessageRequest) -> ...:
                     "schema_version": "user_turn_context.v1",
                     "kind": "anchor" if intent.is_anchor_turn else "continuation",
                     "message": rendered_message.model_dump(mode="json"),
-                    "source_query_event_id": user_query_event_id,
                     "user_instructions_hash": (
                         assembly.user_instructions_hash
                         if intent.is_anchor_turn else None
@@ -1607,10 +1639,8 @@ async def apply_compaction_plan(
             durability = "ephemeral"
 
     # === 装配走 ContextAssembler (硬约束 §4.2 #4) ===
-    covered_until_event_id = (
-        turn_input.pre_turn_history_event_id if turn_input else None
-    )
-
+    # covered_until_event_id 不再由 compactor 本地派生; 派生规则集中在 assembler 内,
+    # 调用方仅传 turn_input, 真实边界从 assembly.covered_until_event_id 读回
     assembly = await self._context_assembler.assemble_compaction(
         intent=intent,
         request=CompactionAssemblyRequest(
@@ -1618,7 +1648,6 @@ async def apply_compaction_plan(
             spawn_id=self._spawn_id,
             user_instructions=user_instructions,
             compacted_history_summary=summary,    # compactor 内部局部变量 summary 透传
-            covered_until_event_id=covered_until_event_id,
             turn_input=turn_input,
             session_attachments_override=session_attachments_override,
         ),
@@ -1641,7 +1670,7 @@ async def apply_compaction_plan(
         retained_turns=0,
         failure_reason=failure_reason,
         base_messages=base_messages,
-        checkpoint_covered_until_event_id=covered_until_event_id,
+        checkpoint_covered_until_event_id=assembly.covered_until_event_id,
         # 新字段 (会被 sink 写到 history_checkpoint payload)
         user_instructions_text=assembly.user_instructions_text,
         user_instructions_hash=assembly.user_instructions_hash,
@@ -2098,16 +2127,11 @@ v3 在此用 "装配的 sources" 列表描述每个 case。v3.1 把它改为 cal
 
 ### Phase 0: 前置改造（独立 PR，无功能变化）
 
-**目标**: 解除 v3 实现的两条硬依赖。这些是纯 mechanical refactor，可以**任何时候并行**于其他工作推进。
+**目标**: 解除后续阶段的文件规模与职责耦合风险。这些是纯 mechanical refactor，可以**任何时候并行**于其他工作推进。v3.2 后 `user_turn_context` 不再保存 `source_query_event_id`，因此 DAO inserted id 返回链路不再是本 spec 的前置硬依赖。
 
-**0a. DAO 改造**:
-- [chat_events_table.py:301-325](../../src/dao/chat_events_table.py:301) `add_event` 改为 `INSERT ... RETURNING id`，返回 `int | None`
-- [events_service.py:24-73](../../src/services/events_service.py:24) `add_history_event` 返回 inserted event id
-- 所有 caller 透传 id（grep `add_event(` / `add_history_event(`）
-
-**0b. 文件拆分（解除 1000 行限制风险）**:
+**0a. 文件拆分（解除 1000 行限制风险）**:
 - [matmaster/core/agent.py](../../matmaster/core/agent.py)（975 行）：抽出 snapshot/checkpoint sink wiring、preflight compaction 装配、tool 调度辅助到独立 helper 模块
-- [src/services/agent_run_service.py](../../src/services/agent_run_service.py)（930 行）：抽出 instructions loading、history restore wiring、user-input event 写入、bohrium rebuild
+- [src/services/agent_run_service.py](../../src/services/agent_run_service.py)（930 行）：抽出 instructions loading、history restore wiring、bohrium rebuild
 - 目标行数 < 800 行/文件，预留 Phase 1-3 扩展空间
 - [src/services/stream_service.py](../../src/services/stream_service.py)（960 行）：抽出 SSE filter 逻辑
 
@@ -2479,7 +2503,6 @@ tests/matmaster/context/
     test_turn_input.py
       - has_effective_input 边界
       - images_as_parts 转换
-      - source_query_event_id 必填
     test_attachments.py
       - from_events
       - with_added (Case 3 预留)
@@ -2532,10 +2555,11 @@ Phase 1 内 `tests/matmaster/manifests/` 保留并继续通过（验证 shim 等
 
 ### 已决验收要点
 
-- **Phase 0 DAO 改造**: `INSERT ... RETURNING id` 在 async 包装下必须可靠返回新 event id（不能因驱动 quirk 返回 None / bool），这是 `user_turn_context.source_query_event_id` 必填的前置条件。`prepare_send_message` 中 User/query 与 user_turn_context **不强求同事务**：
+- **`user_turn_context` 与 `User/query` 的关联方式**: v3.2 不保存 `source_query_event_id`，也不要求 `add_history_event` 返回 inserted row id。关联通过 events 表顶层 metadata 完成：`session_id + spawn_id + invocation_id`。`invocation_id` 是一次真实用户请求的标识，足以把 raw transcript 事件与 model-visible 事件归为同一 turn。该决策避免为了一个 restore 不消费的审计字段，在 API → Redis job → Worker 链路中额外传递 DB 自增 id。
+- **`User/query` 与 `user_turn_context` 不强求同事务**：
    - **理由**：v1 restore 路径不消费 User/query（见 §11.1），孤立的 User/query 不污染 model-visible history，最坏后果仅是前端历史多一条"裸用户消息"；v0 兼容退役（Phase 4）后该后果亦消失
    - **同事务代价过高**：DAO 接口需扩散 connection 参数或引入 `events_service.transaction()` context manager；async 下需保证同一 connection 跨 await 不被其他协程拿走；事务窗口扩大到含 AGENT.md 读 + events 查 + UserMessage 渲染，可能引入连接池占用 / 锁竞争
-   - **兜底**：fail-fast + SSE 错误事件 + 后台周期扫 `User/query 无对应 user_turn_context` 的比率（目标 < 0.1%，与下方 user_turn_context 写入失败率监控对齐）
+   - **兜底**：fail-fast + SSE 错误事件 + 后台周期按 `session_id + invocation_id` 扫 `User/query 无对应 user_turn_context` 的比率（目标 < 0.1%，与下方 user_turn_context 写入失败率监控对齐）
 
 ### 高优先级
 
@@ -2557,7 +2581,7 @@ Phase 1 内 `tests/matmaster/manifests/` 保留并继续通过（验证 shim 等
 
 6. **v3.1 events port 在 service 与 assembler 同时被调用的事务一致性** (新增): 同一 turn 内 `resolve_turn_context_intent` 调用 `SessionEventsPort.load_events`（最近 50 条倒序）后, `ContextAssembler.assemble_turn` 又会调用一次（按 `until_event_id` 升序）. 若 turn 处理时间较长, 中间可能有 background 写入新事件. 需评估:
    - 是否同事务/同 snapshot 读取（强一致 vs 性能）
-   - 是否在 Phase 0 一次性把 `assemble_turn` 内的 events 查询挪到 service, 由 service 一次读取后传给 assembler（去掉一次查询）
+   - 是否在 Phase 2 落地时把 `assemble_turn` 内的 events 查询挪到 service, 由 service 一次读取后传给 assembler（去掉一次查询）
    - Phase 2 落地时实测查询次数与延迟, 决定是否优化
 
 ### 低优先级
@@ -2600,7 +2624,7 @@ Phase 1 内 `tests/matmaster/manifests/` 保留并继续通过（验证 shim 等
 | Section | `ContextSection` 实例，渲染单元 |
 | View | `ContextView`，渲染时的视图选择（RUNTIME / CHECKPOINT），不参与恢复。不变量 `RUNTIME ⊇ CHECKPOINT` |
 | Checkpoint | `history_checkpoint` event 的 v1 payload，含 base_messages、user_instructions_text/hash、schema_version、render_version、covered_until_event_id |
-| `source_query_event_id` | 关联 `User/query` 事件的 id，每个 `user_turn_context` 必填 |
+| `invocation_id` | events 表顶层字段，一次真实用户请求的标识；`User/query` 与 `user_turn_context` 通过 `session_id + spawn_id + invocation_id` 关联 |
 | `pre_turn_history_event_id` | 本轮 User/query 和 user_turn_context 事件写入前的最后 event id，用于 preflight compaction 划定 checkpoint 覆盖边界 |
 | `user_instructions_hash` | AGENT.md 文本的 sha256，service 层用于判定是否需要新 anchor |
 | `transform` | user_turn_context.payload 字段，`"raw"` / `"preflight_compacted"` / `"oversized_summary"`（最后一个 Phase 4 落地）|
@@ -2630,9 +2654,9 @@ Phase 1 内 `tests/matmaster/manifests/` 保留并继续通过（验证 shim 等
 
 ### Phase 0 改动
 
-- [src/dao/chat_events_table.py:301-325](../../src/dao/chat_events_table.py:301) `add_event`: `INSERT ... RETURNING id`
-- [src/services/events_service.py:24-73](../../src/services/events_service.py:24) `add_history_event`: 返回 inserted id
-- 所有 caller: `prepare_send_message`、worker entry、其他 `add_event(` 调用点
+- [matmaster/core/agent.py](../../matmaster/core/agent.py) 文件拆分：compaction wiring / tool dispatch helpers
+- [src/services/agent_run_service.py](../../src/services/agent_run_service.py) 文件拆分：instructions loading / history restore wiring / Bohrium rebuild
+- [src/services/stream_service.py](../../src/services/stream_service.py) 文件拆分：SSE replay filter helpers
 
 ### Phase 0.5 改动
 
