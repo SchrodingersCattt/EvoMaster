@@ -8,6 +8,10 @@ with the AGENT.md hash anchor in user_turn_context events
 
 NOTE: ``agent_run_service.py`` re-exports the public names from this
 module so existing test imports keep working through Phase 1.
+
+COMPAT:legacy-runtime-injection-helper -- Phase 1 removes this helper from the
+AgentRunService runtime main path, but the function stays importable for old
+tests and for Phase 2C cleanup.
 """
 
 from __future__ import annotations
