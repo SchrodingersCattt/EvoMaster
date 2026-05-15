@@ -168,7 +168,12 @@ questions:
   - key: must_submit_json_cmd_bader
     value:
       filename: al2o3_bader_submit.json
-      pattern: '"cmd"\s*:\s*".*bader.*"'
+      pattern: '"cmd"\s*:\s*".*abacus.*bader.*"'
+      flags: i
+  - key: must_submit_json_cmd_core_ref
+    value:
+      filename: al2o3_bader_submit.json
+      pattern: '"cmd"\s*:\s*".*(-ref|core.*chg|add_core).*"'
       flags: i
   - key: turn_budget
     value:
@@ -198,7 +203,12 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: must_submit_json_cmd_bader
-    criterion: '[Must] submit JSON `cmd` contains ABACUS then Bader post-processing chain.'
+    criterion: '[Must] submit JSON `cmd` runs ABACUS before Bader (correct execution order).'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_submit_json_cmd_core_ref
+    criterion: '[Must] submit JSON `cmd` includes core-charge augmentation step (e.g., -ref
+      flag or core charge script) needed for pseudopotential Bader analysis.'
     axis: correctness
     verify: text_file_regex
   - id: no_retries
