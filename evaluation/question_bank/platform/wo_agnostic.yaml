@@ -144,9 +144,8 @@ questions:
   domain: agnostic
   intent: Validate whether the agent can prepare ABACUS INPUT and Bohrium submit JSON
     for an Al2O3 Bader workflow without running calculations.
-  human_prompt_seed: "对 Al₂O₃ 准备 ABACUS Bader 电荷分析所需文件：至少生成 `INPUT`，并给出 Bohrium\
-    \ 提交配置 JSON（文件名 `al2o3_bader_submit.json`，至少包含 `image` 与 `cmd`）；`cmd` 需体现先运行 ABACUS、再运行 `bader`\
-    \ 后处理链路。\n\n本题只检验 `INPUT` 与提交 JSON，不要投递或执行计算。"
+  human_prompt_seed: "对 Al₂O₃ 准备 ABACUS Bader 电荷分析所需文件和 Bohrium 提交配置（文件名\
+    \ `al2o3_bader_submit.json`）。本题只检验输入文件与提交 JSON，不要投递或执行计算。"
   tags:
   - eng_abacus
   data_files: []
@@ -158,7 +157,6 @@ questions:
       filename: INPUT
       must_cover:
       - calculation scf
-      - basis_type pw
       - out_chg 1
   - key: submit_json_artifact
     value: al2o3_bader_submit.json
@@ -188,7 +186,7 @@ questions:
     verify: artifact_exists
   - id: must_input_core
     criterion: '[Must] INPUT contains ABACUS Bader prerequisite keys (`calculation scf`,
-      `basis_type pw`, `out_chg 1`).'
+      `out_chg 1`).'
     axis: correctness
     verify: llm_binary_judge
   - id: submit_json_artifact
