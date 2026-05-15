@@ -945,3 +945,27 @@ async def test_run_agent_passes_remote_workdir_to_bohrium_setup():
 
     assert call_kwargs["remote_workdir"] == "/share/case"
     assert call_kwargs["bohrium_required"] is True
+
+
+@pytest.mark.asyncio
+async def test_run_agent_runs_bohrium_cleanup_after_success():
+    run_result = RunResultEvent(source="agent", status="completed", reason="natural")
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        await svc.run_agent(
+            session_id="s1",
+            user_prompt="hi",
+            send_cb=AsyncMock(),
+            cancel_token=_make_cancel_token(),
+            mode="direct",
+            task_id="t1",
+        )
+
+        bohrium_svc = svc._test_bohrium_svc
+        pg_for_run = svc._pg_manager.get_or_create.return_value
+
+    bohrium_svc.run_cleanup.assert_awaited_once_with(
+        session_id="s1",
+        pg_for_run=pg_for_run,
+        ssh_attached=False,
+    )

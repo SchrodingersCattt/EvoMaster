@@ -63,9 +63,7 @@ def build_history_wiring(
     query_events: list[dict] = []
     if events_table is not None:
         try:
-            raw_query_events = events_table.get_session_user_query_events(
-                session_id
-            )
+            raw_query_events = events_table.get_session_user_query_events(session_id)
             query_events = (
                 raw_query_events if isinstance(raw_query_events, list) else []
             )

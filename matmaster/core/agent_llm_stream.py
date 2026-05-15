@@ -142,9 +142,7 @@ async def stream_llm_items(
                     if not is_empty_response_sentinel_prefix(pending_content):
                         response_stream_released = True
                         pending_response_parts.clear()
-                        yield _response_item(
-                            pending_content, stream_id, "streaming"
-                        )
+                        yield _response_item(pending_content, stream_id, "streaming")
 
             # Accumulate parts (standard streaming accumulation)
             if chunk.reasoning_content:
@@ -189,9 +187,7 @@ async def stream_llm_items(
                 # Segment transition: content -> tool_calls
                 if producing_content:
                     content_snapshot = "".join(content_parts)
-                    visible_snapshot = normalize_visible_response_text(
-                        content_snapshot
-                    )
+                    visible_snapshot = normalize_visible_response_text(content_snapshot)
                     if visible_snapshot is not None:
                         if pending_response_parts and not response_stream_released:
                             response_stream_released = True
@@ -239,12 +235,8 @@ async def stream_llm_items(
                 if pending_response_parts and not response_stream_released:
                     response_stream_released = True
                     pending_response_parts.clear()
-                    yield _response_item(
-                        visible_snapshot, stream_id, "streaming"
-                    )
-                yield _response_item(
-                    visible_snapshot, stream_id, "segment_end"
-                )
+                    yield _response_item(visible_snapshot, stream_id, "streaming")
+                yield _response_item(visible_snapshot, stream_id, "segment_end")
             else:
                 pending_response_parts.clear()
         # End marker
@@ -275,9 +267,7 @@ async def stream_llm_items(
         tool_calls = []
         for _, v in sorted(tool_calls_acc.items()):
             args = parse_tool_arguments(v["arguments"])
-            tool_calls.append(
-                ToolCallData(id=v["id"], name=v["name"], arguments=args)
-            )
+            tool_calls.append(ToolCallData(id=v["id"], name=v["name"], arguments=args))
         if is_trivial_response_text(joined_content):
             joined_content = ""
     visible_content = normalize_visible_response_text(joined_content)
@@ -363,9 +353,7 @@ async def call_llm_streaming(
                 raise
             last_error = e
             current_timeout = current_timeout * 2
-            backoff = (
-                retry_delay * (2**attempt) if attempt < max_retries - 1 else 0.0
-            )
+            backoff = retry_delay * (2**attempt) if attempt < max_retries - 1 else 0.0
             logger.warning(
                 "LLM call failed (attempt %d/%d): %s (backoff=%.1fs)",
                 attempt + 1,

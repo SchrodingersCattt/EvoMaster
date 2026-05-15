@@ -26,6 +26,8 @@ from matmaster.core.agent_compaction import (
 )
 from matmaster.core.agent_llm_stream import (
     _sleep_backoff_with_cancel as sleep_backoff_with_cancel,
+)
+from matmaster.core.agent_llm_stream import (
     call_llm_streaming,
     stream_llm_items,
 )
@@ -78,6 +80,7 @@ from matmaster.types.messages import (
 )
 
 logger = logging.getLogger(__name__)
+
 
 class AgentKernel:
     """Pure execution loop -- consumes AgentRuntimeSpec, no config assembly."""

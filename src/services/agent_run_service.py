@@ -36,9 +36,9 @@ from matmaster.types.events import (
 )
 from src.dao.chat_events_table import get_chat_events_table
 from src.dao.redis_dao import get_redis_dao
-from src.services.agent_run_bohrium_stage import (
+from src.services.agent_run_bohrium_stage import (  # noqa: F401
     _build_figure_upload_config,
-    _build_workspace_upload_fn,  # noqa: F401
+    _build_workspace_upload_fn,
     run_bohrium_stage,
 )
 from src.services.agent_run_history_wiring import build_history_wiring
@@ -57,6 +57,7 @@ from src.services.image_input_service import get_image_input_service
 from src.services.quota_service import use_quota
 from src.services.response_figures_service import ResponseFiguresAccumulator
 from src.services.sessions_service import get_sessions_service
+from src.services.stream_reply_queue import RedisReplyQueue
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -338,6 +339,7 @@ class AgentRunService:
                 bohrium_required=bohrium_required,
                 remote_workdir=remote_workdir,
             )
+            bohrium_svc = stage_result.bohrium_svc
             if stage_result.abort_result is not None:
                 return stage_result.abort_result
             pg_ctx = stage_result.pg_ctx
@@ -492,7 +494,6 @@ class AgentRunService:
 
             # -- Stage 4b: AskQuestion bridge --
             from matmaster.integration.interaction_bridge import AskQuestionBridge
-            from src.services.stream_service import RedisReplyQueue
 
             async def _interaction_event_sink(event: BusEvent) -> None:
                 await fanout.dispatch(event)

@@ -50,8 +50,8 @@ def accumulate_usage(total: dict[str, int], delta: dict[str, int]) -> None:
 
 async def dispatch_tool_calls(
     *,
-    spec: "AgentRuntimeSpec",
-    state: "_KernelState",
+    spec: AgentRuntimeSpec,
+    state: _KernelState,
     tool_calls: Sequence[ToolCallData],
     turn_usage: dict,
     turn_index: int,
@@ -66,9 +66,7 @@ async def dispatch_tool_calls(
         max_turns=spec.max_turns,
         cancel_token=cancel_token,
     )
-    runner_results = await spec.tool_runner.execute_batch(
-        tool_calls, exec_ctx
-    )
+    runner_results = await spec.tool_runner.execute_batch(tool_calls, exec_ctx)
 
     for tc, tool_result in runner_results:
         state.messages.append(

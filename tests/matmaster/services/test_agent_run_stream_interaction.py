@@ -50,7 +50,7 @@ async def test_ask_question_bridge_events_go_through_fanout_and_persistence():
 
     async with _patched_service(ask_then_finish) as (svc, _, persist_events):
         with patch(
-            "src.services.stream_service.RedisReplyQueue",
+            "src.services.agent_run_service.RedisReplyQueue",
             return_value=reply_queue,
         ):
             await svc.run_agent(
@@ -128,7 +128,7 @@ async def test_ask_question_tool_result_reaches_sse_before_run_result():
 
     async with _patched_service(ask_then_emit_tool_result) as (svc, _, __):
         with patch(
-            "src.services.stream_service.RedisReplyQueue",
+            "src.services.agent_run_service.RedisReplyQueue",
             return_value=reply_queue,
         ):
             await svc.run_agent(

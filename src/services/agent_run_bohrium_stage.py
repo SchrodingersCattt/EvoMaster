@@ -15,7 +15,6 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +34,7 @@ class BohriumStageResult:
     """Return value of ``run_bohrium_stage``."""
 
     abort_result: Any | None
+    bohrium_svc: BohriumSetupService
     pg_ctx: Any
     ssh_attached: bool
     user_instructions: str | None
@@ -80,7 +80,7 @@ async def run_bohrium_stage(
     task_id: str,
     playground: Any,
     pg_ctx: Any,
-    run_started_at: datetime,
+    run_started_at: float,
     bohrium_required: bool,
     remote_workdir: str | None,
 ) -> BohriumStageResult:
@@ -101,6 +101,7 @@ async def run_bohrium_stage(
     if bohrium_result.abort_result is not None:
         return BohriumStageResult(
             abort_result=bohrium_result.abort_result,
+            bohrium_svc=bohrium_svc,
             pg_ctx=pg_ctx,
             ssh_attached=ssh_attached,
             user_instructions=None,
@@ -143,6 +144,7 @@ async def run_bohrium_stage(
 
     return BohriumStageResult(
         abort_result=None,
+        bohrium_svc=bohrium_svc,
         pg_ctx=pg_ctx,
         ssh_attached=ssh_attached,
         user_instructions=user_instructions,
