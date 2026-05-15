@@ -158,7 +158,7 @@ def _standard_patches():
         patch('src.services.agent_run_bohrium_stage.WorkspaceHandler'),
         patch('src.services.agent_run_bohrium_stage.BohriumSetupService'),
         patch(
-            'src.services.agent_run_history_wiring.HistoryRestoreService',
+            'src.services.agent_run_history_wiring.ModelHistoryRestoreService',
             create=True,
         ),
         patch('src.services.agent_run_service.get_redis_dao'),
@@ -261,7 +261,7 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
         bohrium_inst.run_cleanup = AsyncMock()
         bohrium_cls.return_value = bohrium_inst
 
-        # HistoryRestoreService mock
+        # ModelHistoryRestoreService mock
         history_restore_inst = MagicMock()
         history_restore_inst.restore_history.return_value = []
         history_restore_cls.return_value = history_restore_inst
@@ -478,7 +478,7 @@ async def test_run_agent_uses_history_restore_service_and_injects_spawn_aware_ch
     async with _patched_service([run_result]) as (svc, _sse, _persist):
         with (
             patch(
-                'src.services.agent_run_history_wiring.HistoryRestoreService',
+                'src.services.agent_run_history_wiring.ModelHistoryRestoreService',
                 create=True,
             ) as restore_cls,
             patch(

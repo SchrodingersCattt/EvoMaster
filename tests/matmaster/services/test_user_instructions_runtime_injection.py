@@ -198,7 +198,7 @@ async def test_run_agent_applies_user_instructions_to_restored_first_user_messag
         svc._test_pg_ctx.session.read_file.return_value = 'Prefer concise answers.'
 
         with patch(
-            'src.services.agent_run_history_wiring.HistoryRestoreService',
+            'src.services.agent_run_history_wiring.ModelHistoryRestoreService',
             create=True,
         ) as restore_cls:
             restore_inst = MagicMock()

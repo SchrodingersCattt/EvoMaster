@@ -12,7 +12,6 @@ hosts only the run-time wiring around that service.
 
 from __future__ import annotations
 
-import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -24,9 +23,10 @@ from matmaster.types.context import WorkspaceArchivalConfig
 from matmaster.types.figures import FigureUploadConfig
 from src.dao.oss_io import upload_bytes_to_oss
 from src.services.agent_run_bohrium import BohriumSetupService
-from src.services.agent_run_instructions import _USER_INSTRUCTIONS_PATH
-
-logger = logging.getLogger(__name__)
+from src.services.user_turn_context_service import (
+    UserInstructionsInfo,
+    load_user_instructions_from_session,
+)
 
 
 @dataclass(frozen=True)
@@ -37,7 +37,7 @@ class BohriumStageResult:
     bohrium_svc: BohriumSetupService
     pg_ctx: Any
     ssh_attached: bool
-    user_instructions: str | None
+    user_instructions: UserInstructionsInfo
 
 
 def _build_workspace_upload_fn(
@@ -104,7 +104,7 @@ async def run_bohrium_stage(
             bohrium_svc=bohrium_svc,
             pg_ctx=pg_ctx,
             ssh_attached=ssh_attached,
-            user_instructions=None,
+            user_instructions=load_user_instructions_from_session(None),
         )
     bohrium_meta = (
         bohrium_result.runtime_snapshot.model_dump()
@@ -120,17 +120,10 @@ async def run_bohrium_stage(
             session_type=session_type,
             execution_workdir=execution_workdir,
         )
-    user_instructions: str | None = None
     _ui_session = (
         bohrium_result.execution_session if bohrium_result else None
     ) or pg_ctx.session
-    if _ui_session is not None:
-        try:
-            user_instructions = (
-                _ui_session.read_file(_USER_INSTRUCTIONS_PATH).strip() or None
-            )
-        except Exception as _ui_err:
-            logger.debug('read user instructions skipped: %s', _ui_err)
+    user_instructions = load_user_instructions_from_session(_ui_session)
 
     fanout.add_handler(
         WorkspaceHandler(
