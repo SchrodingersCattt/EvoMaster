@@ -14,7 +14,6 @@ from .evaluator import BinaryEvaluator
 from .evaluator_helpers import (
     check_abacus_input_from_evidence,
     check_answer_json_numeric_from_ref,
-    check_stru_file_from_evidence,
     check_checkcif_alerts,
     check_duration_budget,
     check_json_file_artifacts,
@@ -23,6 +22,7 @@ from .evaluator_helpers import (
     check_molcrys_local_env_from_evidence,
     check_molcrys_slab_integrity,
     check_sc005_disorder_formulas,
+    check_stru_file_from_evidence,
     check_struct_file_atom_count,
     check_struct_file_bond_angle,
     check_struct_file_bond_count,
