@@ -283,3 +283,113 @@ def test_has_user_turn_context_returns_false_when_missing(
     assert "type = 'user_turn_context'" in sql
     assert "spawn_id = %s" in sql
     assert params == ("sess-x", "spawn-a")
+
+
+def test_query_context_events_builds_filtered_desc_query(
+    chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
+) -> None:
+    table, cursor = chat_events_table_with_mocks
+    cursor.fetchall.return_value = [
+        {
+            "id": 10,
+            "session_id": "sess-x",
+            "source": "MatMaster",
+            "type": "user_turn_context",
+            "content": '{"kind": "anchor"}',
+            "task_id": "task-1",
+            "invocation_id": "inv-1",
+            "spawn_id": None,
+            "created_at": None,
+        }
+    ]
+
+    events = table.query_context_events(
+        session_id="sess-x",
+        spawn_id=None,
+        until_event_id=20,
+        event_types=("user_turn_context", "history_checkpoint"),
+        limit=50,
+        order="desc",
+    )
+
+    sql, params = cursor.execute.call_args[0]
+    assert events[0]["id"] == 10
+    assert events[0]["content"] == {"kind": "anchor"}
+    assert "spawn_id IS NULL" in sql
+    assert "id <= %s" in sql
+    assert "type IN (%s, %s)" in sql
+    assert "ORDER BY id DESC" in sql
+    assert "LIMIT 50" in sql
+    assert params == (
+        "sess-x",
+        20,
+        "user_turn_context",
+        "history_checkpoint",
+    )
+
+
+def test_query_context_events_supports_spawn_scope_and_ascending_order(
+    chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
+) -> None:
+    table, cursor = chat_events_table_with_mocks
+    cursor.fetchall.return_value = []
+
+    events = table.query_context_events(
+        session_id="sess-x",
+        spawn_id="spawn-1",
+        until_event_id=None,
+        event_types=None,
+        limit=None,
+        order="asc",
+    )
+
+    sql, params = cursor.execute.call_args[0]
+    assert events == []
+    assert "spawn_id = %s" in sql
+    assert "ORDER BY id ASC" in sql
+    assert "type IN" not in sql
+    assert "LIMIT" not in sql
+    assert params == ("sess-x", "spawn-1")
+
+
+def test_query_context_events_preserves_user_query_raw_payload(
+    chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
+) -> None:
+    table, cursor = chat_events_table_with_mocks
+    cursor.fetchall.return_value = [
+        {
+            "id": 11,
+            "session_id": "sess-x",
+            "source": "User",
+            "type": "query",
+            "content": json.dumps(
+                {
+                    "content": "Explain FeO.",
+                    "files": ["https://oss.example.com/input.cif"],
+                    "images": ["https://oss.example.com/image.png"],
+                    "workspace_paths": ["/share/result.xyz"],
+                },
+                ensure_ascii=False,
+            ),
+            "task_id": "task-1",
+            "invocation_id": "inv-1",
+            "spawn_id": None,
+            "created_at": None,
+        }
+    ]
+
+    events = table.query_context_events(
+        session_id="sess-x",
+        spawn_id=None,
+        until_event_id=None,
+        event_types=None,
+        limit=None,
+        order="asc",
+    )
+
+    assert events[0]["content"]["content"] == "Explain FeO."
+    assert events[0]["content"]["files"] == ["https://oss.example.com/input.cif"]
+    assert events[0]["content"]["images"] == ["https://oss.example.com/image.png"]
+    assert events[0]["content"]["workspace_paths"] == ["/share/result.xyz"]
+    assert "files" not in events[0]
+    assert "images" not in events[0]

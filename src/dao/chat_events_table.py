@@ -50,6 +50,33 @@ class ChatEventsTable(BaseTable):
 
         return ev
 
+    @staticmethod
+    def _row_to_context_event(row: dict) -> dict:
+        """Parse DB event rows for context assembly without display flattening.
+
+        Do not reuse `_row_to_event()` here: that helper intentionally flattens
+        User/query payloads for frontend display, while ContextAssemblyPorts need
+        the raw JSON payload shape for Phase 2B session source reconstruction.
+        """
+        try:
+            content = json.loads(row['content'])
+        except (json.JSONDecodeError, TypeError):
+            content = row['content']
+
+        event = {
+            'id': row.get('id'),
+            'source': row['source'],
+            'type': row['type'],
+            'content': content,
+            'session_id': row['session_id'],
+            'task_id': row.get('task_id'),
+            'invocation_id': row.get('invocation_id'),
+            'spawn_id': row.get('spawn_id'),
+        }
+        if row.get('created_at') is not None:
+            event['created_at_ms'] = int(row['created_at'].timestamp() * 1000)
+        return event
+
     def get_history_checkpoints(
         self,
         session_id: str,
@@ -107,6 +134,62 @@ class ChatEventsTable(BaseTable):
                     sql += f' LIMIT {int(limit)}'
                 cursor.execute(sql, params)
                 return [self._row_to_event(row) for row in list(cursor.fetchall())]
+
+    def query_context_events(
+        self,
+        *,
+        session_id: str,
+        spawn_id: str | None,
+        until_event_id: int | None = None,
+        event_types: tuple[str, ...] | None = None,
+        limit: int | None = None,
+        order: str = 'asc',
+    ) -> list[dict]:
+        """Read events for Phase 2 context assembly ports.
+
+        This is a read-only helper. Phase 2A adds it for AppSessionEventsPort,
+        but no runtime path calls the port until Phase 2C.
+        """
+        if order not in {'asc', 'desc'}:
+            raise ValueError("order must be 'asc' or 'desc'")
+
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                params: tuple = (session_id,)
+                if spawn_id is None:
+                    spawn_filter = ' AND spawn_id IS NULL'
+                else:
+                    spawn_filter = ' AND spawn_id = %s'
+                    params = (*params, spawn_id)
+
+                boundary_filter = ''
+                if until_event_id is not None:
+                    boundary_filter = ' AND id <= %s'
+                    params = (*params, until_event_id)
+
+                type_filter = ''
+                if event_types:
+                    placeholders = ', '.join(['%s'] * len(event_types))
+                    type_filter = f' AND type IN ({placeholders})'
+                    params = (*params, *event_types)
+
+                order_sql = 'DESC' if order == 'desc' else 'ASC'
+                sql = f'''
+                    SELECT id, session_id, source, type, content, task_id, invocation_id, spawn_id, created_at
+                    FROM {self.table_name}
+                    WHERE session_id = %s
+                      {spawn_filter}
+                      {boundary_filter}
+                      {type_filter}
+                    ORDER BY id {order_sql}
+                '''
+                if limit:
+                    sql += f' LIMIT {int(limit)}'
+                cursor.execute(sql, params)
+                return [
+                    self._row_to_context_event(row)
+                    for row in list(cursor.fetchall())
+                ]
 
     def query_user_turn_context_by_invocation(
         self,
