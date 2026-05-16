@@ -1,6 +1,6 @@
 ---
 name: input-manual-helper
-description: "Prepare, adapt, validate or package runnable engine inputs for ABACUS, CP2K, QE, ABINIT, LAMMPS, ORCA, GROMACS or PySCF before local or Bohrium execution. Use when no MCP submit tool exists or the user asks for engine-specific input artifacts. Not for VASP INCAR-only tasks, Gaussian/PSI4 template-only work, pure postprocessing, or MCP tools that already provide a dedicated submit workflow."
+description: "Use when preparing, adapting, validating, or packaging runnable engine inputs for ABACUS, CP2K, QE, ABINIT, LAMMPS, ORCA, GROMACS, or PySCF before local or Bohrium execution, especially when no MCP submit tool exists or the user asks for engine-specific input artifacts. Not for VASP INCAR-only tasks, Gaussian/PSI4 template-only work, pure postprocessing, or MCP tools with a dedicated submit workflow."
 skill_type: operator
 ---
 
