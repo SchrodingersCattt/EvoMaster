@@ -34,3 +34,9 @@ def test_model_history_restore_service_shim_is_removed() -> None:
     shim_path = ROOT / "src/services" / ("history" + "_restore_service.py")
 
     assert not shim_path.exists()
+
+
+def test_agent_run_instructions_helper_is_removed() -> None:
+    helper_path = ROOT / "src/services" / ("agent_run" + "_instructions.py")
+
+    assert not helper_path.exists()
