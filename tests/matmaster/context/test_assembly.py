@@ -16,7 +16,11 @@ from matmaster.context.ports import (
     UserInstructions,
 )
 from matmaster.context.sections import ContextSection, ContextView, SectionOrder
-from matmaster.context.sources.turn_input import TurnInput, TurnInstructionSource
+from matmaster.context.sources.turn_input import (
+    TurnAttachmentsSource,
+    TurnInput,
+    TurnInstructionSource,
+)
 
 
 class EventsPort:
@@ -147,6 +151,38 @@ async def test_assemble_compaction_prefight_derives_covered_until_from_turn_inpu
     checkpoint = result.user_turn_context.to_message(ContextView.CHECKPOINT)
     assert "<compacted_history>" in runtime.content
     assert "<current_instruction>" not in checkpoint.content
+
+
+@pytest.mark.asyncio
+async def test_compaction_checkpoint_excludes_current_turn_images() -> None:
+    assembler = ContextAssembler(
+        ContextAssemblyPorts(session_events=EventsPort()),
+        _session_section_builder_for_tests=_session_builder,
+    )
+
+    result = await assembler.assemble_compaction(
+        ContextAssemblyIntent.PREFLIGHT_COMPACTION,
+        CompactionAssemblyRequest(
+            session_id="sess-1",
+            spawn_id=None,
+            user_instructions=_instructions(),
+            compacted_history_summary="Earlier turns mention FeO.",
+            turn_input=TurnInput(
+                attachments=TurnAttachmentsSource(
+                    images=("https://example.com/current-turn.png",)
+                ),
+                pre_turn_history_event_id=12,
+            ),
+        ),
+    )
+
+    runtime = result.user_turn_context.to_message(ContextView.RUNTIME)
+    checkpoint = result.user_turn_context.to_message(ContextView.CHECKPOINT)
+
+    assert [image.url for image in runtime.images] == [
+        "https://example.com/current-turn.png"
+    ]
+    assert checkpoint.images == []
 
 
 @pytest.mark.asyncio

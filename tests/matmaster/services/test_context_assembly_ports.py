@@ -155,6 +155,30 @@ async def test_app_session_events_port_preserves_raw_user_query_payload() -> Non
     assert events[0].content["workspace_paths"] == ("/share/result.xyz",)
 
 
+@pytest.mark.asyncio
+async def test_app_session_events_port_preserves_falsy_raw_content() -> None:
+    table = FakeEventsTable(
+        rows=[
+            {
+                "id": 5,
+                "source": "System",
+                "type": "raw_string",
+                "content": "",
+                "session_id": "sess-1",
+                "task_id": None,
+                "invocation_id": None,
+                "spawn_id": None,
+            }
+        ]
+    )
+
+    events = await AppSessionEventsPort(table).load_events(
+        SessionEventQuery(session_id="sess-1", spawn_id=None)
+    )
+
+    assert events[0].content == {"value": ""}
+
+
 def test_freeze_json_object_rejects_non_json_schema_drift() -> None:
     with pytest.raises(TypeError, match="Unsupported JSON value type"):
         _freeze_json_object({"bad": object()})

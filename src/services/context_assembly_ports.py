@@ -101,11 +101,12 @@ class AppSessionEventsPort:
 
     @staticmethod
     def _row_to_event(row: Mapping[str, Any]) -> SessionEvent:
+        raw_content = row["content"] if "content" in row else {}
         return SessionEvent(
             id=int(row.get("id") or 0),
             event_type=str(row.get("type") or row.get("event_type") or ""),
             source=row.get("source"),
-            content=_freeze_json_object(row.get("content") or {}),
+            content=_freeze_json_object(raw_content),
             task_id=row.get("task_id"),
             invocation_id=row.get("invocation_id"),
             spawn_id=row.get("spawn_id"),

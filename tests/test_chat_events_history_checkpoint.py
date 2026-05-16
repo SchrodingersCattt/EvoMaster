@@ -352,6 +352,24 @@ def test_query_context_events_supports_spawn_scope_and_ascending_order(
     assert params == ("sess-x", "spawn-1")
 
 
+def test_query_context_events_supports_zero_limit(
+    chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
+) -> None:
+    table, cursor = chat_events_table_with_mocks
+    cursor.fetchall.return_value = []
+
+    events = table.query_context_events(
+        session_id="sess-x",
+        spawn_id=None,
+        limit=0,
+    )
+
+    sql, params = cursor.execute.call_args[0]
+    assert events == []
+    assert "LIMIT 0" in sql
+    assert params == ("sess-x",)
+
+
 def test_query_context_events_preserves_user_query_raw_payload(
     chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
 ) -> None:

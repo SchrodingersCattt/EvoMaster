@@ -183,7 +183,9 @@ class ChatEventsTable(BaseTable):
                       {type_filter}
                     ORDER BY id {order_sql}
                 '''
-                if limit:
+                if limit is not None:
+                    if limit < 0:
+                        raise ValueError('limit must be >= 0')
                     sql += f' LIMIT {int(limit)}'
                 cursor.execute(sql, params)
                 return [

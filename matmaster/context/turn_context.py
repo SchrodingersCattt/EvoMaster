@@ -12,12 +12,14 @@ from matmaster.types.messages import ImageContentPart, UserMessage
 class UserTurnContext:
     sections: tuple[ContextSection, ...]
     images: tuple[ImageContentPart, ...] = ()
+    checkpoint_images: tuple[ImageContentPart, ...] = ()
 
     @classmethod
     def from_sources(
         cls,
         *section_groups: Iterable[ContextSection],
         images: Iterable[ImageContentPart] = (),
+        checkpoint_images: Iterable[ImageContentPart] = (),
     ) -> UserTurnContext:
         merged: list[ContextSection] = []
         seen_keys: set[str] = set()
@@ -30,10 +32,22 @@ class UserTurnContext:
                     )
                 seen_keys.add(section.key)
                 merged.append(section)
-        return cls(sections=tuple(merged), images=tuple(images))
+        return cls(
+            sections=tuple(merged),
+            images=tuple(images),
+            checkpoint_images=tuple(checkpoint_images),
+        )
 
     def render(self, view: ContextView) -> str:
         return render_sections(self.sections, view=view)
 
     def to_message(self, view: ContextView) -> UserMessage:
-        return UserMessage(content=self.render(view), images=list(self.images))
+        return UserMessage(
+            content=self.render(view),
+            images=list(self._images_for_view(view)),
+        )
+
+    def _images_for_view(self, view: ContextView) -> tuple[ImageContentPart, ...]:
+        if view == ContextView.CHECKPOINT:
+            return self.checkpoint_images
+        return (*self.checkpoint_images, *self.images)

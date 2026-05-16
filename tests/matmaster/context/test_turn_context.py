@@ -31,7 +31,7 @@ def test_from_sources_rejects_duplicate_keys() -> None:
         UserTurnContext.from_sources(first, second)
 
 
-def test_render_and_to_message_preserve_images() -> None:
+def test_render_and_to_message_preserve_runtime_images() -> None:
     context = UserTurnContext.from_sources(
         (
             _section(
@@ -66,4 +66,27 @@ def test_render_and_to_message_preserve_images() -> None:
     assert checkpoint.content == (
         "<user_instructions>\nUse SI units.\n</user_instructions>"
     )
-    assert checkpoint.images == [ImageContentPart(url="https://example.com/feo.png")]
+    assert checkpoint.images == []
+
+
+def test_checkpoint_images_are_visible_in_both_views() -> None:
+    context = UserTurnContext.from_sources(
+        (
+            _section(
+                "instructions",
+                "user_instructions",
+                "Use SI units.",
+                SectionOrder.USER_INSTRUCTIONS,
+                frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT}),
+            ),
+        ),
+        checkpoint_images=(ImageContentPart(url="https://example.com/context.png"),),
+    )
+
+    runtime = context.to_message(ContextView.RUNTIME)
+    checkpoint = context.to_message(ContextView.CHECKPOINT)
+
+    assert runtime.images == [ImageContentPart(url="https://example.com/context.png")]
+    assert checkpoint.images == [
+        ImageContentPart(url="https://example.com/context.png")
+    ]

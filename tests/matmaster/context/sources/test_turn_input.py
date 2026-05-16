@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from matmaster.context.rendering import wrap_tag
 from matmaster.context.sections import ContextView, SectionOrder
 from matmaster.context.sources.turn_input import (
@@ -124,3 +126,8 @@ def test_turn_input_has_effective_input_and_images_as_parts() -> None:
     assert with_image.attachments.images_as_parts() == (
         ImageContentPart(url="https://example.com/a.png"),
     )
+
+
+def test_turn_input_rejects_negative_history_boundary() -> None:
+    with pytest.raises(ValueError, match="pre_turn_history_event_id must be >= 0"):
+        TurnInput(pre_turn_history_event_id=-1)

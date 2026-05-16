@@ -78,6 +78,10 @@ class TurnInput:
     attachments: TurnAttachmentsSource = field(default_factory=TurnAttachmentsSource)
     pre_turn_history_event_id: int = 0
 
+    def __post_init__(self) -> None:
+        if self.pre_turn_history_event_id < 0:
+            raise ValueError("pre_turn_history_event_id must be >= 0")
+
     def to_sections(
         self,
         *,
