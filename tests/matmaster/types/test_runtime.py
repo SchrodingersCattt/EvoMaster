@@ -178,6 +178,15 @@ class TestAgentRuntimeSpec:
         assert isinstance(spec.llm_provider, LLMProvider)
         assert spec.hook_executor is executor
 
+    def test_hook_executor_rejects_non_executor_objects(self) -> None:
+        """hook_executor remains limited to the hook dispatch contract."""
+        with pytest.raises(ValidationError, match="hook_executor"):
+            AgentRuntimeSpec(
+                context_builder=ContextBuilder(),
+                llm_provider=_MockLLMProvider(),
+                hook_executor=object(),
+            )
+
 
 class TestAgentRuntimeSpecCompactor:
     def test_compactor_default_none(self) -> None:

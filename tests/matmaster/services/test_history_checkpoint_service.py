@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, Mock, call
 
+import pytest
+
 from matmaster.core.context_builder import ContextBuilder
 from matmaster.types.messages import UserMessage
 from src.services.history_checkpoint_codec import serialize_base_messages
@@ -171,3 +173,35 @@ class TestHistoryCheckpointService:
             user_instructions_text="Use SI units.",
             user_instructions_hash="sha256:abc",
         )
+
+    async def test_checkpoint_sink_rejects_v1_payload_without_explicit_boundary(
+        self,
+    ) -> None:
+        from src.services.history_checkpoint_service import HistoryCheckpointService
+
+        events_table = Mock()
+        fanout = Mock()
+        fanout.flush_persistence_barrier = AsyncMock()
+        sink = HistoryCheckpointService(events_table).build_checkpoint_sink(
+            fanout=fanout,
+            session_id="s1",
+            task_id="t1",
+            invocation_id="i1",
+            spawn_id=None,
+        )
+
+        with pytest.raises(
+            ValueError, match="history_checkpoint.v1.*covered_until_event_id"
+        ):
+            await sink(
+                payload={
+                    "durability": "durable",
+                    "strategy": "summary",
+                    "schema_version": "history_checkpoint.v1",
+                },
+                base_messages=_compact_base_messages("summary"),
+            )
+
+        fanout.flush_persistence_barrier.assert_not_awaited()
+        events_table.get_latest_scope_event_id.assert_not_called()
+        events_table.add_history_checkpoint.assert_not_called()

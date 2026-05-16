@@ -31,6 +31,14 @@ class HistoryCheckpointService:
             if payload.get("durability") != "durable":
                 return None
 
+            if (
+                payload.get("schema_version") == "history_checkpoint.v1"
+                and payload.get("covered_until_event_id") is None
+            ):
+                raise ValueError(
+                    "history_checkpoint.v1 requires covered_until_event_id"
+                )
+
             validate_base_messages(deserialize_base_messages(base_messages))
             await fanout.flush_persistence_barrier()
             raw_covered_until = payload.get("covered_until_event_id")

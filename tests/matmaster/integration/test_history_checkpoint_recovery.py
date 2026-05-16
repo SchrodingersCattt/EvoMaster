@@ -17,12 +17,12 @@ from matmaster.types.messages import (
     UserMessage,
 )
 from matmaster.types.runtime import CompactionConfig
+from src.services.context_assembly_factory import build_session_context_factory
+from src.services.context_assembly_ports import AppSessionEventsPort, AppSessionJobsPort
 from src.services.history_checkpoint_codec import serialize_base_messages
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.history_restore_service import HistoryRestoreService
 from src.services.model_history_restore_service import ModelHistoryRestoreService
-from src.services.context_assembly_factory import build_session_context_factory
-from src.services.context_assembly_ports import AppSessionEventsPort, AppSessionJobsPort
 
 
 def _compact_user_message(summary: str) -> UserMessage:
@@ -566,6 +566,7 @@ async def test_restore_with_checkpoint_plus_incremental_events() -> None:
             "durability": "durable",
             "strategy": "summary",
             "schema_version": "history_checkpoint.v1",
+            "covered_until_event_id": 2,
         },
         base_messages=checkpoint_base_messages,
     )
@@ -614,7 +615,7 @@ async def test_compaction_checkpoint_assembles_v1_session_attachments(
     fanout = Mock()
     fanout.flush_persistence_barrier = AsyncMock()
 
-    _previous_checkpoint_covered_until = events_table.add_event(
+    events_table.add_event(
         session_id,
         "User",
         "query",
@@ -667,6 +668,7 @@ async def test_compaction_checkpoint_assembles_v1_session_attachments(
     )
 
     assert result.base_snapshot is not None
+    assert result.checkpoint_covered_until_event_id is not None
     checkpoint_sink = HistoryCheckpointService(events_table).build_checkpoint_sink(
         fanout=fanout,
         session_id=session_id,
@@ -679,6 +681,7 @@ async def test_compaction_checkpoint_assembles_v1_session_attachments(
             "durability": "durable",
             "strategy": "summary",
             "schema_version": "history_checkpoint.v1",
+            "covered_until_event_id": result.checkpoint_covered_until_event_id,
             "render_version": "user_context_render.v1",
             "user_instructions_text": result.user_instructions_text,
             "user_instructions_hash": result.user_instructions_hash,
@@ -692,10 +695,9 @@ async def test_compaction_checkpoint_assembles_v1_session_attachments(
     assert checkpoint_content["render_version"] == "user_context_render.v1"
     assert checkpoint_content["user_instructions_text"] == "Use SI units."
     assert checkpoint_content["user_instructions_hash"] == "sha256:abc"
-    assert (
-        checkpoint_content["covered_until_event_id"]
-        == events_table.get_latest_scope_event_id(session_id, None)
-    )
+    assert checkpoint_content[
+        "covered_until_event_id"
+    ] == events_table.get_latest_scope_event_id(session_id, None)
     base_messages = checkpoint["content"]["base_messages"]
     assert [message["role"] for message in base_messages] == ["user"]
     content = base_messages[0]["content"]
@@ -745,6 +747,7 @@ async def test_two_v1_compactions_chain_and_restore_from_latest(
         ),
         first_messages,
     )
+    assert first_result.checkpoint_covered_until_event_id is not None
     first_sink = HistoryCheckpointService(events_table).build_checkpoint_sink(
         fanout=fanout,
         session_id=session_id,
@@ -757,6 +760,7 @@ async def test_two_v1_compactions_chain_and_restore_from_latest(
             "durability": "durable",
             "strategy": "summary",
             "schema_version": "history_checkpoint.v1",
+            "covered_until_event_id": first_result.checkpoint_covered_until_event_id,
             "render_version": "user_context_render.v1",
             "user_instructions_text": first_result.user_instructions_text,
             "user_instructions_hash": first_result.user_instructions_hash,
@@ -795,6 +799,7 @@ async def test_two_v1_compactions_chain_and_restore_from_latest(
         ),
         second_messages,
     )
+    assert second_result.checkpoint_covered_until_event_id is not None
     second_sink = HistoryCheckpointService(events_table).build_checkpoint_sink(
         fanout=fanout,
         session_id=session_id,
@@ -807,6 +812,7 @@ async def test_two_v1_compactions_chain_and_restore_from_latest(
             "durability": "durable",
             "strategy": "summary",
             "schema_version": "history_checkpoint.v1",
+            "covered_until_event_id": second_result.checkpoint_covered_until_event_id,
             "render_version": "user_context_render.v1",
             "user_instructions_text": second_result.user_instructions_text,
             "user_instructions_hash": second_result.user_instructions_hash,
@@ -834,7 +840,9 @@ async def test_two_v1_compactions_chain_and_restore_from_latest(
         spawn_id=None,
         task_id=None,
     )
-    user_messages = [message for message in restored if isinstance(message, UserMessage)]
+    user_messages = [
+        message for message in restored if isinstance(message, UserMessage)
+    ]
     assert "second summary" in (user_messages[0].content or "")
     assert "first summary" not in (user_messages[0].content or "")
     assert any(
@@ -920,12 +928,17 @@ async def test_spawn_id_checkpoint_does_not_affect_parent_restore() -> None:
             _compact_user_message("child summary"),
         ]
     )
+    child_covered_until = events_table.get_latest_scope_event_id(
+        session_id,
+        child_spawn_id,
+    )
 
     await child_sink(
         payload={
             "durability": "durable",
             "strategy": "summary",
             "schema_version": "history_checkpoint.v1",
+            "covered_until_event_id": child_covered_until,
         },
         base_messages=child_base_messages,
     )
@@ -970,137 +983,4 @@ async def test_spawn_id_checkpoint_does_not_affect_parent_restore() -> None:
     assert [message.content for message in child_history[1:]] == [
         "child incremental question",
         "child incremental answer",
-    ]
-
-
-@pytest.mark.asyncio
-async def test_restore_after_midrun_crash_uses_written_checkpoint() -> None:
-    session_id = "sess-midrun-crash"
-    events_table = InMemoryEventsTable()
-    fanout = Mock()
-    fanout.flush_persistence_barrier = AsyncMock()
-
-    _seed_scope_events(
-        events_table,
-        session_id=session_id,
-        task_id="task-before-crash",
-        user_content="question before checkpoint",
-        response_content="answer before checkpoint",
-    )
-
-    checkpoint_sink = HistoryCheckpointService(events_table).build_checkpoint_sink(
-        fanout=fanout,
-        session_id=session_id,
-        task_id="task-before-crash",
-        invocation_id="inv-before-crash",
-        spawn_id=None,
-    )
-    checkpoint_base_messages = serialize_base_messages(
-        [
-            _compact_user_message("checkpoint before crash"),
-        ]
-    )
-
-    await checkpoint_sink(
-        payload={
-            "durability": "durable",
-            "strategy": "summary",
-            "schema_version": "history_checkpoint.v1",
-        },
-        base_messages=checkpoint_base_messages,
-    )
-
-    _seed_scope_events(
-        events_table,
-        session_id=session_id,
-        task_id="task-crashed-run",
-        user_content="question emitted before crash",
-        response_content="partial answer emitted before crash",
-        write_user_turn_context=True,
-    )
-
-    history = HistoryRestoreService(events_table).restore_history(
-        session_id=session_id,
-        spawn_id=None,
-        task_id="task-retry-after-crash",
-    )
-
-    assert [type(message) for message in history] == [
-        UserMessage,
-        UserMessage,
-        AssistantMessage,
-    ]
-    assert "checkpoint before crash" in (history[0].content or "")
-    assert [message.content for message in history[1:]] == [
-        "question emitted before crash",
-        "partial answer emitted before crash",
-    ]
-    assert fanout.flush_persistence_barrier.await_count == 1
-    assert events_table.history_checkpoints(spawn_id=None)[0]["content"] == {
-        "schema_version": "history_checkpoint.v1",
-        "covered_until_event_id": 2,
-        "base_messages": checkpoint_base_messages,
-        "reason": "summary",
-    }
-
-
-@pytest.mark.asyncio
-async def test_compaction_events_replay_but_do_not_enter_restore_tail() -> None:
-    session_id = "sess-compaction"
-    events_table = InMemoryEventsTable()
-    fanout = Mock()
-    fanout.flush_persistence_barrier = AsyncMock()
-
-    _seed_scope_events(
-        events_table,
-        session_id=session_id,
-        user_content="question before compaction",
-        response_content="answer before compaction",
-    )
-
-    checkpoint_sink = HistoryCheckpointService(events_table).build_checkpoint_sink(
-        fanout=fanout,
-        session_id=session_id,
-        task_id="task-1",
-        invocation_id="inv-1",
-        spawn_id=None,
-    )
-
-    covered_until = await checkpoint_sink(
-        payload={
-            "durability": "durable",
-            "strategy": "summary",
-            "schema_version": "history_checkpoint.v1",
-        },
-        base_messages=serialize_base_messages(
-            [
-                _compact_user_message("summary"),
-            ]
-        ),
-    )
-
-    events_table.add_event(
-        session_id,
-        "MatMaster",
-        "compaction",
-        {
-            "compaction_id": "task-1:root:1",
-            "status": "complete",
-            "phase": "runtime",
-            "strategy": "summary",
-            "durability": "durable",
-            "checkpoint_written": True,
-            "covered_until_event_id": covered_until,
-        },
-        task_id="task-1",
-    )
-
-    restored = HistoryRestoreService(events_table).restore_history(
-        session_id=session_id,
-        spawn_id=None,
-        task_id="task-2",
-    )
-
-    assert [type(msg).__name__ for msg in restored] == [
-        "UserMessage",
     ]

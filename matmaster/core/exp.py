@@ -32,7 +32,7 @@ from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec
-from matmaster.types.runtime_ports import EmptySessionEventHistory, KernelRuntimePorts
+from matmaster.types.runtime_ports import KernelRuntimePorts
 
 if TYPE_CHECKING:
     from matmaster.types.messages import Message
@@ -461,93 +461,17 @@ class Exp:
 
         run_meta = getattr(ctx, "run_meta", {}) or {}
 
-        # Compactor uses event_sink=None; _run_items() injects a local sink at runtime.
-        compactor = None
-        context_assembler = None
-        assembly_ports = None
-        if spec.llm_provider is not None:
-            from matmaster.context.assembly import (
-                ContextAssembler,
-                ContextRenderOptions,
-            )
-            from matmaster.context.compaction import ContextCompactor
-            from matmaster.context.ports import ContextAssemblyPorts, UserInstructions
-            from src.services.context_assembly_factory import (
-                RuntimeHistorySessionEventsPort,
-                build_session_context_factory,
-            )
-            from src.services.context_assembly_ports import AppSessionJobsPort
+        from matmaster.core.runtime_context_assembly import (
+            build_runtime_context_assembly,
+        )
 
-            summary_provider = spec.llm_provider
-            if spec.compaction.compaction_llm:
-                llm_config = getattr(ctx, "llm_config", None)
-                if llm_config is not None:
-                    from matmaster.providers.llm_factory import build_provider
-
-                    try:
-                        summary_provider = build_provider(
-                            llm_config, llm_override=spec.compaction.compaction_llm
-                        )
-                    except KeyError:
-                        self.logger.warning(
-                            "compaction_llm key=%r not found, falling back to main provider",
-                            spec.compaction.compaction_llm,
-                        )
-                else:
-                    self.logger.warning(
-                        "compaction_llm key=%r set but no llm_config on context; "
-                        "falling back to main provider",
-                        spec.compaction.compaction_llm,
-                    )
-
-            history_port = ctx.runtime_ports.compaction.history
-            if history_port is None:
-                history_port = EmptySessionEventHistory()
-
-            instructions_text = str(run_meta.get("user_instructions") or "")
-            instructions_hash = run_meta.get("user_instructions_hash")
-            if not isinstance(instructions_hash, str) or not instructions_hash:
-                from src.services.user_turn_context_service import (
-                    hash_user_instructions,
-                )
-
-                instructions_hash = hash_user_instructions(instructions_text)
-            user_instructions = UserInstructions(
-                text=instructions_text,
-                hash=instructions_hash,
-                truncated=bool(run_meta.get("user_instructions_truncated", False)),
-            )
-            assembly_ports = ContextAssemblyPorts(
-                session_events=RuntimeHistorySessionEventsPort(history_port),
-                session_jobs=AppSessionJobsPort(),
-            )
-            context_assembler = ContextAssembler(
-                ports=assembly_ports,
-                session_context_factory=build_session_context_factory(
-                    skill_registry=self._skill_registry,
-                    legal_mcp_servers=run_meta.get("legal_mcp_servers"),
-                    schemas_by_server=run_meta.get("schemas_by_server"),
-                ),
-                render_options=ContextRenderOptions(
-                    split_turn_attachments=bool(
-                        run_meta.get("split_turn_attachments", False)
-                    ),
-                ),
-            )
-
-            compactor = ContextCompactor(
-                config=spec.compaction,
-                summary_provider=summary_provider,
-                context_assembler=context_assembler,
-                user_instructions=user_instructions,
-                session_id=run_meta.get("session_id") or "",
-                spawn_id=spawn_id,
-                runtime_covered_until_provider=history_port.latest_scope_event_id,
-                event_sink=None,  # _run_items() injects a local deque-backed sink
-                compaction_scope=(
-                    f'{run_meta.get("task_id", "")}:{spawn_id or "root"}'
-                ),
-            )
+        runtime_context = build_runtime_context_assembly(
+            spec=spec,
+            ctx=ctx,
+            skill_registry=self._skill_registry,
+            spawn_id=spawn_id,
+            logger=self.logger,
+        )
 
         structural_validation = StructuralValidation()
         capability_policy = DefaultCapabilityPolicy()
@@ -587,15 +511,17 @@ class Exp:
                 "system_prompt": system_prompt,
                 "context_builder": builder,
                 "hook_executor": hook_executor,
-                "compactor": compactor,
-                "context_assembler": context_assembler,
+                "compactor": runtime_context.compactor,
+                "context_assembler": runtime_context.context_assembler,
                 "session_events_port": (
-                    assembly_ports.session_events
-                    if assembly_ports is not None
+                    runtime_context.assembly_ports.session_events
+                    if runtime_context.assembly_ports is not None
                     else None
                 ),
                 "session_jobs_port": (
-                    assembly_ports.session_jobs if assembly_ports is not None else None
+                    runtime_context.assembly_ports.session_jobs
+                    if runtime_context.assembly_ports is not None
+                    else None
                 ),
                 "runtime_ports": KernelRuntimePorts(
                     checkpoint_sink=checkpoint_sink,

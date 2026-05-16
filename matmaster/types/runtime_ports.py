@@ -92,7 +92,7 @@ class EmptySessionEventHistory:
         return None
 
     def latest_scope_event_id(self) -> int | None:
-        return 0
+        return None
 
 
 @dataclass(frozen=True)

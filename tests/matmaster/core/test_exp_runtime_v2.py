@@ -140,6 +140,27 @@ async def test_build_runtime_uses_runtime_ports_history(
 
 
 @pytest.mark.asyncio
+async def test_build_runtime_missing_runtime_history_has_no_scope_boundary(
+    tmp_path: Path,
+) -> None:
+    from matmaster.config.exp import ExpConfig
+    from matmaster.core.exp import Exp
+    from matmaster.types.context import PlaygroundContext
+
+    ctx = PlaygroundContext(
+        workdir=tmp_path,
+        execution_workdir=str(tmp_path),
+        session_type="local",
+        cache_area=tmp_path / "cache",
+        llm_provider=_MockProvider(),
+    )
+
+    runtime = await Exp(ExpConfig(name="test")).build_runtime(ctx)
+
+    assert runtime.spec.compactor._runtime_covered_until_provider() is None
+
+
+@pytest.mark.asyncio
 async def test_build_runtime_passes_current_input_context_to_kernel_meta(
     tmp_path: Path,
 ) -> None:

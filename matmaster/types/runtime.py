@@ -103,6 +103,19 @@ class AgentRuntimeSpec(BaseModel):
                 f"got {type(self.context_builder).__name__}"
             )
 
+        if self.hook_executor is not None:
+            missing_methods = [
+                name
+                for name in ("emit", "emit_intercept", "emit_rewrite")
+                if not callable(getattr(self.hook_executor, name, None))
+            ]
+            if missing_methods:
+                missing = ", ".join(missing_methods)
+                raise ValueError(
+                    "hook_executor must implement HookExecutor methods; "
+                    f"missing {missing}"
+                )
+
         if self.context_assembler is not None:
             from matmaster.context.assembly import ContextAssembler
 
