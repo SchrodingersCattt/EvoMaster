@@ -1,6 +1,6 @@
 ---
 name: input-manual-helper
-description: "Use when preparing, adapting, validating, or packaging runnable input files for computational chemistry or materials-science engines before local or Bohrium execution, especially when no MCP submit tool exists or the user asks for engine-specific input artifacts."
+description: "Prepare, adapt, validate or package runnable engine inputs for ABACUS, CP2K, QE, ABINIT, LAMMPS, ORCA, GROMACS or PySCF before local or Bohrium execution. Use when no MCP submit tool exists or the user asks for engine-specific input artifacts. Not for VASP INCAR-only tasks, Gaussian/PSI4 template-only work, pure postprocessing, or MCP tools that already provide a dedicated submit workflow."
 skill_type: operator
 ---
 
@@ -9,17 +9,6 @@ skill_type: operator
 Use this skill as a thin input-preparation router. It decides whether existing
 inputs are ready, runs the local generation/diagnosis scripts when needed, and
 packages the run directory with a manifest that downstream execution can trust.
-
-## When To Use
-
-Use this skill when the user asks to:
-- Generate or adapt input files for ABACUS, CP2K, QE, ABINIT, LAMMPS, ORCA, GROMACS, or PySCF.
-- Validate an existing engine input before execution.
-- Package an input directory for Bohrium submission.
-- Convert task intent plus structure files into runnable engine artifacts.
-
-Do not use it for VASP INCAR-only tasks, Gaussian/PSI4 template-only work, pure
-postprocessing, or MCP tools that already provide a dedicated submit workflow.
 
 ## Core Rule
 

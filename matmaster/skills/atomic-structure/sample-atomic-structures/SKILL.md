@@ -1,6 +1,6 @@
 ---
 name: sample-atomic-structures
-description: "Sample candidate crystal structures from configuration space via dispatcher-side generators: CALYPSO evolutionary sampling and CrystalFormer property-conditional sampling. NOT a database lookup. Always asks the user for the explicit space_group; never guesses."
+description: "Sample candidate crystal structures from configuration space via dispatcher-side generators: CALYPSO evolutionary sampling and CrystalFormer property-conditional sampling. NOT a database lookup — for fetching known compounds use mcp-mat-struct-db or structure-manager. Always asks the user for the explicit space_group; never guesses."
 skill_type: mcp-loader
 mcp_server: mat_sg
 depends_on: inspect-atomic-structure
@@ -11,16 +11,6 @@ depends_on: inspect-atomic-structure
 Use this skill for global or conditional structure generation, where the output
 is a set of newly sampled candidate structures. This is not database search and
 not a deterministic prototype builder.
-
-## When to Use
-
-- Generate candidate crystals using CALYPSO-style evolutionary sampling.
-- Generate property-conditioned candidates with CrystalFormer.
-- Explore a composition/property target when known database structures are not
-  sufficient.
-
-Do not use this skill for fetching known compounds from a database. Use
-`mcp-mat-struct-db` or `structure-manager` for retrieval.
 
 ## Decision Tree
 

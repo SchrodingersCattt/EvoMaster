@@ -17,13 +17,6 @@ A routing skill for composition-design workflows with explicit decision branches
 4. Composition-to-structure conversion when only formula/composition is provided
 5. Validation and result packaging
 
-## When to use
-
-- "Optimize alloy/composition for target property."
-- "Use genetic algorithm or run_dart_ga for composition search."
-- "I only have composition/formula, please generate usable structures."
-- "Build initial candidates from literature, then optimize."
-
 ## Workflow
 
 1. **Normalize the task**

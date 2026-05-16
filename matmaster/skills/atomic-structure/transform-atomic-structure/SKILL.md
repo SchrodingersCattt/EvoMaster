@@ -1,6 +1,6 @@
 ---
 name: transform-atomic-structure
-description: "Transform an existing non-molecular-crystal structure: supercell, strain/deformation, doping (random/ordered/wyckoff with charge compensation), vacancy defect, ordering, in-place mutations. Routes to operate-molecular-crystal when input is a molecular crystal."
+description: "Transform an existing non-molecular-crystal structure: supercell, strain/deformation, doping (random/ordered/wyckoff with charge compensation), vacancy defect, ordering, in-place mutations. Routes to operate-molecular-crystal when input is a molecular crystal. Not for assembling multiple independent structures — use assemble-atomic-structure."
 skill_type: operator
 depends_on: inspect-atomic-structure, operate-molecular-crystal
 ---
@@ -11,17 +11,6 @@ Use this skill for operations that start from one structure and produce a
 modified version of the same object. It handles ordinary inorganic, metallic,
 ionic, and covalent crystals. If inspection shows a molecular crystal, route to
 `operate-molecular-crystal` before any operation that depends on connectivity.
-
-## When to Use
-
-- Make supercells or apply strain/deformation matrices.
-- Substitute dopants randomly, by ordered sites, or by Wyckoff labels.
-- Create vacancy defects in non-molecular crystals.
-- Order partially occupied/disordered sites.
-- Add/remove atoms when the operation is a mutation of the same structure.
-
-Do not use this skill to assemble multiple independent structures; use
-`assemble-atomic-structure`.
 
 ## Decision Tree
 

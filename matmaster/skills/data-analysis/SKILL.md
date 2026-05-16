@@ -8,13 +8,6 @@ skill_type: operator
 
 Covers data quality control (QC), exploratory data analysis (EDA), and visualization on tabular/structured data (CSV, JSON).
 
-## When to use
-
-* "Check data quality / QC this CSV" → QC workflow below
-* "Find outliers / anomalies" → IQR or Z-score detection
-* "Summarize experiment metrics" → statistical profiling
-* "Plot / visualize data from a table" → matplotlib rendering
-
 ## QC Workflow
 
 1. **Profile**: Read the data file. Report row count, column names & dtypes, missing values per column (count + rate).

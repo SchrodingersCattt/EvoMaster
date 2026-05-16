@@ -67,14 +67,6 @@ python run_checkcif.py --file structure.cif [--timeout 180]
 python ${SKILL_DIR}/scripts/run_checkcif.py --file refined.cif
 ```
 
-## When to use
-
-- After completing crystal structure refinement, before reporting R-factors.
-- To check whether a CIF produced by any refinement program is
-  publication-quality.
-- To identify and diagnose structural problems (missed symmetry, wrong space
-  group, unusual geometry, etc.) flagged by PLATON.
-
 ## Rules
 
 - Always run this skill after obtaining a refined CIF.
