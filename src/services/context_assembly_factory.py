@@ -11,8 +11,10 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from matmaster.context.ports import SessionEvent
+from matmaster.context.assembly import ContextAssembler, ContextRenderOptions
+from matmaster.context.ports import ContextAssemblyPorts, SessionEvent
 from matmaster.context.session import SessionContextBuilder
+from src.services.context_assembly_ports import AppSessionEventsPort, AppSessionJobsPort
 
 SessionContextFactory = Callable[[tuple[SessionEvent, ...]], SessionContextBuilder]
 
@@ -34,3 +36,29 @@ def build_session_context_factory(
         )
 
     return factory
+
+
+def build_context_assembler(
+    *,
+    events_table: object,
+    skill_registry: Any | None,
+    legal_mcp_servers: set[str] | None,
+    schemas_by_server: Mapping[str, list[Mapping[str, Any]]] | None,
+    split_turn_attachments: bool = False,
+) -> tuple[ContextAssembler, ContextAssemblyPorts]:
+    ports = ContextAssemblyPorts(
+        session_events=AppSessionEventsPort(events_table=events_table),
+        session_jobs=AppSessionJobsPort(),
+    )
+    assembler = ContextAssembler(
+        ports=ports,
+        session_context_factory=build_session_context_factory(
+            skill_registry=skill_registry,
+            legal_mcp_servers=legal_mcp_servers,
+            schemas_by_server=schemas_by_server,
+        ),
+        render_options=ContextRenderOptions(
+            split_turn_attachments=split_turn_attachments,
+        ),
+    )
+    return assembler, ports

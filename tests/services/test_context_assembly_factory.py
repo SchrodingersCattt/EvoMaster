@@ -83,3 +83,26 @@ def test_factory_rejects_non_tuple_events_via_session_builder_invariant() -> Non
 
     with pytest.raises(TypeError, match="must be a tuple of SessionEvent"):
         factory([])  # type: ignore[arg-type]
+
+
+def test_build_context_assembler_wires_ports_and_render_options() -> None:
+    from matmaster.context.assembly import ContextAssembler, ContextRenderOptions
+    from src.services.context_assembly_factory import build_context_assembler
+
+    class EventsTable:
+        def query_context_events(self, **kwargs):
+            return []
+
+    assembler, ports = build_context_assembler(
+        events_table=EventsTable(),
+        skill_registry=None,
+        legal_mcp_servers=None,
+        schemas_by_server=None,
+        split_turn_attachments=True,
+    )
+
+    assert isinstance(assembler, ContextAssembler)
+    assert ports.session_jobs is not None
+    assert assembler._render_options == ContextRenderOptions(
+        split_turn_attachments=True
+    )

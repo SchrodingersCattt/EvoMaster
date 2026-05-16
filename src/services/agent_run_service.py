@@ -18,11 +18,10 @@ from typing import Any
 
 from matmaster.config.loader import load_agents_general_llm
 from matmaster.context.assembly import (
-    ContextAssembler,
     ContextAssemblyIntent,
     TurnAssemblyRequest,
 )
-from matmaster.context.ports import ContextAssemblyPorts, UserInstructions
+from matmaster.context.ports import UserInstructions
 from matmaster.context.scanner import coerce_session_events
 from matmaster.context.sections import ContextView
 from matmaster.context.sources.skills import resolve_active_skills, skill_name
@@ -55,8 +54,7 @@ from src.services.agent_run_bohrium_stage import (  # noqa: F401
     run_bohrium_stage,
 )
 from src.services.agent_run_history_wiring import build_history_wiring
-from src.services.context_assembly_factory import build_session_context_factory
-from src.services.context_assembly_ports import AppSessionEventsPort, AppSessionJobsPort
+from src.services.context_assembly_factory import build_context_assembler
 from src.services.context_turn_intent import resolve_turn_context_intent
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.image_input_service import get_image_input_service
@@ -504,6 +502,8 @@ class AgentRunService:
             pg_ctx = pg_ctx.with_run_meta(
                 figure_upload_config=figure_upload_config,
                 user_instructions=user_instructions.text,
+                user_instructions_hash=user_instructions.hash,
+                user_instructions_truncated=user_instructions.truncated,
             )
 
             # -- Stage 4b: AskQuestion bridge --
@@ -543,23 +543,19 @@ class AgentRunService:
                 truncated=user_instructions.truncated,
             )
 
-            session_events_port = AppSessionEventsPort(events_table=events_table)
-            session_jobs_port = AppSessionJobsPort()
-            session_context_factory = build_session_context_factory(
+            context_assembler, assembly_ports = build_context_assembler(
+                events_table=events_table,
                 skill_registry=self._build_skill_registry(
                     exp_config,
                     session=pg_ctx.session,
                 ),
                 legal_mcp_servers=(pg_ctx.run_meta or {}).get("legal_mcp_servers"),
                 schemas_by_server=(pg_ctx.run_meta or {}).get("schemas_by_server"),
-            )
-            context_assembler = ContextAssembler(
-                ports=ContextAssemblyPorts(
-                    session_events=session_events_port,
-                    session_jobs=session_jobs_port,
+                split_turn_attachments=bool(
+                    (pg_ctx.run_meta or {}).get("split_turn_attachments", False)
                 ),
-                session_context_factory=session_context_factory,
             )
+            session_events_port = assembly_ports.session_events
 
             try:
                 intent = await resolve_turn_context_intent(
