@@ -155,9 +155,11 @@ def build_user_turn_context_payload(
     transform: UserTurnContextTransform = DEFAULT_TURN_TRANSFORM,
 ) -> dict[str, Any]:
     validated_images = [
-        image
-        if isinstance(image, ImageContentPart)
-        else ImageContentPart.model_validate(image)
+        (
+            image
+            if isinstance(image, ImageContentPart)
+            else ImageContentPart.model_validate(image)
+        )
         for image in images
     ]
     message = UserMessage(content=rendered_message_content, images=validated_images)
@@ -204,7 +206,9 @@ async def write_user_turn_context_event(
         spawn_id,
     )
     if existing:
-        existing_payload = existing.get("content") if isinstance(existing, dict) else None
+        existing_payload = (
+            existing.get("content") if isinstance(existing, dict) else None
+        )
         if existing_payload == payload:
             return "duplicate"
         raise RuntimeError("user_turn_context payload differs for invocation_id")

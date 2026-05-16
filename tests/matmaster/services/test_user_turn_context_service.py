@@ -137,7 +137,9 @@ def test_latest_anchor_hash_does_not_cross_chronological_checkpoint_with_ids() -
     assert latest_anchor_user_instructions_hash(events) == "sha256:checkpoint"
 
 
-def test_latest_anchor_hash_returns_none_for_chronological_checkpoint_without_hash() -> None:
+def test_latest_anchor_hash_returns_none_for_chronological_checkpoint_without_hash() -> (
+    None
+):
     events = [
         {
             "id": 30,
