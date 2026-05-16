@@ -52,7 +52,7 @@ VASPKIT reads Fermi level from DOSCAR and calculation parameters from INCAR. Mos
 | 710 | Optical (2D) | POSCAR, INCAR, vasprun.xml |
 | 711 | Optical (3D/bulk) | POSCAR, INCAR, vasprun.xml |
 
-## When to use
+## Common Requests
 
 * "Generate K-path for my POSCAR" -> `run_vaspkit.py --task 303 --symprec 1E-5` (bulk) or 302 (2D).
 * "Extract band structure from this VASP run" -> ensure POSCAR, INCAR, EIGENVAL, DOSCAR, and Line-Mode KPOINTS all exist, then `run_vaspkit.py --task 211`.

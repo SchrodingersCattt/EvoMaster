@@ -1,20 +1,11 @@
 ---
 name: skill-iteration
-description: Diagnose why eval questions fail from agent trajectory, then fix the right layer (skill docs, validation scripts, or skill triggers). Use when eval results show agent capability failures that trace back to missing knowledge or inadequate tooling.
+description: Diagnose why eval questions fail from agent trajectory, then fix the right layer (skill docs, validation scripts, or skill triggers). Load after `evaluation-iteration` rules out criteria bugs, when eval results show agent capability failures that trace back to missing knowledge or inadequate tooling.
 ---
 
 # Skill Iteration
 
 Close the loop from eval failure → trajectory diagnosis → skill/tool fix → re-verify.
-
-## When to Use
-
-After `evaluation-iteration` determines a failure is **not** a criteria bug (the question is correct, but the agent genuinely fails), use this skill to:
-
-1. Pull the agent trajectory for the failed repeat
-2. Classify why the agent failed
-3. Apply the fix at the correct layer
-4. Verify the fix works
 
 ## Diagnosis Decision Tree
 

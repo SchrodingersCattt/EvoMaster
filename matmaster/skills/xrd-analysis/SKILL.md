@@ -7,7 +7,7 @@ description: "When the task involves single-crystal XRD (SCXRD) structure soluti
 
 Local Python scripts for crystallographic analysis. No Bohrium submission required — runs directly in the workspace.
 
-## When to Use
+## Scenario → Script
 
 | Scenario | Script | Inputs |
 |----------|--------|--------|

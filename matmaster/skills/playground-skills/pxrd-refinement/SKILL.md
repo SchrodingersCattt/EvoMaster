@@ -15,7 +15,7 @@ Three scripts in `scripts/`, all run on Bohrium:
 
 `scripts/curation.py` is a shared dependency (artifact-prefix detection, baseline fitting, peak picking, PASS/WARN/FAIL verdict). All three scripts import it; **always stage it next to the script** in `input_dir/`.
 
-## When to trigger
+## Script Selection
 
 - User has PXRD pattern + (known or guessable) space group → `gsas2_pawley.py`
 - User has PXRD + a CIF model → `gsas2_rietveld.py`

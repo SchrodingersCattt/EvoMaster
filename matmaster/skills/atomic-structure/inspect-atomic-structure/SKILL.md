@@ -1,6 +1,6 @@
 ---
 name: inspect-atomic-structure
-description: "Inspect any atomic structure (crystal, molecule, slab, polymer chain) and report formula, symmetry, Wyckoff sites, geometry tables, dimensionality, and is_molecular_crystal routing flag. MUST run before and after every transform/assemble step."
+description: "Inspect any atomic structure (crystal, molecule, slab, polymer chain) and report formula, symmetry, Wyckoff sites, geometry tables, dimensionality, and is_molecular_crystal routing flag. MUST run before and after every transform/assemble step. Reports structure sanity only — not a substitute for property prediction or relaxation."
 skill_type: operator
 ---
 
@@ -8,17 +8,6 @@ skill_type: operator
 
 Use this skill whenever a task starts from an existing structure file, and after
 every build, transform, or assemble operation.
-
-## When to Use
-
-- Inspect CIF, POSCAR/CONTCAR, XYZ, SDF, MOL, PDB, or LAMMPS-like coordinate files.
-- Verify a newly generated structure before handing it to simulation skills.
-- Decide whether a structure is a bulk crystal, molecule, slab, interface,
-  amorphous cell, polymer chain, or molecular crystal.
-- Extract Wyckoff sites before targeted doping or ordered substitutions.
-
-Do not use this skill as a replacement for property prediction or relaxation.
-It reports structure sanity, not thermodynamic stability.
 
 ## Decision Tree
 
