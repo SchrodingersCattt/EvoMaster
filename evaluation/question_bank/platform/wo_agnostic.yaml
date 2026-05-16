@@ -229,3 +229,59 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
+- id: PWO_dpa_head_organic_001_20260516
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Test whether agent selects OMol25 DPA head for organic molecule optimization
+    rather than defaulting to Omat24 or misusing SPICE2.
+  human_prompt_seed: 请对咖啡因分子做构型优化，输出优化后的结构文件。
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: optimized_artifact
+    value:
+      pattern: '*_optimized.cif'
+  - key: must_head_omol25
+    value:
+      filename: '*_optimized.cif'
+      check_tool_args: true
+      pattern: OMol25
+  - key: must_not_default_head
+    value: {}
+  - key: turn_budget
+    value:
+      max: 15
+  - key: duration_budget
+    value:
+      max: 600000
+  - key: token_budget_total
+    value:
+      max: 60000
+  scoring_checklist:
+  - id: optimized_artifact
+    criterion: '[Must] Agent produces an optimized structure file in the workspace.'
+    axis: correctness
+    verify: artifact_exists
+  - id: must_head_omol25
+    criterion: '[Must] Agent uses OMol25 head for organic molecule optimization, as
+      documented in mlips skill for organic chemistry.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: must_not_default_head
+    criterion: '[Must] Agent does NOT use default Omat24/OMat24 head or SPICE2 for
+      this organic molecule task. Judge from tool call arguments.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
