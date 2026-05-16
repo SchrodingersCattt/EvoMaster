@@ -4,8 +4,8 @@ import json
 import logging
 from typing import Any
 
-from matmaster.types.messages import Message, UserMessage
-from matmaster.utils.event_source import normalize_event_source
+from matmaster.context.history_restore import ModelHistoryRestorer
+from matmaster.types.messages import Message
 from src.services.chat_history import ChatHistoryConverter
 from src.services.history_checkpoint_codec import (
     deserialize_base_messages,
@@ -45,28 +45,15 @@ class ModelHistoryRestoreService:
                 )
                 continue
 
-            covered_until = content.get("covered_until_event_id")
-            if covered_until is None:
-                logger.warning(
-                    "model_history_restore: v1 checkpoint has null "
-                    "covered_until_event_id; falling back to legacy restore "
-                    "session_id=%s spawn_id=%s checkpoint_id=%s",
-                    session_id,
-                    spawn_id,
-                    v1_checkpoint.get("id"),
-                )
-                return self._restore_legacy(session_id, spawn_id, task_id, raw_limit)
-
             try:
-                after_id = int(covered_until)
-                return self._restore_v1(
+                messages = self._delegate_v1_restore(
                     session_id=session_id,
                     spawn_id=spawn_id,
                     task_id=task_id,
+                    raw_limit=raw_limit,
                     checkpoint=v1_checkpoint,
-                    after_id=after_id,
-                    hybrid_mode=False,
                 )
+                return trim_history_images(messages)
             except Exception as exc:
                 logger.warning(
                     "model_history_restore: v1 checkpoint restore failed; trying older "
@@ -81,23 +68,83 @@ class ModelHistoryRestoreService:
                 continue
 
         if v1_checkpoints:
-            return self._restore_legacy(session_id, spawn_id, task_id, raw_limit)
-
-        if self._session_has_user_turn_context(session_id, spawn_id):
-            return self._restore_v1(
-                session_id=session_id,
-                spawn_id=spawn_id,
-                task_id=task_id,
-                checkpoint=None,
-                after_id=None,
-                hybrid_mode=True,
+            return trim_history_images(
+                self._restore_legacy_untrimmed(
+                    session_id,
+                    spawn_id,
+                    task_id,
+                    raw_limit,
+                )
             )
 
-        # COMPAT:v0-restore -- old sessions without user_turn_context or v1
-        # checkpoint still restore through ChatHistoryConverter until Phase 4.
-        return self._restore_legacy(session_id, spawn_id, task_id, raw_limit)
+        messages = self._delegate_v1_restore(
+            session_id=session_id,
+            spawn_id=spawn_id,
+            task_id=task_id,
+            raw_limit=raw_limit,
+            checkpoint=None,
+        )
+        return trim_history_images(messages)
 
-    def _restore_legacy(
+    def _delegate_v1_restore(
+        self,
+        *,
+        session_id: str,
+        spawn_id: str | None,
+        task_id: str | None,
+        raw_limit: int | None,
+        checkpoint: dict[str, Any] | None,
+    ) -> list[Message]:
+        def get_latest_checkpoint(
+            _session_id: str,
+            _spawn_id: str | None,
+        ) -> dict[str, Any] | None:
+            return checkpoint
+
+        def get_events_after(
+            _session_id: str,
+            after_event_id: int | None,
+            _spawn_id: str | None,
+        ) -> list[dict[str, Any]]:
+            events = self.events_table.get_scope_events_after_id(
+                session_id,
+                spawn_id,
+                after_event_id,
+            )
+            events = ChatHistoryConverter.exclude_task_events(events, task_id)
+            return [self._coerce_to_restorer_dict(event) for event in events]
+
+        def has_user_turn_context(_session_id: str, _spawn_id: str | None) -> bool:
+            return self._session_has_user_turn_context(session_id, spawn_id)
+
+        def legacy_restore(_session_id: str, _spawn_id: str | None) -> list[Message]:
+            return self._restore_legacy_untrimmed(
+                session_id,
+                spawn_id,
+                task_id,
+                raw_limit,
+            )
+
+        def deserialize_checkpoint_base_messages(
+            raw: list[dict[str, Any]],
+        ) -> list[Message]:
+            messages = deserialize_base_messages(raw)
+            validate_base_messages(messages)
+            return messages
+
+        restorer = ModelHistoryRestorer(
+            get_latest_checkpoint=get_latest_checkpoint,
+            get_events_after=get_events_after,
+            has_user_turn_context=has_user_turn_context,
+            legacy_restore=legacy_restore,
+            deserialize_base_messages=deserialize_checkpoint_base_messages,
+            events_to_messages=ChatHistoryConverter.events_to_messages,
+            normalize_tool_result_event=self._normalize_tool_result_event,
+            validate_history=validate_base_messages,
+        )
+        return restorer.restore(session_id, spawn_id=spawn_id)
+
+    def _restore_legacy_untrimmed(
         self,
         session_id: str,
         spawn_id: str | None,
@@ -116,124 +163,24 @@ class ModelHistoryRestoreService:
                 event for event in raw_events if event.get("spawn_id") == spawn_id
             ]
         raw_events = ChatHistoryConverter.exclude_task_events(raw_events, task_id)
-        return trim_history_images(ChatHistoryConverter.events_to_messages(raw_events))
+        return ChatHistoryConverter.events_to_messages(raw_events)
 
-    def _restore_v1(
+    def _restore_legacy(
         self,
-        *,
         session_id: str,
         spawn_id: str | None,
         task_id: str | None,
-        checkpoint: dict[str, Any] | None,
-        after_id: int | None,
-        hybrid_mode: bool,
+        raw_limit: int | None,
     ) -> list[Message]:
-        base_messages: list[Message] = []
-        if checkpoint is not None:
-            content = checkpoint.get("content")
-            if not isinstance(content, dict):
-                raise ValueError("checkpoint content must be a dict")
-            base_messages = deserialize_base_messages(content["base_messages"])
-            validate_base_messages(base_messages)
-
-        scope_events = self.events_table.get_scope_events_after_id(
-            session_id,
-            spawn_id,
-            after_id,
+        return trim_history_images(
+            self._restore_legacy_untrimmed(session_id, spawn_id, task_id, raw_limit)
         )
-        scope_events = ChatHistoryConverter.exclude_task_events(scope_events, task_id)
 
-        covered_invocation_ids: set[str] = set()
-        if hybrid_mode:
-            covered_invocation_ids = {
-                str(event.get("invocation_id"))
-                for event in scope_events
-                if (event.get("type") or "").strip() == "user_turn_context"
-                and event.get("invocation_id")
-            }
-
-        compatible_tail_events: list[dict[str, Any]] = []
-        for event in scope_events:
-            compatible_event = self._event_to_v1_compatible_event(
-                event,
-                hybrid_mode=hybrid_mode,
-                covered_invocation_ids=covered_invocation_ids,
-            )
-            if compatible_event is not None:
-                compatible_tail_events.append(compatible_event)
-
-        tail_messages = ChatHistoryConverter.events_to_messages(compatible_tail_events)
-
-        history = [*base_messages, *tail_messages]
-        if base_messages:
-            validate_base_messages(history)
-        return trim_history_images(history)
-
-    def _event_to_v1_compatible_event(
-        self,
-        event: dict[str, Any],
-        *,
-        hybrid_mode: bool,
-        covered_invocation_ids: set[str],
-    ) -> dict[str, Any] | None:
-        source = normalize_event_source(event.get("source"))
-        event_type = (event.get("type") or "").strip()
-        content = event.get("content")
-
-        if event_type == "user_turn_context":
-            if not isinstance(content, dict):
-                return None
-            raw_message = content.get("message")
-            if not isinstance(raw_message, dict):
-                return None
-            message = UserMessage.model_validate(raw_message)
-            image_urls = [image.url for image in message.images if image.url]
-            return {
-                **event,
-                "source": "User",
-                "type": "query",
-                "content": {
-                    "content": message.content or "",
-                    "images": image_urls,
-                },
-                "images": image_urls,
-            }
-
-        if source == "User" and event_type == "query":
-            if not hybrid_mode:
-                return None
-
-            invocation_id = event.get("invocation_id")
-            if invocation_id and str(invocation_id) in covered_invocation_ids:
-                return None
-
-            # COMPAT:hybrid-restore -- pre-Phase-1 raw User/query rows without a
-            # covering user_turn_context are preserved until active histories are
-            # rewritten.
-            return event
-
-        if event_type == "tool_result":
-            return self._normalize_tool_result_event(event)
-
-        if event_type in {
-            "assistant_state",
-            "response",
-            "run_result",
-            "finish",
-            "tool_call",
-        }:
-            return event
-
-        if event_type in {
-            "thought",
-            "skill_hit",
-            "compaction",
-            "history_checkpoint",
-            "context_compaction",
-        }:
-            return None
-
-        return None
+    @staticmethod
+    def _coerce_to_restorer_dict(event: dict[str, Any]) -> dict[str, Any]:
+        if isinstance(event, dict):
+            return dict(event)
+        return {}
 
     def _session_has_user_turn_context(
         self,
