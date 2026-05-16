@@ -7,6 +7,10 @@ from typing import Any
 import pytest
 
 from matmaster.context.system_prompt import SystemPromptBuilder
+from matmaster.core.agent_llm_stream import (
+    _sleep_backoff_with_cancel,
+    stream_llm_items,
+)
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.events import (
     AssistantStateEvent,
@@ -247,20 +251,19 @@ class EmptyThenContentProvider:
 
 
 class TestStreamLlmItems:
-    """Tests for _stream_llm_items() sub-generator."""
+    """Tests for ``stream_llm_items`` (the sub-generator under retry/backoff)."""
 
     @pytest.mark.asyncio
     async def test_yields_thought_and_response_events(self) -> None:
         """Reasoning chunks yield ThoughtEvent, content chunks yield ResponseEvent."""
-        from matmaster.core.agent import AgentKernel, _KernelItem
+        from matmaster.core.kernel_items import _KernelItem
 
         provider = ReasoningThenContentProvider()
         spec = _make_spec(provider=provider)
-        kernel = AgentKernel()
 
         api_messages = [{"role": "user", "content": "test"}]
         items: list[_KernelItem] = []
-        async for item in kernel._stream_llm_items(spec, api_messages, None):
+        async for item in stream_llm_items(spec, api_messages, None):
             items.append(item)
 
         # Should have: start event, reasoning events, thought-complete, content events,
@@ -285,15 +288,14 @@ class TestStreamLlmItems:
     @pytest.mark.asyncio
     async def test_segment_complete_on_reasoning_to_content(self) -> None:
         """ThoughtEvent(complete) emitted when transitioning from reasoning to content."""
-        from matmaster.core.agent import AgentKernel, _KernelItem
+        from matmaster.core.kernel_items import _KernelItem
 
         provider = ReasoningThenContentProvider()
         spec = _make_spec(provider=provider)
-        kernel = AgentKernel()
 
         api_messages = [{"role": "user", "content": "test"}]
         items: list[_KernelItem] = []
-        async for item in kernel._stream_llm_items(spec, api_messages, None):
+        async for item in stream_llm_items(spec, api_messages, None):
             items.append(item)
 
         # Find thought-complete event
@@ -313,15 +315,14 @@ class TestStreamLlmItems:
     @pytest.mark.asyncio
     async def test_response_segment_end_at_stream_end(self) -> None:
         """ResponseEvent(segment_end) emitted at end of content stream."""
-        from matmaster.core.agent import AgentKernel, _KernelItem
+        from matmaster.core.kernel_items import _KernelItem
 
         provider = ReasoningThenContentProvider()
         spec = _make_spec(provider=provider)
-        kernel = AgentKernel()
 
         api_messages = [{"role": "user", "content": "test"}]
         items: list[_KernelItem] = []
-        async for item in kernel._stream_llm_items(spec, api_messages, None):
+        async for item in stream_llm_items(spec, api_messages, None):
             items.append(item)
 
         response_completes = [
@@ -345,15 +346,14 @@ class TestStreamLlmItems:
     @pytest.mark.asyncio
     async def test_final_yield_carries_llm_response(self) -> None:
         """Last yielded _KernelItem carries llm_response field."""
-        from matmaster.core.agent import AgentKernel, _KernelItem
+        from matmaster.core.kernel_items import _KernelItem
 
         provider = ReasoningThenContentProvider()
         spec = _make_spec(provider=provider)
-        kernel = AgentKernel()
 
         api_messages = [{"role": "user", "content": "test"}]
         items: list[_KernelItem] = []
-        async for item in kernel._stream_llm_items(spec, api_messages, None):
+        async for item in stream_llm_items(spec, api_messages, None):
             items.append(item)
 
         # Last item should have llm_response
@@ -368,15 +368,14 @@ class TestStreamLlmItems:
     @pytest.mark.asyncio
     async def test_start_and_end_events(self) -> None:
         """Stream start and end marker events are yielded."""
-        from matmaster.core.agent import AgentKernel, _KernelItem
+        from matmaster.core.kernel_items import _KernelItem
 
         provider = ContentOnlyProvider()
         spec = _make_spec(provider=provider)
-        kernel = AgentKernel()
 
         api_messages = [{"role": "user", "content": "test"}]
         items: list[_KernelItem] = []
-        async for item in kernel._stream_llm_items(spec, api_messages, None):
+        async for item in stream_llm_items(spec, api_messages, None):
             items.append(item)
 
         # First event should be start marker (ThoughtEvent with start state)
@@ -402,7 +401,7 @@ class TestStreamLlmItems:
     @pytest.mark.asyncio
     async def test_same_call_argument_chunks_stay_single_tool_call(self) -> None:
         """Normal argument streaming for one tool call must not be split."""
-        from matmaster.core.agent import AgentKernel, _KernelItem
+        from matmaster.core.kernel_items import _KernelItem
 
         provider = StreamingProvider(
             [
@@ -428,10 +427,9 @@ class TestStreamLlmItems:
             ]
         )
         spec = _make_spec(provider=provider)
-        kernel = AgentKernel()
 
         items: list[_KernelItem] = []
-        async for item in kernel._stream_llm_items(
+        async for item in stream_llm_items(
             spec, [{"role": "user", "content": "test"}], None
         ):
             items.append(item)
@@ -985,11 +983,11 @@ class TestCancellationTokenSupport:
     async def test_sleep_backoff_wakes_early_on_cancel_token(self) -> None:
         import asyncio
 
-        from matmaster.core.agent import AgentKernel, _KernelStopRequested
+        from matmaster.core.kernel_items import _KernelStopRequested
 
         ctrl = CancellationController()
         task = asyncio.create_task(
-            AgentKernel._sleep_backoff_with_cancel(5.0, ctrl.token)
+            _sleep_backoff_with_cancel(5.0, ctrl.token)
         )
 
         await asyncio.sleep(0.05)

@@ -25,7 +25,6 @@ class _TerminalItem:
 class _KernelItem:
     event: Any = None
     llm_response: LLMResponse | None = None
-    messages_delta: list[Any] | None = None
     terminal: _TerminalItem | None = None
 
 

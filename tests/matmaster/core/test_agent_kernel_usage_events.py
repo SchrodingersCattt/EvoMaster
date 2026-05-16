@@ -18,14 +18,13 @@ from .test_agent_kernel_stream import (
 
 @pytest.mark.asyncio
 async def test_response_segment_end_at_stream_end() -> None:
-    from matmaster.core.agent import AgentKernel
+    from matmaster.core.agent_llm_stream import stream_llm_items
     from matmaster.core.kernel_items import _KernelItem
 
     provider = ReasoningThenContentProvider()
     spec = _make_spec(provider=provider)
-    kernel = AgentKernel()
     items: list[_KernelItem] = []
-    async for item in kernel._stream_llm_items(
+    async for item in stream_llm_items(
         spec, [{"role": "user", "content": "test"}], None
     ):
         items.append(item)

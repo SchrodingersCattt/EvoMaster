@@ -1,12 +1,4 @@
-"""Tool dispatch helpers extracted from AgentKernel.
-
-Phase 0 refactor: the inline tool-call loop in ``AgentKernel._run_items``
-(execute_batch + ToolMessage append + ToolResultEvent emit + SkillHitEvent
-emit) and two adjacent static helpers (``_validate_tool_call_ids``,
-``_accumulate_usage``) move here so ``agent.py`` stays under 800 lines.
-
-Zero behavior change vs the pre-Phase-0 code paths.
-"""
+"""Tool-call dispatch loop + helpers used by AgentKernel."""
 
 from __future__ import annotations
 
@@ -26,7 +18,7 @@ if TYPE_CHECKING:
 
 
 def validate_tool_call_ids(tool_calls: list[ToolCallData]) -> None:
-    """Verbatim move of AgentKernel._validate_tool_call_ids."""
+    """Reject assembled responses that contain duplicate tool_call ids."""
     seen: set[str] = set()
     duplicates: list[str] = []
     for tc in tool_calls:
@@ -57,7 +49,7 @@ async def dispatch_tool_calls(
     turn_index: int,
     cancel_token: CancellationToken | None,
 ) -> AsyncIterator[_KernelItem]:
-    """Verbatim move of the inline tool-dispatch loop."""
+    """Execute the turn's tool calls, append tool messages, emit events."""
     if spec.tool_runner is None:
         raise RuntimeError("No tool_runner in AgentRuntimeSpec")
 
@@ -85,8 +77,8 @@ async def dispatch_tool_calls(
                 status=tool_result.status,
                 payload=tool_result.payload,
                 turn_index=turn_index,
-                turn_usage=dict(turn_usage),
-                total_usage=dict(state.total_usage),
+                turn_usage=turn_usage,
+                total_usage=state.total_usage,
             )
         )
         if tc.name == "Skill":

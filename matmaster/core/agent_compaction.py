@@ -1,12 +1,7 @@
-"""Compaction dispatch helpers extracted from AgentKernel.
+"""Compaction dispatch generators used by AgentKernel.
 
-Phase 0 refactor: these were inline methods on AgentKernel
-(``_run_compaction_plan``, plus the inline preflight/runtime dispatch
-blocks in ``_run_items``). They live here as free async generators so
-that ``agent.py`` stays under the 800-line target and ``matmaster/context/``
-work in later phases has room to grow.
-
-Zero behavior change vs the pre-Phase-0 code paths.
+Each helper yields ``CompactionEvent`` items wrapping the call into
+``ContextCompactor`` and the optional checkpoint sink.
 """
 
 from __future__ import annotations
@@ -35,7 +30,11 @@ async def run_compaction_plan(
     checkpoint_sink: Any,
     turn_input: TurnInput | None = None,
 ) -> AsyncIterator[_KernelItem]:
-    """Verbatim move of AgentKernel._run_compaction_plan."""
+    """Run a compaction plan, emit start/complete events, persist checkpoint.
+
+    ``turn_input`` is only consulted by ``apply_compaction_plan`` for
+    preflight plans; runtime callers pass ``None``.
+    """
     yield _KernelItem(
         event=CompactionEvent(
             source="context_compactor",
@@ -47,7 +46,7 @@ async def run_compaction_plan(
     )
     messages_before = len(state.messages)
     pre_compaction_barrier = spec.runtime_ports.pre_compaction_barrier
-    if callable(pre_compaction_barrier):
+    if pre_compaction_barrier is not None:
         result = pre_compaction_barrier()
         if inspect.isawaitable(result):
             await result
@@ -73,7 +72,7 @@ async def run_compaction_plan(
     failure_reason = result.failure_reason
     covered_until_event_id = None
     should_checkpoint = (
-        callable(checkpoint_sink)
+        checkpoint_sink is not None
         and result.durability == "durable"
         and result.base_snapshot is not None
     )
@@ -130,10 +129,9 @@ async def run_preflight_compaction_if_needed(
     turn_input: TurnInput | None,
     checkpoint_sink: Any,
 ) -> AsyncIterator[_KernelItem]:
-    """Verbatim move of the inline preflight dispatch."""
+    """Plan + execute a preflight compaction before the first LLM turn."""
     if not spec.compactor:
         return
-    spec.compactor.update_message_count(len(state.messages))
     preflight_planner = getattr(spec.compactor, "plan_preflight_compaction", None)
     if callable(preflight_planner):
         skip_preflight_for_empty_history = (
@@ -166,7 +164,11 @@ async def run_runtime_compaction_if_needed(
     turn_usage: dict,
     checkpoint_sink: Any,
 ) -> AsyncIterator[_KernelItem]:
-    """Verbatim move of the inline runtime-compaction dispatch."""
+    """Plan + execute a runtime compaction between LLM turns when budget exceeded.
+
+    Runtime plans do not receive ``turn_input``; see ``apply_compaction_plan``,
+    which only branches on it for preflight plans.
+    """
     if not spec.compactor:
         return
     runtime_planner = getattr(spec.compactor, "plan_runtime_compaction", None)

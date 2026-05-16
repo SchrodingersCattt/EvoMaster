@@ -208,6 +208,11 @@ class ContextCompactor:
         self._last_compaction_turn: int = 0
         self._compaction_count: int = 0
 
+    @property
+    def summary_provider(self) -> LLMProvider:
+        """The LLM provider used to summarize history during compaction."""
+        return self._summary_provider
+
     def update_message_count(self, count: int) -> None:
         """Record the messages length after the last LLM call."""
         self._last_llm_message_count = count

@@ -19,17 +19,10 @@ from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
 from matmaster.core.agent_compaction import (
-    run_compaction_plan,
     run_preflight_compaction_if_needed,
     run_runtime_compaction_if_needed,
 )
-from matmaster.core.agent_llm_stream import (
-    _sleep_backoff_with_cancel as sleep_backoff_with_cancel,
-)
-from matmaster.core.agent_llm_stream import (
-    call_llm_streaming,
-    stream_llm_items,
-)
+from matmaster.core.agent_llm_stream import call_llm_streaming
 from matmaster.core.agent_tool_dispatch import (
     accumulate_usage,
     dispatch_tool_calls,
@@ -81,30 +74,16 @@ from matmaster.types.messages import (
 logger = logging.getLogger(__name__)
 
 
+_TERMINAL_REASON_TO_STATUS: dict[str, str] = {
+    "cancelled": "cancelled",
+    "invalid_finish": "failed",
+    "natural": "completed",
+    "max_turns": "completed",
+}
+
+
 class AgentKernel:
     """Pure execution loop -- consumes AgentRuntimeSpec, no config assembly."""
-
-    async def _run_compaction_plan(
-        self,
-        *,
-        spec: AgentRuntimeSpec,
-        state: _KernelState,
-        plan: Any,
-        checkpoint_sink: Any,
-        turn_input: TurnInput | None = None,
-    ) -> AsyncIterator[_KernelItem]:
-        """Thin wrapper preserved for back-compat with tests that mock the method.
-
-        Logic lives in matmaster.core.agent_compaction.run_compaction_plan.
-        """
-        async for item in run_compaction_plan(
-            spec=spec,
-            state=state,
-            plan=plan,
-            checkpoint_sink=checkpoint_sink,
-            turn_input=turn_input,
-        ):
-            yield item
 
     async def run_stream(
         self,
@@ -117,16 +96,18 @@ class AgentKernel:
 
         Consumes _KernelItem from _run_items(), extracts .event for
         non-terminal items, and converts terminal items to RunResultEvent.
-        Items with event=None (llm_response, messages_delta) are consumed
-        internally and not yielded.
+        Items with event=None (llm_response) are consumed internally and
+        not yielded.
         """
         from matmaster.types.events import RunResultEvent
 
         async with spec.llm_provider:
             _summary_provider = None
-            if spec.compactor and hasattr(spec.compactor, "_summary_provider"):
-                sp = spec.compactor._summary_provider
-                if sp is not spec.llm_provider:
+            if spec.compactor is not None:
+                # getattr default tolerates compactor test doubles that don't
+                # expose summary_provider (real ContextCompactor always does).
+                sp = getattr(spec.compactor, "summary_provider", None)
+                if sp is not None and sp is not spec.llm_provider:
                     _summary_provider = sp
             last_reason: str | None = None
 
@@ -136,13 +117,7 @@ class AgentKernel:
                     if item.terminal is not None:
                         reason = item.terminal.reason
                         last_reason = reason
-                        status = (
-                            "cancelled"
-                            if reason == "cancelled"
-                            else (
-                                "failed" if reason == "invalid_finish" else "completed"
-                            )
-                        )
+                        status = _TERMINAL_REASON_TO_STATUS.get(reason, "completed")
                         yield RunResultEvent(
                             source="agent",
                             status=status,
@@ -150,10 +125,7 @@ class AgentKernel:
                             final_content=item.terminal.final_content,
                             num_turns=item.terminal.num_turns,
                             usage=item.terminal.usage,
-                            usage_vendor_by_turn=[
-                                dict(item)
-                                for item in item.terminal.usage_vendor_by_turn
-                            ],
+                            usage_vendor_by_turn=item.terminal.usage_vendor_by_turn,
                             messages=item.terminal.messages,
                             finish_detail=item.terminal.finish_detail,
                         )
@@ -291,18 +263,12 @@ class AgentKernel:
                 yield item
 
             # ── Tool definitions resolution (version-aware caching) ──
-            if (
-                spec.tool_catalog is not None
-                and hasattr(spec.tool_catalog, "version")
-                and spec.tool_catalog.version != state.last_catalog_version
-            ):
-                state.cached_tool_definitions = None
-                state.last_catalog_version = spec.tool_catalog.version
+            if spec.tool_catalog is not None:
+                if spec.tool_catalog.version != state.last_catalog_version:
+                    state.cached_tool_definitions = None
+                    state.last_catalog_version = spec.tool_catalog.version
 
-            if state.cached_tool_definitions is None:
-                if spec.tool_catalog is not None and hasattr(
-                    spec.tool_catalog, "build_definitions"
-                ):
+                if state.cached_tool_definitions is None:
                     from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 
                     desc_ctx = None
@@ -362,13 +328,9 @@ class AgentKernel:
                         content=response.content,
                         stream_state="complete",
                         turn_index=turn_index,
-                        turn_usage=dict(turn_usage),
-                        total_usage=dict(state.total_usage),
-                        usage_vendor=(
-                            dict(response.usage_vendor)
-                            if response.usage_vendor
-                            else None
-                        ),
+                        turn_usage=turn_usage,
+                        total_usage=state.total_usage,
+                        usage_vendor=response.usage_vendor or None,
                     )
                 )
             if spec.compactor:
@@ -420,8 +382,8 @@ class AgentKernel:
                         source="agent",
                         state=assistant_msg.model_dump(mode="json"),
                         turn_index=turn_index,
-                        turn_usage=dict(turn_usage),
-                        total_usage=dict(state.total_usage),
+                        turn_usage=turn_usage,
+                        total_usage=state.total_usage,
                         finish_detail=assistant_finish_detail,
                     )
                 )
@@ -456,38 +418,11 @@ class AgentKernel:
         *,
         cancel_token: CancellationToken | None = None,
     ) -> AsyncIterator[_KernelItem]:
-        """Thin wrapper preserved for back-compat with tests that mock the method."""
+        """Indirection point so tests can monkey-patch the streaming call."""
         async for item in call_llm_streaming(
             spec,
             api_messages,
             tool_defs,
-            cancel_token=cancel_token,
-        ):
-            yield item
-
-    @staticmethod
-    async def _sleep_backoff_with_cancel(
-        seconds: float,
-        cancel_token: CancellationToken | None,
-    ) -> None:
-        """Thin wrapper preserved for back-compat with tests that call the method."""
-        await sleep_backoff_with_cancel(seconds, cancel_token)
-
-    async def _stream_llm_items(
-        self,
-        spec: AgentRuntimeSpec,
-        api_messages: list[dict[str, Any]],
-        tool_defs: list[dict[str, Any]] | None,
-        *,
-        timeout: float | None = None,
-        cancel_token: CancellationToken | None = None,
-    ) -> AsyncIterator[_KernelItem]:
-        """Thin wrapper preserved for back-compat with tests that call the method."""
-        async for item in stream_llm_items(
-            spec,
-            api_messages,
-            tool_defs,
-            timeout=timeout,
             cancel_token=cancel_token,
         ):
             yield item

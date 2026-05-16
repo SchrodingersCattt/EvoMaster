@@ -1,11 +1,4 @@
-"""LLM streaming + retry + chunk aggregation extracted from AgentKernel.
-
-Phase 0 refactor (DESIGN.md §14): the LLM call path is the largest single
-chunk of agent.py. Moving it out as free functions brings agent.py under the
-800-line target and gives Phase 2+ kernel rewrites room to grow.
-
-Zero behavior change vs the pre-Phase-0 code paths.
-"""
+"""LLM streaming, chunk aggregation, and retry/backoff for AgentKernel."""
 
 from __future__ import annotations
 
@@ -32,7 +25,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Constants kept verbatim from agent.py.
 _STOP_CHECK_EVERY_N_STREAM_CHUNKS = 8
 _STOP_RETRY_SLEEP_SLICE_SEC = 0.25
 
