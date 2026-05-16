@@ -1302,3 +1302,107 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
+- id: SC_graphene_001_20260517
+  capability: structure_construction
+  domain: agnostic
+  intent: Build a monolayer graphene unit cell with correct hexagonal lattice and verify
+    it is a proper 2D honeycomb structure, not a 3D bulk misidentification.
+  human_prompt_seed: 构建单层石墨烯的单胞结构，晶格常数 a = 2.46 Å，层间真空层 15 Å，导出为 `graphene.cif`。
+  tags:
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: file_exists
+    value: graphene.cif
+  - key: formula
+    value:
+      filename: graphene.cif
+      formula: C2
+  - key: atom_count
+    value:
+      filename: graphene.cif
+      expected: 2
+      tolerance: 0
+  - key: cell_a
+    value:
+      filename: graphene.cif
+      param: a
+      expected: 2.46
+      tolerance: 0.02
+  - key: cell_gamma
+    value:
+      filename: graphene.cif
+      param: gamma
+      expected: 120.0
+      tolerance: 0.5
+  - key: cell_c_vacuum
+    value:
+      filename: graphene.cif
+      param: c
+      expected: 15.0
+      tolerance: 2.0
+  - key: is_2d_structure
+    value:
+      filename: graphene.cif
+      expected: 1
+      tolerance: 0
+      axis: z
+      layer_tol_A: 0.1
+  - key: space_group_tokens
+    value:
+    - graphene
+    - hexagonal
+  - key: turn_budget
+    value:
+      max: 10
+  - key: token_budget_total
+    value:
+      max: 20000
+  scoring_checklist:
+  - id: file_exists
+    criterion: Agent writes `graphene.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: formula
+    criterion: Structure formula is C (reduced) with 2 atoms in the unit cell.
+    axis: correctness
+    verify: struct_file_formula
+  - id: atom_count
+    criterion: Unit cell contains exactly 2 carbon atoms (honeycomb basis).
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: cell_a
+    criterion: Lattice constant a is approximately 2.46 Å.
+    axis: correctness
+    verify: struct_file_cell_param
+  - id: cell_gamma
+    criterion: Cell angle gamma is 120 degrees (hexagonal lattice).
+    axis: correctness
+    verify: struct_file_cell_param
+  - id: cell_c_vacuum
+    criterion: Lattice constant c is approximately 15 Å (vacuum layer for 2D isolation).
+    axis: correctness
+    verify: struct_file_cell_param
+  - id: is_2d_structure
+    criterion: All atoms are coplanar (z-coordinates identical within 0.1 Å), confirming
+      a monolayer 2D structure rather than a 3D bulk.
+    axis: correctness
+    verify: struct_file_layer_count
+  - id: space_group_tokens
+    criterion: Final answer confirms the structure is hexagonal graphene (mentions graphene
+      and hexagonal lattice).
+    axis: correctness
+    verify: contains_all
+  - id: grounding_source
+    criterion: Final answer reports lattice parameters from the built structure and
+      confirms monolayer geometry. Must not describe a 3D bulk or FCC structure.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
