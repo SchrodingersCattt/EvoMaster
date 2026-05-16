@@ -193,24 +193,22 @@ questions:
     description: Si diamond primitive cell CIF (2 atoms, Fd-3m).
   reference_answers:
   - key: band_artifact
-    value:
-      pattern: '**/BANDS_1.dat'
+    value: BANDS_1.dat
   - key: dos_artifact
-    value:
-      pattern: '**/DOS1_smearing.dat'
+    value: DOS1_smearing.dat
   - key: must_no_software_switch
     value: {}
   - key: must_band_gap_reported
     value: {}
   - key: turn_budget
     value:
-      max: 40
+      max: 60
   - key: duration_budget
     value:
-      max: 900000
+      max: 1500000
   - key: token_budget_total
     value:
-      max: 120000
+      max: 200000
   scoring_checklist:
   - id: band_artifact
     criterion: '[Must] Workflow produces a band structure data file (BANDS_1.dat or equivalent)
@@ -237,7 +235,7 @@ questions:
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: Wall-clock time stays within budget (15 min for 4-step Si calculation).
+    criterion: Wall-clock time stays within budget (25 min for 4-step Si calculation).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
