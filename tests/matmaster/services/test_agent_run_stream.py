@@ -284,6 +284,7 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
         events_table.query_user_turn_context_by_invocation.return_value = None
         events_table.add_event.return_value = True
         events_table.get_session_user_query_events.return_value = []
+        events_table.query_context_events.return_value = []
         events_table.get_bohrium_events.return_value = []
         events_table_fn.return_value = events_table
 
@@ -447,7 +448,7 @@ async def test_run_agent_injects_current_input_context_into_pg_ctx_run_meta():
 
 
 @pytest.mark.asyncio
-async def test_agent_run_service_injects_full_attachment_manifest_before_exp_run():
+async def test_agent_run_service_keeps_compaction_history_without_attachment_run_meta():
     run_result = RunResultEvent(source='agent', status='completed', reason='natural')
 
     async with _patched_service([run_result]) as (svc, _, __):
@@ -472,15 +473,13 @@ async def test_agent_run_service_injects_full_attachment_manifest_before_exp_run
         )
 
     run_meta = svc._test_fake_exp.last_ctx.run_meta
-    assert "attachment_manifest" in run_meta
-    assert "[Available attachments]" in run_meta["attachment_manifest"]
-    assert (
-        "file_1 data.csv https://oss.example.com/chat/data.csv"
-        in run_meta["attachment_manifest"]
-    )
+    assert "attachment_manifest" not in run_meta
     history = svc._test_fake_exp.last_ctx.runtime_ports.compaction.history
     assert history is not None
     assert callable(history.query_events)
+    assert history.query_events()[0]["files"] == [
+        "https://oss.example.com/chat/data.csv"
+    ]
     assert callable(history.all_events)
     assert callable(history.latest_checkpoint_covered_until_event_id)
     assert callable(
@@ -724,7 +723,6 @@ async def test_run_agent_writes_user_turn_context_and_passes_same_runtime_task()
 
 @pytest.mark.asyncio
 async def test_run_agent_user_turn_context_records_full_provider_facing_with_attachments():
-    from matmaster.core.context_builder import ContextBuilder
     from matmaster.types.current_input import CurrentInputContext
 
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
@@ -790,12 +788,9 @@ async def test_run_agent_user_turn_context_records_full_provider_facing_with_att
     image_urls = [img["url"] for img in payload["message"]["images"]]
     assert "https://oss.example.com/input/struct1.png" in image_urls
     assert "Use SI units." in svc._test_fake_exp.last_task
-    assert "feo.cif" not in svc._test_fake_exp.last_task
-    expected_content = ContextBuilder().build_user_request(
-        user_text=svc._test_fake_exp.last_task,
-        attachments=svc._test_fake_exp.last_attachment_text,
-    )
-    assert payload["message"]["content"] == expected_content
+    assert "feo.cif" in svc._test_fake_exp.last_task
+    assert "[Current attachments]" in svc._test_fake_exp.last_task
+    assert payload["message"]["content"] == svc._test_fake_exp.last_task
 
 
 @pytest.mark.asyncio
@@ -806,9 +801,11 @@ async def test_run_agent_writes_continuation_when_instruction_hash_matches():
 
     async with _patched_service([run_result]) as (svc, _sse, _persist):
         svc._test_pg_ctx.session.read_file.return_value = "Stable preference."
-        svc._test_events_table.get_recent_context_anchor_events.return_value = [
+        svc._test_events_table.query_context_events.return_value = [
             {
+                "id": 1,
                 "type": "user_turn_context",
+                "source": "MatMaster",
                 "content": {
                     "kind": "anchor",
                     "user_instructions_hash": hash_user_instructions(
@@ -837,7 +834,9 @@ async def test_run_agent_writes_continuation_when_instruction_hash_matches():
     ][0]
     assert payload["kind"] == "continuation"
     assert payload["user_instructions_hash"] is None
-    assert svc._test_fake_exp.last_task == "follow up"
+    assert svc._test_fake_exp.last_task == (
+        "<current_instruction>\nfollow up\n</current_instruction>"
+    )
 
 
 @pytest.mark.asyncio
@@ -893,11 +892,11 @@ async def test_run_agent_aborts_when_invocation_id_missing():
 async def test_run_agent_idempotent_skip_when_user_turn_context_already_exists():
     from src.services.user_turn_context_service import (
         DEFAULT_TURN_TRANSFORM,
-        build_user_turn_context_payload,
-        make_user_instructions_info,
-        render_provider_facing_current_message_content,
-        render_runtime_task_for_user_turn_context,
+        USER_CONTEXT_RENDER_VERSION,
+        USER_TURN_CONTEXT_SCHEMA_VERSION,
+        hash_user_instructions,
     )
+    from matmaster.types.messages import UserMessage
 
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
 
@@ -905,22 +904,20 @@ async def test_run_agent_idempotent_skip_when_user_turn_context_already_exists()
         svc._test_pg_ctx.session.read_file.return_value = "Use SI units."
         svc._test_events_table.get_recent_context_anchor_events.return_value = []
 
-        info = make_user_instructions_info("Use SI units.")
-        rendered_task = render_runtime_task_for_user_turn_context(
-            user_prompt="first question",
-            user_instructions=info,
-            kind="anchor",
+        instructions_hash = hash_user_instructions("Use SI units.")
+        rendered_content = (
+            "<user_instructions>\nUse SI units.\n</user_instructions>"
+            "\n\n"
+            "<current_instruction>\nfirst question\n</current_instruction>"
         )
-        existing_payload = build_user_turn_context_payload(
-            kind="anchor",
-            rendered_message_content=render_provider_facing_current_message_content(
-                rendered_runtime_task=rendered_task,
-                attachment_text="",
-            ),
-            images=[],
-            user_instructions=info,
-            transform=DEFAULT_TURN_TRANSFORM,
-        )
+        existing_payload = {
+            "schema_version": USER_TURN_CONTEXT_SCHEMA_VERSION,
+            "kind": "anchor",
+            "message": UserMessage(content=rendered_content).model_dump(mode="json"),
+            "user_instructions_hash": instructions_hash,
+            "transform": DEFAULT_TURN_TRANSFORM,
+            "render_version": USER_CONTEXT_RENDER_VERSION,
+        }
         svc._test_events_table.query_user_turn_context_by_invocation.return_value = {
             "id": 99,
             "type": "user_turn_context",
@@ -1096,6 +1093,7 @@ async def test_exception_emits_error_and_closed():
         events_table.query_user_turn_context_by_invocation.return_value = None
         events_table.add_event.return_value = True
         events_table.get_session_user_query_events.return_value = []
+        events_table.query_context_events.return_value = []
         events_table.get_bohrium_events.return_value = []
         events_table_fn.return_value = events_table
 
@@ -1315,3 +1313,20 @@ def test_history_wiring_attachment_text_equivalent_to_manifests_shim() -> None:
     assert manifest_text == source_text
     assert "[Available attachments]" in source_text
     assert "/tmp/c.csv" in source_text
+
+
+def test_agent_run_service_imports_resolve_turn_context_intent_after_cutover() -> None:
+    """Phase 2C cutover smoke check for the Stage 5b import boundary."""
+    from pathlib import Path
+
+    import src.services.agent_run_service as svc_module
+
+    src = svc_module.__file__
+    assert src is not None
+
+    text = Path(src).read_text()
+    assert "from src.services.context_turn_intent import" in text
+    assert "from matmaster.context.assembly import" in text
+    assert "build_user_turn_context_payload" not in text
+    assert "decide_user_turn_context_kind" not in text
+    assert "render_provider_facing_current_message_content" not in text

@@ -17,12 +17,25 @@ from pathlib import Path
 from typing import Any
 
 from matmaster.config.loader import load_agents_general_llm
+from matmaster.context.assembly import (
+    ContextAssembler,
+    ContextAssemblyIntent,
+    TurnAssemblyRequest,
+)
+from matmaster.context.ports import ContextAssemblyPorts, UserInstructions
+from matmaster.context.scanner import coerce_session_events
+from matmaster.context.sections import ContextView
+from matmaster.context.sources.skills import resolve_active_skills, skill_name
+from matmaster.context.sources.turn_input import (
+    TurnAttachmentsSource,
+    TurnInput,
+    TurnInstructionSource,
+)
 from matmaster.core.playground import PlaygroundManager
 from matmaster.integration.event_payloads import _normalize_public_source
 from matmaster.integration.fanout import RunEventFanout
 from matmaster.integration.persistence_handler import PersistenceHandler
 from matmaster.integration.sse_handler import SSEHandler
-from matmaster.manifests import skill as skill_manifest
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.current_input import CurrentInputContext
 from matmaster.types.events import (
@@ -41,6 +54,9 @@ from src.services.agent_run_bohrium_stage import (  # noqa: F401
     _build_workspace_upload_fn,
     run_bohrium_stage,
 )
+from src.services.context_assembly_factory import build_session_context_factory
+from src.services.context_assembly_ports import AppSessionEventsPort, AppSessionJobsPort
+from src.services.context_turn_intent import resolve_turn_context_intent
 from src.services.agent_run_history_wiring import build_history_wiring
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.image_input_service import get_image_input_service
@@ -50,11 +66,8 @@ from src.services.sessions_service import get_sessions_service
 from src.services.stream_reply_queue import RedisReplyQueue
 from src.services.user_turn_context_service import (
     DEFAULT_TURN_TRANSFORM,
-    build_user_turn_context_payload,
-    decide_user_turn_context_kind,
-    latest_anchor_user_instructions_hash,
-    render_provider_facing_current_message_content,
-    render_runtime_task_for_user_turn_context,
+    USER_CONTEXT_RENDER_VERSION,
+    USER_TURN_CONTEXT_SCHEMA_VERSION,
     write_user_turn_context_event,
 )
 
@@ -214,8 +227,8 @@ class AgentRunService:
                 )
 
         registry = self._build_skill_registry(exp_config, session=session)
-        skills = skill_manifest.resolve_active_skills(raw_events, registry)
-        names = {skill_manifest.skill_name(skill) for skill in skills}
+        skills = resolve_active_skills(coerce_session_events(raw_events), registry)
+        names = {skill_name(skill) for skill in skills}
         names.discard("")
         self._active_skills[session_id] = names
         return names
@@ -517,49 +530,105 @@ class AgentRunService:
                 pre_compaction_barrier=fanout.flush_persistence_barrier,
             )
             history = wiring.history
-            attachment_text = wiring.attachment_text
             pg_ctx = pg_ctx.with_runtime_ports(wiring.runtime_ports)
-            pg_ctx = pg_ctx.with_run_meta(attachment_manifest=attachment_text)
             if wiring.bohrium_rebuild_events:
                 pg_ctx = pg_ctx.with_run_meta(
                     bohrium_rebuild_events=wiring.bohrium_rebuild_events,
                 )
 
-            # -- Stage 5b: Phase 1 user_turn_context cutover --
-            recent_context_events = []
+            # -- Stage 5b: Phase 2C user_turn_context cutover via ContextAssembler --
+            instructions_bundle = UserInstructions(
+                text=user_instructions.text,
+                hash=user_instructions.hash,
+                truncated=user_instructions.truncated,
+            )
+
+            session_events_port = AppSessionEventsPort(events_table=events_table)
+            session_jobs_port = AppSessionJobsPort()
+            session_context_factory = build_session_context_factory(
+                skill_registry=self._build_skill_registry(
+                    exp_config,
+                    session=pg_ctx.session,
+                ),
+                legal_mcp_servers=(pg_ctx.run_meta or {}).get("legal_mcp_servers"),
+                schemas_by_server=(pg_ctx.run_meta or {}).get("schemas_by_server"),
+            )
+            context_assembler = ContextAssembler(
+                ports=ContextAssemblyPorts(
+                    session_events=session_events_port,
+                    session_jobs=session_jobs_port,
+                ),
+                session_context_factory=session_context_factory,
+            )
+
             try:
-                recent_context_events = events_table.get_recent_context_anchor_events(
-                    session_id,
-                    None,  # Phase 1 writes only root user turns.
-                    limit=50,
+                intent = await resolve_turn_context_intent(
+                    instructions_hash=instructions_bundle.hash,
+                    session_id=session_id,
+                    spawn_id=None,
+                    events_port=session_events_port,
                 )
             except Exception:
                 logger.warning(
-                    "user_turn_context: latest anchor query failed; "
-                    "treating current turn as anchor",
+                    "resolve_turn_context_intent failed; treating current turn as anchor",
                     exc_info=True,
                 )
-            latest_hash = latest_anchor_user_instructions_hash(recent_context_events)
-            user_turn_kind = decide_user_turn_context_kind(
-                user_instructions.hash,
-                latest_hash,
+                intent = ContextAssemblyIntent.ANCHOR_TURN
+
+            pre_turn_history_event_id = 0
+            if (
+                current_input_context is not None
+                and current_input_context.pre_query_scope_event_id is not None
+            ):
+                pre_turn_history_event_id = int(
+                    current_input_context.pre_query_scope_event_id
+                )
+
+            turn_input = TurnInput(
+                instruction=TurnInstructionSource(user_text=user_prompt or ""),
+                attachments=TurnAttachmentsSource(
+                    files=(
+                        tuple(current_input_context.files)
+                        if current_input_context is not None
+                        else ()
+                    ),
+                    images=tuple(
+                        image["url"]
+                        for image in current_user_images_payload
+                        if isinstance(image, dict) and image.get("url")
+                    ),
+                    workspace_paths=(
+                        tuple(current_input_context.workspace_paths)
+                        if current_input_context is not None
+                        else ()
+                    ),
+                ),
+                pre_turn_history_event_id=pre_turn_history_event_id,
             )
-            rendered_runtime_task = render_runtime_task_for_user_turn_context(
-                user_prompt=user_prompt,
-                user_instructions=user_instructions,
-                kind=user_turn_kind,
+
+            assembly = await context_assembler.assemble_turn(
+                intent=intent,
+                request=TurnAssemblyRequest(
+                    session_id=session_id,
+                    spawn_id=None,
+                    turn_input=turn_input,
+                    user_instructions=instructions_bundle,
+                ),
             )
-            rendered_message_content = render_provider_facing_current_message_content(
-                rendered_runtime_task=rendered_runtime_task,
-                attachment_text=attachment_text,
+            rendered_message = assembly.user_turn_context.to_message(
+                ContextView.RUNTIME
             )
-            user_turn_payload = build_user_turn_context_payload(
-                kind=user_turn_kind,
-                rendered_message_content=rendered_message_content,
-                images=current_user_images_payload,
-                user_instructions=user_instructions,
-                transform=DEFAULT_TURN_TRANSFORM,
-            )
+
+            user_turn_payload = {
+                "schema_version": USER_TURN_CONTEXT_SCHEMA_VERSION,
+                "kind": "anchor" if intent.is_anchor_turn else "continuation",
+                "message": rendered_message.model_dump(mode="json"),
+                "user_instructions_hash": (
+                    instructions_bundle.hash if intent.is_anchor_turn else None
+                ),
+                "transform": DEFAULT_TURN_TRANSFORM,
+                "render_version": USER_CONTEXT_RENDER_VERSION,
+            }
             try:
                 await write_user_turn_context_event(
                     events_table=events_table,
@@ -578,7 +647,7 @@ class AgentRunService:
                 )
                 return ((False, str(exc)), _elapsed_ms())
 
-            user_prompt = rendered_runtime_task
+            user_prompt = rendered_message.content
 
             # Resolve active skills (hot cache + DB rehydrate). Must run
             # AFTER history is available so the snapshot frozen below reflects

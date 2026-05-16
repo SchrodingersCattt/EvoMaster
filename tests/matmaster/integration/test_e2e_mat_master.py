@@ -194,6 +194,7 @@ def _allow_user_turn_context_write(events_table: MagicMock) -> None:
     events_table.get_history_checkpoints.return_value = []
     events_table.has_user_turn_context.return_value = False
     events_table.get_session_user_query_events.return_value = []
+    events_table.query_context_events.return_value = []
     events_table.get_recent_context_anchor_events.return_value = []
     events_table.query_user_turn_context_by_invocation.return_value = None
     events_table.add_event.return_value = True
@@ -467,7 +468,7 @@ class TestMatMasterRunAgentE2E:
         assert [m['content'] for m in llm_messages[1:]] == [
             'old question',
             'old answer',
-            'new question',
+            '<current_instruction>\nnew question\n</current_instruction>',
         ]
 
     @patch('matmaster.config.loader.load_llm_config')

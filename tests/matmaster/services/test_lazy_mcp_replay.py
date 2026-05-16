@@ -160,9 +160,9 @@ async def test_run_agent_rehydrates_from_db_on_cache_miss(tmp_path, monkeypatch)
 
             svc._test_events_table.get_session_events = MagicMock(
                 return_value=[
-                    {"type": "skill_hit", "content": {"skill_name": "pxrd"}},
-                    {"type": "skill_hit", "content": {"skill_name": "sg"}},
-                    {"type": "tool_call", "tool_name": "mat_ignored_tool"},
+                    {"id": 1, "type": "skill_hit", "content": {"skill_name": "pxrd"}},
+                    {"id": 2, "type": "skill_hit", "content": {"skill_name": "sg"}},
+                    {"id": 3, "type": "tool_call", "tool_name": "mat_ignored_tool"},
                 ]
             )
 
@@ -230,7 +230,11 @@ async def test_run_agent_rehydrates_remote_skill_from_session_root(
             )
             svc._test_events_table.get_session_events = MagicMock(
                 return_value=[
-                    {"type": "skill_hit", "content": {"skill_name": "remote-skill"}},
+                    {
+                        "id": 1,
+                        "type": "skill_hit",
+                        "content": {"skill_name": "remote-skill"},
+                    },
                 ]
             )
 
