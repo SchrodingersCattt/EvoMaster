@@ -48,6 +48,24 @@ def test_resolve_active_skills_returns_registered_skills_in_event_order(
     assert names == ("pxrd", "mlip")
 
 
+def test_resolve_active_skills_uses_skill_hit_events_only(tmp_path: Path) -> None:
+    registry = _registry(tmp_path)
+    events = [
+        {
+            "type": "assistant_state",
+            "content": {"tool_calls": [{"name": "mat_xrd_read"}]},
+        },
+        {"type": "tool_call", "tool_name": "mat_xrd_read"},
+        {"id": 1, "type": "skill_hit", "content": {"skill_name": "pxrd"}},
+        {"id": 2, "type": "skill_hit", "content": {"skill_name": "mlip"}},
+        {"id": 3, "type": "skill_hit", "content": {"skill_name": "missing"}},
+    ]
+
+    skills = resolve_active_skills(coerce_session_events(events), registry)
+
+    assert [skill.meta_info.name for skill in skills] == ["pxrd", "mlip"]
+
+
 def test_resolve_active_skills_handles_missing_registry_lookup(
     tmp_path: Path,
 ) -> None:

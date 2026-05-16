@@ -1,7 +1,8 @@
 from pathlib import Path
 
-from matmaster.manifests.mcp import resolve_runnable_servers
-from matmaster.manifests.skill import resolve_active_skills
+from matmaster.context.scanner import coerce_session_events
+from matmaster.context.sources.skills import resolve_active_skills
+from matmaster.context.sources.tools import resolve_runnable_servers
 from matmaster.skills.registry import SkillRegistry
 
 
@@ -18,9 +19,9 @@ def test_skill_hit_resolves_runnable_server(tmp_path: Path) -> None:
     root = tmp_path / "skills"
     _write_skill(root, "test-skill", "mat_sg")
     registry = SkillRegistry([root])
-    events = [{"type": "skill_hit", "content": {"skill_name": "test-skill"}}]
+    events = [{"id": 1, "type": "skill_hit", "content": {"skill_name": "test-skill"}}]
 
-    skills = resolve_active_skills(events, registry)
+    skills = resolve_active_skills(coerce_session_events(events), registry)
     servers = resolve_runnable_servers(skills, legal_servers={"mat_sg"})
 
     assert servers == {"mat_sg"}
@@ -32,9 +33,9 @@ def test_tool_call_event_without_skill_hit_does_not_activate_mcp(
     root = tmp_path / "skills"
     _write_skill(root, "test-skill", "mat_sg")
     registry = SkillRegistry([root])
-    events = [{"type": "tool_call", "tool_name": "mat_sg_build_bulk"}]
+    events = [{"id": 1, "type": "tool_call", "tool_name": "mat_sg_build_bulk"}]
 
-    skills = resolve_active_skills(events, registry)
+    skills = resolve_active_skills(coerce_session_events(events), registry)
     servers = resolve_runnable_servers(skills, legal_servers={"mat_sg"})
 
     assert servers == set()

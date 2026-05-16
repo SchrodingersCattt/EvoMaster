@@ -1,10 +1,18 @@
-from matmaster.manifests.attachment import (
+from matmaster.context.sources.attachments import (
     AttachmentEntry,
-    build_available_attachments,
     filter_entries_after_event_id,
     filter_entries_in_event_range,
-    format_available_attachments,
+    format_entries_text,
+    scan_legacy_attachment_entries,
 )
+
+
+def build_available_attachments(events, max_entries: int = 30):
+    return list(scan_legacy_attachment_entries(events, max_entries=max_entries))
+
+
+def format_available_attachments(entries):
+    return format_entries_text(entries)
 
 
 def test_build_available_attachments_reads_top_level_query_metadata() -> None:
@@ -344,7 +352,7 @@ def test_filter_entries_after_event_id_none_keeps_all_entries() -> None:
         )
     ]
 
-    assert filter_entries_after_event_id(entries, None) == entries
+    assert filter_entries_after_event_id(entries, None) == tuple(entries)
 
 
 def test_filter_entries_in_event_range_applies_upper_bound_and_drops_unscoped() -> None:
@@ -380,6 +388,6 @@ def test_filter_entries_in_event_range_applies_upper_bound_and_drops_unscoped() 
 
 
 def test_attachment_module_does_not_expose_prompt_append_shortcut() -> None:
-    import matmaster.manifests.attachment as attachment
+    import matmaster.context.sources.attachments as attachment
 
     assert not hasattr(attachment, "append_available_attachments")

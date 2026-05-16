@@ -20,3 +20,11 @@ def test_types_current_input_shim_is_removed() -> None:
     shim_path = ROOT / "matmaster/types" / ("current" + "_input.py")
 
     assert not shim_path.exists()
+
+
+def test_manifests_package_is_removed() -> None:
+    package_path = ROOT / "matmaster" / "manifests"
+    tests_path = ROOT / "tests/matmaster" / "manifests"
+
+    assert not package_path.exists()
+    assert not tests_path.exists()

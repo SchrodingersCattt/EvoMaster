@@ -60,15 +60,10 @@ async def test_run_agent_runs_bohrium_cleanup_after_success():
     )
 
 
-def test_history_wiring_attachment_text_equivalent_to_manifests_shim() -> None:
-    """Phase 2C: context source output must stay byte-equivalent to shim."""
+def test_history_wiring_attachment_text_uses_context_source() -> None:
     from matmaster.context.sources.attachments import (
         format_entries_text,
         scan_legacy_attachment_entries,
-    )
-    from matmaster.manifests.attachment import (
-        build_available_attachments,
-        format_available_attachments,
     )
 
     query_events: list[dict] = [
@@ -90,12 +85,8 @@ def test_history_wiring_attachment_text_equivalent_to_manifests_shim() -> None:
         },
     ]
 
-    manifest_text = format_available_attachments(
-        build_available_attachments(query_events)
-    )
     source_text = format_entries_text(scan_legacy_attachment_entries(query_events))
 
-    assert manifest_text == source_text
     assert "[Available attachments]" in source_text
     assert "/tmp/c.csv" in source_text
 
