@@ -78,7 +78,7 @@ correct, runnable files and avoiding silent-failure configurations.
 - For AFM-prone transition-metal oxides under DFT+U (for example NiO), do not default to all-parallel FM initialization unless the task explicitly asks for FM; use a physically reasonable antiferromagnetic or equivalent antiparallel initialization.
 - If Ni/Co/Fe (or similar) spin channels are split into multiple species in `STRU`, ensure `orbital_corr` and `hubbard_u` cover all correlated species consistently.
 - When the task provides source structures (for example POSCAR/CIF), convert lattice and atomic positions faithfully into `STRU` before applying task-specific settings.
-- Bader charge analysis: requires `out_chg 1`. Both PW and LCAO basis are supported. With pseudopotential-only valence density, light elements (e.g., Al) may show zero Bader charge because the valence density is too flat to partition. Fix: augment valence cube with approximate core charges (Gaussian core model) to create a reference total density, then run `bader SPIN1_CHG.cube -ref total_chg.cube`. The `cmd` chain should include this core-augmentation step between ABACUS and bader.
+- Bader charge analysis: requires `out_chg 1` and core-charge augmentation for correct results. See `references/advanced_tasks.md` § "Bader Charge Analysis Workflow" for the full cmd chain template.
 
 ## Bohrium Submission Defaults
 
