@@ -18,7 +18,10 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from matmaster.manifests import attachment as attachment_manifest
+from matmaster.context.sources.attachments import (
+    format_entries_text,
+    scan_legacy_attachment_entries,
+)
 from matmaster.types.runtime_ports import (
     PlaygroundCompactionPort,
     PlaygroundRuntimePorts,
@@ -73,8 +76,8 @@ def build_history_wiring(
                 session_id,
                 exc_info=True,
             )
-    entries = attachment_manifest.build_available_attachments(query_events)
-    attachment_text = attachment_manifest.format_available_attachments(entries)
+    entries = scan_legacy_attachment_entries(query_events)
+    attachment_text = format_entries_text(entries)
 
     def _get_query_events() -> list[dict]:
         return list(query_events)

@@ -1275,3 +1275,43 @@ async def test_run_agent_runs_bohrium_cleanup_after_success():
         pg_for_run=pg_for_run,
         ssh_attached=False,
     )
+
+
+def test_history_wiring_attachment_text_equivalent_to_manifests_shim() -> None:
+    """Phase 2C: context source output must stay byte-equivalent to shim."""
+    from matmaster.context.sources.attachments import (
+        format_entries_text,
+        scan_legacy_attachment_entries,
+    )
+    from matmaster.manifests.attachment import (
+        build_available_attachments,
+        format_available_attachments,
+    )
+
+    query_events: list[dict] = [
+        {
+            "id": 10,
+            "source": "User",
+            "type": "query",
+            "content": "first turn user text",
+            "files": ["/tmp/a.txt"],
+            "images": ["/tmp/b.png"],
+            "workspace_paths": ["/workspace/note.md"],
+        },
+        {
+            "id": 12,
+            "source": "User",
+            "type": "query",
+            "content": "second turn",
+            "files": ["/tmp/c.csv"],
+        },
+    ]
+
+    manifest_text = format_available_attachments(
+        build_available_attachments(query_events)
+    )
+    source_text = format_entries_text(scan_legacy_attachment_entries(query_events))
+
+    assert manifest_text == source_text
+    assert "[Available attachments]" in source_text
+    assert "/tmp/c.csv" in source_text
