@@ -21,7 +21,6 @@ from src.services.context_assembly_factory import build_session_context_factory
 from src.services.context_assembly_ports import AppSessionEventsPort, AppSessionJobsPort
 from src.services.history_checkpoint_codec import serialize_base_messages
 from src.services.history_checkpoint_service import HistoryCheckpointService
-from src.services.history_restore_service import HistoryRestoreService
 from src.services.model_history_restore_service import ModelHistoryRestoreService
 
 
@@ -580,7 +579,7 @@ async def test_restore_with_checkpoint_plus_incremental_events() -> None:
         write_user_turn_context=True,
     )
 
-    history = HistoryRestoreService(events_table).restore_history(
+    history = ModelHistoryRestoreService(events_table).restore_history(
         session_id=session_id,
         spawn_id=None,
         task_id=None,
@@ -953,7 +952,7 @@ async def test_spawn_id_checkpoint_does_not_affect_parent_restore() -> None:
         write_user_turn_context=True,
     )
 
-    restore_service = HistoryRestoreService(events_table)
+    restore_service = ModelHistoryRestoreService(events_table)
     parent_history = restore_service.restore_history(
         session_id=session_id,
         spawn_id=None,

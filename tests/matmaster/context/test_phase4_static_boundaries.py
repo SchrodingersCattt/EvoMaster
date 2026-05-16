@@ -28,3 +28,9 @@ def test_manifests_package_is_removed() -> None:
 
     assert not package_path.exists()
     assert not tests_path.exists()
+
+
+def test_model_history_restore_service_shim_is_removed() -> None:
+    shim_path = ROOT / "src/services" / ("history" + "_restore_service.py")
+
+    assert not shim_path.exists()

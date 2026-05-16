@@ -3,7 +3,7 @@ from __future__ import annotations
 from matmaster.types.messages import AssistantMessage, SystemMessage, UserMessage
 from src.dao.chat_events_table import ChatEventsTable
 from src.services.history_checkpoint_codec import serialize_base_messages
-from src.services.history_restore_service import HistoryRestoreService
+from src.services.model_history_restore_service import ModelHistoryRestoreService
 
 
 def _compact_user_message(summary: str) -> UserMessage:
@@ -170,7 +170,7 @@ def test_restore_uses_latest_valid_checkpoint() -> None:
         ],
     )
 
-    service = HistoryRestoreService(events_table)
+    service = ModelHistoryRestoreService(events_table)
 
     history = service.restore_history(
         session_id="sess-1",
@@ -205,7 +205,7 @@ def test_restore_falls_back_to_older_checkpoint_when_latest_is_invalid() -> None
         ],
     )
 
-    service = HistoryRestoreService(events_table)
+    service = ModelHistoryRestoreService(events_table)
 
     history = service.restore_history(
         session_id="sess-1",
@@ -241,7 +241,7 @@ def test_restore_skips_old_system_checkpoint_and_uses_older_valid_checkpoint() -
         scope_events=[],
     )
 
-    history = HistoryRestoreService(events_table).restore_history(
+    history = ModelHistoryRestoreService(events_table).restore_history(
         session_id="s1",
         spawn_id=None,
         task_id=None,
@@ -260,7 +260,7 @@ def test_restore_without_checkpoint_uses_raw_event_history() -> None:
         ]
     )
 
-    service = HistoryRestoreService(events_table)
+    service = ModelHistoryRestoreService(events_table)
 
     history = service.restore_history(
         session_id="sess-raw",
@@ -283,7 +283,7 @@ def test_restore_trims_history_images_by_image_turns() -> None:
             _user_event("img 4", images=["https://oss.example.com/chat/4.png"]),
         ]
     )
-    service = HistoryRestoreService(events_table)
+    service = ModelHistoryRestoreService(events_table)
 
     history = service.restore_history(
         session_id="sess-raw",

@@ -7,7 +7,7 @@ import pytest
 from matmaster.types.messages import AssistantMessage, UserMessage
 from src.services.history_checkpoint_codec import serialize_base_messages
 from src.services.history_checkpoint_service import HistoryCheckpointService
-from src.services.history_restore_service import HistoryRestoreService
+from src.services.model_history_restore_service import ModelHistoryRestoreService
 from tests.matmaster.integration.test_history_checkpoint_recovery import (
     InMemoryEventsTable,
     _compact_user_message,
@@ -62,7 +62,7 @@ async def test_restore_after_midrun_crash_uses_written_checkpoint() -> None:
         write_user_turn_context=True,
     )
 
-    history = HistoryRestoreService(events_table).restore_history(
+    history = ModelHistoryRestoreService(events_table).restore_history(
         session_id=session_id,
         spawn_id=None,
         task_id="task-retry-after-crash",
@@ -139,7 +139,7 @@ async def test_compaction_events_replay_but_do_not_enter_restore_tail() -> None:
         task_id="task-1",
     )
 
-    restored = HistoryRestoreService(events_table).restore_history(
+    restored = ModelHistoryRestoreService(events_table).restore_history(
         session_id=session_id,
         spawn_id=None,
         task_id="task-2",

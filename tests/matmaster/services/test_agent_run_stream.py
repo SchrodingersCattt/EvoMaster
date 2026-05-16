@@ -219,7 +219,7 @@ async def test_agent_run_service_keeps_compaction_history_without_attachment_run
 
 
 @pytest.mark.asyncio
-async def test_run_agent_uses_history_restore_service_and_injects_spawn_aware_checkpoint_factory():
+async def test_run_agent_uses_model_history_restore_service_and_injects_spawn_aware_checkpoint_factory():
     run_result = RunResultEvent(source='agent', status='completed', reason='natural')
     restored_history = [MagicMock(name='restored_message')]
     checkpoint_sink = AsyncMock(name='checkpoint_sink')

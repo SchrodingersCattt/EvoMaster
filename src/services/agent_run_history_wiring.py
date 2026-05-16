@@ -6,9 +6,7 @@ attachment manifest + checkpoint covered_until lookup + the inner
 out of ``run_agent`` so ``agent_run_service.py`` stays under the
 800-line target.
 
-Phase 1+ (RESTORE-01) will rename ``HistoryRestoreService`` to
-``ModelHistoryRestoreService`` and add schema-aware dispatch; this
-module is the staging area.
+Model restore is delegated directly to ``ModelHistoryRestoreService``.
 """
 
 from __future__ import annotations
