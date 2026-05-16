@@ -59,7 +59,7 @@ class _DurablePreflightCompactor:
         self.message_counts.append(count)
 
     def plan_preflight_compaction(self, messages: list[Any]):
-        from matmaster.core.context_compactor import CompactionPlan
+        from matmaster.context.compaction import CompactionPlan
 
         self.preflight_calls += 1
         return CompactionPlan(
@@ -80,7 +80,7 @@ class _DurablePreflightCompactor:
         *,
         current_input_context=None,
     ):
-        from matmaster.core.context_compactor import CompactionResult
+        from matmaster.context.compaction import CompactionResult
 
         compact_message = _v1_compacted_user_message()
         base_snapshot = [
@@ -134,7 +134,7 @@ class _LifecycleCompactor:
         *,
         turn: int,
     ):
-        from matmaster.core.context_compactor import CompactionPlan
+        from matmaster.context.compaction import CompactionPlan
 
         self.plan_calls += 1
         return CompactionPlan(
@@ -152,7 +152,7 @@ class _LifecycleCompactor:
         *,
         current_input_context=None,
     ):
-        from matmaster.core.context_compactor import CompactionResult
+        from matmaster.context.compaction import CompactionResult
 
         self.apply_calls += 1
         compact_message = _v1_compacted_user_message(self._summary_text)
@@ -186,7 +186,7 @@ class _EphemeralFallbackCompactor(_LifecycleCompactor):
         *,
         current_input_context=None,
     ):
-        from matmaster.core.context_compactor import CompactionResult
+        from matmaster.context.compaction import CompactionResult
 
         self.apply_calls += 1
         return CompactionResult(
@@ -532,7 +532,7 @@ class _BoundaryOverrideCompactor(_DurablePreflightCompactor):
         *,
         current_input_context=None,
     ):
-        from matmaster.core.context_compactor import CompactionResult
+        from matmaster.context.compaction import CompactionResult
 
         compact_message = _v1_compacted_user_message()
         base_snapshot = [

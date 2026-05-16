@@ -36,13 +36,6 @@ class FakeRehydrator:
         return self.text
 
 
-def test_core_context_compactor_shim_reexports_new_implementation() -> None:
-    from matmaster.context.compaction import ContextCompactor as NewContextCompactor
-    from matmaster.core.context_compactor import ContextCompactor as ShimContextCompactor
-
-    assert ShimContextCompactor is NewContextCompactor
-
-
 class TestEstimateTokens:
     """Token estimation for messages."""
 
@@ -890,9 +883,9 @@ class TestCompactorCompatibility:
         import ast
         import inspect
 
-        from matmaster.core import context_compactor
+        from matmaster.context import compaction
 
-        source = inspect.getsource(context_compactor)
+        source = inspect.getsource(compaction)
         tree = ast.parse(source)
 
         for node in ast.walk(tree):

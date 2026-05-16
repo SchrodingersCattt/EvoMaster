@@ -79,7 +79,7 @@ class FakeCompactor:
         return None
 
     async def plan_runtime_compaction(self, messages, turn_usage, *, turn):
-        from matmaster.core.context_compactor import CompactionPlan
+        from matmaster.context.compaction import CompactionPlan
 
         return CompactionPlan(
             compaction_id="task-1:root:1",
@@ -96,7 +96,7 @@ class FakeCompactor:
         *,
         current_input_context=None,
     ):
-        from matmaster.core.context_compactor import CompactionResult
+        from matmaster.context.compaction import CompactionResult
 
         messages[:] = messages[:1]
         return CompactionResult(
@@ -122,7 +122,7 @@ class DoubleEventCompactor:
         self.message_counts.append(count)
 
     def plan_preflight_compaction(self, messages):
-        from matmaster.core.context_compactor import CompactionPlan
+        from matmaster.context.compaction import CompactionPlan
 
         if self._preflight_planned:
             return None
@@ -139,7 +139,7 @@ class DoubleEventCompactor:
         return None
 
     async def plan_runtime_compaction(self, messages, turn_usage, *, turn):
-        from matmaster.core.context_compactor import CompactionPlan
+        from matmaster.context.compaction import CompactionPlan
 
         if self._runtime_planned:
             return None
@@ -159,7 +159,7 @@ class DoubleEventCompactor:
         *,
         current_input_context=None,
     ):
-        from matmaster.core.context_compactor import CompactionResult
+        from matmaster.context.compaction import CompactionResult
 
         if plan.phase == "preflight":
             messages[:] = messages[:2]

@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 # `matmaster.context.sources.turn_input`。本模块保留 re-export 是为了在
 # Phase 4 删除旧 import 路径之前，让生产 / 测试代码渐进切换。
 # `CurrentInputContext` / `build_current_instruction_block` 仍供
-# core/agent.py 与 core/context_compactor.py 的兼容路径使用。
+# core/agent.py 与旧压缩入口的兼容路径使用。
 from matmaster.context.sources.turn_input import TurnInput  # noqa: F401
 
 
