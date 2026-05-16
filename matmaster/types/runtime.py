@@ -16,8 +16,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from matmaster.core.context_builder import ContextBuilder
-from matmaster.core.hooks import HookExecutor
+from matmaster.context.system_prompt import ContextBuilder
 
 from .llm_provider import LLMProvider
 from .runtime_ports import KernelRuntimePorts
@@ -61,7 +60,7 @@ class AgentRuntimeSpec(BaseModel):
 
     max_turns: int = 100
 
-    hook_executor: HookExecutor | None = None
+    hook_executor: Any | None = None
     runtime_ports: KernelRuntimePorts = Field(
         default_factory=KernelRuntimePorts,
         repr=False,
