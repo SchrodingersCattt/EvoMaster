@@ -161,18 +161,18 @@ async def test_build_runtime_missing_runtime_history_has_no_scope_boundary(
 
 
 @pytest.mark.asyncio
-async def test_build_runtime_passes_current_input_context_to_kernel_meta(
+async def test_build_runtime_passes_turn_input_to_kernel_meta(
     tmp_path: Path,
 ) -> None:
     from matmaster.config.exp import ExpConfig
     from matmaster.core.exp import Exp
     from matmaster.core.playground import PlaygroundContext
-    from matmaster.types.current_input import CurrentInputContext
+    from matmaster.context.sources.turn_input import TurnInput
 
-    current_input_context = CurrentInputContext.from_values(
+    turn_input = TurnInput.from_values(
         user_text="current task",
         files=["https://oss.example.com/chat/current.cif"],
-        pre_query_scope_event_id=12,
+        pre_turn_history_event_id=12,
     )
     ctx = PlaygroundContext(
         workdir=tmp_path,
@@ -180,12 +180,12 @@ async def test_build_runtime_passes_current_input_context_to_kernel_meta(
         session_type="local",
         cache_area=tmp_path / "cache",
         llm_provider=_MockProvider(),
-        run_meta={"current_input_context": current_input_context},
+        run_meta={"turn_input": turn_input},
     )
 
     runtime = await Exp(ExpConfig(name="test")).build_runtime(ctx)
 
-    assert runtime.spec.meta["current_input_context"] == current_input_context
+    assert runtime.spec.meta["turn_input"] == turn_input
 
 
 def _make_playground_context(

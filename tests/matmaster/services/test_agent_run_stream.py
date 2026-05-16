@@ -130,14 +130,14 @@ async def test_run_agent_injects_figure_upload_config_into_pg_ctx_run_meta():
 
 
 @pytest.mark.asyncio
-async def test_run_agent_injects_current_input_context_into_pg_ctx_run_meta():
-    from matmaster.types.current_input import CurrentInputContext
+async def test_run_agent_injects_turn_input_into_pg_ctx_run_meta():
+    from matmaster.context.sources.turn_input import TurnInput
 
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
-    current_input_context = CurrentInputContext.from_values(
+    turn_input = TurnInput.from_values(
         user_text="current prompt",
         files=["https://oss.example.com/chat/current.cif"],
-        pre_query_scope_event_id=21,
+        pre_turn_history_event_id=21,
     )
 
     async with _patched_service([run_result]) as (svc, _sse, _persist):
@@ -149,13 +149,13 @@ async def test_run_agent_injects_current_input_context_into_pg_ctx_run_meta():
             mode="direct",
             task_id="task-1",
             invocation_id="inv-current-input",
-            current_input_context=current_input_context,
+            turn_input=turn_input,
         )
 
     assert ok is True
     assert (
-        svc._test_fake_exp.last_ctx.run_meta["current_input_context"]
-        == current_input_context
+        svc._test_fake_exp.last_ctx.run_meta["turn_input"]
+        == turn_input
     )
 
 
@@ -454,7 +454,7 @@ async def test_run_agent_writes_user_turn_context_and_passes_same_runtime_task()
 
 @pytest.mark.asyncio
 async def test_run_agent_user_turn_context_records_full_provider_facing_with_attachments():
-    from matmaster.types.current_input import CurrentInputContext
+    from matmaster.context.sources.turn_input import TurnInput
 
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
 
@@ -476,7 +476,7 @@ async def test_run_agent_user_turn_context_records_full_provider_facing_with_att
                 "workspace_paths": ["/workspace/notes.md"],
             }
         ]
-        current_input_context = CurrentInputContext.from_values(
+        turn_input = TurnInput.from_values(
             user_text="Compare FeO vs Fe2O3 from these files",
             files=[
                 "https://oss.example.com/input/feo.cif",
@@ -498,7 +498,7 @@ async def test_run_agent_user_turn_context_records_full_provider_facing_with_att
                 session_id="sess-1",
                 user_prompt="Compare FeO vs Fe2O3 from these files",
                 images=["https://oss.example.com/input/struct1.png"],
-                current_input_context=current_input_context,
+                turn_input=turn_input,
                 send_cb=AsyncMock(),
                 cancel_token=_make_cancel_token(),
                 mode="direct",

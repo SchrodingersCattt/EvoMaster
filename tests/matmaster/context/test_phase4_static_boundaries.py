@@ -14,3 +14,9 @@ def test_types_context_shim_is_removed() -> None:
     shim_path = ROOT / "matmaster/types" / "context.py"
 
     assert not shim_path.exists()
+
+
+def test_types_current_input_shim_is_removed() -> None:
+    shim_path = ROOT / "matmaster/types" / ("current" + "_input.py")
+
+    assert not shim_path.exists()

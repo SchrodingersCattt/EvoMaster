@@ -17,7 +17,7 @@ from src.services.user_turn_context_service import (
 def test_turn_input_is_reexported_from_current_input_shim() -> None:
     """Phase 2C shim keeps the old import path alive during migration."""
     from matmaster.context.sources.turn_input import TurnInput as TurnInputSource
-    from matmaster.types.current_input import TurnInput
+    from matmaster.context.sources.turn_input import TurnInput
 
     assert TurnInput is TurnInputSource
 

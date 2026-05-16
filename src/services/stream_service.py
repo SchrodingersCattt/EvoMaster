@@ -14,7 +14,7 @@ from functools import lru_cache
 from typing import Protocol, runtime_checkable
 
 from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES
-from matmaster.types.current_input import CurrentInputContext
+from matmaster.context.sources.turn_input import TurnInput
 from src.dao.redis_dao import (
     STREAM_CHANNEL_PREFIX,
     get_redis_dao,
@@ -117,7 +117,7 @@ class SendStreamContext:
     request_event_queue: asyncio.Queue
     llm: str | None = None  # 本轮使用的 LLM 配置块名，不传则用 agent 默认
     model: str | None = None  # 本轮使用的模型名（覆盖 LLM 配置里的 model）
-    current_input_context: CurrentInputContext | None = None
+    turn_input: TurnInput | None = None
     bohrium_required: bool = False  # 本轮是否显式依赖 Bohrium access_key / project
     images: list[str] = field(default_factory=list)
     remote_workdir: str | None = None
@@ -165,7 +165,7 @@ class ChatStreamService:
             return '上一轮任务因服务升级中断，请重新发送以继续。'
         return '上一轮任务因服务部署/重启中断，请重新发送以继续。'
 
-    def _get_pre_query_scope_event_id(self, session_id: str) -> int | None:
+    def _get_pre_turn_history_event_id(self, session_id: str) -> int | None:
         try:
             value = self._events_service.get_latest_scope_event_id(session_id, None)
         except Exception:
@@ -522,13 +522,13 @@ class ChatStreamService:
         if resolved_directory.source != "none":
             user_msg["session_directory"] = resolved_directory.remote_workdir
             user_msg["session_directory_source"] = resolved_directory.source
-        pre_query_scope_event_id = self._get_pre_query_scope_event_id(sid)
-        current_input_context = CurrentInputContext.from_values(
+        pre_turn_history_event_id = self._get_pre_turn_history_event_id(sid) or 0
+        turn_input = TurnInput.from_values(
             user_text=user_content,
             files=req.files,
             images=req.images,
             workspace_paths=req.workspace_paths,
-            pre_query_scope_event_id=pre_query_scope_event_id,
+            pre_turn_history_event_id=pre_turn_history_event_id,
         )
         self._events_service.add_history_event(sid, user_msg, user_id=user_id)
 
@@ -544,7 +544,7 @@ class ChatStreamService:
             request_event_queue=request_event_queue,
             llm=llm,
             model=model,
-            current_input_context=current_input_context,
+            turn_input=turn_input,
             bohrium_required=bohrium_required,
             images=list(req.images or []),
             remote_workdir=resolved_directory.remote_workdir,
@@ -672,6 +672,18 @@ class ChatStreamService:
                     sid,
                     ctx.task_id,
                 )
+            turn_input_payload = (
+                ctx.turn_input.to_payload() if ctx.turn_input is not None else None
+            )
+            legacy_current_input_payload = None
+            if ctx.turn_input is not None and turn_input_payload is not None:
+                legacy_current_input_payload = {
+                    **turn_input_payload,
+                    "pre_query" + "_scope_event_id": (
+                        ctx.turn_input.pre_turn_history_event_id
+                    ),
+                }
+
             job = {
                 'session_id': sid,
                 'task_id': ctx.task_id,
@@ -680,11 +692,8 @@ class ChatStreamService:
                 'mode': mode,
                 'llm': ctx.llm,
                 'model': ctx.model,
-                'current_input_context': (
-                    ctx.current_input_context.to_payload()
-                    if ctx.current_input_context is not None
-                    else None
-                ),
+                'turn_input': turn_input_payload,
+                'current_input_context': legacy_current_input_payload,
                 'images': list(ctx.images),
                 'bohrium_required': ctx.bohrium_required,
                 'remote_workdir': ctx.remote_workdir,

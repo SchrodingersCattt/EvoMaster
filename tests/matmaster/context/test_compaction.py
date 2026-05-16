@@ -6,7 +6,7 @@ from matmaster.context.assembly import ContextAssembler
 from matmaster.context.compaction import CompactionPlan, ContextCompactor
 from matmaster.context.ports import ContextAssemblyPorts, SessionEvent, UserInstructions
 from matmaster.context.sections import ContextSection, ContextView, SectionOrder
-from matmaster.types.current_input import CurrentInputContext
+from matmaster.context.sources.turn_input import TurnInput
 from matmaster.types.messages import AssistantMessage, LLMResponse, SystemMessage, UserMessage
 from matmaster.types.runtime import CompactionConfig
 
@@ -128,10 +128,10 @@ async def test_preflight_compaction_uses_raw_current_input_without_double_wrap()
     None
 ):
     compactor = make_compactor()
-    ctx = CurrentInputContext.from_values(
+    ctx = TurnInput.from_values(
         user_text="Use current file.",
         files=["https://oss/current.cif"],
-        pre_query_scope_event_id=7,
+        pre_turn_history_event_id=7,
     )
     messages = [
         SystemMessage(content="sys"),
@@ -143,7 +143,7 @@ async def test_preflight_compaction_uses_raw_current_input_without_double_wrap()
     result = await compactor.apply_compaction_plan(
         compactor.plan_preflight_compaction(messages),
         messages,
-        current_input_context=ctx,
+        turn_input=ctx,
     )
 
     runtime_content = messages[1].content or ""

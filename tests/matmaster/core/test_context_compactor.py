@@ -7,7 +7,7 @@ import pytest
 from matmaster.context.assembly import ContextAssembler
 from matmaster.context.ports import ContextAssemblyPorts, UserInstructions
 from matmaster.context.sections import ContextSection, ContextView, SectionOrder
-from matmaster.types.current_input import CurrentInputContext
+from matmaster.context.sources.turn_input import TurnInput
 from matmaster.types.messages import (
     AssistantMessage,
     ImageContentPart,
@@ -604,12 +604,12 @@ class TestPreflightCurrentInputSplit:
             rehydrated=rehydrated_with_current,
             rehydrated_until=rehydrated_until_current,
         )
-        ctx = CurrentInputContext.from_values(
+        ctx = TurnInput.from_values(
             user_text="Use only the new file",
             files=["https://oss.example.com/chat/new.cif"],
             images=["https://oss.example.com/chat/new.png"],
             workspace_paths=["/share/current/POSCAR"],
-            pre_query_scope_event_id=42,
+            pre_turn_history_event_id=42,
         )
         msgs = [
             SystemMessage(content="sys"),
@@ -630,7 +630,7 @@ class TestPreflightCurrentInputSplit:
         result = await compactor.apply_compaction_plan(
             compactor.plan_preflight_compaction(msgs),
             msgs,
-            current_input_context=ctx,
+            turn_input=ctx,
         )
 
         prompt_text = provider.calls[0][1]["content"]
@@ -657,11 +657,13 @@ class TestPreflightCurrentInputSplit:
         assert "new.cif" not in result.base_snapshot[0]["content"]
         assert result.base_snapshot[0].get("images") in (None, [])
 
-    async def test_missing_pre_query_boundary_makes_split_ephemeral(self) -> None:
+    async def test_missing_boundary_defaults_to_session_start_and_stays_durable(
+        self,
+    ) -> None:
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         compactor = _make_compactor(config, provider)
-        ctx = CurrentInputContext.from_values(
+        ctx = TurnInput.from_values(
             user_text="current task",
             files=["https://oss.example.com/chat/current.cif"],
         )
@@ -675,20 +677,21 @@ class TestPreflightCurrentInputSplit:
         result = await compactor.apply_compaction_plan(
             compactor.plan_preflight_compaction(msgs),
             msgs,
-            current_input_context=ctx,
+            turn_input=ctx,
         )
 
-        assert result.durability == "ephemeral"
-        assert result.failure_reason == "preflight_current_input_boundary_missing"
-        assert result.base_snapshot is None
+        assert result.durability == "durable"
+        assert result.failure_reason is None
+        assert result.checkpoint_covered_until_event_id == 0
+        assert result.base_snapshot is not None
 
     async def test_attachment_only_current_input_is_preserved(self) -> None:
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         compactor = _make_compactor(config, provider)
-        ctx = CurrentInputContext.from_values(
+        ctx = TurnInput.from_values(
             files=["https://oss.example.com/chat/only.cif"],
-            pre_query_scope_event_id=42,
+            pre_turn_history_event_id=42,
         )
         msgs = [
             SystemMessage(content="sys"),
@@ -700,7 +703,7 @@ class TestPreflightCurrentInputSplit:
         await compactor.apply_compaction_plan(
             compactor.plan_preflight_compaction(msgs),
             msgs,
-            current_input_context=ctx,
+            turn_input=ctx,
         )
 
         assert "file_1 only.cif https://oss.example.com/chat/only.cif" in (

@@ -40,7 +40,7 @@ def test_send_stream_context_does_not_carry_unused_reply_queue() -> None:
     field_names = {field.name for field in fields(SendStreamContext)}
 
     assert "reply_queue" not in field_names
-    assert "current_input_context" in field_names
+    assert "turn_input" in field_names
     assert "invocation_id" in field_names
 
 

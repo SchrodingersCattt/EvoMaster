@@ -45,8 +45,8 @@ from matmaster.core.kernel_items import (
     _KernelStopRequested,
     _TerminalItem,
 )
+from matmaster.context.sources.turn_input import TurnInput
 from matmaster.types.cancellation import CancellationToken
-from matmaster.types.current_input import CurrentInputContext
 from matmaster.types.events import (
     AssistantStateEvent,
     FinishDetail,
@@ -91,7 +91,7 @@ class AgentKernel:
         state: _KernelState,
         plan: Any,
         checkpoint_sink: Any,
-        current_input_context: CurrentInputContext | None = None,
+        turn_input: TurnInput | None = None,
     ) -> AsyncIterator[_KernelItem]:
         """Thin wrapper preserved for back-compat with tests that mock the method.
 
@@ -102,7 +102,7 @@ class AgentKernel:
             state=state,
             plan=plan,
             checkpoint_sink=checkpoint_sink,
-            current_input_context=current_input_context,
+            turn_input=turn_input,
         ):
             yield item
 
@@ -244,11 +244,11 @@ class AgentKernel:
                 UserPromptContext(prompt=task, session_id=session_id),
             )
 
-        raw_current_input_context = spec.meta.get("current_input_context")
-        current_input_context = (
-            raw_current_input_context
-            if isinstance(raw_current_input_context, CurrentInputContext)
-            else CurrentInputContext.from_payload(raw_current_input_context)
+        raw_turn_input = spec.meta.get("turn_input")
+        turn_input = (
+            raw_turn_input
+            if isinstance(raw_turn_input, TurnInput)
+            else TurnInput.from_payload(raw_turn_input)
         )
         current_user_images = [
             ImageContentPart.model_validate(image)
@@ -268,7 +268,7 @@ class AgentKernel:
             spec=spec,
             state=state,
             history=history,
-            current_input_context=current_input_context,
+            turn_input=turn_input,
             checkpoint_sink=checkpoint_sink,
         ):
             yield item

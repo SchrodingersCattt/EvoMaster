@@ -25,18 +25,13 @@ from matmaster.context.ports import UserInstructions
 from matmaster.context.scanner import coerce_session_events
 from matmaster.context.sections import ContextView
 from matmaster.context.sources.skills import resolve_active_skills, skill_name
-from matmaster.context.sources.turn_input import (
-    TurnAttachmentsSource,
-    TurnInput,
-    TurnInstructionSource,
-)
+from matmaster.context.sources.turn_input import TurnInput
 from matmaster.core.playground import PlaygroundManager
 from matmaster.integration.event_payloads import _normalize_public_source
 from matmaster.integration.fanout import RunEventFanout
 from matmaster.integration.persistence_handler import PersistenceHandler
 from matmaster.integration.sse_handler import SSEHandler
 from matmaster.types.cancellation import CancellationToken
-from matmaster.types.current_input import CurrentInputContext
 from matmaster.types.events import (
     BusEvent,
     CancelledEvent,
@@ -243,7 +238,7 @@ class AgentRunService:
         llm_override: str | None = None,
         model_override: str | None = None,
         images: list[str] | None = None,
-        current_input_context: CurrentInputContext | None = None,
+        turn_input: TurnInput | None = None,
         bohrium_required: bool = False,
         remote_workdir: str | None = None,
     ) -> tuple[bool | tuple[bool, str], int]:
@@ -292,9 +287,9 @@ class AgentRunService:
                     'task_id': task_id,
                 }
             )
-            if current_input_context is not None:
+            if turn_input is not None:
                 pg_ctx = pg_ctx.with_run_meta(
-                    current_input_context=current_input_context,
+                    turn_input=turn_input,
                 )
             try:
                 events_table = get_chat_events_table()
@@ -571,34 +566,18 @@ class AgentRunService:
                 )
                 intent = ContextAssemblyIntent.ANCHOR_TURN
 
-            pre_turn_history_event_id = 0
-            if (
-                current_input_context is not None
-                and current_input_context.pre_query_scope_event_id is not None
-            ):
-                pre_turn_history_event_id = int(
-                    current_input_context.pre_query_scope_event_id
-                )
-
-            turn_input = TurnInput(
-                instruction=TurnInstructionSource(user_text=user_prompt or ""),
-                attachments=TurnAttachmentsSource(
-                    files=(
-                        tuple(current_input_context.files)
-                        if current_input_context is not None
-                        else ()
-                    ),
-                    images=tuple(
-                        image["url"]
-                        for image in current_user_images_payload
-                        if isinstance(image, dict) and image.get("url")
-                    ),
-                    workspace_paths=(
-                        tuple(current_input_context.workspace_paths)
-                        if current_input_context is not None
-                        else ()
-                    ),
+            pre_turn_history_event_id = (
+                turn_input.pre_turn_history_event_id if turn_input is not None else 0
+            )
+            turn_input = turn_input or TurnInput.from_values(
+                user_text=user_prompt,
+                files=(),
+                images=tuple(
+                    image["url"]
+                    for image in current_user_images_payload
+                    if isinstance(image, dict) and image.get("url")
                 ),
+                workspace_paths=(),
                 pre_turn_history_event_id=pre_turn_history_event_id,
             )
 

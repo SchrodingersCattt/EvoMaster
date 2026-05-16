@@ -2,16 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from matmaster.context.rendering import wrap_tag
 from matmaster.context.sections import ContextView, SectionOrder
 from matmaster.context.sources.turn_input import (
     TurnAttachmentsSource,
     TurnInput,
     TurnInstructionSource,
-)
-from matmaster.types.current_input import (
-    CurrentInputContext,
-    build_current_instruction_block,
 )
 from matmaster.types.messages import ImageContentPart
 
@@ -77,8 +72,7 @@ def test_turn_input_default_merges_attachments_into_current_instruction() -> Non
     )
 
 
-def test_turn_input_default_shape_matches_existing_current_input_renderer() -> None:
-    """Pin Phase 2A default prompt shape to Phase 1 ground truth."""
+def test_turn_input_default_shape_matches_current_instruction_renderer() -> None:
     turn_input = TurnInput(
         instruction=TurnInstructionSource(user_text="Explain FeO."),
         attachments=TurnAttachmentsSource(
@@ -87,17 +81,16 @@ def test_turn_input_default_shape_matches_existing_current_input_renderer() -> N
             workspace_paths=("/share/result.xyz",),
         ),
     )
-    legacy_context = CurrentInputContext.from_values(
-        user_text="Explain FeO.",
-        files=("https://oss.example.com/input.cif",),
-        images=("https://oss.example.com/image.png",),
-        workspace_paths=("/share/result.xyz",),
-    )
 
     section = turn_input.to_sections()[0]
 
-    assert wrap_tag(section.tag, section.content) == build_current_instruction_block(
-        legacy_context
+    assert section.tag == "current_instruction"
+    assert section.content == (
+        "Explain FeO.\n\n"
+        "[Current attachments]\n"
+        "file_1 input.cif https://oss.example.com/input.cif\n"
+        "workspace_1 /share/result.xyz\n"
+        "image_1 image.png https://oss.example.com/image.png"
     )
 
 
@@ -131,3 +124,45 @@ def test_turn_input_has_effective_input_and_images_as_parts() -> None:
 def test_turn_input_rejects_negative_history_boundary() -> None:
     with pytest.raises(ValueError, match="pre_turn_history_event_id must be >= 0"):
         TurnInput(pre_turn_history_event_id=-1)
+
+
+def test_turn_input_round_trips_payload() -> None:
+    turn_input = TurnInput.from_values(
+        user_text="analyze current",
+        files=["https://oss.example.com/new.cif"],
+        images=["https://oss.example.com/image.png"],
+        workspace_paths=["/share/current/POSCAR"],
+        pre_turn_history_event_id=42,
+    )
+
+    assert TurnInput.from_payload(turn_input.to_payload()) == turn_input
+
+
+def test_turn_input_reads_legacy_payload_boundary_name() -> None:
+    turn_input = TurnInput.from_payload(
+        {
+            "user_text": "legacy",
+            "files": ["a.cif"],
+            "pre_query_scope_event_id": 7,
+        }
+    )
+
+    assert turn_input is not None
+    assert turn_input.pre_turn_history_event_id == 7
+    assert turn_input.files == ("a.cif",)
+
+
+def test_turn_input_missing_boundary_defaults_to_zero() -> None:
+    turn_input = TurnInput.from_payload({"user_text": "hi"})
+
+    assert turn_input is not None
+    assert turn_input.pre_turn_history_event_id == 0
+
+
+def test_turn_input_invalid_boundary_defaults_to_zero() -> None:
+    turn_input = TurnInput.from_payload(
+        {"user_text": "hi", "pre_turn_history_event_id": "not-an-int"}
+    )
+
+    assert turn_input is not None
+    assert turn_input.pre_turn_history_event_id == 0

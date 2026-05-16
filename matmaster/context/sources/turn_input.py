@@ -2,12 +2,25 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
+from typing import Any
 from urllib.parse import urlparse
 
 from matmaster.context.sections import ContextSection, ContextView, SectionOrder
 from matmaster.types.messages import ImageContentPart
 
 _RUNTIME = frozenset({ContextView.RUNTIME})
+
+
+def _clean_tuple(values: Any) -> tuple[str, ...]:
+    if values is None:
+        return ()
+    if isinstance(values, str):
+        values = [values]
+    if not isinstance(values, (list, tuple)):
+        return ()
+    return tuple(
+        text for value in values if isinstance(value, str) and (text := value.strip())
+    )
 
 
 def _display_name(value: str) -> str:
@@ -81,6 +94,71 @@ class TurnInput:
     def __post_init__(self) -> None:
         if self.pre_turn_history_event_id < 0:
             raise ValueError("pre_turn_history_event_id must be >= 0")
+
+    @classmethod
+    def from_values(
+        cls,
+        *,
+        user_text: str | None = None,
+        files: Any = None,
+        images: Any = None,
+        workspace_paths: Any = None,
+        pre_turn_history_event_id: int | None = 0,
+    ) -> "TurnInput":
+        return cls(
+            instruction=TurnInstructionSource(user_text=(user_text or "").strip()),
+            attachments=TurnAttachmentsSource(
+                files=_clean_tuple(files),
+                images=_clean_tuple(images),
+                workspace_paths=_clean_tuple(workspace_paths),
+            ),
+            pre_turn_history_event_id=int(pre_turn_history_event_id or 0),
+        )
+
+    @classmethod
+    def from_payload(cls, payload: Any) -> "TurnInput | None":
+        if not isinstance(payload, dict):
+            return None
+        raw_boundary = payload.get(
+            "pre_turn_history_event_id",
+            payload.get("pre_query_scope_event_id", 0),
+        )
+        try:
+            boundary = int(raw_boundary or 0)
+        except (TypeError, ValueError):
+            boundary = 0
+        return cls.from_values(
+            user_text=payload.get("user_text"),
+            files=payload.get("files"),
+            images=payload.get("images"),
+            workspace_paths=payload.get("workspace_paths"),
+            pre_turn_history_event_id=boundary,
+        )
+
+    def to_payload(self) -> dict[str, Any]:
+        return {
+            "user_text": self.user_text,
+            "files": list(self.files),
+            "images": list(self.images),
+            "workspace_paths": list(self.workspace_paths),
+            "pre_turn_history_event_id": self.pre_turn_history_event_id,
+        }
+
+    @property
+    def user_text(self) -> str:
+        return self.instruction.user_text
+
+    @property
+    def files(self) -> tuple[str, ...]:
+        return self.attachments.files
+
+    @property
+    def images(self) -> tuple[str, ...]:
+        return self.attachments.images
+
+    @property
+    def workspace_paths(self) -> tuple[str, ...]:
+        return self.attachments.workspace_paths
 
     def to_sections(
         self,

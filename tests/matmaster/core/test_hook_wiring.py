@@ -94,7 +94,7 @@ class FakeCompactor:
         plan,
         messages,
         *,
-        current_input_context=None,
+        turn_input=None,
     ):
         from matmaster.context.compaction import CompactionResult
 
@@ -157,7 +157,7 @@ class DoubleEventCompactor:
         plan,
         messages,
         *,
-        current_input_context=None,
+        turn_input=None,
     ):
         from matmaster.context.compaction import CompactionResult
 

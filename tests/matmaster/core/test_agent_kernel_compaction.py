@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
-from matmaster.types.current_input import CurrentInputContext
+from matmaster.context.sources.turn_input import TurnInput
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -78,7 +78,7 @@ class _DurablePreflightCompactor:
         plan,
         messages: list[Any],
         *,
-        current_input_context=None,
+        turn_input=None,
     ):
         from matmaster.context.compaction import CompactionResult
 
@@ -150,7 +150,7 @@ class _LifecycleCompactor:
         plan,
         messages: list[Any],
         *,
-        current_input_context=None,
+        turn_input=None,
     ):
         from matmaster.context.compaction import CompactionResult
 
@@ -184,7 +184,7 @@ class _EphemeralFallbackCompactor(_LifecycleCompactor):
         plan,
         messages: list[Any],
         *,
-        current_input_context=None,
+        turn_input=None,
     ):
         from matmaster.context.compaction import CompactionResult
 
@@ -514,13 +514,13 @@ class _BarrierFailureCompactor(_DurablePreflightCompactor):
         plan,
         messages,
         *,
-        current_input_context=None,
+        turn_input=None,
     ):
         self.apply_calls += 1
         return await super().apply_compaction_plan(
             plan,
             messages,
-            current_input_context=current_input_context,
+            turn_input=turn_input,
         )
 
 
@@ -530,7 +530,7 @@ class _BoundaryOverrideCompactor(_DurablePreflightCompactor):
         plan,
         messages: list[Any],
         *,
-        current_input_context=None,
+        turn_input=None,
     ):
         from matmaster.context.compaction import CompactionResult
 
@@ -558,10 +558,10 @@ class _BoundaryOverrideCompactor(_DurablePreflightCompactor):
         )
 
 
-class _RecordingCurrentInputCompactor(_DurablePreflightCompactor):
+class _RecordingTurnInputCompactor(_DurablePreflightCompactor):
     def __init__(self) -> None:
         super().__init__()
-        self.seen_current_input_context: Any = None
+        self.seen_turn_input: Any = None
         self.apply_calls = 0
 
     async def apply_compaction_plan(
@@ -569,22 +569,22 @@ class _RecordingCurrentInputCompactor(_DurablePreflightCompactor):
         plan,
         messages: list[Any],
         *,
-        current_input_context=None,
+        turn_input=None,
     ):
         self.apply_calls += 1
-        self.seen_current_input_context = current_input_context
+        self.seen_turn_input = turn_input
         return await super().apply_compaction_plan(
             plan,
             messages,
-            current_input_context=current_input_context,
+            turn_input=turn_input,
         )
 
 
 @pytest.mark.asyncio
-async def test_kernel_passes_raw_current_input_context_to_preflight_compactor():
+async def test_kernel_passes_raw_turn_input_to_preflight_compactor():
     from matmaster.core.agent import AgentKernel
 
-    compactor = _RecordingCurrentInputCompactor()
+    compactor = _RecordingTurnInputCompactor()
 
     async def checkpoint_sink(**kwargs):
         return 42
@@ -593,10 +593,10 @@ async def test_kernel_passes_raw_current_input_context_to_preflight_compactor():
         update={
             "compactor": compactor,
             "meta": {
-                "current_input_context": CurrentInputContext.from_values(
+                "turn_input": TurnInput.from_values(
                     user_text="original before rewrite",
                     files=["https://oss.example.com/chat/current.cif"],
-                    pre_query_scope_event_id=42,
+                    pre_turn_history_event_id=42,
                 )
             },
             "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
@@ -615,18 +615,18 @@ async def test_kernel_passes_raw_current_input_context_to_preflight_compactor():
         )
     ]
 
-    assert compactor.seen_current_input_context.user_text == "original before rewrite"
-    assert compactor.seen_current_input_context.files == (
+    assert compactor.seen_turn_input.user_text == "original before rewrite"
+    assert compactor.seen_turn_input.files == (
         "https://oss.example.com/chat/current.cif",
     )
-    assert compactor.seen_current_input_context.pre_query_scope_event_id == 42
+    assert compactor.seen_turn_input.pre_turn_history_event_id == 42
 
 
 @pytest.mark.asyncio
 async def test_kernel_skips_preflight_current_split_when_history_is_empty() -> None:
     from matmaster.core.agent import AgentKernel
 
-    compactor = _RecordingCurrentInputCompactor()
+    compactor = _RecordingTurnInputCompactor()
 
     async def checkpoint_sink(**kwargs):
         return 42
@@ -635,10 +635,10 @@ async def test_kernel_skips_preflight_current_split_when_history_is_empty() -> N
         update={
             "compactor": compactor,
             "meta": {
-                "current_input_context": CurrentInputContext.from_values(
+                "turn_input": TurnInput.from_values(
                     user_text="current task",
                     files=["https://oss.example.com/chat/current.cif"],
-                    pre_query_scope_event_id=42,
+                    pre_turn_history_event_id=42,
                 )
             },
             "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
@@ -842,13 +842,13 @@ async def test_kernel_runs_pre_compaction_barrier_before_compactor() -> None:
             plan,
             messages,
             *,
-            current_input_context=None,
+            turn_input=None,
         ):
             sequence.append("apply")
             return await super().apply_compaction_plan(
                 plan,
                 messages,
-                current_input_context=current_input_context,
+                turn_input=turn_input,
             )
 
     async def barrier() -> None:

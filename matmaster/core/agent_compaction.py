@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, Any
 
 from matmaster.core.hooks import CompactionContext, HookEvent
 from matmaster.core.kernel_items import _KernelItem, _KernelState
-from matmaster.types.current_input import CurrentInputContext
+from matmaster.context.sources.turn_input import TurnInput
 from matmaster.types.events import CompactionEvent
 
 if TYPE_CHECKING:
@@ -33,7 +33,7 @@ async def run_compaction_plan(
     state: _KernelState,
     plan: Any,
     checkpoint_sink: Any,
-    current_input_context: CurrentInputContext | None = None,
+    turn_input: TurnInput | None = None,
 ) -> AsyncIterator[_KernelItem]:
     """Verbatim move of AgentKernel._run_compaction_plan."""
     yield _KernelItem(
@@ -54,7 +54,7 @@ async def run_compaction_plan(
     result = await spec.compactor.apply_compaction_plan(
         plan,
         state.messages,
-        current_input_context=current_input_context,
+        turn_input=turn_input,
     )
     messages_after = len(state.messages)
 
@@ -127,7 +127,7 @@ async def run_preflight_compaction_if_needed(
     spec: AgentRuntimeSpec,
     state: _KernelState,
     history: list | None,
-    current_input_context: CurrentInputContext | None,
+    turn_input: TurnInput | None,
     checkpoint_sink: Any,
 ) -> AsyncIterator[_KernelItem]:
     """Verbatim move of the inline preflight dispatch."""
@@ -137,8 +137,8 @@ async def run_preflight_compaction_if_needed(
     preflight_planner = getattr(spec.compactor, "plan_preflight_compaction", None)
     if callable(preflight_planner):
         skip_preflight_for_empty_history = (
-            current_input_context is not None
-            and current_input_context.has_effective_input()
+            turn_input is not None
+            and turn_input.has_effective_input()
             and not history
         )
         plan = (
@@ -152,7 +152,7 @@ async def run_preflight_compaction_if_needed(
                 state=state,
                 plan=plan,
                 checkpoint_sink=checkpoint_sink,
-                current_input_context=current_input_context,
+                turn_input=turn_input,
             ):
                 yield item
     else:

@@ -21,11 +21,8 @@ from matmaster.context.assembly import (
 from matmaster.context.ports import UserInstructions
 from matmaster.context.sections import ContextView
 from matmaster.context.sources.turn_input import (
-    TurnAttachmentsSource,
     TurnInput,
-    TurnInstructionSource,
 )
-from matmaster.types.current_input import CurrentInputContext
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import (
     AssistantMessage,
@@ -265,25 +262,6 @@ class ContextCompactor:
     ) -> CompactionPlan | None:
         return self._plan_preflight_compaction(messages)
 
-    @staticmethod
-    def _turn_input_from_current_context(
-        current_input_context: CurrentInputContext,
-    ) -> TurnInput:
-        boundary = current_input_context.pre_query_scope_event_id
-        if boundary is None:
-            boundary = 0
-        return TurnInput(
-            instruction=TurnInstructionSource(
-                user_text=current_input_context.user_text,
-            ),
-            attachments=TurnAttachmentsSource(
-                files=tuple(current_input_context.files),
-                images=tuple(current_input_context.images),
-                workspace_paths=tuple(current_input_context.workspace_paths),
-            ),
-            pre_turn_history_event_id=int(boundary),
-        )
-
     async def plan_runtime_compaction(
         self,
         messages: list[Message],
@@ -316,7 +294,7 @@ class ContextCompactor:
         plan: CompactionPlan,
         messages: list[Message],
         *,
-        current_input_context: CurrentInputContext | None = None,
+        turn_input: TurnInput | None = None,
     ) -> CompactionResult:
         """Apply a previously planned compaction and mutate messages in place."""
         if not messages:
@@ -328,8 +306,8 @@ class ContextCompactor:
         system_msg = messages[0]
         current_split = (
             plan.phase == "preflight"
-            and current_input_context is not None
-            and current_input_context.has_effective_input()
+            and turn_input is not None
+            and turn_input.has_effective_input()
             and len(messages) >= 3
             and isinstance(messages[-1], UserMessage)
             and bool(messages[1:-1])
@@ -360,11 +338,6 @@ class ContextCompactor:
 
         try:
             summary = await self._summarize(summary_input)
-            turn_input = (
-                self._turn_input_from_current_context(current_input_context)
-                if current_split and current_input_context is not None
-                else None
-            )
             intent = (
                 ContextAssemblyIntent.PREFLIGHT_COMPACTION
                 if current_split
@@ -387,7 +360,7 @@ class ContextCompactor:
                     spawn_id=self._spawn_id,
                     user_instructions=self._user_instructions,
                     compacted_history_summary=summary,
-                    turn_input=turn_input,
+                    turn_input=turn_input if current_split else None,
                     covered_until_event_id=covered_until_event_id,
                 )
             )
@@ -399,13 +372,6 @@ class ContextCompactor:
             checkpoint_covered_until_event_id = assembly.covered_until_event_id
             user_instructions_text = assembly.user_instructions_text
             user_instructions_hash = assembly.user_instructions_hash
-            if (
-                current_split
-                and current_input_context is not None
-                and current_input_context.pre_query_scope_event_id is None
-            ):
-                durability = "ephemeral"
-                failure_reason = "preflight_current_input_boundary_missing"
         except Exception as exc:
             if plan.phase == "preflight":
                 logger.warning(

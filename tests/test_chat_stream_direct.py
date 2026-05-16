@@ -119,7 +119,7 @@ def test_chat_stream_returns_503_when_redis_url_missing(tmp_path):
             p.stop()
 
 
-def test_prepare_send_message_captures_current_input_context_before_user_event():
+def test_prepare_send_message_captures_turn_input_before_user_event():
     from src.models.chat import ChatSendRequest
     from src.services.stream_service import ChatStreamService
 
@@ -147,17 +147,33 @@ def test_prepare_send_message_captures_current_input_context_before_user_event()
     ):
         ctx = service.prepare_send_message("sess-1", req, user_id="user-1")
 
-    assert ctx.current_input_context.user_text == "analyze current"
-    assert ctx.current_input_context.files == ("https://oss.example.com/chat/new.cif",)
-    assert ctx.current_input_context.images == (
+    assert ctx.turn_input.user_text == "analyze current"
+    assert ctx.turn_input.files == ("https://oss.example.com/chat/new.cif",)
+    assert ctx.turn_input.images == (
         "https://oss.example.com/chat/current.png",
     )
-    assert ctx.current_input_context.workspace_paths == ("/share/current/POSCAR",)
-    assert ctx.current_input_context.pre_query_scope_event_id == 77
+    assert ctx.turn_input.workspace_paths == ("/share/current/POSCAR",)
+    assert ctx.turn_input.pre_turn_history_event_id == 77
     assert ctx.user_msg["content"] == "analyze current"
     assert "schema_version" not in ctx.user_msg
     events_service.get_latest_scope_event_id.assert_called_once_with("sess-1", None)
     events_service.add_history_event.assert_called_once()
+
+
+def test_worker_payload_legacy_current_input_keeps_boundary_name() -> None:
+    from matmaster.context.sources.turn_input import TurnInput
+
+    turn_input = TurnInput.from_values(
+        user_text="hello",
+        pre_turn_history_event_id=42,
+    )
+    legacy_boundary_key = "pre_query" + "_scope_event_id"
+    legacy_payload = {
+        **turn_input.to_payload(),
+        legacy_boundary_key: turn_input.pre_turn_history_event_id,
+    }
+
+    assert legacy_payload[legacy_boundary_key] == 42
 
 
 def test_generate_send_stream_skips_current_task_in_history_replay():

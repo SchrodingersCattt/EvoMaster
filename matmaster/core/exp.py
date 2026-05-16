@@ -321,9 +321,9 @@ class Exp:
             "spawn_id": spawn_id,
             "attachment_manifest": run_meta.get("attachment_manifest", ""),
         }
-        current_input_context = run_meta.get("current_input_context")
-        if current_input_context is not None:
-            meta["current_input_context"] = current_input_context
+        turn_input = run_meta.get("turn_input")
+        if turn_input is not None:
+            meta["turn_input"] = turn_input
         return meta
 
     # ── Active planes derivation ────────────────────────
