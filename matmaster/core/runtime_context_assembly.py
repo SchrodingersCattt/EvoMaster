@@ -20,7 +20,7 @@ from matmaster.context.ports import (
 )
 from matmaster.context.scanner import coerce_session_events
 from matmaster.context.session import SessionContextBuilder
-from matmaster.types.context import PlaygroundContext
+from matmaster.core.playground import PlaygroundContext
 from matmaster.types.runtime import AgentRuntimeSpec
 from matmaster.types.runtime_ports import EmptySessionEventHistory
 

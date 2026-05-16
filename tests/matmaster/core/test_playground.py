@@ -14,7 +14,7 @@ import pytest
 
 from matmaster.core.playground import Playground
 from matmaster.sessions.local import LocalSession
-from matmaster.types.context import PlaygroundContext, WorkspaceArchivalConfig
+from matmaster.core.playground import PlaygroundContext, WorkspaceArchivalConfig
 
 # ---------------------------------------------------------------------------
 # Helpers

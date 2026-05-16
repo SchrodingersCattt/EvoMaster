@@ -12,7 +12,7 @@ from pathlib import Path
 import pytest
 
 from matmaster.context.system_prompt import SystemPromptBuilder
-from matmaster.types.context import PlaygroundContext
+from matmaster.core.playground import PlaygroundContext
 
 # ---------------------------------------------------------------------------
 # Test helpers

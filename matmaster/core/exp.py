@@ -30,7 +30,7 @@ from matmaster.core.hooks import HookEvent, HookExecutor, SubagentContext
 from matmaster.core.path_access import derive_path_access_roots
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.cancellation import CancellationToken
-from matmaster.types.context import PlaygroundContext
+from matmaster.core.playground import PlaygroundContext
 from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec
 from matmaster.types.runtime_ports import KernelRuntimePorts
 

@@ -316,7 +316,7 @@ def test_apply_run_credentials_registers_runtime_without_dual_write() -> None:
 
 
 def test_playground_context_with_bohrium_uses_snapshot_dict() -> None:
-    from matmaster.types.context import PlaygroundContext
+    from matmaster.core.playground import PlaygroundContext
 
     ctx = PlaygroundContext(
         workdir=Path("/tmp/work"),

@@ -19,7 +19,7 @@ from typing import Any
 
 from matmaster.integration.fanout import RunEventFanout
 from matmaster.integration.workspace_handler import WorkspaceHandler
-from matmaster.types.context import WorkspaceArchivalConfig
+from matmaster.core.playground import WorkspaceArchivalConfig
 from matmaster.types.figures import FigureUploadConfig
 from src.dao.oss_io import upload_bytes_to_oss
 from src.services.agent_run_bohrium import BohriumSetupService

@@ -19,7 +19,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from matmaster.types.context import PlaygroundContext
+from matmaster.core.playground import PlaygroundContext
 
 
 class SystemPromptBuilder:

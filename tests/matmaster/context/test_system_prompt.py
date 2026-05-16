@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from matmaster.context.system_prompt import SystemPromptBuilder
-from matmaster.types.context import PlaygroundContext
+from matmaster.core.playground import PlaygroundContext
 
 
 def test_system_prompt_builder_builds_base_prompt() -> None:

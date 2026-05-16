@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from matmaster.types.cancellation import CancellationController
-from matmaster.types.context import PlaygroundContext
+from matmaster.core.playground import PlaygroundContext
 from matmaster.types.messages import LLMResponse, StreamChunk
 
 # ── Mock LLM providers for different outcomes ────────

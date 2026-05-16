@@ -789,7 +789,7 @@ class TestExpCheckpointSinkScopeResolution:
     ) -> None:
         from matmaster.config.exp import ExpConfig
         from matmaster.core.exp import Exp
-        from matmaster.types.context import PlaygroundContext
+        from matmaster.core.playground import PlaygroundContext
         from matmaster.types.runtime_ports import (
             PlaygroundCompactionPort,
             PlaygroundRuntimePorts,

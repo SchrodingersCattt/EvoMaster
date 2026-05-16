@@ -13,7 +13,7 @@ import pytest
 import matmaster.config.loader as matmaster_loader
 from matmaster.bohrium.types import BohriumRuntimeSnapshot
 from matmaster.types.cancellation import CancellationController
-from matmaster.types.context import PlaygroundContext
+from matmaster.core.playground import PlaygroundContext
 from tests.matmaster.core.conftest import MockLLMProvider
 
 _src_services = pytest.importorskip(

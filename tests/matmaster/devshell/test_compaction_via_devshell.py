@@ -158,7 +158,7 @@ class TestDefaultDevshellPath:
         """Exp.assemble() 产出的 CompactionConfig 默认存在且不再暴露 enabled。"""
         from matmaster.config.exp import ExpConfig
         from matmaster.core.exp import Exp
-        from matmaster.types.context import PlaygroundContext
+        from matmaster.core.playground import PlaygroundContext
 
         config = ExpConfig(name="test", max_turns=5)
         exp = Exp(config)

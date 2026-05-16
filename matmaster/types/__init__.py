@@ -1,7 +1,6 @@
 """matmaster.types -- Type contracts for the three-layer architecture."""
 
 from .cancellation import CancellationController, CancellationToken, CancelledError
-from .context import PlaygroundContext
 from .errors import LLMError
 from .events import (
     AgentEvent,
@@ -66,8 +65,6 @@ __all__ = [
     "CancellationController",
     "CancellationToken",
     "CancelledError",
-    # context
-    "PlaygroundContext",
     # errors
     "LLMError",
     # events

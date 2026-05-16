@@ -16,7 +16,7 @@ from matmaster.config.exp import ExpConfig, ExpSkillsConfig
 from matmaster.core.exp import Exp
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import normalize_tool_result
-from matmaster.types.context import PlaygroundContext
+from matmaster.core.playground import PlaygroundContext
 
 
 async def _execute_use_skill(

@@ -4,7 +4,7 @@ import pytest
 
 from matmaster.manifests.rehydrator import CompactionRehydrator
 from matmaster.skills.registry import SkillRegistry
-from matmaster.types.context import PlaygroundContext
+from matmaster.core.playground import PlaygroundContext
 
 
 def _registry(tmp_path: Path) -> SkillRegistry:

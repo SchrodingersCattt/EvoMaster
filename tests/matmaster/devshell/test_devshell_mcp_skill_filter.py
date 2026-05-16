@@ -12,7 +12,7 @@ from matmaster.config.loader import load_base_system_prompt
 from matmaster.core.exp import Exp
 from matmaster.providers.openai_provider import OpenAIProvider
 from matmaster.sessions.local import LocalSession
-from matmaster.types.context import PlaygroundContext
+from matmaster.core.playground import PlaygroundContext
 
 
 def _tool_names(registry: object) -> set[str]:

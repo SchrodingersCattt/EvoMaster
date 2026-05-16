@@ -26,7 +26,7 @@ from matmaster.core.tool_scheduler import ToolScheduler
 from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
-from matmaster.types.context import PlaygroundContext
+from matmaster.core.playground import PlaygroundContext
 from matmaster.types.events import (
     ResponseEvent,
     RunResultEvent,

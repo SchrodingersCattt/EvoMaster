@@ -14,7 +14,7 @@ from matmaster.core.exp import Exp
 from matmaster.devshell.config import DevConfig
 from matmaster.devshell.stream_hook import DevStreamHook
 from matmaster.types.cancellation import CancellationToken
-from matmaster.types.context import PlaygroundContext
+from matmaster.core.playground import PlaygroundContext
 from matmaster.types.events import BusEvent
 from matmaster.types.messages import Message, UserMessage
 

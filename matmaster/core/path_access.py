@@ -5,7 +5,7 @@ from __future__ import annotations
 import posixpath
 from typing import Any
 
-from matmaster.types.context import PlaygroundContext
+from matmaster.core.playground import PlaygroundContext
 from matmaster.types.topology import PathAccessRoot
 
 

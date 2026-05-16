@@ -12,7 +12,7 @@ from matmaster.config.exp import ExpConfig
 from matmaster.core.exp import Exp
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import normalize_tool_result
-from matmaster.types.context import PlaygroundContext
+from matmaster.core.playground import PlaygroundContext
 
 
 def _setup_skill_env(tmp_path):

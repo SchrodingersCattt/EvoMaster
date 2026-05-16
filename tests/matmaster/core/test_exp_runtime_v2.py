@@ -97,7 +97,7 @@ async def test_build_runtime_uses_runtime_ports_history(
 ) -> None:
     from matmaster.config.exp import ExpConfig
     from matmaster.core.exp import Exp
-    from matmaster.types.context import PlaygroundContext
+    from matmaster.core.playground import PlaygroundContext
     from matmaster.types.runtime_ports import (
         PlaygroundCompactionPort,
         PlaygroundRuntimePorts,
@@ -145,7 +145,7 @@ async def test_build_runtime_missing_runtime_history_has_no_scope_boundary(
 ) -> None:
     from matmaster.config.exp import ExpConfig
     from matmaster.core.exp import Exp
-    from matmaster.types.context import PlaygroundContext
+    from matmaster.core.playground import PlaygroundContext
 
     ctx = PlaygroundContext(
         workdir=tmp_path,
@@ -166,7 +166,7 @@ async def test_build_runtime_passes_current_input_context_to_kernel_meta(
 ) -> None:
     from matmaster.config.exp import ExpConfig
     from matmaster.core.exp import Exp
-    from matmaster.types.context import PlaygroundContext
+    from matmaster.core.playground import PlaygroundContext
     from matmaster.types.current_input import CurrentInputContext
 
     current_input_context = CurrentInputContext.from_values(
@@ -195,7 +195,7 @@ def _make_playground_context(
     llm_provider: Any = None,
 ) -> Any:
     """Build a minimal PlaygroundContext-like object."""
-    from matmaster.types.context import PlaygroundContext
+    from matmaster.core.playground import PlaygroundContext
 
     ctx = PlaygroundContext(
         workdir=Path(workdir),
@@ -759,7 +759,7 @@ class TestActivePlanesNewNames:
         """WebSearch in builtin_cfg activates EXTERNAL_SERVICE plane."""
         from matmaster.config.exp import ExpConfig
         from matmaster.core.exp import Exp
-        from matmaster.types.context import PlaygroundContext
+        from matmaster.core.playground import PlaygroundContext
         from matmaster.types.topology import ToolPlane
 
         config = ExpConfig(name="test", tools={"builtin": ["WebSearch"]})

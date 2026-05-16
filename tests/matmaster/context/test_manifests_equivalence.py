@@ -23,7 +23,7 @@ from matmaster.manifests import skill as legacy_skill
 from matmaster.manifests.rehydrator import CompactionRehydrator
 from matmaster.manifests.scanner import scan_skill_hits as legacy_scan_skill_hits
 from matmaster.skills.registry import SkillRegistry
-from matmaster.types.context import PlaygroundContext
+from matmaster.core.playground import PlaygroundContext
 
 
 def _registry(

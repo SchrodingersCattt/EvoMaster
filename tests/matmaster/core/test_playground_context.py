@@ -8,7 +8,7 @@ from unittest.mock import MagicMock
 import pytest
 from pydantic import ValidationError
 
-from matmaster.types.context import PlaygroundContext, WorkspaceArchivalConfig
+from matmaster.core.playground import PlaygroundContext, WorkspaceArchivalConfig
 from matmaster.types.session import Session
 
 
