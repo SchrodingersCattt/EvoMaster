@@ -69,7 +69,7 @@ banks:
 - path: input_generation/ig_agnostic_abacus.yaml
   capability: input_generation
   domain: agnostic
-  questions: 20
+  questions: 18
 - path: input_generation/ig_agnostic_gpumd.yaml
   capability: input_generation
   domain: agnostic
@@ -149,7 +149,7 @@ banks:
 - path: workflow_orchestration/wo_catalysis.yaml
   capability: workflow_orchestration
   domain: catalysis
-  questions: 6
+  questions: 5
 - path: workflow_orchestration/wo_semiconductor.yaml
   capability: workflow_orchestration
   domain: semiconductor
@@ -157,11 +157,11 @@ banks:
 - path: platform/ig_agnostic.yaml
   capability: input_generation
   domain: agnostic
-  questions: 2
+  questions: 4
 - path: platform/wo_agnostic.yaml
   capability: workflow_orchestration
   domain: agnostic
-  questions: 2
+  questions: 3
 - path: platform/wo_catalysis.yaml
   capability: workflow_orchestration
   domain: catalysis

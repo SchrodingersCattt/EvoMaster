@@ -50,6 +50,7 @@ correct, runnable files and avoiding silent-failure configurations.
 - Supercell/vacancy/defect/BSSE: prefer `kspacing` in `INPUT` (avoid brittle manual meshes).
 - Band structure: use dedicated line-mode KPT for NSCF step.
 - SCF and NSCF should not share a single KPT by default in band/DOS workflows.
+- DOS NSCF requires a denser uniform k-mesh than the SCF step (typically 2-3× denser, minimum 8×8×8 for bulk). A sparse SCF mesh is acceptable for cost reasons (especially with hybrid functionals), but the DOS mesh must remain dense to produce smooth spectra regardless of functional cost.
 - Metal slab calculations: **minimum 12×12 in-plane** k-points (or equivalent `kspacing ≤ 0.10` in-plane). Do not use less.
 
 ## Parameter Baseline (Use Judgment, Not Blind Fixed Values)
@@ -77,6 +78,7 @@ correct, runnable files and avoiding silent-failure configurations.
 - For AFM-prone transition-metal oxides under DFT+U (for example NiO), do not default to all-parallel FM initialization unless the task explicitly asks for FM; use a physically reasonable antiferromagnetic or equivalent antiparallel initialization.
 - If Ni/Co/Fe (or similar) spin channels are split into multiple species in `STRU`, ensure `orbital_corr` and `hubbard_u` cover all correlated species consistently.
 - When the task provides source structures (for example POSCAR/CIF), convert lattice and atomic positions faithfully into `STRU` before applying task-specific settings.
+- Bader charge analysis: requires `out_chg 1`. Both PW and LCAO basis are supported. With pseudopotential-only valence density, light elements (e.g., Al) may show zero Bader charge because the valence density is too flat to partition. Fix: augment valence cube with approximate core charges (Gaussian core model) to create a reference total density, then run `bader SPIN1_CHG.cube -ref total_chg.cube`. The `cmd` chain should include this core-augmentation step between ABACUS and bader.
 
 ## Bohrium Submission Defaults
 
@@ -86,7 +88,7 @@ Keep the previous default profile unless task/environment explicitly overrides i
 
 | Item | Default |
 |------|---------|
-| image | `registry.dp.tech/dptech/dp/native/hub/mrdic2/abacusp:1.0.1-1778080680` |
+| image | `registry.dp.tech/dptech/dp/native/hub/mrdic2/abacusp:1.0.3-1778742780` |
 | machine | `c32_m128_cpu` |
 | cmd | `OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1` |
 

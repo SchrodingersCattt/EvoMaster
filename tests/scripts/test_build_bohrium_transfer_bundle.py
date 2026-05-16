@@ -21,7 +21,8 @@ def test_build_bohrium_transfer_bundle_dry_run_outputs_metadata() -> None:
         capture_output=True,
     )
 
-    payload = json.loads(result.stdout)
+    lines = [line for line in result.stdout.splitlines() if line.strip()]
+    payload = json.loads(lines[-1])
     assert payload["package"] == "matmaster-bohrium-transfer"
     assert payload["protocol_version"] == PROTOCOL_VERSION
     assert payload["schema_version"] == SCHEMA_VERSION
