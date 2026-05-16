@@ -97,6 +97,9 @@ def _scan_payloads(
     *,
     max_entries: int,
 ) -> tuple[AttachmentEntry, ...]:
+    if max_entries <= 0:
+        return ()
+
     counters: dict[AttachmentKind, int] = {"file": 0, "image": 0, "workspace": 0}
     seen: set[tuple[AttachmentKind, str]] = set()
     entries: list[AttachmentEntry] = []
@@ -121,14 +124,14 @@ def _scan_payloads(
         )
 
     for payload, source_event_id in payloads:
-        if len(entries) >= max_entries:
-            break
         for value in _string_tuple(payload.get("files")):
             add("file", value, source_event_id)
         for value in _string_tuple(payload.get("images")):
             add("image", value, source_event_id)
         for value in _string_tuple(payload.get("workspace_paths")):
             add("workspace", value, source_event_id)
+        if len(entries) >= max_entries:
+            break
 
     return tuple(entries)
 
@@ -138,15 +141,15 @@ def scan_attachment_entries(
     *,
     max_entries: int = 30,
 ) -> tuple[AttachmentEntry, ...]:
-    payloads: list[tuple[Mapping[str, object], int | None]] = []
-    for event in events:
-        if event.source != "User":
-            continue
-        if event.event_type != "query":
-            continue
-        payloads.append((_query_payload(event), event.id))
+    def payloads() -> Iterable[tuple[Mapping[str, object], int | None]]:
+        for event in events:
+            if event.source != "User":
+                continue
+            if event.event_type != "query":
+                continue
+            yield (_query_payload(event), event.id)
 
-    return _scan_payloads(payloads, max_entries=max_entries)
+    return _scan_payloads(payloads(), max_entries=max_entries)
 
 
 def scan_legacy_attachment_entries(
@@ -154,16 +157,17 @@ def scan_legacy_attachment_entries(
     *,
     max_entries: int = 30,
 ) -> tuple[AttachmentEntry, ...]:
-    payloads: list[tuple[Mapping[str, object], int | None]] = []
-    for row in rows:
-        if not isinstance(row, Mapping):
-            continue
-        if normalize_event_source(row.get("source")) != "User":
-            continue
-        if str(row.get("type") or "").strip() != "query":
-            continue
-        payloads.append((_legacy_query_payload(row), _event_id_from_mapping(row)))
-    return _scan_payloads(payloads, max_entries=max_entries)
+    def payloads() -> Iterable[tuple[Mapping[str, object], int | None]]:
+        for row in rows:
+            if not isinstance(row, Mapping):
+                continue
+            if normalize_event_source(row.get("source")) != "User":
+                continue
+            if str(row.get("type") or "").strip() != "query":
+                continue
+            yield (_legacy_query_payload(row), _event_id_from_mapping(row))
+
+    return _scan_payloads(payloads(), max_entries=max_entries)
 
 
 def filter_entries_in_event_range(
