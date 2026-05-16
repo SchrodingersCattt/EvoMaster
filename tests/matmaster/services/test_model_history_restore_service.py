@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+import src.services.model_history_restore_service as restore_module
 from matmaster.types.message_normalization import normalize_and_validate_openai_messages
 from matmaster.types.messages import (
     AssistantMessage,
@@ -11,7 +12,6 @@ from matmaster.types.messages import (
     UserMessage,
 )
 from src.services.history_checkpoint_codec import serialize_base_messages
-import src.services.model_history_restore_service as restore_module
 from src.services.model_history_restore_service import ModelHistoryRestoreService
 
 

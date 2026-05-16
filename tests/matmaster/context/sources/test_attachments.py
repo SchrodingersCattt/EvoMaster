@@ -11,7 +11,6 @@ from matmaster.context.sources.attachments import (
     scan_legacy_attachment_entries,
 )
 
-
 _QUERY_EVENTS = [
     {
         "id": 10,

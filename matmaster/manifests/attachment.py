@@ -8,9 +8,15 @@ from typing import Any
 from matmaster.context.sources.attachments import (
     AttachmentEntry,
     AttachmentKind,
+)
+from matmaster.context.sources.attachments import (
     filter_entries_after_event_id as _typed_filter_after,
+)
+from matmaster.context.sources.attachments import (
     filter_entries_in_event_range as _typed_filter_range,
-    format_entries_text as _typed_format,
+)
+from matmaster.context.sources.attachments import format_entries_text as _typed_format
+from matmaster.context.sources.attachments import (
     scan_legacy_attachment_entries as _legacy_scan,
 )
 

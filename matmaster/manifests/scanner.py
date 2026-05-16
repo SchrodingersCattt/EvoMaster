@@ -8,8 +8,8 @@ from typing import Any
 from matmaster.context.scanner import (
     SkillHitRecord,
     coerce_session_events,
-    scan_skill_hits as _typed_scan_skill_hits,
 )
+from matmaster.context.scanner import scan_skill_hits as _typed_scan_skill_hits
 
 __all__ = ["SkillHitRecord", "scan_skill_hits"]
 

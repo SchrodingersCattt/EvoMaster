@@ -98,7 +98,9 @@ def test_session_skills_source_to_sections(tmp_path: Path) -> None:
     assert section.key == "session_skills"
     assert section.tag == "loaded_skills"
     assert section.order == SectionOrder.SESSION_SKILLS
-    assert ContextView.RUNTIME in section.views and ContextView.CHECKPOINT in section.views
+    assert (
+        ContextView.RUNTIME in section.views and ContextView.CHECKPOINT in section.views
+    )
     assert "- pxrd: PXRD helper (mcp_server=mat_xrd)" in section.content
 
 

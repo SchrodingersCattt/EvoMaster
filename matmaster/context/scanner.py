@@ -49,7 +49,9 @@ def _coerce_optional_str(value: Any) -> str | None:
     return text or None
 
 
-def coerce_session_events(rows: Iterable[Mapping[str, Any]]) -> tuple[SessionEvent, ...]:
+def coerce_session_events(
+    rows: Iterable[Mapping[str, Any]],
+) -> tuple[SessionEvent, ...]:
     """Translate raw DAO event rows into a typed SessionEvent tuple."""
     events: list[SessionEvent] = []
     for row in rows:
@@ -64,7 +66,10 @@ def coerce_session_events(rows: Iterable[Mapping[str, Any]]) -> tuple[SessionEve
             and "created_at" not in content
             and row.get("created_at") is not None
         ):
-            content = {**content, "created_at": _freeze_json_value(row.get("created_at"))}
+            content = {
+                **content,
+                "created_at": _freeze_json_value(row.get("created_at")),
+            }
         events.append(
             SessionEvent(
                 id=event_id,
@@ -104,7 +109,9 @@ def scan_skill_hits(events: Iterable[SessionEvent]) -> tuple[SkillHitRecord, ...
             else None
         )
         timestamp = (
-            str(timestamp_raw) if isinstance(timestamp_raw, str) and timestamp_raw else None
+            str(timestamp_raw)
+            if isinstance(timestamp_raw, str) and timestamp_raw
+            else None
         )
         records.append(
             SkillHitRecord(

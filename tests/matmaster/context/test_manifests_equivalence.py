@@ -126,7 +126,12 @@ HASH_ANCHOR_EVENTS = [
 
 @pytest.mark.parametrize(
     "events",
-    [SINGLE_TURN_EVENTS, MULTI_TURN_EVENTS, CHECKPOINT_MIXED_EVENTS, HASH_ANCHOR_EVENTS],
+    [
+        SINGLE_TURN_EVENTS,
+        MULTI_TURN_EVENTS,
+        CHECKPOINT_MIXED_EVENTS,
+        HASH_ANCHOR_EVENTS,
+    ],
 )
 def test_attachment_entries_equivalence(events) -> None:
     legacy_entries = legacy_attachment.build_available_attachments(events)

@@ -47,9 +47,11 @@ def _build(
 
     def deserialize_base_messages(raw: list[dict[str, Any]]) -> list[Message]:
         return [
-            UserMessage.model_validate(item)
-            if item.get("role") == "user"
-            else AssistantMessage.model_validate(item)
+            (
+                UserMessage.model_validate(item)
+                if item.get("role") == "user"
+                else AssistantMessage.model_validate(item)
+            )
             for item in raw
             if item.get("role") in {"user", "assistant"}
         ]

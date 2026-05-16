@@ -105,10 +105,10 @@ def test_scan_skill_hits_accepts_session_events() -> None:
 
 
 def test_scan_skill_hits_accepts_legacy_string_content_via_coerce() -> None:
-    events = coerce_session_events([{"id": 7, "type": "skill_hit", "content": "search"}])
+    events = coerce_session_events(
+        [{"id": 7, "type": "skill_hit", "content": "search"}]
+    )
 
     records = scan_skill_hits(events)
 
-    assert records == (
-        SkillHitRecord(skill_name="search", event_id=7, timestamp=None),
-    )
+    assert records == (SkillHitRecord(skill_name="search", event_id=7, timestamp=None),)

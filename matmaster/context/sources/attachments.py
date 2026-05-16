@@ -219,7 +219,7 @@ class SessionAttachmentsSource:
         until_event_id: int | None = None,
         after_id: int | None = None,
         max_entries: int = 30,
-    ) -> "SessionAttachmentsSource":
+    ) -> SessionAttachmentsSource:
         raw_entries = scan_attachment_entries(events, max_entries=max_entries)
         scoped = filter_entries_in_event_range(
             raw_entries,
@@ -231,7 +231,7 @@ class SessionAttachmentsSource:
     def with_added(
         self,
         extra: Iterable[AttachmentEntry],
-    ) -> "SessionAttachmentsSource":
+    ) -> SessionAttachmentsSource:
         added = tuple(extra)
         if not added:
             return self

@@ -101,9 +101,10 @@ async def test_assemble_turn_anchor_loads_events_and_jobs() -> None:
     assert len(events_port.queries) == 1
     assert events_port.queries[0].until_event_id == 12
     assert len(jobs_port.queries) == 1
-    assert result.user_turn_context.render(ContextView.RUNTIME).count(
-        "<session_tools>"
-    ) == 1
+    assert (
+        result.user_turn_context.render(ContextView.RUNTIME).count("<session_tools>")
+        == 1
+    )
 
 
 @pytest.mark.asyncio
@@ -132,7 +133,9 @@ async def test_assemble_turn_continuation_does_not_load_events() -> None:
 
 
 @pytest.mark.asyncio
-async def test_assemble_compaction_prefight_derives_covered_until_from_turn_input() -> None:
+async def test_assemble_compaction_prefight_derives_covered_until_from_turn_input() -> (
+    None
+):
     events_port = EventsPort()
     assembler = ContextAssembler(
         ContextAssemblyPorts(session_events=events_port),

@@ -63,7 +63,7 @@ class SessionSkillsSource:
         events: Iterable[SessionEvent],
         *,
         skill_registry: Any,
-    ) -> "SessionSkillsSource":
+    ) -> SessionSkillsSource:
         return cls(skills=resolve_active_skills(events, skill_registry))
 
     def to_sections(self) -> tuple[ContextSection, ...]:

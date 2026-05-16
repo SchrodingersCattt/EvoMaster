@@ -83,7 +83,7 @@ class SessionToolsSource:
         *,
         legal_servers: set[str] | None,
         schemas_by_server: Mapping[str, list[Mapping[str, Any]]] | None,
-    ) -> "SessionToolsSource":
+    ) -> SessionToolsSource:
         return cls(
             skills=tuple(skills),
             legal_servers=(

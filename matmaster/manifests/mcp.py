@@ -5,11 +5,9 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
-from matmaster.context.sources.tools import (
-    format_active_mcp as _typed_format,
-    resolve_declared_servers as _typed_declared,
-    resolve_runnable_servers as _typed_runnable,
-)
+from matmaster.context.sources.tools import format_active_mcp as _typed_format
+from matmaster.context.sources.tools import resolve_declared_servers as _typed_declared
+from matmaster.context.sources.tools import resolve_runnable_servers as _typed_runnable
 
 __all__ = [
     "resolve_declared_servers",

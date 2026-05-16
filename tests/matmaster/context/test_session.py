@@ -129,6 +129,6 @@ def test_sections_are_in_section_order_after_render_sort(tmp_path: Path) -> None
 
     sections = builder.build_sections(until_event_id=None, include_attachments=True)
     orders = [section.order for section in sections]
-    assert orders == sorted(orders), (
-        "SessionContextBuilder should emit sections in SectionOrder ascending order"
-    )
+    assert orders == sorted(
+        orders
+    ), "SessionContextBuilder should emit sections in SectionOrder ascending order"
