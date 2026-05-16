@@ -2,21 +2,29 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
 from matmaster.context.assembly import ContextAssembler, ContextRenderOptions
 from matmaster.context.compaction import ContextCompactor
-from matmaster.context.ports import ContextAssemblyPorts, UserInstructions
+from matmaster.context.ports import (
+    ContextAssemblyPorts,
+    SessionEvent,
+    SessionEventQuery,
+    SessionJobs,
+    SessionJobsQuery,
+    UserInstructions,
+)
+from matmaster.context.scanner import coerce_session_events
+from matmaster.context.session import SessionContextBuilder
 from matmaster.types.context import PlaygroundContext
 from matmaster.types.runtime import AgentRuntimeSpec
 from matmaster.types.runtime_ports import EmptySessionEventHistory
-from src.services.context_assembly_factory import (
-    RuntimeHistorySessionEventsPort,
-    build_session_context_factory,
-)
-from src.services.context_assembly_ports import AppSessionJobsPort
+
+SessionContextFactory = Callable[[tuple[SessionEvent, ...]], SessionContextBuilder]
 
 
 @dataclass(frozen=True)
@@ -24,6 +32,47 @@ class RuntimeContextAssembly:
     compactor: ContextCompactor | None = None
     context_assembler: ContextAssembler | None = None
     assembly_ports: ContextAssemblyPorts | None = None
+
+
+def _hash_user_instructions(text: str) -> str:
+    return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _build_session_context_factory(
+    *,
+    skill_registry: Any | None,
+    legal_mcp_servers: set[str] | None,
+    schemas_by_server: Mapping[str, list[Mapping[str, Any]]] | None,
+) -> SessionContextFactory:
+    def factory(events: tuple[SessionEvent, ...]) -> SessionContextBuilder:
+        return SessionContextBuilder(
+            events=events,
+            skill_registry=skill_registry,
+            legal_mcp_servers=legal_mcp_servers,
+            schemas_by_server=schemas_by_server,
+        )
+
+    return factory
+
+
+class _RuntimeHistorySessionEventsPort:
+    def __init__(self, history_port: Any) -> None:
+        self._history_port = history_port
+
+    async def load_events(self, query: SessionEventQuery) -> tuple[SessionEvent, ...]:
+        rows = self._history_port.query_context_events(
+            spawn_id=query.spawn_id,
+            until_event_id=query.until_event_id,
+            event_types=query.event_types,
+            limit=query.limit,
+            order=query.order,
+        )
+        return coerce_session_events(rows)
+
+
+class _EmptySessionJobsPort:
+    async def load_session_jobs(self, query: SessionJobsQuery) -> SessionJobs:
+        return SessionJobs.empty()
 
 
 def build_runtime_context_assembly(
@@ -69,21 +118,19 @@ def build_runtime_context_assembly(
     instructions_text = str(run_meta.get("user_instructions") or "")
     instructions_hash = run_meta.get("user_instructions_hash")
     if not isinstance(instructions_hash, str) or not instructions_hash:
-        from src.services.user_turn_context_service import hash_user_instructions
-
-        instructions_hash = hash_user_instructions(instructions_text)
+        instructions_hash = _hash_user_instructions(instructions_text)
     user_instructions = UserInstructions(
         text=instructions_text,
         hash=instructions_hash,
         truncated=bool(run_meta.get("user_instructions_truncated", False)),
     )
     assembly_ports = ContextAssemblyPorts(
-        session_events=RuntimeHistorySessionEventsPort(history_port),
-        session_jobs=AppSessionJobsPort(),
+        session_events=_RuntimeHistorySessionEventsPort(history_port),
+        session_jobs=_EmptySessionJobsPort(),
     )
     context_assembler = ContextAssembler(
         ports=assembly_ports,
-        session_context_factory=build_session_context_factory(
+        session_context_factory=_build_session_context_factory(
             skill_registry=skill_registry,
             legal_mcp_servers=run_meta.get("legal_mcp_servers"),
             schemas_by_server=run_meta.get("schemas_by_server"),
