@@ -414,6 +414,9 @@ class TestCompactionResults:
         result = await compactor.apply_compaction_plan(plan, msgs)
 
         assert result.strategy == "sliding_window"
+        assert result.durability == "ephemeral"
+        assert result.failure_reason
+        assert result.base_snapshot is None
 
     async def test_no_event_without_bus(self) -> None:
         """无 event_sink 时仍能完成压缩。"""
@@ -587,6 +590,8 @@ class TestToolTruncationFallback:
 
         assert result.strategy == "sliding_window"
         assert result.durability == "ephemeral"
+        assert result.failure_reason
+        assert result.base_snapshot is None
 
     async def test_no_truncation_below_threshold(self) -> None:
         """即使只有 1 turn，未超阈值不截断。"""

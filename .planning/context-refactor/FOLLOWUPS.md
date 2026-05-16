@@ -29,3 +29,10 @@ Phase 3 compactor cutover (`matmaster/core/context_compactor.py` 迁移到
 
 不修。保留 Phase 1 末态 preflight 行为，以维持 Phase 2C 的行为不退化
 验收门。FOLLOWUPS 记录是为 Phase 3 实现者提供 context。
+
+**Resolution (Phase 3)**
+
+Phase 3 moved compaction to `ContextAssembler.assemble_compaction(...)` and stopped
+overwriting `CurrentInputContext.user_text` with the provider-facing `task` in
+`AgentKernel._run_items`. Preflight compaction now renders exactly one
+`<current_instruction>` block from raw current input.

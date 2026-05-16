@@ -48,6 +48,38 @@ class _SummaryProvider:
         yield StreamChunk(content=self.summary, finish_reason="stop")
 
 
+def _make_compactor_for_table(
+    *,
+    events_table: InMemoryEventsTable,
+    session_id: str,
+    tmp_path,
+    provider: _SummaryProvider,
+) -> ContextCompactor:
+    assembler = ContextAssembler(
+        ports=ContextAssemblyPorts(
+            session_events=AppSessionEventsPort(events_table=events_table),
+            session_jobs=AppSessionJobsPort(),
+        ),
+        session_context_factory=build_session_context_factory(
+            skill_registry=SkillRegistry([tmp_path / "skills"]),
+            legal_mcp_servers=None,
+            schemas_by_server=None,
+        ),
+    )
+    return ContextCompactor(
+        config=CompactionConfig(context_limit=128000),
+        summary_provider=provider,
+        context_assembler=assembler,
+        user_instructions=UserInstructions(text="Use SI units.", hash="sha256:abc"),
+        session_id=session_id,
+        spawn_id=None,
+        runtime_covered_until_provider=lambda: events_table.get_latest_scope_event_id(
+            session_id,
+            None,
+        ),
+    )
+
+
 def _user_event(
     content: str,
     *,
@@ -609,27 +641,12 @@ async def test_compaction_checkpoint_assembles_v1_session_attachments(
         task_id="task-after-checkpoint",
     )
 
-    assembler = ContextAssembler(
-        ports=ContextAssemblyPorts(
-            session_events=AppSessionEventsPort(events_table=events_table),
-            session_jobs=AppSessionJobsPort(),
-        ),
-        session_context_factory=build_session_context_factory(
-            skill_registry=SkillRegistry([tmp_path / "skills"]),
-            legal_mcp_servers=None,
-            schemas_by_server=None,
-        ),
-    )
-    compactor = ContextCompactor(
-        config=CompactionConfig(context_limit=128000),
-        summary_provider=_SummaryProvider("Recovered summary with fresh attachment"),
-        context_assembler=assembler,
-        user_instructions=UserInstructions(text="Use SI units.", hash="sha256:abc"),
+    compactor = _make_compactor_for_table(
+        events_table=events_table,
         session_id=session_id,
-        spawn_id=None,
-        runtime_covered_until_provider=lambda: events_table.get_latest_scope_event_id(
-            session_id,
-            None,
+        tmp_path=tmp_path,
+        provider=_SummaryProvider(
+            "Recovered summary with fresh attachment",
         ),
     )
 
@@ -688,6 +705,142 @@ async def test_compaction_checkpoint_assembles_v1_session_attachments(
     assert "<attachments>" in content
     assert "file_1" in content
     assert "file_2" in content
+
+
+@pytest.mark.asyncio
+async def test_two_v1_compactions_chain_and_restore_from_latest(
+    tmp_path,
+) -> None:
+    session_id = "sess-two-compactions"
+    events_table = InMemoryEventsTable()
+    fanout = Mock()
+    fanout.flush_persistence_barrier = AsyncMock()
+
+    _seed_scope_events(
+        events_table,
+        session_id=session_id,
+        user_content="first old question",
+        response_content="first old answer",
+    )
+
+    first_provider = _SummaryProvider("first summary")
+    first_compactor = _make_compactor_for_table(
+        events_table=events_table,
+        session_id=session_id,
+        tmp_path=tmp_path,
+        provider=first_provider,
+    )
+    first_messages = [
+        SystemMessage(content="system prompt"),
+        UserMessage(content="first old question"),
+        AssistantMessage(content="first old answer"),
+    ]
+    first_result = await first_compactor.apply_compaction_plan(
+        CompactionPlan(
+            compaction_id="task-1:root:1",
+            compaction_count=1,
+            phase="runtime",
+            trigger_tokens=1000,
+            turn=2,
+        ),
+        first_messages,
+    )
+    first_sink = HistoryCheckpointService(events_table).build_checkpoint_sink(
+        fanout=fanout,
+        session_id=session_id,
+        task_id="task-1",
+        invocation_id="inv-1",
+        spawn_id=None,
+    )
+    await first_sink(
+        payload={
+            "durability": "durable",
+            "strategy": "summary",
+            "schema_version": "history_checkpoint.v1",
+            "render_version": "user_context_render.v1",
+            "user_instructions_text": first_result.user_instructions_text,
+            "user_instructions_hash": first_result.user_instructions_hash,
+        },
+        base_messages=first_result.base_snapshot,
+    )
+
+    _seed_scope_events(
+        events_table,
+        session_id=session_id,
+        task_id="task-between",
+        user_content="question between compactions",
+        response_content="answer between compactions",
+    )
+
+    second_provider = _SummaryProvider("second summary")
+    second_compactor = _make_compactor_for_table(
+        events_table=events_table,
+        session_id=session_id,
+        tmp_path=tmp_path,
+        provider=second_provider,
+    )
+    second_messages = [
+        SystemMessage(content="system prompt"),
+        UserMessage(content=first_result.base_snapshot[0]["content"]),
+        AssistantMessage(content="answer between compactions"),
+        UserMessage(content="question between compactions"),
+    ]
+    second_result = await second_compactor.apply_compaction_plan(
+        CompactionPlan(
+            compaction_id="task-2:root:1",
+            compaction_count=1,
+            phase="runtime",
+            trigger_tokens=1000,
+            turn=3,
+        ),
+        second_messages,
+    )
+    second_sink = HistoryCheckpointService(events_table).build_checkpoint_sink(
+        fanout=fanout,
+        session_id=session_id,
+        task_id="task-2",
+        invocation_id="inv-2",
+        spawn_id=None,
+    )
+    await second_sink(
+        payload={
+            "durability": "durable",
+            "strategy": "summary",
+            "schema_version": "history_checkpoint.v1",
+            "render_version": "user_context_render.v1",
+            "user_instructions_text": second_result.user_instructions_text,
+            "user_instructions_hash": second_result.user_instructions_hash,
+        },
+        base_messages=second_result.base_snapshot,
+    )
+
+    _seed_scope_events(
+        events_table,
+        session_id=session_id,
+        task_id="task-after-second",
+        user_content="question after second checkpoint",
+        response_content="answer after second checkpoint",
+        write_user_turn_context=True,
+    )
+
+    checkpoints = events_table.history_checkpoints(spawn_id=None)
+    assert len(checkpoints) == 2
+    latest = checkpoints[-1]["content"]
+    assert "second summary" in latest["base_messages"][0]["content"]
+    assert "first summary" in second_provider.calls[0][1]["content"]
+
+    restored = ModelHistoryRestoreService(events_table).restore_history(
+        session_id=session_id,
+        spawn_id=None,
+        task_id=None,
+    )
+    user_messages = [message for message in restored if isinstance(message, UserMessage)]
+    assert "second summary" in (user_messages[0].content or "")
+    assert "first summary" not in (user_messages[0].content or "")
+    assert any(
+        message.content == "question after second checkpoint"
+        for message in user_messages[1:]
+    )
 
 
 @pytest.mark.asyncio

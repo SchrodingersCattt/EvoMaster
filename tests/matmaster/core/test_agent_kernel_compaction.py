@@ -178,6 +178,30 @@ class _LifecycleCompactor:
         )
 
 
+class _EphemeralFallbackCompactor(_LifecycleCompactor):
+    async def apply_compaction_plan(
+        self,
+        plan,
+        messages: list[Any],
+        *,
+        current_input_context=None,
+    ):
+        from matmaster.core.context_compactor import CompactionResult
+
+        self.apply_calls += 1
+        return CompactionResult(
+            compaction_id=plan.compaction_id,
+            compaction_count=plan.compaction_count,
+            phase=plan.phase,
+            strategy="sliding_window",
+            durability="ephemeral",
+            trigger_tokens=plan.trigger_tokens,
+            retained_turns=0,
+            failure_reason="summary down",
+            base_snapshot=None,
+        )
+
+
 def _build_long_history() -> list[Any]:
     return [
         UserMessage(content="old question 1"),
@@ -264,6 +288,41 @@ class TestCheckpointAwareCompaction:
         assert [e.status for e in compaction_events] == ["running", "complete"]
         assert compaction_events[-1].checkpoint_written is False
         assert compaction_events[-1].failure_reason == "checkpoint store down"
+
+    @pytest.mark.asyncio
+    async def test_fallback_compaction_event_carries_strategy_and_durability(
+        self,
+    ) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        checkpoint_sink = pytest.fail
+        spec = _make_spec(provider=ContentOnlyProvider()).model_copy(
+            update={
+                "compactor": _EphemeralFallbackCompactor("ignored"),
+                "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
+                "meta": {"task_id": "task-1"},
+            }
+        )
+
+        events = [
+            event
+            async for event in AgentKernel().run_stream(
+                spec,
+                "task",
+                history=_build_long_history(),
+            )
+        ]
+
+        complete = [
+            event
+            for event in events
+            if getattr(event, "type", None) == "compaction"
+            and getattr(event, "status", None) == "complete"
+        ][0]
+        assert complete.strategy == "sliding_window"
+        assert complete.durability == "ephemeral"
+        assert complete.failure_reason == "summary down"
+        assert complete.checkpoint_written is False
 
     @pytest.mark.asyncio
     async def test_kernel_preflight_calls_checkpoint_sink_for_durable_compaction(
