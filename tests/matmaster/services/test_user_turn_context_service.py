@@ -7,13 +7,9 @@ import pytest
 
 from src.services.user_turn_context_service import (
     USER_INSTRUCTIONS_MAX_BYTES,
-    UserInstructionsInfo,
-    build_user_turn_context_payload,
-    decide_user_turn_context_kind,
     hash_user_instructions,
-    latest_anchor_user_instructions_hash,
     load_user_instructions_from_session,
-    render_runtime_task_for_user_turn_context,
+    make_user_instructions_info,
     write_user_turn_context_event,
 )
 
@@ -37,6 +33,22 @@ def test_hash_user_instructions_does_not_strip_whitespace() -> None:
         "Use SI units.\n"
     )
     assert hash_user_instructions(" abc ") != hash_user_instructions("abc")
+
+
+def test_make_user_instructions_info_uses_empty_string_for_none() -> None:
+    info = make_user_instructions_info(None)
+
+    assert info.text == ""
+    assert info.hash == hash_user_instructions("")
+    assert info.truncated is False
+
+
+def test_make_user_instructions_info_preserves_truncated_flag() -> None:
+    info = make_user_instructions_info("abc", truncated=True)
+
+    assert info.text == "abc"
+    assert info.hash == hash_user_instructions("abc")
+    assert info.truncated is True
 
 
 def test_load_user_instructions_missing_file_returns_empty_hash() -> None:
@@ -73,189 +85,6 @@ def test_load_user_instructions_preserves_trailing_newline() -> None:
 
     assert info.text == "Use SI units.\n"
     assert info.hash == hash_user_instructions("Use SI units.\n")
-
-
-def test_latest_anchor_hash_prefers_latest_user_turn_anchor() -> None:
-    events = [
-        {
-            "type": "user_turn_context",
-            "content": {"kind": "continuation", "user_instructions_hash": None},
-        },
-        {
-            "type": "user_turn_context",
-            "content": {"kind": "anchor", "user_instructions_hash": "sha256:new"},
-        },
-        {
-            "type": "history_checkpoint",
-            "content": {"user_instructions_hash": "sha256:old"},
-        },
-    ]
-
-    assert latest_anchor_user_instructions_hash(events) == "sha256:new"
-
-
-def test_latest_anchor_hash_handles_chronological_events_with_ids() -> None:
-    events = [
-        {
-            "id": 10,
-            "type": "user_turn_context",
-            "content": {"kind": "anchor", "user_instructions_hash": "sha256:old"},
-        },
-        {
-            "id": 11,
-            "type": "user_turn_context",
-            "content": {"kind": "continuation", "user_instructions_hash": None},
-        },
-        {
-            "id": 12,
-            "type": "user_turn_context",
-            "content": {"kind": "anchor", "user_instructions_hash": "sha256:new"},
-        },
-    ]
-
-    assert latest_anchor_user_instructions_hash(events) == "sha256:new"
-
-
-def test_latest_anchor_hash_uses_history_checkpoint_when_no_anchor_event() -> None:
-    events = [
-        {"type": "response", "content": "ignored"},
-        {
-            "type": "history_checkpoint",
-            "content": {"user_instructions_hash": "sha256:checkpoint"},
-        },
-    ]
-
-    assert latest_anchor_user_instructions_hash(events) == "sha256:checkpoint"
-
-
-def test_latest_anchor_hash_does_not_cross_chronological_checkpoint_with_ids() -> None:
-    events = [
-        {
-            "id": 20,
-            "type": "user_turn_context",
-            "content": {"kind": "anchor", "user_instructions_hash": "sha256:old"},
-        },
-        {
-            "id": 21,
-            "type": "history_checkpoint",
-            "content": {"user_instructions_hash": "sha256:checkpoint"},
-        },
-    ]
-
-    assert latest_anchor_user_instructions_hash(events) == "sha256:checkpoint"
-
-
-def test_latest_anchor_hash_returns_none_for_chronological_checkpoint_without_hash() -> None:
-    events = [
-        {
-            "id": 30,
-            "type": "user_turn_context",
-            "content": {"kind": "anchor", "user_instructions_hash": "sha256:old"},
-        },
-        {
-            "id": 31,
-            "type": "history_checkpoint",
-            "content": {"covered_until_event_id": 30, "base_messages": []},
-        },
-    ]
-
-    assert latest_anchor_user_instructions_hash(events) is None
-
-
-def test_latest_anchor_hash_returns_none_when_checkpoint_lacks_hash() -> None:
-    events = [
-        {
-            "type": "history_checkpoint",
-            "content": {"covered_until_event_id": 100, "base_messages": []},
-        },
-        {
-            "type": "user_turn_context",
-            "content": {
-                "kind": "anchor",
-                "user_instructions_hash": "sha256:same-as-current",
-            },
-        },
-    ]
-
-    assert latest_anchor_user_instructions_hash(events) is None
-
-
-def test_latest_anchor_hash_returns_none_when_only_continuation_present() -> None:
-    events = [
-        {
-            "type": "user_turn_context",
-            "content": {"kind": "continuation", "user_instructions_hash": None},
-        },
-    ]
-
-    assert latest_anchor_user_instructions_hash(events) is None
-
-
-def test_decide_kind_anchor_for_missing_or_changed_hash() -> None:
-    assert decide_user_turn_context_kind("sha256:a", None) == "anchor"
-    assert decide_user_turn_context_kind("sha256:a", "sha256:b") == "anchor"
-    assert decide_user_turn_context_kind("sha256:a", "sha256:a") == "continuation"
-
-
-def test_render_runtime_task_adds_instructions_only_for_anchor() -> None:
-    info = UserInstructionsInfo(
-        text="Prefer concise answers.",
-        hash=hash_user_instructions("Prefer concise answers."),
-    )
-
-    anchor = render_runtime_task_for_user_turn_context(
-        user_prompt="Explain FeO.",
-        user_instructions=info,
-        kind="anchor",
-    )
-    continuation = render_runtime_task_for_user_turn_context(
-        user_prompt="Explain FeO.",
-        user_instructions=info,
-        kind="continuation",
-    )
-
-    assert anchor.startswith(
-        '<matmaster-user-instructions source="/personal/.matmaster/AGENT.md">'
-    )
-    assert "Prefer concise answers." in anchor
-    assert anchor.endswith("Explain FeO.")
-    assert continuation == "Explain FeO."
-
-
-def test_build_payload_freezes_user_message_and_anchor_hash() -> None:
-    info = UserInstructionsInfo(text="Use SI units.", hash="sha256:abc")
-
-    payload = build_user_turn_context_payload(
-        kind="anchor",
-        rendered_message_content="provider-facing content",
-        images=[{"url": "https://oss.example.com/chat/current.png", "detail": "auto"}],
-        user_instructions=info,
-        transform="raw",
-    )
-
-    assert payload["schema_version"] == "user_turn_context.v1"
-    assert payload["kind"] == "anchor"
-    assert payload["message"]["role"] == "user"
-    assert payload["message"]["content"] == "provider-facing content"
-    assert payload["message"]["images"][0]["url"].endswith("current.png")
-    assert payload["user_instructions_hash"] == "sha256:abc"
-    assert payload["transform"] == "raw"
-    assert payload["render_version"] == "user_context_render.v1"
-
-
-def test_build_payload_omits_hash_for_continuation() -> None:
-    info = UserInstructionsInfo(text="Use SI units.", hash="sha256:abc")
-
-    payload = build_user_turn_context_payload(
-        kind="continuation",
-        rendered_message_content="current only",
-        images=[],
-        user_instructions=info,
-        transform="raw",
-    )
-
-    assert payload["kind"] == "continuation"
-    assert payload["user_instructions_hash"] is None
 
 
 @pytest.mark.asyncio

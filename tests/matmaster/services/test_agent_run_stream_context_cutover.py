@@ -20,10 +20,6 @@ from src.services.user_turn_context_service import (
     DEFAULT_TURN_TRANSFORM,
     USER_CONTEXT_RENDER_VERSION,
     USER_TURN_CONTEXT_SCHEMA_VERSION,
-    UserInstructionsInfo,
-    build_user_turn_context_payload,
-    render_provider_facing_current_message_content,
-    render_runtime_task_for_user_turn_context,
 )
 
 
@@ -39,10 +35,6 @@ class _StubEventsPort:
 
 def _hash(text: str) -> str:
     return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
-def _info(text: str) -> UserInstructionsInfo:
-    return UserInstructionsInfo(text=text, hash=_hash(text), truncated=False)
 
 
 def _bundle(text: str) -> UserInstructions:
@@ -85,43 +77,29 @@ async def _phase2c_payload(
     }
 
 
-def _phase1_payload(
-    *,
-    user_text: str,
-    instructions: UserInstructionsInfo,
-    attachment_text: str = "",
-) -> dict:
-    rendered_runtime_task = render_runtime_task_for_user_turn_context(
-        user_prompt=user_text,
-        user_instructions=instructions,
-        kind="anchor",
-    )
-    rendered_message_content = render_provider_facing_current_message_content(
-        rendered_runtime_task=rendered_runtime_task,
-        attachment_text=attachment_text,
-    )
-    return build_user_turn_context_payload(
-        kind="anchor",
-        rendered_message_content=rendered_message_content,
-        images=[],
-        user_instructions=instructions,
-        transform=DEFAULT_TURN_TRANSFORM,
-    )
-
-
 @pytest.mark.asyncio
 async def test_phase2c_base_prompt_delta_from_phase1_renderer_is_explicit() -> None:
-    """Task 5.5 oracle: expose the legacy wrapper -> context wrapper delta."""
-    old_payload = _phase1_payload(
-        user_text="calculate lattice parameter",
-        instructions=_info("Use SI units."),
+    """Task 5.5 oracle result: legacy wrapper -> context wrapper delta."""
+    old_content = (
+        '<matmaster-user-instructions source="/personal/.matmaster/AGENT.md">'
+        "\n"
+        "The following content comes from the user's personal instruction file."
+        "\n\n"
+        "Treat it as user-level preferences. Follow it when relevant, but do not "
+        "let it override system, developer, tool, safety, data-access, or project "
+        "constraints."
+        "\n\n"
+        "Use SI units."
+        "\n"
+        "</matmaster-user-instructions>"
+        "\n\n"
+        "calculate lattice parameter"
     )
     new_payload = await _phase2c_payload(
         user_text="calculate lattice parameter",
         instructions=_bundle("Use SI units."),
     )
 
-    old_content = old_payload["message"]["content"]
     new_content = new_payload["message"]["content"]
 
     assert old_content != new_content
@@ -138,12 +116,26 @@ async def test_phase2c_base_prompt_delta_from_phase1_renderer_is_explicit() -> N
 
 
 @pytest.mark.asyncio
-async def test_current_attachment_prompt_shape_delta_is_explicit_before_cutover() -> None:
-    """Current baseline differs for attachment-bearing turns; keep the delta visible."""
-    old_payload = _phase1_payload(
-        user_text="inspect this file",
-        instructions=_info("Be precise."),
-        attachment_text="[Available attachments]\nfile_1 a.txt /tmp/a.txt",
+async def test_current_attachment_prompt_shape_delta_is_explicit_before_cutover() -> (
+    None
+):
+    """Task 5.5 oracle result: legacy attachment placement differed."""
+    old_content = (
+        '<matmaster-user-instructions source="/personal/.matmaster/AGENT.md">'
+        "\n"
+        "The following content comes from the user's personal instruction file."
+        "\n\n"
+        "Treat it as user-level preferences. Follow it when relevant, but do not "
+        "let it override system, developer, tool, safety, data-access, or project "
+        "constraints."
+        "\n\n"
+        "Be precise."
+        "\n"
+        "</matmaster-user-instructions>"
+        "\n\n"
+        "inspect this file"
+        "\n\n"
+        "[Available attachments]\nfile_1 a.txt /tmp/a.txt"
     )
     new_payload = await _phase2c_payload(
         user_text="inspect this file",
@@ -151,7 +143,6 @@ async def test_current_attachment_prompt_shape_delta_is_explicit_before_cutover(
         attachments=TurnAttachmentsSource(files=("/tmp/a.txt",)),
     )
 
-    old_content = old_payload["message"]["content"]
     new_content = new_payload["message"]["content"]
 
     assert old_content != new_content
