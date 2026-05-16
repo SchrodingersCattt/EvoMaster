@@ -153,7 +153,7 @@ banks:
 - path: workflow_orchestration/wo_semiconductor.yaml
   capability: workflow_orchestration
   domain: semiconductor
-  questions: 2
+  questions: 3
 - path: platform/ig_agnostic.yaml
   capability: input_generation
   domain: agnostic

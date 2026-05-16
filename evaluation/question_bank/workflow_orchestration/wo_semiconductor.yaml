@@ -177,3 +177,70 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
+- id: WO_abacus_e2e_001_20260516
+  capability: workflow_orchestration
+  domain: semiconductor
+  intent: End-to-end ABACUS electronic structure workflow (relax → scf → band → DOS)
+    on Si diamond, testing workflow orchestration without software switching or looping.
+  human_prompt_seed: '工作区中有 Si 金刚石结构 `Si_diamond.cif`。请用 ABACUS 完成完整的电子结构计算：
+    结构弛豫、自洽计算、能带计算和态密度计算，最终给出带隙值。'
+  tags:
+  - eng_abacus
+  data_files:
+  - key: si_cif
+    path: data/WO_abacus_e2e_001_20260516/Si_diamond.cif
+    oss_url: ''
+    description: Si diamond primitive cell CIF (2 atoms, Fd-3m).
+  reference_answers:
+  - key: band_artifact
+    value:
+      pattern: '**/BANDS_1.dat'
+  - key: dos_artifact
+    value:
+      pattern: '**/DOS1_smearing.dat'
+  - key: must_no_software_switch
+    value: {}
+  - key: must_band_gap_reported
+    value: {}
+  - key: turn_budget
+    value:
+      max: 40
+  - key: duration_budget
+    value:
+      max: 900000
+  - key: token_budget_total
+    value:
+      max: 120000
+  scoring_checklist:
+  - id: band_artifact
+    criterion: '[Must] Workflow produces a band structure data file (BANDS_1.dat or equivalent)
+      in the workspace, indicating the band NSCF step completed successfully.'
+    axis: correctness
+    verify: artifact_exists
+  - id: dos_artifact
+    criterion: '[Must] Workflow produces a DOS data file (DOS1_smearing.dat or equivalent)
+      in the workspace, indicating the DOS NSCF step completed successfully.'
+    axis: correctness
+    verify: artifact_exists
+  - id: must_no_software_switch
+    criterion: '[Must] Agent uses only ABACUS throughout the workflow. No calls to QE,
+      VASP, CP2K, or other DFT codes. Judge from tool call history.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: must_band_gap_reported
+    criterion: '[Must] Final answer reports the Si band gap value (expected ~1.1 eV
+      for PBE) and identifies it as indirect.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the full workflow within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time stays within budget (15 min for 4-step Si calculation).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
