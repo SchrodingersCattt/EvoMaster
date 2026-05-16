@@ -16,7 +16,6 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import AsyncIterator
-from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from matmaster.core.agent_compaction import (
@@ -251,12 +250,6 @@ class AgentKernel:
             if isinstance(raw_current_input_context, CurrentInputContext)
             else CurrentInputContext.from_payload(raw_current_input_context)
         )
-        effective_current_input_context = (
-            replace(current_input_context, user_text=task)
-            if current_input_context is not None
-            else None
-        )
-
         current_user_images = [
             ImageContentPart.model_validate(image)
             for image in spec.meta.get("current_user_images", [])
@@ -275,7 +268,7 @@ class AgentKernel:
             spec=spec,
             state=state,
             history=history,
-            current_input_context=effective_current_input_context,
+            current_input_context=current_input_context,
             checkpoint_sink=checkpoint_sink,
         ):
             yield item

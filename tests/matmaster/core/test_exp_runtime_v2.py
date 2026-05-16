@@ -110,8 +110,15 @@ async def test_build_runtime_uses_runtime_ports_history(
         def all_events(self):
             return [{"event_id": 20, "source": "runtime"}]
 
+        def query_context_events(self, **kwargs):
+            self.context_query_kwargs = kwargs
+            return []
+
         def latest_checkpoint_covered_until_event_id(self):
             return 20
+
+        def latest_scope_event_id(self):
+            return 25
 
     ctx = PlaygroundContext(
         workdir=tmp_path,
@@ -125,11 +132,11 @@ async def test_build_runtime_uses_runtime_ports_history(
     )
 
     runtime = await Exp(ExpConfig(name="test")).build_runtime(ctx)
-    rehydrator = runtime.spec.compactor._rehydrator
 
-    assert rehydrator._get_query_events() == [{"event_id": 2, "source": "runtime"}]
-    assert rehydrator._get_all_events() == [{"event_id": 20, "source": "runtime"}]
-    assert rehydrator._get_latest_checkpoint_covered_until_event_id() == 20
+    assert runtime.spec.context_assembler is runtime.spec.compactor._context_assembler
+    assert runtime.spec.session_events_port is not None
+    assert runtime.spec.session_jobs_port is not None
+    assert runtime.spec.compactor._runtime_covered_until_provider() == 25
 
 
 @pytest.mark.asyncio

@@ -522,7 +522,7 @@ class _RecordingCurrentInputCompactor(_DurablePreflightCompactor):
 
 
 @pytest.mark.asyncio
-async def test_kernel_passes_effective_current_input_context_to_preflight_compactor():
+async def test_kernel_passes_raw_current_input_context_to_preflight_compactor():
     from matmaster.core.agent import AgentKernel
 
     compactor = _RecordingCurrentInputCompactor()
@@ -556,7 +556,7 @@ async def test_kernel_passes_effective_current_input_context_to_preflight_compac
         )
     ]
 
-    assert compactor.seen_current_input_context.user_text == "effective task text"
+    assert compactor.seen_current_input_context.user_text == "original before rewrite"
     assert compactor.seen_current_input_context.files == (
         "https://oss.example.com/chat/current.cif",
     )

@@ -18,7 +18,7 @@ from matmaster.context.assembly import (
     ContextAssembler,
     ContextAssemblyIntent,
 )
-from matmaster.context.ports import ContextAssemblyPorts, UserInstructions
+from matmaster.context.ports import UserInstructions
 from matmaster.context.sections import ContextView
 from matmaster.context.sources.turn_input import (
     TurnAttachmentsSource,
@@ -182,11 +182,6 @@ class CompactionResult:
     )
 
 
-class _EmptyEventsPort:
-    async def load_events(self, query):
-        return ()
-
-
 class ContextCompactor:
     """Runtime context compressor, called by kernel before each LLM invocation."""
 
@@ -195,21 +190,14 @@ class ContextCompactor:
         config: CompactionConfig,
         summary_provider: LLMProvider,
         *,
-        context_assembler: ContextAssembler | None = None,
-        user_instructions: UserInstructions | None = None,
-        session_id: str = "",
-        spawn_id: str | None = None,
+        context_assembler: ContextAssembler,
+        user_instructions: UserInstructions,
+        session_id: str,
+        spawn_id: str | None,
         runtime_covered_until_provider: Callable[[], int | None] | None = None,
         event_sink: Callable[[Any], Awaitable[None]] | None = None,
         compaction_scope: str = "root",
-        **_legacy_kwargs: Any,
     ) -> None:
-        if context_assembler is None:
-            context_assembler = ContextAssembler(
-                ContextAssemblyPorts(session_events=_EmptyEventsPort()),
-            )
-        if user_instructions is None:
-            user_instructions = UserInstructions(text="", hash="")
         self._config = config
         self._summary_provider = summary_provider
         self._context_assembler = context_assembler

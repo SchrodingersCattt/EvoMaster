@@ -12,7 +12,12 @@ from collections.abc import Callable, Mapping
 from typing import Any
 
 from matmaster.context.assembly import ContextAssembler, ContextRenderOptions
-from matmaster.context.ports import ContextAssemblyPorts, SessionEvent
+from matmaster.context.ports import (
+    ContextAssemblyPorts,
+    SessionEvent,
+    SessionEventQuery,
+)
+from matmaster.context.scanner import coerce_session_events
 from matmaster.context.session import SessionContextBuilder
 from src.services.context_assembly_ports import AppSessionEventsPort, AppSessionJobsPort
 
@@ -62,3 +67,18 @@ def build_context_assembler(
         ),
     )
     return assembler, ports
+
+
+class RuntimeHistorySessionEventsPort:
+    def __init__(self, history_port: Any) -> None:
+        self._history_port = history_port
+
+    async def load_events(self, query: SessionEventQuery):
+        rows = self._history_port.query_context_events(
+            spawn_id=query.spawn_id,
+            until_event_id=query.until_event_id,
+            event_types=query.event_types,
+            limit=query.limit,
+            order=query.order,
+        )
+        return coerce_session_events(rows)

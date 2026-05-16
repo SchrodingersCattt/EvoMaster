@@ -5,11 +5,10 @@ from unittest.mock import AsyncMock, Mock
 
 import pytest
 
-from matmaster.core.context_builder import ContextBuilder
-from matmaster.core.context_compactor import CompactionPlan, ContextCompactor
-from matmaster.manifests.rehydrator import CompactionRehydrator
+from matmaster.context.assembly import ContextAssembler
+from matmaster.context.compaction import CompactionPlan, ContextCompactor
+from matmaster.context.ports import ContextAssemblyPorts, UserInstructions
 from matmaster.skills.registry import SkillRegistry
-from matmaster.types.context import PlaygroundContext
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -22,10 +21,12 @@ from src.services.history_checkpoint_codec import serialize_base_messages
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.history_restore_service import HistoryRestoreService
 from src.services.model_history_restore_service import ModelHistoryRestoreService
+from src.services.context_assembly_factory import build_session_context_factory
+from src.services.context_assembly_ports import AppSessionEventsPort, AppSessionJobsPort
 
 
 def _compact_user_message(summary: str) -> UserMessage:
-    return UserMessage(content=ContextBuilder().build_compact_bundle(summary=summary))
+    return UserMessage(content=f"<compacted_history>\n{summary}\n</compacted_history>")
 
 
 class _SummaryProvider:
@@ -228,6 +229,40 @@ class InMemoryEventsTable:
             not in {"history_checkpoint", "compaction", "context_compaction"}
         ]
         return max(ids, default=0)
+
+    def query_context_events(
+        self,
+        *,
+        session_id: str,
+        spawn_id: str | None,
+        until_event_id: int | None = None,
+        event_types: tuple[str, ...] | None = None,
+        limit: int | None = None,
+        order: str = "asc",
+    ) -> list[dict[str, Any]]:
+        self.calls.append(
+            (
+                "query_context_events",
+                session_id,
+                spawn_id,
+                until_event_id,
+                event_types,
+                limit,
+                order,
+            )
+        )
+        rows = [
+            event
+            for event in self._events
+            if event["session_id"] == session_id
+            and event.get("spawn_id") == spawn_id
+            and (until_event_id is None or int(event["id"]) <= until_event_id)
+            and (not event_types or event["type"] in event_types)
+        ]
+        rows.sort(key=lambda event: int(event["id"]), reverse=order == "desc")
+        if limit is not None:
+            return rows[:limit]
+        return rows
 
     def get_session_events(
         self,
@@ -539,7 +574,7 @@ async def test_restore_with_checkpoint_plus_incremental_events() -> None:
 
 
 @pytest.mark.asyncio
-async def test_compaction_checkpoint_rehydrates_only_attachment_delta(
+async def test_compaction_checkpoint_assembles_v1_session_attachments(
     tmp_path,
 ) -> None:
     session_id = "sess-attachment-delta"
@@ -547,7 +582,7 @@ async def test_compaction_checkpoint_rehydrates_only_attachment_delta(
     fanout = Mock()
     fanout.flush_persistence_barrier = AsyncMock()
 
-    previous_checkpoint_covered_until = events_table.add_event(
+    _previous_checkpoint_covered_until = events_table.add_event(
         session_id,
         "User",
         "query",
@@ -574,24 +609,28 @@ async def test_compaction_checkpoint_rehydrates_only_attachment_delta(
         task_id="task-after-checkpoint",
     )
 
-    rehydrator = CompactionRehydrator(
-        get_query_events=lambda: events_table.get_session_events(session_id),
-        get_all_events=lambda: events_table.get_session_events(session_id),
-        get_latest_checkpoint_covered_until_event_id=(
-            lambda: previous_checkpoint_covered_until
+    assembler = ContextAssembler(
+        ports=ContextAssemblyPorts(
+            session_events=AppSessionEventsPort(events_table=events_table),
+            session_jobs=AppSessionJobsPort(),
         ),
-        skill_registry=SkillRegistry([tmp_path / "skills"]),
-        playground_ctx=PlaygroundContext(
-            workdir=tmp_path,
-            session_type="local",
-            cache_area=tmp_path / "cache",
+        session_context_factory=build_session_context_factory(
+            skill_registry=SkillRegistry([tmp_path / "skills"]),
+            legal_mcp_servers=None,
+            schemas_by_server=None,
         ),
     )
     compactor = ContextCompactor(
         config=CompactionConfig(context_limit=128000),
         summary_provider=_SummaryProvider("Recovered summary with fresh attachment"),
-        rehydrator=rehydrator,
-        context_builder=ContextBuilder(),
+        context_assembler=assembler,
+        user_instructions=UserInstructions(text="Use SI units.", hash="sha256:abc"),
+        session_id=session_id,
+        spawn_id=None,
+        runtime_covered_until_provider=lambda: events_table.get_latest_scope_event_id(
+            session_id,
+            None,
+        ),
     )
 
     messages = [
@@ -623,19 +662,32 @@ async def test_compaction_checkpoint_rehydrates_only_attachment_delta(
             "durability": "durable",
             "strategy": "summary",
             "schema_version": "history_checkpoint.v1",
+            "render_version": "user_context_render.v1",
+            "user_instructions_text": result.user_instructions_text,
+            "user_instructions_hash": result.user_instructions_hash,
         },
         base_messages=result.base_snapshot,
     )
 
     checkpoint = events_table.history_checkpoints(spawn_id=None)[0]
+    checkpoint_content = checkpoint["content"]
+    assert checkpoint_content["schema_version"] == "history_checkpoint.v1"
+    assert checkpoint_content["render_version"] == "user_context_render.v1"
+    assert checkpoint_content["user_instructions_text"] == "Use SI units."
+    assert checkpoint_content["user_instructions_hash"] == "sha256:abc"
+    assert (
+        checkpoint_content["covered_until_event_id"]
+        == events_table.get_latest_scope_event_id(session_id, None)
+    )
     base_messages = checkpoint["content"]["base_messages"]
     assert [message["role"] for message in base_messages] == ["user"]
     content = base_messages[0]["content"]
-    assert "<previous_session_summary>" in content
+    assert "<compacted_history>" in content
+    assert "<previous_session_summary>" not in content
     assert "[Compacted Context]" not in content
     assert "<attachments>" in content
+    assert "file_1" in content
     assert "file_2" in content
-    assert "file_1" not in content
 
 
 @pytest.mark.asyncio

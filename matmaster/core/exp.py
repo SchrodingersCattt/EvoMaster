@@ -463,9 +463,20 @@ class Exp:
 
         # Compactor uses event_sink=None; _run_items() injects a local sink at runtime.
         compactor = None
+        context_assembler = None
+        assembly_ports = None
         if spec.llm_provider is not None:
-            from matmaster.core.context_compactor import ContextCompactor
-            from matmaster.manifests.rehydrator import CompactionRehydrator
+            from matmaster.context.assembly import (
+                ContextAssembler,
+                ContextRenderOptions,
+            )
+            from matmaster.context.compaction import ContextCompactor
+            from matmaster.context.ports import ContextAssemblyPorts, UserInstructions
+            from src.services.context_assembly_factory import (
+                RuntimeHistorySessionEventsPort,
+                build_session_context_factory,
+            )
+            from src.services.context_assembly_ports import AppSessionJobsPort
 
             summary_provider = spec.llm_provider
             if spec.compaction.compaction_llm:
@@ -493,23 +504,45 @@ class Exp:
             if history_port is None:
                 history_port = EmptySessionEventHistory()
 
-            rehydrator = CompactionRehydrator(
-                get_query_events=history_port.query_events,
-                get_all_events=history_port.all_events,
-                get_latest_checkpoint_covered_until_event_id=(
-                    history_port.latest_checkpoint_covered_until_event_id
+            instructions_text = str(run_meta.get("user_instructions") or "")
+            instructions_hash = run_meta.get("user_instructions_hash")
+            if not isinstance(instructions_hash, str) or not instructions_hash:
+                from src.services.user_turn_context_service import (
+                    hash_user_instructions,
+                )
+
+                instructions_hash = hash_user_instructions(instructions_text)
+            user_instructions = UserInstructions(
+                text=instructions_text,
+                hash=instructions_hash,
+                truncated=bool(run_meta.get("user_instructions_truncated", False)),
+            )
+            assembly_ports = ContextAssemblyPorts(
+                session_events=RuntimeHistorySessionEventsPort(history_port),
+                session_jobs=AppSessionJobsPort(),
+            )
+            context_assembler = ContextAssembler(
+                ports=assembly_ports,
+                session_context_factory=build_session_context_factory(
+                    skill_registry=self._skill_registry,
+                    legal_mcp_servers=run_meta.get("legal_mcp_servers"),
+                    schemas_by_server=run_meta.get("schemas_by_server"),
                 ),
-                skill_registry=self._skill_registry,
-                playground_ctx=ctx,
-                legal_mcp_servers=run_meta.get("legal_mcp_servers"),
-                schemas_by_server=run_meta.get("schemas_by_server"),
+                render_options=ContextRenderOptions(
+                    split_turn_attachments=bool(
+                        run_meta.get("split_turn_attachments", False)
+                    ),
+                ),
             )
 
             compactor = ContextCompactor(
                 config=spec.compaction,
                 summary_provider=summary_provider,
-                rehydrator=rehydrator,
-                context_builder=builder,
+                context_assembler=context_assembler,
+                user_instructions=user_instructions,
+                session_id=run_meta.get("session_id") or "",
+                spawn_id=spawn_id,
+                runtime_covered_until_provider=history_port.latest_scope_event_id,
                 event_sink=None,  # _run_items() injects a local deque-backed sink
                 compaction_scope=(
                     f'{run_meta.get("task_id", "")}:{spawn_id or "root"}'
@@ -555,6 +588,15 @@ class Exp:
                 "context_builder": builder,
                 "hook_executor": hook_executor,
                 "compactor": compactor,
+                "context_assembler": context_assembler,
+                "session_events_port": (
+                    assembly_ports.session_events
+                    if assembly_ports is not None
+                    else None
+                ),
+                "session_jobs_port": (
+                    assembly_ports.session_jobs if assembly_ports is not None else None
+                ),
                 "runtime_ports": KernelRuntimePorts(
                     checkpoint_sink=checkpoint_sink,
                     pre_compaction_barrier=pre_compaction_barrier,
