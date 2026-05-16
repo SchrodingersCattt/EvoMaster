@@ -15,12 +15,13 @@
 
 from __future__ import annotations
 
-from matmaster.core.context_builder import ContextBuilder
+from matmaster.context.assembly import ContextAssembler
 from matmaster.context.compaction import (
     ContextCompactor,
     estimate_tokens,
     parse_turns,
 )
+from matmaster.context.ports import ContextAssemblyPorts, UserInstructions
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -103,11 +104,21 @@ def _make_compactor(
     *,
     event_sink=None,
 ) -> ContextCompactor:
+    class EventsPort:
+        async def load_events(self, query):
+            return ()
+
+    assembler = ContextAssembler(
+        ContextAssemblyPorts(session_events=EventsPort()),
+    )
     return ContextCompactor(
         config=config,
         summary_provider=provider,
-        rehydrator=_EmptyRehydrator(),
-        context_builder=ContextBuilder(),
+        context_assembler=assembler,
+        user_instructions=UserInstructions(text="", hash="sha256:empty"),
+        session_id="sess-1",
+        spawn_id=None,
+        runtime_covered_until_provider=lambda: 42,
         event_sink=event_sink,
     )
 
@@ -316,7 +327,7 @@ class TestSummaryStrategy:
         assert msgs[0].content == "You are a helpful assistant."
         assert isinstance(msgs[1], UserMessage)
         assert "[Compacted Context]" not in (msgs[1].content or "")
-        assert "<previous_session_summary>" in (msgs[1].content or "")
+        assert "<compacted_history>" in (msgs[1].content or "")
         assert "Concise summary of work done." in msgs[1].content
         assert "Analyze this dataset" not in msgs[1].content
 

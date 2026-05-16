@@ -82,6 +82,10 @@ async def run_compaction_plan(
             payload = {
                 "durability": result.durability,
                 "strategy": result.strategy,
+                "schema_version": "history_checkpoint.v1",
+                "render_version": "user_context_render.v1",
+                "user_instructions_text": result.user_instructions_text,
+                "user_instructions_hash": result.user_instructions_hash,
             }
             if result.checkpoint_covered_until_event_id is not None:
                 payload["covered_until_event_id"] = (

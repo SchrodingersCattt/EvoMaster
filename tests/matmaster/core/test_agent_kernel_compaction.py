@@ -8,7 +8,6 @@ from unittest.mock import patch
 
 import pytest
 
-from matmaster.core.context_builder import ContextBuilder
 from matmaster.types.current_input import CurrentInputContext
 from matmaster.types.messages import (
     AssistantMessage,
@@ -42,6 +41,10 @@ class ContentOnlyProvider:
 
 
 # ── Compactor test doubles ───────────────────────────────────
+
+
+def _v1_compacted_user_message(summary: str = "summary") -> UserMessage:
+    return UserMessage(content=f"<compacted_history>\n{summary}\n</compacted_history>")
 
 
 class _DurablePreflightCompactor:
@@ -79,8 +82,7 @@ class _DurablePreflightCompactor:
     ):
         from matmaster.core.context_compactor import CompactionResult
 
-        bundle = ContextBuilder().build_compact_bundle(summary="summary")
-        compact_message = UserMessage(content=bundle)
+        compact_message = _v1_compacted_user_message()
         base_snapshot = [
             compact_message.model_dump(mode="json"),
         ]
@@ -98,6 +100,9 @@ class _DurablePreflightCompactor:
             retained_turns=1,
             failure_reason=None,
             base_snapshot=base_snapshot,
+            checkpoint_covered_until_event_id=41,
+            user_instructions_text="Use SI units.",
+            user_instructions_hash="sha256:abc",
         )
 
     async def plan_runtime_compaction(
@@ -150,9 +155,7 @@ class _LifecycleCompactor:
         from matmaster.core.context_compactor import CompactionResult
 
         self.apply_calls += 1
-        compact_message = UserMessage(
-            content=ContextBuilder().build_compact_bundle(summary=self._summary_text)
-        )
+        compact_message = _v1_compacted_user_message(self._summary_text)
         messages[:] = [
             messages[0],
             compact_message,
@@ -169,6 +172,9 @@ class _LifecycleCompactor:
             base_snapshot=[
                 compact_message.model_dump(mode="json"),
             ],
+            checkpoint_covered_until_event_id=41,
+            user_instructions_text="Use SI units.",
+            user_instructions_hash="sha256:abc",
         )
 
 
@@ -301,11 +307,17 @@ class TestCheckpointAwareCompaction:
         assert compactor.preflight_calls == 1
         assert checkpoint_calls == [
             {
-                "payload": {"durability": "durable", "strategy": "summary"},
+                "payload": {
+                    "durability": "durable",
+                    "strategy": "summary",
+                    "schema_version": "history_checkpoint.v1",
+                    "render_version": "user_context_render.v1",
+                    "user_instructions_text": "Use SI units.",
+                    "user_instructions_hash": "sha256:abc",
+                    "covered_until_event_id": 41,
+                },
                 "base_messages": [
-                    UserMessage(
-                        content=ContextBuilder().build_compact_bundle(summary="summary")
-                    ).model_dump(mode="json"),
+                    _v1_compacted_user_message().model_dump(mode="json"),
                 ],
             }
         ]
@@ -463,8 +475,7 @@ class _BoundaryOverrideCompactor(_DurablePreflightCompactor):
     ):
         from matmaster.core.context_compactor import CompactionResult
 
-        bundle = ContextBuilder().build_compact_bundle(summary="summary")
-        compact_message = UserMessage(content=bundle)
+        compact_message = _v1_compacted_user_message()
         base_snapshot = [
             compact_message.model_dump(mode="json"),
         ]
@@ -483,6 +494,8 @@ class _BoundaryOverrideCompactor(_DurablePreflightCompactor):
             failure_reason=None,
             base_snapshot=base_snapshot,
             checkpoint_covered_until_event_id=41,
+            user_instructions_text="Use SI units.",
+            user_instructions_hash="sha256:abc",
         )
 
 
@@ -625,6 +638,10 @@ async def test_kernel_passes_checkpoint_covered_until_override_to_sink() -> None
     assert checkpoint_calls[0]["payload"] == {
         "durability": "durable",
         "strategy": "summary",
+        "schema_version": "history_checkpoint.v1",
+        "render_version": "user_context_render.v1",
+        "user_instructions_text": "Use SI units.",
+        "user_instructions_hash": "sha256:abc",
         "covered_until_event_id": 41,
     }
     assert any(getattr(event, "covered_until_event_id", None) == 41 for event in events)

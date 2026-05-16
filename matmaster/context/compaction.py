@@ -13,12 +13,19 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from matmaster.core.context_builder import ContextBuilder
-from matmaster.manifests.rehydrator import CompactionRehydrator
-from matmaster.types.current_input import (
-    CurrentInputContext,
-    build_current_instruction_block,
+from matmaster.context.assembly import (
+    CompactionAssemblyRequest,
+    ContextAssembler,
+    ContextAssemblyIntent,
 )
+from matmaster.context.ports import ContextAssemblyPorts, UserInstructions
+from matmaster.context.sections import ContextView
+from matmaster.context.sources.turn_input import (
+    TurnAttachmentsSource,
+    TurnInput,
+    TurnInstructionSource,
+)
+from matmaster.types.current_input import CurrentInputContext
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import (
     AssistantMessage,
@@ -45,9 +52,10 @@ into a concise structured summary. Preserve:
 Do NOT add new information. Do NOT include pleasantries. Be factual and precise.
 
 If the input starts with a previous compact context bundle, merge it with later
-events and produce a fresh conversation summary. Older <rehydrated_context>
-blocks are historical state snapshots; do not copy them verbatim. Current state
-is supplied separately by the new rehydrated context.\
+events and produce a fresh conversation summary. Older <compacted_history>
+blocks are historical summaries; do not copy them verbatim. Current session
+state is supplied separately by session sections such as <session_attachments>,
+<session_skills>, and <session_tools>.\
 """
 
 CURRENT_INPUT_CONTINUATION_INSTRUCTION = (
@@ -174,6 +182,11 @@ class CompactionResult:
     )
 
 
+class _EmptyEventsPort:
+    async def load_events(self, query):
+        return ()
+
+
 class ContextCompactor:
     """Runtime context compressor, called by kernel before each LLM invocation."""
 
@@ -182,15 +195,28 @@ class ContextCompactor:
         config: CompactionConfig,
         summary_provider: LLMProvider,
         *,
-        rehydrator: CompactionRehydrator,
-        context_builder: ContextBuilder,
+        context_assembler: ContextAssembler | None = None,
+        user_instructions: UserInstructions | None = None,
+        session_id: str = "",
+        spawn_id: str | None = None,
+        runtime_covered_until_provider: Callable[[], int | None] | None = None,
         event_sink: Callable[[Any], Awaitable[None]] | None = None,
         compaction_scope: str = "root",
+        **_legacy_kwargs: Any,
     ) -> None:
+        if context_assembler is None:
+            context_assembler = ContextAssembler(
+                ContextAssemblyPorts(session_events=_EmptyEventsPort()),
+            )
+        if user_instructions is None:
+            user_instructions = UserInstructions(text="", hash="")
         self._config = config
         self._summary_provider = summary_provider
-        self._rehydrator = rehydrator
-        self._context_builder = context_builder
+        self._context_assembler = context_assembler
+        self._user_instructions = user_instructions
+        self._session_id = session_id
+        self._spawn_id = spawn_id
+        self._runtime_covered_until_provider = runtime_covered_until_provider
         self._event_sink = event_sink
         self._compaction_scope = compaction_scope
         self._last_llm_message_count: int = 0
@@ -250,6 +276,25 @@ class ContextCompactor:
         self, messages: list[Message]
     ) -> CompactionPlan | None:
         return self._plan_preflight_compaction(messages)
+
+    @staticmethod
+    def _turn_input_from_current_context(
+        current_input_context: CurrentInputContext,
+    ) -> TurnInput:
+        boundary = current_input_context.pre_query_scope_event_id
+        if boundary is None:
+            boundary = 0
+        return TurnInput(
+            instruction=TurnInstructionSource(
+                user_text=current_input_context.user_text,
+            ),
+            attachments=TurnAttachmentsSource(
+                files=tuple(current_input_context.files),
+                images=tuple(current_input_context.images),
+                workspace_paths=tuple(current_input_context.workspace_paths),
+            ),
+            pre_turn_history_event_id=int(boundary),
+        )
 
     async def plan_runtime_compaction(
         self,
@@ -320,51 +365,59 @@ class ContextCompactor:
         retained_turns = 0
         checkpoint_covered_until_event_id: int | None = None
         checkpoint_user_msg: UserMessage | None = None
+        user_instructions_text = ""
+        user_instructions_hash = (
+            "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        )
 
         try:
             summary = await self._summarize(summary_input)
-            until_event_id = (
-                current_input_context.pre_query_scope_event_id
+            turn_input = (
+                self._turn_input_from_current_context(current_input_context)
                 if current_split and current_input_context is not None
                 else None
             )
-            rehydrated = await self._rehydrator.build(until_event_id=until_event_id)
-            if current_split and current_input_context is not None:
-                runtime_bundle = self._context_builder.build_compact_bundle(
-                    summary=summary,
-                    rehydrated_context=rehydrated,
-                    continuation_instruction=CURRENT_INPUT_CONTINUATION_INSTRUCTION,
-                )
-                checkpoint_bundle = self._context_builder.build_compact_bundle(
-                    summary=summary,
-                    rehydrated_context=rehydrated,
-                )
-                current_user_message = messages[-1]
-                instruction = build_current_instruction_block(current_input_context)
-                runtime_user_msg = UserMessage(
-                    content=(
-                        f"{runtime_bundle}\n\n{instruction}"
-                        if instruction
-                        else runtime_bundle
-                    ),
-                    images=list(current_user_message.images),
-                )
-                checkpoint_user_msg = UserMessage(content=checkpoint_bundle)
-                messages[:] = [system_msg, runtime_user_msg]
-                if current_input_context.pre_query_scope_event_id is None:
-                    durability = "ephemeral"
-                    failure_reason = "preflight_current_input_boundary_missing"
-                else:
-                    checkpoint_covered_until_event_id = (
-                        current_input_context.pre_query_scope_event_id
+            intent = (
+                ContextAssemblyIntent.PREFLIGHT_COMPACTION
+                if current_split
+                else ContextAssemblyIntent.RUNTIME_COMPACTION
+            )
+            covered_until_event_id = None
+            if intent == ContextAssemblyIntent.RUNTIME_COMPACTION:
+                if self._runtime_covered_until_provider is None:
+                    raise ValueError(
+                        "runtime compaction requires runtime_covered_until_provider"
                     )
-            else:
-                bundle = self._context_builder.build_compact_bundle(
-                    summary=summary,
-                    rehydrated_context=rehydrated,
+                covered_until_event_id = self._runtime_covered_until_provider()
+                if covered_until_event_id is None:
+                    raise ValueError("runtime_current_event_boundary_missing")
+
+            assembly = await self._context_assembler.assemble_compaction(
+                intent,
+                CompactionAssemblyRequest(
+                    session_id=self._session_id,
+                    spawn_id=self._spawn_id,
+                    user_instructions=self._user_instructions,
+                    compacted_history_summary=summary,
+                    turn_input=turn_input,
+                    covered_until_event_id=covered_until_event_id,
                 )
-                checkpoint_user_msg = UserMessage(content=bundle)
-                messages[:] = [system_msg, checkpoint_user_msg]
+            )
+            runtime_user_msg = assembly.user_turn_context.to_message(ContextView.RUNTIME)
+            checkpoint_user_msg = assembly.user_turn_context.to_message(
+                ContextView.CHECKPOINT
+            )
+            messages[:] = [system_msg, runtime_user_msg]
+            checkpoint_covered_until_event_id = assembly.covered_until_event_id
+            user_instructions_text = assembly.user_instructions_text
+            user_instructions_hash = assembly.user_instructions_hash
+            if (
+                current_split
+                and current_input_context is not None
+                and current_input_context.pre_query_scope_event_id is None
+            ):
+                durability = "ephemeral"
+                failure_reason = "preflight_current_input_boundary_missing"
         except Exception as exc:
             if plan.phase == "preflight":
                 logger.warning(
@@ -417,6 +470,8 @@ class ContextCompactor:
             failure_reason=failure_reason,
             base_snapshot=base_snapshot,
             checkpoint_covered_until_event_id=checkpoint_covered_until_event_id,
+            user_instructions_text=user_instructions_text,
+            user_instructions_hash=user_instructions_hash,
         )
 
     def _select_recent_turns(

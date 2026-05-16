@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from matmaster.core.context_builder import ContextBuilder
+from matmaster.context.assembly import ContextAssembler
+from matmaster.context.ports import ContextAssemblyPorts, UserInstructions
+from matmaster.context.sections import ContextSection, ContextView, SectionOrder
 from matmaster.types.current_input import CurrentInputContext
 from matmaster.types.messages import (
     AssistantMessage,
@@ -221,11 +223,40 @@ def _make_compactor(
 ):
     from matmaster.context.compaction import ContextCompactor
 
+    def session_sections(_events, until_event_id, include_attachments):
+        if not include_attachments:
+            return ()
+        text = rehydrated_until if until_event_id is not None else rehydrated
+        if until_event_id is not None and text is None:
+            text = rehydrated
+        if not text:
+            return ()
+        return (
+            ContextSection(
+                key="session_attachments",
+                tag="session_attachments",
+                content=text,
+                order=SectionOrder.SESSION_ATTACHMENTS,
+                views=frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT}),
+            ),
+        )
+
+    class EventsPort:
+        async def load_events(self, query):
+            return ()
+
+    assembler = ContextAssembler(
+        ContextAssemblyPorts(session_events=EventsPort()),
+        _session_section_builder_for_tests=session_sections,
+    )
     return ContextCompactor(
         config=config,
         summary_provider=provider,
-        rehydrator=FakeRehydrator(rehydrated, ranged_text=rehydrated_until),
-        context_builder=ContextBuilder(),
+        context_assembler=assembler,
+        user_instructions=UserInstructions(text="", hash="sha256:empty"),
+        session_id="sess-1",
+        spawn_id=None,
+        runtime_covered_until_provider=lambda: 42,
         event_sink=event_sink,
         compaction_scope=compaction_scope,
     )
@@ -375,9 +406,9 @@ class TestCompactorOutput:
         assert msgs[0].content == "You are helpful"
         assert isinstance(msgs[1], UserMessage)
         assert "[Compacted Context]" not in (msgs[1].content or "")
-        assert "<previous_session_summary>" in (msgs[1].content or "")
+        assert "<compacted_history>" in (msgs[1].content or "")
         assert "Summarized content." in msgs[1].content
-        assert "<rehydrated_context>" in (msgs[1].content or "")
+        assert "<session_attachments>" in (msgs[1].content or "")
         assert "Analyze this data" not in (msgs[1].content or "")
         assert len(msgs) == 2
 
@@ -398,9 +429,9 @@ class TestCompactorOutput:
         assert isinstance(msgs[0], SystemMessage)
         assert isinstance(msgs[1], UserMessage)
         assert "[Compacted Context]" not in (msgs[1].content or "")
-        assert "<previous_session_summary>" in (msgs[1].content or "")
+        assert "<compacted_history>" in (msgs[1].content or "")
         assert "Summarized content." in (msgs[1].content or "")
-        assert "<rehydrated_context>" in (msgs[1].content or "")
+        assert "<session_attachments>" in (msgs[1].content or "")
         assert "Analyze this data" not in (msgs[1].content or "")
 
     async def test_base_snapshot_contains_only_user_bundle(self) -> None:
@@ -414,14 +445,14 @@ class TestCompactorOutput:
 
         assert result.base_snapshot is not None
         assert [item["role"] for item in result.base_snapshot] == ["user"]
-        assert "<previous_session_summary>" in result.base_snapshot[0]["content"]
+        assert "<compacted_history>" in result.base_snapshot[0]["content"]
 
     async def test_second_compact_summarizes_first_bundle_without_special_case(
         self,
     ) -> None:
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider(summary="second summary")
-        first_bundle = ContextBuilder().build_compact_bundle(summary="first summary")
+        first_bundle = "<compacted_history>\nfirst summary\n</compacted_history>"
         msgs = [
             SystemMessage(content="sys"),
             UserMessage(content=first_bundle),
@@ -434,7 +465,7 @@ class TestCompactorOutput:
         await compactor.apply_compaction_plan(plan, msgs)
 
         prompt_text = provider.calls[0][1]["content"]
-        assert "<previous_session_summary>" in prompt_text
+        assert "<compacted_history>" in prompt_text
         assert "first summary" in prompt_text
         assert "second summary" in (msgs[1].content or "")
 
@@ -611,24 +642,23 @@ class TestPreflightCurrentInputSplit:
 
         prompt_text = provider.calls[0][1]["content"]
         runtime_content = msgs[1].content or ""
-        rehydrated_context = runtime_content.split("<rehydrated_context>", 1)[1].split(
-            "</rehydrated_context>", 1
-        )[0]
+        session_attachments = runtime_content.split("<session_attachments>", 1)[
+            1
+        ].split("</session_attachments>", 1)[0]
         current_instruction = runtime_content.split("<current_instruction>", 1)[1]
         assert "old question" in prompt_text
         assert "old answer" in prompt_text
         assert "Use only the new file" not in prompt_text
         assert "new.cif" not in prompt_text
         assert "<current_instruction>" in runtime_content
-        assert "old.cif" in rehydrated_context
-        assert "new.cif" not in rehydrated_context
+        assert "old.cif" in session_attachments
+        assert "new.cif" not in session_attachments
         assert "file_1 new.cif https://oss.example.com/chat/new.cif" in (
             current_instruction
         )
         assert "old.cif" not in current_instruction
         assert msgs[1].images[0].url == "https://oss.example.com/chat/new.png"
         assert result.checkpoint_covered_until_event_id == 42
-        assert compactor._rehydrator.until_event_ids == [42]
         assert result.base_snapshot is not None
         assert "<current_instruction>" not in result.base_snapshot[0]["content"]
         assert "new.cif" not in result.base_snapshot[0]["content"]
@@ -733,7 +763,7 @@ class TestToolTruncationFallback:
         assert len(provider.calls) == 1
         assert len(msgs) == 2
         assert isinstance(msgs[1], UserMessage)
-        assert "<previous_session_summary>" in (msgs[1].content or "")
+        assert "<compacted_history>" in (msgs[1].content or "")
         assert len(received) == 0
 
     async def test_summarizes_when_no_compressible_turns(self) -> None:
