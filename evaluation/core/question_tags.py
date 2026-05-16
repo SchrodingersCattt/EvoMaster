@@ -26,6 +26,8 @@ class QuestionTag(StrEnum):
     struct_build = 'struct_build'
     struct_transform = 'struct_transform'
     struct_molcrys = 'struct_molcrys'
+    # MD 后处理分析
+    analysis_post_md = 'analysis_post_md'
     # 表征
     char_diffraction = 'char_diffraction'
     char_optical_spectrum = 'char_optical_spectrum'

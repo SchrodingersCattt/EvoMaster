@@ -1251,3 +1251,96 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
+- id: SA_rdf_zno_001_20260517
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Analyze a Zn-O radial distribution function from MD simulation to extract
+    first coordination shell distance, coordination number, and validate against known
+    physical values for aqueous Zn2+.
+  human_prompt_seed: '工作区中有一个 DPA-MD 模拟产生的 Zn-O 径向分布函数数据文件：
+
+    - `zn_o_rdf.dat`：1 mol/L ZnSO4 水溶液在 300 K 下的 g(r) 数据
+
+    请分析该 RDF，提取第一配位壳的峰位置、第一极小值位置和配位数，并与已知 Zn2+ 水化壳文献值进行对比验证。
+
+    将结果输出到 `rdf_analysis.json`，格式为 `{"first_peak_A": ..., "first_min_A":
+    ..., "coordination_number": ...}`。'
+  tags:
+  - analysis_post_md
+  data_files:
+  - key: rdf_data
+    path: data/SA_rdf_zno_001/zn_o_rdf.dat
+    oss_url: ''
+    description: Zn-O RDF from DPA-MD of 1 mol/L ZnSO4 solution at 300 K.
+  reference_answers:
+  - key: output_artifact
+    value: rdf_analysis.json
+  - key: first_peak_check
+    value:
+      filename: rdf_analysis.json
+      checks:
+      - key: first_peak_A
+        min: 1.98
+        max: 2.18
+  - key: first_min_check
+    value:
+      filename: rdf_analysis.json
+      checks:
+      - key: first_min_A
+        min: 2.55
+        max: 2.95
+  - key: coordination_number_check
+    value:
+      filename: rdf_analysis.json
+      checks:
+      - key: coordination_number
+        min: 4.8
+        max: 6.8
+  - key: turn_budget
+    value:
+      max: 15
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `rdf_analysis.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: first_peak_check
+    criterion: The first peak position of g(r) is correctly identified near 2.08 Å
+      (typical Zn-O distance in aqueous solution).
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.5
+  - id: first_min_check
+    criterion: The first minimum position is correctly identified near 2.75 Å.
+    axis: correctness
+    verify: text_file_numeric_range
+  - id: coordination_number_check
+    criterion: The coordination number is correctly computed by integrating g(r) to
+      the first minimum, yielding approximately 5.8.
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+  - id: physical_validation
+    criterion: Agent states that the results are consistent with known Zn2+ aqueous
+      hydration shell literature (Zn-O distance ~2.0-2.1 Å, CN ~6, octahedral coordination).
+      Must reference physical chemistry knowledge, not just report numbers.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: correct_integration
+    criterion: Agent uses the correct formula CN = 4*pi*rho*integral(r^2*g(r)*dr) with
+      rho from the file header (0.033 atoms/Å³), not an incorrect formula like just
+      integrating g(r) or using wrong density.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
