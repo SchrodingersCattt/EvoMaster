@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -21,6 +21,14 @@ from matmaster.core.hooks import HookExecutor
 
 from .llm_provider import LLMProvider
 from .runtime_ports import KernelRuntimePorts
+
+if TYPE_CHECKING:  # pragma: no cover - import only for type hints
+    from matmaster.context.assembly import ContextAssembler
+    from matmaster.context.ports import (
+        SessionEventsPort,
+        SessionJobsPort,
+        UserInstructionsPort,
+    )
 
 
 class CompactionConfig(BaseModel):
@@ -78,6 +86,13 @@ class AgentRuntimeSpec(BaseModel):
 
     # Annotations are Any to avoid circular imports across the runtime stack.
     # The model_validator below enforces runtime type contracts.
+    # Phase 2C v3.1: reserved entry points for the Phase 3 compaction cutover.
+    # Kernel/compactor do not consume these fields in Phase 2C.
+    context_assembler: Any | None = None
+    user_instructions_port: Any | None = None
+    session_events_port: Any | None = None
+    session_jobs_port: Any | None = None
+
     tool_runner: Any | None = None
     tool_catalog: Any | None = None
     runtime_topology: Any | None = None
@@ -96,6 +111,32 @@ class AgentRuntimeSpec(BaseModel):
                 "context_builder must be ContextBuilder, "
                 f"got {type(self.context_builder).__name__}"
             )
+
+        if self.context_assembler is not None:
+            from matmaster.context.assembly import ContextAssembler
+
+            if not isinstance(self.context_assembler, ContextAssembler):
+                raise ValueError(
+                    "context_assembler must be ContextAssembler, "
+                    f"got {type(self.context_assembler).__name__}"
+                )
+        if self.user_instructions_port is not None and not hasattr(
+            self.user_instructions_port,
+            "load_user_instructions",
+        ):
+            raise ValueError(
+                "user_instructions_port must implement load_user_instructions"
+            )
+        if self.session_events_port is not None and not hasattr(
+            self.session_events_port,
+            "load_events",
+        ):
+            raise ValueError("session_events_port must implement load_events")
+        if self.session_jobs_port is not None and not hasattr(
+            self.session_jobs_port,
+            "load_session_jobs",
+        ):
+            raise ValueError("session_jobs_port must implement load_session_jobs")
 
         checks: list[tuple[str, Any, type]] = [
             ("tool_runner", self.tool_runner, ToolRunner),
