@@ -28,6 +28,7 @@ class ContextCompositionInputs:
     session_jobs: SessionJobs = field(default_factory=SessionJobs.empty)
     session_attachments_override: SectionSource | None = None
     defer_turn_instruction: bool = False
+    split_turn_attachments: bool = False
 
 
 CompositionStep = Callable[[ContextCompositionInputs], tuple[ContextSection, ...]]
@@ -84,7 +85,9 @@ def _step_turn_input(inputs: ContextCompositionInputs) -> tuple[ContextSection, 
                 deferred=True,
             ),
         )
-    return turn_input.to_sections()
+    return turn_input.to_sections(
+        split_attachments=inputs.split_turn_attachments,
+    )
 
 
 def _step_session_jobs(inputs: ContextCompositionInputs) -> tuple[ContextSection, ...]:

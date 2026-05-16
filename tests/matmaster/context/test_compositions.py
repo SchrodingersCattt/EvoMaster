@@ -123,3 +123,23 @@ def test_defer_turn_instruction_moves_instruction_to_last_order() -> None:
         section for section in context.sections if section.key == "current_instruction"
     ][0]
     assert turn_section.order == SectionOrder.TURN_INSTRUCTION_LAST
+
+
+def test_compaction_inputs_can_split_turn_attachments() -> None:
+    result = COMPACTED_COMPOSITION.apply(
+        ContextCompositionInputs(
+            compacted_history_summary="Earlier summary.",
+            turn_input=TurnInput(
+                instruction=TurnInstructionSource(user_text="Use current file."),
+                attachments=TurnAttachmentsSource(files=("https://oss/a.cif",)),
+                pre_turn_history_event_id=5,
+            ),
+            split_turn_attachments=True,
+        )
+    )
+
+    runtime = result.render(ContextView.RUNTIME)
+    checkpoint = result.render(ContextView.CHECKPOINT)
+    assert "<current_instruction>" in runtime
+    assert "<turn_attachments>" in runtime
+    assert "<turn_attachments>" not in checkpoint

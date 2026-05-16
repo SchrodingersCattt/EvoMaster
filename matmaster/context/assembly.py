@@ -64,6 +64,11 @@ class CompactionAssemblyRequest:
 
 
 @dataclass(frozen=True)
+class ContextRenderOptions:
+    split_turn_attachments: bool = False
+
+
+@dataclass(frozen=True)
 class AssemblyResult:
     user_turn_context: UserTurnContext
     user_instructions_text: str
@@ -102,9 +107,11 @@ class ContextAssembler:
         ports: ContextAssemblyPorts,
         *,
         session_context_factory: SessionContextFactory | None = None,
+        render_options: ContextRenderOptions | None = None,
         _session_section_builder_for_tests: SessionSectionBuilder | None = None,
     ) -> None:
         self._ports = ports
+        self._render_options = render_options or ContextRenderOptions()
         self._session_context_factory = session_context_factory
         # Phase 2A test-only seam: production runtime wiring must use
         # session_context_factory instead of injecting prebuilt sections.
@@ -165,6 +172,7 @@ class ContextAssembler:
                 turn_input=request.turn_input,
                 session_sections=session_sections,
                 session_jobs=jobs,
+                split_turn_attachments=self._render_options.split_turn_attachments,
             )
         )
         return AssemblyResult(
@@ -222,6 +230,7 @@ class ContextAssembler:
                 session_jobs=jobs,
                 session_attachments_override=request.session_attachments_override,
                 defer_turn_instruction=True,
+                split_turn_attachments=self._render_options.split_turn_attachments,
             )
         )
         return AssemblyResult(

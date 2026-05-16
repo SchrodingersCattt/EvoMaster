@@ -9,6 +9,7 @@ from matmaster.context.assembly import (
     CompactionAssemblyRequest,
     ContextAssembler,
     ContextAssemblyIntent,
+    ContextRenderOptions,
     TurnAssemblyRequest,
 )
 from matmaster.context.ports import (
@@ -130,6 +131,57 @@ async def test_assemble_turn_continuation_does_not_load_events() -> None:
     assert "<user_instructions>" not in result.user_turn_context.render(
         ContextView.RUNTIME
     )
+
+
+@pytest.mark.asyncio
+async def test_assembler_render_options_default_to_merged_turn_attachments() -> None:
+    assembler = ContextAssembler(ContextAssemblyPorts(session_events=EventsPort()))
+
+    result = await assembler.assemble_turn(
+        ContextAssemblyIntent.CONTINUATION_TURN,
+        TurnAssemblyRequest(
+            session_id="sess-1",
+            spawn_id=None,
+            turn_input=TurnInput(
+                instruction=TurnInstructionSource(user_text="Use current file."),
+                attachments=TurnAttachmentsSource(files=("https://oss/a.cif",)),
+                pre_turn_history_event_id=5,
+            ),
+            user_instructions=_instructions(),
+        ),
+    )
+
+    runtime = result.user_turn_context.render(ContextView.RUNTIME)
+    assert "<current_instruction>" in runtime
+    assert "[Current attachments]" in runtime
+    assert "<turn_attachments>" not in runtime
+
+
+@pytest.mark.asyncio
+async def test_assembler_render_options_can_split_turn_attachments() -> None:
+    assembler = ContextAssembler(
+        ContextAssemblyPorts(session_events=EventsPort()),
+        render_options=ContextRenderOptions(split_turn_attachments=True),
+    )
+
+    result = await assembler.assemble_turn(
+        ContextAssemblyIntent.CONTINUATION_TURN,
+        TurnAssemblyRequest(
+            session_id="sess-1",
+            spawn_id=None,
+            turn_input=TurnInput(
+                instruction=TurnInstructionSource(user_text="Use current file."),
+                attachments=TurnAttachmentsSource(files=("https://oss/a.cif",)),
+                pre_turn_history_event_id=5,
+            ),
+            user_instructions=_instructions(),
+        ),
+    )
+
+    runtime = result.user_turn_context.render(ContextView.RUNTIME)
+    assert "<current_instruction>" in runtime
+    assert "<turn_attachments>" in runtime
+    assert "[Current attachments]" not in runtime
 
 
 @pytest.mark.asyncio
