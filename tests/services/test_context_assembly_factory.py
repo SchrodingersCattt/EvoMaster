@@ -5,7 +5,7 @@ import pytest
 from matmaster.context.ports import SessionEvent
 from matmaster.context.scanner import coerce_session_events
 from matmaster.context.session import SessionContextBuilder
-from src.services.context_assembly_factory import build_session_context_factory
+from matmaster.core.runtime_context_assembly import build_session_context_factory
 
 
 @pytest.fixture
@@ -111,7 +111,9 @@ def test_build_context_assembler_wires_ports_and_render_options() -> None:
 @pytest.mark.asyncio
 async def test_runtime_history_events_port_filters_existing_history_rows() -> None:
     from matmaster.context.ports import SessionEventQuery
-    from src.services.context_assembly_factory import RuntimeHistorySessionEventsPort
+    from matmaster.core.runtime_context_assembly import (
+        RuntimeHistorySessionEventsPort,
+    )
 
     class History:
         def query_context_events(self, **kwargs):

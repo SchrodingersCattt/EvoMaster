@@ -17,7 +17,7 @@ from matmaster.types.messages import (
     UserMessage,
 )
 from matmaster.types.runtime import CompactionConfig
-from src.services.context_assembly_factory import build_session_context_factory
+from matmaster.core.runtime_context_assembly import build_session_context_factory
 from src.services.context_assembly_ports import AppSessionEventsPort, AppSessionJobsPort
 from src.services.history_checkpoint_codec import serialize_base_messages
 from src.services.history_checkpoint_service import HistoryCheckpointService

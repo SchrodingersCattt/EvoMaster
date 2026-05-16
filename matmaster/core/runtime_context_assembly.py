@@ -38,7 +38,7 @@ def _hash_user_instructions(text: str) -> str:
     return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _build_session_context_factory(
+def build_session_context_factory(
     *,
     skill_registry: Any | None,
     legal_mcp_servers: set[str] | None,
@@ -55,7 +55,7 @@ def _build_session_context_factory(
     return factory
 
 
-class _RuntimeHistorySessionEventsPort:
+class RuntimeHistorySessionEventsPort:
     def __init__(self, history_port: Any) -> None:
         self._history_port = history_port
 
@@ -125,12 +125,12 @@ def build_runtime_context_assembly(
         truncated=bool(run_meta.get("user_instructions_truncated", False)),
     )
     assembly_ports = ContextAssemblyPorts(
-        session_events=_RuntimeHistorySessionEventsPort(history_port),
+        session_events=RuntimeHistorySessionEventsPort(history_port),
         session_jobs=_EmptySessionJobsPort(),
     )
     context_assembler = ContextAssembler(
         ports=assembly_ports,
-        session_context_factory=_build_session_context_factory(
+        session_context_factory=build_session_context_factory(
             skill_registry=skill_registry,
             legal_mcp_servers=run_meta.get("legal_mcp_servers"),
             schemas_by_server=run_meta.get("schemas_by_server"),
