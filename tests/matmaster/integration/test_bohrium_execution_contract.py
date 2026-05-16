@@ -434,6 +434,7 @@ def test_run_agent_loads_exp_config_without_passing_skill_sync_to_bohrium_setup(
 
         mock_events_table = MagicMock()
         mock_events_table.get_session_events.return_value = []
+        mock_events_table.query_user_turn_context_by_invocation.return_value = None
         mock_events_fn.return_value = mock_events_table
         mock_redis_fn.return_value = MagicMock()
 
@@ -450,6 +451,7 @@ def test_run_agent_loads_exp_config_without_passing_skill_sync_to_bohrium_setup(
                 cancel_token=CancellationController().token,
                 mode='direct',
                 task_id='task-spec-order',
+                invocation_id='inv-spec-order',
             )
         )
 
@@ -540,6 +542,7 @@ def test_execution_binding_before_build_runtime(
 
         mock_events_table = MagicMock()
         mock_events_table.get_session_events.return_value = []
+        mock_events_table.query_user_turn_context_by_invocation.return_value = None
         mock_events_fn.return_value = mock_events_table
         mock_redis_fn.return_value = MagicMock()
 
@@ -556,6 +559,7 @@ def test_execution_binding_before_build_runtime(
                 cancel_token=CancellationController().token,
                 mode='direct',
                 task_id='task-exec-bind',
+                invocation_id='inv-exec-bind',
             )
         )
 
