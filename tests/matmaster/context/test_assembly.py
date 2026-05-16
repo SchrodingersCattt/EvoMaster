@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from matmaster.context.assembly import (
@@ -16,11 +18,13 @@ from matmaster.context.ports import (
     UserInstructions,
 )
 from matmaster.context.sections import ContextSection, ContextView, SectionOrder
+from matmaster.context.session import SessionContextBuilder
 from matmaster.context.sources.turn_input import (
     TurnAttachmentsSource,
     TurnInput,
     TurnInstructionSource,
 )
+from matmaster.skills.registry import SkillRegistry
 
 
 class EventsPort:
@@ -216,3 +220,138 @@ async def test_assemble_compaction_rejects_wrong_intent() -> None:
                 covered_until_event_id=1,
             ),
         )
+
+
+def _skill_registry(tmp_path: Path) -> SkillRegistry:
+    root = tmp_path / "skills"
+    skill_dir = root / "pxrd"
+    skill_dir.mkdir(parents=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\nname: pxrd\ndescription: PXRD helper\nmcp_server: mat_xrd\n---\nbody\n",
+        encoding="utf-8",
+    )
+    return SkillRegistry([root])
+
+
+class _RecordingEventsPort:
+    def __init__(self, events: tuple[SessionEvent, ...]) -> None:
+        self._events = events
+        self.queries = []
+
+    async def load_events(self, query):
+        self.queries.append(query)
+        return self._events
+
+
+@pytest.mark.asyncio
+async def test_assemble_turn_anchor_uses_session_context_factory(
+    tmp_path: Path,
+) -> None:
+    registry = _skill_registry(tmp_path)
+    events = (
+        SessionEvent(
+            id=1,
+            event_type="query",
+            source="User",
+            content={"files": ("https://oss.example.com/a.csv",)},
+        ),
+        SessionEvent(
+            id=2,
+            event_type="skill_hit",
+            source="System",
+            content={"skill_name": "pxrd"},
+        ),
+    )
+    port = _RecordingEventsPort(events)
+
+    def factory(loaded_events: tuple[SessionEvent, ...]) -> SessionContextBuilder:
+        return SessionContextBuilder(
+            events=loaded_events,
+            skill_registry=registry,
+            legal_mcp_servers={"mat_xrd"},
+            schemas_by_server={"mat_xrd": [{"name": "read"}]},
+        )
+
+    assembler = ContextAssembler(
+        ContextAssemblyPorts(session_events=port),
+        session_context_factory=factory,
+    )
+
+    result = await assembler.assemble_turn(
+        ContextAssemblyIntent.ANCHOR_TURN,
+        TurnAssemblyRequest(
+            session_id="sess-1",
+            spawn_id=None,
+            turn_input=TurnInput(
+                instruction=TurnInstructionSource(user_text="hi"),
+                pre_turn_history_event_id=2,
+            ),
+            user_instructions=UserInstructions(text="Use SI.", hash="sha256:abc"),
+        ),
+    )
+
+    runtime = result.user_turn_context.render(ContextView.RUNTIME)
+    assert "<loaded_skills>" in runtime
+    assert "<active_tools>" in runtime
+    assert "<attachments>" in runtime
+    assert port.queries[0].until_event_id == 2
+
+
+@pytest.mark.asyncio
+async def test_assemble_turn_continuation_does_not_invoke_session_factory(
+    tmp_path: Path,
+) -> None:
+    call_count = 0
+
+    def factory(_events):
+        nonlocal call_count
+        call_count += 1
+        return SessionContextBuilder(
+            events=(),
+            skill_registry=None,
+            legal_mcp_servers=None,
+            schemas_by_server=None,
+        )
+
+    assembler = ContextAssembler(
+        ContextAssemblyPorts(session_events=_RecordingEventsPort(())),
+        session_context_factory=factory,
+    )
+
+    await assembler.assemble_turn(
+        ContextAssemblyIntent.CONTINUATION_TURN,
+        TurnAssemblyRequest(
+            session_id="sess-1",
+            spawn_id=None,
+            turn_input=TurnInput(
+                instruction=TurnInstructionSource(user_text="continue"),
+                pre_turn_history_event_id=2,
+            ),
+            user_instructions=UserInstructions(text="Use SI.", hash="sha256:abc"),
+        ),
+    )
+
+    assert call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_assembler_default_session_factory_returns_empty_sections() -> None:
+    port = _RecordingEventsPort(())
+    assembler = ContextAssembler(ContextAssemblyPorts(session_events=port))
+
+    result = await assembler.assemble_turn(
+        ContextAssemblyIntent.ANCHOR_TURN,
+        TurnAssemblyRequest(
+            session_id="sess-1",
+            spawn_id=None,
+            turn_input=TurnInput(
+                instruction=TurnInstructionSource(user_text="hi"),
+                pre_turn_history_event_id=0,
+            ),
+            user_instructions=UserInstructions(text="Use SI.", hash="sha256:abc"),
+        ),
+    )
+
+    runtime = result.user_turn_context.render(ContextView.RUNTIME)
+    assert "<loaded_skills>" not in runtime
+    assert "<active_tools>" not in runtime

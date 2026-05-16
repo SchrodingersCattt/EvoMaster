@@ -21,6 +21,7 @@ from matmaster.context.ports import (
     UserInstructions,
 )
 from matmaster.context.sections import ContextSection
+from matmaster.context.session import SessionContextBuilder
 from matmaster.context.sources.turn_input import TurnInput
 from matmaster.context.turn_context import UserTurnContext
 
@@ -75,6 +76,7 @@ SessionSectionBuilder = Callable[
     [tuple[SessionEvent, ...], int, bool],
     tuple[ContextSection, ...],
 ]
+SessionContextFactory = Callable[[tuple[SessionEvent, ...]], SessionContextBuilder]
 
 
 def _empty_session_section_builder(
@@ -82,6 +84,7 @@ def _empty_session_section_builder(
     until_event_id: int,
     include_attachments: bool,
 ) -> tuple[ContextSection, ...]:
+    """Default no-factory path kept until Phase 2C runtime wiring injects one."""
     return ()
 
 
@@ -98,14 +101,31 @@ class ContextAssembler:
         self,
         ports: ContextAssemblyPorts,
         *,
+        session_context_factory: SessionContextFactory | None = None,
         _session_section_builder_for_tests: SessionSectionBuilder | None = None,
     ) -> None:
         self._ports = ports
-        # Phase 2A test-only seam: session.py does not exist yet. Phase 2B
-        # replaces the default with SessionContextBuilder and keeps this path
-        # out of production service wiring.
-        self._session_section_builder = (
-            _session_section_builder_for_tests or _empty_session_section_builder
+        self._session_context_factory = session_context_factory
+        # Phase 2A test-only seam: production runtime wiring must use
+        # session_context_factory instead of injecting prebuilt sections.
+        if _session_section_builder_for_tests is not None:
+            self._session_section_builder = _session_section_builder_for_tests
+        elif session_context_factory is not None:
+            self._session_section_builder = self._build_via_factory
+        else:
+            self._session_section_builder = _empty_session_section_builder
+
+    def _build_via_factory(
+        self,
+        events: tuple[SessionEvent, ...],
+        until_event_id: int,
+        include_attachments: bool,
+    ) -> tuple[ContextSection, ...]:
+        assert self._session_context_factory is not None
+        builder = self._session_context_factory(events)
+        return builder.build_sections(
+            until_event_id=until_event_id,
+            include_attachments=include_attachments,
         )
 
     async def assemble_turn(
