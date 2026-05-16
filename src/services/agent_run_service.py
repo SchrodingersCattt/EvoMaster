@@ -43,9 +43,8 @@ from matmaster.types.events import (
 )
 from src.dao.chat_events_table import get_chat_events_table
 from src.dao.redis_dao import get_redis_dao
-from src.services.agent_run_bohrium_stage import (  # noqa: F401
+from src.services.agent_run_bohrium_stage import (
     _build_figure_upload_config,
-    _build_workspace_upload_fn,
     run_bohrium_stage,
 )
 from src.services.agent_run_history_wiring import build_history_wiring
@@ -200,6 +199,8 @@ class AgentRunService:
         events_table: Any,
         exp_config: Any,
         session: Any | None = None,
+        *,
+        registry: Any | None = None,
     ) -> set[str]:
         cached = self._active_skills.get(session_id)
         if cached is not None:
@@ -219,7 +220,8 @@ class AgentRunService:
                     exc_info=True,
                 )
 
-        registry = self._build_skill_registry(exp_config, session=session)
+        if registry is None:
+            registry = self._build_skill_registry(exp_config, session=session)
         skills = resolve_active_skills(coerce_session_events(raw_events), registry)
         names = {skill_name(skill) for skill in skills}
         names.discard("")
@@ -365,7 +367,6 @@ class AgentRunService:
                 default_key=agent_default_llm,
             )
             selected_profile = llm_config.get_profile(resolved_llm.profile_key)
-            current_user_images_payload: list[dict[str, Any]] = []
             current_images = list(images or [])
             if current_images:
                 selected_profile = get_image_input_service().ensure_vision_supported(
@@ -380,7 +381,6 @@ class AgentRunService:
                     if selected_profile.vision_detail is not None:
                         image_part['detail'] = selected_profile.vision_detail
                     image_parts.append(image_part)
-                current_user_images_payload = image_parts
                 pg_ctx = pg_ctx.with_run_meta(current_user_images=image_parts)
 
             pg_ctx = pg_ctx.model_copy(
@@ -538,12 +538,13 @@ class AgentRunService:
                 truncated=user_instructions.truncated,
             )
 
+            skill_registry = self._build_skill_registry(
+                exp_config,
+                session=pg_ctx.session,
+            )
             context_assembler, assembly_ports = build_context_assembler(
                 events_table=events_table,
-                skill_registry=self._build_skill_registry(
-                    exp_config,
-                    session=pg_ctx.session,
-                ),
+                skill_registry=skill_registry,
                 legal_mcp_servers=(pg_ctx.run_meta or {}).get("legal_mcp_servers"),
                 schemas_by_server=(pg_ctx.run_meta or {}).get("schemas_by_server"),
                 split_turn_attachments=bool(
@@ -574,7 +575,9 @@ class AgentRunService:
                 files=(),
                 images=tuple(
                     image["url"]
-                    for image in current_user_images_payload
+                    for image in (pg_ctx.run_meta or {}).get(
+                        "current_user_images", ()
+                    )
                     if isinstance(image, dict) and image.get("url")
                 ),
                 workspace_paths=(),
@@ -628,7 +631,11 @@ class AgentRunService:
             # AFTER history is available so the snapshot frozen below reflects
             # any skills recovered from past turns.
             active_skills = self._resolve_active_skill_names(
-                session_id, events_table, exp_config, pg_ctx.session
+                session_id,
+                events_table,
+                exp_config,
+                pg_ctx.session,
+                registry=skill_registry,
             )
 
             def _remember_skill_hit(skill_name: str) -> None:

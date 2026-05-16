@@ -8,7 +8,7 @@ import pytest
 from matmaster.core.playground import WorkspaceArchivalConfig
 
 _build_workspace_upload_fn = pytest.importorskip(
-    "src.services.agent_run_service",
+    "src.services.agent_run_bohrium_stage",
     reason="src not available (isolation test)",
 )._build_workspace_upload_fn
 

@@ -71,9 +71,9 @@ async def test_run_agent_uses_hot_cache_when_present(monkeypatch):
         called = {"n": 0}
         original = svc._resolve_active_skill_names
 
-        def _spy(session_id, events_table, exp_config, session=None):
+        def _spy(session_id, events_table, exp_config, session=None, **kwargs):
             called["n"] += 1
-            return original(session_id, events_table, exp_config, session)
+            return original(session_id, events_table, exp_config, session, **kwargs)
 
         monkeypatch.setattr(svc, "_resolve_active_skill_names", _spy)
 

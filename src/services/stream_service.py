@@ -35,7 +35,7 @@ from src.services.session_directory_service import (
     SessionDirectorySource,
 )
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
-from src.services.stream_reply_queue import RedisReplyQueue  # noqa: F401
+from src.services.stream_reply_queue import RedisReplyQueue
 from src.services.stream_sse_filter import (
     _dedupe_replayed_terminal_events,
     _inject_elapsed_for_history,
