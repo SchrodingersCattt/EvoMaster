@@ -1,8 +1,4 @@
-"""Tests for AgentKernel stream generator features.
-
-Tests _stream_llm_items() sub-generator, _run_items() AssistantStateEvent/SkillHitEvent
-yields, and compactor deque integration. Phase 34 Plan 1 Task 1.
-"""
+"""Tests for AgentKernel stream generator features."""
 
 from __future__ import annotations
 
@@ -27,8 +23,6 @@ from .agent_kernel_test_helpers import (
     _make_spec,
     _make_tool_registry,
 )
-
-# ── Providers for streaming tests ─────────────────────────
 
 
 class ReasoningThenContentProvider:

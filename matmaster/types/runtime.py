@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -21,14 +21,6 @@ from matmaster.core.hooks import HookExecutor
 
 from .llm_provider import LLMProvider
 from .runtime_ports import KernelRuntimePorts
-
-if TYPE_CHECKING:  # pragma: no cover - import only for type hints
-    from matmaster.context.assembly import ContextAssembler
-    from matmaster.context.ports import (
-        SessionEventsPort,
-        SessionJobsPort,
-        UserInstructionsPort,
-    )
 
 
 class CompactionConfig(BaseModel):

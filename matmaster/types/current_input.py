@@ -1,16 +1,16 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
+from pathlib import PurePosixPath
+from typing import Any
+from urllib.parse import urlparse
+
 # Phase 2C shim: `TurnInput` 的真实定义已迁到
 # `matmaster.context.sources.turn_input`。本模块保留 re-export 是为了在
 # Phase 4 删除旧 import 路径之前，让生产 / 测试代码渐进切换。
 # `CurrentInputContext` / `build_current_instruction_block` 仍供
 # core/agent.py 与 core/context_compactor.py 的兼容路径使用。
 from matmaster.context.sources.turn_input import TurnInput  # noqa: F401
-
-from dataclasses import dataclass
-from pathlib import PurePosixPath
-from typing import Any
-from urllib.parse import urlparse
 
 
 def _clean_tuple(values: Any) -> tuple[str, ...]:

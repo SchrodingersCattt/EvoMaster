@@ -5,7 +5,6 @@ import pytest
 from matmaster.context.ports import SessionEvent
 from matmaster.context.scanner import coerce_session_events
 from matmaster.context.session import SessionContextBuilder
-
 from src.services.context_assembly_factory import build_session_context_factory
 
 

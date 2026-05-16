@@ -54,10 +54,10 @@ from src.services.agent_run_bohrium_stage import (  # noqa: F401
     _build_workspace_upload_fn,
     run_bohrium_stage,
 )
+from src.services.agent_run_history_wiring import build_history_wiring
 from src.services.context_assembly_factory import build_session_context_factory
 from src.services.context_assembly_ports import AppSessionEventsPort, AppSessionJobsPort
 from src.services.context_turn_intent import resolve_turn_context_intent
-from src.services.agent_run_history_wiring import build_history_wiring
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.image_input_service import get_image_input_service
 from src.services.quota_service import use_quota
