@@ -1,12 +1,18 @@
+"""Phase 2B shim delegating to matmaster.context source helpers."""
+
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from typing import Any
 
-from matmaster.manifests import attachment as attachment_manifest
-from matmaster.manifests import mcp as mcp_manifest
-from matmaster.manifests import skill as skill_manifest
+from matmaster.context.sources.attachments import (
+    filter_entries_in_event_range,
+    format_entries_text,
+    scan_legacy_attachment_entries,
+)
+from matmaster.context.sources.tools import format_active_mcp
+from matmaster.manifests.skill import format_loaded_skills, resolve_active_skills
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +29,7 @@ class CompactionRehydrator:
         skill_registry: Any,
         playground_ctx: Any,
         legal_mcp_servers: set[str] | None = None,
-        schemas_by_server: dict[str, list[dict[str, Any]]] | None = None,
+        schemas_by_server: Mapping[str, list[Mapping[str, Any]]] | None = None,
     ) -> None:
         self._get_query_events = get_query_events
         self._get_all_events = get_all_events
@@ -48,31 +54,29 @@ class CompactionRehydrator:
 
         skills = self._safe_call(
             "loaded_skills",
-            lambda: skill_manifest.resolve_active_skills(
-                all_events,
-                self._skill_registry,
-            ),
+            lambda: resolve_active_skills(all_events, self._skill_registry),
             [],
+        )
+
+        entries = scan_legacy_attachment_entries(query_events)
+        scoped_entries = filter_entries_in_event_range(
+            entries,
+            after_id=latest_covered_until,
+            until_id=until_event_id,
         )
         attachments_text = self._safe_call(
             "attachments",
-            lambda: attachment_manifest.format_available_attachments(
-                attachment_manifest.filter_entries_in_event_range(
-                    attachment_manifest.build_available_attachments(query_events),
-                    after_id=latest_covered_until,
-                    until_id=until_event_id,
-                )
-            ),
+            lambda: format_entries_text(scoped_entries),
             "",
         )
         loaded_skills_text = self._safe_call(
             "loaded_skills_text",
-            lambda: skill_manifest.format_loaded_skills(skills),
+            lambda: format_loaded_skills(skills),
             "",
         )
         active_mcp_text = self._safe_call(
             "active_mcp",
-            lambda: mcp_manifest.format_active_mcp(
+            lambda: format_active_mcp(
                 skills,
                 legal_servers=self._legal_mcp_servers,
                 schemas_by_server=self._schemas_by_server,

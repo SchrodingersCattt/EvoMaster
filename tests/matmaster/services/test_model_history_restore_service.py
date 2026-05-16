@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
+import src.services.model_history_restore_service as restore_module
 from matmaster.types.message_normalization import normalize_and_validate_openai_messages
 from matmaster.types.messages import (
     AssistantMessage,
+    ImageContentPart,
     ToolCallData,
     ToolMessage,
     UserMessage,
@@ -612,4 +614,119 @@ def test_hybrid_v1_keeps_pre_phase1_user_query_without_invocation_id() -> None:
     assert [message.content for message in history] == [
         "old query without invocation",
         "new context",
+    ]
+
+
+def test_restore_history_delegates_algorithm_to_model_history_restorer(
+    monkeypatch,
+) -> None:
+    events_table = FakeEventsTable(has_utc=True)
+    constructed: list[dict[str, Any]] = []
+    restore_calls: list[tuple[str, str | None]] = []
+
+    class FakeRestorer:
+        def __init__(self, **kwargs: Any) -> None:
+            constructed.append(kwargs)
+
+        def restore(self, session_id: str, *, spawn_id: str | None = None):
+            restore_calls.append((session_id, spawn_id))
+            return [UserMessage(content="delegated")]
+
+    monkeypatch.setattr(
+        restore_module,
+        "ModelHistoryRestorer",
+        FakeRestorer,
+        raising=False,
+    )
+
+    history = ModelHistoryRestoreService(events_table).restore_history(
+        session_id="sess-1",
+        spawn_id=None,
+        task_id=None,
+    )
+
+    assert constructed
+    assert restore_calls == [("sess-1", None)]
+    assert [message.content for message in history] == ["delegated"]
+
+
+def test_v1_restore_mixed_fixture_preserves_phase1_message_bytes() -> None:
+    utc_message = UserMessage(
+        content="tail question",
+        images=[ImageContentPart(url="https://example.com/tail.png")],
+    )
+    events_table = FakeEventsTable(
+        checkpoints=[_v1_checkpoint(covered_until_event_id=5, summary="base")],
+        scope_events=[
+            {
+                "id": 6,
+                "session_id": "sess-1",
+                "source": "MatMaster",
+                "type": "user_turn_context",
+                "content": {
+                    "schema_version": "user_turn_context.v1",
+                    "kind": "anchor",
+                    "message": utc_message.model_dump(mode="json"),
+                    "user_instructions_hash": "sha256:abc",
+                    "transform": "raw",
+                    "render_version": "user_context_render.v1",
+                },
+                "task_id": None,
+                "invocation_id": "inv-tail",
+                "spawn_id": None,
+            },
+            _assistant_state("I will search.", event_id=7),
+            _tool_result({"matches": [3, 1]}, event_id=8),
+            _response("found results", event_id=9),
+            _run_result("found results", event_id=10),
+        ],
+    )
+
+    history = ModelHistoryRestoreService(events_table).restore_history(
+        session_id="sess-1",
+        spawn_id=None,
+        task_id=None,
+    )
+
+    assert [message.model_dump(mode="json") for message in history] == [
+        {
+            "role": "user",
+            "content": "<compacted_history>\nbase\n</compacted_history>",
+            "images": [],
+        },
+        {
+            "role": "user",
+            "content": "tail question",
+            "images": [
+                {
+                    "url": "https://example.com/tail.png",
+                    "mime_type": None,
+                    "detail": None,
+                }
+            ],
+        },
+        {
+            "role": "assistant",
+            "content": "I will search.",
+            "tool_calls": [
+                {
+                    "id": "call-1",
+                    "name": "search_materials",
+                    "arguments": {"formula": "Si"},
+                }
+            ],
+            "reasoning_content": None,
+        },
+        {
+            "role": "tool",
+            "content": '{"matches": [3, 1]}',
+            "tool_call_id": "call-1",
+            "tool_name": "search_materials",
+        },
+        {
+            "role": "assistant",
+            "content": "found results",
+            "tool_calls": None,
+            "reasoning_content": None,
+        },
     ]

@@ -1,20 +1,24 @@
+"""Phase 2B shim delegating to matmaster.context.sources.skills."""
+
 from __future__ import annotations
 
+from collections.abc import Iterable
 from typing import Any
 
+from matmaster.context.sources.skills import format_loaded_skills as _typed_format
+from matmaster.context.sources.skills import skill_name as _typed_skill_name
 from matmaster.manifests.scanner import scan_skill_hits
+
+__all__ = ["skill_name", "resolve_active_skills", "format_loaded_skills"]
 
 
 def skill_name(skill: Any) -> str:
-    """Best-effort extraction of a skill's display name from name/meta_info."""
-    return str(
-        getattr(skill, "name", "")
-        or getattr(getattr(skill, "meta_info", None), "name", "")
-    ).strip()
+    return _typed_skill_name(skill)
 
 
 def resolve_active_skills(
-    events: list[dict[str, Any]], skill_registry: Any
+    events: Iterable[dict[str, Any]],
+    skill_registry: Any,
 ) -> list[Any]:
     skills: list[Any] = []
     if skill_registry is None:
@@ -29,18 +33,5 @@ def resolve_active_skills(
     return skills
 
 
-def format_loaded_skills(skills: list[Any]) -> str:
-    if not skills:
-        return ""
-    lines = ["[Loaded skills]"]
-    for skill in skills:
-        name = skill_name(skill)
-        meta = getattr(skill, "meta_info", None)
-        description = getattr(meta, "description", "") or ""
-        mcp_server = getattr(meta, "mcp_server", None)
-        suffix = f" (mcp_server={mcp_server})" if mcp_server else ""
-        if description:
-            lines.append(f"- {name}: {description}{suffix}")
-        else:
-            lines.append(f"- {name}{suffix}")
-    return "\n".join(lines)
+def format_loaded_skills(skills: Iterable[Any]) -> str:
+    return _typed_format(skills)
