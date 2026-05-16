@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -16,20 +15,13 @@ from matmaster.context.ports import (
     SessionJobsQuery,
     UserInstructions,
 )
+from src.services.user_turn_context_service import (
+    USER_INSTRUCTIONS_MAX_BYTES,
+    hash_user_instructions,
+    truncate_utf8,
+)
 
 logger = logging.getLogger(__name__)
-USER_INSTRUCTIONS_MAX_BYTES = 50 * 1024
-
-
-def _hash_user_instructions(text: str) -> str:
-    return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
-
-
-def _truncate_utf8(text: str, max_bytes: int) -> tuple[str, bool]:
-    raw = text.encode("utf-8")
-    if len(raw) <= max_bytes:
-        return text, False
-    return raw[:max_bytes].decode("utf-8", errors="ignore"), True
 
 
 def _freeze_json_value(value: Any) -> JsonValue:
@@ -61,13 +53,13 @@ class AppUserInstructionsPort:
         except FileNotFoundError:
             return UserInstructions(
                 text="",
-                hash=_hash_user_instructions(""),
+                hash=hash_user_instructions(""),
                 truncated=False,
             )
         # Other IO / decoding errors intentionally propagate. Missing AGENT.md
         # is normal; unreadable or invalid files should not be silently ignored.
 
-        text, truncated = _truncate_utf8(raw, USER_INSTRUCTIONS_MAX_BYTES)
+        text, truncated = truncate_utf8(raw, USER_INSTRUCTIONS_MAX_BYTES)
         if truncated:
             logger.warning(
                 "AGENT.md exceeds %d bytes; truncating user instructions",
@@ -75,7 +67,7 @@ class AppUserInstructionsPort:
             )
         return UserInstructions(
             text=text,
-            hash=_hash_user_instructions(text),
+            hash=hash_user_instructions(text),
             truncated=truncated,
         )
 

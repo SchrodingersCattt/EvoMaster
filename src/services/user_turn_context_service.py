@@ -22,8 +22,6 @@ USER_TURN_CONTEXT_SCHEMA_VERSION = "user_turn_context.v1"
 USER_CONTEXT_RENDER_VERSION = "user_context_render.v1"
 DEFAULT_TURN_TRANSFORM = "raw"
 
-UserTurnContextKind = Literal["anchor", "continuation"]
-UserTurnContextTransform = Literal["raw", "preflight_compacted", "oversized_summary"]
 UserTurnContextWriteStatus = Literal["written", "duplicate"]
 
 
@@ -39,7 +37,7 @@ def hash_user_instructions(text: str) -> str:
     return f"sha256:{digest}"
 
 
-def _truncate_utf8(text: str, max_bytes: int) -> tuple[str, bool]:
+def truncate_utf8(text: str, max_bytes: int) -> tuple[str, bool]:
     raw = text.encode("utf-8")
     if len(raw) <= max_bytes:
         return text, False
@@ -69,7 +67,7 @@ def load_user_instructions_from_session(session: Any) -> UserInstructionsInfo:
         return make_user_instructions_info("")
 
     raw_text = str(text or "")
-    truncated_text, truncated = _truncate_utf8(raw_text, USER_INSTRUCTIONS_MAX_BYTES)
+    truncated_text, truncated = truncate_utf8(raw_text, USER_INSTRUCTIONS_MAX_BYTES)
     if not truncated:
         return make_user_instructions_info(truncated_text)
 

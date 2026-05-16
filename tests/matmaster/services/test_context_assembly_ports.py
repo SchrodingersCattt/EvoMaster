@@ -11,12 +11,14 @@ from matmaster.context.ports import (
     UserInstructions,
 )
 from src.services.context_assembly_ports import (
-    USER_INSTRUCTIONS_MAX_BYTES,
     AppSessionEventsPort,
     AppSessionJobsPort,
     AppUserInstructionsPort,
     _freeze_json_object,
-    _hash_user_instructions,
+)
+from src.services.user_turn_context_service import (
+    USER_INSTRUCTIONS_MAX_BYTES,
+    hash_user_instructions,
 )
 
 
@@ -28,7 +30,7 @@ async def test_app_user_instructions_port_missing_file_returns_empty_bundle(
 
     assert result == UserInstructions(
         text="",
-        hash=_hash_user_instructions(""),
+        hash=hash_user_instructions(""),
         truncated=False,
     )
 
@@ -44,7 +46,7 @@ async def test_app_user_instructions_port_preserves_raw_trailing_newline(
     result = await AppUserInstructionsPort().load_user_instructions(tmp_path)
 
     assert result.text == "Use SI units.\n"
-    assert result.hash == _hash_user_instructions("Use SI units.\n")
+    assert result.hash == hash_user_instructions("Use SI units.\n")
 
 
 @pytest.mark.asyncio
@@ -61,7 +63,7 @@ async def test_app_user_instructions_port_truncates_by_utf8_bytes(
 
     assert len(result.text.encode("utf-8")) == USER_INSTRUCTIONS_MAX_BYTES
     assert result.truncated is True
-    assert result.hash == _hash_user_instructions(result.text)
+    assert result.hash == hash_user_instructions(result.text)
     assert "AGENT.md exceeds" in caplog.text
 
 
