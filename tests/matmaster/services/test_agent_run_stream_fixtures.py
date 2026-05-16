@@ -76,19 +76,11 @@ class _FakeExp:
         self._cleanup_callbacks: list = []
         self.last_ctx: Any = None
         self.last_task: str | None = None
-        self.last_attachment_text: str = ""
         self.last_run_kwargs: dict[str, Any] | None = None
 
     async def run_stream(self, *args: Any, **kwargs: Any):
         self.last_ctx = args[0] if args else None
         self.last_task = args[1] if len(args) > 1 else None
-        self.last_attachment_text = (
-            (getattr(self.last_ctx, "run_meta", {}) or {}).get(
-                "attachment_manifest", ""
-            )
-            if self.last_ctx is not None
-            else ""
-        )
         self.last_run_kwargs = kwargs
         try:
             if callable(self._events):

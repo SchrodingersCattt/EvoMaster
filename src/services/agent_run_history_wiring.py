@@ -1,12 +1,8 @@
-"""History restore + runtime ports wiring extracted from agent_run_service.
+"""History restore + runtime ports wiring for run_agent.
 
-Phase 0 refactor (DESIGN.md §14 Phase 0a): move history restore +
-attachment manifest + checkpoint covered_until lookup + the inner
-``_RunSessionEventHistory`` adapter + ``PlaygroundRuntimePorts`` assembly
-out of ``run_agent`` so ``agent_run_service.py`` stays under the
-800-line target.
-
-Model restore is delegated directly to ``ModelHistoryRestoreService``.
+Bundles history restore via ``ModelHistoryRestoreService`` with the
+``PlaygroundRuntimePorts`` adapter that exposes raw event lookups to the
+compaction subsystem.
 """
 
 from __future__ import annotations
@@ -16,10 +12,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from matmaster.context.sources.attachments import (
-    format_entries_text,
-    scan_legacy_attachment_entries,
-)
 from matmaster.types.runtime_ports import (
     PlaygroundCompactionPort,
     PlaygroundRuntimePorts,
@@ -34,7 +26,6 @@ class HistoryWiringResult:
     """Bundle of history-related values produced for a single run_agent call."""
 
     history: list
-    attachment_text: str
     runtime_ports: PlaygroundRuntimePorts
     bohrium_rebuild_events: list[dict]
 
@@ -70,12 +61,10 @@ def build_history_wiring(
             )
         except Exception:
             logger.warning(
-                "attachment manifest: get_session_user_query_events failed for session_id=%s",
+                "history wiring: get_session_user_query_events failed for session_id=%s",
                 session_id,
                 exc_info=True,
             )
-    entries = scan_legacy_attachment_entries(query_events)
-    attachment_text = format_entries_text(entries)
 
     def _get_query_events() -> list[dict]:
         return list(query_events)
@@ -90,7 +79,9 @@ def build_history_wiring(
             )
             return events if isinstance(events, list) else []
         except Exception:
-            logger.warning("manifest: get_session_events failed", exc_info=True)
+            logger.warning(
+                "history wiring: get_session_events failed", exc_info=True
+            )
             return []
 
     def _get_latest_checkpoint_covered_until_event_id() -> int | None:
@@ -102,7 +93,7 @@ def build_history_wiring(
             )
         except Exception:
             logger.warning(
-                "manifest: get_history_checkpoints failed",
+                "history wiring: get_history_checkpoints failed",
                 exc_info=True,
             )
             return None
@@ -127,7 +118,9 @@ def build_history_wiring(
         try:
             raw = events_table.get_latest_scope_event_id(session_id, None)
         except Exception:
-            logger.warning("manifest: get_latest_scope_event_id failed", exc_info=True)
+            logger.warning(
+                "history wiring: get_latest_scope_event_id failed", exc_info=True
+            )
             return None
         try:
             return int(raw) if raw is not None else None
@@ -155,7 +148,9 @@ def build_history_wiring(
             )
             return events if isinstance(events, list) else []
         except Exception:
-            logger.warning("manifest: query_context_events failed", exc_info=True)
+            logger.warning(
+                "history wiring: query_context_events failed", exc_info=True
+            )
             return []
 
     class _RunSessionEventHistory:
@@ -209,7 +204,6 @@ def build_history_wiring(
 
     return HistoryWiringResult(
         history=history,
-        attachment_text=attachment_text,
         runtime_ports=runtime_ports,
         bohrium_rebuild_events=bohrium_rebuild_events,
     )

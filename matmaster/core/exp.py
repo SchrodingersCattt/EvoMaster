@@ -319,7 +319,6 @@ class Exp:
             "task_id": run_meta.get("task_id", ""),
             "session_id": run_meta.get("session_id", ""),
             "spawn_id": spawn_id,
-            "attachment_manifest": run_meta.get("attachment_manifest", ""),
         }
         turn_input = run_meta.get("turn_input")
         if turn_input is not None:
