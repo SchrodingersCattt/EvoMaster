@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from matmaster.context.sections import ContextSection, ContextView, SectionOrder
-
-_VIEWS = frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT})
+from matmaster.context.sections import ALL_VIEWS, ContextSection, SectionOrder
 
 
 @dataclass(frozen=True)
@@ -20,6 +18,6 @@ class CompactedHistorySource:
                 tag="compacted_history",
                 content=self.summary,
                 order=SectionOrder.COMPACTED_HISTORY,
-                views=_VIEWS,
+                views=ALL_VIEWS,
             ),
         )

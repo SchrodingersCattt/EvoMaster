@@ -1,14 +1,13 @@
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 from typing import Any
 from urllib.parse import urlparse
 
-from matmaster.context.sections import ContextSection, ContextView, SectionOrder
+from matmaster.context.sections import RUNTIME_ONLY_VIEWS, ContextSection, SectionOrder
 from matmaster.types.messages import ImageContentPart
-
-_RUNTIME = frozenset({ContextView.RUNTIME})
 
 
 def _clean_tuple(values: Any) -> tuple[str, ...]:
@@ -48,7 +47,7 @@ class TurnInstructionSource:
                 tag="current_instruction",
                 content=text,
                 order=order,
-                views=_RUNTIME,
+                views=RUNTIME_ONLY_VIEWS,
             ),
         )
 
@@ -77,7 +76,7 @@ class TurnAttachmentsSource:
                 tag="turn_attachments",
                 content="\n".join(lines),
                 order=SectionOrder.TURN_ATTACHMENTS,
-                views=_RUNTIME,
+                views=RUNTIME_ONLY_VIEWS,
             ),
         )
 
@@ -185,6 +184,12 @@ class TurnInput:
             or self.attachments.files
             or self.attachments.images
             or self.attachments.workspace_paths
+        )
+
+    def with_deferred_instruction(self) -> TurnInput:
+        return dataclasses.replace(
+            self,
+            instruction=dataclasses.replace(self.instruction, deferred=True),
         )
 
     def _merged_current_instruction_text(self) -> str:

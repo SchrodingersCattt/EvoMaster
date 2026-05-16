@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import dataclasses
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Protocol
@@ -78,13 +77,7 @@ def _step_turn_input(inputs: ContextCompositionInputs) -> tuple[ContextSection, 
         return ()
     turn_input = inputs.turn_input
     if inputs.defer_turn_instruction:
-        turn_input = dataclasses.replace(
-            turn_input,
-            instruction=dataclasses.replace(
-                turn_input.instruction,
-                deferred=True,
-            ),
-        )
+        turn_input = turn_input.with_deferred_instruction()
     return turn_input.to_sections(
         split_attachments=inputs.split_turn_attachments,
     )

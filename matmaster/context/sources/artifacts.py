@@ -2,17 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from matmaster.context.sections import ContextSection, ContextView, SectionOrder
-
-_VIEWS = frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT})
+from matmaster.context.sections import ALL_VIEWS, ContextSection, SectionOrder
 
 
 @dataclass(frozen=True)
 class SessionArtifactsSource:
-    """Placeholder artifact source.
+    """Simple text carrier for the session-artifacts section.
 
-    Phase 2A uses a simple text field only; future artifact integration may
-    replace this carrier with typed fields.
+    Real artifact integration may later replace this carrier with typed fields.
     """
 
     text: str = ""
@@ -26,6 +23,6 @@ class SessionArtifactsSource:
                 tag="session_artifacts",
                 content=self.text,
                 order=SectionOrder.SESSION_ARTIFACTS,
-                views=_VIEWS,
+                views=ALL_VIEWS,
             ),
         )

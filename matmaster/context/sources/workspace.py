@@ -2,17 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from matmaster.context.sections import ContextSection, ContextView, SectionOrder
-
-_VIEWS = frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT})
+from matmaster.context.sections import ALL_VIEWS, ContextSection, SectionOrder
 
 
 @dataclass(frozen=True)
 class SessionWorkspaceSource:
-    """Placeholder workspace source.
+    """Simple text carrier for the session-workspace section.
 
-    Phase 2A uses a simple text field so composition wiring is testable. Real
-    workspace fields are owned by the later workspace/artifact integration.
+    The real workspace fields are owned by the later workspace/artifact
+    integration; this dataclass keeps composition wiring testable.
     """
 
     text: str = ""
@@ -26,6 +24,6 @@ class SessionWorkspaceSource:
                 tag="session_workspace",
                 content=self.text,
                 order=SectionOrder.SESSION_WORKSPACE,
-                views=_VIEWS,
+                views=ALL_VIEWS,
             ),
         )

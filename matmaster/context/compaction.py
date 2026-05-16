@@ -7,6 +7,8 @@ truncation if summarization fails.
 
 from __future__ import annotations
 
+import functools
+import hashlib
 import json
 import logging
 from collections.abc import Awaitable, Callable
@@ -25,7 +27,6 @@ from matmaster.context.sources.turn_input import (
 )
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import (
-    AssistantMessage,
     Message,
     SystemMessage,
     ToolMessage,
@@ -35,7 +36,8 @@ from matmaster.types.runtime import CompactionConfig
 
 logger = logging.getLogger(__name__)
 
-_encoder = None
+_EMPTY_USER_INSTRUCTIONS_HASH = f"sha256:{hashlib.sha256(b'').hexdigest()}"
+_TRUNCATION_TARGET_RATIO = 0.8
 
 SUMMARY_SYSTEM_PROMPT = """\
 You are a conversation summarizer. Summarize the following conversation history \
@@ -62,19 +64,16 @@ CURRENT_INPUT_CONTINUATION_INSTRUCTION = (
 )
 
 
+@functools.cache
 def _get_encoder():
     """Lazy-load tiktoken encoder with fallback."""
-    global _encoder
-    if _encoder is not None:
-        return _encoder
     try:
         import tiktoken
 
-        _encoder = tiktoken.encoding_for_model("gpt-4o")
+        return tiktoken.encoding_for_model("gpt-4o")
     except Exception:
         logger.warning("tiktoken unavailable, using len/4 heuristic")
-        _encoder = None
-    return _encoder
+        return None
 
 
 def estimate_tokens(messages: list[Message], safety_margin: float = 1.0) -> int:
@@ -89,66 +88,6 @@ def estimate_tokens(messages: list[Message], safety_margin: float = 1.0) -> int:
             total += max(len(text) // 4, 1)
         total += 4
     return int(total * safety_margin)
-
-
-def _find_initial_task_index(messages: list[Message]) -> int:
-    """Find the index of the initial task UserMessage."""
-    first_assistant = -1
-    for i, msg in enumerate(messages):
-        if isinstance(msg, AssistantMessage):
-            first_assistant = i
-            break
-    if first_assistant == -1:
-        for i in range(len(messages) - 1, -1, -1):
-            if isinstance(messages[i], UserMessage):
-                return i
-        return -1
-    for i in range(first_assistant - 1, -1, -1):
-        if isinstance(messages[i], UserMessage):
-            return i
-    return -1
-
-
-def parse_turns(messages: list[Message]) -> list[list[Message]]:
-    """Parse mutable messages into complete turns."""
-    task_idx = _find_initial_task_index(messages)
-    if task_idx == -1:
-        return []
-    start = task_idx + 1
-    if start >= len(messages):
-        return []
-
-    turns: list[list[Message]] = []
-    current_turn: list[Message] = []
-    current_has_assistant = False
-
-    for msg in messages[start:]:
-        if isinstance(msg, AssistantMessage):
-            if current_turn and current_has_assistant:
-                turns.append(current_turn)
-                current_turn = []
-            current_turn.append(msg)
-            current_has_assistant = True
-            continue
-
-        if isinstance(msg, UserMessage):
-            if current_turn and current_has_assistant:
-                turns.append(current_turn)
-                current_turn = []
-                current_has_assistant = False
-            current_turn.append(msg)
-            continue
-
-        if isinstance(msg, ToolMessage):
-            current_turn.append(msg)
-            continue
-
-        current_turn.append(msg)
-
-    if current_turn:
-        turns.append(current_turn)
-
-    return turns
 
 
 @dataclass(frozen=True)
@@ -174,9 +113,7 @@ class CompactionResult:
     base_snapshot: list[dict[str, Any]] | None
     checkpoint_covered_until_event_id: int | None = None
     user_instructions_text: str = ""
-    user_instructions_hash: str = (
-        "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-    )
+    user_instructions_hash: str = _EMPTY_USER_INSTRUCTIONS_HASH
 
 
 class ContextCompactor:
@@ -333,13 +270,10 @@ class ContextCompactor:
         strategy = "summary"
         durability = "durable"
         failure_reason: str | None = None
-        retained_turns = 0
         checkpoint_covered_until_event_id: int | None = None
         checkpoint_user_msg: UserMessage | None = None
         user_instructions_text = ""
-        user_instructions_hash = (
-            "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-        )
+        user_instructions_hash = _EMPTY_USER_INSTRUCTIONS_HASH
 
         try:
             summary = await self._summarize(summary_input)
@@ -407,13 +341,12 @@ class ContextCompactor:
 
         logger.warning(
             "Context compaction #%d triggered at turn %d: "
-            "estimated_tokens=%d threshold=%d strategy=%s retained_turns=%d",
+            "estimated_tokens=%d threshold=%d strategy=%s",
             self._compaction_count,
             self._last_compaction_turn,
             plan.trigger_tokens,
             self._auto_threshold(),
             strategy,
-            retained_turns,
         )
         base_snapshot = None
         if durability == "durable" and checkpoint_user_msg is not None:
@@ -425,39 +358,13 @@ class ContextCompactor:
             strategy=strategy,
             durability=durability,
             trigger_tokens=plan.trigger_tokens,
-            retained_turns=retained_turns,
+            retained_turns=0,
             failure_reason=failure_reason,
             base_snapshot=base_snapshot,
             checkpoint_covered_until_event_id=checkpoint_covered_until_event_id,
             user_instructions_text=user_instructions_text,
             user_instructions_hash=user_instructions_hash,
         )
-
-    def _select_recent_turns(
-        self, turns: list[list[Message]]
-    ) -> tuple[list[list[Message]], int]:
-        """Select recent turns to retain based on the retention rule."""
-        window = self._config.context_limit
-        budget_20 = int(window * 0.2)
-        budget_40 = int(window * 0.4)
-
-        selected: list[list[Message]] = []
-        total_tokens = 0
-
-        for turn in reversed(turns):
-            turn_tokens = estimate_tokens(turn, safety_margin=1.1)
-            if len(selected) >= 3 and total_tokens + turn_tokens > budget_40:
-                break
-            selected.append(turn)
-            total_tokens += turn_tokens
-            if len(selected) >= 3 and total_tokens >= budget_20:
-                break
-
-        while len(selected) < min(3, len(turns)):
-            selected.append(turns[-(len(selected) + 1)])
-
-        selected.reverse()
-        return selected, len(selected)
 
     @staticmethod
     def _truncate_tool_results(
@@ -487,9 +394,7 @@ class ContextCompactor:
         tool_indices.sort(key=lambda x: x[1], reverse=True)
 
         truncated = 0
-        tokens_to_shed = int(
-            estimated_tokens - threshold * 0.8
-        )  # target 80% of threshold
+        tokens_to_shed = int(estimated_tokens - threshold * _TRUNCATION_TARGET_RATIO)
 
         for idx, toks in tool_indices:
             if tokens_to_shed <= 0:

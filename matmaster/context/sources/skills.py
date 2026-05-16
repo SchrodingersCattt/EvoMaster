@@ -6,9 +6,7 @@ from typing import Any
 
 from matmaster.context.ports import SessionEvent
 from matmaster.context.scanner import scan_skill_hits
-from matmaster.context.sections import ContextSection, ContextView, SectionOrder
-
-_VIEWS = frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT})
+from matmaster.context.sections import ALL_VIEWS, ContextSection, SectionOrder
 
 
 def skill_name(skill: Any) -> str:
@@ -76,6 +74,6 @@ class SessionSkillsSource:
                 tag="loaded_skills",
                 content=text,
                 order=SectionOrder.SESSION_SKILLS,
-                views=_VIEWS,
+                views=ALL_VIEWS,
             ),
         )

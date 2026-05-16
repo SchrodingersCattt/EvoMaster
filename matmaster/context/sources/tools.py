@@ -4,9 +4,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
-from matmaster.context.sections import ContextSection, ContextView, SectionOrder
-
-_VIEWS = frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT})
+from matmaster.context.sections import ALL_VIEWS, ContextSection, SectionOrder
 
 
 def _skill_mcp_server(skill: Any) -> str | None:
@@ -36,8 +34,7 @@ def resolve_runnable_servers(
         runnable = {
             server
             for server in runnable
-            if isinstance(schemas_by_server.get(server), list)
-            and len(schemas_by_server.get(server) or []) > 0
+            if isinstance((schemas := schemas_by_server.get(server)), list) and schemas
         }
     return runnable
 
@@ -108,6 +105,6 @@ class SessionToolsSource:
                 tag="active_tools",
                 content=text,
                 order=SectionOrder.SESSION_TOOLS,
-                views=_VIEWS,
+                views=ALL_VIEWS,
             ),
         )

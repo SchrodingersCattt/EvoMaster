@@ -1,18 +1,8 @@
 """SystemPromptBuilder -- sectioned system prompt assembler.
 
-Constructs the system prompt from multiple sources in a fixed order.
-LLM prompt caching benefits from stable prefix, so high-frequency change
+All static text is caller-supplied; an empty string causes the section to be
+skipped. LLM prompt caching benefits from a stable prefix, so high-frequency
 sections (task, memory) are placed last.
-
-Section order: system_prompt -> identity -> skills -> tools -> memory -> task
-
-All static text (system_prompt, identity) comes from the caller (toml config).
-SystemPromptBuilder has no default text of its own -- empty string means the
-section is skipped entirely.
-
-Tools section: generic guidance directing the LLM to use function calling
-definitions (tool names/descriptions/schemas are already provided in the
-API tool_definitions parameter). No per-tool enumeration in the system prompt.
 """
 
 from __future__ import annotations
@@ -21,16 +11,29 @@ from typing import Any
 
 from matmaster.core.playground import PlaygroundContext
 
+_GENERIC_TOOLS_TEXT = (
+    "Use the tools declared in function calling. "
+    "Each tool's name, description, and parameter schema are "
+    "provided in the function definitions."
+)
+
+_TEXT_SECTION_HEADINGS: dict[str, str] = {
+    "system_prompt": "System",
+    "identity": "Identity",
+    "memory": "Memory",
+    "task": "Task Context",
+}
+
+
+def _format_text_section(heading: str, text: str | None) -> str:
+    stripped = (text or "").strip()
+    if not stripped:
+        return ""
+    return f"# {heading}\n\n{stripped}"
+
 
 class SystemPromptBuilder:
-    """Sectioned system prompt assembler.
-
-    Section order (fixed): system_prompt -> identity -> skills -> tools -> memory -> task
-    LLM prompt caching benefits from stable prefix, so high-frequency change sections
-    (task, memory) are placed last.
-
-    All static text is caller-supplied. Empty string = section skipped.
-    """
+    """Assemble system prompt sections in a fixed, cache-friendly order."""
 
     SEPARATOR = "\n\n---\n\n"
 
@@ -55,87 +58,33 @@ class SystemPromptBuilder:
         task_context: str | None = None,
         disabled_sections: set[str] | None = None,
     ) -> str:
-        """Assemble system prompt from sections in fixed order.
-
-        Args:
-            ctx: PlaygroundContext from Playground.prepare().
-            tool_registry: Accepted for backward compat, no longer used.
-            system_prompt: Universal base text from _base.toml.
-            identity: Identity text from toml developer_instructions.
-            skill_registry: Optional skill registry with get_meta_info_context().
-            memory_context: Optional memory/conversation summary text.
-            task_context: Optional task description text.
-            disabled_sections: Set of section names to skip.
-
-        Returns:
-            Assembled system prompt string with sections joined by SEPARATOR.
-        """
         disabled = disabled_sections or set()
+        text_values: dict[str, str | None] = {
+            "system_prompt": system_prompt,
+            "identity": identity,
+            "memory": memory_context,
+            "task": task_context,
+        }
 
-        section_builders: dict[str, str] = {}
-
-        for section_name in self.SYSTEM_SECTION_ORDER:
-            if section_name in disabled:
+        rendered: list[str] = []
+        for name in self.SYSTEM_SECTION_ORDER:
+            if name in disabled:
                 continue
-
-            content = self._build_section(
-                section_name,
-                system_prompt=system_prompt,
-                identity=identity,
-                skill_registry=skill_registry,
-                memory_context=memory_context,
-                task_context=task_context,
-            )
-
+            if name == "skills":
+                content = self._build_skills(skill_registry)
+            elif name == "tools":
+                content = f"# Tools\n\n{_GENERIC_TOOLS_TEXT}"
+            else:
+                content = _format_text_section(
+                    _TEXT_SECTION_HEADINGS[name], text_values.get(name)
+                )
             if content:
-                section_builders[section_name] = content
+                rendered.append(content)
 
-        return self.SEPARATOR.join(section_builders.values())
-
-    def _build_section(
-        self,
-        name: str,
-        *,
-        system_prompt: str,
-        identity: str,
-        skill_registry: Any,
-        memory_context: str | None,
-        task_context: str | None,
-    ) -> str:
-        """Dispatch to the appropriate section builder."""
-        if name == "system_prompt":
-            return self._build_system_prompt(system_prompt)
-        if name == "identity":
-            return self._build_identity(identity)
-        if name == "skills":
-            return self._build_skills(skill_registry)
-        if name == "tools":
-            return self._build_tools()
-        if name == "memory":
-            return self._build_memory(memory_context)
-        if name == "task":
-            return self._build_task(task_context)
-        return ""
-
-    @staticmethod
-    def _build_system_prompt(system_prompt: str) -> str:
-        """Build the system prompt section. Empty string = skip."""
-        text = system_prompt.strip()
-        if not text:
-            return ""
-        return f"# System\n\n{text}"
-
-    @staticmethod
-    def _build_identity(identity: str) -> str:
-        """Build the identity section. Empty string = skip."""
-        text = identity.strip()
-        if not text:
-            return ""
-        return f"# Identity\n\n{text}"
+        return self.SEPARATOR.join(rendered)
 
     @staticmethod
     def _build_skills(skill_registry: Any) -> str:
-        """Build the skills section from skill registry."""
         if skill_registry is None:
             return ""
         method = getattr(skill_registry, "get_meta_info_context", None)
@@ -145,32 +94,3 @@ class SystemPromptBuilder:
         if not context:
             return ""
         return f"# Skills\n\n{context}"
-
-    @staticmethod
-    def _build_tools() -> str:
-        """Build the available tools section -- generic guidance only.
-
-        Tool names, descriptions, and parameter schemas are already provided
-        in the API function calling definitions. The system prompt only needs
-        a general directive pointing the LLM to use them.
-        """
-        return (
-            "# Tools\n\n"
-            "Use the tools declared in function calling. "
-            "Each tool's name, description, and parameter schema are "
-            "provided in the function definitions."
-        )
-
-    @staticmethod
-    def _build_memory(memory_context: str | None) -> str:
-        """Build the memory section. Returns empty string if no context."""
-        if not memory_context:
-            return ""
-        return f"# Memory\n\n{memory_context}"
-
-    @staticmethod
-    def _build_task(task_context: str | None) -> str:
-        """Build the task context section. Returns empty string if no context."""
-        if not task_context:
-            return ""
-        return f"# Task Context\n\n{task_context}"

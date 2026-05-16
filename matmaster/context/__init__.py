@@ -1,5 +1,6 @@
 """Provider-facing context assembly primitives.
 
-Phase 2A introduces this package as dead code: modules are unit-tested, but no
-runtime path imports them until Phase 2C.
+Sectioned user-turn context, system prompt assembly, and compaction live here.
+The package is consumed by the agent runtime via
+``matmaster.core.runtime_context_assembly``.
 """

@@ -7,12 +7,11 @@ from typing import Literal
 from urllib.parse import quote, unquote, urlparse, urlunparse
 
 from matmaster.context.ports import SessionEvent
-from matmaster.context.sections import ContextSection, ContextView, SectionOrder
+from matmaster.context.scanner import coerce_event_id
+from matmaster.context.sections import ALL_VIEWS, ContextSection, SectionOrder
 from matmaster.utils.event_source import normalize_event_source
 
 AttachmentKind = Literal["file", "image", "workspace"]
-
-_VIEWS = frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT})
 
 
 @dataclass(frozen=True)
@@ -69,16 +68,6 @@ def _query_payload(event: SessionEvent) -> Mapping[str, object]:
     if isinstance(content, Mapping):
         return content
     return {}
-
-
-def _event_id_from_mapping(row: Mapping[str, object]) -> int | None:
-    raw = row.get("id")
-    if raw is None:
-        return None
-    try:
-        return int(raw)
-    except (TypeError, ValueError):
-        return None
 
 
 def _legacy_query_payload(row: Mapping[str, object]) -> dict[str, object]:
@@ -165,7 +154,7 @@ def scan_legacy_attachment_entries(
                 continue
             if str(row.get("type") or "").strip() != "query":
                 continue
-            yield (_legacy_query_payload(row), _event_id_from_mapping(row))
+            yield (_legacy_query_payload(row), coerce_event_id(row.get("id")))
 
     return _scan_payloads(payloads(), max_entries=max_entries)
 
@@ -247,6 +236,6 @@ class SessionAttachmentsSource:
                 tag="attachments",
                 content=text,
                 order=SectionOrder.SESSION_ATTACHMENTS,
-                views=_VIEWS,
+                views=ALL_VIEWS,
             ),
         )

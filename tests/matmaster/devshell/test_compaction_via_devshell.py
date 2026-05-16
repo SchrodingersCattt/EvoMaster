@@ -19,7 +19,6 @@ from matmaster.context.assembly import ContextAssembler
 from matmaster.context.compaction import (
     ContextCompactor,
     estimate_tokens,
-    parse_turns,
 )
 from matmaster.context.ports import ContextAssemblyPorts, UserInstructions
 from matmaster.types.messages import (
@@ -481,50 +480,6 @@ class TestMultipleCompactions:
         assert second_plan.compaction_count == 2
 
 
-# ── Test 9: retained turns 选择逻辑 ─────────────────────
-
-
-class TestRetainedTurnsSelection:
-    """验证 _select_recent_turns 的保留逻辑。"""
-
-    def test_minimum_3_turns_retained(self) -> None:
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
-        provider = MockSummaryProvider()
-        msgs = _build_conversation(10)
-        compactor = _make_compactor(config, provider)
-
-        turns = parse_turns(msgs)
-        selected, count = compactor._select_recent_turns(turns)
-        assert count >= 3, f"至少保留 3 个 turn，实际保留 {count}"
-
-    def test_small_conversation_retains_all(self) -> None:
-        """对话 turn 数 < 3 时全部保留。"""
-        config = CompactionConfig(context_limit=100000, trigger_ratio=0.9)
-        provider = MockSummaryProvider()
-        msgs = _build_conversation(2)
-        compactor = _make_compactor(config, provider)
-
-        turns = parse_turns(msgs)
-        selected, count = compactor._select_recent_turns(turns)
-        assert count == len(turns)
-
-    def test_budget_constraint(self) -> None:
-        """大 content_size 时 budget_40 约束生效。"""
-        config = CompactionConfig(context_limit=2000, trigger_ratio=0.9)
-        provider = MockSummaryProvider()
-        # 每个 turn 的 content 很大
-        msgs = _build_conversation(20, content_size=2000)
-        compactor = _make_compactor(config, provider)
-
-        turns = parse_turns(msgs)
-        selected, count = compactor._select_recent_turns(turns)
-        # 受 budget_40 限制，不可能保留全部 20 个 turn
-        assert count < len(
-            turns
-        ), f"budget 约束应限制保留数，实际保留 {count}/{len(turns)}"
-        assert count >= 3, "最低仍应保留 3 个"
-
-
 # ── Test 10: tool_truncation 兜底策略 ────────────────────
 
 
@@ -646,41 +601,3 @@ class TestTokenEstimation:
         assert tokens > 500
 
 
-# ── Test: parse_turns 边界 ───────────────────────────────
-
-
-class TestParseTurnsBoundary:
-    """parse_turns 的边界条件。"""
-
-    def test_no_assistant_messages(self) -> None:
-        msgs = [SystemMessage(content="sys"), UserMessage(content="task")]
-        turns = parse_turns(msgs)
-        assert len(turns) == 0
-
-    def test_single_complete_turn(self) -> None:
-        msgs = [
-            SystemMessage(content="sys"),
-            UserMessage(content="task"),
-            AssistantMessage(content="reply"),
-        ]
-        turns = parse_turns(msgs)
-        assert len(turns) == 1
-        assert isinstance(turns[0][0], AssistantMessage)
-
-    def test_multi_tool_single_turn(self) -> None:
-        msgs = [
-            SystemMessage(content="sys"),
-            UserMessage(content="task"),
-            AssistantMessage(
-                content="",
-                tool_calls=[
-                    ToolCallData(id="tc1", name="a", arguments={}),
-                    ToolCallData(id="tc2", name="b", arguments={}),
-                ],
-            ),
-            ToolMessage(content="r1", tool_call_id="tc1", tool_name="a"),
-            ToolMessage(content="r2", tool_call_id="tc2", tool_name="b"),
-        ]
-        turns = parse_turns(msgs)
-        assert len(turns) == 1
-        assert len(turns[0]) == 3  # Assistant + 2 ToolMessages

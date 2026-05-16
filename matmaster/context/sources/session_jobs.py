@@ -4,18 +4,16 @@ import json
 from dataclasses import dataclass
 
 from matmaster.context.ports import SessionJobs
-from matmaster.context.sections import ContextSection, ContextView, SectionOrder
-
-_VIEWS = frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT})
+from matmaster.context.sections import ALL_VIEWS, ContextSection, SectionOrder
 
 
 @dataclass(frozen=True)
 class SessionJobsSource:
-    """Placeholder renderer for active jobs.
+    """Renderer for active jobs.
 
-    The JSON-line shape is intentionally temporary; the Bohrium job ledger phase
-    will define stable fields and may replace this renderer without treating
-    the Phase 2A string format as product contract.
+    The JSON-line shape is intentionally temporary; the Bohrium job ledger may
+    later define stable fields and replace this renderer without treating the
+    current string format as a product contract.
     """
 
     lines: tuple[str, ...] = ()
@@ -38,6 +36,6 @@ class SessionJobsSource:
                 tag="session_jobs",
                 content="\n".join(self.lines),
                 order=SectionOrder.SESSION_JOBS,
-                views=_VIEWS,
+                views=ALL_VIEWS,
             ),
         )

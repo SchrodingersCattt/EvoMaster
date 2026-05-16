@@ -33,8 +33,8 @@ def _coerce_content(value: Any) -> JsonObject:
     return {"content": _freeze_json_value(value)}
 
 
-def _coerce_event_id(value: Any) -> int | None:
-    if isinstance(value, bool):
+def coerce_event_id(value: Any) -> int | None:
+    if value is None or isinstance(value, bool):
         return None
     try:
         return int(value)
@@ -57,7 +57,7 @@ def coerce_session_events(
     for row in rows:
         if not isinstance(row, Mapping):
             continue
-        event_id = _coerce_event_id(row.get("id"))
+        event_id = coerce_event_id(row.get("id"))
         if event_id is None:
             continue
         content = _coerce_content(row.get("content"))

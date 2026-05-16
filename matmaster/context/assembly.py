@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
@@ -84,12 +85,12 @@ SessionSectionBuilder = Callable[
 SessionContextFactory = Callable[[tuple[SessionEvent, ...]], SessionContextBuilder]
 
 
-def _empty_session_section_builder(
+def _no_session_sections(
     events: tuple[SessionEvent, ...],
     until_event_id: int,
     include_attachments: bool,
 ) -> tuple[ContextSection, ...]:
-    """Default no-factory path kept until Phase 2C runtime wiring injects one."""
+    """Default builder when no session_context_factory is supplied."""
     return ()
 
 
@@ -99,6 +100,26 @@ _INTENT_COMPOSITION_MAP: dict[ContextAssemblyIntent, ContextComposition] = {
     ContextAssemblyIntent.PREFLIGHT_COMPACTION: COMPACTED_COMPOSITION,
     ContextAssemblyIntent.RUNTIME_COMPACTION: COMPACTED_COMPOSITION,
 }
+
+
+def _resolve_covered_until(
+    intent: ContextAssemblyIntent,
+    request: CompactionAssemblyRequest,
+) -> int:
+    if intent == ContextAssemblyIntent.RUNTIME_COMPACTION:
+        if request.covered_until_event_id is None:
+            raise ValueError(
+                "RUNTIME_COMPACTION requires explicit covered_until_event_id"
+            )
+        return request.covered_until_event_id
+    if request.covered_until_event_id is not None:
+        return request.covered_until_event_id
+    if request.turn_input is not None:
+        return request.turn_input.pre_turn_history_event_id
+    raise ValueError(
+        "PREFLIGHT_COMPACTION requires turn_input or explicit "
+        "covered_until_event_id"
+    )
 
 
 class ContextAssembler:
@@ -113,14 +134,14 @@ class ContextAssembler:
         self._ports = ports
         self._render_options = render_options or ContextRenderOptions()
         self._session_context_factory = session_context_factory
-        # Phase 2A test-only seam: production runtime wiring must use
-        # session_context_factory instead of injecting prebuilt sections.
+        # Production wiring must use session_context_factory;
+        # _session_section_builder_for_tests is a unit-test-only seam.
         if _session_section_builder_for_tests is not None:
             self._session_section_builder = _session_section_builder_for_tests
         elif session_context_factory is not None:
             self._session_section_builder = self._build_via_factory
         else:
-            self._session_section_builder = _empty_session_section_builder
+            self._session_section_builder = _no_session_sections
 
     def _build_via_factory(
         self,
@@ -148,23 +169,27 @@ class ContextAssembler:
 
         composition = _INTENT_COMPOSITION_MAP[intent]
         session_sections: tuple[ContextSection, ...] = ()
-        jobs = await self._load_jobs_or_empty(request.session_id)
 
         if intent == ContextAssemblyIntent.ANCHOR_TURN:
             history_boundary = request.turn_input.pre_turn_history_event_id
-            events = await self._ports.session_events.load_events(
-                SessionEventQuery(
-                    session_id=request.session_id,
-                    spawn_id=request.spawn_id,
-                    until_event_id=history_boundary,
-                    order="asc",
-                )
+            events, jobs = await asyncio.gather(
+                self._ports.session_events.load_events(
+                    SessionEventQuery(
+                        session_id=request.session_id,
+                        spawn_id=request.spawn_id,
+                        until_event_id=history_boundary,
+                        order="asc",
+                    )
+                ),
+                self._load_jobs_or_empty(request.session_id),
             )
             session_sections = self._session_section_builder(
                 events,
                 history_boundary,
                 True,
             )
+        else:
+            jobs = await self._load_jobs_or_empty(request.session_id)
 
         user_turn_context = composition.apply(
             ContextCompositionInputs(
@@ -190,36 +215,24 @@ class ContextAssembler:
         if not intent.is_compaction:
             raise ValueError(f"assemble_compaction does not accept intent {intent!r}")
 
-        if intent == ContextAssemblyIntent.RUNTIME_COMPACTION:
-            if request.covered_until_event_id is None:
-                raise ValueError(
-                    "RUNTIME_COMPACTION requires explicit covered_until_event_id"
-                )
-            covered_until = request.covered_until_event_id
-        elif request.covered_until_event_id is not None:
-            covered_until = request.covered_until_event_id
-        elif request.turn_input is not None:
-            covered_until = request.turn_input.pre_turn_history_event_id
-        else:
-            raise ValueError(
-                "PREFLIGHT_COMPACTION requires turn_input or explicit "
-                "covered_until_event_id"
-            )
+        covered_until = _resolve_covered_until(intent, request)
 
-        events = await self._ports.session_events.load_events(
-            SessionEventQuery(
-                session_id=request.session_id,
-                spawn_id=request.spawn_id,
-                until_event_id=covered_until,
-                order="asc",
-            )
+        events, jobs = await asyncio.gather(
+            self._ports.session_events.load_events(
+                SessionEventQuery(
+                    session_id=request.session_id,
+                    spawn_id=request.spawn_id,
+                    until_event_id=covered_until,
+                    order="asc",
+                )
+            ),
+            self._load_jobs_or_empty(request.session_id),
         )
         session_sections = self._session_section_builder(
             events,
             covered_until,
             request.session_attachments_override is None,
         )
-        jobs = await self._load_jobs_or_empty(request.session_id)
         composition = _INTENT_COMPOSITION_MAP[intent]
         user_turn_context = composition.apply(
             ContextCompositionInputs(

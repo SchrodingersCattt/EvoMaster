@@ -9,6 +9,10 @@ class ContextView(str, Enum):
     CHECKPOINT = "checkpoint"
 
 
+ALL_VIEWS = frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT})
+RUNTIME_ONLY_VIEWS = frozenset({ContextView.RUNTIME})
+
+
 class SectionOrder(IntEnum):
     USER_INSTRUCTIONS = 10
     COMPACTED_HISTORY = 100

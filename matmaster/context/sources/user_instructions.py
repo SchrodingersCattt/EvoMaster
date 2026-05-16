@@ -2,9 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from matmaster.context.sections import ContextSection, ContextView, SectionOrder
-
-_VIEWS = frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT})
+from matmaster.context.sections import ALL_VIEWS, ContextSection, SectionOrder
 
 
 @dataclass(frozen=True)
@@ -20,6 +18,6 @@ class UserInstructionsSource:
                 tag="user_instructions",
                 content=self.text,
                 order=SectionOrder.USER_INSTRUCTIONS,
-                views=_VIEWS,
+                views=ALL_VIEWS,
             ),
         )
