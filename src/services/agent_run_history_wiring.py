@@ -125,14 +125,14 @@ def build_history_wiring(
 
     def _get_latest_scope_event_id() -> int | None:
         if events_table is None:
-            return 0
+            return None
         try:
             raw = events_table.get_latest_scope_event_id(session_id, None)
         except Exception:
             logger.warning("manifest: get_latest_scope_event_id failed", exc_info=True)
             return None
         try:
-            return int(raw) if raw is not None else 0
+            return int(raw) if raw is not None else None
         except (TypeError, ValueError):
             return None
 
