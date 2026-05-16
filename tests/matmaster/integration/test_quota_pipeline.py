@@ -216,6 +216,12 @@ def _run_with_quota_mock(
 
         mock_events_table = MagicMock()
         mock_events_table.get_session_events.return_value = []
+        mock_events_table.get_history_checkpoints.return_value = []
+        mock_events_table.has_user_turn_context.return_value = False
+        mock_events_table.get_session_user_query_events.return_value = []
+        mock_events_table.get_recent_context_anchor_events.return_value = []
+        mock_events_table.query_user_turn_context_by_invocation.return_value = None
+        mock_events_table.add_event.return_value = True
         mock_events_fn.return_value = mock_events_table
 
         mock_redis = MagicMock()
@@ -229,6 +235,7 @@ def _run_with_quota_mock(
                 cancel_token=cancel_token or _make_cancel_token(),
                 mode='direct',
                 task_id='task-q',
+                invocation_id='inv-task-q',
             )
         )
 

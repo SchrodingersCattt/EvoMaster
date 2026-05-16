@@ -54,6 +54,15 @@ def _make_bohrium_service(sessions_service: Any | None = None) -> BohriumSetupSe
     )
 
 
+def _allow_user_turn_context_write(events_table: MagicMock) -> None:
+    events_table.get_history_checkpoints.return_value = []
+    events_table.has_user_turn_context.return_value = False
+    events_table.get_session_user_query_events.return_value = []
+    events_table.get_recent_context_anchor_events.return_value = []
+    events_table.query_user_turn_context_by_invocation.return_value = None
+    events_table.add_event.return_value = True
+
+
 @patch.object(arb, '_run_clear_remote_proxy', MagicMock())
 @patch.object(arb, '_remote_session_workspace_root', return_value='/share')
 @patch('src.services.agent_run_bohrium.get_bohrium_nodes_table')
@@ -434,6 +443,7 @@ def test_run_agent_loads_exp_config_without_passing_skill_sync_to_bohrium_setup(
 
         mock_events_table = MagicMock()
         mock_events_table.get_session_events.return_value = []
+        _allow_user_turn_context_write(mock_events_table)
         mock_events_fn.return_value = mock_events_table
         mock_redis_fn.return_value = MagicMock()
 
@@ -450,6 +460,7 @@ def test_run_agent_loads_exp_config_without_passing_skill_sync_to_bohrium_setup(
                 cancel_token=CancellationController().token,
                 mode='direct',
                 task_id='task-spec-order',
+                invocation_id='inv-spec-order',
             )
         )
 
@@ -540,10 +551,11 @@ def test_execution_binding_before_build_runtime(
 
         mock_events_table = MagicMock()
         mock_events_table.get_session_events.return_value = []
+        _allow_user_turn_context_write(mock_events_table)
         mock_events_fn.return_value = mock_events_table
         mock_redis_fn.return_value = MagicMock()
 
-        async def _mock_use_quota(uid: str) -> None:
+        async def _mock_use_quota(uid: str, **_: Any) -> None:
             pass
 
         mock_use_quota.side_effect = _mock_use_quota
@@ -556,6 +568,7 @@ def test_execution_binding_before_build_runtime(
                 cancel_token=CancellationController().token,
                 mode='direct',
                 task_id='task-exec-bind',
+                invocation_id='inv-exec-bind',
             )
         )
 

@@ -153,27 +153,28 @@ async def test_run_agent_rehydrates_from_db_on_cache_miss(tmp_path, monkeypatch)
                 mcp_runtime_file="mcp.yaml",
             )
         )
-        monkeypatch.setattr(
-            "matmaster.config.loader.load_exp_config", lambda _name: cfg
-        )
+        with monkeypatch.context() as scoped_monkeypatch:
+            scoped_monkeypatch.setattr(
+                "matmaster.config.loader.load_exp_config", lambda _name: cfg
+            )
 
-        svc._test_events_table.get_session_events = MagicMock(
-            return_value=[
-                {"type": "skill_hit", "content": {"skill_name": "pxrd"}},
-                {"type": "skill_hit", "content": {"skill_name": "sg"}},
-                {"type": "tool_call", "tool_name": "mat_ignored_tool"},
-            ]
-        )
+            svc._test_events_table.get_session_events = MagicMock(
+                return_value=[
+                    {"type": "skill_hit", "content": {"skill_name": "pxrd"}},
+                    {"type": "skill_hit", "content": {"skill_name": "sg"}},
+                    {"type": "tool_call", "tool_name": "mat_ignored_tool"},
+                ]
+            )
 
-        await svc.run_agent(
-            session_id="sess-rehydrate",
-            user_prompt="hi",
-            send_cb=AsyncMock(),
-            cancel_token=_make_cancel_token(),
-            mode="direct",
-            task_id="t1",
-            invocation_id="inv-rehydrate",
-        )
+            await svc.run_agent(
+                session_id="sess-rehydrate",
+                user_prompt="hi",
+                send_cb=AsyncMock(),
+                cancel_token=_make_cancel_token(),
+                mode="direct",
+                task_id="t1",
+                invocation_id="inv-rehydrate",
+            )
 
     assert svc._active_skills["sess-rehydrate"] == {"pxrd", "sg"}
     snapshot = svc._test_fake_exp.last_ctx.run_meta["active_skills"]
@@ -223,24 +224,25 @@ async def test_run_agent_rehydrates_remote_skill_from_session_root(
                 mcp_runtime_file="mcp.yaml",
             )
         )
-        monkeypatch.setattr(
-            "matmaster.config.loader.load_exp_config", lambda _name: cfg
-        )
-        svc._test_events_table.get_session_events = MagicMock(
-            return_value=[
-                {"type": "skill_hit", "content": {"skill_name": "remote-skill"}},
-            ]
-        )
+        with monkeypatch.context() as scoped_monkeypatch:
+            scoped_monkeypatch.setattr(
+                "matmaster.config.loader.load_exp_config", lambda _name: cfg
+            )
+            svc._test_events_table.get_session_events = MagicMock(
+                return_value=[
+                    {"type": "skill_hit", "content": {"skill_name": "remote-skill"}},
+                ]
+            )
 
-        await svc.run_agent(
-            session_id="sess-remote-rehydrate",
-            user_prompt="hi",
-            send_cb=AsyncMock(),
-            cancel_token=_make_cancel_token(),
-            mode="direct",
-            task_id="t1",
-            invocation_id="inv-remote-rehydrate",
-        )
+            await svc.run_agent(
+                session_id="sess-remote-rehydrate",
+                user_prompt="hi",
+                send_cb=AsyncMock(),
+                cancel_token=_make_cancel_token(),
+                mode="direct",
+                task_id="t1",
+                invocation_id="inv-remote-rehydrate",
+            )
 
     assert svc._active_skills["sess-remote-rehydrate"] == {"remote-skill"}
     snapshot = svc._test_fake_exp.last_ctx.run_meta["active_skills"]

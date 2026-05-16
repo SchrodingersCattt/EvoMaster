@@ -190,6 +190,15 @@ def _make_pg_ctx(tmp_path: Path, llm_provider: Any = None) -> PlaygroundContext:
     )
 
 
+def _allow_user_turn_context_write(events_table: MagicMock) -> None:
+    events_table.get_history_checkpoints.return_value = []
+    events_table.has_user_turn_context.return_value = False
+    events_table.get_session_user_query_events.return_value = []
+    events_table.get_recent_context_anchor_events.return_value = []
+    events_table.query_user_turn_context_by_invocation.return_value = None
+    events_table.add_event.return_value = True
+
+
 # ── E2E tests ─────────────────────────────────────────
 
 
@@ -301,6 +310,7 @@ class TestMatMasterRunAgentE2E:
             # Configure events_table mock -- returned by get_chat_events_table()
             mock_events_table = MagicMock()
             mock_events_table.get_session_events.return_value = []
+            _allow_user_turn_context_write(mock_events_table)
             mock_events_table_fn.return_value = mock_events_table
 
             # Configure Redis mock
@@ -308,7 +318,7 @@ class TestMatMasterRunAgentE2E:
             mock_redis_fn.return_value = mock_redis
 
             # use_quota is async
-            async def _mock_use_quota(uid):
+            async def _mock_use_quota(uid, **_kwargs):
                 pass
 
             mock_use_quota.side_effect = _mock_use_quota
@@ -328,6 +338,7 @@ class TestMatMasterRunAgentE2E:
                     cancel_token=CancellationController().token,
                     mode='direct',
                     task_id='task-1',
+                    invocation_id='inv-task-1',
                 )
             )
 
@@ -422,12 +433,13 @@ class TestMatMasterRunAgentE2E:
 
             mock_events_table = MagicMock()
             mock_events_table.get_session_events.return_value = raw_events
+            _allow_user_turn_context_write(mock_events_table)
             mock_events_table_fn.return_value = mock_events_table
 
             mock_redis = MagicMock()
             mock_redis_fn.return_value = mock_redis
 
-            async def _mock_use_quota(uid):
+            async def _mock_use_quota(uid, **_kwargs):
                 pass
 
             mock_use_quota.side_effect = _mock_use_quota
@@ -440,6 +452,7 @@ class TestMatMasterRunAgentE2E:
                     cancel_token=CancellationController().token,
                     mode='direct',
                     task_id=current_task_id,
+                    invocation_id='inv-task-current',
                 )
             )
 
@@ -587,12 +600,13 @@ class TestMatMasterRunAgentE2E:
 
             mock_events_table = MagicMock()
             mock_events_table.get_session_events.return_value = []
+            _allow_user_turn_context_write(mock_events_table)
             mock_events_table_fn.return_value = mock_events_table
 
             mock_redis = MagicMock()
             mock_redis_fn.return_value = mock_redis
 
-            async def _mock_use_quota(uid):
+            async def _mock_use_quota(uid, **_kwargs):
                 pass
 
             mock_use_quota.side_effect = _mock_use_quota
@@ -638,6 +652,7 @@ class TestMatMasterRunAgentE2E:
                     cancel_token=CancellationController().token,
                     mode='direct',
                     task_id='task-bohrium-event',
+                    invocation_id='inv-bohrium-event',
                 )
             )
 
@@ -708,12 +723,13 @@ class TestMatMasterRunAgentE2E:
 
             mock_events_table = MagicMock()
             mock_events_table.get_session_events.return_value = []
+            _allow_user_turn_context_write(mock_events_table)
             mock_events_table_fn.return_value = mock_events_table
 
             mock_redis = MagicMock()
             mock_redis_fn.return_value = mock_redis
 
-            async def _mock_use_quota(uid):
+            async def _mock_use_quota(uid, **_kwargs):
                 pass
 
             mock_use_quota.side_effect = _mock_use_quota
@@ -726,6 +742,7 @@ class TestMatMasterRunAgentE2E:
                     cancel_token=CancellationController().token,
                     mode='direct',
                     task_id='task-bohrium-abort',
+                    invocation_id='inv-bohrium-abort',
                 )
             )
 
@@ -790,12 +807,13 @@ class TestMatMasterRunAgentE2E:
         ):
             mock_events_table = MagicMock()
             mock_events_table.get_session_events.return_value = []
+            _allow_user_turn_context_write(mock_events_table)
             mock_events_table_fn.return_value = mock_events_table
 
             mock_redis = MagicMock()
             mock_redis_fn.return_value = mock_redis
 
-            async def _mock_use_quota(uid):
+            async def _mock_use_quota(uid, **_kwargs):
                 pass
 
             mock_use_quota.side_effect = _mock_use_quota
@@ -813,6 +831,7 @@ class TestMatMasterRunAgentE2E:
                     cancel_token=CancellationController().token,
                     mode='direct',
                     task_id='task-bohrium-access-key-abort',
+                    invocation_id='inv-bohrium-access-key-abort',
                     bohrium_required=True,
                 )
             )
@@ -883,12 +902,13 @@ class TestMatMasterRunAgentE2E:
 
             mock_events_table = MagicMock()
             mock_events_table.get_session_events.return_value = []
+            _allow_user_turn_context_write(mock_events_table)
             mock_events_table_fn.return_value = mock_events_table
 
             mock_redis = MagicMock()
             mock_redis_fn.return_value = mock_redis
 
-            async def _mock_use_quota(uid):
+            async def _mock_use_quota(uid, **_kwargs):
                 pass
 
             mock_use_quota.side_effect = _mock_use_quota
@@ -906,6 +926,7 @@ class TestMatMasterRunAgentE2E:
                     cancel_token=CancellationController().token,
                     mode='direct',
                     task_id='task-bohrium-error',
+                    invocation_id='inv-bohrium-error',
                 )
             )
 
