@@ -1,0 +1,220 @@
+from __future__ import annotations
+
+from collections.abc import Callable
+from dataclasses import dataclass
+from enum import Enum
+
+from matmaster.context.compositions import (
+    ANCHOR_COMPOSITION,
+    COMPACTED_COMPOSITION,
+    CONTINUATION_COMPOSITION,
+    ContextComposition,
+    ContextCompositionInputs,
+    SectionSource,
+)
+from matmaster.context.ports import (
+    ContextAssemblyPorts,
+    SessionEvent,
+    SessionEventQuery,
+    SessionJobs,
+    SessionJobsQuery,
+    UserInstructions,
+)
+from matmaster.context.sections import ContextSection
+from matmaster.context.sources.turn_input import TurnInput
+from matmaster.context.turn_context import UserTurnContext
+
+
+class ContextAssemblyIntent(str, Enum):
+    ANCHOR_TURN = "anchor_turn"
+    CONTINUATION_TURN = "continuation_turn"
+    PREFLIGHT_COMPACTION = "preflight_compaction"
+    RUNTIME_COMPACTION = "runtime_compaction"
+
+    @property
+    def is_anchor_turn(self) -> bool:
+        return self == ContextAssemblyIntent.ANCHOR_TURN
+
+    @property
+    def is_compaction(self) -> bool:
+        return self in {
+            ContextAssemblyIntent.PREFLIGHT_COMPACTION,
+            ContextAssemblyIntent.RUNTIME_COMPACTION,
+        }
+
+
+@dataclass(frozen=True)
+class TurnAssemblyRequest:
+    session_id: str
+    spawn_id: str | None
+    turn_input: TurnInput
+    user_instructions: UserInstructions
+
+
+@dataclass(frozen=True)
+class CompactionAssemblyRequest:
+    session_id: str
+    spawn_id: str | None
+    user_instructions: UserInstructions
+    compacted_history_summary: str
+    turn_input: TurnInput | None = None
+    covered_until_event_id: int | None = None
+    session_attachments_override: SectionSource | None = None
+
+
+@dataclass(frozen=True)
+class AssemblyResult:
+    user_turn_context: UserTurnContext
+    user_instructions_text: str
+    user_instructions_hash: str
+    used_composition: str
+    covered_until_event_id: int | None = None
+
+
+SessionSectionBuilder = Callable[
+    [tuple[SessionEvent, ...], int, bool],
+    tuple[ContextSection, ...],
+]
+
+
+def _empty_session_section_builder(
+    events: tuple[SessionEvent, ...],
+    until_event_id: int,
+    include_attachments: bool,
+) -> tuple[ContextSection, ...]:
+    return ()
+
+
+_INTENT_COMPOSITION_MAP: dict[ContextAssemblyIntent, ContextComposition] = {
+    ContextAssemblyIntent.ANCHOR_TURN: ANCHOR_COMPOSITION,
+    ContextAssemblyIntent.CONTINUATION_TURN: CONTINUATION_COMPOSITION,
+    ContextAssemblyIntent.PREFLIGHT_COMPACTION: COMPACTED_COMPOSITION,
+    ContextAssemblyIntent.RUNTIME_COMPACTION: COMPACTED_COMPOSITION,
+}
+
+
+class ContextAssembler:
+    def __init__(
+        self,
+        ports: ContextAssemblyPorts,
+        *,
+        _session_section_builder_for_tests: SessionSectionBuilder | None = None,
+    ) -> None:
+        self._ports = ports
+        # Phase 2A test-only seam: session.py does not exist yet. Phase 2B
+        # replaces the default with SessionContextBuilder and keeps this path
+        # out of production service wiring.
+        self._session_section_builder = (
+            _session_section_builder_for_tests or _empty_session_section_builder
+        )
+
+    async def assemble_turn(
+        self,
+        intent: ContextAssemblyIntent,
+        request: TurnAssemblyRequest,
+    ) -> AssemblyResult:
+        if intent not in {
+            ContextAssemblyIntent.ANCHOR_TURN,
+            ContextAssemblyIntent.CONTINUATION_TURN,
+        }:
+            raise ValueError(f"assemble_turn does not accept intent {intent!r}")
+
+        composition = _INTENT_COMPOSITION_MAP[intent]
+        session_sections: tuple[ContextSection, ...] = ()
+        jobs = await self._load_jobs_or_empty(request.session_id)
+
+        if intent == ContextAssemblyIntent.ANCHOR_TURN:
+            history_boundary = request.turn_input.pre_turn_history_event_id
+            events = await self._ports.session_events.load_events(
+                SessionEventQuery(
+                    session_id=request.session_id,
+                    spawn_id=request.spawn_id,
+                    until_event_id=history_boundary,
+                    order="asc",
+                )
+            )
+            session_sections = self._session_section_builder(
+                events,
+                history_boundary,
+                True,
+            )
+
+        user_turn_context = composition.apply(
+            ContextCompositionInputs(
+                user_instructions_text=request.user_instructions.text,
+                turn_input=request.turn_input,
+                session_sections=session_sections,
+                session_jobs=jobs,
+            )
+        )
+        return AssemblyResult(
+            user_turn_context=user_turn_context,
+            user_instructions_text=request.user_instructions.text,
+            user_instructions_hash=request.user_instructions.hash,
+            used_composition=composition.name,
+        )
+
+    async def assemble_compaction(
+        self,
+        intent: ContextAssemblyIntent,
+        request: CompactionAssemblyRequest,
+    ) -> AssemblyResult:
+        if not intent.is_compaction:
+            raise ValueError(f"assemble_compaction does not accept intent {intent!r}")
+
+        if intent == ContextAssemblyIntent.RUNTIME_COMPACTION:
+            if request.covered_until_event_id is None:
+                raise ValueError(
+                    "RUNTIME_COMPACTION requires explicit covered_until_event_id"
+                )
+            covered_until = request.covered_until_event_id
+        elif request.covered_until_event_id is not None:
+            covered_until = request.covered_until_event_id
+        elif request.turn_input is not None:
+            covered_until = request.turn_input.pre_turn_history_event_id
+        else:
+            raise ValueError(
+                "PREFLIGHT_COMPACTION requires turn_input or explicit "
+                "covered_until_event_id"
+            )
+
+        events = await self._ports.session_events.load_events(
+            SessionEventQuery(
+                session_id=request.session_id,
+                spawn_id=request.spawn_id,
+                until_event_id=covered_until,
+                order="asc",
+            )
+        )
+        session_sections = self._session_section_builder(
+            events,
+            covered_until,
+            request.session_attachments_override is None,
+        )
+        jobs = await self._load_jobs_or_empty(request.session_id)
+        composition = _INTENT_COMPOSITION_MAP[intent]
+        user_turn_context = composition.apply(
+            ContextCompositionInputs(
+                user_instructions_text=request.user_instructions.text,
+                compacted_history_summary=request.compacted_history_summary,
+                turn_input=request.turn_input,
+                session_sections=session_sections,
+                session_jobs=jobs,
+                session_attachments_override=request.session_attachments_override,
+                defer_turn_instruction=True,
+            )
+        )
+        return AssemblyResult(
+            user_turn_context=user_turn_context,
+            user_instructions_text=request.user_instructions.text,
+            user_instructions_hash=request.user_instructions.hash,
+            used_composition=composition.name,
+            covered_until_event_id=covered_until,
+        )
+
+    async def _load_jobs_or_empty(self, session_id: str) -> SessionJobs:
+        if self._ports.session_jobs is None:
+            return SessionJobs.empty()
+        return await self._ports.session_jobs.load_session_jobs(
+            SessionJobsQuery(session_id=session_id)
+        )
