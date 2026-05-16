@@ -1,4 +1,4 @@
-"""ContextBuilder -- sectioned system prompt assembler.
+"""SystemPromptBuilder -- sectioned system prompt assembler.
 
 Constructs the system prompt from multiple sources in a fixed order.
 LLM prompt caching benefits from stable prefix, so high-frequency change
@@ -7,7 +7,7 @@ sections (task, memory) are placed last.
 Section order: system_prompt -> identity -> skills -> tools -> memory -> task
 
 All static text (system_prompt, identity) comes from the caller (toml config).
-ContextBuilder has no default text of its own -- empty string means the
+SystemPromptBuilder has no default text of its own -- empty string means the
 section is skipped entirely.
 
 Tools section: generic guidance directing the LLM to use function calling
@@ -22,7 +22,7 @@ from typing import Any
 from matmaster.types.context import PlaygroundContext
 
 
-class ContextBuilder:
+class SystemPromptBuilder:
     """Sectioned system prompt assembler.
 
     Section order (fixed): system_prompt -> identity -> skills -> tools -> memory -> task
@@ -41,23 +41,6 @@ class ContextBuilder:
         "tools",
         "memory",
         "task",
-    )
-
-    BUNDLE_SECTION_ORDER = (
-        "header",
-        "previous_session_summary",
-        "rehydrated_context",
-        "continuation_instruction",
-    )
-
-    DEFAULT_COMPACT_HEADER = (
-        "以下是先前对话的压缩摘要，作为历史背景。"
-        "请基于这些信息继续完成当前任务，不要复述摘要、不要重新自我介绍。"
-    )
-
-    DEFAULT_CONTINUATION_INSTRUCTION = (
-        "不要向用户复述上述摘要，除非用户明确要求。"
-        "请直接基于这些背景继续完成当前任务。"
     )
 
     def build_system_prompt(
@@ -108,54 +91,6 @@ class ContextBuilder:
                 section_builders[section_name] = content
 
         return self.SEPARATOR.join(section_builders.values())
-
-    def build_user_request(
-        self,
-        *,
-        user_text: str,
-        attachments: str | None = None,
-    ) -> str:
-        parts = []
-        text = (user_text or "").strip()
-        if text:
-            parts.append(text)
-        attachment_text = (attachments or "").strip()
-        if attachment_text:
-            parts.append(attachment_text)
-        return "\n\n".join(parts)
-
-    def build_compact_bundle(
-        self,
-        *,
-        summary: str,
-        rehydrated_context: str | None = None,
-        continuation_instruction: str | None = None,
-    ) -> str:
-        summary_text = (summary or "").strip()
-        if not summary_text:
-            raise ValueError("compact summary must not be empty")
-
-        instruction = (
-            continuation_instruction
-            if continuation_instruction is not None
-            else self.DEFAULT_CONTINUATION_INSTRUCTION
-        )
-
-        sections = [
-            self.DEFAULT_COMPACT_HEADER,
-            self._tag("previous_session_summary", summary_text),
-        ]
-        rehydrated = (rehydrated_context or "").strip()
-        if rehydrated:
-            sections.append(self._tag("rehydrated_context", rehydrated))
-        instruction_text = (instruction or "").strip()
-        if instruction_text:
-            sections.append(self._tag("continuation_instruction", instruction_text))
-        return "\n\n".join(sections)
-
-    @staticmethod
-    def _tag(name: str, content: str) -> str:
-        return f"<{name}>\n{content}\n</{name}>"
 
     def _build_section(
         self,

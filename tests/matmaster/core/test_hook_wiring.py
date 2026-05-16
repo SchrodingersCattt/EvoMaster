@@ -11,7 +11,7 @@ import pytest
 from matmaster.config.exp import ExpConfig
 from matmaster.core.agent import AgentKernel
 from matmaster.core.capability_policy import DefaultCapabilityPolicy
-from matmaster.core.context_builder import ContextBuilder
+from matmaster.context.system_prompt import SystemPromptBuilder
 from matmaster.core.exp import Exp
 from matmaster.core.hooks import (
     CompactionContext,
@@ -593,7 +593,7 @@ class TestAgentKernelHookWiring:
         executor.on(HookEvent.RUN_END, on_end)
 
         spec = AgentRuntimeSpec(
-            context_builder=ContextBuilder(),
+            system_prompt_builder=SystemPromptBuilder(),
             llm_provider=provider,
             hook_executor=executor,
             meta={"task_id": "task-1", "session_id": "session-1"},
@@ -621,7 +621,7 @@ class TestAgentKernelHookWiring:
         executor.on(HookEvent.RUN_END, on_end)
 
         spec = AgentRuntimeSpec(
-            context_builder=ContextBuilder(),
+            system_prompt_builder=SystemPromptBuilder(),
             llm_provider=provider,
             hook_executor=executor,
             meta={"task_id": "task-1", "session_id": "session-1"},
@@ -652,7 +652,7 @@ class TestAgentKernelHookWiring:
         executor.on(HookEvent.USER_PROMPT_SUBMIT, observe)
 
         spec = AgentRuntimeSpec(
-            context_builder=ContextBuilder(),
+            system_prompt_builder=SystemPromptBuilder(),
             llm_provider=provider,
             hook_executor=executor,
             meta={"task_id": "task-1", "session_id": "session-1"},
@@ -678,7 +678,7 @@ class TestAgentKernelHookWiring:
         executor.on(HookEvent.CONTEXT_COMPACTION, observe)
 
         spec = AgentRuntimeSpec(
-            context_builder=ContextBuilder(),
+            system_prompt_builder=SystemPromptBuilder(),
             llm_provider=provider,
             hook_executor=executor,
             compactor=compactor,
@@ -710,7 +710,7 @@ class TestAgentKernelHookWiring:
         executor.on(HookEvent.CONTEXT_COMPACTION, observe)
 
         spec = AgentRuntimeSpec(
-            context_builder=ContextBuilder(),
+            system_prompt_builder=SystemPromptBuilder(),
             llm_provider=provider,
             hook_executor=executor,
             compactor=compactor,

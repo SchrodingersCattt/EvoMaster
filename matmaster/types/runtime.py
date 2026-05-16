@@ -16,7 +16,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from matmaster.context.system_prompt import ContextBuilder
+from matmaster.context.system_prompt import SystemPromptBuilder
 
 from .llm_provider import LLMProvider
 from .runtime_ports import KernelRuntimePorts
@@ -70,7 +70,7 @@ class AgentRuntimeSpec(BaseModel):
     compaction: CompactionConfig = Field(default_factory=CompactionConfig)
     system_prompt: str = ""
     compactor: Any | None = None
-    context_builder: ContextBuilder
+    system_prompt_builder: SystemPromptBuilder
 
     # Extensible metadata bag (prompt templates, MCP/skill config, etc.)
     meta: dict[str, Any] = Field(default_factory=dict)
@@ -97,10 +97,10 @@ class AgentRuntimeSpec(BaseModel):
         from matmaster.tools.tool_catalog import ToolCatalog
         from matmaster.types.topology import RuntimeTopology
 
-        if not isinstance(self.context_builder, ContextBuilder):
+        if not isinstance(self.system_prompt_builder, SystemPromptBuilder):
             raise ValueError(
-                "context_builder must be ContextBuilder, "
-                f"got {type(self.context_builder).__name__}"
+                "system_prompt_builder must be SystemPromptBuilder, "
+                f"got {type(self.system_prompt_builder).__name__}"
             )
 
         if self.hook_executor is not None:

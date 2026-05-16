@@ -25,7 +25,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from matmaster.config.exp import ExpConfig
-from matmaster.core.context_builder import ContextBuilder
+from matmaster.context.system_prompt import SystemPromptBuilder
 from matmaster.core.hooks import HookEvent, HookExecutor, SubagentContext
 from matmaster.core.path_access import derive_path_access_roots
 from matmaster.tools.tool_registry import ToolRegistry
@@ -157,7 +157,7 @@ class Exp:
     (defaults to 'direct').
 
     assemble() is a pure data transform: config + ctx -> AgentRuntimeSpec.
-    build_runtime() creates resources (ToolRegistry, ContextBuilder, Kernel).
+    build_runtime() creates resources (ToolRegistry, SystemPromptBuilder, Kernel).
     run_stream() delegates to build_runtime then kernel.run_stream with cleanup guarantee.
     """
 
@@ -300,7 +300,7 @@ class Exp:
     async def assemble(self, ctx: PlaygroundContext) -> AgentRuntimeSpec:
         """Data transform: config + ctx -> AgentRuntimeSpec."""
         return AgentRuntimeSpec(
-            context_builder=ContextBuilder(),
+            system_prompt_builder=SystemPromptBuilder(),
             llm_provider=ctx.llm_provider,
             max_turns=self._config.max_turns,
             compaction=self._config.compaction,
@@ -447,8 +447,8 @@ class Exp:
             )
             registry.register(agent_tool, source="builtin")
 
-        builder = ContextBuilder()
-        system_prompt = builder.build_system_prompt(
+        system_prompt_builder = SystemPromptBuilder()
+        system_prompt = system_prompt_builder.build_system_prompt(
             ctx,
             registry,
             system_prompt=self._config.system_prompt,
@@ -509,7 +509,7 @@ class Exp:
                 "capability_policy": capability_policy,
                 "structural_validation": structural_validation,
                 "system_prompt": system_prompt,
-                "context_builder": builder,
+                "system_prompt_builder": system_prompt_builder,
                 "hook_executor": hook_executor,
                 "compactor": runtime_context.compactor,
                 "context_assembler": runtime_context.context_assembler,

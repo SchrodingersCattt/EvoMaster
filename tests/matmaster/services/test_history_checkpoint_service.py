@@ -4,15 +4,16 @@ from unittest.mock import AsyncMock, Mock, call
 
 import pytest
 
-from matmaster.core.context_builder import ContextBuilder
 from matmaster.types.messages import UserMessage
 from src.services.history_checkpoint_codec import serialize_base_messages
 
 
+def _compact_user_message(summary: str) -> UserMessage:
+    return UserMessage(content=f"<compacted_history>\n{summary}\n</compacted_history>")
+
+
 def _compact_base_messages(summary: str) -> list[dict]:
-    return serialize_base_messages(
-        [UserMessage(content=ContextBuilder().build_compact_bundle(summary=summary))]
-    )
+    return serialize_base_messages([_compact_user_message(summary)])
 
 
 class TestHistoryCheckpointService:

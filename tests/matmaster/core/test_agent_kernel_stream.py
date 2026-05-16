@@ -6,7 +6,7 @@ from typing import Any
 
 import pytest
 
-from matmaster.core.context_builder import ContextBuilder
+from matmaster.context.system_prompt import SystemPromptBuilder
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.events import (
     AssistantStateEvent,
@@ -671,7 +671,7 @@ class TestGap1FullToolRunnerActivation:
         registry, _tools = _make_tool_registry()
         catalog = ToolCatalog(registry)
         spec = AgentRuntimeSpec(
-            context_builder=ContextBuilder(),
+            system_prompt_builder=SystemPromptBuilder(),
             llm_provider=provider,
             tool_catalog=catalog,
             # tool_runner intentionally None
