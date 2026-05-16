@@ -1,13 +1,25 @@
-# Context 模块统一重构 — Design v3.2
+# Context 模块统一重构 — Design v3.3
 
-- 日期: 2026-05-15（v3.2 修订）
-- 状态: 草稿 v3.2（移除 `source_query_event_id` 外键语义，`user_turn_context` 通过顶层 `invocation_id` 关联用户请求），待作者复核
+- 日期: 2026-05-16（v3.3 修订）
+- 状态: 草稿 v3.3（修复 hybrid restore、anchor hash barrier、Phase 1 dedup、UserInstructions raw hash 四处会影响 backend restore 正确性的 spec 漏洞），待作者复核
 - 作者: kealdoom + Claude + GPT
 - 范围: `matmaster/` 与 `src/services/` 中所有 provider-facing 上下文相关的代码与数据流
 
 ---
 
 ## 0. 关键变化日志
+
+### 0.0 v3.3 相对 v3.2 的关键变化
+
+v3.3 聚焦修复 Phase 1 plan review 中发现的四处会影响 backend restore 正确性的 spec 漏洞，并把 Phase 1 dedup 应用层防线从隐含约束提到正文。
+
+| 项 | v3.2 | v3.3 |
+|----|------|------|
+| Restore schema 分流 | §2 #4 写"无 v1 检查点 → 沿用 ChatHistoryConverter"，但 §11.1 又说"无 checkpoint 但 events 含 user_turn_context → v1 路径"；两者冲突。v1 路径跳过 `User/query`，导致混合 session 丢失 Phase 1 部署前的 raw user turn | §2 #4 重写为三分支：纯 v0 / hybrid v1 / 纯 v1，与 §11.1 统一。Hybrid v1 在按 `invocation_id` 检查后，**消费**未被 `user_turn_context` 覆盖的老 `User/query`，保证混合 session 不丢老用户输入 |
+| `latest_anchor_user_instructions_hash` 扫描行为 | §7bis.5 把 `history_checkpoint` 当无条件 barrier；但因措辞过简，Phase 1 plan 实现可能把 hash 缺失的 checkpoint 视为可穿越 | §7bis.5 强化措辞：**任何** `history_checkpoint` 都是 barrier，hash 缺失时返回 `None`（保守地视当前轮为 anchor）。理由：Phase 1 checkpoint 仍写 v0 marker，绝大多数 checkpoint 没有 hash，旧式"穿越 checkpoint 找老 anchor"会让 AGENT.md 改动在 compaction 后失效 |
+| Phase 1 dedup 应用层防线 | §4.1 #1 只写硬不变量"最多一条"，但实现层未指定 enforcement 路径 | §4.1 #1 增补：Phase 1 必须在写入前按 `(session_id, invocation_id, type='user_turn_context', spawn_id IS NULL)` 查重；命中已有时 payload 一致才幂等 skip，不一致 fail-fast。DB unique index 留待 Phase 1.5 / 2A |
+| `UserInstructions.text` 是否做 strip | §7bis.4 示例代码就是 raw text 截断 + raw text hash（隐含不 strip），但未显式写明 | §7bis.4 增补硬约束：`UserInstructions.text` 必须保留 raw text（仅做 utf-8 bytes 截断），hash 必须基于该 raw text。理由：尾随空白 / 行尾差异不能被 strip 掩盖；raw text 变化应触发 anchor 重生成 |
+| `invocation_id` 缺失时 `user_turn_context` 写入策略 | §3.6 只说"写入失败 fail-fast"，未明确"关联键缺失"是否计入"写入失败" | §3.6 显式补一行：缺 `invocation_id` 等同写入失败，必须 raise 而非 silent skip。配合 §4.1 #1 dedup 检查，写入前必须先验证关联键存在 |
 
 ### 0.1 v3.2 相对 v3.1 的关键变化
 
@@ -100,11 +112,23 @@ v3.1 的核心目标是消除 v3 末尾仍然散落在 §7.3 / §8.2 / §9.2 的
 4. History restore 分流：
    - frontend display restore: 从 raw transcript (User/query, response, tool events)
      消费现有 ChatHistoryConverter 即可，不引入新路径。
-   - backend model restore: schema-aware 分流。
-     - v1 checkpoint 存在: checkpoint.base_messages
-                          + 后续 user_turn_context + assistant_state
-                          + response/run_result + tool_result
-     - 无 v1 检查点: 沿用 ChatHistoryConverter.events_to_dialog_messages
+   - backend model restore: schema-aware 分流，按 (v1 checkpoint 存在?) × (events 含
+     user_turn_context?) 二元组合得到三条路径：
+     - **纯 v0** (无 v1 checkpoint 且无 user_turn_context):
+                 走 ChatHistoryConverter.events_to_dialog_messages，COMPAT:v0-restore
+     - **Hybrid v1** (无 v1 checkpoint 但 events 含 user_turn_context，Phase 1/2/3 过渡):
+                 单遍消费事件流。先收集已写 user_turn_context 的 invocation_id
+                 集合，遍历时：
+                   * user_turn_context  → 追加 UserMessage(message)
+                   * User/query 且 invocation_id 在集合内 → 跳过（被 utc 覆盖）
+                   * User/query 且 invocation_id 不在集合内 → 按 legacy 转 UserMessage
+                     （保留 Phase 1 部署前的 raw user turns）
+                   * 其余 (assistant_state / response / run_result / tool_result 等) 同 v1
+     - **纯 v1** (v1 checkpoint 存在):
+                 从 checkpoint.base_messages 起重放 + 后续 user_turn_context +
+                 assistant_state + response/run_result + tool_result。
+                 checkpoint.covered_until_event_id 之前的 User/query 已经被压缩进
+                 base_messages，restore 不再消费。
 ```
 
 这四条是本次重构的**硬约束**。所有后续设计决策都要回到这四条来验证。
@@ -232,10 +256,14 @@ Session 首轮：
 |------|----------|------|
 | `User/query` 写入失败 | fail-fast | API 层已有处理，本次不动 |
 | `user_turn_context` 写入失败 | **fail-fast，本轮终止** | 是 model restore 的权威输入；继续跑 LLM 会制造未来无法正确恢复的会话 |
+| `user_turn_context` 关联键缺失 (`invocation_id` 为空) | **fail-fast (raise)，等同写入失败** (v3.3) | 关联键缺失会让 §11.1 hybrid restore 无法把该事件与 User/query 配对；silently skip 写入只是"看起来安全"，实际等同写入失败但不告警 |
+| `user_turn_context` 重复写入 (同一 `(session_id, invocation_id, spawn_id IS NULL)` 命中已有) | **payload 一致时幂等 skip；payload 不一致时 fail-fast** (v3.3) | Worker retry / 客户端重发常见，但只能在已存 provider-facing payload 与本轮渲染结果一致时幂等。详见 §4.1 #1 |
 | `history_checkpoint` 写入失败 | **best-effort，记录 failure_reason** | 失败后最多从更老 checkpoint 或 raw events 重放，不影响本轮 LLM 调用 |
 | `assistant_state` 写入失败 | best-effort，log | 同上 |
 
 `CompactionResult.failure_reason` 字段保留，专门记录 checkpoint sink 错误信息。
+
+**Service 层调用约束** (v3.3 新增): `agent_run_service._prepare_and_dispatch` 把 `write_user_turn_context_event` 包在 try/except 内, 捕获 `RuntimeError` 后按现有 `run_agent` 失败返回模式包装 `(False, error_msg)`, 不允许异常裸抛到 stream layer。否则 SSE 客户端只看到连接 drop 而不知道 reason。
 
 ---
 
@@ -246,6 +274,10 @@ Session 首轮：
 ### 4.1 事件与编排不变量（v3 保留）
 
 1. 每个 `session_id + spawn_id + invocation_id` 在 events 表中对应**最多一条** `user_turn_context` 事件。多于一条是 bug，不是 dedup 常态。Phase 1 仅 root spawn 写入 `user_turn_context`，因此实际唯一性检查可先按 `session_id + invocation_id + spawn_id IS NULL` 落地。
+
+   **Phase 1 enforcement (v3.3 新增)**: service 层在写入 `user_turn_context` 之前必须做一次应用层查重 (按 `session_id + invocation_id + type='user_turn_context' + spawn_id IS NULL` 查询 events 表)。命中已有记录时必须把已存 payload 与本轮将写入的 payload 做结构化比较：一致则返回 duplicate/幂等 skip，调用方继续用本轮渲染得到的 `rendered_runtime_task` 调 LLM；不一致则 fail-fast。retry 场景常见，重复写入而非"重复发现"才是 bug，但 payload drift 代表同一个 invocation 的 provider-facing 事实发生分歧，不能静默放行。
+   - DB 层 unique index 留待 Phase 1.5 / Phase 2A 加, 通过 migration 落地。Phase 1 应用层防线先保证 99% 场景。
+   - Phase 1 仅 root spawn 写入, 所以查重 SQL 可固定 `spawn_id IS NULL`; Phase 2C 扩展 sub-agent 时改为按真实 spawn_id 查。
 2. `user_turn_context` 写入失败时，本轮 fail-fast；不允许继续 LLM 调用。
 3. `history_checkpoint` 写入失败时，本轮可继续；compaction 路径必须记录 `failure_reason`。
 4. 前端 SSE 回放与实时流永远不发 `user_turn_context` / `assistant_state` / `history_checkpoint`。
@@ -1295,7 +1327,17 @@ USER_INSTRUCTIONS_MAX_BYTES = 50 * 1024
 
 
 class AppUserInstructionsPort:
-    """AGENT.md 路径约定, size cap, hash 计算的归属。"""
+    """AGENT.md 路径约定, size cap, hash 计算的归属。
+
+    v3.3 硬约束:
+    - `UserInstructions.text` 必须保留 raw 文本 (仅做 utf-8 bytes 截断),
+      不做 strip / normalize / decode-error filtering 之外的任何处理
+    - hash 必须基于该 raw text 计算
+    - 理由: 尾随空白 / 行尾 LF/CRLF 差异不能被 strip 掩盖；raw text
+      变化应触发 anchor 重生成。如果 strip 后再 hash, `"Use SI units."`
+      与 `"Use SI units.\\n"` hash 相同, 但 anchor 冻结的文本可能与文件
+      实际内容不一致, 下次比对失败
+    """
 
     async def load_user_instructions(
         self, workspace_root: Path,
@@ -1315,10 +1357,12 @@ class AppUserInstructionsPort:
                 "utf-8", errors="ignore",
             )
             truncated = True
+        # v3.3: 不做 .strip(); raw text 直接进 UserInstructions
         return UserInstructions(text=raw, hash=_hash(raw), truncated=truncated)
 
 
 def _hash(text: str) -> str:
+    """v3.3: raw text → sha256, 不做任何 normalize / strip。"""
     return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
@@ -1416,11 +1460,27 @@ async def resolve_turn_context_intent(
 def _latest_anchor_hash_from_events(
     events: tuple[SessionEvent, ...],
 ) -> str | None:
+    """v3.3: history_checkpoint 是无条件 barrier。
+
+    遍历倒序事件流, 任何一个 history_checkpoint 都终止扫描:
+    - 如果 checkpoint 有 user_instructions_hash → 返回该 hash
+    - 如果 checkpoint 没有 user_instructions_hash (Phase 1 / v0 checkpoint) → 返回 None
+      → 调用方 decide_turn_context_intent 拿到 None 后判定为 ANCHOR, 当前轮重写
+      AGENT.md wrap。这是保守正确: 我们不能跨越 checkpoint 去比较更老的 anchor hash,
+      因为 checkpoint 期间的 AGENT.md 历史已被压缩进 base_messages, 无法重建。
+
+    禁止"checkpoint hash 缺失就跳过该 checkpoint 继续扫更老 anchor"的实现:
+    - Phase 1 checkpoint 写 v0 marker, 没有 hash; 跳过会让 anchor 重生成判定
+      跨过压缩边界, 错误地继承压缩前的 anchor 状态
+    - AGENT.md 改动在 compaction 后会失效, 直到下次 hash 真正变化才重生
+    """
     for ev in events:    # already DESC
         if ev.event_type == "user_turn_context":
             if ev.content.get("kind") == "anchor":
                 return ev.content.get("user_instructions_hash")
+            # continuation 不携带 hash, 继续扫更老 anchor
         elif ev.event_type == "history_checkpoint":
+            # barrier: 无论 hash 是否存在都 return
             return ev.content.get("user_instructions_hash")
     return None
 ```
@@ -1858,17 +1918,21 @@ class ModelHistoryRestorer:
         *,
         get_latest_checkpoint: Callable[[str, str | None], dict[str, Any] | None],
         get_events_after: Callable[[str, int | None, str | None], list[dict[str, Any]]],
+        has_user_turn_context: Callable[[str, str | None], bool],
         legacy_restore: Callable[[str, str | None], list[Message]],
     ) -> None:
         """
         Args:
             get_latest_checkpoint(session_id, spawn_id) -> checkpoint dict or None
             get_events_after(session_id, after_id, spawn_id) -> list of events
+            has_user_turn_context(session_id, spawn_id) -> bool
+                用 EXISTS 查询判断是否进入 hybrid v1；不要用 earliest-N events 探测
             legacy_restore(session_id, spawn_id) -> messages
                 v0 路径委托给 ChatHistoryConverter.events_to_dialog_messages 的包装函数
         """
         self._get_latest_checkpoint = get_latest_checkpoint
         self._get_events_after = get_events_after
+        self._has_user_turn_context = has_user_turn_context
         self._legacy_restore = legacy_restore
 
     def restore(
@@ -1877,10 +1941,13 @@ class ModelHistoryRestorer:
         *,
         spawn_id: str | None = None,
     ) -> list[Message]:
-        """Schema-aware 分流。
+        """Schema-aware 分流 (v3.3 三分支, 与 §2 不变量 #4 一致)。
 
-        v1 路径: 存在 v1 history_checkpoint 时使用
-        COMPAT:v0-restore: 兼容旧 session, 委托给 ChatHistoryConverter
+        - 纯 v1: 存在 v1 history_checkpoint → _restore_v1(checkpoint=...)
+        - Hybrid v1: 无 v1 checkpoint 但 events 含 user_turn_context →
+                     _restore_v1(checkpoint=None) (内部按 invocation_id 决定是否消费 User/query)
+        - 纯 v0: 既无 v1 checkpoint 也无 user_turn_context → _legacy_restore
+                 COMPAT:v0-restore
         """
         checkpoint = self._get_latest_checkpoint(session_id, spawn_id)
         schema_v1 = (
@@ -1888,14 +1955,14 @@ class ModelHistoryRestorer:
             and checkpoint.get("content", {}).get("schema_version") == "history_checkpoint.v1"
         )
 
-        # 判断是否走 v1: 有 v1 checkpoint OR (无 checkpoint 但 events 含 user_turn_context)
         if not schema_v1:
             has_user_turn_context = self._session_has_user_turn_context(session_id, spawn_id)
             if not has_user_turn_context:
                 # COMPAT:v0-restore
                 return self._legacy_restore(session_id, spawn_id)
+            # 走 hybrid v1 (checkpoint=None)
 
-        return self._restore_v1(session_id, spawn_id, checkpoint)
+        return self._restore_v1(session_id, spawn_id, checkpoint if schema_v1 else None)
 
     def _restore_v1(
         self,
@@ -1903,6 +1970,15 @@ class ModelHistoryRestorer:
         spawn_id: str | None,
         checkpoint: dict[str, Any] | None,
     ) -> list[Message]:
+        """v3.3 hybrid v1 算法。
+
+        关键差异 (相对 v3.2):
+        - 入参 `checkpoint=None` 表示 hybrid 模式 (无 v1 checkpoint 但有 user_turn_context)
+        - hybrid 模式下消费 User/query: 若其 invocation_id 已被 user_turn_context 覆盖则跳过,
+          否则按 legacy 转 UserMessage。这保证 Phase 1 部署前的 raw user turn 不丢
+        - 纯 v1 模式 (checkpoint != None) 下不消费 User/query: covered_until_event_id 之前的
+          User/query 已经被压缩进 base_messages, 之后的 User/query 必然有对应 user_turn_context
+        """
         if checkpoint is not None and checkpoint.get("content", {}).get("schema_version") == "history_checkpoint.v1":
             content = checkpoint["content"]
             after = content.get("covered_until_event_id")
@@ -1916,19 +1992,57 @@ class ModelHistoryRestorer:
                 )
                 return self._legacy_restore(session_id, spawn_id)
             messages = self._deserialize_messages(content["base_messages"])
+            hybrid_mode = False
         else:
             messages = []
             after = None
+            hybrid_mode = True
 
         events = self._get_events_after(session_id, after, spawn_id)
+
+        # Hybrid mode: 先收集已写 user_turn_context 的 invocation_id, 用于决定 User/query
+        # 是否被覆盖。纯 v1 模式不需要此集合 (User/query 全部跳过)。
+        covered_invocation_ids: set[str] = set()
+        if hybrid_mode:
+            for ev in events:
+                if ev.get("type") == "user_turn_context":
+                    inv = ev.get("invocation_id")
+                    if inv:
+                        covered_invocation_ids.add(inv)
 
         for event in events:
             etype = event.get("type")
             payload = event.get("content", {})
+            source = event.get("source", "")
 
             if etype == "user_turn_context":
                 msg_dict = payload.get("message", {})
                 messages.append(UserMessage.model_validate(msg_dict))
+
+            elif source == "User" and etype == "query":
+                # Hybrid v1: 仅消费未被 user_turn_context 覆盖的 User/query。
+                # 纯 v1 模式 (hybrid_mode=False) 一律跳过, 因为:
+                #   - covered_until_event_id 之前的 User/query 已在 base_messages
+                #   - 之后的 User/query 必然有对应 user_turn_context (Phase 1 起每轮必写)
+                if not hybrid_mode:
+                    continue
+                inv = event.get("invocation_id")
+                if inv and inv in covered_invocation_ids:
+                    continue
+                # COMPAT:hybrid-restore - 老 User/query 按 legacy 转 UserMessage,
+                # 保留 Phase 1 部署前的 raw user turn (Phase 4 该分支随 v0 退役一并删除)
+                if isinstance(payload, dict):
+                    user_text = payload.get("content") or ""
+                    image_urls = event.get("images")
+                    if image_urls is None:
+                        image_urls = payload.get("images") or []
+                else:
+                    user_text = str(payload or "")
+                    image_urls = event.get("images") or []
+                messages.append(UserMessage(
+                    content=str(user_text),
+                    images=[ImageContentPart(url=u) for u in image_urls if u],
+                ))
 
             elif etype == "assistant_state":
                 # tool_calls 分支的权威 (kernel agent.py:535)
@@ -1944,18 +2058,24 @@ class ModelHistoryRestorer:
                 # 自然结束分支 (kernel agent.py:498-513)
                 # 注意: 同一 turn 不会同时有 assistant_state(tool_calls) 和 response,
                 # 因为 kernel 二选一。重复出现按出现顺序 append (defensive)。
-                content = payload.get("content") or payload.get("text") or ""
-                reasoning = payload.get("reasoning_content")
+                if isinstance(payload, dict):
+                    content = payload.get("content") or payload.get("final_content") or payload.get("text") or ""
+                    reasoning = payload.get("reasoning_content")
+                else:
+                    content = str(payload or "")
+                    reasoning = None
                 messages.append(AssistantMessage(
                     content=content,
                     reasoning_content=reasoning,
                 ))
 
             elif etype == "tool_result":
+                if not isinstance(payload, dict):
+                    continue
                 messages.append(ToolMessage(
-                    content=payload.get("result", ""),
-                    tool_call_id=payload["call_id"],
-                    tool_name=payload.get("tool_name", ""),
+                    content=str(payload.get("result", "")),
+                    tool_call_id=str(payload.get("call_id") or payload.get("id") or ""),
+                    tool_name=str(payload.get("tool_name") or payload.get("name") or ""),
                 ))
             # 其他类型(skill_hit, thought, planner_reply, log_line, ...)跳过
 
@@ -1966,12 +2086,13 @@ class ModelHistoryRestorer:
         session_id: str,
         spawn_id: str | None,
     ) -> bool:
-        """Quick scan: 检查 session 是否有任何 user_turn_context 事件。
+        """EXISTS 查询: 检查 session/scope 是否有任何 user_turn_context 事件。
 
-        用于无 checkpoint 时判定走 v1 还是 v0。实现可以查 events 表 EXISTS。
+        用于无 checkpoint 时判定走 v1 还是 v0。不要用
+        get_session_events(limit=N) 做探测；该 DAO 返回最早的 N 条事件，
+        长 session 会漏掉后续 Phase 1 写入的 user_turn_context。
         """
-        events = self._get_events_after(session_id, None, spawn_id)
-        return any(e.get("type") == "user_turn_context" for e in events[:200])
+        return self._has_user_turn_context(session_id, spawn_id)
 
     @staticmethod
     def _deserialize_messages(raw: list[dict[str, Any]]) -> list[Message]:
@@ -2008,6 +2129,29 @@ v3 选 A，理由：
 
 方案 B 留作未来 phase（独立 spec）。
 
+### 11.2.1 Hybrid v1 与混合 session 不丢老 User/query 的保证（v3.3 新增）
+
+Phase 1 部署后会出现一类"混合 session": 部署前已有若干 raw `User/query` + response 事件,
+部署后追加的轮才有 `user_turn_context`。这类 session 在 Phase 1 期间不会有 v1 checkpoint
+(写入路径仍输出 v0 marker, §14 Phase 1c), 进入 §11.1 的 hybrid v1 分支。
+
+**关键不变量**: hybrid v1 必须保留部署前的老 `User/query`, 否则模型视图会丢失老用户输入,
+LLM 看不到自己 "为什么会有那个 response", 行为不可预测。
+
+**实现要点** (与 §11.1 _restore_v1 一致):
+
+1. 先扫一遍 events 收集 `covered_invocation_ids` (所有 user_turn_context 的 invocation_id)
+2. 遍历 events 时, 对 `source == "User" and type == "query"`:
+   - 如果 invocation_id 在 covered_invocation_ids 中 → 跳过（被 user_turn_context 覆盖）
+   - 否则 → 按 legacy 转 UserMessage 追加（保留老输入）
+3. 其余事件类型按 §11.1 规则消费
+
+**Phase 4 退役**: hybrid 分支与 `COMPAT:v0-restore` 在 Phase 4 一并删除。前提:
+- 所有线上 session 的最新 user_turn_context / checkpoint 已超过 30 天
+- 或产品确认不再恢复 Phase 1 之前的 session
+
+退役后 v1 restore 不再消费 User/query (硬约束 §4.1 #1 保证 Phase 1+ 每个 invocation 必有 utc)。
+
 ### 11.3 `src/services/` 的 DI 实现
 
 ```python
@@ -2031,6 +2175,9 @@ def build_model_restorer(events_dao: ChatEventsTable) -> ModelHistoryRestorer:
         )
         return [{"id": r.id, "type": r.event_type, "content": r.content} for r in rows]
 
+    def has_user_turn_context(session_id: str, spawn_id: str | None) -> bool:
+        return events_dao.has_user_turn_context(session_id, spawn_id)
+
     def legacy_restore(session_id: str, spawn_id: str | None) -> list[Message]:
         events = events_dao.get_session_events(session_id, include_spawn=False)
         dialog = ChatHistoryConverter.events_to_dialog_messages(events)
@@ -2039,6 +2186,7 @@ def build_model_restorer(events_dao: ChatEventsTable) -> ModelHistoryRestorer:
     return ModelHistoryRestorer(
         get_latest_checkpoint=get_latest_checkpoint,
         get_events_after=get_events_after,
+        has_user_turn_context=has_user_turn_context,
         legacy_restore=legacy_restore,
     )
 ```
