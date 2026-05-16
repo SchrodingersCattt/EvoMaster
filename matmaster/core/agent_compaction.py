@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 async def run_compaction_plan(
     *,
-    spec: "AgentRuntimeSpec",
+    spec: AgentRuntimeSpec,
     state: _KernelState,
     plan: Any,
     checkpoint_sink: Any,
@@ -120,7 +120,7 @@ async def run_compaction_plan(
 
 async def run_preflight_compaction_if_needed(
     *,
-    spec: "AgentRuntimeSpec",
+    spec: AgentRuntimeSpec,
     state: _KernelState,
     history: list | None,
     current_input_context: CurrentInputContext | None,
@@ -130,9 +130,7 @@ async def run_preflight_compaction_if_needed(
     if not spec.compactor:
         return
     spec.compactor.update_message_count(len(state.messages))
-    preflight_planner = getattr(
-        spec.compactor, "plan_preflight_compaction", None
-    )
+    preflight_planner = getattr(spec.compactor, "plan_preflight_compaction", None)
     if callable(preflight_planner):
         skip_preflight_for_empty_history = (
             current_input_context is not None
@@ -159,7 +157,7 @@ async def run_preflight_compaction_if_needed(
 
 async def run_runtime_compaction_if_needed(
     *,
-    spec: "AgentRuntimeSpec",
+    spec: AgentRuntimeSpec,
     state: _KernelState,
     turn_usage: dict,
     checkpoint_sink: Any,
@@ -167,9 +165,7 @@ async def run_runtime_compaction_if_needed(
     """Verbatim move of the inline runtime-compaction dispatch."""
     if not spec.compactor:
         return
-    runtime_planner = getattr(
-        spec.compactor, "plan_runtime_compaction", None
-    )
+    runtime_planner = getattr(spec.compactor, "plan_runtime_compaction", None)
     if callable(runtime_planner):
         plan = await runtime_planner(
             state.messages,
@@ -185,6 +181,4 @@ async def run_runtime_compaction_if_needed(
             ):
                 yield item
     else:
-        await spec.compactor.compact_if_needed(
-            state.messages, turn_usage, state.turn
-        )
+        await spec.compactor.compact_if_needed(state.messages, turn_usage, state.turn)

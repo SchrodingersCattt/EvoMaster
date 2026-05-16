@@ -328,9 +328,9 @@ def test_restore_v1_roundtrip_from_user_turn_context_event() -> None:
         {
             "schema_version": "user_turn_context.v1",
             "kind": "anchor",
-            "message": UserMessage(
-                content="provider-facing question"
-            ).model_dump(mode="json"),
+            "message": UserMessage(content="provider-facing question").model_dump(
+                mode="json"
+            ),
             "user_instructions_hash": "sha256:abc",
             "transform": "raw",
             "render_version": "user_context_render.v1",
