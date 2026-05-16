@@ -261,16 +261,11 @@ class AgentKernel:
             ImageContentPart.model_validate(image)
             for image in spec.meta.get("current_user_images", [])
         ]
-        attachment_text = str(spec.meta.get("attachment_manifest") or "")
-        user_content = spec.context_builder.build_user_request(
-            user_text=task,
-            attachments=attachment_text,
-        )
         state = _KernelState(
             messages=[
                 SystemMessage(content=spec.system_prompt),
                 *(history or []),
-                UserMessage(content=user_content, images=current_user_images),
+                UserMessage(content=task, images=current_user_images),
             ]
         )
 

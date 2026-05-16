@@ -462,6 +462,36 @@ class TestRunItemsAssistantState:
     """_run_items() yields AssistantStateEvent on tool_calls turns."""
 
     @pytest.mark.asyncio
+    async def test_run_stream_uses_preassembled_task_content_without_legacy_wrap(
+        self,
+    ) -> None:
+        """Phase 2C: kernel passes service-assembled task content through."""
+        from matmaster.core.agent import AgentKernel
+
+        provider = RecordingContentProvider()
+        task = (
+            "<user_instructions>\nUse SI units.\n</user_instructions>"
+            "\n\n"
+            "<current_instruction>\nfit structure\n</current_instruction>"
+        )
+        spec = _make_spec(provider=provider).model_copy(
+            update={"meta": {"attachment_manifest": "ATTACHMENT-SHOULD-BE-IGNORED"}}
+        )
+        kernel = AgentKernel()
+
+        async for _event in kernel.run_stream(spec, task):
+            pass
+
+        assert provider.seen_messages
+        user_messages = [
+            message
+            for message in provider.seen_messages[0]
+            if message.get("role") == "user"
+        ]
+        assert user_messages[-1]["content"] == task
+        assert "ATTACHMENT-SHOULD-BE-IGNORED" not in user_messages[-1]["content"]
+
+    @pytest.mark.asyncio
     async def test_current_user_images_are_sent_as_content_parts(self) -> None:
         from matmaster.core.agent import AgentKernel
 
