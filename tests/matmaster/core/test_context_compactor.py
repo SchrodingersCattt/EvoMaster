@@ -34,16 +34,23 @@ class FakeRehydrator:
         return self.text
 
 
+def test_core_context_compactor_shim_reexports_new_implementation() -> None:
+    from matmaster.context.compaction import ContextCompactor as NewContextCompactor
+    from matmaster.core.context_compactor import ContextCompactor as ShimContextCompactor
+
+    assert ShimContextCompactor is NewContextCompactor
+
+
 class TestEstimateTokens:
     """Token estimation for messages."""
 
     def test_empty_list(self) -> None:
-        from matmaster.core.context_compactor import estimate_tokens
+        from matmaster.context.compaction import estimate_tokens
 
         assert estimate_tokens([]) == 0
 
     def test_single_message(self) -> None:
-        from matmaster.core.context_compactor import estimate_tokens
+        from matmaster.context.compaction import estimate_tokens
 
         msgs = [UserMessage(content="hello world")]
         tokens = estimate_tokens(msgs)
@@ -51,7 +58,7 @@ class TestEstimateTokens:
         assert tokens < 20
 
     def test_multiple_messages(self) -> None:
-        from matmaster.core.context_compactor import estimate_tokens
+        from matmaster.context.compaction import estimate_tokens
 
         msgs = [
             SystemMessage(content="You are helpful"),
@@ -63,7 +70,7 @@ class TestEstimateTokens:
         assert total > single
 
     def test_tool_message_content(self) -> None:
-        from matmaster.core.context_compactor import estimate_tokens
+        from matmaster.context.compaction import estimate_tokens
 
         long_result = "x" * 4000
         msgs = [ToolMessage(content=long_result, tool_call_id="tc-1", tool_name="t")]
@@ -75,7 +82,7 @@ class TestParseTurns:
     """Turn boundary detection for retention rule."""
 
     def test_simple_assistant_tool_turn(self) -> None:
-        from matmaster.core.context_compactor import parse_turns
+        from matmaster.context.compaction import parse_turns
 
         msgs = [
             SystemMessage(content="sys"),
@@ -93,7 +100,7 @@ class TestParseTurns:
         assert len(turns[1]) == 1
 
     def test_turn_includes_preceding_user_message(self) -> None:
-        from matmaster.core.context_compactor import parse_turns
+        from matmaster.context.compaction import parse_turns
 
         msgs = [
             SystemMessage(content="sys"),
@@ -111,7 +118,7 @@ class TestParseTurns:
         assert isinstance(turns[1][1], AssistantMessage)
 
     def test_empty_after_immutable(self) -> None:
-        from matmaster.core.context_compactor import parse_turns
+        from matmaster.context.compaction import parse_turns
 
         msgs = [
             SystemMessage(content="sys"),
@@ -121,7 +128,7 @@ class TestParseTurns:
         assert len(turns) == 0
 
     def test_multi_tool_calls_in_one_turn(self) -> None:
-        from matmaster.core.context_compactor import parse_turns
+        from matmaster.context.compaction import parse_turns
 
         msgs = [
             SystemMessage(content="sys"),
@@ -212,7 +219,7 @@ def _make_compactor(
     event_sink=None,
     compaction_scope: str = "root",
 ):
-    from matmaster.core.context_compactor import ContextCompactor
+    from matmaster.context.compaction import ContextCompactor
 
     return ContextCompactor(
         config=config,

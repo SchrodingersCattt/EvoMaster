@@ -16,7 +16,7 @@
 from __future__ import annotations
 
 from matmaster.core.context_builder import ContextBuilder
-from matmaster.core.context_compactor import (
+from matmaster.context.compaction import (
     ContextCompactor,
     estimate_tokens,
     parse_turns,
