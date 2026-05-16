@@ -249,6 +249,33 @@ def test_skill_hit_timestamp_bridge_equivalence() -> None:
     assert typed_records[0].timestamp == "2026-01-01T00:00:00"
 
 
+def test_legacy_skill_hit_dict_content_without_skill_name_is_ignored() -> None:
+    events = [
+        {
+            "id": 1,
+            "type": "skill_hit",
+            "content": {"content": "not-a-legacy-skill-name"},
+        }
+    ]
+
+    assert legacy_scan_skill_hits(events) == []
+
+
+def test_legacy_skill_hit_non_string_created_at_is_stringified() -> None:
+    events = [
+        {
+            "id": 1,
+            "type": "skill_hit",
+            "content": {"skill_name": "pxrd"},
+            "created_at": 12345,
+        }
+    ]
+
+    records = legacy_scan_skill_hits(events)
+
+    assert records[0].timestamp == "12345"
+
+
 def test_active_mcp_equivalence(tmp_path: Path) -> None:
     registry = _registry(
         tmp_path,

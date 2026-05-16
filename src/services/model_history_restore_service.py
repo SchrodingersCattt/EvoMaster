@@ -165,17 +165,6 @@ class ModelHistoryRestoreService:
         raw_events = ChatHistoryConverter.exclude_task_events(raw_events, task_id)
         return ChatHistoryConverter.events_to_messages(raw_events)
 
-    def _restore_legacy(
-        self,
-        session_id: str,
-        spawn_id: str | None,
-        task_id: str | None,
-        raw_limit: int | None,
-    ) -> list[Message]:
-        return trim_history_images(
-            self._restore_legacy_untrimmed(session_id, spawn_id, task_id, raw_limit)
-        )
-
     @staticmethod
     def _coerce_to_restorer_dict(event: dict[str, Any]) -> dict[str, Any]:
         if isinstance(event, dict):
