@@ -25,6 +25,12 @@ def test_empty_session_event_history_is_explicit_empty_reader() -> None:
     assert history.latest_checkpoint_covered_until_event_id() is None
 
 
+def test_empty_session_event_history_latest_scope_event_id_is_zero() -> None:
+    history = EmptySessionEventHistory()
+
+    assert history.latest_scope_event_id() == 0
+
+
 def test_playground_runtime_ports_defaults_are_narrow() -> None:
     ports = PlaygroundRuntimePorts()
 

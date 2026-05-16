@@ -17,6 +17,10 @@ class CompactionCheckpointPayload(TypedDict):
     durability: str
     strategy: str
     covered_until_event_id: NotRequired[int]
+    schema_version: NotRequired[str]
+    render_version: NotRequired[str]
+    user_instructions_text: NotRequired[str]
+    user_instructions_hash: NotRequired[str]
 
 
 @runtime_checkable
@@ -50,7 +54,19 @@ class SessionEventHistoryPort(Protocol):
 
     def all_events(self) -> list[dict[str, Any]]: ...
 
+    def query_context_events(
+        self,
+        *,
+        spawn_id: str | None,
+        until_event_id: int | None = None,
+        event_types: tuple[str, ...] | None = None,
+        limit: int | None = None,
+        order: str = "asc",
+    ) -> list[dict[str, Any]]: ...
+
     def latest_checkpoint_covered_until_event_id(self) -> int | None: ...
+
+    def latest_scope_event_id(self) -> int | None: ...
 
 
 @dataclass(frozen=True)
@@ -61,8 +77,22 @@ class EmptySessionEventHistory:
     def all_events(self) -> list[dict[str, Any]]:
         return []
 
+    def query_context_events(
+        self,
+        *,
+        spawn_id: str | None,
+        until_event_id: int | None = None,
+        event_types: tuple[str, ...] | None = None,
+        limit: int | None = None,
+        order: str = "asc",
+    ) -> list[dict[str, Any]]:
+        return []
+
     def latest_checkpoint_covered_until_event_id(self) -> int | None:
         return None
+
+    def latest_scope_event_id(self) -> int | None:
+        return 0
 
 
 @dataclass(frozen=True)

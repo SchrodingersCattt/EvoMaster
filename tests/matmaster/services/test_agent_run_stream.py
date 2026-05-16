@@ -173,6 +173,7 @@ async def test_agent_run_service_keeps_compaction_history_without_attachment_run
                 "files": ["https://oss.example.com/chat/data.csv"],
             }
         ]
+        svc._test_events_table.get_latest_scope_event_id.return_value = 25
 
         await svc.run_agent(
             session_id='sess-attachments',
@@ -194,6 +195,24 @@ async def test_agent_run_service_keeps_compaction_history_without_attachment_run
     ]
     assert callable(history.all_events)
     assert callable(history.latest_checkpoint_covered_until_event_id)
+    assert history.latest_scope_event_id() == 25
+    history.query_context_events(
+        spawn_id=None,
+        until_event_id=10,
+        event_types=("query",),
+    )
+    svc._test_events_table.get_latest_scope_event_id.assert_called_with(
+        "sess-attachments",
+        None,
+    )
+    svc._test_events_table.query_context_events.assert_called_with(
+        session_id="sess-attachments",
+        spawn_id=None,
+        until_event_id=10,
+        event_types=("query",),
+        limit=None,
+        order="asc",
+    )
     assert callable(
         svc._test_fake_exp.last_ctx.runtime_ports.compaction.pre_compaction_barrier
     )

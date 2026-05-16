@@ -168,6 +168,10 @@ class CompactionResult:
     failure_reason: str | None
     base_snapshot: list[dict[str, Any]] | None
     checkpoint_covered_until_event_id: int | None = None
+    user_instructions_text: str = ""
+    user_instructions_hash: str = (
+        "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    )
 
 
 class ContextCompactor:

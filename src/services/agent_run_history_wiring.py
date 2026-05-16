@@ -123,6 +123,43 @@ def build_history_wiring(
                         return None
         return None
 
+    def _get_latest_scope_event_id() -> int | None:
+        if events_table is None:
+            return 0
+        try:
+            raw = events_table.get_latest_scope_event_id(session_id, None)
+        except Exception:
+            logger.warning("manifest: get_latest_scope_event_id failed", exc_info=True)
+            return None
+        try:
+            return int(raw) if raw is not None else 0
+        except (TypeError, ValueError):
+            return None
+
+    def _query_context_events(
+        *,
+        spawn_id: str | None,
+        until_event_id: int | None = None,
+        event_types: tuple[str, ...] | None = None,
+        limit: int | None = None,
+        order: str = "asc",
+    ) -> list[dict[str, Any]]:
+        if events_table is None:
+            return []
+        try:
+            events = events_table.query_context_events(
+                session_id=session_id,
+                spawn_id=spawn_id,
+                until_event_id=until_event_id,
+                event_types=event_types,
+                limit=limit,
+                order=order,
+            )
+            return events if isinstance(events, list) else []
+        except Exception:
+            logger.warning("manifest: query_context_events failed", exc_info=True)
+            return []
+
     class _RunSessionEventHistory:
         def query_events(self) -> list[dict[str, Any]]:
             return _get_query_events()
@@ -130,8 +167,28 @@ def build_history_wiring(
         def all_events(self) -> list[dict[str, Any]]:
             return _get_all_events()
 
+        def query_context_events(
+            self,
+            *,
+            spawn_id: str | None,
+            until_event_id: int | None = None,
+            event_types: tuple[str, ...] | None = None,
+            limit: int | None = None,
+            order: str = "asc",
+        ) -> list[dict[str, Any]]:
+            return _query_context_events(
+                spawn_id=spawn_id,
+                until_event_id=until_event_id,
+                event_types=event_types,
+                limit=limit,
+                order=order,
+            )
+
         def latest_checkpoint_covered_until_event_id(self) -> int | None:
             return _get_latest_checkpoint_covered_until_event_id()
+
+        def latest_scope_event_id(self) -> int | None:
+            return _get_latest_scope_event_id()
 
     runtime_ports = PlaygroundRuntimePorts(
         child_event_forward_sink=child_event_sink,
