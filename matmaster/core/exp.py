@@ -754,6 +754,9 @@ class Exp:
             )
             return
 
+        # Core-layer registry is independent of the service-layer resolver
+        # registry. Service registry serves ActiveSkill prompt rendering; this
+        # registry serves SkillTool registration into ToolCatalog.
         skill_registry = SkillRegistry(
             roots,
             remote_session=ctx.session if remote_roots else None,
