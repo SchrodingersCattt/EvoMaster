@@ -9,6 +9,7 @@ test path (pytest.ini sets testpaths = tests). Run explicitly:
 from __future__ import annotations
 
 import json
+import os
 import time
 from unittest.mock import patch
 
@@ -109,6 +110,37 @@ def _run_pure_path_per_turn(messages: list) -> tuple[float, int]:
     return elapsed, dumps_count
 
 
+def _run_pipeline_per_turn(messages: list) -> tuple[float, int]:
+    """Same prefix-growth simulation, but through IncrementalMessagePipeline."""
+    from matmaster.core.message_pipeline import IncrementalMessagePipeline
+
+    dumps_count = 0
+    orig_dumps = json.dumps
+
+    def counting_dumps(*args, **kwargs):
+        nonlocal dumps_count
+        dumps_count += 1
+        return orig_dumps(*args, **kwargs)
+
+    boundaries = [2]
+    i = 2
+    while i < len(messages):
+        if isinstance(messages[i], AssistantMessage) and messages[i].tool_calls:
+            i += 1 + len(messages[i].tool_calls)
+            boundaries.append(i)
+        else:
+            i += 1
+
+    pipeline = IncrementalMessagePipeline()
+    start = time.perf_counter()
+    with patch("json.dumps", side_effect=counting_dumps):
+        for end in boundaries:
+            prefix = messages[:end]
+            pipeline.feed_tail(prefix)
+    elapsed = time.perf_counter() - start
+    return elapsed, dumps_count
+
+
 @pytest.mark.parametrize("label,num_turns,calls,arg_size", FIXTURE_CONFIGS)
 def test_pure_path_baseline(label: str, num_turns: int, calls: int, arg_size: int):
     messages = _build_fixture(num_turns, calls, arg_size)
@@ -118,3 +150,44 @@ def test_pure_path_baseline(label: str, num_turns: int, calls: int, arg_size: in
         f"turns={num_turns} calls/turn={calls} arg_size={arg_size}B "
         f"wall={elapsed * 1000:.2f}ms json.dumps_calls={dumps_count}"
     )
+
+
+@pytest.mark.parametrize("label,num_turns,calls,arg_size", FIXTURE_CONFIGS)
+def test_pipeline_path_improvement(
+    label: str,
+    num_turns: int,
+    calls: int,
+    arg_size: int,
+):
+    """Compare incremental pipeline against the pure-function path.
+
+    Pure and pipeline runs use independent fixtures. After E3 layer 1,
+    json.dumps is already cached per ToolCallData instance on both paths, so
+    dumps_count is a non-regression signal rather than the main improvement
+    metric. The expected improvement here is wall time from avoiding repeated
+    canonicalize/normalize/validate work over the already processed prefix.
+    """
+    pure_messages = _build_fixture(num_turns, calls, arg_size)
+    pure_elapsed, pure_dumps = _run_pure_path_per_turn(pure_messages)
+
+    pipe_messages = _build_fixture(num_turns, calls, arg_size)
+    pipe_elapsed, pipe_dumps = _run_pipeline_per_turn(pipe_messages)
+
+    speedup = pure_elapsed / pipe_elapsed if pipe_elapsed > 0 else float("inf")
+    dumps_ratio = pure_dumps / pipe_dumps if pipe_dumps > 0 else float("inf")
+
+    print(
+        f"\n[E3 IMPROVEMENT] fixture={label} "
+        f"turns={num_turns} calls/turn={calls} arg_size={arg_size}B"
+    )
+    print(f"  pure:     wall={pure_elapsed * 1000:.2f}ms dumps={pure_dumps}")
+    print(f"  pipeline: wall={pipe_elapsed * 1000:.2f}ms dumps={pipe_dumps}")
+    print(f"  speedup={speedup:.2f}x  dumps_ratio={dumps_ratio:.2f}x")
+
+    assert pure_dumps > 0
+    assert pipe_dumps <= pure_dumps
+
+    if os.environ.get("RUN_PERF_GATE") == "1" and label == "large":
+        assert speedup >= 2.0, (
+            f"large fixture speedup {speedup:.2f}x below 2x acceptance threshold"
+        )
