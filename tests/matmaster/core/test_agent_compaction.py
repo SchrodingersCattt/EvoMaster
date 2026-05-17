@@ -72,7 +72,9 @@ def _spec(provider: Provider, compactor: Compactor) -> AgentRuntimeSpec:
         llm_provider=provider,
         max_turns=10,
         runtime_ports=KernelRuntimePorts(),
-        compaction=CompactionConfig(context_limit=20_000, reserved_summary_tokens=1_000),
+        compaction=CompactionConfig(
+            context_limit=20_000, reserved_summary_tokens=1_000
+        ),
         system_prompt="sys",
         compactor=compactor,
         system_prompt_builder=object(),
@@ -94,7 +96,9 @@ def _plan(phase: str) -> CompactionPlan:
 async def test_compaction_plan_runner_summary_success_calls_apply_summary() -> None:
     provider = Provider("summary text")
     compactor = Compactor()
-    state = _KernelState(messages=[SystemMessage(content="sys"), UserMessage(content="old")])
+    state = _KernelState(
+        messages=[SystemMessage(content="sys"), UserMessage(content="old")]
+    )
     tools = [{"type": "function", "function": {"name": "tool"}}]
 
     events = [
@@ -122,7 +126,9 @@ async def test_compaction_plan_runner_summary_success_calls_apply_summary() -> N
 async def test_compaction_plan_runner_preflight_summary_failure_raises() -> None:
     provider = Provider(RuntimeError("network down"))
     compactor = Compactor()
-    state = _KernelState(messages=[SystemMessage(content="sys"), UserMessage(content="old")])
+    state = _KernelState(
+        messages=[SystemMessage(content="sys"), UserMessage(content="old")]
+    )
 
     with pytest.raises(RuntimeError, match="network down"):
         async for _item in run_compaction_plan(
@@ -141,7 +147,9 @@ async def test_compaction_plan_runner_preflight_summary_failure_raises() -> None
 async def test_compaction_plan_runner_runtime_summary_failure_uses_fallback() -> None:
     provider = Provider(RuntimeError("network down"))
     compactor = Compactor()
-    state = _KernelState(messages=[SystemMessage(content="sys"), UserMessage(content="old")])
+    state = _KernelState(
+        messages=[SystemMessage(content="sys"), UserMessage(content="old")]
+    )
 
     events = [
         item.event

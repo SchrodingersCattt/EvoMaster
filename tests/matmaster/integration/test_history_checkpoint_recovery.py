@@ -8,6 +8,7 @@ import pytest
 from matmaster.context.assembly import ContextAssembler
 from matmaster.context.compaction import CompactionPlan, ContextCompactor
 from matmaster.context.ports import ContextAssemblyPorts, UserInstructions
+from matmaster.core.runtime_context_assembly import build_session_context_factory
 from matmaster.skills.registry import SkillRegistry
 from matmaster.types.messages import (
     AssistantMessage,
@@ -17,7 +18,6 @@ from matmaster.types.messages import (
     UserMessage,
 )
 from matmaster.types.runtime import CompactionConfig
-from matmaster.core.runtime_context_assembly import build_session_context_factory
 from src.services.context_assembly_ports import AppSessionEventsPort, AppSessionJobsPort
 from src.services.history_checkpoint_codec import serialize_base_messages
 from src.services.history_checkpoint_service import HistoryCheckpointService

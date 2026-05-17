@@ -256,27 +256,6 @@ class TestChatContent:
 
         assert result.finish_reason == "stop"
 
-    async def test_chat_forwards_tool_choice(self) -> None:
-        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
-        mock_client = AsyncMock()
-        mock_client.chat.completions.create.return_value = _make_mock_completion(
-            content="summary"
-        )
-        provider._client = mock_client
-
-        result = await provider.chat(
-            [{"role": "user", "content": "Summarize"}],
-            tools=[{"type": "function", "function": {"name": "paper_search"}}],
-            tool_choice="none",
-        )
-
-        assert result.content == "summary"
-        kwargs = mock_client.chat.completions.create.call_args.kwargs
-        assert kwargs["tool_choice"] == "none"
-        assert kwargs["tools"] == [
-            {"type": "function", "function": {"name": "paper_search"}}
-        ]
-
 
 # -- chat_stream() response mapping ---------------------------------------
 

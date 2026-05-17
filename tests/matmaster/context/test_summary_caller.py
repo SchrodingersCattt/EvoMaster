@@ -253,9 +253,7 @@ class RecordingProvider:
 
 
 @pytest.mark.asyncio
-async def test_call_summary_llm_uses_real_messages_tools_and_tool_choice_none() -> (
-    None
-):
+async def test_call_summary_llm_uses_real_messages_tools_and_tool_choice_none() -> None:
     provider = RecordingProvider(content="structured summary")
     full_messages = [
         SystemMessage(content="main system"),

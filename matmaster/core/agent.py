@@ -18,6 +18,7 @@ import logging
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
+from matmaster.context.sources.turn_input import TurnInput
 from matmaster.core.agent_compaction import (
     run_preflight_compaction_if_needed,
     run_runtime_compaction_if_needed,
@@ -38,7 +39,6 @@ from matmaster.core.kernel_items import (
     _KernelStopRequested,
     _TerminalItem,
 )
-from matmaster.context.sources.turn_input import TurnInput
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.events import (
     AssistantStateEvent,

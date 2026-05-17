@@ -11,9 +11,9 @@ import logging
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
+from matmaster.context.sources.turn_input import TurnInput
 from matmaster.core.hooks import CompactionContext, HookEvent
 from matmaster.core.kernel_items import _KernelItem, _KernelState
-from matmaster.context.sources.turn_input import TurnInput
 from matmaster.types.events import CompactionEvent
 
 if TYPE_CHECKING:
@@ -72,7 +72,9 @@ async def run_compaction_plan(
         )
     except Exception as exc:
         if plan.phase == "preflight":
-            logger.warning("Preflight compaction summary failed; aborting", exc_info=True)
+            logger.warning(
+                "Preflight compaction summary failed; aborting", exc_info=True
+            )
             raise
         logger.warning(
             "Compaction #%d summary failed; falling back",
@@ -165,9 +167,7 @@ async def run_preflight_compaction_if_needed(
     preflight_planner = getattr(spec.compactor, "plan_preflight_compaction", None)
     if callable(preflight_planner):
         skip_preflight_for_empty_history = (
-            turn_input is not None
-            and turn_input.has_effective_input()
-            and not history
+            turn_input is not None and turn_input.has_effective_input() and not history
         )
         plan = (
             None

@@ -13,7 +13,6 @@ from matmaster.context.compaction import ContextCompactor
 from matmaster.context.ports import (
     ContextAssemblyPorts,
     SessionEvent,
-    SessionEventQuery,
     SessionJobs,
     SessionJobsQuery,
     UserInstructions,

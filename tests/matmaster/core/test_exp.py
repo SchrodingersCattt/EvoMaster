@@ -10,8 +10,8 @@ import pytest
 from matmaster.config.exp import ExpConfig, ExpSubagentMeta, ExpToolsConfig
 from matmaster.core.exp import Exp
 from matmaster.core.hooks import HookExecutor
-from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.core.playground import PlaygroundContext
+from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.runtime import (
     AgentRuntime,
     AgentRuntimeSpec,

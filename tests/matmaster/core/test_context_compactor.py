@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from matmaster.context.assembly import ContextAssembler
 from matmaster.context.ports import ContextAssemblyPorts, UserInstructions
 from matmaster.context.sections import ContextSection, ContextView, SectionOrder

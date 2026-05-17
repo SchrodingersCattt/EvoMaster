@@ -9,9 +9,9 @@ from unittest.mock import patch
 import pytest
 
 from matmaster.config.exp import ExpConfig
+from matmaster.context.system_prompt import SystemPromptBuilder
 from matmaster.core.agent import AgentKernel
 from matmaster.core.capability_policy import DefaultCapabilityPolicy
-from matmaster.context.system_prompt import SystemPromptBuilder
 from matmaster.core.exp import Exp
 from matmaster.core.hooks import (
     CompactionContext,
@@ -20,13 +20,13 @@ from matmaster.core.hooks import (
     HookOutcome,
     HookResult,
 )
+from matmaster.core.playground import PlaygroundContext
 from matmaster.core.structural_validation import StructuralValidation
 from matmaster.core.tool_runner import FullToolRunner
 from matmaster.core.tool_scheduler import ToolScheduler
 from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
-from matmaster.core.playground import PlaygroundContext
 from matmaster.types.events import (
     ResponseEvent,
     RunResultEvent,

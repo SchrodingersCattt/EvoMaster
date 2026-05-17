@@ -474,7 +474,9 @@ class ContextCompactor:
         covered_until_event_id = None
         if intent == ContextAssemblyIntent.RUNTIME_COMPACTION:
             if self._runtime_covered_until_provider is None:
-                raise ValueError("runtime compaction requires runtime_covered_until_provider")
+                raise ValueError(
+                    "runtime compaction requires runtime_covered_until_provider"
+                )
             covered_until_event_id = self._runtime_covered_until_provider()
             if covered_until_event_id is None:
                 raise ValueError("runtime_current_event_boundary_missing")

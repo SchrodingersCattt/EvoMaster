@@ -386,7 +386,9 @@ class TestAgentRuntimeSpecToolRuntimeV2Fields:
 
         runner = _StubToolRunner()
 
-        spec = AgentRuntimeSpec(system_prompt_builder=SystemPromptBuilder(), tool_runner=runner)
+        spec = AgentRuntimeSpec(
+            system_prompt_builder=SystemPromptBuilder(), tool_runner=runner
+        )
 
         assert spec.tool_runner is runner
 
@@ -412,7 +414,9 @@ class TestAgentRuntimeSpecToolRuntimeV2Fields:
             control_root="/tmp",
             workspace_root="/tmp/workspace",
         )
-        spec = AgentRuntimeSpec(system_prompt_builder=SystemPromptBuilder(), runtime_topology=topo)
+        spec = AgentRuntimeSpec(
+            system_prompt_builder=SystemPromptBuilder(), runtime_topology=topo
+        )
         assert spec.runtime_topology is topo
         assert spec.runtime_topology.session_kind == "local"
 
@@ -432,7 +436,9 @@ class TestAgentRuntimeSpecToolRuntimeV2Fields:
     def test_tool_runner_rejects_invalid_type(self) -> None:
         """tool_runner field rejects non-ToolRunner objects at construction."""
         with pytest.raises(ValidationError, match="tool_runner must be ToolRunner"):
-            AgentRuntimeSpec(system_prompt_builder=SystemPromptBuilder(), tool_runner=object())
+            AgentRuntimeSpec(
+                system_prompt_builder=SystemPromptBuilder(), tool_runner=object()
+            )
 
     def test_tool_catalog_rejects_invalid_type(self) -> None:
         """tool_catalog field rejects non-ToolCatalog objects at construction."""
@@ -447,7 +453,9 @@ class TestAgentRuntimeSpecToolRuntimeV2Fields:
         with pytest.raises(
             ValidationError, match="runtime_topology must be RuntimeTopology"
         ):
-            AgentRuntimeSpec(system_prompt_builder=SystemPromptBuilder(), runtime_topology=42)
+            AgentRuntimeSpec(
+                system_prompt_builder=SystemPromptBuilder(), runtime_topology=42
+            )
 
 
 # ── Types re-export from matmaster.types (Phase 32) ───
