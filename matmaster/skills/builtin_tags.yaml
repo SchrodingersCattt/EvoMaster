@@ -51,6 +51,7 @@ categories:
           - gromacs
           - gromacs-system-prep
           - grompp-remote-mdrun
+          - md-analysis
       gpumd:
         skills:
           - gpumd
@@ -58,9 +59,6 @@ categories:
         skills:
           - mlips
           - aissq-explorer
-      md-analysis:
-        skills:
-          - md-analysis
 
   analysis:
     groups:
