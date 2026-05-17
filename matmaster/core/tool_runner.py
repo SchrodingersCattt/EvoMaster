@@ -145,6 +145,19 @@ class FullToolRunner:
         Phase 1 (serial): validate each call through the constraint layers.
         Phase 2 (concurrent): execute all approved calls via asyncio.gather.
 
+        Argument immutability contract:
+        every consumer along this chain must treat the received arguments dict
+        as read-only. This applies to pre/post hooks, StructuralValidation,
+        input_validator callables, CapabilityPolicy, and tool_executor. In-place
+        edits such as arguments[k] = v, update(), pop(), clear(), or setdefault()
+        are forbidden because ToolCallData caches arguments_json and the runner
+        does not deep-copy the dict between consumers.
+
+        decision.modified_args is the sanctioned way for validation layers to
+        derive a changed argument set: it builds a fresh dict and keeps the
+        original tc.arguments untouched. Tool implementations that need adjusted
+        parameters must construct their own fresh dict.
+
         Returns list of (ToolCallData, ToolResult) in input order.
         """
         n = len(tool_calls)

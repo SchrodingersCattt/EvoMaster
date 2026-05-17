@@ -11,9 +11,10 @@ from __future__ import annotations
 import json
 import logging
 from enum import Enum
+from functools import cached_property
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +35,25 @@ class ToolCallData(BaseModel):
 
     arguments is dict[str, Any], not raw JSON string -- parsing is done
     at the provider boundary.
+
+    Immutability contract:
+    - frozen=True blocks field rebinding (tc.arguments = ...).
+    - Nested mutation of arguments (tc.arguments["k"] = v) is not blocked by
+      frozen and is forbidden by convention; it would stale arguments_json.
+    - Do not use model_copy(update={"arguments": ...}), because it would carry
+      the stale cached arguments_json. Construct a fresh ToolCallData instead.
     """
+
+    model_config = ConfigDict(frozen=True)
 
     id: str
     name: str
     arguments: dict[str, Any]
+
+    @cached_property
+    def arguments_json(self) -> str:
+        """JSON-serialized arguments, cached once per instance."""
+        return json.dumps(self.arguments)
 
 
 def _coerce_parsed_tool_arguments(value: Any) -> dict[str, Any] | None:
@@ -235,7 +250,7 @@ class AssistantMessage(Message):
                     "type": "function",
                     "function": {
                         "name": tc.name,
-                        "arguments": json.dumps(tc.arguments),
+                        "arguments": tc.arguments_json,
                     },
                 }
                 for tc in self.tool_calls
