@@ -36,10 +36,41 @@ _ZIP_EXCLUDE = frozenset(
 
 
 def _load_tags_config() -> dict[str, Any]:
+    """Load and normalize builtin_tags.yaml into a flat structure for downstream use.
+
+    The YAML uses a 3-level hierarchy: category → group → skill.
+    This function flattens it into:
+      - "tag_definitions": {group_id: display_name, ...}
+      - "skills": {skill_name: [group_id, ...], ...}
+      - "categories": original nested structure (passed to tools-server)
+    """
     if not _TAGS_FILE.exists():
         logger.warning("builtin_tags.yaml not found at %s", _TAGS_FILE)
         return {}
-    return yaml.safe_load(_TAGS_FILE.read_text(encoding="utf-8")) or {}
+    raw = yaml.safe_load(_TAGS_FILE.read_text(encoding="utf-8")) or {}
+
+    categories = raw.get("categories")
+    if not categories:
+        return raw
+
+    tag_definitions: dict[str, str] = {}
+    skills_map: dict[str, list[str]] = {}
+    skill_category_map: dict[str, str] = {}
+
+    for cat_id, cat in categories.items():
+        groups = cat.get("groups", {})
+        for group_id, group in groups.items():
+            tag_definitions[group_id] = group.get("name", group_id)
+            for skill_name in group.get("skills", []):
+                skills_map.setdefault(skill_name, []).append(group_id)
+                skill_category_map.setdefault(skill_name, cat_id)
+
+    return {
+        "tag_definitions": tag_definitions,
+        "skills": skills_map,
+        "skill_categories": skill_category_map,
+        "categories": categories,
+    }
 
 
 def _get_version() -> str:
@@ -133,6 +164,7 @@ def _scan_builtin_skills(
 ) -> list[dict[str, Any]]:
     """扫描 _SKILLS_ROOT 下的 SKILL.md，提取元信息 + 打包 zip。"""
     skill_tags_map: dict[str, list[str]] = tags_config.get("skills", {}) or {}
+    skill_category_map: dict[str, str] = tags_config.get("skill_categories", {}) or {}
     results: list[dict[str, Any]] = []
 
     if not _SKILLS_ROOT.exists():
@@ -170,6 +202,7 @@ def _scan_builtin_skills(
         result_item: dict[str, Any] = {
             "name": name,
             "description": description,
+            "category": skill_category_map.get(name),
             "tags": tags,
             "skill_dir": skill_dir,
             "zip_bytes": zip_bytes,
@@ -198,6 +231,7 @@ def sync_builtin_skills_to_tools_server() -> bool:
         return False
 
     tag_definitions = tags_config.get("tag_definitions") or {}
+    categories = tags_config.get("categories") or {}
     version = _get_version()
     build_seq = _get_build_seq()
 
@@ -210,6 +244,7 @@ def sync_builtin_skills_to_tools_server() -> bool:
             item: dict[str, Any] = {
                 "name": skill["name"],
                 "description": skill["description"],
+                "category": skill.get("category"),
                 "tags": skill.get("tags"),
                 "content_sha256": skill["content_sha256"],
                 "byte_size": skill["byte_size"],
@@ -229,12 +264,14 @@ def sync_builtin_skills_to_tools_server() -> bool:
                 object_key or "(upload failed)",
             )
 
-    payload = {
+    payload: dict[str, Any] = {
         "version": version,
         "build_seq": build_seq,
         "tag_definitions": tag_definitions,
         "skills": sync_items,
     }
+    if categories:
+        payload["categories"] = categories
 
     url = f"{base}/api/v1/skills/sync-builtin"
     try:
