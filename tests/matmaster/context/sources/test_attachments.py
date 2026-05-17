@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from matmaster.context.scanner import coerce_session_events
+from matmaster.context.ports import SessionEvent
 from matmaster.context.sections import ContextSection, ContextView, SectionOrder
 from matmaster.context.sources.attachments import (
     AttachmentEntry,
@@ -8,7 +8,6 @@ from matmaster.context.sources.attachments import (
     filter_entries_in_event_range,
     format_entries_text,
     scan_attachment_entries,
-    scan_legacy_attachment_entries,
 )
 
 _QUERY_EVENTS = [
@@ -39,8 +38,22 @@ _QUERY_EVENTS = [
 ]
 
 
+def _session_events(rows: list[dict]) -> tuple[SessionEvent, ...]:
+    events: list[SessionEvent] = []
+    for row in rows:
+        events.append(
+            SessionEvent(
+                id=int(row["id"]),
+                source=row.get("source"),
+                event_type=str(row.get("type") or ""),
+                content=row.get("content") or {"value": None},
+            )
+        )
+    return tuple(events)
+
+
 def test_scan_attachment_entries_dedup_and_label() -> None:
-    events = coerce_session_events(_QUERY_EVENTS)
+    events = _session_events(_QUERY_EVENTS)
 
     entries = scan_attachment_entries(events)
 
@@ -76,47 +89,8 @@ def test_scan_attachment_entries_dedup_and_label() -> None:
     )
 
 
-def test_scan_legacy_attachment_entries_reads_top_level_metadata_without_id() -> None:
-    rows = [
-        {
-            "source": "User",
-            "type": "query",
-            "content": "analyze attachments",
-            "files": ["https://oss.example.com/chat/data.csv"],
-            "images": ["https://oss.example.com/chat/em.png"],
-            "workspace_paths": ["/share/a.cif"],
-        }
-    ]
-
-    entries = scan_legacy_attachment_entries(rows)
-
-    assert entries == (
-        AttachmentEntry(
-            kind="file",
-            label="file_1",
-            name="data.csv",
-            value="https://oss.example.com/chat/data.csv",
-            source_event_id=None,
-        ),
-        AttachmentEntry(
-            kind="image",
-            label="image_1",
-            name="em.png",
-            value="https://oss.example.com/chat/em.png",
-            source_event_id=None,
-        ),
-        AttachmentEntry(
-            kind="workspace",
-            label="workspace_1",
-            name="/share/a.cif",
-            value="/share/a.cif",
-            source_event_id=None,
-        ),
-    )
-
-
 def test_filter_entries_in_event_range_window() -> None:
-    events = coerce_session_events(_QUERY_EVENTS)
+    events = _session_events(_QUERY_EVENTS)
     entries = scan_attachment_entries(events)
 
     filtered = filter_entries_in_event_range(entries, after_id=10, until_id=None)
@@ -125,7 +99,7 @@ def test_filter_entries_in_event_range_window() -> None:
 
 
 def test_format_entries_text_matches_legacy_shape() -> None:
-    events = coerce_session_events(_QUERY_EVENTS)
+    events = _session_events(_QUERY_EVENTS)
     entries = scan_attachment_entries(events)
 
     text = format_entries_text(entries)
@@ -141,7 +115,7 @@ def test_format_entries_text_empty() -> None:
 
 
 def test_source_to_sections_emits_runtime_plus_checkpoint() -> None:
-    events = coerce_session_events(_QUERY_EVENTS)
+    events = _session_events(_QUERY_EVENTS)
 
     source = SessionAttachmentsSource.from_events(events)
     sections = source.to_sections()
@@ -163,7 +137,7 @@ def test_source_to_sections_empty_returns_no_section() -> None:
 
 
 def test_source_from_events_respects_until_event_id() -> None:
-    events = coerce_session_events(_QUERY_EVENTS)
+    events = _session_events(_QUERY_EVENTS)
 
     source = SessionAttachmentsSource.from_events(events, until_event_id=10)
     text = source.to_sections()[0].content

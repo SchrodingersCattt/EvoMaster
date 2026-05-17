@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from matmaster.context.scanner import coerce_session_events
+from matmaster.context.ports import SessionEvent
 from matmaster.context.sections import ContextSection, ContextView, SectionOrder
 from matmaster.context.sources.skills import (
     SessionSkillsSource,
@@ -34,12 +34,16 @@ def test_resolve_active_skills_returns_registered_skills_in_event_order(
     tmp_path: Path,
 ) -> None:
     registry = _registry(tmp_path)
-    events = coerce_session_events(
-        [
-            {"id": 1, "type": "skill_hit", "content": {"skill_name": "pxrd"}},
-            {"id": 2, "type": "skill_hit", "content": {"skill_name": "mlip"}},
-            {"id": 3, "type": "skill_hit", "content": {"skill_name": "pxrd"}},
-        ]
+    events = (
+        SessionEvent(
+            id=1, event_type="skill_hit", source=None, content={"skill_name": "pxrd"}
+        ),
+        SessionEvent(
+            id=2, event_type="skill_hit", source=None, content={"skill_name": "mlip"}
+        ),
+        SessionEvent(
+            id=3, event_type="skill_hit", source=None, content={"skill_name": "pxrd"}
+        ),
     )
 
     skills = resolve_active_skills(events, registry)
@@ -50,18 +54,34 @@ def test_resolve_active_skills_returns_registered_skills_in_event_order(
 
 def test_resolve_active_skills_uses_skill_hit_events_only(tmp_path: Path) -> None:
     registry = _registry(tmp_path)
-    events = [
-        {
-            "type": "assistant_state",
-            "content": {"tool_calls": [{"name": "mat_xrd_read"}]},
-        },
-        {"type": "tool_call", "tool_name": "mat_xrd_read"},
-        {"id": 1, "type": "skill_hit", "content": {"skill_name": "pxrd"}},
-        {"id": 2, "type": "skill_hit", "content": {"skill_name": "mlip"}},
-        {"id": 3, "type": "skill_hit", "content": {"skill_name": "missing"}},
-    ]
+    events = (
+        SessionEvent(
+            id=1,
+            event_type="assistant_state",
+            source=None,
+            content={"tool_calls": ({"name": "mat_xrd_read"},)},
+        ),
+        SessionEvent(
+            id=2,
+            event_type="tool_call",
+            source=None,
+            content={"tool_name": "mat_xrd_read"},
+        ),
+        SessionEvent(
+            id=3, event_type="skill_hit", source=None, content={"skill_name": "pxrd"}
+        ),
+        SessionEvent(
+            id=4, event_type="skill_hit", source=None, content={"skill_name": "mlip"}
+        ),
+        SessionEvent(
+            id=5,
+            event_type="skill_hit",
+            source=None,
+            content={"skill_name": "missing"},
+        ),
+    )
 
-    skills = resolve_active_skills(coerce_session_events(events), registry)
+    skills = resolve_active_skills(events, registry)
 
     assert [skill.meta_info.name for skill in skills] == ["pxrd", "mlip"]
 
@@ -70,10 +90,13 @@ def test_resolve_active_skills_handles_missing_registry_lookup(
     tmp_path: Path,
 ) -> None:
     registry = _registry(tmp_path)
-    events = coerce_session_events(
-        [
-            {"id": 1, "type": "skill_hit", "content": {"skill_name": "unknown"}},
-        ]
+    events = (
+        SessionEvent(
+            id=1,
+            event_type="skill_hit",
+            source=None,
+            content={"skill_name": "unknown"},
+        ),
     )
 
     skills = resolve_active_skills(events, registry)
@@ -82,8 +105,10 @@ def test_resolve_active_skills_handles_missing_registry_lookup(
 
 
 def test_resolve_active_skills_with_none_registry_returns_empty() -> None:
-    events = coerce_session_events(
-        [{"id": 1, "type": "skill_hit", "content": {"skill_name": "pxrd"}}]
+    events = (
+        SessionEvent(
+            id=1, event_type="skill_hit", source=None, content={"skill_name": "pxrd"}
+        ),
     )
 
     assert resolve_active_skills(events, None) == ()
@@ -91,8 +116,10 @@ def test_resolve_active_skills_with_none_registry_returns_empty() -> None:
 
 def test_format_loaded_skills_emits_legacy_header(tmp_path: Path) -> None:
     registry = _registry(tmp_path)
-    events = coerce_session_events(
-        [{"id": 1, "type": "skill_hit", "content": {"skill_name": "pxrd"}}]
+    events = (
+        SessionEvent(
+            id=1, event_type="skill_hit", source=None, content={"skill_name": "pxrd"}
+        ),
     )
 
     text = format_loaded_skills(resolve_active_skills(events, registry))
@@ -103,8 +130,10 @@ def test_format_loaded_skills_emits_legacy_header(tmp_path: Path) -> None:
 
 def test_session_skills_source_to_sections(tmp_path: Path) -> None:
     registry = _registry(tmp_path)
-    events = coerce_session_events(
-        [{"id": 1, "type": "skill_hit", "content": {"skill_name": "pxrd"}}]
+    events = (
+        SessionEvent(
+            id=1, event_type="skill_hit", source=None, content={"skill_name": "pxrd"}
+        ),
     )
 
     source = SessionSkillsSource.from_events(events, skill_registry=registry)
@@ -132,8 +161,10 @@ def test_session_skills_source_keeps_skills_for_downstream_tool_source(
     tmp_path: Path,
 ) -> None:
     registry = _registry(tmp_path)
-    events = coerce_session_events(
-        [{"id": 1, "type": "skill_hit", "content": {"skill_name": "pxrd"}}]
+    events = (
+        SessionEvent(
+            id=1, event_type="skill_hit", source=None, content={"skill_name": "pxrd"}
+        ),
     )
 
     source = SessionSkillsSource.from_events(events, skill_registry=registry)

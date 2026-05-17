@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from matmaster.context.scanner import coerce_session_events
+from matmaster.context.ports import SessionEvent
 from matmaster.context.sections import ContextSection, ContextView, SectionOrder
 from matmaster.context.sources.skills import resolve_active_skills
 from matmaster.context.sources.tools import (
@@ -46,11 +46,15 @@ def _write_skill(root: Path, name: str, mcp_server: str) -> None:
 
 def _skills(root: Path):
     registry = SkillRegistry([root])
-    events = [
-        {"id": 1, "type": "skill_hit", "content": {"skill_name": "pxrd"}},
-        {"id": 2, "type": "skill_hit", "content": {"skill_name": "sg"}},
-    ]
-    return resolve_active_skills(coerce_session_events(events), registry)
+    events = (
+        SessionEvent(
+            id=1, event_type="skill_hit", source=None, content={"skill_name": "pxrd"}
+        ),
+        SessionEvent(
+            id=2, event_type="skill_hit", source=None, content={"skill_name": "sg"}
+        ),
+    )
+    return resolve_active_skills(events, registry)
 
 
 def test_resolve_declared_servers_dedup() -> None:
