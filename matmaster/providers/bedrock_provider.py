@@ -344,10 +344,17 @@ class BedrockProvider:
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+        *,
+        tool_choice: str | dict | None = None,
     ) -> LLMResponse:
         from botocore.exceptions import ClientError
 
         from matmaster.types.errors import LLMError
+
+        if tool_choice is not None and tool_choice != "none":
+            raise NotImplementedError(
+                f"bedrock_provider does not yet support tool_choice={tool_choice!r}"
+            )
 
         client = self._ensure_client()
         kwargs = self._converse_kwargs(messages, tools)
