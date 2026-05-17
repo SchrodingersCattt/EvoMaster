@@ -187,13 +187,14 @@ DOS-specific parameters:
 | `dos_sigma` | `0.07` | Gaussian smearing width (eV) |
 | `dos_nche` | `100` | Chebyshev expansion order for LCAO DOS |
 
-DOS KPT — **dense uniform mesh** (NOT line-mode):
+DOS KPT — **dense uniform mesh** (NOT line-mode, minimum 8×8×8 for bulk):
 ```
 K_POINTS
 0
 Gamma
 12 12 12 0 0 0
 ```
+> Even for expensive functionals (HSE, PBE0), the DOS k-mesh must remain dense. A sparse SCF mesh is acceptable to save cost, but the DOS NSCF step requires a dense mesh for smooth spectra — never copy the SCF mesh to DOS.
 
 ### Two-Step File Management on Bohrium
 
