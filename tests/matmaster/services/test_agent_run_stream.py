@@ -105,6 +105,30 @@ async def test_run_agent_injects_child_event_forward_sink_into_runtime_ports():
 
 
 @pytest.mark.asyncio
+async def test_run_agent_passes_session_id_to_playground_prepare():
+    run_result = RunResultEvent(source='agent', status='completed', reason='natural')
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        ok, _elapsed = await svc.run_agent(
+            session_id='sess-explicit',
+            user_prompt='hello',
+            send_cb=AsyncMock(),
+            cancel_token=_make_cancel_token(),
+            mode='direct',
+            task_id='task-1',
+            invocation_id='inv-prepare-session',
+        )
+
+    assert ok is True
+    prepare_call = svc._test_playground.prepare.call_args
+    assert prepare_call.args == ()
+    assert prepare_call.kwargs["session_id"] == "sess-explicit"
+    assert prepare_call.kwargs["task_id"] == "task-1"
+    assert "session_id" not in svc._test_fake_exp.last_ctx.run_meta
+    assert svc._test_fake_exp.last_ctx.session_id == "sess-explicit"
+
+
+@pytest.mark.asyncio
 async def test_run_agent_injects_figure_upload_via_runtime_ports():
     run_result = RunResultEvent(
         source='MatMaster',
@@ -161,10 +185,7 @@ async def test_run_agent_injects_turn_input_into_pg_ctx_run_meta():
         )
 
     assert ok is True
-    assert (
-        svc._test_fake_exp.last_ctx.run_meta["turn_input"]
-        == turn_input
-    )
+    assert svc._test_fake_exp.last_ctx.run_meta["turn_input"] == turn_input
 
 
 @pytest.mark.asyncio

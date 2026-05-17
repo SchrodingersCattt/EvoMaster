@@ -24,7 +24,9 @@ def test_turn_instruction_source_returns_runtime_only_section() -> None:
 
 
 def test_turn_instruction_source_deferred_uses_last_order() -> None:
-    section = TurnInstructionSource(user_text="Continue.", deferred=True).to_sections()[0]
+    section = TurnInstructionSource(user_text="Continue.", deferred=True).to_sections()[
+        0
+    ]
 
     assert section.order == SectionOrder.TURN_INSTRUCTION_LAST
 
@@ -119,6 +121,19 @@ def test_turn_input_has_effective_input_and_images_as_parts() -> None:
     assert with_image.attachments.images_as_parts() == (
         ImageContentPart(url="https://example.com/a.png"),
     )
+
+
+def test_turn_input_images_as_parts_preserves_image_detail() -> None:
+    turn_input = TurnInput.from_values(
+        user_text="看图",
+        images=["https://oss.example.com/a.png"],
+        image_detail="high",
+    )
+
+    assert turn_input.attachments.images_as_parts() == (
+        ImageContentPart(url="https://oss.example.com/a.png", detail="high"),
+    )
+    assert TurnInput.from_payload(turn_input.to_payload()) == turn_input
 
 
 def test_turn_input_rejects_negative_history_boundary() -> None:

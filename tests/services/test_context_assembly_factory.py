@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import inspect
+
 import pytest
 
 from matmaster.context.ports import ActiveSkill, SessionEvent
@@ -39,8 +41,6 @@ def test_factory_returns_session_context_builder_with_injected_dependencies(
 
     factory = build_session_context_factory(
         skill_resolver=resolver,
-        legal_mcp_servers={"bohrium"},
-        schemas_by_server={"bohrium": [{"name": "submit_job"}]},
     )
 
     builder = factory(sample_events)
@@ -48,30 +48,25 @@ def test_factory_returns_session_context_builder_with_injected_dependencies(
     assert isinstance(builder, SessionContextBuilder)
     assert builder.events is sample_events
     assert builder.active_skills == (ActiveSkill(name="pxrd", mcp_server="bohrium"),)
-    assert builder.legal_mcp_servers == {"bohrium"}
-    assert builder.schemas_by_server == {"bohrium": [{"name": "submit_job"}]}
-
-
-def test_factory_passes_none_legal_servers_through(
-    sample_events: tuple[SessionEvent, ...],
-) -> None:
-    factory = build_session_context_factory(
-        skill_resolver=_empty_resolver,
-        legal_mcp_servers=None,
-        schemas_by_server=None,
-    )
-
-    builder = factory(sample_events)
-
     assert builder.legal_mcp_servers is None
     assert builder.schemas_by_server is None
+
+
+def test_context_assembly_factories_do_not_accept_run_meta_ghost_options() -> None:
+    from src.services.context_assembly_factory import build_context_assembler
+
+    assert set(inspect.signature(build_session_context_factory).parameters) == {
+        "skill_resolver"
+    }
+    assert set(inspect.signature(build_context_assembler).parameters) == {
+        "events_table",
+        "skill_resolver",
+    }
 
 
 def test_factory_accepts_empty_events_and_returns_buildable_sections() -> None:
     factory = build_session_context_factory(
         skill_resolver=_empty_resolver,
-        legal_mcp_servers=None,
-        schemas_by_server=None,
     )
 
     builder = factory(())
@@ -83,8 +78,6 @@ def test_factory_accepts_empty_events_and_returns_buildable_sections() -> None:
 def test_factory_rejects_non_tuple_events_via_session_builder_invariant() -> None:
     factory = build_session_context_factory(
         skill_resolver=_empty_resolver,
-        legal_mcp_servers=None,
-        schemas_by_server=None,
     )
 
     with pytest.raises(TypeError, match="must be a tuple of SessionEvent"):
@@ -102,13 +95,8 @@ def test_build_context_assembler_wires_ports_and_render_options() -> None:
     assembler, ports = build_context_assembler(
         events_table=EventsTable(),
         skill_resolver=_empty_resolver,
-        legal_mcp_servers=None,
-        schemas_by_server=None,
-        split_turn_attachments=True,
     )
 
     assert isinstance(assembler, ContextAssembler)
     assert ports.session_jobs is not None
-    assert assembler._render_options == ContextRenderOptions(
-        split_turn_attachments=True
-    )
+    assert assembler._render_options == ContextRenderOptions()

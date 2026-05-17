@@ -234,7 +234,8 @@ class TestExpWiring:
             execution_workdir=str(tmp_path / "exec"),
             session_type="local",
             cache_area=tmp_path / "cache",
-            run_meta={"task_id": "task-1", "session_id": "session-1"},
+            session_id="session-1",
+            run_meta={"task_id": "task-1"},
             llm_provider=MockLLMProvider(),
         )
 
@@ -268,7 +269,7 @@ class TestExpWiring:
             execution_workdir=str(tmp_path / "exec"),
             session_type="local",
             cache_area=tmp_path / "cache",
-            run_meta={"session_id": "session-1"},
+            session_id="session-1",
             llm_provider=MockLLMProvider(),
         )
 
@@ -321,7 +322,7 @@ class TestExpWiring:
             execution_workdir=str(tmp_path / "exec"),
             session_type="local",
             cache_area=tmp_path / "cache",
-            run_meta={"session_id": "session-1"},
+            session_id="session-1",
             llm_provider=MockLLMProvider(),
             runtime_ports=PlaygroundRuntimePorts(
                 child_event_forward_sink=sink,
@@ -381,7 +382,7 @@ class TestExpWiring:
             execution_workdir=str(tmp_path / "exec"),
             session_type="local",
             cache_area=tmp_path / "cache",
-            run_meta={"session_id": "session-1"},
+            session_id="session-1",
             llm_provider=MockLLMProvider(),
             runtime_ports=PlaygroundRuntimePorts(
                 child_event_forward_sink=sink,
@@ -425,7 +426,7 @@ class TestExpWiring:
             execution_workdir=str(tmp_path / "exec"),
             session_type="local",
             cache_area=tmp_path / "cache",
-            run_meta={"session_id": "session-1"},
+            session_id="session-1",
             llm_provider=MockLLMProvider(),
         )
 
@@ -782,7 +783,7 @@ class TestSpawnGuardWiring:
             execution_workdir=str(tmp_path / "exec"),
             session_type="local",
             cache_area=tmp_path / "cache",
-            run_meta={"session_id": "session-1"},
+            session_id="session-1",
             llm_provider=MockLLMProvider(),
         )
 
@@ -845,10 +846,12 @@ class TestSpawnGuardWiring:
             execution_workdir=str(tmp_path / "exec"),
             session_type="local",
             cache_area=tmp_path / "cache",
-            run_meta={"session_id": "session-1"},
+            session_id="session-1",
             llm_provider=MockLLMProvider(),
         )
-        sentinel_resolver = lambda events: ()
+
+        def sentinel_resolver(events):
+            return ()
 
         with (
             patch(

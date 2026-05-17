@@ -165,9 +165,9 @@ async def test_build_runtime_passes_turn_input_to_kernel_meta(
     tmp_path: Path,
 ) -> None:
     from matmaster.config.exp import ExpConfig
+    from matmaster.context.sources.turn_input import TurnInput
     from matmaster.core.exp import Exp
     from matmaster.core.playground import PlaygroundContext
-    from matmaster.context.sources.turn_input import TurnInput
 
     turn_input = TurnInput.from_values(
         user_text="current task",
@@ -257,6 +257,27 @@ class TestBuildRuntimeFullToolRunner:
 
         assert runtime.spec.tool_catalog is not None
         assert isinstance(runtime.spec.tool_catalog, ToolCatalog)
+
+    @pytest.mark.asyncio
+    async def test_build_runtime_meta_uses_explicit_session_id(self) -> None:
+        from matmaster.core.exp import Exp
+
+        config = _make_exp_config()
+        exp = Exp(config)
+        ctx = _make_playground_context().model_copy(
+            update={
+                "session_id": "sess-explicit",
+                "run_meta": {
+                    "task_id": "task-1",
+                    "session_id": "legacy-run-meta-session",
+                },
+            }
+        )
+
+        runtime = await exp.build_runtime(ctx)
+
+        assert runtime.spec.meta["task_id"] == "task-1"
+        assert runtime.spec.meta["session_id"] == "sess-explicit"
 
     @pytest.mark.asyncio
     async def test_spec_has_runtime_topology(self) -> None:

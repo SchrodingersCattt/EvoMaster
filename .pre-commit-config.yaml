@@ -61,6 +61,7 @@ repos:
         exclude: |
           (?x)^(
             tests/matmaster/core/agent_kernel_test_helpers.py|
+            tests/matmaster/services/agent_run_stream_fixtures.py|
             tests/evaluation/capability_abbrev.py
           )$
       - id: no-commit-to-branch

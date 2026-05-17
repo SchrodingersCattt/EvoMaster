@@ -63,8 +63,6 @@ def _make_compactor_for_table(
         ),
         session_context_factory=build_session_context_factory(
             skill_resolver=empty_skill_resolver,
-            legal_mcp_servers=None,
-            schemas_by_server=None,
         ),
     )
     return ContextCompactor(

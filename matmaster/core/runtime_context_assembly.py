@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import logging
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
 
 from matmaster.context.assembly import ContextAssembler, ContextRenderOptions
 from matmaster.context.compaction import ContextCompactor
@@ -46,15 +45,11 @@ def _hash_user_instructions(text: str) -> str:
 def build_session_context_factory(
     *,
     skill_resolver: SkillResolver,
-    legal_mcp_servers: set[str] | None,
-    schemas_by_server: Mapping[str, list[Mapping[str, Any]]] | None,
 ) -> SessionContextFactory:
     def factory(events: tuple[SessionEvent, ...]) -> SessionContextBuilder:
         return SessionContextBuilder(
             events=events,
             active_skills=skill_resolver(events),
-            legal_mcp_servers=legal_mcp_servers,
-            schemas_by_server=schemas_by_server,
         )
 
     return factory
@@ -99,12 +94,8 @@ def build_runtime_context_assembly(
         ports=assembly_ports,
         session_context_factory=build_session_context_factory(
             skill_resolver=skill_resolver,
-            legal_mcp_servers=run_meta.get("legal_mcp_servers"),
-            schemas_by_server=run_meta.get("schemas_by_server"),
         ),
-        render_options=ContextRenderOptions(
-            split_turn_attachments=bool(run_meta.get("split_turn_attachments", False)),
-        ),
+        render_options=ContextRenderOptions(),
     )
 
     return RuntimeContextAssembly(
@@ -112,7 +103,7 @@ def build_runtime_context_assembly(
             config=spec.compaction,
             context_assembler=context_assembler,
             user_instructions=user_instructions,
-            session_id=run_meta.get("session_id") or "",
+            session_id=ctx.session_id,
             spawn_id=spawn_id,
             runtime_covered_until_provider=history_port.latest_scope_event_id,
             event_sink=None,

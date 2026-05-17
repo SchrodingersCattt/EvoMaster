@@ -29,9 +29,9 @@ from matmaster.context.ports import SkillResolver
 from matmaster.context.system_prompt import SystemPromptBuilder
 from matmaster.core.hooks import HookEvent, HookExecutor, SubagentContext
 from matmaster.core.path_access import derive_path_access_roots
+from matmaster.core.playground import PlaygroundContext
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.cancellation import CancellationToken
-from matmaster.core.playground import PlaygroundContext
 from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec
 from matmaster.types.runtime_ports import KernelRuntimePorts
 
@@ -238,7 +238,7 @@ class Exp:
             child_exp = Exp(child_config, allow_spawn=False)
             child_source = f"{source_prefix}:{exp_name}"
             child_spawn_id = uuid.uuid4().hex[:16]
-            parent_session_id = ctx.run_meta.get("session_id", "")
+            parent_session_id = ctx.session_id
             event_sink = ctx.runtime_ports.child_event_forward_sink
 
             async def _forward_child_event(event: Any) -> None:
@@ -319,12 +319,13 @@ class Exp:
         base_meta: dict[str, Any],
         run_meta: dict[str, Any],
         *,
+        session_id: str,
         spawn_id: str | None,
     ) -> dict[str, Any]:
         meta = {
             **base_meta,
             "task_id": run_meta.get("task_id", ""),
-            "session_id": run_meta.get("session_id", ""),
+            "session_id": session_id,
             "spawn_id": spawn_id,
         }
         turn_input = run_meta.get("turn_input")
@@ -541,6 +542,7 @@ class Exp:
                 "meta": self._build_kernel_meta(
                     spec.meta,
                     run_meta,
+                    session_id=ctx.session_id,
                     spawn_id=spawn_id,
                 ),
             }
@@ -583,16 +585,6 @@ class Exp:
                 spawn_id=spawn_id,
             )
             spec = runtime.spec
-            current_user_images = ctx.run_meta.get("current_user_images")
-            if current_user_images:
-                spec = spec.model_copy(
-                    update={
-                        "meta": {
-                            **spec.meta,
-                            "current_user_images": current_user_images,
-                        }
-                    }
-                )
             if ctx.session is not None:
                 ctx.session._cancel_token = cancel_token
 

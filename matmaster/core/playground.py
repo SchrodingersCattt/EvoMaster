@@ -61,6 +61,7 @@ class PlaygroundContext(BaseModel):
 
     workdir: Path
     session_type: str
+    session_id: str = ""
     cache_area: Path
     # Resolved directory where tools execute (may differ from workdir for remote sessions).
     # Empty string means "default to str(workdir)" (see model validator).
@@ -97,7 +98,7 @@ class PlaygroundContext(BaseModel):
         session: Session | None,
         session_type: str,
         execution_workdir: str,
-    ) -> "PlaygroundContext":
+    ) -> PlaygroundContext:
         """Return a new frozen instance with execution binding fields updated."""
         return self.model_copy(
             update={
@@ -107,7 +108,7 @@ class PlaygroundContext(BaseModel):
             }
         )
 
-    def with_bohrium(self, snapshot: dict[str, Any]) -> "PlaygroundContext":
+    def with_bohrium(self, snapshot: dict[str, Any]) -> PlaygroundContext:
         """Return a new frozen instance with Bohrium snapshot in run_meta."""
         updated_meta = {**self.run_meta, "bohrium": snapshot}
         return self.model_copy(update={"run_meta": updated_meta})
@@ -115,17 +116,17 @@ class PlaygroundContext(BaseModel):
     def with_runtime_ports(
         self,
         runtime_ports: PlaygroundRuntimePorts,
-    ) -> "PlaygroundContext":
+    ) -> PlaygroundContext:
         """Return a new frozen instance with runtime capability ports updated."""
         return self.model_copy(update={"runtime_ports": runtime_ports})
 
-    def with_runtime_port(self, **fields: Any) -> "PlaygroundContext":
+    def with_runtime_port(self, **fields: Any) -> PlaygroundContext:
         """Return a new instance with selected runtime port fields replaced."""
         if not fields:
             return self
         return self.with_runtime_ports(replace(self.runtime_ports, **fields))
 
-    def with_run_meta(self, **fields: Any) -> "PlaygroundContext":
+    def with_run_meta(self, **fields: Any) -> PlaygroundContext:
         """Return a new frozen instance with ``run_meta`` keys merged."""
         if not fields:
             return self
@@ -145,7 +146,7 @@ class Playground:
             session_type="local",
             session_config={"workspace_path": "/tmp/ws"},
         )
-        ctx = pg.prepare({"run_dir": "/tmp/runs/run-001", "task_id": "t1"})
+        ctx = pg.prepare(run_dir="/tmp/runs/run-001", task_id="t1")
         # ... pass ctx to Exp.assemble() ...
         pg.cleanup()
     """
@@ -179,25 +180,34 @@ class Playground:
     # Public API
     # ------------------------------------------------------------------
 
-    def prepare(self, run_meta: dict[str, Any]) -> PlaygroundContext:
+    def prepare(
+        self,
+        *,
+        run_dir: str | Path | None = None,
+        task_id: str = "",
+        session_id: str = "",
+        session_override: Session | None = None,
+        **extra_run_meta: Any,
+    ) -> PlaygroundContext:
         """Create workspace, session, logging and return a frozen context.
 
         Args:
-            run_meta: Runtime metadata dict.  Recognised keys:
-                - ``run_dir``: base directory for this run (required for
-                  workspace/logging; str or Path)
-                - ``task_id``: per-task identifier (optional; determines
-                  workspace sub-path and log file name)
-                - ``session_override``: caller-owned session to reuse
-                  instead of creating a new one
+            run_dir: base directory for this run.
+            task_id: per-task identifier; determines workspace sub-path
+                and log file name.
+            session_id: explicit session identifier. It is intentionally
+                not copied into ``run_meta``.
+            session_override: caller-owned session to reuse instead of
+                creating a new one.
+            extra_run_meta: temporary metadata keys retained until P2
+                migrates ``run_meta`` to ``RunMetadata``.
 
         Returns:
             Immutable ``PlaygroundContext`` snapshot.
         """
-        workspace_path = self._resolve_workspace_path(run_meta)
+        workspace_path = self._resolve_workspace_path_explicit(run_dir, task_id)
         workspace_path.mkdir(parents=True, exist_ok=True)
 
-        session_override = run_meta.get('session_override')
         if session_override is not None:
             self.session = session_override
             self._owns_session = False
@@ -218,18 +228,24 @@ class Playground:
         cache_area = self._resolve_cache_area(workspace_path)
         cache_area.mkdir(parents=True, exist_ok=True)
 
-        self._setup_logging(run_meta)
+        self._setup_logging_explicit(run_dir, task_id)
 
-        run_meta_copy = dict(run_meta)
-        self._prepare_run_meta = run_meta_copy
+        run_meta = {
+            "run_dir": str(run_dir) if run_dir is not None else "",
+            "task_id": task_id,
+            **extra_run_meta,
+        }
+        assert "session_id" not in run_meta
+        self._prepare_run_meta = run_meta
         return PlaygroundContext(
             workdir=workspace_path,
             session_type=self._session_type,
+            session_id=session_id,
             cache_area=cache_area,
             execution_workdir=str(workspace_path),
             env_vars=self._collect_env_vars(),
             archival=self._archival,
-            run_meta=run_meta_copy,
+            run_meta=run_meta,
             session=self.session,
         )
 
@@ -368,40 +384,49 @@ class Playground:
             "Only 'local' and 'ssh' are supported."
         )
 
-    def _resolve_workspace_path(self, run_meta: dict[str, Any]) -> Path:
-        """Determine workspace directory path from run_meta.
+    def _resolve_workspace_path_explicit(
+        self,
+        run_dir: str | Path | None,
+        task_id: str = "",
+    ) -> Path:
+        """Determine workspace directory path from explicit run fields.
 
         - ``run_dir`` + ``task_id`` -> ``run_dir/workspaces/{task_id}``
         - ``run_dir`` only -> ``run_dir/workspace``
         - No ``run_dir`` -> ``workspace_base/default``
         """
-        run_dir_raw = run_meta.get('run_dir')
-        if run_dir_raw is None:
+        if run_dir in (None, ""):
             base = self._workspace_base or '/tmp/matmaster/workspaces'
             return Path(base) / 'default'
 
-        run_dir = Path(run_dir_raw)
-        task_id = run_meta.get('task_id')
         if task_id:
-            return run_dir / 'workspaces' / task_id
-        return run_dir / 'workspace'
+            return Path(run_dir) / 'workspaces' / task_id
+        return Path(run_dir) / 'workspace'
 
-    def _setup_logging(self, run_meta: dict[str, Any]) -> None:
+    def _resolve_workspace_path(self, run_meta: dict[str, Any]) -> Path:
+        """Determine workspace directory path from temporary run_meta."""
+        return self._resolve_workspace_path_explicit(
+            run_meta.get('run_dir'),
+            str(run_meta.get('task_id') or ""),
+        )
+
+    def _setup_logging_explicit(
+        self,
+        run_dir: str | Path | None,
+        task_id: str = "",
+    ) -> None:
         """Set up a file logger under ``<run_dir>/logs/{task_id}.log``.
 
         If ``run_dir`` is not provided, logging setup is skipped.
         """
         self._teardown_log_handler()
 
-        run_dir_raw = run_meta.get('run_dir')
-        if run_dir_raw is None:
+        if run_dir in (None, ""):
             return
 
-        run_dir = Path(run_dir_raw)
-        logs_dir = run_dir / 'logs'
+        logs_dir = Path(run_dir) / 'logs'
         logs_dir.mkdir(parents=True, exist_ok=True)
 
-        task_id = run_meta.get('task_id')
         log_filename = f"{task_id}.log" if task_id else 'playground.log'
         log_file = logs_dir / log_filename
 

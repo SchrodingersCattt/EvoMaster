@@ -13,8 +13,19 @@ def _make_mock_playground(pg_ctx: Any) -> Any:
     """Build a mock Playground that returns the given PlaygroundContext."""
     pg = MagicMock()
 
-    def _prepare(run_meta: dict[str, Any]) -> Any:
-        pg_ctx.run_meta = dict(run_meta)
+    def _prepare(
+        *,
+        run_dir: str | None = None,
+        task_id: str = "",
+        session_id: str = "",
+        **kwargs: Any,
+    ) -> Any:
+        pg_ctx.session_id = session_id
+        pg_ctx.run_meta = {
+            "run_dir": str(run_dir or ""),
+            "task_id": task_id,
+            **kwargs,
+        }
         return pg_ctx
 
     pg.prepare.side_effect = _prepare
@@ -29,6 +40,7 @@ def _make_mock_pg_ctx() -> MagicMock:
     ctx.workdir = '/tmp/workspace'
     ctx.execution_workdir = '/tmp/workspace'
     ctx.session = MagicMock()
+    ctx.session_id = ''
     ctx.session._cancel_token = None
     ctx.session.capabilities = MagicMock()
     ctx.session.path_exists.return_value = False
@@ -274,6 +286,7 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
             svc._active_skills = {}
             svc._test_fake_exp = fake_exp
             svc._test_pg_ctx = pg_ctx
+            svc._test_playground = pg
             svc._test_events_table = events_table_fn.return_value
             svc._test_bohrium_svc = bohrium_inst
 

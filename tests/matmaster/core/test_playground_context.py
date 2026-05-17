@@ -8,7 +8,11 @@ from unittest.mock import MagicMock
 import pytest
 from pydantic import ValidationError
 
-from matmaster.core.playground import PlaygroundContext, WorkspaceArchivalConfig
+from matmaster.core.playground import (
+    Playground,
+    PlaygroundContext,
+    WorkspaceArchivalConfig,
+)
 from matmaster.types.session import Session
 
 
@@ -72,11 +76,24 @@ class TestPlaygroundContext:
         ctx = PlaygroundContext(
             workdir=Path("/tmp/work"),
             session_type="docker",
+            session_id="sess-1",
             cache_area=Path("/tmp/cache"),
         )
         assert ctx.workdir == Path("/tmp/work")
         assert ctx.session_type == "docker"
+        assert ctx.session_id == "sess-1"
         assert ctx.cache_area == Path("/tmp/cache")
+
+    def test_playground_context_carries_explicit_session_id(self) -> None:
+        ctx = PlaygroundContext(
+            workdir=Path("/tmp/work"),
+            session_type="local",
+            session_id="sess-explicit",
+            cache_area=Path("/tmp/cache"),
+            run_meta={"session_id": "legacy"},
+        )
+
+        assert ctx.session_id == "sess-explicit"
 
     def test_execution_workdir_defaults_to_local_workdir(self) -> None:
         ctx = PlaygroundContext(
@@ -493,9 +510,7 @@ class TestPlaygroundContextRuntimePorts:
             ),
         )
 
-        updated = ctx.with_runtime_port(
-            figure_upload=FigureUploadPort(config=cfg)
-        )
+        updated = ctx.with_runtime_port(figure_upload=FigureUploadPort(config=cfg))
 
         assert updated is not ctx
         assert updated.runtime_ports.figure_upload.config is cfg
@@ -517,3 +532,23 @@ class TestPlaygroundContextRuntimePorts:
         )
 
         assert ctx.runtime_ports == ports
+
+
+class TestPlaygroundPrepareSessionId:
+    def test_prepare_does_not_leak_session_id_into_run_meta(self, tmp_path: Path):
+        run_dir = tmp_path / "run"
+        playground = Playground(session_type="local")
+
+        try:
+            ctx = playground.prepare(
+                run_dir=run_dir,
+                task_id="task-1",
+                session_id="sess-1",
+            )
+        finally:
+            playground.cleanup()
+
+        assert ctx.session_id == "sess-1"
+        assert ctx.run_meta["run_dir"] == str(run_dir)
+        assert ctx.run_meta["task_id"] == "task-1"
+        assert "session_id" not in ctx.run_meta

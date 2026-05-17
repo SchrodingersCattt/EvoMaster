@@ -25,8 +25,8 @@ from matmaster.context.ports import SkillResolver, UserInstructions
 from matmaster.context.scanner import scan_skill_hits
 from matmaster.context.sections import ContextView
 from matmaster.context.sources.turn_input import TurnInput
-from matmaster.core.runtime_context_assembly import empty_skill_resolver
 from matmaster.core.playground import PlaygroundManager
+from matmaster.core.runtime_context_assembly import empty_skill_resolver
 from matmaster.integration.event_payloads import _normalize_public_source
 from matmaster.integration.fanout import RunEventFanout
 from matmaster.integration.persistence_handler import PersistenceHandler
@@ -55,8 +55,8 @@ from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.image_input_service import get_image_input_service
 from src.services.quota_service import use_quota
 from src.services.response_figures_service import ResponseFiguresAccumulator
-from src.services.sessions_service import get_sessions_service
 from src.services.session_event_codec import decode_session_events
+from src.services.sessions_service import get_sessions_service
 from src.services.skill_registry_factory import build_skill_registry
 from src.services.skill_resolver import SkillRegistryResolver
 from src.services.stream_reply_queue import RedisReplyQueue
@@ -209,9 +209,7 @@ class AgentRunService:
         if until_event_id is not None:
             events = tuple(event for event in events if event.id <= until_event_id)
         names = frozenset(
-            record.skill_name
-            for record in scan_skill_hits(events)
-            if record.skill_name
+            record.skill_name for record in scan_skill_hits(events) if record.skill_name
         )
         self._active_skills[session_id] = names
         return names
@@ -272,10 +270,9 @@ class AgentRunService:
             playground = self._pg_manager.get_or_create(session_id)
             run_dir = str(_project_root / 'runs' / RUN_ID_WEB)
             pg_ctx = playground.prepare(
-                {
-                    'run_dir': run_dir,
-                    'task_id': task_id,
-                }
+                run_dir=run_dir,
+                task_id=task_id,
+                session_id=session_id,
             )
             if turn_input is not None:
                 pg_ctx = pg_ctx.with_run_meta(
@@ -355,7 +352,21 @@ class AgentRunService:
                 default_key=agent_default_llm,
             )
             selected_profile = llm_config.get_profile(resolved_llm.profile_key)
-            current_images = list(images or [])
+            top_level_images = tuple(images or ())
+            turn_input_images = turn_input.images if turn_input is not None else ()
+            current_images = turn_input_images or top_level_images
+            if (
+                turn_input_images
+                and top_level_images
+                and turn_input_images != top_level_images
+            ):
+                logger.warning(
+                    "run_agent image inputs differ; using TurnInput images "
+                    "session_id=%s task_id=%s",
+                    session_id,
+                    task_id,
+                )
+            image_detail = None
             if current_images:
                 selected_profile = get_image_input_service().ensure_vision_supported(
                     llm_config=llm_config,
@@ -363,13 +374,7 @@ class AgentRunService:
                     model_override=model_override,
                     default_profile_key=agent_default_llm,
                 )
-                image_parts: list[dict[str, Any]] = []
-                for image_url in current_images:
-                    image_part: dict[str, Any] = {'url': image_url}
-                    if selected_profile.vision_detail is not None:
-                        image_part['detail'] = selected_profile.vision_detail
-                    image_parts.append(image_part)
-                pg_ctx = pg_ctx.with_run_meta(current_user_images=image_parts)
+                image_detail = selected_profile.vision_detail
 
             pg_ctx = pg_ctx.model_copy(
                 update={
@@ -536,11 +541,6 @@ class AgentRunService:
             context_assembler, assembly_ports = build_context_assembler(
                 events_table=events_table,
                 skill_resolver=skill_resolver,
-                legal_mcp_servers=(pg_ctx.run_meta or {}).get("legal_mcp_servers"),
-                schemas_by_server=(pg_ctx.run_meta or {}).get("schemas_by_server"),
-                split_turn_attachments=bool(
-                    (pg_ctx.run_meta or {}).get("split_turn_attachments", False)
-                ),
             )
             session_events_port = assembly_ports.session_events
 
@@ -561,19 +561,29 @@ class AgentRunService:
             pre_turn_history_event_id = (
                 turn_input.pre_turn_history_event_id if turn_input is not None else 0
             )
-            turn_input = turn_input or TurnInput.from_values(
-                user_text=user_prompt,
-                files=(),
-                images=tuple(
-                    image["url"]
-                    for image in (pg_ctx.run_meta or {}).get(
-                        "current_user_images", ()
-                    )
-                    if isinstance(image, dict) and image.get("url")
-                ),
-                workspace_paths=(),
-                pre_turn_history_event_id=pre_turn_history_event_id,
-            )
+            if turn_input is None:
+                turn_input = TurnInput.from_values(
+                    user_text=user_prompt,
+                    files=(),
+                    images=current_images,
+                    image_detail=image_detail if current_images else None,
+                    workspace_paths=(),
+                    pre_turn_history_event_id=pre_turn_history_event_id,
+                )
+            elif current_images:
+                turn_input = TurnInput.from_values(
+                    user_text=turn_input.user_text,
+                    files=turn_input.files,
+                    images=current_images,
+                    image_detail=(
+                        image_detail
+                        if image_detail is not None
+                        else turn_input.attachments.image_detail
+                    ),
+                    workspace_paths=turn_input.workspace_paths,
+                    pre_turn_history_event_id=turn_input.pre_turn_history_event_id,
+                )
+            pg_ctx = pg_ctx.with_run_meta(turn_input=turn_input)
 
             assembly = await context_assembler.assemble_turn(
                 intent=intent,
@@ -629,9 +639,7 @@ class AgentRunService:
             def _remember_skill_hit(skill_name: str) -> None:
                 if skill_name:
                     current = self._active_skills.get(session_id, frozenset())
-                    self._active_skills[session_id] = frozenset(
-                        (*current, skill_name)
-                    )
+                    self._active_skills[session_id] = frozenset((*current, skill_name))
 
             pg_ctx = pg_ctx.with_run_meta(active_skills=frozenset(active_skills))
 
@@ -643,7 +651,6 @@ class AgentRunService:
                     user_prompt,
                     history=history,
                     cancel_token=cancel_token,
-                    skills=pg_ctx.run_meta.get('skill_config'),
                     skill_resolver=skill_resolver,
                 )
             ) as stream:

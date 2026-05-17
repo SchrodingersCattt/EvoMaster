@@ -484,20 +484,19 @@ class TestRunItemsAssistantState:
         assert "ATTACHMENT-SHOULD-BE-IGNORED" not in user_messages[-1]["content"]
 
     @pytest.mark.asyncio
-    async def test_current_user_images_are_sent_as_content_parts(self) -> None:
+    async def test_turn_input_images_are_sent_as_content_parts(self) -> None:
+        from matmaster.context.sources.turn_input import TurnInput
         from matmaster.core.agent import AgentKernel
 
         provider = RecordingContentProvider()
         spec = _make_spec(provider=provider).model_copy(
             update={
                 "meta": {
-                    "current_user_images": [
-                        {
-                            "url": "https://oss.example.com/chat/a.png",
-                            "mime_type": "image/png",
-                            "detail": "high",
-                        }
-                    ]
+                    "turn_input": TurnInput.from_values(
+                        user_text="看图",
+                        images=["https://oss.example.com/chat/a.png"],
+                        image_detail="high",
+                    )
                 }
             }
         )
@@ -986,9 +985,7 @@ class TestCancellationTokenSupport:
         from matmaster.core.kernel_items import _KernelStopRequested
 
         ctrl = CancellationController()
-        task = asyncio.create_task(
-            _sleep_backoff_with_cancel(5.0, ctrl.token)
-        )
+        task = asyncio.create_task(_sleep_backoff_with_cancel(5.0, ctrl.token))
 
         await asyncio.sleep(0.05)
         ctrl.cancel()

@@ -59,7 +59,6 @@ from matmaster.response_text import (
 )
 from matmaster.types.messages import (
     AssistantMessage,
-    ImageContentPart,
     LLMResponse,
     Message,
     SystemMessage,
@@ -233,15 +232,16 @@ class AgentKernel:
             if isinstance(raw_turn_input, TurnInput)
             else TurnInput.from_payload(raw_turn_input)
         )
-        current_user_images = [
-            ImageContentPart.model_validate(image)
-            for image in spec.meta.get("current_user_images", [])
-        ]
+        turn_images = (
+            list(turn_input.attachments.images_as_parts())
+            if turn_input is not None
+            else []
+        )
         state = _KernelState(
             messages=[
                 SystemMessage(content=spec.system_prompt),
                 *(history or []),
-                UserMessage(content=task, images=current_user_images),
+                UserMessage(content=task, images=turn_images),
             ]
         )
 

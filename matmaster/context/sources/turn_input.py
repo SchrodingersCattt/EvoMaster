@@ -3,7 +3,7 @@ from __future__ import annotations
 import dataclasses
 from dataclasses import dataclass, field
 from pathlib import PurePosixPath
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 from matmaster.context.sections import RUNTIME_ONLY_VIEWS, ContextSection, SectionOrder
@@ -56,13 +56,17 @@ class TurnInstructionSource:
 class TurnAttachmentsSource:
     files: tuple[str, ...] = ()
     images: tuple[str, ...] = ()
+    image_detail: Literal["low", "high", "auto"] | None = None
     workspace_paths: tuple[str, ...] = ()
 
     def to_lines(self) -> tuple[str, ...]:
         lines = [
             *(f"file_{i} {_display_name(v)} {v}" for i, v in enumerate(self.files, 1)),
             *(f"workspace_{i} {v}" for i, v in enumerate(self.workspace_paths, 1)),
-            *(f"image_{i} {_display_name(v)} {v}" for i, v in enumerate(self.images, 1)),
+            *(
+                f"image_{i} {_display_name(v)} {v}"
+                for i, v in enumerate(self.images, 1)
+            ),
         ]
         return tuple(lines)
 
@@ -81,7 +85,9 @@ class TurnAttachmentsSource:
         )
 
     def images_as_parts(self) -> tuple[ImageContentPart, ...]:
-        return tuple(ImageContentPart(url=url) for url in self.images)
+        return tuple(
+            ImageContentPart(url=url, detail=self.image_detail) for url in self.images
+        )
 
 
 @dataclass(frozen=True)
@@ -101,21 +107,23 @@ class TurnInput:
         user_text: str | None = None,
         files: Any = None,
         images: Any = None,
+        image_detail: Literal["low", "high", "auto"] | None = None,
         workspace_paths: Any = None,
         pre_turn_history_event_id: int | None = 0,
-    ) -> "TurnInput":
+    ) -> TurnInput:
         return cls(
             instruction=TurnInstructionSource(user_text=(user_text or "").strip()),
             attachments=TurnAttachmentsSource(
                 files=_clean_tuple(files),
                 images=_clean_tuple(images),
+                image_detail=image_detail,
                 workspace_paths=_clean_tuple(workspace_paths),
             ),
             pre_turn_history_event_id=int(pre_turn_history_event_id or 0),
         )
 
     @classmethod
-    def from_payload(cls, payload: Any) -> "TurnInput | None":
+    def from_payload(cls, payload: Any) -> TurnInput | None:
         if not isinstance(payload, dict):
             return None
         raw_boundary = payload.get(
@@ -130,6 +138,7 @@ class TurnInput:
             user_text=payload.get("user_text"),
             files=payload.get("files"),
             images=payload.get("images"),
+            image_detail=payload.get("image_detail"),
             workspace_paths=payload.get("workspace_paths"),
             pre_turn_history_event_id=boundary,
         )
@@ -139,6 +148,7 @@ class TurnInput:
             "user_text": self.user_text,
             "files": list(self.files),
             "images": list(self.images),
+            "image_detail": self.attachments.image_detail,
             "workspace_paths": list(self.workspace_paths),
             "pre_turn_history_event_id": self.pre_turn_history_event_id,
         }
