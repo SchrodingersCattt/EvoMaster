@@ -24,7 +24,7 @@ class SessionContextBuilder:
         if not isinstance(self.events, tuple):
             raise TypeError(
                 "SessionContextBuilder.events must be a tuple of SessionEvent; "
-                "convert via matmaster.context.scanner.coerce_session_events first"
+                "service-layer callers should decode raw rows before constructing it"
             )
 
     def build_sections(

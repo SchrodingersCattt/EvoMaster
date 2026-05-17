@@ -30,12 +30,14 @@ def test_session_event_preserves_typed_envelope() -> None:
         task_id="task-1",
         invocation_id="inv-1",
         spawn_id=None,
+        created_at_ms=1767225600000,
     )
 
     assert event.id == 7
     assert event.event_type == "user_turn_context"
     assert event.content["kind"] == "anchor"
     assert event.invocation_id == "inv-1"
+    assert event.created_at_ms == 1767225600000
 
 
 def test_session_event_query_defaults_are_scope_safe() -> None:
