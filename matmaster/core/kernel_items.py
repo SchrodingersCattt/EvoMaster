@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from dataclasses import field as dc_field
 from typing import Any
 
+from matmaster.core.message_pipeline import IncrementalMessagePipeline
 from matmaster.types.events import FinishDetail
 from matmaster.types.messages import LLMResponse
 
@@ -36,6 +37,9 @@ class _KernelState:
     usage_vendor_by_turn: list[dict[str, Any]] = dc_field(default_factory=list)
     cached_tool_definitions: list[dict[str, Any]] | None = None
     last_catalog_version: int = -1
+    pipeline: IncrementalMessagePipeline = dc_field(
+        default_factory=IncrementalMessagePipeline
+    )
 
 
 class _KernelStopRequested(Exception):

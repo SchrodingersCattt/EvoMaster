@@ -57,10 +57,6 @@ from matmaster.core.hooks import (
 from matmaster.response_text import (
     is_trivial_response_text,
 )
-from matmaster.types.message_normalization import (
-    canonicalize_messages_for_provider,
-    normalize_and_validate_openai_messages,
-)
 from matmaster.types.messages import (
     AssistantMessage,
     ImageContentPart,
@@ -283,9 +279,7 @@ class AgentKernel:
 
             tool_defs = tool_definitions
 
-            api_messages = normalize_and_validate_openai_messages(
-                canonicalize_messages_for_provider(state.messages)
-            )
+            api_messages = state.pipeline.feed_tail(state.messages)
 
             llm_response: LLMResponse | None = None
             try:

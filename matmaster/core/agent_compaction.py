@@ -86,6 +86,11 @@ async def run_compaction_plan(
             state.messages,
             failure_reason=str(exc),
         )
+
+    # Compactor mutates state.messages in place. Reset the incremental pipeline
+    # so the next provider payload is rebuilt from the compacted history.
+    state.pipeline.reset()
+
     messages_after = len(state.messages)
 
     if spec.hook_executor is not None:
