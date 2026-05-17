@@ -17,6 +17,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
+from matmaster.context.ports import SessionEventQuery
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.events import (
     ResponseEvent,
@@ -196,10 +197,13 @@ async def test_agent_run_service_keeps_compaction_history_without_attachment_run
     assert callable(history.all_events)
     assert callable(history.latest_checkpoint_covered_until_event_id)
     assert history.latest_scope_event_id() == 25
-    history.query_context_events(
-        spawn_id=None,
-        until_event_id=10,
-        event_types=("query",),
+    await history.load_events(
+        SessionEventQuery(
+            session_id="sess-attachments",
+            spawn_id=None,
+            until_event_id=10,
+            event_types=("query",),
+        )
     )
     svc._test_events_table.get_latest_scope_event_id.assert_called_with(
         "sess-attachments",

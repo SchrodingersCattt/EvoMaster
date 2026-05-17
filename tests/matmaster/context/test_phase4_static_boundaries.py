@@ -40,3 +40,30 @@ def test_agent_run_instructions_helper_is_removed() -> None:
     helper_path = ROOT / "src/services" / ("agent_run" + "_instructions.py")
 
     assert not helper_path.exists()
+
+
+def test_context_scanner_does_not_decode_raw_rows() -> None:
+    scanner_path = ROOT / "matmaster" / "context" / "scanner.py"
+    text = scanner_path.read_text(encoding="utf-8")
+
+    forbidden = [
+        "coerce" + "_session_events",
+        "coerce" + "_event_id",
+        "_freeze_json_value",
+        "_coerce_content",
+        "_coerce_optional_str",
+        "Mapping[str, Any]",
+    ]
+    for token in forbidden:
+        assert token not in text
+
+
+def test_core_context_does_not_import_service_codec() -> None:
+    context_root = ROOT / "matmaster" / "context"
+    offenders = []
+    for path in context_root.rglob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        if "src.services.session_event_codec" in text:
+            offenders.append(path.relative_to(ROOT).as_posix())
+
+    assert offenders == []
