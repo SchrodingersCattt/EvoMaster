@@ -40,8 +40,8 @@ def _load_tags_config() -> dict[str, Any]:
 
     The YAML uses a 3-level hierarchy: category → group → skill.
     This function flattens it into:
-      - "tag_definitions": {group_id: display_name, ...}
       - "skills": {skill_name: [group_id, ...], ...}
+      - "skill_categories": {skill_name: category_id, ...}
       - "categories": original nested structure (passed to tools-server)
     """
     if not _TAGS_FILE.exists():
@@ -53,20 +53,17 @@ def _load_tags_config() -> dict[str, Any]:
     if not categories:
         return raw
 
-    tag_definitions: dict[str, str] = {}
     skills_map: dict[str, list[str]] = {}
     skill_category_map: dict[str, str] = {}
 
     for cat_id, cat in categories.items():
         groups = cat.get("groups", {})
         for group_id, group in groups.items():
-            tag_definitions[group_id] = group.get("name", group_id)
             for skill_name in group.get("skills", []):
                 skills_map.setdefault(skill_name, []).append(group_id)
                 skill_category_map.setdefault(skill_name, cat_id)
 
     return {
-        "tag_definitions": tag_definitions,
         "skills": skills_map,
         "skill_categories": skill_category_map,
         "categories": categories,
@@ -230,7 +227,6 @@ def sync_builtin_skills_to_tools_server() -> bool:
         logger.warning("No builtin skills found, skip sync")
         return False
 
-    tag_definitions = tags_config.get("tag_definitions") or {}
     categories = tags_config.get("categories") or {}
     version = _get_version()
     build_seq = _get_build_seq()
@@ -267,7 +263,6 @@ def sync_builtin_skills_to_tools_server() -> bool:
     payload: dict[str, Any] = {
         "version": version,
         "build_seq": build_seq,
-        "tag_definitions": tag_definitions,
         "skills": sync_items,
     }
     if categories:
