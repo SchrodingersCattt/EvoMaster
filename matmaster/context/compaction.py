@@ -27,6 +27,7 @@ from matmaster.context.sources.turn_input import (
 )
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import (
+    AssistantMessage,
     Message,
     SystemMessage,
     ToolMessage,
@@ -88,6 +89,15 @@ def estimate_tokens(messages: list[Message], safety_margin: float = 1.0) -> int:
             total += max(len(text) // 4, 1)
         total += 4
     return int(total * safety_margin)
+
+
+def estimate_json_tokens(obj: Any, safety_margin: float = 1.0) -> int:
+    """Estimate token count for an arbitrary JSON-serializable object."""
+    text = json.dumps(obj, ensure_ascii=False)
+    enc = _get_encoder()
+    if enc is not None:
+        return int(len(enc.encode(text)) * safety_margin)
+    return int(max(len(text) // 4, 1) * safety_margin)
 
 
 @dataclass(frozen=True)
@@ -441,3 +451,52 @@ class ContextCompactor:
         if not response.content or not response.content.strip():
             raise ValueError("Summary LLM returned empty content")
         return response.content
+
+
+def _assistant_tool_call_ids(message: AssistantMessage) -> tuple[str, ...]:
+    return tuple(tc.id for tc in message.tool_calls or ())
+
+
+def _select_tool_safe_tail(
+    non_system_messages: list[Message],
+    *,
+    n: int,
+) -> list[Message]:
+    """Select a trailing tail without emitting orphan tool results."""
+    if n <= 0 or not non_system_messages:
+        return []
+
+    selected_indices = set(
+        range(max(0, len(non_system_messages) - n), len(non_system_messages))
+    )
+    selected_tool_ids = {
+        msg.tool_call_id
+        for idx, msg in enumerate(non_system_messages)
+        if idx in selected_indices and isinstance(msg, ToolMessage)
+    }
+
+    owner_ids: set[str] = set()
+    for idx in range(len(non_system_messages) - 1, -1, -1):
+        msg = non_system_messages[idx]
+        if not isinstance(msg, AssistantMessage):
+            continue
+        call_ids = set(_assistant_tool_call_ids(msg))
+        if call_ids and call_ids & selected_tool_ids:
+            if call_ids <= selected_tool_ids:
+                selected_indices.add(idx)
+                owner_ids.update(call_ids)
+            else:
+                selected_indices.discard(idx)
+
+    result: list[Message] = []
+    for idx, msg in enumerate(non_system_messages):
+        if idx not in selected_indices:
+            continue
+        if isinstance(msg, ToolMessage) and msg.tool_call_id not in owner_ids:
+            continue
+        if isinstance(msg, AssistantMessage):
+            call_ids = set(_assistant_tool_call_ids(msg))
+            if call_ids and not call_ids <= selected_tool_ids:
+                continue
+        result.append(msg)
+    return result
