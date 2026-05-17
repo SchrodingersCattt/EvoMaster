@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from matmaster.context.ports import SessionEvent
+from matmaster.context.ports import ActiveSkill, SessionEvent
 from matmaster.context.session import SessionContextBuilder
 from matmaster.core.runtime_context_assembly import build_session_context_factory
 
@@ -26,11 +26,19 @@ def sample_events() -> tuple[SessionEvent, ...]:
     )
 
 
+def _empty_resolver(events: tuple[SessionEvent, ...]) -> tuple[ActiveSkill, ...]:
+    return ()
+
+
 def test_factory_returns_session_context_builder_with_injected_dependencies(
     sample_events: tuple[SessionEvent, ...],
 ) -> None:
+    def resolver(events: tuple[SessionEvent, ...]) -> tuple[ActiveSkill, ...]:
+        assert events is sample_events
+        return (ActiveSkill(name="pxrd", mcp_server="bohrium"),)
+
     factory = build_session_context_factory(
-        skill_registry=object(),
+        skill_resolver=resolver,
         legal_mcp_servers={"bohrium"},
         schemas_by_server={"bohrium": [{"name": "submit_job"}]},
     )
@@ -39,6 +47,7 @@ def test_factory_returns_session_context_builder_with_injected_dependencies(
 
     assert isinstance(builder, SessionContextBuilder)
     assert builder.events is sample_events
+    assert builder.active_skills == (ActiveSkill(name="pxrd", mcp_server="bohrium"),)
     assert builder.legal_mcp_servers == {"bohrium"}
     assert builder.schemas_by_server == {"bohrium": [{"name": "submit_job"}]}
 
@@ -47,7 +56,7 @@ def test_factory_passes_none_legal_servers_through(
     sample_events: tuple[SessionEvent, ...],
 ) -> None:
     factory = build_session_context_factory(
-        skill_registry=object(),
+        skill_resolver=_empty_resolver,
         legal_mcp_servers=None,
         schemas_by_server=None,
     )
@@ -60,7 +69,7 @@ def test_factory_passes_none_legal_servers_through(
 
 def test_factory_accepts_empty_events_and_returns_buildable_sections() -> None:
     factory = build_session_context_factory(
-        skill_registry=None,
+        skill_resolver=_empty_resolver,
         legal_mcp_servers=None,
         schemas_by_server=None,
     )
@@ -73,7 +82,7 @@ def test_factory_accepts_empty_events_and_returns_buildable_sections() -> None:
 
 def test_factory_rejects_non_tuple_events_via_session_builder_invariant() -> None:
     factory = build_session_context_factory(
-        skill_registry=None,
+        skill_resolver=_empty_resolver,
         legal_mcp_servers=None,
         schemas_by_server=None,
     )
@@ -92,7 +101,7 @@ def test_build_context_assembler_wires_ports_and_render_options() -> None:
 
     assembler, ports = build_context_assembler(
         events_table=EventsTable(),
-        skill_registry=None,
+        skill_resolver=_empty_resolver,
         legal_mcp_servers=None,
         schemas_by_server=None,
         split_turn_attachments=True,
