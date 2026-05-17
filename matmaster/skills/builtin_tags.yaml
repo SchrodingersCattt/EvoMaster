@@ -49,8 +49,6 @@ categories:
       gromacs:
         skills:
           - gromacs
-          - gromacs-system-prep
-          - grompp-remote-mdrun
           - md-analysis
           - poly-forcefield
       gpumd:
