@@ -98,11 +98,13 @@ Notes:
 
 ## Pre-Submission Validation
 
-After generating all INPUT/STRU/KPT files, run the validation script before Bohrium submission:
+**MUST run after generating ANY ABACUS input files** — even if not submitting to Bohrium:
 ```bash
 python ${SKILL_DIR}/scripts/validate_input.py --dir <input_dir>
 ```
-It catches the most common silent failures: ntype mismatch, missing cal_force/cal_stress, missing out_chg for SCF→NSCF, wrong basis_type, APNS PP/orbital filename mismatches, guessed pseudopotential names, missing PP/orbital files, and stru_file/kpoint_file reference errors. Fix any FAIL items before submitting.
+If the INPUT uses a non-default filename (e.g., `INPUT_bsse`), copy or symlink it to `INPUT` in a temp dir before running the validator, or use `--input-file` flag if supported. Fix **all** FAIL items before proceeding.
+
+This catches: missing `ntype`, ntype mismatch, missing cal_force/cal_stress, missing out_chg for SCF→NSCF, wrong basis_type, APNS PP/orbital filename mismatches, guessed pseudopotential names, missing PP/orbital files, and stru_file/kpoint_file reference errors.
 
 ## References
 
