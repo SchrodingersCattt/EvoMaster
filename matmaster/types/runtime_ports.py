@@ -10,6 +10,7 @@ from collections.abc import Awaitable
 from dataclasses import dataclass, field
 from typing import Any, NotRequired, Protocol, TypedDict, runtime_checkable
 
+from matmaster.context.ports import SessionEvent, SessionEventQuery
 from matmaster.types.events import BusEvent
 
 
@@ -50,19 +51,14 @@ class CheckpointSinkFactory(Protocol):
 
 @runtime_checkable
 class SessionEventHistoryPort(Protocol):
+    async def load_events(
+        self,
+        query: SessionEventQuery,
+    ) -> tuple[SessionEvent, ...]: ...
+
     def query_events(self) -> list[dict[str, Any]]: ...
 
     def all_events(self) -> list[dict[str, Any]]: ...
-
-    def query_context_events(
-        self,
-        *,
-        spawn_id: str | None,
-        until_event_id: int | None = None,
-        event_types: tuple[str, ...] | None = None,
-        limit: int | None = None,
-        order: str = "asc",
-    ) -> list[dict[str, Any]]: ...
 
     def latest_checkpoint_covered_until_event_id(self) -> int | None: ...
 
@@ -71,21 +67,16 @@ class SessionEventHistoryPort(Protocol):
 
 @dataclass(frozen=True)
 class EmptySessionEventHistory:
+    async def load_events(
+        self,
+        query: SessionEventQuery,
+    ) -> tuple[SessionEvent, ...]:
+        return ()
+
     def query_events(self) -> list[dict[str, Any]]:
         return []
 
     def all_events(self) -> list[dict[str, Any]]:
-        return []
-
-    def query_context_events(
-        self,
-        *,
-        spawn_id: str | None,
-        until_event_id: int | None = None,
-        event_types: tuple[str, ...] | None = None,
-        limit: int | None = None,
-        order: str = "asc",
-    ) -> list[dict[str, Any]]:
         return []
 
     def latest_checkpoint_covered_until_event_id(self) -> int | None:

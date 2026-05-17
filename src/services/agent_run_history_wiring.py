@@ -7,15 +7,18 @@ compaction subsystem.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, TypeVar
 
+from matmaster.context.ports import SessionEvent, SessionEventQuery
 from matmaster.types.runtime_ports import (
     PlaygroundCompactionPort,
     PlaygroundRuntimePorts,
 )
+from src.services.session_event_codec import decode_session_events
 from src.services.model_history_restore_service import ModelHistoryRestoreService
 
 logger = logging.getLogger(__name__)
@@ -154,28 +157,25 @@ def build_history_wiring(
         return events if isinstance(events, list) else []
 
     class _RunSessionEventHistory:
+        async def load_events(
+            self,
+            query: SessionEventQuery,
+        ) -> tuple[SessionEvent, ...]:
+            rows = await asyncio.to_thread(
+                _query_context_events,
+                spawn_id=query.spawn_id,
+                until_event_id=query.until_event_id,
+                event_types=query.event_types,
+                limit=query.limit,
+                order=query.order,
+            )
+            return decode_session_events(rows)
+
         def query_events(self) -> list[dict[str, Any]]:
             return _get_query_events()
 
         def all_events(self) -> list[dict[str, Any]]:
             return _get_all_events()
-
-        def query_context_events(
-            self,
-            *,
-            spawn_id: str | None,
-            until_event_id: int | None = None,
-            event_types: tuple[str, ...] | None = None,
-            limit: int | None = None,
-            order: str = "asc",
-        ) -> list[dict[str, Any]]:
-            return _query_context_events(
-                spawn_id=spawn_id,
-                until_event_id=until_event_id,
-                event_types=event_types,
-                limit=limit,
-                order=order,
-            )
 
         def latest_checkpoint_covered_until_event_id(self) -> int | None:
             return _get_latest_checkpoint_covered_until_event_id()

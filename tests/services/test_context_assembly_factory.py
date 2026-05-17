@@ -3,29 +3,26 @@ from __future__ import annotations
 import pytest
 
 from matmaster.context.ports import SessionEvent
-from matmaster.context.scanner import coerce_session_events
 from matmaster.context.session import SessionContextBuilder
 from matmaster.core.runtime_context_assembly import build_session_context_factory
 
 
 @pytest.fixture
 def sample_events() -> tuple[SessionEvent, ...]:
-    return coerce_session_events(
-        [
-            {
-                "id": 1,
-                "type": "skill_hit",
-                "content": {"skill_name": "pxrd"},
-                "source": "System",
-            },
-            {
-                "id": 2,
-                "type": "query",
-                "source": "User",
-                "content": {"content": "hello", "files": ["/tmp/a.txt"]},
-                "invocation_id": "inv-1",
-            },
-        ]
+    return (
+        SessionEvent(
+            id=1,
+            event_type="skill_hit",
+            content={"skill_name": "pxrd"},
+            source="System",
+        ),
+        SessionEvent(
+            id=2,
+            event_type="query",
+            source="User",
+            content={"content": "hello", "files": ("/tmp/a.txt",)},
+            invocation_id="inv-1",
+        ),
     )
 
 
@@ -106,56 +103,3 @@ def test_build_context_assembler_wires_ports_and_render_options() -> None:
     assert assembler._render_options == ContextRenderOptions(
         split_turn_attachments=True
     )
-
-
-@pytest.mark.asyncio
-async def test_runtime_history_events_port_filters_existing_history_rows() -> None:
-    from matmaster.context.ports import SessionEventQuery
-    from matmaster.core.runtime_context_assembly import (
-        RuntimeHistorySessionEventsPort,
-    )
-
-    class History:
-        def query_context_events(self, **kwargs):
-            self.kwargs = kwargs
-            return [
-                {
-                    "id": 1,
-                    "type": "query",
-                    "source": "User",
-                    "content": {"content": "old"},
-                },
-            ]
-
-        def all_events(self):
-            raise AssertionError("runtime context assembly must not use all_events()")
-
-        def query_events(self):
-            return []
-
-        def latest_checkpoint_covered_until_event_id(self):
-            return None
-
-        def latest_scope_event_id(self):
-            return 3
-
-    history = History()
-    events = await RuntimeHistorySessionEventsPort(history).load_events(
-        SessionEventQuery(
-            session_id="sess-1",
-            spawn_id=None,
-            until_event_id=2,
-            event_types=("query",),
-            order="asc",
-        )
-    )
-
-    assert [event.id for event in events] == [1]
-    assert events[0].content == {"content": "old"}
-    assert history.kwargs == {
-        "spawn_id": None,
-        "until_event_id": 2,
-        "event_types": ("query",),
-        "limit": None,
-        "order": "asc",
-    }

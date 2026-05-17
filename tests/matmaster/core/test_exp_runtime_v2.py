@@ -110,9 +110,9 @@ async def test_build_runtime_uses_runtime_ports_history(
         def all_events(self):
             return [{"event_id": 20, "source": "runtime"}]
 
-        def query_context_events(self, **kwargs):
-            self.context_query_kwargs = kwargs
-            return []
+        async def load_events(self, query):
+            self.context_query = query
+            return ()
 
         def latest_checkpoint_covered_until_event_id(self):
             return 20

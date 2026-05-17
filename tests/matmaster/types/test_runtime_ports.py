@@ -31,6 +31,17 @@ def test_empty_session_event_history_has_no_implicit_scope_boundary() -> None:
     assert history.latest_scope_event_id() is None
 
 
+@pytest.mark.asyncio
+async def test_empty_session_event_history_load_events_returns_empty() -> None:
+    from matmaster.context.ports import SessionEventQuery
+
+    history = EmptySessionEventHistory()
+
+    assert (
+        await history.load_events(SessionEventQuery(session_id="sess-1", spawn_id=None))
+    ) == ()
+
+
 def test_playground_runtime_ports_defaults_are_narrow() -> None:
     ports = PlaygroundRuntimePorts()
 

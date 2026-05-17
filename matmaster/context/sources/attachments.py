@@ -7,9 +7,7 @@ from typing import Literal
 from urllib.parse import quote, unquote, urlparse, urlunparse
 
 from matmaster.context.ports import SessionEvent
-from matmaster.context.scanner import coerce_event_id
 from matmaster.context.sections import ALL_VIEWS, ContextSection, SectionOrder
-from matmaster.utils.event_source import normalize_event_source
 
 AttachmentKind = Literal["file", "image", "workspace"]
 
@@ -70,17 +68,6 @@ def _query_payload(event: SessionEvent) -> Mapping[str, object]:
     return {}
 
 
-def _legacy_query_payload(row: Mapping[str, object]) -> dict[str, object]:
-    payload: dict[str, object] = {}
-    content = row.get("content")
-    if isinstance(content, Mapping):
-        payload.update(content)
-    for key in ("files", "images", "workspace_paths"):
-        if key in row:
-            payload[key] = row.get(key)
-    return payload
-
-
 def _scan_payloads(
     payloads: Iterable[tuple[Mapping[str, object], int | None]],
     *,
@@ -137,24 +124,6 @@ def scan_attachment_entries(
             if event.event_type != "query":
                 continue
             yield (_query_payload(event), event.id)
-
-    return _scan_payloads(payloads(), max_entries=max_entries)
-
-
-def scan_legacy_attachment_entries(
-    rows: Iterable[Mapping[str, object]],
-    *,
-    max_entries: int = 30,
-) -> tuple[AttachmentEntry, ...]:
-    def payloads() -> Iterable[tuple[Mapping[str, object], int | None]]:
-        for row in rows:
-            if not isinstance(row, Mapping):
-                continue
-            if normalize_event_source(row.get("source")) != "User":
-                continue
-            if str(row.get("type") or "").strip() != "query":
-                continue
-            yield (_legacy_query_payload(row), coerce_event_id(row.get("id")))
 
     return _scan_payloads(payloads(), max_entries=max_entries)
 

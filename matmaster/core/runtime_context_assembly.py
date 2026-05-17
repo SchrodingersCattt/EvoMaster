@@ -18,7 +18,6 @@ from matmaster.context.ports import (
     SessionJobsQuery,
     UserInstructions,
 )
-from matmaster.context.scanner import coerce_session_events
 from matmaster.context.session import SessionContextBuilder
 from matmaster.core.playground import PlaygroundContext
 from matmaster.types.runtime import AgentRuntimeSpec
@@ -53,21 +52,6 @@ def build_session_context_factory(
         )
 
     return factory
-
-
-class RuntimeHistorySessionEventsPort:
-    def __init__(self, history_port: Any) -> None:
-        self._history_port = history_port
-
-    async def load_events(self, query: SessionEventQuery) -> tuple[SessionEvent, ...]:
-        rows = self._history_port.query_context_events(
-            spawn_id=query.spawn_id,
-            until_event_id=query.until_event_id,
-            event_types=query.event_types,
-            limit=query.limit,
-            order=query.order,
-        )
-        return coerce_session_events(rows)
 
 
 class _EmptySessionJobsPort:
@@ -125,7 +109,7 @@ def build_runtime_context_assembly(
         truncated=bool(run_meta.get("user_instructions_truncated", False)),
     )
     assembly_ports = ContextAssemblyPorts(
-        session_events=RuntimeHistorySessionEventsPort(history_port),
+        session_events=history_port,
         session_jobs=_EmptySessionJobsPort(),
     )
     context_assembler = ContextAssembler(
