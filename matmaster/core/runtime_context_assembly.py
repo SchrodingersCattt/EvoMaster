@@ -72,29 +72,6 @@ def build_runtime_context_assembly(
         return RuntimeContextAssembly()
 
     run_meta = getattr(ctx, "run_meta", {}) or {}
-    summary_provider = spec.llm_provider
-    if spec.compaction.compaction_llm:
-        llm_config = getattr(ctx, "llm_config", None)
-        if llm_config is not None:
-            from matmaster.providers.llm_factory import build_provider
-
-            try:
-                summary_provider = build_provider(
-                    llm_config,
-                    llm_override=spec.compaction.compaction_llm,
-                )
-            except KeyError:
-                logger.warning(
-                    "compaction_llm key=%r not found, falling back to main provider",
-                    spec.compaction.compaction_llm,
-                )
-        else:
-            logger.warning(
-                "compaction_llm key=%r set but no llm_config on context; "
-                "falling back to main provider",
-                spec.compaction.compaction_llm,
-            )
-
     history_port = ctx.runtime_ports.compaction.history
     if history_port is None:
         history_port = EmptySessionEventHistory()
@@ -127,7 +104,6 @@ def build_runtime_context_assembly(
     return RuntimeContextAssembly(
         compactor=ContextCompactor(
             config=spec.compaction,
-            summary_provider=summary_provider,
             context_assembler=context_assembler,
             user_instructions=user_instructions,
             session_id=run_meta.get("session_id") or "",

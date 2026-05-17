@@ -37,6 +37,8 @@ class _MockLLMProvider:
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+        *,
+        tool_choice: str | dict | None = None,
     ) -> LLMResponse:
         return LLMResponse(content="mock", finish_reason="stop")
 
@@ -60,7 +62,7 @@ class TestCompactionConfig:
         assert config.context_limit == 200_000
         assert config.trigger_ratio == 0.9
         assert config.strategy == "summary"
-        assert config.compaction_llm is None
+        assert not hasattr(config, "compaction_llm")
 
     def test_frozen(self) -> None:
         config = CompactionConfig()
@@ -85,9 +87,10 @@ class TestCompactionConfigUpdate:
         cfg = CompactionConfig()
         assert cfg.strategy == "summary"
 
-    def test_compaction_llm_from_config(self) -> None:
-        cfg = CompactionConfig(compaction_llm="compaction")
-        assert cfg.compaction_llm == "compaction"
+    def test_compaction_config_ignores_removed_compaction_llm_field(self) -> None:
+        cfg = CompactionConfig.model_validate({"compaction_llm": "compaction"})
+
+        assert not hasattr(cfg, "compaction_llm")
 
     def test_frozen(self) -> None:
         cfg = CompactionConfig()

@@ -128,13 +128,6 @@ class AgentKernel:
         from matmaster.types.events import RunResultEvent
 
         async with spec.llm_provider:
-            _summary_provider = None
-            if spec.compactor is not None:
-                # getattr default tolerates compactor test doubles that don't
-                # expose summary_provider (real ContextCompactor always does).
-                sp = getattr(spec.compactor, "summary_provider", None)
-                if sp is not None and sp is not spec.llm_provider:
-                    _summary_provider = sp
             last_reason: str | None = None
 
             async def _consume_and_yield():
@@ -170,13 +163,8 @@ class AgentKernel:
                 )
 
             try:
-                if _summary_provider is not None:
-                    async with _summary_provider:
-                        async for event in _consume_and_yield():
-                            yield event
-                else:
-                    async for event in _consume_and_yield():
-                        yield event
+                async for event in _consume_and_yield():
+                    yield event
             except BaseException as exc:
                 if last_reason is None:
                     if isinstance(exc, (GeneratorExit, asyncio.CancelledError)):

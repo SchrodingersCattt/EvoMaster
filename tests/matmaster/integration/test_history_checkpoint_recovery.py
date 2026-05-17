@@ -39,7 +39,7 @@ class _SummaryProvider:
     async def __aexit__(self, *args):
         return None
 
-    async def chat(self, messages, tools=None):
+    async def chat(self, messages, tools=None, *, tool_choice=None):
         self.calls.append(messages)
         return LLMResponse(content=self.summary, finish_reason="stop")
 
@@ -67,7 +67,6 @@ def _make_compactor_for_table(
     )
     return ContextCompactor(
         config=CompactionConfig(context_limit=128000),
-        summary_provider=provider,
         context_assembler=assembler,
         user_instructions=UserInstructions(text="Use SI units.", hash="sha256:abc"),
         session_id=session_id,
@@ -655,7 +654,7 @@ async def test_compaction_checkpoint_assembles_v1_session_attachments(
         UserMessage(content="continue from current session"),
         AssistantMessage(content="working"),
     ]
-    result = await compactor.apply_compaction_plan(
+    result = await compactor.apply_summary(
         CompactionPlan(
             compaction_id="task-1:root:1",
             compaction_count=1,
@@ -664,6 +663,7 @@ async def test_compaction_checkpoint_assembles_v1_session_attachments(
             turn=2,
         ),
         messages,
+        "Recovered summary with fresh attachment",
     )
 
     assert result.base_snapshot is not None
@@ -736,7 +736,7 @@ async def test_two_v1_compactions_chain_and_restore_from_latest(
         UserMessage(content="first old question"),
         AssistantMessage(content="first old answer"),
     ]
-    first_result = await first_compactor.apply_compaction_plan(
+    first_result = await first_compactor.apply_summary(
         CompactionPlan(
             compaction_id="task-1:root:1",
             compaction_count=1,
@@ -745,6 +745,7 @@ async def test_two_v1_compactions_chain_and_restore_from_latest(
             turn=2,
         ),
         first_messages,
+        first_provider.summary,
     )
     assert first_result.checkpoint_covered_until_event_id is not None
     first_sink = HistoryCheckpointService(events_table).build_checkpoint_sink(
@@ -788,7 +789,7 @@ async def test_two_v1_compactions_chain_and_restore_from_latest(
         AssistantMessage(content="answer between compactions"),
         UserMessage(content="question between compactions"),
     ]
-    second_result = await second_compactor.apply_compaction_plan(
+    second_result = await second_compactor.apply_summary(
         CompactionPlan(
             compaction_id="task-2:root:1",
             compaction_count=1,
@@ -797,6 +798,7 @@ async def test_two_v1_compactions_chain_and_restore_from_latest(
             turn=3,
         ),
         second_messages,
+        second_provider.summary,
     )
     assert second_result.checkpoint_covered_until_event_id is not None
     second_sink = HistoryCheckpointService(events_table).build_checkpoint_sink(
@@ -832,7 +834,6 @@ async def test_two_v1_compactions_chain_and_restore_from_latest(
     assert len(checkpoints) == 2
     latest = checkpoints[-1]["content"]
     assert "second summary" in latest["base_messages"][0]["content"]
-    assert "first summary" in second_provider.calls[0][1]["content"]
 
     restored = ModelHistoryRestoreService(events_table).restore_history(
         session_id=session_id,

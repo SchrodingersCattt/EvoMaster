@@ -648,7 +648,7 @@ class TestExpCompaction:
             runtime = await exp.build_runtime(ctx)
 
         assert runtime.spec.compactor is not None
-        assert runtime.spec.compactor._summary_provider is runtime.spec.llm_provider
+        assert not hasattr(runtime.spec.compactor, "_summary_provider")
 
 
 # ── TestSessionlessBuiltins ────────────────────────────

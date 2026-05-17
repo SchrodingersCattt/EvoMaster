@@ -30,7 +30,6 @@ class CompactionConfig(BaseModel):
     context_limit: int = 200_000
     trigger_ratio: float = 0.9
     strategy: str = "summary"  # 'sliding_window' | 'summary' | 'latest_half'
-    compaction_llm: str | None = None  # key in config.llm
     reserved_summary_tokens: int = 20_000
     auto_compact_buffer_tokens: int = 13_000
 
