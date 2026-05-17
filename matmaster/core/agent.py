@@ -82,6 +82,32 @@ _TERMINAL_REASON_TO_STATUS: dict[str, str] = {
 }
 
 
+def ensure_tool_definitions(
+    spec: AgentRuntimeSpec,
+    state: _KernelState,
+) -> list[dict[str, Any]] | None:
+    """Resolve and cache tool definitions on kernel state."""
+    if spec.tool_catalog is None:
+        return None
+
+    if spec.tool_catalog.version != state.last_catalog_version:
+        state.cached_tool_definitions = None
+        state.last_catalog_version = spec.tool_catalog.version
+
+    if state.cached_tool_definitions is None:
+        from matmaster.types.tool_desc_ctx import ToolDescriptionContext
+
+        desc_ctx = None
+        if spec.runtime_topology is not None:
+            desc_ctx = ToolDescriptionContext(
+                session_kind=spec.runtime_topology.session_kind,
+                workspace_root=spec.runtime_topology.workspace_root,
+                topology=spec.runtime_topology,
+            )
+        state.cached_tool_definitions = spec.tool_catalog.build_definitions(desc_ctx)
+    return state.cached_tool_definitions
+
+
 class AgentKernel:
     """Pure execution loop -- consumes AgentRuntimeSpec, no config assembly."""
 
@@ -235,6 +261,7 @@ class AgentKernel:
         )
 
         checkpoint_sink = spec.runtime_ports.checkpoint_sink
+        tool_definitions = ensure_tool_definitions(spec, state)
 
         async for item in run_preflight_compaction_if_needed(
             spec=spec,
@@ -242,6 +269,7 @@ class AgentKernel:
             history=history,
             turn_input=turn_input,
             checkpoint_sink=checkpoint_sink,
+            tool_definitions=tool_definitions,
         ):
             yield item
 
@@ -253,36 +281,18 @@ class AgentKernel:
                 return
 
             state.turn += 1
+            tool_definitions = ensure_tool_definitions(spec, state)
 
             async for item in run_runtime_compaction_if_needed(
                 spec=spec,
                 state=state,
                 turn_usage=turn_usage,
                 checkpoint_sink=checkpoint_sink,
+                tool_definitions=tool_definitions,
             ):
                 yield item
 
-            # ── Tool definitions resolution (version-aware caching) ──
-            if spec.tool_catalog is not None:
-                if spec.tool_catalog.version != state.last_catalog_version:
-                    state.cached_tool_definitions = None
-                    state.last_catalog_version = spec.tool_catalog.version
-
-                if state.cached_tool_definitions is None:
-                    from matmaster.types.tool_desc_ctx import ToolDescriptionContext
-
-                    desc_ctx = None
-                    if spec.runtime_topology is not None:
-                        desc_ctx = ToolDescriptionContext(
-                            session_kind=spec.runtime_topology.session_kind,
-                            workspace_root=spec.runtime_topology.workspace_root,
-                            topology=spec.runtime_topology,
-                        )
-                    state.cached_tool_definitions = spec.tool_catalog.build_definitions(
-                        desc_ctx
-                    )
-
-            tool_defs = state.cached_tool_definitions
+            tool_defs = tool_definitions
 
             api_messages = normalize_and_validate_openai_messages(
                 canonicalize_messages_for_provider(state.messages)
