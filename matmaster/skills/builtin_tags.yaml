@@ -8,9 +8,10 @@ categories:
           - transform-atomic-structure
           - assemble-atomic-structure
           - sample-atomic-structures
+          - tasker-polar-surface
+          - operate-molecular-crystal
       crystal-special:
         skills:
-          - operate-molecular-crystal
           - structure-manager
           - mcp-mat-struct-db
       polymer-modeling:
@@ -78,7 +79,6 @@ categories:
         skills:
           - mcp-mat-compdart
           - composition-optimization
-          - tasker-polar-surface
 
   research-writing:
     groups:
