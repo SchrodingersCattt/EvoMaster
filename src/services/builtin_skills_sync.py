@@ -42,7 +42,6 @@ def _load_tags_config() -> dict[str, Any]:
     This function flattens it into:
       - "skills": {skill_name: [group_id, ...], ...}
       - "skill_categories": {skill_name: category_id, ...}
-      - "categories": original nested structure (passed to tools-server)
     """
     if not _TAGS_FILE.exists():
         logger.warning("builtin_tags.yaml not found at %s", _TAGS_FILE)
@@ -55,23 +54,17 @@ def _load_tags_config() -> dict[str, Any]:
 
     skills_map: dict[str, list[str]] = {}
     skill_category_map: dict[str, str] = {}
-    categories_slim: dict[str, Any] = {}
 
     for cat_id, cat in categories.items():
         groups = cat.get("groups", {})
-        groups_slim: dict[str, Any] = {}
         for group_id, group in groups.items():
-            skills_list = group.get("skills", [])
-            groups_slim[group_id] = {"skills": skills_list}
-            for skill_name in skills_list:
+            for skill_name in group.get("skills", []):
                 skills_map.setdefault(skill_name, []).append(group_id)
                 skill_category_map.setdefault(skill_name, cat_id)
-        categories_slim[cat_id] = {"groups": groups_slim}
 
     return {
         "skills": skills_map,
         "skill_categories": skill_category_map,
-        "categories": categories_slim,
     }
 
 
@@ -232,7 +225,6 @@ def sync_builtin_skills_to_tools_server() -> bool:
         logger.warning("No builtin skills found, skip sync")
         return False
 
-    categories = tags_config.get("categories") or {}
     version = _get_version()
     build_seq = _get_build_seq()
 
@@ -270,8 +262,6 @@ def sync_builtin_skills_to_tools_server() -> bool:
         "build_seq": build_seq,
         "skills": sync_items,
     }
-    if categories:
-        payload["categories"] = categories
 
     url = f"{base}/api/v1/skills/sync-builtin"
     try:
