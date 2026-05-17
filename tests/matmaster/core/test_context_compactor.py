@@ -137,7 +137,7 @@ class DummySummaryProvider:
 
 def _make_compactor(
     config,
-    provider,
+    provider=None,
     *,
     rehydrated: str = "",
     rehydrated_until: str | None = None,
@@ -174,7 +174,6 @@ def _make_compactor(
     )
     return ContextCompactor(
         config=config,
-        summary_provider=provider,
         context_assembler=assembler,
         user_instructions=UserInstructions(text="", hash="sha256:empty"),
         session_id="sess-1",
@@ -228,8 +227,10 @@ class TestCompactorThreshold:
         msgs = [SystemMessage(content="sys"), UserMessage(content="task")]
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 1000}, turn=2)
-        assert len(provider.calls) == 0
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 1000}, turn=2
+        )
+        assert plan is None
 
     async def test_trigger_when_above_threshold(self) -> None:
         pass
@@ -240,8 +241,12 @@ class TestCompactorThreshold:
         compactor = _make_compactor(config, provider)
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
-        assert len(provider.calls) == 1
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=2
+        )
+        assert plan is not None
+        await compactor.apply_summary(plan, msgs, "summary text")
+        assert compactor._compaction_count == 1
 
     async def test_cooldown_skips_consecutive_turn(self) -> None:
         pass
@@ -252,11 +257,16 @@ class TestCompactorThreshold:
         compactor = _make_compactor(config, provider)
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
-        assert len(provider.calls) == 1
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=2
+        )
+        assert plan is not None
+        await compactor.apply_summary(plan, msgs, "summary text")
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
-        assert len(provider.calls) == 1
+        next_plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=3
+        )
+        assert next_plan is None
 
 
 class TestCompactorPlanApply:
@@ -286,7 +296,7 @@ class TestCompactorPlanApply:
         assert plan.trigger_tokens == 950
         assert plan.strategy is None
 
-    async def test_apply_compaction_plan_reports_fallback_strategy(self) -> None:
+    async def test_apply_fallback_reports_fallback_strategy(self) -> None:
         from matmaster.types.runtime import CompactionConfig
 
         provider = DummySummaryProvider(RuntimeError("summary down"))
@@ -303,7 +313,11 @@ class TestCompactorPlanApply:
         plan = await compactor.plan_runtime_compaction(
             msgs, {"prompt_tokens": 950}, turn=2
         )
-        result = await compactor.apply_compaction_plan(plan, msgs)
+        result = await compactor.apply_fallback(
+            plan,
+            msgs,
+            failure_reason="summary down",
+        )
 
         assert result.compaction_id == "task-1:root:1"
         assert result.strategy == "sliding_window"
@@ -323,7 +337,10 @@ class TestCompactorOutput:
         )
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=2
+        )
+        await compactor.apply_summary(plan, msgs, "Summarized content.")
 
         assert isinstance(msgs[0], SystemMessage)
         assert msgs[0].content == "You are helpful"
@@ -346,7 +363,10 @@ class TestCompactorOutput:
         )
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=2
+        )
+        await compactor.apply_summary(plan, msgs, "Summarized content.")
 
         assert len(msgs) == 2
         assert isinstance(msgs[0], SystemMessage)
@@ -364,7 +384,7 @@ class TestCompactorOutput:
         compactor = _make_compactor(config, provider)
 
         plan = compactor.plan_preflight_compaction(msgs)
-        result = await compactor.apply_compaction_plan(plan, msgs)
+        result = await compactor.apply_summary(plan, msgs, "summary")
 
         assert result.base_snapshot is not None
         assert [item["role"] for item in result.base_snapshot] == ["user"]
@@ -385,11 +405,8 @@ class TestCompactorOutput:
         compactor = _make_compactor(config, provider)
 
         plan = compactor.plan_preflight_compaction(msgs)
-        await compactor.apply_compaction_plan(plan, msgs)
+        await compactor.apply_summary(plan, msgs, "second summary")
 
-        prompt_text = provider.calls[0][1]["content"]
-        assert "<compacted_history>" in prompt_text
-        assert "first summary" in prompt_text
         assert "second summary" in (msgs[1].content or "")
 
     async def test_fallback_on_summary_failure(self) -> None:
@@ -402,16 +419,19 @@ class TestCompactorOutput:
         compactor = _make_compactor(config, provider)
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
-
-        assert len(msgs) == original_len
-        assert isinstance(msgs[0], SystemMessage)
-        assert isinstance(msgs[1], UserMessage)
-        assert "[Compacted Context]" not in (msgs[0].content or "")
-        assert any(
-            isinstance(message, ToolMessage) and "truncated" in (message.content or "")
-            for message in msgs
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=2
         )
+        await compactor.apply_fallback(plan, msgs, failure_reason="LLM unavailable")
+
+        assert len(msgs) < original_len
+        assert isinstance(msgs[0], SystemMessage)
+        assert "[Compacted Context]" not in (msgs[0].content or "")
+        from matmaster.types.message_normalization import (
+            normalize_and_validate_openai_messages,
+        )
+
+        normalize_and_validate_openai_messages(msgs)
 
 
 class TestCompactorMessageCount:
@@ -442,7 +462,7 @@ class TestCompactorResultMetadata:
         plan = await compactor.plan_runtime_compaction(
             msgs, {"prompt_tokens": 950}, turn=2
         )
-        result = await compactor.apply_compaction_plan(plan, msgs)
+        result = await compactor.apply_summary(plan, msgs, "summary text")
 
         assert result.compaction_count == 1
         assert result.strategy == "summary"
@@ -457,7 +477,7 @@ class TestCompactorResultMetadata:
         compactor = _make_compactor(config, provider)
 
         plan = compactor.plan_preflight_compaction(msgs)
-        result = await compactor.apply_compaction_plan(plan, msgs)
+        result = await compactor.apply_summary(plan, msgs, "summary text")
 
         assert result.phase == "preflight"
         assert result.strategy == "summary"
@@ -475,13 +495,17 @@ class TestCompactorResultMetadata:
         plan = await compactor.plan_runtime_compaction(
             msgs, {"prompt_tokens": 950}, turn=2
         )
-        result = await compactor.apply_compaction_plan(plan, msgs)
+        result = await compactor.apply_fallback(
+            plan,
+            msgs,
+            failure_reason="LLM unavailable",
+        )
 
         assert result.phase == "runtime"
         assert result.strategy == "sliding_window"
         assert result.durability == "ephemeral"
 
-    async def test_preflight_summary_failure_raises_instead_of_silent_fallback(
+    async def test_preflight_fallback_is_not_used_by_compactor_application(
         self,
     ) -> None:
         pass
@@ -490,9 +514,12 @@ class TestCompactorResultMetadata:
         provider = FailingSummaryProvider()
         msgs = _build_long_conversation(5)
         compactor = _make_compactor(config, provider)
+        plan = compactor.plan_preflight_compaction(msgs)
 
-        with pytest.raises(RuntimeError, match="LLM unavailable"):
-            await compactor.preflight_if_needed(msgs)
+        result = await compactor.apply_summary(plan, msgs, "summary text")
+
+        assert result.phase == "preflight"
+        assert result.strategy == "summary"
 
     async def test_summary_input_contains_tool_name_and_call_id(self) -> None:
         pass
@@ -503,12 +530,13 @@ class TestCompactorResultMetadata:
         compactor = _make_compactor(config, provider)
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=2
+        )
+        result = await compactor.apply_summary(plan, msgs, "summary text")
 
-        prompt_text = provider.calls[0][1]["content"]
-        assert "tool_call_id" in prompt_text
-        assert "tool_name" in prompt_text
-        assert "bash" in prompt_text
+        assert result.strategy == "summary"
+        assert "<compacted_history>" in (msgs[1].content or "")
 
 
 class TestPreflightCurrentInputSplit:
@@ -557,22 +585,18 @@ class TestPreflightCurrentInputSplit:
             ),
         ]
 
-        result = await compactor.apply_compaction_plan(
+        result = await compactor.apply_summary(
             compactor.plan_preflight_compaction(msgs),
             msgs,
+            "summary text",
             turn_input=ctx,
         )
 
-        prompt_text = provider.calls[0][1]["content"]
         runtime_content = msgs[1].content or ""
         session_attachments = runtime_content.split("<session_attachments>", 1)[
             1
         ].split("</session_attachments>", 1)[0]
         current_instruction = runtime_content.split("<current_instruction>", 1)[1]
-        assert "old question" in prompt_text
-        assert "old answer" in prompt_text
-        assert "Use only the new file" not in prompt_text
-        assert "new.cif" not in prompt_text
         assert "<current_instruction>" in runtime_content
         assert "old.cif" in session_attachments
         assert "new.cif" not in session_attachments
@@ -604,9 +628,10 @@ class TestPreflightCurrentInputSplit:
             UserMessage(content="current task"),
         ]
 
-        result = await compactor.apply_compaction_plan(
+        result = await compactor.apply_summary(
             compactor.plan_preflight_compaction(msgs),
             msgs,
+            "summary text",
             turn_input=ctx,
         )
 
@@ -630,9 +655,10 @@ class TestPreflightCurrentInputSplit:
             UserMessage(content=""),
         ]
 
-        await compactor.apply_compaction_plan(
+        await compactor.apply_summary(
             compactor.plan_preflight_compaction(msgs),
             msgs,
+            "summary text",
             turn_input=ctx,
         )
 
@@ -640,7 +666,7 @@ class TestPreflightCurrentInputSplit:
             msgs[1].content or ""
         )
 
-    async def test_compact_if_needed_succeeds_without_event_sink(self) -> None:
+    async def test_apply_summary_succeeds_without_event_sink(self) -> None:
         pass
 
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
@@ -649,7 +675,10 @@ class TestPreflightCurrentInputSplit:
         compactor = _make_compactor(config, provider, event_sink=None)
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=2
+        )
+        await compactor.apply_summary(plan, msgs, "summary text")
         assert compactor._compaction_count == 1
 
 
@@ -684,9 +713,9 @@ class TestToolTruncationFallback:
 
         compactor = _make_compactor(config, provider, event_sink=sink)
 
-        await compactor.preflight_if_needed(msgs)
+        plan = compactor.plan_preflight_compaction(msgs)
+        await compactor.apply_summary(plan, msgs, "summary text")
 
-        assert len(provider.calls) == 1
         assert len(msgs) == 2
         assert isinstance(msgs[1], UserMessage)
         assert "<compacted_history>" in (msgs[1].content or "")
@@ -732,9 +761,8 @@ class TestToolTruncationFallback:
         plan = await compactor.plan_runtime_compaction(
             msgs, {"prompt_tokens": 600}, turn=3
         )
-        result = await compactor.apply_compaction_plan(plan, msgs)
+        result = await compactor.apply_summary(plan, msgs, "summary text")
 
-        assert len(provider.calls) == 1
         assert compactor._compaction_count == 1
         assert len(msgs) == 2
         assert isinstance(msgs[1], UserMessage)
@@ -762,13 +790,15 @@ class TestToolTruncationFallback:
         compactor = _make_compactor(config, provider)
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 600}, turn=3)
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 600}, turn=3
+        )
+        await compactor.apply_fallback(plan, msgs, failure_reason="LLM unavailable")
 
-        # Small content -> not truncated (truncation skips content < 500 chars)
-        assert "truncated" not in (msgs[3].content or "")
+        assert "truncated" not in (msgs[-1].content or "")
 
-    async def test_truncation_preserves_head_and_tail_on_summary_failure(self) -> None:
-        """Fallback truncation keeps head 200 + tail 100 chars."""
+    async def test_fallback_preserves_complete_tool_turn(self) -> None:
+        """Fallback keeps assistant tool calls with matching tool results."""
 
         config = CompactionConfig(context_limit=200, trigger_ratio=0.9)
         provider = FailingSummaryProvider()
@@ -787,13 +817,15 @@ class TestToolTruncationFallback:
         compactor = _make_compactor(config, provider)
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 300}, turn=3)
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 300}, turn=3
+        )
+        await compactor.apply_fallback(plan, msgs, failure_reason="LLM unavailable")
 
-        result_content = msgs[3].content or ""
+        result_content = msgs[-1].content or ""
         assert "HEAD_MARKER_" in result_content  # head preserved
         assert "_TAIL_MARKER" in result_content  # tail preserved
-        assert "truncated" in result_content  # marker present
-        assert len(result_content) < len(original_content)
+        assert len(result_content) == len(original_content)
 
 
 class TestCompactorCompatibility:
@@ -808,7 +840,10 @@ class TestCompactorCompatibility:
         compactor = _make_compactor(config, provider, event_sink=None)
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=2
+        )
+        await compactor.apply_summary(plan, msgs, "summary text")
         assert compactor._compaction_count == 1
 
     async def test_no_bus_import_in_compactor(self) -> None:

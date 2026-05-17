@@ -42,7 +42,6 @@ from matmaster.types.runtime import CompactionConfig
 logger = logging.getLogger(__name__)
 
 _EMPTY_USER_INSTRUCTIONS_HASH = f"sha256:{hashlib.sha256(b'').hexdigest()}"
-_TRUNCATION_TARGET_RATIO = 0.8
 
 SUMMARY_USER_REQUEST_TEMPLATE = """\
 <compact_request>
@@ -343,7 +342,6 @@ class ContextCompactor:
     def __init__(
         self,
         config: CompactionConfig,
-        summary_provider: LLMProvider,
         *,
         context_assembler: ContextAssembler,
         user_instructions: UserInstructions,
@@ -354,7 +352,6 @@ class ContextCompactor:
         compaction_scope: str = "root",
     ) -> None:
         self._config = config
-        self._summary_provider = summary_provider
         self._context_assembler = context_assembler
         self._user_instructions = user_instructions
         self._session_id = session_id
@@ -366,32 +363,9 @@ class ContextCompactor:
         self._last_compaction_turn: int = 0
         self._compaction_count: int = 0
 
-    @property
-    def summary_provider(self) -> LLMProvider:
-        """The LLM provider used to summarize history during compaction."""
-        return self._summary_provider
-
     def update_message_count(self, count: int) -> None:
         """Record the messages length after the last LLM call."""
         self._last_llm_message_count = count
-
-    async def preflight_if_needed(self, messages: list[Message]) -> None:
-        """Compact eagerly before the next turn when history is already too large."""
-        plan = self.plan_preflight_compaction(messages)
-        if plan is None:
-            return
-
-        await self.apply_compaction_plan(plan, messages)
-
-    async def compact_if_needed(
-        self, messages: list[Message], last_usage: dict[str, int], turn: int
-    ) -> None:
-        """Check threshold and compact messages in place when needed."""
-        plan = await self.plan_runtime_compaction(messages, last_usage, turn=turn)
-        if plan is None:
-            return
-
-        await self.apply_compaction_plan(plan, messages)
 
     def _next_compaction_id(self) -> tuple[int, str]:
         next_count = self._compaction_count + 1
@@ -452,14 +426,31 @@ class ContextCompactor:
             turn=turn,
         )
 
-    async def apply_compaction_plan(
+    def _finalize_result_state(
+        self, plan: CompactionPlan, messages: list[Message]
+    ) -> None:
+        self._compaction_count = plan.compaction_count
+        if plan.phase == "runtime":
+            self._last_compaction_turn = plan.turn or 0
+        self._last_llm_message_count = len(messages)
+        logger.warning(
+            "Context compaction #%d triggered at turn %d: "
+            "estimated_tokens=%d threshold=%d",
+            self._compaction_count,
+            self._last_compaction_turn,
+            plan.trigger_tokens,
+            self._auto_threshold(),
+        )
+
+    async def apply_summary(
         self,
         plan: CompactionPlan,
         messages: list[Message],
+        summary: str,
         *,
         turn_input: TurnInput | None = None,
     ) -> CompactionResult:
-        """Apply a previously planned compaction and mutate messages in place."""
+        """Apply a pre-computed summary and mutate messages in place."""
         if not messages:
             raise ValueError("Cannot compact an empty message list")
         if not isinstance(messages[0], SystemMessage):
@@ -475,193 +466,82 @@ class ContextCompactor:
             and isinstance(messages[-1], UserMessage)
             and bool(messages[1:-1])
         )
-        if current_split:
-            summary_input = list(messages[1:-1])
-        else:
-            summary_input = [
-                message
-                for message in messages
-                if not isinstance(message, SystemMessage)
-            ]
-        if not summary_input:
-            raise ValueError(
-                "Cannot compact messages without user or assistant history"
-            )
-
-        strategy = "summary"
-        durability = "durable"
-        failure_reason: str | None = None
-        checkpoint_covered_until_event_id: int | None = None
-        checkpoint_user_msg: UserMessage | None = None
-        user_instructions_text = ""
-        user_instructions_hash = _EMPTY_USER_INSTRUCTIONS_HASH
-
-        try:
-            summary = await self._summarize(summary_input)
-            intent = (
-                ContextAssemblyIntent.PREFLIGHT_COMPACTION
-                if current_split
-                else ContextAssemblyIntent.RUNTIME_COMPACTION
-            )
-            covered_until_event_id = None
-            if intent == ContextAssemblyIntent.RUNTIME_COMPACTION:
-                if self._runtime_covered_until_provider is None:
-                    raise ValueError(
-                        "runtime compaction requires runtime_covered_until_provider"
-                    )
-                covered_until_event_id = self._runtime_covered_until_provider()
-                if covered_until_event_id is None:
-                    raise ValueError("runtime_current_event_boundary_missing")
-
-            assembly = await self._context_assembler.assemble_compaction(
-                intent,
-                CompactionAssemblyRequest(
-                    session_id=self._session_id,
-                    spawn_id=self._spawn_id,
-                    user_instructions=self._user_instructions,
-                    compacted_history_summary=summary,
-                    turn_input=turn_input if current_split else None,
-                    covered_until_event_id=covered_until_event_id,
-                )
-            )
-            runtime_user_msg = assembly.user_turn_context.to_message(ContextView.RUNTIME)
-            checkpoint_user_msg = assembly.user_turn_context.to_message(
-                ContextView.CHECKPOINT
-            )
-            messages[:] = [system_msg, runtime_user_msg]
-            checkpoint_covered_until_event_id = assembly.covered_until_event_id
-            user_instructions_text = assembly.user_instructions_text
-            user_instructions_hash = assembly.user_instructions_hash
-        except Exception as exc:
-            if plan.phase == "preflight":
-                logger.warning(
-                    "Preflight compaction summary failed; aborting without fallback",
-                    exc_info=True,
-                )
-                raise
-            logger.warning(
-                "Compaction #%d summary failed, falling back to sliding_window",
-                plan.compaction_count,
-                exc_info=True,
-            )
-            strategy = "sliding_window"
-            durability = "ephemeral"
-            failure_reason = str(exc)
-            truncated = self._truncate_tool_results(
-                messages,
-                plan.trigger_tokens,
-                self._auto_threshold(),
-            )
-            if truncated == 0:
-                messages[:] = [system_msg, *summary_input[-3:]]
-
-        self._compaction_count = plan.compaction_count
-        if plan.phase == "runtime":
-            self._last_compaction_turn = plan.turn or 0
-        self._last_llm_message_count = len(messages)
-
-        logger.warning(
-            "Context compaction #%d triggered at turn %d: "
-            "estimated_tokens=%d threshold=%d strategy=%s",
-            self._compaction_count,
-            self._last_compaction_turn,
-            plan.trigger_tokens,
-            self._auto_threshold(),
-            strategy,
+        intent = (
+            ContextAssemblyIntent.PREFLIGHT_COMPACTION
+            if current_split
+            else ContextAssemblyIntent.RUNTIME_COMPACTION
         )
-        base_snapshot = None
-        if durability == "durable" and checkpoint_user_msg is not None:
-            base_snapshot = [checkpoint_user_msg.model_dump(mode="json")]
+        covered_until_event_id = None
+        if intent == ContextAssemblyIntent.RUNTIME_COMPACTION:
+            if self._runtime_covered_until_provider is None:
+                raise ValueError("runtime compaction requires runtime_covered_until_provider")
+            covered_until_event_id = self._runtime_covered_until_provider()
+            if covered_until_event_id is None:
+                raise ValueError("runtime_current_event_boundary_missing")
+
+        assembly = await self._context_assembler.assemble_compaction(
+            intent,
+            CompactionAssemblyRequest(
+                session_id=self._session_id,
+                spawn_id=self._spawn_id,
+                user_instructions=self._user_instructions,
+                compacted_history_summary=summary,
+                turn_input=turn_input if current_split else None,
+                covered_until_event_id=covered_until_event_id,
+            ),
+        )
+        runtime_user_msg = assembly.user_turn_context.to_message(ContextView.RUNTIME)
+        checkpoint_user_msg = assembly.user_turn_context.to_message(
+            ContextView.CHECKPOINT
+        )
+        messages[:] = [system_msg, runtime_user_msg]
+        self._finalize_result_state(plan, messages)
         return CompactionResult(
             compaction_id=plan.compaction_id,
             compaction_count=plan.compaction_count,
             phase=plan.phase,
-            strategy=strategy,
-            durability=durability,
+            strategy="summary",
+            durability="durable",
             trigger_tokens=plan.trigger_tokens,
             retained_turns=0,
-            failure_reason=failure_reason,
-            base_snapshot=base_snapshot,
-            checkpoint_covered_until_event_id=checkpoint_covered_until_event_id,
-            user_instructions_text=user_instructions_text,
-            user_instructions_hash=user_instructions_hash,
+            failure_reason=None,
+            base_snapshot=[checkpoint_user_msg.model_dump(mode="json")],
+            checkpoint_covered_until_event_id=assembly.covered_until_event_id,
+            user_instructions_text=assembly.user_instructions_text,
+            user_instructions_hash=assembly.user_instructions_hash,
         )
 
-    @staticmethod
-    def _truncate_tool_results(
+    async def apply_fallback(
+        self,
+        plan: CompactionPlan,
         messages: list[Message],
-        estimated_tokens: int,
-        threshold: float,
-    ) -> int:
-        """Truncate large ToolMessage content in place when no old turns to compress.
-
-        Iterates tool messages from oldest to newest. For each oversized message,
-        keeps a head + tail preview with a truncation marker. Stops once estimated
-        tokens drop below threshold.
-
-        Returns the number of messages truncated.
-        """
-        # Collect (index, token_count) for ToolMessages, largest first
-        tool_indices: list[tuple[int, int]] = []
-        for i, msg in enumerate(messages):
-            if isinstance(msg, ToolMessage) and msg.content:
-                toks = estimate_tokens([msg])
-                tool_indices.append((i, toks))
-
-        if not tool_indices:
-            return 0
-
-        # Sort by token count descending -- truncate the biggest first
-        tool_indices.sort(key=lambda x: x[1], reverse=True)
-
-        truncated = 0
-        tokens_to_shed = int(estimated_tokens - threshold * _TRUNCATION_TARGET_RATIO)
-
-        for idx, toks in tool_indices:
-            if tokens_to_shed <= 0:
-                break
-            msg = messages[idx]
-            assert isinstance(msg, ToolMessage)
-            content = msg.content or ""
-            if len(content) < 500:
-                continue
-
-            # Keep first 200 chars + last 100 chars, insert marker
-            head = content[:200]
-            tail = content[-100:]
-            marker = (
-                f"\n\n... [truncated: {len(content)} chars → 300 chars "
-                f"to fit context window] ...\n\n"
+        *,
+        failure_reason: str,
+    ) -> CompactionResult:
+        """Apply a tool-turn-safe sliding-window fallback."""
+        if not messages:
+            raise ValueError("Cannot compact an empty message list")
+        if not isinstance(messages[0], SystemMessage):
+            raise TypeError(
+                f"messages[0] must be SystemMessage, got {type(messages[0])}"
             )
-            new_content = head + marker + tail
-            messages[idx] = ToolMessage(
-                content=new_content,
-                tool_call_id=msg.tool_call_id,
-                tool_name=msg.tool_name,
-            )
-            saved = toks - estimate_tokens([messages[idx]])
-            tokens_to_shed -= saved
-            truncated += 1
-
-        return truncated
-
-    async def _summarize(self, old_messages: list[Message]) -> str:
-        """Use the summary provider to condense old conversation messages."""
-        conversation_text = "\n".join(
-            json.dumps(msg.model_dump(mode="json"), ensure_ascii=False)
-            for msg in old_messages
+        system_msg = messages[0]
+        tail = _select_tool_safe_tail(messages[1:], n=3)
+        if not tail:
+            raise ValueError("runtime fallback produced empty tail")
+        messages[:] = [system_msg, *tail]
+        self._finalize_result_state(plan, messages)
+        return CompactionResult(
+            compaction_id=plan.compaction_id,
+            compaction_count=plan.compaction_count,
+            phase=plan.phase,
+            strategy="sliding_window",
+            durability="ephemeral",
+            trigger_tokens=plan.trigger_tokens,
+            retained_turns=len(tail),
+            failure_reason=failure_reason,
+            base_snapshot=None,
         )
-        api_messages = [
-            {"role": "system", "content": SUMMARY_SYSTEM_PROMPT},
-            {
-                "role": "user",
-                "content": f"Summarize this conversation:\n\n{conversation_text}",
-            },
-        ]
-        response = await self._summary_provider.chat(api_messages)
-        if not response.content or not response.content.strip():
-            raise ValueError("Summary LLM returned empty content")
-        return response.content
 
 
 def _assistant_tool_call_ids(message: AssistantMessage) -> tuple[str, ...]:
