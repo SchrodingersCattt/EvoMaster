@@ -120,7 +120,9 @@ class SkillReport:
         """Average per-case trigger rate across positive cases."""
         if not self.positive_results:
             return 0.0
-        return sum(r.trigger_rate for r in self.positive_results) / len(self.positive_results)
+        return sum(r.trigger_rate for r in self.positive_results) / len(
+            self.positive_results
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -145,9 +147,7 @@ class _SkillTriggerDetector:
 
         if event.tool_name == "Skill":
             self.triggered_skill = (
-                event.arguments.get("skill")
-                or event.arguments.get("skill_name")
-                or ""
+                event.arguments.get("skill") or event.arguments.get("skill_name") or ""
             ).lstrip("/")
             self._cancel_ctrl.cancel()
         else:
@@ -240,8 +240,6 @@ async def _run_single_repeat(
     return result
 
 
-
-
 # ---------------------------------------------------------------------------
 # Main evaluation driver
 # ---------------------------------------------------------------------------
@@ -320,39 +318,47 @@ async def run_skill_trigger_eval(
 
         logger.info(
             "Evaluating skill: %s (%d pos, %d neg, k=%d, jobs=%d)",
-            skill_name, len(positives), len(negatives), repeats, jobs,
+            skill_name,
+            len(positives),
+            len(negatives),
+            repeats,
+            jobs,
         )
 
         # Build all tasks for this skill (positive + negative, all repeats)
         all_tasks: list[dict[str, Any]] = []
         for idx, prompt in enumerate(positives):
             for r in range(repeats):
-                all_tasks.append({
-                    "prompt": prompt,
-                    "target_skill": skill_name,
-                    "case_type": "positive",
-                    "max_turns": max_turns,
-                    "exp_name": exp_name,
-                    "mat_config_path": mat_config_path,
-                    "workspace_root": workspace_root,
-                    "case_index": idx,
-                    "repeat_index": r,
-                    "model_route": model_route,
-                })
+                all_tasks.append(
+                    {
+                        "prompt": prompt,
+                        "target_skill": skill_name,
+                        "case_type": "positive",
+                        "max_turns": max_turns,
+                        "exp_name": exp_name,
+                        "mat_config_path": mat_config_path,
+                        "workspace_root": workspace_root,
+                        "case_index": idx,
+                        "repeat_index": r,
+                        "model_route": model_route,
+                    }
+                )
         for idx, prompt in enumerate(negatives):
             for r in range(repeats):
-                all_tasks.append({
-                    "prompt": prompt,
-                    "target_skill": skill_name,
-                    "case_type": "negative",
-                    "max_turns": max_turns,
-                    "exp_name": exp_name,
-                    "mat_config_path": mat_config_path,
-                    "workspace_root": workspace_root,
-                    "case_index": idx,
-                    "repeat_index": r,
-                    "model_route": model_route,
-                })
+                all_tasks.append(
+                    {
+                        "prompt": prompt,
+                        "target_skill": skill_name,
+                        "case_type": "negative",
+                        "max_turns": max_turns,
+                        "exp_name": exp_name,
+                        "mat_config_path": mat_config_path,
+                        "workspace_root": workspace_root,
+                        "case_index": idx,
+                        "repeat_index": r,
+                        "model_route": model_route,
+                    }
+                )
 
         # Run all repeats in parallel (bounded by semaphore)
         coros = [_run_repeat_with_semaphore(**task) for task in all_tasks]
@@ -368,8 +374,12 @@ async def run_skill_trigger_eval(
             report.positive_results.append(case)
             logger.info(
                 "  [+] %s case %d/%d → %s (rate=%.0f%%, %dms)",
-                skill_name, idx + 1, len(positives),
-                case.verdict, case.trigger_rate * 100, case.total_duration_ms,
+                skill_name,
+                idx + 1,
+                len(positives),
+                case.verdict,
+                case.trigger_rate * 100,
+                case.total_duration_ms,
             )
 
         for idx, prompt in enumerate(negatives):
@@ -380,8 +390,12 @@ async def run_skill_trigger_eval(
             report.negative_results.append(case)
             logger.info(
                 "  [-] %s case %d/%d → %s (rate=%.0f%%, %dms)",
-                skill_name, idx + 1, len(negatives),
-                case.verdict, case.trigger_rate * 100, case.total_duration_ms,
+                skill_name,
+                idx + 1,
+                len(negatives),
+                case.verdict,
+                case.trigger_rate * 100,
+                case.total_duration_ms,
             )
 
         reports.append(report)
@@ -449,7 +463,9 @@ def _write_report(reports: list[SkillReport], output_dir: Path) -> None:
 
     # Human-readable summary
     lines: list[str] = ["# Skill Trigger Evaluation Report", ""]
-    lines.append(f"{'Skill':<25} {'Recall':<10} {'Specificity':<12} {'Pos':<8} {'Neg':<8}")
+    lines.append(
+        f"{'Skill':<25} {'Recall':<10} {'Specificity':<12} {'Pos':<8} {'Neg':<8}"
+    )
     lines.append("-" * 65)
     total_pos_pass = 0
     total_pos = 0
@@ -499,20 +515,16 @@ def main() -> None:
     )
 
     parser = argparse.ArgumentParser(description="Skill trigger-rate evaluation")
-    parser.add_argument(
-        "--cases", type=Path, default=None, help="Path to cases.yaml"
-    )
-    parser.add_argument(
-        "--config", type=Path, default=None, help="Path to LLM config"
-    )
-    parser.add_argument(
-        "--output", type=Path, default=None, help="Output directory"
-    )
+    parser.add_argument("--cases", type=Path, default=None, help="Path to cases.yaml")
+    parser.add_argument("--config", type=Path, default=None, help="Path to LLM config")
+    parser.add_argument("--output", type=Path, default=None, help="Output directory")
     parser.add_argument(
         "--exp", type=str, default=_DEFAULT_EXP_NAME, help="Exp config name"
     )
     parser.add_argument(
-        "--model", type=str, default="bedrock-claude-opus",
+        "--model",
+        type=str,
+        default="bedrock-claude-opus",
         help=(
             "LLM route key (e.g. 'bedrock-claude-opus', 'claude-sonnet-4-6'). "
             "See config/llm_config.yaml routes. Default: bedrock-claude-opus."
@@ -522,16 +534,22 @@ def main() -> None:
         "--skills", nargs="*", default=None, help="Filter: only evaluate these skills"
     )
     parser.add_argument(
-        "--max-cases", type=int, default=None,
-        help="Max cases per type per skill (for quick test)"
+        "--max-cases",
+        type=int,
+        default=None,
+        help="Max cases per type per skill (for quick test)",
     )
     parser.add_argument(
-        "--k", type=int, default=_DEFAULT_REPEATS,
-        help=f"Repeats per case — all must pass (default: {_DEFAULT_REPEATS})"
+        "--k",
+        type=int,
+        default=_DEFAULT_REPEATS,
+        help=f"Repeats per case — all must pass (default: {_DEFAULT_REPEATS})",
     )
     parser.add_argument(
-        "--jobs", type=int, default=1,
-        help="Number of parallel tasks (default: 1, sequential)"
+        "--jobs",
+        type=int,
+        default=1,
+        help="Number of parallel tasks (default: 1, sequential)",
     )
     args = parser.parse_args()
 
