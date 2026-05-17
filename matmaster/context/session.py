@@ -16,7 +16,7 @@ class SessionContextBuilder:
     """Compose session-level sections from typed inputs.
 
     Service layer is responsible for resolving active skills before
-    constructing the builder. matmaster/context/* never sees SkillRegistry.
+    constructing the builder.
     """
 
     events: tuple[SessionEvent, ...]

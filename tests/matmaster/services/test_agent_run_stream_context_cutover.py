@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from types import SimpleNamespace
 
 import pytest
 
@@ -41,14 +40,6 @@ class _StubEventsPort:
         return self._events
 
 
-class _FakeSkillRegistry:
-    def __init__(self, skills: dict[str, object]) -> None:
-        self._skills = skills
-
-    def get_skill(self, name: str) -> object | None:
-        return self._skills.get(name)
-
-
 def _hash(text: str) -> str:
     return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
 
@@ -60,17 +51,6 @@ def _bundle(text: str) -> UserInstructions:
 def _assembler(events: tuple[SessionEvent, ...] = ()) -> ContextAssembler:
     return ContextAssembler(
         ports=ContextAssemblyPorts(session_events=_StubEventsPort(events))
-    )
-
-
-def _skill(name: str, *, mcp_server: str | None = None) -> object:
-    return SimpleNamespace(
-        name=name,
-        meta_info=SimpleNamespace(
-            name=name,
-            description="PXRD helper",
-            mcp_server=mcp_server,
-        ),
     )
 
 

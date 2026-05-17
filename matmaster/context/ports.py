@@ -30,8 +30,7 @@ class ActiveSkill:
     """matmaster-owned DTO for prompt-side skill rendering.
 
     Service layer is responsible for resolving skill_hit events into this
-    structure (registry lookup + disabled rules + local/remote roots).
-    matmaster/context/* never sees SkillRegistry.
+    structure, including lookup, disabled rules, and local/remote roots.
     """
 
     name: str
