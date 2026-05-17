@@ -91,7 +91,7 @@ def _plan(phase: str) -> CompactionPlan:
 
 
 @pytest.mark.asyncio
-async def test_run_compaction_plan_summary_success_calls_apply_summary() -> None:
+async def test_compaction_plan_runner_summary_success_calls_apply_summary() -> None:
     provider = Provider("summary text")
     compactor = Compactor()
     state = _KernelState(messages=[SystemMessage(content="sys"), UserMessage(content="old")])
@@ -119,7 +119,7 @@ async def test_run_compaction_plan_summary_success_calls_apply_summary() -> None
 
 
 @pytest.mark.asyncio
-async def test_run_compaction_plan_preflight_summary_failure_raises() -> None:
+async def test_compaction_plan_runner_preflight_summary_failure_raises() -> None:
     provider = Provider(RuntimeError("network down"))
     compactor = Compactor()
     state = _KernelState(messages=[SystemMessage(content="sys"), UserMessage(content="old")])
@@ -138,7 +138,7 @@ async def test_run_compaction_plan_preflight_summary_failure_raises() -> None:
 
 
 @pytest.mark.asyncio
-async def test_run_compaction_plan_runtime_summary_failure_uses_fallback() -> None:
+async def test_compaction_plan_runner_runtime_summary_failure_uses_fallback() -> None:
     provider = Provider(RuntimeError("network down"))
     compactor = Compactor()
     state = _KernelState(messages=[SystemMessage(content="sys"), UserMessage(content="old")])

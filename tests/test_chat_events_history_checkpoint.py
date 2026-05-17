@@ -3,7 +3,7 @@
 Bug: A botched refactor in commit 88f9f5a1 left a duplicated ``session_id``
 in the params tuple, so ``cursor.execute`` was called with 8 args against
 7 ``%s`` placeholders. pymysql's ``%``-based binding raises ``TypeError``;
-``AgentKernel._run_compaction_plan`` swallowed the exception as a warning,
+``run_compaction_plan`` swallowed the exception as a warning,
 so no ``history_checkpoint`` rows were ever persisted and every subsequent
 session fell back to full ``get_session_events`` replay -> LLM context
 overflow.

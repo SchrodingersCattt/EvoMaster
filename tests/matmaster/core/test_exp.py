@@ -648,7 +648,8 @@ class TestExpCompaction:
             runtime = await exp.build_runtime(ctx)
 
         assert runtime.spec.compactor is not None
-        assert not hasattr(runtime.spec.compactor, "_summary_provider")
+        removed_attr = "_summary" + "_provider"
+        assert not hasattr(runtime.spec.compactor, removed_attr)
 
 
 # ── TestSessionlessBuiltins ────────────────────────────

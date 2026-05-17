@@ -56,7 +56,7 @@ class RecordingProvider:
     async def __aexit__(self, *args):
         pass
 
-    async def chat(self, messages, tools=None):
+    async def chat(self, messages, tools=None, *, tool_choice=None):
         return LLMResponse(content="unused", finish_reason="stop")
 
     async def chat_stream(self, messages, tools=None, *, timeout=None):
@@ -75,9 +75,6 @@ class FakeCompactor:
     def plan_preflight_compaction(self, messages):
         return None
 
-    async def preflight_if_needed(self, messages) -> None:
-        return None
-
     async def plan_runtime_compaction(self, messages, turn_usage, *, turn):
         from matmaster.context.compaction import CompactionPlan
 
@@ -89,10 +86,11 @@ class FakeCompactor:
             turn=turn,
         )
 
-    async def apply_compaction_plan(
+    async def apply_summary(
         self,
         plan,
         messages,
+        summary: str,
         *,
         turn_input=None,
     ):
@@ -135,9 +133,6 @@ class DoubleEventCompactor:
             turn=0,
         )
 
-    async def preflight_if_needed(self, messages) -> None:
-        return None
-
     async def plan_runtime_compaction(self, messages, turn_usage, *, turn):
         from matmaster.context.compaction import CompactionPlan
 
@@ -152,10 +147,11 @@ class DoubleEventCompactor:
             turn=turn,
         )
 
-    async def apply_compaction_plan(
+    async def apply_summary(
         self,
         plan,
         messages,
+        summary: str,
         *,
         turn_input=None,
     ):

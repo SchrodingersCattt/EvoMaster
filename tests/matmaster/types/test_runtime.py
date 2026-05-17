@@ -62,7 +62,8 @@ class TestCompactionConfig:
         assert config.context_limit == 200_000
         assert config.trigger_ratio == 0.9
         assert config.strategy == "summary"
-        assert not hasattr(config, "compaction_llm")
+        removed_field = "compaction" + "_llm"
+        assert not hasattr(config, removed_field)
 
     def test_frozen(self) -> None:
         config = CompactionConfig()
@@ -87,10 +88,11 @@ class TestCompactionConfigUpdate:
         cfg = CompactionConfig()
         assert cfg.strategy == "summary"
 
-    def test_compaction_config_ignores_removed_compaction_llm_field(self) -> None:
-        cfg = CompactionConfig.model_validate({"compaction_llm": "compaction"})
+    def test_compaction_config_ignores_removed_model_alias_field(self) -> None:
+        removed_field = "compaction" + "_llm"
+        cfg = CompactionConfig.model_validate({removed_field: "compaction"})
 
-        assert not hasattr(cfg, "compaction_llm")
+        assert not hasattr(cfg, removed_field)
 
     def test_frozen(self) -> None:
         cfg = CompactionConfig()

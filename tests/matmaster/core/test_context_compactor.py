@@ -390,7 +390,7 @@ class TestCompactorOutput:
         assert [item["role"] for item in result.base_snapshot] == ["user"]
         assert "<compacted_history>" in result.base_snapshot[0]["content"]
 
-    async def test_second_compact_summarizes_first_bundle_without_special_case(
+    async def test_second_compact_compresses_first_bundle_without_special_case(
         self,
     ) -> None:
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
@@ -540,7 +540,7 @@ class TestCompactorResultMetadata:
 
 
 class TestPreflightCurrentInputSplit:
-    async def test_summarizes_previous_history_and_keeps_current_instruction(
+    async def test_compresses_previous_history_and_keeps_current_instruction(
         self,
     ) -> None:
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
@@ -685,7 +685,7 @@ class TestPreflightCurrentInputSplit:
 class TestToolTruncationFallback:
     """Tool result truncation when no old turns to compress."""
 
-    async def test_preflight_summarizes_single_turn_without_old_turns(
+    async def test_preflight_compresses_single_turn_without_old_turns(
         self,
     ) -> None:
         """Preflight uses the same summary-to-bundle path for any compact window."""
@@ -721,7 +721,7 @@ class TestToolTruncationFallback:
         assert "<compacted_history>" in (msgs[1].content or "")
         assert len(received) == 0
 
-    async def test_summarizes_when_no_compressible_turns(self) -> None:
+    async def test_compresses_when_no_compressible_turns(self) -> None:
         """1 turn with huge tool results -> summary bundle on success."""
 
         config = CompactionConfig(context_limit=500, trigger_ratio=0.9)

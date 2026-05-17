@@ -31,7 +31,7 @@ class ContentOnlyProvider:
     async def __aexit__(self, *args):
         pass
 
-    async def chat(self, messages, tools=None):
+    async def chat(self, messages, tools=None, *, tool_choice=None):
         return LLMResponse(content="not used", finish_reason="stop")
 
     async def chat_stream(self, messages, tools=None, *, timeout=None):
@@ -41,6 +41,11 @@ class ContentOnlyProvider:
 
 
 # ── Compactor test doubles ───────────────────────────────────
+
+
+class FailingSummaryProvider(ContentOnlyProvider):
+    async def chat(self, messages, tools=None, *, tool_choice=None):
+        raise RuntimeError("summary down")
 
 
 def _v1_compacted_user_message(summary: str = "summary") -> UserMessage:
@@ -70,13 +75,11 @@ class _DurablePreflightCompactor:
             turn=0,
         )
 
-    async def preflight_if_needed(self, messages: list[Any]) -> None:
-        return None
-
-    async def apply_compaction_plan(
+    async def apply_summary(
         self,
         plan,
         messages: list[Any],
+        summary: str,
         *,
         turn_input=None,
     ):
@@ -124,9 +127,6 @@ class _LifecycleCompactor:
     def update_message_count(self, count: int) -> None:
         self.message_counts.append(count)
 
-    async def preflight_if_needed(self, messages: list[Any]) -> None:
-        return None
-
     async def plan_runtime_compaction(
         self,
         messages: list[Any],
@@ -145,10 +145,11 @@ class _LifecycleCompactor:
             turn=turn,
         )
 
-    async def apply_compaction_plan(
+    async def apply_summary(
         self,
         plan,
         messages: list[Any],
+        summary: str,
         *,
         turn_input=None,
     ):
@@ -179,12 +180,12 @@ class _LifecycleCompactor:
 
 
 class _EphemeralFallbackCompactor(_LifecycleCompactor):
-    async def apply_compaction_plan(
+    async def apply_fallback(
         self,
         plan,
         messages: list[Any],
         *,
-        turn_input=None,
+        failure_reason: str,
     ):
         from matmaster.context.compaction import CompactionResult
 
@@ -197,7 +198,7 @@ class _EphemeralFallbackCompactor(_LifecycleCompactor):
             durability="ephemeral",
             trigger_tokens=plan.trigger_tokens,
             retained_turns=0,
-            failure_reason="summary down",
+            failure_reason=failure_reason,
             base_snapshot=None,
         )
 
@@ -296,7 +297,7 @@ class TestCheckpointAwareCompaction:
         from matmaster.core.agent import AgentKernel
 
         checkpoint_sink = pytest.fail
-        spec = _make_spec(provider=ContentOnlyProvider()).model_copy(
+        spec = _make_spec(provider=FailingSummaryProvider()).model_copy(
             update={
                 "compactor": _EphemeralFallbackCompactor("ignored"),
                 "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
@@ -509,26 +510,29 @@ class _BarrierFailureCompactor(_DurablePreflightCompactor):
         super().__init__()
         self.apply_calls = 0
 
-    async def apply_compaction_plan(
+    async def apply_summary(
         self,
         plan,
         messages,
+        summary: str,
         *,
         turn_input=None,
     ):
         self.apply_calls += 1
-        return await super().apply_compaction_plan(
+        return await super().apply_summary(
             plan,
             messages,
+            summary,
             turn_input=turn_input,
         )
 
 
 class _BoundaryOverrideCompactor(_DurablePreflightCompactor):
-    async def apply_compaction_plan(
+    async def apply_summary(
         self,
         plan,
         messages: list[Any],
+        summary: str,
         *,
         turn_input=None,
     ):
@@ -564,18 +568,20 @@ class _RecordingTurnInputCompactor(_DurablePreflightCompactor):
         self.seen_turn_input: Any = None
         self.apply_calls = 0
 
-    async def apply_compaction_plan(
+    async def apply_summary(
         self,
         plan,
         messages: list[Any],
+        summary: str,
         *,
         turn_input=None,
     ):
         self.apply_calls += 1
         self.seen_turn_input = turn_input
-        return await super().apply_compaction_plan(
+        return await super().apply_summary(
             plan,
             messages,
+            summary,
             turn_input=turn_input,
         )
 
@@ -837,17 +843,19 @@ async def test_kernel_runs_pre_compaction_barrier_before_compactor() -> None:
     sequence: list[str] = []
 
     class BarrierCompactor(_DurablePreflightCompactor):
-        async def apply_compaction_plan(
+        async def apply_summary(
             self,
             plan,
             messages,
+            summary: str,
             *,
             turn_input=None,
         ):
             sequence.append("apply")
-            return await super().apply_compaction_plan(
+            return await super().apply_summary(
                 plan,
                 messages,
+                summary,
                 turn_input=turn_input,
             )
 
