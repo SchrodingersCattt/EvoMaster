@@ -37,19 +37,23 @@ def _safe_event_call(
     method_name: str,
     default: T,
     *args: Any,
+    _log_extra: str = "",
     **kwargs: Any,
 ) -> Any | T:
     """Call ``events_table.<method_name>(*args, **kwargs)`` defensively.
 
     Returns ``default`` when the table is missing or the call raises.
+    ``_log_extra`` appends caller-specific context to the warning message
+    (e.g. session_id, purpose) so error-triage information is preserved.
     """
     if events_table is None:
         return default
     try:
         return getattr(events_table, method_name)(*args, **kwargs)
     except Exception:
+        suffix = f" ({_log_extra})" if _log_extra else ""
         logger.warning(
-            "history wiring: %s failed", method_name, exc_info=True
+            "history wiring: %s failed%s", method_name, suffix, exc_info=True
         )
         return default
 
@@ -77,7 +81,11 @@ def build_history_wiring(
     )
 
     raw_query_events = _safe_event_call(
-        events_table, "get_session_user_query_events", [], session_id
+        events_table,
+        "get_session_user_query_events",
+        [],
+        session_id,
+        _log_extra=f"session_id={session_id}",
     )
     query_events: list[dict] = (
         raw_query_events if isinstance(raw_query_events, list) else []
@@ -185,7 +193,11 @@ def build_history_wiring(
     )
 
     bohrium_rebuild_events = _safe_event_call(
-        events_table, "get_bohrium_events", [], session_id
+        events_table,
+        "get_bohrium_events",
+        [],
+        session_id,
+        _log_extra="for registry rebuild",
     )
     if not isinstance(bohrium_rebuild_events, list):
         bohrium_rebuild_events = []
