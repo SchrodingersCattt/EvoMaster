@@ -1,23 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
-from matmaster.context.ports import SessionEvent
+from matmaster.context.ports import ActiveSkill, SessionEvent
 from matmaster.context.session import SessionContextBuilder
-from matmaster.skills.registry import SkillRegistry
-
-
-def _registry(tmp_path: Path) -> SkillRegistry:
-    root = tmp_path / "skills"
-    skill_dir = root / "pxrd"
-    skill_dir.mkdir(parents=True)
-    (skill_dir / "SKILL.md").write_text(
-        "---\nname: pxrd\ndescription: PXRD helper\nmcp_server: mat_xrd\n---\nbody\n",
-        encoding="utf-8",
-    )
-    return SkillRegistry([root])
 
 
 _BASE_EVENTS = [
@@ -57,12 +43,16 @@ def _session_events(rows: list[dict]) -> tuple[SessionEvent, ...]:
     return tuple(events)
 
 
-def test_build_sections_returns_attachments_skills_tools_in_order(
-    tmp_path: Path,
-) -> None:
+def test_build_sections_returns_attachments_skills_tools_in_order() -> None:
     builder = SessionContextBuilder(
         events=_session_events(_BASE_EVENTS),
-        skill_registry=_registry(tmp_path),
+        active_skills=(
+            ActiveSkill(
+                name="pxrd",
+                description="PXRD helper",
+                mcp_server="mat_xrd",
+            ),
+        ),
         legal_mcp_servers={"mat_xrd"},
         schemas_by_server={"mat_xrd": [{"name": "read"}]},
     )
@@ -75,12 +65,23 @@ def test_build_sections_returns_attachments_skills_tools_in_order(
     assert "session_attachments" in keys
 
 
-def test_build_sections_until_event_id_truncates_attachments(
-    tmp_path: Path,
-) -> None:
+def test_session_context_builder_renders_skills_section() -> None:
+    builder = SessionContextBuilder(
+        events=(),
+        active_skills=(ActiveSkill(name="pxrd"),),
+        legal_mcp_servers=None,
+        schemas_by_server=None,
+    )
+
+    sections = builder.build_sections(until_event_id=None, include_attachments=False)
+
+    assert any(section.tag == "loaded_skills" for section in sections)
+
+
+def test_build_sections_until_event_id_truncates_attachments() -> None:
     builder = SessionContextBuilder(
         events=_session_events(_BASE_EVENTS),
-        skill_registry=_registry(tmp_path),
+        active_skills=(),
         legal_mcp_servers={"mat_xrd"},
         schemas_by_server={"mat_xrd": [{"name": "read"}]},
     )
@@ -92,12 +93,21 @@ def test_build_sections_until_event_id_truncates_attachments(
     assert "b.csv" not in attachments.content
 
 
-def test_build_sections_exclude_attachments_drops_section(
-    tmp_path: Path,
-) -> None:
+def test_session_context_builder_attachments_still_use_events() -> None:
+    builder = SessionContextBuilder(
+        events=(SessionEvent(id=1, event_type="query", source="User", content={}),),
+        active_skills=(),
+    )
+
+    sections = builder.build_sections(until_event_id=10, include_attachments=True)
+
+    assert isinstance(sections, tuple)
+
+
+def test_build_sections_exclude_attachments_drops_section() -> None:
     builder = SessionContextBuilder(
         events=_session_events(_BASE_EVENTS),
-        skill_registry=_registry(tmp_path),
+        active_skills=(ActiveSkill(name="pxrd", mcp_server="mat_xrd"),),
         legal_mcp_servers={"mat_xrd"},
         schemas_by_server={"mat_xrd": [{"name": "read"}]},
     )
@@ -108,10 +118,10 @@ def test_build_sections_exclude_attachments_drops_section(
     assert "session_attachments" not in keys
 
 
-def test_build_sections_empty_inputs_returns_empty_tuple(tmp_path: Path) -> None:
+def test_build_sections_empty_inputs_returns_empty_tuple() -> None:
     builder = SessionContextBuilder(
         events=(),
-        skill_registry=_registry(tmp_path),
+        active_skills=(),
         legal_mcp_servers=None,
         schemas_by_server=None,
     )
@@ -121,22 +131,28 @@ def test_build_sections_empty_inputs_returns_empty_tuple(tmp_path: Path) -> None
     assert sections == ()
 
 
-def test_constructor_rejects_list_input_to_enforce_typed_envelope(
-    tmp_path: Path,
-) -> None:
+def test_constructor_rejects_list_input_to_enforce_typed_envelope() -> None:
     with pytest.raises(TypeError, match="tuple"):
         SessionContextBuilder(
             events=list(_session_events(_BASE_EVENTS)),  # type: ignore[arg-type]
-            skill_registry=_registry(tmp_path),
+            active_skills=(),
             legal_mcp_servers=None,
             schemas_by_server=None,
         )
 
 
-def test_sections_are_in_section_order_after_render_sort(tmp_path: Path) -> None:
+def test_constructor_rejects_non_tuple_active_skills() -> None:
+    with pytest.raises(TypeError, match="active_skills"):
+        SessionContextBuilder(
+            events=(),
+            active_skills=[ActiveSkill(name="pxrd")],  # type: ignore[arg-type]
+        )
+
+
+def test_sections_are_in_section_order_after_render_sort() -> None:
     builder = SessionContextBuilder(
         events=_session_events(_BASE_EVENTS),
-        skill_registry=_registry(tmp_path),
+        active_skills=(ActiveSkill(name="pxrd", mcp_server="mat_xrd"),),
         legal_mcp_servers={"mat_xrd"},
         schemas_by_server={"mat_xrd": [{"name": "read"}]},
     )
