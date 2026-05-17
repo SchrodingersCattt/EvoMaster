@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypeVar
 
 from matmaster.types.runtime_ports import (
     PlaygroundCompactionPort,
@@ -20,6 +20,8 @@ from src.services.model_history_restore_service import ModelHistoryRestoreServic
 
 logger = logging.getLogger(__name__)
 
+T = TypeVar("T")
+
 
 @dataclass(frozen=True)
 class HistoryWiringResult:
@@ -28,6 +30,28 @@ class HistoryWiringResult:
     history: list
     runtime_ports: PlaygroundRuntimePorts
     bohrium_rebuild_events: list[dict]
+
+
+def _safe_event_call(
+    events_table: Any | None,
+    method_name: str,
+    default: T,
+    *args: Any,
+    **kwargs: Any,
+) -> Any | T:
+    """Call ``events_table.<method_name>(*args, **kwargs)`` defensively.
+
+    Returns ``default`` when the table is missing or the call raises.
+    """
+    if events_table is None:
+        return default
+    try:
+        return getattr(events_table, method_name)(*args, **kwargs)
+    except Exception:
+        logger.warning(
+            "history wiring: %s failed", method_name, exc_info=True
+        )
+        return default
 
 
 def build_history_wiring(
@@ -52,51 +76,30 @@ def build_history_wiring(
         else []
     )
 
-    query_events: list[dict] = []
-    if events_table is not None:
-        try:
-            raw_query_events = events_table.get_session_user_query_events(session_id)
-            query_events = (
-                raw_query_events if isinstance(raw_query_events, list) else []
-            )
-        except Exception:
-            logger.warning(
-                "history wiring: get_session_user_query_events failed for session_id=%s",
-                session_id,
-                exc_info=True,
-            )
+    raw_query_events = _safe_event_call(
+        events_table, "get_session_user_query_events", [], session_id
+    )
+    query_events: list[dict] = (
+        raw_query_events if isinstance(raw_query_events, list) else []
+    )
 
     def _get_query_events() -> list[dict]:
         return list(query_events)
 
     def _get_all_events() -> list[dict]:
-        if events_table is None:
-            return []
-        try:
-            events = events_table.get_session_events(
-                session_id,
-                limit=raw_history_limit,
-            )
-            return events if isinstance(events, list) else []
-        except Exception:
-            logger.warning(
-                "history wiring: get_session_events failed", exc_info=True
-            )
-            return []
+        events = _safe_event_call(
+            events_table,
+            "get_session_events",
+            [],
+            session_id,
+            limit=raw_history_limit,
+        )
+        return events if isinstance(events, list) else []
 
     def _get_latest_checkpoint_covered_until_event_id() -> int | None:
-        if events_table is None:
-            return None
-        try:
-            checkpoints = events_table.get_history_checkpoints(
-                session_id, None, limit=1
-            )
-        except Exception:
-            logger.warning(
-                "history wiring: get_history_checkpoints failed",
-                exc_info=True,
-            )
-            return None
+        checkpoints = _safe_event_call(
+            events_table, "get_history_checkpoints", None, session_id, None, limit=1
+        )
         if not isinstance(checkpoints, list):
             return None
         for checkpoint in checkpoints:
@@ -113,15 +116,9 @@ def build_history_wiring(
         return None
 
     def _get_latest_scope_event_id() -> int | None:
-        if events_table is None:
-            return None
-        try:
-            raw = events_table.get_latest_scope_event_id(session_id, None)
-        except Exception:
-            logger.warning(
-                "history wiring: get_latest_scope_event_id failed", exc_info=True
-            )
-            return None
+        raw = _safe_event_call(
+            events_table, "get_latest_scope_event_id", None, session_id, None
+        )
         try:
             return int(raw) if raw is not None else None
         except (TypeError, ValueError):
@@ -135,23 +132,18 @@ def build_history_wiring(
         limit: int | None = None,
         order: str = "asc",
     ) -> list[dict[str, Any]]:
-        if events_table is None:
-            return []
-        try:
-            events = events_table.query_context_events(
-                session_id=session_id,
-                spawn_id=spawn_id,
-                until_event_id=until_event_id,
-                event_types=event_types,
-                limit=limit,
-                order=order,
-            )
-            return events if isinstance(events, list) else []
-        except Exception:
-            logger.warning(
-                "history wiring: query_context_events failed", exc_info=True
-            )
-            return []
+        events = _safe_event_call(
+            events_table,
+            "query_context_events",
+            [],
+            session_id=session_id,
+            spawn_id=spawn_id,
+            until_event_id=until_event_id,
+            event_types=event_types,
+            limit=limit,
+            order=order,
+        )
+        return events if isinstance(events, list) else []
 
     class _RunSessionEventHistory:
         def query_events(self) -> list[dict[str, Any]]:
@@ -192,15 +184,11 @@ def build_history_wiring(
         ),
     )
 
-    bohrium_rebuild_events: list[dict] = []
-    try:
-        if events_table is not None:
-            bohrium_rebuild_events = events_table.get_bohrium_events(session_id)
-    except Exception:
-        logger.warning(
-            'Failed to load Bohrium events for registry rebuild',
-            exc_info=True,
-        )
+    bohrium_rebuild_events = _safe_event_call(
+        events_table, "get_bohrium_events", [], session_id
+    )
+    if not isinstance(bohrium_rebuild_events, list):
+        bohrium_rebuild_events = []
 
     return HistoryWiringResult(
         history=history,

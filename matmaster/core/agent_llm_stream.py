@@ -42,6 +42,20 @@ def _response_item(
     )
 
 
+def _thought_item(
+    reasoning: str, stream_id: str, stream_state: str | None
+) -> _KernelItem:
+    return _KernelItem(
+        event=ThoughtEvent(
+            source="agent",
+            content=reasoning,
+            stream_state=stream_state,
+            stream_id=stream_id,
+            reasoning_content=reasoning or None,
+        )
+    )
+
+
 async def _sleep_backoff_with_cancel(
     seconds: float,
     cancel_token: CancellationToken | None,
@@ -83,14 +97,7 @@ async def stream_llm_items(
     response_stream_released = False
 
     # Start marker
-    yield _KernelItem(
-        event=ThoughtEvent(
-            source="agent",
-            content="",
-            stream_state="start",
-            stream_id=stream_id,
-        )
-    )
+    yield _thought_item("", stream_id, "start")
 
     stream_cancelled = False
     chunk_idx = 0
@@ -115,15 +122,7 @@ async def stream_llm_items(
 
             # Yield streaming events for reasoning and content chunks
             if chunk.reasoning_content:
-                yield _KernelItem(
-                    event=ThoughtEvent(
-                        source="agent",
-                        content=chunk.reasoning_content,
-                        stream_state="streaming",
-                        stream_id=stream_id,
-                        reasoning_content=chunk.reasoning_content,
-                    )
-                )
+                yield _thought_item(chunk.reasoning_content, stream_id, "streaming")
 
             if chunk.content:
                 if response_stream_released:
@@ -144,14 +143,8 @@ async def stream_llm_items(
             if chunk.content:
                 # Segment transition: reasoning -> content
                 if producing_reasoning:
-                    yield _KernelItem(
-                        event=ThoughtEvent(
-                            source="agent",
-                            content="".join(reasoning_parts),
-                            stream_state="complete",
-                            stream_id=stream_id,
-                            reasoning_content="".join(reasoning_parts),
-                        )
+                    yield _thought_item(
+                        "".join(reasoning_parts), stream_id, "complete"
                     )
                     producing_reasoning = False
                 content_parts.append(chunk.content)
@@ -166,14 +159,8 @@ async def stream_llm_items(
             if chunk.tool_call_deltas:
                 # Segment transition: reasoning -> tool_calls
                 if producing_reasoning:
-                    yield _KernelItem(
-                        event=ThoughtEvent(
-                            source="agent",
-                            content="".join(reasoning_parts),
-                            stream_state="complete",
-                            stream_id=stream_id,
-                            reasoning_content="".join(reasoning_parts),
-                        )
+                    yield _thought_item(
+                        "".join(reasoning_parts), stream_id, "complete"
                     )
                     producing_reasoning = False
                 # Segment transition: content -> tool_calls
@@ -211,15 +198,7 @@ async def stream_llm_items(
     finally:
         # Emit segment-complete for any in-progress segments
         if producing_reasoning:
-            yield _KernelItem(
-                event=ThoughtEvent(
-                    source="agent",
-                    content="".join(reasoning_parts),
-                    stream_state="complete",
-                    stream_id=stream_id,
-                    reasoning_content="".join(reasoning_parts),
-                )
-            )
+            yield _thought_item("".join(reasoning_parts), stream_id, "complete")
         if producing_content:
             content_snapshot = "".join(content_parts)
             visible_snapshot = normalize_visible_response_text(content_snapshot)

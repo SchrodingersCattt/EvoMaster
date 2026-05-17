@@ -45,3 +45,25 @@ class ContextSection:
             raise ValueError("ContextSection.key must be non-empty")
         if not self.tag:
             raise ValueError("ContextSection.tag must be non-empty")
+
+
+def single_section_or_empty(
+    *,
+    key: str,
+    tag: str,
+    content: str,
+    order: int,
+    views: frozenset[ContextView] = ALL_VIEWS,
+) -> tuple[ContextSection, ...]:
+    """Return a single-element tuple if content has non-blank text, else ()."""
+    if not content.strip():
+        return ()
+    return (
+        ContextSection(
+            key=key,
+            tag=tag,
+            content=content,
+            order=order,
+            views=views,
+        ),
+    )

@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from matmaster.context.sections import ALL_VIEWS, ContextSection, SectionOrder
+from matmaster.context.sections import (
+    ContextSection,
+    SectionOrder,
+    single_section_or_empty,
+)
 
 
 @dataclass(frozen=True)
@@ -16,14 +20,9 @@ class SessionWorkspaceSource:
     text: str = ""
 
     def to_sections(self) -> tuple[ContextSection, ...]:
-        if not self.text.strip():
-            return ()
-        return (
-            ContextSection(
-                key="session_workspace",
-                tag="session_workspace",
-                content=self.text,
-                order=SectionOrder.SESSION_WORKSPACE,
-                views=ALL_VIEWS,
-            ),
+        return single_section_or_empty(
+            key="session_workspace",
+            tag="session_workspace",
+            content=self.text,
+            order=SectionOrder.SESSION_WORKSPACE,
         )
