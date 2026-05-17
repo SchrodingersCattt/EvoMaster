@@ -1,9 +1,7 @@
 categories:
   structure-modeling:
-    name: 结构建模
     groups:
       atomic-structure-ops:
-        name: 原子结构操作
         skills:
           - build-atomic-structure
           - inspect-atomic-structure
@@ -11,84 +9,66 @@ categories:
           - assemble-atomic-structure
           - sample-atomic-structures
       crystal-special:
-        name: 晶体与特殊结构
         skills:
           - operate-molecular-crystal
           - structure-manager
           - mcp-mat-struct-db
       polymer-modeling:
-        name: 高分子建模
         skills:
           - poly-generator
           - poly-forcefield
 
   simulation:
-    name: 模拟计算
     groups:
       abacus:
-        name: ABACUS
         skills:
           - abacus
           - pyatb
       vasp:
-        name: VASP
         skills:
           - vasp
           - vaspkit-postprocess
       cp2k:
-        name: CP2K
         skills:
           - cp2k
       quantum-espresso:
-        name: Quantum ESPRESSO
         skills:
           - quantum_espresso
       abinit:
-        name: ABINIT
         skills:
           - abinit
       pyscf:
-        name: PySCF
         skills:
           - pyscf
       orca:
-        name: ORCA
         skills:
           - orca
       lammps:
-        name: LAMMPS
         skills:
           - lammps
       gromacs:
-        name: GROMACS
         skills:
           - gromacs
           - gromacs-system-prep
           - grompp-remote-mdrun
       gpumd:
-        name: GPUMD
         skills:
           - gpumd
       mlips:
-        name: MLIPs
         skills:
           - mlips
           - aissq-explorer
       md-analysis:
-        name: MD 分析
         skills:
           - md-analysis
 
   analysis:
-    name: 分析与表征
     groups:
       general-data-analysis:
-        name: 通用数据分析
         skills:
           - data-analysis
           - result-analysis
       characterization:
-        name: 表征与谱学
         skills:
           - xrd-analysis
           - pxrd-refinement
@@ -97,32 +77,26 @@ categories:
           - mcp-mat-nmr
           - mcp-mat-electron-microscope
       data-mining:
-        name: 数据挖掘与优化
         skills:
           - mcp-mat-compdart
           - composition-optimization
           - tasker-polar-surface
 
   research-writing:
-    name: 科研写作
     groups:
       literature:
-        name: 文献调研
         skills:
           - mcp-mat-doc
           - deep-survey
           - lit-data-organizer
       academic-writing:
-        name: 学术写作
         skills:
           - manuscript-scribe
           - proposal-review
 
   workflow-system:
-    name: 工作流与系统
     groups:
       task-planning:
-        name: 任务规划
         skills:
           - plan-writer
           - plan-checker
@@ -131,7 +105,6 @@ categories:
           - acceptance-writer
           - stack-checker
       system-tools:
-        name: 系统工具
         skills:
           - skill-manager
           - input-manual-helper
