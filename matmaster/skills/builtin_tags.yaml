@@ -11,13 +11,12 @@ categories:
           - tasker-polar-surface
           - operate-molecular-crystal
           - structure-manager
-      crystal-special:
+      structure-search:
         skills:
           - mcp-mat-struct-db
       polymer-modeling:
         skills:
           - poly-generator
-          - poly-forcefield
 
   simulation:
     groups:
@@ -53,6 +52,7 @@ categories:
           - gromacs-system-prep
           - grompp-remote-mdrun
           - md-analysis
+          - poly-forcefield
       gpumd:
         skills:
           - gpumd
