@@ -11,12 +11,12 @@ import logging
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
-from matmaster.context.sources.turn_input import TurnInput
 from matmaster.core.hooks import CompactionContext, HookEvent
 from matmaster.core.kernel_items import _KernelItem, _KernelState
 from matmaster.types.events import CompactionEvent
 
 if TYPE_CHECKING:
+    from matmaster.context.sources.turn_input import TurnInput
     from matmaster.types.runtime import AgentRuntimeSpec
 
 logger = logging.getLogger(__name__)

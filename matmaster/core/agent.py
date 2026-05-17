@@ -18,7 +18,6 @@ import logging
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
-from matmaster.context.sources.turn_input import TurnInput
 from matmaster.core.agent_compaction import (
     run_preflight_compaction_if_needed,
     run_runtime_compaction_if_needed,
@@ -229,6 +228,8 @@ class AgentKernel:
                 HookEvent.USER_PROMPT_SUBMIT,
                 UserPromptContext(prompt=task, session_id=session_id),
             )
+
+        from matmaster.context.sources.turn_input import TurnInput
 
         raw_turn_input = spec.meta.get("turn_input")
         turn_input = (
