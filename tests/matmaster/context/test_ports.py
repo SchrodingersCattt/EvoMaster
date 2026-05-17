@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from matmaster.context.ports import (
+    ActiveSkill,
     ContextAssemblyPorts,
     SessionEvent,
     SessionEventQuery,
@@ -19,6 +20,22 @@ def test_user_instructions_is_typed_data_carrier() -> None:
     assert instructions.text == "Use SI units.\n"
     assert instructions.hash == "sha256:abc"
     assert instructions.truncated is True
+
+
+def test_active_skill_defaults_to_empty_description_and_no_mcp_server() -> None:
+    skill = ActiveSkill(name="pxrd")
+
+    assert skill.name == "pxrd"
+    assert skill.description == ""
+    assert skill.mcp_server is None
+
+
+def test_active_skill_is_frozen_and_hashable() -> None:
+    skill = ActiveSkill(name="pxrd", description="x-ray", mcp_server="xrd_server")
+
+    assert hash(skill) == hash(
+        ActiveSkill(name="pxrd", description="x-ray", mcp_server="xrd_server")
+    )
 
 
 def test_session_event_preserves_typed_envelope() -> None:

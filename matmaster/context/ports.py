@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, Protocol, TypeAlias
@@ -26,6 +26,20 @@ class UserInstructionsPort(Protocol):
 
 
 @dataclass(frozen=True)
+class ActiveSkill:
+    """matmaster-owned DTO for prompt-side skill rendering.
+
+    Service layer is responsible for resolving skill_hit events into this
+    structure (registry lookup + disabled rules + local/remote roots).
+    matmaster/context/* never sees SkillRegistry.
+    """
+
+    name: str
+    description: str = ""
+    mcp_server: str | None = None
+
+
+@dataclass(frozen=True)
 class SessionEvent:
     """DB events row envelope for context assembly.
 
@@ -43,6 +57,11 @@ class SessionEvent:
     invocation_id: str | None = None
     spawn_id: str | None = None
     created_at_ms: int | None = None
+
+
+SkillResolver: TypeAlias = Callable[
+    [tuple[SessionEvent, ...]], tuple[ActiveSkill, ...]
+]
 
 
 @dataclass(frozen=True)
