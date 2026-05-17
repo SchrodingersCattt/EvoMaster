@@ -55,18 +55,23 @@ def _load_tags_config() -> dict[str, Any]:
 
     skills_map: dict[str, list[str]] = {}
     skill_category_map: dict[str, str] = {}
+    categories_slim: dict[str, Any] = {}
 
     for cat_id, cat in categories.items():
         groups = cat.get("groups", {})
+        groups_slim: dict[str, Any] = {}
         for group_id, group in groups.items():
-            for skill_name in group.get("skills", []):
+            skills_list = group.get("skills", [])
+            groups_slim[group_id] = {"skills": skills_list}
+            for skill_name in skills_list:
                 skills_map.setdefault(skill_name, []).append(group_id)
                 skill_category_map.setdefault(skill_name, cat_id)
+        categories_slim[cat_id] = {"groups": groups_slim}
 
     return {
         "skills": skills_map,
         "skill_categories": skill_category_map,
-        "categories": categories,
+        "categories": categories_slim,
     }
 
 
