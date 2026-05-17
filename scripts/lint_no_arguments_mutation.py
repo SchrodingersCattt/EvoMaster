@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 """Heuristic lint: detect mutation of ToolCallData.arguments.
 
-This is a fast tripwire for the E3 arguments_json cache contract, not a full
-AST proof. It only flags common mutation patterns on identifiers that normally
-refer to ToolCallData instances.
+This is a fast AST tripwire for the E3 arguments_json cache contract. It flags
+common mutation patterns on ToolCallData.arguments and on conventional runner
+argument variable names.
 """
 
 from __future__ import annotations
 
-import re
+import ast
 import sys
-import tokenize
-from io import StringIO
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -21,26 +19,8 @@ ALLOWLIST_PREFIXES = [
     "matmaster/providers/openai_provider.py",
 ]
 
-_TC_IDENTIFIERS = r"(?:tc|tool_call|tool_calls\[\s*\d+\s*\])"
-
-PATTERNS = [
-    (
-        rf"\b{_TC_IDENTIFIERS}\.arguments\s*=\s*[^=]",
-        "rebind <tc>.arguments = ...",
-    ),
-    (
-        rf"\b{_TC_IDENTIFIERS}\.arguments\[[^\]]+\]\s*=\s*",
-        "subscript assign <tc>.arguments[k] = ...",
-    ),
-    (
-        rf"\b{_TC_IDENTIFIERS}\.arguments\.(?:update|pop|clear|setdefault|popitem)\b",
-        "mutate via <tc>.arguments.<method>(...)",
-    ),
-    (
-        rf"\b{_TC_IDENTIFIERS}\.model_copy\([^)]*update\s*=\s*\{{[^}}]*['\"]arguments['\"]",
-        "<tc>.model_copy(update={'arguments': ...}) carries stale cache",
-    ),
-]
+PROTECTED_NAMES = {"arguments", "effective_args", "args"}
+MUTATING_METHODS = {"update", "pop", "clear", "setdefault", "popitem"}
 
 
 def _is_allowlisted(rel_path: str) -> bool:
@@ -56,29 +36,74 @@ def check_file(path: Path) -> list[tuple[int, str, str]]:
         return violations
 
     source_lines = text.splitlines()
-    code_lines = list(source_lines)
     try:
-        tokens = tokenize.generate_tokens(StringIO(text).readline)
-        for token in tokens:
-            if token.type not in {tokenize.STRING, tokenize.COMMENT}:
-                continue
-            start_line, start_col = token.start
-            end_line, end_col = token.end
-            for line_no in range(start_line, end_line + 1):
-                index = line_no - 1
-                if index >= len(code_lines):
-                    continue
-                line = code_lines[index]
-                left = start_col if line_no == start_line else 0
-                right = end_col if line_no == end_line else len(line)
-                code_lines[index] = line[:left] + (" " * (right - left)) + line[right:]
-    except tokenize.TokenError:
-        code_lines = source_lines
+        tree = ast.parse(text, filename=str(path))
+    except SyntaxError:
+        return violations
 
-    for line_no, line in enumerate(code_lines, start=1):
-        for regex, label in PATTERNS:
-            if re.search(regex, line):
-                violations.append((line_no, label, source_lines[line_no - 1].rstrip()))
+    def line_for(node: ast.AST) -> str:
+        line_no = getattr(node, "lineno", 1)
+        if 1 <= line_no <= len(source_lines):
+            return source_lines[line_no - 1].rstrip()
+        return ""
+
+    def add(node: ast.AST, label: str) -> None:
+        violations.append((getattr(node, "lineno", 1), label, line_for(node)))
+
+    def is_arguments_attr(node: ast.AST) -> bool:
+        return isinstance(node, ast.Attribute) and node.attr == "arguments"
+
+    def protected_name(node: ast.AST) -> str | None:
+        if isinstance(node, ast.Name) and node.id in PROTECTED_NAMES:
+            return node.id
+        return None
+
+    def model_copy_updates_arguments(node: ast.Call) -> bool:
+        func = node.func
+        if not isinstance(func, ast.Attribute) or func.attr != "model_copy":
+            return False
+        for keyword in node.keywords:
+            if keyword.arg != "update":
+                continue
+            value = keyword.value
+            if not isinstance(value, ast.Dict):
+                continue
+            for key in value.keys:
+                if isinstance(key, ast.Constant) and key.value == "arguments":
+                    return True
+        return False
+
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            for target in targets:
+                if is_arguments_attr(target):
+                    add(target, "rebind <obj>.arguments = ...")
+                if isinstance(target, ast.Subscript):
+                    owner = target.value
+                    if is_arguments_attr(owner):
+                        add(target, "subscript assign <obj>.arguments[k] = ...")
+                    name = protected_name(owner)
+                    if name is not None:
+                        add(target, f"subscript assign {name}[k] = ...")
+
+        if not isinstance(node, ast.Call):
+            continue
+
+        if model_copy_updates_arguments(node):
+            add(node, "model_copy(update={'arguments': ...}) carries stale cache")
+            continue
+
+        func = node.func
+        if not isinstance(func, ast.Attribute) or func.attr not in MUTATING_METHODS:
+            continue
+        owner = func.value
+        if is_arguments_attr(owner):
+            add(node, f"mutate via <obj>.arguments.{func.attr}(...)")
+        name = protected_name(owner)
+        if name is not None:
+            add(node, f"mutate via {name}.<method>(...)")
+
     return violations
 
 

@@ -43,3 +43,12 @@ def test_tool_call_data_frozen_blocks_field_rebind():
     tc = ToolCallData(id="c1", name="search", arguments={"q": "x"})
     with pytest.raises(Exception):
         tc.arguments = {"q": "y"}  # type: ignore[misc]
+
+
+def test_model_copy_update_arguments_is_forbidden():
+    """model_copy(update={'arguments': ...}) would carry stale cached JSON."""
+    tc = ToolCallData(id="c1", name="search", arguments={"q": "old"})
+    assert json.loads(tc.arguments_json) == {"q": "old"}
+
+    with pytest.raises(ValueError, match="fresh ToolCallData"):
+        tc.model_copy(update={"arguments": {"q": "new"}})

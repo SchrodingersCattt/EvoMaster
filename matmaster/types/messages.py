@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+from collections.abc import Mapping
 from enum import Enum
 from functools import cached_property
 from typing import Any, Literal
@@ -54,6 +55,25 @@ class ToolCallData(BaseModel):
     def arguments_json(self) -> str:
         """JSON-serialized arguments, cached once per instance."""
         return json.dumps(self.arguments)
+
+    def model_copy(
+        self,
+        *,
+        update: Mapping[str, Any] | None = None,
+        deep: bool = False,
+    ) -> ToolCallData:
+        """Copy the model, forbidding arguments replacement.
+
+        Pydantic preserves cached_property state during model_copy. Replacing
+        arguments through update after arguments_json is cached would silently
+        carry stale JSON, so callers must construct a fresh instance.
+        """
+        if update is not None and "arguments" in update:
+            raise ValueError(
+                "Changing arguments via model_copy(update=...) would stale "
+                "arguments_json; construct a fresh ToolCallData instead."
+            )
+        return super().model_copy(update=update, deep=deep)
 
 
 def _coerce_parsed_tool_arguments(value: Any) -> dict[str, Any] | None:

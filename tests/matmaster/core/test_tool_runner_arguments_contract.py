@@ -58,6 +58,20 @@ class _RecordingTool:
         return ToolResult(content="ok")
 
 
+class _MutatingTool(_RecordingTool):
+    """Tool that violates the contract so the runner isolation can be tested."""
+
+    @property
+    def name(self) -> str:
+        return "mutate_args"
+
+    async def execute(self, arguments: dict[str, Any]) -> ToolResult:
+        self.calls.append(arguments)
+        arguments["q"] = "MUTATED"
+        arguments["nested"]["n"] = 99
+        return ToolResult(content="mutated")
+
+
 def test_nested_mutation_stales_arguments_json_cache():
     """Nested mutation is allowed by frozen, and that would stale the cache."""
     tc = ToolCallData(id="c1", name="synthetic_mut", arguments={"q": "hello", "n": 5})
@@ -105,10 +119,53 @@ async def test_full_tool_runner_chain_does_not_mutate_arguments():
     snapshot = copy.deepcopy(tc.arguments)
     cached_before = tc.arguments_json
 
-    results = await runner.execute_batch([tc], ToolExecutionContext(turn=1, max_turns=3))
+    results = await runner.execute_batch(
+        [tc], ToolExecutionContext(turn=1, max_turns=3)
+    )
 
     assert len(results) == 1
     assert results[0][1].status == "success"
     assert tool.calls == [tc.arguments]
+    assert tc.arguments == snapshot
+    assert tc.arguments_json == cached_before
+
+
+@pytest.mark.asyncio
+async def test_full_tool_runner_isolates_original_arguments_from_mutating_tool():
+    """Even a mutating tool must not stale the original ToolCallData cache."""
+    tool = _MutatingTool()
+    registry = ToolRegistry()
+    registry.register(tool, source="builtin")
+    topology = RuntimeTopology(
+        session_kind="local",
+        control_root="/tmp/control",
+        workspace_root="/tmp/workspace",
+        active_planes=frozenset(ToolPlane),
+    )
+    catalog = ToolCatalog(registry, topology=topology)
+    runner = FullToolRunner(
+        catalog=catalog,
+        structural_validation=StructuralValidation(),
+        capability_policy=DefaultCapabilityPolicy(),
+        scheduler=ToolScheduler(default_timeout=1.0),
+        topology=topology,
+    )
+
+    tc = ToolCallData(
+        id="c1",
+        name=tool.name,
+        arguments={"q": "hello", "nested": {"n": 5}},
+    )
+    snapshot = copy.deepcopy(tc.arguments)
+    cached_before = tc.arguments_json
+
+    results = await runner.execute_batch(
+        [tc], ToolExecutionContext(turn=1, max_turns=3)
+    )
+
+    assert len(results) == 1
+    assert results[0][1].content == "mutated"
+    assert tool.calls[0] is not tc.arguments
+    assert tool.calls[0] == {"q": "MUTATED", "nested": {"n": 99}}
     assert tc.arguments == snapshot
     assert tc.arguments_json == cached_before
