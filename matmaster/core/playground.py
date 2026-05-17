@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import logging
 import threading
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -117,6 +118,12 @@ class PlaygroundContext(BaseModel):
     ) -> "PlaygroundContext":
         """Return a new frozen instance with runtime capability ports updated."""
         return self.model_copy(update={"runtime_ports": runtime_ports})
+
+    def with_runtime_port(self, **fields: Any) -> "PlaygroundContext":
+        """Return a new instance with selected runtime port fields replaced."""
+        if not fields:
+            return self
+        return self.with_runtime_ports(replace(self.runtime_ports, **fields))
 
     def with_run_meta(self, **fields: Any) -> "PlaygroundContext":
         """Return a new frozen instance with ``run_meta`` keys merged."""

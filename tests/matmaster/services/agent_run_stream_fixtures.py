@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -43,6 +44,13 @@ def _make_mock_pg_ctx() -> MagicMock:
         return ctx
 
     ctx.with_runtime_ports.side_effect = _with_runtime_ports
+
+    def _with_runtime_port(**fields: Any) -> MagicMock:
+        if fields:
+            ctx.runtime_ports = replace(ctx.runtime_ports, **fields)
+        return ctx
+
+    ctx.with_runtime_port.side_effect = _with_runtime_port
 
     def _with_run_meta(**fields: Any) -> MagicMock:
         if fields:

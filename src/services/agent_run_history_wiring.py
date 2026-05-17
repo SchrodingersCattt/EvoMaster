@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any, TypeVar
 
 from matmaster.context.ports import SessionEvent, SessionEventQuery
@@ -63,6 +63,7 @@ def _safe_event_call(
 
 def build_history_wiring(
     *,
+    base_runtime_ports: PlaygroundRuntimePorts,
     events_table: Any | None,
     session_id: str,
     task_id: str,
@@ -183,7 +184,8 @@ def build_history_wiring(
         def latest_scope_event_id(self) -> int | None:
             return _get_latest_scope_event_id()
 
-    runtime_ports = PlaygroundRuntimePorts(
+    runtime_ports = replace(
+        base_runtime_ports,
         child_event_forward_sink=child_event_sink,
         compaction=PlaygroundCompactionPort(
             history=_RunSessionEventHistory(),

@@ -12,6 +12,7 @@ from typing import Any, NotRequired, Protocol, TypedDict, runtime_checkable
 
 from matmaster.context.ports import SessionEvent, SessionEventQuery
 from matmaster.types.events import BusEvent
+from matmaster.types.figures import FigureUploadConfig
 
 
 class CompactionCheckpointPayload(TypedDict):
@@ -94,11 +95,17 @@ class PlaygroundCompactionPort:
 
 
 @dataclass(frozen=True)
+class FigureUploadPort:
+    config: FigureUploadConfig | None = None
+
+
+@dataclass(frozen=True)
 class PlaygroundRuntimePorts:
     child_event_forward_sink: BusEventSink | None = None
     compaction: PlaygroundCompactionPort = field(
         default_factory=PlaygroundCompactionPort
     )
+    figure_upload: FigureUploadPort = field(default_factory=FigureUploadPort)
 
 
 @dataclass(frozen=True)

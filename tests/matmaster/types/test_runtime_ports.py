@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError, is_dataclass
+
 import pytest
 from pydantic import TypeAdapter
 
 from matmaster.types.events import ResponseEvent
+from matmaster.types.figures import FigureUploadConfig
 from matmaster.types.runtime_ports import (
     BusEventSink,
     CheckpointSink,
     CheckpointSinkFactory,
     EmptySessionEventHistory,
+    FigureUploadPort,
     KernelRuntimePorts,
     PlaygroundCompactionPort,
     PlaygroundRuntimePorts,
@@ -47,6 +51,8 @@ def test_playground_runtime_ports_defaults_are_narrow() -> None:
 
     assert ports.child_event_forward_sink is None
     assert isinstance(ports.compaction, PlaygroundCompactionPort)
+    assert isinstance(ports.figure_upload, FigureUploadPort)
+    assert ports.figure_upload.config is None
     assert ports.compaction.history is None
     assert ports.compaction.checkpoint_sink_factory is None
     assert ports.compaction.pre_compaction_barrier is None
@@ -54,6 +60,21 @@ def test_playground_runtime_ports_defaults_are_narrow() -> None:
     assert not hasattr(ports, "metadata")
     assert not hasattr(ports, "state")
     assert not hasattr(ports, "services")
+
+
+def test_figure_upload_port_is_frozen_dataclass() -> None:
+    cfg = FigureUploadConfig(
+        session_id="sess-1",
+        task_id="task-1",
+        asset_key_prefix="figures/sess-1/task-1",
+        upload_bytes=lambda data, name: f"https://oss.example/{name}",
+    )
+    port = FigureUploadPort(config=cfg)
+
+    assert is_dataclass(port)
+    assert port.config is cfg
+    with pytest.raises(FrozenInstanceError):
+        port.config = None
 
 
 def test_kernel_runtime_ports_defaults_are_narrow() -> None:

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from matmaster.types.events import RunResultEvent
-from tests.matmaster.services.test_agent_run_stream_fixtures import (
+from tests.matmaster.services.agent_run_stream_fixtures import (
     _make_cancel_token,
     _patched_service,
 )

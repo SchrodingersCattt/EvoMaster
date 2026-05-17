@@ -5,11 +5,18 @@ from unittest.mock import patch
 import pytest
 
 from matmaster.context.ports import SessionEventQuery
+from matmaster.types.figures import FigureUploadConfig
+from matmaster.types.runtime_ports import FigureUploadPort, PlaygroundRuntimePorts
 from src.services.agent_run_history_wiring import build_history_wiring
 
 
-def _build_history_wiring(*, events_table):
+def _build_history_wiring(
+    *,
+    events_table,
+    base_runtime_ports: PlaygroundRuntimePorts | None = None,
+):
     return build_history_wiring(
+        base_runtime_ports=base_runtime_ports or PlaygroundRuntimePorts(),
         events_table=events_table,
         session_id="sess-1",
         task_id="task-1",
@@ -92,3 +99,24 @@ async def test_history_wiring_load_events_returns_typed_session_events() -> None
     assert events[0].source == "User"
     assert events[0].content["files"] == ("a",)
     assert table.context_kwargs["session_id"] == "sess-1"
+
+
+def test_build_history_wiring_merges_into_existing_runtime_ports() -> None:
+    cfg = FigureUploadConfig(
+        session_id="sess-1",
+        task_id="task-1",
+        asset_key_prefix="figures/sess-1/task-1",
+        upload_bytes=lambda data, name: f"https://oss.example/{name}",
+    )
+    base_ports = PlaygroundRuntimePorts(
+        figure_upload=FigureUploadPort(config=cfg)
+    )
+
+    result = _build_history_wiring(
+        events_table=None,
+        base_runtime_ports=base_ports,
+    )
+
+    assert result.runtime_ports.figure_upload.config is cfg
+    assert result.runtime_ports.child_event_forward_sink is not None
+    assert result.runtime_ports.compaction.history is not None

@@ -484,22 +484,25 @@ class TestBuildRuntimeFullToolRunner:
         self,
     ) -> None:
         from matmaster.core.exp import Exp
+        from matmaster.types.figures import FigureUploadConfig
+        from matmaster.types.runtime_ports import FigureUploadPort
 
-        figure_upload_config = {
-            "bucket": "figures",
-            "rules": {"enabled": True, "formats": ["png", "svg"]},
-        }
+        figure_upload_config = FigureUploadConfig(
+            session_id="sess-1",
+            task_id="task-1",
+            asset_key_prefix="figures/sess-1/task-1",
+            upload_bytes=lambda data, name: f"https://oss.example/{name}",
+        )
         config = _make_exp_config()
         exp = Exp(config)
-        ctx = _make_playground_context().model_copy(
-            update={"run_meta": {"figure_upload_config": figure_upload_config}}
+        ctx = _make_playground_context().with_runtime_port(
+            figure_upload=FigureUploadPort(config=figure_upload_config)
         )
 
         runtime = await exp.build_runtime(ctx)
 
         stored = runtime.spec.tool_runner.state.get("figure_upload_config")
         assert stored is figure_upload_config
-        assert stored == figure_upload_config
 
 
 # ── ESIN-01: run_stream() yields events and runs cleanup ─

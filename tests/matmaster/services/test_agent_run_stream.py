@@ -24,7 +24,8 @@ from matmaster.types.events import (
     RunResultEvent,
     ThoughtEvent,
 )
-from tests.matmaster.services.test_agent_run_stream_fixtures import (
+from matmaster.types.figures import FigureUploadConfig
+from tests.matmaster.services.agent_run_stream_fixtures import (
     _FakeExp,
     _make_cancel_token,
     _make_mock_pg_ctx,
@@ -104,7 +105,7 @@ async def test_run_agent_injects_child_event_forward_sink_into_runtime_ports():
 
 
 @pytest.mark.asyncio
-async def test_run_agent_injects_figure_upload_config_into_pg_ctx_run_meta():
+async def test_run_agent_injects_figure_upload_via_runtime_ports():
     run_result = RunResultEvent(
         source='MatMaster',
         status='completed',
@@ -124,10 +125,16 @@ async def test_run_agent_injects_figure_upload_config_into_pg_ctx_run_meta():
             invocation_id='inv-figure-config',
         )
 
-    figure_cfg = svc._test_fake_exp.last_ctx.run_meta['figure_upload_config']
+    ctx = svc._test_fake_exp.last_ctx
+    figure_cfg = ctx.runtime_ports.figure_upload.config
+    assert figure_cfg is not None
+    assert isinstance(figure_cfg, FigureUploadConfig)
     assert figure_cfg.session_id == 'sess-1'
     assert figure_cfg.task_id == 'task-1'
     assert callable(figure_cfg.upload_bytes)
+    assert "figure_upload_config" not in ctx.run_meta
+    assert ctx.runtime_ports.child_event_forward_sink is not None
+    assert ctx.runtime_ports.compaction.history is not None
 
 
 @pytest.mark.asyncio
@@ -411,6 +418,7 @@ async def test_run_agent_does_not_store_callback_ports_in_run_meta():
         "get_all_events",
         "get_latest_checkpoint_covered_until_event_id",
         "pre_compaction_barrier",
+        "figure_upload_config",
     }
     assert forbidden.isdisjoint(run_meta)
 

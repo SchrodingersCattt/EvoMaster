@@ -41,6 +41,7 @@ from matmaster.types.events import (
     StreamClosedEvent,
     ToolResultEvent,
 )
+from matmaster.types.runtime_ports import FigureUploadPort
 from src.dao.chat_events_table import get_chat_events_table
 from src.dao.redis_dao import get_redis_dao
 from src.services.agent_run_bohrium_stage import (
@@ -481,8 +482,10 @@ class AgentRunService:
                     spawn_id=spawn_id,
                 )
 
+            pg_ctx = pg_ctx.with_runtime_port(
+                figure_upload=FigureUploadPort(config=figure_upload_config),
+            )
             pg_ctx = pg_ctx.with_run_meta(
-                figure_upload_config=figure_upload_config,
                 user_instructions=user_instructions.text,
                 user_instructions_hash=user_instructions.hash,
                 user_instructions_truncated=user_instructions.truncated,
@@ -503,6 +506,7 @@ class AgentRunService:
             pg_ctx = pg_ctx.model_copy(update={'interaction_bridge': bridge})
             # -- Stage 5: History --
             wiring = build_history_wiring(
+                base_runtime_ports=pg_ctx.runtime_ports,
                 events_table=events_table,
                 session_id=session_id,
                 task_id=task_id,

@@ -464,6 +464,44 @@ class TestPlaygroundContextRuntimePorts:
         assert updated.env_vars == {"A": "B"}
         assert updated.run_meta == {"task_id": "task-1"}
 
+    def test_with_runtime_port_merges_single_field_only(self) -> None:
+        from matmaster.types.figures import FigureUploadConfig
+        from matmaster.types.runtime_ports import (
+            EmptySessionEventHistory,
+            FigureUploadPort,
+            PlaygroundCompactionPort,
+            PlaygroundRuntimePorts,
+        )
+
+        def child_sink(event) -> None:
+            return None
+
+        history = EmptySessionEventHistory()
+        cfg = FigureUploadConfig(
+            session_id="sess-1",
+            task_id="task-1",
+            asset_key_prefix="figures/sess-1/task-1",
+            upload_bytes=lambda data, name: f"https://oss.example/{name}",
+        )
+        ctx = PlaygroundContext(
+            workdir=Path("/tmp/work"),
+            session_type="local",
+            cache_area=Path("/tmp/cache"),
+            runtime_ports=PlaygroundRuntimePorts(
+                child_event_forward_sink=child_sink,
+                compaction=PlaygroundCompactionPort(history=history),
+            ),
+        )
+
+        updated = ctx.with_runtime_port(
+            figure_upload=FigureUploadPort(config=cfg)
+        )
+
+        assert updated is not ctx
+        assert updated.runtime_ports.figure_upload.config is cfg
+        assert updated.runtime_ports.child_event_forward_sink is child_sink
+        assert updated.runtime_ports.compaction.history is history
+
     def test_model_validate_accepts_runtime_ports_dataclass(self) -> None:
         from matmaster.types.runtime_ports import PlaygroundRuntimePorts
 

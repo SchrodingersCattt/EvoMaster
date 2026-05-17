@@ -7,7 +7,7 @@ import pytest
 
 from matmaster.types.events import RunResultEvent, ToolResultEvent
 
-from .test_agent_run_stream_fixtures import (
+from .agent_run_stream_fixtures import (
     _ImmediateReplyQueue,
     _make_cancel_token,
     _patched_service,
