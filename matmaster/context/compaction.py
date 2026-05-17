@@ -26,6 +26,10 @@ from matmaster.context.sources.turn_input import (
     TurnInput,
 )
 from matmaster.types.llm_provider import LLMProvider
+from matmaster.types.message_normalization import (
+    canonicalize_messages_for_provider,
+    normalize_and_validate_openai_messages,
+)
 from matmaster.types.messages import (
     AssistantMessage,
     Message,
@@ -284,6 +288,53 @@ def prepare_messages_for_summary_call(
         request_tokens=request_tokens,
         message_budget=message_budget,
     )
+
+
+async def call_summary_llm(
+    *,
+    llm_provider: LLMProvider,
+    system_prompt: str,
+    full_messages: list[Message],
+    phase: Literal["preflight", "runtime"],
+    turn_input: TurnInput | None,
+    tool_definitions: list[dict] | None,
+    context_limit: int,
+    reserved_summary_tokens: int,
+    safety_margin_tokens: int = 5_000,
+) -> str:
+    """Call the main LLM to summarize conversation history."""
+    if not full_messages:
+        raise ValueError("Cannot summarize empty message list")
+    if not isinstance(full_messages[0], SystemMessage):
+        raise TypeError(
+            f"full_messages[0] must be SystemMessage, got {type(full_messages[0])}"
+        )
+    if full_messages[0].content != system_prompt:
+        logger.debug("Summary call system prompt differs from supplied system_prompt")
+
+    compact_request = UserMessage(content=SUMMARY_USER_REQUEST_TEMPLATE)
+    prep = prepare_messages_for_summary_call(
+        full_messages=full_messages,
+        phase=phase,
+        turn_input=turn_input,
+        compact_request=compact_request,
+        tool_definitions=tool_definitions,
+        context_limit=context_limit,
+        reserved_summary_tokens=reserved_summary_tokens,
+        safety_margin_tokens=safety_margin_tokens,
+    )
+    summary_messages = [*prep.messages, compact_request]
+    api_messages = normalize_and_validate_openai_messages(
+        canonicalize_messages_for_provider(summary_messages)
+    )
+    response = await llm_provider.chat(
+        api_messages,
+        tools=tool_definitions,
+        tool_choice="none",
+    )
+    if not response.content or not response.content.strip():
+        raise ValueError("Summary LLM returned empty content")
+    return response.content
 
 
 class ContextCompactor:

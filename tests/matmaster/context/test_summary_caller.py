@@ -5,6 +5,7 @@ import pytest
 from matmaster.context.compaction import (
     SUMMARY_USER_REQUEST_TEMPLATE,
     _select_tool_safe_tail,
+    call_summary_llm,
     estimate_json_tokens,
     prepare_messages_for_summary_call,
 )
@@ -14,6 +15,7 @@ from matmaster.types.message_normalization import (
 )
 from matmaster.types.messages import (
     AssistantMessage,
+    LLMResponse,
     SystemMessage,
     ToolCallData,
     ToolMessage,
@@ -232,3 +234,71 @@ def test_prepare_messages_truncates_only_largest_tool_results_needed_to_fit() ->
     assert "original_chars: 16000" in (prep.messages[5].content or "")
     assert full_messages[5] is large
     assert full_messages[5].content == "L" * 16_000
+
+
+class RecordingProvider:
+    def __init__(self, content: str | None = "summary") -> None:
+        self.content = content
+        self.calls: list[dict[str, object]] = []
+
+    async def chat(self, messages, tools=None, *, tool_choice=None):
+        self.calls.append(
+            {
+                "messages": messages,
+                "tools": tools,
+                "tool_choice": tool_choice,
+            }
+        )
+        return LLMResponse(content=self.content, finish_reason="stop")
+
+
+@pytest.mark.asyncio
+async def test_call_summary_llm_uses_real_messages_tools_and_tool_choice_none() -> (
+    None
+):
+    provider = RecordingProvider(content="structured summary")
+    full_messages = [
+        SystemMessage(content="main system"),
+        UserMessage(content="old request"),
+        AssistantMessage(content="old answer"),
+    ]
+    tools = [{"type": "function", "function": {"name": "paper_search"}}]
+
+    summary = await call_summary_llm(
+        llm_provider=provider,
+        system_prompt="main system",
+        full_messages=full_messages,
+        phase="runtime",
+        turn_input=None,
+        tool_definitions=tools,
+        context_limit=20_000,
+        reserved_summary_tokens=1_000,
+    )
+
+    assert summary == "structured summary"
+    assert len(provider.calls) == 1
+    call = provider.calls[0]
+    assert call["tools"] is tools
+    assert call["tool_choice"] == "none"
+    roles = [msg["role"] for msg in call["messages"]]
+    assert roles == ["system", "user", "assistant", "user"]
+    assert call["messages"][0]["content"] == "main system"
+    assert "<compact_request>" in call["messages"][-1]["content"]
+
+
+@pytest.mark.asyncio
+async def test_call_summary_llm_raises_on_empty_response() -> None:
+    provider = RecordingProvider(content="  ")
+    full_messages = [SystemMessage(content="sys"), UserMessage(content="old")]
+
+    with pytest.raises(ValueError, match="Summary LLM returned empty content"):
+        await call_summary_llm(
+            llm_provider=provider,
+            system_prompt="sys",
+            full_messages=full_messages,
+            phase="runtime",
+            turn_input=None,
+            tool_definitions=None,
+            context_limit=20_000,
+            reserved_summary_tokens=1_000,
+        )
