@@ -150,7 +150,15 @@ class ContextAssembler:
         include_attachments: bool,
     ) -> tuple[ContextSection, ...]:
         assert self._session_context_factory is not None
-        builder = self._session_context_factory(events)
+        # Defense in depth: even if a port returned events past the boundary,
+        # the factory and its skill resolver must only see in-scope events.
+        if until_event_id is not None:
+            scoped_events = tuple(
+                event for event in events if event.id <= until_event_id
+            )
+        else:
+            scoped_events = events
+        builder = self._session_context_factory(scoped_events)
         return builder.build_sections(
             until_event_id=until_event_id,
             include_attachments=include_attachments,

@@ -11,10 +11,12 @@ from typing import Any
 from matmaster.context.assembly import ContextAssembler, ContextRenderOptions
 from matmaster.context.compaction import ContextCompactor
 from matmaster.context.ports import (
+    ActiveSkill,
     ContextAssemblyPorts,
     SessionEvent,
     SessionJobs,
     SessionJobsQuery,
+    SkillResolver,
     UserInstructions,
 )
 from matmaster.context.session import SessionContextBuilder
@@ -32,20 +34,25 @@ class RuntimeContextAssembly:
     assembly_ports: ContextAssemblyPorts | None = None
 
 
+def empty_skill_resolver(_events: tuple[SessionEvent, ...]) -> tuple[ActiveSkill, ...]:
+    """Default SkillResolver for paths that do not wire one explicitly."""
+    return ()
+
+
 def _hash_user_instructions(text: str) -> str:
     return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def build_session_context_factory(
     *,
-    skill_registry: Any | None,
+    skill_resolver: SkillResolver,
     legal_mcp_servers: set[str] | None,
     schemas_by_server: Mapping[str, list[Mapping[str, Any]]] | None,
 ) -> SessionContextFactory:
     def factory(events: tuple[SessionEvent, ...]) -> SessionContextBuilder:
         return SessionContextBuilder(
             events=events,
-            skill_registry=skill_registry,
+            active_skills=skill_resolver(events),
             legal_mcp_servers=legal_mcp_servers,
             schemas_by_server=schemas_by_server,
         )
@@ -62,7 +69,7 @@ def build_runtime_context_assembly(
     *,
     spec: AgentRuntimeSpec,
     ctx: PlaygroundContext,
-    skill_registry: Any,
+    skill_resolver: SkillResolver,
     spawn_id: str | None,
     logger: logging.Logger,
 ) -> RuntimeContextAssembly:
@@ -91,7 +98,7 @@ def build_runtime_context_assembly(
     context_assembler = ContextAssembler(
         ports=assembly_ports,
         session_context_factory=build_session_context_factory(
-            skill_registry=skill_registry,
+            skill_resolver=skill_resolver,
             legal_mcp_servers=run_meta.get("legal_mcp_servers"),
             schemas_by_server=run_meta.get("schemas_by_server"),
         ),
