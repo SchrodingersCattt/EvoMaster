@@ -30,8 +30,8 @@ class SessionEvent:
     """DB events row envelope for context assembly.
 
     `content` must preserve the raw DB payload shape after JSON parsing. For
-    rows loaded through AppSessionEventsPort, nested lists are converted to
-    tuples by `_freeze_json_object`; callers should not pass display-flattened
+    rows loaded through service-layer codecs, nested lists are converted to
+    tuples by `freeze_json_object`; callers should not pass display-flattened
     User/query rows where files/images/workspace_paths were hoisted out.
     """
 
@@ -42,6 +42,7 @@ class SessionEvent:
     task_id: str | None = None
     invocation_id: str | None = None
     spawn_id: str | None = None
+    created_at_ms: int | None = None
 
 
 @dataclass(frozen=True)
