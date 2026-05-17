@@ -14,8 +14,8 @@ from src.services.context_assembly_ports import (
     AppSessionEventsPort,
     AppSessionJobsPort,
     AppUserInstructionsPort,
-    _freeze_json_object,
 )
+from src.services.session_event_codec import freeze_json_object
 from src.services.user_turn_context_service import (
     USER_INSTRUCTIONS_MAX_BYTES,
     hash_user_instructions,
@@ -73,16 +73,17 @@ class FakeEventsTable:
         self.rows = rows or [
             {
                 "id": 3,
-                "source": "MatMaster",
-                "type": "user_turn_context",
+                "source": " MatMaster ",
+                "type": " user_turn_context ",
                 "content": {
                     "kind": "anchor",
                     "images": ["https://example.com/a.png"],
                 },
                 "session_id": "sess-1",
-                "task_id": "task-1",
-                "invocation_id": "inv-1",
-                "spawn_id": None,
+                "task_id": " task-1 ",
+                "invocation_id": " inv-1 ",
+                "spawn_id": "",
+                "created_at_ms": "1234",
             }
         ]
 
@@ -119,8 +120,28 @@ async def test_app_session_events_port_maps_rows_to_typed_events() -> None:
     ]
     assert events[0].id == 3
     assert events[0].event_type == "user_turn_context"
+    assert events[0].source == "MatMaster"
     assert events[0].content["images"] == ("https://example.com/a.png",)
     assert events[0].invocation_id == "inv-1"
+    assert events[0].spawn_id is None
+    assert events[0].created_at_ms == 1234
+
+
+@pytest.mark.asyncio
+async def test_app_session_events_port_filters_rows_without_valid_id() -> None:
+    table = FakeEventsTable(
+        rows=[
+            {"id": None, "source": "User", "type": "query", "content": {}},
+            {"id": "bad", "source": "User", "type": "query", "content": {}},
+            {"id": 6, "source": "User", "type": "query", "content": {}},
+        ]
+    )
+
+    events = await AppSessionEventsPort(table).load_events(
+        SessionEventQuery(session_id="sess-1", spawn_id=None)
+    )
+
+    assert [event.id for event in events] == [6]
 
 
 @pytest.mark.asyncio
@@ -183,7 +204,7 @@ async def test_app_session_events_port_preserves_falsy_raw_content() -> None:
 
 def test_freeze_json_object_rejects_non_json_schema_drift() -> None:
     with pytest.raises(TypeError, match="Unsupported JSON value type"):
-        _freeze_json_object({"bad": object()})
+        freeze_json_object({"bad": object()})
 
 
 @pytest.mark.asyncio
