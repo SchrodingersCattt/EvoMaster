@@ -4,24 +4,16 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from matmaster.context.ports import ActiveSkill
 from matmaster.context.sections import ALL_VIEWS, ContextSection, SectionOrder
 
 
-def _skill_mcp_server(skill: Any) -> str | None:
-    raw = getattr(getattr(skill, "meta_info", None), "mcp_server", None)
-    if isinstance(raw, str) and raw.strip():
-        return raw.strip()
-    return None
-
-
-def resolve_declared_servers(skills: Iterable[Any]) -> set[str]:
-    return {
-        server for skill in skills if (server := _skill_mcp_server(skill)) is not None
-    }
+def resolve_declared_servers(skills: Iterable[ActiveSkill]) -> set[str]:
+    return {skill.mcp_server for skill in skills if skill.mcp_server}
 
 
 def resolve_runnable_servers(
-    skills: Iterable[Any],
+    skills: Iterable[ActiveSkill],
     *,
     legal_servers: set[str] | None = None,
     schemas_by_server: Mapping[str, list[Mapping[str, Any]]] | None = None,
@@ -40,7 +32,7 @@ def resolve_runnable_servers(
 
 
 def format_active_mcp(
-    skills: Iterable[Any],
+    skills: Iterable[ActiveSkill],
     *,
     legal_servers: set[str] | None = None,
     schemas_by_server: Mapping[str, list[Mapping[str, Any]]] | None = None,
@@ -69,14 +61,14 @@ def format_active_mcp(
 
 @dataclass(frozen=True)
 class SessionToolsSource:
-    skills: tuple[Any, ...] = ()
+    skills: tuple[ActiveSkill, ...] = ()
     legal_servers: frozenset[str] | None = None
     schemas_by_server: Mapping[str, list[Mapping[str, Any]]] | None = None
 
     @classmethod
     def from_skills(
         cls,
-        skills: Iterable[Any],
+        skills: Iterable[ActiveSkill],
         *,
         legal_servers: set[str] | None,
         schemas_by_server: Mapping[str, list[Mapping[str, Any]]] | None,
