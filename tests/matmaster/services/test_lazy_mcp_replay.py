@@ -66,14 +66,14 @@ async def test_run_agent_uses_hot_cache_when_present(monkeypatch):
 
     async with _patched_service([run_result]) as (svc, _, __):
         # Helper bypasses __init__, so the field must be set explicitly.
-        svc._active_skills = {"sess-1": {"pxrd"}}
+        svc._active_skills = {"sess-1": frozenset({"pxrd"})}
 
         called = {"n": 0}
         original = svc._resolve_active_skill_names
 
-        def _spy(session_id, events_table, exp_config, session=None, **kwargs):
+        def _spy(session_id, events_table, **kwargs):
             called["n"] += 1
-            return original(session_id, events_table, exp_config, session, **kwargs)
+            return original(session_id, events_table, **kwargs)
 
         monkeypatch.setattr(svc, "_resolve_active_skill_names", _spy)
 
@@ -114,7 +114,7 @@ async def test_run_agent_skill_hit_event_writes_back_to_hot_cache():
         )
 
     assert "record_active_mcp_server" not in svc._test_fake_exp.last_ctx.run_meta
-    assert svc._active_skills["sess-2"] == {"test-skill"}
+    assert svc._active_skills["sess-2"] == frozenset({"test-skill"})
 
 
 @pytest.mark.asyncio
@@ -176,7 +176,7 @@ async def test_run_agent_rehydrates_from_db_on_cache_miss(tmp_path, monkeypatch)
                 invocation_id="inv-rehydrate",
             )
 
-    assert svc._active_skills["sess-rehydrate"] == {"pxrd", "sg"}
+    assert svc._active_skills["sess-rehydrate"] == frozenset({"pxrd", "sg"})
     snapshot = svc._test_fake_exp.last_ctx.run_meta["active_skills"]
     assert snapshot == frozenset({"pxrd", "sg"})
 
@@ -248,6 +248,6 @@ async def test_run_agent_rehydrates_remote_skill_from_session_root(
                 invocation_id="inv-remote-rehydrate",
             )
 
-    assert svc._active_skills["sess-remote-rehydrate"] == {"remote-skill"}
+    assert svc._active_skills["sess-remote-rehydrate"] == frozenset({"remote-skill"})
     snapshot = svc._test_fake_exp.last_ctx.run_meta["active_skills"]
     assert snapshot == frozenset({"remote-skill"})

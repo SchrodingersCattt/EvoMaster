@@ -11,7 +11,12 @@ from matmaster.context.assembly import (
     ContextAssemblyIntent,
     TurnAssemblyRequest,
 )
-from matmaster.context.ports import ContextAssemblyPorts, SessionEvent, UserInstructions
+from matmaster.context.ports import (
+    ActiveSkill,
+    ContextAssemblyPorts,
+    SessionEvent,
+    UserInstructions,
+)
 from matmaster.context.sections import ContextView
 from matmaster.context.session import SessionContextBuilder
 from matmaster.context.sources.turn_input import (
@@ -363,12 +368,17 @@ async def test_anchor_turn_with_session_factory_renders_tools_and_attachments() 
         ),
     )
     port = _StubEventsPort(events)
-    registry = _FakeSkillRegistry({"pxrd": _skill("pxrd", mcp_server="mat_xrd")})
 
     def factory(loaded_events: tuple[SessionEvent, ...]) -> SessionContextBuilder:
         return SessionContextBuilder(
             events=loaded_events,
-            skill_registry=registry,
+            active_skills=(
+                ActiveSkill(
+                    name="pxrd",
+                    description="PXRD helper",
+                    mcp_server="mat_xrd",
+                ),
+            ),
             legal_mcp_servers={"mat_xrd"},
             schemas_by_server={"mat_xrd": [{"name": "read"}]},
         )
