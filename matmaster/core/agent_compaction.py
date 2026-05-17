@@ -29,10 +29,11 @@ async def run_compaction_plan(
     plan: Any,
     checkpoint_sink: Any,
     turn_input: TurnInput | None = None,
+    tool_definitions: list[dict[str, Any]] | None = None,
 ) -> AsyncIterator[_KernelItem]:
     """Run a compaction plan, emit start/complete events, persist checkpoint.
 
-    ``turn_input`` is only consulted by ``apply_compaction_plan`` for
+    ``turn_input`` is only consulted by ``apply_summary`` for
     preflight plans; runtime callers pass ``None``.
     """
     yield _KernelItem(
@@ -50,11 +51,39 @@ async def run_compaction_plan(
         result = pre_compaction_barrier()
         if inspect.isawaitable(result):
             await result
-    result = await spec.compactor.apply_compaction_plan(
-        plan,
-        state.messages,
-        turn_input=turn_input,
-    )
+    try:
+        from matmaster.context.compaction import call_summary_llm
+
+        summary = await call_summary_llm(
+            llm_provider=spec.llm_provider,
+            system_prompt=spec.system_prompt,
+            full_messages=state.messages,
+            phase=plan.phase,
+            turn_input=turn_input,
+            tool_definitions=tool_definitions,
+            context_limit=spec.compaction.context_limit,
+            reserved_summary_tokens=spec.compaction.reserved_summary_tokens,
+        )
+        result = await spec.compactor.apply_summary(
+            plan,
+            state.messages,
+            summary,
+            turn_input=turn_input,
+        )
+    except Exception as exc:
+        if plan.phase == "preflight":
+            logger.warning("Preflight compaction summary failed; aborting", exc_info=True)
+            raise
+        logger.warning(
+            "Compaction #%d summary failed; falling back",
+            plan.compaction_count,
+            exc_info=True,
+        )
+        result = await spec.compactor.apply_fallback(
+            plan,
+            state.messages,
+            failure_reason=str(exc),
+        )
     messages_after = len(state.messages)
 
     if spec.hook_executor is not None:
@@ -128,6 +157,7 @@ async def run_preflight_compaction_if_needed(
     history: list | None,
     turn_input: TurnInput | None,
     checkpoint_sink: Any,
+    tool_definitions: list[dict[str, Any]] | None = None,
 ) -> AsyncIterator[_KernelItem]:
     """Plan + execute a preflight compaction before the first LLM turn."""
     if not spec.compactor:
@@ -151,10 +181,9 @@ async def run_preflight_compaction_if_needed(
                 plan=plan,
                 checkpoint_sink=checkpoint_sink,
                 turn_input=turn_input,
+                tool_definitions=tool_definitions,
             ):
                 yield item
-    else:
-        await spec.compactor.preflight_if_needed(state.messages)
 
 
 async def run_runtime_compaction_if_needed(
@@ -163,10 +192,11 @@ async def run_runtime_compaction_if_needed(
     state: _KernelState,
     turn_usage: dict,
     checkpoint_sink: Any,
+    tool_definitions: list[dict[str, Any]] | None = None,
 ) -> AsyncIterator[_KernelItem]:
     """Plan + execute a runtime compaction between LLM turns when budget exceeded.
 
-    Runtime plans do not receive ``turn_input``; see ``apply_compaction_plan``,
+    Runtime plans do not receive ``turn_input``; see ``apply_summary``,
     which only branches on it for preflight plans.
     """
     if not spec.compactor:
@@ -184,7 +214,6 @@ async def run_runtime_compaction_if_needed(
                 state=state,
                 plan=plan,
                 checkpoint_sink=checkpoint_sink,
+                tool_definitions=tool_definitions,
             ):
                 yield item
-    else:
-        await spec.compactor.compact_if_needed(state.messages, turn_usage, state.turn)
