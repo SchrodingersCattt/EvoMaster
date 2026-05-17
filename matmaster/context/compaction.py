@@ -331,6 +331,8 @@ async def call_summary_llm(
         tools=tool_definitions,
         tool_choice="none",
     )
+    if response.tool_calls:
+        raise ValueError("Summary LLM attempted tool calls")
     if not response.content or not response.content.strip():
         raise ValueError("Summary LLM returned empty content")
     return response.content
@@ -562,24 +564,88 @@ def _select_tool_safe_tail(
     selected_indices = set(
         range(max(0, len(non_system_messages) - n), len(non_system_messages))
     )
-    selected_tool_ids = {
-        msg.tool_call_id
-        for idx, msg in enumerate(non_system_messages)
-        if idx in selected_indices and isinstance(msg, ToolMessage)
-    }
+
+    tool_indices_by_id: dict[str, list[int]] = {}
+    for idx, msg in enumerate(non_system_messages):
+        if isinstance(msg, ToolMessage):
+            tool_indices_by_id.setdefault(msg.tool_call_id, []).append(idx)
+
+    def complete_turn_indices(assistant_idx: int) -> set[int] | None:
+        msg = non_system_messages[assistant_idx]
+        if not isinstance(msg, AssistantMessage):
+            return None
+        call_ids = _assistant_tool_call_ids(msg)
+        if not call_ids:
+            return {assistant_idx}
+
+        turn_indices = {assistant_idx}
+        for call_id in call_ids:
+            result_idx = next(
+                (
+                    idx
+                    for idx in tool_indices_by_id.get(call_id, [])
+                    if idx > assistant_idx
+                ),
+                None,
+            )
+            if result_idx is None:
+                return None
+            turn_indices.add(result_idx)
+        return turn_indices
+
+    changed = True
+    while changed:
+        changed = False
+        selected_tool_ids = {
+            msg.tool_call_id
+            for idx, msg in enumerate(non_system_messages)
+            if idx in selected_indices and isinstance(msg, ToolMessage)
+        }
+        for idx, msg in enumerate(non_system_messages):
+            if not isinstance(msg, AssistantMessage):
+                continue
+            call_ids = set(_assistant_tool_call_ids(msg))
+            if not call_ids:
+                continue
+            if idx not in selected_indices and not (call_ids & selected_tool_ids):
+                continue
+
+            turn_indices = complete_turn_indices(idx)
+            if turn_indices is None:
+                before = len(selected_indices)
+                selected_indices.discard(idx)
+                selected_indices = {
+                    selected_idx
+                    for selected_idx in selected_indices
+                    if not (
+                        isinstance(
+                            non_system_messages[selected_idx],
+                            ToolMessage,
+                        )
+                        and non_system_messages[selected_idx].tool_call_id in call_ids
+                    )
+                }
+                changed = changed or len(selected_indices) != before
+                continue
+
+            before = len(selected_indices)
+            selected_indices.update(turn_indices)
+            changed = changed or len(selected_indices) != before
 
     owner_ids: set[str] = set()
-    for idx in range(len(non_system_messages) - 1, -1, -1):
+    selected_assistant_indices: set[int] = set()
+    for idx in selected_indices:
         msg = non_system_messages[idx]
         if not isinstance(msg, AssistantMessage):
             continue
-        call_ids = set(_assistant_tool_call_ids(msg))
-        if call_ids and call_ids & selected_tool_ids:
-            if call_ids <= selected_tool_ids:
-                selected_indices.add(idx)
-                owner_ids.update(call_ids)
-            else:
-                selected_indices.discard(idx)
+        call_ids = _assistant_tool_call_ids(msg)
+        if not call_ids:
+            selected_assistant_indices.add(idx)
+            continue
+        turn_indices = complete_turn_indices(idx)
+        if turn_indices is not None and turn_indices <= selected_indices:
+            selected_assistant_indices.add(idx)
+            owner_ids.update(call_ids)
 
     result: list[Message] = []
     for idx, msg in enumerate(non_system_messages):
@@ -588,8 +654,8 @@ def _select_tool_safe_tail(
         if isinstance(msg, ToolMessage) and msg.tool_call_id not in owner_ids:
             continue
         if isinstance(msg, AssistantMessage):
-            call_ids = set(_assistant_tool_call_ids(msg))
-            if call_ids and not call_ids <= selected_tool_ids:
+            call_ids = _assistant_tool_call_ids(msg)
+            if call_ids and idx not in selected_assistant_indices:
                 continue
         result.append(msg)
     return result

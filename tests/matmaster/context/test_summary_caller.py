@@ -104,6 +104,22 @@ def test_select_tool_safe_tail_returns_empty_for_all_orphans() -> None:
     assert _select_tool_safe_tail([_tool("a"), _tool("b")], n=2) == []
 
 
+def test_select_tool_safe_tail_expands_to_large_parallel_tool_turn() -> None:
+    messages = [
+        UserMessage(content="old"),
+        _assistant("a", "b", "c", "d"),
+        _tool("a"),
+        _tool("b"),
+        _tool("c"),
+        _tool("d"),
+    ]
+
+    selected = _select_tool_safe_tail(messages, n=3)
+
+    assert selected == messages[1:]
+    normalize_and_validate_openai_messages([m.to_api_dict() for m in selected])
+
+
 def test_prepare_messages_common_case_preserves_message_identity() -> None:
     compact_request = UserMessage(content=SUMMARY_USER_REQUEST_TEMPLATE)
     full_messages = [
@@ -237,8 +253,14 @@ def test_prepare_messages_truncates_only_largest_tool_results_needed_to_fit() ->
 
 
 class RecordingProvider:
-    def __init__(self, content: str | None = "summary") -> None:
+    def __init__(
+        self,
+        content: str | None = "summary",
+        *,
+        tool_calls: list[ToolCallData] | None = None,
+    ) -> None:
         self.content = content
+        self.tool_calls = tool_calls
         self.calls: list[dict[str, object]] = []
 
     async def chat(self, messages, tools=None, *, tool_choice=None):
@@ -249,7 +271,11 @@ class RecordingProvider:
                 "tool_choice": tool_choice,
             }
         )
-        return LLMResponse(content=self.content, finish_reason="stop")
+        return LLMResponse(
+            content=self.content,
+            finish_reason="stop",
+            tool_calls=self.tool_calls,
+        )
 
 
 @pytest.mark.asyncio
@@ -297,6 +323,27 @@ async def test_call_summary_llm_raises_on_empty_response() -> None:
             phase="runtime",
             turn_input=None,
             tool_definitions=None,
+            context_limit=20_000,
+            reserved_summary_tokens=1_000,
+        )
+
+
+@pytest.mark.asyncio
+async def test_call_summary_llm_rejects_tool_calls_in_response() -> None:
+    provider = RecordingProvider(
+        content="summary",
+        tool_calls=[ToolCallData(id="tc-1", name="tool", arguments={})],
+    )
+    full_messages = [SystemMessage(content="sys"), UserMessage(content="old")]
+
+    with pytest.raises(ValueError, match="Summary LLM attempted tool calls"):
+        await call_summary_llm(
+            llm_provider=provider,
+            system_prompt="sys",
+            full_messages=full_messages,
+            phase="runtime",
+            turn_input=None,
+            tool_definitions=[{"type": "function", "function": {"name": "tool"}}],
             context_limit=20_000,
             reserved_summary_tokens=1_000,
         )

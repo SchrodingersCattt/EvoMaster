@@ -6,14 +6,20 @@ from matmaster.context.compaction import CompactionPlan
 from matmaster.core.agent_compaction import run_compaction_plan
 from matmaster.core.kernel_items import _KernelState
 from matmaster.types.events import CompactionEvent
-from matmaster.types.messages import SystemMessage, UserMessage
+from matmaster.types.messages import SystemMessage, ToolCallData, UserMessage
 from matmaster.types.runtime import AgentRuntimeSpec, CompactionConfig
 from matmaster.types.runtime_ports import KernelRuntimePorts
 
 
 class Provider:
-    def __init__(self, content: str | Exception = "summary") -> None:
+    def __init__(
+        self,
+        content: str | Exception = "summary",
+        *,
+        tool_calls: list[ToolCallData] | None = None,
+    ) -> None:
         self.content = content
+        self.tool_calls = tool_calls
         self.calls = []
 
     async def chat(self, messages, tools=None, *, tool_choice=None):
@@ -22,7 +28,11 @@ class Provider:
             raise self.content
         from matmaster.types.messages import LLMResponse
 
-        return LLMResponse(content=self.content, finish_reason="stop")
+        return LLMResponse(
+            content=self.content,
+            finish_reason="stop",
+            tool_calls=self.tool_calls,
+        )
 
 
 class Compactor:
@@ -164,4 +174,33 @@ async def test_compaction_plan_runner_runtime_summary_failure_uses_fallback() ->
 
     assert compactor.summary_calls == []
     assert compactor.fallback_calls[0][1] == "network down"
+    assert events[-1].strategy == "sliding_window"
+
+
+@pytest.mark.asyncio
+async def test_compaction_plan_runner_runtime_tool_call_response_uses_fallback() -> (
+    None
+):
+    provider = Provider(
+        "summary text",
+        tool_calls=[ToolCallData(id="tc-1", name="tool", arguments={})],
+    )
+    compactor = Compactor()
+    state = _KernelState(
+        messages=[SystemMessage(content="sys"), UserMessage(content="old")]
+    )
+
+    events = [
+        item.event
+        async for item in run_compaction_plan(
+            spec=_spec(provider, compactor),
+            state=state,
+            plan=_plan("runtime"),
+            checkpoint_sink=None,
+            tool_definitions=[{"type": "function", "function": {"name": "tool"}}],
+        )
+    ]
+
+    assert compactor.summary_calls == []
+    assert compactor.fallback_calls[0][1] == "Summary LLM attempted tool calls"
     assert events[-1].strategy == "sliding_window"
