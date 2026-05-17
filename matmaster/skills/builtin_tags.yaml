@@ -10,9 +10,9 @@ categories:
           - sample-atomic-structures
           - tasker-polar-surface
           - operate-molecular-crystal
+          - structure-manager
       crystal-special:
         skills:
-          - structure-manager
           - mcp-mat-struct-db
       polymer-modeling:
         skills:
