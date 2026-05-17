@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-from types import SimpleNamespace
 
 import pytest
 
@@ -11,7 +10,12 @@ from matmaster.context.assembly import (
     ContextAssemblyIntent,
     TurnAssemblyRequest,
 )
-from matmaster.context.ports import ContextAssemblyPorts, SessionEvent, UserInstructions
+from matmaster.context.ports import (
+    ActiveSkill,
+    ContextAssemblyPorts,
+    SessionEvent,
+    UserInstructions,
+)
 from matmaster.context.sections import ContextView
 from matmaster.context.session import SessionContextBuilder
 from matmaster.context.sources.turn_input import (
@@ -36,14 +40,6 @@ class _StubEventsPort:
         return self._events
 
 
-class _FakeSkillRegistry:
-    def __init__(self, skills: dict[str, object]) -> None:
-        self._skills = skills
-
-    def get_skill(self, name: str) -> object | None:
-        return self._skills.get(name)
-
-
 def _hash(text: str) -> str:
     return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
 
@@ -55,17 +51,6 @@ def _bundle(text: str) -> UserInstructions:
 def _assembler(events: tuple[SessionEvent, ...] = ()) -> ContextAssembler:
     return ContextAssembler(
         ports=ContextAssemblyPorts(session_events=_StubEventsPort(events))
-    )
-
-
-def _skill(name: str, *, mcp_server: str | None = None) -> object:
-    return SimpleNamespace(
-        name=name,
-        meta_info=SimpleNamespace(
-            name=name,
-            description="PXRD helper",
-            mcp_server=mcp_server,
-        ),
     )
 
 
@@ -363,12 +348,17 @@ async def test_anchor_turn_with_session_factory_renders_tools_and_attachments() 
         ),
     )
     port = _StubEventsPort(events)
-    registry = _FakeSkillRegistry({"pxrd": _skill("pxrd", mcp_server="mat_xrd")})
 
     def factory(loaded_events: tuple[SessionEvent, ...]) -> SessionContextBuilder:
         return SessionContextBuilder(
             events=loaded_events,
-            skill_registry=registry,
+            active_skills=(
+                ActiveSkill(
+                    name="pxrd",
+                    description="PXRD helper",
+                    mcp_server="mat_xrd",
+                ),
+            ),
             legal_mcp_servers={"mat_xrd"},
             schemas_by_server={"mat_xrd": [{"name": "read"}]},
         )

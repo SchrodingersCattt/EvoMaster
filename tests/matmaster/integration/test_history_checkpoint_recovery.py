@@ -8,8 +8,10 @@ import pytest
 from matmaster.context.assembly import ContextAssembler
 from matmaster.context.compaction import CompactionPlan, ContextCompactor
 from matmaster.context.ports import ContextAssemblyPorts, UserInstructions
-from matmaster.core.runtime_context_assembly import build_session_context_factory
-from matmaster.skills.registry import SkillRegistry
+from matmaster.core.runtime_context_assembly import (
+    build_session_context_factory,
+    empty_skill_resolver,
+)
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -60,7 +62,7 @@ def _make_compactor_for_table(
             session_jobs=AppSessionJobsPort(),
         ),
         session_context_factory=build_session_context_factory(
-            skill_registry=SkillRegistry([tmp_path / "skills"]),
+            skill_resolver=empty_skill_resolver,
             legal_mcp_servers=None,
             schemas_by_server=None,
         ),

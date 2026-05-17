@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from matmaster.context.assembly import (
@@ -13,8 +11,10 @@ from matmaster.context.assembly import (
     TurnAssemblyRequest,
 )
 from matmaster.context.ports import (
+    ActiveSkill,
     ContextAssemblyPorts,
     SessionEvent,
+    SessionEventQuery,
     SessionJobs,
     UserInstructions,
 )
@@ -25,7 +25,6 @@ from matmaster.context.sources.turn_input import (
     TurnInput,
     TurnInstructionSource,
 )
-from matmaster.skills.registry import SkillRegistry
 
 
 class EventsPort:
@@ -277,17 +276,6 @@ async def test_assemble_compaction_rejects_wrong_intent() -> None:
         )
 
 
-def _skill_registry(tmp_path: Path) -> SkillRegistry:
-    root = tmp_path / "skills"
-    skill_dir = root / "pxrd"
-    skill_dir.mkdir(parents=True)
-    (skill_dir / "SKILL.md").write_text(
-        "---\nname: pxrd\ndescription: PXRD helper\nmcp_server: mat_xrd\n---\nbody\n",
-        encoding="utf-8",
-    )
-    return SkillRegistry([root])
-
-
 class _RecordingEventsPort:
     def __init__(self, events: tuple[SessionEvent, ...]) -> None:
         self._events = events
@@ -298,11 +286,20 @@ class _RecordingEventsPort:
         return self._events
 
 
+class _UnscopedEventsPort:
+    """Test double that intentionally returns events past `until_event_id`."""
+
+    def __init__(self, events: tuple[SessionEvent, ...]) -> None:
+        self._events = events
+        self.captured_query: SessionEventQuery | None = None
+
+    async def load_events(self, query):
+        self.captured_query = query
+        return self._events
+
+
 @pytest.mark.asyncio
-async def test_assemble_turn_anchor_uses_session_context_factory(
-    tmp_path: Path,
-) -> None:
-    registry = _skill_registry(tmp_path)
+async def test_assemble_turn_anchor_uses_session_context_factory() -> None:
     events = (
         SessionEvent(
             id=1,
@@ -322,7 +319,13 @@ async def test_assemble_turn_anchor_uses_session_context_factory(
     def factory(loaded_events: tuple[SessionEvent, ...]) -> SessionContextBuilder:
         return SessionContextBuilder(
             events=loaded_events,
-            skill_registry=registry,
+            active_skills=(
+                ActiveSkill(
+                    name="pxrd",
+                    description="PXRD helper",
+                    mcp_server="mat_xrd",
+                ),
+            ),
             legal_mcp_servers={"mat_xrd"},
             schemas_by_server={"mat_xrd": [{"name": "read"}]},
         )
@@ -353,9 +356,7 @@ async def test_assemble_turn_anchor_uses_session_context_factory(
 
 
 @pytest.mark.asyncio
-async def test_assemble_turn_continuation_does_not_invoke_session_factory(
-    tmp_path: Path,
-) -> None:
+async def test_assemble_turn_continuation_does_not_invoke_session_factory() -> None:
     call_count = 0
 
     def factory(_events):
@@ -363,7 +364,7 @@ async def test_assemble_turn_continuation_does_not_invoke_session_factory(
         call_count += 1
         return SessionContextBuilder(
             events=(),
-            skill_registry=None,
+            active_skills=(),
             legal_mcp_servers=None,
             schemas_by_server=None,
         )
@@ -387,6 +388,66 @@ async def test_assemble_turn_continuation_does_not_invoke_session_factory(
     )
 
     assert call_count == 0
+
+
+@pytest.mark.asyncio
+async def test_assembler_scopes_events_to_until_event_id_before_factory() -> None:
+    events = (
+        SessionEvent(
+            id=1,
+            event_type="skill_hit",
+            source=None,
+            content={"skill_name": "pxrd"},
+        ),
+        SessionEvent(
+            id=9,
+            event_type="skill_hit",
+            source=None,
+            content={"skill_name": "mlip"},
+        ),
+    )
+
+    seen_event_ids: list[tuple[int, ...]] = []
+
+    def resolver(scoped_events: tuple[SessionEvent, ...]) -> tuple[ActiveSkill, ...]:
+        seen_event_ids.append(tuple(event.id for event in scoped_events))
+        return tuple(
+            ActiveSkill(name=str(event.content["skill_name"]))
+            for event in scoped_events
+            if event.event_type == "skill_hit"
+        )
+
+    def factory(scoped_events: tuple[SessionEvent, ...]) -> SessionContextBuilder:
+        return SessionContextBuilder(
+            events=scoped_events,
+            active_skills=resolver(scoped_events),
+        )
+
+    assembler = ContextAssembler(
+        ports=ContextAssemblyPorts(
+            session_events=_UnscopedEventsPort(events),
+            session_jobs=None,
+        ),
+        session_context_factory=factory,
+    )
+
+    result = await assembler.assemble_turn(
+        ContextAssemblyIntent.ANCHOR_TURN,
+        TurnAssemblyRequest(
+            session_id="sess-1",
+            spawn_id=None,
+            turn_input=TurnInput.from_values(
+                user_text="",
+                pre_turn_history_event_id=1,
+            ),
+            user_instructions=UserInstructions(text="", hash=""),
+        ),
+    )
+
+    assert seen_event_ids == [(1,)]
+    rendered = result.user_turn_context.render(ContextView.RUNTIME)
+    assert "pxrd" in rendered
+    assert "mlip" not in rendered
 
 
 @pytest.mark.asyncio

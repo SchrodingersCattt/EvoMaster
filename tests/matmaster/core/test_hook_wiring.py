@@ -805,3 +805,68 @@ class TestSpawnGuardWiring:
 
         assert result == "child done"
         assert created_allow_spawn[-1] is False
+
+    @pytest.mark.asyncio
+    async def test_make_spawn_fn_propagates_skill_resolver_to_child_exp(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import matmaster.core.exp as exp_module
+
+        captured_kwargs: dict[str, object] = {}
+        original_exp = exp_module.Exp
+
+        class RecordingExp:
+            def __init__(self, config, *, allow_spawn: bool = True) -> None:
+                self.config = config
+                self.allow_spawn = allow_spawn
+
+            def run_stream(self, ctx, task, **kwargs):
+                captured_kwargs.update(kwargs)
+
+                async def _gen():
+                    if False:
+                        yield None
+
+                return _gen()
+
+        async def fake_drain_run_stream(_stream, on_event=None):
+            return SimpleNamespace(
+                status="completed",
+                final_content="child done",
+                reason="natural",
+            )
+
+        monkeypatch.setattr(exp_module, "Exp", RecordingExp)
+
+        ctx = PlaygroundContext(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path / "exec"),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+            run_meta={"session_id": "session-1"},
+            llm_provider=MockLLMProvider(),
+        )
+        sentinel_resolver = lambda events: ()
+
+        with (
+            patch(
+                "matmaster.config.loader.load_exp_config",
+                return_value=ExpConfig(name="direct"),
+            ),
+            patch(
+                "matmaster.core.stream_drain.drain_run_stream",
+                side_effect=fake_drain_run_stream,
+            ),
+        ):
+            spawn_fn = original_exp._make_spawn_fn(
+                ctx,
+                source_prefix="MatMaster",
+                hook_executor=HookExecutor(),
+                skill_resolver=sentinel_resolver,
+            )
+            result = await spawn_fn("direct", "summarize this task")
+
+        assert result == "child done"
+        assert captured_kwargs["skill_resolver"] is sentinel_resolver

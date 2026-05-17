@@ -21,10 +21,11 @@ from matmaster.context.assembly import (
     ContextAssemblyIntent,
     TurnAssemblyRequest,
 )
-from matmaster.context.ports import UserInstructions
+from matmaster.context.ports import SkillResolver, UserInstructions
+from matmaster.context.scanner import scan_skill_hits
 from matmaster.context.sections import ContextView
-from matmaster.context.sources.skills import resolve_active_skills, skill_name
 from matmaster.context.sources.turn_input import TurnInput
+from matmaster.core.runtime_context_assembly import empty_skill_resolver
 from matmaster.core.playground import PlaygroundManager
 from matmaster.integration.event_payloads import _normalize_public_source
 from matmaster.integration.fanout import RunEventFanout
@@ -55,6 +56,8 @@ from src.services.quota_service import use_quota
 from src.services.response_figures_service import ResponseFiguresAccumulator
 from src.services.sessions_service import get_sessions_service
 from src.services.session_event_codec import decode_session_events
+from src.services.skill_registry_factory import build_skill_registry
+from src.services.skill_resolver import SkillRegistryResolver
 from src.services.stream_reply_queue import RedisReplyQueue
 from src.services.user_turn_context_service import (
     DEFAULT_TURN_TRANSFORM,
@@ -107,30 +110,6 @@ def _invalid_finish_error_message(finish_detail: Any) -> str:
     return _INVALID_FINISH_MESSAGES.get(kind, _INVALID_FINISH_DEFAULT)
 
 
-def _remote_skill_roots_from_session(session: Any | None) -> list[str]:
-    if session is None:
-        return []
-
-    roots: list[str] = []
-    raw_roots = getattr(session, 'remote_skill_roots', None)
-    if isinstance(raw_roots, (list, tuple, set)):
-        roots.extend(
-            root.strip() for root in raw_roots if isinstance(root, str) and root.strip()
-        )
-
-    raw_user_root = getattr(session, 'remote_user_skills_root', None)
-    if isinstance(raw_user_root, str) and raw_user_root.strip():
-        roots.append(raw_user_root.strip())
-
-    seen: set[str] = set()
-    unique: list[str] = []
-    for root in roots:
-        if root not in seen:
-            seen.add(root)
-            unique.append(root)
-    return unique
-
-
 async def _emit_error_and_close_fanout(
     fanout: RunEventFanout, message: str, source: str = 'System'
 ) -> None:
@@ -152,56 +131,61 @@ class AgentRunService:
     def __init__(self, sessions_service=None):
         self._sessions_service = sessions_service or get_sessions_service()
         self._pg_manager = PlaygroundManager(_project_root)
-        # Hot cache: session_id -> set of skill names already activated.
+        # Hot cache: session_id -> frozenset of skill names already activated.
         # The authoritative source is DB skill_hit events; this dict only
         # avoids re-scanning the DB on every turn. Populated lazily on cache miss.
-        self._active_skills: dict[str, set[str]] = {}
+        self._active_skills: dict[str, frozenset[str]] = {}
 
     def init_playground_sync(self) -> None:
         """Validate configs at startup -- delegates to PlaygroundManager."""
         self._pg_manager.validate_startup()
 
-    def _build_skill_registry(
+    def _build_skill_resolver(
         self,
         exp_config: Any,
-        session: Any | None = None,
-    ) -> Any | None:
-        if getattr(exp_config, "skills", None) is None or not exp_config.skills.enabled:
-            return None
-        try:
-            from matmaster.skills.registry import SkillRegistry
+        session: Any | None,
+    ) -> SkillResolver:
+        skills_cfg = getattr(exp_config, "skills", None)
+        if skills_cfg is None or not getattr(skills_cfg, "enabled", False):
+            return empty_skill_resolver
 
-            roots_raw = exp_config.skills.skills_root
-            if isinstance(roots_raw, list):
-                roots = [Path(root) for root in roots_raw if root]
-            elif roots_raw:
-                roots = [Path(roots_raw)]
-            else:
-                roots = []
-            remote_roots = _remote_skill_roots_from_session(session)
-            if not roots and not remote_roots:
-                return None
-            return SkillRegistry(
-                roots,
-                remote_session=session if remote_roots else None,
-                remote_roots=remote_roots,
+        roots_raw = getattr(skills_cfg, "skills_root", None)
+        if isinstance(roots_raw, (list, tuple)):
+            config_roots: tuple[str | Path, ...] = tuple(
+                root for root in roots_raw if isinstance(root, (str, Path)) and root
+            )
+        elif isinstance(roots_raw, (str, Path)) and roots_raw:
+            config_roots = (roots_raw,)
+        else:
+            config_roots = ()
+
+        disabled_raw = getattr(skills_cfg, "disabled_skill_names", ())
+        config_disabled = (
+            tuple(disabled_raw)
+            if isinstance(disabled_raw, (list, tuple, set, frozenset))
+            else ()
+        )
+        try:
+            registry = build_skill_registry(
+                config_roots=config_roots,
+                session=session,
+                config_disabled=config_disabled,
             )
         except Exception:
             logger.warning(
-                "active skill rehydrate: building SkillRegistry failed",
+                "active skill resolver: building SkillRegistry failed",
                 exc_info=True,
             )
-            return None
+            registry = None
+        return SkillRegistryResolver(registry)
 
     def _resolve_active_skill_names(
         self,
         session_id: str,
         events_table: Any,
-        exp_config: Any,
-        session: Any | None = None,
         *,
-        registry: Any | None = None,
-    ) -> set[str]:
+        until_event_id: int | None = None,
+    ) -> frozenset[str]:
         cached = self._active_skills.get(session_id)
         if cached is not None:
             return cached
@@ -220,11 +204,14 @@ class AgentRunService:
                     exc_info=True,
                 )
 
-        if registry is None:
-            registry = self._build_skill_registry(exp_config, session=session)
-        skills = resolve_active_skills(decode_session_events(raw_events), registry)
-        names = {skill_name(skill) for skill in skills}
-        names.discard("")
+        events = decode_session_events(raw_events)
+        if until_event_id is not None:
+            events = tuple(event for event in events if event.id <= until_event_id)
+        names = frozenset(
+            record.skill_name
+            for record in scan_skill_hits(events)
+            if record.skill_name
+        )
         self._active_skills[session_id] = names
         return names
 
@@ -538,13 +525,13 @@ class AgentRunService:
                 truncated=user_instructions.truncated,
             )
 
-            skill_registry = self._build_skill_registry(
+            skill_resolver = self._build_skill_resolver(
                 exp_config,
                 session=pg_ctx.session,
             )
             context_assembler, assembly_ports = build_context_assembler(
                 events_table=events_table,
-                skill_registry=skill_registry,
+                skill_resolver=skill_resolver,
                 legal_mcp_servers=(pg_ctx.run_meta or {}).get("legal_mcp_servers"),
                 schemas_by_server=(pg_ctx.run_meta or {}).get("schemas_by_server"),
                 split_turn_attachments=bool(
@@ -633,14 +620,14 @@ class AgentRunService:
             active_skills = self._resolve_active_skill_names(
                 session_id,
                 events_table,
-                exp_config,
-                pg_ctx.session,
-                registry=skill_registry,
             )
 
             def _remember_skill_hit(skill_name: str) -> None:
                 if skill_name:
-                    self._active_skills.setdefault(session_id, set()).add(skill_name)
+                    current = self._active_skills.get(session_id, frozenset())
+                    self._active_skills[session_id] = frozenset(
+                        (*current, skill_name)
+                    )
 
             pg_ctx = pg_ctx.with_run_meta(active_skills=frozenset(active_skills))
 
@@ -653,6 +640,7 @@ class AgentRunService:
                     history=history,
                     cancel_token=cancel_token,
                     skills=pg_ctx.run_meta.get('skill_config'),
+                    skill_resolver=skill_resolver,
                 )
             ) as stream:
                 async for event in stream:

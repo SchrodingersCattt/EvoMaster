@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from matmaster.config.exp import ExpConfig
+from matmaster.context.ports import SkillResolver
 from matmaster.context.system_prompt import SystemPromptBuilder
 from matmaster.core.hooks import HookEvent, HookExecutor, SubagentContext
 from matmaster.core.path_access import derive_path_access_roots
@@ -165,7 +166,11 @@ class Exp:
         self._config = config
         self._allow_spawn = allow_spawn
         self._cleanup_callbacks: list[Callable[[], Any]] = []
+        # Core-layer registry serves SkillTool registration and the
+        # registry-wide system prompt prefix. Service-layer resolver state is
+        # held separately and feeds active-skill prompt rendering.
         self._skill_registry: Any = None
+        self._skill_resolver: SkillResolver | None = None
         self.logger = logging.getLogger(self.__class__.__name__)
 
     # ── Properties ───────────────────────────────────────
@@ -212,6 +217,7 @@ class Exp:
         ctx: PlaygroundContext,
         source_prefix: str,
         hook_executor: HookExecutor | None = None,
+        skill_resolver: SkillResolver | None = None,
     ) -> Any:
         """Create async spawn_fn closure capturing parent runtime context.
 
@@ -273,6 +279,7 @@ class Exp:
                         task,
                         cancel_token=cancel_token,
                         spawn_id=child_spawn_id,
+                        skill_resolver=skill_resolver,
                     ),
                     on_event=_forward_child_event,
                 )
@@ -357,6 +364,7 @@ class Exp:
         ctx: PlaygroundContext,
         *,
         skills: dict[str, Any] | None = None,
+        skill_resolver: SkillResolver | None = None,
         spawn_id: str | None = None,
     ) -> AgentRuntime:
         """Resource creation: assemble -> tools -> prompt -> kernel.
@@ -369,6 +377,9 @@ class Exp:
         # Discard any registry from a prior run so a turn that turns skills off
         # cannot expose stale state to the prompt builder.
         self._skill_registry = None
+        from matmaster.core.runtime_context_assembly import empty_skill_resolver
+
+        self._skill_resolver = skill_resolver or empty_skill_resolver
 
         registry = ToolRegistry()
         builtin_cfg = self._config.tools.builtin
@@ -432,6 +443,7 @@ class Exp:
                     ctx,
                     source_prefix="MatMaster",
                     hook_executor=hook_executor,
+                    skill_resolver=self._skill_resolver,
                 )
                 available_exps = list_model_visible_exps()
             agent_tool = AgentTool(
@@ -467,7 +479,7 @@ class Exp:
         runtime_context = build_runtime_context_assembly(
             spec=spec,
             ctx=ctx,
-            skill_registry=self._skill_registry,
+            skill_resolver=self._skill_resolver,
             spawn_id=spawn_id,
             logger=self.logger,
         )
@@ -554,6 +566,7 @@ class Exp:
         history: list[Message] | None = None,
         cancel_token: CancellationToken | None = None,
         skills: dict[str, Any] | None = None,
+        skill_resolver: SkillResolver | None = None,
         spawn_id: str | None = None,
     ) -> AsyncIterator[Any]:
         """build_runtime -> kernel.run_stream -> cleanup.
@@ -566,6 +579,7 @@ class Exp:
             runtime = await self.build_runtime(
                 ctx,
                 skills=skills,
+                skill_resolver=skill_resolver,
                 spawn_id=spawn_id,
             )
             spec = runtime.spec
@@ -740,6 +754,9 @@ class Exp:
             )
             return
 
+        # Core-layer registry is independent of the service-layer resolver
+        # registry. Service registry serves ActiveSkill prompt rendering; this
+        # registry serves SkillTool registration into ToolCatalog.
         skill_registry = SkillRegistry(
             roots,
             remote_session=ctx.session if remote_roots else None,

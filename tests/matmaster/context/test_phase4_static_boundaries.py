@@ -67,3 +67,26 @@ def test_core_context_does_not_import_service_codec() -> None:
             offenders.append(path.relative_to(ROOT).as_posix())
 
     assert offenders == []
+
+
+def test_matmaster_context_does_not_reference_skill_registry() -> None:
+    context_root = ROOT / "matmaster" / "context"
+    offenders: list[str] = []
+    for path in context_root.rglob("*.py"):
+        text = path.read_text(encoding="utf-8")
+        if "skill_registry" in text or "SkillRegistry" in text:
+            offenders.append(path.relative_to(ROOT).as_posix())
+
+    offenders = [path for path in offenders if "system_prompt.py" not in path]
+    assert offenders == [], (
+        "matmaster/context/* must not depend on SkillRegistry; "
+        f"violations: {offenders}"
+    )
+
+
+def test_session_skills_source_does_not_export_legacy_helpers() -> None:
+    from matmaster.context.sources import skills
+
+    assert not hasattr(skills, "resolve_active_skills")
+    assert not hasattr(skills, "skill_name")
+    assert not hasattr(skills.SessionSkillsSource, "from_events")
