@@ -3,9 +3,12 @@ from __future__ import annotations
 import pytest
 
 from matmaster.context.compaction import (
+    SUMMARY_USER_REQUEST_TEMPLATE,
     _select_tool_safe_tail,
     estimate_json_tokens,
+    prepare_messages_for_summary_call,
 )
+from matmaster.context.sources.turn_input import TurnInput
 from matmaster.types.message_normalization import (
     normalize_and_validate_openai_messages,
 )
@@ -97,3 +100,135 @@ def test_select_tool_safe_tail_excludes_orphan_tool_messages() -> None:
 
 def test_select_tool_safe_tail_returns_empty_for_all_orphans() -> None:
     assert _select_tool_safe_tail([_tool("a"), _tool("b")], n=2) == []
+
+
+def test_prepare_messages_common_case_preserves_message_identity() -> None:
+    compact_request = UserMessage(content=SUMMARY_USER_REQUEST_TEMPLATE)
+    full_messages = [
+        SystemMessage(content="sys"),
+        UserMessage(content="old"),
+        AssistantMessage(content="answer"),
+    ]
+    tool_definitions = [{"type": "function", "function": {"name": "tool"}}]
+
+    prep = prepare_messages_for_summary_call(
+        full_messages=full_messages,
+        phase="runtime",
+        turn_input=None,
+        compact_request=compact_request,
+        tool_definitions=tool_definitions,
+        context_limit=20_000,
+        reserved_summary_tokens=1_000,
+    )
+
+    assert prep.messages == full_messages
+    assert all(left is right for left, right in zip(prep.messages, full_messages))
+    assert prep.truncated_tool_call_ids == ()
+    assert prep.original_tokens == prep.prepared_tokens
+    assert prep.tool_schema_tokens > 0
+    assert prep.request_tokens > 0
+    assert prep.message_budget > prep.prepared_tokens
+
+
+def test_prepare_messages_preflight_excludes_current_user_when_split_applies() -> None:
+    compact_request = UserMessage(content=SUMMARY_USER_REQUEST_TEMPLATE)
+    current = TurnInput.from_values(user_text="new request")
+    full_messages = [
+        SystemMessage(content="sys"),
+        UserMessage(content="old"),
+        AssistantMessage(content="answer"),
+        UserMessage(content="new request"),
+    ]
+
+    prep = prepare_messages_for_summary_call(
+        full_messages=full_messages,
+        phase="preflight",
+        turn_input=current,
+        compact_request=compact_request,
+        tool_definitions=None,
+        context_limit=20_000,
+        reserved_summary_tokens=1_000,
+    )
+
+    assert prep.messages == full_messages[:-1]
+    assert full_messages[-1] not in prep.messages
+
+
+def test_prepare_messages_runtime_includes_trailing_tool_message() -> None:
+    compact_request = UserMessage(content=SUMMARY_USER_REQUEST_TEMPLATE)
+    full_messages = [
+        SystemMessage(content="sys"),
+        UserMessage(content="run"),
+        _assistant("a"),
+        _tool("a", "large output"),
+    ]
+
+    prep = prepare_messages_for_summary_call(
+        full_messages=full_messages,
+        phase="runtime",
+        turn_input=None,
+        compact_request=compact_request,
+        tool_definitions=None,
+        context_limit=20_000,
+        reserved_summary_tokens=1_000,
+    )
+
+    assert prep.messages[-1] is full_messages[-1]
+
+
+def test_prepare_messages_non_positive_budget_raises() -> None:
+    compact_request = UserMessage(content=SUMMARY_USER_REQUEST_TEMPLATE)
+    full_messages = [SystemMessage(content="sys"), UserMessage(content="old")]
+
+    with pytest.raises(ValueError, match="summary message budget non-positive"):
+        prepare_messages_for_summary_call(
+            full_messages=full_messages,
+            phase="runtime",
+            turn_input=None,
+            compact_request=compact_request,
+            tool_definitions=[{"schema": "x" * 20_000}],
+            context_limit=1_000,
+            reserved_summary_tokens=900,
+        )
+
+
+def test_prepare_messages_truncates_only_largest_tool_results_needed_to_fit() -> None:
+    compact_request = UserMessage(content=SUMMARY_USER_REQUEST_TEMPLATE)
+    small = _tool("small", "S" * 600)
+    medium = _tool("medium", "M" * 4_000)
+    large = _tool("large", "L" * 16_000)
+    full_messages = [
+        SystemMessage(content="sys"),
+        UserMessage(content="run"),
+        _assistant("small", "medium", "large"),
+        small,
+        medium,
+        large,
+    ]
+
+    prep = prepare_messages_for_summary_call(
+        full_messages=full_messages,
+        phase="runtime",
+        turn_input=None,
+        compact_request=compact_request,
+        tool_definitions=None,
+        context_limit=7_000,
+        reserved_summary_tokens=1_000,
+        safety_margin_tokens=500,
+    )
+
+    assert prep.prepared_tokens <= prep.message_budget
+    assert "large" in prep.truncated_tool_call_ids
+    assert prep.messages[3] is small
+    assert prep.messages[4] is medium or prep.messages[4].tool_call_id == "medium"
+    assert prep.messages[5] is not large
+    assert prep.messages[5].tool_call_id == large.tool_call_id
+    assert prep.messages[5].tool_name == large.tool_name
+    assert "[tool_result truncated before summary call]" in (
+        prep.messages[5].content or ""
+    )
+    assert "tool_name: tool" in (prep.messages[5].content or "")
+    assert "tool_call_id: large" in (prep.messages[5].content or "")
+    assert "original_chars: 16000" in (prep.messages[5].content or "")
+    assert full_messages[5] is large
+    assert full_messages[5].content == "L" * 16_000

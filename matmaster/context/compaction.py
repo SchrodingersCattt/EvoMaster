@@ -40,23 +40,54 @@ logger = logging.getLogger(__name__)
 _EMPTY_USER_INSTRUCTIONS_HASH = f"sha256:{hashlib.sha256(b'').hexdigest()}"
 _TRUNCATION_TARGET_RATIO = 0.8
 
-SUMMARY_SYSTEM_PROMPT = """\
-You are a conversation summarizer. Summarize the following conversation history \
-into a concise structured summary. Preserve:
-- Key decisions made and their rationale
-- Tool call results and their outcomes (include exact values, paths, filenames)
-- Error messages and how they were resolved
-- User constraints, parameters, and preferences stated during the conversation
-- Current status and what has been accomplished
+SUMMARY_USER_REQUEST_TEMPLATE = """\
+<compact_request>
+当前会话上下文已接近上限，需要你对所有对话进行压缩。请按以下要求输出
+一份结构化摘要，后续对话将以输出的摘要作为历史背景继续，使用的语言需要
+同之前用户使用的语言维持一致。
 
-Do NOT add new information. Do NOT include pleasantries. Be factual and precise.
+需要保留：
+- 关键决策及其原因
+- 工具调用的结果（必须保留确切数值、路径、文件名、错误信息）
+- 用户给出的约束、参数、偏好
+- 当前任务状态与已完成事项
+- 需要继续进行的任务
 
-If the input starts with a previous compact context bundle, merge it with later
-events and produce a fresh conversation summary. Older <compacted_history>
-blocks are historical summaries; do not copy them verbatim. Current session
-state is supplied separately by session sections such as <session_attachments>,
-<session_skills>, and <session_tools>.\
+输出要求：
+- 只输出摘要文本，不要寒暄、不要解释你正在做什么、不要复述本压缩请求
+- 不要调用任何工具
+- 不要继续推进工具调用未完成的任务，只对其结果做总结
+- 不要新增没有提到的信息
+</compact_request>\
 """
+
+_SUMMARY_USER_REQUEST_TEMPLATE_EN_RESERVED = """\
+<compact_request>
+The conversation context above is approaching the limit. Please produce a
+structured summary; subsequent dialogue will treat your summary as the
+historical context. Match the language of the conversation above.
+
+Preserve:
+- Key decisions and their rationale
+- Tool call results (keep exact values, paths, filenames, error messages)
+- User constraints, parameters, and preferences
+- Current task status and completed items
+
+Output requirements:
+- Output only the summary text. No pleasantries, meta-commentary, or
+  restatement of this request.
+- Do not call any tools (disabled at API level even if tools appear relevant).
+- Do not continue any in-flight tool-driven reasoning; only summarize results.
+- Do not add information not present above.
+- If the conversation above starts with a <compacted_history> block, merge it
+  with later events into a single fresh summary; do not copy the old block
+  verbatim.
+</compact_request>\
+"""
+
+_TRUNCATE_HEAD_CHARS = 1200
+_TRUNCATE_TAIL_CHARS = 800
+_TRUNCATE_MIN_CONTENT_CHARS = 500
 
 CURRENT_INPUT_CONTINUATION_INSTRUCTION = (
     "不要向用户复述上述摘要，除非用户明确要求。"
@@ -100,6 +131,43 @@ def estimate_json_tokens(obj: Any, safety_margin: float = 1.0) -> int:
     return int(max(len(text) // 4, 1) * safety_margin)
 
 
+def _truncate_tool_message_for_summary(msg: ToolMessage) -> ToolMessage:
+    content = msg.content or ""
+    head = content[:_TRUNCATE_HEAD_CHARS]
+    tail = content[-_TRUNCATE_TAIL_CHARS:]
+    marker = (
+        "\n\n[tool_result truncated before summary call]\n"
+        f"tool_name: {msg.tool_name}\n"
+        f"tool_call_id: {msg.tool_call_id}\n"
+        f"original_chars: {len(content)}\n"
+        f"preserved: first {_TRUNCATE_HEAD_CHARS} chars and "
+        f"last {_TRUNCATE_TAIL_CHARS} chars\n"
+        "reason: summary input would exceed context window\n\n"
+    )
+    return ToolMessage(
+        content=head + marker + tail,
+        tool_call_id=msg.tool_call_id,
+        tool_name=msg.tool_name,
+    )
+
+
+def _summary_base_messages(
+    *,
+    full_messages: list[Message],
+    phase: Literal["preflight", "runtime"],
+    turn_input: TurnInput | None,
+) -> list[Message]:
+    current_split = (
+        phase == "preflight"
+        and turn_input is not None
+        and turn_input.has_effective_input()
+        and len(full_messages) >= 3
+        and isinstance(full_messages[-1], UserMessage)
+        and bool(full_messages[1:-1])
+    )
+    return full_messages[:-1] if current_split else full_messages
+
+
 @dataclass(frozen=True)
 class CompactionPlan:
     compaction_id: str
@@ -124,6 +192,98 @@ class CompactionResult:
     checkpoint_covered_until_event_id: int | None = None
     user_instructions_text: str = ""
     user_instructions_hash: str = _EMPTY_USER_INSTRUCTIONS_HASH
+
+
+@dataclass(frozen=True)
+class SummaryInputPreparation:
+    """Result of preparing messages for a summary call."""
+
+    messages: list[Message]
+    truncated_tool_call_ids: tuple[str, ...]
+    original_tokens: int
+    prepared_tokens: int
+    tool_schema_tokens: int
+    request_tokens: int
+    message_budget: int
+
+
+def prepare_messages_for_summary_call(
+    *,
+    full_messages: list[Message],
+    phase: Literal["preflight", "runtime"],
+    turn_input: TurnInput | None,
+    compact_request: UserMessage,
+    tool_definitions: list[dict] | None,
+    context_limit: int,
+    reserved_summary_tokens: int,
+    safety_margin_tokens: int = 5_000,
+) -> SummaryInputPreparation:
+    """Prepare base messages for a cache-preserving summary call."""
+    if not full_messages:
+        raise ValueError("Cannot prepare summary call for empty messages")
+    if not isinstance(full_messages[0], SystemMessage):
+        raise TypeError(
+            f"full_messages[0] must be SystemMessage, got {type(full_messages[0])}"
+        )
+
+    base_messages = _summary_base_messages(
+        full_messages=full_messages,
+        phase=phase,
+        turn_input=turn_input,
+    )
+    input_budget = context_limit - reserved_summary_tokens - safety_margin_tokens
+    tool_schema_tokens = estimate_json_tokens(tool_definitions or [])
+    request_tokens = estimate_tokens([compact_request], safety_margin=1.1)
+    message_budget = input_budget - tool_schema_tokens - request_tokens
+    if message_budget <= 0:
+        raise ValueError("summary message budget non-positive")
+
+    prepared_tokens = estimate_tokens(list(base_messages), safety_margin=1.0)
+    if prepared_tokens <= message_budget:
+        return SummaryInputPreparation(
+            messages=list(base_messages),
+            truncated_tool_call_ids=(),
+            original_tokens=prepared_tokens,
+            prepared_tokens=prepared_tokens,
+            tool_schema_tokens=tool_schema_tokens,
+            request_tokens=request_tokens,
+            message_budget=message_budget,
+        )
+
+    working = list(base_messages)
+    original_tokens = prepared_tokens
+    candidates = [
+        (idx, estimate_tokens([msg], safety_margin=1.0))
+        for idx, msg in enumerate(working)
+        if isinstance(msg, ToolMessage)
+        and msg.content
+        and len(msg.content) >= _TRUNCATE_MIN_CONTENT_CHARS
+    ]
+    candidates.sort(key=lambda item: item[1], reverse=True)
+
+    truncated_ids: list[str] = []
+    for idx, _tokens in candidates:
+        msg = working[idx]
+        if not isinstance(msg, ToolMessage):
+            continue
+        working[idx] = _truncate_tool_message_for_summary(msg)
+        truncated_ids.append(msg.tool_call_id)
+        prepared_tokens = estimate_tokens(working, safety_margin=1.0)
+        if prepared_tokens <= message_budget:
+            break
+
+    if prepared_tokens > message_budget:
+        raise ValueError("summary input exceeds context window after tool truncation")
+
+    return SummaryInputPreparation(
+        messages=working,
+        truncated_tool_call_ids=tuple(truncated_ids),
+        original_tokens=original_tokens,
+        prepared_tokens=prepared_tokens,
+        tool_schema_tokens=tool_schema_tokens,
+        request_tokens=request_tokens,
+        message_budget=message_budget,
+    )
 
 
 class ContextCompactor:
