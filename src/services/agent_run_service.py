@@ -22,7 +22,6 @@ from matmaster.context.assembly import (
     TurnAssemblyRequest,
 )
 from matmaster.context.ports import UserInstructions
-from matmaster.context.scanner import coerce_session_events
 from matmaster.context.sections import ContextView
 from matmaster.context.sources.skills import resolve_active_skills, skill_name
 from matmaster.context.sources.turn_input import TurnInput
@@ -55,6 +54,7 @@ from src.services.image_input_service import get_image_input_service
 from src.services.quota_service import use_quota
 from src.services.response_figures_service import ResponseFiguresAccumulator
 from src.services.sessions_service import get_sessions_service
+from src.services.session_event_codec import decode_session_events
 from src.services.stream_reply_queue import RedisReplyQueue
 from src.services.user_turn_context_service import (
     DEFAULT_TURN_TRANSFORM,
@@ -222,7 +222,7 @@ class AgentRunService:
 
         if registry is None:
             registry = self._build_skill_registry(exp_config, session=session)
-        skills = resolve_active_skills(coerce_session_events(raw_events), registry)
+        skills = resolve_active_skills(decode_session_events(raw_events), registry)
         names = {skill_name(skill) for skill in skills}
         names.discard("")
         self._active_skills[session_id] = names
