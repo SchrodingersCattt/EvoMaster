@@ -956,11 +956,17 @@ def check_stru_file_from_evidence(
     expected = cfg.get("expected")
     if not filename or not check_type:
         return False, "stru_file_check: need 'filename' and 'check' in ref"
+    min_sites_raw = cfg.get("min_sites", 2)
+    try:
+        min_sites = int(min_sites_raw)
+    except (TypeError, ValueError):
+        min_sites = 2
     return check_stru_file(
         ws,
         filename=filename,
         check=check_type,
         expected=expected,
+        min_sites=min_sites,
         workspace_resolve=_workspace_resolve_from_ref(ref),
     )
 
