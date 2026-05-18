@@ -209,8 +209,8 @@ cases:
       - "Before any transform, decide whether this MOF is a molecular crystal"  # [english][workflow]
     negative:
       - "帮我用这个结构跑一个 VASP 能带计算"        # → vasp
-      - "下载一下 mp-149 这个晶体的 CIF"            # → structure-manager
-      - "把这个 CIF 转成 POSCAR"                    # → structure-manager
+      - "下载一下 mp-149 这个晶体的 CIF"            # → retrieve-structure
+      - "把这个 CIF 转成 POSCAR"                    # → retrieve-structure
       - "构造一个 Si 的 2x2x2 超胞"                 # → transform-atomic-structure
       - "给这个 slab 顶部加一个 H2O 吸附"           # → assemble-atomic-structure
 
@@ -230,7 +230,7 @@ cases:
       - "帮我把这个 POSCAR 变成 2x2x2 超胞"          # → transform-atomic-structure
       - "这个 CIF 文件的对称性是什么"                # → inspect-atomic-structure
       - "用 CALYPSO 在 LiSi 体系里搜结构"            # → sample-atomic-structures
-      - "下载 mp-22862 这个材料的 CIF"               # → structure-manager
+      - "下载 mp-22862 这个材料的 CIF"               # → retrieve-structure
       - "把 H2O 分子吸附到 Cu(111) 表面"             # → assemble-atomic-structure
 
   - skill: sample-atomic-structures
@@ -246,7 +246,7 @@ cases:
       - "Run a CALYPSO global search on the Ti-O system and return top-5 candidates"  # [english][explicit]
       - "Sample crystal candidates conditioned on bulk modulus > 200 GPa with a generative model"  # [english][task-only]
     negative:
-      - "从 Materials Project 下载 SrTiO3 的 CIF"      # → structure-manager
+      - "从 Materials Project 下载 SrTiO3 的 CIF"      # → retrieve-structure
       - "帮我用 ASE 生成一个 fcc Cu 晶胞"              # → build-atomic-structure
       - "把这个 POSCAR 弄成 2x2x2 超胞"                # → transform-atomic-structure
       - "检查一下这个生成的结构是否合理"               # → inspect-atomic-structure
@@ -269,7 +269,7 @@ cases:
       - "把这个 SMILES 转成 3D 分子"                  # → build-atomic-structure
       - "帮我看一下这个 CIF 的空间群"                 # → inspect-atomic-structure
       - "这个是分子晶体，帮我做溶剂分子提取"          # → operate-molecular-crystal
-      - "下载 MP 上的 Fe2O3 结构"                     # → structure-manager
+      - "下载 MP 上的 Fe2O3 结构"                     # → retrieve-structure
 
   - skill: assemble-atomic-structure
     positive:
@@ -288,7 +288,7 @@ cases:
       - "用 SMILES 生成苯分子"                        # → build-atomic-structure
       - "看一下这个 slab 的真空层厚度"                # → inspect-atomic-structure
       - "切 LiCoO2 (003) 极性面要怎么处理偶极"        # → tasker-polar-surface
-      - "帮我下载石墨烯的 CIF"                        # → structure-manager
+      - "帮我下载石墨烯的 CIF"                        # → retrieve-structure
 
   - skill: operate-molecular-crystal
     positive:
@@ -307,7 +307,7 @@ cases:
       - "构建一个 Cu(111) slab"                        # → assemble-atomic-structure
       - "用 SMILES 生成乙醇分子"                       # → build-atomic-structure
       - "看一下这个 CIF 是不是分子晶体"                # → inspect-atomic-structure
-      - "下载这个 MOF 的 CIF 文件"                     # → structure-manager
+      - "下载这个 MOF 的 CIF 文件"                     # → retrieve-structure
 
   - skill: tasker-polar-surface
     positive:
@@ -343,7 +343,7 @@ cases:
     negative:
       - "帮我做 PXRD 的 Rietveld 精修"                 # → pxrd-refinement
       - "标定一下这个 XRD 的峰位"                      # → xrd-analysis
-      - "把这个 CIF 转成 POSCAR"                       # → structure-manager
+      - "把这个 CIF 转成 POSCAR"                       # → retrieve-structure
       - "帮我看一下这个 CIF 的对称性"                  # → inspect-atomic-structure
       - "用 GSAS-II 做 Pawley 提取晶胞参数"            # → pxrd-refinement
 
@@ -364,7 +364,7 @@ cases:
       - "标定一下这个 XRD 峰对应什么物相"              # → xrd-analysis
       - "用 SHELX 精修这个单晶数据"                    # → (single-crystal, not in scope)
       - "画一下这个 PXRD 数据"                         # → data-analysis
-      - "帮我下载石墨烯的 CIF"                         # → structure-manager
+      - "帮我下载石墨烯的 CIF"                         # → retrieve-structure
 
   - skill: aissq-explorer
     positive:
@@ -381,11 +381,11 @@ cases:
     negative:
       - "用本地的 DPA-2 模型跑一个 MD"                          # → mlips
       - "帮我训练一个 NEP 势函数"                               # → mlips
-      - "从 Materials Project 下载 SrTiO3"                      # → structure-manager
-      - "去 HuggingFace 上把 MACE-MP large 拉下来跑 NPT"         # → structure-manager + mlips
-      - "论文 SI 把 SevenNet-l3i5 的权重挂在 figshare 上了，拉下来跑一段 NPT"  # → structure-manager + mlips
+      - "从 Materials Project 下载 SrTiO3"                      # → retrieve-structure
+      - "去 HuggingFace 上把 MACE-MP large 拉下来跑 NPT"         # → retrieve-structure + mlips
+      - "论文 SI 把 SevenNet-l3i5 的权重挂在 figshare 上了，拉下来跑一段 NPT"  # → retrieve-structure + mlips
 
-  - skill: structure-manager
+  - skill: retrieve-structure
     positive:
       - "这个 URL 是 POSCAR 直链，下载到 workspace"                             # [imperative][url]
       - "文献 SI 这个 CIF 链接，下下来并 validate"                              # [imperative][url][workflow]
@@ -417,7 +417,7 @@ cases:
       - "Run a DART-style composition GA on the Mg-Al-Zn alloy targeting yield strength"  # [english][explicit]
       - "Optimize four-component refractory HEA composition for hot hardness"  # [english]
     negative:
-      - "帮我下载 mp-22862 的 CIF"                     # → structure-manager
+      - "帮我下载 mp-22862 的 CIF"                     # → retrieve-structure
       - "用 CALYPSO 搜结构"                            # → sample-atomic-structures
       - "帮我做 Si 的 DFT 能带计算"                    # → vasp
       - "给这个晶胞掺杂 5% Mg"                         # → transform-atomic-structure

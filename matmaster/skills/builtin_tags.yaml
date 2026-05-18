@@ -10,7 +10,7 @@ categories:
           - sample-atomic-structures
           - tasker-polar-surface
           - operate-molecular-crystal
-          - structure-manager
+          - retrieve-structure
       structure-search:
         skills:
           - mcp-mat-struct-db

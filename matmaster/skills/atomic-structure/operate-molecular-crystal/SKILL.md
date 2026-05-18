@@ -392,5 +392,5 @@ Never stop at `dir(molcrys_kit)` — the helpers live in
   placement.
 - `transform-atomic-structure`: non-molecular doping, defects, strain,
   supercells.
-- `structure-manager` contains additional molecular-crystal slab /
+- `retrieve-structure` contains additional molecular-crystal slab /
   passivation helper scripts for known fragile cases.

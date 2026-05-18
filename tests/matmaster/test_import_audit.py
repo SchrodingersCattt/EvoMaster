@@ -104,7 +104,7 @@ class TestPhase30FullIsolation:
     KNOWN_VIOLATIONS: frozenset[str] = frozenset(
         {
             "matmaster/core/__init__.py:L10",
-            "matmaster/skills/playground-skills/structure-manager/scripts/fetch_web_structure.py:L30",
+            "matmaster/skills/playground-skills/retrieve-structure/scripts/fetch_web_structure.py:L30",
         }
     )
 

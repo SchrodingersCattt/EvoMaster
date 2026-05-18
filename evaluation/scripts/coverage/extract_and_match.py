@@ -79,7 +79,7 @@ SKILL_TAG_MAP: dict[str, list[str]] = {
     "transform-atomic-structure": ["struct_transform"],
     "operate-molecular-crystal": ["struct_molcrys"],
     "mcp-mat-struct-db": ["meta_database"],
-    "structure-manager": ["meta_database"],
+    "retrieve-structure": ["meta_database"],
     "xrd-analysis": ["char_diffraction"],
     "checkcif-validator": ["char_diffraction"],
     "mcp-mat-xrd": ["char_diffraction"],

@@ -96,5 +96,5 @@ Report these items in the final answer whenever this skill is used:
 - Use `assemble-atomic-structure` for slabs, adsorbates, interfaces, amorphous
   boxes, and crosslinks.
 - Use `operate-molecular-crystal` whenever PBC molecule integrity matters.
-- `matmaster/skills/playground-skills/structure-manager/scripts/assess_structure.py`
+- `matmaster/skills/playground-skills/retrieve-structure/scripts/assess_structure.py`
   remains a quick CLI validation fallback.
