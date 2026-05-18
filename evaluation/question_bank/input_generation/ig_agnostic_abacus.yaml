@@ -1915,7 +1915,6 @@ questions:
   tags:
   - eng_abacus
   - struct_transform
-  priority: P0
   data_files:
   - key: base_vacancy
     path: data/IG_abacus_002_20260404/base_vacancy.stru
@@ -2072,6 +2071,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
+  priority: P0
 - id: IG_abacus_005_20260508
   capability: input_generation
   domain: agnostic
@@ -3047,9 +3047,18 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare minimal PW vs LCAO SCF input triplets for Si2 (official 02_scf).
-  human_prompt_seed: "为 Si₂ 金刚石结构准备两套基础 ABACUS 自洽场输入，分别使用平面波与 LCAO 基组：在 `run_pw_si2/`、`run_lcao_si2/` 各编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
+  human_prompt_seed: "为 Si₂ 金刚石结构准备两套基础 ABACUS 自洽场输入，分别使用平面波与 LCAO 基组。读取工作区 STRU，在 `run_pw_si2/`、`run_lcao_si2/` 各编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_pw_Si2
+    path: data/IG_abacus_024_20260518/STRU_pw_Si2
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/02_scf/01_pw_Si2
+  - key: STRU_lcao_Si2
+    path: data/IG_abacus_024_20260518/STRU_lcao_Si2
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/02_scf/02_lcao_Si2
   reference_answers:
   - key: pw_si2_input
     value: run_pw_si2/INPUT
@@ -3154,22 +3163,30 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_pw_Si2
-    path: data/IG_abacus_024_20260518/STRU_pw_Si2
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/02_scf/01_pw_Si2
-  - key: STRU_lcao_Si2
-    path: data/IG_abacus_024_20260518/STRU_lcao_Si2
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/02_scf/02_lcao_Si2
 - id: IG_abacus_025_20260518
   capability: input_generation
   domain: agnostic
   intent: Spin-polarized LCAO SCF with distinct initial magnetic orders (official 03_spin_polarized).
-  human_prompt_seed: "准备四套 LCAO 自旋极化 SCF 输入：`run_fe_fm/`（bcc Fe 铁磁）、`run_fe_afm/`（反铁磁）、`run_h_atom/`（单 H）、`run_co6nb4os2/`（Co₆Nb₄Os₂ 团簇）。各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
+  human_prompt_seed: "准备四套 LCAO 自旋极化 SCF 输入（`run_fe_fm/`、`run_fe_afm/`、`run_h_atom/`、`run_co6nb4os2/`）。读取工作区 STRU，各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_Fe_FM
+    path: data/IG_abacus_025_20260518/STRU_Fe_FM
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/03_spin_polarized/02_Fe_FM
+  - key: STRU_Fe_AFM
+    path: data/IG_abacus_025_20260518/STRU_Fe_AFM
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/03_spin_polarized/03_Fe_AFM
+  - key: STRU_H_atom
+    path: data/IG_abacus_025_20260518/STRU_H_atom
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/03_spin_polarized/01_H_atom
+  - key: STRU_Co6Nb4Os2
+    path: data/IG_abacus_025_20260518/STRU_Co6Nb4Os2
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/03_spin_polarized/04_Co6Nb4Os2
   reference_answers:
   - key: fe_fm_input
     value: run_fe_fm/INPUT
@@ -3321,30 +3338,18 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_Fe_FM
-    path: data/IG_abacus_025_20260518/STRU_Fe_FM
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/03_spin_polarized/02_Fe_FM
-  - key: STRU_Fe_AFM
-    path: data/IG_abacus_025_20260518/STRU_Fe_AFM
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/03_spin_polarized/03_Fe_AFM
-  - key: STRU_H_atom
-    path: data/IG_abacus_025_20260518/STRU_H_atom
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/03_spin_polarized/01_H_atom
-  - key: STRU_Co6Nb4Os2
-    path: data/IG_abacus_025_20260518/STRU_Co6Nb4Os2
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/03_spin_polarized/04_Co6Nb4Os2
 - id: IG_abacus_026_20260518
   capability: input_generation
   domain: agnostic
   intent: Noncollinear LCAO SCF with SOC for bcc Fe (official 04_noncollinear).
-  human_prompt_seed: 为 bcc Fe 准备一套 ABACUS 非共线 LCAO 自洽场输入：在 `run_fe_nc/` 编写 `INPUT` 与 `KPT`（含自旋轨道耦合；只写文件，不运行）。
+  human_prompt_seed: 为 bcc Fe 准备非共线 LCAO 自洽场输入（含自旋轨道耦合）。读取工作区 STRU，在 `run_fe_nc/` 编写 `INPUT` 与 `KPT`（只写文件，不运行）。
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_Fe_nc
+    path: data/IG_abacus_026_20260518/STRU_Fe_nc
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/04_noncollinear/01_Fe_noncollinear
   reference_answers:
   - key: input_artifact
     value: run_fe_nc/INPUT
@@ -3420,18 +3425,18 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_Fe_nc
-    path: data/IG_abacus_026_20260518/STRU_Fe_nc
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/04_noncollinear/01_Fe_noncollinear
 - id: IG_abacus_027_20260518
   capability: input_generation
   domain: agnostic
   intent: PW SOC SCF then NSCF band workflow for GaAs (official 05_soc).
-  human_prompt_seed: "为 GaAs 准备 ABACUS 平面波 + 自旋轨道耦合两步输入：`run_gaas_scf/`（自洽）、`run_gaas_band/`（能带非自洽）。各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
+  human_prompt_seed: "为 GaAs 准备平面波 + 自旋轨道耦合两步输入（`run_gaas_scf/`、`run_gaas_band/`）。读取工作区 STRU，各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_GaAs
+    path: data/IG_abacus_027_20260518/STRU_GaAs
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/05_soc/01_pw_GaAs
   reference_answers:
   - key: run_gaas_scf_input
     value: run_gaas_scf/INPUT
@@ -3527,18 +3532,18 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_GaAs
-    path: data/IG_abacus_027_20260518/STRU_GaAs
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/05_soc/01_pw_GaAs
 - id: IG_abacus_028_20260518
   capability: input_generation
   domain: agnostic
   intent: Compare Gaussian vs fixed smearing for spin LCAO Fe (official 06_smearing).
-  human_prompt_seed: 为自旋极化 Fe 准备两套 LCAO SCF 输入，对比 Gaussian 与 fixed smearing：`run_gaussian/`、`run_fixed/` 各编写 `INPUT` 与 `KPT`（只写文件，不运行）。
+  human_prompt_seed: 为自旋极化 Fe 准备两套 LCAO SCF 输入（`run_gaussian/`、`run_fixed/`）。读取工作区 STRU，各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_Fe_smearing
+    path: data/IG_abacus_028_20260518/STRU_Fe_smearing
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/06_smearing/01_lcao_Fe
   reference_answers:
   - key: must_run_gaussian_sm
     value:
@@ -3633,18 +3638,18 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_Fe_smearing
-    path: data/IG_abacus_028_20260518/STRU_Fe_smearing
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/06_smearing/01_lcao_Fe
 - id: IG_abacus_029_20260518
   capability: input_generation
   domain: agnostic
   intent: Compare Broyden vs plain mixing for PW fcc Al (official 07_charge_mixing).
-  human_prompt_seed: 为 fcc Al 准备两套 PW SCF 输入，对比 Broyden 与 plain 电荷混合：`run_broyden/`、`run_plain/` 各编写 `INPUT` 与 `KPT`（只写文件，不运行）。
+  human_prompt_seed: 为 fcc Al 准备两套 PW SCF 输入（`run_broyden/`、`run_plain/`）。读取工作区 STRU，各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_Al
+    path: data/IG_abacus_029_20260518/STRU_Al
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/07_charge_mixing/01_pw_Al
   reference_answers:
   - key: must_run_broyden_mix
     value:
@@ -3746,18 +3751,26 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_Al
-    path: data/IG_abacus_029_20260518/STRU_Al
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/07_charge_mixing/01_pw_Al
 - id: IG_abacus_030_20260518
   capability: input_generation
   domain: agnostic
   intent: SCF inputs writing charge density for PW Al, LCAO Si2, spin PW Fe (official 08_charge_density).
-  human_prompt_seed: 准备三套输出电荷密度的 SCF 输入：`run_pw_al/`、`run_lcao_si2/`、`run_pw_fe/`。各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。
+  human_prompt_seed: 准备三套输出电荷密度的 SCF 输入（`run_pw_al/`、`run_lcao_si2/`、`run_pw_fe/`）。读取工作区 STRU，各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_Al
+    path: data/IG_abacus_030_20260518/STRU_Al
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/08_charge_density/01_pw_Al_nspin1
+  - key: STRU_Si2_lcao
+    path: data/IG_abacus_030_20260518/STRU_Si2_lcao
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/08_charge_density/02_lcao_Si2_nspin1
+  - key: STRU_Fe
+    path: data/IG_abacus_030_20260518/STRU_Fe
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/08_charge_density/03_pw_Fe_nspin2
   reference_answers:
   - key: must_run_pw_al
     value:
@@ -3873,26 +3886,18 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_Al
-    path: data/IG_abacus_030_20260518/STRU_Al
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/08_charge_density/01_pw_Al_nspin1
-  - key: STRU_Si2_lcao
-    path: data/IG_abacus_030_20260518/STRU_Si2_lcao
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/08_charge_density/02_lcao_Si2_nspin1
-  - key: STRU_Fe
-    path: data/IG_abacus_030_20260518/STRU_Fe
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/08_charge_density/03_pw_Fe_nspin2
 - id: IG_abacus_031_20260518
   capability: input_generation
   domain: agnostic
   intent: LCAO gamma-only SCF outputting density matrix (official 09_density_matrix).
-  human_prompt_seed: 为 LCAO Si₂ 在 `run_lcao_si2/` 准备输出密度矩阵的 SCF 输入：编写 `INPUT`（Γ 点可不写 `KPT`；只写文件，不运行）。
+  human_prompt_seed: 为 LCAO Si₂ 准备输出密度矩阵的 SCF 输入。读取工作区 STRU，在 `run_lcao_si2/` 编写 `INPUT`（Γ 点可不写 `KPT`；只写文件，不运行）。
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_Si2
+    path: data/IG_abacus_031_20260518/STRU_Si2
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/09_density_matrix/01_lcao_Si2_nspin1
   reference_answers:
   - key: input_artifact
     value: run_lcao_si2/INPUT
@@ -3953,18 +3958,26 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_Si2
-    path: data/IG_abacus_031_20260518/STRU_Si2
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/09_density_matrix/01_lcao_Si2_nspin1
 - id: IG_abacus_032_20260518
   capability: input_generation
   domain: agnostic
   intent: 'LCAO H/S matrix outputs: k-space, real-space, get_s (official 10_hs_matrix).'
-  human_prompt_seed: 准备三套 LCAO H/S 矩阵输出输入：`run_hsk/`、`run_hsr/`、`run_get_s/`。各目录编写 `INPUT`；需 k 点采样的目录另写 `KPT`（只写文件，不运行）。
+  human_prompt_seed: 准备三套 LCAO H/S 矩阵输出输入（`run_hsk/`、`run_hsr/`、`run_get_s/`）。读取工作区 STRU，各目录编写 `INPUT`；需 k 点采样的目录另写 `KPT`（只写文件，不运行）。
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_hsk
+    path: data/IG_abacus_032_20260518/STRU_hsk
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/10_hs_matrix/04_out_hsk_multik
+  - key: STRU_hsr
+    path: data/IG_abacus_032_20260518/STRU_hsr
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/10_hs_matrix/01_out_hsr_multik
+  - key: STRU_gets
+    path: data/IG_abacus_032_20260518/STRU_gets
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/10_hs_matrix/05_gets
   reference_answers:
   - key: must_run_hsk
     value:
@@ -4054,26 +4067,26 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_hsk
-    path: data/IG_abacus_032_20260518/STRU_hsk
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/10_hs_matrix/04_out_hsk_multik
-  - key: STRU_hsr
-    path: data/IG_abacus_032_20260518/STRU_hsr
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/10_hs_matrix/01_out_hsr_multik
-  - key: STRU_gets
-    path: data/IG_abacus_032_20260518/STRU_gets
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/10_hs_matrix/05_gets
 - id: IG_abacus_033_20260518
   capability: input_generation
   domain: agnostic
   intent: Wavefunction output PW/LCAO SCF and get_wf (official 11_wfc).
-  human_prompt_seed: 准备三套波函数输出输入：`run_pw_al/`、`run_lcao_si2/`、`run_lcao_getwf/`。各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。
+  human_prompt_seed: 准备三套波函数输出输入（`run_pw_al/`、`run_lcao_si2/`、`run_lcao_getwf/`）。读取工作区 STRU，各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_Al_pw
+    path: data/IG_abacus_033_20260518/STRU_Al_pw
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/11_wfc/01_pw_scf_Al
+  - key: STRU_Si2_lcao
+    path: data/IG_abacus_033_20260518/STRU_Si2_lcao
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/11_wfc/02_lcao_scf_Si2
+  - key: STRU_Si2_getwf
+    path: data/IG_abacus_033_20260518/STRU_Si2_getwf
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/11_wfc/03_lcao_getwf
   reference_answers:
   - key: must_run_pw_al
     value:
@@ -4179,26 +4192,22 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_Al_pw
-    path: data/IG_abacus_033_20260518/STRU_Al_pw
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/11_wfc/01_pw_scf_Al
-  - key: STRU_Si2_lcao
-    path: data/IG_abacus_033_20260518/STRU_Si2_lcao
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/11_wfc/02_lcao_scf_Si2
-  - key: STRU_Si2_getwf
-    path: data/IG_abacus_033_20260518/STRU_Si2_getwf
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/11_wfc/03_lcao_getwf
 - id: IG_abacus_034_20260518
   capability: input_generation
   domain: agnostic
   intent: PW and LCAO two-step band workflows (official 12_band).
-  human_prompt_seed: 准备 PW 与 LCAO 能带两步工作流输入：`run_pw_scf/`、`run_pw_band/`、`run_lcao_scf/`、`run_lcao_band/`。各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。
+  human_prompt_seed: 准备 PW 与 LCAO 能带两步工作流输入（`run_pw_scf/`、`run_pw_band/`、`run_lcao_scf/`、`run_lcao_band/`）。读取工作区 STRU，各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_Al
+    path: data/IG_abacus_034_20260518/STRU_Al
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/12_band/01_pw_Al
+  - key: STRU_Si2_lcao
+    path: data/IG_abacus_034_20260518/STRU_Si2_lcao
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/12_band/02_lcao_Si2
   reference_answers:
   - key: must_run_pw_scf
     value:
@@ -4351,22 +4360,22 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_Al
-    path: data/IG_abacus_034_20260518/STRU_Al
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/12_band/01_pw_Al
-  - key: STRU_Si2_lcao
-    path: data/IG_abacus_034_20260518/STRU_Si2_lcao
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/12_band/02_lcao_Si2
 - id: IG_abacus_035_20260518
   capability: input_generation
   domain: agnostic
   intent: PW and LCAO DOS workflows with dense Gamma NSCF mesh (official 13_dos).
-  human_prompt_seed: 准备 PW 与 LCAO DOS 工作流输入：`run_pw_scf/`、`run_pw_dos/`、`run_lcao_scf/`、`run_lcao_dos/`。各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。
+  human_prompt_seed: 准备 PW 与 LCAO DOS 工作流输入（`run_pw_scf/`、`run_pw_dos/`、`run_lcao_scf/`、`run_lcao_dos/`）。读取工作区 STRU，各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_Al
+    path: data/IG_abacus_035_20260518/STRU_Al
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/13_dos/01_pw_Al
+  - key: STRU_Si2_lcao
+    path: data/IG_abacus_035_20260518/STRU_Si2_lcao
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/13_dos/02_lcao_Si2
   reference_answers:
   - key: must_run_pw_scf
     value:
@@ -4519,22 +4528,18 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_Al
-    path: data/IG_abacus_035_20260518/STRU_Al
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/13_dos/01_pw_Al
-  - key: STRU_Si2_lcao
-    path: data/IG_abacus_035_20260518/STRU_Si2_lcao
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/13_dos/02_lcao_Si2
 - id: IG_abacus_036_20260518
   capability: input_generation
   domain: agnostic
   intent: LCAO SCF with Mulliken output (official 14_mulliken).
-  human_prompt_seed: 为 LCAO Si₂ 在 `run_lcao_si2/` 准备含 Mulliken 输出的 SCF 输入：编写 `INPUT` 与 `KPT`（只写文件，不运行）。
+  human_prompt_seed: 为 LCAO Si₂ 准备含 Mulliken 输出的 SCF 输入。读取工作区 STRU，在 `run_lcao_si2/` 编写 `INPUT` 与 `KPT`（只写文件，不运行）。
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_Si2
+    path: data/IG_abacus_036_20260518/STRU_Si2
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/14_mulliken/01_lcao_Si2
   reference_answers:
   - key: must_lcao
     value:
@@ -4588,18 +4593,18 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_Si2
-    path: data/IG_abacus_036_20260518/STRU_Si2
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/14_mulliken/01_lcao_Si2
 - id: IG_abacus_037_20260518
   capability: input_generation
   domain: agnostic
   intent: Fixed occupations for C/N single-electron excitation (official 15_fixed_occ).
-  human_prompt_seed: 为自旋极化 C/N 在 `run_fixed_occ/` 准备固定占据 SCF 输入：编写 `INPUT`（只写文件，不运行）。
+  human_prompt_seed: 为自旋极化 C/N 准备固定占据 SCF 输入。读取工作区 STRU，在 `run_fixed_occ/` 编写 `INPUT`（只写文件，不运行）。
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_C62N1
+    path: data/IG_abacus_037_20260518/STRU_C62N1
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/15_fixed_occ/01_C62N1
   reference_answers:
   - key: input_artifact
     value: run_fixed_occ/INPUT
@@ -4677,18 +4682,18 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_C62N1
-    path: data/IG_abacus_037_20260518/STRU_C62N1
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/15_fixed_occ/01_C62N1
 - id: IG_abacus_038_20260518
   capability: input_generation
   domain: agnostic
   intent: PW ultrasoft PP SCF for bcc Fe (official 16_uspp).
-  human_prompt_seed: 为 bcc Fe 在 `run_pw_fe_uspp/` 准备超软赝势 PW SCF 输入：编写 `INPUT` 与 `KPT`（只写文件，不运行）。
+  human_prompt_seed: 为 bcc Fe 准备超软赝势 PW SCF 输入。读取工作区 STRU，在 `run_pw_fe_uspp/` 编写 `INPUT` 与 `KPT`（只写文件，不运行）。
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_Fe_uspp
+    path: data/IG_abacus_038_20260518/STRU_Fe_uspp
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/16_uspp/01_pw_Fe
   reference_answers:
   - key: must_pw
     value:
@@ -4756,18 +4761,22 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_Fe_uspp
-    path: data/IG_abacus_038_20260518/STRU_Fe_uspp
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/16_uspp/01_pw_Fe
 - id: IG_abacus_039_20260518
   capability: input_generation
   domain: agnostic
   intent: PW cell-relax vs LCAO atomic relax (official 17_relax).
-  human_prompt_seed: 准备两套弛豫输入：`run_pw_cell_relax/`（PW 可变晶胞）、`run_lcao_relax/`（LCAO 原子弛豫）。各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。
+  human_prompt_seed: 准备两套弛豫输入（`run_pw_cell_relax/`、`run_lcao_relax/`）。读取工作区 STRU，各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_Al_relax
+    path: data/IG_abacus_039_20260518/STRU_Al_relax
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/17_relax/01_pw_cell_relax_BFGS_Al
+  - key: STRU_Si2_relax
+    path: data/IG_abacus_039_20260518/STRU_Si2_relax
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/17_relax/02_lcao_relax_CG_Si2
   reference_answers:
   - key: must_run_pw_cell_relax
     value:
@@ -4868,22 +4877,18 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_Al_relax
-    path: data/IG_abacus_039_20260518/STRU_Al_relax
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/17_relax/01_pw_cell_relax_BFGS_Al
-  - key: STRU_Si2_relax
-    path: data/IG_abacus_039_20260518/STRU_Si2_relax
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/17_relax/02_lcao_relax_CG_Si2
 - id: IG_abacus_040_20260518
   capability: input_generation
   domain: agnostic
   intent: Prepare LCAO MD inputs for Si8 NVE vs NVT ensembles per official 18_md.
-  human_prompt_seed: "为 Si₈ 准备两套 LCAO 分子动力学输入：`run_md_nve/`（NVE）、`run_md_nvt/`（NVT）。各目录编写 `INPUT`（`gamma_only` 时可不写 `KPT`；只写文件，不运行）。"
+  human_prompt_seed: "为 Si₈ 准备两套 LCAO 分子动力学输入（`run_md_nve/`、`run_md_nvt/`）。读取工作区 STRU，各目录编写 `INPUT`（`gamma_only` 时可不写 `KPT`；只写文件，不运行）。"
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_Si8
+    path: data/IG_abacus_040_20260518/STRU_Si8
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/18_md/01_lcao_gamma_Si8
   reference_answers:
   - key: nve_input_artifact
     value: run_md_nve/INPUT
@@ -5011,18 +5016,22 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_Si8
-    path: data/IG_abacus_040_20260518/STRU_Si8
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/18_md/01_lcao_gamma_Si8
 - id: IG_abacus_042_20260518
   capability: input_generation
   domain: agnostic
   intent: Prepare PW and LCAO hybrid-functional SCF inputs for Si2 per official 20_hybrid—dft_functional and exact-exchange fraction for PW.
-  human_prompt_seed: "为 Si₂ 准备两套杂化泛函 SCF 输入：`run_pw_si2_hybrid/`（PW）、`run_lcao_si2_hybrid/`（LCAO）。各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
+  human_prompt_seed: "为 Si₂ 准备两套杂化泛函 SCF 输入（`run_pw_si2_hybrid/`、`run_lcao_si2_hybrid/`）。读取工作区 STRU，各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_pw_Si2_hybrid
+    path: data/IG_abacus_042_20260518/STRU_pw_Si2_hybrid
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/20_hybrid/01_pw_Si2
+  - key: STRU_lcao_Si2_hybrid
+    path: data/IG_abacus_042_20260518/STRU_lcao_Si2_hybrid
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/20_hybrid/02_lcao_Si2
   reference_answers:
   - key: pw_hybrid_input_artifact
     value: run_pw_si2_hybrid/INPUT
@@ -5161,22 +5170,22 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_pw_Si2_hybrid
-    path: data/IG_abacus_042_20260518/STRU_pw_Si2_hybrid
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/20_hybrid/01_pw_Si2
-  - key: STRU_lcao_Si2_hybrid
-    path: data/IG_abacus_042_20260518/STRU_lcao_Si2_hybrid
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/20_hybrid/02_lcao_Si2
 - id: IG_abacus_043_20260518
   capability: input_generation
   domain: agnostic
   intent: Prepare DeePKS projector-generation and LCAO SCF-with-model inputs per official 21_deepks—gen_bessel vs deepks_scf/deepks_model.
-  human_prompt_seed: "准备 DeePKS 两套输入：`run_pw_h2o_gen_bessel/`（gen_bessel）、`run_lcao_h2o_deepks/`（deepks 自洽）。各目录编写 `INPUT`；需要 k 点的目录另写 `KPT`（只写文件，不运行）。"
+  human_prompt_seed: "准备 DeePKS 两套输入（`run_pw_h2o_gen_bessel/`、`run_lcao_h2o_deepks/`）。读取工作区 STRU，各目录编写 `INPUT`；需要 k 点的目录另写 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_H2O_pw
+    path: data/IG_abacus_043_20260518/STRU_H2O_pw
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/21_deepks/01_pw_H2O
+  - key: STRU_H2O_lcao
+    path: data/IG_abacus_043_20260518/STRU_H2O_lcao
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/21_deepks/02_lcao_H2O
   reference_answers:
   - key: bessel_input_artifact
     value: run_pw_h2o_gen_bessel/INPUT
@@ -5307,22 +5316,22 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_H2O_pw
-    path: data/IG_abacus_043_20260518/STRU_H2O_pw
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/21_deepks/01_pw_H2O
-  - key: STRU_H2O_lcao
-    path: data/IG_abacus_043_20260518/STRU_H2O_lcao
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/21_deepks/02_lcao_H2O
 - id: IG_abacus_044_20260518
   capability: input_generation
   domain: agnostic
   intent: Prepare LCAO RT-TDDFT inputs for H2 in length vs velocity gauge per official 22_rt-tddft—calculation md, esolver_type tddft, td_vext, td_stype, out_dipole.
-  human_prompt_seed: "为 H₂ 准备两套实时 TDDFT 输入：`run_h2_tddft_length/`（长度规范）、`run_h2_tddft_velocity/`（速度规范）。各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
+  human_prompt_seed: "为 H₂ 准备两套实时 TDDFT 输入（`run_h2_tddft_length/`、`run_h2_tddft_velocity/`）。读取工作区 STRU，各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_H2_length
+    path: data/IG_abacus_044_20260518/STRU_H2_length
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/22_rt-tddft/01_H2_length_gauge
+  - key: STRU_H2_velocity
+    path: data/IG_abacus_044_20260518/STRU_H2_velocity
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/22_rt-tddft/02_H2_velocity_gauge
   reference_answers:
   - key: length_input_artifact
     value: run_h2_tddft_length/INPUT
@@ -5446,22 +5455,22 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_H2_length
-    path: data/IG_abacus_044_20260518/STRU_H2_length
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/22_rt-tddft/01_H2_length_gauge
-  - key: STRU_H2_velocity
-    path: data/IG_abacus_044_20260518/STRU_H2_velocity
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/22_rt-tddft/02_H2_velocity_gauge
 - id: IG_abacus_045_20260518
   capability: input_generation
   domain: agnostic
   intent: Prepare PW SDFT SCF and MD inputs per official 23_sdft—esolver_type sdft, stochastic bands, finite-temperature smearing.
-  human_prompt_seed: "准备两套随机 DFT 平面波输入：`run_pw_si2_sdft/`（Si₂ SCF）、`run_pw_al_sdft_md/`（Al MD）。各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
+  human_prompt_seed: "准备两套随机 DFT 平面波输入（`run_pw_si2_sdft/`、`run_pw_al_sdft_md/`）。读取工作区 STRU，各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_Si2_sdft
+    path: data/IG_abacus_045_20260518/STRU_Si2_sdft
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/23_sdft/01_pw_Si2
+  - key: STRU_Al_sdft
+    path: data/IG_abacus_045_20260518/STRU_Al_sdft
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/23_sdft/02_pw_md_Al
   reference_answers:
   - key: si2_sdft_input_artifact
     value: run_pw_si2_sdft/INPUT
@@ -5597,22 +5606,22 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_Si2_sdft
-    path: data/IG_abacus_045_20260518/STRU_Si2_sdft
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/23_sdft/01_pw_Si2
-  - key: STRU_Al_sdft
-    path: data/IG_abacus_045_20260518/STRU_Al_sdft
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/23_sdft/02_pw_md_Al
 - id: IG_abacus_046_20260518
   capability: input_generation
   domain: agnostic
   intent: Prepare LCAO linear-response TDDFT inputs for Si2 and H2O per official 24_lr-tddft—esolver_type ks-lr, lr_nstates, absorption gauge settings.
-  human_prompt_seed: "准备两套 LCAO 线性响应 TDDFT 输入：`run_lcao_si2_lr_tddft/`（Si₂）、`run_lcao_h2o_lr_tddft/`（H₂O）。各目录编写 `INPUT`；需 k 点的目录另写 `KPT`（只写文件，不运行）。"
+  human_prompt_seed: "准备两套 LCAO 线性响应 TDDFT 输入（`run_lcao_si2_lr_tddft/`、`run_lcao_h2o_lr_tddft/`）。读取工作区 STRU，各目录编写 `INPUT`；需 k 点的目录另写 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_Si2_lr
+    path: data/IG_abacus_046_20260518/STRU_Si2_lr
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/24_lr-tddft/01_lcao_Si2
+  - key: STRU_H2O_lr
+    path: data/IG_abacus_046_20260518/STRU_H2O_lr
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/24_lr-tddft/02_lcao_H2O
   reference_answers:
   - key: si2_lr_input_artifact
     value: run_lcao_si2_lr_tddft/INPUT
@@ -5726,22 +5735,22 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_Si2_lr
-    path: data/IG_abacus_046_20260518/STRU_Si2_lr
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/24_lr-tddft/01_lcao_Si2
-  - key: STRU_H2O_lr
-    path: data/IG_abacus_046_20260518/STRU_H2O_lr
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/24_lr-tddft/02_lcao_H2O
 - id: IG_abacus_047_20260518
   capability: input_generation
   domain: agnostic
   intent: Prepare PW and LCAO SCF inputs with Grimme D2 vs D3(BJ) vdW corrections per official 25_vdw.
-  human_prompt_seed: "为 Si₂ 准备四套范德华修正 SCF 输入：`run_vdw_d2_lcao/`、`run_vdw_d2_pw/`、`run_vdw_d3_lcao/`、`run_vdw_d3_pw/`。各目录编写 `INPUT` 与 `KPT`；D2 目录另须提供 `c6.txt`（只写文件，不运行）。"
+  human_prompt_seed: "为 Si₂ 准备四套范德华修正 SCF 输入（`run_vdw_d2_lcao/`、`run_vdw_d2_pw/`、`run_vdw_d3_lcao/`、`run_vdw_d3_pw/`）；D2 目录另写 `c6.txt`。读取工作区 STRU，各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_Si2_vdw_D2
+    path: data/IG_abacus_047_20260518/STRU_Si2_vdw_D2
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/25_vdw/01_vdw_D2_Si2
+  - key: STRU_Si2_vdw_D3
+    path: data/IG_abacus_047_20260518/STRU_Si2_vdw_D3
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/25_vdw/02_vdw_D3_Si2
   reference_answers:
   - key: d2_lcao_input_artifact
     value: run_vdw_d2_lcao/INPUT
@@ -5902,22 +5911,18 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_Si2_vdw_D2
-    path: data/IG_abacus_047_20260518/STRU_Si2_vdw_D2
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/25_vdw/01_vdw_D2_Si2
-  - key: STRU_Si2_vdw_D3
-    path: data/IG_abacus_047_20260518/STRU_Si2_vdw_D3
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/25_vdw/02_vdw_D3_Si2
 - id: IG_abacus_048_20260518
   capability: input_generation
   domain: agnostic
   intent: Prepare PW Berry-phase INPUT/KPT for PbTiO3 per official 26_berryphase.
-  human_prompt_seed: "为 **PbTiO₃** 准备 Berry 相极化平面波计算输入：在 `run_pw_pbtio3_berry/` 编写 `INPUT-scf`、`INPUT-nscf-a/b/c` 与 `KPT-scf`、`KPT-nscf-a/b/c`（只写文件，不运行）。"
+  human_prompt_seed: "为 PbTiO₃ 准备 Berry 相极化平面波计算输入。读取工作区 STRU，在 `run_pw_pbtio3_berry/` 编写 `INPUT-scf`、`INPUT-nscf-a/b/c` 与 `KPT-scf`、`KPT-nscf-a/b/c`（只写文件，不运行）。"
   tags:
   - eng_abacus
+  data_files:
+  - key: stru_pbtio3
+    path: data/IG_abacus_048_20260518/STRU_PbTiO3
+    oss_url: ''
+    description: Official PbTiO3 from abacus-develop examples/26_berryphase/01_pw_PbTiO3.
   reference_answers:
   - key: berry_scf_input
     value: run_pw_pbtio3_berry/INPUT-scf
@@ -5990,11 +5995,6 @@ questions:
   - key: token_budget_total
     value:
       max: 26000
-  data_files:
-  - key: stru_pbtio3
-    path: data/IG_abacus_048_20260518/STRU_PbTiO3
-    oss_url: ''
-    description: Official PbTiO3 from abacus-develop examples/26_berryphase/01_pw_PbTiO3.
   scoring_checklist:
   - id: berry_scf_input
     criterion: run_pw_pbtio3_berry/INPUT-scf exists.
@@ -6065,7 +6065,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare PW SCF INPUT for implicit solvation on Pt(111) slab per official 27_imp_sol.
-  human_prompt_seed: '为 **Pt(111) 平板** 准备隐式溶剂化（implicit solvation）平面波 SCF 输入：编写 `run_pw_pt_slab_imp_sol/INPUT`（`gamma_only` 时可不写 `KPT`；只写文件，不运行）。'
+  human_prompt_seed: '为 Pt(111) 平板准备隐式溶剂化平面波 SCF 输入。读取工作区 STRU，在 `run_pw_pt_slab_imp_sol/` 编写 `INPUT`（`gamma_only` 时可不写 `KPT`；只写文件，不运行）。'
   tags:
   - eng_abacus
   data_files:
@@ -6149,7 +6149,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare PW SCF INPUT for external saw-like electric field on Pt(111) slab per official 28_efield.
-  human_prompt_seed: '为 **Pt(111) 平板** 准备外加电场（saw-like efield）平面波 SCF 输入：编写 `run_pw_pt_slab_efield/INPUT`（`gamma_only` 时可不写 `KPT`；只写文件，不运行）。'
+  human_prompt_seed: '为 Pt(111) 平板准备外加电场平面波 SCF 输入。读取工作区 STRU，在 `run_pw_pt_slab_efield/` 编写 `INPUT`（`gamma_only` 时可不写 `KPT`；只写文件，不运行）。'
   tags:
   - eng_abacus
   data_files:
@@ -6244,15 +6244,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare PW SCF INPUT for dipole correction on Pt(111) slab per official 29_dipole_corr.
-  human_prompt_seed: '为 **Pt(111) 平板** 准备偶极修正平面波 SCF 输入：
-
-
-    1) `run_pw_pt_dipole_only/INPUT` — 仅偶极修正；
-
-    2) `run_pw_pt_dipole_efield/INPUT` — 偶极修正 + 外加电场。
-
-
-    （`gamma_only` 时可不写 `KPT`；只写文件，不运行。）'
+  human_prompt_seed: '为 Pt(111) 平板准备偶极修正平面波 SCF 输入（`run_pw_pt_dipole_only/`、`run_pw_pt_dipole_efield/`）。读取工作区 STRU，各目录编写 `INPUT`（`gamma_only` 时可不写 `KPT`；只写文件，不运行）。'
   tags:
   - eng_abacus
   data_files:
@@ -6378,9 +6370,14 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare LCAO SCF inputs with electrostatic potential output per official 30_elec_pot—out_pot 2 for CUBE export.
-  human_prompt_seed: "为 Si 准备 LCAO SCF 静电势输出输入：在 `run_lcao_si_epot/` 编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
+  human_prompt_seed: "为 Si 准备 LCAO SCF 静电势输出输入。读取工作区 STRU，在 `run_lcao_si_epot/` 编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_Si
+    path: data/IG_abacus_052_20260518/STRU_Si
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/30_elec_pot/01_lcao_Si
   reference_answers:
   - key: epot_input
     value: run_lcao_si_epot/INPUT
@@ -6459,16 +6456,11 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_Si
-    path: data/IG_abacus_052_20260518/STRU_Si
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/30_elec_pot/01_lcao_Si
 - id: IG_abacus_053_20260518
   capability: input_generation
   domain: agnostic
   intent: Prepare PW SCF INPUT for compensating charge (gate) on Pt(111) slab per official 31_comp_charge.
-  human_prompt_seed: '为 **Pt(111) 平板** 准备补偿电荷（compensating charge / gate）平面波 SCF 输入：编写 `run_pw_pt_slab_gate/INPUT`（`gamma_only` 时可不写 `KPT`；只写文件，不运行）。'
+  human_prompt_seed: '为 Pt(111) 平板准备补偿电荷 gate 平面波 SCF 输入。读取工作区 STRU，在 `run_pw_pt_slab_gate/` 编写 `INPUT`（`gamma_only` 时可不写 `KPT`；只写文件，不运行）。'
   tags:
   - eng_abacus
   data_files:
@@ -6574,7 +6566,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare shared LCAO INPUT/KPT for H2O counterpoise BSSE per official 32_bsse.
-  human_prompt_seed: "为气相 **H₂O** 的 counterpoise（BSSE）准备共享 LCAO 输入：在 `run_lcao_h2o_cp/` 编写 `INPUT` 与 `KPT`（整分子算例 `ntype 2`，O/H 碎片算例 `ntype 3`；只写文件，不运行）。"
+  human_prompt_seed: "为气相 H₂O counterpoise（BSSE）准备共享 LCAO 输入。读取工作区 STRU，在 `run_lcao_h2o_cp/` 编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
   data_files:
@@ -6654,9 +6646,14 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare LCAO spin-polarized SCF inputs with PEXSI solver per official 33_pexsi 01_spin_Fe2.
-  human_prompt_seed: "为 Fe₂ 二聚体准备 LCAO 自旋极化 PEXSI SCF 输入：在 `run_lcao_fe2_pexsi/` 编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
+  human_prompt_seed: "为 Fe₂ 二聚体准备 LCAO 自旋极化 PEXSI SCF 输入。读取工作区 STRU，在 `run_lcao_fe2_pexsi/` 编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_Fe2
+    path: data/IG_abacus_055_20260518/STRU_Fe2
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/33_pexsi/01_spin_Fe2
   reference_answers:
   - key: pexsi_input
     value: run_lcao_fe2_pexsi/INPUT
@@ -6746,18 +6743,22 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_Fe2
-    path: data/IG_abacus_055_20260518/STRU_Fe2
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/33_pexsi/01_spin_Fe2
 - id: IG_abacus_056_20260518
   capability: input_generation
   domain: agnostic
   intent: Prepare PW and LCAO SCF inputs with GPU acceleration per official 34_gpu—device gpu in INPUT.
-  human_prompt_seed: "为 Si₁₆ 准备两套 GPU 加速 SCF 输入：`run_pw_si16_gpu/`（PW）、`run_lcao_si16_gpu/`（LCAO）。各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
+  human_prompt_seed: "为 Si₁₆ 准备两套 GPU 加速 SCF 输入（`run_pw_si16_gpu/`、`run_lcao_si16_gpu/`）。读取工作区 STRU，各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
+  data_files:
+  - key: STRU_Si16_pw
+    path: data/IG_abacus_056_20260518/STRU_Si16_pw
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/34_gpu/01_pw_Si16
+  - key: STRU_Si16_lcao
+    path: data/IG_abacus_056_20260518/STRU_Si16_lcao
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/34_gpu/02_lcao_Si16
   reference_answers:
   - key: pw_gpu_input
     value: run_pw_si16_gpu/INPUT
@@ -6860,12 +6861,3 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  data_files:
-  - key: STRU_Si16_pw
-    path: data/IG_abacus_056_20260518/STRU_Si16_pw
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/34_gpu/01_pw_Si16
-  - key: STRU_Si16_lcao
-    path: data/IG_abacus_056_20260518/STRU_Si16_lcao
-    oss_url: ''
-    description: Official STRU from abacus-develop examples/34_gpu/02_lcao_Si16
