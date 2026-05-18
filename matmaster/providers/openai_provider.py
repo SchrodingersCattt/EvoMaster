@@ -408,6 +408,8 @@ class OpenAIProvider:
         self,
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
+        *,
+        tool_choice: str | dict | None = None,
     ) -> LLMResponse:
         """Non-streaming async chat completion."""
         client = self._ensure_client()
@@ -420,6 +422,8 @@ class OpenAIProvider:
             kwargs["max_tokens"] = self._max_tokens
         if tools:
             kwargs["tools"] = tools
+        if tool_choice is not None:
+            kwargs["tool_choice"] = tool_choice
         if self._extra_kwargs:
             kwargs.update(self._extra_kwargs)
 

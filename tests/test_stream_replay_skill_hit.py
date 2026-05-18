@@ -50,6 +50,23 @@ class TestReplayFilterSkillHit:
         assert _should_emit_event_to_sse(event) is False
 
 
+def test_should_not_emit_user_turn_context() -> None:
+    from src.services.stream_service import _should_emit_event_to_sse
+
+    event = {
+        "type": "user_turn_context",
+        "source": "MatMaster",
+        "content": {
+            "schema_version": "user_turn_context.v1",
+            "kind": "anchor",
+            "message": {"role": "user", "content": "provider-facing"},
+            "render_version": "user_context_render.v1",
+        },
+    }
+
+    assert _should_emit_event_to_sse(event) is False
+
+
 def test_normalize_replayed_event_unpacks_structured_response_content() -> None:
     from src.services.stream_service import _normalize_replayed_event
 

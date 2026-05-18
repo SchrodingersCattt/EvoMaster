@@ -19,8 +19,8 @@ import pytest
 from matmaster.config.exp import ExpConfig
 from matmaster.core.agent import AgentKernel
 from matmaster.core.exp import Exp
+from matmaster.core.playground import PlaygroundContext
 from matmaster.types.cancellation import CancellationController
-from matmaster.types.context import PlaygroundContext
 from matmaster.types.events import (
     ResponseEvent,
     ToolCallEvent,
@@ -30,6 +30,7 @@ from matmaster.types.messages import (
     LLMResponse,
     StreamChunk,
 )
+from matmaster.types.run_metadata import RunMetadata
 from matmaster.types.tool_spec import ResourceClaim
 from matmaster.types.topology import ToolPlane
 
@@ -185,9 +186,19 @@ def _make_pg_ctx(tmp_path: Path, llm_provider: Any = None) -> PlaygroundContext:
         workdir=tmp_path / 'workspace',
         session_type='local',
         cache_area=tmp_path / 'cache',
-        run_meta={'run_dir': str(tmp_path), 'task_id': 'test-task'},
+        metadata=RunMetadata(run_dir=str(tmp_path), task_id='test-task'),
         llm_provider=llm_provider,
     )
+
+
+def _allow_user_turn_context_write(events_table: MagicMock) -> None:
+    events_table.get_history_checkpoints.return_value = []
+    events_table.has_user_turn_context.return_value = False
+    events_table.get_session_user_query_events.return_value = []
+    events_table.query_context_events.return_value = []
+    events_table.get_recent_context_anchor_events.return_value = []
+    events_table.query_user_turn_context_by_invocation.return_value = None
+    events_table.add_event.return_value = True
 
 
 # ── E2E tests ─────────────────────────────────────────
@@ -271,7 +282,7 @@ class TestMatMasterRunAgentE2E:
         with (
             patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
             patch(
-                'src.services.agent_run_service.BohriumSetupService'
+                'src.services.agent_run_bohrium_stage.BohriumSetupService'
             ) as mock_bohrium_cls,
             patch(
                 'src.services.agent_run_service.get_chat_events_table'
@@ -301,6 +312,7 @@ class TestMatMasterRunAgentE2E:
             # Configure events_table mock -- returned by get_chat_events_table()
             mock_events_table = MagicMock()
             mock_events_table.get_session_events.return_value = []
+            _allow_user_turn_context_write(mock_events_table)
             mock_events_table_fn.return_value = mock_events_table
 
             # Configure Redis mock
@@ -308,7 +320,7 @@ class TestMatMasterRunAgentE2E:
             mock_redis_fn.return_value = mock_redis
 
             # use_quota is async
-            async def _mock_use_quota(uid):
+            async def _mock_use_quota(uid, **_kwargs):
                 pass
 
             mock_use_quota.side_effect = _mock_use_quota
@@ -328,6 +340,7 @@ class TestMatMasterRunAgentE2E:
                     cancel_token=CancellationController().token,
                     mode='direct',
                     task_id='task-1',
+                    invocation_id='inv-task-1',
                 )
             )
 
@@ -394,7 +407,7 @@ class TestMatMasterRunAgentE2E:
         with (
             patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
             patch(
-                'src.services.agent_run_service.BohriumSetupService'
+                'src.services.agent_run_bohrium_stage.BohriumSetupService'
             ) as mock_bohrium_cls,
             patch(
                 'src.services.agent_run_service.get_chat_events_table'
@@ -422,12 +435,13 @@ class TestMatMasterRunAgentE2E:
 
             mock_events_table = MagicMock()
             mock_events_table.get_session_events.return_value = raw_events
+            _allow_user_turn_context_write(mock_events_table)
             mock_events_table_fn.return_value = mock_events_table
 
             mock_redis = MagicMock()
             mock_redis_fn.return_value = mock_redis
 
-            async def _mock_use_quota(uid):
+            async def _mock_use_quota(uid, **_kwargs):
                 pass
 
             mock_use_quota.side_effect = _mock_use_quota
@@ -440,6 +454,7 @@ class TestMatMasterRunAgentE2E:
                     cancel_token=CancellationController().token,
                     mode='direct',
                     task_id=current_task_id,
+                    invocation_id='inv-task-current',
                 )
             )
 
@@ -454,7 +469,7 @@ class TestMatMasterRunAgentE2E:
         assert [m['content'] for m in llm_messages[1:]] == [
             'old question',
             'old answer',
-            'new question',
+            '<current_instruction>\nnew question\n</current_instruction>',
         ]
 
     @patch('matmaster.config.loader.load_llm_config')
@@ -487,7 +502,7 @@ class TestMatMasterRunAgentE2E:
             patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
             patch('src.services.agent_run_service.RunEventFanout') as mock_fanout_cls,
             patch(
-                'src.services.agent_run_service.BohriumSetupService'
+                'src.services.agent_run_bohrium_stage.BohriumSetupService'
             ) as mock_bohrium_cls,
             patch(
                 'src.services.agent_run_service.get_chat_events_table',
@@ -553,7 +568,7 @@ class TestMatMasterRunAgentE2E:
         with (
             patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
             patch(
-                'src.services.agent_run_service.BohriumSetupService'
+                'src.services.agent_run_bohrium_stage.BohriumSetupService'
             ) as mock_bohrium_cls,
             patch(
                 'src.services.agent_run_service.get_chat_events_table'
@@ -587,12 +602,13 @@ class TestMatMasterRunAgentE2E:
 
             mock_events_table = MagicMock()
             mock_events_table.get_session_events.return_value = []
+            _allow_user_turn_context_write(mock_events_table)
             mock_events_table_fn.return_value = mock_events_table
 
             mock_redis = MagicMock()
             mock_redis_fn.return_value = mock_redis
 
-            async def _mock_use_quota(uid):
+            async def _mock_use_quota(uid, **_kwargs):
                 pass
 
             mock_use_quota.side_effect = _mock_use_quota
@@ -638,6 +654,7 @@ class TestMatMasterRunAgentE2E:
                     cancel_token=CancellationController().token,
                     mode='direct',
                     task_id='task-bohrium-event',
+                    invocation_id='inv-bohrium-event',
                 )
             )
 
@@ -687,7 +704,7 @@ class TestMatMasterRunAgentE2E:
         with (
             patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
             patch(
-                'src.services.agent_run_service.BohriumSetupService'
+                'src.services.agent_run_bohrium_stage.BohriumSetupService'
             ) as mock_bohrium_cls,
             patch(
                 'src.services.agent_run_service.get_chat_events_table'
@@ -708,12 +725,13 @@ class TestMatMasterRunAgentE2E:
 
             mock_events_table = MagicMock()
             mock_events_table.get_session_events.return_value = []
+            _allow_user_turn_context_write(mock_events_table)
             mock_events_table_fn.return_value = mock_events_table
 
             mock_redis = MagicMock()
             mock_redis_fn.return_value = mock_redis
 
-            async def _mock_use_quota(uid):
+            async def _mock_use_quota(uid, **_kwargs):
                 pass
 
             mock_use_quota.side_effect = _mock_use_quota
@@ -726,6 +744,7 @@ class TestMatMasterRunAgentE2E:
                     cancel_token=CancellationController().token,
                     mode='direct',
                     task_id='task-bohrium-abort',
+                    invocation_id='inv-bohrium-abort',
                 )
             )
 
@@ -790,12 +809,13 @@ class TestMatMasterRunAgentE2E:
         ):
             mock_events_table = MagicMock()
             mock_events_table.get_session_events.return_value = []
+            _allow_user_turn_context_write(mock_events_table)
             mock_events_table_fn.return_value = mock_events_table
 
             mock_redis = MagicMock()
             mock_redis_fn.return_value = mock_redis
 
-            async def _mock_use_quota(uid):
+            async def _mock_use_quota(uid, **_kwargs):
                 pass
 
             mock_use_quota.side_effect = _mock_use_quota
@@ -813,6 +833,7 @@ class TestMatMasterRunAgentE2E:
                     cancel_token=CancellationController().token,
                     mode='direct',
                     task_id='task-bohrium-access-key-abort',
+                    invocation_id='inv-bohrium-access-key-abort',
                     bohrium_required=True,
                 )
             )
@@ -866,7 +887,7 @@ class TestMatMasterRunAgentE2E:
         with (
             patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
             patch(
-                'src.services.agent_run_service.BohriumSetupService'
+                'src.services.agent_run_bohrium_stage.BohriumSetupService'
             ) as mock_bohrium_cls,
             patch(
                 'src.services.agent_run_service.get_chat_events_table'
@@ -883,12 +904,13 @@ class TestMatMasterRunAgentE2E:
 
             mock_events_table = MagicMock()
             mock_events_table.get_session_events.return_value = []
+            _allow_user_turn_context_write(mock_events_table)
             mock_events_table_fn.return_value = mock_events_table
 
             mock_redis = MagicMock()
             mock_redis_fn.return_value = mock_redis
 
-            async def _mock_use_quota(uid):
+            async def _mock_use_quota(uid, **_kwargs):
                 pass
 
             mock_use_quota.side_effect = _mock_use_quota
@@ -906,6 +928,7 @@ class TestMatMasterRunAgentE2E:
                     cancel_token=CancellationController().token,
                     mode='direct',
                     task_id='task-bohrium-error',
+                    invocation_id='inv-bohrium-error',
                 )
             )
 

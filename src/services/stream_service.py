@@ -4,7 +4,6 @@
 import asyncio
 import json
 import logging
-import queue
 import threading
 import time
 import uuid
@@ -15,11 +14,8 @@ from functools import lru_cache
 from typing import Protocol, runtime_checkable
 
 from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES
-from matmaster.integration.event_payloads import normalize_response_sse_payload
-from matmaster.types.current_input import CurrentInputContext
-from matmaster.utils.event_source import normalize_event_source
+from matmaster.context.sources.turn_input import TurnInput
 from src.dao.redis_dao import (
-    INTERACTION_CANCEL_VALUE,
     STREAM_CHANNEL_PREFIX,
     get_redis_dao,
 )
@@ -39,6 +35,14 @@ from src.services.session_directory_service import (
     SessionDirectorySource,
 )
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
+from src.services.stream_reply_queue import RedisReplyQueue
+from src.services.stream_sse_filter import (
+    _dedupe_replayed_terminal_events,
+    _inject_elapsed_for_history,
+    _normalize_replayed_compaction_events,
+    _normalize_replayed_event,
+    _should_emit_event_to_sse,
+)
 from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
 from src.utils.constant import AG_UI_EVENT, REDIS_URL, SERVICE_ENV
@@ -61,166 +65,6 @@ class ReplyQueueLike(Protocol):
     def put_cancel(self) -> None: ...
 
     def get(self, timeout: float | None = None) -> str | None: ...
-
-
-def _should_emit_event_to_sse(event: dict) -> bool:
-    """Filter persisted events for history replay SSE.
-
-    NOTE: This filter is intentionally simpler than
-    matmaster.integration.event_router.SSEHandler._should_skip().
-    The live SSE path knows the run mode and stream_state; replay only sees
-    persisted event rows.
-
-    Practical consequences:
-    - assistant_state is always hidden in replay
-    - log_line is always hidden in replay
-    - checkpoint bookkeeping events are always hidden in replay
-    - direct-mode non-streaming thoughts may still appear in replay if they
-      were persisted as completed events
-
-    If exact parity is required in the future, the missing replay inputs
-    (for example mode) must be persisted explicitly.
-    """
-    t = event.get('type')
-    if t == 'log_line':
-        return False
-    if t == 'assistant_state':
-        return False
-    if t == 'skill_hit':
-        return False
-    if t in {'compact_boundary', 'history_checkpoint'}:
-        return False
-    return True
-
-
-def _normalize_replayed_event(event: dict) -> dict:
-    """Normalize source labels in replayed history events to the public set."""
-    replay_event = dict(event)
-    replay_event['source'] = normalize_event_source(replay_event.get('source'))
-    return normalize_response_sse_payload(replay_event)
-
-
-def _normalize_replayed_compaction_events(events: list[dict]) -> list[dict]:
-    """Normalize replayed compaction lifecycle rows for frontend consumption."""
-    terminal_ids: set[str] = set()
-    for event in events:
-        if event.get('type') != 'compaction':
-            continue
-        content = event.get('content') or {}
-        if not isinstance(content, dict):
-            continue
-        if content.get('status') in {'complete', 'interrupted'}:
-            compaction_id = str(content.get('compaction_id') or '')
-            if compaction_id:
-                terminal_ids.add(compaction_id)
-
-    normalized: list[dict] = []
-    for event in events:
-        event_type = event.get('type')
-        if event_type == 'context_compaction':
-            continue
-        if event_type != 'compaction':
-            normalized.append(event)
-            continue
-
-        content = event.get('content') or {}
-        if not isinstance(content, dict):
-            normalized.append(event)
-            continue
-
-        compaction_id = str(content.get('compaction_id') or '')
-        if content.get('status') == 'running' and compaction_id not in terminal_ids:
-            normalized.append(
-                {
-                    **event,
-                    'content': {
-                        **content,
-                        'status': 'interrupted',
-                        'failure_reason': content.get('failure_reason')
-                        or 'replay_inferred_interrupted',
-                    },
-                }
-            )
-            continue
-
-        normalized.append(event)
-
-    return normalized
-
-
-def _replay_terminal_dedupe_key(event: dict) -> tuple[str, str | None] | None:
-    """Key for replay dedupe: parent stream vs each sub-agent share task_id but differ by spawn_id."""
-    task_id = event.get('task_id')
-    if task_id is None:
-        return None
-    spawn_id = event.get('spawn_id')
-    if spawn_id is not None:
-        spawn_id = str(spawn_id)
-    return (str(task_id), spawn_id)
-
-
-def _dedupe_replayed_terminal_events(events: list[dict]) -> list[dict]:
-    """Hide replayed run_result when the same task already has a replayable response.
-
-    Live SSE already streamed the final `response` content. After persisted
-    complete response segments were added, replaying the trailing `run_result`
-    would duplicate the final answer after reconnect. We suppress terminal
-    events once a replayable `response` has been seen for the same
-    `(task_id, spawn_id)` stream.
-
-    `response_figures` is replayable answer metadata. It may appear before the
-    first response, between response chunks, or after a response. It is kept in
-    replay output and does not reset or suppress the response-seen state.
-
-    Dedupe is keyed by (task_id, spawn_id) so a sub-agent `response` does not
-    suppress the parent stream's `run_result`.
-    """
-    deduped: list[dict] = []
-    saw_response_by_key: dict[tuple[str, str | None], bool] = {}
-
-    for event in events:
-        dedupe_key = _replay_terminal_dedupe_key(event)
-        event_type = str(event.get('type') or '')
-        if (
-            dedupe_key is not None
-            and event_type in {'run_result', 'finish'}
-            and saw_response_by_key.get(dedupe_key, False)
-        ):
-            continue
-
-        deduped.append(event)
-
-        if dedupe_key is not None and _should_emit_event_to_sse(event):
-            if event_type == 'response':
-                saw_response_by_key[dedupe_key] = True
-            elif event_type in {'run_result', 'finish'}:
-                saw_response_by_key.setdefault(dedupe_key, False)
-
-    return deduped
-
-
-class RedisReplyQueue:
-    """基于 Redis List 的回复队列，任意 worker 可 put_content/put_cancel，执行 run 的 worker 可 get。"""
-
-    def __init__(self, session_id: str) -> None:
-        self._session_id = session_id.strip()
-        self._dao = get_redis_dao()
-
-    def put_content(self, content: str) -> None:
-        self._dao.rpush_interaction_reply(self._session_id, content)
-
-    def put_cancel(self) -> None:
-        self._dao.rpush_interaction_reply(self._session_id, INTERACTION_CANCEL_VALUE)
-
-    def get(self, timeout: float | None = None) -> str | None:
-        # timeout=None 表示 BLOCK 模式，Redis BLPOP timeout=0 表示一直阻塞
-        sec = 0 if timeout is None else int(timeout) if timeout >= 0 else 300
-        value = self._dao.blpop_interaction_reply(self._session_id, sec)
-        if value is None:
-            raise queue.Empty
-        if value == INTERACTION_CANCEL_VALUE:
-            return None
-        return value
 
 
 class StreamQueueManager:
@@ -273,7 +117,7 @@ class SendStreamContext:
     request_event_queue: asyncio.Queue
     llm: str | None = None  # 本轮使用的 LLM 配置块名，不传则用 agent 默认
     model: str | None = None  # 本轮使用的模型名（覆盖 LLM 配置里的 model）
-    current_input_context: CurrentInputContext | None = None
+    turn_input: TurnInput | None = None
     bohrium_required: bool = False  # 本轮是否显式依赖 Bohrium access_key / project
     images: list[str] = field(default_factory=list)
     remote_workdir: str | None = None
@@ -305,28 +149,6 @@ class ChatStreamService:
         )
 
     @staticmethod
-    def _inject_elapsed_for_history(events: list[dict]) -> list[dict]:
-        """为历史事件按 task_id 补全 stream_started_at、elapsed_ms，便于刷新后前端仍能展示耗时。"""
-        task_start_ms: dict[str, int] = {}
-        for ev in events:
-            tid = ev.get('task_id')
-            t_ms = ev.get('created_at_ms')
-            if tid is not None and t_ms is not None:
-                if tid not in task_start_ms or t_ms < task_start_ms[tid]:
-                    task_start_ms[tid] = t_ms
-        out = []
-        for ev in events:
-            ev = dict(ev)
-            tid = ev.get('task_id')
-            t_ms = ev.get('created_at_ms')
-            if tid and t_ms is not None and tid in task_start_ms:
-                start = task_start_ms[tid]
-                ev['stream_started_at'] = start
-                ev['elapsed_ms'] = t_ms - start
-            out.append(ev)
-        return out
-
-    @staticmethod
     def _ping_payload(session_id: str) -> dict:
         return {
             'source': 'System',
@@ -343,7 +165,7 @@ class ChatStreamService:
             return '上一轮任务因服务升级中断，请重新发送以继续。'
         return '上一轮任务因服务部署/重启中断，请重新发送以继续。'
 
-    def _get_pre_query_scope_event_id(self, session_id: str) -> int | None:
+    def _get_pre_turn_history_event_id(self, session_id: str) -> int | None:
         try:
             value = self._events_service.get_latest_scope_event_id(session_id, None)
         except Exception:
@@ -516,7 +338,7 @@ class ChatStreamService:
             if events:
                 events = _normalize_replayed_compaction_events(events)
                 events = _dedupe_replayed_terminal_events(events)
-                events = self._inject_elapsed_for_history(events)
+                events = _inject_elapsed_for_history(events)
                 for event in events:
                     if _should_emit_event_to_sse(event):
                         yield self.sse_format(_normalize_replayed_event(event))
@@ -700,13 +522,13 @@ class ChatStreamService:
         if resolved_directory.source != "none":
             user_msg["session_directory"] = resolved_directory.remote_workdir
             user_msg["session_directory_source"] = resolved_directory.source
-        pre_query_scope_event_id = self._get_pre_query_scope_event_id(sid)
-        current_input_context = CurrentInputContext.from_values(
+        pre_turn_history_event_id = self._get_pre_turn_history_event_id(sid) or 0
+        turn_input = TurnInput.from_values(
             user_text=user_content,
             files=req.files,
             images=req.images,
             workspace_paths=req.workspace_paths,
-            pre_query_scope_event_id=pre_query_scope_event_id,
+            pre_turn_history_event_id=pre_turn_history_event_id,
         )
         self._events_service.add_history_event(sid, user_msg, user_id=user_id)
 
@@ -722,7 +544,7 @@ class ChatStreamService:
             request_event_queue=request_event_queue,
             llm=llm,
             model=model,
-            current_input_context=current_input_context,
+            turn_input=turn_input,
             bohrium_required=bohrium_required,
             images=list(req.images or []),
             remote_workdir=resolved_directory.remote_workdir,
@@ -791,7 +613,7 @@ class ChatStreamService:
         history = ChatHistoryConverter.exclude_task_events(history, ctx.task_id)
         history = _normalize_replayed_compaction_events(history)
         history = _dedupe_replayed_terminal_events(history)
-        history = self._inject_elapsed_for_history(history)
+        history = _inject_elapsed_for_history(history)
         for event in history:
             if _should_emit_event_to_sse(event):
                 yield self.sse_format(_normalize_replayed_event(event))
@@ -850,6 +672,18 @@ class ChatStreamService:
                     sid,
                     ctx.task_id,
                 )
+            turn_input_payload = (
+                ctx.turn_input.to_payload() if ctx.turn_input is not None else None
+            )
+            legacy_current_input_payload = None
+            if ctx.turn_input is not None and turn_input_payload is not None:
+                legacy_current_input_payload = {
+                    **turn_input_payload,
+                    "pre_query" + "_scope_event_id": (
+                        ctx.turn_input.pre_turn_history_event_id
+                    ),
+                }
+
             job = {
                 'session_id': sid,
                 'task_id': ctx.task_id,
@@ -858,11 +692,8 @@ class ChatStreamService:
                 'mode': mode,
                 'llm': ctx.llm,
                 'model': ctx.model,
-                'current_input_context': (
-                    ctx.current_input_context.to_payload()
-                    if ctx.current_input_context is not None
-                    else None
-                ),
+                'turn_input': turn_input_payload,
+                'current_input_context': legacy_current_input_payload,
                 'images': list(ctx.images),
                 'bohrium_required': ctx.bohrium_required,
                 'remote_workdir': ctx.remote_workdir,

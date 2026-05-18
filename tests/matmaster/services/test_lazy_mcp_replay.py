@@ -9,6 +9,7 @@ import pytest
 
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.events import RunResultEvent, SkillHitEvent
+from matmaster.types.run_metadata import RunMetadata
 from tests.matmaster.services.test_agent_run_stream import _patched_service
 
 
@@ -66,14 +67,14 @@ async def test_run_agent_uses_hot_cache_when_present(monkeypatch):
 
     async with _patched_service([run_result]) as (svc, _, __):
         # Helper bypasses __init__, so the field must be set explicitly.
-        svc._active_skills = {"sess-1": {"pxrd"}}
+        svc._active_skills = {"sess-1": frozenset({"pxrd"})}
 
         called = {"n": 0}
         original = svc._resolve_active_skill_names
 
-        def _spy(session_id, events_table, exp_config, session=None):
+        def _spy(session_id, events_table, **kwargs):
             called["n"] += 1
-            return original(session_id, events_table, exp_config, session)
+            return original(session_id, events_table, **kwargs)
 
         monkeypatch.setattr(svc, "_resolve_active_skill_names", _spy)
 
@@ -84,9 +85,10 @@ async def test_run_agent_uses_hot_cache_when_present(monkeypatch):
             cancel_token=_make_cancel_token(),
             mode="direct",
             task_id="t1",
+            invocation_id="inv-hot-cache",
         )
 
-    snapshot = svc._test_fake_exp.last_ctx.run_meta["active_skills"]
+    snapshot = svc._test_fake_exp.last_ctx.metadata.active_skills
     assert snapshot == frozenset({"pxrd"})
     assert isinstance(snapshot, frozenset)
     assert called["n"] == 1
@@ -109,10 +111,11 @@ async def test_run_agent_skill_hit_event_writes_back_to_hot_cache():
             cancel_token=_make_cancel_token(),
             mode="direct",
             task_id="t1",
+            invocation_id="inv-skill-hit",
         )
 
-    assert "record_active_mcp_server" not in svc._test_fake_exp.last_ctx.run_meta
-    assert svc._active_skills["sess-2"] == {"test-skill"}
+    assert "record_active_mcp_server" not in RunMetadata.model_fields
+    assert svc._active_skills["sess-2"] == frozenset({"test-skill"})
 
 
 @pytest.mark.asyncio
@@ -151,29 +154,31 @@ async def test_run_agent_rehydrates_from_db_on_cache_miss(tmp_path, monkeypatch)
                 mcp_runtime_file="mcp.yaml",
             )
         )
-        monkeypatch.setattr(
-            "matmaster.config.loader.load_exp_config", lambda _name: cfg
-        )
+        with monkeypatch.context() as scoped_monkeypatch:
+            scoped_monkeypatch.setattr(
+                "matmaster.config.loader.load_exp_config", lambda _name: cfg
+            )
 
-        svc._test_events_table.get_session_events = MagicMock(
-            return_value=[
-                {"type": "skill_hit", "content": {"skill_name": "pxrd"}},
-                {"type": "skill_hit", "content": {"skill_name": "sg"}},
-                {"type": "tool_call", "tool_name": "mat_ignored_tool"},
-            ]
-        )
+            svc._test_events_table.get_session_events = MagicMock(
+                return_value=[
+                    {"id": 1, "type": "skill_hit", "content": {"skill_name": "pxrd"}},
+                    {"id": 2, "type": "skill_hit", "content": {"skill_name": "sg"}},
+                    {"id": 3, "type": "tool_call", "tool_name": "mat_ignored_tool"},
+                ]
+            )
 
-        await svc.run_agent(
-            session_id="sess-rehydrate",
-            user_prompt="hi",
-            send_cb=AsyncMock(),
-            cancel_token=_make_cancel_token(),
-            mode="direct",
-            task_id="t1",
-        )
+            await svc.run_agent(
+                session_id="sess-rehydrate",
+                user_prompt="hi",
+                send_cb=AsyncMock(),
+                cancel_token=_make_cancel_token(),
+                mode="direct",
+                task_id="t1",
+                invocation_id="inv-rehydrate",
+            )
 
-    assert svc._active_skills["sess-rehydrate"] == {"pxrd", "sg"}
-    snapshot = svc._test_fake_exp.last_ctx.run_meta["active_skills"]
+    assert svc._active_skills["sess-rehydrate"] == frozenset({"pxrd", "sg"})
+    snapshot = svc._test_fake_exp.last_ctx.metadata.active_skills
     assert snapshot == frozenset({"pxrd", "sg"})
 
 
@@ -220,24 +225,30 @@ async def test_run_agent_rehydrates_remote_skill_from_session_root(
                 mcp_runtime_file="mcp.yaml",
             )
         )
-        monkeypatch.setattr(
-            "matmaster.config.loader.load_exp_config", lambda _name: cfg
-        )
-        svc._test_events_table.get_session_events = MagicMock(
-            return_value=[
-                {"type": "skill_hit", "content": {"skill_name": "remote-skill"}},
-            ]
-        )
+        with monkeypatch.context() as scoped_monkeypatch:
+            scoped_monkeypatch.setattr(
+                "matmaster.config.loader.load_exp_config", lambda _name: cfg
+            )
+            svc._test_events_table.get_session_events = MagicMock(
+                return_value=[
+                    {
+                        "id": 1,
+                        "type": "skill_hit",
+                        "content": {"skill_name": "remote-skill"},
+                    },
+                ]
+            )
 
-        await svc.run_agent(
-            session_id="sess-remote-rehydrate",
-            user_prompt="hi",
-            send_cb=AsyncMock(),
-            cancel_token=_make_cancel_token(),
-            mode="direct",
-            task_id="t1",
-        )
+            await svc.run_agent(
+                session_id="sess-remote-rehydrate",
+                user_prompt="hi",
+                send_cb=AsyncMock(),
+                cancel_token=_make_cancel_token(),
+                mode="direct",
+                task_id="t1",
+                invocation_id="inv-remote-rehydrate",
+            )
 
-    assert svc._active_skills["sess-remote-rehydrate"] == {"remote-skill"}
-    snapshot = svc._test_fake_exp.last_ctx.run_meta["active_skills"]
+    assert svc._active_skills["sess-remote-rehydrate"] == frozenset({"remote-skill"})
+    snapshot = svc._test_fake_exp.last_ctx.metadata.active_skills
     assert snapshot == frozenset({"remote-skill"})

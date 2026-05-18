@@ -10,7 +10,7 @@ from unittest.mock import patch
 import yaml
 
 from matmaster.core.playground import Playground, PlaygroundManager
-from matmaster.types.context import WorkspaceArchivalConfig
+from matmaster.core.playground import WorkspaceArchivalConfig
 
 # ---------------------------------------------------------------------------
 # Helpers

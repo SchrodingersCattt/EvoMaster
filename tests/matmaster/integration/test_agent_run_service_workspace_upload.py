@@ -5,10 +5,10 @@ from unittest.mock import patch
 
 import pytest
 
-from matmaster.types.context import WorkspaceArchivalConfig
+from matmaster.core.playground import WorkspaceArchivalConfig
 
 _build_workspace_upload_fn = pytest.importorskip(
-    "src.services.agent_run_service",
+    "src.services.agent_run_bohrium_stage",
     reason="src not available (isolation test)",
 )._build_workspace_upload_fn
 

@@ -45,6 +45,7 @@ async def test_run_agent_emits_response_figures_before_run_result() -> None:
             cancel_token=controller.token,
             mode='direct',
             task_id='task-1',
+            invocation_id='inv-response-figures',
         )
 
     sse_types = [getattr(evt, 'type', None) for evt in sse_events]
@@ -156,6 +157,7 @@ async def test_run_agent_ignores_spawned_tool_result_figures_yielded_on_parent_s
             cancel_token=controller.token,
             mode='direct',
             task_id='task-1',
+            invocation_id='inv-spawned-figures',
         )
 
     sse_types = [getattr(evt, 'type', None) for evt in sse_events]
@@ -207,6 +209,7 @@ async def test_run_agent_only_emits_response_figures_on_root_run_result():
             cancel_token=controller.token,
             mode='direct',
             task_id='task-1',
+            invocation_id='inv-root-run-result',
         )
 
     sse_types = [getattr(evt, 'type', None) for evt in sse_events]

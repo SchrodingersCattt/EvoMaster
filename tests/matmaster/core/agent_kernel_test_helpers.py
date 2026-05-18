@@ -8,7 +8,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
-from matmaster.core.context_builder import ContextBuilder
+from matmaster.context.system_prompt import SystemPromptBuilder
 from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
@@ -231,7 +231,7 @@ def _make_spec(
     catalog = ToolCatalog(tool_registry)
     runner = _SimpleTestToolRunner(catalog)
     return AgentRuntimeSpec(
-        context_builder=ContextBuilder(),
+        system_prompt_builder=SystemPromptBuilder(),
         llm_provider=provider or MockLLMProvider(),
         tool_catalog=catalog,
         tool_runner=runner,

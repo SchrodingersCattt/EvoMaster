@@ -3,6 +3,7 @@
 Filter rules:
 - Skip: assistant_state (internal-only)
 - Skip: skill_hit (persist-only)
+- Skip: user_turn_context (provider-facing restore metadata)
 - Skip: Planner source streaming thought (ephemeral JSON)
 - Skip: UI mode (direct/planner) non-streaming complete thought (persist-only)
 - Skip: ThoughtEvent/ResponseEvent with stream_state='complete' (aggregated)
@@ -128,6 +129,10 @@ class SSEHandler:
 
         # skill_hit is persist-only, not pushed to frontend
         if event_type == 'skill_hit':
+            return True
+
+        # user_turn_context is provider-facing restore metadata, never frontend SSE.
+        if event_type == 'user_turn_context':
             return True
 
         if isinstance(event, ThoughtEvent):

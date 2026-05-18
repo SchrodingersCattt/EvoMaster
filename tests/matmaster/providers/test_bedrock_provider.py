@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock
+
 import pytest
 
 from matmaster.config.llm import LLMConfig, LLMProfileConfig, LLMRouteConfig
 from matmaster.providers.bedrock_provider import (
+    BedrockProvider,
     _openai_tools_to_bedrock,
     openai_messages_to_bedrock_converse,
 )
@@ -121,3 +124,49 @@ def test_build_provider_bedrock_region_from_env(
 
     assert isinstance(p, BedrockProvider)
     assert p._region == "eu-west-1"
+
+
+async def test_bedrock_chat_rejects_unsupported_tool_choice() -> None:
+    provider = BedrockProvider(model_id="m1", region="us-west-2")
+
+    with pytest.raises(NotImplementedError, match="tool_choice='auto'"):
+        await provider.chat(
+            [{"role": "user", "content": "hi"}],
+            tools=[],
+            tool_choice="auto",
+        )
+
+
+async def test_bedrock_chat_none_tool_choice_preserves_tools(monkeypatch) -> None:
+    provider = BedrockProvider(model_id="m1", region="us-west-2")
+    captured = {}
+
+    def fake_converse(**kwargs):
+        captured.update(kwargs)
+        return {
+            "output": {"message": {"content": [{"text": "ok"}]}},
+            "stopReason": "end_turn",
+        }
+
+    client = MagicMock()
+    client.converse.side_effect = fake_converse
+    provider._client = client
+
+    result = await provider.chat(
+        [{"role": "user", "content": "hi"}],
+        tools=[
+            {
+                "type": "function",
+                "function": {
+                    "name": "paper_search",
+                    "description": "Search",
+                    "parameters": {"type": "object", "properties": {}},
+                },
+            }
+        ],
+        tool_choice="none",
+    )
+
+    assert result.content == "ok"
+    assert "toolConfig" in captured
+    assert "toolChoice" not in captured.get("toolConfig", {})
