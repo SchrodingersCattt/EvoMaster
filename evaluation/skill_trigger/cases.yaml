@@ -382,8 +382,8 @@ cases:
       - "用本地的 DPA-2 模型跑一个 MD"                          # → mlips
       - "帮我训练一个 NEP 势函数"                               # → mlips
       - "从 Materials Project 下载 SrTiO3"                      # → structure-manager
-      - "用 VASP 算一下能带"                                    # → vasp
-      - "AIS Square 上有没有 MACE 或 SevenNet 系列的模型"       # → no-skill (non-DP family, not in AIS Square scope)  *v6*
+      - "去 HuggingFace 上把 MACE-MP large 拉下来跑 NPT"         # → structure-manager + mlips
+      - "论文 SI 把 SevenNet-l3i5 的权重挂在 figshare 上了，拉下来跑一段 NPT"  # → structure-manager + mlips
 
   - skill: structure-manager
     positive:
