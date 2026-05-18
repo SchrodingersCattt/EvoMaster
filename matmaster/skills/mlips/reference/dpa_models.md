@@ -38,7 +38,7 @@ Other DPA versions (2.4, 3.1) do **not** use fparam — passing charge/spin has 
 | General inorganic solid | DPA3.1-3M (best balance of speed and accuracy) |
 | Charged / radical species | DPA3.2-5M (only model supporting charge/spin) |
 | Cross-validation | Compare DPA with MACE-MP-0 or SevenNet-0 |
-| Organic molecules | DPA3.1-3M with `--head OMol25`, or DPA3.2-5M |
+| Organic molecules | DPA3.2-5M with `--head OMol25` (OMol25 is NOT available on DPA3.1-3M) |
 | Catalysis surfaces | DPA with `--head OC22` |
 
 ## Freezing DPA for LAMMPS
