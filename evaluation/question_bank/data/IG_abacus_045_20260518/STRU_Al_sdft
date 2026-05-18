@@ -14,7 +14,7 @@ LATTICE_VECTORS
 
 ATOMIC_POSITIONS
 Cartesian 		#Cartesian(Unit is LATTICE_CONSTANT)
-Al 			#Name of element	
+Al 			#Name of element
 0.0			#Magnetic for this element.
 16			#Number of atoms
 0.0598184   0.789049    0.599279    1   1   1
