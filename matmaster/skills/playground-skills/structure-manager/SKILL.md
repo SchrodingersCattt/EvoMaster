@@ -1,6 +1,6 @@
 ---
 name: structure-manager
-description: "Use when the user needs to bring an external crystal structure into the workspace, or convert one already in hand. Triggers on downloading a crystal structure file from a direct URL into the workspace, extracting a structure embedded in a supplementary or literature HTML page, crystal-database lookup (Materials Project, OQMD, etc.), format conversion (CIF, POSCAR, XYZ, extended XYZ), and post-download structure-file validation."
+description: "Search, download, validate, and convert crystal structure files. Supports literature-based retrieval, database lookup, direct URL download into the workspace, extracting structure files embedded in supplementary/literature HTML pages, format conversion (CIF, POSCAR, XYZ, extended XYZ), and post-download structure-file validation. Load this skill for structure acquisition and file-management tasks beyond a simple DB formula query."
 skill_type: operator
 depends_on: mcp-mat-struct-db, build-atomic-structure, transform-atomic-structure, assemble-atomic-structure, operate-molecular-crystal, mcp-mat-doc
 ---

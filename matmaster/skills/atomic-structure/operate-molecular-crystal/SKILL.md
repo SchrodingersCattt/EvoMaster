@@ -1,6 +1,6 @@
 ---
 name: operate-molecular-crystal
-description: "Use when an existing structure, typically a molecular crystal or any periodic structure with dangling bonds, disorder, or partial occupancy, needs structure-aware editing or repair. Triggers on PBC-preserving slab cuts on a molecular crystal; guest molecule extraction, desolvation, or cocrystal guest separation; resolving disorder to an ordered replica; resolving partial occupancy; sp3/sp2/octahedral hydrogen completion on dangling surface atoms; small-amplitude perturbation ensembles; and coordination-number, CShM polyhedron, or packing-shell analysis."
+description: "Operations for molecular crystals and related local geometric repairs, organised in four axes. (A) Topology-preserving fragment ops on molecular crystals: PBC slab cut, molecule-cluster defect, guest molecule extraction, desolvation, cocrystal guest separation. (B) Experimental-crystallography fixes: disorder ordering, partial-occupancy resolution, CIF moiety constraints. (C) Generic atom-level geometric operations: sp3/sp2/octahedral hydrogen completion, perturbation, rotation, usable on any structure including inorganic slabs and surfaces with dangling bonds. (D) Local coordination environment characterisation: CN detection, ideal-polyhedron match, CShM shape classification, packing shells. Axes A and B trigger when the inspected structure is a molecular crystal or has molecular fragments under PBC; Axes C and D trigger on the geometric task type, not the crystal class."
 skill_type: operator
 depends_on: inspect-atomic-structure
 ---
