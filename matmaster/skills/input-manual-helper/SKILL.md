@@ -1,6 +1,6 @@
 ---
 name: input-manual-helper
-description: "Prepare, validate, or package ABACUS, CP2K, QE, ABINIT, LAMMPS, ORCA, GROMACS, or PySCF inputs before local/Bohrium runs when no MCP submit tool fits. Not VASP-only INCAR, Gaussian templates, or pure postprocessing."
+description: "Use when preparing, validating, or packaging ABACUS, CP2K, QE, ABINIT, LAMMPS, ORCA, GROMACS, or PySCF inputs before local/Bohrium runs and no MCP submit tool fits. Not for VASP-only INCAR, Gaussian templates, or pure postprocessing."
 skill_type: operator
 ---
 
