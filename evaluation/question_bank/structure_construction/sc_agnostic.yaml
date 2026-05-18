@@ -1406,91 +1406,27 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
-- id: SC_abacus_pt111_20260518
-  capability: structure_construction
-  domain: agnostic
-  intent: Place official Pt(111) slab STRU from 27_imp_sol into run directory (structure
-    modeling).
-  human_prompt_seed: '工作区中有官方 **Pt(111) slab** 结构文件 `STRU_Pt111`（27_imp_sol）。
-
-
-    请创建目录 `run_pw_pt_slab/`，将结构放入 `run_pw_pt_slab/STRU`（**仅结构文件**，不要写 INPUT/KPT）。'
-  tags:
-  - struct_surface
-  - eng_abacus
-  data_files:
-  - key: stru_pt111
-    path: data/IG_abacus_shared_pt_slab_20260518/STRU_Pt111
-    oss_url: ''
-    description: Official Pt(111) slab from abacus-develop examples/27_imp_sol/01_pw_Pt_slab.
-  reference_answers:
-  - key: stru_out
-    value: run_pw_pt_slab/STRU
-  - key: must_pt_stru_match
-    value:
-      filename: run_pw_pt_slab/STRU
-      check: lattice_matches
-      expected: STRU_Pt111
-  - key: turn_budget
-    value:
-      max: 8
-  - key: duration_budget
-    value:
-      max: 7200000
-  - key: token_budget_total
-    value:
-      max: 12000
-  scoring_checklist:
-  - id: stru_out
-    criterion: run_pw_pt_slab/STRU exists.
-    axis: correctness
-    verify: artifact_exists
-  - id: must_pt_stru_match
-    criterion: '[Must] run_pw_pt_slab/STRU lattice matches STRU_Pt111.'
-    axis: correctness
-    verify: stru_file_check
-    weight: 1.0
-  - id: turn_budget
-    criterion: Agent completes within turn budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration stays within benchmark ceiling.
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
 - id: SC_abacus_bsse_h2o_20260518
   capability: structure_construction
   domain: agnostic
-  intent: Place official BSSE fragment STRU_0–STRU_3 for H2O from 32_bsse (structure
-    modeling).
-  human_prompt_seed: '工作区已提供官方 Counterpoise 结构 `STRU_0`～`STRU_3`（32_bsse/01_water）。
+  intent: Build four ABACUS LCAO STRU fragments for gas-phase H2O counterpoise (BSSE)—whole
+    molecule, O-only, and two single-H fragments with ghost/empty species (32_bsse/01_water).
+  human_prompt_seed: '为气相 **H₂O** 的 **counterpoise（BSSE）** 准备四套 ABACUS LCAO **STRU**
+    碎片，写入 `run_lcao_h2o_cp/`：
 
 
-    请创建目录 `run_lcao_h2o_cp/`，将四个文件**原样复制**到该目录（**仅结构**，不要写 INPUT/KPT）。'
+    - `STRU_0`：完整水分子（H₂O）；
+
+    - `STRU_1`：只保留 **O 原子**，两个 H 用 **ghost/empty 物种** 在同几何位置占位；
+
+    - `STRU_2`、`STRU_3`：各只保留 **一个 H 原子**，其余原子用 ghost/empty 占位（对应两个 H
+      碎片）。
+
+
+    四套结构共用同一立方盒子（约 20 Bohr 边长），须含 `NUMERICAL_ORBITAL`。'
   tags:
   - struct_surface
   - eng_abacus
-  data_files:
-  - key: stru_0
-    path: data/IG_abacus_054_20260518/STRU_0
-    oss_url: ''
-    description: Official BSSE structure STRU_0 from examples/32_bsse/01_water.
-  - key: stru_1
-    path: data/IG_abacus_054_20260518/STRU_1
-    oss_url: ''
-    description: Official BSSE structure STRU_1 from examples/32_bsse/01_water.
-  - key: stru_2
-    path: data/IG_abacus_054_20260518/STRU_2
-    oss_url: ''
-    description: Official BSSE structure STRU_2 from examples/32_bsse/01_water.
-  - key: stru_3
-    path: data/IG_abacus_054_20260518/STRU_3
-    oss_url: ''
-    description: Official BSSE structure STRU_3 from examples/32_bsse/01_water.
   reference_answers:
   - key: cp_stru0
     value: run_lcao_h2o_cp/STRU_0
@@ -1500,35 +1436,86 @@ questions:
     value: run_lcao_h2o_cp/STRU_2
   - key: cp_stru3
     value: run_lcao_h2o_cp/STRU_3
-  - key: must_cp_stru0_match
+  - key: must_h2o_whole_atoms
     value:
       filename: run_lcao_h2o_cp/STRU_0
-      check: lattice_matches
-      expected: STRU_0
-  - key: must_cp_stru1_match
+      check: total_atoms
+      expected: 3
+  - key: must_h2o_whole_species
+    value:
+      filename: run_lcao_h2o_cp/STRU_0
+      check: species_count
+      expected: 2
+  - key: must_h2o_whole_lcao
+    value:
+      filename: run_lcao_h2o_cp/STRU_0
+      tokens:
+        - NUMERICAL_ORBITAL
+        - ATOMIC_SPECIES
+        - H
+        - O
+      flags: i
+  - key: must_o_frag_atoms
     value:
       filename: run_lcao_h2o_cp/STRU_1
-      check: lattice_matches
-      expected: STRU_1
-  - key: must_cp_stru2_match
+      check: total_atoms
+      expected: 3
+  - key: must_o_frag_ghost
+    value:
+      filename: run_lcao_h2o_cp/STRU_1
+      pattern: (?im)empty|H_empty
+      flags: im
+  - key: must_o_frag_o_present
+    value:
+      filename: run_lcao_h2o_cp/STRU_1
+      tokens:
+        - ATOMIC_SPECIES
+        - O
+      flags: i
+  - key: must_h1_frag_atoms
     value:
       filename: run_lcao_h2o_cp/STRU_2
-      check: lattice_matches
-      expected: STRU_2
-  - key: must_cp_stru3_match
+      check: total_atoms
+      expected: 3
+  - key: must_h1_frag_species
+    value:
+      filename: run_lcao_h2o_cp/STRU_2
+      check: species_count
+      expected: 3
+  - key: must_h1_frag_ghost
+    value:
+      filename: run_lcao_h2o_cp/STRU_2
+      pattern: (?im)empty|H_empty
+      flags: im
+  - key: must_h2_frag_atoms
     value:
       filename: run_lcao_h2o_cp/STRU_3
-      check: lattice_matches
-      expected: STRU_3
+      check: total_atoms
+      expected: 3
+  - key: must_h2_frag_species
+    value:
+      filename: run_lcao_h2o_cp/STRU_3
+      check: species_count
+      expected: 3
+  - key: must_h2_frag_ghost
+    value:
+      filename: run_lcao_h2o_cp/STRU_3
+      pattern: (?im)empty|H_empty
+      flags: im
+  - key: must_cp_box
+    value:
+      filename: run_lcao_h2o_cp/STRU_0
+      pattern: (?im)^\s*LATTICE_VECTORS\s*\n\s*20\s+0\s+0
+      flags: im
   - key: turn_budget
     value:
-      max: 10
+      max: 14
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 14000
+      max: 18000
   scoring_checklist:
   - id: cp_stru0
     criterion: run_lcao_h2o_cp/STRU_0 exists.
@@ -1546,25 +1533,70 @@ questions:
     criterion: run_lcao_h2o_cp/STRU_3 exists.
     axis: correctness
     verify: artifact_exists
-  - id: must_cp_stru0_match
-    criterion: '[Must] run_lcao_h2o_cp/STRU_0 matches reference STRU_0.'
+  - id: must_h2o_whole_atoms
+    criterion: '[Must] STRU_0 has 3 atoms (one H2O).'
     axis: correctness
     verify: stru_file_check
     weight: 1.0
-  - id: must_cp_stru1_match
-    criterion: '[Must] run_lcao_h2o_cp/STRU_1 matches reference STRU_1.'
+  - id: must_h2o_whole_species
+    criterion: '[Must] STRU_0 has H and O species only.'
     axis: correctness
     verify: stru_file_check
     weight: 1.0
-  - id: must_cp_stru2_match
-    criterion: '[Must] run_lcao_h2o_cp/STRU_2 matches reference STRU_2.'
+  - id: must_h2o_whole_lcao
+    criterion: '[Must] STRU_0 is LCAO-ready (NUMERICAL_ORBITAL, H, O).'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_o_frag_atoms
+    criterion: '[Must] STRU_1 keeps 3 coordinate sites (O + two ghost H).'
+    axis: correctness
+    verify: stru_file_check
+    weight: 1.0
+  - id: must_o_frag_ghost
+    criterion: '[Must] STRU_1 uses ghost/empty species for removed H.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_o_frag_o_present
+    criterion: '[Must] STRU_1 retains real O in ATOMIC_SPECIES.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.8
+  - id: must_h1_frag_atoms
+    criterion: '[Must] STRU_2 has 3 coordinate sites (one H fragment).'
+    axis: correctness
+    verify: stru_file_check
+    weight: 1.0
+  - id: must_h1_frag_species
+    criterion: '[Must] STRU_2 defines three species (H + ghosts).'
     axis: correctness
     verify: stru_file_check
     weight: 0.8
-  - id: must_cp_stru3_match
-    criterion: '[Must] run_lcao_h2o_cp/STRU_3 matches reference STRU_3.'
+  - id: must_h1_frag_ghost
+    criterion: '[Must] STRU_2 uses ghost/empty species.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_h2_frag_atoms
+    criterion: '[Must] STRU_3 has 3 coordinate sites (second H fragment).'
     axis: correctness
     verify: stru_file_check
+    weight: 1.0
+  - id: must_h2_frag_species
+    criterion: '[Must] STRU_3 defines three species (H + ghosts).'
+    axis: correctness
+    verify: stru_file_check
+    weight: 0.8
+  - id: must_h2_frag_ghost
+    criterion: '[Must] STRU_3 uses ghost/empty species.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_cp_box
+    criterion: '[Must] STRU_0 uses ~20 Bohr cubic cell (shared BSSE box).'
+    axis: correctness
+    verify: text_file_regex
     weight: 0.8
   - id: turn_budget
     criterion: Agent completes within turn budget.

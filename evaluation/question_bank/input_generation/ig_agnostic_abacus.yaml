@@ -6247,8 +6247,8 @@ questions:
 - id: IG_abacus_048_20260518
   capability: input_generation
   domain: agnostic
-  intent: Prepare PW Berry-phase INPUT/KPT workflow for PbTiO3 per official 26_berryphase (structure supplied; agent copies reference STRU then writes inputs).
-  human_prompt_seed: "工作区已提供官方 **PbTiO₃** 结构文件 `STRU_PbTiO3`（对应 [abacus-develop 26_berryphase/01_pw_PbTiO3](https://github.com/deepmodeling/abacus-develop/tree/develop/examples/26_berryphase/01_pw_PbTiO3)）。\n\n请将其复制到 `run_pw_pbtio3_berry/STRU` 后，编写 Berry 相极化所需的 `INPUT-scf`、`INPUT-nscf-a/b/c` 与对应 `KPT-scf`、`KPT-nscf-a/b/c`（只写文件，不运行）。"
+  intent: Prepare PW Berry-phase INPUT/KPT for PbTiO3 per official 26_berryphase.
+  human_prompt_seed: "为 **PbTiO₃** 准备 Berry 相极化平面波计算输入：在 `run_pw_pbtio3_berry/` 编写 `INPUT-scf`、`INPUT-nscf-a/b/c` 与 `KPT-scf`、`KPT-nscf-a/b/c`（只写文件，不运行）。"
   tags:
   - eng_abacus
   reference_answers:
@@ -6256,8 +6256,6 @@ questions:
     value: run_pw_pbtio3_berry/INPUT-scf
   - key: berry_scf_kpt
     value: run_pw_pbtio3_berry/KPT-scf
-  - key: berry_stru
-    value: run_pw_pbtio3_berry/STRU
   - key: must_berry_scf
     value:
       filename: run_pw_pbtio3_berry/INPUT-scf
@@ -6325,11 +6323,6 @@ questions:
   - key: token_budget_total
     value:
       max: 26000
-  - key: must_berry_stru_match
-    value:
-      filename: run_pw_pbtio3_berry/STRU
-      check: lattice_matches
-      expected: STRU_PbTiO3
   data_files:
   - key: stru_pbtio3
     path: data/IG_abacus_048_20260518/STRU_PbTiO3
@@ -6344,19 +6337,10 @@ questions:
     criterion: run_pw_pbtio3_berry/KPT-scf exists.
     axis: correctness
     verify: artifact_exists
-  - id: berry_stru
-    criterion: run_pw_pbtio3_berry/STRU exists (copied from STRU_PbTiO3).
-    axis: correctness
-    verify: artifact_exists
   - id: must_berry_scf
     criterion: '[Must] INPUT-scf is PW SCF with out_chg for Berry workflow.'
     axis: correctness
     verify: text_file_contains_all
-    weight: 1.0
-  - id: must_berry_stru_match
-    criterion: '[Must] run_pw_pbtio3_berry/STRU matches reference STRU_PbTiO3.'
-    axis: correctness
-    verify: stru_file_check
     weight: 1.0
   - id: must_berry_scf_out_chg
     criterion: '[Must] INPUT-scf sets out_chg 1.'
@@ -6413,15 +6397,18 @@ questions:
 - id: IG_abacus_049_20260518
   capability: input_generation
   domain: agnostic
-  intent: Prepare PW SCF inputs with implicit solvation for Pt slab per official 27_imp_sol—imp_sol and solvent parameters.
-  human_prompt_seed: "为 **Pt(111) 平板** 准备一套 **隐式溶剂化（implicit solvation）** 平面波 SCF 输入（只写文件，不运行）：\n\n目录 `run_pw_pt_slab_imp_sol/`，须含 `INPUT`、`STRU`（`gamma_only` 时可不写 `KPT`）。"
+  intent: Prepare PW SCF INPUT for implicit solvation on Pt(111) slab per official 27_imp_sol.
+  human_prompt_seed: '为 **Pt(111) 平板** 准备隐式溶剂化（implicit solvation）平面波 SCF 输入：编写 `run_pw_pt_slab_imp_sol/INPUT`（`gamma_only` 时可不写 `KPT`；只写文件，不运行）。'
   tags:
   - eng_abacus
+  data_files:
+  - key: stru_pt111
+    path: data/IG_abacus_shared_pt_slab_20260518/STRU_Pt111
+    oss_url: ''
+    description: Official Pt(111) slab from abacus-develop examples/27_imp_sol/01_pw_Pt_slab.
   reference_answers:
   - key: imp_sol_input
     value: run_pw_pt_slab_imp_sol/INPUT
-  - key: imp_sol_stru
-    value: run_pw_pt_slab_imp_sol/STRU
   - key: must_imp_sol_input
     value:
       filename: run_pw_pt_slab_imp_sol/INPUT
@@ -6443,14 +6430,6 @@ questions:
       filename: run_pw_pt_slab_imp_sol/INPUT
       pattern: (?im)^\s*eb_k\s+\S+
       flags: im
-  - key: must_imp_sol_stru
-    value:
-      filename: run_pw_pt_slab_imp_sol/STRU
-      tokens:
-      - LATTICE_VECTORS
-      - ATOMIC_SPECIES
-      - ATOMIC_POSITIONS
-      flags: i
   - key: variable_imp_sol_semantics
     value: Implicit solvation SCF per 27_imp_sol—imp_sol 1 with eb_k and related solvent model parameters for PW Pt slab.
   - key: turn_budget
@@ -6465,10 +6444,6 @@ questions:
   scoring_checklist:
   - id: imp_sol_input
     criterion: run_pw_pt_slab_imp_sol/INPUT exists.
-    axis: correctness
-    verify: artifact_exists
-  - id: imp_sol_stru
-    criterion: run_pw_pt_slab_imp_sol/STRU exists.
     axis: correctness
     verify: artifact_exists
   - id: must_imp_sol_input
@@ -6486,11 +6461,6 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 0.8
-  - id: must_imp_sol_stru
-    criterion: '[Must] run_pw_pt_slab_imp_sol/STRU is valid Pt slab structure.'
-    axis: correctness
-    verify: text_file_contains_all
-    weight: 1.0
   - id: variable_imp_sol_semantics
     criterion: '[Variable] Implicit solvation setup matches 27_imp_sol README.'
     axis: grounding
@@ -6511,15 +6481,18 @@ questions:
 - id: IG_abacus_050_20260518
   capability: input_generation
   domain: agnostic
-  intent: Prepare PW SCF inputs with external saw-like electric field for Pt slab per official 28_efield.
-  human_prompt_seed: "为 **Pt(111) 平板** 准备一套 **外加电场（saw-like efield）** 平面波 SCF 输入（只写文件，不运行）：\n\n目录 `run_pw_pt_slab_efield/`，须含 `INPUT`、`STRU`（`gamma_only` 时可不写 `KPT`）。"
+  intent: Prepare PW SCF INPUT for external saw-like electric field on Pt(111) slab per official 28_efield.
+  human_prompt_seed: '为 **Pt(111) 平板** 准备外加电场（saw-like efield）平面波 SCF 输入：编写 `run_pw_pt_slab_efield/INPUT`（`gamma_only` 时可不写 `KPT`；只写文件，不运行）。'
   tags:
   - eng_abacus
+  data_files:
+  - key: stru_pt111
+    path: data/IG_abacus_shared_pt_slab_20260518/STRU_Pt111
+    oss_url: ''
+    description: Official Pt(111) slab from abacus-develop examples/27_imp_sol/01_pw_Pt_slab.
   reference_answers:
   - key: efield_input
     value: run_pw_pt_slab_efield/INPUT
-  - key: efield_stru
-    value: run_pw_pt_slab_efield/STRU
   - key: must_efield_input
     value:
       filename: run_pw_pt_slab_efield/INPUT
@@ -6547,14 +6520,6 @@ questions:
       filename: run_pw_pt_slab_efield/INPUT
       pattern: (?im)^\s*efield_amp\s+(?!0(?:\.0*)?\s*$)\S+
       flags: im
-  - key: must_efield_stru
-    value:
-      filename: run_pw_pt_slab_efield/STRU
-      tokens:
-      - LATTICE_VECTORS
-      - ATOMIC_SPECIES
-      - ATOMIC_POSITIONS
-      flags: i
   - key: variable_efield_semantics
     value: External electric field per 28_efield—efield_flag 1 with efield_dir/pos/amp; dip_cor_flag 0 (field only, not dipole correction).
   - key: turn_budget
@@ -6569,10 +6534,6 @@ questions:
   scoring_checklist:
   - id: efield_input
     criterion: run_pw_pt_slab_efield/INPUT exists.
-    axis: correctness
-    verify: artifact_exists
-  - id: efield_stru
-    criterion: run_pw_pt_slab_efield/STRU exists.
     axis: correctness
     verify: artifact_exists
   - id: must_efield_input
@@ -6595,11 +6556,6 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 1.0
-  - id: must_efield_stru
-    criterion: '[Must] run_pw_pt_slab_efield/STRU is valid Pt slab structure.'
-    axis: correctness
-    verify: text_file_contains_all
-    weight: 1.0
   - id: variable_efield_semantics
     criterion: '[Variable] External efield setup matches 28_efield README.'
     axis: grounding
@@ -6620,19 +6576,28 @@ questions:
 - id: IG_abacus_051_20260518
   capability: input_generation
   domain: agnostic
-  intent: Prepare PW SCF inputs for dipole correction only vs dipole plus external field per official 29_dipole_corr.
-  human_prompt_seed: "为 **Pt(111) 平板** 准备两套 **偶极修正** 平面波 SCF 输入（只写文件，不运行）：\n\n1) `run_pw_pt_dipole_only/` — 仅偶极修正（无外加电场）；\n2) `run_pw_pt_dipole_efield/` — 偶极修正 + 外加电场。\n\n各目录须含 `INPUT`、`STRU`（`gamma_only` 时可不写 `KPT`）。"
+  intent: Prepare PW SCF INPUT for dipole correction on Pt(111) slab per official 29_dipole_corr.
+  human_prompt_seed: '为 **Pt(111) 平板** 准备偶极修正平面波 SCF 输入：
+
+
+    1) `run_pw_pt_dipole_only/INPUT` — 仅偶极修正；
+
+    2) `run_pw_pt_dipole_efield/INPUT` — 偶极修正 + 外加电场。
+
+
+    （`gamma_only` 时可不写 `KPT`；只写文件，不运行。）'
   tags:
   - eng_abacus
+  data_files:
+  - key: stru_pt111
+    path: data/IG_abacus_shared_pt_slab_20260518/STRU_Pt111
+    oss_url: ''
+    description: Official Pt(111) slab from abacus-develop examples/27_imp_sol/01_pw_Pt_slab.
   reference_answers:
   - key: dip_only_input
     value: run_pw_pt_dipole_only/INPUT
-  - key: dip_only_stru
-    value: run_pw_pt_dipole_only/STRU
   - key: dip_ef_input
     value: run_pw_pt_dipole_efield/INPUT
-  - key: dip_ef_stru
-    value: run_pw_pt_dipole_efield/STRU
   - key: must_dip_only_input
     value:
       filename: run_pw_pt_dipole_only/INPUT
@@ -6691,16 +6656,8 @@ questions:
     criterion: run_pw_pt_dipole_only/INPUT exists.
     axis: correctness
     verify: artifact_exists
-  - id: dip_only_stru
-    criterion: run_pw_pt_dipole_only/STRU exists.
-    axis: correctness
-    verify: artifact_exists
   - id: dip_ef_input
     criterion: run_pw_pt_dipole_efield/INPUT exists.
-    axis: correctness
-    verify: artifact_exists
-  - id: dip_ef_stru
-    criterion: run_pw_pt_dipole_efield/STRU exists.
     axis: correctness
     verify: artifact_exists
   - id: must_dip_only_input
@@ -6858,15 +6815,18 @@ questions:
 - id: IG_abacus_053_20260518
   capability: input_generation
   domain: agnostic
-  intent: Prepare PW SCF inputs with compensating charge (gate) for Pt slab per official 31_comp_charge.
-  human_prompt_seed: "为 **Pt(111) 平板** 准备一套 **补偿电荷（compensating charge）** 平面波 SCF 输入（只写文件，不运行）：\n\n目录 `run_pw_pt_slab_gate/`，须含 `INPUT`、`STRU`（`gamma_only` 时可不写 `KPT`）。"
+  intent: Prepare PW SCF INPUT for compensating charge (gate) on Pt(111) slab per official 31_comp_charge.
+  human_prompt_seed: '为 **Pt(111) 平板** 准备补偿电荷（compensating charge / gate）平面波 SCF 输入：编写 `run_pw_pt_slab_gate/INPUT`（`gamma_only` 时可不写 `KPT`；只写文件，不运行）。'
   tags:
   - eng_abacus
+  data_files:
+  - key: stru_pt111
+    path: data/IG_abacus_shared_pt_slab_20260518/STRU_Pt111
+    oss_url: ''
+    description: Official Pt(111) slab from abacus-develop examples/27_imp_sol/01_pw_Pt_slab.
   reference_answers:
   - key: gate_input
     value: run_pw_pt_slab_gate/INPUT
-  - key: gate_stru
-    value: run_pw_pt_slab_gate/STRU
   - key: must_gate_input
     value:
       filename: run_pw_pt_slab_gate/INPUT
@@ -6900,14 +6860,6 @@ questions:
       filename: run_pw_pt_slab_gate/INPUT
       pattern: (?im)^\s*nelec\s+\d+
       flags: im
-  - key: must_gate_stru
-    value:
-      filename: run_pw_pt_slab_gate/STRU
-      tokens:
-      - LATTICE_VECTORS
-      - ATOMIC_SPECIES
-      - ATOMIC_POSITIONS
-      flags: i
   - key: variable_gate_semantics
     value: Compensating charge per 31_comp_charge—gate_flag 1 with zgate and block geometry for supercell neutrality under excess charge (nelec).
   - key: turn_budget
@@ -6922,10 +6874,6 @@ questions:
   scoring_checklist:
   - id: gate_input
     criterion: run_pw_pt_slab_gate/INPUT exists.
-    axis: correctness
-    verify: artifact_exists
-  - id: gate_stru
-    criterion: run_pw_pt_slab_gate/STRU exists.
     axis: correctness
     verify: artifact_exists
   - id: must_gate_input
@@ -6953,11 +6901,6 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 0.8
-  - id: must_gate_stru
-    criterion: '[Must] run_pw_pt_slab_gate/STRU is valid Pt slab structure.'
-    axis: correctness
-    verify: text_file_contains_all
-    weight: 1.0
   - id: variable_gate_semantics
     criterion: '[Variable] Compensating charge setup matches 31_comp_charge README.'
     axis: grounding
@@ -6978,8 +6921,8 @@ questions:
 - id: IG_abacus_054_20260518
   capability: input_generation
   domain: agnostic
-  intent: Prepare shared LCAO INPUT/KPT for H2O counterpoise BSSE per official 32_bsse (fragment STRU supplied; agent copies then writes INPUT/KPT).
-  human_prompt_seed: "工作区已提供官方 Counterpoise 结构 `STRU_0`～`STRU_3`（[32_bsse/01_water](https://github.com/deepmodeling/abacus-develop/tree/develop/examples/32_bsse/01_water)）。\n\n请复制到 `run_lcao_h2o_cp/` 同名文件后，**仅编写**共享的 `INPUT` 与 `KPT`。（`STRU_0` 整分子配合 `ntype 2`；碎片 `STRU_1` O、`STRU_2/3` H 配合 `ntype 3`；不要运行。）"
+  intent: Prepare shared LCAO INPUT/KPT for H2O counterpoise BSSE per official 32_bsse.
+  human_prompt_seed: "为气相 **H₂O** 的 counterpoise（BSSE）准备共享 LCAO 输入：在 `run_lcao_h2o_cp/` 编写 `INPUT` 与 `KPT`（整分子算例 `ntype 2`，O/H 碎片算例 `ntype 3`；只写文件，不运行）。"
   tags:
   - eng_abacus
   data_files:
@@ -7004,14 +6947,6 @@ questions:
     value: run_lcao_h2o_cp/INPUT
   - key: cp_kpt
     value: run_lcao_h2o_cp/KPT
-  - key: cp_stru0
-    value: run_lcao_h2o_cp/STRU_0
-  - key: cp_stru1
-    value: run_lcao_h2o_cp/STRU_1
-  - key: cp_stru2
-    value: run_lcao_h2o_cp/STRU_2
-  - key: cp_stru3
-    value: run_lcao_h2o_cp/STRU_3
   - key: must_cp_input
     value:
       filename: run_lcao_h2o_cp/INPUT
@@ -7032,26 +6967,6 @@ questions:
   - key: token_budget_total
     value:
       max: 22000
-  - key: must_cp_stru0_match
-    value:
-      filename: run_lcao_h2o_cp/STRU_0
-      check: lattice_matches
-      expected: STRU_0
-  - key: must_cp_stru1_match
-    value:
-      filename: run_lcao_h2o_cp/STRU_1
-      check: lattice_matches
-      expected: STRU_1
-  - key: must_cp_stru2_match
-    value:
-      filename: run_lcao_h2o_cp/STRU_2
-      check: lattice_matches
-      expected: STRU_2
-  - key: must_cp_stru3_match
-    value:
-      filename: run_lcao_h2o_cp/STRU_3
-      check: lattice_matches
-      expected: STRU_3
   scoring_checklist:
   - id: cp_input
     criterion: run_lcao_h2o_cp/INPUT exists.
@@ -7061,26 +6976,6 @@ questions:
     criterion: run_lcao_h2o_cp/KPT exists.
     axis: correctness
     verify: artifact_exists
-  - id: must_cp_stru3_match
-    criterion: '[Must] run_lcao_h2o_cp/STRU_3 matches reference STRU_3.'
-    axis: correctness
-    verify: stru_file_check
-    weight: 1.0
-  - id: must_cp_stru2_match
-    criterion: '[Must] run_lcao_h2o_cp/STRU_2 matches reference STRU_2.'
-    axis: correctness
-    verify: stru_file_check
-    weight: 1.0
-  - id: must_cp_stru1_match
-    criterion: '[Must] run_lcao_h2o_cp/STRU_1 matches reference STRU_1.'
-    axis: correctness
-    verify: stru_file_check
-    weight: 1.0
-  - id: must_cp_stru0_match
-    criterion: '[Must] run_lcao_h2o_cp/STRU_0 matches reference STRU_0.'
-    axis: correctness
-    verify: stru_file_check
-    weight: 1.0
   - id: must_cp_input
     criterion: '[Must] run_lcao_h2o_cp/INPUT is LCAO suitable for counterpoise BSSE workflow.'
     axis: correctness
