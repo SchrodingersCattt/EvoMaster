@@ -56,7 +56,7 @@ cases:
       - "用 GPUMD 做一个热膨胀模拟"
       - "帮我训练一个 NEP 势函数"
     negative:
-      - "帮我用 LAMMPS 跑 MD"
+      - "帮我用 LAMMPS 往GPU集群上提交 MD任务"
       - "用 ABACUS 做结构优化"
       - "画一个 RDF 图"
       - "帮我做第一性原理计算"
