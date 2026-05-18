@@ -3047,7 +3047,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare minimal PW vs LCAO SCF input triplets for Si2 (official 02_scf).
-  human_prompt_seed: "请为 Si₂ 金刚石结构准备两套基础 ABACUS 自洽场输入，分别使用平面波与 LCAO 基组： - `run_pw_si2/` - `run_lcao_si2/`\n各目录写入 `INPUT`、`STRU`、`KPT`。STRU 用 `LATTICE_VECTORS` 描述晶胞；补齐赝势路径及该基组所需的 SCF 控制项。不要运行计算。"
+  human_prompt_seed: "为 Si₂ 金刚石结构准备两套基础 ABACUS 自洽场输入，分别使用平面波与 LCAO 基组：在 `run_pw_si2/`、`run_lcao_si2/` 各编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
   reference_answers:
@@ -3063,13 +3063,6 @@ questions:
       - ecutwfc
       - scf_thr
       - scf_nmax
-      flags: i
-  - key: must_run_pw_si2_lv
-    value:
-      filename: run_pw_si2/STRU
-      tokens:
-      - LATTICE_VECTORS
-      - ATOMIC_SPECIES
       flags: i
   - key: must_run_pw_si2_kpt
     value:
@@ -3091,13 +3084,6 @@ questions:
       - scf_thr
       - scf_nmax
       flags: i
-  - key: must_run_lcao_si2_lv
-    value:
-      filename: run_lcao_si2/STRU
-      tokens:
-      - LATTICE_VECTORS
-      - ATOMIC_SPECIES
-      flags: i
   - key: must_run_lcao_si2_kpt
     value:
       filename: run_lcao_si2/KPT
@@ -3110,12 +3096,6 @@ questions:
       filename: run_lcao_si2/INPUT
       pattern: (?im)^\s*orbital_dir\s+\S+
       flags: im
-  - key: must_run_lcao_si2_no
-    value:
-      filename: run_lcao_si2/STRU
-      tokens:
-      - NUMERICAL_ORBITAL
-      flags: i
   - key: turn_budget
     value:
       max: 14
@@ -3130,20 +3110,12 @@ questions:
     criterion: '`run_pw_si2/INPUT` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
-  - id: run_pw_si2_st
-    criterion: '`run_pw_si2/STRU` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
   - id: run_pw_si2_kp
     criterion: '`run_pw_si2/KPT` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
   - id: must_run_pw_si2_scf
     criterion: '[Must] run_pw_si2/INPUT minimal PW SCF.'
-    axis: correctness
-    verify: text_file_contains_all
-  - id: must_run_pw_si2_lv
-    criterion: '[Must] run_pw_si2/STRU uses LATTICE_VECTORS.'
     axis: correctness
     verify: text_file_contains_all
   - id: must_run_pw_si2_kpt
@@ -3154,20 +3126,12 @@ questions:
     criterion: '`run_lcao_si2/INPUT` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
-  - id: run_lcao_si2_st
-    criterion: '`run_lcao_si2/STRU` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
   - id: run_lcao_si2_kp
     criterion: '`run_lcao_si2/KPT` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
   - id: must_run_lcao_si2_scf
     criterion: '[Must] run_lcao_si2/INPUT minimal LCAO SCF.'
-    axis: correctness
-    verify: text_file_contains_all
-  - id: must_run_lcao_si2_lv
-    criterion: '[Must] run_lcao_si2/STRU uses LATTICE_VECTORS.'
     axis: correctness
     verify: text_file_contains_all
   - id: must_run_lcao_si2_kpt
@@ -3178,10 +3142,6 @@ questions:
     criterion: '[Must] run_lcao_si2/INPUT orbital_dir.'
     axis: correctness
     verify: text_file_regex
-  - id: must_run_lcao_si2_no
-    criterion: '[Must] run_lcao_si2/STRU NUMERICAL_ORBITAL.'
-    axis: correctness
-    verify: text_file_contains_all
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
@@ -3194,11 +3154,20 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_pw_Si2
+    path: data/IG_abacus_024_20260518/STRU_pw_Si2
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/02_scf/01_pw_Si2
+  - key: STRU_lcao_Si2
+    path: data/IG_abacus_024_20260518/STRU_lcao_Si2
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/02_scf/02_lcao_Si2
 - id: IG_abacus_025_20260518
   capability: input_generation
   domain: agnostic
   intent: Spin-polarized LCAO SCF with distinct initial magnetic orders (official 03_spin_polarized).
-  human_prompt_seed: "请按 ABACUS 官方自旋极化示例思路，准备四套 LCAO 自旋 SCF 输入（各含 `INPUT`、`STRU`、`KPT`）： - `run_fe_fm/`：bcc Fe 铁磁初态 - `run_fe_afm/`：bcc Fe 反铁磁初态（晶胞与 FM 相同） - `run_h_atom/`：单 H 原子 - `run_co6nb4os2/`：Co₆Nb₄Os₂ 团簇，多位点磁矩\n不要运行计算。"
+  human_prompt_seed: "准备四套 LCAO 自旋极化 SCF 输入：`run_fe_fm/`（bcc Fe 铁磁）、`run_fe_afm/`（反铁磁）、`run_h_atom/`（单 H）、`run_co6nb4os2/`（Co₆Nb₄Os₂ 团簇）。各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
   reference_answers:
@@ -3218,12 +3187,6 @@ questions:
       - pseudo_dir
       - orbital_dir
       flags: i
-  - key: must_fe_fm_mag
-    value:
-      filename: run_fe_fm/STRU
-      check: magnetic_order
-      expected: fm
-      min_sites: 2
   - key: fe_afm_input
     value: run_fe_afm/INPUT
   - key: must_fe_afm_nspin
@@ -3240,17 +3203,6 @@ questions:
       - pseudo_dir
       - orbital_dir
       flags: i
-  - key: must_fe_afm_mag
-    value:
-      filename: run_fe_afm/STRU
-      check: magnetic_order
-      expected: afm
-      min_sites: 2
-  - key: must_afm_lat
-    value:
-      filename: run_fe_afm/STRU
-      check: lattice_matches
-      expected: run_fe_fm/STRU
   - key: h_atom_input
     value: run_h_atom/INPUT
   - key: must_h_atom_nspin
@@ -3267,12 +3219,6 @@ questions:
       - pseudo_dir
       - orbital_dir
       flags: i
-  - key: must_h_atom_mag
-    value:
-      filename: run_h_atom/STRU
-      check: magnetic_order
-      expected: fm
-      min_sites: 1
   - key: co6nb4os2_input
     value: run_co6nb4os2/INPUT
   - key: must_co6nb4os2_nspin
@@ -3289,11 +3235,6 @@ questions:
       - pseudo_dir
       - orbital_dir
       flags: i
-  - key: must_cl_mag
-    value:
-      filename: run_co6nb4os2/STRU
-      check: site_magmom_count_min
-      expected: 10
   - key: turn_budget
     value:
       max: 18
@@ -3308,10 +3249,6 @@ questions:
     criterion: '`run_fe_fm/INPUT` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
-  - id: fe_fm_st
-    criterion: '`run_fe_fm/STRU` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
   - id: fe_fm_kp
     criterion: '`run_fe_fm/KPT` must be written to the workspace.'
     axis: correctness
@@ -3324,16 +3261,8 @@ questions:
     criterion: '[Must] run_fe_fm/INPUT LCAO SCF paths.'
     axis: correctness
     verify: text_file_contains_all
-  - id: must_fe_fm_mag
-    criterion: '[Must] run_fe_fm/STRU magnetic_order fm.'
-    axis: correctness
-    verify: stru_file_check
   - id: fe_afm_in
     criterion: '`run_fe_afm/INPUT` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
-  - id: fe_afm_st
-    criterion: '`run_fe_afm/STRU` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
   - id: fe_afm_kp
@@ -3348,20 +3277,8 @@ questions:
     criterion: '[Must] run_fe_afm/INPUT LCAO SCF paths.'
     axis: correctness
     verify: text_file_contains_all
-  - id: must_fe_afm_mag
-    criterion: '[Must] run_fe_afm/STRU magnetic_order afm.'
-    axis: correctness
-    verify: stru_file_check
-  - id: must_afm_lat
-    criterion: '[Must] AFM STRU same lattice as FM.'
-    axis: correctness
-    verify: stru_file_check
   - id: h_atom_in
     criterion: '`run_h_atom/INPUT` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
-  - id: h_atom_st
-    criterion: '`run_h_atom/STRU` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
   - id: h_atom_kp
@@ -3376,16 +3293,8 @@ questions:
     criterion: '[Must] run_h_atom/INPUT LCAO SCF paths.'
     axis: correctness
     verify: text_file_contains_all
-  - id: must_h_atom_mag
-    criterion: '[Must] run_h_atom/STRU magnetic_order fm.'
-    axis: correctness
-    verify: stru_file_check
   - id: co6nb4os2_in
     criterion: '`run_co6nb4os2/INPUT` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
-  - id: co6nb4os2_st
-    criterion: '`run_co6nb4os2/STRU` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
   - id: co6nb4os2_kp
@@ -3400,10 +3309,6 @@ questions:
     criterion: '[Must] run_co6nb4os2/INPUT LCAO SCF paths.'
     axis: correctness
     verify: text_file_contains_all
-  - id: must_cl_mag
-    criterion: '[Must] cluster STRU has >=10 site magmom lines.'
-    axis: correctness
-    verify: stru_file_check
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
@@ -3416,18 +3321,33 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_Fe_FM
+    path: data/IG_abacus_025_20260518/STRU_Fe_FM
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/03_spin_polarized/02_Fe_FM
+  - key: STRU_Fe_AFM
+    path: data/IG_abacus_025_20260518/STRU_Fe_AFM
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/03_spin_polarized/03_Fe_AFM
+  - key: STRU_H_atom
+    path: data/IG_abacus_025_20260518/STRU_H_atom
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/03_spin_polarized/01_H_atom
+  - key: STRU_Co6Nb4Os2
+    path: data/IG_abacus_025_20260518/STRU_Co6Nb4Os2
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/03_spin_polarized/04_Co6Nb4Os2
 - id: IG_abacus_026_20260518
   capability: input_generation
   domain: agnostic
   intent: Noncollinear LCAO SCF with SOC for bcc Fe (official 04_noncollinear).
-  human_prompt_seed: 请为 bcc Fe 准备一套 ABACUS **非共线** LCAO 自洽场输入目录 `run_fe_nc/`（`INPUT`、`STRU`、`KPT`）。需包含自旋轨道耦合，并在 STRU 中为 Fe 设置**三分量**初始磁矩。不要运行计算。
+  human_prompt_seed: 为 bcc Fe 准备一套 ABACUS 非共线 LCAO 自洽场输入：在 `run_fe_nc/` 编写 `INPUT` 与 `KPT`（含自旋轨道耦合；只写文件，不运行）。
   tags:
   - eng_abacus
   reference_answers:
   - key: input_artifact
     value: run_fe_nc/INPUT
-  - key: stru_artifact
-    value: run_fe_nc/STRU
   - key: kpt_artifact
     value: run_fe_nc/KPT
   - key: must_nspin4
@@ -3454,16 +3374,6 @@ questions:
       - pseudo_dir
       - orbital_dir
       flags: i
-  - key: must_vec
-    value:
-      filename: run_fe_nc/STRU
-      check: site_vector_magmom_count_min
-      expected: 2
-  - key: must_atoms
-    value:
-      filename: run_fe_nc/STRU
-      check: total_atoms
-      expected: 2
   - key: turn_budget
     value:
       max: 14
@@ -3476,10 +3386,6 @@ questions:
   scoring_checklist:
   - id: input_artifact
     criterion: '`run_fe_nc/INPUT` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
-  - id: stru_artifact
-    criterion: '`run_fe_nc/STRU` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
   - id: kpt_artifact
@@ -3502,14 +3408,6 @@ questions:
     criterion: '[Must] LCAO SCF paths.'
     axis: correctness
     verify: text_file_contains_all
-  - id: must_vec
-    criterion: '[Must] >=2 vector magmom sites.'
-    axis: correctness
-    verify: stru_file_check
-  - id: must_atoms
-    criterion: '[Must] 2 Fe atoms.'
-    axis: correctness
-    verify: stru_file_check
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
@@ -3522,11 +3420,16 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_Fe_nc
+    path: data/IG_abacus_026_20260518/STRU_Fe_nc
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/04_noncollinear/01_Fe_noncollinear
 - id: IG_abacus_027_20260518
   capability: input_generation
   domain: agnostic
   intent: PW SOC SCF then NSCF band workflow for GaAs (official 05_soc).
-  human_prompt_seed: "请为 GaAs 准备 ABACUS **平面波 + 自旋轨道耦合** 的两步输入： - `run_gaas_scf/`：自洽并输出电荷 - `run_gaas_band/`：非自洽能带（读取上一步电荷）\n各目录含 `INPUT`、`STRU`、`KPT`。不要运行计算。"
+  human_prompt_seed: "为 GaAs 准备 ABACUS 平面波 + 自旋轨道耦合两步输入：`run_gaas_scf/`（自洽）、`run_gaas_band/`（能带非自洽）。各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
   reference_answers:
@@ -3584,10 +3487,6 @@ questions:
     criterion: '`run_gaas_scf/INPUT` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
-  - id: run_gaas_scf_st
-    criterion: '`run_gaas_scf/STRU` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
   - id: run_gaas_scf_kp
     criterion: '`run_gaas_scf/KPT` must be written to the workspace.'
     axis: correctness
@@ -3598,10 +3497,6 @@ questions:
     verify: text_file_contains_all
   - id: run_gaas_band_in
     criterion: '`run_gaas_band/INPUT` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
-  - id: run_gaas_band_st
-    criterion: '`run_gaas_band/STRU` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
   - id: run_gaas_band_kp
@@ -3632,11 +3527,16 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_GaAs
+    path: data/IG_abacus_027_20260518/STRU_GaAs
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/05_soc/01_pw_GaAs
 - id: IG_abacus_028_20260518
   capability: input_generation
   domain: agnostic
   intent: Compare Gaussian vs fixed smearing for spin LCAO Fe (official 06_smearing).
-  human_prompt_seed: 请为同一 LCAO 自旋极化 Fe 体系准备两套 SCF 输入（`run_gaussian/`、`run_fixed/`），各含 `INPUT`、`STRU`、`KPT`。不要运行计算。
+  human_prompt_seed: 为自旋极化 Fe 准备两套 LCAO SCF 输入，对比 Gaussian 与 fixed smearing：`run_gaussian/`、`run_fixed/` 各编写 `INPUT` 与 `KPT`（只写文件，不运行）。
   tags:
   - eng_abacus
   reference_answers:
@@ -3675,11 +3575,6 @@ questions:
       - pseudo_dir
       - orbital_dir
       flags: i
-  - key: must_lat
-    value:
-      filename: run_fixed/STRU
-      check: lattice_matches
-      expected: run_gaussian/STRU
   - key: turn_budget
     value:
       max: 14
@@ -3692,10 +3587,6 @@ questions:
   scoring_checklist:
   - id: run_gaussian_in
     criterion: '`run_gaussian/INPUT` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
-  - id: run_gaussian_st
-    criterion: '`run_gaussian/STRU` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
   - id: run_gaussian_kp
@@ -3718,10 +3609,6 @@ questions:
     criterion: '`run_fixed/INPUT` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
-  - id: run_fixed_st
-    criterion: '`run_fixed/STRU` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
   - id: run_fixed_kp
     criterion: '`run_fixed/KPT` must be written to the workspace.'
     axis: correctness
@@ -3734,10 +3621,6 @@ questions:
     criterion: '[Must] LCAO spin SCF.'
     axis: correctness
     verify: text_file_contains_all
-  - id: must_lat
-    criterion: '[Must] same Fe lattice in both STRU.'
-    axis: correctness
-    verify: stru_file_check
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
@@ -3750,11 +3633,16 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_Fe_smearing
+    path: data/IG_abacus_028_20260518/STRU_Fe_smearing
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/06_smearing/01_lcao_Fe
 - id: IG_abacus_029_20260518
   capability: input_generation
   domain: agnostic
   intent: Compare Broyden vs plain mixing for PW fcc Al (official 07_charge_mixing).
-  human_prompt_seed: 请为 fcc Al 准备两套 PW SCF 输入（`run_broyden/`、`run_plain/`），对比 Broyden 与 plain 电荷混合。各含 `INPUT`、`STRU`、`KPT`。不要运行计算。
+  human_prompt_seed: 为 fcc Al 准备两套 PW SCF 输入，对比 Broyden 与 plain 电荷混合：`run_broyden/`、`run_plain/` 各编写 `INPUT` 与 `KPT`（只写文件，不运行）。
   tags:
   - eng_abacus
   reference_answers:
@@ -3777,11 +3665,6 @@ questions:
       - latname fcc
       - pseudo_dir
       flags: i
-  - key: must_run_broyden_lc
-    value:
-      filename: run_broyden/STRU
-      pattern: (?im)^\s*LATTICE_CONSTANT\s+
-      flags: im
   - key: must_run_plain_mix
     value:
       filename: run_plain/INPUT
@@ -3801,11 +3684,6 @@ questions:
       - latname fcc
       - pseudo_dir
       flags: i
-  - key: must_run_plain_lc
-    value:
-      filename: run_plain/STRU
-      pattern: (?im)^\s*LATTICE_CONSTANT\s+
-      flags: im
   - key: turn_budget
     value:
       max: 14
@@ -3818,10 +3696,6 @@ questions:
   scoring_checklist:
   - id: run_broyden_in
     criterion: '`run_broyden/INPUT` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
-  - id: run_broyden_st
-    criterion: '`run_broyden/STRU` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
   - id: run_broyden_kp
@@ -3840,16 +3714,8 @@ questions:
     criterion: '[Must] PW fcc Al SCF.'
     axis: correctness
     verify: text_file_contains_all
-  - id: must_run_broyden_lc
-    criterion: '[Must] STRU LATTICE_CONSTANT.'
-    axis: correctness
-    verify: text_file_regex
   - id: run_plain_in
     criterion: '`run_plain/INPUT` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
-  - id: run_plain_st
-    criterion: '`run_plain/STRU` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
   - id: run_plain_kp
@@ -3868,10 +3734,6 @@ questions:
     criterion: '[Must] PW fcc Al SCF.'
     axis: correctness
     verify: text_file_contains_all
-  - id: must_run_plain_lc
-    criterion: '[Must] STRU LATTICE_CONSTANT.'
-    axis: correctness
-    verify: text_file_regex
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
@@ -3884,11 +3746,16 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_Al
+    path: data/IG_abacus_029_20260518/STRU_Al
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/07_charge_mixing/01_pw_Al
 - id: IG_abacus_030_20260518
   capability: input_generation
   domain: agnostic
   intent: SCF inputs writing charge density for PW Al, LCAO Si2, spin PW Fe (official 08_charge_density).
-  human_prompt_seed: 请准备三套输出电荷密度的 SCF 目录：`run_pw_al/`、`run_lcao_si2/`、`run_pw_fe/`。各含 `INPUT`、`STRU`、`KPT`。不要运行计算。
+  human_prompt_seed: 准备三套输出电荷密度的 SCF 输入：`run_pw_al/`、`run_lcao_si2/`、`run_pw_fe/`。各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。
   tags:
   - eng_abacus
   reference_answers:
@@ -3921,12 +3788,6 @@ questions:
       filename: run_lcao_si2/INPUT
       pattern: (?im)^\s*out_chg\s+1\s*$
       flags: im
-  - key: must_run_lcao_si2_orb
-    value:
-      filename: run_lcao_si2/STRU
-      tokens:
-      - NUMERICAL_ORBITAL
-      flags: i
   - key: must_run_pw_fe
     value:
       filename: run_pw_fe/INPUT
@@ -3956,10 +3817,6 @@ questions:
     criterion: '`run_pw_al/INPUT` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
-  - id: run_pw_al_st
-    criterion: '`run_pw_al/STRU` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
   - id: run_pw_al_kp
     criterion: '`run_pw_al/KPT` must be written to the workspace.'
     axis: correctness
@@ -3976,10 +3833,6 @@ questions:
     criterion: '`run_lcao_si2/INPUT` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
-  - id: run_lcao_si2_st
-    criterion: '`run_lcao_si2/STRU` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
   - id: run_lcao_si2_kp
     criterion: '`run_lcao_si2/KPT` must be written to the workspace.'
     axis: correctness
@@ -3992,16 +3845,8 @@ questions:
     criterion: '[Must] out_chg 1.'
     axis: correctness
     verify: text_file_regex
-  - id: must_run_lcao_si2_orb
-    criterion: '[Must] NUMERICAL_ORBITAL.'
-    axis: correctness
-    verify: text_file_contains_all
   - id: run_pw_fe_in
     criterion: '`run_pw_fe/INPUT` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
-  - id: run_pw_fe_st
-    criterion: '`run_pw_fe/STRU` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
   - id: run_pw_fe_kp
@@ -4028,18 +3873,29 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_Al
+    path: data/IG_abacus_030_20260518/STRU_Al
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/08_charge_density/01_pw_Al_nspin1
+  - key: STRU_Si2_lcao
+    path: data/IG_abacus_030_20260518/STRU_Si2_lcao
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/08_charge_density/02_lcao_Si2_nspin1
+  - key: STRU_Fe
+    path: data/IG_abacus_030_20260518/STRU_Fe
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/08_charge_density/03_pw_Fe_nspin2
 - id: IG_abacus_031_20260518
   capability: input_generation
   domain: agnostic
   intent: LCAO gamma-only SCF outputting density matrix (official 09_density_matrix).
-  human_prompt_seed: 请为 LCAO Si₂ 准备 `run_lcao_si2/` 的 SCF 输入以输出密度矩阵（`INPUT`、`STRU`；Γ 点可不写 `KPT`）。不要运行计算。
+  human_prompt_seed: 为 LCAO Si₂ 在 `run_lcao_si2/` 准备输出密度矩阵的 SCF 输入：编写 `INPUT`（Γ 点可不写 `KPT`；只写文件，不运行）。
   tags:
   - eng_abacus
   reference_answers:
   - key: input_artifact
     value: run_lcao_si2/INPUT
-  - key: stru_artifact
-    value: run_lcao_si2/STRU
   - key: must_gamma
     value:
       filename: run_lcao_si2/INPUT
@@ -4073,10 +3929,6 @@ questions:
     criterion: '`run_lcao_si2/INPUT` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
-  - id: stru_artifact
-    criterion: '`run_lcao_si2/STRU` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
   - id: must_gamma
     criterion: '[Must] gamma_only 1.'
     axis: correctness
@@ -4101,11 +3953,16 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_Si2
+    path: data/IG_abacus_031_20260518/STRU_Si2
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/09_density_matrix/01_lcao_Si2_nspin1
 - id: IG_abacus_032_20260518
   capability: input_generation
   domain: agnostic
   intent: 'LCAO H/S matrix outputs: k-space, real-space, get_s (official 10_hs_matrix).'
-  human_prompt_seed: 请准备 `run_hsk/`、`run_hsr/`、`run_get_s/` 三套 LCAO 输入（k 空间 H/S、实空间 H(R)/S(R)、直接求 S）。各含 `INPUT`、`STRU`；需多 k 点的目录另写 `KPT`。不要运行计算。
+  human_prompt_seed: 准备三套 LCAO H/S 矩阵输出输入：`run_hsk/`、`run_hsr/`、`run_get_s/`。各目录编写 `INPUT`；需 k 点采样的目录另写 `KPT`（只写文件，不运行）。
   tags:
   - eng_abacus
   reference_answers:
@@ -4143,11 +4000,6 @@ questions:
       flags: i
   - key: run_get_s_kpt
     value: run_get_s/KPT
-  - key: must_hsr_lat
-    value:
-      filename: run_hsr/STRU
-      check: lattice_matches
-      expected: run_hsk/STRU
   - key: turn_budget
     value:
       max: 16
@@ -4162,20 +4014,12 @@ questions:
     criterion: '`run_hsk/INPUT` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
-  - id: run_hsk_st
-    criterion: '`run_hsk/STRU` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
   - id: must_run_hsk
     criterion: '[Must] run_hsk/INPUT mode.'
     axis: correctness
     verify: text_file_contains_all
   - id: run_hsr_in
     criterion: '`run_hsr/INPUT` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
-  - id: run_hsr_st
-    criterion: '`run_hsr/STRU` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
   - id: must_run_hsr
@@ -4190,10 +4034,6 @@ questions:
     criterion: '`run_get_s/INPUT` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
-  - id: run_get_s_st
-    criterion: '`run_get_s/STRU` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
   - id: must_run_get_s
     criterion: '[Must] run_get_s/INPUT mode.'
     axis: correctness
@@ -4202,10 +4042,6 @@ questions:
     criterion: '`run_get_s/KPT` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
-  - id: must_hsr_lat
-    criterion: '[Must] run_hsr lattice matches run_hsk.'
-    axis: correctness
-    verify: stru_file_check
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
@@ -4218,11 +4054,24 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_hsk
+    path: data/IG_abacus_032_20260518/STRU_hsk
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/10_hs_matrix/04_out_hsk_multik
+  - key: STRU_hsr
+    path: data/IG_abacus_032_20260518/STRU_hsr
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/10_hs_matrix/01_out_hsr_multik
+  - key: STRU_gets
+    path: data/IG_abacus_032_20260518/STRU_gets
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/10_hs_matrix/05_gets
 - id: IG_abacus_033_20260518
   capability: input_generation
   domain: agnostic
   intent: Wavefunction output PW/LCAO SCF and get_wf (official 11_wfc).
-  human_prompt_seed: 请准备 `run_pw_al/`、`run_lcao_si2/`、`run_lcao_getwf/`（含 `INPUT-scf` 与 `INPUT-getwf`）波函数相关输入。不要运行计算。
+  human_prompt_seed: 准备三套波函数输出输入：`run_pw_al/`、`run_lcao_si2/`、`run_lcao_getwf/`。各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。
   tags:
   - eng_abacus
   reference_answers:
@@ -4278,10 +4127,6 @@ questions:
     criterion: '`run_pw_al/INPUT` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
-  - id: run_pw_al_st
-    criterion: '`run_pw_al/STRU` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
   - id: run_pw_al_kp
     criterion: '`run_pw_al/KPT` must be written to the workspace.'
     axis: correctness
@@ -4292,10 +4137,6 @@ questions:
     verify: text_file_contains_all
   - id: run_lcao_si2_in
     criterion: '`run_lcao_si2/INPUT` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
-  - id: run_lcao_si2_st
-    criterion: '`run_lcao_si2/STRU` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
   - id: run_lcao_si2_kp
@@ -4312,10 +4153,6 @@ questions:
     verify: artifact_exists
   - id: gwf_wf
     criterion: '`run_lcao_getwf/INPUT-getwf` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
-  - id: gwf_st
-    criterion: '`run_lcao_getwf/STRU` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
   - id: must_gwf_scf
@@ -4342,11 +4179,24 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_Al_pw
+    path: data/IG_abacus_033_20260518/STRU_Al_pw
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/11_wfc/01_pw_scf_Al
+  - key: STRU_Si2_lcao
+    path: data/IG_abacus_033_20260518/STRU_Si2_lcao
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/11_wfc/02_lcao_scf_Si2
+  - key: STRU_Si2_getwf
+    path: data/IG_abacus_033_20260518/STRU_Si2_getwf
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/11_wfc/03_lcao_getwf
 - id: IG_abacus_034_20260518
   capability: input_generation
   domain: agnostic
   intent: PW and LCAO two-step band workflows (official 12_band).
-  human_prompt_seed: 请准备 `run_pw_scf/`、`run_pw_band/`、`run_lcao_scf/`、`run_lcao_band/` 四套能带流程输入。不要运行计算。
+  human_prompt_seed: 准备 PW 与 LCAO 能带两步工作流输入：`run_pw_scf/`、`run_pw_band/`、`run_lcao_scf/`、`run_lcao_band/`。各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。
   tags:
   - eng_abacus
   reference_answers:
@@ -4429,10 +4279,6 @@ questions:
     criterion: '`run_pw_scf/INPUT` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
-  - id: run_pw_scf_st
-    criterion: '`run_pw_scf/STRU` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
   - id: run_pw_scf_kp
     criterion: '`run_pw_scf/KPT` must be written to the workspace.'
     axis: correctness
@@ -4447,10 +4293,6 @@ questions:
     verify: text_file_contains_all
   - id: run_pw_band_in
     criterion: '`run_pw_band/INPUT` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
-  - id: run_pw_band_st
-    criterion: '`run_pw_band/STRU` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
   - id: run_pw_band_kp
@@ -4469,10 +4311,6 @@ questions:
     criterion: '`run_lcao_scf/INPUT` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
-  - id: run_lcao_scf_st
-    criterion: '`run_lcao_scf/STRU` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
   - id: run_lcao_scf_kp
     criterion: '`run_lcao_scf/KPT` must be written to the workspace.'
     axis: correctness
@@ -4487,10 +4325,6 @@ questions:
     verify: text_file_contains_all
   - id: run_lcao_band_in
     criterion: '`run_lcao_band/INPUT` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
-  - id: run_lcao_band_st
-    criterion: '`run_lcao_band/STRU` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
   - id: run_lcao_band_kp
@@ -4517,11 +4351,20 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_Al
+    path: data/IG_abacus_034_20260518/STRU_Al
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/12_band/01_pw_Al
+  - key: STRU_Si2_lcao
+    path: data/IG_abacus_034_20260518/STRU_Si2_lcao
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/12_band/02_lcao_Si2
 - id: IG_abacus_035_20260518
   capability: input_generation
   domain: agnostic
   intent: PW and LCAO DOS workflows with dense Gamma NSCF mesh (official 13_dos).
-  human_prompt_seed: 请准备 `run_pw_scf/`、`run_pw_dos/`、`run_lcao_scf/`、`run_lcao_dos/` 四套 SCF→DOS 输入（各含 `INPUT`、`STRU`、`KPT`）；DOS 步使用更密 Γ 点网格（非 Line 路径）。不要运行计算。
+  human_prompt_seed: 准备 PW 与 LCAO DOS 工作流输入：`run_pw_scf/`、`run_pw_dos/`、`run_lcao_scf/`、`run_lcao_dos/`。各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。
   tags:
   - eng_abacus
   reference_answers:
@@ -4604,10 +4447,6 @@ questions:
     criterion: '`run_pw_scf/INPUT` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
-  - id: run_pw_scf_st
-    criterion: '`run_pw_scf/STRU` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
   - id: run_pw_scf_kp
     criterion: '`run_pw_scf/KPT` must be written to the workspace.'
     axis: correctness
@@ -4622,10 +4461,6 @@ questions:
     verify: text_file_contains_all
   - id: run_pw_dos_in
     criterion: '`run_pw_dos/INPUT` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
-  - id: run_pw_dos_st
-    criterion: '`run_pw_dos/STRU` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
   - id: run_pw_dos_kp
@@ -4644,10 +4479,6 @@ questions:
     criterion: '`run_lcao_scf/INPUT` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
-  - id: run_lcao_scf_st
-    criterion: '`run_lcao_scf/STRU` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
   - id: run_lcao_scf_kp
     criterion: '`run_lcao_scf/KPT` must be written to the workspace.'
     axis: correctness
@@ -4662,10 +4493,6 @@ questions:
     verify: text_file_contains_all
   - id: run_lcao_dos_in
     criterion: '`run_lcao_dos/INPUT` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
-  - id: run_lcao_dos_st
-    criterion: '`run_lcao_dos/STRU` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
   - id: run_lcao_dos_kp
@@ -4692,11 +4519,20 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_Al
+    path: data/IG_abacus_035_20260518/STRU_Al
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/13_dos/01_pw_Al
+  - key: STRU_Si2_lcao
+    path: data/IG_abacus_035_20260518/STRU_Si2_lcao
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/13_dos/02_lcao_Si2
 - id: IG_abacus_036_20260518
   capability: input_generation
   domain: agnostic
   intent: LCAO SCF with Mulliken output (official 14_mulliken).
-  human_prompt_seed: 请为 LCAO Si₂ 准备 `run_lcao_si2/` Mulliken 布居分析输入。不要运行计算。
+  human_prompt_seed: 为 LCAO Si₂ 在 `run_lcao_si2/` 准备含 Mulliken 输出的 SCF 输入：编写 `INPUT` 与 `KPT`（只写文件，不运行）。
   tags:
   - eng_abacus
   reference_answers:
@@ -4728,10 +4564,6 @@ questions:
     criterion: '`run_lcao_si2/INPUT` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
-  - id: stru_artifact
-    criterion: '`run_lcao_si2/STRU` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
   - id: kpt_artifact
     criterion: '`run_lcao_si2/KPT` must be written to the workspace.'
     axis: correctness
@@ -4756,18 +4588,21 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_Si2
+    path: data/IG_abacus_036_20260518/STRU_Si2
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/14_mulliken/01_lcao_Si2
 - id: IG_abacus_037_20260518
   capability: input_generation
   domain: agnostic
   intent: Fixed occupations for C/N single-electron excitation (official 15_fixed_occ).
-  human_prompt_seed: 请为自旋极化 C/N 准备 `run_fixed_occ/` 固定占据输入（`INPUT`、`STRU`）。不要运行计算。
+  human_prompt_seed: 为自旋极化 C/N 在 `run_fixed_occ/` 准备固定占据 SCF 输入：编写 `INPUT`（只写文件，不运行）。
   tags:
   - eng_abacus
   reference_answers:
   - key: input_artifact
     value: run_fixed_occ/INPUT
-  - key: stru_artifact
-    value: run_fixed_occ/STRU
   - key: must_nspin
     value:
       filename: run_fixed_occ/INPUT
@@ -4810,10 +4645,6 @@ questions:
     criterion: '`run_fixed_occ/INPUT` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
-  - id: stru_artifact
-    criterion: '`run_fixed_occ/STRU` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
   - id: must_nspin
     criterion: '[Must] nspin 2.'
     axis: correctness
@@ -4846,11 +4677,16 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_C62N1
+    path: data/IG_abacus_037_20260518/STRU_C62N1
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/15_fixed_occ/01_C62N1
 - id: IG_abacus_038_20260518
   capability: input_generation
   domain: agnostic
   intent: PW ultrasoft PP SCF for bcc Fe (official 16_uspp).
-  human_prompt_seed: 请为 bcc Fe 准备超软赝势 PW 输入 `run_pw_fe_uspp/`（含 ecutwfc 与 ecutrho）。不要运行计算。
+  human_prompt_seed: 为 bcc Fe 在 `run_pw_fe_uspp/` 准备超软赝势 PW SCF 输入：编写 `INPUT` 与 `KPT`（只写文件，不运行）。
   tags:
   - eng_abacus
   reference_answers:
@@ -4878,11 +4714,6 @@ questions:
       - key: ecutrho
         min: 200
         max: 500
-  - key: must_upf
-    value:
-      filename: run_pw_fe_uspp/STRU
-      pattern: (?i)\.upf
-      flags: im
   - key: turn_budget
     value:
       max: 14
@@ -4895,10 +4726,6 @@ questions:
   scoring_checklist:
   - id: input_artifact
     criterion: '`run_pw_fe_uspp/INPUT` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
-  - id: stru_artifact
-    criterion: '`run_pw_fe_uspp/STRU` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
   - id: kpt_artifact
@@ -4917,10 +4744,6 @@ questions:
     criterion: '[Must] ecutrho high enough for USPP.'
     axis: correctness
     verify: text_file_numeric_range
-  - id: must_upf
-    criterion: '[Must] .upf in STRU.'
-    axis: correctness
-    verify: text_file_regex
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
@@ -4933,11 +4756,16 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_Fe_uspp
+    path: data/IG_abacus_038_20260518/STRU_Fe_uspp
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/16_uspp/01_pw_Fe
 - id: IG_abacus_039_20260518
   capability: input_generation
   domain: agnostic
   intent: PW cell-relax vs LCAO atomic relax (official 17_relax).
-  human_prompt_seed: 请准备 `run_pw_cell_relax/`（可变晶胞）与 `run_lcao_relax/`（原子弛豫）两套优化输入。不要运行计算。
+  human_prompt_seed: 准备两套弛豫输入：`run_pw_cell_relax/`（PW 可变晶胞）、`run_lcao_relax/`（LCAO 原子弛豫）。各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。
   tags:
   - eng_abacus
   reference_answers:
@@ -4996,10 +4824,6 @@ questions:
     criterion: '`run_pw_cell_relax/INPUT` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
-  - id: run_pw_cell_relax_st
-    criterion: '`run_pw_cell_relax/STRU` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
   - id: run_pw_cell_relax_kp
     criterion: '`run_pw_cell_relax/KPT` must be written to the workspace.'
     axis: correctness
@@ -5018,10 +4842,6 @@ questions:
     verify: text_file_regex
   - id: run_lcao_relax_in
     criterion: '`run_lcao_relax/INPUT` must be written to the workspace.'
-    axis: correctness
-    verify: artifact_exists
-  - id: run_lcao_relax_st
-    criterion: '`run_lcao_relax/STRU` must be written to the workspace.'
     axis: correctness
     verify: artifact_exists
   - id: must_run_lcao_relax
@@ -5048,22 +4868,27 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_Al_relax
+    path: data/IG_abacus_039_20260518/STRU_Al_relax
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/17_relax/01_pw_cell_relax_BFGS_Al
+  - key: STRU_Si2_relax
+    path: data/IG_abacus_039_20260518/STRU_Si2_relax
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/17_relax/02_lcao_relax_CG_Si2
 - id: IG_abacus_040_20260518
   capability: input_generation
   domain: agnostic
   intent: Prepare LCAO MD inputs for Si8 NVE vs NVT ensembles per official 18_md.
-  human_prompt_seed: "为 **Si₈** 准备两套 **LCAO 分子动力学（MD）** 输入（只写文件，不运行）：\n\n1) `run_md_nve/` — **NVE** 微正则系综；\n2) `run_md_nvt/` — **NVT** 正则系综（须指定控温方式）。\n\n每目录含 `INPUT`、`STRU`（`gamma_only` 时可不写 `KPT`）；关闭对称性。"
+  human_prompt_seed: "为 Si₈ 准备两套 LCAO 分子动力学输入：`run_md_nve/`（NVE）、`run_md_nvt/`（NVT）。各目录编写 `INPUT`（`gamma_only` 时可不写 `KPT`；只写文件，不运行）。"
   tags:
   - eng_abacus
   reference_answers:
   - key: nve_input_artifact
     value: run_md_nve/INPUT
-  - key: nve_stru_artifact
-    value: run_md_nve/STRU
   - key: nvt_input_artifact
     value: run_md_nvt/INPUT
-  - key: nvt_stru_artifact
-    value: run_md_nvt/STRU
   - key: must_nve_input_md
     value:
       filename: run_md_nve/INPUT
@@ -5114,19 +4939,6 @@ questions:
       filename: run_md_nvt/INPUT
       pattern: (?im)^\s*symmetry\s+0\s*$
       flags: im
-  - key: must_nve_stru_lcao
-    value:
-      filename: run_md_nve/STRU
-      tokens:
-      - LATTICE_VECTORS
-      - NUMERICAL_ORBITAL
-      - ATOMIC_SPECIES
-      flags: i
-  - key: must_nvt_stru_same_lattice
-    value:
-      filename: run_md_nvt/STRU
-      check: lattice_matches
-      expected: run_md_nve/STRU
   - key: variable_md_ensemble_semantics
     value: LCAO MD with calculation md; NVE uses md_type nve; NVT uses md_type nvt plus md_thermostat.
   - key: turn_budget
@@ -5143,16 +4955,8 @@ questions:
     criterion: run_md_nve/INPUT exists.
     axis: correctness
     verify: artifact_exists
-  - id: nve_stru_artifact
-    criterion: run_md_nve/STRU exists.
-    axis: correctness
-    verify: artifact_exists
   - id: nvt_input_artifact
     criterion: run_md_nvt/INPUT exists.
-    axis: correctness
-    verify: artifact_exists
-  - id: nvt_stru_artifact
-    criterion: run_md_nvt/STRU exists.
     axis: correctness
     verify: artifact_exists
   - id: must_nve_input_md
@@ -5190,16 +4994,6 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 0.8
-  - id: must_nve_stru_lcao
-    criterion: '[Must] run_md_nve/STRU is LCAO with NUMERICAL_ORBITAL.'
-    axis: correctness
-    verify: text_file_contains_all
-    weight: 1.0
-  - id: must_nvt_stru_same_lattice
-    criterion: '[Must] run_md_nvt/STRU matches run_md_nve/STRU lattice.'
-    axis: correctness
-    verify: stru_file_check
-    weight: 1.0
   - id: variable_md_ensemble_semantics
     criterion: '[Variable] NVE vs NVT MD setup matches 18_md README.'
     axis: grounding
@@ -5217,24 +5011,25 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_Si8
+    path: data/IG_abacus_040_20260518/STRU_Si8
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/18_md/01_lcao_gamma_Si8
 - id: IG_abacus_042_20260518
   capability: input_generation
   domain: agnostic
   intent: Prepare PW and LCAO hybrid-functional SCF inputs for Si2 per official 20_hybrid—dft_functional and exact-exchange fraction for PW.
-  human_prompt_seed: "为 **Si₂** 准备两套 **杂化泛函（hybrid）自洽场** 输入（只写文件，不运行）：\n\n1) `run_pw_si2_hybrid/` — 平面波；\n2) `run_lcao_si2_hybrid/` — LCAO。\n\n每目录须含 `INPUT`、`STRU`、`KPT`。"
+  human_prompt_seed: "为 Si₂ 准备两套杂化泛函 SCF 输入：`run_pw_si2_hybrid/`（PW）、`run_lcao_si2_hybrid/`（LCAO）。各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
   reference_answers:
   - key: pw_hybrid_input_artifact
     value: run_pw_si2_hybrid/INPUT
-  - key: pw_hybrid_stru_artifact
-    value: run_pw_si2_hybrid/STRU
   - key: pw_hybrid_kpt_artifact
     value: run_pw_si2_hybrid/KPT
   - key: lcao_hybrid_input_artifact
     value: run_lcao_si2_hybrid/INPUT
-  - key: lcao_hybrid_stru_artifact
-    value: run_lcao_si2_hybrid/STRU
   - key: lcao_hybrid_kpt_artifact
     value: run_lcao_si2_hybrid/KPT
   - key: must_pw_hybrid_input
@@ -5279,29 +5074,12 @@ questions:
       filename: run_lcao_si2_hybrid/INPUT
       pattern: (?im)^\s*dft_functional\s+(?:pbe0|hse06?|b3lyp)\s*$
       flags: im
-  - key: must_lcao_hybrid_stru
-    value:
-      filename: run_lcao_si2_hybrid/STRU
-      tokens:
-      - LATTICE_VECTORS
-      - ATOMIC_SPECIES
-      - NUMERICAL_ORBITAL
-      - ATOMIC_POSITIONS
-      flags: i
   - key: must_lcao_hybrid_kpt
     value:
       filename: run_lcao_si2_hybrid/KPT
       tokens:
       - K_POINTS
       - Gamma
-      flags: i
-  - key: must_pw_hybrid_stru
-    value:
-      filename: run_pw_si2_hybrid/STRU
-      tokens:
-      - LATTICE_VECTORS
-      - ATOMIC_SPECIES
-      - ATOMIC_POSITIONS
       flags: i
   - key: variable_hybrid_si2_semantics
     value: Hybrid-functional SCF for Si2 per 20_hybrid—PW and LCAO with dft_functional hybrid (e.g. HSE/PBE0); PW includes exact-exchange fraction parameter.
@@ -5319,20 +5097,12 @@ questions:
     criterion: run_pw_si2_hybrid/INPUT exists.
     axis: correctness
     verify: artifact_exists
-  - id: pw_hybrid_stru_artifact
-    criterion: run_pw_si2_hybrid/STRU exists.
-    axis: correctness
-    verify: artifact_exists
   - id: pw_hybrid_kpt_artifact
     criterion: run_pw_si2_hybrid/KPT exists.
     axis: correctness
     verify: artifact_exists
   - id: lcao_hybrid_input_artifact
     criterion: run_lcao_si2_hybrid/INPUT exists.
-    axis: correctness
-    verify: artifact_exists
-  - id: lcao_hybrid_stru_artifact
-    criterion: run_lcao_si2_hybrid/STRU exists.
     axis: correctness
     verify: artifact_exists
   - id: lcao_hybrid_kpt_artifact
@@ -5359,11 +5129,6 @@ questions:
     axis: correctness
     verify: text_file_contains_all
     weight: 0.8
-  - id: must_pw_hybrid_stru
-    criterion: '[Must] run_pw_si2_hybrid/STRU has valid structure sections.'
-    axis: correctness
-    verify: text_file_contains_all
-    weight: 1.0
   - id: must_lcao_hybrid_input
     criterion: '[Must] run_lcao_si2_hybrid/INPUT is LCAO hybrid-functional SCF.'
     axis: correctness
@@ -5373,11 +5138,6 @@ questions:
     criterion: '[Must] run_lcao_si2_hybrid/INPUT sets a hybrid dft_functional.'
     axis: correctness
     verify: text_file_regex
-    weight: 1.0
-  - id: must_lcao_hybrid_stru
-    criterion: '[Must] run_lcao_si2_hybrid/STRU is LCAO Si2 with NUMERICAL_ORBITAL.'
-    axis: correctness
-    verify: text_file_contains_all
     weight: 1.0
   - id: must_lcao_hybrid_kpt
     criterion: '[Must] run_lcao_si2_hybrid/KPT uses Gamma automatic k-mesh.'
@@ -5401,22 +5161,27 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_pw_Si2_hybrid
+    path: data/IG_abacus_042_20260518/STRU_pw_Si2_hybrid
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/20_hybrid/01_pw_Si2
+  - key: STRU_lcao_Si2_hybrid
+    path: data/IG_abacus_042_20260518/STRU_lcao_Si2_hybrid
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/20_hybrid/02_lcao_Si2
 - id: IG_abacus_043_20260518
   capability: input_generation
   domain: agnostic
   intent: Prepare DeePKS projector-generation and LCAO SCF-with-model inputs per official 21_deepks—gen_bessel vs deepks_scf/deepks_model.
-  human_prompt_seed: "请按 DeePKS 官方流程准备两套输入（只写文件，不运行）：\n\n1) `run_pw_h2o_gen_bessel/` — 生成 Bessel 投影基（`gen_bessel`）；\n2) `run_lcao_h2o_deepks/` — 载入已训练模型做 LCAO 自洽。\n\n各目录须含 `INPUT`、`STRU`；需要 k 点采样的目录另写 `KPT`。"
+  human_prompt_seed: "准备 DeePKS 两套输入：`run_pw_h2o_gen_bessel/`（gen_bessel）、`run_lcao_h2o_deepks/`（deepks 自洽）。各目录编写 `INPUT`；需要 k 点的目录另写 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
   reference_answers:
   - key: bessel_input_artifact
     value: run_pw_h2o_gen_bessel/INPUT
-  - key: bessel_stru_artifact
-    value: run_pw_h2o_gen_bessel/STRU
   - key: deepks_input_artifact
     value: run_lcao_h2o_deepks/INPUT
-  - key: deepks_stru_artifact
-    value: run_lcao_h2o_deepks/STRU
   - key: deepks_kpt_artifact
     value: run_lcao_h2o_deepks/KPT
   - key: must_bessel_input
@@ -5438,14 +5203,6 @@ questions:
       filename: run_pw_h2o_gen_bessel/INPUT
       pattern: (?im)^\s*bessel_descriptor_rcut\s+\S+
       flags: im
-  - key: must_bessel_stru
-    value:
-      filename: run_pw_h2o_gen_bessel/STRU
-      tokens:
-      - LATTICE_VECTORS
-      - ATOMIC_SPECIES
-      - ATOMIC_POSITIONS
-      flags: i
   - key: must_deepks_input
     value:
       filename: run_lcao_h2o_deepks/INPUT
@@ -5467,15 +5224,6 @@ questions:
       filename: run_lcao_h2o_deepks/INPUT
       pattern: (?im)^\s*deepks_model\s+\S+\.ptg\s*$
       flags: im
-  - key: must_deepks_stru_lcao
-    value:
-      filename: run_lcao_h2o_deepks/STRU
-      tokens:
-      - LATTICE_VECTORS
-      - ATOMIC_SPECIES
-      - NUMERICAL_ORBITAL
-      - ATOMIC_POSITIONS
-      flags: i
   - key: must_deepks_kpt
     value:
       filename: run_lcao_h2o_deepks/KPT
@@ -5499,16 +5247,8 @@ questions:
     criterion: run_pw_h2o_gen_bessel/INPUT exists.
     axis: correctness
     verify: artifact_exists
-  - id: bessel_stru_artifact
-    criterion: run_pw_h2o_gen_bessel/STRU exists.
-    axis: correctness
-    verify: artifact_exists
   - id: deepks_input_artifact
     criterion: run_lcao_h2o_deepks/INPUT exists.
-    axis: correctness
-    verify: artifact_exists
-  - id: deepks_stru_artifact
-    criterion: run_lcao_h2o_deepks/STRU exists.
     axis: correctness
     verify: artifact_exists
   - id: deepks_kpt_artifact
@@ -5530,11 +5270,6 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 0.8
-  - id: must_bessel_stru
-    criterion: '[Must] run_pw_h2o_gen_bessel/STRU is valid H2O structure.'
-    axis: correctness
-    verify: text_file_contains_all
-    weight: 1.0
   - id: must_deepks_input
     criterion: '[Must] run_lcao_h2o_deepks/INPUT is LCAO SCF with DeePKS enabled.'
     axis: correctness
@@ -5549,11 +5284,6 @@ questions:
     criterion: '[Must] run_lcao_h2o_deepks/INPUT sets deepks_model to a .ptg file path.'
     axis: correctness
     verify: text_file_regex
-    weight: 1.0
-  - id: must_deepks_stru_lcao
-    criterion: '[Must] run_lcao_h2o_deepks/STRU is LCAO H2O with NUMERICAL_ORBITAL.'
-    axis: correctness
-    verify: text_file_contains_all
     weight: 1.0
   - id: must_deepks_kpt
     criterion: '[Must] run_lcao_h2o_deepks/KPT uses Gamma automatic k-mesh.'
@@ -5577,24 +5307,29 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_H2O_pw
+    path: data/IG_abacus_043_20260518/STRU_H2O_pw
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/21_deepks/01_pw_H2O
+  - key: STRU_H2O_lcao
+    path: data/IG_abacus_043_20260518/STRU_H2O_lcao
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/21_deepks/02_lcao_H2O
 - id: IG_abacus_044_20260518
   capability: input_generation
   domain: agnostic
   intent: Prepare LCAO RT-TDDFT inputs for H2 in length vs velocity gauge per official 22_rt-tddft—calculation md, esolver_type tddft, td_vext, td_stype, out_dipole.
-  human_prompt_seed: "为 **H₂** 准备两套 **实时含时 DFT（RT-TDDFT）** 输入（只写文件，不运行）：\n\n1) `run_h2_tddft_length/` — **长度规范**（length gauge）；\n2) `run_h2_tddft_velocity/` — **速度规范**（velocity gauge）。\n\n每目录须含 `INPUT`、`STRU`、`KPT`。"
+  human_prompt_seed: "为 H₂ 准备两套实时 TDDFT 输入：`run_h2_tddft_length/`（长度规范）、`run_h2_tddft_velocity/`（速度规范）。各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
   reference_answers:
   - key: length_input_artifact
     value: run_h2_tddft_length/INPUT
-  - key: length_stru_artifact
-    value: run_h2_tddft_length/STRU
   - key: length_kpt_artifact
     value: run_h2_tddft_length/KPT
   - key: velocity_input_artifact
     value: run_h2_tddft_velocity/INPUT
-  - key: velocity_stru_artifact
-    value: run_h2_tddft_velocity/STRU
   - key: velocity_kpt_artifact
     value: run_h2_tddft_velocity/KPT
   - key: must_length_tddft_input
@@ -5635,20 +5370,6 @@ questions:
       filename: run_h2_tddft_velocity/INPUT
       pattern: (?im)^\s*td_stype\s+1\s*$
       flags: im
-  - key: must_length_stru_lcao
-    value:
-      filename: run_h2_tddft_length/STRU
-      tokens:
-      - LATTICE_VECTORS
-      - ATOMIC_SPECIES
-      - NUMERICAL_ORBITAL
-      - ATOMIC_POSITIONS
-      flags: i
-  - key: must_velocity_stru_same_lattice
-    value:
-      filename: run_h2_tddft_velocity/STRU
-      check: lattice_matches
-      expected: run_h2_tddft_length/STRU
   - key: must_length_kpt
     value:
       filename: run_h2_tddft_length/KPT
@@ -5671,20 +5392,12 @@ questions:
     criterion: run_h2_tddft_length/INPUT exists.
     axis: correctness
     verify: artifact_exists
-  - id: length_stru_artifact
-    criterion: run_h2_tddft_length/STRU exists.
-    axis: correctness
-    verify: artifact_exists
   - id: length_kpt_artifact
     criterion: run_h2_tddft_length/KPT exists.
     axis: correctness
     verify: artifact_exists
   - id: velocity_input_artifact
     criterion: run_h2_tddft_velocity/INPUT exists.
-    axis: correctness
-    verify: artifact_exists
-  - id: velocity_stru_artifact
-    criterion: run_h2_tddft_velocity/STRU exists.
     axis: correctness
     verify: artifact_exists
   - id: velocity_kpt_artifact
@@ -5711,16 +5424,6 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 1.0
-  - id: must_length_stru_lcao
-    criterion: '[Must] run_h2_tddft_length/STRU is LCAO H2 with NUMERICAL_ORBITAL.'
-    axis: correctness
-    verify: text_file_contains_all
-    weight: 1.0
-  - id: must_velocity_stru_same_lattice
-    criterion: '[Must] run_h2_tddft_velocity/STRU matches run_h2_tddft_length/STRU lattice.'
-    axis: correctness
-    verify: stru_file_check
-    weight: 0.8
   - id: must_length_kpt
     criterion: '[Must] run_h2_tddft_length/KPT is present.'
     axis: correctness
@@ -5743,24 +5446,29 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_H2_length
+    path: data/IG_abacus_044_20260518/STRU_H2_length
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/22_rt-tddft/01_H2_length_gauge
+  - key: STRU_H2_velocity
+    path: data/IG_abacus_044_20260518/STRU_H2_velocity
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/22_rt-tddft/02_H2_velocity_gauge
 - id: IG_abacus_045_20260518
   capability: input_generation
   domain: agnostic
   intent: Prepare PW SDFT SCF and MD inputs per official 23_sdft—esolver_type sdft, stochastic bands, finite-temperature smearing.
-  human_prompt_seed: "请准备两套 **随机 DFT（SDFT）** 平面波输入（只写文件，不运行）：\n\n1) `run_pw_si2_sdft/` — Si₂ 有限温度 **SCF**；\n2) `run_pw_al_sdft_md/` — Al **MD**（SDFT）。\n\n各目录须含 `INPUT`、`STRU`、`KPT`。"
+  human_prompt_seed: "准备两套随机 DFT 平面波输入：`run_pw_si2_sdft/`（Si₂ SCF）、`run_pw_al_sdft_md/`（Al MD）。各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
   reference_answers:
   - key: si2_sdft_input_artifact
     value: run_pw_si2_sdft/INPUT
-  - key: si2_sdft_stru_artifact
-    value: run_pw_si2_sdft/STRU
   - key: si2_sdft_kpt_artifact
     value: run_pw_si2_sdft/KPT
   - key: al_sdft_input_artifact
     value: run_pw_al_sdft_md/INPUT
-  - key: al_sdft_stru_artifact
-    value: run_pw_al_sdft_md/STRU
   - key: al_sdft_kpt_artifact
     value: run_pw_al_sdft_md/KPT
   - key: must_si2_sdft_input
@@ -5800,14 +5508,6 @@ questions:
       - smearing_method
       - smearing_sigma
       flags: i
-  - key: must_si2_sdft_stru
-    value:
-      filename: run_pw_si2_sdft/STRU
-      tokens:
-      - LATTICE_VECTORS
-      - ATOMIC_SPECIES
-      - ATOMIC_POSITIONS
-      flags: i
   - key: must_si2_sdft_kpt
     value:
       filename: run_pw_si2_sdft/KPT
@@ -5838,20 +5538,12 @@ questions:
     criterion: run_pw_si2_sdft/INPUT exists.
     axis: correctness
     verify: artifact_exists
-  - id: si2_sdft_stru_artifact
-    criterion: run_pw_si2_sdft/STRU exists.
-    axis: correctness
-    verify: artifact_exists
   - id: si2_sdft_kpt_artifact
     criterion: run_pw_si2_sdft/KPT exists.
     axis: correctness
     verify: artifact_exists
   - id: al_sdft_input_artifact
     criterion: run_pw_al_sdft_md/INPUT exists.
-    axis: correctness
-    verify: artifact_exists
-  - id: al_sdft_stru_artifact
-    criterion: run_pw_al_sdft_md/STRU exists.
     axis: correctness
     verify: artifact_exists
   - id: al_sdft_kpt_artifact
@@ -5878,11 +5570,6 @@ questions:
     axis: correctness
     verify: text_file_contains_all
     weight: 0.8
-  - id: must_si2_sdft_stru
-    criterion: '[Must] run_pw_si2_sdft/STRU is valid Si structure.'
-    axis: correctness
-    verify: text_file_contains_all
-    weight: 1.0
   - id: must_si2_sdft_kpt
     criterion: '[Must] run_pw_si2_sdft/KPT uses Gamma automatic k-mesh.'
     axis: correctness
@@ -5910,24 +5597,29 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_Si2_sdft
+    path: data/IG_abacus_045_20260518/STRU_Si2_sdft
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/23_sdft/01_pw_Si2
+  - key: STRU_Al_sdft
+    path: data/IG_abacus_045_20260518/STRU_Al_sdft
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/23_sdft/02_pw_md_Al
 - id: IG_abacus_046_20260518
   capability: input_generation
   domain: agnostic
   intent: Prepare LCAO linear-response TDDFT inputs for Si2 and H2O per official 24_lr-tddft—esolver_type ks-lr, lr_nstates, absorption gauge settings.
-  human_prompt_seed: "请准备两套 **LCAO 线性响应 TDDFT（LR-TDDFT）** 激发态输入（只写文件，不运行）：\n\n1) `run_lcao_si2_lr_tddft/` — **Si₂**（周期体系）；\n2) `run_lcao_h2o_lr_tddft/` — **H₂O**（分子）。\n\n各目录须含 `INPUT`、`STRU`；需要 k 点采样的目录另写 `KPT`。"
+  human_prompt_seed: "准备两套 LCAO 线性响应 TDDFT 输入：`run_lcao_si2_lr_tddft/`（Si₂）、`run_lcao_h2o_lr_tddft/`（H₂O）。各目录编写 `INPUT`；需 k 点的目录另写 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
   reference_answers:
   - key: si2_lr_input_artifact
     value: run_lcao_si2_lr_tddft/INPUT
-  - key: si2_lr_stru_artifact
-    value: run_lcao_si2_lr_tddft/STRU
   - key: si2_lr_kpt_artifact
     value: run_lcao_si2_lr_tddft/KPT
   - key: h2o_lr_input_artifact
     value: run_lcao_h2o_lr_tddft/INPUT
-  - key: h2o_lr_stru_artifact
-    value: run_lcao_h2o_lr_tddft/STRU
   - key: must_si2_lr_input
     value:
       filename: run_lcao_si2_lr_tddft/INPUT
@@ -5968,24 +5660,6 @@ questions:
       filename: run_lcao_h2o_lr_tddft/INPUT
       pattern: (?im)^\s*abs_gauge\s+length\s*$
       flags: im
-  - key: must_si2_lr_stru
-    value:
-      filename: run_lcao_si2_lr_tddft/STRU
-      tokens:
-      - LATTICE_VECTORS
-      - ATOMIC_SPECIES
-      - NUMERICAL_ORBITAL
-      - ATOMIC_POSITIONS
-      flags: i
-  - key: must_h2o_lr_stru
-    value:
-      filename: run_lcao_h2o_lr_tddft/STRU
-      tokens:
-      - LATTICE_VECTORS
-      - ATOMIC_SPECIES
-      - NUMERICAL_ORBITAL
-      - ATOMIC_POSITIONS
-      flags: i
   - key: variable_lr_tddft_semantics
     value: LR-TDDFT per 24_lr-tddft—esolver_type ks-lr with lr_nstates; periodic Si2 uses velocity abs_gauge; molecular H2O uses length abs_gauge.
   - key: turn_budget
@@ -6002,20 +5676,12 @@ questions:
     criterion: run_lcao_si2_lr_tddft/INPUT exists.
     axis: correctness
     verify: artifact_exists
-  - id: si2_lr_stru_artifact
-    criterion: run_lcao_si2_lr_tddft/STRU exists.
-    axis: correctness
-    verify: artifact_exists
   - id: si2_lr_kpt_artifact
     criterion: run_lcao_si2_lr_tddft/KPT exists.
     axis: correctness
     verify: artifact_exists
   - id: h2o_lr_input_artifact
     criterion: run_lcao_h2o_lr_tddft/INPUT exists.
-    axis: correctness
-    verify: artifact_exists
-  - id: h2o_lr_stru_artifact
-    criterion: run_lcao_h2o_lr_tddft/STRU exists.
     axis: correctness
     verify: artifact_exists
   - id: must_si2_lr_input
@@ -6043,16 +5709,6 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 1.0
-  - id: must_si2_lr_stru
-    criterion: '[Must] run_lcao_si2_lr_tddft/STRU is LCAO Si2 with NUMERICAL_ORBITAL.'
-    axis: correctness
-    verify: text_file_contains_all
-    weight: 1.0
-  - id: must_h2o_lr_stru
-    criterion: '[Must] run_lcao_h2o_lr_tddft/STRU is LCAO H2O with NUMERICAL_ORBITAL.'
-    axis: correctness
-    verify: text_file_contains_all
-    weight: 1.0
   - id: variable_lr_tddft_semantics
     criterion: '[Variable] LR-TDDFT Si2 vs H2O setup matches 24_lr-tddft README and official INPUT.'
     axis: grounding
@@ -6070,11 +5726,20 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_Si2_lr
+    path: data/IG_abacus_046_20260518/STRU_Si2_lr
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/24_lr-tddft/01_lcao_Si2
+  - key: STRU_H2O_lr
+    path: data/IG_abacus_046_20260518/STRU_H2O_lr
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/24_lr-tddft/02_lcao_H2O
 - id: IG_abacus_047_20260518
   capability: input_generation
   domain: agnostic
   intent: Prepare PW and LCAO SCF inputs with Grimme D2 vs D3(BJ) vdW corrections per official 25_vdw.
-  human_prompt_seed: "请为 **Si₂** 准备四套含 **范德华修正** 的 SCF 输入（只写文件，不运行）：\n\n1) `run_vdw_d2_lcao/` — DFT-D2，LCAO；\n2) `run_vdw_d2_pw/` — DFT-D2，平面波；\n3) `run_vdw_d3_lcao/` — DFT-D3，LCAO；\n4) `run_vdw_d3_pw/` — DFT-D3，平面波。\n\n每目录须含 `INPUT`、`STRU`、`KPT`；D2 目录另须提供 `c6.txt`（手动 C₆ 参数文件）。"
+  human_prompt_seed: "为 Si₂ 准备四套范德华修正 SCF 输入：`run_vdw_d2_lcao/`、`run_vdw_d2_pw/`、`run_vdw_d3_lcao/`、`run_vdw_d3_pw/`。各目录编写 `INPUT` 与 `KPT`；D2 目录另须提供 `c6.txt`（只写文件，不运行）。"
   tags:
   - eng_abacus
   reference_answers:
@@ -6148,13 +5813,6 @@ questions:
       filename: run_vdw_d2_lcao/c6.txt
       pattern: (?is)\S
       flags: im
-  - key: must_vdw_stru_shared
-    value:
-      filename: run_vdw_d2_lcao/STRU
-      tokens:
-      - LATTICE_VECTORS
-      - ATOMIC_SPECIES
-      flags: i
   - key: variable_vdw_grimme_semantics
     value: Grimme D2 with vdw_C6_file c6.txt vs D3(BJ) vdw_method d3_bj; PW vs LCAO per 25_vdw official INPUT1/INPUT2 layout.
   - key: turn_budget
@@ -6244,6 +5902,15 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_Si2_vdw_D2
+    path: data/IG_abacus_047_20260518/STRU_Si2_vdw_D2
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/25_vdw/01_vdw_D2_Si2
+  - key: STRU_Si2_vdw_D3
+    path: data/IG_abacus_047_20260518/STRU_Si2_vdw_D3
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/25_vdw/02_vdw_D3_Si2
 - id: IG_abacus_048_20260518
   capability: input_generation
   domain: agnostic
@@ -6711,14 +6378,12 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare LCAO SCF inputs with electrostatic potential output per official 30_elec_pot—out_pot 2 for CUBE export.
-  human_prompt_seed: "为 **Si** 准备一套 **LCAO SCF** 输入，用于输出 **静电势**（只写文件，不运行）：\n\n目录 `run_lcao_si_epot/`，须含 `INPUT`、`STRU`、`KPT`。"
+  human_prompt_seed: "为 Si 准备 LCAO SCF 静电势输出输入：在 `run_lcao_si_epot/` 编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
   reference_answers:
   - key: epot_input
     value: run_lcao_si_epot/INPUT
-  - key: epot_stru
-    value: run_lcao_si_epot/STRU
   - key: epot_kpt
     value: run_lcao_si_epot/KPT
   - key: must_epot_input
@@ -6736,15 +6401,6 @@ questions:
       filename: run_lcao_si_epot/INPUT
       pattern: (?im)^\s*out_pot\s+2\s*$
       flags: im
-  - key: must_epot_stru
-    value:
-      filename: run_lcao_si_epot/STRU
-      tokens:
-      - LATTICE_VECTORS
-      - ATOMIC_SPECIES
-      - NUMERICAL_ORBITAL
-      - ATOMIC_POSITIONS
-      flags: i
   - key: must_epot_kpt
     value:
       filename: run_lcao_si_epot/KPT
@@ -6767,10 +6423,6 @@ questions:
     criterion: run_lcao_si_epot/INPUT exists.
     axis: correctness
     verify: artifact_exists
-  - id: epot_stru
-    criterion: run_lcao_si_epot/STRU exists.
-    axis: correctness
-    verify: artifact_exists
   - id: epot_kpt
     criterion: run_lcao_si_epot/KPT exists.
     axis: correctness
@@ -6784,11 +6436,6 @@ questions:
     criterion: '[Must] run_lcao_si_epot/INPUT sets out_pot 2.'
     axis: correctness
     verify: text_file_regex
-    weight: 1.0
-  - id: must_epot_stru
-    criterion: '[Must] run_lcao_si_epot/STRU is LCAO Si with NUMERICAL_ORBITAL.'
-    axis: correctness
-    verify: text_file_contains_all
     weight: 1.0
   - id: must_epot_kpt
     criterion: '[Must] run_lcao_si_epot/KPT is present.'
@@ -6812,6 +6459,11 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_Si
+    path: data/IG_abacus_052_20260518/STRU_Si
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/30_elec_pot/01_lcao_Si
 - id: IG_abacus_053_20260518
   capability: input_generation
   domain: agnostic
@@ -7002,14 +6654,12 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare LCAO spin-polarized SCF inputs with PEXSI solver per official 33_pexsi 01_spin_Fe2.
-  human_prompt_seed: "为 **Fe₂ 二聚体** 准备一套 **LCAO 自旋极化 SCF** 输入，使用 **PEXSI** 求解器（只写文件，不运行）：\n\n目录 `run_lcao_fe2_pexsi/`，须含 `INPUT`、`STRU`、`KPT`。"
+  human_prompt_seed: "为 Fe₂ 二聚体准备 LCAO 自旋极化 PEXSI SCF 输入：在 `run_lcao_fe2_pexsi/` 编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
   reference_answers:
   - key: pexsi_input
     value: run_lcao_fe2_pexsi/INPUT
-  - key: pexsi_stru
-    value: run_lcao_fe2_pexsi/STRU
   - key: pexsi_kpt
     value: run_lcao_fe2_pexsi/KPT
   - key: must_pexsi_input
@@ -7033,15 +6683,6 @@ questions:
       filename: run_lcao_fe2_pexsi/INPUT
       pattern: (?im)^\s*pexsi_npole\s+\d+
       flags: im
-  - key: must_pexsi_stru
-    value:
-      filename: run_lcao_fe2_pexsi/STRU
-      tokens:
-      - LATTICE_VECTORS
-      - ATOMIC_SPECIES
-      - NUMERICAL_ORBITAL
-      - ATOMIC_POSITIONS
-      flags: i
   - key: must_pexsi_kpt
     value:
       filename: run_lcao_fe2_pexsi/KPT
@@ -7064,10 +6705,6 @@ questions:
     criterion: run_lcao_fe2_pexsi/INPUT exists.
     axis: correctness
     verify: artifact_exists
-  - id: pexsi_stru
-    criterion: run_lcao_fe2_pexsi/STRU exists.
-    axis: correctness
-    verify: artifact_exists
   - id: pexsi_kpt
     criterion: run_lcao_fe2_pexsi/KPT exists.
     axis: correctness
@@ -7087,11 +6724,6 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 0.8
-  - id: must_pexsi_stru
-    criterion: '[Must] run_lcao_fe2_pexsi/STRU is LCAO Fe2 with NUMERICAL_ORBITAL.'
-    axis: correctness
-    verify: text_file_contains_all
-    weight: 1.0
   - id: must_pexsi_kpt
     criterion: '[Must] run_lcao_fe2_pexsi/KPT is present.'
     axis: correctness
@@ -7114,24 +6746,25 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_Fe2
+    path: data/IG_abacus_055_20260518/STRU_Fe2
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/33_pexsi/01_spin_Fe2
 - id: IG_abacus_056_20260518
   capability: input_generation
   domain: agnostic
   intent: Prepare PW and LCAO SCF inputs with GPU acceleration per official 34_gpu—device gpu in INPUT.
-  human_prompt_seed: "请准备两套 **GPU 加速** 的 **Si₁₆** SCF 输入（只写文件，不运行）：\n\n1) `run_pw_si16_gpu/` — 平面波；\n2) `run_lcao_si16_gpu/` — LCAO。\n\n各目录须含 `INPUT`、`STRU`、`KPT`。"
+  human_prompt_seed: "为 Si₁₆ 准备两套 GPU 加速 SCF 输入：`run_pw_si16_gpu/`（PW）、`run_lcao_si16_gpu/`（LCAO）。各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
   reference_answers:
   - key: pw_gpu_input
     value: run_pw_si16_gpu/INPUT
-  - key: pw_gpu_stru
-    value: run_pw_si16_gpu/STRU
   - key: pw_gpu_kpt
     value: run_pw_si16_gpu/KPT
   - key: lcao_gpu_input
     value: run_lcao_si16_gpu/INPUT
-  - key: lcao_gpu_stru
-    value: run_lcao_si16_gpu/STRU
   - key: lcao_gpu_kpt
     value: run_lcao_si16_gpu/KPT
   - key: must_pw_gpu_input
@@ -7162,22 +6795,6 @@ questions:
       filename: run_lcao_si16_gpu/INPUT
       pattern: (?im)^\s*(?:device\s+gpu|gpu\s+1)\s*$
       flags: im
-  - key: must_pw_gpu_stru
-    value:
-      filename: run_pw_si16_gpu/STRU
-      tokens:
-      - LATTICE_VECTORS
-      - ATOMIC_SPECIES
-      - ATOMIC_POSITIONS
-      flags: i
-  - key: must_lcao_gpu_stru
-    value:
-      filename: run_lcao_si16_gpu/STRU
-      tokens:
-      - LATTICE_VECTORS
-      - ATOMIC_SPECIES
-      - NUMERICAL_ORBITAL
-      flags: i
   - key: variable_gpu_semantics
     value: GPU-accelerated SCF per 34_gpu—device gpu (or gpu 1) with PW vs LCAO Si16 supercell.
   - key: turn_budget
@@ -7194,20 +6811,12 @@ questions:
     criterion: run_pw_si16_gpu/INPUT exists.
     axis: correctness
     verify: artifact_exists
-  - id: pw_gpu_stru
-    criterion: run_pw_si16_gpu/STRU exists.
-    axis: correctness
-    verify: artifact_exists
   - id: pw_gpu_kpt
     criterion: run_pw_si16_gpu/KPT exists.
     axis: correctness
     verify: artifact_exists
   - id: lcao_gpu_input
     criterion: run_lcao_si16_gpu/INPUT exists.
-    axis: correctness
-    verify: artifact_exists
-  - id: lcao_gpu_stru
-    criterion: run_lcao_si16_gpu/STRU exists.
     axis: correctness
     verify: artifact_exists
   - id: lcao_gpu_kpt
@@ -7234,16 +6843,6 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 1.0
-  - id: must_pw_gpu_stru
-    criterion: '[Must] run_pw_si16_gpu/STRU is valid Si structure.'
-    axis: correctness
-    verify: text_file_contains_all
-    weight: 1.0
-  - id: must_lcao_gpu_stru
-    criterion: '[Must] run_lcao_si16_gpu/STRU is LCAO Si with NUMERICAL_ORBITAL.'
-    axis: correctness
-    verify: text_file_contains_all
-    weight: 1.0
   - id: variable_gpu_semantics
     criterion: '[Variable] PW/LCAO GPU setup matches 34_gpu README.'
     axis: grounding
@@ -7261,3 +6860,12 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+  data_files:
+  - key: STRU_Si16_pw
+    path: data/IG_abacus_056_20260518/STRU_Si16_pw
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/34_gpu/01_pw_Si16
+  - key: STRU_Si16_lcao
+    path: data/IG_abacus_056_20260518/STRU_Si16_lcao
+    oss_url: ''
+    description: Official STRU from abacus-develop examples/34_gpu/02_lcao_Si16
