@@ -73,6 +73,53 @@ evaluation/question_bank/
 `rule_scope_overrides.yaml`，并为 `testable` 规则优先设计能真正失败的 checklist；
 不要只靠 tag/关键词把 raw coverage 刷高。
 
+### Skill 触发率评测 cases
+
+Skill 触发率评测位于 `evaluation/skill_trigger/`，用于验证模型面对真实用户
+prompt 时是否会正确加载目标 Skill、且不会在相邻任务上误触发。开发或大幅调整
+Skill 前，必须先准备触发率 case；case 代表用户真实意图，后续评测未达标时优先
+优化 `SKILL.md` frontmatter 的 `description` 触发关键词，不应为了过测反向改 case。
+
+Case 文件为 `evaluation/skill_trigger/cases.yaml`，每个 Skill 一段：
+
+```yaml
+  - skill: your-skill-name
+    positive:
+      - "应触发该 Skill 的用户 prompt"
+    negative:
+      - "不应触发该 Skill 的相邻任务 prompt"
+```
+
+编写要求：
+
+- `skill` 必须与对应 `SKILL.md` frontmatter 中的 `name` 完全一致。
+- 每个 Skill 至少 **10 条 positive**、**5 条 negative**；不要用重复改写凑数。
+- positive 覆盖 Skill 的核心能力边界，包含明确提到软件/方法名的简单 case，也包含
+  只描述任务意图、不直接点名 Skill 的自然 case；至少 2 条英文 prompt。
+- negative 应优先选择最容易混淆的邻近 Skill 或同流程上下游场景，例如同类软件、
+  结构构建 vs 结构变换、计算执行 vs 结果分析；不要写明显无关的废话 prompt。
+- prompt 应是一句话、自然语言、无代码块；避免内部 MCP tool 名、脚本路径或
+  `Skill: <name>` 这类路由泄漏。通用软件/方法名（如 VASP、Pawley、checkCIF）
+  可以使用。
+- case 以"应然正确"为目标：先保证意图清晰、科学语义合理、边界可区分，再考虑运行
+  评测。若 runtime 结果不稳定，通常说明 `description` 触发信号不足。
+
+本地基础检查：
+
+```bash
+uv run python -c "import yaml; yaml.safe_load(open('evaluation/skill_trigger/cases.yaml'))"
+```
+
+需要实际跑触发率评测时：
+
+```bash
+uv run python -m evaluation.skill_trigger --skills your-skill-name --k 1 --max-cases 2
+uv run python -m evaluation.skill_trigger --skills your-skill-name --jobs 8
+```
+
+默认正式评测 `k=3`，positive 要求每次都触发目标 Skill，negative 要求每次都不触发
+目标 Skill；结果写入 `runs/skill_trigger_eval/`。
+
 ### `EvalConfig` 与 Agent 运行（`run_mat_task`）
 
 - **`empty_completion_max_retries`**（默认 `1`）：当单次运行结果为 `status=completed`、无工具调用、且无可见答案（含内核 `reason=natural` 或旧版 playground 无 `reason` 字段）时，视为「可能因网关/流式偶发空流」，**整题重跑**最多额外次数；`0` 表示关闭。`mat_result` 会附带 `empty_completion_retry_count`（实际执行的重试次数），`duration_ms` 为**多次尝试之和**。
