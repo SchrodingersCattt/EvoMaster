@@ -3,7 +3,6 @@
 
 from __future__ import annotations
 
-import re
 import shutil
 from pathlib import Path
 
@@ -296,9 +295,7 @@ def _patch_questions(questions: list[dict]) -> int:
             if not _is_stru_ref(r.get("key", ""), r.get("value"))
         ]
         q["scoring_checklist"] = [
-            s
-            for s in q.get("scoring_checklist", [])
-            if not _is_stru_score(s)
+            s for s in q.get("scoring_checklist", []) if not _is_stru_score(s)
         ]
         # ruamel may append data_files at the end; normalize field order.
         df = q.pop("data_files", None)

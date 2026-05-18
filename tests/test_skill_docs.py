@@ -53,7 +53,8 @@ def test_skill_description_length_limit() -> None:
             offenders.append(
                 f"{path} ({fm.get('name', '?')}): {len(desc)} chars (max {_MAX_DESCRIPTION_LENGTH})"
             )
-    assert offenders == [], (
-        f"{len(offenders)} skill(s) exceed description limit:\n"
-        + "\n".join(f"  - {o}" for o in offenders)
+    assert (
+        offenders == []
+    ), f"{len(offenders)} skill(s) exceed description limit:\n" + "\n".join(
+        f"  - {o}" for o in offenders
     )
