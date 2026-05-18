@@ -3486,3 +3486,72 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+- id: WO_custom_dp_model_001_20260518
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Use a user-provided DeepMD .pt model file to run structure optimization,
+    testing whether the agent can correctly inspect model metadata (type_map) and set
+    up the calculation accordingly.
+  human_prompt_seed: '我有一个自训练的 DeepMD 模型，OSS 地址为 `https://bohrium.oss-cn-zhangjiakou.aliyuncs.com/13756/27666/store/upload/cd12300a-d3e6-4de9-9783-dd9899376cae/dpa-2.4-7M.pt`。请用它对
+    FCC Cu（a=3.615 Å）做结构优化，输出 `cu_relaxed.cif`。'
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: output_artifact
+    value: cu_relaxed.cif
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 25000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `cu_relaxed.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: inspects_type_map
+    criterion: Agent inspects the model's type_map before running optimization, using
+      a correct method such as `dp --pt show model.pt`, Python DeepPot API
+      (`from deepmd.infer import DeepPot`), or reading model metadata. Does NOT use
+      `strings` or `hexdump` on the binary file.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: confirms_cu_support
+    criterion: Agent confirms that the model supports Cu element (present in type_map)
+      before proceeding with the calculation.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: structure_correct
+    criterion: The output CIF is a valid Cu FCC structure with lattice constant near
+      3.6 Å (relaxed from 3.615 input).
+    axis: correctness
+    verify: struct_file_cell_param
+    verify_params:
+      filename: cu_relaxed.cif
+      param: a
+      expected: 3.6
+      tolerance: 0.1
+  - id: uses_local_model_path
+    criterion: Agent correctly references the model file from its workspace path
+      (not downloading a different model from the internet or using a platform
+      preset head).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
