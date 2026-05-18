@@ -5,7 +5,8 @@ questions:
 - id: SC_struct_002_20260507v4
   capability: structure_construction
   domain: agnostic
-  intent: Build a 4-layer (110) surface slab from the uploaded PUBMUU03 molecular crystal CIF and verify molecule integrity plus atom-count scaling.
+  intent: Build a 4-layer (110) surface slab from the uploaded PUBMUU03 molecular
+    crystal CIF and verify molecule integrity plus atom-count scaling.
   human_prompt_seed: 从 `surface_PUBMUU03.cif` 切出 (1,1,0) 表面 slab，4 个原子层，输出为 `slab_PUBMUU03_110.cif`。文件地址：`https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_surface/1774583701_surface_PUBMUU03.cif`
   tags:
   - struct_surface
@@ -45,7 +46,8 @@ questions:
       max: 24000
   scoring_checklist:
   - id: unit_cell_atoms
-    criterion: The input unit cell atom count read from the downloaded CIF is 144 atoms.
+    criterion: The input unit cell atom count read from the downloaded CIF is 144
+      atoms.
     axis: correctness
     verify: struct_file_atom_count
   - id: total_atoms
@@ -53,15 +55,22 @@ questions:
     axis: correctness
     verify: struct_file_atom_count
   - id: molcrys_slab_molecular_integrity
-    criterion: No molecules are cut by the slab cut (verified via MolCrysKit graph-based molecular integrity check on workspace CIF files).
+    criterion: No molecules are cut by the slab cut (verified via MolCrysKit graph-based
+      molecular integrity check on workspace CIF files).
     axis: correctness
     verify: molcrys_slab_molecular_integrity
   - id: required_fields
-    criterion: Output names the slab structure file and gives a molecule-integrity narrative consistent with MolCrysKit / connectivity reasoning. Numeric scaling is evaluated only by deterministic structure-file checks.
+    criterion: Output names the slab structure file and gives a molecule-integrity
+      narrative consistent with MolCrysKit / connectivity reasoning. Numeric scaling
+      is evaluated only by deterministic structure-file checks.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The answer states what physical picture is used (molecular connectivity, periodic boundaries, (110) plane vs bulk, and how that supports or contradicts cutting molecules), citing the structures, not generic recall disconnected from those files. Judge solely from the final answer and named deliverables; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The answer states what physical picture is used (molecular connectivity,
+      periodic boundaries, (110) plane vs bulk, and how that supports or contradicts
+      cutting molecules), citing the structures, not generic recall disconnected from
+      those files. Judge solely from the final answer and named deliverables; do not
+      fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -73,22 +82,38 @@ questions:
     axis: efficiency
     verify: turn_budget
   - id: efficiency_judge
-    criterion: The (110) slab construction and integrity check complete without excessive exploratory calls.
+    criterion: The (110) slab construction and integrity check complete without excessive
+      exploratory calls.
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
 - id: SC_struct_005_20260508v2
   capability: structure_construction
   domain: agnostic
-  intent: Infer SG-derived chemical formulas for 5 disordered crystal structures and construct ordered replicas to assess 3D structure perception.
-  human_prompt_seed: "对以下 5 个含无序占位的晶体结构分别生成有序 replica，每个输出命名为 `ordered_<原始文件名>.cif`：\n- `disorder_DAN-2.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_disorder/strucuture_disorder/disorder_DAN-2.cif`\n- `disorder_DAP-4.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_disorder/strucuture_disorder/disorder_DAP-4.cif`\n- `disorder_PAP-H4.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_disorder/strucuture_disorder/disorder_PAP-H4.cif`\n- `disorder_PAP-M5.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_disorder/strucuture_disorder/disorder_PAP-M5.cif`\n- `disorder_TILPEN.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_disorder/strucuture_disorder/disorder_TILPEN.cif`\n"
+  intent: Infer SG-derived chemical formulas for 5 disordered crystal structures and
+    construct ordered replicas to assess 3D structure perception.
+  human_prompt_seed: '对以下 5 个含无序占位的晶体结构分别生成有序 replica，每个输出命名为 `ordered_<原始文件名>.cif`：
+
+    - `disorder_DAN-2.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_disorder/strucuture_disorder/disorder_DAN-2.cif`
+
+    - `disorder_DAP-4.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_disorder/strucuture_disorder/disorder_DAP-4.cif`
+
+    - `disorder_PAP-H4.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_disorder/strucuture_disorder/disorder_PAP-H4.cif`
+
+    - `disorder_PAP-M5.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_disorder/strucuture_disorder/disorder_PAP-M5.cif`
+
+    - `disorder_TILPEN.cif` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_disorder/strucuture_disorder/disorder_TILPEN.cif`
+
+    '
   tags:
   - struct_molcrys
   reference_answers:
@@ -103,7 +128,7 @@ questions:
   - key: ordered_files_occupancy_one
     value:
       filename: ordered_*.cif
-      tolerance: 1e-06
+      tolerance: 1.0e-06
   - key: ordered_file_name_mapping
     value:
     - disorder_DAN-2.cif
@@ -157,7 +182,8 @@ questions:
       filename: ordered_*.cif
   scoring_checklist:
   - id: structures_processed
-    criterion: All 5 disordered structures are processed (verified by counting ordered-replica output files in workspace).
+    criterion: All 5 disordered structures are processed (verified by counting ordered-replica
+      output files in workspace).
     axis: correctness
     verify: struct_file_count
   - id: ordered_files_parsable
@@ -165,7 +191,8 @@ questions:
     axis: correctness
     verify: struct_file_parsable
   - id: ordered_files_occupancy_one
-    criterion: Every ordered-replica CIF has only occupancy-1 sites; no partial or split occupancies remain in `_atom_site_occupancy`.
+    criterion: Every ordered-replica CIF has only occupancy-1 sites; no partial or
+      split occupancies remain in `_atom_site_occupancy`.
     axis: correctness
     verify: struct_file_all_occupancy_one
   - id: dan2_formula
@@ -173,46 +200,61 @@ questions:
     axis: correctness
     verify: struct_file_formula
   - id: dap4_formula
-    criterion: The file `ordered_disorder_DAP-4.cif` has the expected ordered-replica composition.
+    criterion: The file `ordered_disorder_DAP-4.cif` has the expected ordered-replica
+      composition.
     axis: correctness
     verify: struct_file_formula
   - id: sc005_disorder_formulas
-    criterion: The answer includes the four reference formula strings for DAP-4, PAP-H4, PAP-M5, and TILPEN; for DAN-2 the reported ordered-replica chemical_formula uses integer stoichiometry only (no fractional occupancies like 13.98 in counts).
+    criterion: The answer includes the four reference formula strings for DAP-4, PAP-H4,
+      PAP-M5, and TILPEN; for DAN-2 the reported ordered-replica chemical_formula
+      uses integer stoichiometry only (no fractional occupancies like 13.98 in counts).
     axis: correctness
     verify: sc005_disorder_formulas
     weight: 0.5
   - id: paph4_formula
-    criterion: The file `ordered_disorder_PAP-H4.cif` has the expected ordered-replica composition.
+    criterion: The file `ordered_disorder_PAP-H4.cif` has the expected ordered-replica
+      composition.
     axis: correctness
     verify: struct_file_formula
   - id: papm5_formula
-    criterion: The file `ordered_disorder_PAP-M5.cif` has the expected ordered-replica composition.
+    criterion: The file `ordered_disorder_PAP-M5.cif` has the expected ordered-replica
+      composition.
     axis: correctness
     verify: struct_file_formula
   - id: tilpen_formula
-    criterion: The file `ordered_disorder_TILPEN.cif` has the expected ordered-replica composition.
+    criterion: The file `ordered_disorder_TILPEN.cif` has the expected ordered-replica
+      composition.
     axis: correctness
     verify: struct_file_formula
   - id: required_fields
-    criterion: Each filename is paired with chemical_formula, is_disordered, ordered_replica_count, and ordered_output_archive.
+    criterion: Each filename is paired with chemical_formula, is_disordered, ordered_replica_count,
+      and ordered_output_archive.
     axis: correctness
     verify: llm_binary_judge
   - id: ordered_file_name_mapping
-    criterion: Final answer explicitly names all five input CIF basenames and the five corresponding `ordered_<basename>.cif` output files.
+    criterion: Final answer explicitly names all five input CIF basenames and the
+      five corresponding `ordered_<basename>.cif` output files.
     axis: correctness
     verify: contains_all
   - id: ordered_integer_stoichiometry
-    criterion: The chemical formula of each ordered replica has integer atom counts (no fractional like H13.98 or Li0.5).
+    criterion: The chemical formula of each ordered replica has integer atom counts
+      (no fractional like H13.98 or Li0.5).
     axis: correctness
     verify: struct_file_integer_stoichiometry
     weight: 1.0
   - id: ordered_replicas_distinct
-    criterion: When multiple ordered replicas are generated for the same structure, they are structurally distinct (different atom arrangements, not identical copies).
+    criterion: When multiple ordered replicas are generated for the same structure,
+      they are structurally distinct (different atom arrangements, not identical copies).
     axis: correctness
     verify: struct_file_replicas_distinct
     weight: 1.0
   - id: grounding_source
-    criterion: The answer explains the physical/chemical basis for each structure (disorder/occupancy, connectivity, valence or charge balance, and what changes when building an ordered replica), tied to the named CIFs and delivered outputs, not only restating task text without structural basis. Judge solely from the final answer and named deliverables; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The answer explains the physical/chemical basis for each structure
+      (disorder/occupancy, connectivity, valence or charge balance, and what changes
+      when building an ordered replica), tied to the named CIFs and delivered outputs,
+      not only restating task text without structural basis. Judge solely from the
+      final answer and named deliverables; do not fail because the tool-call log omits
+      MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries_disorder
@@ -228,25 +270,31 @@ questions:
     axis: efficiency
     verify: token_budget
   - id: efficiency_judge
-    criterion: The agent handles the 5 structures one by one with minimal detours and without exploratory over-processing.
+    criterion: The agent handles the 5 structures one by one with minimal detours
+      and without exploratory over-processing.
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
 - id: SC_struct_006_20260507v7
   capability: structure_construction
   domain: agnostic
-  intent: Add missing hydrogens to the diacetylmorphine (DACMOR) molecular crystal CIF and validate the formula, local molecular environment, and tetrahedral geometry using MolCrysKit.
-  human_prompt_seed: 该 CIF 是从单晶 XRD 解析的二乙酰吗啡（diacetylmorphine）分子晶体，H 原子缺失。请补全 H 原子并导出为 `dacmor_hydrogenated.cif`。文件地址：`https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_surface/cda9f292ec4b411facb478d0486b54ce/DACMOR.cif`
+  intent: Add missing hydrogens to the diacetylmorphine (DACMOR) molecular crystal
+    CIF and validate the formula, local molecular environment, and tetrahedral geometry
+    using MolCrysKit.
+  human_prompt_seed: 该 CIF 是从单晶 XRD 解析的二乙酰吗啡（diacetylmorphine）分子晶体，H 原子缺失。请补全 H 原子并导出为
+    `dacmor_hydrogenated.cif`。文件地址：`https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_surface/cda9f292ec4b411facb478d0486b54ce/DACMOR.cif`
   tags:
   - struct_molcrys
   data_files:
   - key: dacmor_cif
     path: data/SC_struct_006/DACMOR.cif
     oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/structure_surface/cda9f292ec4b411facb478d0486b54ce/DACMOR.cif
-    description: DACMOR (diacetylmorphine) molecular-crystal CIF missing explicit H atoms.
+    description: DACMOR (diacetylmorphine) molecular-crystal CIF missing explicit
+      H atoms.
   reference_answers:
   - key: file_exists
     value: dacmor_hydrogenated.cif
@@ -293,7 +341,8 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: target_formula
-    criterion: The reduced chemical formula read from dacmor_hydrogenated.cif matches C21H23NO5.
+    criterion: The reduced chemical formula read from dacmor_hydrogenated.cif matches
+      C21H23NO5.
     axis: correctness
     verify: struct_file_formula
   - id: total_atom_count
@@ -301,19 +350,30 @@ questions:
     axis: correctness
     verify: struct_file_atom_count
   - id: hydrogen_atom_count
-    criterion: The output CIF contains exactly 92 H atoms, i.e. 23 H atoms per molecule for Z=4.
+    criterion: The output CIF contains exactly 92 H atoms, i.e. 23 H atoms per molecule
+      for Z=4.
     axis: correctness
     verify: struct_file_atom_count
   - id: hch_angle_deg
-    criterion: The unfiltered mean H-C-H angle computed from all output-CIF H-C-H triplets with C-H cutoff 1.5 A is close to tetrahedral 109.48 degrees within tolerance.
+    criterion: The unfiltered mean H-C-H angle computed from all output-CIF H-C-H
+      triplets with C-H cutoff 1.5 A is close to tetrahedral 109.48 degrees within
+      tolerance.
     axis: correctness
     verify: struct_file_bond_angle
   - id: molcrys_local_env
-    criterion: MolCrysKit validates that the hydrogenated output has correct molecular connectivity (no fragmented or over-bonded molecules), each molecule matches the expected formula, and ChemicalEnvironment analysis confirms H-bearing atoms have chemically consistent local geometry (hybridisation, coordination).
+    criterion: MolCrysKit validates that the hydrogenated output has correct molecular
+      connectivity (no fragmented or over-bonded molecules), each molecule matches
+      the expected formula, and ChemicalEnvironment analysis confirms H-bearing atoms
+      have chemically consistent local geometry (hybridisation, coordination).
     axis: correctness
     verify: molcrys_local_env
   - id: grounding_source
-    criterion: The answer states the chemical/geometry rationale (which C/N atoms receive H, tetrahedral geometry targets, carbonyl/ester O should not be hydrogenated) and ties checks to `dacmor_hydrogenated.cif` and the input CIF, not only procedural wording disconnected from those files. Judge solely from the final answer and named deliverables; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The answer states the chemical/geometry rationale (which C/N atoms
+      receive H, tetrahedral geometry targets, carbonyl/ester O should not be hydrogenated)
+      and ties checks to `dacmor_hydrogenated.cif` and the input CIF, not only procedural
+      wording disconnected from those files. Judge solely from the final answer and
+      named deliverables; do not fail because the tool-call log omits MCP, web_search,
+      or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -325,22 +385,28 @@ questions:
     axis: efficiency
     verify: turn_budget
   - id: efficiency_judge
-    criterion: The hydrogenation and validation workflow completes directly without redundant exploratory steps.
+    criterion: The hydrogenation and validation workflow completes directly without
+      redundant exploratory steps.
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
 - id: SC_struct_008_20260507v4
   capability: structure_construction
   domain: agnostic
-  intent: Construct a computation-ready gamma-alumina bulk model and validate stoichiometry, geometry, coordination environments, and post-relaxation force.
-  human_prompt_seed: 'Build a γ-Al₂O₃ bulk model and relax it. Export as `gamma_alumina.cif`. Include `<eval_results>{"max_force_ev_per_ang": <number>}</eval_results>` in your answer.'
+  intent: Construct a computation-ready gamma-alumina bulk model and validate stoichiometry,
+    geometry, coordination environments, and post-relaxation force.
+  human_prompt_seed: 'Build a γ-Al₂O₃ bulk model and relax it. Export as `gamma_alumina.cif`.
+    Include `<eval_results>{"max_force_ev_per_ang": <number>}</eval_results>` in your
+    answer.'
   tags:
   - struct_build
   data_files: []
@@ -402,7 +468,8 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: al_o_ratio
-    criterion: The Al:O stoichiometry ratio read from gamma_alumina.cif is approximately 2:3 within 5%.
+    criterion: The Al:O stoichiometry ratio read from gamma_alumina.cif is approximately
+      2:3 within 5%.
     axis: correctness
     verify: struct_file_stoichiometry_ratio
   - id: alpha_deg
@@ -418,29 +485,44 @@ questions:
     axis: correctness
     verify: struct_file_cell_param
   - id: max_force_eV_A
-    criterion: The reported relaxed maximum force in `<eval_results>` is below 0.1 eV/A.
+    criterion: The reported relaxed maximum force in `<eval_results>` is below 0.1
+      eV/A.
     axis: correctness
     verify: answer_json_numeric
   - id: min_distance_A
-    criterion: The minimum interatomic distance read from `gamma_alumina.cif` is at least 1.0 A.
+    criterion: The minimum interatomic distance read from `gamma_alumina.cif` is at
+      least 1.0 A.
     axis: correctness
     verify: struct_file_min_interatomic_distance
   - id: required_fields
-    criterion: The answer explicitly reports the Al:O ratio, all three cell angles, evidence for both tetrahedral and octahedral AlO environments, a minimum-distance sanity check above 1.0 A, and a relaxed maximum-force check below 0.1 eV/A.
+    criterion: The answer explicitly reports the Al:O ratio, all three cell angles,
+      evidence for both tetrahedral and octahedral AlO environments, a minimum-distance
+      sanity check above 1.0 A, and a relaxed maximum-force check below 0.1 eV/A.
     axis: correctness
     verify: llm_binary_judge
   - id: structure_knowledge
-    criterion: Agent demonstrates understanding that γ-Al2O3 adopts a defect-spinel structure with aluminum occupying both tetrahedral and octahedral coordination sites, reflected in the construction approach, final answer, or tool parameters. This criterion can pass even if the final output file was not successfully delivered, as long as the understanding is evident.
+    criterion: Agent demonstrates understanding that γ-Al2O3 adopts a defect-spinel
+      structure with aluminum occupying both tetrahedral and octahedral coordination
+      sites, reflected in the construction approach, final answer, or tool parameters.
+      This criterion can pass even if the final output file was not successfully delivered,
+      as long as the understanding is evident.
     axis: correctness
     verify: llm_binary_judge
     weight: 1.0
   - id: relaxation_attempted
-    criterion: Agent initiates structure relaxation or geometry optimization on the constructed γ-Al2O3 bulk model using any available calculator (MLIP, DP, or force-field), even if the relaxation does not converge or the final file is not delivered. Evidence may come from tool calls, scripts, or narrative.
+    criterion: Agent initiates structure relaxation or geometry optimization on the
+      constructed γ-Al2O3 bulk model using any available calculator (MLIP, DP, or
+      force-field), even if the relaxation does not converge or the final file is
+      not delivered. Evidence may come from tool calls, scripts, or narrative.
     axis: correctness
     verify: llm_binary_judge
     weight: 0.5
   - id: grounding_source
-    criterion: The answer links code-checked Al:O ratio, cell angles, tetrahedral vs octahedral Al sites, minimum contact distances, and post-relax forces to `gamma_alumina.cif` and the stated relaxation, not handbook recall disconnected from that file. Judge solely from the final answer and named deliverables; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The answer links code-checked Al:O ratio, cell angles, tetrahedral
+      vs octahedral Al sites, minimum contact distances, and post-relax forces to
+      `gamma_alumina.cif` and the stated relaxation, not handbook recall disconnected
+      from that file. Judge solely from the final answer and named deliverables; do
+      not fail because the tool-call log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -452,22 +534,28 @@ questions:
     axis: efficiency
     verify: turn_budget
   - id: efficiency_judge
-    criterion: The gamma-alumina construction and relaxation workflow completes without redundant exploratory detours.
+    criterion: The gamma-alumina construction and relaxation workflow completes without
+      redundant exploratory detours.
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
 - id: SC_struct_009_20260508v2
   capability: structure_construction
   domain: agnostic
-  intent: Build a stoichiometric and symmetric CeO2(111) surface with three Ce-O-Ce trilayers and oxygen termination; slab normal stacking should expose nine distinct atomic planes along z (three trilayers times three planes each).
-  human_prompt_seed: Build a symmetric CeO2(111) surface slab with three Ce-O-Ce tri-layers. Export as `ceo2_111_trilayer.cif`.
+  intent: Build a stoichiometric and symmetric CeO2(111) surface with three Ce-O-Ce
+    trilayers and oxygen termination; slab normal stacking should expose nine distinct
+    atomic planes along z (three trilayers times three planes each).
+  human_prompt_seed: Build a symmetric CeO2(111) surface slab with three Ce-O-Ce tri-layers.
+    Export as `ceo2_111_trilayer.cif`.
   tags:
   - struct_surface
   priority: P0
@@ -516,31 +604,49 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: slab_layers
-    criterion: The number of distinct atomic z-planes in ceo2_111_trilayer.cif is 9 (atoms on the same plane merged within 0.25 Å along z), matching three Ce-O-Ce trilayers.
+    criterion: The number of distinct atomic z-planes in ceo2_111_trilayer.cif is
+      9 (atoms on the same plane merged within 0.25 Å along z), matching three Ce-O-Ce
+      trilayers.
     axis: correctness
     verify: struct_file_layer_count
   - id: ce_o_ratio
-    criterion: The Ce:O ratio read from ceo2_111_trilayer.cif is consistent with CeO2 stoichiometry.
+    criterion: The Ce:O ratio read from ceo2_111_trilayer.cif is consistent with CeO2
+      stoichiometry.
     axis: correctness
     verify: struct_file_stoichiometry_ratio
   - id: o_termination
-    criterion: Both the top and bottom outermost atomic layers of ceo2_111_trilayer.cif are O-terminated (verified by reading the file and checking the outermost z-layer element is O).
+    criterion: Both the top and bottom outermost atomic layers of ceo2_111_trilayer.cif
+      are O-terminated (verified by reading the file and checking the outermost z-layer
+      element is O).
     axis: correctness
     verify: struct_file_surface_termination
   - id: required_fields
-    criterion: The answer explicitly reports the 9-layer construction, a slab-center mirror-equivalence symmetry check, oxygen-terminated outermost layers on both sides, stoichiometric CeO2 ratio, and (111) surface orientation where relevant.
+    criterion: The answer explicitly reports the 9-layer construction, a slab-center
+      mirror-equivalence symmetry check, oxygen-terminated outermost layers on both
+      sides, stoichiometric CeO2 ratio, and (111) surface orientation where relevant.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The answer explains slab polarity/symmetry, layer stacking for CeO2(111), O termination, and Ce:O stoichiometry using `ceo2_111_trilayer.cif`, not textbook-only claims disconnected from that file. Judge solely from the final answer and named deliverables; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The answer explains slab polarity/symmetry, layer stacking for CeO2(111),
+      O termination, and Ce:O stoichiometry using `ceo2_111_trilayer.cif`, not textbook-only
+      claims disconnected from that file. Judge solely from the final answer and named
+      deliverables; do not fail because the tool-call log omits MCP, web_search, or
+      any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: tasker_classification
-    criterion: The agent identifies or discusses the Tasker classification of CeO2(111) (Type 2 surface with charged but non-dipolar repeat unit O-Ce-O), or equivalently explains that the (111) stacking of alternating charged planes does not produce a net dipole moment per repeat unit when the O-Ce-O trilayer is chosen as the repeat.
+    criterion: The agent identifies or discusses the Tasker classification of CeO2(111)
+      (Type 2 surface with charged but non-dipolar repeat unit O-Ce-O), or equivalently
+      explains that the (111) stacking of alternating charged planes does not produce
+      a net dipole moment per repeat unit when the O-Ce-O trilayer is chosen as the
+      repeat.
     axis: grounding
     verify: llm_binary_judge
   - id: symmetric_slab_polarity_strategy
-    criterion: The agent explains or applies a symmetric slab construction strategy (mirror-symmetric terminations on both sides) to ensure no net dipole across the slab, or mentions that dipole corrections are unnecessary because the chosen O-terminated trilayer repeat is inherently non-polar.
+    criterion: The agent explains or applies a symmetric slab construction strategy
+      (mirror-symmetric terminations on both sides) to ensure no net dipole across
+      the slab, or mentions that dipole corrections are unnecessary because the chosen
+      O-terminated trilayer repeat is inherently non-polar.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -552,18 +658,24 @@ questions:
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
 - id: SC_struct_010_20260507v3
   capability: structure_construction
   domain: agnostic
-  intent: Build a seven-layer Ag(111) slab with explicit water and potassium ions for an electrochemical interface initial model.
-  human_prompt_seed: '构建 Ag(111)/水界面初始结构：Ag(111) slab 为 2×3 超胞 7 层，上方加入 43 个 H₂O 分子和 2 个 K⁺ 离子（仅中性 H₂O，不引入 OH⁻/H₃O⁺），z 方向约 12 Å 真空层。导出为 `ag111_k_water_interface.cif`。最终答案中包含 `<eval_results>{"vacuum_angstrom": <number>, "supercell_a": <int>, "supercell_b": <int>, "adsorbate_side": "same_side"}</eval_results>`。'
+  intent: Build a seven-layer Ag(111) slab with explicit water and potassium ions
+    for an electrochemical interface initial model.
+  human_prompt_seed: '构建 Ag(111)/水界面初始结构：Ag(111) slab 为 2×3 超胞 7 层，上方加入 43 个 H₂O 分子和
+    2 个 K⁺ 离子（仅中性 H₂O，不引入 OH⁻/H₃O⁺），z 方向约 12 Å 真空层。导出为 `ag111_k_water_interface.cif`。最终答案中包含
+    `<eval_results>{"vacuum_angstrom": <number>, "supercell_a": <int>, "supercell_b":
+    <int>, "adsorbate_side": "same_side"}</eval_results>`。'
   tags:
   - struct_surface
   data_files: []
@@ -643,19 +755,23 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: ag_count
-    criterion: The output CIF contains exactly 42 Ag atoms, consistent with a 7-layer (2 × 3) Ag(111) slab.
+    criterion: The output CIF contains exactly 42 Ag atoms, consistent with a 7-layer
+      (2 × 3) Ag(111) slab.
     axis: correctness
     verify: struct_file_atom_count
   - id: water_count
-    criterion: Under the neutral-water-only assumption, the output CIF contains exactly 43 oxygen atoms, equivalent to 43 H2O molecules.
+    criterion: Under the neutral-water-only assumption, the output CIF contains exactly
+      43 oxygen atoms, equivalent to 43 H2O molecules.
     axis: correctness
     verify: struct_file_atom_count
   - id: k_count
-    criterion: The output CIF contains exactly 2 K atoms, confirming the potassium-ion count.
+    criterion: The output CIF contains exactly 2 K atoms, confirming the potassium-ion
+      count.
     axis: correctness
     verify: struct_file_atom_count
   - id: formula_check
-    criterion: The output CIF formula is Ag42K2H86O43, confirming 43 H2O molecules and 2 K ions were included.
+    criterion: The output CIF formula is Ag42K2H86O43, confirming 43 H2O molecules
+      and 2 K ions were included.
     axis: correctness
     verify: struct_file_formula
   - id: slab_layers
@@ -667,23 +783,33 @@ questions:
     axis: correctness
     verify: answer_json_numeric
   - id: supercell_a
-    criterion: The `<eval_results>` JSON reports the Ag(111) slab as a 2x supercell along a.
+    criterion: The `<eval_results>` JSON reports the Ag(111) slab as a 2x supercell
+      along a.
     axis: correctness
     verify: answer_json_numeric
   - id: supercell_b
-    criterion: The `<eval_results>` JSON reports the Ag(111) slab as a 3x supercell along b.
+    criterion: The `<eval_results>` JSON reports the Ag(111) slab as a 3x supercell
+      along b.
     axis: correctness
     verify: answer_json_numeric
   - id: eval_result_keys
-    criterion: The final answer includes machine-readable keys for vacuum, supercell_a, supercell_b, and adsorbate_side so the same-side placement is explicit.
+    criterion: The final answer includes machine-readable keys for vacuum, supercell_a,
+      supercell_b, and adsorbate_side so the same-side placement is explicit.
     axis: correctness
     verify: contains_all
   - id: required_fields
-    criterion: The answer explicitly reports the output structure file, slab layer check, vacuum thickness near 12 Å, neutral-water-only species (no OH-/H3O+), and that solvent/ions are placed above one side of the slab. Numeric loading values are evaluated only by deterministic structure-file checks.
+    criterion: The answer explicitly reports the output structure file, slab layer
+      check, vacuum thickness near 12 Å, neutral-water-only species (no OH-/H3O+),
+      and that solvent/ions are placed above one side of the slab. Numeric loading
+      values are evaluated only by deterministic structure-file checks.
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The answer ties the 7-layer Ag(111) slab, explicit solvent loading, potassium-ion placement, and vacuum spacing to `ag111_k_water_interface.cif`, not generic interface-building claims disconnected from that file. Judge solely from the final answer and named deliverables; do not fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: The answer ties the 7-layer Ag(111) slab, explicit solvent loading,
+      potassium-ion placement, and vacuum spacing to `ag111_k_water_interface.cif`,
+      not generic interface-building claims disconnected from that file. Judge solely
+      from the final answer and named deliverables; do not fail because the tool-call
+      log omits MCP, web_search, or any specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -695,22 +821,27 @@ questions:
     axis: efficiency
     verify: turn_budget
   - id: efficiency_judge
-    criterion: The explicit-solvent Ag(111) interface is built in a direct workflow without unnecessary rebuilds.
+    criterion: The explicit-solvent Ag(111) interface is built in a direct workflow
+      without unnecessary rebuilds.
     axis: efficiency
     verify: llm_binary_judge
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
 - id: SC_struct_013_20260507v2
   capability: structure_construction
   domain: agnostic
-  intent: Construct and compare close-packed layer cross sections for fcc and hcp crystals, then expand both slabs to 5x5x1 supercells.
-  human_prompt_seed: 分别构建 fcc 和 hcp 近密堆积截面 slab（各 5 层，5×5×1 超胞），输出 `fcc_close_packed_5x5x1.cif`、`hcp_close_packed_5x5x1.cif` 和 `packing_comparison.md`，说明两者堆垛方式的区别。
+  intent: Construct and compare close-packed layer cross sections for fcc and hcp
+    crystals, then expand both slabs to 5x5x1 supercells.
+  human_prompt_seed: 分别构建 fcc 和 hcp 近密堆积截面 slab（各 5 层，5×5×1 超胞），输出 `fcc_close_packed_5x5x1.cif`、`hcp_close_packed_5x5x1.cif`
+    和 `packing_comparison.md`，说明两者堆垛方式的区别。
   tags:
   - struct_surface
   data_files: []
@@ -785,19 +916,23 @@ questions:
     axis: correctness
     verify: struct_file_layer_count
   - id: fcc_atom_count
-    criterion: The file `fcc_close_packed_5x5x1.cif` has 125 atoms for a 5-layer 5x5x1 slab.
+    criterion: The file `fcc_close_packed_5x5x1.cif` has 125 atoms for a 5-layer 5x5x1
+      slab.
     axis: correctness
     verify: struct_file_atom_count
   - id: hcp_atom_count
-    criterion: The file `hcp_close_packed_5x5x1.cif` has 125 atoms for a 5-layer 5x5x1 slab.
+    criterion: The file `hcp_close_packed_5x5x1.cif` has 125 atoms for a 5-layer 5x5x1
+      slab.
     axis: correctness
     verify: struct_file_atom_count
   - id: compare_tokens
-    criterion: The file `packing_comparison.md` explicitly mentions fcc, hcp, AB stacking, and ABC stacking.
+    criterion: The file `packing_comparison.md` explicitly mentions fcc, hcp, AB stacking,
+      and ABC stacking.
     axis: correctness
     verify: text_file_contains_all
   - id: grounding_source
-    criterion: The final answer is grounded in both generated CIF files and the comparison note, rather than generic textbook-only statements.
+    criterion: The final answer is grounded in both generated CIF files and the comparison
+      note, rather than generic textbook-only statements.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -805,7 +940,8 @@ questions:
     axis: efficiency
     verify: no_retries
   - id: efficiency_judge
-    criterion: Workflow completes in a compact sequence (build bulk → cut slabs → make supercells → compare) without redundant loops.
+    criterion: Workflow completes in a compact sequence (build bulk → cut slabs →
+      make supercells → compare) without redundant loops.
     axis: efficiency
     verify: llm_binary_judge
   - id: turn_budget
@@ -813,17 +949,20 @@ questions:
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
 - id: SC_struct_build_001_20260508v5
   capability: structure_construction
   domain: agnostic
-  intent: Build FCC copper conventional cell using ASE bulk prototype and verify lattice constant, atom count, and space group.
+  intent: Build FCC copper conventional cell using ASE bulk prototype and verify lattice
+    constant, atom count, and space group.
   human_prompt_seed: 用实验晶格常数 a = 3.615 Å 构建 FCC 铜的惯用晶胞，导出为 `cu_fcc.cif`。
   tags:
   - struct_build
@@ -883,11 +1022,14 @@ questions:
     axis: correctness
     verify: struct_file_space_group
   - id: space_group_tokens
-    criterion: Final answer explicitly reports both space group number 225 and symbol Fm-3m.
+    criterion: Final answer explicitly reports both space group number 225 and symbol
+      Fm-3m.
     axis: correctness
     verify: contains_all
   - id: grounding_source
-    criterion: Final answer explicitly states the lattice constant and space group number from the built structure. Cell size is evaluated only by deterministic structure-file checks.
+    criterion: Final answer explicitly states the lattice constant and space group
+      number from the built structure. Cell size is evaluated only by deterministic
+      structure-file checks.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -901,8 +1043,10 @@ questions:
 - id: SC_struct_build_002_20260507v5
   capability: structure_construction
   domain: agnostic
-  intent: Build hexagonal boron nitride (hBN) unit cell from space group and Wyckoff positions, verifying correct cell angles and stoichiometry.
-  human_prompt_seed: 构建六方氮化硼（hBN）单胞，空间群 P6₃/mmc (#194)，a = 2.504 Å，c = 6.661 Å，导出为 `hbn.cif`。
+  intent: Build hexagonal boron nitride (hBN) unit cell from space group and Wyckoff
+    positions, verifying correct cell angles and stoichiometry.
+  human_prompt_seed: 构建六方氮化硼（hBN）单胞，空间群 P6₃/mmc (#194)，a = 2.504 Å，c = 6.661 Å，导出为
+    `hbn.cif`。
   tags:
   - struct_build
   data_files: []
@@ -982,11 +1126,14 @@ questions:
     axis: correctness
     verify: struct_file_space_group
   - id: space_group_tokens
-    criterion: Final answer explicitly reports space group number 194 and the P6_3/mmc setting.
+    criterion: Final answer explicitly reports space group number 194 and the P6_3/mmc
+      setting.
     axis: correctness
     verify: contains_all
   - id: grounding_source
-    criterion: Final answer reports lattice parameters, gamma angle, and space-group setting from the built structure. Cell size and element-ratio checks are evaluated only by deterministic structure-file checks.
+    criterion: Final answer reports lattice parameters, gamma angle, and space-group
+      setting from the built structure. Cell size and element-ratio checks are evaluated
+      only by deterministic structure-file checks.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -1000,7 +1147,8 @@ questions:
 - id: SC_struct_build_003_20260507v5
   capability: structure_construction
   domain: agnostic
-  intent: Build a phenol molecule from SMILES using RDKit and verify atom count and chemical formula.
+  intent: Build a phenol molecule from SMILES using RDKit and verify atom count and
+    chemical formula.
   human_prompt_seed: 从 SMILES `c1ccc(cc1)O` 构建苯酚的三维分子构象，导出为 `phenol.xyz`。
   tags:
   - struct_build
@@ -1036,11 +1184,13 @@ questions:
     axis: correctness
     verify: struct_file_atom_count
   - id: min_distance
-    criterion: The minimum interatomic distance in `phenol.xyz` is at least 0.7 Å, ruling out overlapping coordinates.
+    criterion: The minimum interatomic distance in `phenol.xyz` is at least 0.7 Å,
+      ruling out overlapping coordinates.
     axis: correctness
     verify: struct_file_min_interatomic_distance
   - id: required_fields
-    criterion: Final answer mentions phenol; the numeric size check is evaluated only by deterministic structure-file checks.
+    criterion: Final answer mentions phenol; the numeric size check is evaluated only
+      by deterministic structure-file checks.
     axis: correctness
     verify: contains_all
   - id: grounding_source
@@ -1058,8 +1208,17 @@ questions:
 - id: SC_twist_001_20260513
   capability: structure_construction
   domain: agnostic
-  intent: Build twisted bilayer graphene structure requiring custom scripting beyond standard MCP tools.
-  human_prompt_seed: "请构建一个转角约 21.8° 的双层石墨烯（Twisted Bilayer Graphene）结构。\n要求：\n1. 生成具有周期性边界条件的超胞\n2. 层间距约 3.35 Å\n3. 输出为 `TBG_21.8deg.cif`"
+  intent: Build twisted bilayer graphene structure requiring custom scripting beyond
+    standard MCP tools.
+  human_prompt_seed: '请构建一个转角约 21.8° 的双层石墨烯（Twisted Bilayer Graphene）结构。
+
+    要求：
+
+    1. 生成具有周期性边界条件的超胞
+
+    2. 层间距约 3.35 Å
+
+    3. 输出为 `TBG_21.8deg.cif`'
   tags:
   - struct_build
   data_files: []
@@ -1146,7 +1305,8 @@ questions:
 - id: SC_graphene_001_20260517
   capability: structure_construction
   domain: agnostic
-  intent: Build a monolayer graphene unit cell with correct hexagonal lattice and verify it is a proper 2D honeycomb structure, not a 3D bulk misidentification.
+  intent: Build a monolayer graphene unit cell with correct hexagonal lattice and verify
+    it is a proper 2D honeycomb structure, not a 3D bulk misidentification.
   human_prompt_seed: 构建单层石墨烯的单胞结构，晶格常数 a = 2.46 Å，层间真空层 15 Å，导出为 `graphene.cif`。
   tags:
   - struct_build
@@ -1224,15 +1384,18 @@ questions:
     axis: correctness
     verify: struct_file_cell_param
   - id: is_2d_structure
-    criterion: All atoms are coplanar (z-coordinates identical within 0.1 Å), confirming a monolayer 2D structure rather than a 3D bulk.
+    criterion: All atoms are coplanar (z-coordinates identical within 0.1 Å), confirming
+      a monolayer 2D structure rather than a 3D bulk.
     axis: correctness
     verify: struct_file_layer_count
   - id: space_group_tokens
-    criterion: Final answer confirms the structure is hexagonal graphene (mentions graphene and hexagonal lattice).
+    criterion: Final answer confirms the structure is hexagonal graphene (mentions graphene
+      and hexagonal lattice).
     axis: correctness
     verify: contains_all
   - id: grounding_source
-    criterion: Final answer reports lattice parameters from the built structure and confirms monolayer geometry. Must not describe a 3D bulk or FCC structure.
+    criterion: Final answer reports lattice parameters from the built structure and
+      confirms monolayer geometry. Must not describe a 3D bulk or FCC structure.
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -1246,8 +1409,12 @@ questions:
 - id: SC_abacus_pt111_20260518
   capability: structure_construction
   domain: agnostic
-  intent: Place official Pt(111) slab STRU from 27_imp_sol into run directory (structure modeling).
-  human_prompt_seed: "工作区中有官方 **Pt(111) slab** 结构文件 `STRU_Pt111`（27_imp_sol）。\n\n请创建目录 `run_pw_pt_slab/`，将结构放入 `run_pw_pt_slab/STRU`（**仅结构文件**，不要写 INPUT/KPT）。"
+  intent: Place official Pt(111) slab STRU from 27_imp_sol into run directory (structure
+    modeling).
+  human_prompt_seed: '工作区中有官方 **Pt(111) slab** 结构文件 `STRU_Pt111`（27_imp_sol）。
+
+
+    请创建目录 `run_pw_pt_slab/`，将结构放入 `run_pw_pt_slab/STRU`（**仅结构文件**，不要写 INPUT/KPT）。'
   tags:
   - struct_surface
   - eng_abacus
@@ -1298,8 +1465,12 @@ questions:
 - id: SC_abacus_bsse_h2o_20260518
   capability: structure_construction
   domain: agnostic
-  intent: Place official BSSE fragment STRU_0–STRU_3 for H2O from 32_bsse (structure modeling).
-  human_prompt_seed: "工作区已提供官方 Counterpoise 结构 `STRU_0`～`STRU_3`（32_bsse/01_water）。\n\n请创建目录 `run_lcao_h2o_cp/`，将四个文件**原样复制**到该目录（**仅结构**，不要写 INPUT/KPT）。"
+  intent: Place official BSSE fragment STRU_0–STRU_3 for H2O from 32_bsse (structure
+    modeling).
+  human_prompt_seed: '工作区已提供官方 Counterpoise 结构 `STRU_0`～`STRU_3`（32_bsse/01_water）。
+
+
+    请创建目录 `run_lcao_h2o_cp/`，将四个文件**原样复制**到该目录（**仅结构**，不要写 INPUT/KPT）。'
   tags:
   - struct_surface
   - eng_abacus
@@ -1389,12 +1560,12 @@ questions:
     criterion: '[Must] run_lcao_h2o_cp/STRU_2 matches reference STRU_2.'
     axis: correctness
     verify: stru_file_check
-    weight: 1.0
+    weight: 0.8
   - id: must_cp_stru3_match
     criterion: '[Must] run_lcao_h2o_cp/STRU_3 matches reference STRU_3.'
     axis: correctness
     verify: stru_file_check
-    weight: 1.0
+    weight: 0.8
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
