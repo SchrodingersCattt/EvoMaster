@@ -1,6 +1,6 @@
 ---
 name: inspect-atomic-structure
-description: "Inspect any atomic structure (crystal, molecule, slab, polymer chain) and report formula, symmetry, Wyckoff sites, geometry tables, dimensionality, and is_molecular_crystal routing flag. MUST run before and after every transform/assemble step. Reports structure sanity only — not a substitute for property prediction or relaxation."
+description: "Read an existing atomic structure file (CIF, POSCAR, PDB, or extended XYZ) and report what it is without modifying it. Triggers when the user wants a symmetry readout (space group, point group, Wyckoff sites), bonding or coordination geometry, dimensionality (1D/2D/3D), vacuum thickness and direction for a slab, a decision on whether the structure should be treated as a molecular crystal, or a diagnosis of disorder, partial occupancy, missing CRYST1 / unclear PBC, and solvent fragments before further processing."
 skill_type: operator
 ---
 

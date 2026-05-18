@@ -1,6 +1,6 @@
 ---
 name: structure-manager
-description: "Search, download, validate (assess_structure.py), and convert (convert_format.py) crystal structure files. Supports literature-based retrieval, database lookup, and direct URL download. Load this skill for any structure task beyond a simple DB formula query."
+description: "Use when the user needs to bring an external crystal structure into the workspace, or convert one already in hand. Triggers on downloading a crystal structure file from a direct URL into the workspace, extracting a structure embedded in a supplementary or literature HTML page, crystal-database lookup (Materials Project, OQMD, etc.), format conversion (CIF, POSCAR, XYZ, extended XYZ), and post-download structure-file validation."
 skill_type: operator
 depends_on: mcp-mat-struct-db, build-atomic-structure, transform-atomic-structure, assemble-atomic-structure, operate-molecular-crystal, mcp-mat-doc
 ---

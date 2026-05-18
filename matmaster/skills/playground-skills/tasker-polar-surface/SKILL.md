@@ -1,6 +1,6 @@
 ---
 name: tasker-polar-surface
-description: "Guides slab cutting for ionic and polar crystals using Tasker types (1/2/3). Use built-in script build_slab_tasker_fix.py as the default builder for all surface types, then validate with check_slab_tasker.py and assess_structure.py. If auto-fix fails, explicitly report to user and ask for manual adjustment or temporary acceptance."
+description: "Use when a polar or ionic oxide crystal needs a slab termination that is dipole-balanced. Triggers on classifying a polar cut by Tasker Type-1/2/3, fixing a net surface dipole on a polar slab, or reconstructing a polar termination into a non-polar one. Typical materials include oxides, perovskites, and layered ionic crystals."
 depends_on: assemble-atomic-structure, mcp-mat-doc
 ---
 
