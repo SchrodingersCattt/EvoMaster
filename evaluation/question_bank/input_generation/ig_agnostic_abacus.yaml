@@ -6,21 +6,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: 'Add ABACUS LCAO BSSE correction for Fe(110) slab: define Fe_empty species, place empty-atom layers in vacuum, and write SCF INPUT with sparse k along vacuum.'
-  human_prompt_seed: '工作区中提供了仅含真实 Fe 原子的表面 slab 结构（尚未做 BSSE 校正）。
-
-
-    请准备 ABACUS LCAO 单点输入用于 NAO-BSSE 校正：
-
-    1) 在结构中引入 empty/ghost 物种用于补足基组。
-
-    2) 在真空区域布置 empty 原子层，保证位于 slab 外侧而不是埋入体内。
-
-    3) 生成与该场景匹配的 SCF INPUT，沿真空方向使用单点/稀疏采样。 说明：k 采样可用 kspacing 或 KPT 两种路线；若使用 KPT，建议采用 `KPT_bsse` 文件名与 Gamma 风格。
-
-
-    将结果写入当前目录：`STRU_bsse`、`INPUT_bsse`。
-
-    '
+  human_prompt_seed: "工作区中提供了仅含真实 Fe 原子的表面 slab 结构（尚未做 BSSE 校正）。\n\n请准备 ABACUS LCAO 单点输入用于 NAO-BSSE 校正：\n1) 在结构中引入 empty/ghost 物种用于补足基组。\n2) 在真空区域布置 empty 原子层，保证位于 slab 外侧而不是埋入体内。\n3) 生成与该场景匹配的 SCF INPUT，沿真空方向使用单点/稀疏采样。 说明：k 采样可用 kspacing 或 KPT 两种路线；若使用 KPT，建议采用 `KPT_bsse` 文件名与 Gamma 风格。\n\n将结果写入当前目录：`STRU_bsse`、`INPUT_bsse`。\n"
   tags:
   - eng_abacus
   - struct_surface
@@ -70,7 +56,7 @@ questions:
         min: 80
         max: 120
       - key: scf_thr
-        min: 1.0e-10
+        min: 1e-10
         max: 0.01
   - key: suggested_input_bsse_smearing
     value:
@@ -204,21 +190,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare, validate, and package an ABACUS SCF run directory from task intent.
-  human_prompt_seed: '请准备一个最小 ABACUS LCAO SCF 输入目录：
-
-    - 材料：Si diamond conventional cell，a=5.43 Å。
-
-    - 任务：ABACUS scf。
-
-    - 输出目录：`run_abacus_scf/`，其中应包含 `INPUT`、`STRU`、`KPT`、`diagnosis.json`、`input_prep_manifest.json`。
-
-    - 请验证主输入并保存 machine-readable diagnostics 到 `run_abacus_scf/diagnosis.json`。
-
-    - `input_prep_manifest.json` 必须是 JSON object，至少包含这些顶层字段：software、task、input_dir、generated_files、user_provided_files、diagnostics、auxiliary_files、assumptions、submit_ready、bohrium_command；其中 `diagnostics.file` 必须是 `diagnosis.json`，`submit_ready` 必须是 JSON boolean。
-
-    - 这是把 task intent plus structure files 转成 runnable engine artifacts 的题；不要只在最终回答里描述而不写文件。
-
-    本题只准备输入目录，不实际提交 Bohrium。'
+  human_prompt_seed: "请准备一个最小 ABACUS LCAO SCF 输入目录：\n- 材料：Si diamond conventional cell，a=5.43 Å。\n- 任务：ABACUS scf。\n- 输出目录：`run_abacus_scf/`，其中应包含 `INPUT`、`STRU`、`KPT`、`diagnosis.json`、`input_prep_manifest.json`。\n- 请验证主输入并保存 machine-readable diagnostics 到 `run_abacus_scf/diagnosis.json`。\n- `input_prep_manifest.json` 必须是 JSON object，至少包含这些顶层字段：software、task、input_dir、generated_files、user_provided_files、diagnostics、auxiliary_files、assumptions、submit_ready、bohrium_command；其中 `diagnostics.file` 必须是 `diagnosis.json`，`submit_ready` 必须是 JSON boolean。\n- 这是把 task intent plus structure files 转成 runnable engine artifacts 的题；不要只在最终回答里描述而不写文件。\n本题只准备输入目录，不实际提交 Bohrium。"
   tags:
   - eng_abacus
   data_files: []
@@ -310,17 +282,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Package an ABACUS input directory with auxiliary files and engine-skill submission defaults.
-  human_prompt_seed: '请为一个已准备好的 ABACUS LCAO 运行目录做 submission preflight，目录名用 `run_abacus_packaged/`：
-
-    1. 生成或整理 `INPUT`、`STRU`、`KPT`，并把所需 auxiliary files（例如 pseudopotential/orbital 文件名占位或清单）集中到同一个 input directory。
-
-    2. 验证主输入并保存 machine-readable diagnostics 到 `diagnosis.json`。
-
-    3. 写 `input_prep_manifest.json`。它必须是 JSON object，至少包含这些顶层字段：software、task、input_dir、generated_files、user_provided_files、diagnostics、auxiliary_files、assumptions、submit_ready、bohrium_command；其中 `diagnostics.file` 必须是 `diagnosis.json`，`submit_ready` 必须是 JSON boolean，`auxiliary_files` 必须是 JSON array（即使为空也必须写成 `[]`）。如果没有可靠提交资源信息，`bohrium_command` 可以为空字符串。
-
-    4. 本题不要真正提交，只输出目录和说明；不要臆造 Bohrium image、machine 或 command 默认值。
-
-    请确保 manifest 能让后续 Bohrium submission 使用。'
+  human_prompt_seed: "请为一个已准备好的 ABACUS LCAO 运行目录做 submission preflight，目录名用 `run_abacus_packaged/`：\n1. 生成或整理 `INPUT`、`STRU`、`KPT`，并把所需 auxiliary files（例如 pseudopotential/orbital 文件名占位或清单）集中到同一个 input directory。\n2. 验证主输入并保存 machine-readable diagnostics 到 `diagnosis.json`。\n3. 写 `input_prep_manifest.json`。它必须是 JSON object，至少包含这些顶层字段：software、task、input_dir、generated_files、user_provided_files、diagnostics、auxiliary_files、assumptions、submit_ready、bohrium_command；其中 `diagnostics.file` 必须是 `diagnosis.json`，`submit_ready` 必须是 JSON boolean，`auxiliary_files` 必须是 JSON array（即使为空也必须写成 `[]`）。如果没有可靠提交资源信息，`bohrium_command` 可以为空字符串。\n4. 本题不要真正提交，只输出目录和说明；不要臆造 Bohrium image、machine 或 command 默认值。\n请确保 manifest 能让后续 Bohrium submission 使用。"
   tags:
   - eng_abacus
   data_files: []
@@ -432,7 +394,7 @@ questions:
         min: 40
         max: 200
       - key: scf_thr
-        min: 1.0e-12
+        min: 1e-12
         max: 0.0001
   - key: must_stru_o_species_orbital
     value:
@@ -542,7 +504,6 @@ questions:
   domain: agnostic
   intent: Prepare ABACUS input files for ASE-ABACUS ethanol relaxation and vibrational-frequency stages.
   human_prompt_seed: 请为 ASE-ABACUS 的孤立乙醇分子结构弛豫与振动频率静态计算准备 ABACUS 输入文件。体系使用 LCAO 基组、PBE 泛函和 Gamma 点；弛豫阶段和振动阶段都只需要保留实际 ABACUS 输入，不需要执行计算或输出频率结果。请固定输出位置：`relax/OUT/INPUT`、`relax/OUT/KPT`、`vib/OUT/INPUT`、`vib/OUT/KPT`。
-
   tags:
   - eng_abacus
   reference_answers:
@@ -685,7 +646,7 @@ questions:
         min: 30
         max: 150
       - key: scf_thr
-        min: 1.0e-10
+        min: 1e-10
         max: 0.0001
       - key: smearing_sigma
         allow_missing_key: true
@@ -808,7 +769,7 @@ questions:
         min: 40
         max: 150
       - key: scf_thr
-        min: 1.0e-10
+        min: 1e-10
         max: 0.0001
       - key: smearing_sigma
         allow_missing_key: true
@@ -955,7 +916,7 @@ questions:
         min: 40
         max: 150
       - key: scf_thr
-        min: 1.0e-10
+        min: 1e-10
         max: 0.0001
   - key: must_stru_si_species_orbital
     value:
@@ -1117,7 +1078,7 @@ questions:
         min: 40
         max: 150
       - key: scf_thr
-        min: 1.0e-10
+        min: 1e-10
         max: 0.0001
       - key: smearing_sigma
         allow_missing_key: true
@@ -1135,7 +1096,7 @@ questions:
         min: 40
         max: 150
       - key: scf_thr
-        min: 1.0e-10
+        min: 1e-10
         max: 0.0001
       - key: smearing_sigma
         allow_missing_key: true
@@ -1238,13 +1199,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS PBE+U LCAO cell-relax input directories for comparing rocksalt and square-planar NiO phases.
-  human_prompt_seed: '我想用 ABACUS 比较 NiO 两种候选结构的相对稳定性：一个是常规岩盐相，另一个是 Ni 处于平面四配位环境的变形相。请先只准备后续计算需要的输入文件。
-
-    计算方法统一采用 LCAO 基组；两套输入应使用一致的计算精度、赝势/轨道来源和 k 点采样策略，便于之后做能量比较。
-
-    这一步应先完成可变晶胞的结构优化：同时优化晶胞参数和原子位置。
-
-    工作区已经提供了 `POSCAR_rocksalt` 和 `POSCAR_square_planar`，请在当前目录下分别建立 `nio_rocksalt/` 和 `nio_square_planar/`，把对应 POSCAR 转写为 ABACUS `STRU`，并写入对应的 ABACUS `INPUT`。不要运行计算，也不要提交任务。'
+  human_prompt_seed: "我想用 ABACUS 比较 NiO 两种候选结构的相对稳定性：一个是常规岩盐相，另一个是 Ni 处于平面四配位环境的变形相。请先只准备后续计算需要的输入文件。\n计算方法统一采用 LCAO 基组；两套输入应使用一致的计算精度、赝势/轨道来源和 k 点采样策略，便于之后做能量比较。\n这一步应先完成可变晶胞的结构优化：同时优化晶胞参数和原子位置。\n工作区已经提供了 `POSCAR_rocksalt` 和 `POSCAR_square_planar`，请在当前目录下分别建立 `nio_rocksalt/` 和 `nio_square_planar/`，把对应 POSCAR 转写为 ABACUS `STRU`，并写入对应的 ABACUS `INPUT`。不要运行计算，也不要提交任务。"
   tags:
   - eng_abacus
   - struct_transform
@@ -1293,7 +1248,8 @@ questions:
         min: 4.0
         max: 7.0
       - key: hubbard_u
-        if_component_count_in: [3]
+        if_component_count_in:
+        - 3
         component: 2
         min: 4.0
         max: 7.0
@@ -1306,7 +1262,8 @@ questions:
         min: 4.0
         max: 7.0
       - key: hubbard_u
-        if_component_count_in: [3]
+        if_component_count_in:
+        - 3
         component: 2
         min: 4.0
         max: 7.0
@@ -1328,8 +1285,8 @@ questions:
         min: 80
         max: 150
       - key: scf_thr
-        min: 1.0e-10
-        max: 1.0e-05
+        min: 1e-10
+        max: 1e-05
       - key: relax_nmax
         min: 20
         max: 300
@@ -1347,8 +1304,8 @@ questions:
         min: 80
         max: 150
       - key: scf_thr
-        min: 1.0e-10
-        max: 1.0e-05
+        min: 1e-10
+        max: 1e-05
       - key: relax_nmax
         min: 20
         max: 300
@@ -1501,17 +1458,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS LCAO-SCF inputs that require resolving nontrivial APNS pseudopotential filenames.
-  human_prompt_seed: '请为一个 Mg-N-Rh 三元素小胞准备 ABACUS LCAO-SCF 输入文件，用于测试 APNS 赝势/轨道文件名解析是否正确。
-
-    要求：
-
-    1) 生成当前目录下的 `INPUT`、`STRU`、`KPT`。
-
-    2) 使用 ABACUS LCAO 和 PBE 单点自洽；显式设置 APNS 赝势目录和轨道目录。
-
-    3) `STRU` 中的 Mg、N、Rh 三种元素必须使用 skill references 中实际存在的 APNS pseudopotential 和 numerical-orbital 文件名；不要凭元素符号猜成 `元素名.upf`。
-
-    4) 结构只需是一个合理的周期性测试小胞，重点是三种元素、`INPUT`/`STRU`/`KPT` 互相一致；不要运行计算。'
+  human_prompt_seed: "请为一个 Mg-N-Rh 三元素小胞准备 ABACUS LCAO-SCF 输入文件，用于测试 APNS 赝势/轨道文件名解析是否正确。\n要求：\n1) 生成当前目录下的 `INPUT`、`STRU`、`KPT`。\n2) 使用 ABACUS LCAO 和 PBE 单点自洽；显式设置 APNS 赝势目录和轨道目录。\n3) `STRU` 中的 Mg、N、Rh 三种元素必须使用 skill references 中实际存在的 APNS pseudopotential 和 numerical-orbital 文件名；不要凭元素符号猜成 `元素名.upf`。\n4) 结构只需是一个合理的周期性测试小胞，重点是三种元素、`INPUT`/`STRU`/`KPT` 互相一致；不要运行计算。"
   tags:
   - eng_abacus
   reference_answers:
@@ -1651,19 +1598,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Generate ABACUS PW SCF INPUT and KPT files for Al slab electrostatic-potential calculation setup.
-  human_prompt_seed: '工作区中提供了一个带真空层的 Al slab 结构（STRU）。
-
-
-    请为该体系准备 ABACUS 平面波单点输入，用于后续静电势分析：
-
-    1) 生成一份可直接运行的 SCF 输入文件，并确保包含静电势输出所需设置。
-
-    2) 生成与 slab 几何相匹配的 K 点设置：面内采样应足够，法向方向使用单点采样。
-
-
-    将结果写入当前目录：`INPUT_pot`、`KPT_pot`。
-
-    '
+  human_prompt_seed: "工作区中提供了一个带真空层的 Al slab 结构（STRU）。\n\n请为该体系准备 ABACUS 平面波单点输入，用于后续静电势分析：\n1) 生成一份可直接运行的 SCF 输入文件，并确保包含静电势输出所需设置。\n2) 生成与 slab 几何相匹配的 K 点设置：面内采样应足够，法向方向使用单点采样。\n\n将结果写入当前目录：`INPUT_pot`、`KPT_pot`。\n"
   tags:
   - eng_abacus
   - struct_surface
@@ -1808,19 +1743,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Generate ABACUS PW SCF input for dipole correction on an asymmetric H2O slab, with the saw-like region placed in vacuum and no finite external field.
-  human_prompt_seed: '工作区中提供了一个带较大真空区的 H2O 结构（STRU）。
-
-
-    请准备 ABACUS 平面波单点输入，目标是做偶极修正的静电势分析：
-
-    1) 生成一份 SCF INPUT，开启偶极修正相关设置，并明确这是“偶极修正场景”而非施加有限外场。
-
-    2) 生成与该大真空超胞匹配的 Gamma 点 KPT。
-
-
-    将结果写入当前目录：`INPUT_dipole`、`KPT_dipole`。
-
-    '
+  human_prompt_seed: "工作区中提供了一个带较大真空区的 H2O 结构（STRU）。\n\n请准备 ABACUS 平面波单点输入，目标是做偶极修正的静电势分析：\n1) 生成一份 SCF INPUT，开启偶极修正相关设置，并明确这是“偶极修正场景”而非施加有限外场。\n2) 生成与该大真空超胞匹配的 Gamma 点 KPT。\n\n将结果写入当前目录：`INPUT_dipole`、`KPT_dipole`。\n"
   tags:
   - eng_abacus
   - struct_surface
@@ -1865,7 +1788,7 @@ questions:
         min: 35
         max: 75
       - key: scf_thr
-        min: 1.0e-10
+        min: 1e-10
         max: 0.01
       - key: out_pot
         expected: 2
@@ -1988,21 +1911,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Add ABACUS LCAO BSSE correction at a bulk Fe vacancy site using a single Fe_empty ghost atom and SCF INPUT.
-  human_prompt_seed: '工作区中提供了一个 Fe 体相空位结构（已去掉一个 Fe 原子）。
-
-
-    请准备 ABACUS LCAO 单点输入用于 vacancy 位置的 BSSE 校正：
-
-    1) 在空位处引入 Fe_empty ghost 基组位点。
-
-    2) 生成与体相场景匹配的 SCF INPUT（均匀三维采样）。
-
-    3) 在最终回答中简要说明 vacancy 场景为何需要 ghost 基组补偿。 说明：均匀三维采样可用 kspacing 或 KPT 两种路线；若使用 KPT，建议采用 `KPT_vac_bsse` 文件名与 Gamma 风格。
-
-
-    将结果写入当前目录：`STRU_vac_bsse`、`INPUT_vac_bsse`。
-
-    '
+  human_prompt_seed: "工作区中提供了一个 Fe 体相空位结构（已去掉一个 Fe 原子）。\n\n请准备 ABACUS LCAO 单点输入用于 vacancy 位置的 BSSE 校正：\n1) 在空位处引入 Fe_empty ghost 基组位点。\n2) 生成与体相场景匹配的 SCF INPUT（均匀三维采样）。\n3) 在最终回答中简要说明 vacancy 场景为何需要 ghost 基组补偿。 说明：均匀三维采样可用 kspacing 或 KPT 两种路线；若使用 KPT，建议采用 `KPT_vac_bsse` 文件名与 Gamma 风格。\n\n将结果写入当前目录：`STRU_vac_bsse`、`INPUT_vac_bsse`。\n"
   tags:
   - eng_abacus
   - struct_transform
@@ -2048,7 +1957,7 @@ questions:
         min: 80
         max: 120
       - key: scf_thr
-        min: 1.0e-10
+        min: 1e-10
         max: 0.01
   - key: suggested_input_vac_smearing
     value:
@@ -2167,21 +2076,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS PW bulk-and-slab inputs for Al fcc(100) surface-energy convergence using bulk, 5-layer slab, and 7-layer slab structures.
-  human_prompt_seed: '工作区中提供了体相与两种厚度 slab 的 Al fcc(100) 结构。
-
-
-    请为表面能收敛测试准备 ABACUS 平面波输入：
-
-    1) 体相输入使用 cell-relax。
-
-    2) 两个 slab 输入使用离子弛豫，并保留原 STRU 中已有的固定/弛豫标记，不修改给定结构。
-
-    3) 提供体相与 slab 各自匹配的 K 点文件；其中 slab 需采用各向异性采样并在法向使用单点。
-
-
-    将结果写入当前目录：`INPUT_bulk_relax`、`INPUT_slab5`、`INPUT_slab7`、`KPT_bulk`、`KPT_slab`。
-
-    '
+  human_prompt_seed: "工作区中提供了体相与两种厚度 slab 的 Al fcc(100) 结构。\n\n请为表面能收敛测试准备 ABACUS 平面波输入：\n1) 体相输入使用 cell-relax。\n2) 两个 slab 输入使用离子弛豫，并保留原 STRU 中已有的固定/弛豫标记，不修改给定结构。\n3) 提供体相与 slab 各自匹配的 K 点文件；其中 slab 需采用各向异性采样并在法向使用单点。\n\n将结果写入当前目录：`INPUT_bulk_relax`、`INPUT_slab5`、`INPUT_slab7`、`KPT_bulk`、`KPT_slab`。\n"
   tags:
   - eng_abacus
   - struct_surface
@@ -2410,21 +2305,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS PW inputs for Mo surface-vacancy energy using bulk, pristine slab, and surface-vacancy slab structures.
-  human_prompt_seed: '工作区中提供了 Mo 体相、无缺陷表面和表面空位三套结构。
-
-
-    请为表面 vacancy benchmark 准备 ABACUS 平面波输入：
-
-    1) 体相输入用于获取每原子参考能，采用 cell-relax。
-
-    2) 无缺陷表面和表面空位两套 slab 输入采用 SCF，并保持可直接用于对比。
-
-    3) 三套计算使用一致的低成本 benchmark 风格参数，并提供共用的 Gamma 点 KPT 文件。
-
-
-    将结果写入当前目录：`INPUT_bulk_mo`、`INPUT_slab_clean`、`INPUT_slab_vac`、`KPT_gamma`。
-
-    '
+  human_prompt_seed: "工作区中提供了 Mo 体相、无缺陷表面和表面空位三套结构。\n\n请为表面 vacancy benchmark 准备 ABACUS 平面波输入：\n1) 体相输入用于获取每原子参考能，采用 cell-relax。\n2) 无缺陷表面和表面空位两套 slab 输入采用 SCF，并保持可直接用于对比。\n3) 三套计算使用一致的低成本 benchmark 风格参数，并提供共用的 Gamma 点 KPT 文件。\n\n将结果写入当前目录：`INPUT_bulk_mo`、`INPUT_slab_clean`、`INPUT_slab_vac`、`KPT_gamma`。\n"
   tags:
   - eng_abacus
   - struct_transform
@@ -2769,18 +2650,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Test stru_file and kpoint_file routing when multiple non-default filenames coexist.
-  human_prompt_seed: '工作目录中有如下文件：
-
-    - `Si_diamond.stru`（Si 金刚石结构，2 原子原胞）
-
-    - `Si_fcc.stru`（Si FCC 结构，1 原子原胞）
-
-    - `kpt_444.txt`（Gamma-centered 4×4×4 网格）
-
-    - `kpt_666.txt`（Gamma-centered 6×6×6 网格）
-
-
-    请为 **Si 金刚石结构** 准备 ABACUS PW 单点自洽计算，使用 **4×4×4 k 点网格**。所有生成的文件放在 `run_si/` 目录下。'
+  human_prompt_seed: "工作目录中有如下文件：\n- `Si_diamond.stru`（Si 金刚石结构，2 原子原胞）\n- `Si_fcc.stru`（Si FCC 结构，1 原子原胞）\n- `kpt_444.txt`（Gamma-centered 4×4×4 网格）\n- `kpt_666.txt`（Gamma-centered 6×6×6 网格）\n\n请为 **Si 金刚石结构** 准备 ABACUS PW 单点自洽计算，使用 **4×4×4 k 点网格**。所有生成的文件放在 `run_si/` 目录下。"
   tags:
   - eng_abacus
   data_files:
@@ -2812,7 +2682,7 @@ questions:
     value:
       filename: run_si/INPUT
       check: input_resolves_kpt_contains
-      expected: '4 4 4'
+      expected: 4 4 4
   - key: must_input_core
     value:
       filename: run_si/INPUT
@@ -2867,13 +2737,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Test DFT+U SCF with antiferromagnetic initialization for NiO.
-  human_prompt_seed: '请为 NiO 岩盐结构准备 ABACUS LCAO DFT+U 自洽场计算。
-
-    结构文件 `STRU_NiO` 已在工作区中（conventional cell，4 Ni + 4 O）。
-
-    Ni 的 3d 轨道 Hubbard U 值请用 6.0 eV。
-
-    注意考虑 NiO 基态的磁有序性质。'
+  human_prompt_seed: "请为 NiO 岩盐结构准备 ABACUS LCAO DFT+U 自洽场计算。\n结构文件 `STRU_NiO` 已在工作区中（conventional cell，4 Ni + 4 O）。\nNi 的 3d 轨道 Hubbard U 值请用 6.0 eV。\n注意考虑 NiO 基态的磁有序性质。"
   tags:
   - eng_abacus
   data_files:
@@ -2960,11 +2824,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Map Bravais lattice types to ABACUS latname and STRU lattice parameters (official 01_bravais_lattice).
-  human_prompt_seed: '请为下列三套 Bravais 晶系在当前目录建立子目录并写入 ABACUS SCF 输入（不要运行计算）：
-
-    - `run_fcc_si/`：面心立方 Si；STRU 中 `LATTICE_CONSTANT` = 10.2 Å；PW SCF - `run_hex_mos2/`：六角 MoS₂；`LATTICE_CONSTANT` = 5.9716 Å，`LATTICE_PARAMETERS` = 12；PW SCF - `run_so_snte/`：简单正交 SnTe；`LATTICE_CONSTANT` = 8.7826087 Å，`LATTICE_PARAMETERS` 为 0.981704692 与 3.5126991；LCAO SCF
-
-    各目录需含 `INPUT`、`STRU`、`KPT`。INPUT 中用标准 Bravais 关键字指定晶胞；STRU 写入上述晶格常数与参数。'
+  human_prompt_seed: "请为下列三套 Bravais 晶系在当前目录建立子目录并写入 ABACUS SCF 输入（不要运行计算）：\n- `run_fcc_si/`：面心立方 Si；STRU 中 `LATTICE_CONSTANT` = 10.2 Å；PW SCF - `run_hex_mos2/`：六角 MoS₂；`LATTICE_CONSTANT` = 5.9716 Å，`LATTICE_PARAMETERS` = 12；PW SCF - `run_so_snte/`：简单正交 SnTe；`LATTICE_CONSTANT` = 8.7826087 Å，`LATTICE_PARAMETERS` 为 0.981704692 与 3.5126991；LCAO SCF\n各目录需含 `INPUT`、`STRU`、`KPT`。INPUT 中用标准 Bravais 关键字指定晶胞；STRU 写入上述晶格常数与参数。"
   tags:
   - eng_abacus
   reference_answers:
@@ -3172,25 +3032,22 @@ questions:
     axis: correctness
     verify: text_file_contains_all
   - id: turn_budget
-    criterion: 'Agent completes within turn budget.'
+    criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: 'Wall-clock run duration stays within benchmark ceiling.'
+    criterion: Wall-clock run duration stays within benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: 'Total token usage stays within benchmark ceiling.'
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-
 - id: IG_abacus_024_20260518
   capability: input_generation
   domain: agnostic
   intent: Prepare minimal PW vs LCAO SCF input triplets for Si2 (official 02_scf).
-  human_prompt_seed: '请为 Si₂ 金刚石结构准备两套基础 ABACUS 自洽场输入，分别使用平面波与 LCAO 基组： - `run_pw_si2/` - `run_lcao_si2/`
-
-    各目录写入 `INPUT`、`STRU`、`KPT`。STRU 用 `LATTICE_VECTORS` 描述晶胞；补齐赝势路径及该基组所需的 SCF 控制项。不要运行计算。'
+  human_prompt_seed: "请为 Si₂ 金刚石结构准备两套基础 ABACUS 自洽场输入，分别使用平面波与 LCAO 基组： - `run_pw_si2/` - `run_lcao_si2/`\n各目录写入 `INPUT`、`STRU`、`KPT`。STRU 用 `LATTICE_VECTORS` 描述晶胞；补齐赝势路径及该基组所需的 SCF 控制项。不要运行计算。"
   tags:
   - eng_abacus
   reference_answers:
@@ -3326,25 +3183,22 @@ questions:
     axis: correctness
     verify: text_file_contains_all
   - id: turn_budget
-    criterion: 'Agent completes within turn budget.'
+    criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: 'Wall-clock run duration stays within benchmark ceiling.'
+    criterion: Wall-clock run duration stays within benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: 'Total token usage stays within benchmark ceiling.'
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-
 - id: IG_abacus_025_20260518
   capability: input_generation
   domain: agnostic
   intent: Spin-polarized LCAO SCF with distinct initial magnetic orders (official 03_spin_polarized).
-  human_prompt_seed: '请按 ABACUS 官方自旋极化示例思路，准备四套 LCAO 自旋 SCF 输入（各含 `INPUT`、`STRU`、`KPT`）： - `run_fe_fm/`：bcc Fe 铁磁初态 - `run_fe_afm/`：bcc Fe 反铁磁初态（晶胞与 FM 相同） - `run_h_atom/`：单 H 原子 - `run_co6nb4os2/`：Co₆Nb₄Os₂ 团簇，多位点磁矩
-
-    不要运行计算。'
+  human_prompt_seed: "请按 ABACUS 官方自旋极化示例思路，准备四套 LCAO 自旋 SCF 输入（各含 `INPUT`、`STRU`、`KPT`）： - `run_fe_fm/`：bcc Fe 铁磁初态 - `run_fe_afm/`：bcc Fe 反铁磁初态（晶胞与 FM 相同） - `run_h_atom/`：单 H 原子 - `run_co6nb4os2/`：Co₆Nb₄Os₂ 团簇，多位点磁矩\n不要运行计算。"
   tags:
   - eng_abacus
   reference_answers:
@@ -3551,23 +3405,22 @@ questions:
     axis: correctness
     verify: stru_file_check
   - id: turn_budget
-    criterion: 'Agent completes within turn budget.'
+    criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: 'Wall-clock run duration stays within benchmark ceiling.'
+    criterion: Wall-clock run duration stays within benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: 'Total token usage stays within benchmark ceiling.'
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-
 - id: IG_abacus_026_20260518
   capability: input_generation
   domain: agnostic
   intent: Noncollinear LCAO SCF with SOC for bcc Fe (official 04_noncollinear).
-  human_prompt_seed: '请为 bcc Fe 准备一套 ABACUS **非共线** LCAO 自洽场输入目录 `run_fe_nc/`（`INPUT`、`STRU`、`KPT`）。需包含自旋轨道耦合，并在 STRU 中为 Fe 设置**三分量**初始磁矩。不要运行计算。'
+  human_prompt_seed: 请为 bcc Fe 准备一套 ABACUS **非共线** LCAO 自洽场输入目录 `run_fe_nc/`（`INPUT`、`STRU`、`KPT`）。需包含自旋轨道耦合，并在 STRU 中为 Fe 设置**三分量**初始磁矩。不要运行计算。
   tags:
   - eng_abacus
   reference_answers:
@@ -3658,25 +3511,22 @@ questions:
     axis: correctness
     verify: stru_file_check
   - id: turn_budget
-    criterion: 'Agent completes within turn budget.'
+    criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: 'Wall-clock run duration stays within benchmark ceiling.'
+    criterion: Wall-clock run duration stays within benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: 'Total token usage stays within benchmark ceiling.'
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-
 - id: IG_abacus_027_20260518
   capability: input_generation
   domain: agnostic
   intent: PW SOC SCF then NSCF band workflow for GaAs (official 05_soc).
-  human_prompt_seed: '请为 GaAs 准备 ABACUS **平面波 + 自旋轨道耦合** 的两步输入： - `run_gaas_scf/`：自洽并输出电荷 - `run_gaas_band/`：非自洽能带（读取上一步电荷）
-
-    各目录含 `INPUT`、`STRU`、`KPT`。不要运行计算。'
+  human_prompt_seed: "请为 GaAs 准备 ABACUS **平面波 + 自旋轨道耦合** 的两步输入： - `run_gaas_scf/`：自洽并输出电荷 - `run_gaas_band/`：非自洽能带（读取上一步电荷）\n各目录含 `INPUT`、`STRU`、`KPT`。不要运行计算。"
   tags:
   - eng_abacus
   reference_answers:
@@ -3771,23 +3621,22 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: turn_budget
-    criterion: 'Agent completes within turn budget.'
+    criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: 'Wall-clock run duration stays within benchmark ceiling.'
+    criterion: Wall-clock run duration stays within benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: 'Total token usage stays within benchmark ceiling.'
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-
 - id: IG_abacus_028_20260518
   capability: input_generation
   domain: agnostic
   intent: Compare Gaussian vs fixed smearing for spin LCAO Fe (official 06_smearing).
-  human_prompt_seed: '请为同一 LCAO 自旋极化 Fe 体系准备两套 SCF 输入（`run_gaussian/`、`run_fixed/`），各含 `INPUT`、`STRU`、`KPT`。不要运行计算。'
+  human_prompt_seed: 请为同一 LCAO 自旋极化 Fe 体系准备两套 SCF 输入（`run_gaussian/`、`run_fixed/`），各含 `INPUT`、`STRU`、`KPT`。不要运行计算。
   tags:
   - eng_abacus
   reference_answers:
@@ -3890,23 +3739,22 @@ questions:
     axis: correctness
     verify: stru_file_check
   - id: turn_budget
-    criterion: 'Agent completes within turn budget.'
+    criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: 'Wall-clock run duration stays within benchmark ceiling.'
+    criterion: Wall-clock run duration stays within benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: 'Total token usage stays within benchmark ceiling.'
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-
 - id: IG_abacus_029_20260518
   capability: input_generation
   domain: agnostic
   intent: Compare Broyden vs plain mixing for PW fcc Al (official 07_charge_mixing).
-  human_prompt_seed: '请为 fcc Al 准备两套 PW SCF 输入（`run_broyden/`、`run_plain/`），对比 Broyden 与 plain 电荷混合。各含 `INPUT`、`STRU`、`KPT`。不要运行计算。'
+  human_prompt_seed: 请为 fcc Al 准备两套 PW SCF 输入（`run_broyden/`、`run_plain/`），对比 Broyden 与 plain 电荷混合。各含 `INPUT`、`STRU`、`KPT`。不要运行计算。
   tags:
   - eng_abacus
   reference_answers:
@@ -4025,23 +3873,22 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: turn_budget
-    criterion: 'Agent completes within turn budget.'
+    criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: 'Wall-clock run duration stays within benchmark ceiling.'
+    criterion: Wall-clock run duration stays within benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: 'Total token usage stays within benchmark ceiling.'
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-
 - id: IG_abacus_030_20260518
   capability: input_generation
   domain: agnostic
   intent: SCF inputs writing charge density for PW Al, LCAO Si2, spin PW Fe (official 08_charge_density).
-  human_prompt_seed: '请准备三套输出电荷密度的 SCF 目录：`run_pw_al/`、`run_lcao_si2/`、`run_pw_fe/`。各含 `INPUT`、`STRU`、`KPT`。不要运行计算。'
+  human_prompt_seed: 请准备三套输出电荷密度的 SCF 目录：`run_pw_al/`、`run_lcao_si2/`、`run_pw_fe/`。各含 `INPUT`、`STRU`、`KPT`。不要运行计算。
   tags:
   - eng_abacus
   reference_answers:
@@ -4170,23 +4017,22 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: turn_budget
-    criterion: 'Agent completes within turn budget.'
+    criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: 'Wall-clock run duration stays within benchmark ceiling.'
+    criterion: Wall-clock run duration stays within benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: 'Total token usage stays within benchmark ceiling.'
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-
 - id: IG_abacus_031_20260518
   capability: input_generation
   domain: agnostic
   intent: LCAO gamma-only SCF outputting density matrix (official 09_density_matrix).
-  human_prompt_seed: '请为 LCAO Si₂ 准备 `run_lcao_si2/` 的 SCF 输入以输出密度矩阵（`INPUT`、`STRU`；Γ 点可不写 `KPT`）。不要运行计算。'
+  human_prompt_seed: 请为 LCAO Si₂ 准备 `run_lcao_si2/` 的 SCF 输入以输出密度矩阵（`INPUT`、`STRU`；Γ 点可不写 `KPT`）。不要运行计算。
   tags:
   - eng_abacus
   reference_answers:
@@ -4244,23 +4090,22 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: turn_budget
-    criterion: 'Agent completes within turn budget.'
+    criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: 'Wall-clock run duration stays within benchmark ceiling.'
+    criterion: Wall-clock run duration stays within benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: 'Total token usage stays within benchmark ceiling.'
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-
 - id: IG_abacus_032_20260518
   capability: input_generation
   domain: agnostic
   intent: 'LCAO H/S matrix outputs: k-space, real-space, get_s (official 10_hs_matrix).'
-  human_prompt_seed: '请准备 `run_hsk/`、`run_hsr/`、`run_get_s/` 三套 LCAO 输入（k 空间 H/S、实空间 H(R)/S(R)、直接求 S）。各含 `INPUT`、`STRU`；需多 k 点的目录另写 `KPT`。不要运行计算。'
+  human_prompt_seed: 请准备 `run_hsk/`、`run_hsr/`、`run_get_s/` 三套 LCAO 输入（k 空间 H/S、实空间 H(R)/S(R)、直接求 S）。各含 `INPUT`、`STRU`；需多 k 点的目录另写 `KPT`。不要运行计算。
   tags:
   - eng_abacus
   reference_answers:
@@ -4362,23 +4207,22 @@ questions:
     axis: correctness
     verify: stru_file_check
   - id: turn_budget
-    criterion: 'Agent completes within turn budget.'
+    criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: 'Wall-clock run duration stays within benchmark ceiling.'
+    criterion: Wall-clock run duration stays within benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: 'Total token usage stays within benchmark ceiling.'
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-
 - id: IG_abacus_033_20260518
   capability: input_generation
   domain: agnostic
   intent: Wavefunction output PW/LCAO SCF and get_wf (official 11_wfc).
-  human_prompt_seed: '请准备 `run_pw_al/`、`run_lcao_si2/`、`run_lcao_getwf/`（含 `INPUT-scf` 与 `INPUT-getwf`）波函数相关输入。不要运行计算。'
+  human_prompt_seed: 请准备 `run_pw_al/`、`run_lcao_si2/`、`run_lcao_getwf/`（含 `INPUT-scf` 与 `INPUT-getwf`）波函数相关输入。不要运行计算。
   tags:
   - eng_abacus
   reference_answers:
@@ -4487,23 +4331,22 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: turn_budget
-    criterion: 'Agent completes within turn budget.'
+    criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: 'Wall-clock run duration stays within benchmark ceiling.'
+    criterion: Wall-clock run duration stays within benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: 'Total token usage stays within benchmark ceiling.'
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-
 - id: IG_abacus_034_20260518
   capability: input_generation
   domain: agnostic
   intent: PW and LCAO two-step band workflows (official 12_band).
-  human_prompt_seed: '请准备 `run_pw_scf/`、`run_pw_band/`、`run_lcao_scf/`、`run_lcao_band/` 四套能带流程输入。不要运行计算。'
+  human_prompt_seed: 请准备 `run_pw_scf/`、`run_pw_band/`、`run_lcao_scf/`、`run_lcao_band/` 四套能带流程输入。不要运行计算。
   tags:
   - eng_abacus
   reference_answers:
@@ -4663,23 +4506,22 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: turn_budget
-    criterion: 'Agent completes within turn budget.'
+    criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: 'Wall-clock run duration stays within benchmark ceiling.'
+    criterion: Wall-clock run duration stays within benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: 'Total token usage stays within benchmark ceiling.'
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-
 - id: IG_abacus_035_20260518
   capability: input_generation
   domain: agnostic
   intent: PW and LCAO DOS workflows with dense Gamma NSCF mesh (official 13_dos).
-  human_prompt_seed: '请准备 `run_pw_scf/`、`run_pw_dos/`、`run_lcao_scf/`、`run_lcao_dos/` 四套 SCF→DOS 输入（各含 `INPUT`、`STRU`、`KPT`）；DOS 步使用更密 Γ 点网格（非 Line 路径）。不要运行计算。'
+  human_prompt_seed: 请准备 `run_pw_scf/`、`run_pw_dos/`、`run_lcao_scf/`、`run_lcao_dos/` 四套 SCF→DOS 输入（各含 `INPUT`、`STRU`、`KPT`）；DOS 步使用更密 Γ 点网格（非 Line 路径）。不要运行计算。
   tags:
   - eng_abacus
   reference_answers:
@@ -4839,23 +4681,22 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: turn_budget
-    criterion: 'Agent completes within turn budget.'
+    criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: 'Wall-clock run duration stays within benchmark ceiling.'
+    criterion: Wall-clock run duration stays within benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: 'Total token usage stays within benchmark ceiling.'
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-
 - id: IG_abacus_036_20260518
   capability: input_generation
   domain: agnostic
   intent: LCAO SCF with Mulliken output (official 14_mulliken).
-  human_prompt_seed: '请为 LCAO Si₂ 准备 `run_lcao_si2/` Mulliken 布居分析输入。不要运行计算。'
+  human_prompt_seed: 请为 LCAO Si₂ 准备 `run_lcao_si2/` Mulliken 布居分析输入。不要运行计算。
   tags:
   - eng_abacus
   reference_answers:
@@ -4904,23 +4745,22 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: turn_budget
-    criterion: 'Agent completes within turn budget.'
+    criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: 'Wall-clock run duration stays within benchmark ceiling.'
+    criterion: Wall-clock run duration stays within benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: 'Total token usage stays within benchmark ceiling.'
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-
 - id: IG_abacus_037_20260518
   capability: input_generation
   domain: agnostic
   intent: Fixed occupations for C/N single-electron excitation (official 15_fixed_occ).
-  human_prompt_seed: '请为自旋极化 C/N 准备 `run_fixed_occ/` 固定占据输入（`INPUT`、`STRU`）。不要运行计算。'
+  human_prompt_seed: 请为自旋极化 C/N 准备 `run_fixed_occ/` 固定占据输入（`INPUT`、`STRU`）。不要运行计算。
   tags:
   - eng_abacus
   reference_answers:
@@ -4995,23 +4835,22 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: turn_budget
-    criterion: 'Agent completes within turn budget.'
+    criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: 'Wall-clock run duration stays within benchmark ceiling.'
+    criterion: Wall-clock run duration stays within benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: 'Total token usage stays within benchmark ceiling.'
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-
 - id: IG_abacus_038_20260518
   capability: input_generation
   domain: agnostic
   intent: PW ultrasoft PP SCF for bcc Fe (official 16_uspp).
-  human_prompt_seed: '请为 bcc Fe 准备超软赝势 PW 输入 `run_pw_fe_uspp/`（含 ecutwfc 与 ecutrho）。不要运行计算。'
+  human_prompt_seed: 请为 bcc Fe 准备超软赝势 PW 输入 `run_pw_fe_uspp/`（含 ecutwfc 与 ecutrho）。不要运行计算。
   tags:
   - eng_abacus
   reference_answers:
@@ -5083,23 +4922,22 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: turn_budget
-    criterion: 'Agent completes within turn budget.'
+    criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: 'Wall-clock run duration stays within benchmark ceiling.'
+    criterion: Wall-clock run duration stays within benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: 'Total token usage stays within benchmark ceiling.'
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-
 - id: IG_abacus_039_20260518
   capability: input_generation
   domain: agnostic
   intent: PW cell-relax vs LCAO atomic relax (official 17_relax).
-  human_prompt_seed: '请准备 `run_pw_cell_relax/`（可变晶胞）与 `run_lcao_relax/`（原子弛豫）两套优化输入。不要运行计算。'
+  human_prompt_seed: 请准备 `run_pw_cell_relax/`（可变晶胞）与 `run_lcao_relax/`（原子弛豫）两套优化输入。不要运行计算。
   tags:
   - eng_abacus
   reference_answers:
@@ -5199,30 +5037,22 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: turn_budget
-    criterion: 'Agent completes within turn budget.'
+    criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: 'Wall-clock run duration stays within benchmark ceiling.'
+    criterion: Wall-clock run duration stays within benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: 'Total token usage stays within benchmark ceiling.'
+    criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
 - id: IG_abacus_040_20260518
   capability: input_generation
   domain: agnostic
   intent: Prepare LCAO MD inputs for Si8 NVE vs NVT ensembles per official 18_md.
-  human_prompt_seed: '为 **Si₈** 准备两套 **LCAO 分子动力学（MD）** 输入（只写文件，不运行）：
-
-
-    1) `run_md_nve/` — **NVE** 微正则系综；
-
-    2) `run_md_nvt/` — **NVT** 正则系综（须指定控温方式）。
-
-
-    每目录含 `INPUT`、`STRU`（`gamma_only` 时可不写 `KPT`）；关闭对称性。'
+  human_prompt_seed: "为 **Si₈** 准备两套 **LCAO 分子动力学（MD）** 输入（只写文件，不运行）：\n\n1) `run_md_nve/` — **NVE** 微正则系综；\n2) `run_md_nvt/` — **NVT** 正则系综（须指定控温方式）。\n\n每目录含 `INPUT`、`STRU`（`gamma_only` 时可不写 `KPT`）；关闭对称性。"
   tags:
   - eng_abacus
   reference_answers:
@@ -5391,15 +5221,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare PW and LCAO hybrid-functional SCF inputs for Si2 per official 20_hybrid—dft_functional and exact-exchange fraction for PW.
-  human_prompt_seed: '为 **Si₂** 准备两套 **杂化泛函（hybrid）自洽场** 输入（只写文件，不运行）：
-
-
-    1) `run_pw_si2_hybrid/` — 平面波；
-
-    2) `run_lcao_si2_hybrid/` — LCAO。
-
-
-    每目录须含 `INPUT`、`STRU`、`KPT`。'
+  human_prompt_seed: "为 **Si₂** 准备两套 **杂化泛函（hybrid）自洽场** 输入（只写文件，不运行）：\n\n1) `run_pw_si2_hybrid/` — 平面波；\n2) `run_lcao_si2_hybrid/` — LCAO。\n\n每目录须含 `INPUT`、`STRU`、`KPT`。"
   tags:
   - eng_abacus
   reference_answers:
@@ -5583,15 +5405,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare DeePKS projector-generation and LCAO SCF-with-model inputs per official 21_deepks—gen_bessel vs deepks_scf/deepks_model.
-  human_prompt_seed: '请按 DeePKS 官方流程准备两套输入（只写文件，不运行）：
-
-
-    1) `run_pw_h2o_gen_bessel/` — 生成 Bessel 投影基（`gen_bessel`）；
-
-    2) `run_lcao_h2o_deepks/` — 载入已训练模型做 LCAO 自洽。
-
-
-    各目录须含 `INPUT`、`STRU`；需要 k 点采样的目录另写 `KPT`。'
+  human_prompt_seed: "请按 DeePKS 官方流程准备两套输入（只写文件，不运行）：\n\n1) `run_pw_h2o_gen_bessel/` — 生成 Bessel 投影基（`gen_bessel`）；\n2) `run_lcao_h2o_deepks/` — 载入已训练模型做 LCAO 自洽。\n\n各目录须含 `INPUT`、`STRU`；需要 k 点采样的目录另写 `KPT`。"
   tags:
   - eng_abacus
   reference_answers:
@@ -5767,15 +5581,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare LCAO RT-TDDFT inputs for H2 in length vs velocity gauge per official 22_rt-tddft—calculation md, esolver_type tddft, td_vext, td_stype, out_dipole.
-  human_prompt_seed: '为 **H₂** 准备两套 **实时含时 DFT（RT-TDDFT）** 输入（只写文件，不运行）：
-
-
-    1) `run_h2_tddft_length/` — **长度规范**（length gauge）；
-
-    2) `run_h2_tddft_velocity/` — **速度规范**（velocity gauge）。
-
-
-    每目录须含 `INPUT`、`STRU`、`KPT`。'
+  human_prompt_seed: "为 **H₂** 准备两套 **实时含时 DFT（RT-TDDFT）** 输入（只写文件，不运行）：\n\n1) `run_h2_tddft_length/` — **长度规范**（length gauge）；\n2) `run_h2_tddft_velocity/` — **速度规范**（velocity gauge）。\n\n每目录须含 `INPUT`、`STRU`、`KPT`。"
   tags:
   - eng_abacus
   reference_answers:
@@ -5941,15 +5747,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare PW SDFT SCF and MD inputs per official 23_sdft—esolver_type sdft, stochastic bands, finite-temperature smearing.
-  human_prompt_seed: '请准备两套 **随机 DFT（SDFT）** 平面波输入（只写文件，不运行）：
-
-
-    1) `run_pw_si2_sdft/` — Si₂ 有限温度 **SCF**；
-
-    2) `run_pw_al_sdft_md/` — Al **MD**（SDFT）。
-
-
-    各目录须含 `INPUT`、`STRU`、`KPT`。'
+  human_prompt_seed: "请准备两套 **随机 DFT（SDFT）** 平面波输入（只写文件，不运行）：\n\n1) `run_pw_si2_sdft/` — Si₂ 有限温度 **SCF**；\n2) `run_pw_al_sdft_md/` — Al **MD**（SDFT）。\n\n各目录须含 `INPUT`、`STRU`、`KPT`。"
   tags:
   - eng_abacus
   reference_answers:
@@ -6116,15 +5914,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare LCAO linear-response TDDFT inputs for Si2 and H2O per official 24_lr-tddft—esolver_type ks-lr, lr_nstates, absorption gauge settings.
-  human_prompt_seed: '请准备两套 **LCAO 线性响应 TDDFT（LR-TDDFT）** 激发态输入（只写文件，不运行）：
-
-
-    1) `run_lcao_si2_lr_tddft/` — **Si₂**（周期体系）；
-
-    2) `run_lcao_h2o_lr_tddft/` — **H₂O**（分子）。
-
-
-    各目录须含 `INPUT`、`STRU`；需要 k 点采样的目录另写 `KPT`。'
+  human_prompt_seed: "请准备两套 **LCAO 线性响应 TDDFT（LR-TDDFT）** 激发态输入（只写文件，不运行）：\n\n1) `run_lcao_si2_lr_tddft/` — **Si₂**（周期体系）；\n2) `run_lcao_h2o_lr_tddft/` — **H₂O**（分子）。\n\n各目录须含 `INPUT`、`STRU`；需要 k 点采样的目录另写 `KPT`。"
   tags:
   - eng_abacus
   reference_answers:
@@ -6284,19 +6074,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare PW and LCAO SCF inputs with Grimme D2 vs D3(BJ) vdW corrections per official 25_vdw.
-  human_prompt_seed: '请为 **Si₂** 准备四套含 **范德华修正** 的 SCF 输入（只写文件，不运行）：
-
-
-    1) `run_vdw_d2_lcao/` — DFT-D2，LCAO；
-
-    2) `run_vdw_d2_pw/` — DFT-D2，平面波；
-
-    3) `run_vdw_d3_lcao/` — DFT-D3，LCAO；
-
-    4) `run_vdw_d3_pw/` — DFT-D3，平面波。
-
-
-    每目录须含 `INPUT`、`STRU`、`KPT`；D2 目录另须提供 `c6.txt`（手动 C₆ 参数文件）。'
+  human_prompt_seed: "请为 **Si₂** 准备四套含 **范德华修正** 的 SCF 输入（只写文件，不运行）：\n\n1) `run_vdw_d2_lcao/` — DFT-D2，LCAO；\n2) `run_vdw_d2_pw/` — DFT-D2，平面波；\n3) `run_vdw_d3_lcao/` — DFT-D3，LCAO；\n4) `run_vdw_d3_pw/` — DFT-D3，平面波。\n\n每目录须含 `INPUT`、`STRU`、`KPT`；D2 目录另须提供 `c6.txt`（手动 C₆ 参数文件）。"
   tags:
   - eng_abacus
   reference_answers:
@@ -6470,10 +6248,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare PW Berry-phase INPUT/KPT workflow for PbTiO3 per official 26_berryphase (structure supplied; agent copies reference STRU then writes inputs).
-  human_prompt_seed: '工作区已提供官方 **PbTiO₃** 结构文件 `STRU_PbTiO3`（对应 [abacus-develop 26_berryphase/01_pw_PbTiO3](https://github.com/deepmodeling/abacus-develop/tree/develop/examples/26_berryphase/01_pw_PbTiO3)）。
-
-
-    请将其复制到 `run_pw_pbtio3_berry/STRU` 后，编写 Berry 相极化所需的 `INPUT-scf`、`INPUT-nscf-a/b/c` 与对应 `KPT-scf`、`KPT-nscf-a/b/c`（只写文件，不运行）。'
+  human_prompt_seed: "工作区已提供官方 **PbTiO₃** 结构文件 `STRU_PbTiO3`（对应 [abacus-develop 26_berryphase/01_pw_PbTiO3](https://github.com/deepmodeling/abacus-develop/tree/develop/examples/26_berryphase/01_pw_PbTiO3)）。\n\n请将其复制到 `run_pw_pbtio3_berry/STRU` 后，编写 Berry 相极化所需的 `INPUT-scf`、`INPUT-nscf-a/b/c` 与对应 `KPT-scf`、`KPT-nscf-a/b/c`（只写文件，不运行）。"
   tags:
   - eng_abacus
   reference_answers:
@@ -6639,17 +6414,9 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare PW SCF inputs with implicit solvation for Pt slab per official 27_imp_sol—imp_sol and solvent parameters.
-  human_prompt_seed: '工作区已提供官方 **Pt(111) slab** 结构 `STRU_Pt111`（[27_imp_sol/01_pw_Pt_slab](https://github.com/deepmodeling/abacus-develop/tree/develop/examples/27_imp_sol/01_pw_Pt_slab)）。
-
-
-    请复制到 `run_pw_pt_slab_imp_sol/STRU` 后，**仅编写**隐式溶剂化平面波 SCF 的 `INPUT`（`gamma_only` 时可不写 `KPT`；不要运行）。'
+  human_prompt_seed: "为 **Pt(111) 平板** 准备一套 **隐式溶剂化（implicit solvation）** 平面波 SCF 输入（只写文件，不运行）：\n\n目录 `run_pw_pt_slab_imp_sol/`，须含 `INPUT`、`STRU`（`gamma_only` 时可不写 `KPT`）。"
   tags:
   - eng_abacus
-  data_files:
-  - key: stru_pt111
-    path: data/IG_abacus_shared_pt_slab_20260518/STRU_Pt111
-    oss_url: ''
-    description: Official Pt(111) slab from abacus-develop examples/27_imp_sol/01_pw_Pt_slab.
   reference_answers:
   - key: imp_sol_input
     value: run_pw_pt_slab_imp_sol/INPUT
@@ -6676,6 +6443,14 @@ questions:
       filename: run_pw_pt_slab_imp_sol/INPUT
       pattern: (?im)^\s*eb_k\s+\S+
       flags: im
+  - key: must_imp_sol_stru
+    value:
+      filename: run_pw_pt_slab_imp_sol/STRU
+      tokens:
+      - LATTICE_VECTORS
+      - ATOMIC_SPECIES
+      - ATOMIC_POSITIONS
+      flags: i
   - key: variable_imp_sol_semantics
     value: Implicit solvation SCF per 27_imp_sol—imp_sol 1 with eb_k and related solvent model parameters for PW Pt slab.
   - key: turn_budget
@@ -6687,11 +6462,6 @@ questions:
   - key: token_budget_total
     value:
       max: 16000
-  - key: must_run_pw_pt_slab_imp_sol_stru_match
-    value:
-      filename: run_pw_pt_slab_imp_sol/STRU
-      check: lattice_matches
-      expected: STRU_Pt111
   scoring_checklist:
   - id: imp_sol_input
     criterion: run_pw_pt_slab_imp_sol/INPUT exists.
@@ -6716,10 +6486,10 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 0.8
-  - id: must_run_pw_pt_slab_imp_sol_stru_match
-    criterion: '[Must] run_pw_pt_slab_imp_sol/STRU matches reference STRU_Pt111.'
+  - id: must_imp_sol_stru
+    criterion: '[Must] run_pw_pt_slab_imp_sol/STRU is valid Pt slab structure.'
     axis: correctness
-    verify: stru_file_check
+    verify: text_file_contains_all
     weight: 1.0
   - id: variable_imp_sol_semantics
     criterion: '[Variable] Implicit solvation setup matches 27_imp_sol README.'
@@ -6741,32 +6511,128 @@ questions:
 - id: IG_abacus_050_20260518
   capability: input_generation
   domain: agnostic
-  intent: Prepare PW SCF INPUT for external field and dipole correction on Pt(111) slab per official 28_efield and 29_dipole_corr (shared reference STRU).
-  human_prompt_seed: '工作区已提供官方 **Pt(111) slab** 结构 `STRU_Pt111`（27_imp_sol）。
-
-
-    请将 `STRU_Pt111` 复制到下列各目录的 `STRU` 后，**仅编写各目录 `INPUT`**（`gamma_only` 时可不写 `KPT`；不要运行）：
-
-
-    1) `run_pw_pt_slab_efield/` — 外加电场（[28_efield](https://github.com/deepmodeling/abacus-develop/tree/develop/examples/28_efield)）；
-
-    2) `run_pw_pt_dipole_only/` — 仅偶极修正（[29_dipole_corr](https://github.com/deepmodeling/abacus-develop/tree/develop/examples/29_dipole_corr)）；
-
-    3) `run_pw_pt_dipole_efield/` — 偶极修正 + 外加电场。'
+  intent: Prepare PW SCF inputs with external saw-like electric field for Pt slab per official 28_efield.
+  human_prompt_seed: "为 **Pt(111) 平板** 准备一套 **外加电场（saw-like efield）** 平面波 SCF 输入（只写文件，不运行）：\n\n目录 `run_pw_pt_slab_efield/`，须含 `INPUT`、`STRU`（`gamma_only` 时可不写 `KPT`）。"
   tags:
   - eng_abacus
-  data_files:
-  - key: stru_pt111
-    path: data/IG_abacus_shared_pt_slab_20260518/STRU_Pt111
-    oss_url: ''
-    description: Official Pt(111) slab from abacus-develop examples/27_imp_sol/01_pw_Pt_slab.
   reference_answers:
   - key: efield_input
     value: run_pw_pt_slab_efield/INPUT
+  - key: efield_stru
+    value: run_pw_pt_slab_efield/STRU
+  - key: must_efield_input
+    value:
+      filename: run_pw_pt_slab_efield/INPUT
+      tokens:
+      - calculation scf
+      - basis_type pw
+      - efield_flag
+      - efield_dir
+      - efield_amp
+      - pseudo_dir
+      - ecutwfc
+      flags: i
+  - key: must_efield_flag_on
+    value:
+      filename: run_pw_pt_slab_efield/INPUT
+      pattern: (?im)^\s*efield_flag\s+1\s*$
+      flags: im
+  - key: must_efield_no_dip_cor
+    value:
+      filename: run_pw_pt_slab_efield/INPUT
+      pattern: (?im)^\s*dip_cor_flag\s+0\s*$
+      flags: im
+  - key: must_efield_amp_nonzero
+    value:
+      filename: run_pw_pt_slab_efield/INPUT
+      pattern: (?im)^\s*efield_amp\s+(?!0(?:\.0*)?\s*$)\S+
+      flags: im
+  - key: must_efield_stru
+    value:
+      filename: run_pw_pt_slab_efield/STRU
+      tokens:
+      - LATTICE_VECTORS
+      - ATOMIC_SPECIES
+      - ATOMIC_POSITIONS
+      flags: i
+  - key: variable_efield_semantics
+    value: External electric field per 28_efield—efield_flag 1 with efield_dir/pos/amp; dip_cor_flag 0 (field only, not dipole correction).
+  - key: turn_budget
+    value:
+      max: 12
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 16000
+  scoring_checklist:
+  - id: efield_input
+    criterion: run_pw_pt_slab_efield/INPUT exists.
+    axis: correctness
+    verify: artifact_exists
+  - id: efield_stru
+    criterion: run_pw_pt_slab_efield/STRU exists.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_efield_input
+    criterion: '[Must] run_pw_pt_slab_efield/INPUT is PW SCF with external electric field.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_efield_flag_on
+    criterion: '[Must] run_pw_pt_slab_efield/INPUT sets efield_flag 1.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_efield_no_dip_cor
+    criterion: '[Must] run_pw_pt_slab_efield/INPUT sets dip_cor_flag 0.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.8
+  - id: must_efield_amp_nonzero
+    criterion: '[Must] run_pw_pt_slab_efield/INPUT sets nonzero efield_amp.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_efield_stru
+    criterion: '[Must] run_pw_pt_slab_efield/STRU is valid Pt slab structure.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: variable_efield_semantics
+    criterion: '[Variable] External efield setup matches 28_efield README.'
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 0.5
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: IG_abacus_051_20260518
+  capability: input_generation
+  domain: agnostic
+  intent: Prepare PW SCF inputs for dipole correction only vs dipole plus external field per official 29_dipole_corr.
+  human_prompt_seed: "为 **Pt(111) 平板** 准备两套 **偶极修正** 平面波 SCF 输入（只写文件，不运行）：\n\n1) `run_pw_pt_dipole_only/` — 仅偶极修正（无外加电场）；\n2) `run_pw_pt_dipole_efield/` — 偶极修正 + 外加电场。\n\n各目录须含 `INPUT`、`STRU`（`gamma_only` 时可不写 `KPT`）。"
+  tags:
+  - eng_abacus
+  reference_answers:
   - key: dip_only_input
     value: run_pw_pt_dipole_only/INPUT
+  - key: dip_only_stru
+    value: run_pw_pt_dipole_only/STRU
   - key: dip_ef_input
     value: run_pw_pt_dipole_efield/INPUT
+  - key: dip_ef_stru
+    value: run_pw_pt_dipole_efield/STRU
   - key: must_dip_only_input
     value:
       filename: run_pw_pt_dipole_only/INPUT
@@ -6809,50 +6675,8 @@ questions:
       filename: run_pw_pt_dipole_efield/INPUT
       pattern: (?im)^\s*dip_cor_flag\s+1\s*$
       flags: im
-  - key: must_efield_input
-    value:
-      filename: run_pw_pt_slab_efield/INPUT
-      tokens:
-      - calculation scf
-      - basis_type pw
-      - efield_flag
-      - efield_dir
-      - efield_amp
-      - pseudo_dir
-      - ecutwfc
-      flags: i
-  - key: must_efield_flag_on
-    value:
-      filename: run_pw_pt_slab_efield/INPUT
-      pattern: (?im)^\s*efield_flag\s+1\s*$
-      flags: im
-  - key: must_efield_no_dip_cor
-    value:
-      filename: run_pw_pt_slab_efield/INPUT
-      pattern: (?im)^\s*dip_cor_flag\s+0\s*$
-      flags: im
-  - key: must_efield_amp_nonzero
-    value:
-      filename: run_pw_pt_slab_efield/INPUT
-      pattern: (?im)^\s*efield_amp\s+(?!0(?:\.0*)?\s*$)\S+
-      flags: im
-  - key: must_run_pw_pt_slab_efield_stru_match
-    value:
-      filename: run_pw_pt_slab_efield/STRU
-      check: lattice_matches
-      expected: STRU_Pt111
-  - key: must_run_pw_pt_dipole_only_stru_match
-    value:
-      filename: run_pw_pt_dipole_only/STRU
-      check: lattice_matches
-      expected: STRU_Pt111
-  - key: must_run_pw_pt_dipole_efield_stru_match
-    value:
-      filename: run_pw_pt_dipole_efield/STRU
-      check: lattice_matches
-      expected: STRU_Pt111
-  - key: variable_surface_electrostatics
-    value: 'Pt slab: efield_flag with nonzero efield_amp; dip_cor_flag 1; dipole-only uses efield_amp 0; combined case has both dip_cor and nonzero efield.'
+  - key: variable_dipole_corr_semantics
+    value: Dipole correction per 29_dipole_corr—dip_cor_flag 1; pure correction uses efield_amp 0; combined case uses nonzero efield_amp with efield_flag 1.
   - key: turn_budget
     value:
       max: 14
@@ -6863,53 +6687,22 @@ questions:
     value:
       max: 18000
   scoring_checklist:
-  - id: efield_input
-    criterion: run_pw_pt_slab_efield/INPUT exists.
-    axis: correctness
-    verify: artifact_exists
-  - id: must_run_pw_pt_slab_efield_stru_match
-    criterion: '[Must] run_pw_pt_slab_efield/STRU matches STRU_Pt111.'
-    axis: correctness
-    verify: stru_file_check
-    weight: 0.8
-  - id: dipole_only_input
+  - id: dip_only_input
     criterion: run_pw_pt_dipole_only/INPUT exists.
     axis: correctness
     verify: artifact_exists
-  - id: must_run_pw_pt_dipole_only_stru_match
-    criterion: '[Must] run_pw_pt_dipole_only/STRU matches STRU_Pt111.'
+  - id: dip_only_stru
+    criterion: run_pw_pt_dipole_only/STRU exists.
     axis: correctness
-    verify: stru_file_check
-    weight: 0.8
-  - id: dipole_efield_input
+    verify: artifact_exists
+  - id: dip_ef_input
     criterion: run_pw_pt_dipole_efield/INPUT exists.
     axis: correctness
     verify: artifact_exists
-  - id: must_run_pw_pt_dipole_efield_stru_match
-    criterion: '[Must] run_pw_pt_dipole_efield/STRU matches STRU_Pt111.'
+  - id: dip_ef_stru
+    criterion: run_pw_pt_dipole_efield/STRU exists.
     axis: correctness
-    verify: stru_file_check
-    weight: 0.8
-  - id: must_efield_input
-    criterion: '[Must] run_pw_pt_slab_efield/INPUT is PW SCF with external electric field.'
-    axis: correctness
-    verify: text_file_contains_all
-    weight: 1.0
-  - id: must_efield_flag_on
-    criterion: '[Must] run_pw_pt_slab_efield/INPUT sets efield_flag 1.'
-    axis: correctness
-    verify: text_file_regex
-    weight: 1.0
-  - id: must_efield_no_dip_cor
-    criterion: '[Must] run_pw_pt_slab_efield/INPUT sets dip_cor_flag 0.'
-    axis: correctness
-    verify: text_file_regex
-    weight: 0.8
-  - id: must_efield_amp_nonzero
-    criterion: '[Must] run_pw_pt_slab_efield/INPUT sets nonzero efield_amp.'
-    axis: correctness
-    verify: text_file_regex
-    weight: 1.0
+    verify: artifact_exists
   - id: must_dip_only_input
     criterion: '[Must] run_pw_pt_dipole_only/INPUT is PW SCF with dipole correction enabled.'
     axis: correctness
@@ -6940,8 +6733,8 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 1.0
-  - id: variable_surface_electrostatics
-    criterion: '[Variable] Efield and dipole flags match 28_efield / 29_dipole_corr intent.'
+  - id: variable_dipole_corr_semantics
+    criterion: '[Variable] Pure dipole vs dipole+efield matches 29_dipole_corr README.'
     axis: grounding
     verify: llm_binary_judge
     weight: 0.5
@@ -6961,10 +6754,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare LCAO SCF inputs with electrostatic potential output per official 30_elec_pot—out_pot 2 for CUBE export.
-  human_prompt_seed: '为 **Si** 准备一套 **LCAO SCF** 输入，用于输出 **静电势**（只写文件，不运行）：
-
-
-    目录 `run_lcao_si_epot/`，须含 `INPUT`、`STRU`、`KPT`。'
+  human_prompt_seed: "为 **Si** 准备一套 **LCAO SCF** 输入，用于输出 **静电势**（只写文件，不运行）：\n\n目录 `run_lcao_si_epot/`，须含 `INPUT`、`STRU`、`KPT`。"
   tags:
   - eng_abacus
   reference_answers:
@@ -7069,17 +6859,9 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare PW SCF inputs with compensating charge (gate) for Pt slab per official 31_comp_charge.
-  human_prompt_seed: '工作区已提供官方 **Pt(111) slab** 结构 `STRU_Pt111`（31_comp_charge 同型结构）。
-
-
-    请复制到 `run_pw_pt_slab_gate/STRU` 后，**仅编写**补偿电荷（gate）平面波 SCF 的 `INPUT`（`gamma_only` 时可不写 `KPT`；不要运行）。'
+  human_prompt_seed: "为 **Pt(111) 平板** 准备一套 **补偿电荷（compensating charge）** 平面波 SCF 输入（只写文件，不运行）：\n\n目录 `run_pw_pt_slab_gate/`，须含 `INPUT`、`STRU`（`gamma_only` 时可不写 `KPT`）。"
   tags:
   - eng_abacus
-  data_files:
-  - key: stru_pt111
-    path: data/IG_abacus_shared_pt_slab_20260518/STRU_Pt111
-    oss_url: ''
-    description: Official Pt(111) slab from abacus-develop examples/27_imp_sol/01_pw_Pt_slab.
   reference_answers:
   - key: gate_input
     value: run_pw_pt_slab_gate/INPUT
@@ -7118,6 +6900,14 @@ questions:
       filename: run_pw_pt_slab_gate/INPUT
       pattern: (?im)^\s*nelec\s+\d+
       flags: im
+  - key: must_gate_stru
+    value:
+      filename: run_pw_pt_slab_gate/STRU
+      tokens:
+      - LATTICE_VECTORS
+      - ATOMIC_SPECIES
+      - ATOMIC_POSITIONS
+      flags: i
   - key: variable_gate_semantics
     value: Compensating charge per 31_comp_charge—gate_flag 1 with zgate and block geometry for supercell neutrality under excess charge (nelec).
   - key: turn_budget
@@ -7129,11 +6919,6 @@ questions:
   - key: token_budget_total
     value:
       max: 16000
-  - key: must_run_pw_pt_slab_gate_stru_match
-    value:
-      filename: run_pw_pt_slab_gate/STRU
-      check: lattice_matches
-      expected: STRU_Pt111
   scoring_checklist:
   - id: gate_input
     criterion: run_pw_pt_slab_gate/INPUT exists.
@@ -7168,10 +6953,10 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 0.8
-  - id: must_run_pw_pt_slab_gate_stru_match
-    criterion: '[Must] run_pw_pt_slab_gate/STRU matches reference STRU_Pt111.'
+  - id: must_gate_stru
+    criterion: '[Must] run_pw_pt_slab_gate/STRU is valid Pt slab structure.'
     axis: correctness
-    verify: stru_file_check
+    verify: text_file_contains_all
     weight: 1.0
   - id: variable_gate_semantics
     criterion: '[Variable] Compensating charge setup matches 31_comp_charge README.'
@@ -7194,10 +6979,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare shared LCAO INPUT/KPT for H2O counterpoise BSSE per official 32_bsse (fragment STRU supplied; agent copies then writes INPUT/KPT).
-  human_prompt_seed: '工作区已提供官方 Counterpoise 结构 `STRU_0`～`STRU_3`（[32_bsse/01_water](https://github.com/deepmodeling/abacus-develop/tree/develop/examples/32_bsse/01_water)）。
-
-
-    请复制到 `run_lcao_h2o_cp/` 同名文件后，**仅编写**共享的 `INPUT` 与 `KPT`。（`STRU_0` 整分子配合 `ntype 2`；碎片 `STRU_1` O、`STRU_2/3` H 配合 `ntype 3`；不要运行。）'
+  human_prompt_seed: "工作区已提供官方 Counterpoise 结构 `STRU_0`～`STRU_3`（[32_bsse/01_water](https://github.com/deepmodeling/abacus-develop/tree/develop/examples/32_bsse/01_water)）。\n\n请复制到 `run_lcao_h2o_cp/` 同名文件后，**仅编写**共享的 `INPUT` 与 `KPT`。（`STRU_0` 整分子配合 `ntype 2`；碎片 `STRU_1` O、`STRU_2/3` H 配合 `ntype 3`；不要运行。）"
   tags:
   - eng_abacus
   data_files:
@@ -7325,10 +7107,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare LCAO spin-polarized SCF inputs with PEXSI solver per official 33_pexsi 01_spin_Fe2.
-  human_prompt_seed: '为 **Fe₂ 二聚体** 准备一套 **LCAO 自旋极化 SCF** 输入，使用 **PEXSI** 求解器（只写文件，不运行）：
-
-
-    目录 `run_lcao_fe2_pexsi/`，须含 `INPUT`、`STRU`、`KPT`。'
+  human_prompt_seed: "为 **Fe₂ 二聚体** 准备一套 **LCAO 自旋极化 SCF** 输入，使用 **PEXSI** 求解器（只写文件，不运行）：\n\n目录 `run_lcao_fe2_pexsi/`，须含 `INPUT`、`STRU`、`KPT`。"
   tags:
   - eng_abacus
   reference_answers:
@@ -7444,15 +7223,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare PW and LCAO SCF inputs with GPU acceleration per official 34_gpu—device gpu in INPUT.
-  human_prompt_seed: '请准备两套 **GPU 加速** 的 **Si₁₆** SCF 输入（只写文件，不运行）：
-
-
-    1) `run_pw_si16_gpu/` — 平面波；
-
-    2) `run_lcao_si16_gpu/` — LCAO。
-
-
-    各目录须含 `INPUT`、`STRU`、`KPT`。'
+  human_prompt_seed: "请准备两套 **GPU 加速** 的 **Si₁₆** SCF 输入（只写文件，不运行）：\n\n1) `run_pw_si16_gpu/` — 平面波；\n2) `run_lcao_si16_gpu/` — LCAO。\n\n各目录须含 `INPUT`、`STRU`、`KPT`。"
   tags:
   - eng_abacus
   reference_answers:
@@ -7589,168 +7360,6 @@ questions:
     verify: turn_budget
   - id: duration_budget
     criterion: Wall-clock run duration does not exceed ceiling.
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
-- id: IG_abacus_057_20260518
-  capability: input_generation
-  domain: agnostic
-  intent: Place official Pt(111) slab STRU from 27_imp_sol into run directory (structure modeling).
-  human_prompt_seed: "工作区中有官方 **Pt(111) slab** 结构文件 `STRU_Pt111`（27_imp_sol）。\n\n请创建目录 `run_pw_pt_slab/`，将结构放入 `run_pw_pt_slab/STRU`（**仅结构文件**，不要写 INPUT/KPT）。"
-  tags:
-  - eng_abacus
-  data_files:
-  - key: stru_pt111
-    path: data/IG_abacus_shared_pt_slab_20260518/STRU_Pt111
-    oss_url: ''
-    description: Official Pt(111) slab from abacus-develop examples/27_imp_sol/01_pw_Pt_slab.
-  reference_answers:
-  - key: stru_out
-    value: run_pw_pt_slab/STRU
-  - key: must_pt_stru_match
-    value:
-      filename: run_pw_pt_slab/STRU
-      check: lattice_matches
-      expected: STRU_Pt111
-  - key: turn_budget
-    value:
-      max: 8
-  - key: duration_budget
-    value:
-      max: 7200000
-  - key: token_budget_total
-    value:
-      max: 12000
-  scoring_checklist:
-  - id: stru_out
-    criterion: run_pw_pt_slab/STRU exists.
-    axis: correctness
-    verify: artifact_exists
-  - id: must_pt_stru_match
-    criterion: '[Must] run_pw_pt_slab/STRU lattice matches STRU_Pt111.'
-    axis: correctness
-    verify: stru_file_check
-    weight: 1.0
-  - id: turn_budget
-    criterion: Agent completes within turn budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration stays within benchmark ceiling.
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
-- id: IG_abacus_058_20260518
-  capability: input_generation
-  domain: agnostic
-  intent: Place official BSSE fragment STRU_0–STRU_3 for H2O from 32_bsse (structure modeling).
-  human_prompt_seed: "工作区已提供官方 Counterpoise 结构 `STRU_0`～`STRU_3`（32_bsse/01_water）。\n\n请创建目录 `run_lcao_h2o_cp/`，将四个文件**原样复制**到该目录（**仅结构**，不要写 INPUT/KPT）。"
-  tags:
-  - eng_abacus
-  data_files:
-  - key: stru_0
-    path: data/IG_abacus_054_20260518/STRU_0
-    oss_url: ''
-    description: Official BSSE structure STRU_0 from examples/32_bsse/01_water.
-  - key: stru_1
-    path: data/IG_abacus_054_20260518/STRU_1
-    oss_url: ''
-    description: Official BSSE structure STRU_1 from examples/32_bsse/01_water.
-  - key: stru_2
-    path: data/IG_abacus_054_20260518/STRU_2
-    oss_url: ''
-    description: Official BSSE structure STRU_2 from examples/32_bsse/01_water.
-  - key: stru_3
-    path: data/IG_abacus_054_20260518/STRU_3
-    oss_url: ''
-    description: Official BSSE structure STRU_3 from examples/32_bsse/01_water.
-  reference_answers:
-  - key: cp_stru0
-    value: run_lcao_h2o_cp/STRU_0
-  - key: cp_stru1
-    value: run_lcao_h2o_cp/STRU_1
-  - key: cp_stru2
-    value: run_lcao_h2o_cp/STRU_2
-  - key: cp_stru3
-    value: run_lcao_h2o_cp/STRU_3
-  - key: must_cp_stru0_match
-    value:
-      filename: run_lcao_h2o_cp/STRU_0
-      check: lattice_matches
-      expected: STRU_0
-  - key: must_cp_stru1_match
-    value:
-      filename: run_lcao_h2o_cp/STRU_1
-      check: lattice_matches
-      expected: STRU_1
-  - key: must_cp_stru2_match
-    value:
-      filename: run_lcao_h2o_cp/STRU_2
-      check: lattice_matches
-      expected: STRU_2
-  - key: must_cp_stru3_match
-    value:
-      filename: run_lcao_h2o_cp/STRU_3
-      check: lattice_matches
-      expected: STRU_3
-  - key: turn_budget
-    value:
-      max: 10
-  - key: duration_budget
-    value:
-      max: 7200000
-  - key: token_budget_total
-    value:
-      max: 14000
-  scoring_checklist:
-  - id: cp_stru0
-    criterion: run_lcao_h2o_cp/STRU_0 exists.
-    axis: correctness
-    verify: artifact_exists
-  - id: cp_stru1
-    criterion: run_lcao_h2o_cp/STRU_1 exists.
-    axis: correctness
-    verify: artifact_exists
-  - id: cp_stru2
-    criterion: run_lcao_h2o_cp/STRU_2 exists.
-    axis: correctness
-    verify: artifact_exists
-  - id: cp_stru3
-    criterion: run_lcao_h2o_cp/STRU_3 exists.
-    axis: correctness
-    verify: artifact_exists
-  - id: must_cp_stru0_match
-    criterion: '[Must] run_lcao_h2o_cp/STRU_0 matches reference STRU_0.'
-    axis: correctness
-    verify: stru_file_check
-    weight: 1.0
-  - id: must_cp_stru1_match
-    criterion: '[Must] run_lcao_h2o_cp/STRU_1 matches reference STRU_1.'
-    axis: correctness
-    verify: stru_file_check
-    weight: 1.0
-  - id: must_cp_stru2_match
-    criterion: '[Must] run_lcao_h2o_cp/STRU_2 matches reference STRU_2.'
-    axis: correctness
-    verify: stru_file_check
-    weight: 1.0
-  - id: must_cp_stru3_match
-    criterion: '[Must] run_lcao_h2o_cp/STRU_3 matches reference STRU_3.'
-    axis: correctness
-    verify: stru_file_check
-    weight: 1.0
-  - id: turn_budget
-    criterion: Agent completes within turn budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration stays within benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
