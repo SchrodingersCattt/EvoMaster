@@ -3401,3 +3401,88 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+- id: WO_pes_scan_001_20260518
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Scan the C-N bond dissociation PES of CH3NH3+ using DPA, testing correct
+    use of single-point/constrained-opt (not full optimization) and appropriate model
+    head selection for charged organic molecules.
+  human_prompt_seed: 使用 DPA 扫描 CH3NH3+ 的 C-N 解离曲线（1.2–3.0 Å，步长 0.1 Å），输出
+    `scan.csv`（两列：distance_A, energy_eV）。
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: scan_artifact
+    value: scan.csv
+  - key: scan_row_count
+    value:
+      filename: scan.csv
+      pattern: ^\d+\.\d+
+      min_matches: 15
+  - key: equilibrium_distance
+    value:
+      filename: scan.csv
+      checks:
+      - key: distance_A
+        min: 1.35
+        max: 1.65
+  - key: dissociation_energy
+    value:
+      filename: scan.csv
+      checks:
+      - key: dissociation_energy_eV
+        min: 2.0
+        max: 5.0
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 30000
+  scoring_checklist:
+  - id: scan_artifact
+    criterion: Agent writes `scan.csv` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: scan_row_count
+    criterion: scan.csv contains at least 15 data rows covering the requested range.
+    axis: correctness
+    verify: text_file_regex
+  - id: equilibrium_distance
+    criterion: The minimum-energy point in scan.csv corresponds to a C-N distance
+      of approximately 1.5 Å (typical C-N bond length in CH3NH3+). A wrong value
+      (e.g. all points near the same energy) indicates the scan geometry was not
+      properly constrained.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: monotonic_dissociation
+    criterion: The energy values in scan.csv increase from the equilibrium distance
+      toward 3.0 Å, showing a physically reasonable dissociation profile. The energy
+      at 3.0 Å must be at least 2 eV above the minimum. If all points have similar
+      energy, it means geometries were fully optimized (destroying the scan) or a
+      trivial classical potential was used.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: grounding_source
+    criterion: Final answer reports equilibrium distance, dissociation energy, and
+      the DPA model/head used, grounded in the actual scan.csv data.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
