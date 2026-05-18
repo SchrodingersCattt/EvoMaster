@@ -1302,6 +1302,79 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
+- id: SC_struct_build_004_20260518
+  capability: structure_construction
+  domain: agnostic
+  intent: Build MgO rocksalt bulk structure with correct experimental lattice constant
+    without being given the value, testing domain knowledge of common oxide parameters.
+  human_prompt_seed: 构建 MgO 岩盐结构的惯用晶胞，导出为 `mgo_rocksalt.cif`。
+  tags:
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: file_exists
+    value: mgo_rocksalt.cif
+  - key: formula
+    value:
+      filename: mgo_rocksalt.cif
+      formula: Mg4O4
+  - key: cell_a
+    value:
+      filename: mgo_rocksalt.cif
+      param: a
+      expected: 4.211
+      tolerance: 0.02
+  - key: atom_count
+    value:
+      filename: mgo_rocksalt.cif
+      expected: 8
+      tolerance: 0
+  - key: space_group_number
+    value:
+      filename: mgo_rocksalt.cif
+      expected_number: 225
+      symprec: 0.1
+  - key: turn_budget
+    value:
+      max: 10
+  - key: token_budget_total
+    value:
+      max: 20000
+  scoring_checklist:
+  - id: file_exists
+    criterion: Agent writes `mgo_rocksalt.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: formula
+    criterion: Structure formula is MgO (4 Mg + 4 O in conventional cell).
+    axis: correctness
+    verify: struct_file_formula
+  - id: cell_a
+    criterion: Lattice constant a is approximately 4.211 Å (experimental value).
+    axis: correctness
+    verify: struct_file_cell_param
+  - id: atom_count
+    criterion: Conventional rocksalt cell contains 8 atoms (4 Mg + 4 O).
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: space_group_number
+    criterion: The file is identified as space group Fm-3m (225).
+    axis: correctness
+    verify: struct_file_space_group
+  - id: grounding_source
+    criterion: Final answer reports the lattice constant used and confirms it is the
+      experimental value for MgO. Must not use a significantly wrong value like 4.0
+      or 4.3 Å.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
 - id: SC_graphene_001_20260517
   capability: structure_construction
   domain: agnostic
