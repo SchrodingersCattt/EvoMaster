@@ -875,4 +875,3 @@ def test_stru_magnetic_order_rejects_no_site_mag(tmp_path: Path) -> None:
     )
     assert ok is False
     assert "nonmagnetic" in reason or "insufficient" in reason
-

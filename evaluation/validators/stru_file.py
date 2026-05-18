@@ -7,7 +7,6 @@ from pathlib import Path
 
 from .text_file import _resolve_file
 
-
 _MAG_MOMENT_LINE = re.compile(
     r"\bmag(?:mom)?\s+([-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)",
     re.IGNORECASE,
@@ -199,9 +198,7 @@ def _parse_stru_magnetic_moments(content: str) -> list[float]:
     return _site_moments_for_magnetic_order(content)
 
 
-def _classify_magnetic_order(
-    moments: list[float], *, min_sites: int = 2
-) -> str:
+def _classify_magnetic_order(moments: list[float], *, min_sites: int = 2) -> str:
     """Classify initial magnetic order from site moments.
 
     Returns:
