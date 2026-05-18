@@ -80,7 +80,7 @@ The OSS URLs in `reference/dpa_models.md` are a **snapshot** and may rotate. If 
 - **Convergence**: `--fmax 0.01` for optimization, `--fmax 0.05` for NEB.
 - **Cell relaxation**: `--relax-cell` for equilibrium properties (elastic, phonon).
 - **Elastic**: Input MUST be fully relaxed (run optimize first with `--relax-cell`).
-- **NEB**: Both structures must be relaxed, same atoms in same order.
+- **NEB**: Both structures must be relaxed, same atoms in same order. Ensure the migrating atom's displacement between initial and final uses minimum image convention (shortest path under PBC). Avoid CIF format for NEB endpoints — CIF writers wrap fractional coordinates back into [0,1), undoing any unwrapped positioning. Use POSCAR or XYZ with cell info instead.
 - **Chain outputs**: Use `*_optimized.cif` from optimization as input to subsequent tasks. **Save intermediate results** under task filenames before starting next step.
 
 ## Submission Workflow
