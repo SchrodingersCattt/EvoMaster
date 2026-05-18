@@ -21,7 +21,7 @@ cases:
       - "帮我画一个 RDF 分析图"
       - "用 VASP 算弹性常数"
       - "帮我跑一个 LAMMPS 的 MD 模拟"
-      - "分析一下这个 XRD 数据"
+      - "这是 ABACUS 的 OUT.ABACUS 和结构文件，用 dpdata 转成 DeePMD 训练数据"
       - "用 GPUMD 做热导率计算"
 
   - skill: vasp
@@ -41,7 +41,7 @@ cases:
       - "画一个能带图"
       - "帮我构建一个 slab 模型"
       - "用 CP2K 做 AIMD"
-      - "分析一下这个轨迹文件"
+      - "分析这个 VASP 产生的 XDATCAR 轨迹，计算 RDF"
 
   - skill: gpumd
     positive:
@@ -117,7 +117,7 @@ cases:
       - "用 LAMMPS 跑经典 MD"
       - "画一个能带图"
       - "帮我构建一个表面模型"
-      - "搜索一下关于催化的文献"
+      - "这是 CP2K 计算的日志和结构，用 dpdata 转成可用于 DeePMD 训练的数据"
 
   - skill: input-manual-helper
     positive:
