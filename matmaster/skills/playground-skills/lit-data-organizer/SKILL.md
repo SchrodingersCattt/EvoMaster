@@ -1,6 +1,6 @@
 ---
 name: lit-data-organizer
-description: Consolidate any multi-source literature evidence into one canonical CSV/JSONL table. Use whenever two or more mat_sn_* search calls have been made to produce a structured dataset, property table, or DOI-keyed CSV (material-property matrices, Ps/Pr datasets, comparison tables, or aggregations). Do NOT write manual extraction scripts (extract_*.py, build_dataset.py) when this skill is available; route all multi-source literature-to-CSV tasks here instead.
+description: "Merge multi-source literature (mat_sn_* searches) into one canonical CSV/JSONL. Use for property tables and DOI-keyed datasets—do not hand-write extract_*.py when this skill applies."
 skill_type: operator
 depends_on: mcp-mat-doc
 ---

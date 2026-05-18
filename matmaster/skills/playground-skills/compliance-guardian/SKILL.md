@@ -1,6 +1,6 @@
 ---
 name: compliance-guardian
-description: Validates task safety, software licensing, and research ethics. Use before executing restricted software or providing sensitive technical details. Run scripts/check_compliance.py with "<plan_description>" "<intended_command>". Returns JSON with allowed, reason, suggestion. Redirects VASP→ABACUS/remote, Gaussian→ORCA/remote; blocks synthesis recipes for energetic materials; blocks dangerous shell commands.
+description: "Check task safety, licensing, and ethics before restricted software or sensitive details. Run scripts/check_compliance.py; returns allowed/reason/suggestion and safe engine redirects."
 skill_type: operator
 ---
 

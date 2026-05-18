@@ -1,6 +1,6 @@
 ---
 name: inspect-atomic-structure
-description: "Inspect any atomic structure (crystal, molecule, slab, polymer chain) and report formula, symmetry, Wyckoff sites, geometry tables, dimensionality, and is_molecular_crystal routing flag. MUST run before and after every transform/assemble step. Reports structure sanity only — not a substitute for property prediction or relaxation."
+description: "Inspect crystals, molecules, slabs, or polymers: formula, symmetry, Wyckoff, geometry, dimensionality, is_molecular_crystal. Run before/after transform/assemble. Sanity checks only—not property prediction or relaxation."
 skill_type: operator
 ---
 
