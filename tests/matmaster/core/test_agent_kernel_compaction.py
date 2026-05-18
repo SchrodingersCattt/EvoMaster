@@ -8,14 +8,14 @@ from unittest.mock import patch
 
 import pytest
 
-from matmaster.core.context_builder import ContextBuilder
-from matmaster.types.current_input import CurrentInputContext
+from matmaster.context.sources.turn_input import TurnInput
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
     StreamChunk,
     UserMessage,
 )
+from matmaster.types.run_metadata import RunIdentity, RunMetadata
 from matmaster.types.runtime_ports import KernelRuntimePorts
 
 from .agent_kernel_test_helpers import _make_spec
@@ -32,7 +32,7 @@ class ContentOnlyProvider:
     async def __aexit__(self, *args):
         pass
 
-    async def chat(self, messages, tools=None):
+    async def chat(self, messages, tools=None, *, tool_choice=None):
         return LLMResponse(content="not used", finish_reason="stop")
 
     async def chat_stream(self, messages, tools=None, *, timeout=None):
@@ -42,6 +42,15 @@ class ContentOnlyProvider:
 
 
 # ── Compactor test doubles ───────────────────────────────────
+
+
+class FailingSummaryProvider(ContentOnlyProvider):
+    async def chat(self, messages, tools=None, *, tool_choice=None):
+        raise RuntimeError("summary down")
+
+
+def _v1_compacted_user_message(summary: str = "summary") -> UserMessage:
+    return UserMessage(content=f"<compacted_history>\n{summary}\n</compacted_history>")
 
 
 class _DurablePreflightCompactor:
@@ -56,7 +65,7 @@ class _DurablePreflightCompactor:
         self.message_counts.append(count)
 
     def plan_preflight_compaction(self, messages: list[Any]):
-        from matmaster.core.context_compactor import CompactionPlan
+        from matmaster.context.compaction import CompactionPlan
 
         self.preflight_calls += 1
         return CompactionPlan(
@@ -67,20 +76,17 @@ class _DurablePreflightCompactor:
             turn=0,
         )
 
-    async def preflight_if_needed(self, messages: list[Any]) -> None:
-        return None
-
-    async def apply_compaction_plan(
+    async def apply_summary(
         self,
         plan,
         messages: list[Any],
+        summary: str,
         *,
-        current_input_context=None,
+        turn_input=None,
     ):
-        from matmaster.core.context_compactor import CompactionResult
+        from matmaster.context.compaction import CompactionResult
 
-        bundle = ContextBuilder().build_compact_bundle(summary="summary")
-        compact_message = UserMessage(content=bundle)
+        compact_message = _v1_compacted_user_message()
         base_snapshot = [
             compact_message.model_dump(mode="json"),
         ]
@@ -98,6 +104,9 @@ class _DurablePreflightCompactor:
             retained_turns=1,
             failure_reason=None,
             base_snapshot=base_snapshot,
+            checkpoint_covered_until_event_id=41,
+            user_instructions_text="Use SI units.",
+            user_instructions_hash="sha256:abc",
         )
 
     async def plan_runtime_compaction(
@@ -119,9 +128,6 @@ class _LifecycleCompactor:
     def update_message_count(self, count: int) -> None:
         self.message_counts.append(count)
 
-    async def preflight_if_needed(self, messages: list[Any]) -> None:
-        return None
-
     async def plan_runtime_compaction(
         self,
         messages: list[Any],
@@ -129,7 +135,7 @@ class _LifecycleCompactor:
         *,
         turn: int,
     ):
-        from matmaster.core.context_compactor import CompactionPlan
+        from matmaster.context.compaction import CompactionPlan
 
         self.plan_calls += 1
         return CompactionPlan(
@@ -140,19 +146,18 @@ class _LifecycleCompactor:
             turn=turn,
         )
 
-    async def apply_compaction_plan(
+    async def apply_summary(
         self,
         plan,
         messages: list[Any],
+        summary: str,
         *,
-        current_input_context=None,
+        turn_input=None,
     ):
-        from matmaster.core.context_compactor import CompactionResult
+        from matmaster.context.compaction import CompactionResult
 
         self.apply_calls += 1
-        compact_message = UserMessage(
-            content=ContextBuilder().build_compact_bundle(summary=self._summary_text)
-        )
+        compact_message = _v1_compacted_user_message(self._summary_text)
         messages[:] = [
             messages[0],
             compact_message,
@@ -169,6 +174,33 @@ class _LifecycleCompactor:
             base_snapshot=[
                 compact_message.model_dump(mode="json"),
             ],
+            checkpoint_covered_until_event_id=41,
+            user_instructions_text="Use SI units.",
+            user_instructions_hash="sha256:abc",
+        )
+
+
+class _EphemeralFallbackCompactor(_LifecycleCompactor):
+    async def apply_fallback(
+        self,
+        plan,
+        messages: list[Any],
+        *,
+        failure_reason: str,
+    ):
+        from matmaster.context.compaction import CompactionResult
+
+        self.apply_calls += 1
+        return CompactionResult(
+            compaction_id=plan.compaction_id,
+            compaction_count=plan.compaction_count,
+            phase=plan.phase,
+            strategy="sliding_window",
+            durability="ephemeral",
+            trigger_tokens=plan.trigger_tokens,
+            retained_turns=0,
+            failure_reason=failure_reason,
+            base_snapshot=None,
         )
 
 
@@ -188,9 +220,7 @@ def build_runtime_spec_with_compaction(*, checkpoint_sink: Any, summary_text: st
     return spec.model_copy(
         update={
             "compactor": _LifecycleCompactor(summary_text),
-            "meta": {
-                "task_id": "task-1",
-            },
+            "run_identity": RunIdentity(task_id="task-1"),
             "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
         }
     )
@@ -260,6 +290,41 @@ class TestCheckpointAwareCompaction:
         assert compaction_events[-1].failure_reason == "checkpoint store down"
 
     @pytest.mark.asyncio
+    async def test_fallback_compaction_event_carries_strategy_and_durability(
+        self,
+    ) -> None:
+        from matmaster.core.agent import AgentKernel
+
+        checkpoint_sink = pytest.fail
+        spec = _make_spec(provider=FailingSummaryProvider()).model_copy(
+            update={
+                "compactor": _EphemeralFallbackCompactor("ignored"),
+                "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
+                "run_identity": RunIdentity(task_id="task-1"),
+            }
+        )
+
+        events = [
+            event
+            async for event in AgentKernel().run_stream(
+                spec,
+                "task",
+                history=_build_long_history(),
+            )
+        ]
+
+        complete = [
+            event
+            for event in events
+            if getattr(event, "type", None) == "compaction"
+            and getattr(event, "status", None) == "complete"
+        ][0]
+        assert complete.strategy == "sliding_window"
+        assert complete.durability == "ephemeral"
+        assert complete.failure_reason == "summary down"
+        assert complete.checkpoint_written is False
+
+    @pytest.mark.asyncio
     async def test_kernel_preflight_calls_checkpoint_sink_for_durable_compaction(
         self,
     ) -> None:
@@ -301,11 +366,17 @@ class TestCheckpointAwareCompaction:
         assert compactor.preflight_calls == 1
         assert checkpoint_calls == [
             {
-                "payload": {"durability": "durable", "strategy": "summary"},
+                "payload": {
+                    "durability": "durable",
+                    "strategy": "summary",
+                    "schema_version": "history_checkpoint.v1",
+                    "render_version": "user_context_render.v1",
+                    "user_instructions_text": "Use SI units.",
+                    "user_instructions_hash": "sha256:abc",
+                    "covered_until_event_id": 41,
+                },
                 "base_messages": [
-                    UserMessage(
-                        content=ContextBuilder().build_compact_bundle(summary="summary")
-                    ).model_dump(mode="json"),
+                    _v1_compacted_user_message().model_dump(mode="json"),
                 ],
             }
         ]
@@ -413,7 +484,6 @@ async def test_kernel_reads_checkpoint_sink_from_runtime_ports() -> None:
         update={
             "compactor": compactor,
             "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
-            "meta": {},
         }
     )
 
@@ -438,33 +508,35 @@ class _BarrierFailureCompactor(_DurablePreflightCompactor):
         super().__init__()
         self.apply_calls = 0
 
-    async def apply_compaction_plan(
+    async def apply_summary(
         self,
         plan,
         messages,
+        summary: str,
         *,
-        current_input_context=None,
+        turn_input=None,
     ):
         self.apply_calls += 1
-        return await super().apply_compaction_plan(
+        return await super().apply_summary(
             plan,
             messages,
-            current_input_context=current_input_context,
+            summary,
+            turn_input=turn_input,
         )
 
 
 class _BoundaryOverrideCompactor(_DurablePreflightCompactor):
-    async def apply_compaction_plan(
+    async def apply_summary(
         self,
         plan,
         messages: list[Any],
+        summary: str,
         *,
-        current_input_context=None,
+        turn_input=None,
     ):
-        from matmaster.core.context_compactor import CompactionResult
+        from matmaster.context.compaction import CompactionResult
 
-        bundle = ContextBuilder().build_compact_bundle(summary="summary")
-        compact_message = UserMessage(content=bundle)
+        compact_message = _v1_compacted_user_message()
         base_snapshot = [
             compact_message.model_dump(mode="json"),
         ]
@@ -483,36 +555,40 @@ class _BoundaryOverrideCompactor(_DurablePreflightCompactor):
             failure_reason=None,
             base_snapshot=base_snapshot,
             checkpoint_covered_until_event_id=41,
+            user_instructions_text="Use SI units.",
+            user_instructions_hash="sha256:abc",
         )
 
 
-class _RecordingCurrentInputCompactor(_DurablePreflightCompactor):
+class _RecordingTurnInputCompactor(_DurablePreflightCompactor):
     def __init__(self) -> None:
         super().__init__()
-        self.seen_current_input_context: Any = None
+        self.seen_turn_input: Any = None
         self.apply_calls = 0
 
-    async def apply_compaction_plan(
+    async def apply_summary(
         self,
         plan,
         messages: list[Any],
+        summary: str,
         *,
-        current_input_context=None,
+        turn_input=None,
     ):
         self.apply_calls += 1
-        self.seen_current_input_context = current_input_context
-        return await super().apply_compaction_plan(
+        self.seen_turn_input = turn_input
+        return await super().apply_summary(
             plan,
             messages,
-            current_input_context=current_input_context,
+            summary,
+            turn_input=turn_input,
         )
 
 
 @pytest.mark.asyncio
-async def test_kernel_passes_effective_current_input_context_to_preflight_compactor():
+async def test_kernel_passes_raw_turn_input_to_preflight_compactor():
     from matmaster.core.agent import AgentKernel
 
-    compactor = _RecordingCurrentInputCompactor()
+    compactor = _RecordingTurnInputCompactor()
 
     async def checkpoint_sink(**kwargs):
         return 42
@@ -520,13 +596,11 @@ async def test_kernel_passes_effective_current_input_context_to_preflight_compac
     spec = _make_spec(provider=ContentOnlyProvider()).model_copy(
         update={
             "compactor": compactor,
-            "meta": {
-                "current_input_context": CurrentInputContext.from_values(
-                    user_text="original before rewrite",
-                    files=["https://oss.example.com/chat/current.cif"],
-                    pre_query_scope_event_id=42,
-                )
-            },
+            "turn_input": TurnInput.from_values(
+                user_text="original before rewrite",
+                files=["https://oss.example.com/chat/current.cif"],
+                pre_turn_history_event_id=42,
+            ),
             "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
         }
     )
@@ -543,18 +617,18 @@ async def test_kernel_passes_effective_current_input_context_to_preflight_compac
         )
     ]
 
-    assert compactor.seen_current_input_context.user_text == "effective task text"
-    assert compactor.seen_current_input_context.files == (
+    assert compactor.seen_turn_input.user_text == "original before rewrite"
+    assert compactor.seen_turn_input.files == (
         "https://oss.example.com/chat/current.cif",
     )
-    assert compactor.seen_current_input_context.pre_query_scope_event_id == 42
+    assert compactor.seen_turn_input.pre_turn_history_event_id == 42
 
 
 @pytest.mark.asyncio
 async def test_kernel_skips_preflight_current_split_when_history_is_empty() -> None:
     from matmaster.core.agent import AgentKernel
 
-    compactor = _RecordingCurrentInputCompactor()
+    compactor = _RecordingTurnInputCompactor()
 
     async def checkpoint_sink(**kwargs):
         return 42
@@ -562,13 +636,11 @@ async def test_kernel_skips_preflight_current_split_when_history_is_empty() -> N
     spec = _make_spec(provider=ContentOnlyProvider()).model_copy(
         update={
             "compactor": compactor,
-            "meta": {
-                "current_input_context": CurrentInputContext.from_values(
-                    user_text="current task",
-                    files=["https://oss.example.com/chat/current.cif"],
-                    pre_query_scope_event_id=42,
-                )
-            },
+            "turn_input": TurnInput.from_values(
+                user_text="current task",
+                files=["https://oss.example.com/chat/current.cif"],
+                pre_turn_history_event_id=42,
+            ),
             "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
         }
     )
@@ -625,6 +697,10 @@ async def test_kernel_passes_checkpoint_covered_until_override_to_sink() -> None
     assert checkpoint_calls[0]["payload"] == {
         "durability": "durable",
         "strategy": "summary",
+        "schema_version": "history_checkpoint.v1",
+        "render_version": "user_context_render.v1",
+        "user_instructions_text": "Use SI units.",
+        "user_instructions_hash": "sha256:abc",
         "covered_until_event_id": 41,
     }
     assert any(getattr(event, "covered_until_event_id", None) == 41 for event in events)
@@ -645,7 +721,6 @@ async def test_kernel_sync_pre_compaction_barrier_error_stops_compaction() -> No
         update={
             "compactor": compactor,
             "runtime_ports": KernelRuntimePorts(pre_compaction_barrier=barrier),
-            "meta": {},
         }
     )
 
@@ -681,7 +756,6 @@ async def test_kernel_async_pre_compaction_barrier_error_stops_compaction() -> N
         update={
             "compactor": compactor,
             "runtime_ports": KernelRuntimePorts(pre_compaction_barrier=barrier),
-            "meta": {},
         }
     )
 
@@ -713,7 +787,7 @@ class TestExpCheckpointSinkScopeResolution:
     ) -> None:
         from matmaster.config.exp import ExpConfig
         from matmaster.core.exp import Exp
-        from matmaster.types.context import PlaygroundContext
+        from matmaster.core.playground import PlaygroundContext
         from matmaster.types.runtime_ports import (
             PlaygroundCompactionPort,
             PlaygroundRuntimePorts,
@@ -735,7 +809,7 @@ class TestExpCheckpointSinkScopeResolution:
             cache_area=tmp_path / "cache",
             execution_workdir=str(tmp_path),
             llm_provider=ContentOnlyProvider(),
-            run_meta={},
+            metadata=RunMetadata(),
             runtime_ports=PlaygroundRuntimePorts(
                 compaction=PlaygroundCompactionPort(
                     checkpoint_sink_factory=checkpoint_sink_factory,
@@ -761,18 +835,20 @@ async def test_kernel_runs_pre_compaction_barrier_before_compactor() -> None:
     sequence: list[str] = []
 
     class BarrierCompactor(_DurablePreflightCompactor):
-        async def apply_compaction_plan(
+        async def apply_summary(
             self,
             plan,
             messages,
+            summary: str,
             *,
-            current_input_context=None,
+            turn_input=None,
         ):
             sequence.append("apply")
-            return await super().apply_compaction_plan(
+            return await super().apply_summary(
                 plan,
                 messages,
-                current_input_context=current_input_context,
+                summary,
+                turn_input=turn_input,
             )
 
     async def barrier() -> None:

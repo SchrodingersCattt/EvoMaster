@@ -13,6 +13,7 @@ cancel_token).
 from __future__ import annotations
 
 import asyncio
+import copy
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, replace
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
@@ -145,6 +146,23 @@ class FullToolRunner:
         Phase 1 (serial): validate each call through the constraint layers.
         Phase 2 (concurrent): execute all approved calls via asyncio.gather.
 
+        Argument immutability contract:
+        every consumer along this chain must treat the received arguments dict
+        as read-only. This applies to pre/post hooks, StructuralValidation,
+        input_validator callables, CapabilityPolicy, and tool_executor. In-place
+        edits such as arguments[k] = v, update(), pop(), clear(), or setdefault()
+        are forbidden because ToolCallData caches arguments_json.
+
+        decision.modified_args is the sanctioned way for validation layers to
+        derive a changed argument set: it builds a fresh dict and keeps the
+        original tc.arguments untouched. Tool implementations that need adjusted
+        parameters must construct their own fresh dict.
+
+        The runner defensively deep-copies tc.arguments before handing data to
+        each layer so a buggy consumer cannot stale the original ToolCallData
+        cache, but this is a cache-safety backstop rather than permission to
+        mutate layer inputs.
+
         Returns list of (ToolCallData, ToolResult) in input order.
         """
         n = len(tool_calls)
@@ -183,11 +201,13 @@ class FullToolRunner:
                     await on_result(tc, tr)
                 continue
 
+            base_args = copy.deepcopy(tc.arguments)
+
             if self._hook_executor is not None:
                 pre_ctx = PreToolCallContext(
                     tool_name=tc.name,
                     tool_call_id=tc.id,
-                    arguments=tc.arguments,
+                    arguments=copy.deepcopy(base_args),
                     turn=ctx.turn,
                 )
                 await self._hook_executor.emit(HookEvent.PRE_TOOL_CALL, pre_ctx)
@@ -224,7 +244,11 @@ class FullToolRunner:
                     continue
 
             # 2. StructuralValidation (Layer A)
-            decision = self._validation.validate(self._topology, instance, tc.arguments)
+            decision = self._validation.validate(
+                self._topology,
+                instance,
+                copy.deepcopy(base_args),
+            )
             if decision.decision == "deny":
                 tr = ToolResult(
                     status="error",
@@ -236,13 +260,17 @@ class FullToolRunner:
                     await on_result(tc, tr)
                 continue
 
-            effective_args = decision.modified_args or tc.arguments
+            effective_args = (
+                copy.deepcopy(decision.modified_args)
+                if decision.modified_args is not None
+                else copy.deepcopy(base_args)
+            )
 
             # 2b. input_validator
             if instance.input_validator is not None:
                 try:
                     iv_decision = await instance.input_validator(
-                        effective_args,
+                        copy.deepcopy(effective_args),
                         self._state,
                     )
                 except Exception as exc:
@@ -267,7 +295,11 @@ class FullToolRunner:
                     continue
 
             # 3. CapabilityPolicy (Layer B)
-            decision = self._policy.evaluate(self._topology, instance, effective_args)
+            decision = self._policy.evaluate(
+                self._topology,
+                instance,
+                copy.deepcopy(effective_args),
+            )
             if decision.decision == "deny":
                 tr = ToolResult(
                     status="error",
@@ -287,7 +319,7 @@ class FullToolRunner:
                 and instance.tool_spec.fast_path_eligible
             )
 
-            approved.append((idx, tc, instance, effective_args, is_fast))
+            approved.append((idx, tc, instance, copy.deepcopy(effective_args), is_fast))
 
         # ── Phase 2: Concurrent execution ──────────────────
         if approved:
@@ -348,7 +380,10 @@ class FullToolRunner:
         # Execute + Release
         try:
             call_exec_ctx = replace(exec_ctx, tool_call_id=tc.id)
-            tr = await instance.tool_executor(effective_args, call_exec_ctx)
+            tr = await instance.tool_executor(
+                copy.deepcopy(effective_args),
+                call_exec_ctx,
+            )
         except Exception as e:
             tr = ToolResult.from_error(tc.name, e)
         finally:
@@ -371,7 +406,7 @@ class FullToolRunner:
             post_ctx = PostToolCallContext(
                 tool_name=tc.name,
                 tool_call_id=tc.id,
-                arguments=tc.arguments,
+                arguments=copy.deepcopy(effective_args),
                 result=tr,
                 turn=batch_ctx.turn,
             )
@@ -381,7 +416,7 @@ class FullToolRunner:
             post_ctx_final = PostToolCallContext(
                 tool_name=tc.name,
                 tool_call_id=tc.id,
-                arguments=tc.arguments,
+                arguments=copy.deepcopy(effective_args),
                 result=tr,
                 turn=batch_ctx.turn,
             )

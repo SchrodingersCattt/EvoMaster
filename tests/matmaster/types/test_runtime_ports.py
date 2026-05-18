@@ -2,15 +2,21 @@
 
 from __future__ import annotations
 
+from dataclasses import FrozenInstanceError, is_dataclass
+
 import pytest
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 
 from matmaster.types.events import ResponseEvent
+from matmaster.types.figures import FigureUploadConfig
 from matmaster.types.runtime_ports import (
+    BohriumRuntimePort,
+    BohriumRuntimeSnapshot,
     BusEventSink,
     CheckpointSink,
     CheckpointSinkFactory,
     EmptySessionEventHistory,
+    FigureUploadPort,
     KernelRuntimePorts,
     PlaygroundCompactionPort,
     PlaygroundRuntimePorts,
@@ -25,11 +31,32 @@ def test_empty_session_event_history_is_explicit_empty_reader() -> None:
     assert history.latest_checkpoint_covered_until_event_id() is None
 
 
+def test_empty_session_event_history_has_no_implicit_scope_boundary() -> None:
+    history = EmptySessionEventHistory()
+
+    assert history.latest_scope_event_id() is None
+
+
+@pytest.mark.asyncio
+async def test_empty_session_event_history_load_events_returns_empty() -> None:
+    from matmaster.context.ports import SessionEventQuery
+
+    history = EmptySessionEventHistory()
+
+    assert (
+        await history.load_events(SessionEventQuery(session_id="sess-1", spawn_id=None))
+    ) == ()
+
+
 def test_playground_runtime_ports_defaults_are_narrow() -> None:
     ports = PlaygroundRuntimePorts()
 
     assert ports.child_event_forward_sink is None
     assert isinstance(ports.compaction, PlaygroundCompactionPort)
+    assert isinstance(ports.figure_upload, FigureUploadPort)
+    assert isinstance(ports.bohrium, BohriumRuntimePort)
+    assert ports.figure_upload.config is None
+    assert ports.bohrium.snapshot is None
     assert ports.compaction.history is None
     assert ports.compaction.checkpoint_sink_factory is None
     assert ports.compaction.pre_compaction_barrier is None
@@ -37,6 +64,26 @@ def test_playground_runtime_ports_defaults_are_narrow() -> None:
     assert not hasattr(ports, "metadata")
     assert not hasattr(ports, "state")
     assert not hasattr(ports, "services")
+
+
+def test_figure_upload_port_is_frozen_dataclass() -> None:
+    cfg = FigureUploadConfig(
+        session_id="sess-1",
+        task_id="task-1",
+        asset_key_prefix="figures/sess-1/task-1",
+        upload_bytes=lambda data, name: f"https://oss.example/{name}",
+    )
+    port = FigureUploadPort(config=cfg)
+
+    assert is_dataclass(port)
+    assert port.config is cfg
+    with pytest.raises(FrozenInstanceError):
+        port.config = None
+
+
+def test_bohrium_runtime_snapshot_rejects_unknown_fields() -> None:
+    with pytest.raises(ValidationError):
+        BohriumRuntimeSnapshot(unknown_field="x")
 
 
 def test_kernel_runtime_ports_defaults_are_narrow() -> None:

@@ -31,6 +31,14 @@ class HistoryCheckpointService:
             if payload.get("durability") != "durable":
                 return None
 
+            if (
+                payload.get("schema_version") == "history_checkpoint.v1"
+                and payload.get("covered_until_event_id") is None
+            ):
+                raise ValueError(
+                    "history_checkpoint.v1 requires covered_until_event_id"
+                )
+
             validate_base_messages(deserialize_base_messages(base_messages))
             await fanout.flush_persistence_barrier()
             raw_covered_until = payload.get("covered_until_event_id")
@@ -42,6 +50,16 @@ class HistoryCheckpointService:
                     session_id,
                     spawn_id,
                 )
+            checkpoint_kwargs = {
+                key: payload[key]
+                for key in (
+                    "schema_version",
+                    "render_version",
+                    "user_instructions_text",
+                    "user_instructions_hash",
+                )
+                if key in payload
+            }
             await asyncio.to_thread(
                 self.events_table.add_history_checkpoint,
                 session_id,
@@ -51,6 +69,7 @@ class HistoryCheckpointService:
                 covered_until_event_id=covered_until_event_id,
                 base_messages=base_messages,
                 reason=str(payload.get("strategy") or "summary"),
+                **checkpoint_kwargs,
             )
             return covered_until_event_id
 

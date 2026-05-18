@@ -1,7 +1,7 @@
 """MatMaster ``matmaster/exps/{name}.toml`` prompt token budget (devshell loop).
 
 Counts the **full assembled prompt** that current runtime wiring produces at
-agent start: ``ContextBuilder.build_system_prompt()`` output only. Local
+agent start: ``SystemPromptBuilder.build_system_prompt()`` output only. Local
 builtin / skill tool guidance now lives in ``function.description``, so it is
 intentionally excluded from this budget.
 
@@ -35,7 +35,7 @@ def token_count_gpt4o(text: str) -> int:
 
 
 # ---------------------------------------------------------------------------
-# Prompt assembly helpers (mirror ContextBuilder text assembly)
+# Prompt assembly helpers (mirror SystemPromptBuilder text assembly)
 # ---------------------------------------------------------------------------
 
 
@@ -61,17 +61,17 @@ def _build_skills_meta(cfg: ExpConfig) -> str:
 
 
 def _build_full_prompt_text(cfg: ExpConfig) -> str:
-    """Reconstruct the text ``ContextBuilder.build_system_prompt()`` would produce.
+    """Reconstruct the text ``SystemPromptBuilder.build_system_prompt()`` would produce.
 
-    Includes only the static text sections assembled by ``ContextBuilder``:
+    Includes only the static text sections assembled by ``SystemPromptBuilder``:
     system prompt, developer instructions, skill meta, and the generic
     ``# Tools`` section. Excludes dynamic runtime content and local tool
     descriptions now supplied via ``function.description``.
     """
-    from matmaster.core.context_builder import ContextBuilder
-    from matmaster.types.context import PlaygroundContext
+    from matmaster.context.system_prompt import SystemPromptBuilder
+    from matmaster.core.playground import PlaygroundContext
 
-    builder = ContextBuilder()
+    builder = SystemPromptBuilder()
     skills_text = _build_skills_meta(cfg)
 
     class _SkillRegistrySnapshot:

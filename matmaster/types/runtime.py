@@ -16,10 +16,11 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from matmaster.core.context_builder import ContextBuilder
-from matmaster.core.hooks import HookExecutor
+from matmaster.context.sources.turn_input import TurnInput
+from matmaster.context.system_prompt import SystemPromptBuilder
 
 from .llm_provider import LLMProvider
+from .run_metadata import RunIdentity
 from .runtime_ports import KernelRuntimePorts
 
 
@@ -31,7 +32,6 @@ class CompactionConfig(BaseModel):
     context_limit: int = 200_000
     trigger_ratio: float = 0.9
     strategy: str = "summary"  # 'sliding_window' | 'summary' | 'latest_half'
-    compaction_llm: str | None = None  # key in config.llm
     reserved_summary_tokens: int = 20_000
     auto_compact_buffer_tokens: int = 13_000
 
@@ -53,7 +53,11 @@ class AgentRuntimeSpec(BaseModel):
     is immutable during kernel execution.
     """
 
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+    model_config = ConfigDict(
+        frozen=True,
+        arbitrary_types_allowed=True,
+        extra="forbid",
+    )
 
     # None is allowed during the assemble phase (ctx.llm_provider may be None);
     # build_runtime guarantees a real provider before kernel execution.
@@ -61,7 +65,7 @@ class AgentRuntimeSpec(BaseModel):
 
     max_turns: int = 100
 
-    hook_executor: HookExecutor | None = None
+    hook_executor: Any | None = None
     runtime_ports: KernelRuntimePorts = Field(
         default_factory=KernelRuntimePorts,
         repr=False,
@@ -71,13 +75,20 @@ class AgentRuntimeSpec(BaseModel):
     compaction: CompactionConfig = Field(default_factory=CompactionConfig)
     system_prompt: str = ""
     compactor: Any | None = None
-    context_builder: ContextBuilder
+    system_prompt_builder: SystemPromptBuilder
 
-    # Extensible metadata bag (prompt templates, MCP/skill config, etc.)
-    meta: dict[str, Any] = Field(default_factory=dict)
+    run_identity: RunIdentity = Field(default_factory=RunIdentity)
+    turn_input: TurnInput | None = None
 
     # Annotations are Any to avoid circular imports across the runtime stack.
     # The model_validator below enforces runtime type contracts.
+    # Phase 2C v3.1: reserved entry points for the Phase 3 compaction cutover.
+    # Kernel/compactor do not consume these fields in Phase 2C.
+    context_assembler: Any | None = None
+    user_instructions_port: Any | None = None
+    session_events_port: Any | None = None
+    session_jobs_port: Any | None = None
+
     tool_runner: Any | None = None
     tool_catalog: Any | None = None
     runtime_topology: Any | None = None
@@ -91,11 +102,50 @@ class AgentRuntimeSpec(BaseModel):
         from matmaster.tools.tool_catalog import ToolCatalog
         from matmaster.types.topology import RuntimeTopology
 
-        if not isinstance(self.context_builder, ContextBuilder):
+        if not isinstance(self.system_prompt_builder, SystemPromptBuilder):
             raise ValueError(
-                "context_builder must be ContextBuilder, "
-                f"got {type(self.context_builder).__name__}"
+                "system_prompt_builder must be SystemPromptBuilder, "
+                f"got {type(self.system_prompt_builder).__name__}"
             )
+
+        if self.hook_executor is not None:
+            missing_methods = [
+                name
+                for name in ("emit", "emit_intercept", "emit_rewrite")
+                if not callable(getattr(self.hook_executor, name, None))
+            ]
+            if missing_methods:
+                missing = ", ".join(missing_methods)
+                raise ValueError(
+                    "hook_executor must implement HookExecutor methods; "
+                    f"missing {missing}"
+                )
+
+        if self.context_assembler is not None:
+            from matmaster.context.assembly import ContextAssembler
+
+            if not isinstance(self.context_assembler, ContextAssembler):
+                raise ValueError(
+                    "context_assembler must be ContextAssembler, "
+                    f"got {type(self.context_assembler).__name__}"
+                )
+        if self.user_instructions_port is not None and not hasattr(
+            self.user_instructions_port,
+            "load_user_instructions",
+        ):
+            raise ValueError(
+                "user_instructions_port must implement load_user_instructions"
+            )
+        if self.session_events_port is not None and not hasattr(
+            self.session_events_port,
+            "load_events",
+        ):
+            raise ValueError("session_events_port must implement load_events")
+        if self.session_jobs_port is not None and not hasattr(
+            self.session_jobs_port,
+            "load_session_jobs",
+        ):
+            raise ValueError("session_jobs_port must implement load_session_jobs")
 
         checks: list[tuple[str, Any, type]] = [
             ("tool_runner", self.tool_runner, ToolRunner),

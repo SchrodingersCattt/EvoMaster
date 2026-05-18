@@ -11,12 +11,13 @@ from typing import TYPE_CHECKING, Any
 from matmaster.bohrium.runtime import try_attach_local_bohrium_runtime_from_env
 from matmaster.config.exp import ExpConfig, ExpToolsConfig
 from matmaster.core.exp import Exp
+from matmaster.core.playground import PlaygroundContext
 from matmaster.devshell.config import DevConfig
 from matmaster.devshell.stream_hook import DevStreamHook
 from matmaster.types.cancellation import CancellationToken
-from matmaster.types.context import PlaygroundContext
 from matmaster.types.events import BusEvent
 from matmaster.types.messages import Message, UserMessage
+from matmaster.types.run_metadata import RunMetadata
 
 if TYPE_CHECKING:
     from matmaster.core.stream_drain import DrainResult
@@ -63,7 +64,7 @@ class DevRunner:
             llm_provider=llm_provider,
             config_dir=None,
             llm_config=llm_config,
-            run_meta={"source": "devshell"},
+            metadata=RunMetadata(source="devshell"),
         )
         try_attach_local_bohrium_runtime_from_env(session)
 

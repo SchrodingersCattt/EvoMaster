@@ -25,14 +25,16 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from matmaster.config.exp import ExpConfig
-from matmaster.core.context_builder import ContextBuilder
+from matmaster.context.ports import SkillResolver
+from matmaster.context.system_prompt import SystemPromptBuilder
 from matmaster.core.hooks import HookEvent, HookExecutor, SubagentContext
 from matmaster.core.path_access import derive_path_access_roots
+from matmaster.core.playground import PlaygroundContext
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.cancellation import CancellationToken
-from matmaster.types.context import PlaygroundContext
+from matmaster.types.run_metadata import RunIdentity
 from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec
-from matmaster.types.runtime_ports import EmptySessionEventHistory, KernelRuntimePorts
+from matmaster.types.runtime_ports import KernelRuntimePorts
 
 if TYPE_CHECKING:
     from matmaster.types.messages import Message
@@ -157,7 +159,7 @@ class Exp:
     (defaults to 'direct').
 
     assemble() is a pure data transform: config + ctx -> AgentRuntimeSpec.
-    build_runtime() creates resources (ToolRegistry, ContextBuilder, Kernel).
+    build_runtime() creates resources (ToolRegistry, SystemPromptBuilder, Kernel).
     run_stream() delegates to build_runtime then kernel.run_stream with cleanup guarantee.
     """
 
@@ -165,7 +167,11 @@ class Exp:
         self._config = config
         self._allow_spawn = allow_spawn
         self._cleanup_callbacks: list[Callable[[], Any]] = []
+        # Core-layer registry serves SkillTool registration and the
+        # registry-wide system prompt prefix. Service-layer resolver state is
+        # held separately and feeds active-skill prompt rendering.
         self._skill_registry: Any = None
+        self._skill_resolver: SkillResolver | None = None
         self.logger = logging.getLogger(self.__class__.__name__)
 
     # ── Properties ───────────────────────────────────────
@@ -212,6 +218,7 @@ class Exp:
         ctx: PlaygroundContext,
         source_prefix: str,
         hook_executor: HookExecutor | None = None,
+        skill_resolver: SkillResolver | None = None,
     ) -> Any:
         """Create async spawn_fn closure capturing parent runtime context.
 
@@ -232,7 +239,7 @@ class Exp:
             child_exp = Exp(child_config, allow_spawn=False)
             child_source = f"{source_prefix}:{exp_name}"
             child_spawn_id = uuid.uuid4().hex[:16]
-            parent_session_id = ctx.run_meta.get("session_id", "")
+            parent_session_id = ctx.session_id
             event_sink = ctx.runtime_ports.child_event_forward_sink
 
             async def _forward_child_event(event: Any) -> None:
@@ -273,6 +280,7 @@ class Exp:
                         task,
                         cancel_token=cancel_token,
                         spawn_id=child_spawn_id,
+                        skill_resolver=skill_resolver,
                     ),
                     on_event=_forward_child_event,
                 )
@@ -300,31 +308,23 @@ class Exp:
     async def assemble(self, ctx: PlaygroundContext) -> AgentRuntimeSpec:
         """Data transform: config + ctx -> AgentRuntimeSpec."""
         return AgentRuntimeSpec(
-            context_builder=ContextBuilder(),
+            system_prompt_builder=SystemPromptBuilder(),
             llm_provider=ctx.llm_provider,
             max_turns=self._config.max_turns,
             compaction=self._config.compaction,
-            meta={},
         )
 
     @staticmethod
-    def _build_kernel_meta(
-        base_meta: dict[str, Any],
-        run_meta: dict[str, Any],
+    def _build_run_identity(
+        ctx: PlaygroundContext,
         *,
         spawn_id: str | None,
-    ) -> dict[str, Any]:
-        meta = {
-            **base_meta,
-            "task_id": run_meta.get("task_id", ""),
-            "session_id": run_meta.get("session_id", ""),
-            "spawn_id": spawn_id,
-            "attachment_manifest": run_meta.get("attachment_manifest", ""),
-        }
-        current_input_context = run_meta.get("current_input_context")
-        if current_input_context is not None:
-            meta["current_input_context"] = current_input_context
-        return meta
+    ) -> RunIdentity:
+        return RunIdentity(
+            task_id=ctx.metadata.task_id,
+            session_id=ctx.session_id,
+            spawn_id=spawn_id,
+        )
 
     # ── Active planes derivation ────────────────────────
 
@@ -358,6 +358,7 @@ class Exp:
         ctx: PlaygroundContext,
         *,
         skills: dict[str, Any] | None = None,
+        skill_resolver: SkillResolver | None = None,
         spawn_id: str | None = None,
     ) -> AgentRuntime:
         """Resource creation: assemble -> tools -> prompt -> kernel.
@@ -370,6 +371,9 @@ class Exp:
         # Discard any registry from a prior run so a turn that turns skills off
         # cannot expose stale state to the prompt builder.
         self._skill_registry = None
+        from matmaster.core.runtime_context_assembly import empty_skill_resolver
+
+        self._skill_resolver = skill_resolver or empty_skill_resolver
 
         registry = ToolRegistry()
         builtin_cfg = self._config.tools.builtin
@@ -433,6 +437,7 @@ class Exp:
                     ctx,
                     source_prefix="MatMaster",
                     hook_executor=hook_executor,
+                    skill_resolver=self._skill_resolver,
                 )
                 available_exps = list_model_visible_exps()
             agent_tool = AgentTool(
@@ -447,8 +452,8 @@ class Exp:
             )
             registry.register(agent_tool, source="builtin")
 
-        builder = ContextBuilder()
-        system_prompt = builder.build_system_prompt(
+        system_prompt_builder = SystemPromptBuilder()
+        system_prompt = system_prompt_builder.build_system_prompt(
             ctx,
             registry,
             system_prompt=self._config.system_prompt,
@@ -456,75 +461,29 @@ class Exp:
             skill_registry=self._skill_registry,
         )
 
+        from matmaster.core.runtime_context_assembly import (
+            build_runtime_context_assembly,
+        )
         from matmaster.tools.builtin.bohrium_tool.registry import JobRegistry
         from matmaster.types.tool_runner_state import ToolRunnerState
 
-        run_meta = getattr(ctx, "run_meta", {}) or {}
-
-        # Compactor uses event_sink=None; _run_items() injects a local sink at runtime.
-        compactor = None
-        if spec.llm_provider is not None:
-            from matmaster.core.context_compactor import ContextCompactor
-            from matmaster.manifests.rehydrator import CompactionRehydrator
-
-            summary_provider = spec.llm_provider
-            if spec.compaction.compaction_llm:
-                llm_config = getattr(ctx, "llm_config", None)
-                if llm_config is not None:
-                    from matmaster.providers.llm_factory import build_provider
-
-                    try:
-                        summary_provider = build_provider(
-                            llm_config, llm_override=spec.compaction.compaction_llm
-                        )
-                    except KeyError:
-                        self.logger.warning(
-                            "compaction_llm key=%r not found, falling back to main provider",
-                            spec.compaction.compaction_llm,
-                        )
-                else:
-                    self.logger.warning(
-                        "compaction_llm key=%r set but no llm_config on context; "
-                        "falling back to main provider",
-                        spec.compaction.compaction_llm,
-                    )
-
-            history_port = ctx.runtime_ports.compaction.history
-            if history_port is None:
-                history_port = EmptySessionEventHistory()
-
-            rehydrator = CompactionRehydrator(
-                get_query_events=history_port.query_events,
-                get_all_events=history_port.all_events,
-                get_latest_checkpoint_covered_until_event_id=(
-                    history_port.latest_checkpoint_covered_until_event_id
-                ),
-                skill_registry=self._skill_registry,
-                playground_ctx=ctx,
-                legal_mcp_servers=run_meta.get("legal_mcp_servers"),
-                schemas_by_server=run_meta.get("schemas_by_server"),
-            )
-
-            compactor = ContextCompactor(
-                config=spec.compaction,
-                summary_provider=summary_provider,
-                rehydrator=rehydrator,
-                context_builder=builder,
-                event_sink=None,  # _run_items() injects a local deque-backed sink
-                compaction_scope=(
-                    f'{run_meta.get("task_id", "")}:{spawn_id or "root"}'
-                ),
-            )
+        runtime_context = build_runtime_context_assembly(
+            spec=spec,
+            ctx=ctx,
+            skill_resolver=self._skill_resolver,
+            spawn_id=spawn_id,
+            logger=self.logger,
+        )
 
         structural_validation = StructuralValidation()
         capability_policy = DefaultCapabilityPolicy()
         scheduler = ToolScheduler()
         runner_state = ToolRunnerState()
         bohrium_registry = JobRegistry.rebuild_from_events(
-            (ctx.run_meta or {}).get("bohrium_rebuild_events")
+            ctx.metadata.bohrium_rebuild_events
         )
         runner_state.set("bohrium_job_registry", bohrium_registry)
-        figure_upload_config = run_meta.get("figure_upload_config")
+        figure_upload_config = ctx.runtime_ports.figure_upload.config
         if figure_upload_config is not None:
             runner_state.set("figure_upload_config", figure_upload_config)
         self._register_cleanup(runner_state.clear)
@@ -552,18 +511,26 @@ class Exp:
                 "capability_policy": capability_policy,
                 "structural_validation": structural_validation,
                 "system_prompt": system_prompt,
-                "context_builder": builder,
+                "system_prompt_builder": system_prompt_builder,
                 "hook_executor": hook_executor,
-                "compactor": compactor,
+                "compactor": runtime_context.compactor,
+                "context_assembler": runtime_context.context_assembler,
+                "session_events_port": (
+                    runtime_context.assembly_ports.session_events
+                    if runtime_context.assembly_ports is not None
+                    else None
+                ),
+                "session_jobs_port": (
+                    runtime_context.assembly_ports.session_jobs
+                    if runtime_context.assembly_ports is not None
+                    else None
+                ),
                 "runtime_ports": KernelRuntimePorts(
                     checkpoint_sink=checkpoint_sink,
                     pre_compaction_barrier=pre_compaction_barrier,
                 ),
-                "meta": self._build_kernel_meta(
-                    spec.meta,
-                    run_meta,
-                    spawn_id=spawn_id,
-                ),
+                "run_identity": self._build_run_identity(ctx, spawn_id=spawn_id),
+                "turn_input": ctx.metadata.turn_input,
             }
         )
 
@@ -587,6 +554,7 @@ class Exp:
         history: list[Message] | None = None,
         cancel_token: CancellationToken | None = None,
         skills: dict[str, Any] | None = None,
+        skill_resolver: SkillResolver | None = None,
         spawn_id: str | None = None,
     ) -> AsyncIterator[Any]:
         """build_runtime -> kernel.run_stream -> cleanup.
@@ -599,19 +567,10 @@ class Exp:
             runtime = await self.build_runtime(
                 ctx,
                 skills=skills,
+                skill_resolver=skill_resolver,
                 spawn_id=spawn_id,
             )
             spec = runtime.spec
-            current_user_images = ctx.run_meta.get("current_user_images")
-            if current_user_images:
-                spec = spec.model_copy(
-                    update={
-                        "meta": {
-                            **spec.meta,
-                            "current_user_images": current_user_images,
-                        }
-                    }
-                )
             if ctx.session is not None:
                 ctx.session._cancel_token = cancel_token
 
@@ -773,6 +732,9 @@ class Exp:
             )
             return
 
+        # Core-layer registry is independent of the service-layer resolver
+        # registry. Service registry serves ActiveSkill prompt rendering; this
+        # registry serves SkillTool registration into ToolCatalog.
         skill_registry = SkillRegistry(
             roots,
             remote_session=ctx.session if remote_roots else None,
@@ -848,8 +810,6 @@ class Exp:
             for name, cfg in executors.items()
             if isinstance(cfg, dict) and cfg.get("sync_tools")
         }
-
-        run_meta_for_record = getattr(ctx, "run_meta", None) or {}
 
         builtin_cfg = self._config.tools.builtin or []
         allow_builtin_all = "*" in builtin_cfg
@@ -936,7 +896,7 @@ class Exp:
         # activate_mcp_server reads only from the on-disk schema cache (no MCP IO),
         # is idempotent (skips tools already in registry), and warns +
         # skips on cache miss.
-        replay_skills = run_meta_for_record.get("active_skills") or ()
+        replay_skills = ctx.metadata.active_skills
         if isinstance(replay_skills, (set, frozenset, list, tuple)):
             for skill_name in replay_skills:
                 if not isinstance(skill_name, str) or not skill_name:

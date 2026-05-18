@@ -149,19 +149,6 @@ profiles:
     max_retries: 3
     retry_delay: 1.0
 
-  compaction:
-    provider: "openai"
-    model: "gemini-3-flash-preview"
-    api_key: "${LITELLM_PROXY_API_KEY}"
-    base_url: "${LITELLM_PROXY_API_BASE}"
-    temperature: 0.3
-    max_tokens: 4096
-    timeout: 1200
-    stream_timeout: 60
-    stream_idle_timeout: 30
-    max_retries: 2
-    retry_delay: 1.0
-
   # Amazon Bedrock Converse（凭证：环境变量 AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY /
   # AWS_REGION 等默认链；无需 LITELLM）
   # model：填推理配置文件的 inferenceProfileId（或 ARN）。若报「invalid」：与当前 region 不符或 ID 抄错。
