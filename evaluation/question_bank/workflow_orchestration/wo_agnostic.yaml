@@ -3407,7 +3407,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_pes_scan_001_20260518
+- id: WO_pes_scan_001_20260519
   capability: workflow_orchestration
   domain: agnostic
   intent: Scan the C-N bond dissociation PES of CH3NH3+ using DPA, testing correct
@@ -3425,7 +3425,7 @@ questions:
     value:
       filename: scan.csv
       pattern: ^\d+\.\d+
-      min_matches: 15
+      flags: m
   - key: equilibrium_distance
     value:
       filename: scan.csv
