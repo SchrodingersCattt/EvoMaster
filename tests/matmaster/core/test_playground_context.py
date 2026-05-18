@@ -13,6 +13,8 @@ from matmaster.core.playground import (
     PlaygroundContext,
     WorkspaceArchivalConfig,
 )
+from matmaster.types.run_metadata import RunMetadata
+from matmaster.types.runtime_ports import BohriumRuntimeSnapshot
 from matmaster.types.session import Session
 
 
@@ -32,6 +34,33 @@ def test_interaction_bridge_is_accessible_but_excluded_from_dump() -> None:
     assert ctx.interaction_bridge is bridge
     assert "interaction_bridge" not in ctx.model_dump()
     assert "interaction_bridge" not in ctx.model_dump(mode="json")
+
+
+def test_playground_context_metadata_is_typed_runmetadata() -> None:
+    ctx = PlaygroundContext(
+        workdir=Path("/tmp/work"),
+        session_type="local",
+        cache_area=Path("/tmp/cache"),
+    )
+
+    assert isinstance(ctx.metadata, RunMetadata)
+
+    updated = ctx.with_metadata(task_id="task-1")
+
+    assert updated is not ctx
+    assert updated.metadata.task_id == "task-1"
+    assert ctx.metadata.task_id == ""
+
+
+def test_with_metadata_rejects_unknown_fields() -> None:
+    ctx = PlaygroundContext(
+        workdir=Path("/tmp/work"),
+        session_type="local",
+        cache_area=Path("/tmp/cache"),
+    )
+
+    with pytest.raises(ValueError, match="Unknown RunMetadata field"):
+        ctx.with_metadata(ghost_field="x")
 
 
 class TestWorkspaceArchivalConfig:
@@ -90,7 +119,6 @@ class TestPlaygroundContext:
             session_type="local",
             session_id="sess-explicit",
             cache_area=Path("/tmp/cache"),
-            run_meta={"session_id": "legacy"},
         )
 
         assert ctx.session_id == "sess-explicit"
@@ -119,7 +147,7 @@ class TestPlaygroundContext:
             cache_area=Path("/tmp/cache"),
         )
         assert ctx.env_vars == {}
-        assert ctx.run_meta == {}
+        assert ctx.metadata == RunMetadata()
         assert ctx.archival is None
 
     def test_no_mcp_manager_field(self) -> None:
@@ -129,6 +157,9 @@ class TestPlaygroundContext:
     def test_no_skill_registry_field(self) -> None:
         """PlaygroundContext must not have skill_registry field."""
         assert "skill_registry" not in PlaygroundContext.model_fields
+
+    def test_playground_context_has_no_run_meta_dict_bag(self) -> None:
+        assert "run_meta" not in PlaygroundContext.model_fields
 
     def test_archival_defaults_to_none(self) -> None:
         ctx = PlaygroundContext(
@@ -164,7 +195,7 @@ class TestPlaygroundContext:
             session_type="docker",
             cache_area=Path("/tmp/cache"),
             env_vars={"KEY": "val"},
-            run_meta={"task_id": "t1"},
+            metadata=RunMetadata(task_id="t1"),
             archival=archival,
         )
         data = ctx.model_dump()
@@ -179,7 +210,7 @@ class TestPlaygroundContext:
         assert restored.workdir == ctx.workdir
         assert restored.session_type == ctx.session_type
         assert restored.env_vars == ctx.env_vars
-        assert restored.run_meta == ctx.run_meta
+        assert restored.metadata == ctx.metadata
         assert restored.execution_workdir == ctx.execution_workdir
         assert restored.archival is not None
         assert restored.archival.enabled is True
@@ -191,7 +222,7 @@ class TestPlaygroundContext:
             session_type="docker",
             cache_area=Path("/tmp/cache"),
             env_vars={"KEY": "val"},
-            run_meta={"task_id": "t1"},
+            metadata=RunMetadata(task_id="t1"),
         )
         data = ctx.model_dump()
         restored = PlaygroundContext.model_validate(data)
@@ -238,37 +269,44 @@ class TestWithExecution:
 class TestWithBohrium:
     """PlaygroundContext.with_bohrium() returns new frozen instance."""
 
-    def test_with_bohrium_returns_new_instance_with_bohrium_in_run_meta(self) -> None:
+    def test_with_bohrium_uses_typed_snapshot(self) -> None:
         ctx = PlaygroundContext(
             workdir=Path("/tmp/work"),
             session_type="docker",
             cache_area=Path("/tmp/cache"),
         )
-        result = ctx.with_bohrium({"ssh_attached": True, "node_id": "abc"})
-        assert result.run_meta["bohrium"] == {"ssh_attached": True, "node_id": "abc"}
+        result = ctx.with_bohrium(BohriumRuntimeSnapshot(ssh_attached=True, node_id=9))
+        snapshot = result.runtime_ports.bohrium.snapshot
 
-    def test_with_bohrium_preserves_existing_run_meta(self) -> None:
+        assert snapshot is not None
+        assert snapshot.ssh_attached is True
+        assert snapshot.node_id == 9
+        assert "bohrium" not in RunMetadata.model_fields
+
+    def test_with_bohrium_preserves_existing_metadata_without_writing_bohrium(
+        self,
+    ) -> None:
         ctx = PlaygroundContext(
             workdir=Path("/tmp/work"),
             session_type="docker",
             cache_area=Path("/tmp/cache"),
-            run_meta={"task_id": "t1", "extra": 42},
+            metadata=RunMetadata(task_id="t1", source="test"),
         )
-        result = ctx.with_bohrium({"ssh_attached": False})
-        assert result.run_meta["task_id"] == "t1"
-        assert result.run_meta["extra"] == 42
-        assert result.run_meta["bohrium"] == {"ssh_attached": False}
+        result = ctx.with_bohrium(BohriumRuntimeSnapshot(ssh_attached=False))
+        assert result.metadata.task_id == "t1"
+        assert result.metadata.source == "test"
+        assert "bohrium" not in RunMetadata.model_fields
 
     def test_with_bohrium_does_not_mutate_original(self) -> None:
         ctx = PlaygroundContext(
             workdir=Path("/tmp/work"),
             session_type="docker",
             cache_area=Path("/tmp/cache"),
-            run_meta={"task_id": "t1"},
+            metadata=RunMetadata(task_id="t1"),
         )
-        _ = ctx.with_bohrium({"ssh_attached": True})
-        assert "bohrium" not in ctx.run_meta
-        assert ctx.run_meta == {"task_id": "t1"}
+        _ = ctx.with_bohrium(BohriumRuntimeSnapshot(ssh_attached=True))
+        assert "bohrium" not in RunMetadata.model_fields
+        assert ctx.metadata == RunMetadata(task_id="t1")
 
     def test_with_bohrium_preserves_execution_workdir(self) -> None:
         ctx = PlaygroundContext(
@@ -277,7 +315,7 @@ class TestWithBohrium:
             cache_area=Path("/tmp/cache"),
             execution_workdir="/custom/exec",
         )
-        result = ctx.with_bohrium({"ok": True})
+        result = ctx.with_bohrium(BohriumRuntimeSnapshot(ssh_attached=True))
         assert result.execution_workdir == "/custom/exec"
         assert ctx.execution_workdir == "/custom/exec"
 
@@ -303,20 +341,20 @@ class TestPlaygroundContextFrozenRejectMutation:
 
 
 class TestPlaygroundContextWithBohriumPreservesExistingMeta:
-    """QUAL-01: with_bohrium preserves existing run_meta keys."""
+    """QUAL-01: with_bohrium preserves existing metadata fields."""
 
     def test_playground_context_with_bohrium_preserves_existing_meta(self) -> None:
         ctx = PlaygroundContext(
             workdir=Path("/tmp/work"),
             session_type="docker",
             cache_area=Path("/tmp/cache"),
-            run_meta={"key": "val", "number": 42},
+            metadata=RunMetadata(source="test", task_id="task-1"),
         )
-        result = ctx.with_bohrium({"ssh": True})
-        # Both original and bohrium keys present
-        assert result.run_meta["key"] == "val"
-        assert result.run_meta["number"] == 42
-        assert result.run_meta["bohrium"] == {"ssh": True}
+        result = ctx.with_bohrium(BohriumRuntimeSnapshot(ssh_attached=True))
+        assert result.metadata.source == "test"
+        assert result.metadata.task_id == "task-1"
+        assert "bohrium" not in RunMetadata.model_fields
+        assert result.runtime_ports.bohrium.snapshot is not None
 
 
 class TestPlaygroundContextEmptyArchival:
@@ -384,7 +422,7 @@ class TestPlaygroundContextSessionAndConfigDir:
             session_type="docker",
             cache_area=Path("/tmp/cache"),
             env_vars={"KEY": "val"},
-            run_meta={"task_id": "t1"},
+            metadata=RunMetadata(task_id="t1"),
         )
         assert ctx.workdir == Path("/tmp/work")
         assert ctx.session_type == "docker"
@@ -467,7 +505,7 @@ class TestPlaygroundContextRuntimePorts:
             cache_area=Path("/tmp/cache"),
             execution_workdir="/remote/work",
             env_vars={"A": "B"},
-            run_meta={"task_id": "task-1"},
+            metadata=RunMetadata(task_id="task-1"),
         )
 
         updated = ctx.with_runtime_ports(ports)
@@ -479,7 +517,7 @@ class TestPlaygroundContextRuntimePorts:
         assert updated.session_type == "ssh"
         assert updated.execution_workdir == "/remote/work"
         assert updated.env_vars == {"A": "B"}
-        assert updated.run_meta == {"task_id": "task-1"}
+        assert updated.metadata == RunMetadata(task_id="task-1")
 
     def test_with_runtime_port_merges_single_field_only(self) -> None:
         from matmaster.types.figures import FigureUploadConfig
@@ -535,20 +573,19 @@ class TestPlaygroundContextRuntimePorts:
 
 
 class TestPlaygroundPrepareSessionId:
-    def test_prepare_does_not_leak_session_id_into_run_meta(self, tmp_path: Path):
+    def test_prepare_keeps_session_id_out_of_metadata(self, tmp_path: Path):
         run_dir = tmp_path / "run"
         playground = Playground(session_type="local")
 
         try:
             ctx = playground.prepare(
-                run_dir=run_dir,
-                task_id="task-1",
+                RunMetadata(run_dir=str(run_dir), task_id="task-1"),
                 session_id="sess-1",
             )
         finally:
             playground.cleanup()
 
         assert ctx.session_id == "sess-1"
-        assert ctx.run_meta["run_dir"] == str(run_dir)
-        assert ctx.run_meta["task_id"] == "task-1"
-        assert "session_id" not in ctx.run_meta
+        assert ctx.metadata.run_dir == str(run_dir)
+        assert ctx.metadata.task_id == "task-1"
+        assert "session_id" not in RunMetadata.model_fields

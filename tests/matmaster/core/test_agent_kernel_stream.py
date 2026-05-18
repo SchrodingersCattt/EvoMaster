@@ -466,9 +466,7 @@ class TestRunItemsAssistantState:
             "\n\n"
             "<current_instruction>\nfit structure\n</current_instruction>"
         )
-        spec = _make_spec(provider=provider).model_copy(
-            update={"meta": {"attachment_manifest": "ATTACHMENT-SHOULD-BE-IGNORED"}}
-        )
+        spec = _make_spec(provider=provider)
         kernel = AgentKernel()
 
         async for _event in kernel.run_stream(spec, task):
@@ -491,13 +489,11 @@ class TestRunItemsAssistantState:
         provider = RecordingContentProvider()
         spec = _make_spec(provider=provider).model_copy(
             update={
-                "meta": {
-                    "turn_input": TurnInput.from_values(
-                        user_text="看图",
-                        images=["https://oss.example.com/chat/a.png"],
-                        image_detail="high",
-                    )
-                }
+                "turn_input": TurnInput.from_values(
+                    user_text="看图",
+                    images=["https://oss.example.com/chat/a.png"],
+                    image_detail="high",
+                )
             }
         )
         kernel = AgentKernel()

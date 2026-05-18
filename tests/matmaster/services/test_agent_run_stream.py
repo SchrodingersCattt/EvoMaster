@@ -25,6 +25,7 @@ from matmaster.types.events import (
     ThoughtEvent,
 )
 from matmaster.types.figures import FigureUploadConfig
+from matmaster.types.run_metadata import RunMetadata
 from tests.matmaster.services.agent_run_stream_fixtures import (
     _FakeExp,
     _make_cancel_token,
@@ -101,7 +102,7 @@ async def test_run_agent_injects_child_event_forward_sink_into_runtime_ports():
     ports = svc._test_fake_exp.last_ctx.runtime_ports
     injected = ports.child_event_forward_sink
     assert callable(injected)
-    assert svc._test_fake_exp.last_ctx.run_meta['task_id'] == 'task-1'
+    assert svc._test_fake_exp.last_ctx.metadata.task_id == 'task-1'
 
 
 @pytest.mark.asyncio
@@ -121,10 +122,10 @@ async def test_run_agent_passes_session_id_to_playground_prepare():
 
     assert ok is True
     prepare_call = svc._test_playground.prepare.call_args
-    assert prepare_call.args == ()
+    assert prepare_call.args[0].task_id == "task-1"
     assert prepare_call.kwargs["session_id"] == "sess-explicit"
-    assert prepare_call.kwargs["task_id"] == "task-1"
-    assert "session_id" not in svc._test_fake_exp.last_ctx.run_meta
+    assert "task_id" not in prepare_call.kwargs
+    assert "session_id" not in RunMetadata.model_fields
     assert svc._test_fake_exp.last_ctx.session_id == "sess-explicit"
 
 
@@ -156,13 +157,13 @@ async def test_run_agent_injects_figure_upload_via_runtime_ports():
     assert figure_cfg.session_id == 'sess-1'
     assert figure_cfg.task_id == 'task-1'
     assert callable(figure_cfg.upload_bytes)
-    assert "figure_upload_config" not in ctx.run_meta
+    assert "figure_upload_config" not in RunMetadata.model_fields
     assert ctx.runtime_ports.child_event_forward_sink is not None
     assert ctx.runtime_ports.compaction.history is not None
 
 
 @pytest.mark.asyncio
-async def test_run_agent_injects_turn_input_into_pg_ctx_run_meta():
+async def test_run_agent_injects_turn_input_into_pg_ctx_metadata():
     from matmaster.context.sources.turn_input import TurnInput
 
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
@@ -185,7 +186,7 @@ async def test_run_agent_injects_turn_input_into_pg_ctx_run_meta():
         )
 
     assert ok is True
-    assert svc._test_fake_exp.last_ctx.run_meta["turn_input"] == turn_input
+    assert svc._test_fake_exp.last_ctx.metadata.turn_input == turn_input
 
 
 @pytest.mark.asyncio
@@ -214,8 +215,8 @@ async def test_agent_run_service_keeps_compaction_history_without_attachment_run
             invocation_id='inv-attachments',
         )
 
-    run_meta = svc._test_fake_exp.last_ctx.run_meta
-    assert "attachment_manifest" not in run_meta
+    svc._test_fake_exp.last_ctx.metadata
+    assert "attachment_manifest" not in RunMetadata.model_fields
     history = svc._test_fake_exp.last_ctx.runtime_ports.compaction.history
     assert history is not None
     assert callable(history.query_events)
@@ -314,7 +315,7 @@ async def test_run_agent_uses_model_history_restore_service_and_injects_spawn_aw
         assert built_sink is checkpoint_sink
 
 
-def test_run_agent_injects_bohrium_rebuild_events_into_pg_ctx_run_meta():
+def test_run_agent_injects_bohrium_rebuild_events_into_pg_ctx_metadata():
     run_result = RunResultEvent(source='agent', status='completed', reason='natural')
     rebuild_events = [
         {
@@ -345,8 +346,8 @@ def test_run_agent_injects_bohrium_rebuild_events_into_pg_ctx_run_meta():
 
     assert ok is True
     svc._test_events_table.get_bohrium_events.assert_called_once_with('sess-1')
-    assert (
-        svc._test_fake_exp.last_ctx.run_meta['bohrium_rebuild_events'] == rebuild_events
+    assert svc._test_fake_exp.last_ctx.metadata.bohrium_rebuild_events == tuple(
+        rebuild_events
     )
 
 
@@ -417,7 +418,7 @@ async def test_child_event_sink_reaches_sse_and_persistence():
 
 
 @pytest.mark.asyncio
-async def test_run_agent_does_not_store_callback_ports_in_run_meta():
+async def test_run_agent_does_not_store_callback_ports_in_metadata():
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
 
     async with _patched_service([run_result]) as (svc, _sse, _persist):
@@ -431,7 +432,7 @@ async def test_run_agent_does_not_store_callback_ports_in_run_meta():
             invocation_id="inv-1",
         )
 
-    run_meta = svc._test_fake_exp.last_ctx.run_meta
+    field_names = set(RunMetadata.model_fields)
     forbidden = {
         "event_sink",
         "checkpoint_sink_factory",
@@ -441,7 +442,7 @@ async def test_run_agent_does_not_store_callback_ports_in_run_meta():
         "pre_compaction_barrier",
         "figure_upload_config",
     }
-    assert forbidden.isdisjoint(run_meta)
+    assert forbidden.isdisjoint(field_names)
 
 
 @pytest.mark.asyncio

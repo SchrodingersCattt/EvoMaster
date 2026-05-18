@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from matmaster.types.events import ResponseEvent, RunResultEvent
+from matmaster.types.run_metadata import RunIdentity
 
 from .agent_kernel_test_helpers import _make_spec
 from .test_agent_kernel_stream import (
@@ -94,7 +95,7 @@ async def test_child_runtime_does_not_emit_usage_response_complete() -> None:
     from matmaster.core.agent import AgentKernel
 
     spec = _make_spec(provider=ContentOnlyProvider()).model_copy(
-        update={"meta": {"spawn_id": "child-1"}}
+        update={"run_identity": RunIdentity(spawn_id="child-1")}
     )
     events: list[Any] = []
     async for event in AgentKernel().run_stream(spec, "child task"):

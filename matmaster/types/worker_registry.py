@@ -2,7 +2,7 @@
 
 Phase 3 defines the Protocol only. Phase 5 provides the Redis-backed
 implementation. Service layer injects the implementation into Exp via
-constructor or PlaygroundContext.run_meta.
+constructor or typed runtime ports.
 """
 
 from __future__ import annotations

@@ -88,7 +88,6 @@ def _spec(provider: Provider, compactor: Compactor) -> AgentRuntimeSpec:
         system_prompt="sys",
         compactor=compactor,
         system_prompt_builder=object(),
-        meta={},
     )
 
 

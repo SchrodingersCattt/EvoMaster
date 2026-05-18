@@ -10,6 +10,8 @@ from collections.abc import Awaitable
 from dataclasses import dataclass, field
 from typing import Any, NotRequired, Protocol, TypedDict, runtime_checkable
 
+from pydantic import BaseModel, ConfigDict
+
 from matmaster.context.ports import SessionEvent, SessionEventQuery
 from matmaster.types.events import BusEvent
 from matmaster.types.figures import FigureUploadConfig
@@ -99,6 +101,22 @@ class FigureUploadPort:
     config: FigureUploadConfig | None = None
 
 
+class BohriumRuntimeSnapshot(BaseModel):
+    """Narrow Bohrium runtime snapshot for path/runtime consumers."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    ssh_attached: bool = False
+    node_id: int | None = None
+    remote_project_root: str | None = None
+    remote_workspace_root: str | None = None
+
+
+@dataclass(frozen=True)
+class BohriumRuntimePort:
+    snapshot: BohriumRuntimeSnapshot | None = None
+
+
 @dataclass(frozen=True)
 class PlaygroundRuntimePorts:
     child_event_forward_sink: BusEventSink | None = None
@@ -106,6 +124,7 @@ class PlaygroundRuntimePorts:
         default_factory=PlaygroundCompactionPort
     )
     figure_upload: FigureUploadPort = field(default_factory=FigureUploadPort)
+    bohrium: BohriumRuntimePort = field(default_factory=BohriumRuntimePort)
 
 
 @dataclass(frozen=True)

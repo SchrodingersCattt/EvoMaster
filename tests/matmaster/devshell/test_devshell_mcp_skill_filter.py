@@ -10,9 +10,10 @@ import pytest
 from matmaster.config.exp import ExpConfig, ExpSkillsConfig, ExpToolsConfig
 from matmaster.config.loader import load_base_system_prompt
 from matmaster.core.exp import Exp
+from matmaster.core.playground import PlaygroundContext
 from matmaster.providers.openai_provider import OpenAIProvider
 from matmaster.sessions.local import LocalSession
-from matmaster.core.playground import PlaygroundContext
+from matmaster.types.run_metadata import RunMetadata
 
 
 def _tool_names(registry: object) -> set[str]:
@@ -41,7 +42,7 @@ def test_devshell_mcp_only_struct_db_skill_and_lazy_mcp(
         llm_provider=OpenAIProvider(model="gpt-4o-mini", api_key="sk-test"),
         config_dir=None,
         llm_config=None,
-        run_meta={"source": "test"},
+        metadata=RunMetadata(source="test"),
     )
 
     exp_cfg = ExpConfig(
@@ -107,7 +108,7 @@ def test_mcp_runtime_patch_limits_mat_sg_lazy_tools(
         llm_provider=OpenAIProvider(model="gpt-4o-mini", api_key="sk-test"),
         config_dir=None,
         llm_config=None,
-        run_meta={"source": "test"},
+        metadata=RunMetadata(source="test"),
     )
 
     # mat_sg now only ships sampling + job-control tools in the schema cache;

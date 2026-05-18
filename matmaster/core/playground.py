@@ -25,7 +25,12 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from matmaster.sessions.local import LocalSession
-from matmaster.types.runtime_ports import PlaygroundRuntimePorts
+from matmaster.types.run_metadata import RunMetadata
+from matmaster.types.runtime_ports import (
+    BohriumRuntimePort,
+    BohriumRuntimeSnapshot,
+    PlaygroundRuntimePorts,
+)
 from matmaster.types.session import Session, SSHSessionConfig
 
 
@@ -57,7 +62,11 @@ class PlaygroundContext(BaseModel):
     selection is made outside the Exp layer (e.g. by frontend user).
     """
 
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+    model_config = ConfigDict(
+        frozen=True,
+        arbitrary_types_allowed=True,
+        extra="forbid",
+    )
 
     workdir: Path
     session_type: str
@@ -68,7 +77,7 @@ class PlaygroundContext(BaseModel):
     execution_workdir: str = Field(default="")
     env_vars: dict[str, str] = Field(default_factory=dict)
     archival: WorkspaceArchivalConfig | None = None
-    run_meta: dict[str, Any] = Field(default_factory=dict)
+    metadata: RunMetadata = Field(default_factory=RunMetadata)
     runtime_ports: PlaygroundRuntimePorts = Field(
         default_factory=PlaygroundRuntimePorts,
         repr=False,
@@ -108,10 +117,12 @@ class PlaygroundContext(BaseModel):
             }
         )
 
-    def with_bohrium(self, snapshot: dict[str, Any]) -> PlaygroundContext:
-        """Return a new frozen instance with Bohrium snapshot in run_meta."""
-        updated_meta = {**self.run_meta, "bohrium": snapshot}
-        return self.model_copy(update={"run_meta": updated_meta})
+    def with_bohrium(
+        self,
+        snapshot: BohriumRuntimeSnapshot,
+    ) -> PlaygroundContext:
+        """Return a new frozen instance with typed Bohrium runtime snapshot."""
+        return self.with_runtime_port(bohrium=BohriumRuntimePort(snapshot=snapshot))
 
     def with_runtime_ports(
         self,
@@ -126,11 +137,17 @@ class PlaygroundContext(BaseModel):
             return self
         return self.with_runtime_ports(replace(self.runtime_ports, **fields))
 
-    def with_run_meta(self, **fields: Any) -> PlaygroundContext:
-        """Return a new frozen instance with ``run_meta`` keys merged."""
+    def with_metadata(self, **fields: Any) -> PlaygroundContext:
+        """Return a new frozen instance with typed run metadata fields merged."""
         if not fields:
             return self
-        return self.model_copy(update={"run_meta": {**self.run_meta, **fields}})
+        unknown = set(fields) - set(RunMetadata.model_fields)
+        if unknown:
+            names = ", ".join(sorted(unknown))
+            raise ValueError(f"Unknown RunMetadata field(s): {names}")
+        data = {name: getattr(self.metadata, name) for name in RunMetadata.model_fields}
+        data.update(fields)
+        return self.model_copy(update={"metadata": RunMetadata.model_validate(data)})
 
 
 class Playground:
@@ -146,7 +163,7 @@ class Playground:
             session_type="local",
             session_config={"workspace_path": "/tmp/ws"},
         )
-        ctx = pg.prepare(run_dir="/tmp/runs/run-001", task_id="t1")
+        ctx = pg.prepare(RunMetadata(run_dir="/tmp/runs/run-001", task_id="t1"))
         # ... pass ctx to Exp.assemble() ...
         pg.cleanup()
     """
@@ -172,7 +189,7 @@ class Playground:
         self.session: Session | None = None
         self.agent: Any = None
         self._owns_session: bool = False
-        self._prepare_run_meta: dict[str, Any] | None = None
+        self._prepare_metadata: RunMetadata | None = None
         self._log_file_handler: logging.FileHandler | None = None
         self._log_file_stream = None
 
@@ -182,30 +199,33 @@ class Playground:
 
     def prepare(
         self,
+        metadata: RunMetadata,
         *,
-        run_dir: str | Path | None = None,
-        task_id: str = "",
         session_id: str = "",
         session_override: Session | None = None,
-        **extra_run_meta: Any,
     ) -> PlaygroundContext:
         """Create workspace, session, logging and return a frozen context.
 
         Args:
-            run_dir: base directory for this run.
-            task_id: per-task identifier; determines workspace sub-path
-                and log file name.
-            session_id: explicit session identifier. It is intentionally
-                not copied into ``run_meta``.
+            metadata: typed per-run metadata.
+            session_id: explicit session identifier. It is intentionally kept
+                on ``PlaygroundContext`` rather than in metadata.
             session_override: caller-owned session to reuse instead of
                 creating a new one.
-            extra_run_meta: temporary metadata keys retained until P2
-                migrates ``run_meta`` to ``RunMetadata``.
 
         Returns:
             Immutable ``PlaygroundContext`` snapshot.
         """
-        workspace_path = self._resolve_workspace_path_explicit(run_dir, task_id)
+        if not isinstance(metadata, RunMetadata):
+            raise TypeError(
+                f"prepare() requires RunMetadata, got {type(metadata).__name__}. "
+                "dict input was removed in run-meta-refactor P2."
+            )
+
+        workspace_path = self._resolve_workspace_path_explicit(
+            metadata.run_dir,
+            metadata.task_id,
+        )
         workspace_path.mkdir(parents=True, exist_ok=True)
 
         if session_override is not None:
@@ -228,15 +248,8 @@ class Playground:
         cache_area = self._resolve_cache_area(workspace_path)
         cache_area.mkdir(parents=True, exist_ok=True)
 
-        self._setup_logging_explicit(run_dir, task_id)
-
-        run_meta = {
-            "run_dir": str(run_dir) if run_dir is not None else "",
-            "task_id": task_id,
-            **extra_run_meta,
-        }
-        assert "session_id" not in run_meta
-        self._prepare_run_meta = run_meta
+        self._setup_logging_explicit(metadata.run_dir, metadata.task_id)
+        self._prepare_metadata = metadata
         return PlaygroundContext(
             workdir=workspace_path,
             session_type=self._session_type,
@@ -245,7 +258,7 @@ class Playground:
             execution_workdir=str(workspace_path),
             env_vars=self._collect_env_vars(),
             archival=self._archival,
-            run_meta=run_meta,
+            metadata=metadata,
             session=self.session,
         )
 
@@ -403,11 +416,11 @@ class Playground:
             return Path(run_dir) / 'workspaces' / task_id
         return Path(run_dir) / 'workspace'
 
-    def _resolve_workspace_path(self, run_meta: dict[str, Any]) -> Path:
-        """Determine workspace directory path from temporary run_meta."""
+    def _resolve_workspace_path(self, metadata: RunMetadata) -> Path:
+        """Determine workspace directory path from typed run metadata."""
         return self._resolve_workspace_path_explicit(
-            run_meta.get('run_dir'),
-            str(run_meta.get('task_id') or ""),
+            metadata.run_dir,
+            metadata.task_id,
         )
 
     def _setup_logging_explicit(
@@ -485,12 +498,12 @@ class Playground:
             if not self.session.is_open:
                 self.session.open()
             return
-        if self._prepare_run_meta is None:
+        if self._prepare_metadata is None:
             self.logger.warning(
                 '_setup_session: no prepare() metadata; cannot restore session'
             )
             return
-        workspace_path = self._resolve_workspace_path(self._prepare_run_meta)
+        workspace_path = self._resolve_workspace_path(self._prepare_metadata)
         effective_config = {
             **self._session_config,
             "workspace_path": str(workspace_path),

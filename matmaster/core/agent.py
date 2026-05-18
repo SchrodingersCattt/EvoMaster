@@ -150,8 +150,8 @@ class AgentKernel:
                 await spec.hook_executor.emit(
                     HookEvent.RUN_START,
                     RunContext(
-                        task_id=spec.meta.get("task_id", ""),
-                        session_id=spec.meta.get("session_id", ""),
+                        task_id=spec.run_identity.task_id,
+                        session_id=spec.run_identity.session_id,
                         reason="startup",
                     ),
                 )
@@ -171,8 +171,8 @@ class AgentKernel:
                     await spec.hook_executor.emit(
                         HookEvent.RUN_END,
                         RunContext(
-                            task_id=spec.meta.get("task_id", ""),
-                            session_id=spec.meta.get("session_id", ""),
+                            task_id=spec.run_identity.task_id,
+                            session_id=spec.run_identity.session_id,
                             reason=last_reason or "error",
                         ),
                     )
@@ -212,7 +212,7 @@ class AgentKernel:
         Yields events for streaming, AssistantState, and SkillHit.
         """
         if spec.hook_executor is not None:
-            session_id = spec.meta.get("session_id", "")
+            session_id = spec.run_identity.session_id
             prompt_ctx = UserPromptContext(prompt=task, session_id=session_id)
             task = await spec.hook_executor.emit_rewrite(
                 HookEvent.USER_PROMPT_SUBMIT,
@@ -224,14 +224,7 @@ class AgentKernel:
                 UserPromptContext(prompt=task, session_id=session_id),
             )
 
-        from matmaster.context.sources.turn_input import TurnInput
-
-        raw_turn_input = spec.meta.get("turn_input")
-        turn_input = (
-            raw_turn_input
-            if isinstance(raw_turn_input, TurnInput)
-            else TurnInput.from_payload(raw_turn_input)
-        )
+        turn_input = spec.turn_input
         turn_images = (
             list(turn_input.attachments.images_as_parts())
             if turn_input is not None
@@ -309,7 +302,7 @@ class AgentKernel:
                 dict(response.usage_vendor) if response.usage_vendor else {}
             )
             turn_index = state.turn - 1
-            is_root_run = spec.meta.get("spawn_id") is None
+            is_root_run = spec.run_identity.spawn_id is None
             if (
                 is_root_run
                 and response.content

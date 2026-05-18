@@ -32,6 +32,7 @@ from matmaster.core.path_access import derive_path_access_roots
 from matmaster.core.playground import PlaygroundContext
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.cancellation import CancellationToken
+from matmaster.types.run_metadata import RunIdentity
 from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec
 from matmaster.types.runtime_ports import KernelRuntimePorts
 
@@ -311,27 +312,19 @@ class Exp:
             llm_provider=ctx.llm_provider,
             max_turns=self._config.max_turns,
             compaction=self._config.compaction,
-            meta={},
         )
 
     @staticmethod
-    def _build_kernel_meta(
-        base_meta: dict[str, Any],
-        run_meta: dict[str, Any],
+    def _build_run_identity(
+        ctx: PlaygroundContext,
         *,
-        session_id: str,
         spawn_id: str | None,
-    ) -> dict[str, Any]:
-        meta = {
-            **base_meta,
-            "task_id": run_meta.get("task_id", ""),
-            "session_id": session_id,
-            "spawn_id": spawn_id,
-        }
-        turn_input = run_meta.get("turn_input")
-        if turn_input is not None:
-            meta["turn_input"] = turn_input
-        return meta
+    ) -> RunIdentity:
+        return RunIdentity(
+            task_id=ctx.metadata.task_id,
+            session_id=ctx.session_id,
+            spawn_id=spawn_id,
+        )
 
     # ── Active planes derivation ────────────────────────
 
@@ -468,14 +461,11 @@ class Exp:
             skill_registry=self._skill_registry,
         )
 
-        from matmaster.tools.builtin.bohrium_tool.registry import JobRegistry
-        from matmaster.types.tool_runner_state import ToolRunnerState
-
-        run_meta = getattr(ctx, "run_meta", {}) or {}
-
         from matmaster.core.runtime_context_assembly import (
             build_runtime_context_assembly,
         )
+        from matmaster.tools.builtin.bohrium_tool.registry import JobRegistry
+        from matmaster.types.tool_runner_state import ToolRunnerState
 
         runtime_context = build_runtime_context_assembly(
             spec=spec,
@@ -490,7 +480,7 @@ class Exp:
         scheduler = ToolScheduler()
         runner_state = ToolRunnerState()
         bohrium_registry = JobRegistry.rebuild_from_events(
-            (ctx.run_meta or {}).get("bohrium_rebuild_events")
+            ctx.metadata.bohrium_rebuild_events
         )
         runner_state.set("bohrium_job_registry", bohrium_registry)
         figure_upload_config = ctx.runtime_ports.figure_upload.config
@@ -539,12 +529,8 @@ class Exp:
                     checkpoint_sink=checkpoint_sink,
                     pre_compaction_barrier=pre_compaction_barrier,
                 ),
-                "meta": self._build_kernel_meta(
-                    spec.meta,
-                    run_meta,
-                    session_id=ctx.session_id,
-                    spawn_id=spawn_id,
-                ),
+                "run_identity": self._build_run_identity(ctx, spawn_id=spawn_id),
+                "turn_input": ctx.metadata.turn_input,
             }
         )
 
@@ -825,8 +811,6 @@ class Exp:
             if isinstance(cfg, dict) and cfg.get("sync_tools")
         }
 
-        run_meta_for_record = getattr(ctx, "run_meta", None) or {}
-
         builtin_cfg = self._config.tools.builtin or []
         allow_builtin_all = "*" in builtin_cfg
         allowed_builtin = set(builtin_cfg) if not allow_builtin_all else None
@@ -912,7 +896,7 @@ class Exp:
         # activate_mcp_server reads only from the on-disk schema cache (no MCP IO),
         # is idempotent (skips tools already in registry), and warns +
         # skips on cache miss.
-        replay_skills = run_meta_for_record.get("active_skills") or ()
+        replay_skills = ctx.metadata.active_skills
         if isinstance(replay_skills, (set, frozenset, list, tuple)):
             for skill_name in replay_skills:
                 if not isinstance(skill_name, str) or not skill_name:

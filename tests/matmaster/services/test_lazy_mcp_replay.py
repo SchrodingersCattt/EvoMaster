@@ -9,6 +9,7 @@ import pytest
 
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.events import RunResultEvent, SkillHitEvent
+from matmaster.types.run_metadata import RunMetadata
 from tests.matmaster.services.test_agent_run_stream import _patched_service
 
 
@@ -87,7 +88,7 @@ async def test_run_agent_uses_hot_cache_when_present(monkeypatch):
             invocation_id="inv-hot-cache",
         )
 
-    snapshot = svc._test_fake_exp.last_ctx.run_meta["active_skills"]
+    snapshot = svc._test_fake_exp.last_ctx.metadata.active_skills
     assert snapshot == frozenset({"pxrd"})
     assert isinstance(snapshot, frozenset)
     assert called["n"] == 1
@@ -113,7 +114,7 @@ async def test_run_agent_skill_hit_event_writes_back_to_hot_cache():
             invocation_id="inv-skill-hit",
         )
 
-    assert "record_active_mcp_server" not in svc._test_fake_exp.last_ctx.run_meta
+    assert "record_active_mcp_server" not in RunMetadata.model_fields
     assert svc._active_skills["sess-2"] == frozenset({"test-skill"})
 
 
@@ -177,7 +178,7 @@ async def test_run_agent_rehydrates_from_db_on_cache_miss(tmp_path, monkeypatch)
             )
 
     assert svc._active_skills["sess-rehydrate"] == frozenset({"pxrd", "sg"})
-    snapshot = svc._test_fake_exp.last_ctx.run_meta["active_skills"]
+    snapshot = svc._test_fake_exp.last_ctx.metadata.active_skills
     assert snapshot == frozenset({"pxrd", "sg"})
 
 
@@ -249,5 +250,5 @@ async def test_run_agent_rehydrates_remote_skill_from_session_root(
             )
 
     assert svc._active_skills["sess-remote-rehydrate"] == frozenset({"remote-skill"})
-    snapshot = svc._test_fake_exp.last_ctx.run_meta["active_skills"]
+    snapshot = svc._test_fake_exp.last_ctx.metadata.active_skills
     assert snapshot == frozenset({"remote-skill"})

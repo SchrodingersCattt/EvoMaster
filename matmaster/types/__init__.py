@@ -1,5 +1,7 @@
 """matmaster.types -- Type contracts for the three-layer architecture."""
 
+from typing import Any
+
 from .cancellation import CancellationController, CancellationToken, CancelledError
 from .errors import LLMError
 from .events import (
@@ -42,7 +44,6 @@ from .messages import (
     ToolMessage,
     UserMessage,
 )
-from .runtime import AgentRuntimeSpec, CompactionConfig
 from .runtime_ports import (
     BusEventSink,
     CheckpointSink,
@@ -59,6 +60,22 @@ from .tool_decision import ToolDecision
 from .tool_spec import ResourceClaim, ToolBinding, ToolInstance, ToolSpec
 from .topology import RuntimeTopology, SessionCapabilities, ToolPlane
 from .worker_registry import WorkerRegistry
+
+_RUNTIME_EXPORTS = frozenset({"AgentRuntimeSpec", "CompactionConfig"})
+
+
+def __getattr__(name: str) -> Any:
+    if name in _RUNTIME_EXPORTS:
+        from .runtime import AgentRuntimeSpec, CompactionConfig
+
+        exports = {
+            "AgentRuntimeSpec": AgentRuntimeSpec,
+            "CompactionConfig": CompactionConfig,
+        }
+        globals().update(exports)
+        return exports[name]
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     # cancellation

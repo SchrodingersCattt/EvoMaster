@@ -19,6 +19,7 @@ from matmaster.core.playground import PlaygroundContext
 from matmaster.providers.llm_factory import build_provider
 from matmaster.sessions.local import LocalSession
 from matmaster.types.messages import AssistantMessage
+from matmaster.types.run_metadata import RunMetadata
 
 from .schemas import ModeLiteral
 
@@ -169,7 +170,7 @@ def _run_mat_task_once(
         session=session,
         llm_provider=llm_provider,
         llm_config=llm_config,
-        run_meta={"source": "evaluation", "task_id": task_id, "mode": mode},
+        metadata=RunMetadata(source="evaluation", task_id=task_id),
     )
     try_attach_local_bohrium_runtime_from_env(session)
 

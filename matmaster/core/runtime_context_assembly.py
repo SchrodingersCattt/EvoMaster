@@ -72,19 +72,14 @@ def build_runtime_context_assembly(
     if spec.llm_provider is None:
         return RuntimeContextAssembly()
 
-    run_meta = getattr(ctx, "run_meta", {}) or {}
     history_port = ctx.runtime_ports.compaction.history
     if history_port is None:
         history_port = EmptySessionEventHistory()
 
-    instructions_text = str(run_meta.get("user_instructions") or "")
-    instructions_hash = run_meta.get("user_instructions_hash")
-    if not isinstance(instructions_hash, str) or not instructions_hash:
-        instructions_hash = _hash_user_instructions(instructions_text)
-    user_instructions = UserInstructions(
-        text=instructions_text,
-        hash=instructions_hash,
-        truncated=bool(run_meta.get("user_instructions_truncated", False)),
+    user_instructions = ctx.metadata.user_instructions or UserInstructions(
+        text="",
+        hash=_hash_user_instructions(""),
+        truncated=False,
     )
     assembly_ports = ContextAssemblyPorts(
         session_events=history_port,
@@ -107,7 +102,7 @@ def build_runtime_context_assembly(
             spawn_id=spawn_id,
             runtime_covered_until_provider=history_port.latest_scope_event_id,
             event_sink=None,
-            compaction_scope=f'{run_meta.get("task_id", "")}:{spawn_id or "root"}',
+            compaction_scope=f'{ctx.metadata.task_id}:{spawn_id or "root"}',
         ),
         context_assembler=context_assembler,
         assembly_ports=assembly_ports,

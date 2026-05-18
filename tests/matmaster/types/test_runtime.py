@@ -9,11 +9,13 @@ from typing import Any
 import pytest
 from pydantic import ValidationError
 
+from matmaster.context.sources.turn_input import TurnInput
 from matmaster.context.system_prompt import SystemPromptBuilder
 from matmaster.core.hooks import HookExecutor
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import LLMResponse, StreamChunk
+from matmaster.types.run_metadata import RunIdentity
 from matmaster.types.runtime import (
     AgentRuntime,
     AgentRuntimeSpec,
@@ -119,6 +121,53 @@ def test_agent_runtime_spec_rejects_legacy_builder_keyword() -> None:
 
     with pytest.raises(ValueError):
         AgentRuntimeSpec(**{legacy_key: SystemPromptBuilder()})
+
+
+def test_agent_runtime_spec_has_typed_run_identity_and_turn_input() -> None:
+    turn_input = TurnInput.from_values(user_text="hello")
+    identity = RunIdentity(task_id="task-1", session_id="session-1", spawn_id="child")
+
+    spec = AgentRuntimeSpec(
+        system_prompt_builder=SystemPromptBuilder(),
+        run_identity=identity,
+        turn_input=turn_input,
+    )
+
+    assert spec.run_identity is identity
+    assert spec.turn_input is turn_input
+
+
+def test_agent_runtime_spec_has_no_meta_dict_bag() -> None:
+    assert "meta" not in AgentRuntimeSpec.model_fields
+
+
+def test_agent_runtime_spec_rejects_legacy_meta_dict_bag() -> None:
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        AgentRuntimeSpec(
+            system_prompt_builder=SystemPromptBuilder(),
+            meta={"task_id": "task-1"},
+        )
+
+
+def test_agent_runtime_spec_rejects_turn_input_inside_legacy_meta() -> None:
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        AgentRuntimeSpec(
+            system_prompt_builder=SystemPromptBuilder(),
+            meta={"turn_input": TurnInput.from_values(user_text="hello")},
+        )
+
+
+def test_run_identity_rejects_extra_fields() -> None:
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        RunIdentity(task_id="task-1", run_dir="/tmp/run")
+
+
+def test_run_identity_is_single_sourced() -> None:
+    from matmaster.types.run_metadata import RunIdentity as CanonicalRunIdentity
+
+    field = AgentRuntimeSpec.model_fields["run_identity"]
+
+    assert field.annotation is CanonicalRunIdentity
 
 
 class TestAgentRuntimeSpec:

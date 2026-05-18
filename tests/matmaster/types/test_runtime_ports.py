@@ -5,11 +5,13 @@ from __future__ import annotations
 from dataclasses import FrozenInstanceError, is_dataclass
 
 import pytest
-from pydantic import TypeAdapter
+from pydantic import TypeAdapter, ValidationError
 
 from matmaster.types.events import ResponseEvent
 from matmaster.types.figures import FigureUploadConfig
 from matmaster.types.runtime_ports import (
+    BohriumRuntimePort,
+    BohriumRuntimeSnapshot,
     BusEventSink,
     CheckpointSink,
     CheckpointSinkFactory,
@@ -52,7 +54,9 @@ def test_playground_runtime_ports_defaults_are_narrow() -> None:
     assert ports.child_event_forward_sink is None
     assert isinstance(ports.compaction, PlaygroundCompactionPort)
     assert isinstance(ports.figure_upload, FigureUploadPort)
+    assert isinstance(ports.bohrium, BohriumRuntimePort)
     assert ports.figure_upload.config is None
+    assert ports.bohrium.snapshot is None
     assert ports.compaction.history is None
     assert ports.compaction.checkpoint_sink_factory is None
     assert ports.compaction.pre_compaction_barrier is None
@@ -75,6 +79,11 @@ def test_figure_upload_port_is_frozen_dataclass() -> None:
     assert port.config is cfg
     with pytest.raises(FrozenInstanceError):
         port.config = None
+
+
+def test_bohrium_runtime_snapshot_rejects_unknown_fields() -> None:
+    with pytest.raises(ValidationError):
+        BohriumRuntimeSnapshot(unknown_field="x")
 
 
 def test_kernel_runtime_ports_defaults_are_narrow() -> None:

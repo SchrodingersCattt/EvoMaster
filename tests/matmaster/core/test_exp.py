@@ -107,12 +107,15 @@ class TestExpAssemble:
         spec = await exp.assemble(ctx)
         assert "guards" not in type(spec).model_fields
 
-    async def test_meta_is_empty(self) -> None:
-        """Meta bag is empty with new ExpConfig design."""
+    async def test_runtime_identity_defaults_empty(self) -> None:
+        """Runtime identity is explicit and empty at assemble time."""
         exp = Exp(ExpConfig(name='test'))
         ctx = _make_ctx()
         spec = await exp.assemble(ctx)
-        assert spec.meta == {}
+        assert spec.run_identity.task_id == ""
+        assert spec.run_identity.session_id == ""
+        assert spec.run_identity.spawn_id is None
+        assert spec.turn_input is None
 
     async def test_llm_provider_from_ctx(self) -> None:
         """llm_provider comes from ctx, not config."""

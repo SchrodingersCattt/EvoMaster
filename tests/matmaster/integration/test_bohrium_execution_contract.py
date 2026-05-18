@@ -12,8 +12,9 @@ import pytest
 
 import matmaster.config.loader as matmaster_loader
 from matmaster.bohrium.types import BohriumRuntimeSnapshot
-from matmaster.types.cancellation import CancellationController
 from matmaster.core.playground import PlaygroundContext
+from matmaster.types.cancellation import CancellationController
+from matmaster.types.run_metadata import RunMetadata
 from tests.matmaster.core.conftest import MockLLMProvider
 
 _src_services = pytest.importorskip(
@@ -405,7 +406,7 @@ def test_run_agent_loads_exp_config_without_passing_skill_sync_to_bohrium_setup(
         workdir=tmp_path / 'workspace',
         session_type='local',
         cache_area=tmp_path / 'cache',
-        run_meta={'run_dir': str(tmp_path), 'task_id': 'test-task'},
+        metadata=RunMetadata(run_dir=str(tmp_path), task_id='test-task'),
     )
     mock_pg.prepare.return_value = mock_pg_ctx
     mock_pg.config_path = Path('config/config.yaml')
@@ -493,7 +494,7 @@ def test_execution_binding_before_build_runtime(
         workdir=tmp_path / 'workspace',
         session_type='local',
         cache_area=tmp_path / 'cache',
-        run_meta={'run_dir': str(tmp_path), 'task_id': 'test-task'},
+        metadata=RunMetadata(run_dir=str(tmp_path), task_id='test-task'),
     )
     mock_pg.prepare.return_value = mock_pg_ctx
     mock_pg.config_path = Path('config/config.yaml')
@@ -581,11 +582,12 @@ def test_execution_binding_before_build_runtime(
     assert pg_passed.session is mock_exec
     assert pg_passed.session_type == 'ssh'
     assert pg_passed.execution_workdir == '/remote/ws'
-    bmeta = pg_passed.run_meta.get('bohrium', {})
-    assert 'execution_session' not in bmeta
-    assert bmeta.get('ssh_attached') is True
-    assert bmeta.get('execution_workdir') == '/remote/ws'
-    assert bmeta.get('session_type') == 'ssh'
+    snapshot = pg_passed.runtime_ports.bohrium.snapshot
+    assert snapshot is not None
+    assert snapshot.ssh_attached is True
+    assert snapshot.remote_workspace_root == '/share'
+    assert snapshot.remote_project_root == '/share/.matmaster'
+    assert 'bohrium' not in RunMetadata.model_fields
 
 
 @patch.object(arb, "_run_clear_remote_proxy", MagicMock())

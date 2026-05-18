@@ -19,8 +19,8 @@ import pytest
 from matmaster.config.exp import ExpConfig
 from matmaster.core.agent import AgentKernel
 from matmaster.core.exp import Exp
-from matmaster.types.cancellation import CancellationController
 from matmaster.core.playground import PlaygroundContext
+from matmaster.types.cancellation import CancellationController
 from matmaster.types.events import (
     ResponseEvent,
     ToolCallEvent,
@@ -30,6 +30,7 @@ from matmaster.types.messages import (
     LLMResponse,
     StreamChunk,
 )
+from matmaster.types.run_metadata import RunMetadata
 from matmaster.types.tool_spec import ResourceClaim
 from matmaster.types.topology import ToolPlane
 
@@ -185,7 +186,7 @@ def _make_pg_ctx(tmp_path: Path, llm_provider: Any = None) -> PlaygroundContext:
         workdir=tmp_path / 'workspace',
         session_type='local',
         cache_area=tmp_path / 'cache',
-        run_meta={'run_dir': str(tmp_path), 'task_id': 'test-task'},
+        metadata=RunMetadata(run_dir=str(tmp_path), task_id='test-task'),
         llm_provider=llm_provider,
     )
 

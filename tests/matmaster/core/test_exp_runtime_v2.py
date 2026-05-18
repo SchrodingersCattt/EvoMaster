@@ -18,6 +18,8 @@ from matmaster.types.messages import (
     LLMResponse,
     StreamChunk,
 )
+from matmaster.types.run_metadata import RunMetadata
+from matmaster.types.runtime_ports import BohriumRuntimeSnapshot
 
 # ── Minimal mocks for Exp.build_runtime() tests ──────────
 
@@ -161,7 +163,7 @@ async def test_build_runtime_missing_runtime_history_has_no_scope_boundary(
 
 
 @pytest.mark.asyncio
-async def test_build_runtime_passes_turn_input_to_kernel_meta(
+async def test_build_runtime_passes_turn_input_to_kernel_spec(
     tmp_path: Path,
 ) -> None:
     from matmaster.config.exp import ExpConfig
@@ -180,12 +182,12 @@ async def test_build_runtime_passes_turn_input_to_kernel_meta(
         session_type="local",
         cache_area=tmp_path / "cache",
         llm_provider=_MockProvider(),
-        run_meta={"turn_input": turn_input},
+        metadata=RunMetadata(turn_input=turn_input),
     )
 
     runtime = await Exp(ExpConfig(name="test")).build_runtime(ctx)
 
-    assert runtime.spec.meta["turn_input"] == turn_input
+    assert runtime.spec.turn_input == turn_input
 
 
 def _make_playground_context(
@@ -259,7 +261,7 @@ class TestBuildRuntimeFullToolRunner:
         assert isinstance(runtime.spec.tool_catalog, ToolCatalog)
 
     @pytest.mark.asyncio
-    async def test_build_runtime_meta_uses_explicit_session_id(self) -> None:
+    async def test_build_runtime_identity_uses_explicit_session_id(self) -> None:
         from matmaster.core.exp import Exp
 
         config = _make_exp_config()
@@ -267,17 +269,14 @@ class TestBuildRuntimeFullToolRunner:
         ctx = _make_playground_context().model_copy(
             update={
                 "session_id": "sess-explicit",
-                "run_meta": {
-                    "task_id": "task-1",
-                    "session_id": "legacy-run-meta-session",
-                },
+                "metadata": RunMetadata(task_id="task-1"),
             }
         )
 
         runtime = await exp.build_runtime(ctx)
 
-        assert runtime.spec.meta["task_id"] == "task-1"
-        assert runtime.spec.meta["session_id"] == "sess-explicit"
+        assert runtime.spec.run_identity.task_id == "task-1"
+        assert runtime.spec.run_identity.session_id == "sess-explicit"
 
     @pytest.mark.asyncio
     async def test_spec_has_runtime_topology(self) -> None:
@@ -415,14 +414,8 @@ class TestBuildRuntimeFullToolRunner:
 
         config = _make_exp_config()
         exp = Exp(config)
-        ctx = _make_playground_context().model_copy(
-            update={
-                "run_meta": {
-                    "bohrium": {
-                        "remote_workspace_root": "/share",
-                    }
-                }
-            }
+        ctx = _make_playground_context().with_bohrium(
+            BohriumRuntimeSnapshot(remote_workspace_root="/share")
         )
 
         runtime = await exp.build_runtime(ctx)
@@ -456,15 +449,15 @@ class TestBuildRuntimeFullToolRunner:
         assert "/personal/.matmaster/skills" in glob_tool._path_access_roots
         assert "/personal/.matmaster/skills" in grep_tool._path_access_roots
 
-    def test_build_runtime_seeds_bohrium_registry_from_run_meta(self) -> None:
+    def test_build_runtime_seeds_bohrium_registry_from_metadata(self) -> None:
         from matmaster.core.exp import Exp
 
         config = _make_exp_config()
         exp = Exp(config)
         ctx = _make_playground_context().model_copy(
             update={
-                "run_meta": {
-                    "bohrium_rebuild_events": [
+                "metadata": RunMetadata(
+                    bohrium_rebuild_events=(
                         {
                             "action": "submit",
                             "job_id": "job-1",
@@ -484,8 +477,8 @@ class TestBuildRuntimeFullToolRunner:
                             "status": "Running",
                             "cached": True,
                         },
-                    ]
-                }
+                    )
+                )
             }
         )
 

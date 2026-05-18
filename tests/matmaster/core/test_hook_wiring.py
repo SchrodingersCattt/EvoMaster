@@ -38,6 +38,7 @@ from matmaster.types.messages import (
     StreamChunk,
     UserMessage,
 )
+from matmaster.types.run_metadata import RunIdentity, RunMetadata
 from matmaster.types.runtime import AgentRuntimeSpec
 from matmaster.types.topology import ToolPlane
 from tests.conftest import MockAsyncTool
@@ -224,7 +225,7 @@ def _make_echo_catalog(tool_name: str = "echo_tool") -> ToolCatalog:
 
 class TestExpWiring:
     @pytest.mark.asyncio
-    async def test_build_runtime_injects_run_meta_and_runner_hook_executor(
+    async def test_build_runtime_injects_metadata_and_runner_hook_executor(
         self,
         tmp_path: Path,
     ) -> None:
@@ -235,15 +236,15 @@ class TestExpWiring:
             session_type="local",
             cache_area=tmp_path / "cache",
             session_id="session-1",
-            run_meta={"task_id": "task-1"},
+            metadata=RunMetadata(task_id="task-1"),
             llm_provider=MockLLMProvider(),
         )
 
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
 
-        assert runtime.spec.meta["task_id"] == "task-1"
-        assert runtime.spec.meta["session_id"] == "session-1"
+        assert runtime.spec.run_identity.task_id == "task-1"
+        assert runtime.spec.run_identity.session_id == "session-1"
         assert runtime.spec.tool_runner._hook_executor is runtime.spec.hook_executor
 
     @pytest.mark.asyncio
@@ -593,7 +594,7 @@ class TestAgentKernelHookWiring:
             system_prompt_builder=SystemPromptBuilder(),
             llm_provider=provider,
             hook_executor=executor,
-            meta={"task_id": "task-1", "session_id": "session-1"},
+            run_identity=RunIdentity(task_id="task-1", session_id="session-1"),
             system_prompt="You are a test agent",
         )
 
@@ -621,7 +622,7 @@ class TestAgentKernelHookWiring:
             system_prompt_builder=SystemPromptBuilder(),
             llm_provider=provider,
             hook_executor=executor,
-            meta={"task_id": "task-1", "session_id": "session-1"},
+            run_identity=RunIdentity(task_id="task-1", session_id="session-1"),
             system_prompt="You are a test agent",
         )
 
@@ -652,7 +653,7 @@ class TestAgentKernelHookWiring:
             system_prompt_builder=SystemPromptBuilder(),
             llm_provider=provider,
             hook_executor=executor,
-            meta={"task_id": "task-1", "session_id": "session-1"},
+            run_identity=RunIdentity(task_id="task-1", session_id="session-1"),
             system_prompt="You are a test agent",
         )
 

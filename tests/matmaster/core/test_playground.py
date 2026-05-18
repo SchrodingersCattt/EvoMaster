@@ -18,6 +18,7 @@ from matmaster.core.playground import (
     WorkspaceArchivalConfig,
 )
 from matmaster.sessions.local import LocalSession
+from matmaster.types.run_metadata import RunMetadata
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -45,6 +46,13 @@ def _make_playground(
     )
 
 
+def _metadata(run_dir: Path | None = None, task_id: str = "") -> RunMetadata:
+    return RunMetadata(
+        run_dir=str(run_dir) if run_dir is not None else "",
+        task_id=task_id,
+    )
+
+
 # ---------------------------------------------------------------------------
 # prepare() returns PlaygroundContext
 # ---------------------------------------------------------------------------
@@ -56,7 +64,7 @@ class TestPrepare:
         run_dir = tmp_path / "runs" / "run-001"
         run_dir.mkdir(parents=True)
 
-        ctx = pg.prepare(run_dir=run_dir, task_id="t1")
+        ctx = pg.prepare(_metadata(run_dir, "t1"))
 
         assert isinstance(ctx, PlaygroundContext)
         assert ctx.session_type == "local"
@@ -67,7 +75,7 @@ class TestPrepare:
         run_dir = tmp_path / "runs" / "run-exec"
         run_dir.mkdir(parents=True)
 
-        ctx = pg.prepare(run_dir=run_dir, task_id="t1")
+        ctx = pg.prepare(_metadata(run_dir, "t1"))
 
         assert ctx.execution_workdir == str(ctx.workdir)
         pg.cleanup()
@@ -77,7 +85,7 @@ class TestPrepare:
         run_dir = tmp_path / "runs" / "run-002"
         run_dir.mkdir(parents=True)
 
-        ctx = pg.prepare(run_dir=run_dir, task_id="task-abc")
+        ctx = pg.prepare(_metadata(run_dir, "task-abc"))
 
         expected_ws = run_dir / "workspaces" / "task-abc"
         assert ctx.workdir == expected_ws
@@ -89,7 +97,7 @@ class TestPrepare:
         run_dir = tmp_path / "runs" / "run-003"
         run_dir.mkdir(parents=True)
 
-        ctx = pg.prepare(run_dir=run_dir)
+        ctx = pg.prepare(_metadata(run_dir))
 
         expected_ws = run_dir / "workspace"
         assert ctx.workdir == expected_ws
@@ -99,7 +107,7 @@ class TestPrepare:
     def test_workspace_fallback_without_run_dir(self, tmp_path: Path) -> None:
         pg = _make_playground(tmp_path, workspace_base=str(tmp_path / "base"))
 
-        ctx = pg.prepare()
+        ctx = pg.prepare(RunMetadata())
 
         expected_ws = tmp_path / "base" / "default"
         assert ctx.workdir == expected_ws
@@ -111,7 +119,7 @@ class TestPrepare:
         run_dir = tmp_path / "runs" / "run-004"
         run_dir.mkdir(parents=True)
 
-        ctx = pg.prepare(run_dir=run_dir, task_id="t2")
+        ctx = pg.prepare(_metadata(run_dir, "t2"))
 
         assert ctx.cache_area.is_dir()
         pg.cleanup()
@@ -121,7 +129,7 @@ class TestPrepare:
         run_dir = tmp_path / "runs" / "run-005"
         run_dir.mkdir(parents=True)
 
-        ctx = pg.prepare(run_dir=run_dir)
+        ctx = pg.prepare(_metadata(run_dir))
 
         assert ctx.archival is None
         pg.cleanup()
@@ -137,7 +145,7 @@ class TestPrepare:
         run_dir = tmp_path / "runs" / "run-006"
         run_dir.mkdir(parents=True)
 
-        ctx = pg.prepare(run_dir=run_dir)
+        ctx = pg.prepare(_metadata(run_dir))
 
         assert ctx.archival is not None
         assert isinstance(ctx.archival, WorkspaceArchivalConfig)
@@ -152,7 +160,7 @@ class TestPrepare:
         run_dir = tmp_path / "runs" / "run-007"
         run_dir.mkdir(parents=True)
 
-        pg.prepare(run_dir=run_dir, task_id="t3")
+        pg.prepare(_metadata(run_dir, "t3"))
 
         log_file = run_dir / "logs" / "t3.log"
         assert log_file.exists()
@@ -163,7 +171,7 @@ class TestPrepare:
         run_dir = tmp_path / "runs" / "run-008"
         run_dir.mkdir(parents=True)
 
-        pg.prepare(run_dir=run_dir)
+        pg.prepare(_metadata(run_dir))
 
         log_file = run_dir / "logs" / "playground.log"
         assert log_file.exists()
@@ -174,7 +182,7 @@ class TestPrepare:
         run_dir = tmp_path / "runs" / "run-cache"
         run_dir.mkdir(parents=True)
 
-        ctx = pg.prepare(run_dir=run_dir, task_id="t1")
+        ctx = pg.prepare(_metadata(run_dir, "t1"))
 
         assert ctx.cache_area.name == "custom"
         assert ".cache" in str(ctx.cache_area)
@@ -193,7 +201,7 @@ class TestCleanup:
         run_dir = tmp_path / "runs" / "run-c1"
         run_dir.mkdir(parents=True)
 
-        pg.prepare(run_dir=run_dir)
+        pg.prepare(_metadata(run_dir))
 
         assert pg._owns_session is True
         assert pg.session is not None
@@ -212,7 +220,7 @@ class TestCleanup:
         mock_session = MagicMock(spec=LocalSession)
         mock_session.is_open = True
 
-        pg.prepare(run_dir=run_dir, session_override=mock_session)
+        pg.prepare(_metadata(run_dir), session_override=mock_session)
 
         assert pg._owns_session is False
 
@@ -225,7 +233,7 @@ class TestCleanup:
         run_dir = tmp_path / "runs" / "run-c3"
         run_dir.mkdir(parents=True)
 
-        pg.prepare(run_dir=run_dir)
+        pg.prepare(_metadata(run_dir))
 
         assert pg._log_file_handler is not None
 
@@ -376,7 +384,7 @@ class TestContextImmutability:
         run_dir = tmp_path / "runs" / "run-f1"
         run_dir.mkdir(parents=True)
 
-        ctx = pg.prepare(run_dir=run_dir)
+        ctx = pg.prepare(_metadata(run_dir))
 
         from pydantic import ValidationError
 

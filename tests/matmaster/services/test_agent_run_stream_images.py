@@ -7,6 +7,7 @@ import pytest
 from matmaster.context.sources.turn_input import TurnInput
 from matmaster.types.events import RunResultEvent
 from matmaster.types.messages import ImageContentPart
+from matmaster.types.run_metadata import RunMetadata
 from tests.matmaster.services.agent_run_stream_fixtures import (
     _make_cancel_token,
     _patched_service,
@@ -14,7 +15,7 @@ from tests.matmaster.services.agent_run_stream_fixtures import (
 
 
 @pytest.mark.asyncio
-async def test_run_agent_builds_turn_input_from_images_without_image_run_meta():
+async def test_run_agent_builds_turn_input_from_images_without_image_metadata_key():
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
 
     async with _patched_service([run_result]) as (svc, _sse, _persist):
@@ -38,9 +39,9 @@ async def test_run_agent_builds_turn_input_from_images_without_image_run_meta():
             )
 
     assert ok is True
-    run_meta = svc._test_fake_exp.last_ctx.run_meta
-    assert "current_user_images" not in run_meta
-    turn_input = run_meta["turn_input"]
+    metadata = svc._test_fake_exp.last_ctx.metadata
+    assert "current_user_images" not in RunMetadata.model_fields
+    turn_input = metadata.turn_input
     assert isinstance(turn_input, TurnInput)
     assert turn_input.images == ("https://oss.example.com/chat/a.png",)
     assert turn_input.attachments.image_detail == "high"
@@ -80,8 +81,7 @@ async def test_run_agent_enriches_existing_turn_input_images_with_detail():
             )
 
     assert ok is True
-    run_meta = svc._test_fake_exp.last_ctx.run_meta
-    enriched = run_meta["turn_input"]
+    enriched = svc._test_fake_exp.last_ctx.metadata.turn_input
     assert isinstance(enriched, TurnInput)
     assert enriched.images == ("https://oss.example.com/chat/a.png",)
     assert enriched.pre_turn_history_event_id == 12
@@ -121,6 +121,6 @@ async def test_run_agent_validates_images_from_turn_input_without_top_level_imag
 
     assert ok is True
     image_service.ensure_vision_supported.assert_called_once()
-    enriched = svc._test_fake_exp.last_ctx.run_meta["turn_input"]
+    enriched = svc._test_fake_exp.last_ctx.metadata.turn_input
     assert enriched.images == ("https://oss.example.com/chat/a.png",)
     assert enriched.attachments.image_detail == "high"

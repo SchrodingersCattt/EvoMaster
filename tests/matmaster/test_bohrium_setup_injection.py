@@ -24,6 +24,7 @@ from matmaster.types.events import (
     ErrorEvent,
     StreamClosedEvent,
 )
+from matmaster.types.run_metadata import RunMetadata
 
 
 def _make_service(*, event_sink=None, sessions_service: Any = None):
@@ -317,6 +318,7 @@ def test_apply_run_credentials_registers_runtime_without_dual_write() -> None:
 
 def test_playground_context_with_bohrium_uses_snapshot_dict() -> None:
     from matmaster.core.playground import PlaygroundContext
+    from matmaster.types.runtime_ports import BohriumRuntimeSnapshot
 
     ctx = PlaygroundContext(
         workdir=Path("/tmp/work"),
@@ -325,15 +327,15 @@ def test_playground_context_with_bohrium_uses_snapshot_dict() -> None:
     )
 
     updated = ctx.with_bohrium(
-        {
-            "session_type": "ssh",
-            "execution_workdir": "/share",
-            "remote_workspace_root": "/share",
-            "remote_project_root": "/share/.matmaster",
-            "node_id": 9,
-            "node_ip": "10.0.0.9",
-            "ssh_attached": True,
-        }
+        BohriumRuntimeSnapshot(
+            remote_workspace_root="/share",
+            remote_project_root="/share/.matmaster",
+            node_id=9,
+            ssh_attached=True,
+        )
     )
 
-    assert updated.run_meta["bohrium"]["node_id"] == 9
+    snapshot = updated.runtime_ports.bohrium.snapshot
+    assert snapshot is not None
+    assert snapshot.node_id == 9
+    assert "bohrium" not in RunMetadata.model_fields

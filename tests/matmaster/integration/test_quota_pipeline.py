@@ -16,9 +16,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from matmaster.types.cancellation import CancellationController
 from matmaster.core.playground import PlaygroundContext
+from matmaster.types.cancellation import CancellationController
 from matmaster.types.messages import LLMResponse, StreamChunk
+from matmaster.types.run_metadata import RunMetadata
 
 # ── Mock LLM providers for different outcomes ────────
 
@@ -138,7 +139,7 @@ def _make_ctx(tmp_path: Path) -> PlaygroundContext:
         workdir=tmp_path / 'workspace',
         session_type='local',
         cache_area=tmp_path / 'cache',
-        run_meta={'run_dir': str(tmp_path), 'task_id': 'test'},
+        metadata=RunMetadata(run_dir=str(tmp_path), task_id='test'),
     )
 
 

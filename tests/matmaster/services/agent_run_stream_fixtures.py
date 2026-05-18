@@ -7,6 +7,7 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from matmaster.types.cancellation import CancellationController
+from matmaster.types.run_metadata import RunMetadata
 
 
 def _make_mock_playground(pg_ctx: Any) -> Any:
@@ -14,18 +15,12 @@ def _make_mock_playground(pg_ctx: Any) -> Any:
     pg = MagicMock()
 
     def _prepare(
+        metadata: RunMetadata,
         *,
-        run_dir: str | None = None,
-        task_id: str = "",
         session_id: str = "",
-        **kwargs: Any,
     ) -> Any:
         pg_ctx.session_id = session_id
-        pg_ctx.run_meta = {
-            "run_dir": str(run_dir or ""),
-            "task_id": task_id,
-            **kwargs,
-        }
+        pg_ctx.metadata = metadata
         return pg_ctx
 
     pg.prepare.side_effect = _prepare
@@ -46,7 +41,7 @@ def _make_mock_pg_ctx() -> MagicMock:
     ctx.session.path_exists.return_value = False
     ctx.session.read_file.return_value = ''
     ctx.archival = None
-    ctx.run_meta = {}
+    ctx.metadata = RunMetadata()
     ctx.runtime_ports = PlaygroundRuntimePorts()
     ctx.with_bohrium.return_value = ctx
     ctx.with_execution.return_value = ctx
@@ -64,12 +59,12 @@ def _make_mock_pg_ctx() -> MagicMock:
 
     ctx.with_runtime_port.side_effect = _with_runtime_port
 
-    def _with_run_meta(**fields: Any) -> MagicMock:
+    def _with_metadata(**fields: Any) -> MagicMock:
         if fields:
-            ctx.run_meta = {**ctx.run_meta, **fields}
+            ctx.metadata = ctx.metadata.model_copy(update=fields)
         return ctx
 
-    ctx.with_run_meta.side_effect = _with_run_meta
+    ctx.with_metadata.side_effect = _with_metadata
 
     def _model_copy(*, update: dict[str, Any] | None = None, **_: Any) -> MagicMock:
         if update:

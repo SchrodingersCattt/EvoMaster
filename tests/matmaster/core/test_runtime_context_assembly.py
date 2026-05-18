@@ -4,7 +4,7 @@ import logging
 from collections.abc import AsyncIterator
 
 from matmaster.context.assembly import ContextRenderOptions
-from matmaster.context.ports import ActiveSkill, SessionEvent
+from matmaster.context.ports import ActiveSkill, SessionEvent, UserInstructions
 from matmaster.context.system_prompt import SystemPromptBuilder
 from matmaster.core.playground import PlaygroundContext
 from matmaster.core.runtime_context_assembly import (
@@ -13,6 +13,7 @@ from matmaster.core.runtime_context_assembly import (
     empty_skill_resolver,
 )
 from matmaster.types.messages import LLMResponse, StreamChunk
+from matmaster.types.run_metadata import RunMetadata
 from matmaster.types.runtime import AgentRuntimeSpec
 
 
@@ -74,7 +75,7 @@ def test_empty_skill_resolver_returns_empty_tuple() -> None:
     )
 
 
-def test_runtime_context_assembly_ignores_run_meta_tool_render_ghosts(tmp_path) -> None:
+def test_runtime_context_assembly_ignores_tool_render_ghosts(tmp_path) -> None:
     spec = AgentRuntimeSpec(
         llm_provider=_Provider(),
         system_prompt_builder=SystemPromptBuilder(),
@@ -84,11 +85,7 @@ def test_runtime_context_assembly_ignores_run_meta_tool_render_ghosts(tmp_path) 
         session_type="local",
         session_id="sess-1",
         cache_area=tmp_path / "cache",
-        run_meta={
-            "legal_mcp_servers": {"mat_xrd"},
-            "schemas_by_server": {"mat_xrd": [{"name": "read"}]},
-            "split_turn_attachments": True,
-        },
+        metadata=RunMetadata(),
     )
 
     assembly = build_runtime_context_assembly(
@@ -105,3 +102,33 @@ def test_runtime_context_assembly_ignores_run_meta_tool_render_ghosts(tmp_path) 
     builder = assembly.context_assembler._session_context_factory(())
     assert builder.legal_mcp_servers is None
     assert builder.schemas_by_server is None
+
+
+def test_user_instructions_hash_is_not_recomputed_in_assembly(tmp_path) -> None:
+    spec = AgentRuntimeSpec(
+        llm_provider=_Provider(),
+        system_prompt_builder=SystemPromptBuilder(),
+    )
+    bundle = UserInstructions(
+        text="Use project-specific units.",
+        hash="sha256:already-computed",
+        truncated=True,
+    )
+    ctx = PlaygroundContext(
+        workdir=tmp_path,
+        session_type="local",
+        session_id="sess-1",
+        cache_area=tmp_path / "cache",
+        metadata=RunMetadata(task_id="task-1", user_instructions=bundle),
+    )
+
+    assembly = build_runtime_context_assembly(
+        spec=spec,
+        ctx=ctx,
+        skill_resolver=empty_skill_resolver,
+        spawn_id=None,
+        logger=logging.getLogger(__name__),
+    )
+
+    assert assembly.compactor is not None
+    assert assembly.compactor._user_instructions is bundle

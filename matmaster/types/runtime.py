@@ -16,9 +16,11 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from matmaster.context.sources.turn_input import TurnInput
 from matmaster.context.system_prompt import SystemPromptBuilder
 
 from .llm_provider import LLMProvider
+from .run_metadata import RunIdentity
 from .runtime_ports import KernelRuntimePorts
 
 
@@ -51,7 +53,11 @@ class AgentRuntimeSpec(BaseModel):
     is immutable during kernel execution.
     """
 
-    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
+    model_config = ConfigDict(
+        frozen=True,
+        arbitrary_types_allowed=True,
+        extra="forbid",
+    )
 
     # None is allowed during the assemble phase (ctx.llm_provider may be None);
     # build_runtime guarantees a real provider before kernel execution.
@@ -71,8 +77,8 @@ class AgentRuntimeSpec(BaseModel):
     compactor: Any | None = None
     system_prompt_builder: SystemPromptBuilder
 
-    # Extensible metadata bag (prompt templates, MCP/skill config, etc.)
-    meta: dict[str, Any] = Field(default_factory=dict)
+    run_identity: RunIdentity = Field(default_factory=RunIdentity)
+    turn_input: TurnInput | None = None
 
     # Annotations are Any to avoid circular imports across the runtime stack.
     # The model_validator below enforces runtime type contracts.

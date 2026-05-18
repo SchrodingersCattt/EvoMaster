@@ -15,6 +15,7 @@ from matmaster.types.messages import (
     StreamChunk,
     UserMessage,
 )
+from matmaster.types.run_metadata import RunIdentity, RunMetadata
 from matmaster.types.runtime_ports import KernelRuntimePorts
 
 from .agent_kernel_test_helpers import _make_spec
@@ -219,9 +220,7 @@ def build_runtime_spec_with_compaction(*, checkpoint_sink: Any, summary_text: st
     return spec.model_copy(
         update={
             "compactor": _LifecycleCompactor(summary_text),
-            "meta": {
-                "task_id": "task-1",
-            },
+            "run_identity": RunIdentity(task_id="task-1"),
             "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
         }
     )
@@ -301,7 +300,7 @@ class TestCheckpointAwareCompaction:
             update={
                 "compactor": _EphemeralFallbackCompactor("ignored"),
                 "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
-                "meta": {"task_id": "task-1"},
+                "run_identity": RunIdentity(task_id="task-1"),
             }
         )
 
@@ -485,7 +484,6 @@ async def test_kernel_reads_checkpoint_sink_from_runtime_ports() -> None:
         update={
             "compactor": compactor,
             "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
-            "meta": {},
         }
     )
 
@@ -598,13 +596,11 @@ async def test_kernel_passes_raw_turn_input_to_preflight_compactor():
     spec = _make_spec(provider=ContentOnlyProvider()).model_copy(
         update={
             "compactor": compactor,
-            "meta": {
-                "turn_input": TurnInput.from_values(
-                    user_text="original before rewrite",
-                    files=["https://oss.example.com/chat/current.cif"],
-                    pre_turn_history_event_id=42,
-                )
-            },
+            "turn_input": TurnInput.from_values(
+                user_text="original before rewrite",
+                files=["https://oss.example.com/chat/current.cif"],
+                pre_turn_history_event_id=42,
+            ),
             "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
         }
     )
@@ -640,13 +636,11 @@ async def test_kernel_skips_preflight_current_split_when_history_is_empty() -> N
     spec = _make_spec(provider=ContentOnlyProvider()).model_copy(
         update={
             "compactor": compactor,
-            "meta": {
-                "turn_input": TurnInput.from_values(
-                    user_text="current task",
-                    files=["https://oss.example.com/chat/current.cif"],
-                    pre_turn_history_event_id=42,
-                )
-            },
+            "turn_input": TurnInput.from_values(
+                user_text="current task",
+                files=["https://oss.example.com/chat/current.cif"],
+                pre_turn_history_event_id=42,
+            ),
             "runtime_ports": KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
         }
     )
@@ -727,7 +721,6 @@ async def test_kernel_sync_pre_compaction_barrier_error_stops_compaction() -> No
         update={
             "compactor": compactor,
             "runtime_ports": KernelRuntimePorts(pre_compaction_barrier=barrier),
-            "meta": {},
         }
     )
 
@@ -763,7 +756,6 @@ async def test_kernel_async_pre_compaction_barrier_error_stops_compaction() -> N
         update={
             "compactor": compactor,
             "runtime_ports": KernelRuntimePorts(pre_compaction_barrier=barrier),
-            "meta": {},
         }
     )
 
@@ -817,7 +809,7 @@ class TestExpCheckpointSinkScopeResolution:
             cache_area=tmp_path / "cache",
             execution_workdir=str(tmp_path),
             llm_provider=ContentOnlyProvider(),
-            run_meta={},
+            metadata=RunMetadata(),
             runtime_ports=PlaygroundRuntimePorts(
                 compaction=PlaygroundCompactionPort(
                     checkpoint_sink_factory=checkpoint_sink_factory,

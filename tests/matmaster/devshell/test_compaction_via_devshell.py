@@ -30,6 +30,7 @@ from matmaster.types.messages import (
     ToolMessage,
     UserMessage,
 )
+from matmaster.types.run_metadata import RunMetadata
 from matmaster.types.runtime import CompactionConfig
 
 
@@ -207,7 +208,7 @@ class TestDefaultDevshellPath:
                 llm_provider=None,
                 config_dir=None,
                 llm_config=None,
-                run_meta={},
+                metadata=RunMetadata(),
             )
             spec = await exp.assemble(ctx)
 
