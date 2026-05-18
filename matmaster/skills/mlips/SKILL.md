@@ -75,7 +75,7 @@ The OSS URLs in `reference/dpa_models.md` are a **snapshot** and may rotate. If 
 ## Key Rules
 
 - **Structure preparation runs locally.** Scripts that only use pymatgen/ASE to build or inspect structures (no MLIP inference) should run via `Bash`, not Bohrium. Only submit to Bohrium when the script imports `_calculator.py` or calls a model. This avoids wasting minutes on submit/poll/download cycles for pure-Python tasks.
-- **Validate before optimizing.** Before submitting to Bohrium for MLIP relaxation, verify the input structure is physically reasonable (min interatomic distance > 1.0 Å, correct stoichiometry). If the structure has issues, fix the construction logic first — do not attempt to rely on the optimizer to fix a fundamentally broken starting geometry.
+- **Validate before ANY Bohrium submission** (optimization, MD, phonon, NEB, elastic — all). Check min interatomic distance > 1.0 Å and correct stoichiometry. If min_dist < 1.0 Å, the structure has overlapping atoms — run energy minimization or fix the builder before submitting. Submitting a structure with overlaps will crash the simulation on the first step.
 - **Convergence**: `--fmax 0.01` for optimization, `--fmax 0.05` for NEB.
 - **Cell relaxation**: `--relax-cell` for equilibrium properties (elastic, phonon).
 - **Elastic**: Input MUST be fully relaxed (run optimize first with `--relax-cell`).
