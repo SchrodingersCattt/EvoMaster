@@ -1,6 +1,6 @@
 ---
 name: operate-molecular-crystal
-description: "Trigger for molecular-crystal edits and local-geometry repairs: PBC slab cuts, guest extraction, desolvation, disorder/partial-occupancy resolution, hydrogen completion, perturbation, coordination/CShM analysis."
+description: "Trigger for molecular-crystal edits/local-geometry repairs: topology-preserved slab cuts, stoichiometry-preserved vacancy/guest removal, desolvation, disorder/occupancy resolution, hydrogen completion, perturbation, coordination/CShM analysis."
 skill_type: operator
 depends_on: inspect-atomic-structure
 ---

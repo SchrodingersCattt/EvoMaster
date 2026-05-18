@@ -1,6 +1,6 @@
 ---
 name: mlips
-description: "MUST use for machine-learning interatomic potentials such as DPA, MACE, SevenNet, MatterSim: structure optimization, phonon, MD, elastic, NEB, adsorption, training-data preparation, active learning, accuracy and extrapolation evaluation."
+description: "MUST use for machine-learning interatomic potentials such as DPA, MACE, SevenNet, MatterSim, demonstrating structure optimization, phonon, MD, elastic, NEB, adsorption, training-data preparation, active learning, accuracy and extrapolation evaluation."
 skill_type: operator
 ---
 

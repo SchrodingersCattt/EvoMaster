@@ -1,6 +1,6 @@
 ---
 name: inspect-atomic-structure
-description: "Trigger to inspect an existing structure and report formula, symmetry/Wyckoff, dimensionality, slab vacuum, molecular-crystal indication, disorder, partial occupancy, CRYST1/PBC, or solvent fragments."
+description: "Trigger to inspect existing structures for composition, symmetry, dimensionality, PBC/vacuum setup, molecular-crystal cues, disorder/occupancy issues, or solvent fragments."
 skill_type: operator
 ---
 
