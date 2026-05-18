@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 import yaml
 
 
@@ -30,10 +29,6 @@ def test_skill_docs_do_not_reference_legacy_skill_dispatch_api() -> None:
 _MAX_DESCRIPTION_LENGTH = 300
 
 
-@pytest.mark.xfail(
-    reason="15 skills currently exceed 300-char limit; tracked for incremental fix",
-    strict=False,
-)
 def test_skill_description_length_limit() -> None:
     """Skill descriptions must be at most 300 characters to keep routing prompts lean."""
     skills_root = Path("matmaster/skills")
@@ -58,7 +53,8 @@ def test_skill_description_length_limit() -> None:
             offenders.append(
                 f"{path} ({fm.get('name', '?')}): {len(desc)} chars (max {_MAX_DESCRIPTION_LENGTH})"
             )
-    assert offenders == [], (
-        f"{len(offenders)} skill(s) exceed description limit:\n"
-        + "\n".join(f"  - {o}" for o in offenders)
+    assert (
+        offenders == []
+    ), f"{len(offenders)} skill(s) exceed description limit:\n" + "\n".join(
+        f"  - {o}" for o in offenders
     )
