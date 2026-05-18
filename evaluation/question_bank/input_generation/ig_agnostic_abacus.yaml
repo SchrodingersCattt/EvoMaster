@@ -3181,21 +3181,15 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Map Bravais lattice types to ABACUS latname and STRU lattice parameters (official 01_bravais_lattice).
-  human_prompt_seed: '工作区提供了 `bravais_suite_spec.yaml`，其中列出三套晶系与晶格常数/参数（不含 latname）。
+  human_prompt_seed: '请为下列三套 Bravais 晶系在当前目录建立子目录并写入 ABACUS SCF 输入（不要运行计算）：
 
-请为每套体系在当前目录建立对应子目录并写入 ABACUS SCF 输入：
-- `run_fcc_si/`：面心立方 Si
-- `run_hex_mos2/`：六角 MoS₂
-- `run_so_snte/`：简单正交 SnTe（LCAO）
+- `run_fcc_si/`：面心立方 Si；STRU 中 `LATTICE_CONSTANT` = 10.2 Å；PW SCF
+- `run_hex_mos2/`：六角 MoS₂；`LATTICE_CONSTANT` = 5.9716 Å，`LATTICE_PARAMETERS` = 12；PW SCF
+- `run_so_snte/`：简单正交 SnTe；`LATTICE_CONSTANT` = 8.7826087 Å，`LATTICE_PARAMETERS` 为 0.981704692 与 3.5126991；LCAO SCF
 
-各目录需含 `INPUT`、`STRU`、`KPT`。在 INPUT 中用标准 Bravais 关键字指定晶胞；在 STRU 中写入 `LATTICE_CONSTANT` 及 spec 要求的 `LATTICE_PARAMETERS`。不要运行计算。'
+各目录需含 `INPUT`、`STRU`、`KPT`。INPUT 中用标准 Bravais 关键字指定晶胞；STRU 写入上述晶格常数与参数。'
   tags:
   - eng_abacus
-  data_files:
-  - key: bravais_spec
-    path: data/IG_abacus_023_20260518/bravais_suite_spec.yaml
-    oss_url: ''
-    description: Bravais lattice geometry specs without latname hints.
   reference_answers:
   - key: fcc_si_input_artifact
     value: run_fcc_si/INPUT
