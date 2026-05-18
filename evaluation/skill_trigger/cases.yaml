@@ -21,7 +21,7 @@ cases:
       - "帮我画一个 RDF 分析图"
       - "用 VASP 算弹性常数"
       - "帮我跑一个 LAMMPS 的 MD 模拟"
-      - "这是 ABACUS 的 OUT.ABACUS 和结构文件，用 dpdata 转成 DeePMD 训练数据"
+      - "检索 ABACUS 做二维材料 HSE06 能带计算的教程和相关文献"
       - "用 GPUMD 做热导率计算"
 
   - skill: vasp
