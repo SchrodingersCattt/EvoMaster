@@ -229,7 +229,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: PWO_dpa_head_organic_001_20260516
+- id: PWO_dpa_head_organic_001_20260519
   capability: workflow_orchestration
   domain: agnostic
   intent: Test whether agent selects OMol25 DPA head for organic molecule optimization
@@ -240,8 +240,7 @@ questions:
   data_files: []
   reference_answers:
   - key: optimized_artifact
-    value:
-      pattern: '*_optimized.cif'
+    value: '*_optimized.cif'
   - key: must_head_omol25
     value:
       filename: '*_optimized.cif'

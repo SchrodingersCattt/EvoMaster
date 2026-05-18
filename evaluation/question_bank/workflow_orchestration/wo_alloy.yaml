@@ -90,7 +90,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_mech_006_20260415
+- id: WO_mech_006_20260519
   capability: workflow_orchestration
   domain: alloy
   intent: Build the convex hull for a CuCrZr alloy and summarize stability interpretation artifacts.
@@ -157,7 +157,10 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: grounding_source
-    criterion: Final answer is grounded in convex-hull artifacts and does not assert unsupported stability conclusions.
+    criterion: Final answer uses the mock values explicitly provided in the user prompt
+      (hull_distance=0.024, stability_label=metastable, reference_phases=[Cu, Cr2Zr, CuZr2]).
+      Using these prompt-provided values is NOT fabrication. Only fail if the agent invents
+      numbers not given in the prompt.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries

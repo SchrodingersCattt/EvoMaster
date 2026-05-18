@@ -1166,7 +1166,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_mech_008_20260415
+- id: WO_mech_008_20260519
   capability: workflow_orchestration
   domain: agnostic
   intent: Calculate SrTiO3 elastic constants with APEX and report full C11/C12/C44 outputs.
@@ -1237,8 +1237,10 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: grounding_source
-    criterion: Final answer is grounded in generated APEX elastic outputs and does not invent
-      unsupported tensor values.
+    criterion: Final answer uses the mock elastic constants explicitly provided in the user
+      prompt (C11=316.8, C12=101.5, C44=125.7 GPa, method=finite_strain). Using these
+      prompt-provided values is NOT fabrication. Only fail if the agent invents numbers not
+      given in the prompt.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -2043,7 +2045,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_dpa_009_20260415
+- id: WO_mlip_dpa_009_20260519
   capability: workflow_orchestration
   domain: agnostic
   intent: Retrieve an MgB2 structure from open databases and compute its phonon spectrum with
@@ -2116,8 +2118,10 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: grounding_source
-    criterion: Final answer is grounded in both retrieval and phonon artifacts and does not
-      fabricate unsupported structure/spectrum details.
+    criterion: Final answer uses the mock phonon/retrieval values explicitly provided in the
+      user prompt (retrieval_source=Materials Project, mp-763, imaginary_mode_check=false,
+      gamma_e2g_mode_meV=74.8). Using these prompt-provided values is NOT fabrication. Only
+      fail if the agent invents numbers not given in the prompt.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -2141,7 +2145,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_dpa_008_20260415
+- id: WO_mlip_dpa_008_20260519
   capability: workflow_orchestration
   domain: agnostic
   intent: Run a short DPA molecular-dynamics simulation for Li2O at 300 K and summarize thermostat/time-step
@@ -2218,8 +2222,10 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: grounding_source
-    criterion: The final answer is grounded in MD output artifacts and does not invent trajectory
-      statistics not present in generated results.
+    criterion: Final answer uses the mock MD statistics explicitly provided in the user prompt
+      (T_avg=301.2 K, T_std=7.8, drift=small, n_steps=1000, ensemble=NVT, 300K/1ps/1fs).
+      Using these prompt-provided values is NOT fabrication. Only fail if the agent invents
+      numbers not given in the prompt.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
