@@ -1,6 +1,6 @@
 ---
 name: inspect-atomic-structure
-description: "Inspect any existing atomic structure (crystal, molecule, slab, polymer chain) and report formula, symmetry (space group, point group, Wyckoff sites), geometry tables, dimensionality, vacuum direction/thickness for slabs, and whether molecular-crystal handling is needed. Also use for sanity checks involving disorder, partial occupancy, missing CRYST1 / unclear PBC, or solvent fragments before downstream processing. Reports structure sanity only — not a substitute for property prediction, relaxation, or structure editing."
+description: "Trigger to inspect an existing structure and report formula, symmetry/Wyckoff, dimensionality, slab vacuum, molecular-crystal indication, disorder, partial occupancy, CRYST1/PBC, or solvent fragments."
 skill_type: operator
 ---
 

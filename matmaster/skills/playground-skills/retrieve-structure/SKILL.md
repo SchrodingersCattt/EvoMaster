@@ -1,6 +1,6 @@
 ---
 name: retrieve-structure
-description: "Search, download, validate, and convert crystal structure files. Supports literature-based retrieval, database lookup, direct URL download into the workspace, extracting structure files embedded in supplementary/literature HTML pages, format conversion (CIF, POSCAR, XYZ, extended XYZ), and post-download structure-file validation. Load this skill for structure acquisition and file-management tasks beyond a simple DB formula query."
+description: "Trigger to acquire crystal structure files: retrieve from databases, literature, direct URL, or supplementary HTML; also format conversion and post-download validation."
 skill_type: operator
 depends_on: mcp-mat-struct-db, build-atomic-structure, transform-atomic-structure, assemble-atomic-structure, operate-molecular-crystal, mcp-mat-doc
 ---

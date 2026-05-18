@@ -1,6 +1,6 @@
 ---
 name: tasker-polar-surface
-description: "Guides slab cutting for ionic and polar crystals using Tasker types (1/2/3), especially when the task involves classifying a polar surface, fixing a net slab dipole, choosing a symmetric or non-polar termination, or validating whether a polar/ionic oxide slab is physically reasonable. Scope is Tasker/polar-surface handling for ionic and polar slabs rather than a default builder for every surface type. If automatic construction cannot find a non-polar termination, explicitly report to the user and ask for manual adjustment or temporary acceptance."
+description: "Use for ionic/polar surface or slab tasks needing Tasker-aware construction, adjustment, or validation of dipole-balanced/symmetric/non-polar terminations."
 depends_on: assemble-atomic-structure, mcp-mat-doc
 ---
 
