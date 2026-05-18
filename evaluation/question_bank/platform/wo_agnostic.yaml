@@ -2,7 +2,7 @@ version: v5
 capability: workflow_orchestration
 domain: agnostic
 questions:
-- id: WO_finetune_001_20260513
+- id: WO_finetune_001_20260519
   capability: workflow_orchestration
   domain: agnostic
   intent: Set up a real DP model fine-tuning workflow given training data and a base
@@ -33,7 +33,7 @@ questions:
       flags: ''
   - key: must_config_base_model
     value:
-      filename: finetune_input.json
+      filename: finetune_submit.json
       pattern: DPA2-base
       flags: ''
   - key: must_submit_train_cmd
