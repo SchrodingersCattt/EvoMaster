@@ -21,7 +21,7 @@ cases:
       - "帮我画一个 RDF 分析图"
       - "用 VASP 算弹性常数"
       - "帮我跑一个 LAMMPS 的 MD 模拟"
-      - "分析一下这个 XRD 数据"
+      - "检索 ABACUS 做二维材料 HSE06 能带计算的教程和相关文献"
       - "用 GPUMD 做热导率计算"
 
   - skill: vasp
@@ -41,7 +41,7 @@ cases:
       - "画一个能带图"
       - "帮我构建一个 slab 模型"
       - "用 CP2K 做 AIMD"
-      - "分析一下这个轨迹文件"
+      - "分析这个 VASP 产生的 XDATCAR 轨迹，计算 RDF"
 
   - skill: gpumd
     positive:
@@ -117,7 +117,7 @@ cases:
       - "用 LAMMPS 跑经典 MD"
       - "画一个能带图"
       - "帮我构建一个表面模型"
-      - "搜索一下关于催化的文献"
+      - "这是 CP2K 计算的日志和结构，用 dpdata 转成可用于 DeePMD 训练的数据"
 
   - skill: input-manual-helper
     positive:
@@ -382,8 +382,8 @@ cases:
       - "用本地的 DPA-2 模型跑一个 MD"                          # → mlips
       - "帮我训练一个 NEP 势函数"                               # → mlips
       - "从 Materials Project 下载 SrTiO3"                      # → structure-manager
-      - "用 VASP 算一下能带"                                    # → vasp
-      - "AIS Square 上有没有 MACE 或 SevenNet 系列的模型"       # → no-skill (non-DP family, not in AIS Square scope)  *v6*
+      - "去 HuggingFace 上把 MACE-MP large 拉下来跑 NPT"         # → structure-manager + mlips
+      - "论文 SI 把 SevenNet-l3i5 的权重挂在 figshare 上了，拉下来跑一段 NPT"  # → structure-manager + mlips
 
   - skill: structure-manager
     positive:
