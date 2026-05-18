@@ -216,3 +216,25 @@ kspacing        0.10
 > `cal_force 1` is critical — Phonopy reads forces from the log.
 > Tighter `scf_thr` (1.0e-8) and smaller `smearing_sigma` (0.005) for accurate forces.
 > `kspacing` adapts automatically to supercell size.
+
+---
+
+## Bader Charge Analysis Workflow
+
+**Goal**: Partition electron density into atomic basins using Bader's zero-flux algorithm.
+
+**INPUT requirements**: `calculation scf`, `out_chg 1` (produces `SPIN1_CHG.cube`). Both PW and LCAO basis are supported.
+
+**Critical**: With pseudopotential-only valence density, light elements (Al, Li, Na, Mg, etc.) often show zero Bader charge because the valence density is too flat near the nucleus to find zero-flux surfaces. You **must** augment the valence charge with approximate core charges before running Bader.
+
+**Bohrium cmd chain**:
+```bash
+OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1 \
+  && cd OUT.{suffix} \
+  && python3 ../add_core_charge.py SPIN1_CHG.cube total_chg.cube \
+  && bader SPIN1_CHG.cube -ref total_chg.cube > bader.log 2>&1
+```
+
+The `add_core_charge.py` script reconstructs approximate core electron density (Gaussian model) and adds it to the valence cube, creating a reference total density. Bader then uses `-ref total_chg.cube` to find basin boundaries on the total density while reporting charges from the valence density.
+
+**Without core augmentation**: Bader will fail silently — atoms with diffuse valence density (Al, Li, etc.) get assigned zero charge, producing physically meaningless results.

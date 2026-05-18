@@ -204,3 +204,6 @@ evaluation/semantic_coverage_report.json
 evaluation/scripts/coverage/.semantic_cache.json
 evaluation/uncovered_rules_full.md
 evaluation/traj_analysis/
+
+# Allow mock .log files in question bank data (overrides global *.log rule)
+!evaluation/question_bank/data/**/*.log

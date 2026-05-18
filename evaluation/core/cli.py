@@ -54,13 +54,21 @@ def main() -> int:
         help='Force using seed prompts (disable rewriting)',
     )
     parser.add_argument(
+        '--exp',
+        default=None,
+        choices=['direct', 'planner'],
+        help='Experiment / mode: maps to matmaster/exps/{exp}.toml (default: direct)',
+    )
+    parser.add_argument(
         '--slices',
         default=None,
         metavar='EXPR',
         help=(
             'OR-of-slices: whitespace between slices; cap; cap[dom]; cap[d1,d2]; '
-            'cap@tag or cap[dom]@t1,t2 (one @ per slice; tags AND). No spaces in '
-            '[...] or after @ (e.g. "workflow_orchestration[polymer]@wf_batch input_gen")'
+            'cap@tag or cap[dom]@t1,t2 (one @ per slice; tags AND); '
+            '#platform or #knowledge for scope filter (one # per slice). '
+            'No spaces in [...] or after @. '
+            'e.g. "input_generation#knowledge @eng_vasp#platform"'
         ),
     )
     parser.add_argument(
@@ -121,6 +129,8 @@ def main() -> int:
         eval_cfg['question_bank_dir'] = args.question_bank_dir
     if args.use_seed_prompt:
         eval_cfg['use_seed_prompt'] = True
+    if args.exp is not None:
+        eval_cfg['exp'] = args.exp
     if args.slices is not None:
         eval_cfg['include_slices'] = [
             s.model_dump() for s in parse_slices_expression(args.slices)

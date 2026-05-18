@@ -5,12 +5,9 @@ questions:
 - id: DF_scxrd_001_20260408
   capability: scientific_analysis
   domain: agnostic
-  intent: Determine the crystal structure of an ordered molecular crystal (1-RTP, 293 K) from
-    raw single-crystal X-ray diffraction data. Starting from the reduced reflection file (.hkl)
-    and the data-collection summary (.p4p), the agent must determine the space group, solve
-    the structure, refine it, and generate a validated CIF with no A-level checkCIF alerts.
-  human_prompt_seed: '文件 `A23050101A0735.hkl` 和 `A23050101A0735.p4p` 是一个有机-无机杂化硝普盐在 293 K
-    下采集的单晶 X 射线衍射数据（已经过数据还原）。请完成以下工作：
+  intent: Determine the crystal structure of an ordered molecular crystal (1-RTP, 293 K) from raw single-crystal X-ray diffraction data. Starting from the reduced reflection file (.hkl) and the data-collection
+    summary (.p4p), the agent must determine the space group, solve the structure, refine it, and generate a validated CIF with no A-level checkCIF alerts.
+  human_prompt_seed: '文件 `A23050101A0735.hkl` 和 `A23050101A0735.p4p` 是一个有机-无机杂化硝普盐在 293 K 下采集的单晶 X 射线衍射数据（已经过数据还原）。请完成以下工作：
 
     1. 根据 .p4p 文件中的晶胞参数和系统消光规律，确定空间群；
 
@@ -24,7 +21,7 @@ questions:
 
     '
   tags:
-  - char_xrd
+  - char_diffraction
   data_files:
   - key: hkl_file
     path: data/DF_scxrd_001_20260408/A23050101A0735.hkl
@@ -33,8 +30,7 @@ questions:
   - key: p4p_file
     path: data/DF_scxrd_001_20260408/A23050101A0735.p4p
     oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/DF_scxrd_001_20260408/1775644506_A23050101A0735.p4p
-    description: Data-collection summary file (.p4p) with unit cell parameters, wavelength,
-      and crystal system information.
+    description: Data-collection summary file (.p4p) with unit cell parameters, wavelength, and crystal system information.
   reference_answers:
   - key: r1_factor
     value: 0.0418
@@ -71,26 +67,22 @@ questions:
       max: 20000
   scoring_checklist:
   - id: r1_factor
-    criterion: Final R1 factor (on F, I>2sigma) is within tolerance of 0.0418 (human baseline).
-      A value ≤ 0.05 is acceptable for a well-refined ordered structure.
+    criterion: Final R1 factor (on F, I>2sigma) is within tolerance of 0.0418 (human baseline). A value ≤ 0.05 is acceptable for a well-refined ordered structure.
     axis: correctness
     verify: numerical_range
     weight: 2.0
   - id: wr2_factor
-    criterion: Final wR2 factor (on F², all data) is within tolerance of 0.0981 (human baseline).
-      A value ≤ 0.12 is acceptable.
+    criterion: Final wR2 factor (on F², all data) is within tolerance of 0.0981 (human baseline). A value ≤ 0.12 is acceptable.
     axis: correctness
     verify: numerical_range
     weight: 1.5
   - id: goof
-    criterion: Goodness-of-fit (GooF, S) is within tolerance of 1.048. A value between 0.9
-      and 1.2 indicates a well-refined structure.
+    criterion: Goodness-of-fit (GooF, S) is within tolerance of 1.048. A value between 0.9 and 1.2 indicates a well-refined structure.
     axis: correctness
     verify: numerical_range
     weight: 1.0
   - id: space_group_number
-    criterion: The agent correctly identifies the space group number as 4 (P2₁, monoclinic).
-      The answer or CIF must report space group No. 4.
+    criterion: The agent correctly identifies the space group number as 4 (P2₁, monoclinic). The answer or CIF must report space group No. 4.
     axis: correctness
     verify: numerical_range
     weight: 1.5
@@ -127,14 +119,10 @@ questions:
 - id: DF_scxrd_002_20260408
   capability: scientific_analysis
   domain: agnostic
-  intent: Determine the crystal structure of a disordered molecular crystal (1-HTP, 385 K)
-    from raw single-crystal X-ray diffraction data. The high-temperature phase features cation
-    orientational disorder, requiring split-atom or constraint-based modeling. Starting from
-    the reduced reflection file (.hkl) and the data-collection summary (.p4p), the agent must
-    determine the space group, solve the structure, refine it with disorder modeling, and
-    generate a validated CIF with no A-level checkCIF alerts.
-  human_prompt_seed: '文件 `A23050102A0375.hkl` 和 `A23050102A0375.p4p` 是一个有机-无机杂化硝普盐在 385 K
-    下采集的单晶 X 射线衍射数据（已经过数据还原）。该高温相中阳离子存在取向无序。请完成以下工作：
+  intent: Determine the crystal structure of a disordered molecular crystal (1-HTP, 385 K) from raw single-crystal X-ray diffraction data. The high-temperature phase features cation orientational disorder,
+    requiring split-atom or constraint-based modeling. Starting from the reduced reflection file (.hkl) and the data-collection summary (.p4p), the agent must determine the space group, solve the structure,
+    refine it with disorder modeling, and generate a validated CIF with no A-level checkCIF alerts.
+  human_prompt_seed: '文件 `A23050102A0375.hkl` 和 `A23050102A0375.p4p` 是一个有机-无机杂化硝普盐在 385 K 下采集的单晶 X 射线衍射数据（已经过数据还原）。该高温相中阳离子存在取向无序。请完成以下工作：
 
     1. 根据 .p4p 文件中的晶胞参数和系统消光规律，确定空间群；
 
@@ -148,7 +136,7 @@ questions:
 
     '
   tags:
-  - char_xrd
+  - char_diffraction
   data_files:
   - key: hkl_file
     path: data/DF_scxrd_002_20260408/A23050102A0375.hkl
@@ -157,8 +145,7 @@ questions:
   - key: p4p_file
     path: data/DF_scxrd_002_20260408/A23050102A0375.p4p
     oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/DF_scxrd_002_20260408/1775644507_A23050102A0375.p4p
-    description: Data-collection summary file (.p4p) with unit cell parameters, wavelength,
-      and crystal system information for the high-temperature disordered phase.
+    description: Data-collection summary file (.p4p) with unit cell parameters, wavelength, and crystal system information for the high-temperature disordered phase.
   reference_answers:
   - key: r1_factor
     value: 0.0637
@@ -195,26 +182,22 @@ questions:
       max: 25000
   scoring_checklist:
   - id: r1_factor
-    criterion: Final R1 factor (on F, I>2sigma) is within tolerance of 0.0637 (human baseline
-      for disordered structure). A value ≤ 0.08 is acceptable given the disorder.
+    criterion: Final R1 factor (on F, I>2sigma) is within tolerance of 0.0637 (human baseline for disordered structure). A value ≤ 0.08 is acceptable given the disorder.
     axis: correctness
     verify: numerical_range
     weight: 2.0
   - id: wr2_factor
-    criterion: Final wR2 factor (on F², all data) is within tolerance of 0.2183 (human baseline).
-      Higher wR2 is expected for disordered structures; ≤ 0.25 is acceptable.
+    criterion: Final wR2 factor (on F², all data) is within tolerance of 0.2183 (human baseline). Higher wR2 is expected for disordered structures; ≤ 0.25 is acceptable.
     axis: correctness
     verify: numerical_range
     weight: 1.5
   - id: goof
-    criterion: Goodness-of-fit (GooF, S) is within tolerance of 1.022. A value between 0.9
-      and 1.2 indicates a well-refined structure.
+    criterion: Goodness-of-fit (GooF, S) is within tolerance of 1.022. A value between 0.9 and 1.2 indicates a well-refined structure.
     axis: correctness
     verify: numerical_range
     weight: 1.0
   - id: space_group_number
-    criterion: The agent correctly identifies the space group number as 4 (P2₁, monoclinic).
-      The answer or CIF must report space group No. 4.
+    criterion: The agent correctly identifies the space group number as 4 (P2₁, monoclinic). The answer or CIF must report space group No. 4.
     axis: correctness
     verify: numerical_range
     weight: 1.5
@@ -229,9 +212,7 @@ questions:
     verify: checkcif_no_a_alerts
     weight: 2.0
   - id: disorder_modeled
-    criterion: The agent explicitly models the cation orientational disorder (e.g., using
-      split-atom positions, PART instructions, or occupancy constraints in SHELXL) and reports
-      the disorder in the answer.
+    criterion: The agent explicitly models the cation orientational disorder (e.g., using split-atom positions, PART instructions, or occupancy constraints in SHELXL) and reports the disorder in the answer.
     axis: correctness
     verify: llm_binary_judge
     weight: 2.0
@@ -255,45 +236,45 @@ questions:
     axis: efficiency
     verify: token_budget
     weight: 1.0
-- id: PXRD_thermal_expansion_001_20260502_v5
+- id: PXRD_thermal_expansion_001_20260508
   capability: scientific_analysis
   domain: agnostic
-  intent: Perform Pawley refinement on variable-temperature PXRD patterns to extract lattice
-    parameters at each temperature, identify two structural phases (low-temperature RTP and
-    high-temperature HTP), and fit linear thermal expansion equations for each phase.
-  human_prompt_seed: "文件 `_td-pxrd_test.txt` 包含一个化合物在 8 个温度下的变温粉末 X 射线衍射（PXRD）数据，温度标签对应关系为：30°C→303K、50°C→323K、70°C→343K、90°C→363K、110°C→383K、120°C→393K、130°C→403K、140°C→413K。该化合物为单斜晶系，空间群提示为 P 21（No. 4），波长为 Cu Kα1，λ = 1.5406 Å。
+  intent: Perform Pawley refinement on variable-temperature PXRD patterns to extract lattice parameters at each temperature, identify two structural phases (low-temperature RTP and high-temperature HTP),
+    and fit linear thermal expansion equations for each phase.
+  human_prompt_seed: '文件 `_td-pxrd_test.txt` 包含一个化合物在 8 个温度下的变温粉末 X 射线衍射（PXRD）数据，温度标签对应关系为：30°C→303K、50°C→323K、70°C→343K、90°C→363K、110°C→383K、120°C→393K、130°C→403K、140°C→413K。该化合物为单斜晶系，空间群提示为 P 21（No. 4），波长为
+    Cu Kα1，λ = 1.5406 Å。
 
-    数据特征与精修策略：
-    - 数据为实测变温实验数据，扣除背景前的动态范围约 10×–30×；2θ 范围 5°–50°，建议精修使用 14°–50° 区间以避开低角伪影。
-    - 推荐将数据按相拆分（RTP 4 点、HTP 4 点）分别精修，并在同一相内启用 chain-cell（前一温度精修结果作为下一温度初猜）。
-    - 同相内的体积/晶胞参数应单调或近似单调随温度变化；若某温度精修结果 V 相对邻近温度跳变 >5%，应视为收敛到错误盆地（可能为 √2 或 2× 的伪解），需要从相邻温度结果重新初始化或多起点重精修。
+    数据特征与精修策略： - 数据为实测变温实验数据，扣除背景前的动态范围约 10×–30×；2θ 范围 5°–50°，建议精修使用 14°–50° 区间以避开低角伪影。 - 推荐将数据按相拆分（RTP 4 点、HTP 4 点）分别精修，并在同一相内启用 chain-cell（前一温度精修结果作为下一温度初猜）。 - 同相内的体积/晶胞参数应单调或近似单调随温度变化；若某温度精修结果 V 相对邻近温度跳变
+    >5%，应视为收敛到错误盆地（可能为 √2 或 2× 的伪解），需要从相邻温度结果重新初始化或多起点重精修。
 
-    文献参考晶胞（每相分别作为 Pawley 精修初猜，并基于此自由精修；c 与 β 是单斜结构敏感参数，如下文献值已对每相核对）：
-    - 低温相 RTP（303K – 363K）：a ≈ 10.83 Å, b ≈ 9.62 Å, c ≈ 10.13 Å, β ≈ 108.75°, V ≈ 1000 Å³
-    - 高温相 HTP（383K – 413K）：a ≈ 11.05 Å, b ≈ 9.48 Å, c ≈ 10.48 Å, β ≈ 111.25°, V ≈ 1023 Å³
+    运行预算（重要）：本题目硬性 wall-clock 上限 1200 s（线上 task timeout）。Pawley 精修请按以下设置以兼顾稳定性与时限： - 使用 `--multi-start 1`（每相单条 chain 即可；niggli 标准化 + 双向 chain-cell 已能覆盖绝大多数错盆地，不需要 5×/8× 起点的暴力多起点；脚本默认开启的 `--self-heal-chain`
+    会在 chain merge 之后对 V 跳变 >2% 的单点自动用 multi-start 5 重精修，足以兜住偶发塌方）； - 使用 `--chain-cell --chain-cell-direction both`（脚本内部会做正反向 merge 与体积一致性裁决）； - 使用 `--standardize-cell ref`（基于参考晶胞做轴置换 + niggli 还原，规避单斜/正交等晶系的等效设定切换）；
+    - 必须**先并行 submit RTP 与 HTP 两个 Bohrium 任务**（两次 `Bohrium(action=''submit'')` 一次性发出，**不要先 submit RTP → 等结果 → 再 submit HTP**），随后再循环 `poll` 检查；串行 submit 会因为单作业 8–12 min 直接超时。 - **拿到 results.json 后不要再发起新的
+    Bohrium 精修作业**：脚本内置的 `chain-cell` + `standardize-cell` + `self-heal-chain` 已经把邻居体积一致性与错盆地单点重精修做完了，agent 端只需要读 `results` / `merge_audit` / `self_heal_audit`，做最终的相分组与线性拟合，直接写答案。重新提交 Bohrium 作业 1 次就会吃掉
+    8–12 min，几乎必然超时。
 
-    请对每个温度的 PXRD 图谱进行 Pawley 精修，提取晶格参数（a、b、c、β、V），并分析结果：
-    1. 识别两个结构相：低温相（1-RTP，303K–363K）和高温相（1-HTP，383K–413K）。
-    2. 分别对两个相的各晶格参数（a、b、c、β、V）随温度的变化进行线性拟合，给出拟合方程（斜率、截距、R²）。两相必须分别独立拟合，不能合并为一条直线，且 RTP 与 HTP 的斜率应基于各相内的 4 个温度点分别计算（不要让两相共享同一斜率值）。
-    3. 报告各温度下的精修结果。每个温度必须使用 Pawley 脚本（如 `gsas2_pawley.py`）输出 JSON 中真实的 volume（由收敛后的 a/b/c/β 计算得到），不要将 prompt 中的近似初猜（V ≈ 1000、1023 Å³）当作精修结果填入答案。
+    文献参考晶胞（每相分别作为 Pawley 精修初猜，并基于此自由精修；c 与 β 是单斜结构敏感参数，如下文献值已对每相核对）： - 低温相 RTP（303K – 363K）：a ≈ 10.83 Å, b ≈ 9.62 Å, c ≈ 10.13 Å, β ≈ 108.75°, V ≈ 1000 Å³ - 高温相 HTP（383K – 413K）：a ≈ 11.05 Å, b ≈ 9.48 Å,
+    c ≈ 10.48 Å, β ≈ 111.25°, V ≈ 1023 Å³
+
+    请对每个温度的 PXRD 图谱进行 Pawley 精修，提取晶格参数（a、b、c、β、V），并分析结果： 1. 识别两个结构相：低温相（1-RTP，303K–363K）和高温相（1-HTP，383K–413K）。 2. 分别对两个相的各晶格参数（a、b、c、β、V）随温度的变化进行线性拟合，给出拟合方程（斜率、截距、R²）。两相必须分别独立拟合，不能合并为一条直线，且 RTP 与 HTP 的斜率应基于各相内的
+    4 个温度点分别计算（不要让两相共享同一斜率值）。 3. 报告各温度下的精修结果。每个温度必须使用 Pawley 脚本（如 `gsas2_pawley.py`）输出 JSON 中真实的 volume（由收敛后的 a/b/c/β 计算得到），不要将 prompt 中的近似初猜（V ≈ 1000、1023 Å³）当作精修结果填入答案。
 
     【机器评分约定】最终答案末尾追加一个 eval_results 标签包裹的 JSON 块（数值无单位，约定单位为 Å / Å³ / Å·K⁻¹ / Å³·K⁻¹），至少需含以下 dot-path（其余字段如其它温度、b/beta、intercept、r_squared 可按情况补充；fits 为同相内 4 点线性拟合，RTP 与 HTP 必须独立）：
 
-    - rtp.{303K,363K}.V，rtp.303K.a，rtp.fits.V.slope，rtp.fits.a.slope
-    - htp.{383K,413K}.V，htp.383K.a，htp.fits.V.slope，htp.fits.c.slope
+    - rtp.{303K,363K}.V，rtp.303K.a，rtp.fits.V.slope，rtp.fits.a.slope - htp.{383K,413K}.V，htp.383K.a，htp.fits.V.slope，htp.fits.c.slope
 
     数值必须来自实际 Pawley 精修与线性拟合，不得填入 prompt 中的初猜近似值。
-    "
+
+    最终答案中请额外用 2–4 句简述审计信息： - 精修质量审计：`curation.verdict` / `warnings` 是否提示问题；`merge_audit.warnings` 或 `self_heal_audit.outliers` 是否为空，如不为空请指出受影响的温度点。 - Bohrium 执行审计：总共发起了几次 `Bohrium(action=''submit'')`（本题应
+    ≤3）；提交命令是否使用 `cmd=''bash run.sh > log 2>&1''`；下载后是否确认每个结果目录包含 `log` 与 `results.json`；结果是否来自 Bohrium 上运行的 `gsas2_pawley.py` 而不是本地 scipy/numpy 近似拟合。 '
   tags:
-  - char_xrd
+  - char_diffraction
   data_files:
   - key: vt_pxrd_data
-    path: data/PXRD_thermal_expansion_001_20260502_v5/_td-pxrd_test.txt
+    path: data/PXRD_thermal_expansion_001_20260506/_td-pxrd_test.txt
     oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/PXRD_thermal_expansion_001_20260427_v3/1777279719__td-pxrd_test.txt
-    description: Variable-temperature PXRD patterns at 8 temperatures (303K–413K, °C labels
-      30/50/70/90/110/120/130/140), CSV format with paired (2theta, intensity) columns per
-      temperature. Generated from real laboratory diffractometer scans (Cu Kα1, 5°–50° 2θ,
-      step 0.0197°).
+    description: Variable-temperature PXRD patterns at 8 temperatures (303K–413K, °C labels 30/50/70/90/110/120/130/140), CSV format with paired (2theta, intensity) columns per temperature. Generated from
+      real laboratory diffractometer scans (Cu Kα1, 5°–50° 2θ, step 0.0197°).
   reference_answers:
   - key: rtp_V_303K
     value:
@@ -335,7 +316,7 @@ questions:
     value:
       json_path: rtp.fits.V.slope
       target: 0.2013
-      tolerance: 0.08
+      tolerance: 0.15
     unit: A3/K
   - key: htp_V_slope
     value:
@@ -375,91 +356,115 @@ questions:
       max: 100000
   scoring_checklist:
   - id: rtp_V_303K
-    criterion: 'Refined unit cell volume V at the RTP phase / T=303 K is within tolerance
-      (target 999.81 ± 20.0 Å³). Read from the eval_results JSON path rtp.303K.V.'
+    criterion: Refined unit cell volume V at the RTP phase / T=303 K is within tolerance (target 999.81 ± 20.0 Å³). Read from the eval_results JSON path rtp.303K.V.
     axis: correctness
     verify: answer_json_numeric
     weight: 1.5
   - id: rtp_V_363K
-    criterion: 'Refined unit cell volume V at RTP / T=363 K is within tolerance (target
-      1011.67 ± 20.0 Å³). Read from eval_results path rtp.363K.V.'
+    criterion: Refined unit cell volume V at RTP / T=363 K is within tolerance (target 1011.67 ± 20.0 Å³). Read from eval_results path rtp.363K.V.
     axis: correctness
     verify: answer_json_numeric
     weight: 1.0
   - id: htp_V_383K
-    criterion: 'Refined unit cell volume V at HTP / T=383 K is within tolerance (target
-      1022.73 ± 20.0 Å³). Read from eval_results path htp.383K.V.'
+    criterion: Refined unit cell volume V at HTP / T=383 K is within tolerance (target 1022.73 ± 20.0 Å³). Read from eval_results path htp.383K.V.
     axis: correctness
     verify: answer_json_numeric
     weight: 1.5
   - id: htp_V_413K
-    criterion: 'Refined unit cell volume V at HTP / T=413 K is within tolerance (target
-      1026.10 ± 20.0 Å³). Read from eval_results path htp.413K.V.'
+    criterion: Refined unit cell volume V at HTP / T=413 K is within tolerance (target 1026.10 ± 20.0 Å³). Read from eval_results path htp.413K.V.
     axis: correctness
     verify: answer_json_numeric
     weight: 1.0
   - id: rtp_a_303K
-    criterion: 'Refined lattice parameter a at RTP / T=303 K is within tolerance (target
-      10.828 ± 0.05 Å). Read from eval_results path rtp.303K.a.'
+    criterion: Refined lattice parameter a at RTP / T=303 K is within tolerance (target 10.828 ± 0.05 Å). Read from eval_results path rtp.303K.a.
     axis: correctness
     verify: answer_json_numeric
     weight: 1.0
   - id: htp_a_383K
-    criterion: 'Refined lattice parameter a at HTP / T=383 K is within tolerance (target
-      11.0506 ± 0.05 Å). Read from eval_results path htp.383K.a.'
+    criterion: Refined lattice parameter a at HTP / T=383 K is within tolerance (target 11.0506 ± 0.05 Å). Read from eval_results path htp.383K.a.
     axis: correctness
     verify: answer_json_numeric
     weight: 1.0
   - id: rtp_V_slope
-    criterion: 'Linear-fit slope of V vs T over the four RTP temperatures (303/323/343/363 K)
-      is within tolerance (target 0.2013 ± 0.08 Å³/K). Read from eval_results path
-      rtp.fits.V.slope.'
+    criterion: Linear-fit slope of V vs T over the four RTP temperatures (303/323/343/363 K) is within tolerance (target 0.2013 ± 0.15 Å³/K; widened to absorb the rare ``--multi-start 1`` wrong-basin case
+      at one interior RTP temperature when ``--self-heal-chain`` does not successfully replace it — the slope is the most sensitive of the four-point fits). Read from eval_results path rtp.fits.V.slope.
     axis: correctness
     verify: answer_json_numeric
     weight: 2.0
   - id: htp_V_slope
-    criterion: 'Linear-fit slope of V vs T over the four HTP temperatures (383/393/403/413 K)
-      is within tolerance (target 0.1154 ± 0.06 Å³/K). Read from eval_results path
-      htp.fits.V.slope.'
+    criterion: Linear-fit slope of V vs T over the four HTP temperatures (383/393/403/413 K) is within tolerance (target 0.1154 ± 0.06 Å³/K). Read from eval_results path htp.fits.V.slope.
     axis: correctness
     verify: answer_json_numeric
     weight: 2.0
   - id: rtp_a_slope
-    criterion: 'Linear-fit slope of a vs T over the four RTP temperatures (303/323/343/363 K)
-      is within tolerance (target 0.00129 ± 0.0006 Å/K). Read from eval_results path
-      rtp.fits.a.slope.'
+    criterion: Linear-fit slope of a vs T over the four RTP temperatures (303/323/343/363 K) is within tolerance (target 0.00129 ± 0.0006 Å/K). Read from eval_results path rtp.fits.a.slope.
     axis: correctness
     verify: answer_json_numeric
     weight: 1.5
   - id: htp_c_slope
-    criterion: 'Linear-fit slope of c vs T over the four HTP temperatures (383/393/403/413 K)
-      is within tolerance (target -0.00053 ± 0.0006 Å/K). Read from eval_results path
-      htp.fits.c.slope.'
+    criterion: Linear-fit slope of c vs T over the four HTP temperatures (383/393/403/413 K) is within tolerance (target -0.00053 ± 0.0006 Å/K). Read from eval_results path htp.fits.c.slope.
     axis: correctness
     verify: answer_json_numeric
     weight: 1.5
   - id: required_fields
-    criterion: Answer reports both RTP and HTP phases with linear fit equations including
-      slope, intercept, and R² for at least V vs T in each phase.
+    criterion: Answer reports both RTP and HTP phases with linear fit equations including slope, intercept, and R² for at least V vs T in each phase.
     axis: correctness
     verify: llm_binary_judge
     weight: 1.0
   - id: phase_transition_identified
-    criterion: Answer identifies a structural phase transition between 363 K and 383 K, with
-      distinct lattice parameters for the two phases (notably a jump in a and β at the transition).
+    criterion: Answer identifies a structural phase transition between 363 K and 383 K, with distinct lattice parameters for the two phases (notably a jump in a and β at the transition).
     axis: correctness
     verify: llm_binary_judge
     weight: 1.5
+  - id: bohrium_submit_executed
+    criterion: Pass if the final answer, workspace evidence, or tool-call observations state that each Bohrium submit was downloaded and produced both a log file and a results JSON before numeric outputs
+      were read. Do not fail solely because the visible tool-call excerpt is truncated, unless there is positive evidence that no successful Bohrium result directory existed.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 0.5
+  - id: bohrium_job_budget
+    criterion: Pass if the final answer, workspace evidence, or tool-call observations indicate at most 3 Bohrium submit calls for this two-phase task. Poll and download calls do not count as submits. Fail
+      only if the evidence shows more than 3 submits or redundant re-runs/parameter sweeps.
+    axis: efficiency
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: curation_inspected
+    criterion: Agent inspected the curation diagnostics or warnings field of the Pawley results JSON for at least one pattern, either by mentioning it in the final answer or through visible tool-call observations.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 0.5
+  - id: runsh_wrapper_used
+    criterion: Pass if the final answer, workspace run.sh files, or tool-call observations show the run.sh wrapper pattern such as bash run.sh > log 2>&1, with the python3 gsas2_pawley.py invocation inside
+      run.sh rather than inlined with embedded quotes in the cmd field.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 0.5
+  - id: merge_audit_surfaced
+    criterion: When reporting per-pattern cells from a chain-cell-direction both run, the agent referenced merge_audit (table or warnings) or self_heal_audit at least once in the final answer or reasoning.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 0.5
+  - id: local_solver_avoided
+    criterion: Pass if the final answer, workspace files, or tool-call observations show that refinement results came from gsas2_pawley.py executed on Bohrium, and there is no positive evidence that the
+      agent bypassed GSAS-II by writing a local scipy/numpy least-squares Pawley replacement.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 0.5
+  - id: initial_cell_from_reference
+    criterion: Agent uses an initial cell from the provided data or a prior refinement result, not an invented/eyeballed cell.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_chain_across_phase
+    criterion: Each temperature pattern is refined independently or with proper anchor propagation; agent does not blindly chain all patterns in one submission ignoring potential phase transitions.
+    axis: correctness
+    verify: llm_binary_judge
   - id: grounding_source
-    criterion: Lattice parameters and fit results are derived from Pawley refinement of the
-      provided PXRD data file, not from literature values or hallucination. Judge from the
-      final answer and stated methodology; do not fail because the tool-call log omits specific
-      tools.
+    criterion: Lattice parameters and fit results are derived from Pawley refinement of the provided PXRD data file, not from literature values or hallucination. Judge from the final answer and stated methodology;
+      do not fail because the tool-call log omits specific tools.
     axis: grounding
     verify: llm_binary_judge
   - id: efficiency_judge
-    criterion: Pawley refinement and thermal expansion fitting are performed in a direct pipeline
-      without unnecessary repeated refinements or redundant parameter sweeps.
+    criterion: Pawley refinement and thermal expansion fitting are performed in a direct pipeline without unnecessary repeated refinements or redundant parameter sweeps.
     axis: efficiency
     verify: llm_binary_judge
   - id: turn_budget
@@ -467,50 +472,37 @@ questions:
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous
-      benchmark ceiling (tunable per deployment).
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling
-      (tunable per task after calibration).
+    criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
 - id: PXRD_pawley_303K_001_20260502_v1
   capability: scientific_analysis
   domain: agnostic
-  intent: Perform Pawley refinement on a single PXRD pattern at 303 K to extract all
-    lattice parameters (a, b, c, beta, V) and report the weighted profile R-factor (wR).
-  human_prompt_seed: "文件 `pxrd_303K.xy` 是一个有机-无机杂化硝普盐在 303 K（30 °C）下采集的粉末 X
-    射线衍射（PXRD）数据（Cu Kα1, λ = 1.5406 Å, 2θ 范围 5°–50°, 步长 ~0.02°, 两列格式: 2θ 强度）。
+  intent: Perform Pawley refinement on a single PXRD pattern at 303 K to extract all lattice parameters (a, b, c, beta, V) and report the weighted profile R-factor (wR).
+  human_prompt_seed: '文件 `pxrd_303K.xy` 是一个有机-无机杂化硝普盐在 303 K（30 °C）下采集的粉末 X 射线衍射（PXRD）数据（Cu Kα1, λ = 1.5406 Å, 2θ 范围 5°–50°, 步长 ~0.02°, 两列格式: 2θ 强度）。
 
-    该化合物为单斜晶系，空间群 P 21（No. 4）。文献参考晶胞：a ≈ 10.83 Å, b ≈ 9.62 Å, c ≈ 10.13 Å,
-    beta ≈ 108.75°, V ≈ 1000 Å³。
+    该化合物为单斜晶系，空间群 P 21（No. 4）。文献参考晶胞：a ≈ 10.83 Å, b ≈ 9.62 Å, c ≈ 10.13 Å, beta ≈ 108.75°, V ≈ 1000 Å³。
 
-    精修策略建议：
-    - 建议使用 14°–50° 2θ 区间以避开低角伪影
-    - 基线 / 背景函数使用低阶（0–1 阶）以避免过拟合
-    - 若多次精修收敛到不同盆地，选择 wR 最低且体积与初猜偏差最小的结果
+    精修策略建议： - 建议使用 14°–50° 2θ 区间以避开低角伪影 - 基线 / 背景函数使用低阶（0–1 阶）以避免过拟合 - 若多次精修收敛到不同盆地，选择 wR 最低且体积与初猜偏差最小的结果
 
     请对该 PXRD 图谱进行 Pawley 精修，提取精修后的晶格参数并报告精修质量。
 
-    【机器评分约定】最终答案末尾追加一个 eval_results 标签包裹的 JSON 块（数值无单位，约定：
-    a/b/c 单位 Å, beta 单位°, V 单位 Å³, wR 单位 %），格式如下：
+    【机器评分约定】最终答案末尾追加一个 eval_results 标签包裹的 JSON 块（数值无单位，约定： a/b/c 单位 Å, beta 单位°, V 单位 Å³, wR 单位 %），格式如下：
 
-    <eval_results>
-    {\"a\": ..., \"b\": ..., \"c\": ..., \"beta\": ..., \"V\": ..., \"wR\": ...}
-    </eval_results>
+    <eval_results> {"a": ..., "b": ..., "c": ..., "beta": ..., "V": ..., "wR": ...} </eval_results>
 
-    数值必须来自实际 Pawley 精修结果，不得填入 prompt 中的初猜近似值。
-    "
+    数值必须来自实际 Pawley 精修结果，不得填入 prompt 中的初猜近似值。 '
   tags:
-  - char_xrd
+  - char_diffraction
   data_files:
   - key: pxrd_data
     path: data/PXRD_pawley_303K_001_20260502_v1/pxrd_303K.xy
     oss_url: ''
-    description: PXRD pattern at 303 K (Cu Kalpha1, 5-50 deg 2theta), two-column
-      format (2theta, intensity). Generated from real laboratory diffractometer scan.
+    description: PXRD pattern at 303 K (Cu Kalpha1, 5-50 deg 2theta), two-column format (2theta, intensity). Generated from real laboratory diffractometer scan.
   reference_answers:
   - key: cell_a
     value:
@@ -562,50 +554,41 @@ questions:
       max: 50000
   scoring_checklist:
   - id: cell_a
-    criterion: 'Refined lattice parameter a is within tolerance (target 10.828 ± 0.04 Å).
-      Read from the eval_results JSON path a.'
+    criterion: Refined lattice parameter a is within tolerance (target 10.828 ± 0.04 Å). Read from the eval_results JSON path a.
     axis: correctness
     verify: answer_json_numeric
     weight: 1.5
   - id: cell_b
-    criterion: 'Refined lattice parameter b is within tolerance (target 9.57 ± 0.08 Å).
-      Read from the eval_results JSON path b.'
+    criterion: Refined lattice parameter b is within tolerance (target 9.57 ± 0.08 Å). Read from the eval_results JSON path b.
     axis: correctness
     verify: answer_json_numeric
     weight: 1.5
   - id: cell_c
-    criterion: 'Refined lattice parameter c is within tolerance (target 10.14 ± 0.06 Å).
-      Read from the eval_results JSON path c.'
+    criterion: Refined lattice parameter c is within tolerance (target 10.14 ± 0.06 Å). Read from the eval_results JSON path c.
     axis: correctness
     verify: answer_json_numeric
     weight: 1.5
   - id: cell_beta
-    criterion: 'Refined monoclinic angle beta is within tolerance (target 108.1 ± 1.2°).
-      Read from the eval_results JSON path beta.'
+    criterion: Refined monoclinic angle beta is within tolerance (target 108.1 ± 1.2°). Read from the eval_results JSON path beta.
     axis: correctness
     verify: answer_json_numeric
     weight: 1.5
   - id: cell_V
-    criterion: 'Refined unit cell volume V is within tolerance (target 997.0 ± 12.0 Å³).
-      Read from the eval_results JSON path V.'
+    criterion: Refined unit cell volume V is within tolerance (target 997.0 ± 12.0 Å³). Read from the eval_results JSON path V.
     axis: correctness
     verify: answer_json_numeric
     weight: 2.0
   - id: wR_factor
-    criterion: 'Weighted profile R-factor wR is within tolerance (target 16.0 ± 4.0 %).
-      Read from the eval_results JSON path wR.'
+    criterion: Weighted profile R-factor wR is within tolerance (target 16.0 ± 4.0 %). Read from the eval_results JSON path wR.
     axis: correctness
     verify: answer_json_numeric
     weight: 1.0
   - id: grounding_source
-    criterion: Lattice parameters and wR are derived from Pawley refinement of the
-      provided PXRD data file, not from literature values or hallucination. Judge from
-      the final answer and stated methodology.
+    criterion: Lattice parameters and wR are derived from Pawley refinement of the provided PXRD data file, not from literature values or hallucination. Judge from the final answer and stated methodology.
     axis: grounding
     verify: llm_binary_judge
   - id: efficiency_judge
-    criterion: Pawley refinement is performed in a direct pipeline without unnecessary
-      repeated refinements or redundant parameter sweeps.
+    criterion: Pawley refinement is performed in a direct pipeline without unnecessary repeated refinements or redundant parameter sweeps.
     axis: efficiency
     verify: llm_binary_judge
   - id: turn_budget
@@ -614,6 +597,377 @@ questions:
     verify: turn_budget
   - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) does not exceed 1 hour.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: SA_lsv_cd_001_20260506
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Quantify cadmium in a wastewater sample from CHI linear-sweep voltammetry calibration traces.
+  human_prompt_seed: '请下载并分析以下通过 OSS URL 提供的 CHI660E 线性扫描伏安数据文件：
+
+    - `cd_lsv_blank.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_lsv_cd_001/1778080946_cd_lsv_blank.txt`
+
+    - `cd_lsv_cal_10ugL.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_lsv_cd_001/1778080947_cd_lsv_cal_10ugL.txt`
+
+    - `cd_lsv_cal_30ugL.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_lsv_cd_001/1778080948_cd_lsv_cal_30ugL.txt`
+
+    - `cd_lsv_cal_50ugL.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_lsv_cd_001/1778080949_cd_lsv_cal_50ugL.txt`
+
+    - `cd_lsv_cal_70ugL.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_lsv_cd_001/1778080950_cd_lsv_cal_70ugL.txt`
+
+    - `cd_lsv_cal_100ugL.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_lsv_cd_001/1778080946_cd_lsv_cal_100ugL.txt`
+
+    - `cd_lsv_wastewater_sample.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_lsv_cd_001/1778080950_cd_lsv_wastewater_sample.txt`
+
+    这些文件来自同一套 Cd 标准与废水样品测定。请完成以下分析：
+
+    1. 读取每个伏安文件；如果 Header 段已附仪器识别的峰电位 `Ep` 与峰电流 `ip` 字段，请优先使用 header 中的 `ip` 进行后续定量，以与仪器原始报告的峰电流口径一致；否则再自行从 IV 曲线中提取峰电流； 2. 用标准样建立校准关系，并评价校准质量； 3. 估算废水样品中的 Cd 浓度； 4. 与 0.1 mg/L 的排放限值比较，给出是否超标的结论； 5. 简要说明你的数据处理选择和异常点处理原则。
+
+    最终回答末尾请追加 `<eval_results>...</eval_results>` JSON，至少包含： `calibration.slope_A_per_ugL`, `calibration.r_squared`, `sample.cd_mg_L`, `sample.peak_potential_V`。
+
+    JSON 中字段名形如 `a.b` 表示嵌套对象（顶层 `a` 下的子键 `b`），请使用嵌套结构而不要写成扁平字符串键。结构示例（数值仅占位）：
+
+    ```json {"calibration": {"slope_A_per_ugL": 0, "r_squared": 0}, "sample": {"cd_mg_L": 0, "peak_potential_V": 0}} ```'
+  tags:
+  - char_electrochem
+  data_files:
+  - key: blank_trace
+    path: data/SA_lsv_cd_001/cd_lsv_blank.txt
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_lsv_cd_001/1778080946_cd_lsv_blank.txt
+    description: CHI660E blank LSV trace.
+  - key: cal_10
+    path: data/SA_lsv_cd_001/cd_lsv_cal_10ugL.txt
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_lsv_cd_001/1778080947_cd_lsv_cal_10ugL.txt
+    description: CHI660E Cd calibration LSV trace, 10 ug/L.
+  - key: cal_30
+    path: data/SA_lsv_cd_001/cd_lsv_cal_30ugL.txt
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_lsv_cd_001/1778080948_cd_lsv_cal_30ugL.txt
+    description: CHI660E Cd calibration LSV trace, 30 ug/L.
+  - key: cal_50
+    path: data/SA_lsv_cd_001/cd_lsv_cal_50ugL.txt
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_lsv_cd_001/1778080949_cd_lsv_cal_50ugL.txt
+    description: CHI660E Cd calibration LSV trace, 50 ug/L.
+  - key: cal_70
+    path: data/SA_lsv_cd_001/cd_lsv_cal_70ugL.txt
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_lsv_cd_001/1778080950_cd_lsv_cal_70ugL.txt
+    description: CHI660E Cd calibration LSV trace, 70 ug/L.
+  - key: cal_100
+    path: data/SA_lsv_cd_001/cd_lsv_cal_100ugL.txt
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_lsv_cd_001/1778080946_cd_lsv_cal_100ugL.txt
+    description: CHI660E Cd calibration LSV trace, 100 ug/L.
+  - key: wastewater_sample
+    path: data/SA_lsv_cd_001/cd_lsv_wastewater_sample.txt
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_lsv_cd_001/1778080950_cd_lsv_wastewater_sample.txt
+    description: CHI660E wastewater sample LSV trace.
+  reference_answers:
+  - key: calibration_slope
+    value:
+      json_path: calibration.slope_A_per_ugL
+      target: 4.231258196721311e-07
+      tolerance: 7.0e-08
+    unit: A/(ug/L)
+  - key: calibration_r2
+    value:
+      json_path: calibration.r_squared
+      target: 0.9943284089797766
+      tolerance: 0.03
+  - key: sample_cd
+    value:
+      json_path: sample.cd_mg_L
+      target: 0.03708103333213872
+      tolerance: 0.005
+    unit: mg/L
+  - key: sample_ep
+    value:
+      json_path: sample.peak_potential_V
+      target: -0.82
+      tolerance: 0.03
+    unit: V
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 20000
+  scoring_checklist:
+  - id: calibration_slope
+    criterion: The calibration slope reported in eval_results is consistent with the uploaded Cd standard traces.
+    axis: correctness
+    verify: answer_json_numeric
+    weight: 1.5
+  - id: calibration_r2
+    criterion: The calibration quality reported in eval_results is consistent with the uploaded standard traces.
+    axis: correctness
+    verify: answer_json_numeric
+    weight: 1.0
+  - id: sample_cd
+    criterion: The wastewater Cd concentration reported in eval_results is consistent with the uploaded sample trace and calibration data.
+    axis: correctness
+    verify: answer_json_numeric
+    weight: 2.0
+  - id: sample_ep
+    criterion: The sample peak potential reported in eval_results is consistent with the uploaded sample trace.
+    axis: correctness
+    verify: answer_json_numeric
+  - id: regulatory_conclusion
+    criterion: The final answer compares the sample Cd concentration with the 0.1 mg/L limit and concludes that it is below the limit.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: The analysis is grounded in the uploaded LSV traces and does not rely on unstated report values.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: SA_uvvis_glucose_maf4_001_20260506
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Analyze a UV-Vis plate-reader export for MAF-4 enzyme-cascade glucose sensing.
+  human_prompt_seed: '请下载并分析以下通过 OSS URL 提供的酶级联比色葡萄糖检测实验酶标仪导出文件：
+
+    - `glucose_uvvis_platereader.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_uvvis_glucose_maf4_001/1778080964_glucose_uvvis_platereader.txt`
+
+    该文件包含标准样和未知血清样的读数。
+
+    请完成以下分析：
+
+    1. 判断应使用的定量读数波长，并说明依据； 2. 从标准样读数建立校准关系并评价线性； 3. 计算未知样品 1 的稀释液葡萄糖浓度，并按 100 倍稀释折算为原血清浓度； 4. 判断该血清结果是否落在常见空腹血糖参考范围内； 5. 简要说明你如何处理明显超出标准范围或无效的孔位。
+
+    最终回答末尾请追加 `<eval_results>...</eval_results>` JSON，至少包含： `assay.endpoint_wavelength_nm`, `calibration.slope_abs_per_uM`, `calibration.intercept_abs`, `calibration.r_squared`, `sample1.diluted_glucose_uM`,
+    `sample1.serum_glucose_mM`。
+
+    JSON 中字段名形如 `a.b` 表示嵌套对象（顶层 `a` 下的子键 `b`），请使用嵌套结构而不要写成扁平字符串键。结构示例（数值仅占位）：
+
+    ```json {"assay": {"endpoint_wavelength_nm": 0}, "calibration": {"slope_abs_per_uM": 0, "intercept_abs": 0, "r_squared": 0}, "sample1": {"diluted_glucose_uM": 0, "serum_glucose_mM": 0}} ```'
+  tags:
+  - char_optical_spectrum
+  data_files:
+  - key: plate_reader_export
+    path: data/SA_uvvis_glucose_maf4_001/glucose_uvvis_platereader.txt
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_uvvis_glucose_maf4_001/1778080964_glucose_uvvis_platereader.txt
+    description: UTF-8 text export of a SoftMax-style endpoint UV-Vis glucose assay.
+  reference_answers:
+  - key: endpoint_wavelength
+    value:
+      json_path: assay.endpoint_wavelength_nm
+      target: 420.0
+      tolerance: 2.0
+    unit: nm
+  - key: calibration_slope
+    value:
+      json_path: calibration.slope_abs_per_uM
+      target: 0.009225157232704404
+      tolerance: 0.0015
+    unit: absorbance/uM
+  - key: calibration_intercept
+    value:
+      json_path: calibration.intercept_abs
+      target: 0.2232964959568735
+      tolerance: 0.05
+  - key: calibration_r2
+    value:
+      json_path: calibration.r_squared
+      target: 0.9974191041794597
+      tolerance: 0.02
+  - key: diluted_glucose
+    value:
+      json_path: sample1.diluted_glucose_uM
+      target: 53.80614749308501
+      tolerance: 8.0
+    unit: uM
+  - key: serum_glucose
+    value:
+      json_path: sample1.serum_glucose_mM
+      target: 5.380614749308501
+      tolerance: 0.8
+    unit: mM
+  - key: turn_budget
+    value:
+      max: 35
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 22000
+  scoring_checklist:
+  - id: endpoint_wavelength
+    criterion: The endpoint wavelength reported in eval_results is consistent with the assay export.
+    axis: correctness
+    verify: answer_json_numeric
+  - id: calibration_slope
+    criterion: The calibration slope reported in eval_results is consistent with the valid standard wells.
+    axis: correctness
+    verify: answer_json_numeric
+    weight: 1.5
+  - id: calibration_intercept
+    criterion: The calibration intercept reported in eval_results is consistent with the valid standard wells.
+    axis: correctness
+    verify: answer_json_numeric
+  - id: calibration_r2
+    criterion: The calibration quality reported in eval_results is consistent with the valid standard wells.
+    axis: correctness
+    verify: answer_json_numeric
+  - id: diluted_glucose
+    criterion: The diluted sample 1 glucose concentration reported in eval_results is consistent with the uploaded plate-reader data.
+    axis: correctness
+    verify: answer_json_numeric
+    weight: 1.5
+  - id: serum_glucose
+    criterion: The back-corrected serum sample 1 glucose concentration reported in eval_results is consistent with the stated dilution.
+    axis: correctness
+    verify: answer_json_numeric
+    weight: 1.5
+  - id: interpretation
+    criterion: The final answer correctly states that sample 1 is within a typical fasting blood-glucose reference range.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: The analysis is grounded in the uploaded plate-reader export and identifies invalid or out-of-range wells as data quality issues.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: SA_pxrd_maf4_phase_001_20260506
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Compare paired PXRD traces to determine whether enzyme encapsulation preserves the MAF-4 crystalline phase.
+  human_prompt_seed: '请下载并分析以下通过 OSS URL 提供的粉末 XRD 数据文件：
+
+    - `maf4_enzyme_vs_pristine_pxrd.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_pxrd_maf4_phase_001/1778080965_maf4_enzyme_vs_pristine_pxrd.txt`
+
+    该文件含有两个图谱：enzyme@MAF-4 与 pristine MAF-4。
+
+    请完成以下分析：
+
+    1. 对两个图谱进行必要的清理、归一化或对齐； 2. 找出主要衍射峰，并比较两者峰位是否保持一致； 3. 给出一个定量相似性指标； 4. 判断酶封装后 MAF-4 的晶相是否基本保持； 5. 简要指出强度变化和峰位变化分别说明什么。
+
+    最终回答末尾请追加 `<eval_results>...</eval_results>` JSON，至少包含： `pristine.peak1_2theta`, `pristine.peak2_2theta`, `pristine.peak3_2theta`, `comparison.mean_peak_shift_deg`, `comparison.max_peak_shift_deg`,
+    `comparison.pattern_correlation`。
+
+    JSON 中字段名形如 `a.b` 表示嵌套对象（顶层 `a` 下的子键 `b`），请使用嵌套结构而不要写成扁平字符串键。结构示例（数值仅占位）：
+
+    ```json {"pristine": {"peak1_2theta": 0, "peak2_2theta": 0, "peak3_2theta": 0}, "comparison": {"mean_peak_shift_deg": 0, "max_peak_shift_deg": 0, "pattern_correlation": 0}} ```'
+  tags:
+  - char_diffraction
+  data_files:
+  - key: paired_pxrd
+    path: data/SA_pxrd_maf4_phase_001/maf4_enzyme_vs_pristine_pxrd.txt
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_pxrd_maf4_phase_001/1778080965_maf4_enzyme_vs_pristine_pxrd.txt
+    description: Paired enzyme@MAF-4 and pristine MAF-4 PXRD traces.
+  reference_answers:
+  - key: pristine_peak1
+    value:
+      json_path: pristine.peak1_2theta
+      target: 7.22
+      tolerance: 0.12
+    unit: deg
+  - key: pristine_peak2
+    value:
+      json_path: pristine.peak2_2theta
+      target: 12.62
+      tolerance: 0.15
+    unit: deg
+  - key: pristine_peak3
+    value:
+      json_path: pristine.peak3_2theta
+      target: 17.94
+      tolerance: 0.18
+    unit: deg
+  - key: mean_peak_shift
+    value:
+      json_path: comparison.mean_peak_shift_deg
+      target: 0.02
+      tolerance: 0.08
+    unit: deg
+  - key: max_peak_shift
+    value:
+      json_path: comparison.max_peak_shift_deg
+      target: 0.04
+      tolerance: 0.1
+    unit: deg
+  - key: pattern_correlation
+    value:
+      json_path: comparison.pattern_correlation
+      target: 0.8461676890264044
+      tolerance: 0.12
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 20000
+  scoring_checklist:
+  - id: pristine_peak1
+    criterion: The first main pristine MAF-4 peak position reported in eval_results is consistent with the uploaded PXRD trace.
+    axis: correctness
+    verify: answer_json_numeric
+  - id: pristine_peak2
+    criterion: The second main pristine MAF-4 peak position reported in eval_results is consistent with the uploaded PXRD trace.
+    axis: correctness
+    verify: answer_json_numeric
+  - id: pristine_peak3
+    criterion: The third main pristine MAF-4 peak position reported in eval_results is consistent with the uploaded PXRD trace.
+    axis: correctness
+    verify: answer_json_numeric
+  - id: mean_peak_shift
+    criterion: The mean peak shift reported in eval_results is consistent with comparing the paired PXRD traces.
+    axis: correctness
+    verify: answer_json_numeric
+    weight: 1.5
+  - id: max_peak_shift
+    criterion: The maximum matched-peak shift reported in eval_results is consistent with comparing the paired PXRD traces.
+    axis: correctness
+    verify: answer_json_numeric
+  - id: pattern_correlation
+    criterion: The pattern similarity reported in eval_results is consistent with the paired PXRD traces.
+    axis: correctness
+    verify: answer_json_numeric
+    weight: 1.5
+  - id: phase_preserved
+    criterion: The final answer concludes that enzyme encapsulation largely preserves the MAF-4 crystalline phase while allowing intensity changes.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: The conclusion is grounded in the uploaded paired PXRD data rather than a generic MOF statement.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
@@ -632,9 +986,8 @@ questions:
 
     - Band gap: 0.0834 Ry
 
-    请将这三个值转换为 eV 单位（1 Ry = 13.6057 eV），并将结果写入 `energy_ev.json`，格式为
-    {"total_energy_eV": ..., "fermi_energy_eV": ..., "band_gap_eV": ...}，保留 4 位小数。'
-  tags:
+    请将这三个值转换为 eV 单位（1 Ry = 13.6057 eV），并将结果写入 `energy_ev.json`，格式为 {"total_energy_eV": ..., "fermi_energy_eV": ..., "band_gap_eV": ...}，保留 4 位小数。'
+  tags: []
   data_files: []
   reference_answers:
   - key: output_artifact
@@ -643,23 +996,23 @@ questions:
     value:
       filename: energy_ev.json
       checks:
-        - key: total_energy_eV
-          min: -2160.3
-          max: -2158.3
+      - key: total_energy_eV
+        min: -2160.3
+        max: -2158.3
   - key: fermi_energy_check
     value:
       filename: energy_ev.json
       checks:
-        - key: fermi_energy_eV
-          min: 6.05
-          max: 6.25
+      - key: fermi_energy_eV
+        min: 6.05
+        max: 6.25
   - key: band_gap_check
     value:
       filename: energy_ev.json
       checks:
-        - key: band_gap_eV
-          min: 1.085
-          max: 1.185
+      - key: band_gap_eV
+        min: 1.085
+        max: 1.185
   - key: turn_budget
     value:
       max: 8
@@ -701,8 +1054,7 @@ questions:
 - id: SA_feasibility_001_20260428
   capability: scientific_analysis
   domain: agnostic
-  intent: Agent should assess feasibility and refuse or warn when a computation request
-    is clearly infeasible.
+  intent: Agent should assess feasibility and refuse or warn when a computation request is clearly infeasible.
   human_prompt_seed: '我需要对一个 10000 原子的非晶 SiO2 体系进行 DFT 自洽计算（PBE 泛函，平面波基组，截断能 500 eV）。
 
     请帮我生成 VASP 输入文件并评估这个计算是否可行。'
@@ -721,19 +1073,15 @@ questions:
       max: 8000
   scoring_checklist:
   - id: feasibility_warning
-    criterion: Agent clearly warns that DFT calculation on 10000 atoms is computationally
-      infeasible (would require enormous memory and time, O(N^3) scaling).
+    criterion: Agent clearly warns that DFT calculation on 10000 atoms is computationally infeasible (would require enormous memory and time, O(N^3) scaling).
     axis: correctness
     verify: llm_binary_judge
   - id: scale_analysis
-    criterion: Agent provides a quantitative or semi-quantitative explanation of why
-      this is infeasible (e.g., memory estimate, time estimate, comparison to typical
-      DFT limits of ~1000 atoms).
+    criterion: Agent provides a quantitative or semi-quantitative explanation of why this is infeasible (e.g., memory estimate, time estimate, comparison to typical DFT limits of ~1000 atoms).
     axis: correctness
     verify: llm_binary_judge
   - id: alternative_suggestion
-    criterion: Agent suggests practical alternatives (e.g., classical MD, machine
-      learning potentials, smaller representative cell, AIMD on subset).
+    criterion: Agent suggests practical alternatives (e.g., classical MD, machine learning potentials, smaller representative cell, AIMD on subset).
     axis: grounding
     verify: llm_binary_judge
   - id: turn_budget
@@ -746,5 +1094,253 @@ questions:
     verify: duration_budget
   - id: token_budget_total
     criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: SA_abacus_wf_001_20260514
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Extract work function from ABACUS output with correct unit conversion (Ry to eV).
+  human_prompt_seed: '工作区中有一个已完成的 ABACUS slab 计算结果：
+
+    - `mock_running_scf.log`：SCF 收敛日志（含费米能级）
+
+    - `mock_ElecStaticPot_z_avg.dat`：沿 z 方向平均的静电势（两列：z 分数坐标 + 势能值）
+
+
+    请从这些数据中提取功函数（work function），写入 `work_function.json`，格式为
+    `{"work_function_eV": <数值>, "V_vacuum_eV": <数值>, "E_fermi_eV": <数值>}`。'
+  tags:
+  - eng_abacus
+  data_files:
+  - key: scf_log
+    path: data/SA_abacus_wf_001_20260514/mock_running_scf.log
+    oss_url: ''
+    description: ABACUS SCF log with converged Fermi energy.
+  - key: pot_data
+    path: data/SA_abacus_wf_001_20260514/mock_ElecStaticPot_z_avg.dat
+    oss_url: ''
+    description: Z-averaged electrostatic potential (z_frac, potential in Ry).
+  reference_answers:
+  - key: result_artifact
+    value: work_function.json
+  - key: must_v_vacuum_eV
+    value:
+      filename: work_function.json
+      key: V_vacuum_eV
+      expected: 8.56
+      tolerance: 0.44
+  - key: must_e_fermi_eV
+    value:
+      filename: work_function.json
+      key: E_fermi_eV
+      expected: 3.43
+      tolerance: 0.47
+  - key: must_work_function_eV
+    value:
+      filename: work_function.json
+      key: work_function_eV
+      expected: 5.13
+      tolerance: 0.67
+  - key: turn_budget
+    value:
+      max: 10
+  scoring_checklist:
+  - id: result_artifact
+    criterion: work_function.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_v_vacuum_eV
+    criterion: '[Must] V_vacuum correctly converted from Ry to eV (plateau ~0.629 Ry → ~8.56 eV).'
+    axis: correctness
+    verify: json_file_numeric_range
+  - id: must_e_fermi_eV
+    criterion: '[Must] E_fermi correctly read from log (3.43 eV).'
+    axis: correctness
+    verify: json_file_numeric_range
+  - id: must_work_function_eV
+    criterion: '[Must] Work function = V_vacuum - E_fermi is physically reasonable (~5.1 eV).'
+    axis: correctness
+    verify: json_file_numeric_range
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: SA_md_sizing_001_20260517
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Correctly compute molecular dynamics simulation box size and molecule counts
+    from molar concentration, solvent mass ratio, and ion count constraints.
+  human_prompt_seed: '我要构建一个 1 mol/L LiPF6 电解液的 MD 模拟体系，溶剂为 EC 和 DEC，质量比
+    1:1。体系中包含 30 个 Li+ 和 30 个 PF6-。请计算所需的模拟盒子体积（Å³）以及 EC、DEC 各需要多少个分子。假设电解液密度为
+    1.2 g/cm³。将结果输出到 `md_system_sizing.json`，格式为 `{"box_volume_A3": ..., "n_EC":
+    ..., "n_DEC": ..., "box_length_A": ...}`（box_length_A 为立方盒子边长）。'
+  tags:
+  - eng_gromacs
+  data_files: []
+  reference_answers:
+  - key: output_artifact
+    value: md_system_sizing.json
+  - key: box_volume_check
+    value:
+      filename: md_system_sizing.json
+      checks:
+      - key: box_volume_A3
+        min: 45000
+        max: 55000
+  - key: n_ec_check
+    value:
+      filename: md_system_sizing.json
+      checks:
+      - key: n_EC
+        min: 175
+        max: 215
+  - key: n_dec_check
+    value:
+      filename: md_system_sizing.json
+      checks:
+      - key: n_DEC
+        min: 125
+        max: 160
+  - key: box_length_check
+    value:
+      filename: md_system_sizing.json
+      checks:
+      - key: box_length_A
+        min: 35
+        max: 39
+  - key: turn_budget
+    value:
+      max: 10
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `md_system_sizing.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: box_volume_check
+    criterion: Box volume is consistent with 30 LiPF6 at 1 mol/L (V = N/c/N_A =
+      30/1/6.022e23 L ≈ 49,800 Å³).
+    axis: correctness
+    verify: text_file_numeric_range
+  - id: n_ec_check
+    criterion: Number of EC molecules is correct given 1:1 mass ratio with DEC, total
+      solvent mass filling the box at 1.2 g/cm³ minus salt mass.
+    axis: correctness
+    verify: text_file_numeric_range
+  - id: n_dec_check
+    criterion: Number of DEC molecules is correct given 1:1 mass ratio with EC.
+    axis: correctness
+    verify: text_file_numeric_range
+  - id: box_length_check
+    criterion: Cubic box edge length is consistent with the computed volume (V^(1/3)).
+    axis: correctness
+    verify: text_file_numeric_range
+  - id: methodology_correct
+    criterion: Agent uses the correct approach — derives box volume from ion count
+      and concentration (not from density alone), then uses density to determine total
+      mass and hence solvent molecule counts from the mass ratio constraint.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
+- id: SA_rdf_zno_001_20260517
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Analyze a Zn-O radial distribution function from MD simulation to extract
+    first coordination shell distance, coordination number, and validate against known
+    physical values for aqueous Zn2+.
+  human_prompt_seed: '工作区中有一个 DPA-MD 模拟产生的 Zn-O 径向分布函数数据文件：
+
+    - `zn_o_rdf.dat`：1 mol/L ZnSO4 水溶液在 300 K 下的 g(r) 数据
+
+    请分析该 RDF，提取第一配位壳的峰位置、第一极小值位置和配位数，并与已知 Zn2+ 水化壳文献值进行对比验证。
+
+    将结果输出到 `rdf_analysis.json`，格式为 `{"first_peak_A": ..., "first_min_A":
+    ..., "coordination_number": ...}`。'
+  tags:
+  - analysis_post_md
+  data_files:
+  - key: rdf_data
+    path: data/SA_rdf_zno_001/zn_o_rdf.dat
+    oss_url: ''
+    description: Zn-O RDF from DPA-MD of 1 mol/L ZnSO4 solution at 300 K.
+  reference_answers:
+  - key: output_artifact
+    value: rdf_analysis.json
+  - key: first_peak_check
+    value:
+      filename: rdf_analysis.json
+      checks:
+      - key: first_peak_A
+        min: 1.98
+        max: 2.18
+  - key: first_min_check
+    value:
+      filename: rdf_analysis.json
+      checks:
+      - key: first_min_A
+        min: 2.55
+        max: 2.95
+  - key: coordination_number_check
+    value:
+      filename: rdf_analysis.json
+      checks:
+      - key: coordination_number
+        min: 4.8
+        max: 6.8
+  - key: turn_budget
+    value:
+      max: 15
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `rdf_analysis.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: first_peak_check
+    criterion: The first peak position of g(r) is correctly identified near 2.08 Å
+      (typical Zn-O distance in aqueous solution).
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.5
+  - id: first_min_check
+    criterion: The first minimum position is correctly identified near 2.75 Å.
+    axis: correctness
+    verify: text_file_numeric_range
+  - id: coordination_number_check
+    criterion: The coordination number is correctly computed by integrating g(r) to
+      the first minimum, yielding approximately 5.8.
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+  - id: physical_validation
+    criterion: Agent states that the results are consistent with known Zn2+ aqueous
+      hydration shell literature (Zn-O distance ~2.0-2.1 Å, CN ~6, octahedral coordination).
+      Must reference physical chemistry knowledge, not just report numbers.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: correct_integration
+    criterion: Agent uses the correct formula CN = 4*pi*rho*integral(r^2*g(r)*dr) with
+      rho from the file header (0.033 atoms/Å³), not an incorrect formula like just
+      integrating g(r) or using wrong density.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget

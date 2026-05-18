@@ -55,15 +55,22 @@ VerifyLiteral = Literal[
     'struct_file_formula',
     'struct_file_bond_count',
     'struct_file_bond_length',
+    'struct_file_bond_length_range',
     'struct_file_bond_angle',
     'struct_file_cell_param',
     'struct_file_stoichiometry_ratio',
     'struct_file_coordination',
     'struct_file_layer_count',
+    'struct_file_parsable',
+    'struct_file_all_occupancy_one',
+    'struct_file_space_group',
+    'struct_file_min_interatomic_distance',
     # file-system check (no pymatgen needed)
     'struct_file_count',
     # surface termination check
     'struct_file_surface_termination',
+    'struct_file_integer_stoichiometry',
+    'struct_file_replicas_distinct',
     # IUCr checkCIF web service (single-crystal XRD validation)
     'checkcif_no_a_alerts',
     # plain-text file checks
@@ -77,8 +84,10 @@ VerifyLiteral = Literal[
     'json_file_schema',
     'json_file_numeric_range',
     'json_file_artifacts',
-    # tool usage check (did agent call a specific tool name?)
-    'tool_name_used',
+    # STRU file checks
+    'stru_file_check',
+    # ABACUS INPUT resolution checks
+    'abacus_input_check',
 ]
 
 AxisLiteral = Literal['correctness', 'grounding', 'efficiency']
@@ -103,6 +112,8 @@ DomainLiteral = Literal[
     'semiconductor',
     'agnostic',
 ]
+
+ScopeLiteral = Literal['platform', 'knowledge']
 
 GENERIC_PROCESS_TAGS = {
     'workflow',
@@ -235,6 +246,7 @@ class QuestionItem(BaseModel):
     id: str
     capability: CapabilityLiteral
     domain: DomainLiteral
+    scope: ScopeLiteral = 'knowledge'
     intent: str
     human_prompt_seed: str
     tags: list[QuestionTag] = Field(default_factory=list)
@@ -301,7 +313,10 @@ class QuestionItem(BaseModel):
             'turn_budget',
             'molcrys_slab_molecular_integrity',
             'molcrys_local_env',
-            'sc005_disorder_formulas',
+            'struct_file_parsable',
+            'struct_file_all_occupancy_one',
+            'struct_file_space_group',
+            'struct_file_min_interatomic_distance',
             'text_file_contains_all',
             'text_file_kpt_path',
             'text_file_numeric_range',
@@ -310,7 +325,8 @@ class QuestionItem(BaseModel):
             'json_file_schema',
             'json_file_numeric_range',
             'json_file_artifacts',
-            'tool_name_used',
+            'stru_file_check',
+            'abacus_input_check',
         }
         for item in self.scoring_checklist:
             if item.verify in _needs_ref and item.id not in ref_keys:
@@ -387,6 +403,7 @@ class CapabilitySlice(BaseModel):
     capability: str | None = None
     domains: list[str] | None = None
     tags: list[str] | None = None
+    scope: str | None = None
 
     @field_validator('capability')
     @classmethod
@@ -420,6 +437,13 @@ class EvalConfig(BaseModel):
     """Top-level evaluation config."""
 
     k: int = 1
+    exp: ModeLiteral = Field(
+        default='direct',
+        description=(
+            'Experiment / mode name passed to ``load_exp_config()``. '
+            'Maps to ``matmaster/exps/{exp}.toml``.'
+        ),
+    )
     question_bank_dir: str = 'evaluation/question_bank'
     output_dir: str = 'runs/mat_master_eval'
     run_label: str = 'matter_eval'

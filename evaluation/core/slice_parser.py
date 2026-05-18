@@ -1,4 +1,4 @@
-"""Parse ``--slices`` expressions: ``cap cap[dom] cap[d1,d2] cap@t1,t2 @t1`` (OR of slices)."""
+"""Parse ``--slices`` expressions: ``cap cap[dom] cap[d1,d2] cap@t1,t2 @t1 #scope`` (OR of slices)."""
 
 from __future__ import annotations
 
@@ -50,7 +50,7 @@ def _split_slice_segments(raw: str) -> list[str]:
 
 
 def _parse_capability_domain_token(seg: str) -> tuple[str, list[str] | None]:
-    """Parse ``cap`` or ``cap[a,b]`` (no ``@`` in *seg*)."""
+    """Parse ``cap`` or ``cap[a,b]`` (no ``@`` or ``#`` in *seg*)."""
     if '[' not in seg:
         return seg.strip(), None
     if seg.count('[') != 1 or seg.count(']') != 1:
@@ -90,15 +90,49 @@ def _parse_tags_after_at(*, piece: str, rest: str) -> list[str]:
     return tags
 
 
+_VALID_SCOPES = {'platform', 'knowledge'}
+
+
+def _extract_scope(piece: str) -> tuple[str, str | None]:
+    """Extract ``#scope`` from a slice segment, return (remainder, scope).
+
+    ``#`` may appear at any position in the segment:
+    - ``#platform`` → ('', 'platform')
+    - ``input_generation#knowledge`` → ('input_generation', 'knowledge')
+    - ``@eng_vasp#platform`` → ('@eng_vasp', 'platform')
+    - ``input_generation@eng_vasp#platform`` → ('input_generation@eng_vasp', 'platform')
+
+    At most one ``#`` is allowed per segment.
+    """
+    if '#' not in piece:
+        return piece, None
+    if piece.count('#') > 1:
+        raise ValueError(
+            f'each slice may contain at most one "#" scope marker: {piece!r}'
+        )
+    left, scope_str = piece.split('#', 1)
+    scope_str = scope_str.strip()
+    if not scope_str:
+        raise ValueError(f'empty scope after "#" in slice {piece!r}')
+    if scope_str not in _VALID_SCOPES:
+        raise ValueError(
+            f'unknown scope {scope_str!r} in slice {piece!r}; '
+            f'valid scopes: {sorted(_VALID_SCOPES)}'
+        )
+    return left, scope_str
+
+
 def parse_slices_expression(expr: str) -> list[CapabilitySlice]:
     """Parse a slice string into OR-of-slices.
 
     - Whitespace **outside** ``[...]`` separates slices (OR).
-    - ``cap`` alone: that capability, any domain, any tags.
+    - ``cap`` alone: that capability, any domain, any tags, any scope.
     - ``cap[a]`` or ``cap[a,b]``: capability must match and domain in the listed set (OR).
     - ``cap@t1`` or ``cap@t1,t2``: each slice uses **at most one** ``@``; after capability /
       ``[domains]``, optional tags are comma-separated; multiple tags are **AND**.
     - ``@t1`` or ``@t1,t2``: tag-only filter — matches across **all** capabilities.
+    - ``#platform`` or ``#knowledge``: scope-only filter — matches across all capabilities.
+    - ``cap#platform``, ``@t1#knowledge``: scope combined with other filters.
     - No whitespace inside ``[...]`` (use commas only). No whitespace after ``@`` in the
       tag list (use ``@t1,t2`` not ``@t1, t2``).
     - More than one ``@`` in a slice is invalid — use ``cap@tag1,tag2`` instead of
@@ -113,21 +147,29 @@ def parse_slices_expression(expr: str) -> list[CapabilitySlice]:
 
     out: list[CapabilitySlice] = []
     for piece in _split_slice_segments(raw):
+        # Extract scope (#platform / #knowledge) first
+        piece_no_scope, scope = _extract_scope(piece)
+
         tags: list[str] | None = None
-        if '@' in piece:
-            if piece.count('@') > 1:
+        if '@' in piece_no_scope:
+            if piece_no_scope.count('@') > 1:
                 raise ValueError(
                     'each slice may contain at most one "@"; '
                     'use commas for multiple tags, e.g. cap@tag1,tag2'
                 )
-            cap_dom, rest = piece.split('@', 1)
+            cap_dom, rest = piece_no_scope.split('@', 1)
             tags = _parse_tags_after_at(piece=piece, rest=rest)
             if cap_dom.strip():
                 cap, domains = _parse_capability_domain_token(cap_dom)
             else:
                 cap, domains = None, None
         else:
-            cap, domains = _parse_capability_domain_token(piece)
-        out.append(CapabilitySlice(capability=cap, domains=domains, tags=tags))
+            if piece_no_scope.strip():
+                cap, domains = _parse_capability_domain_token(piece_no_scope)
+            else:
+                cap, domains = None, None
+        out.append(
+            CapabilitySlice(capability=cap, domains=domains, tags=tags, scope=scope)
+        )
 
     return out

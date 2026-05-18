@@ -74,6 +74,8 @@ def check_json_file_numeric_range(
     for part in parts:
         if isinstance(val, dict) and part in val:
             val = val[part]
+        elif isinstance(val, list) and part.isdigit() and int(part) < len(val):
+            val = val[int(part)]
         else:
             return False, f'key path {key_path!r} not found in {filename}'
     try:
@@ -95,6 +97,8 @@ def _traverse_dotted(obj: object, dotted_key: str) -> object | None:
     for part in dotted_key.split('.'):
         if isinstance(val, dict) and part in val:
             val = val[part]
+        elif isinstance(val, list) and part.isdigit() and int(part) < len(val):
+            val = val[int(part)]
         else:
             return None
     return val
@@ -188,20 +192,3 @@ def check_json_file_artifacts(
         parts.append(f'{len(missing)} missing ({", ".join(show)}{tail})')
     parts.append(f'expected {expected_count}±{count_tolerance}')
     return ok, '; '.join(parts)
-
-
-def check_tool_name_used(
-    evidence: EvidenceBundle | None, ref: ReferenceAnswer
-) -> tuple[bool, str]:
-    """Check that the agent called a specific tool at least once."""
-    if evidence is None:
-        return False, 'no tool call evidence available'
-    expected_tool = str(ref.value).strip()
-    if not expected_tool:
-        return False, 'tool_name_used: empty tool name in reference answer'
-    calls = evidence.tool_calls
-    found = [c for c in calls if c.tool_name == expected_tool]
-    if found:
-        return True, f'{expected_tool} called {len(found)} time(s)'
-    all_tools = sorted({c.tool_name for c in calls})
-    return False, f'{expected_tool} not found in tool calls; tools used: {all_tools}'

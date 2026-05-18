@@ -41,7 +41,7 @@ Usage:
   python gsas2_autoindex.py --data pattern.xye \\
       --bravais orthorhombic-P,monoclinic-P,triclinic --timeout 180
 
-  # Wide-table CSV with a single temperature column:
+  # Wide-table CSV with a single condition column:
   python gsas2_autoindex.py --data multi_temp.txt --wide-csv --column "140 C" \\
       --bravais monoclinic-P -o result.json
 

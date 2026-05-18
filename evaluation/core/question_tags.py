@@ -10,6 +10,8 @@ class QuestionTag(StrEnum):
 
     # 数据来源
     meta_database = 'meta_database'
+    # 行为合约：基于证据回答、不编造
+    meta_grounding = 'meta_grounding'
     # 计算引擎
     eng_vasp = 'eng_vasp'
     eng_abacus = 'eng_abacus'
@@ -24,5 +26,11 @@ class QuestionTag(StrEnum):
     struct_build = 'struct_build'
     struct_transform = 'struct_transform'
     struct_molcrys = 'struct_molcrys'
+    # MD 后处理分析
+    analysis_post_md = 'analysis_post_md'
     # 表征
-    char_xrd = 'char_xrd'
+    char_diffraction = 'char_diffraction'
+    char_optical_spectrum = 'char_optical_spectrum'
+    char_time_resolved = 'char_time_resolved'
+    char_electrochem = 'char_electrochem'
+    char_battery_cycling = 'char_battery_cycling'

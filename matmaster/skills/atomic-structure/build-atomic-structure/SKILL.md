@@ -1,6 +1,6 @@
 ---
 name: build-atomic-structure
-description: "Build a new atomic structure from spec: bulk crystal (template / spacegroup+Wyckoff), molecule (SMILES / hand-coords), polymer chain (architecture+monomer sequence). Use when there is no input structure file."
+description: "Build a new atomic structure from spec: bulk crystal (template / spacegroup+Wyckoff), molecule (SMILES / hand-coords), polymer chain (architecture+monomer sequence). Use when there is no input structure file. Not for modifying an existing structure — use transform-atomic-structure or assemble-atomic-structure."
 skill_type: operator
 depends_on: inspect-atomic-structure, poly-generator
 ---
@@ -9,18 +9,6 @@ depends_on: inspect-atomic-structure, poly-generator
 
 Use this skill when the user wants a new atomic structure and has not provided a
 starting structure file. The output should be a saved file, not just a recipe.
-
-## When to Use
-
-- Build a bulk crystal from a prototype, lattice constants, space group, or
-  Wyckoff positions.
-- Build a molecule from SMILES or explicit coordinates.
-- Build an isolated polymer/copolymer chain from monomer names, SMILES, sequence,
-  and architecture.
-- Add a simulation cell around an isolated molecule.
-
-Do not use this skill for modifying an existing structure; use
-`transform-atomic-structure` or `assemble-atomic-structure` instead.
 
 ## Decision Tree
 

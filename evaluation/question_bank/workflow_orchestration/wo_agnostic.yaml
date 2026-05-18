@@ -208,7 +208,7 @@ questions:
     注意：不要假设未在清单出现的附件类型。
 
     '
-  tags:
+  tags: []
   data_files:
   - key: attachment_manifest
     path: data/WO_general_userlog_005_20260410v3/attachment_manifest.json
@@ -334,7 +334,7 @@ questions:
     要求：流程中必须覆盖能带、MSD、概率密度三类后处理对象。
 
     '
-  tags:
+  tags: []
   data_files:
   - key: result_manifest
     path: data/WO_general_userlog_006_20260410v3/result_manifest.json
@@ -993,8 +993,9 @@ questions:
     `binary_formation_energy_summary`, `solid_solution_prediction`, `possible_structure`；
     - `hea_alcr0.8cofeni_report.md`：解释判据、结论与不确定性。
 
-    最终回答中简要给出“是否可能形成固溶体”的结论与依据。'
+    最终回答中简要给出”是否可能形成固溶体”的结论与依据。'
   tags:
+  - code_mlip
   data_files: []
   reference_answers:
   - key: hea_summary_json
@@ -1176,6 +1177,7 @@ questions:
     \ `deformation_settings`；\n2) `srtio3_elastic_apex_report.md`：说明 query 输入梳理、mock 后处理流程与结果可靠性讨论。\n\
     \n最终回答中简要给出关键弹性常数并解释其物理含义。\n"
   tags:
+  - code_mlip
   data_files: []
   reference_answers:
   - key: elastic_json
@@ -1270,6 +1272,7 @@ questions:
     \ `bulk_modulus`；\n2) `alloy_eos_report.md`：说明 query 输入梳理、mock 后处理流程、体积扫描策略与不确定性。\n\n\
     最终回答中简要说明该 EOS 结果能支持哪些定性判断。\n"
   tags:
+  - code_mlip
   data_files: []
   reference_answers:
   - key: eos_summary_json
@@ -1448,6 +1451,7 @@ questions:
 
     '
   tags:
+  - code_mlip
   data_files:
   - key: dpgen_docs
     path: data/WO_general_userlog_001_20260410v3/dpgen_docs_brief.md
@@ -2442,7 +2446,7 @@ questions:
     3. 将扩展后的结构保存为 `supercell.vasp`
 
     请按顺序执行，如果某一步失败请明确告知。'
-  tags:
+  tags: []
   data_files: []
   reference_answers:
   - key: turn_budget
@@ -2476,6 +2480,921 @@ questions:
     verify: turn_budget
   - id: duration_budget
     criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: WO_gromacs_em_npt_001_20260507
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Submit GROMACS energy minimization and NPT equilibration on Bohrium,
+    verify convergence and output structure.
+  human_prompt_seed: '对提供的 SPC 水盒子体系执行 GROMACS 能量最小化 + NPT 平衡模拟。
+
+    已提供文件：
+    - `conf.gro`: 216 个 SPC 水分子的初始坐标
+    - `topol.top`: 拓扑文件
+    - `em.mdp`: 能量最小化参数
+    - `npt.mdp`: NPT 平衡参数（2 ns, 298.15 K, 1 bar）
+
+    请完成以下步骤：
+    1) 在 Bohrium GROMACS 镜像上提交能量最小化（EM），确认 Fmax < 1000 kJ/mol/nm
+    2) 用 EM 输出作为 NPT 输入，提交 NPT 平衡
+    3) 输出最终结构 `npt_final.gro` 到工作目录
+
+    在最终回答中报告：EM 收敛步数、NPT 最终密度 (g/cm³)。'
+  tags:
+  - eng_gromacs
+  data_files:
+  - key: conf_gro
+    path: EC_gromacs_em_npt/conf.gro
+    description: Initial SPC water box coordinates (216 waters)
+  - key: topol_top
+    path: EC_gromacs_em_npt/topol.top
+    description: GROMACS topology file
+  - key: em_mdp
+    path: EC_gromacs_em_npt/em.mdp
+    description: Energy minimization parameters
+  - key: npt_mdp
+    path: EC_gromacs_em_npt/npt.mdp
+    description: NPT equilibration parameters
+  reference_answers:
+  - key: npt_output
+    value: npt_final.gro
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 30000
+  scoring_checklist:
+  - id: npt_output
+    criterion: Agent produces `npt_final.gro` in the workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: em_convergence
+    criterion: Final answer reports EM convergence (steps and Fmax < 1000).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: npt_density
+    criterion: Final answer reports NPT equilibrium density close to 1.0 g/cm³
+      (within ±0.1 for SPC water at 298K).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: The reported density and convergence values come from actual GROMACS
+      output logs, not textbook recall.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical Bohrium submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage within budget.
+    axis: efficiency
+    verify: token_budget
+- id: WO_gromacs_solvate_001_20260507
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Build a solvated, ion-neutralized GROMACS system from a PDB file and run
+    energy minimization, all in a single Bohrium submission.
+  human_prompt_seed: '提供了一个丙氨酸二肽 (ACE-ALA-NME) 的 PDB 文件 `ala_dipeptide.pdb`。
+
+    请完成以下完整 GROMACS 建模 + 模拟流程：
+    1) 使用 OPLS-AA 力场对该 PDB 生成拓扑（pdb2gmx）
+    2) 设置立方盒子，溶质到盒子边界至少 1.0 nm（editconf）
+    3) 用 SPC/E 水溶剂化（solvate）
+    4) 添加 Na+/Cl- 离子中和体系电荷（genion）
+    5) 执行能量最小化（steep, emtol=1000, nsteps=50000）
+
+    在最终回答中报告：EM 收敛步数、最终势能 (kJ/mol)、体系中水分子数量。'
+  tags:
+  - eng_gromacs
+  data_files:
+  - key: ala_dipeptide_pdb
+    path: WO_gromacs_solvate_001/ala_dipeptide.pdb
+    description: Alanine dipeptide (ACE-ALA-NME) PDB structure
+  reference_answers:
+  - key: em_output
+    value: em.gro
+  - key: single_submission
+    value:
+      filename: run.sh
+      tokens: [gmx_mpi pdb2gmx, gmx_mpi solvate, genion, gmx_mpi mdrun]
+      case_sensitive: false
+  - key: gmx_mpi_used
+    value:
+      filename: run.sh
+      tokens: [gmx_mpi]
+      case_sensitive: true
+  - key: maxwarn_used
+    value:
+      filename: run.sh
+      tokens: [-maxwarn]
+  - key: set_e_in_script
+    value:
+      filename: run.sh
+      tokens: [set -e]
+  - key: genion_pipe
+    value:
+      filename: run.sh
+      pattern: "echo.*\\|.*gmx_mpi\\s+genion|printf.*\\|.*gmx_mpi\\s+genion"
+      flags: i
+  - key: turn_budget
+    value:
+      max: 15
+  - key: duration_budget
+    value:
+      max: 3600000
+  - key: token_budget_total
+    value:
+      max: 25000
+  scoring_checklist:
+  - id: single_submission
+    criterion: All steps (pdb2gmx, solvate, genion, mdrun) are chained in a single
+      run.sh script submitted once to Bohrium.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: gmx_mpi_used
+    criterion: The run.sh script uses `gmx_mpi` for GROMACS commands.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: no_local_gmx
+    criterion: Agent does NOT attempt to run any gmx/gmx_mpi command locally (outside
+      of the Bohrium submission).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: genion_pipe
+    criterion: The genion command uses echo/pipe (e.g. `echo "SOL" | gmx_mpi genion ...`)
+      to provide interactive group selection.
+    axis: correctness
+    verify: text_file_regex
+  - id: maxwarn_used
+    criterion: grompp invocations include `-maxwarn` flag.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: topology_before_solvate
+    criterion: The topology file exists (via pdb2gmx) before `solvate -p` is called.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: genion_has_tpr
+    criterion: A grompp step produces a .tpr before genion is called (genion requires
+      a .tpr input).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: set_e_in_script
+    criterion: The run.sh script includes `set -e` so that it aborts on first error.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: em_convergence
+    criterion: Final answer reports EM convergence (step count and potential energy).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: water_count
+    criterion: Final answer reports the number of water molecules in the solvated
+      system.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical Bohrium submissions.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock duration within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage within budget.
+    axis: efficiency
+    verify: token_budget
+- id: WO_mlip_fetch_001_20260513
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Discover a public DFT-labeled training dataset for energetic-materials chemistry on the principal open MLIP registry, then confirm its on-disk footprint fits within a fixed local-disk budget.
+  human_prompt_seed: 'We are scoping fine-tuning budgets for a foundation MLIP on **energetic-materials** chemistry. Please locate a publicly available, downloadable training dataset that pairs **DFT energies + atomic forces** with structures from this domain, and tell me whether its single-file footprint fits within a 5 GB local-disk budget. Save `energetic_dataset_size.json` to the workspace with these fields: `name`, `file_name`, `size_bytes`, `fits_in_5gb` (boolean), `download_host`, `source_registry`. Every value must come from a real registry lookup; if no such dataset exists on the registry you searched, set `name` to null and add a one-line `not_found_reason`. Do NOT invent file names, byte sizes or download hosts.
+
+    '
+  tags:
+  - code_mlip
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: dataset_json
+    value: energetic_dataset_size.json
+  - key: required_tokens
+    value:
+      filename: energetic_dataset_size.json
+      tokens:
+      - name
+      - file_name
+      - size_bytes
+      - fits_in_5gb
+      - download_host
+      - source_registry
+      flags: i
+  - key: deepems_token
+    value:
+      filename: energetic_dataset_size.json
+      tokens:
+      - DeepEMs
+      flags: i
+  - key: aissquare_host
+    value:
+      filename: energetic_dataset_size.json
+      tokens:
+      - aissquare.com
+      flags: i
+  - key: size_bytes_realistic
+    value:
+      filename: energetic_dataset_size.json
+      pattern: '"size_bytes"\s*:\s*\d{8,12}'
+      flags: ''
+  - key: fits_boolean
+    value:
+      filename: energetic_dataset_size.json
+      pattern: '"fits_in_5gb"\s*:\s*(true|false)'
+      flags: i
+  - key: no_fabricated_host
+    value:
+      filename: energetic_dataset_size.json
+      pattern: '(?s)\A(?:(?!(aliyuncs\.com|googleapis\.com|huggingface\.co|s3\.amazonaws\.com|github\.com)).)*\Z'
+      flags: ''
+  - key: turn_budget
+    value:
+      max: 12
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 25000
+  scoring_checklist:
+  - id: dataset_json
+    criterion: Agent writes `energetic_dataset_size.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: required_tokens
+    criterion: JSON contains name, file_name, size_bytes, fits_in_5gb, download_host, source_registry keys.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: deepems_token
+    criterion: Agent identified the DeepEMs energetic-materials dataset - the principal entry covering this domain on the open MLIP registry.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: aissquare_host
+    criterion: download_host / source_registry correctly points back to AIS Square.
+    axis: grounding
+    verify: text_file_contains_all
+  - id: size_bytes_realistic
+    criterion: Reported size_bytes is a plausible integer (~100 MB to ~1 TB) for a DFT-labeled dataset, not a placeholder.
+    axis: grounding
+    verify: text_file_regex
+  - id: fits_boolean
+    criterion: fits_in_5gb is an explicit boolean computed from the reported size_bytes vs 5 GB.
+    axis: correctness
+    verify: text_file_regex
+  - id: no_fabricated_host
+    criterion: No off-registry hosts (aliyuncs, googleapis, huggingface, s3, github) appear - the agent did not invent download URLs.
+    axis: grounding
+    verify: text_file_regex
+  - id: no_retries
+    criterion: No repeated identical lookup calls.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock duration within benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: WO_mlip_fetch_002_20260513
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Determine - from the registry's own data alone - whether any checkpoint of the MACE family is currently published on a specified open MLIP registry, with a query trace that survives later registry-state changes.
+  human_prompt_seed: 'A colleague claims that some checkpoint of the **MACE family** of universal MLIP foundation models is available as a downloadable asset on the principal open MLIP/MLP registry that hosts DP-style foundation models. Please settle the question from the registry''s own data alone - not from prior knowledge of what is or isn''t hosted there. Save `mace_lookup.json` with this shape:
+
+    `{ "family": "MACE", "queries_attempted": [ { "query": <string>, "resource_type": "models" | "datasets", "n_results": <integer>, "candidate_names": [<string>, ...] }, ... ], "conclusion": "available" | "not_available", "evidence": <string> }`.
+
+    Hard constraints: (1) `queries_attempted` must contain at least 2 distinct `query` strings; (2) every `n_results` must reflect what the registry actually returned at query time; (3) if `conclusion` is `available`, `evidence` must be a real `downloadLink` string copied verbatim from the registry response; if `not_available`, `evidence` must be a one-sentence statement without any URLs. Never invent a URL.
+
+    '
+  tags:
+  - code_mlip
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: mace_json
+    value: mace_lookup.json
+  - key: required_tokens
+    value:
+      filename: mace_lookup.json
+      tokens:
+      - MACE
+      - queries_attempted
+      - conclusion
+      - evidence
+      flags: i
+  - key: at_least_two_queries
+    value:
+      filename: mace_lookup.json
+      pattern: '"query"\s*:\s*"[^"]+"[\s\S]*?"query"\s*:\s*"[^"]+"'
+      flags: ''
+  - key: n_results_numeric
+    value:
+      filename: mace_lookup.json
+      pattern: '"n_results"\s*:\s*\d+'
+      flags: ''
+  - key: no_fabricated_host
+    value:
+      filename: mace_lookup.json
+      pattern: '(?s)\A(?:(?!(aliyuncs\.com|googleapis\.com|huggingface\.co|s3\.amazonaws\.com|github\.com)).)*\Z'
+      flags: ''
+  - key: conclusion_evidence_consistency
+    value:
+      filename: mace_lookup.json
+      if_pattern: '"conclusion"\s*:\s*"not_available"'
+      then_pattern: '(?s)\A(?:(?!https?://).)*\Z'
+      else_pattern: 'https?://[^"\s]*aissquare\.com'
+      flags: i
+  - key: turn_budget
+    value:
+      max: 14
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 27000
+  scoring_checklist:
+  - id: mace_json
+    criterion: Agent writes `mace_lookup.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: required_tokens
+    criterion: JSON contains MACE, queries_attempted, conclusion, evidence keys.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: at_least_two_queries
+    criterion: At least 2 distinct query strings recorded in queries_attempted - agent did not short-circuit on a single failed lookup.
+    axis: correctness
+    verify: text_file_regex
+  - id: n_results_numeric
+    criterion: At least one numeric n_results entry, proving the agent actually called the registry rather than answering from memory.
+    axis: grounding
+    verify: text_file_regex
+  - id: no_fabricated_host
+    criterion: No off-registry hosts (aliyuncs, googleapis, huggingface, s3, github) appear anywhere - the agent did not invent a download URL while concluding.
+    axis: grounding
+    verify: text_file_regex
+  - id: conclusion_evidence_consistency
+    criterion: If conclusion is `not_available`, no URL appears anywhere in the artifact (evidence is a plain-text explanation). If conclusion is `available`, evidence cites an aissquare.com downloadLink.
+    axis: grounding
+    verify: text_file_regex
+  - id: no_retries
+    criterion: No repeated identical lookup calls.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock duration within benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: WO_mlip_fetch_003_20260513
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Identify, from the open MLIP registry's own metadata, a DP-family universal MLIP checkpoint that advertises system-level charge and spin-multiplicity inputs via an fparam interface, and capture its provenance verbatim.
+  human_prompt_seed: 'I need to run a single-point evaluation on a small cluster that has a non-zero net charge **and** an open-shell electron count, so I must pass per-system charge and spin-multiplicity at inference time (not just atomic coordinates). Find me a pretrained, downloadable universal MLIP checkpoint that **explicitly supports per-system charge and spin-multiplicity inputs through an fparam-style interface**, and capture its registry provenance.
+
+    Save `charge_spin_model.json` with: `name`, `modifyDate`, `primary_file` (the chosen `.pt` filename), `size_bytes`, `download_host`, `fparam_evidence_excerpt` (the verbatim sentence or bullet from the model''s registry description that mentions both charge and spin and uses the `fparam` keyword).
+
+    Do not invent any field; if the registry has no such model, set `name` to null and explain in a one-line `not_found_reason`.
+
+    '
+  tags:
+  - code_mlip
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: model_json
+    value: charge_spin_model.json
+  - key: required_tokens
+    value:
+      filename: charge_spin_model.json
+      tokens:
+      - name
+      - modifyDate
+      - primary_file
+      - size_bytes
+      - download_host
+      - fparam_evidence_excerpt
+      flags: i
+  - key: dpa_family_token
+    value:
+      filename: charge_spin_model.json
+      tokens:
+      - DPA
+      flags: i
+  - key: fparam_evidence_keywords
+    value:
+      filename: charge_spin_model.json
+      tokens:
+      - charge
+      - spin
+      - fparam
+      flags: i
+  - key: size_bytes_realistic
+    value:
+      filename: charge_spin_model.json
+      pattern: '"size_bytes"\s*:\s*\d{7,11}'
+      flags: ''
+  - key: aissquare_host
+    value:
+      filename: charge_spin_model.json
+      tokens:
+      - aissquare.com
+      flags: i
+  - key: no_fabricated_host
+    value:
+      filename: charge_spin_model.json
+      pattern: '(?s)\A(?:(?!(aliyuncs\.com|googleapis\.com|huggingface\.co|s3\.amazonaws\.com|github\.com)).)*\Z'
+      flags: ''
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 40000
+  scoring_checklist:
+  - id: model_json
+    criterion: Agent writes `charge_spin_model.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: required_tokens
+    criterion: JSON contains name, modifyDate, primary_file, size_bytes, download_host, fparam_evidence_excerpt keys.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: dpa_family_token
+    criterion: The chosen model is in the DPA family - the family on this registry that currently advertises charge/spin inputs.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: fparam_evidence_keywords
+    criterion: fparam_evidence_excerpt mentions charge, spin, and the fparam keyword - proving the claim is grounded in the registry description, not prior knowledge.
+    axis: grounding
+    verify: text_file_contains_all
+  - id: size_bytes_realistic
+    criterion: Reported size_bytes is plausible for a DPA-family checkpoint (~10 MB to ~10 GB), not a placeholder.
+    axis: grounding
+    verify: text_file_regex
+  - id: aissquare_host
+    criterion: download_host correctly points to the AIS Square store host.
+    axis: grounding
+    verify: text_file_contains_all
+  - id: no_fabricated_host
+    criterion: No off-registry hosts appear - the agent did not invent a download URL.
+    axis: grounding
+    verify: text_file_regex
+  - id: no_retries
+    criterion: No repeated identical lookup calls.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock duration within benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: WO_mlip_fetch_004_20260513
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Determine the most recently released base (non-fine-tuned) member of the DPA-3 universal MLIP family on the open MLIP registry, enumerate every DPA-3 member, and surface the LAMMPS hand-off caveat.
+  human_prompt_seed: 'For a reproducibility audit I need three things about the **DPA-3 family** of universal MLIP checkpoints as currently published on the principal open MLIP registry that hosts DP foundation models:
+
+    (1) the most recently released **base** version (i.e. NOT a fine-tuned variant) - return its `name` and `modifyDate` plus its full provenance;
+
+    (2) a complete enumeration of every published registry entry whose name starts with `DPA-3`, one row per entry, each with `name` and `modifyDate`;
+
+    (3) any extra preparation step required before the chosen base `.pt` checkpoint can be consumed by **LAMMPS** (one short line - what is the well-known caveat for multi-head universal-MLIP checkpoints?).
+
+    Save `dpa3_latest_base.json` with shape `{ "latest_base": { "name": <string>, "modifyDate": <ISO string>, "primary_file": <string>, "size_bytes": <int>, "download_host": <string> }, "all_dpa3_members": [ { "name": <string>, "modifyDate": <ISO string> }, ... ], "lammps_handoff_note": <one-line string> }`. Every field must come from a real registry lookup. Do not invent.
+
+    '
+  tags:
+  - code_mlip
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: dpa3_json
+    value: dpa3_latest_base.json
+  - key: required_tokens
+    value:
+      filename: dpa3_latest_base.json
+      tokens:
+      - latest_base
+      - all_dpa3_members
+      - lammps_handoff_note
+      - modifyDate
+      - primary_file
+      - size_bytes
+      - download_host
+      flags: i
+  - key: dpa3_token
+    value:
+      filename: dpa3_latest_base.json
+      tokens:
+      - DPA-3
+      flags: i
+  - key: members_at_least_3
+    value:
+      filename: dpa3_latest_base.json
+      pattern: '"name"\s*:\s*"DPA-3[^"]*"[\s\S]*?"name"\s*:\s*"DPA-3[^"]*"[\s\S]*?"name"\s*:\s*"DPA-3[^"]*"'
+      flags: i
+  - key: lammps_freeze_keyword
+    value:
+      filename: dpa3_latest_base.json
+      pattern: '"lammps_handoff_note"\s*:\s*"[^"]*(freeze|single[-_ ]?head|head[-_ ]?freeze|select[-_ ]?head|deepmd-pt\s+freeze)'
+      flags: i
+  - key: modify_date_iso
+    value:
+      filename: dpa3_latest_base.json
+      pattern: '"modifyDate"\s*:\s*"\d{4}-\d{2}-\d{2}'
+      flags: ''
+  - key: size_bytes_realistic
+    value:
+      filename: dpa3_latest_base.json
+      pattern: '"size_bytes"\s*:\s*\d{7,11}'
+      flags: ''
+  - key: aissquare_host
+    value:
+      filename: dpa3_latest_base.json
+      tokens:
+      - aissquare.com
+      flags: i
+  - key: no_fabricated_host
+    value:
+      filename: dpa3_latest_base.json
+      pattern: '(?s)\A(?:(?!(aliyuncs\.com|googleapis\.com|huggingface\.co|s3\.amazonaws\.com|github\.com)).)*\Z'
+      flags: ''
+  - key: turn_budget
+    value:
+      max: 16
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 30000
+  scoring_checklist:
+  - id: dpa3_json
+    criterion: Agent writes `dpa3_latest_base.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: required_tokens
+    criterion: JSON contains the required top-level keys and inner provenance fields.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: dpa3_token
+    criterion: Output is grounded in the DPA-3 family.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: members_at_least_3
+    criterion: At least 3 distinct DPA-3* entries enumerated in all_dpa3_members.
+    axis: grounding
+    verify: text_file_regex
+  - id: lammps_freeze_keyword
+    criterion: lammps_handoff_note references the head-freezing / single-head-selection step required to make a multi-head DPA-3 checkpoint LAMMPS-consumable.
+    axis: correctness
+    verify: text_file_regex
+  - id: modify_date_iso
+    criterion: modifyDate is in real ISO format (YYYY-MM-DD...) copied from the registry, not invented.
+    axis: grounding
+    verify: text_file_regex
+  - id: size_bytes_realistic
+    criterion: Reported size_bytes is plausible for a DPA-3 checkpoint (~10 MB to ~10 GB).
+    axis: grounding
+    verify: text_file_regex
+  - id: aissquare_host
+    criterion: download_host correctly points to AIS Square store.
+    axis: grounding
+    verify: text_file_contains_all
+  - id: no_fabricated_host
+    criterion: No off-registry hosts appear.
+    axis: grounding
+    verify: text_file_regex
+  - id: no_retries
+    criterion: No repeated identical lookup calls.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock duration within benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+
+- id: WO_mlip_nemd_emd_boundary_001_20260515
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Test whether the agent recognizes that a large NEMD ion-transport request should not be run as plain ASE MLIP MD and must be routed through an explicit human choice.
+  human_prompt_seed: |
+    Use the pretrained DPA MLIP workflow to run a nonequilibrium MD calculation for a 4000-atom solid electrolyte supercell. Apply an ion-flux or temperature-gradient driving field, run 100 ns of production, and report the ionic conductivity.
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 8
+  - key: duration_budget
+    value:
+      max: 600000
+  - key: token_budget_total
+    value:
+      max: 24000
+  scoring_checklist:
+  - id: detects_nemd_boundary
+    criterion: Agent recognizes that NEMD with imposed driving fields or gradients is not covered by the standard ASE MLIP MD script and should be treated as a specialized workflow.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: detects_scale_risk
+    criterion: Agent identifies the requested 4000-atom, 100 ns MLIP run as high risk for time or memory and does not treat it as a routine pretrained-MLIP job.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: proposes_emd_or_lammps_routes
+    criterion: Agent offers technically appropriate alternatives such as an EMD MSD/diffusion precheck on a smaller/shorter run or a LAMMPS-style NEMD workflow.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: asks_human_before_route_change
+    criterion: Agent explicitly asks the human to choose among concrete routes before changing scale or switching to EMD/LAMMPS.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: no_plain_ase_submit
+    criterion: Agent does not directly submit `run_molecular_dynamics.py` as if it supported the requested NEMD driving field and production scale.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent reaches the boundary decision within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+- id: WO_mlip_msst_lammps_boundary_001_20260515
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Test whether the agent routes shock/Hugoniot/MSST work away from ASE MLIP task scripts and asks the human before switching to a LAMMPS-style workflow.
+  human_prompt_seed: |
+    I have a metallic crystal supercell on hand. Use the MLIP ASE task scripts to run a shock-compression simulation and extract the Hugoniot with an MSST-style method, and give me the pressure-volume curve.
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 8
+  - key: duration_budget
+    value:
+      max: 600000
+  - key: token_budget_total
+    value:
+      max: 6000
+  scoring_checklist:
+  - id: detects_msst_boundary
+    criterion: Agent recognizes that shock/Hugoniot/MSST is an advanced MD workflow not provided by the standard ASE MLIP scripts.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: routes_to_lammps
+    criterion: Agent identifies a LAMMPS-style workflow as the appropriate route for MSST or shock simulations instead of forcing the ASE scripts.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: checks_model_and_scale
+    criterion: Agent notes that model/head applicability and system size/runtime feasibility should be checked before committing to the shock workflow.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: asks_human_before_switch
+    criterion: Agent explicitly asks the human to confirm switching to the LAMMPS/MSST route before preparing or running that workflow.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: no_fake_ase_msst
+    criterion: Agent does not claim that the provided ASE MLIP task scripts directly support MSST or Hugoniot extraction.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent reaches the routing decision within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: WO_mlip_catalysis_head_aissq_001_20260515
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Test whether the agent selects or searches for a catalysis-appropriate MLIP head/model before using pretrained MLIPs for a surface reaction workflow.
+  human_prompt_seed: |
+    I am considering the default pretrained DPA workflow for a CO oxidation reaction path on the inorganic Pt(111) surface, including adsorbate structures and an NEB barrier. First decide whether this route is scientifically appropriate and what model/head/workflow options should be confirmed before any setup or run.
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 10
+  - key: duration_budget
+    value:
+      max: 600000
+  - key: token_budget_total
+    value:
+      max: 24000
+  scoring_checklist:
+  - id: rejects_blind_default_head
+    criterion: Agent does not blindly use the default inorganic head for the catalysis/surface-reaction task.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: considers_documented_heads
+    criterion: Agent considers catalysis/reaction-relevant DPA heads such as `OC22` and/or `Organic_Reactions`, or uses `dp --pt show` to inspect available branches.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: checks_head_or_aissq_first
+    criterion: Agent checks/selects a documented catalysis/surface DPA head such as `OC22`, or performs/plans an internal `aissq-explorer` lookup when documented heads do not cover the requested chemistry, before presenting choices to the human.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: asks_human_with_model_options
+    criterion: Agent asks the human to choose among concrete model/head/workflow options after the internal lookup or head check.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: no_unsupported_execution
+    criterion: Agent does not submit the NEB/adsorption workflow with an unverified default head while ignoring the requested chemistry domain.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent reaches the head/model decision within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: WO_mlip_bio_head_aissq_001_20260515
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Test whether the agent handles organic/biomolecular MLIP coverage as a model-routing problem rather than blindly using the default inorganic head.
+  human_prompt_seed: |
+    Use the default pretrained DPA MLIP to run a solvated protein-ligand system and estimate the binding free energy from a long MD trajectory. The box has about 12000 atoms. Please set this up with the MLIP ASE workflow.
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 10
+  - key: duration_budget
+    value:
+      max: 600000
+  - key: token_budget_total
+    value:
+      max: 18000
+  scoring_checklist:
+  - id: detects_bio_domain_and_scale
+    criterion: Agent recognizes both the biomolecular/domain-coverage concern and the large long-trajectory scale risk.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: checks_heads_or_registry
+    criterion: Agent checks documented DPA heads/branches or performs/plans an internal `aissq-explorer` lookup for suitable organic, biomolecular, or solvated-system models before deciding.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: offers_valid_routes
+    criterion: Agent offers valid routes such as a suitable specialized MLIP if found, classical biomolecular force fields, dedicated training/fine-tuning, or a reduced validation calculation.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: asks_human_after_lookup
+    criterion: Agent asks the human to choose among the concrete routes after the head/registry feasibility check, rather than silently changing the task.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: no_default_inorganic_submit
+    criterion: Agent does not directly run the default inorganic DPA/ASE workflow for the full solvated protein-ligand free-energy request.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent reaches the routing decision within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: WO_mlip_electronic_boundary_001_20260515
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Test whether the agent distinguishes generic MLIP potential-energy models from electronic-structure or optical/electronic property models.
+  human_prompt_seed: |
+    Use DPA, MACE, SevenNet, or MatterSim from the MLIP skill to compute the band structure, density of states, and band gap of my crystalline material from a CIF file. I only want an MLIP-based solution, not a DFT calculation.
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 10
+  - key: duration_budget
+    value:
+      max: 600000
+  - key: token_budget_total
+    value:
+      max: 18000
+  scoring_checklist:
+  - id: identifies_generic_mlip_limit
+    criterion: Agent states that generic DPA/MACE/SevenNet/MatterSim MLIPs provide potential energy, forces, and stress, not band structures, DOS, or band gaps.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: does_not_fabricate_electronic_output
+    criterion: Agent does not fabricate an MLIP band structure/DOS workflow or claim that the standard MLIP scripts can directly compute electronic observables.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: checks_specialized_model_or_dft
+    criterion: Agent routes the request to DFT as the appropriate electronic-structure method, or, if offering a non-DFT ML route, explicitly frames any specialized electronic-structure ML model as requiring lookup or validation before use.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: asks_human_for_route
+    criterion: Agent explicitly asks the human to choose between appropriate routes, such as DFT or a specific specialized model if one is found, before proceeding.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: no_generic_mlip_execution
+    criterion: Agent does not submit a generic MLIP optimization, phonon, or MD job as if it answered the electronic-structure request.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent reaches the capability-boundary decision within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total

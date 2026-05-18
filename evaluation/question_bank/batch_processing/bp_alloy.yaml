@@ -21,6 +21,7 @@ questions:
 
     '
   tags:
+  - eng_vasp
   data_files:
   - key: convergence_encut
     path: data/BP_struct_003/convergence_encut.json

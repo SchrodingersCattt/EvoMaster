@@ -1,0 +1,287 @@
+version: v5
+capability: workflow_orchestration
+domain: agnostic
+questions:
+- id: WO_finetune_001_20260513
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Set up a real DP model fine-tuning workflow given training data and a base
+    model, producing training config and submission artifacts.
+  human_prompt_seed: '工作区中有 NaCl 体系的 DFT 训练数据 `train_data/`（dpdata 格式，含
+    energy/force/virial），基础模型为 `DPA2-base.pt`。请对该模型进行 fine-tune 以获得
+    NaCl 专用势函数。输出训练配置文件 `finetune_input.json` 和提交配置 `finetune_submit.json`。'
+  tags:
+  - code_mlip
+  data_files:
+  - key: train_data
+    path: data/WO_finetune_001/train_data/type_map.raw
+    oss_url: ''
+    description: Minimal dpdata training set placeholder (type_map.raw with Na Cl).
+  - key: base_model
+    path: data/WO_finetune_001/DPA2-base.pt
+    oss_url: ''
+    description: Dummy base model file (placeholder).
+  reference_answers:
+  - key: config_artifact
+    value: finetune_input.json
+  - key: submit_artifact
+    value: finetune_submit.json
+  - key: must_config_training_data
+    value:
+      filename: finetune_input.json
+      pattern: train_data
+      flags: ''
+  - key: must_config_base_model
+    value:
+      filename: finetune_input.json
+      pattern: DPA2-base
+      flags: ''
+  - key: must_submit_train_cmd
+    value:
+      filename: finetune_submit.json
+      pattern: dp\s+--pt\s+train|dp\s+train|finetune
+      flags: i
+  - key: turn_budget
+    value:
+      max: 15
+  scoring_checklist:
+  - id: config_artifact
+    criterion: finetune_input.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: submit_artifact
+    criterion: finetune_submit.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_config_training_data
+    criterion: '[Must] Training config references the train_data path.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_config_base_model
+    criterion: '[Must] Training config references DPA2-base.pt as the base/pretrained
+      model for fine-tuning.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_submit_train_cmd
+    criterion: '[Platform] Submission config cmd includes dp train or finetune command.'
+    axis: correctness
+    verify: text_file_regex
+  - id: config_structure
+    criterion: finetune_input.json has a valid DeePMD-kit training config structure
+      including model, learning_rate, loss, and training sections with finetune-appropriate
+      settings (frozen base model, lower learning rate than from-scratch).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: WO_mace_001_20260513
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Test whether agent knows MACE-MP-0 can be used directly by name via mlips
+    skill without manually downloading the model file.
+  human_prompt_seed: '请使用 MACE-MP-0 势函数对工作区中的 `nacl_bulk.cif`（NaCl 岩盐结构，64
+    原子超胞）进行结构优化，输出提交配置 `opt_submit.json`。'
+  tags:
+  - code_mlip
+  data_files:
+  - key: nacl_cif
+    path: data/WO_mace_001/nacl_bulk.cif
+    oss_url: ''
+    description: NaCl rock-salt 2x2x2 supercell (64 atoms).
+  reference_answers:
+  - key: submit_artifact
+    value: opt_submit.json
+  - key: must_model_mace
+    value:
+      filename: opt_submit.json
+      pattern: MACE-MP-0|mace
+      flags: i
+  - key: must_optimize_script
+    value:
+      filename: opt_submit.json
+      pattern: optimize_structure
+      flags: ''
+  - key: must_image_mlips
+    value:
+      filename: opt_submit.json
+      pattern: mlips
+      flags: i
+  - key: turn_budget
+    value:
+      max: 10
+  scoring_checklist:
+  - id: submit_artifact
+    criterion: opt_submit.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_model_mace
+    criterion: '[Platform] cmd references MACE-MP-0 model by name.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_optimize_script
+    criterion: '[Platform] cmd uses optimize_structure script from mlips skill.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_image_mlips
+    criterion: '[Platform] image references the multi-family mlips image (not the
+      DPA-only image).'
+    axis: correctness
+    verify: text_file_regex
+  - id: no_download_attempt
+    criterion: Agent did NOT attempt to manually download the MACE model file from
+      GitHub or other URLs. It should know that MACE-MP-0 is a known model name
+      supported directly by the mlips skill scripts.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: PWO_elec_009_20260516
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Validate whether the agent can prepare ABACUS INPUT and Bohrium submit JSON
+    for an Al2O3 Bader workflow without running calculations.
+  human_prompt_seed: "对 Al₂O₃ 准备 ABACUS Bader 电荷分析所需文件和 Bohrium 提交配置（文件名\
+    \ `al2o3_bader_submit.json`）。本题只检验输入文件与提交 JSON，不要投递或执行计算。"
+  tags:
+  - eng_abacus
+  data_files: []
+  reference_answers:
+  - key: input_artifact
+    value: INPUT
+  - key: must_input_core
+    value:
+      filename: INPUT
+      must_cover:
+      - calculation scf
+      - out_chg 1
+  - key: submit_json_artifact
+    value: al2o3_bader_submit.json
+  - key: must_submit_json_image
+    value:
+      filename: al2o3_bader_submit.json
+      pattern: '"image"\s*:\s*"registry\.dp\.tech/dptech/dp/native/hub/mrdic2/abacusp:1\.0\.3-1778742780"'
+      flags: i
+  - key: must_submit_json_cmd_bader
+    value:
+      filename: al2o3_bader_submit.json
+      pattern: '"cmd"\s*:\s*".*abacus.*bader.*"'
+      flags: i
+  - key: must_submit_json_cmd_core_ref
+    value:
+      filename: al2o3_bader_submit.json
+      pattern: '"cmd"\s*:\s*".*(-ref|core.*chg|add_core).*"'
+      flags: i
+  - key: turn_budget
+    value:
+      max: 14
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 18000
+  scoring_checklist:
+  - id: input_artifact
+    criterion: Agent writes ABACUS `INPUT` file to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_input_core
+    criterion: '[Must] INPUT contains ABACUS Bader prerequisite keys (`calculation scf`,
+      `out_chg 1`).'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: submit_json_artifact
+    criterion: Agent writes Bohrium submit config `al2o3_bader_submit.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_submit_json_image
+    criterion: '[Must] submit JSON includes required Bohrium image.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_submit_json_cmd_bader
+    criterion: '[Must] submit JSON `cmd` runs ABACUS before Bader (correct execution order).'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_submit_json_cmd_core_ref
+    criterion: '[Must] submit JSON `cmd` includes core-charge augmentation step (e.g., -ref
+      flag or core charge script) needed for pseudopotential Bader analysis.'
+    axis: correctness
+    verify: text_file_regex
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
+    axis: efficiency
+    verify: token_budget
+- id: PWO_dpa_head_organic_001_20260516
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Test whether agent selects OMol25 DPA head for organic molecule optimization
+    rather than defaulting to Omat24 or misusing SPICE2.
+  human_prompt_seed: 请对咖啡因分子做构型优化，输出优化后的结构文件。
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: optimized_artifact
+    value:
+      pattern: '*_optimized.cif'
+  - key: must_head_omol25
+    value:
+      filename: '*_optimized.cif'
+      check_tool_args: true
+      pattern: OMol25
+  - key: must_not_default_head
+    value: {}
+  - key: turn_budget
+    value:
+      max: 15
+  - key: duration_budget
+    value:
+      max: 600000
+  - key: token_budget_total
+    value:
+      max: 60000
+  scoring_checklist:
+  - id: optimized_artifact
+    criterion: '[Must] Agent produces an optimized structure file in the workspace.'
+    axis: correctness
+    verify: artifact_exists
+  - id: must_head_omol25
+    criterion: '[Must] Agent uses OMol25 head for organic molecule optimization, as
+      documented in mlips skill for organic chemistry.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: must_not_default_head
+    criterion: '[Must] Agent does NOT use default Omat24/OMat24 head or SPICE2 for
+      this organic molecule task. Judge from tool call arguments.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget

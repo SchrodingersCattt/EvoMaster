@@ -76,3 +76,94 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+- id: IG_gromacs_002_20260508
+  capability: input_generation
+  domain: agnostic
+  intent: Prepare a GROMACS minimization input directory and record the manifest gate.
+  human_prompt_seed: '请为 GROMACS energy minimization 准备 `run_gromacs_em/`：
+
+    - 生成或 adapt input files：`em.mdp`，参数为 steepest descent、nsteps=50000、emtol=1000、emstep=0.01。
+
+    - 验证 `em.mdp` 并保存 machine-readable diagnostics 到 `run_gromacs_em/diagnosis.json`。
+
+    - 写 `input_prep_manifest.json`。它必须是 JSON object，至少包含这些顶层字段：software、task、input_dir、generated_files、user_provided_files、diagnostics、auxiliary_files、assumptions、submit_ready、bohrium_command；其中 `diagnostics.file` 必须是 `diagnosis.json`，`submit_ready` 必须是 JSON boolean。
+
+    - manifest 中必须包含 `submit_ready` gate；如果有 blockers 就不能提交。
+
+    本题只生成输入目录，不实际运行 GROMACS。'
+  tags:
+  - eng_gromacs
+  data_files: []
+  reference_answers:
+  - key: mdp_artifact
+    value: em.mdp
+  - key: manifest_schema
+    value:
+      filename: input_prep_manifest.json
+      required_keys:
+      - software
+      - task
+      - input_dir
+      - generated_files
+      - user_provided_files
+      - diagnostics
+      - auxiliary_files
+      - assumptions
+      - submit_ready
+      - bohrium_command
+  - key: diagnosis_artifact
+    value: diagnosis.json
+  - key: required_keywords
+    value:
+      filename: em.mdp
+      tokens:
+      - integrator
+      - steep
+      - nsteps
+      - emtol
+      - emstep
+      flags: i
+  - key: output_grounding
+    value: The final answer states that em.mdp, diagnosis.json, and input_prep_manifest.json were produced, records the submit_ready gate, and confirms no GROMACS run was started.
+  - key: turn_budget
+    value:
+      max: 12
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 14000
+  scoring_checklist:
+  - id: mdp_artifact
+    criterion: The GROMACS input generation task writes `em.mdp` in the prepared run directory.
+    axis: correctness
+    verify: artifact_exists
+  - id: manifest_schema
+    criterion: The run directory includes `input_prep_manifest.json` with the required manifest fields and submit_ready gate.
+    axis: correctness
+    verify: json_file_schema
+  - id: diagnosis_artifact
+    criterion: The run directory includes machine-readable diagnostics as `diagnosis.json`.
+    axis: correctness
+    verify: artifact_exists
+  - id: required_keywords
+    criterion: The generated or adapted input file contains the requested GROMACS minimization parameters.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: output_grounding
+    criterion: The final answer states that em.mdp, diagnosis.json, and input_prep_manifest.json were produced, records the submit_ready gate, and confirms no GROMACS run was started.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget

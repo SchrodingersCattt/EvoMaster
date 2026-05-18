@@ -8,6 +8,8 @@ skill_type: operator
 
 Manage the user's personal skill library via the Bohrium Open API.
 
+> Skill-authoring rule: Do not add a `## When to Use` section. Skill loading is decided from frontmatter `description`; put trigger keywords and routing guardrails there. Body sections should describe how the loaded skill behaves.
+
 ## Prerequisites
 
 The following environment variables are injected by the runtime:

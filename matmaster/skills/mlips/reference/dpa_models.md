@@ -2,6 +2,8 @@
 
 ## Available Models
 
+> URLs below are a snapshot. For the current canonical provenance (latest version, byte size, fresh download link) of any DPA checkpoint — and for models not listed here — invoke the **`aissq-explorer`** skill instead of hardcoding URLs.
+
 | Name | Params | URL | Default Head | Notes |
 |------|--------|-----|-------------|-------|
 | DPA2.4-7M | 6.6M | `https://bohrium.oss-cn-zhangjiakou.aliyuncs.com/13756/27666/store/upload/cd12300a-d3e6-4de9-9783-dd9899376cae/dpa-2.4-7M.pt` | OMat24 | 37-head shared fitting, 120GPU pretrain |
@@ -65,10 +67,10 @@ DPA2.4-7M exposes many more branches (e.g. `Domains_Alloy`, `H2O_H2O_PD`, `Metal
 
 ```bash
 # both flags accepted; --model-branch is canonical in v3.1+
-dp --pt freeze -c DPA-3.2-5M.pt -o frozen_model.pth --model-branch OMat24
+dp --pt freeze -c DPA-3.2-5M.pt -o frozen_model.pth --model-branch [head_name]
 
 # equivalent
-dp --pt freeze -c DPA-3.2-5M.pt -o frozen_model.pth --head OMat24
+dp --pt freeze -c DPA-3.2-5M.pt -o frozen_model.pth --head [head_name]
 ```
 
 Output `frozen_model.pth` is a **single-head** model usable in both LAMMPS and ASE.
@@ -87,7 +89,7 @@ Run via `$PREFIX/bin/lmp -in in.lmp` (use the `lmp` binary shipped with the deep
 Before freezing, you can re-align the per-element energy bias of the pretrained model to your downstream system without retraining:
 
 ```bash
-dp --pt change-bias DPA-3.2-5M.pt -s <your_system> --model-branch OMat24
+dp --pt change-bias DPA-3.2-5M.pt -s <your_system> --model-branch [head_name]
 ```
 
 Then freeze the resulting checkpoint as in step 2.

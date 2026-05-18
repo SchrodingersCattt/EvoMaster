@@ -47,6 +47,32 @@ evaluation/question_bank/
 | `grounding` | 是否使用了正确的工具/数据源，而非凭空编造 |
 | `efficiency` | 过程是否高效（无冗余调用、耗时/token 合理） |
 
+### 提示词 / 工具 / Skill 覆盖率口径
+
+`evaluation/scripts/coverage/extract_and_match.py` 会从 `matmaster/skills`、
+内置工具提示与系统提示中抽取规则，并与题库做匹配。报告同时保留两套口径：
+
+- **Raw coverage**：所有抽取规则都进入分母，用于观察提示词、工具、Skill
+  文档的整体匹配情况。
+- **Actionable coverage**：只统计应由题库 checklist 捕获的规则。每条规则会带
+  `actionability`、`is_actionable` 与 `actionability_reason`；默认只有
+  `actionability: testable` 进入 actionable 分母。
+
+行动性分类配置在
+`evaluation/scripts/coverage/rule_scope_overrides.yaml`。常用分类为：
+
+| actionability | 含义 |
+| --- | --- |
+| `testable` | 应通过题目 checklist、确定性 verifier 或 LLM judge 覆盖 |
+| `policy_only` | 系统/流程/对话策略，不默认要求科学题库覆盖 |
+| `tool_schema` | 工具参数或工具 schema 说明，优先通过工具单测覆盖 |
+| `runtime_dependent` | 依赖 MCP、Bohrium 镜像、机器队列等运行时资源 |
+| `out_of_scope` | 当前评测目标外的能力或暂未启用服务 |
+
+新增大类 Skill、工具或 MCP 时，若其规则不应默认进入题库补题分母，应同步更新
+`rule_scope_overrides.yaml`，并为 `testable` 规则优先设计能真正失败的 checklist；
+不要只靠 tag/关键词把 raw coverage 刷高。
+
 ### `EvalConfig` 与 Agent 运行（`run_mat_task`）
 
 - **`empty_completion_max_retries`**（默认 `1`）：当单次运行结果为 `status=completed`、无工具调用、且无可见答案（含内核 `reason=natural` 或旧版 playground 无 `reason` 字段）时，视为「可能因网关/流式偶发空流」，**整题重跑**最多额外次数；`0` 表示关闭。`mat_result` 会附带 `empty_completion_retry_count`（实际执行的重试次数），`duration_ms` 为**多次尝试之和**。
@@ -249,6 +275,10 @@ evaluation/question_bank/
 | `struct_file_stoichiometry_ratio` | `{"filename": str, "element_a": str, "element_b": str, "expected_ratio": float, "tolerance": float}` | 验证 count(A)/count(B) 比值 |
 | `struct_file_coordination` | `{"filename": str, "center_element": str, "expected": int, "tolerance": float, "cutoff_A": float}` | 统计中心元素的配位数均值并校验 |
 | `struct_file_layer_count` | `{"filename": str, "expected": int, "tolerance": float, "axis": str, "layer_tol_A": float, "element": str(可选)}` | 沿指定轴在笛卡尔坐标下统计**不同原子平面**数：排序后，与当前平面锚点距离超过 `layer_tol_A`（Å）则开始新平面；默认 `layer_tol_A` 为 `0.25`。提供 `element` 时仅统计该元素的分层（如仅统计 slab 金属层，不计溶剂/离子层）。旧字段 `gap_threshold_A` 仍可读，但语义为平面合并容差（与现实现一致），新题请写 `layer_tol_A` |
+| `struct_file_parsable` | `{"filename": str}` | 用 pymatgen 解析所有匹配的结构文件；适合单独要求 CIF/POSCAR 等交付物不仅存在而且可读。`filename` 可为 basename glob（如 `ordered_*.cif`），匹配到多个文件时全部必须可解析 |
+| `struct_file_all_occupancy_one` | `{"filename": str, "tolerance": float}` | 用 pymatgen 读取所有匹配文件，要求每个 site 只有一个 species 且 occupancy 为 `1±tolerance`；适合 ordered replica 等题，**不要**用于允许 partial occupancy 的无序/缺陷结构 |
+| `struct_file_space_group` | `{"filename": str, "expected_number": int, "symprec": float, "angle_tolerance": float}` | 用 pymatgen `SpacegroupAnalyzer` 识别周期结构空间群编号并比较；适合高对称 bulk/标准结构，slab/界面/弛豫结构需谨慎设置 `symprec` |
+| `struct_file_min_interatomic_distance` | `{"filename": str, "min_distance_A": float, "elements": list[str](可选)}` | 读结构文件并检查所有选中 atom pair 的最小距离不低于阈值；提供 `elements` 时只在这些元素内筛选，否则检查全结构。适合“无重叠/最短距离下限”类题 |
 | `struct_file_count` | `{"pattern": str, "expected": int, "tolerance": int}` | 统计 workspace 中匹配 glob 的文件数（无需 pymatgen） |
 | `struct_file_surface_termination` | `{"filename": str, "element": str, "axis": "x"\|"y"\|"z", "side": "top"\|"bottom"\|"both", "layer_tol_A": float}` | 检查 slab 最外层（top/bottom/both）是否由指定元素构成；用于验证 O-terminated 或其他特定终止面（如 CeO2(111) 的 O 终止）|
 | `checkcif_no_a_alerts` | `{"filename": str, "max_a_alerts": int}` | 在 workspace 中找到匹配 `filename`（glob，默认 `*.cif`）的 CIF 文件，POST 到 IUCr checkCIF 服务（`https://checkcif.iucr.org/cgi-bin/checkcif_hkl.pl`），解析 HTML 响应中的 A/B/C/G 级别警告数，验证 A 级警告数 ≤ `max_a_alerts`（默认 0）。实现见 `evaluation/validators/checkcif.py`。|

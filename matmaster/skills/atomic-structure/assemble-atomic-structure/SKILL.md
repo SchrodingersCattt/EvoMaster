@@ -11,17 +11,6 @@ Use this skill when multiple structural pieces are combined into one simulation
 object: bulk to slab, adsorbate on slab, slab/slab interface, packed amorphous
 cell, or crosslinked network. The output must be a concrete structure file.
 
-## When to Use
-
-- Cut a surface slab from a non-molecular bulk crystal.
-- Place molecular adsorbates on surfaces.
-- Stack two slabs into an interface.
-- Pack molecules or polymer chains into an amorphous periodic cell.
-- Build a geometric crosslink network from an existing packed cell.
-
-If the bulk is a molecular crystal, use `operate-molecular-crystal` for slab
-cutting because ASE/pymatgen slab cuts may break molecules across PBC.
-
 ## Decision Tree
 
 1. Inspect all input structures first.

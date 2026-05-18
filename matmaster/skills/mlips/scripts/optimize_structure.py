@@ -3,8 +3,10 @@
 Usage::
 
     python optimize_structure.py --structure input.cif --model DPA3.1-3M \\
-        [--head OMat24] [--relax-cell] [--fmax 0.01] [--steps 100] \\
+        [--head head_name] [--relax-cell] [--fmax 0.01] [--steps 100] \\
         [--charge 0] [--spin 1]
+
+Choose a domain-matched DPA head before running. For surface/adsorbate catalysis or catalytic NEB, check/use ``--head OC22`` instead of the inorganic default.
 
 Outputs (in working directory):
     {stem}_optimized.cif / .xyz   — optimized structure
@@ -39,7 +41,9 @@ def parse_args() -> argparse.Namespace:
         help="Model name, path, or URL (default: DPA3.1-3M)",
     )
     p.add_argument(
-        "--head", default=None, help="Model head for DP family (e.g. OMat24, OMol25)"
+        "--head",
+        default=None,
+        help="Model head for DP family (e.g. OC22, OMol25, OMat24)",
     )
     p.add_argument(
         "--relax-cell", action="store_true", help="Also relax cell shape/volume"

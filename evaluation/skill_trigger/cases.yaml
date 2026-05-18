@@ -1,0 +1,196 @@
+# Skill trigger-rate evaluation cases.
+# Each skill has 10 positive cases (should trigger this skill)
+# and 5 negative cases (should NOT trigger this skill).
+
+max_turns: 3
+
+cases:
+  - skill: abacus
+    positive:
+      - "帮我用 ABACUS 算一下 Si 的能带结构"
+      - "ABACUS SCF 计算怎么设置"
+      - "用 ABACUS 做一个 Si 的结构优化"
+      - "帮我写一个 ABACUS 的 INPUT 文件"
+      - "ABACUS 怎么做自旋极化计算"
+      - "用 ABACUS 计算 Fe 的磁矩"
+      - "帮我配置 ABACUS 的赝势文件"
+      - "ABACUS LCAO 基组怎么选"
+      - "用 ABACUS 做一个 DOS 计算"
+      - "帮我用 ABACUS 算 GaAs 的介电函数"
+    negative:
+      - "帮我画一个 RDF 分析图"
+      - "用 VASP 算弹性常数"
+      - "帮我跑一个 LAMMPS 的 MD 模拟"
+      - "分析一下这个 XRD 数据"
+      - "用 GPUMD 做热导率计算"
+
+  - skill: vasp
+    positive:
+      - "帮我用 VASP 算一下能带"
+      - "写一个 VASP 的 INCAR 文件"
+      - "VASP 结构优化怎么设置"
+      - "用 VASP 算弹性常数"
+      - "帮我配置 VASP 的 POTCAR"
+      - "VASP 的 KPOINTS 怎么设置"
+      - "用 VASP 做一个 HSE06 计算"
+      - "帮我用 VASP 算 DOS"
+      - "VASP NEB 计算怎么做"
+      - "用 VASP 做一个分子动力学模拟"
+    negative:
+      - "帮我用 ABACUS 算能带"
+      - "画一个能带图"
+      - "帮我构建一个 slab 模型"
+      - "用 CP2K 做 AIMD"
+      - "分析一下这个轨迹文件"
+
+  - skill: gpumd
+    positive:
+      - "帮我用 GPUMD 跑一个 MD 模拟"
+      - "GPUMD 的 run.in 怎么写"
+      - "用 GPUMD 算热导率"
+      - "帮我配置 GPUMD 的 NEP 势函数"
+      - "GPUMD 怎么做 NVT 模拟"
+      - "用 GPUMD 计算声子谱"
+      - "帮我用 GPUMD 做扩散系数计算"
+      - "GPUMD 的 model.xyz 格式是什么"
+      - "用 GPUMD 做一个热膨胀模拟"
+      - "帮我训练一个 NEP 势函数"
+    negative:
+      - "帮我用 LAMMPS 跑 MD"
+      - "用 ABACUS 做结构优化"
+      - "画一个 RDF 图"
+      - "帮我做第一性原理计算"
+      - "分析一下 XRD 数据"
+
+  - skill: data-analysis
+    positive:
+      - "帮我画一个 RDF 分析图"
+      - "分析一下这个 MD 轨迹的温度变化"
+      - "画一个能带结构图"
+      - "帮我做一个 MSD 分析"
+      - "把这个数据画成散点图"
+      - "帮我分析一下这个 CSV 数据"
+      - "画一个 DOS 图"
+      - "帮我做 XRD 数据的峰拟合"
+      - "分析一下这个 PDOS 数据"
+      - "帮我画一个应力-应变曲线"
+    negative:
+      - "帮我用 VASP 算能带"
+      - "生成一个 ABACUS 输入文件"
+      - "用 LAMMPS 跑 MD"
+      - "帮我构建一个超胞"
+      - "帮我搜索一篇关于锂电池的文献"
+
+  - skill: lammps
+    positive:
+      - "帮我用 LAMMPS 跑一个 MD 模拟"
+      - "写一个 LAMMPS 的 input 脚本"
+      - "LAMMPS 怎么设置 EAM 势函数"
+      - "用 LAMMPS 做拉伸模拟"
+      - "帮我配置 LAMMPS 的 fix npt"
+      - "LAMMPS 怎么计算 RDF"
+      - "用 LAMMPS 做一个退火模拟"
+      - "帮我用 LAMMPS 算粘度"
+      - "LAMMPS 的 data 文件怎么写"
+      - "用 LAMMPS 做一个剪切模拟"
+    negative:
+      - "帮我用 GPUMD 跑 MD"
+      - "用 ABACUS 做 SCF 计算"
+      - "画一个温度演化图"
+      - "用 Gromacs 跑蛋白质模拟"
+      - "帮我搜索文献"
+
+  - skill: cp2k
+    positive:
+      - "帮我用 CP2K 做一个 AIMD 模拟"
+      - "CP2K 的输入文件怎么写"
+      - "用 CP2K 做结构优化"
+      - "帮我配置 CP2K 的 DFT 参数"
+      - "CP2K 怎么设置 basis set"
+      - "用 CP2K 算能带"
+      - "帮我用 CP2K 做 NEB 计算"
+      - "CP2K 的 MOTION 部分怎么设置"
+      - "用 CP2K 做一个 metadynamics 模拟"
+      - "帮我用 CP2K 算吸附能"
+    negative:
+      - "帮我用 VASP 做计算"
+      - "用 LAMMPS 跑经典 MD"
+      - "画一个能带图"
+      - "帮我构建一个表面模型"
+      - "搜索一下关于催化的文献"
+
+  - skill: input-manual-helper
+    positive:
+      - "帮我准备一套 ABACUS 的计算输入文件"
+      - "检查一下这个 INPUT 文件有没有问题"
+      - "帮我打包这些输入文件准备提交"
+      - "验证一下我的 VASP 输入文件"
+      - "帮我生成一套 QE 的输入"
+      - "这个 CP2K 输入文件哪里写错了"
+      - "帮我适配一下这个输入文件到 Bohrium"
+      - "检查 LAMMPS 输入文件的语法"
+      - "帮我准备 GROMACS 的输入文件"
+      - "帮我诊断一下这个 ORCA 输入为什么报错"
+    negative:
+      - "帮我分析计算结果"
+      - "画一个能带图"
+      - "帮我搜索文献"
+      - "构建一个超胞模型"
+      - "帮我训练一个机器学习势"
+
+  - skill: gromacs
+    positive:
+      - "帮我用 Gromacs 跑一个蛋白质模拟"
+      - "Gromacs 的 mdp 文件怎么写"
+      - "用 Gromacs 做一个溶剂化模拟"
+      - "帮我配置 Gromacs 的力场"
+      - "Gromacs 怎么做自由能计算"
+      - "用 gmx pdb2gmx 处理一下这个蛋白质"
+      - "帮我用 Gromacs 做一个 umbrella sampling"
+      - "Gromacs 的 topology 文件怎么写"
+      - "用 Gromacs 做一个 NPT 平衡"
+      - "帮我用 Gromacs 算结合自由能"
+    negative:
+      - "帮我用 LAMMPS 跑 MD"
+      - "用 ABACUS 做 DFT 计算"
+      - "画一个 RDF 图"
+      - "帮我构建一个晶体结构"
+      - "用 GPUMD 算热导率"
+
+  - skill: xrd-analysis
+    positive:
+      - "帮我分析一下这个 XRD 数据"
+      - "做一个 XRD 的 Rietveld 精修"
+      - "帮我标定 XRD 的峰位"
+      - "这个 XRD 图谱对应什么物相"
+      - "帮我计算 XRD 的晶粒尺寸"
+      - "用 Scherrer 公式分析一下这个 XRD"
+      - "帮我做 XRD 的物相鉴定"
+      - "分析一下这个粉末 XRD 数据"
+      - "帮我计算 XRD 峰的半高宽"
+      - "对比一下这个 XRD 和标准卡片"
+    negative:
+      - "帮我画一个能带图"
+      - "用 VASP 算能带"
+      - "帮我分析 MD 轨迹"
+      - "构建一个晶体结构"
+      - "帮我做第一性原理计算"
+
+  - skill: mlips
+    positive:
+      - "帮我训练一个机器学习势函数"
+      - "用 DeePMD 训练一个势"
+      - "帮我做一个 MLIP 的训练集"
+      - "怎么评估机器学习势的精度"
+      - "帮我用 NEP 训练一个势函数"
+      - "机器学习势的超参数怎么调"
+      - "帮我用 MACE 做一个势函数"
+      - "怎么做主动学习选点"
+      - "帮我评估这个 MLP 的外推能力"
+      - "用 DP-GEN 做一个迭代训练"
+    negative:
+      - "帮我用 VASP 做 DFT 计算"
+      - "画一个能量曲线"
+      - "帮我跑一个 MD 模拟"
+      - "构建一个晶体结构"
+      - "搜索关于电池材料的文献"
