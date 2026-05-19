@@ -3492,7 +3492,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_custom_dp_model_001_20260518
+- id: WO_custom_dp_model_001_20260519
   capability: workflow_orchestration
   domain: agnostic
   intent: Use a user-provided DeepMD .pt model file to run structure optimization,
@@ -3506,6 +3506,12 @@ questions:
   reference_answers:
   - key: output_artifact
     value: cu_relaxed.cif
+  - key: structure_correct
+    value:
+      filename: cu_relaxed.cif
+      param: a
+      expected: 3.6
+      tolerance: 0.1
   - key: turn_budget
     value:
       max: 20
@@ -3538,11 +3544,6 @@ questions:
       3.6 Å (relaxed from 3.615 input).
     axis: correctness
     verify: struct_file_cell_param
-    verify_params:
-      filename: cu_relaxed.cif
-      param: a
-      expected: 3.6
-      tolerance: 0.1
   - id: uses_local_model_path
     criterion: Agent correctly references the model file from its workspace path
       (not downloading a different model from the internet or using a platform
