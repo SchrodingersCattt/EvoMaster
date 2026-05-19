@@ -1653,7 +1653,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_dpa_005_20260411v2
+- id: WO_mlip_dpa_005_20260521
   capability: workflow_orchestration
   domain: agnostic
   intent: Compute Cu FCC single-vacancy migration barrier with DPA via NEB; report forward
@@ -1666,7 +1666,7 @@ questions:
 
     分别优化初态和末态结构，然后使用 DPA 机器学习势做 NEB 计算（5 个中间像）。
 
-    报告正向迁移能垒 (eV) 和能量曲线趋势。
+    报告正向迁移能垒 (eV) 和能量曲线趋势，结果写入 `neb_result.json`。
 
     '
   tags:
@@ -1675,8 +1675,12 @@ questions:
   data_files: []
   reference_answers:
   - key: forward_barrier_eV
-    value: 0.7
-    tolerance: 0.2
+    value:
+      filename: neb_result.json
+      checks:
+      - key: forward_barrier_eV
+        min: 0.5
+        max: 0.9
   - key: required_fields
     value:
     - initial_state
@@ -1694,9 +1698,9 @@ questions:
       max: 10000
   scoring_checklist:
   - id: forward_barrier_eV
-    criterion: Cu vacancy forward migration barrier is within tolerance (~0.7 eV).
+    criterion: Cu vacancy forward migration barrier in neb_result.json is within 0.5-0.9 eV.
     axis: correctness
-    verify: numerical_range
+    verify: text_file_numeric_range
   - id: required_fields
     criterion: Report includes description of initial and final states, forward barrier value,
       and energy profile along the migration path.
