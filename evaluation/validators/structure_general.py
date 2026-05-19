@@ -544,6 +544,50 @@ def check_stoichiometry_ratio(
 
 
 # ---------------------------------------------------------------------------
+# 7b. Charge balance (formal oxidation states)
+# ---------------------------------------------------------------------------
+
+
+def check_charge_balance(
+    workspace_dir: str | Path,
+    *,
+    filename: str,
+    oxidation_states: dict[str, int],
+    tolerance: float = 0.01,
+) -> tuple[bool, str]:
+    """Verify that sum(count_i * oxidation_i) == 0 for an ionic structure.
+
+    oxidation_states: mapping of element symbol to formal charge, e.g.
+    {"Mg": 2, "Al": 3, "O": -2}.
+    """
+    if not _PMG_AVAILABLE:
+        return False, _IMPORT_MSG
+    root = Path(workspace_dir)
+    fpath = _resolve_file(root, filename)
+    if fpath is None:
+        return False, f'no file matching {filename!r} in {root}'
+    try:
+        struct = _load_structure(fpath)
+    except Exception as exc:
+        return False, f'could not parse {fpath.name}: {exc}'
+
+    comp = struct.composition
+    total_charge = 0.0
+    details = []
+    for elem, ox in oxidation_states.items():
+        count = comp.get(elem, 0)
+        total_charge += count * ox
+        details.append(f'{elem}({ox:+d})×{count:g}')
+
+    hit = abs(total_charge) <= tolerance
+    return (
+        hit,
+        f'{fpath.name}: charge = {total_charge:+.2f} [{", ".join(details)}]'
+        f'{" — NEUTRAL" if hit else " — NOT NEUTRAL"}',
+    )
+
+
+# ---------------------------------------------------------------------------
 # 8. Coordination number
 # ---------------------------------------------------------------------------
 
