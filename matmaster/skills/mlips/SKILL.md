@@ -84,7 +84,11 @@ The OSS URLs in `reference/dpa_models.md` are a **snapshot** and may rotate. If 
 - **Convergence**: `--fmax 0.01` for optimization, `--fmax 0.05` for NEB.
 - **Cell relaxation**: `--relax-cell` for equilibrium properties (elastic, phonon).
 - **Elastic**: Input MUST be fully relaxed (run optimize first with `--relax-cell`).
-- **NEB**: Both structures must be relaxed, same atoms in same order. Ensure the migrating atom's displacement between initial and final uses minimum image convention (shortest path under PBC). Avoid CIF format for NEB endpoints — CIF writers wrap fractional coordinates back into [0,1), undoing any unwrapped positioning. Use POSCAR or XYZ with cell info instead.
+- **NEB**: Both structures must be relaxed, same atoms in same order. Avoid CIF format for NEB endpoints — CIF writers wrap fractional coordinates back into [0,1). Use POSCAR or XYZ instead. MUST run this MIC check after constructing endpoints, before submitting NEB:
+  ```bash
+  python -c "from ase.io import read; import numpy as np; ini=read('INITIAL'); fin=read('FINAL'); diff=fin.positions-ini.positions; cell=ini.cell.lengths(); diff-=np.round(diff/cell)*cell; md=np.linalg.norm(diff,axis=1).max(); print(f'max_disp={md:.3f} A'); assert md<cell.min()/2, f'MIC FAIL: {md:.2f} A — fix endpoint coords'"
+  ```
+  If it fails, the migrating atom's coordinates cross a cell boundary — shift by one lattice vector so the straight-line path is the shortest.
 - **Chain outputs**: Use `*_optimized.cif` from optimization as input to subsequent tasks. **Save intermediate results** under task filenames before starting next step.
 
 ## Submission Workflow
