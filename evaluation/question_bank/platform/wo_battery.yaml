@@ -99,7 +99,7 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
-- id: WO_dpmd_custom_model_001_20260519
+- id: WO_dpmd_custom_model_001_20260521
   capability: workflow_orchestration
   domain: battery
   intent: Test whether agent correctly passes a user-provided local DP model path to
@@ -122,7 +122,7 @@ questions:
     value: md_submit.json
   - key: must_cmd_custom_model
     value:
-      filename: md_submit.json
+      filename: in.*
       pattern: lifsi_dme\.pt
       flags: ''
   - key: must_cmd_md
@@ -139,8 +139,8 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: must_cmd_custom_model
-    criterion: '[Platform] cmd references the user-provided model file lifsi_dme.pt
-      (not DPA3 or other default model).'
+    criterion: '[Platform] LAMMPS input file references the user-provided model file
+      lifsi_dme.pt (not DPA3 or other default model).'
     axis: correctness
     verify: text_file_regex
   - id: must_cmd_md
