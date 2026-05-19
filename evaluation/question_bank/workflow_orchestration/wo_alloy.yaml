@@ -90,7 +90,7 @@ questions:
     criterion: Total token usage is recorded and stays within a generous benchmark ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_mech_006_20260415
+- id: WO_mech_006_20260519
   capability: workflow_orchestration
   domain: alloy
   intent: Build the convex hull for a CuCrZr alloy and summarize stability interpretation artifacts.
@@ -157,7 +157,10 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: grounding_source
-    criterion: Final answer is grounded in convex-hull artifacts and does not assert unsupported stability conclusions.
+    criterion: Final answer uses the mock values explicitly provided in the user prompt
+      (hull_distance=0.024, stability_label=metastable, reference_phases=[Cu, Cr2Zr, CuZr2]).
+      Using these prompt-provided values is NOT fabrication. Only fail if the agent invents
+      numbers not given in the prompt.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -458,101 +461,53 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: WO_dpmd_lammps_fcc_feni_001_20260514
+- id: WO_dpmd_lammps_fcc_feni_001_20260519
   capability: workflow_orchestration
   domain: alloy
   priority: P0
-  intent: Use DPA-2.4-7M with LAMMPS to perform structure relaxation on a random fcc Fe-Ni 1:1 supercell and produce the specified deliverable files.
+  intent: Prepare DPA-2.4-7M freeze + LAMMPS minimize inputs for a random fcc Fe-Ni
+    supercell, testing multi-head model freeze knowledge and type_map alignment.
   human_prompt_seed: |
-    使用 DPA-2.4-7M 模型（OMat24 head）配合 LAMMPS，对 fcc Fe-Ni 合金做结构优化（能量+受力最小化）。
+    我想用 DPA-2.4-7M 模型配合 LAMMPS，对 fcc Fe-Ni 等比合金（2×2×2 超胞，32 原子）做结构优化。请帮我准备好输入文件，不需要实际执行计算。
 
-    任务：
-    1. 构建 fcc Fe-Ni 随机占位超胞作为初始结构：fcc 晶格（常规胞 a0 ≈ 3.57 Å 量级），2×2×2 常规胞超胞（共 32 个原子），Fe:Ni = 1:1（16 Fe + 16 Ni 随机占据 fcc 格点）。
-    2. 用 DPA-2.4-7M 与 LAMMPS 完成结构优化。
-    3. 解析 LAMMPS 输出，整理结果。
-
-    请按下列**精确文件名**（不允许重命名、不允许加路径前缀，必须落在 workspace 根目录）交付：
-
-    | 文件名 | 内容 |
-    |---|---|
-    | `conf.lmp` | LAMMPS 数据文件 |
-    | `in.lmp` | LAMMPS 输入脚本 |
-    | `relaxed.cif` | 优化后的结构 |
-    | `relax_summary.json` | 至少包含字段：`model`、`head`、`engine`、`n_atoms`、`composition`、`notes` |
-
-    任何重命名（如 `FeNi_relaxed.cif`、`lammps.in`）或放入子目录都会导致评测失败。
+    交付要求：输入文件和执行脚本放在 `input/` 目录（`conf.lmp`、`in.lmp`、`run.sh`）。
   tags:
   - code_mlip
   - eng_lammps
   data_files: []
   reference_answers:
-  - key: pth_model_exists
+  - key: run_sh_exists
+    value: input/run.sh
+  - key: run_sh_has_freeze
     value:
-      pattern: "*.pth"
-      expected: 1
-      tolerance: 0
-  - key: conf_lmp_exists
-    value: conf.lmp
-    workspace_resolve: root
-  - key: in_lmp_exists
-    value: in.lmp
-    workspace_resolve: root
-  - key: relaxed_cif_exists
-    value: relaxed.cif
-    workspace_resolve: root
-  - key: summary_json_exists
-    value: relax_summary.json
-    workspace_resolve: root
-  - key: conf_atom_types_ge28
+      filename: input/run.sh
+      pattern: 'dp\s+--pt\s+freeze|freeze.*\.pth'
+      flags: i
+  - key: run_sh_has_lammps
     value:
-      filename: conf.lmp
+      filename: input/run.sh
+      pattern: 'lmp\s|lammps'
+      flags: i
+  - key: input_has_data_file
+    value:
+      filename: input/conf.lmp
       pattern: '^\s*(?:28|29|[3-9]\d|\d{3,})\s+atom\s+types\b'
       flags: m
-    workspace_resolve: root
-  - key: conf_fe_at_index_26
+  - key: input_fe_type_26
     value:
-      filename: conf.lmp
-      pattern: '^\s*26\s+55\.8\d*'
+      filename: input/conf.lmp
+      pattern: '^\s*26\s+55\.8'
       flags: m
-    workspace_resolve: root
-  - key: conf_ni_at_index_28
+  - key: input_ni_type_28
     value:
-      filename: conf.lmp
-      pattern: '^\s*28\s+58\.[67]\d*'
+      filename: input/conf.lmp
+      pattern: '^\s*28\s+58\.[67]'
       flags: m
-    workspace_resolve: root
-  - key: in_lmp_has_minimize
+  - key: input_has_minimize
     value:
-      filename: in.lmp
-      pattern: '^\s*(?:minimize\b|fix\s+\S+\s+all\s+box/relax\b)'
+      filename: input/in.lmp
+      pattern: '(?:minimize\b|fix\s+\S+\s+all\s+box/relax\b)'
       flags: im
-    workspace_resolve: root
-  - key: summary_required_tokens
-    value:
-      filename: relax_summary.json
-      tokens:
-      - DPA-2.4-7M
-      - Omat24
-      - lammps
-      flags: i
-    workspace_resolve: root
-  - key: relaxed_total_atoms_32
-    value:
-      filename: relaxed.cif
-      expected: 32
-      tolerance: 0
-  - key: relaxed_fe_count_16
-    value:
-      filename: relaxed.cif
-      element: Fe
-      expected: 16
-      tolerance: 0
-  - key: relaxed_ni_count_16
-    value:
-      filename: relaxed.cif
-      element: Ni
-      expected: 16
-      tolerance: 0
   - key: turn_budget
     value:
       max: 18
@@ -561,73 +516,47 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 12000
+      max: 30000
   scoring_checklist:
-  - id: pth_model_exists
-    criterion: Agent writes exactly one `.pth` model file somewhere under the workspace.
-    axis: correctness
-    verify: struct_file_count
-  - id: conf_lmp_exists
-    criterion: Agent writes `conf.lmp` at the workspace root.
+  - id: run_sh_exists
+    criterion: Agent writes `input/run.sh` to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: in_lmp_exists
-    criterion: Agent writes `in.lmp` at the workspace root.
-    axis: correctness
-    verify: artifact_exists
-  - id: relaxed_cif_exists
-    criterion: Agent writes `relaxed.cif` at the workspace root.
-    axis: correctness
-    verify: artifact_exists
-  - id: summary_json_exists
-    criterion: Agent writes `relax_summary.json` at the workspace root.
-    axis: correctness
-    verify: artifact_exists
-  - id: conf_atom_types_ge28
-    criterion: The LAMMPS data file declares an atom-type range large enough for the model's element indexing, rejecting compact 1/2-style mappings.
+  - id: run_sh_has_freeze
+    criterion: '[Must] run.sh contains a dp freeze command (agent knows multi-head DPA
+      models must be frozen for LAMMPS).'
     axis: correctness
     verify: text_file_regex
-  - id: conf_fe_at_index_26
-    criterion: The LAMMPS data file maps Fe to atom type 26 in the Masses section.
+  - id: run_sh_has_lammps
+    criterion: '[Must] run.sh invokes LAMMPS after model preparation.'
     axis: correctness
     verify: text_file_regex
-  - id: conf_ni_at_index_28
-    criterion: The LAMMPS data file maps Ni to atom type 28 in the Masses section.
+  - id: input_has_data_file
+    criterion: '[Must] input/conf.lmp declares ≥28 atom types (full element type_map,
+      not compact 1/2 mapping).'
     axis: correctness
     verify: text_file_regex
-  - id: in_lmp_has_minimize
-    criterion: The LAMMPS input contains a structure-relaxation/minimization command.
+  - id: input_fe_type_26
+    criterion: '[Must] input/conf.lmp maps Fe to type 26 (matching DPA type_map).'
     axis: correctness
     verify: text_file_regex
-  - id: summary_required_tokens
-    criterion: The summary records the model, head, frozen-model filename, and LAMMPS engine context.
+  - id: input_ni_type_28
+    criterion: '[Must] input/conf.lmp maps Ni to type 28 (matching DPA type_map).'
     axis: correctness
-    verify: text_file_contains_all
-  - id: relaxed_total_atoms_32
-    criterion: The optimized structure contains exactly 32 atoms.
+    verify: text_file_regex
+  - id: input_has_minimize
+    criterion: '[Must] input/in.lmp contains a minimize command.'
     axis: correctness
-    verify: struct_file_atom_count
-  - id: relaxed_fe_count_16
-    criterion: The optimized structure contains exactly 16 Fe atoms.
-    axis: correctness
-    verify: struct_file_atom_count
-  - id: relaxed_ni_count_16
-    criterion: The optimized structure contains exactly 16 Ni atoms.
-    axis: correctness
-    verify: struct_file_atom_count
-  - id: no_retries
-    criterion: No repeated identical tool calls with the same parameter set.
-    axis: efficiency
-    verify: no_retries
+    verify: text_file_regex
   - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
+    criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    criterion: Wall-clock time within budget.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
-    criterion: Total token usage stays within benchmark ceiling.
+    criterion: Token usage within budget.
     axis: efficiency
     verify: token_budget

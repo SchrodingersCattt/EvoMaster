@@ -23,6 +23,14 @@ _ROLE_TO_MESSAGE_MODEL: dict[str, type[Message]] = {
     Role.TOOL.value: ToolMessage,
 }
 
+MARKERS_V0 = {"<previous_session_summary>"}
+MARKERS_V1 = {"<compacted_history>"}
+
+
+def _has_acceptable_marker(content: str) -> bool:
+    # COMPAT:v0-checkpoint-marker -- keep accepting v0 marker until Phase 4.
+    return any(marker in content for marker in MARKERS_V0 | MARKERS_V1)
+
 
 def _message_role_name(raw: dict[str, Any]) -> str:
     role = raw.get("role")
@@ -87,5 +95,7 @@ def validate_base_messages(messages: list[Message]) -> None:
         raise ValueError("checkpoint base_messages must not contain SystemMessage")
 
     first_content = (messages[0].content or "").strip()
-    if "<previous_session_summary>" not in first_content:
-        raise ValueError("checkpoint base_messages[0] must be compact context bundle")
+    if not _has_acceptable_marker(first_content):
+        raise ValueError(
+            "checkpoint base_messages[0] must contain compact context bundle marker"
+        )

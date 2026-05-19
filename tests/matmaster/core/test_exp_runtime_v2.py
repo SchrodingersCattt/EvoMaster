@@ -18,6 +18,8 @@ from matmaster.types.messages import (
     LLMResponse,
     StreamChunk,
 )
+from matmaster.types.run_metadata import RunMetadata
+from matmaster.types.runtime_ports import BohriumRuntimeSnapshot
 
 # ── Minimal mocks for Exp.build_runtime() tests ──────────
 
@@ -97,7 +99,7 @@ async def test_build_runtime_uses_runtime_ports_history(
 ) -> None:
     from matmaster.config.exp import ExpConfig
     from matmaster.core.exp import Exp
-    from matmaster.types.context import PlaygroundContext
+    from matmaster.core.playground import PlaygroundContext
     from matmaster.types.runtime_ports import (
         PlaygroundCompactionPort,
         PlaygroundRuntimePorts,
@@ -110,8 +112,15 @@ async def test_build_runtime_uses_runtime_ports_history(
         def all_events(self):
             return [{"event_id": 20, "source": "runtime"}]
 
+        async def load_events(self, query):
+            self.context_query = query
+            return ()
+
         def latest_checkpoint_covered_until_event_id(self):
             return 20
+
+        def latest_scope_event_id(self):
+            return 25
 
     ctx = PlaygroundContext(
         workdir=tmp_path,
@@ -125,26 +134,47 @@ async def test_build_runtime_uses_runtime_ports_history(
     )
 
     runtime = await Exp(ExpConfig(name="test")).build_runtime(ctx)
-    rehydrator = runtime.spec.compactor._rehydrator
 
-    assert rehydrator._get_query_events() == [{"event_id": 2, "source": "runtime"}]
-    assert rehydrator._get_all_events() == [{"event_id": 20, "source": "runtime"}]
-    assert rehydrator._get_latest_checkpoint_covered_until_event_id() == 20
+    assert runtime.spec.context_assembler is runtime.spec.compactor._context_assembler
+    assert runtime.spec.session_events_port is not None
+    assert runtime.spec.session_jobs_port is not None
+    assert runtime.spec.compactor._runtime_covered_until_provider() == 25
 
 
 @pytest.mark.asyncio
-async def test_build_runtime_passes_current_input_context_to_kernel_meta(
+async def test_build_runtime_missing_runtime_history_has_no_scope_boundary(
     tmp_path: Path,
 ) -> None:
     from matmaster.config.exp import ExpConfig
     from matmaster.core.exp import Exp
-    from matmaster.types.context import PlaygroundContext
-    from matmaster.types.current_input import CurrentInputContext
+    from matmaster.core.playground import PlaygroundContext
 
-    current_input_context = CurrentInputContext.from_values(
+    ctx = PlaygroundContext(
+        workdir=tmp_path,
+        execution_workdir=str(tmp_path),
+        session_type="local",
+        cache_area=tmp_path / "cache",
+        llm_provider=_MockProvider(),
+    )
+
+    runtime = await Exp(ExpConfig(name="test")).build_runtime(ctx)
+
+    assert runtime.spec.compactor._runtime_covered_until_provider() is None
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_passes_turn_input_to_kernel_spec(
+    tmp_path: Path,
+) -> None:
+    from matmaster.config.exp import ExpConfig
+    from matmaster.context.sources.turn_input import TurnInput
+    from matmaster.core.exp import Exp
+    from matmaster.core.playground import PlaygroundContext
+
+    turn_input = TurnInput.from_values(
         user_text="current task",
         files=["https://oss.example.com/chat/current.cif"],
-        pre_query_scope_event_id=12,
+        pre_turn_history_event_id=12,
     )
     ctx = PlaygroundContext(
         workdir=tmp_path,
@@ -152,12 +182,12 @@ async def test_build_runtime_passes_current_input_context_to_kernel_meta(
         session_type="local",
         cache_area=tmp_path / "cache",
         llm_provider=_MockProvider(),
-        run_meta={"current_input_context": current_input_context},
+        metadata=RunMetadata(turn_input=turn_input),
     )
 
     runtime = await Exp(ExpConfig(name="test")).build_runtime(ctx)
 
-    assert runtime.spec.meta["current_input_context"] == current_input_context
+    assert runtime.spec.turn_input == turn_input
 
 
 def _make_playground_context(
@@ -167,7 +197,7 @@ def _make_playground_context(
     llm_provider: Any = None,
 ) -> Any:
     """Build a minimal PlaygroundContext-like object."""
-    from matmaster.types.context import PlaygroundContext
+    from matmaster.core.playground import PlaygroundContext
 
     ctx = PlaygroundContext(
         workdir=Path(workdir),
@@ -229,6 +259,24 @@ class TestBuildRuntimeFullToolRunner:
 
         assert runtime.spec.tool_catalog is not None
         assert isinstance(runtime.spec.tool_catalog, ToolCatalog)
+
+    @pytest.mark.asyncio
+    async def test_build_runtime_identity_uses_explicit_session_id(self) -> None:
+        from matmaster.core.exp import Exp
+
+        config = _make_exp_config()
+        exp = Exp(config)
+        ctx = _make_playground_context().model_copy(
+            update={
+                "session_id": "sess-explicit",
+                "metadata": RunMetadata(task_id="task-1"),
+            }
+        )
+
+        runtime = await exp.build_runtime(ctx)
+
+        assert runtime.spec.run_identity.task_id == "task-1"
+        assert runtime.spec.run_identity.session_id == "sess-explicit"
 
     @pytest.mark.asyncio
     async def test_spec_has_runtime_topology(self) -> None:
@@ -366,14 +414,8 @@ class TestBuildRuntimeFullToolRunner:
 
         config = _make_exp_config()
         exp = Exp(config)
-        ctx = _make_playground_context().model_copy(
-            update={
-                "run_meta": {
-                    "bohrium": {
-                        "remote_workspace_root": "/share",
-                    }
-                }
-            }
+        ctx = _make_playground_context().with_bohrium(
+            BohriumRuntimeSnapshot(remote_workspace_root="/share")
         )
 
         runtime = await exp.build_runtime(ctx)
@@ -407,15 +449,15 @@ class TestBuildRuntimeFullToolRunner:
         assert "/personal/.matmaster/skills" in glob_tool._path_access_roots
         assert "/personal/.matmaster/skills" in grep_tool._path_access_roots
 
-    def test_build_runtime_seeds_bohrium_registry_from_run_meta(self) -> None:
+    def test_build_runtime_seeds_bohrium_registry_from_metadata(self) -> None:
         from matmaster.core.exp import Exp
 
         config = _make_exp_config()
         exp = Exp(config)
         ctx = _make_playground_context().model_copy(
             update={
-                "run_meta": {
-                    "bohrium_rebuild_events": [
+                "metadata": RunMetadata(
+                    bohrium_rebuild_events=(
                         {
                             "action": "submit",
                             "job_id": "job-1",
@@ -435,8 +477,8 @@ class TestBuildRuntimeFullToolRunner:
                             "status": "Running",
                             "cached": True,
                         },
-                    ]
-                }
+                    )
+                )
             }
         )
 
@@ -456,22 +498,25 @@ class TestBuildRuntimeFullToolRunner:
         self,
     ) -> None:
         from matmaster.core.exp import Exp
+        from matmaster.types.figures import FigureUploadConfig
+        from matmaster.types.runtime_ports import FigureUploadPort
 
-        figure_upload_config = {
-            "bucket": "figures",
-            "rules": {"enabled": True, "formats": ["png", "svg"]},
-        }
+        figure_upload_config = FigureUploadConfig(
+            session_id="sess-1",
+            task_id="task-1",
+            asset_key_prefix="figures/sess-1/task-1",
+            upload_bytes=lambda data, name: f"https://oss.example/{name}",
+        )
         config = _make_exp_config()
         exp = Exp(config)
-        ctx = _make_playground_context().model_copy(
-            update={"run_meta": {"figure_upload_config": figure_upload_config}}
+        ctx = _make_playground_context().with_runtime_port(
+            figure_upload=FigureUploadPort(config=figure_upload_config)
         )
 
         runtime = await exp.build_runtime(ctx)
 
         stored = runtime.spec.tool_runner.state.get("figure_upload_config")
         assert stored is figure_upload_config
-        assert stored == figure_upload_config
 
 
 # ── ESIN-01: run_stream() yields events and runs cleanup ─
@@ -731,7 +776,7 @@ class TestActivePlanesNewNames:
         """WebSearch in builtin_cfg activates EXTERNAL_SERVICE plane."""
         from matmaster.config.exp import ExpConfig
         from matmaster.core.exp import Exp
-        from matmaster.types.context import PlaygroundContext
+        from matmaster.core.playground import PlaygroundContext
         from matmaster.types.topology import ToolPlane
 
         config = ExpConfig(name="test", tools={"builtin": ["WebSearch"]})

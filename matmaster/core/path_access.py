@@ -5,7 +5,7 @@ from __future__ import annotations
 import posixpath
 from typing import Any
 
-from matmaster.types.context import PlaygroundContext
+from matmaster.core.playground import PlaygroundContext
 from matmaster.types.topology import PathAccessRoot
 
 
@@ -48,14 +48,12 @@ def derive_path_access_roots(ctx: PlaygroundContext) -> tuple[PathAccessRoot, ..
             _add(root, "skill")
     _add(getattr(session, "remote_user_skills_root", None), "skill")
 
-    run_meta = getattr(ctx, "run_meta", {}) or {}
-    bohrium = run_meta.get("bohrium") if isinstance(run_meta, dict) else None
-    if isinstance(bohrium, dict):
-        _add(bohrium.get("remote_project_root"), "runtime")
-        remote_workspace_root = bohrium.get("remote_workspace_root")
-        if isinstance(remote_workspace_root, str) and remote_workspace_root.strip():
+    snapshot = ctx.runtime_ports.bohrium.snapshot
+    if snapshot is not None:
+        _add(snapshot.remote_project_root, "runtime")
+        if snapshot.remote_workspace_root:
             _add(
-                posixpath.join(remote_workspace_root, ".matmaster"),
+                posixpath.join(snapshot.remote_workspace_root, ".matmaster"),
                 "project_runtime",
             )
 

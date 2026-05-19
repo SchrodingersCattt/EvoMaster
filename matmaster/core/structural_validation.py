@@ -93,20 +93,6 @@ class StructuralValidation:
         return ToolDecision(decision="allow", modified_args=modified_args)
 
     @staticmethod
-    def _normalize_workspace_path(root: str, raw_path: str) -> str:
-        """Resolve a raw path against workspace root and enforce boundary."""
-        root_path = PurePosixPath(posixpath.normpath(root))
-        if raw_path.startswith("/"):
-            normalized = PurePosixPath(posixpath.normpath(raw_path))
-        else:
-            normalized = PurePosixPath(
-                posixpath.normpath(posixpath.join(root, raw_path))
-            )
-        if not normalized.is_relative_to(root_path):
-            raise ValueError("outside workspace boundary")
-        return str(normalized)
-
-    @staticmethod
     def _operation_for_tool(tool_instance: ToolInstance) -> PathAccessOperation:
         """Infer path access operation from the tool's declared capabilities."""
         capabilities = tool_instance.tool_spec.capabilities

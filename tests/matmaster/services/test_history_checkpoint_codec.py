@@ -69,6 +69,19 @@ def test_validate_base_messages_accepts_compact_user_bundle() -> None:
     validate_base_messages([_compact_user_message()])
 
 
+def test_validate_base_messages_accepts_compacted_history_marker() -> None:
+    validate_base_messages(
+        [
+            UserMessage(
+                content=(
+                    "<user_instructions>\nUse SI units.\n</user_instructions>"
+                    "\n\n<compacted_history>\nsummary\n</compacted_history>"
+                )
+            )
+        ]
+    )
+
+
 def test_validate_base_messages_rejects_system_message_anywhere() -> None:
     with pytest.raises(ValueError, match="must not contain SystemMessage"):
         validate_base_messages(

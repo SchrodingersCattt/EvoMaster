@@ -12,8 +12,9 @@ import pytest
 
 import matmaster.config.loader as matmaster_loader
 from matmaster.bohrium.types import BohriumRuntimeSnapshot
+from matmaster.core.playground import PlaygroundContext
 from matmaster.types.cancellation import CancellationController
-from matmaster.types.context import PlaygroundContext
+from matmaster.types.run_metadata import RunMetadata
 from tests.matmaster.core.conftest import MockLLMProvider
 
 _src_services = pytest.importorskip(
@@ -52,6 +53,16 @@ def _make_bohrium_service(sessions_service: Any | None = None) -> BohriumSetupSe
         sessions_service=sessions_service or MagicMock(),
         event_sink=lambda event: None,
     )
+
+
+def _allow_user_turn_context_write(events_table: MagicMock) -> None:
+    events_table.get_history_checkpoints.return_value = []
+    events_table.has_user_turn_context.return_value = False
+    events_table.get_session_user_query_events.return_value = []
+    events_table.query_context_events.return_value = []
+    events_table.get_recent_context_anchor_events.return_value = []
+    events_table.query_user_turn_context_by_invocation.return_value = None
+    events_table.add_event.return_value = True
 
 
 @patch.object(arb, '_run_clear_remote_proxy', MagicMock())
@@ -395,7 +406,7 @@ def test_run_agent_loads_exp_config_without_passing_skill_sync_to_bohrium_setup(
         workdir=tmp_path / 'workspace',
         session_type='local',
         cache_area=tmp_path / 'cache',
-        run_meta={'run_dir': str(tmp_path), 'task_id': 'test-task'},
+        metadata=RunMetadata(run_dir=str(tmp_path), task_id='test-task'),
     )
     mock_pg.prepare.return_value = mock_pg_ctx
     mock_pg.config_path = Path('config/config.yaml')
@@ -414,7 +425,9 @@ def test_run_agent_loads_exp_config_without_passing_skill_sync_to_bohrium_setup(
 
     with (
         patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
-        patch('src.services.agent_run_service.BohriumSetupService') as mock_bohrium_cls,
+        patch(
+            'src.services.agent_run_bohrium_stage.BohriumSetupService'
+        ) as mock_bohrium_cls,
         patch('src.services.agent_run_service.get_chat_events_table') as mock_events_fn,
         patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
         patch('src.services.agent_run_service.use_quota') as mock_use_quota,
@@ -434,6 +447,7 @@ def test_run_agent_loads_exp_config_without_passing_skill_sync_to_bohrium_setup(
 
         mock_events_table = MagicMock()
         mock_events_table.get_session_events.return_value = []
+        _allow_user_turn_context_write(mock_events_table)
         mock_events_fn.return_value = mock_events_table
         mock_redis_fn.return_value = MagicMock()
 
@@ -450,6 +464,7 @@ def test_run_agent_loads_exp_config_without_passing_skill_sync_to_bohrium_setup(
                 cancel_token=CancellationController().token,
                 mode='direct',
                 task_id='task-spec-order',
+                invocation_id='inv-spec-order',
             )
         )
 
@@ -479,7 +494,7 @@ def test_execution_binding_before_build_runtime(
         workdir=tmp_path / 'workspace',
         session_type='local',
         cache_area=tmp_path / 'cache',
-        run_meta={'run_dir': str(tmp_path), 'task_id': 'test-task'},
+        metadata=RunMetadata(run_dir=str(tmp_path), task_id='test-task'),
     )
     mock_pg.prepare.return_value = mock_pg_ctx
     mock_pg.config_path = Path('config/config.yaml')
@@ -528,7 +543,9 @@ def test_execution_binding_before_build_runtime(
 
     with (
         patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
-        patch('src.services.agent_run_service.BohriumSetupService') as mock_bohrium_cls,
+        patch(
+            'src.services.agent_run_bohrium_stage.BohriumSetupService'
+        ) as mock_bohrium_cls,
         patch('src.services.agent_run_service.get_chat_events_table') as mock_events_fn,
         patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
         patch('src.services.agent_run_service.use_quota') as mock_use_quota,
@@ -540,10 +557,11 @@ def test_execution_binding_before_build_runtime(
 
         mock_events_table = MagicMock()
         mock_events_table.get_session_events.return_value = []
+        _allow_user_turn_context_write(mock_events_table)
         mock_events_fn.return_value = mock_events_table
         mock_redis_fn.return_value = MagicMock()
 
-        async def _mock_use_quota(uid: str) -> None:
+        async def _mock_use_quota(uid: str, **_: Any) -> None:
             pass
 
         mock_use_quota.side_effect = _mock_use_quota
@@ -556,6 +574,7 @@ def test_execution_binding_before_build_runtime(
                 cancel_token=CancellationController().token,
                 mode='direct',
                 task_id='task-exec-bind',
+                invocation_id='inv-exec-bind',
             )
         )
 
@@ -563,11 +582,12 @@ def test_execution_binding_before_build_runtime(
     assert pg_passed.session is mock_exec
     assert pg_passed.session_type == 'ssh'
     assert pg_passed.execution_workdir == '/remote/ws'
-    bmeta = pg_passed.run_meta.get('bohrium', {})
-    assert 'execution_session' not in bmeta
-    assert bmeta.get('ssh_attached') is True
-    assert bmeta.get('execution_workdir') == '/remote/ws'
-    assert bmeta.get('session_type') == 'ssh'
+    snapshot = pg_passed.runtime_ports.bohrium.snapshot
+    assert snapshot is not None
+    assert snapshot.ssh_attached is True
+    assert snapshot.remote_workspace_root == '/share'
+    assert snapshot.remote_project_root == '/share/.matmaster'
+    assert 'bohrium' not in RunMetadata.model_fields
 
 
 @patch.object(arb, "_run_clear_remote_proxy", MagicMock())

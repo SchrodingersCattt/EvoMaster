@@ -10,8 +10,8 @@ import pytest
 from matmaster.config.exp import ExpConfig, ExpSubagentMeta, ExpToolsConfig
 from matmaster.core.exp import Exp
 from matmaster.core.hooks import HookExecutor
+from matmaster.core.playground import PlaygroundContext
 from matmaster.tools.tool_registry import ToolRegistry
-from matmaster.types.context import PlaygroundContext
 from matmaster.types.runtime import (
     AgentRuntime,
     AgentRuntimeSpec,
@@ -107,12 +107,15 @@ class TestExpAssemble:
         spec = await exp.assemble(ctx)
         assert "guards" not in type(spec).model_fields
 
-    async def test_meta_is_empty(self) -> None:
-        """Meta bag is empty with new ExpConfig design."""
+    async def test_runtime_identity_defaults_empty(self) -> None:
+        """Runtime identity is explicit and empty at assemble time."""
         exp = Exp(ExpConfig(name='test'))
         ctx = _make_ctx()
         spec = await exp.assemble(ctx)
-        assert spec.meta == {}
+        assert spec.run_identity.task_id == ""
+        assert spec.run_identity.session_id == ""
+        assert spec.run_identity.spawn_id is None
+        assert spec.turn_input is None
 
     async def test_llm_provider_from_ctx(self) -> None:
         """llm_provider comes from ctx, not config."""
@@ -372,7 +375,7 @@ class TestExpCleanup:
 
 
 class TestIdentityOverride:
-    """Identity from config is forwarded to ContextBuilder.build_system_prompt()."""
+    """Identity from config is forwarded to SystemPromptBuilder.build_system_prompt()."""
 
     async def test_identity_from_config(self) -> None:
         exp = Exp(
@@ -402,7 +405,7 @@ class TestIdentityOverride:
 
 
 class TestSystemPromptOverride:
-    """system_prompt from config is forwarded to ContextBuilder.build_system_prompt()."""
+    """system_prompt from config is forwarded to SystemPromptBuilder.build_system_prompt()."""
 
     async def test_system_prompt_from_config(self) -> None:
         exp = Exp(
@@ -648,7 +651,8 @@ class TestExpCompaction:
             runtime = await exp.build_runtime(ctx)
 
         assert runtime.spec.compactor is not None
-        assert runtime.spec.compactor._summary_provider is runtime.spec.llm_provider
+        removed_attr = "_summary" + "_provider"
+        assert not hasattr(runtime.spec.compactor, removed_attr)
 
 
 # ── TestSessionlessBuiltins ────────────────────────────
