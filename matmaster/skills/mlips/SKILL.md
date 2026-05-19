@@ -119,6 +119,8 @@ pair_style  deepmd frozen_model.pth
 pair_coeff  * *
 ```
 
+**Type-map alignment:** The frozen model keeps the full-element type_map by default. LAMMPS data file atom types must use the same element indices (e.g., Fe=26, Ni=28 — not compact 1,2). See `reference/dpa_models.md` § "Use in LAMMPS" for full details and the compact `--type-map` alternative.
+
 Notes:
 - The frozen `.pth` is also directly usable by ASE: `from deepmd.calculator import DP; atoms.calc = DP("frozen_model.pth")`.
 - The ASE workflows provided by this skill (optimize/phonon/MD/elastic/NEB/adsorption) load the **multi-head `.pt`** directly and select the head via `--head`, so freezing is only required when you actually need LAMMPS.

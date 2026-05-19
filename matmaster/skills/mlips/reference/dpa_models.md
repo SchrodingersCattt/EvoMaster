@@ -82,6 +82,13 @@ pair_style  deepmd frozen_model.pth
 pair_coeff  * *
 ```
 
+**Type-map alignment (critical):** The frozen model preserves the full-periodic-table type_map from pretraining (H=1, He=2, ..., Fe=26, ..., Ni=28, ...). The LAMMPS data file atom types MUST match these indices. Two valid approaches:
+
+- **Full-index approach** (recommended): declare ≥N atom types in the data file (where N = max atomic number used), assign Fe to type 26 and Ni to type 28 in the Masses section. Types 1-25 and 27 are unused but must be declared.
+- **Compact approach** (advanced): freeze with `--type-map Fe Ni` to produce a model with only 2 types. Then Fe=1, Ni=2 in the data file. This overrides the default full type_map.
+
+If you use compact types (1, 2) but freeze without `--type-map`, LAMMPS will silently map type 1 to H and type 2 to He — producing garbage results.
+
 Run via `$PREFIX/bin/lmp -in in.lmp` (use the `lmp` binary shipped with the deepmd environment, not a system LAMMPS).
 
 ### 4. Optional: zero-shot bias adjustment
