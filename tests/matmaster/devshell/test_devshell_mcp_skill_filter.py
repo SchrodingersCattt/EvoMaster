@@ -118,7 +118,7 @@ def test_mcp_runtime_patch_limits_mat_sg_lazy_tools(
         tools=ExpToolsConfig(builtin=["execute_bash"]),
         skills=ExpSkillsConfig(
             enabled=True,
-            skills_root=["matmaster/skills/atomic-structure/sample-atomic-structures"],
+            skills_root=["matmaster/skills/sample-atomic-structures"],
             mcp_runtime_patch={
                 "tool_include_only": {
                     "mat_sg": ["submit_generate_calypso_structures"],

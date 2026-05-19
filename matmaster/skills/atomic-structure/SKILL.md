@@ -6,16 +6,15 @@ skill_type: orchestrator
 
 # Atomic Structure Decision Tree
 
-Use this skill as the single entry point for atomistic structure construction,
-inspection, retrieval, conversion, editing, and assembly. The leaves below are
-implementation documents. Load the referenced document when a decision reaches
-that leaf; the leaf SKILL.md does not need to be independently selected by the
-router.
+Use this skill as the fallback entry point for ambiguous, compound, or
+multi-step atomistic structure workflows. The leaves below are first-class
+skills in the router; when this decision tree reaches a leaf, load that
+leaf's SKILL.md and follow its narrower workflow.
 
 ## Step 0 - Inspect First
 
 For any task with an existing structure file, inspect before choosing a
-mutation or construction path. Use `./inspect-atomic-structure/SKILL.md`.
+mutation or construction path. Use `../inspect-atomic-structure/SKILL.md`.
 
 Record at least:
 
@@ -46,18 +45,18 @@ reporting success.
 
    If the user gives a formula/prototype, space group plus Wyckoff positions,
    lattice constants, SMILES, or polymer sequence and wants a new structure from
-   specification, use `./build-atomic-structure/SKILL.md`.
+   specification, use `../build-atomic-structure/SKILL.md`.
 
    If the user asks for global or property-conditional candidate generation
    rather than a deterministic known structure, use
-   `./sample-atomic-structures/SKILL.md`.
+   `../sample-atomic-structures/SKILL.md`.
 
 2. **Input is an isolated molecule**
 
-   Use `./build-atomic-structure/SKILL.md` for SMILES-to-3D or molecule file
+   Use `../build-atomic-structure/SKILL.md` for SMILES-to-3D or molecule file
    generation. If the molecule must be packed in a box, placed on a surface, or
    combined with another structure, route next to
-   `./assemble-atomic-structure/SKILL.md`.
+   `../assemble-atomic-structure/SKILL.md`.
 
 3. **Input is a molecular crystal or contains molecular fragments under PBC**
 
@@ -70,7 +69,7 @@ reporting success.
    - `Z' > 1`, `_chemical_formula_moiety`, guest/solvent molecules, or
      partial-occupancy molecular fragments in a CIF.
 
-   Use `./operate-molecular-crystal/SKILL.md` when an operation could cut,
+   Use `../operate-molecular-crystal/SKILL.md` when an operation could cut,
    delete, extract, desolvate, perturb, or order whole molecular fragments. This
    includes molecular-crystal slab cuts, molecule-cluster vacancies, guest
    extraction, desolvation, and disorder ordering.
@@ -83,7 +82,7 @@ reporting success.
    - Mixed species on one crystallographic site.
    - Alternate locations, split positions, or moiety constraints.
 
-   Use `./operate-molecular-crystal/SKILL.md` axis B for ordered replicas and
+   Use `../operate-molecular-crystal/SKILL.md` axis B for ordered replicas and
    moiety-aware crystallographic fixes. Do not emit fractional stoichiometry as
    a finished structure.
 
@@ -97,9 +96,9 @@ reporting success.
    - Site selection by random seed, Wyckoff label, symmetry orbit, or exact
      count.
 
-   Use `./transform-atomic-structure/SKILL.md`. If inspection says the input is
+   Use `../transform-atomic-structure/SKILL.md`. If inspection says the input is
    a molecular crystal and the requested edit would break molecular
-   connectivity, reroute to `./operate-molecular-crystal/SKILL.md`.
+   connectivity, reroute to `../operate-molecular-crystal/SKILL.md`.
 
 6. **Task combines multiple structural pieces**
 
@@ -110,7 +109,7 @@ reporting success.
      amorphous packing, or crosslink network.
    - Multiple inputs that must become one simulation object.
 
-   Use `./assemble-atomic-structure/SKILL.md`. Inspect every input first and
+   Use `../assemble-atomic-structure/SKILL.md`. Inspect every input first and
    the final output after assembly.
 
 7. **Task is a polar or Tasker-sensitive surface**
@@ -138,7 +137,7 @@ reporting success.
    - Need to decide coordination number, ideal polyhedron, CShM shape, or local
      packing shell.
 
-   Use `./operate-molecular-crystal/SKILL.md` axis C or D. These axes are
+   Use `../operate-molecular-crystal/SKILL.md` axis C or D. These axes are
    selected by the geometric task, not by `unit_class`; they may apply to
    inorganic surfaces and defects as well as molecular crystals.
 

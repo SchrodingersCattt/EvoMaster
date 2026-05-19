@@ -2,7 +2,7 @@
 name: retrieve-structure
 description: "Trigger to acquire crystal structure files: retrieve from databases, literature, direct URL, or supplementary HTML; also format conversion and post-download validation."
 skill_type: operator
-depends_on: mcp-mat-struct-db, atomic-structure, mcp-mat-doc
+depends_on: mcp-mat-struct-db, mcp-mat-doc
 ---
 
 <!-- multi-server: mat_struct_db, mat_sg, mat_sn, mat_doc -->

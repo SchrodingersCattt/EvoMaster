@@ -2,7 +2,6 @@
 name: operate-molecular-crystal
 description: "Trigger for molecular-crystal edits/local-geometry repairs: topology-preserved slab cuts, stoichiometry-preserved vacancy/guest removal, desolvation, disorder/occupancy resolution, hydrogen completion, perturbation, coordination/CShM analysis."
 skill_type: operator
-depends_on: inspect-atomic-structure
 ---
 
 # Operate with molcrys-kit

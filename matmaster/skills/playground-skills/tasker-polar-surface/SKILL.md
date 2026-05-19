@@ -1,7 +1,7 @@
 ---
 name: tasker-polar-surface
 description: "Use for ionic, heterovalent, or polar surface/slab tasks needing Tasker-aware construction, adjustment, or validation of dipole-balanced/symmetric/non-polar terminations."
-depends_on: atomic-structure, mcp-mat-doc
+depends_on: mcp-mat-doc
 ---
 
 <!-- multi-server: mat_sg, mat_sn, mat_doc -->

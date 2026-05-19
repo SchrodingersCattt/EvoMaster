@@ -103,9 +103,9 @@ Case 文件为 `evaluation/skill_trigger/cases.yaml`，每个 Skill 一段：
   可以使用。
 - case 以"应然正确"为目标：先保证意图清晰、科学语义合理、边界可区分，再考虑运行
   评测。若 runtime 结果不稳定，通常说明 `description` 触发信号不足。
-- 若某个 `skill_type: orchestrator` 父 Skill 通过决策树吸收多个叶子文档，触发率
-  cases 只写父 Skill 一段；positive 可用 YAML 注释 `# leaf: <leaf-name>` 标记覆盖
-  的决策树叶子，便于审查叶子覆盖率，但不要为已隐藏的叶子文档再建独立 cases 段。
+- 若某个 `skill_type: orchestrator` 父 Skill 通过决策树串起多个并列 leaf
+  skill，触发率 cases 必须为每个 leaf 单独写一段；父 Skill 的 cases
+  仅用于用户提问模糊、多步、或没明确指向某 leaf 的兜底场景。
 
 本地基础检查：
 

@@ -197,32 +197,106 @@ cases:
 
   - skill: atomic-structure
     positive:
-      - "看一下这个 CIF 的空间群和 Wyckoff 位点"                                # leaf: inspect
-      - "这个 PDB 没有 CRYST1，先判断按周期结构还是分子处理"                  # leaf: inspect
-      - "搭一个 fcc Ni 的原胞"                                                  # leaf: build
-      - "用空间群 P6_3mc + Wyckoff 位置建一个 wurtzite ZnS"                     # leaf: build
-      - "SMILES CCC=O 转成带 3D 坐标的 SDF"                                     # leaf: build
-      - "Mg-Si-O 三元做一次全局结构搜索"                                        # leaf: sample
-      - "把这个 POSCAR 扩成 3x3x2"                                              # leaf: transform
-      - "TiO2 里随机替换 5% 的 Ti 为 Nb"                                        # leaf: transform
-      - "从 Cu bulk 切 (110) slab，5 层，真空 15 Å"                             # leaf: assemble
-      - "在 Pt(111) top 位放一个 CO 分子"                                       # leaf: assemble
-      - "切 LiCoO2 (003) slab，极性面，auto-fix 偶极"                           # leaf: tasker-polar-surface
-      - "ZnO (0001) 是不是极性面，先判一下再切"                                 # leaf: tasker-polar-surface
-      - "这个分子晶体 CIF 切 (010) 表面，不要切断分子"                          # leaf: operate-molecular-crystal
-      - "CIF 里 Br/Cl 有混乱占位，给一个 ordered 单胞"                          # leaf: operate-molecular-crystal
-      - "文献 SI 这个 CIF 链接，下下来并 validate"                              # leaf: retrieve-structure
-      - "把这个 CIF 转成 POSCAR，元素顺序也理一下"                              # leaf: retrieve-structure
-      - "Build a primitive cell of PbS rocksalt from the lattice constant"      # leaf: build
-      - "Place a single H2O on the bridge site of TiO2(110)"                    # leaf: assemble
+      - "先下载一个 CIF，validate 后转 POSCAR，再扩成 2x2x1 并在表面放 CO"
+      - "这个结构任务要先判断是分子晶体还是普通晶体，再决定 build、transform 还是 assemble 路径"
+      - "我有一个含混乱占位的 CIF，想先清理、切 slab、最后检查输出结构"
     negative:
       - "帮我用 VASP 算一下这个 POSCAR 的能带"                  # → vasp
       - "帮我用 LAMMPS 往 GPU 集群上提交 MD 任务"               # → lammps
       - "用 GPUMD 计算这个材料的热导率"                          # → gpumd
       - "分析这个 VASP 产生的 XDATCAR 轨迹，计算 RDF"            # → data-analysis / md-analysis
-      - "这是 CP2K 计算的日志和结构，用 dpdata 转成可用于 DeePMD 训练的数据"  # → mlips
       - "把这个 CIF 提交到 IUCr checkCIF 看一下报告"             # → checkcif-validator
+
+  - skill: inspect-atomic-structure
+    positive:
+      - "看一下这个 CIF 的空间群和 Wyckoff 位点"
+      - "这个 PDB 没有 CRYST1，先判断按周期结构还是分子处理"
+      - "判断这个 XYZ 是孤立分子、1D 链、2D slab 还是 3D 周期结构"
+      - "检查这个 POSCAR 的元素顺序、晶格和真空层是否合理"
+    negative:
+      - "搭一个 fcc Ni 的原胞"                                  # → build-atomic-structure
+      - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
+      - "在 Pt(111) top 位放一个 CO 分子"                       # → assemble-atomic-structure
+      - "文献 SI 这个 CIF 链接，下下来并 validate"              # → retrieve-structure
+      - "帮我用 VASP 算一下这个 POSCAR 的能带"                  # → vasp
+
+  - skill: build-atomic-structure
+    positive:
+      - "搭一个 fcc Ni 的原胞"
+      - "用空间群 P6_3mc + Wyckoff 位置建一个 wurtzite ZnS"
+      - "SMILES CCC=O 转成带 3D 坐标的 SDF"
+      - "Build a primitive cell of PbS rocksalt from the lattice constant"
+    negative:
+      - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
+      - "TiO2 里随机替换 5% 的 Ti 为 Nb"                        # → transform-atomic-structure
+      - "从 Cu bulk 切 (110) slab，5 层，真空 15 Å"             # → assemble-atomic-structure
+      - "文献 SI 这个 CIF 链接，下下来并 validate"              # → retrieve-structure
+      - "用 CALYPSO 搜 Mg-Si-O 的候选晶体结构"                  # → sample-atomic-structures
+
+  - skill: sample-atomic-structures
+    positive:
+      - "Mg-Si-O 三元做一次全局结构搜索"
+      - "用 CALYPSO 对 Li-P-S 体系跑一次 evolutionary crystal structure search"
+      - "用 CrystalFormer 按目标带隙条件生成一批候选晶体"
+    negative:
+      - "mp-149 的 CIF 帮我搜一下"                             # → mcp-mat-struct-db
+      - "搭一个 fcc Ni 的原胞"                                  # → build-atomic-structure
+      - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
+      - "文献 SI 这个 CIF 链接，下下来并 validate"              # → retrieve-structure
+      - "帮我用 VASP 做结构优化"                                # → vasp
+
+  - skill: transform-atomic-structure
+    positive:
+      - "把这个 POSCAR 扩成 3x3x2"
+      - "TiO2 里随机替换 5% 的 Ti 为 Nb"
+      - "对这个晶胞沿 c 方向施加 2% 拉伸应变"
+      - "在 NaCl 超胞里删一个 Cl 做 vacancy defect"
+    negative:
+      - "搭一个 fcc Ni 的原胞"                                  # → build-atomic-structure
+      - "从 Cu bulk 切 (110) slab，5 层，真空 15 Å"             # → assemble-atomic-structure
+      - "这个分子晶体 CIF 切 (010) 表面，不要切断分子"          # → operate-molecular-crystal
+      - "切 LiCoO2 (003) slab，极性面，auto-fix 偶极"           # → tasker-polar-surface
+      - "帮我用 LAMMPS 跑 NPT"                                  # → lammps
+
+  - skill: assemble-atomic-structure
+    positive:
+      - "从 Cu bulk 切 (110) slab，5 层，真空 15 Å"
+      - "在 Pt(111) top 位放一个 CO 分子"
+      - "Place a single H2O on the bridge site of TiO2(110)"
+      - "把两个 slab 叠成一个异质界面并加真空层"
+    negative:
+      - "搭一个 fcc Ni 的原胞"                                  # → build-atomic-structure
+      - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
+      - "这个分子晶体 CIF 切 (010) 表面，不要切断分子"          # → operate-molecular-crystal
+      - "ZnO (0001) 是不是极性面，先判一下再切"                 # → tasker-polar-surface
+      - "把这个 CIF 转成 POSCAR，元素顺序也理一下"              # → retrieve-structure
+
+  - skill: operate-molecular-crystal
+    positive:
+      - "这个分子晶体 CIF 切 (010) 表面，不要切断分子"
+      - "CIF 里 Br/Cl 有混乱占位，给一个 ordered 单胞"
+      - "把这个 solvate molecular crystal 里的溶剂分子整分子删掉"
+      - "给这个有 dangling bond 的有机晶体表面补氢"
+    negative:
+      - "从 Cu bulk 切 (110) slab，5 层，真空 15 Å"             # → assemble-atomic-structure
+      - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
+      - "搭一个 fcc Ni 的原胞"                                  # → build-atomic-structure
+      - "切 LiCoO2 (003) slab，极性面，auto-fix 偶极"           # → tasker-polar-surface
+      - "帮我用 CP2K 做分子动力学"                              # → cp2k
+
+  - skill: tasker-polar-surface
+    positive:
+      - "切 LiCoO2 (003) slab，极性面，auto-fix 偶极"
+      - "ZnO (0001) 是不是极性面，先判一下再切"
+      - "帮我构造一个 rocksalt MgO(111) 的非极性对称 slab"
+      - "判断这个 perovskite (001) slab 的 Tasker type，并给稳定终止面"
+    negative:
+      - "从 Cu bulk 切 (110) slab，5 层，真空 15 Å"             # → assemble-atomic-structure
+      - "在 Pt(111) top 位放一个 CO 分子"                       # → assemble-atomic-structure
+      - "这个分子晶体 CIF 切 (010) 表面，不要切断分子"          # → operate-molecular-crystal
+      - "把这个 CIF 转成 POSCAR，元素顺序也理一下"              # → retrieve-structure
       - "用 VASPKIT 算这个 slab 的功函数"                       # → vaspkit-postprocess
+
 
   - skill: checkcif-validator
     positive:

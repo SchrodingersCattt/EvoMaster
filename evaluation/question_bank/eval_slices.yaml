@@ -49,6 +49,42 @@ slices:
       - "@struct_build,struct_transform,struct_molcrys,struct_surface,meta_database"
     count: 39
 
+  - target: "Skill: inspect-atomic-structure"
+    type: skill
+    slices:
+      - "@struct_build,struct_transform,struct_molcrys,struct_surface"
+    count: 0
+
+  - target: "Skill: build-atomic-structure"
+    type: skill
+    slices:
+      - "@struct_build"
+    count: 0
+
+  - target: "Skill: transform-atomic-structure"
+    type: skill
+    slices:
+      - "@struct_transform"
+    count: 0
+
+  - target: "Skill: assemble-atomic-structure"
+    type: skill
+    slices:
+      - "@struct_surface"
+    count: 0
+
+  - target: "Skill: operate-molecular-crystal"
+    type: skill
+    slices:
+      - "@struct_molcrys"
+    count: 0
+
+  - target: "Skill: sample-atomic-structures"
+    type: skill
+    slices:
+      - "@struct_build"
+    count: 0
+
   - target: "Skill: xrd + checkcif"
     type: skill
     slices:

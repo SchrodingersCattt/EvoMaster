@@ -4,6 +4,12 @@ categories:
       atomic-structure-ops:
         skills:
           - atomic-structure
+          - inspect-atomic-structure
+          - build-atomic-structure
+          - transform-atomic-structure
+          - assemble-atomic-structure
+          - operate-molecular-crystal
+          - sample-atomic-structures
       structure-search:
         skills:
           - mcp-mat-struct-db
