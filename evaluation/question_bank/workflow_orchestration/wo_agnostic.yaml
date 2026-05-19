@@ -3440,13 +3440,13 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_custom_dp_model_001_20260519
+- id: WO_custom_dp_model_001_20260521
   capability: workflow_orchestration
   domain: agnostic
   intent: Use a user-provided DeepMD .pt model file to run structure optimization,
     testing whether the agent can correctly inspect model metadata (type_map) and set
     up the calculation accordingly.
-  human_prompt_seed: '我有一个自训练的 DeepMD 模型，OSS 地址为 `https://bohrium.oss-cn-zhangjiakou.aliyuncs.com/13756/27666/store/upload/cd12300a-d3e6-4de9-9783-dd9899376cae/dpa-2.4-7M.pt`。请用它对
+  human_prompt_seed: '我有一个自训练的 DeepMD 模型，下载地址为 `https://store.aissquare.com/models/41d1cfb7-1a98-42a2-90a8-e6257db431ea/DPA2_medium_28_10M_rc0.pt`。请用它对
     FCC Cu（a=3.615 Å）做结构优化，输出 `cu_relaxed.cif`。'
   tags:
   - code_mlip
