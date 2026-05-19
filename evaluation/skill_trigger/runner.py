@@ -28,7 +28,7 @@ from matmaster.core.stream_drain import DrainResult
 from matmaster.providers.llm_factory import build_provider
 from matmaster.sessions.local import LocalSession
 from matmaster.types.cancellation import CancellationController
-from matmaster.types.context import PlaygroundContext
+from matmaster.core.playground import PlaygroundContext
 from matmaster.types.events import ToolCallEvent
 
 logger = logging.getLogger(__name__)
