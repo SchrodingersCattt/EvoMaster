@@ -142,6 +142,68 @@ The Task Scripts table is the agent's lookup for "which tool do I call." Require
 
 Include format specs (e.g., `stages.json` schema) immediately after the table — the agent needs them when constructing the command.
 
+## Operability Audit
+
+After writing or reviewing a SKILL.md, audit every rule for agent executability. A rule is **operable** if the agent can act on it without inference, improvisation, or consulting undefined concepts.
+
+### Test: Can the Agent Execute This?
+
+For each rule, ask: "If I give this rule to an agent with no other context, can it produce the correct action deterministically?"
+
+| Operable | Not operable |
+|----------|-------------|
+| "Run `dp --pt show <model> model-branch` to list heads" | "Do the internal check" |
+| "`--fmax 0.01` for optimization" | "Ensure proper convergence" |
+| "IF system contains surface + adsorbate → use OC22" | "When chemistry maps to a specialized head" |
+| "System chemistry doesn't match any row above → STOP" | "For unfamiliar chemistry" |
+
+### Common Operability Failures
+
+**1. Undefined subject** — rule uses a concept never defined in the skill:
+- "property class change" — what is a property class? Where is the list?
+- "unfamiliar chemistry" — familiar to whom? Agent has no memory.
+
+Fix: replace subjective terms with objective conditions or table lookups.
+
+**2. Unresolved procedure** — rule says "do X" but X is not a concrete action:
+- "first do the internal check" — what check? what command? where?
+- "internal lookup and human choice" — lookup where?
+
+Fix: replace with exact command or explicit step sequence.
+
+**3. Decision requires inference** — rule gives principles instead of a lookup table:
+- "chemistry maps to a documented specialized head" — agent must reason about what chemistry maps to what head.
+
+Fix: provide a decision table with trigger conditions in the left column and action in the right.
+
+**4. Scattered decision path** — agent needs information from 3+ locations to complete one action:
+- Head selection requires: (a) head names from Models paragraph, (b) selection rules from Decision Boundaries, (c) verification command from Conditional Routing, (d) availability from `dp --pt show`.
+
+Fix: consolidate into one self-contained section. All information needed for one decision lives in one place.
+
+### Operability Audit Procedure
+
+1. List every imperative statement (MUST, ALWAYS, DO NOT, run X, use Y)
+2. For each, classify: ✓ operable / ✗ needs inference / ? ambiguous trigger
+3. For each ✗ or ?: identify what's missing (undefined term? missing table? scattered info?)
+4. Fix by: adding decision table, replacing vague term with condition, or consolidating scattered info
+
+### Decision Table Pattern
+
+When a rule requires choosing between options based on context, always use a decision table:
+
+```markdown
+| Condition (agent can observe) | Action |
+|-------------------------------|--------|
+| System has surface + adsorbate molecules | Use head OC22 |
+| System is pure organic molecule | Use head OMol25 (DPA3.2 only) |
+| System is MOF/porous framework | Use head ODAC23 |
+| None of the above | Use OMat24 (DPA3.2) / Omat24 (DPA3.1) |
+| Uncertain which row applies | Run `dp --pt show`, present options to user |
+```
+
+Left column must be **observable** (agent can determine from the input structure/prompt), not **interpretive** (requires domain expertise the agent may not have).
+
 ## Quality Checklist
 
 Use when reviewing a finished SKILL.md:
@@ -154,3 +216,4 @@ Use when reviewing a finished SKILL.md:
 - [ ] Executable commands given where a check exists
 - [ ] Total length ≤ 120 lines (excluding frontmatter/blank lines) — if over, audit what can move to reference
 - [ ] Low-frequency paths (< 20% of tasks) in reference files, not SKILL.md body
+- [ ] Every imperative rule passes operability test (agent can act without inference)
