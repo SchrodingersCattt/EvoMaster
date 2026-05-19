@@ -1,6 +1,6 @@
 ---
 name: build-atomic-structure
-description: "Build a new atomic structure from specs when no input file exists: bulk crystal, molecule, or polymer chain. Not for modifying existing structures; use transform-atomic-structure or assemble-atomic-structure."
+description: "Build a new atomic structure from specs when no input file exists: bulk crystal, molecule, or polymer chain. Not for modifying existing structures; use transform-atomic-structure or assemble-atomic-structure instead."
 skill_type: operator
 depends_on: inspect-atomic-structure, poly-generator
 ---
