@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from .evidence import EvidenceBundle
-from .schemas import ReferenceAnswer
+from evaluation.core.evidence import EvidenceBundle
+from evaluation.core.schemas import ReferenceAnswer
 
 
 def check_json_file_schema(
