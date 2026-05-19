@@ -1683,3 +1683,59 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+- id: SC_doped_mgo_001_20260519
+  capability: structure_construction
+  domain: agnostic
+  intent: Build Al-doped MgO supercell with correct charge compensation, testing that
+    the agent introduces cation vacancies to maintain charge neutrality for aliovalent
+    doping.
+  human_prompt_seed: 构建 4 at.% Al 掺杂的 MgO 超胞（基于 2×2×2 超胞），导出为 `mgo_al_doped.cif`。
+  tags:
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: file_exists
+    value: mgo_al_doped.cif
+  - key: charge_neutral
+    value:
+      filename: mgo_al_doped.cif
+      oxidation_states:
+        Mg: 2
+        Al: 3
+        O: -2
+      tolerance: 0.01
+  - key: turn_budget
+    value:
+      max: 15
+  - key: token_budget_total
+    value:
+      max: 20000
+  scoring_checklist:
+  - id: file_exists
+    criterion: Agent writes `mgo_al_doped.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: charge_neutral
+    criterion: The structure is charge neutral. For Al3+ substituting Mg2+ in MgO,
+      charge compensation requires 1 Mg vacancy per 2 Al substitutions. Verified by
+      2*N_Mg + 3*N_Al = 2*N_O (formal oxidation state sum equals zero).
+    axis: correctness
+    verify: struct_file_charge_balance
+    weight: 2.0
+  - id: has_al_dopants
+    criterion: The structure contains Al atoms (at least 1).
+    axis: correctness
+    verify: struct_file_formula
+  - id: retains_rocksalt
+    criterion: The structure retains the basic rocksalt topology (MgO-type, not a
+      spinel or other phase).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget

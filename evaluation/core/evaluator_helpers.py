@@ -21,6 +21,7 @@ from evaluation.validators.structure_general import (
     check_bond_length,
     check_bond_length_range,
     check_cell_param,
+    check_charge_balance,
     check_coordination_number,
     check_file_count,
     check_formula,
@@ -586,6 +587,24 @@ def check_struct_file_stoichiometry_ratio(
         element_b=str(cfg.get("element_b", "")),
         expected_ratio=float(cfg.get("expected_ratio", 0)),
         tolerance=float(cfg.get("tolerance", 0)),
+    )
+
+
+def check_struct_file_charge_balance(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_charge_balance(
+        ws,
+        filename=cfg.get("filename", "*.cif"),
+        oxidation_states={
+            str(k): int(v)
+            for k, v in cfg.get("oxidation_states", {}).items()
+        },
+        tolerance=float(cfg.get("tolerance", 0.01)),
     )
 
 

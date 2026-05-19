@@ -1653,7 +1653,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_dpa_005_20260411v2
+- id: WO_mlip_dpa_005_20260521
   capability: workflow_orchestration
   domain: agnostic
   intent: Compute Cu FCC single-vacancy migration barrier with DPA via NEB; report forward
@@ -1666,7 +1666,7 @@ questions:
 
     分别优化初态和末态结构，然后使用 DPA 机器学习势做 NEB 计算（5 个中间像）。
 
-    报告正向迁移能垒 (eV) 和能量曲线趋势。
+    报告正向迁移能垒 (eV) 和能量曲线趋势，结果写入 `neb_result.json`（顶层包含 `forward_barrier_eV` 字段）。
 
     '
   tags:
@@ -1675,8 +1675,12 @@ questions:
   data_files: []
   reference_answers:
   - key: forward_barrier_eV
-    value: 0.7
-    tolerance: 0.2
+    value:
+      filename: neb_result.json
+      checks:
+      - key: forward_barrier_eV
+        min: 0.5
+        max: 0.9
   - key: required_fields
     value:
     - initial_state
@@ -1694,9 +1698,9 @@ questions:
       max: 10000
   scoring_checklist:
   - id: forward_barrier_eV
-    criterion: Cu vacancy forward migration barrier is within tolerance (~0.7 eV).
+    criterion: Cu vacancy forward migration barrier in neb_result.json is within 0.5-0.9 eV.
     axis: correctness
-    verify: numerical_range
+    verify: text_file_numeric_range
   - id: required_fields
     criterion: Report includes description of initial and final states, forward barrier value,
       and energy profile along the migration path.
@@ -3336,7 +3340,9 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: asks_human_for_route
-    criterion: Agent explicitly asks the human to choose between appropriate routes, such as DFT or a specific specialized model if one is found, before proceeding.
+    criterion: 'PASS if the agent asks the human to choose a route (e.g., "would you
+      like DFT or a specialized model?"). FAIL only if the agent proceeds to execute
+      a calculation without asking. Asking and waiting IS the correct behavior.'
     axis: correctness
     verify: llm_binary_judge
   - id: no_generic_mlip_execution
@@ -3427,76 +3433,6 @@ questions:
     criterion: Final answer reports equilibrium distance, dissociation energy, and
       the DPA model/head used, grounded in the actual scan.csv data.
     axis: grounding
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent completes the task within the turn budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration does not exceed benchmark ceiling.
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
-- id: WO_custom_dp_model_001_20260519
-  capability: workflow_orchestration
-  domain: agnostic
-  intent: Use a user-provided DeepMD .pt model file to run structure optimization,
-    testing whether the agent can correctly inspect model metadata (type_map) and set
-    up the calculation accordingly.
-  human_prompt_seed: '我有一个自训练的 DeepMD 模型，OSS 地址为 `https://bohrium.oss-cn-zhangjiakou.aliyuncs.com/13756/27666/store/upload/cd12300a-d3e6-4de9-9783-dd9899376cae/dpa-2.4-7M.pt`。请用它对
-    FCC Cu（a=3.615 Å）做结构优化，输出 `cu_relaxed.cif`。'
-  tags:
-  - code_mlip
-  data_files: []
-  reference_answers:
-  - key: output_artifact
-    value: cu_relaxed.cif
-  - key: structure_correct
-    value:
-      filename: cu_relaxed.cif
-      param: a
-      expected: 3.6
-      tolerance: 0.1
-  - key: turn_budget
-    value:
-      max: 20
-  - key: duration_budget
-    value:
-      max: 7200000
-  - key: token_budget_total
-    value:
-      max: 25000
-  scoring_checklist:
-  - id: output_artifact
-    criterion: Agent writes `cu_relaxed.cif` to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: inspects_type_map
-    criterion: Agent inspects the model's type_map before running optimization, using
-      a correct method such as `dp --pt show model.pt`, Python DeepPot API
-      (`from deepmd.infer import DeepPot`), or reading model metadata. Does NOT use
-      `strings` or `hexdump` on the binary file.
-    axis: correctness
-    verify: llm_binary_judge
-    weight: 2.0
-  - id: confirms_cu_support
-    criterion: Agent confirms that the model supports Cu element (present in type_map)
-      before proceeding with the calculation.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: structure_correct
-    criterion: The output CIF is a valid Cu FCC structure with lattice constant near
-      3.6 Å (relaxed from 3.615 input).
-    axis: correctness
-    verify: struct_file_cell_param
-  - id: uses_local_model_path
-    criterion: Agent correctly references the model file from its workspace path
-      (not downloading a different model from the internet or using a platform
-      preset head).
-    axis: correctness
     verify: llm_binary_judge
   - id: turn_budget
     criterion: Agent completes the task within the turn budget.

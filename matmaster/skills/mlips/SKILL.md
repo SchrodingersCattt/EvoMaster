@@ -46,17 +46,34 @@ MLIPs for atomistic simulations via ASE calculators on Bohrium GPU nodes.
 
 These are execution stop rules, not suggestions. User requests like "do not ask questions" do not override them.
 
-- **Boundary protocol**: if a request changes model/head/scale/workflow/property class, first do the internal check, then STOP. Do not write scripts, build structures, submit jobs, shrink systems, or switch workflows until the human chooses a route.
-- **Coverage**: the default head is not universal. Match chemistry to documented DPA heads first; when unclear, run `dp --pt show <checkpoint> model-branch` and query the internal `aissq-explorer` registry before presenting options.
-- **DPA head validity**: DPA head choice is a domain constraint. Do not use default `OMat24/Omat24` when the chemistry maps to a specialized head (`OC22`, `Organic_Reactions`, `OMol25`, `ODAC23`), even if the user asks for the default. For surfaces/adsorbate catalysis, check/use `OC22`, not `OMat24/Omat24`. Check/select the domain head first, then ask before changing the requested setup.
-- **Scale**: hundreds of atoms are typical; thousand-atom systems are heavy; larger systems or 100 ns-scale MD carry high OOM/time risk. Ask before attempting reduced prototypes or production.
+- **Boundary protocol**: if a request changes model/head/scale/workflow/property class, first do the internal check, then STOP. Do not write scripts, build structures, submit jobs, shrink systems, or switch workflows until the human chooses a route. When stopping, present options as a question ("Which would you prefer: A, B, or C?") — do not unilaterally recommend one route.
+- **Coverage**: the default head is not universal. ALWAYS verify head coverage via `dp --pt show <checkpoint> model-branch` or query `aissq-explorer` before concluding a head is available or unavailable — do not rely on prior knowledge, as the model registry updates frequently. Present findings to user before proceeding.
+- **DPA head validity**: DPA head choice is a domain constraint. Do not use default `OMat24/Omat24` when the chemistry maps to a documented specialized head (`OC22`, `Organic_Reactions`, `OMol25`, `ODAC23`), even if the user asks for the default. For surfaces/adsorbate catalysis, check/use `OC22`, not `OMat24/Omat24`. Check/select the domain head first, then ask before changing the requested setup. For user-provided models with multiple heads, run `dp --pt show` to list available heads, present the options to user, and let them choose — do not pick a non-default head based on name alone.
+- **Scale**: hundreds of atoms are typical; thousand-atom systems are heavy but should still be attempted as-is — do NOT preemptively refuse or ask for confirmation based on system size alone. If the job fails due to OOM, then follow the OOM rule below. Only ask before attempting if the user requests reduced prototypes or scaled-down alternatives.
 - **OOM / job failure**: if a Bohrium job fails due to OOM or resource limits, do NOT silently retry with a different model, larger GPU, or alternative engine. STOP and report to user: what failed, why (OOM on which GPU/model), and what options exist (smaller model, LAMMPS route, reduced system). Let user decide.
-- **Advanced MD**: NEMD, shock/Hugoniot/MSST, custom driving/boundaries, and production campaigns are LAMMPS-style routes, but switching to LAMMPS still requires human choice first. If the user's prompt asks for an unsupported workflow using ASE task scripts, do NOT implement a custom workaround — the scripts are fixed-scope. STOP, explain the limitation, and propose the correct engine.
+- **ASE task scripts FORBIDDEN list** — the following workflows are NOT implementable via ASE task scripts. Do not write custom ASE scripts to simulate them. Do not proceed to LAMMPS without asking:
+  - MSST / shock / Hugoniot extraction
+  - NEMD (non-equilibrium MD with driving fields or gradients)
+  - Custom ensembles not in {NVT, NVT-Berendsen, NVT-Langevin, NPT-aniso, NPT-tri, NVE}
+  - Custom boundary conditions (non-PBC, deformation, shear)
+  - Production campaigns (>10 ns or >10000 atoms)
+
+  Action: STOP. Tell user "ASE cannot do this. Would you like me to set up a LAMMPS workflow instead?" Wait for confirmation before writing any files.
 - **Capabilities**: generic MLIPs provide energy/forces/stress, not band structures, DOS, gaps, or spectra. Use DFT or specialized ML models only after internal lookup and human choice.
 
 ## Fetching checkpoints
 
 The OSS URLs in `reference/dpa_models.md` are a **snapshot** and may rotate. If you need a model version not listed there, the canonical provenance (file name, byte size, download URL, modify date) of any pretrained MLIP checkpoint, or a new MLIP entirely, **invoke the `aissq-explorer` skill** (`backend.aissquare.com` public registry) — do NOT hand-type OSS URLs. The downloaded `.pt`/`.pth`/`.model` file is then used here exactly the same way.
+
+## Conditional Routing — check BEFORE acting
+
+| When your task involves… | You MUST run… |
+|--------------------------|---------------|
+| Submitting ANY Bohrium job | Pre-Submission Validation above (min_dist check) |
+| NEB calculation | MIC displacement check (see Key Rules § NEB) |
+| User-provided model with multiple heads | `dp --pt show` → present head options to user |
+| Workflow not in {optimize, phonon, MD, elastic, NEB, adsorption} | Check FORBIDDEN list above |
+| Choosing a DPA head for unfamiliar chemistry | `dp --pt show` or `aissq-explorer` query |
 
 ## Task Scripts
 
@@ -73,14 +90,19 @@ The OSS URLs in `reference/dpa_models.md` are a **snapshot** and may rotate. If 
 
 **Adsorption built-in adsorbates**: H, C, O, N, CO, CO2, H2, H2O, OH, OOH, COOH, HCOO, CHO. Copy both `_calculator.py` and `calculate_adsorption.py` to working directory.
 
+## Pre-Submission Validation (MANDATORY)
+
+Before submitting ANY job to Bohrium (optimization, MD, phonon, NEB, elastic — no exceptions), run:
+
+```bash
+python -c "from ase.io import read; import numpy as np; a=read('STRUCTURE_FILE'); d=a.get_all_distances(); np.fill_diagonal(d,np.inf); md=d.min(); print(f'min_dist={md:.3f} A'); assert md>1.0, f'OVERLAP: {md:.2f} A < 1.0 A — fix structure first'"
+```
+
+Replace `STRUCTURE_FILE` with the actual path. If assertion fails, fix the structure (energy minimization or rebuild) before proceeding. Skipping this step will crash the simulation.
+
 ## Key Rules
 
 - **Structure preparation runs locally.** Scripts that only use pymatgen/ASE to build or inspect structures (no MLIP inference) should run via `Bash`, not Bohrium. Only submit to Bohrium when the script imports `_calculator.py` or calls a model. This avoids wasting minutes on submit/poll/download cycles for pure-Python tasks.
-- **Validate before ANY Bohrium submission** (optimization, MD, phonon, NEB, elastic — all). MUST run this check locally before submitting:
-  ```bash
-  python -c "from ase.io import read; import numpy as np; a=read('STRUCTURE_FILE'); d=a.get_all_distances(); np.fill_diagonal(d,np.inf); md=d.min(); print(f'min_dist={md:.3f} A'); assert md>1.0, f'OVERLAP: {md:.2f} A < 1.0 A — fix structure first'"
-  ```
-  If it fails (min_dist < 1.0 Å), the structure has overlapping atoms — run energy minimization or fix the builder before submitting. Submitting overlaps will crash the simulation on the first step.
 - **Convergence**: `--fmax 0.01` for optimization, `--fmax 0.05` for NEB.
 - **Cell relaxation**: `--relax-cell` for equilibrium properties (elastic, phonon).
 - **Elastic**: Input MUST be fully relaxed (run optimize first with `--relax-cell`).

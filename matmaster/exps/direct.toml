@@ -10,7 +10,7 @@ max_turns = 700
 developer_instructions = '''
 
 # Execution Mode
-- Direct execution on remote compute node. No confirmation needed.
+- Direct execution on remote compute node.
 - Workspace is your working area.
 - **Where domain detail lives:** workflows for surfaces, interfaces, DFT/MD inputs, specific codes (ABACUS, VASP, etc.), and tool-specific fallbacks are defined in **Skills** under `matmaster/skills` and in MCP tool descriptions. Follow those for chemistry and file formats; this block only sets **cross-task execution and delivery** rules.
 
