@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: catalysis
 questions:
-- id: CR_SC_ZnS001_20260508
+- id: CR_SC_ZnS001_20260508v2
   capability: structure_construction
   domain: catalysis
   intent: Build ZnS(001) polar surface slab with 3 layers and 2x2x1 supercell per
@@ -36,6 +36,24 @@ questions:
       filename: ZnS_001_slab.cif
       expected: 24
       tolerance: 0
+  - key: inplane_a
+    value:
+      filename: ZnS_001_slab.cif
+      param: a
+      expected: 7.65
+      tolerance: 0.5
+  - key: inplane_b
+    value:
+      filename: ZnS_001_slab.cif
+      param: b
+      expected: 7.65
+      tolerance: 0.5
+  - key: cell_c_vacuum
+    value:
+      filename: ZnS_001_slab.cif
+      param: c
+      expected: 22.0
+      tolerance: 7.0
   - key: turn_budget
     value:
       max: 22
@@ -64,12 +82,21 @@ questions:
     criterion: The 3-bilayer 2x2x1 ZnS(001) slab contains exactly 24 atoms.
     axis: correctness
     verify: struct_file_atom_count
-  - id: supercell_vacuum_ok
-    criterion: 交付的 ZnS(001) slab 采用 2×2×1 扩胞，真空层 ≥15 Å；若只在答案中声明，必须与 `ZnS_001_slab.cif`
-      的晶胞尺寸和层厚说明一致。
+  - id: inplane_a
+    criterion: The ZnS(001) slab cell a lattice parameter is close to the 2x
+      in-plane surface repeat of zinc-blende ZnS, about sqrt(2)*5.41 A.
     axis: correctness
-    verify: llm_binary_judge
-    weight: 1.0
+    verify: struct_file_cell_param
+  - id: inplane_b
+    criterion: The ZnS(001) slab cell b lattice parameter is close to the 2x
+      in-plane surface repeat of zinc-blende ZnS, about sqrt(2)*5.41 A.
+    axis: correctness
+    verify: struct_file_cell_param
+  - id: cell_c_vacuum
+    criterion: The ZnS(001) slab cell c parameter is large enough to include the
+      slab thickness plus at least approximately 15 A of vacuum.
+    axis: correctness
+    verify: struct_file_cell_param
   - id: polar_handling
     criterion: 答案说明了 ZnS(001) 表面的极性问题，并至少提出一种合理的处理策略（如构建对称 slab、施加偶极修正等），所述策略与交付的结构文件一致。
     axis: grounding

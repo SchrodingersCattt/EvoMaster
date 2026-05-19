@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: semiconductor
 questions:
-- id: SC_struct_hetero_20260507v3
+- id: SC_struct_hetero_20260507v4
   capability: structure_construction
   domain: semiconductor
   intent: Build a graphene/h-BN vertical van der Waals heterostructure with controlled
@@ -50,14 +50,12 @@ questions:
       cutoff_A: 5.0
       expected: 3.35
       tolerance: 0.3
-  - key: required_fields
+  - key: vacuum_A
     value:
-    - structure_file
-    - lattice_mismatch_percent
-    - total_atoms
-    - interlayer_distance_A
-    - stacking
-    - vacuum_A
+      filename: hetero_graphene_hBN.cif
+      param: c
+      expected: 18.35
+      tolerance: 2.0
   - key: turn_budget
     value: &id001
       max: 20
@@ -95,11 +93,15 @@ questions:
       A.
     axis: correctness
     verify: struct_file_bond_length
-  - id: required_fields
-    criterion: Output includes structure file, lattice mismatch percentage below 2%,
-      interlayer distance near 3.35 A, AB stacking, and vacuum thickness near 15 A.
-      Element ratios are evaluated only by deterministic structure-file checks.
+  - id: vacuum_A
+    criterion: The output CIF cell c parameter is consistent with a graphene/h-BN
+      bilayer separated by 3.35 A plus approximately 15 A of vacuum.
     axis: correctness
+    verify: struct_file_cell_param
+  - id: ab_stacking
+    criterion: The final answer states that the delivered heterostructure uses
+      AB stacking, rather than only reporting generic bilayer construction.
+    axis: grounding
     verify: llm_binary_judge
   - id: grounding_source
     criterion: The answer states the physical picture (lattice matching, AB stacking,
@@ -132,7 +134,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_SiH_20260512v7
+- id: SC_struct_SiH_20260512v8
   capability: structure_construction
   domain: semiconductor
   intent: Passivate dangling bonds on both top and bottom surfaces of a Si(100) slab
@@ -190,12 +192,6 @@ questions:
       element: H
       expected: 4
       tolerance: 0
-  - key: required_fields
-    value:
-    - structure_file
-    - hydrogen_count
-    - si_h_bond_length_A
-    - all_si_four_coordination
   - key: turn_budget
     value: *id001
   - key: duration_budget
@@ -233,12 +229,6 @@ questions:
       passivation of the 2x1 Si(100) slab background.
     axis: correctness
     verify: struct_file_atom_count
-  - id: required_fields
-    criterion: Output includes structure file, representative Si-H bond length, and
-      an explicit check that all Si atoms (top and bottom) reach four coordination.
-      H loading is evaluated only by deterministic structure-file checks.
-    axis: correctness
-    verify: llm_binary_judge
   - id: grounding_source
     criterion: The answer cites the structural physics (Si(100) facets, dangling bonds
       on both surfaces, target coordination, Si-H bond length) and ties passivation
