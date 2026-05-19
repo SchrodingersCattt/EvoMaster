@@ -3340,7 +3340,9 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: asks_human_for_route
-    criterion: Agent explicitly asks the human to choose between appropriate routes, such as DFT or a specific specialized model if one is found, before proceeding.
+    criterion: 'PASS if the agent asks the human to choose a route (e.g., "would you
+      like DFT or a specialized model?"). FAIL only if the agent proceeds to execute
+      a calculation without asking. Asking and waiting IS the correct behavior.'
     axis: correctness
     verify: llm_binary_judge
   - id: no_generic_mlip_execution
