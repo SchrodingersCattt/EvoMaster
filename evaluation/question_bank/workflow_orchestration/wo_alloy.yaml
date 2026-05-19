@@ -461,7 +461,7 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: WO_dpmd_lammps_fcc_feni_001_20260519
+- id: WO_dpmd_lammps_fcc_feni_001_20260521
   capability: workflow_orchestration
   domain: alloy
   priority: P0
@@ -488,20 +488,13 @@ questions:
       filename: input/run.sh
       pattern: 'lmp\s|lammps'
       flags: i
-  - key: input_has_data_file
+  - key: type_map_consistent
     value:
-      filename: input/conf.lmp
-      pattern: '^\s*(?:28|29|[3-9]\d|\d{3,})\s+atom\s+types\b'
-      flags: m
-  - key: input_fe_type_26
-    value:
-      filename: input/conf.lmp
-      pattern: '^\s*26\s+55\.8'
-      flags: m
-  - key: input_ni_type_28
-    value:
-      filename: input/conf.lmp
-      pattern: '^\s*28\s+58\.[67]'
+      if_filename: input/run.sh
+      if_pattern: '--type-map'
+      then_pattern: '--type-map\s+\w+\s+\w+'
+      else_filename: input/conf.lmp
+      else_pattern: '^\s*(?:28|29|[3-9]\d|\d{3,})\s+atom\s+types\b'
       flags: m
   - key: input_has_minimize
     value:
@@ -531,17 +524,10 @@ questions:
     criterion: '[Must] run.sh invokes LAMMPS after model preparation.'
     axis: correctness
     verify: text_file_regex
-  - id: input_has_data_file
-    criterion: '[Must] input/conf.lmp declares ≥28 atom types (full element type_map,
-      not compact 1/2 mapping).'
-    axis: correctness
-    verify: text_file_regex
-  - id: input_fe_type_26
-    criterion: '[Must] input/conf.lmp maps Fe to type 26 (matching DPA type_map).'
-    axis: correctness
-    verify: text_file_regex
-  - id: input_ni_type_28
-    criterion: '[Must] input/conf.lmp maps Ni to type 28 (matching DPA type_map).'
+  - id: type_map_consistent
+    criterion: '[Must] Type-map alignment is correct: if run.sh uses --type-map (compact
+      freeze), conf.lmp may use compact types; otherwise conf.lmp must declare ≥28 atom
+      types (full-element indices matching the default frozen model).'
     axis: correctness
     verify: text_file_regex
   - id: input_has_minimize
