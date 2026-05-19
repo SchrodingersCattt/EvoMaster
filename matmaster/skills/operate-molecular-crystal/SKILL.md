@@ -1,8 +1,7 @@
 ---
 name: operate-molecular-crystal
-description: "molcrys-kit operations organised in four orthogonal axes. (A) Topology-preserving fragment ops on molecular crystals: PBC slab cut, molecule-cluster defect, desolvation, extraction. (B) Experimental-crystallography fixes: disorder ordering, partial-occupancy, CIF moiety constraints. (C) Generic atom-level geometric operations: sp3/sp2/octahedral hydrogen completion, perturbation, rotation, usable on any structure including inorganic slabs and surfaces with dangling bonds. (D) Local coordination environment characterisation: CN detection, ideal-polyhedron match, CShM shape classification, packing shells (main / 0.3+). Axes A and B trigger on is_molecular_crystal=true. Axes C and D trigger on the geometric task type, not the crystal class — the pure-geometry helpers work on inorganic slabs, surfaces, and defects too."
+description: "Trigger for molecular-crystal edits/local-geometry repairs: topology-preserved slab cuts, stoichiometry-preserved vacancy/guest removal, desolvation, disorder/occupancy resolution, hydrogen completion, perturbation, coordination/CShM analysis."
 skill_type: operator
-depends_on: inspect-atomic-structure
 ---
 
 # Operate with molcrys-kit
@@ -392,5 +391,5 @@ Never stop at `dir(molcrys_kit)` — the helpers live in
   placement.
 - `transform-atomic-structure`: non-molecular doping, defects, strain,
   supercells.
-- `structure-manager` contains additional molecular-crystal slab /
+- `retrieve-structure` contains additional molecular-crystal slab /
   passivation helper scripts for known fragile cases.
