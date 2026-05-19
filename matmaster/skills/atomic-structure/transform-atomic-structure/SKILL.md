@@ -1,6 +1,6 @@
 ---
 name: transform-atomic-structure
-description: "Transform non-molecular crystals: supercell, strain, doping, vacancy, ordering, mutations. Routes molecular crystals to operate-molecular-crystal. Not for joining multiple structures—use assemble-atomic-structure."
+description: "Transform an existing non-molecular-crystal structure: supercell, strain/deformation, doping (random/ordered/wyckoff with charge compensation), vacancy defect, ordering, in-place mutations. Routes to operate-molecular-crystal when input is a molecular crystal. Not for assembling multiple independent structures — use assemble-atomic-structure."
 skill_type: operator
 depends_on: inspect-atomic-structure, operate-molecular-crystal
 ---

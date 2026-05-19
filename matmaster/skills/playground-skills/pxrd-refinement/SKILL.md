@@ -1,6 +1,6 @@
 ---
 name: pxrd-refinement
-description: "GSAS-II powder refinement: Pawley (cell), Rietveld (structure), or autoindex from peaks. For PXRD/Pawley/Rietveld/lattice tasks on Bohrium image xrd-app:dev-260119—not SCXRD solution."
+description: "Powder XRD refinement via GSAS-II. Pawley extracts a refined unit cell from PXRD + space group + initial cell; Rietveld refines a full structure from PXRD + CIF; gsas2_autoindex is a last-resort cell guesser from peak positions only. Triggers on: PXRD/powder XRD refinement, Pawley, Rietveld, lattice parameter extraction, and multi-pattern PXRD series. All execution goes to Bohrium image xrd-app:dev-260119."
 ---
 
 # PXRD Refinement (Pawley / Rietveld / Auto-index)

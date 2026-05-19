@@ -1,6 +1,6 @@
 ---
 name: tasker-polar-surface
-description: "Cut ionic/polar slabs with Tasker types 1/2/3 via build_slab_tasker_fix.py; validate with check_slab_tasker.py and assess_structure.py. Report and ask user if auto-fix fails."
+description: "Guides slab cutting for ionic and polar crystals using Tasker types (1/2/3). Use built-in script build_slab_tasker_fix.py as the default builder for all surface types, then validate with check_slab_tasker.py and assess_structure.py. If auto-fix fails, explicitly report to user and ask for manual adjustment or temporary acceptance."
 depends_on: assemble-atomic-structure, mcp-mat-doc
 ---
 

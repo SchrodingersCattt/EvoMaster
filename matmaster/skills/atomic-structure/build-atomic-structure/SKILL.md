@@ -1,6 +1,6 @@
 ---
 name: build-atomic-structure
-description: "Build a new structure from spec: bulk (template/spacegroup+Wyckoff), molecule (SMILES/coords), polymer chain. Use when no input file exists. Not for editing existing structures—use transform- or assemble-atomic-structure."
+description: "Build a new atomic structure from spec: bulk crystal (template / spacegroup+Wyckoff), molecule (SMILES / hand-coords), polymer chain (architecture+monomer sequence). Use when there is no input structure file. Not for modifying an existing structure — use transform-atomic-structure or assemble-atomic-structure."
 skill_type: operator
 depends_on: inspect-atomic-structure, poly-generator
 ---

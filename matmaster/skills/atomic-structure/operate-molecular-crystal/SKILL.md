@@ -1,6 +1,6 @@
 ---
 name: operate-molecular-crystal
-description: "molcrys-kit: molecular-crystal slab cuts, defects, desolvation, disorder/CIF fixes; H-completion and local geometry; coordination/shape/packing. Axes A/B need molecular crystals; C/D also work on inorganic slabs and surfaces."
+description: "molcrys-kit operations organised in four orthogonal axes. (A) Topology-preserving fragment ops on molecular crystals: PBC slab cut, molecule-cluster defect, desolvation, extraction. (B) Experimental-crystallography fixes: disorder ordering, partial-occupancy, CIF moiety constraints. (C) Generic atom-level geometric operations: sp3/sp2/octahedral hydrogen completion, perturbation, rotation, usable on any structure including inorganic slabs and surfaces with dangling bonds. (D) Local coordination environment characterisation: CN detection, ideal-polyhedron match, CShM shape classification, packing shells (main / 0.3+). Axes A and B trigger on is_molecular_crystal=true. Axes C and D trigger on the geometric task type, not the crystal class — the pure-geometry helpers work on inorganic slabs, surfaces, and defects too."
 skill_type: operator
 depends_on: inspect-atomic-structure
 ---
