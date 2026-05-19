@@ -9,9 +9,9 @@ from unittest.mock import patch
 import pytest
 
 from matmaster.config.exp import ExpConfig
+from matmaster.context.system_prompt import SystemPromptBuilder
 from matmaster.core.agent import AgentKernel
 from matmaster.core.capability_policy import DefaultCapabilityPolicy
-from matmaster.core.context_builder import ContextBuilder
 from matmaster.core.exp import Exp
 from matmaster.core.hooks import (
     CompactionContext,
@@ -20,13 +20,13 @@ from matmaster.core.hooks import (
     HookOutcome,
     HookResult,
 )
+from matmaster.core.playground import PlaygroundContext
 from matmaster.core.structural_validation import StructuralValidation
 from matmaster.core.tool_runner import FullToolRunner
 from matmaster.core.tool_scheduler import ToolScheduler
 from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
-from matmaster.types.context import PlaygroundContext
 from matmaster.types.events import (
     ResponseEvent,
     RunResultEvent,
@@ -38,6 +38,7 @@ from matmaster.types.messages import (
     StreamChunk,
     UserMessage,
 )
+from matmaster.types.run_metadata import RunIdentity, RunMetadata
 from matmaster.types.runtime import AgentRuntimeSpec
 from matmaster.types.topology import ToolPlane
 from tests.conftest import MockAsyncTool
@@ -56,7 +57,7 @@ class RecordingProvider:
     async def __aexit__(self, *args):
         pass
 
-    async def chat(self, messages, tools=None):
+    async def chat(self, messages, tools=None, *, tool_choice=None):
         return LLMResponse(content="unused", finish_reason="stop")
 
     async def chat_stream(self, messages, tools=None, *, timeout=None):
@@ -75,11 +76,8 @@ class FakeCompactor:
     def plan_preflight_compaction(self, messages):
         return None
 
-    async def preflight_if_needed(self, messages) -> None:
-        return None
-
     async def plan_runtime_compaction(self, messages, turn_usage, *, turn):
-        from matmaster.core.context_compactor import CompactionPlan
+        from matmaster.context.compaction import CompactionPlan
 
         return CompactionPlan(
             compaction_id="task-1:root:1",
@@ -89,14 +87,15 @@ class FakeCompactor:
             turn=turn,
         )
 
-    async def apply_compaction_plan(
+    async def apply_summary(
         self,
         plan,
         messages,
+        summary: str,
         *,
-        current_input_context=None,
+        turn_input=None,
     ):
-        from matmaster.core.context_compactor import CompactionResult
+        from matmaster.context.compaction import CompactionResult
 
         messages[:] = messages[:1]
         return CompactionResult(
@@ -122,7 +121,7 @@ class DoubleEventCompactor:
         self.message_counts.append(count)
 
     def plan_preflight_compaction(self, messages):
-        from matmaster.core.context_compactor import CompactionPlan
+        from matmaster.context.compaction import CompactionPlan
 
         if self._preflight_planned:
             return None
@@ -135,11 +134,8 @@ class DoubleEventCompactor:
             turn=0,
         )
 
-    async def preflight_if_needed(self, messages) -> None:
-        return None
-
     async def plan_runtime_compaction(self, messages, turn_usage, *, turn):
-        from matmaster.core.context_compactor import CompactionPlan
+        from matmaster.context.compaction import CompactionPlan
 
         if self._runtime_planned:
             return None
@@ -152,14 +148,15 @@ class DoubleEventCompactor:
             turn=turn,
         )
 
-    async def apply_compaction_plan(
+    async def apply_summary(
         self,
         plan,
         messages,
+        summary: str,
         *,
-        current_input_context=None,
+        turn_input=None,
     ):
-        from matmaster.core.context_compactor import CompactionResult
+        from matmaster.context.compaction import CompactionResult
 
         if plan.phase == "preflight":
             messages[:] = messages[:2]
@@ -228,7 +225,7 @@ def _make_echo_catalog(tool_name: str = "echo_tool") -> ToolCatalog:
 
 class TestExpWiring:
     @pytest.mark.asyncio
-    async def test_build_runtime_injects_run_meta_and_runner_hook_executor(
+    async def test_build_runtime_injects_metadata_and_runner_hook_executor(
         self,
         tmp_path: Path,
     ) -> None:
@@ -238,15 +235,16 @@ class TestExpWiring:
             execution_workdir=str(tmp_path / "exec"),
             session_type="local",
             cache_area=tmp_path / "cache",
-            run_meta={"task_id": "task-1", "session_id": "session-1"},
+            session_id="session-1",
+            metadata=RunMetadata(task_id="task-1"),
             llm_provider=MockLLMProvider(),
         )
 
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
 
-        assert runtime.spec.meta["task_id"] == "task-1"
-        assert runtime.spec.meta["session_id"] == "session-1"
+        assert runtime.spec.run_identity.task_id == "task-1"
+        assert runtime.spec.run_identity.session_id == "session-1"
         assert runtime.spec.tool_runner._hook_executor is runtime.spec.hook_executor
 
     @pytest.mark.asyncio
@@ -272,7 +270,7 @@ class TestExpWiring:
             execution_workdir=str(tmp_path / "exec"),
             session_type="local",
             cache_area=tmp_path / "cache",
-            run_meta={"session_id": "session-1"},
+            session_id="session-1",
             llm_provider=MockLLMProvider(),
         )
 
@@ -325,7 +323,7 @@ class TestExpWiring:
             execution_workdir=str(tmp_path / "exec"),
             session_type="local",
             cache_area=tmp_path / "cache",
-            run_meta={"session_id": "session-1"},
+            session_id="session-1",
             llm_provider=MockLLMProvider(),
             runtime_ports=PlaygroundRuntimePorts(
                 child_event_forward_sink=sink,
@@ -385,7 +383,7 @@ class TestExpWiring:
             execution_workdir=str(tmp_path / "exec"),
             session_type="local",
             cache_area=tmp_path / "cache",
-            run_meta={"session_id": "session-1"},
+            session_id="session-1",
             llm_provider=MockLLMProvider(),
             runtime_ports=PlaygroundRuntimePorts(
                 child_event_forward_sink=sink,
@@ -429,7 +427,7 @@ class TestExpWiring:
             execution_workdir=str(tmp_path / "exec"),
             session_type="local",
             cache_area=tmp_path / "cache",
-            run_meta={"session_id": "session-1"},
+            session_id="session-1",
             llm_provider=MockLLMProvider(),
         )
 
@@ -593,10 +591,10 @@ class TestAgentKernelHookWiring:
         executor.on(HookEvent.RUN_END, on_end)
 
         spec = AgentRuntimeSpec(
-            context_builder=ContextBuilder(),
+            system_prompt_builder=SystemPromptBuilder(),
             llm_provider=provider,
             hook_executor=executor,
-            meta={"task_id": "task-1", "session_id": "session-1"},
+            run_identity=RunIdentity(task_id="task-1", session_id="session-1"),
             system_prompt="You are a test agent",
         )
 
@@ -621,10 +619,10 @@ class TestAgentKernelHookWiring:
         executor.on(HookEvent.RUN_END, on_end)
 
         spec = AgentRuntimeSpec(
-            context_builder=ContextBuilder(),
+            system_prompt_builder=SystemPromptBuilder(),
             llm_provider=provider,
             hook_executor=executor,
-            meta={"task_id": "task-1", "session_id": "session-1"},
+            run_identity=RunIdentity(task_id="task-1", session_id="session-1"),
             system_prompt="You are a test agent",
         )
 
@@ -652,10 +650,10 @@ class TestAgentKernelHookWiring:
         executor.on(HookEvent.USER_PROMPT_SUBMIT, observe)
 
         spec = AgentRuntimeSpec(
-            context_builder=ContextBuilder(),
+            system_prompt_builder=SystemPromptBuilder(),
             llm_provider=provider,
             hook_executor=executor,
-            meta={"task_id": "task-1", "session_id": "session-1"},
+            run_identity=RunIdentity(task_id="task-1", session_id="session-1"),
             system_prompt="You are a test agent",
         )
 
@@ -678,7 +676,7 @@ class TestAgentKernelHookWiring:
         executor.on(HookEvent.CONTEXT_COMPACTION, observe)
 
         spec = AgentRuntimeSpec(
-            context_builder=ContextBuilder(),
+            system_prompt_builder=SystemPromptBuilder(),
             llm_provider=provider,
             hook_executor=executor,
             compactor=compactor,
@@ -710,7 +708,7 @@ class TestAgentKernelHookWiring:
         executor.on(HookEvent.CONTEXT_COMPACTION, observe)
 
         spec = AgentRuntimeSpec(
-            context_builder=ContextBuilder(),
+            system_prompt_builder=SystemPromptBuilder(),
             llm_provider=provider,
             hook_executor=executor,
             compactor=compactor,
@@ -786,7 +784,7 @@ class TestSpawnGuardWiring:
             execution_workdir=str(tmp_path / "exec"),
             session_type="local",
             cache_area=tmp_path / "cache",
-            run_meta={"session_id": "session-1"},
+            session_id="session-1",
             llm_provider=MockLLMProvider(),
         )
 
@@ -809,3 +807,70 @@ class TestSpawnGuardWiring:
 
         assert result == "child done"
         assert created_allow_spawn[-1] is False
+
+    @pytest.mark.asyncio
+    async def test_make_spawn_fn_propagates_skill_resolver_to_child_exp(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        import matmaster.core.exp as exp_module
+
+        captured_kwargs: dict[str, object] = {}
+        original_exp = exp_module.Exp
+
+        class RecordingExp:
+            def __init__(self, config, *, allow_spawn: bool = True) -> None:
+                self.config = config
+                self.allow_spawn = allow_spawn
+
+            def run_stream(self, ctx, task, **kwargs):
+                captured_kwargs.update(kwargs)
+
+                async def _gen():
+                    if False:
+                        yield None
+
+                return _gen()
+
+        async def fake_drain_run_stream(_stream, on_event=None):
+            return SimpleNamespace(
+                status="completed",
+                final_content="child done",
+                reason="natural",
+            )
+
+        monkeypatch.setattr(exp_module, "Exp", RecordingExp)
+
+        ctx = PlaygroundContext(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path / "exec"),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+            session_id="session-1",
+            llm_provider=MockLLMProvider(),
+        )
+
+        def sentinel_resolver(events):
+            return ()
+
+        with (
+            patch(
+                "matmaster.config.loader.load_exp_config",
+                return_value=ExpConfig(name="direct"),
+            ),
+            patch(
+                "matmaster.core.stream_drain.drain_run_stream",
+                side_effect=fake_drain_run_stream,
+            ),
+        ):
+            spawn_fn = original_exp._make_spawn_fn(
+                ctx,
+                source_prefix="MatMaster",
+                hook_executor=HookExecutor(),
+                skill_resolver=sentinel_resolver,
+            )
+            result = await spawn_fn("direct", "summarize this task")
+
+        assert result == "child done"
+        assert captured_kwargs["skill_resolver"] is sentinel_resolver

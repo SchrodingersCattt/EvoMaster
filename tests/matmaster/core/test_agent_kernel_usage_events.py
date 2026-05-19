@@ -7,6 +7,7 @@ from typing import Any
 import pytest
 
 from matmaster.types.events import ResponseEvent, RunResultEvent
+from matmaster.types.run_metadata import RunIdentity
 
 from .agent_kernel_test_helpers import _make_spec
 from .test_agent_kernel_stream import (
@@ -18,14 +19,13 @@ from .test_agent_kernel_stream import (
 
 @pytest.mark.asyncio
 async def test_response_segment_end_at_stream_end() -> None:
-    from matmaster.core.agent import AgentKernel
+    from matmaster.core.agent_llm_stream import stream_llm_items
     from matmaster.core.kernel_items import _KernelItem
 
     provider = ReasoningThenContentProvider()
     spec = _make_spec(provider=provider)
-    kernel = AgentKernel()
     items: list[_KernelItem] = []
-    async for item in kernel._stream_llm_items(
+    async for item in stream_llm_items(
         spec, [{"role": "user", "content": "test"}], None
     ):
         items.append(item)
@@ -95,7 +95,7 @@ async def test_child_runtime_does_not_emit_usage_response_complete() -> None:
     from matmaster.core.agent import AgentKernel
 
     spec = _make_spec(provider=ContentOnlyProvider()).model_copy(
-        update={"meta": {"spawn_id": "child-1"}}
+        update={"run_identity": RunIdentity(spawn_id="child-1")}
     )
     events: list[Any] = []
     async for event in AgentKernel().run_stream(spec, "child task"):

@@ -14,7 +14,7 @@ from typing import Any
 from matmaster.config.exp import ExpConfig
 from matmaster.core.agent import AgentKernel
 from matmaster.core.exp import Exp
-from matmaster.types.context import PlaygroundContext
+from matmaster.core.playground import PlaygroundContext
 from matmaster.types.messages import LLMResponse, StreamChunk
 from matmaster.types.tool_spec import ResourceClaim
 from matmaster.types.topology import ToolPlane

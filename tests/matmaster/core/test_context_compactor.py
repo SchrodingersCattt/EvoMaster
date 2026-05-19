@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-import pytest
-
-from matmaster.core.context_builder import ContextBuilder
-from matmaster.types.current_input import CurrentInputContext
+from matmaster.context.assembly import ContextAssembler
+from matmaster.context.ports import ContextAssemblyPorts, UserInstructions
+from matmaster.context.sections import ContextSection, ContextView, SectionOrder
+from matmaster.context.sources.turn_input import TurnInput
 from matmaster.types.messages import (
     AssistantMessage,
     ImageContentPart,
@@ -38,12 +38,12 @@ class TestEstimateTokens:
     """Token estimation for messages."""
 
     def test_empty_list(self) -> None:
-        from matmaster.core.context_compactor import estimate_tokens
+        from matmaster.context.compaction import estimate_tokens
 
         assert estimate_tokens([]) == 0
 
     def test_single_message(self) -> None:
-        from matmaster.core.context_compactor import estimate_tokens
+        from matmaster.context.compaction import estimate_tokens
 
         msgs = [UserMessage(content="hello world")]
         tokens = estimate_tokens(msgs)
@@ -51,7 +51,7 @@ class TestEstimateTokens:
         assert tokens < 20
 
     def test_multiple_messages(self) -> None:
-        from matmaster.core.context_compactor import estimate_tokens
+        from matmaster.context.compaction import estimate_tokens
 
         msgs = [
             SystemMessage(content="You are helpful"),
@@ -63,82 +63,12 @@ class TestEstimateTokens:
         assert total > single
 
     def test_tool_message_content(self) -> None:
-        from matmaster.core.context_compactor import estimate_tokens
+        from matmaster.context.compaction import estimate_tokens
 
         long_result = "x" * 4000
         msgs = [ToolMessage(content=long_result, tool_call_id="tc-1", tool_name="t")]
         tokens = estimate_tokens(msgs)
         assert tokens > 500
-
-
-class TestParseTurns:
-    """Turn boundary detection for retention rule."""
-
-    def test_simple_assistant_tool_turn(self) -> None:
-        from matmaster.core.context_compactor import parse_turns
-
-        msgs = [
-            SystemMessage(content="sys"),
-            UserMessage(content="task"),
-            AssistantMessage(
-                content="thinking",
-                tool_calls=[ToolCallData(id="tc1", name="bash", arguments={})],
-            ),
-            ToolMessage(content="result", tool_call_id="tc1", tool_name="bash"),
-            AssistantMessage(content="done"),
-        ]
-        turns = parse_turns(msgs)
-        assert len(turns) == 2
-        assert len(turns[0]) == 2
-        assert len(turns[1]) == 1
-
-    def test_turn_includes_preceding_user_message(self) -> None:
-        from matmaster.core.context_compactor import parse_turns
-
-        msgs = [
-            SystemMessage(content="sys"),
-            UserMessage(content="task1"),
-            AssistantMessage(content="reply1"),
-            UserMessage(content="task2"),
-            AssistantMessage(content="reply2"),
-        ]
-        turns = parse_turns(msgs)
-        assert len(turns) == 2
-        assert len(turns[0]) == 1
-        assert isinstance(turns[0][0], AssistantMessage)
-        assert len(turns[1]) == 2
-        assert isinstance(turns[1][0], UserMessage)
-        assert isinstance(turns[1][1], AssistantMessage)
-
-    def test_empty_after_immutable(self) -> None:
-        from matmaster.core.context_compactor import parse_turns
-
-        msgs = [
-            SystemMessage(content="sys"),
-            UserMessage(content="task"),
-        ]
-        turns = parse_turns(msgs)
-        assert len(turns) == 0
-
-    def test_multi_tool_calls_in_one_turn(self) -> None:
-        from matmaster.core.context_compactor import parse_turns
-
-        msgs = [
-            SystemMessage(content="sys"),
-            UserMessage(content="task"),
-            AssistantMessage(
-                content="",
-                tool_calls=[
-                    ToolCallData(id="tc1", name="a", arguments={}),
-                    ToolCallData(id="tc2", name="b", arguments={}),
-                ],
-            ),
-            ToolMessage(content="r1", tool_call_id="tc1", tool_name="a"),
-            ToolMessage(content="r2", tool_call_id="tc2", tool_name="b"),
-        ]
-        turns = parse_turns(msgs)
-        assert len(turns) == 1
-        assert len(turns[0]) == 3
 
 
 class MockSummaryProvider:
@@ -205,20 +135,48 @@ class DummySummaryProvider:
 
 def _make_compactor(
     config,
-    provider,
+    provider=None,
     *,
     rehydrated: str = "",
     rehydrated_until: str | None = None,
     event_sink=None,
     compaction_scope: str = "root",
 ):
-    from matmaster.core.context_compactor import ContextCompactor
+    from matmaster.context.compaction import ContextCompactor
 
+    def session_sections(_events, until_event_id, include_attachments):
+        if not include_attachments:
+            return ()
+        text = rehydrated_until if until_event_id is not None else rehydrated
+        if until_event_id is not None and text is None:
+            text = rehydrated
+        if not text:
+            return ()
+        return (
+            ContextSection(
+                key="session_attachments",
+                tag="session_attachments",
+                content=text,
+                order=SectionOrder.SESSION_ATTACHMENTS,
+                views=frozenset({ContextView.RUNTIME, ContextView.CHECKPOINT}),
+            ),
+        )
+
+    class EventsPort:
+        async def load_events(self, query):
+            return ()
+
+    assembler = ContextAssembler(
+        ContextAssemblyPorts(session_events=EventsPort()),
+        _session_section_builder_for_tests=session_sections,
+    )
     return ContextCompactor(
         config=config,
-        summary_provider=provider,
-        rehydrator=FakeRehydrator(rehydrated, ranged_text=rehydrated_until),
-        context_builder=ContextBuilder(),
+        context_assembler=assembler,
+        user_instructions=UserInstructions(text="", hash="sha256:empty"),
+        session_id="sess-1",
+        spawn_id=None,
+        runtime_covered_until_provider=lambda: 42,
         event_sink=event_sink,
         compaction_scope=compaction_scope,
     )
@@ -267,8 +225,10 @@ class TestCompactorThreshold:
         msgs = [SystemMessage(content="sys"), UserMessage(content="task")]
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 1000}, turn=2)
-        assert len(provider.calls) == 0
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 1000}, turn=2
+        )
+        assert plan is None
 
     async def test_trigger_when_above_threshold(self) -> None:
         pass
@@ -279,8 +239,12 @@ class TestCompactorThreshold:
         compactor = _make_compactor(config, provider)
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
-        assert len(provider.calls) == 1
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=2
+        )
+        assert plan is not None
+        await compactor.apply_summary(plan, msgs, "summary text")
+        assert compactor._compaction_count == 1
 
     async def test_cooldown_skips_consecutive_turn(self) -> None:
         pass
@@ -291,11 +255,16 @@ class TestCompactorThreshold:
         compactor = _make_compactor(config, provider)
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
-        assert len(provider.calls) == 1
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=2
+        )
+        assert plan is not None
+        await compactor.apply_summary(plan, msgs, "summary text")
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=3)
-        assert len(provider.calls) == 1
+        next_plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=3
+        )
+        assert next_plan is None
 
 
 class TestCompactorPlanApply:
@@ -325,7 +294,7 @@ class TestCompactorPlanApply:
         assert plan.trigger_tokens == 950
         assert plan.strategy is None
 
-    async def test_apply_compaction_plan_reports_fallback_strategy(self) -> None:
+    async def test_apply_fallback_reports_fallback_strategy(self) -> None:
         from matmaster.types.runtime import CompactionConfig
 
         provider = DummySummaryProvider(RuntimeError("summary down"))
@@ -342,7 +311,11 @@ class TestCompactorPlanApply:
         plan = await compactor.plan_runtime_compaction(
             msgs, {"prompt_tokens": 950}, turn=2
         )
-        result = await compactor.apply_compaction_plan(plan, msgs)
+        result = await compactor.apply_fallback(
+            plan,
+            msgs,
+            failure_reason="summary down",
+        )
 
         assert result.compaction_id == "task-1:root:1"
         assert result.strategy == "sliding_window"
@@ -362,15 +335,18 @@ class TestCompactorOutput:
         )
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=2
+        )
+        await compactor.apply_summary(plan, msgs, "Summarized content.")
 
         assert isinstance(msgs[0], SystemMessage)
         assert msgs[0].content == "You are helpful"
         assert isinstance(msgs[1], UserMessage)
         assert "[Compacted Context]" not in (msgs[1].content or "")
-        assert "<previous_session_summary>" in (msgs[1].content or "")
+        assert "<compacted_history>" in (msgs[1].content or "")
         assert "Summarized content." in msgs[1].content
-        assert "<rehydrated_context>" in (msgs[1].content or "")
+        assert "<session_attachments>" in (msgs[1].content or "")
         assert "Analyze this data" not in (msgs[1].content or "")
         assert len(msgs) == 2
 
@@ -385,15 +361,18 @@ class TestCompactorOutput:
         )
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=2
+        )
+        await compactor.apply_summary(plan, msgs, "Summarized content.")
 
         assert len(msgs) == 2
         assert isinstance(msgs[0], SystemMessage)
         assert isinstance(msgs[1], UserMessage)
         assert "[Compacted Context]" not in (msgs[1].content or "")
-        assert "<previous_session_summary>" in (msgs[1].content or "")
+        assert "<compacted_history>" in (msgs[1].content or "")
         assert "Summarized content." in (msgs[1].content or "")
-        assert "<rehydrated_context>" in (msgs[1].content or "")
+        assert "<session_attachments>" in (msgs[1].content or "")
         assert "Analyze this data" not in (msgs[1].content or "")
 
     async def test_base_snapshot_contains_only_user_bundle(self) -> None:
@@ -403,18 +382,18 @@ class TestCompactorOutput:
         compactor = _make_compactor(config, provider)
 
         plan = compactor.plan_preflight_compaction(msgs)
-        result = await compactor.apply_compaction_plan(plan, msgs)
+        result = await compactor.apply_summary(plan, msgs, "summary")
 
         assert result.base_snapshot is not None
         assert [item["role"] for item in result.base_snapshot] == ["user"]
-        assert "<previous_session_summary>" in result.base_snapshot[0]["content"]
+        assert "<compacted_history>" in result.base_snapshot[0]["content"]
 
-    async def test_second_compact_summarizes_first_bundle_without_special_case(
+    async def test_second_compact_compresses_first_bundle_without_special_case(
         self,
     ) -> None:
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider(summary="second summary")
-        first_bundle = ContextBuilder().build_compact_bundle(summary="first summary")
+        first_bundle = "<compacted_history>\nfirst summary\n</compacted_history>"
         msgs = [
             SystemMessage(content="sys"),
             UserMessage(content=first_bundle),
@@ -424,11 +403,8 @@ class TestCompactorOutput:
         compactor = _make_compactor(config, provider)
 
         plan = compactor.plan_preflight_compaction(msgs)
-        await compactor.apply_compaction_plan(plan, msgs)
+        await compactor.apply_summary(plan, msgs, "second summary")
 
-        prompt_text = provider.calls[0][1]["content"]
-        assert "<previous_session_summary>" in prompt_text
-        assert "first summary" in prompt_text
         assert "second summary" in (msgs[1].content or "")
 
     async def test_fallback_on_summary_failure(self) -> None:
@@ -441,16 +417,19 @@ class TestCompactorOutput:
         compactor = _make_compactor(config, provider)
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
-
-        assert len(msgs) == original_len
-        assert isinstance(msgs[0], SystemMessage)
-        assert isinstance(msgs[1], UserMessage)
-        assert "[Compacted Context]" not in (msgs[0].content or "")
-        assert any(
-            isinstance(message, ToolMessage) and "truncated" in (message.content or "")
-            for message in msgs
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=2
         )
+        await compactor.apply_fallback(plan, msgs, failure_reason="LLM unavailable")
+
+        assert len(msgs) < original_len
+        assert isinstance(msgs[0], SystemMessage)
+        assert "[Compacted Context]" not in (msgs[0].content or "")
+        from matmaster.types.message_normalization import (
+            normalize_and_validate_openai_messages,
+        )
+
+        normalize_and_validate_openai_messages(msgs)
 
 
 class TestCompactorMessageCount:
@@ -481,7 +460,7 @@ class TestCompactorResultMetadata:
         plan = await compactor.plan_runtime_compaction(
             msgs, {"prompt_tokens": 950}, turn=2
         )
-        result = await compactor.apply_compaction_plan(plan, msgs)
+        result = await compactor.apply_summary(plan, msgs, "summary text")
 
         assert result.compaction_count == 1
         assert result.strategy == "summary"
@@ -496,7 +475,7 @@ class TestCompactorResultMetadata:
         compactor = _make_compactor(config, provider)
 
         plan = compactor.plan_preflight_compaction(msgs)
-        result = await compactor.apply_compaction_plan(plan, msgs)
+        result = await compactor.apply_summary(plan, msgs, "summary text")
 
         assert result.phase == "preflight"
         assert result.strategy == "summary"
@@ -514,13 +493,17 @@ class TestCompactorResultMetadata:
         plan = await compactor.plan_runtime_compaction(
             msgs, {"prompt_tokens": 950}, turn=2
         )
-        result = await compactor.apply_compaction_plan(plan, msgs)
+        result = await compactor.apply_fallback(
+            plan,
+            msgs,
+            failure_reason="LLM unavailable",
+        )
 
         assert result.phase == "runtime"
         assert result.strategy == "sliding_window"
         assert result.durability == "ephemeral"
 
-    async def test_preflight_summary_failure_raises_instead_of_silent_fallback(
+    async def test_preflight_fallback_is_not_used_by_compactor_application(
         self,
     ) -> None:
         pass
@@ -529,9 +512,12 @@ class TestCompactorResultMetadata:
         provider = FailingSummaryProvider()
         msgs = _build_long_conversation(5)
         compactor = _make_compactor(config, provider)
+        plan = compactor.plan_preflight_compaction(msgs)
 
-        with pytest.raises(RuntimeError, match="LLM unavailable"):
-            await compactor.preflight_if_needed(msgs)
+        result = await compactor.apply_summary(plan, msgs, "summary text")
+
+        assert result.phase == "preflight"
+        assert result.strategy == "summary"
 
     async def test_summary_input_contains_tool_name_and_call_id(self) -> None:
         pass
@@ -542,16 +528,17 @@ class TestCompactorResultMetadata:
         compactor = _make_compactor(config, provider)
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=2
+        )
+        result = await compactor.apply_summary(plan, msgs, "summary text")
 
-        prompt_text = provider.calls[0][1]["content"]
-        assert "tool_call_id" in prompt_text
-        assert "tool_name" in prompt_text
-        assert "bash" in prompt_text
+        assert result.strategy == "summary"
+        assert "<compacted_history>" in (msgs[1].content or "")
 
 
 class TestPreflightCurrentInputSplit:
-    async def test_summarizes_previous_history_and_keeps_current_instruction(
+    async def test_compresses_previous_history_and_keeps_current_instruction(
         self,
     ) -> None:
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
@@ -573,12 +560,12 @@ class TestPreflightCurrentInputSplit:
             rehydrated=rehydrated_with_current,
             rehydrated_until=rehydrated_until_current,
         )
-        ctx = CurrentInputContext.from_values(
+        ctx = TurnInput.from_values(
             user_text="Use only the new file",
             files=["https://oss.example.com/chat/new.cif"],
             images=["https://oss.example.com/chat/new.png"],
             workspace_paths=["/share/current/POSCAR"],
-            pre_query_scope_event_id=42,
+            pre_turn_history_event_id=42,
         )
         msgs = [
             SystemMessage(content="sys"),
@@ -596,42 +583,39 @@ class TestPreflightCurrentInputSplit:
             ),
         ]
 
-        result = await compactor.apply_compaction_plan(
+        result = await compactor.apply_summary(
             compactor.plan_preflight_compaction(msgs),
             msgs,
-            current_input_context=ctx,
+            "summary text",
+            turn_input=ctx,
         )
 
-        prompt_text = provider.calls[0][1]["content"]
         runtime_content = msgs[1].content or ""
-        rehydrated_context = runtime_content.split("<rehydrated_context>", 1)[1].split(
-            "</rehydrated_context>", 1
-        )[0]
+        session_attachments = runtime_content.split("<session_attachments>", 1)[
+            1
+        ].split("</session_attachments>", 1)[0]
         current_instruction = runtime_content.split("<current_instruction>", 1)[1]
-        assert "old question" in prompt_text
-        assert "old answer" in prompt_text
-        assert "Use only the new file" not in prompt_text
-        assert "new.cif" not in prompt_text
         assert "<current_instruction>" in runtime_content
-        assert "old.cif" in rehydrated_context
-        assert "new.cif" not in rehydrated_context
+        assert "old.cif" in session_attachments
+        assert "new.cif" not in session_attachments
         assert "file_1 new.cif https://oss.example.com/chat/new.cif" in (
             current_instruction
         )
         assert "old.cif" not in current_instruction
         assert msgs[1].images[0].url == "https://oss.example.com/chat/new.png"
         assert result.checkpoint_covered_until_event_id == 42
-        assert compactor._rehydrator.until_event_ids == [42]
         assert result.base_snapshot is not None
         assert "<current_instruction>" not in result.base_snapshot[0]["content"]
         assert "new.cif" not in result.base_snapshot[0]["content"]
         assert result.base_snapshot[0].get("images") in (None, [])
 
-    async def test_missing_pre_query_boundary_makes_split_ephemeral(self) -> None:
+    async def test_missing_boundary_defaults_to_session_start_and_stays_durable(
+        self,
+    ) -> None:
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         compactor = _make_compactor(config, provider)
-        ctx = CurrentInputContext.from_values(
+        ctx = TurnInput.from_values(
             user_text="current task",
             files=["https://oss.example.com/chat/current.cif"],
         )
@@ -642,23 +626,25 @@ class TestPreflightCurrentInputSplit:
             UserMessage(content="current task"),
         ]
 
-        result = await compactor.apply_compaction_plan(
+        result = await compactor.apply_summary(
             compactor.plan_preflight_compaction(msgs),
             msgs,
-            current_input_context=ctx,
+            "summary text",
+            turn_input=ctx,
         )
 
-        assert result.durability == "ephemeral"
-        assert result.failure_reason == "preflight_current_input_boundary_missing"
-        assert result.base_snapshot is None
+        assert result.durability == "durable"
+        assert result.failure_reason is None
+        assert result.checkpoint_covered_until_event_id == 0
+        assert result.base_snapshot is not None
 
     async def test_attachment_only_current_input_is_preserved(self) -> None:
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider()
         compactor = _make_compactor(config, provider)
-        ctx = CurrentInputContext.from_values(
+        ctx = TurnInput.from_values(
             files=["https://oss.example.com/chat/only.cif"],
-            pre_query_scope_event_id=42,
+            pre_turn_history_event_id=42,
         )
         msgs = [
             SystemMessage(content="sys"),
@@ -667,17 +653,18 @@ class TestPreflightCurrentInputSplit:
             UserMessage(content=""),
         ]
 
-        await compactor.apply_compaction_plan(
+        await compactor.apply_summary(
             compactor.plan_preflight_compaction(msgs),
             msgs,
-            current_input_context=ctx,
+            "summary text",
+            turn_input=ctx,
         )
 
         assert "file_1 only.cif https://oss.example.com/chat/only.cif" in (
             msgs[1].content or ""
         )
 
-    async def test_compact_if_needed_succeeds_without_event_sink(self) -> None:
+    async def test_apply_summary_succeeds_without_event_sink(self) -> None:
         pass
 
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
@@ -686,14 +673,17 @@ class TestPreflightCurrentInputSplit:
         compactor = _make_compactor(config, provider, event_sink=None)
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=2
+        )
+        await compactor.apply_summary(plan, msgs, "summary text")
         assert compactor._compaction_count == 1
 
 
 class TestToolTruncationFallback:
     """Tool result truncation when no old turns to compress."""
 
-    async def test_preflight_summarizes_single_turn_without_old_turns(
+    async def test_preflight_compresses_single_turn_without_old_turns(
         self,
     ) -> None:
         """Preflight uses the same summary-to-bundle path for any compact window."""
@@ -721,15 +711,15 @@ class TestToolTruncationFallback:
 
         compactor = _make_compactor(config, provider, event_sink=sink)
 
-        await compactor.preflight_if_needed(msgs)
+        plan = compactor.plan_preflight_compaction(msgs)
+        await compactor.apply_summary(plan, msgs, "summary text")
 
-        assert len(provider.calls) == 1
         assert len(msgs) == 2
         assert isinstance(msgs[1], UserMessage)
-        assert "<previous_session_summary>" in (msgs[1].content or "")
+        assert "<compacted_history>" in (msgs[1].content or "")
         assert len(received) == 0
 
-    async def test_summarizes_when_no_compressible_turns(self) -> None:
+    async def test_compresses_when_no_compressible_turns(self) -> None:
         """1 turn with huge tool results -> summary bundle on success."""
 
         config = CompactionConfig(context_limit=500, trigger_ratio=0.9)
@@ -769,9 +759,8 @@ class TestToolTruncationFallback:
         plan = await compactor.plan_runtime_compaction(
             msgs, {"prompt_tokens": 600}, turn=3
         )
-        result = await compactor.apply_compaction_plan(plan, msgs)
+        result = await compactor.apply_summary(plan, msgs, "summary text")
 
-        assert len(provider.calls) == 1
         assert compactor._compaction_count == 1
         assert len(msgs) == 2
         assert isinstance(msgs[1], UserMessage)
@@ -799,13 +788,15 @@ class TestToolTruncationFallback:
         compactor = _make_compactor(config, provider)
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 600}, turn=3)
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 600}, turn=3
+        )
+        await compactor.apply_fallback(plan, msgs, failure_reason="LLM unavailable")
 
-        # Small content -> not truncated (truncation skips content < 500 chars)
-        assert "truncated" not in (msgs[3].content or "")
+        assert "truncated" not in (msgs[-1].content or "")
 
-    async def test_truncation_preserves_head_and_tail_on_summary_failure(self) -> None:
-        """Fallback truncation keeps head 200 + tail 100 chars."""
+    async def test_fallback_preserves_complete_tool_turn(self) -> None:
+        """Fallback keeps assistant tool calls with matching tool results."""
 
         config = CompactionConfig(context_limit=200, trigger_ratio=0.9)
         provider = FailingSummaryProvider()
@@ -824,13 +815,15 @@ class TestToolTruncationFallback:
         compactor = _make_compactor(config, provider)
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 300}, turn=3)
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 300}, turn=3
+        )
+        await compactor.apply_fallback(plan, msgs, failure_reason="LLM unavailable")
 
-        result_content = msgs[3].content or ""
+        result_content = msgs[-1].content or ""
         assert "HEAD_MARKER_" in result_content  # head preserved
         assert "_TAIL_MARKER" in result_content  # tail preserved
-        assert "truncated" in result_content  # marker present
-        assert len(result_content) < len(original_content)
+        assert len(result_content) == len(original_content)
 
 
 class TestCompactorCompatibility:
@@ -845,7 +838,10 @@ class TestCompactorCompatibility:
         compactor = _make_compactor(config, provider, event_sink=None)
         compactor.update_message_count(len(msgs))
 
-        await compactor.compact_if_needed(msgs, {"prompt_tokens": 950}, turn=2)
+        plan = await compactor.plan_runtime_compaction(
+            msgs, {"prompt_tokens": 950}, turn=2
+        )
+        await compactor.apply_summary(plan, msgs, "summary text")
         assert compactor._compaction_count == 1
 
     async def test_no_bus_import_in_compactor(self) -> None:
@@ -853,9 +849,9 @@ class TestCompactorCompatibility:
         import ast
         import inspect
 
-        from matmaster.core import context_compactor
+        from matmaster.context import compaction
 
-        source = inspect.getsource(context_compactor)
+        source = inspect.getsource(compaction)
         tree = ast.parse(source)
 
         for node in ast.walk(tree):

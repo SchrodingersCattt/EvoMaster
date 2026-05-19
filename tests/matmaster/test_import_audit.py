@@ -66,6 +66,8 @@ def _find_all_imports_matching(
     for node in ast.walk(tree):
         if not isinstance(node, ast.ImportFrom):
             continue
+        if node.level:
+            continue
         if node.module is None:
             continue
         if not node.module.startswith(module_prefix):
@@ -103,7 +105,6 @@ class TestPhase30FullIsolation:
     # 23 violations resolved since Plan 01 (exp.py, playground.py, tools/, integration/).
     KNOWN_VIOLATIONS: frozenset[str] = frozenset(
         {
-            "matmaster/core/__init__.py:L10",
             "matmaster/skills/playground-skills/retrieve-structure/scripts/fetch_web_structure.py:L30",
         }
     )
@@ -150,8 +151,8 @@ class TestPhase30FullIsolation:
 
     def test_known_violations_count(self):
         """Track the total known violations count -- this number should decrease over time."""
-        assert len(self.KNOWN_VIOLATIONS) == 2, (
-            f"Expected 2 known violations, got {len(self.KNOWN_VIOLATIONS)}. "
+        assert len(self.KNOWN_VIOLATIONS) == 1, (
+            f"Expected 1 known violation, got {len(self.KNOWN_VIOLATIONS)}. "
             "Update this count as violations are resolved."
         )
 

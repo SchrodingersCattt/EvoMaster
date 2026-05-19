@@ -16,9 +16,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from matmaster.core.playground import PlaygroundContext
 from matmaster.types.cancellation import CancellationController
-from matmaster.types.context import PlaygroundContext
 from matmaster.types.messages import LLMResponse, StreamChunk
+from matmaster.types.run_metadata import RunMetadata
 
 # ── Mock LLM providers for different outcomes ────────
 
@@ -138,7 +139,7 @@ def _make_ctx(tmp_path: Path) -> PlaygroundContext:
         workdir=tmp_path / 'workspace',
         session_type='local',
         cache_area=tmp_path / 'cache',
-        run_meta={'run_dir': str(tmp_path), 'task_id': 'test'},
+        metadata=RunMetadata(run_dir=str(tmp_path), task_id='test'),
     )
 
 
@@ -185,7 +186,9 @@ def _run_with_quota_mock(
     """Run agent with standard patches and return whether use_quota was called."""
     with (
         patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
-        patch('src.services.agent_run_service.BohriumSetupService') as mock_bohrium_cls,
+        patch(
+            'src.services.agent_run_bohrium_stage.BohriumSetupService'
+        ) as mock_bohrium_cls,
         patch('src.services.agent_run_service.get_chat_events_table') as mock_events_fn,
         patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
         patch('src.services.agent_run_service.use_quota', use_quota_mock),
@@ -216,6 +219,13 @@ def _run_with_quota_mock(
 
         mock_events_table = MagicMock()
         mock_events_table.get_session_events.return_value = []
+        mock_events_table.get_history_checkpoints.return_value = []
+        mock_events_table.has_user_turn_context.return_value = False
+        mock_events_table.get_session_user_query_events.return_value = []
+        mock_events_table.query_context_events.return_value = []
+        mock_events_table.get_recent_context_anchor_events.return_value = []
+        mock_events_table.query_user_turn_context_by_invocation.return_value = None
+        mock_events_table.add_event.return_value = True
         mock_events_fn.return_value = mock_events_table
 
         mock_redis = MagicMock()
@@ -229,6 +239,7 @@ def _run_with_quota_mock(
                 cancel_token=cancel_token or _make_cancel_token(),
                 mode='direct',
                 task_id='task-q',
+                invocation_id='inv-task-q',
             )
         )
 

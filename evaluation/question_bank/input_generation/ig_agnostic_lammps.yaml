@@ -79,7 +79,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_lammps_gaff_001_20260513
+- id: IG_lammps_gaff_001_20260518v2
   capability: input_generation
   domain: agnostic
   intent: Generate LAMMPS input files for polymer structure optimization using GAFF
@@ -112,7 +112,7 @@ questions:
   - key: must_pair_style
     value:
       filename: in.lammps
-      pattern: pair_style\s+lj
+      pattern: pair_style\s+lj/cut(/coul/(long|cut))?\s
       flags: ''
   - key: must_bond_style
     value:
@@ -152,7 +152,8 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: must_pair_style
-    criterion: '[Must] pair_style includes lj (Lennard-Jones for GAFF van der Waals).'
+    criterion: '[Must] pair_style is lj/cut or lj/cut/coul/long (Lennard-Jones for
+      GAFF van der Waals), NOT tip4p or other water-specific pair styles.'
     axis: correctness
     verify: text_file_regex
   - id: must_bond_style

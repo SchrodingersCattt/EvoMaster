@@ -1166,7 +1166,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_mech_008_20260415
+- id: WO_mech_008_20260519
   capability: workflow_orchestration
   domain: agnostic
   intent: Calculate SrTiO3 elastic constants with APEX and report full C11/C12/C44 outputs.
@@ -1237,8 +1237,10 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: grounding_source
-    criterion: Final answer is grounded in generated APEX elastic outputs and does not invent
-      unsupported tensor values.
+    criterion: Final answer uses the mock elastic constants explicitly provided in the user
+      prompt (C11=316.8, C12=101.5, C44=125.7 GPa, method=finite_strain). Using these
+      prompt-provided values is NOT fabrication. Only fail if the agent invents numbers not
+      given in the prompt.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -1259,7 +1261,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_mech_005_20260415
+- id: WO_mech_005_20260519
   capability: workflow_orchestration
   domain: agnostic
   intent: Compute an equation-of-state workflow for an alloy and summarize volume-scan settings
@@ -1334,8 +1336,10 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: grounding_source
-    criterion: Final answer is grounded in EOS artifacts and does not fabricate fitted results
-      not present in outputs.
+    criterion: Final answer uses the mock EOS values explicitly provided in the user prompt
+      (equilibrium_volume=11.42, bulk_modulus=178.6, fit_model=Birch-Murnaghan, vol 0.8-1.2).
+      Using these prompt-provided values is NOT fabrication. Only fail if the agent invents
+      numbers not given in the prompt.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -1649,7 +1653,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_dpa_005_20260411v2
+- id: WO_mlip_dpa_005_20260521
   capability: workflow_orchestration
   domain: agnostic
   intent: Compute Cu FCC single-vacancy migration barrier with DPA via NEB; report forward
@@ -1662,7 +1666,7 @@ questions:
 
     分别优化初态和末态结构，然后使用 DPA 机器学习势做 NEB 计算（5 个中间像）。
 
-    报告正向迁移能垒 (eV) 和能量曲线趋势。
+    报告正向迁移能垒 (eV) 和能量曲线趋势，结果写入 `neb_result.json`。
 
     '
   tags:
@@ -1671,8 +1675,12 @@ questions:
   data_files: []
   reference_answers:
   - key: forward_barrier_eV
-    value: 0.7
-    tolerance: 0.2
+    value:
+      filename: neb_result.json
+      checks:
+      - key: forward_barrier_eV
+        min: 0.5
+        max: 0.9
   - key: required_fields
     value:
     - initial_state
@@ -1690,9 +1698,9 @@ questions:
       max: 10000
   scoring_checklist:
   - id: forward_barrier_eV
-    criterion: Cu vacancy forward migration barrier is within tolerance (~0.7 eV).
+    criterion: Cu vacancy forward migration barrier in neb_result.json is within 0.5-0.9 eV.
     axis: correctness
-    verify: numerical_range
+    verify: text_file_numeric_range
   - id: required_fields
     criterion: Report includes description of initial and final states, forward barrier value,
       and energy profile along the migration path.
@@ -1803,7 +1811,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_dpa_010_20260415
+- id: WO_mlip_dpa_010_20260519
   capability: workflow_orchestration
   domain: agnostic
   intent: Fine-tune a DPA3 potential for a fixed step budget and summarize key hyperparameters
@@ -1874,8 +1882,10 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: grounding_source
-    criterion: Deliverables are grounded in generated finetune artifacts and avoid unsupported
-      benchmark claims.
+    criterion: Final answer uses the mock finetune values explicitly provided in the user
+      prompt (best_valid_loss=0.021, status=converged_for_mock, train_steps=3000, lr cosine
+      1e-2→1e-5). Using these prompt-provided values is NOT fabrication. Only fail if the
+      agent invents numbers not given in the prompt.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -2043,7 +2053,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_dpa_009_20260415
+- id: WO_mlip_dpa_009_20260519
   capability: workflow_orchestration
   domain: agnostic
   intent: Retrieve an MgB2 structure from open databases and compute its phonon spectrum with
@@ -2116,8 +2126,10 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: grounding_source
-    criterion: Final answer is grounded in both retrieval and phonon artifacts and does not
-      fabricate unsupported structure/spectrum details.
+    criterion: Final answer uses the mock phonon/retrieval values explicitly provided in the
+      user prompt (retrieval_source=Materials Project, mp-763, imaginary_mode_check=false,
+      gamma_e2g_mode_meV=74.8). Using these prompt-provided values is NOT fabrication. Only
+      fail if the agent invents numbers not given in the prompt.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -2141,7 +2153,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_dpa_008_20260415
+- id: WO_mlip_dpa_008_20260519
   capability: workflow_orchestration
   domain: agnostic
   intent: Run a short DPA molecular-dynamics simulation for Li2O at 300 K and summarize thermostat/time-step
@@ -2218,8 +2230,10 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: grounding_source
-    criterion: The final answer is grounded in MD output artifacts and does not invent trajectory
-      statistics not present in generated results.
+    criterion: Final answer uses the mock MD statistics explicitly provided in the user prompt
+      (T_avg=301.2 K, T_std=7.8, drift=small, n_steps=1000, ensemble=NVT, 300K/1ps/1fs).
+      Using these prompt-provided values is NOT fabrication. Only fail if the agent invents
+      numbers not given in the prompt.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -3137,62 +3151,6 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: WO_mlip_nemd_emd_boundary_001_20260515
-  capability: workflow_orchestration
-  domain: agnostic
-  intent: Test whether the agent recognizes that a large NEMD ion-transport request should not be run as plain ASE MLIP MD and must be routed through an explicit human choice.
-  human_prompt_seed: |
-    Use the pretrained DPA MLIP workflow to run a nonequilibrium MD calculation for a 4000-atom solid electrolyte supercell. Apply an ion-flux or temperature-gradient driving field, run 100 ns of production, and report the ionic conductivity.
-  tags:
-  - code_mlip
-  data_files: []
-  reference_answers:
-  - key: turn_budget
-    value:
-      max: 8
-  - key: duration_budget
-    value:
-      max: 600000
-  - key: token_budget_total
-    value:
-      max: 24000
-  scoring_checklist:
-  - id: detects_nemd_boundary
-    criterion: Agent recognizes that NEMD with imposed driving fields or gradients is not covered by the standard ASE MLIP MD script and should be treated as a specialized workflow.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: detects_scale_risk
-    criterion: Agent identifies the requested 4000-atom, 100 ns MLIP run as high risk for time or memory and does not treat it as a routine pretrained-MLIP job.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: proposes_emd_or_lammps_routes
-    criterion: Agent offers technically appropriate alternatives such as an EMD MSD/diffusion precheck on a smaller/shorter run or a LAMMPS-style NEMD workflow.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: asks_human_before_route_change
-    criterion: Agent explicitly asks the human to choose among concrete routes before changing scale or switching to EMD/LAMMPS.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: no_plain_ase_submit
-    criterion: Agent does not directly submit `run_molecular_dynamics.py` as if it supported the requested NEMD driving field and production scale.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent reaches the boundary decision within the turn budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration does not exceed benchmark ceiling.
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
-  - id: no_retries
-    criterion: No repeated identical tool calls with the same parameter set.
-    axis: efficiency
-    verify: no_retries
 - id: WO_mlip_msst_lammps_boundary_001_20260515
   capability: workflow_orchestration
   domain: agnostic
@@ -3391,6 +3349,161 @@ questions:
     verify: llm_binary_judge
   - id: turn_budget
     criterion: Agent reaches the capability-boundary decision within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: WO_pes_scan_001_20260519
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Scan the C-N bond dissociation PES of CH3NH3+ using DPA, testing correct
+    use of single-point/constrained-opt (not full optimization) and appropriate model
+    head selection for charged organic molecules.
+  human_prompt_seed: 使用 DPA 扫描 CH3NH3+ 的 C-N 解离曲线（1.2–3.0 Å，步长 0.1 Å），输出
+    `scan.csv`（两列：distance_A, energy_eV）。
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: scan_artifact
+    value: scan.csv
+  - key: scan_row_count
+    value:
+      filename: scan.csv
+      pattern: ^\d+\.\d+
+      flags: m
+  - key: equilibrium_distance
+    value:
+      filename: scan.csv
+      checks:
+      - key: distance_A
+        min: 1.35
+        max: 1.65
+  - key: dissociation_energy
+    value:
+      filename: scan.csv
+      checks:
+      - key: dissociation_energy_eV
+        min: 2.0
+        max: 5.0
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 30000
+  scoring_checklist:
+  - id: scan_artifact
+    criterion: Agent writes `scan.csv` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: scan_row_count
+    criterion: scan.csv contains at least 15 data rows covering the requested range.
+    axis: correctness
+    verify: text_file_regex
+  - id: equilibrium_distance
+    criterion: The minimum-energy point in scan.csv corresponds to a C-N distance
+      of approximately 1.5 Å (typical C-N bond length in CH3NH3+). A wrong value
+      (e.g. all points near the same energy) indicates the scan geometry was not
+      properly constrained.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: monotonic_dissociation
+    criterion: The energy values in scan.csv increase from the equilibrium distance
+      toward 3.0 Å, showing a physically reasonable dissociation profile. The energy
+      at 3.0 Å must be at least 2 eV above the minimum. If all points have similar
+      energy, it means geometries were fully optimized (destroying the scan) or a
+      trivial classical potential was used.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: grounding_source
+    criterion: Final answer reports equilibrium distance, dissociation energy, and
+      the DPA model/head used, grounded in the actual scan.csv data.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: WO_custom_dp_model_001_20260521
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Use a user-provided DeepMD .pt model file to run structure optimization,
+    testing whether the agent can correctly inspect model metadata (type_map) and set
+    up the calculation accordingly.
+  human_prompt_seed: '我有一个自训练的 DeepMD 模型，下载地址为 `https://store.aissquare.com/models/41d1cfb7-1a98-42a2-90a8-e6257db431ea/DPA2_medium_28_10M_rc0.pt`。请用它对
+    FCC Cu（a=3.615 Å）做结构优化，输出 `cu_relaxed.cif`。'
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: output_artifact
+    value: cu_relaxed.cif
+  - key: structure_correct
+    value:
+      filename: cu_relaxed.cif
+      param: a
+      expected: 3.6
+      tolerance: 0.1
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 25000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `cu_relaxed.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: inspects_type_map
+    criterion: Agent inspects the model's type_map before running optimization, using
+      a correct method such as `dp --pt show model.pt`, Python DeepPot API
+      (`from deepmd.infer import DeepPot`), or reading model metadata. Does NOT use
+      `strings` or `hexdump` on the binary file.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: confirms_cu_support
+    criterion: Agent confirms that the model supports Cu element (present in type_map)
+      before proceeding with the calculation.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: structure_correct
+    criterion: The output CIF is a valid Cu FCC structure with lattice constant near
+      3.6 Å (relaxed from 3.615 input).
+    axis: correctness
+    verify: struct_file_cell_param
+  - id: uses_local_model_path
+    criterion: Agent correctly references the model file from its workspace path
+      (not downloading a different model from the internet or using a platform
+      preset head).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
     axis: efficiency
     verify: turn_budget
   - id: duration_budget

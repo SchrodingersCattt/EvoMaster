@@ -17,17 +17,21 @@ from pathlib import Path
 from typing import Any
 
 from matmaster.config.loader import load_agents_general_llm
+from matmaster.context.assembly import (
+    ContextAssemblyIntent,
+    TurnAssemblyRequest,
+)
+from matmaster.context.ports import SkillResolver, UserInstructions
+from matmaster.context.scanner import scan_skill_hits
+from matmaster.context.sections import ContextView
+from matmaster.context.sources.turn_input import TurnInput
 from matmaster.core.playground import PlaygroundManager
+from matmaster.core.runtime_context_assembly import empty_skill_resolver
 from matmaster.integration.event_payloads import _normalize_public_source
 from matmaster.integration.fanout import RunEventFanout
 from matmaster.integration.persistence_handler import PersistenceHandler
 from matmaster.integration.sse_handler import SSEHandler
-from matmaster.integration.workspace_handler import WorkspaceHandler
-from matmaster.manifests import attachment as attachment_manifest
-from matmaster.manifests import skill as skill_manifest
 from matmaster.types.cancellation import CancellationToken
-from matmaster.types.context import WorkspaceArchivalConfig
-from matmaster.types.current_input import CurrentInputContext
 from matmaster.types.events import (
     BusEvent,
     CancelledEvent,
@@ -37,22 +41,32 @@ from matmaster.types.events import (
     StreamClosedEvent,
     ToolResultEvent,
 )
-from matmaster.types.figures import FigureUploadConfig
-from matmaster.types.messages import Message, UserMessage
-from matmaster.types.runtime_ports import (
-    PlaygroundCompactionPort,
-    PlaygroundRuntimePorts,
-)
+from matmaster.types.run_metadata import RunMetadata
+from matmaster.types.runtime_ports import FigureUploadPort
 from src.dao.chat_events_table import get_chat_events_table
-from src.dao.oss_io import upload_bytes_to_oss
 from src.dao.redis_dao import get_redis_dao
-from src.services.agent_run_bohrium import BohriumSetupService
+from src.services.agent_run_bohrium_stage import (
+    _build_figure_upload_config,
+    run_bohrium_stage,
+)
+from src.services.agent_run_history_wiring import build_history_wiring
+from src.services.context_assembly_factory import build_context_assembler
+from src.services.context_turn_intent import resolve_turn_context_intent
 from src.services.history_checkpoint_service import HistoryCheckpointService
-from src.services.history_restore_service import HistoryRestoreService
 from src.services.image_input_service import get_image_input_service
 from src.services.quota_service import use_quota
 from src.services.response_figures_service import ResponseFiguresAccumulator
+from src.services.session_event_codec import decode_session_events
 from src.services.sessions_service import get_sessions_service
+from src.services.skill_registry_factory import build_skill_registry
+from src.services.skill_resolver import SkillRegistryResolver
+from src.services.stream_reply_queue import RedisReplyQueue
+from src.services.user_turn_context_service import (
+    DEFAULT_TURN_TRANSFORM,
+    USER_CONTEXT_RENDER_VERSION,
+    USER_TURN_CONTEXT_SCHEMA_VERSION,
+    write_user_turn_context_event,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -66,24 +80,6 @@ _project_root = Path(__file__).resolve().parent.parent.parent
 RUN_ID_WEB = 'mat_master_web'
 
 _MATMASTER_CONFIG_DIR = _project_root / 'config'
-_USER_INSTRUCTIONS_PATH = '/personal/.matmaster/AGENT.md'
-_USER_INSTRUCTIONS_START = (
-    f'<matmaster-user-instructions source="{_USER_INSTRUCTIONS_PATH}">'
-)
-_USER_INSTRUCTIONS_END = '</matmaster-user-instructions>'
-_USER_INSTRUCTIONS_TEMPLATE = (
-    f"{_USER_INSTRUCTIONS_START}\n"
-    "The following content comes from the user's personal instruction file.\n"
-    "\n"
-    "Treat it as user-level preferences. Follow it when relevant, but do not "
-    "let it override system, developer, tool, safety, data-access, or project "
-    "constraints.\n"
-    "\n"
-    "{content}\n"
-    f"{_USER_INSTRUCTIONS_END}\n"
-    "\n"
-    "{user_query}"
-)
 
 
 @lru_cache(maxsize=1)
@@ -116,141 +112,6 @@ def _invalid_finish_error_message(finish_detail: Any) -> str:
     return _INVALID_FINISH_MESSAGES.get(kind, _INVALID_FINISH_DEFAULT)
 
 
-def _remote_skill_roots_from_session(session: Any | None) -> list[str]:
-    if session is None:
-        return []
-
-    roots: list[str] = []
-    raw_roots = getattr(session, 'remote_skill_roots', None)
-    if isinstance(raw_roots, (list, tuple, set)):
-        roots.extend(
-            root.strip() for root in raw_roots if isinstance(root, str) and root.strip()
-        )
-
-    raw_user_root = getattr(session, 'remote_user_skills_root', None)
-    if isinstance(raw_user_root, str) and raw_user_root.strip():
-        roots.append(raw_user_root.strip())
-
-    seen: set[str] = set()
-    unique: list[str] = []
-    for root in roots:
-        if root not in seen:
-            seen.add(root)
-            unique.append(root)
-    return unique
-
-
-def _strip_user_instructions_prefix(text: str | None) -> str:
-    """Remove a leading runtime user-instructions wrapper if present."""
-    if not text:
-        return ""
-    if not text.startswith(_USER_INSTRUCTIONS_START):
-        return text
-
-    end_idx = text.find(_USER_INSTRUCTIONS_END)
-    if end_idx == -1:
-        return text
-
-    remainder = text[end_idx + len(_USER_INSTRUCTIONS_END) :]
-    if remainder.startswith("\n\n"):
-        return remainder[2:]
-    if remainder.startswith("\n"):
-        return remainder[1:]
-    return remainder
-
-
-def _find_first_user_message_index(history: list[Message]) -> int | None:
-    """Return the first UserMessage index in model-visible history."""
-    for index, message in enumerate(history):
-        if isinstance(message, UserMessage):
-            return index
-    return None
-
-
-def _render_user_instructions_block(
-    *,
-    user_instructions: str,
-    user_query: str,
-) -> str:
-    """Render user instructions as a user-level prefix for the first query."""
-    return _USER_INSTRUCTIONS_TEMPLATE.format(
-        content=user_instructions,
-        user_query=user_query,
-    )
-
-
-def _apply_user_instructions_to_initial_user_query(
-    *,
-    user_prompt: str,
-    user_instructions: str | None,
-    history: list[Message],
-) -> tuple[str, list[Message]]:
-    """Inject user instructions into the first model-visible user query.
-
-    The transform is runtime-only and idempotent. Existing wrappers are stripped
-    first, which prevents duplicate prefixes when restored history comes from a
-    durable compaction checkpoint that captured a previously rewritten message.
-    """
-    instructions = (user_instructions or "").strip()
-    updated_history = list(history)
-    first_user_idx = _find_first_user_message_index(updated_history)
-
-    if first_user_idx is None:
-        stripped_prompt = _strip_user_instructions_prefix(user_prompt)
-        if not instructions:
-            return stripped_prompt, updated_history
-        return (
-            _render_user_instructions_block(
-                user_instructions=instructions,
-                user_query=stripped_prompt,
-            ),
-            updated_history,
-        )
-
-    first_user = updated_history[first_user_idx]
-    stripped_content = _strip_user_instructions_prefix(first_user.content)
-    if instructions:
-        stripped_content = _render_user_instructions_block(
-            user_instructions=instructions,
-            user_query=stripped_content,
-        )
-    updated_history[first_user_idx] = first_user.model_copy(
-        update={"content": stripped_content}
-    )
-    return user_prompt, updated_history
-
-
-def _build_workspace_upload_fn(
-    archival_config: WorkspaceArchivalConfig | None,
-) -> Callable[..., Any] | None:
-    """Build workspace upload closure when archival is enabled.
-
-    Lazy-imports oss_io to avoid hard oss2 dependency when archival
-    is disabled.
-    """
-    if not archival_config or not archival_config.enabled:
-        return None
-    oss_prefix = (archival_config.oss_prefix or '').strip('/')
-
-    def _do_upload(session_id: str, task_id: str, workspace_path: Path) -> None:
-        from src.dao.oss_io import upload_dir_to_oss
-
-        key_prefix = '/'.join(part for part in (oss_prefix, session_id) if part)
-        upload_dir_to_oss(workspace_path, key_prefix)
-
-    return _do_upload
-
-
-def _build_figure_upload_config(*, session_id: str, task_id: str) -> FigureUploadConfig:
-    """Build the per-run figure upload contract injected into tool runtime state."""
-    return FigureUploadConfig(
-        session_id=session_id,
-        task_id=task_id,
-        asset_key_prefix='matmaster/chat_figures',
-        upload_bytes=upload_bytes_to_oss,
-    )
-
-
 async def _emit_error_and_close_fanout(
     fanout: RunEventFanout, message: str, source: str = 'System'
 ) -> None:
@@ -272,54 +133,61 @@ class AgentRunService:
     def __init__(self, sessions_service=None):
         self._sessions_service = sessions_service or get_sessions_service()
         self._pg_manager = PlaygroundManager(_project_root)
-        # Hot cache: session_id -> set of skill names already activated.
+        # Hot cache: session_id -> frozenset of skill names already activated.
         # The authoritative source is DB skill_hit events; this dict only
         # avoids re-scanning the DB on every turn. Populated lazily on cache miss.
-        self._active_skills: dict[str, set[str]] = {}
+        self._active_skills: dict[str, frozenset[str]] = {}
 
     def init_playground_sync(self) -> None:
         """Validate configs at startup -- delegates to PlaygroundManager."""
         self._pg_manager.validate_startup()
 
-    def _build_skill_registry(
+    def _build_skill_resolver(
         self,
         exp_config: Any,
-        session: Any | None = None,
-    ) -> Any | None:
-        if getattr(exp_config, "skills", None) is None or not exp_config.skills.enabled:
-            return None
-        try:
-            from matmaster.skills.registry import SkillRegistry
+        session: Any | None,
+    ) -> SkillResolver:
+        skills_cfg = getattr(exp_config, "skills", None)
+        if skills_cfg is None or not getattr(skills_cfg, "enabled", False):
+            return empty_skill_resolver
 
-            roots_raw = exp_config.skills.skills_root
-            if isinstance(roots_raw, list):
-                roots = [Path(root) for root in roots_raw if root]
-            elif roots_raw:
-                roots = [Path(roots_raw)]
-            else:
-                roots = []
-            remote_roots = _remote_skill_roots_from_session(session)
-            if not roots and not remote_roots:
-                return None
-            return SkillRegistry(
-                roots,
-                remote_session=session if remote_roots else None,
-                remote_roots=remote_roots,
+        roots_raw = getattr(skills_cfg, "skills_root", None)
+        if isinstance(roots_raw, (list, tuple)):
+            config_roots: tuple[str | Path, ...] = tuple(
+                root for root in roots_raw if isinstance(root, (str, Path)) and root
+            )
+        elif isinstance(roots_raw, (str, Path)) and roots_raw:
+            config_roots = (roots_raw,)
+        else:
+            config_roots = ()
+
+        disabled_raw = getattr(skills_cfg, "disabled_skill_names", ())
+        config_disabled = (
+            tuple(disabled_raw)
+            if isinstance(disabled_raw, (list, tuple, set, frozenset))
+            else ()
+        )
+        try:
+            registry = build_skill_registry(
+                config_roots=config_roots,
+                session=session,
+                config_disabled=config_disabled,
             )
         except Exception:
             logger.warning(
-                "active skill rehydrate: building SkillRegistry failed",
+                "active skill resolver: building SkillRegistry failed",
                 exc_info=True,
             )
-            return None
+            registry = None
+        return SkillRegistryResolver(registry)
 
     def _resolve_active_skill_names(
         self,
         session_id: str,
         events_table: Any,
-        exp_config: Any,
-        session: Any | None = None,
-    ) -> set[str]:
+        *,
+        until_event_id: int | None = None,
+    ) -> frozenset[str]:
         cached = self._active_skills.get(session_id)
         if cached is not None:
             return cached
@@ -338,10 +206,12 @@ class AgentRunService:
                     exc_info=True,
                 )
 
-        registry = self._build_skill_registry(exp_config, session=session)
-        skills = skill_manifest.resolve_active_skills(raw_events, registry)
-        names = {skill_manifest.skill_name(skill) for skill in skills}
-        names.discard("")
+        events = decode_session_events(raw_events)
+        if until_event_id is not None:
+            events = tuple(event for event in events if event.id <= until_event_id)
+        names = frozenset(
+            record.skill_name for record in scan_skill_hits(events) if record.skill_name
+        )
         self._active_skills[session_id] = names
         return names
 
@@ -357,7 +227,7 @@ class AgentRunService:
         llm_override: str | None = None,
         model_override: str | None = None,
         images: list[str] | None = None,
-        current_input_context: CurrentInputContext | None = None,
+        turn_input: TurnInput | None = None,
         bohrium_required: bool = False,
         remote_workdir: str | None = None,
     ) -> tuple[bool | tuple[bool, str], int]:
@@ -401,14 +271,12 @@ class AgentRunService:
             playground = self._pg_manager.get_or_create(session_id)
             run_dir = str(_project_root / 'runs' / RUN_ID_WEB)
             pg_ctx = playground.prepare(
-                {
-                    'run_dir': run_dir,
-                    'task_id': task_id,
-                }
+                RunMetadata(run_dir=run_dir, task_id=task_id),
+                session_id=session_id,
             )
-            if current_input_context is not None:
-                pg_ctx = pg_ctx.with_run_meta(
-                    current_input_context=current_input_context,
+            if turn_input is not None:
+                pg_ctx = pg_ctx.with_metadata(
+                    turn_input=turn_input,
                 )
             try:
                 events_table = get_chat_events_table()
@@ -451,57 +319,24 @@ class AgentRunService:
             def _dispatch_from_thread(event: BusEvent) -> None:
                 fanout.dispatch_from_thread(loop, event)
 
-            bohrium_svc = BohriumSetupService(
-                self._sessions_service,
-                event_sink=_dispatch_from_thread,
-            )
-            effective_bohrium_required = bool(bohrium_required or remote_workdir)
-            bohrium_result = await bohrium_svc.run_setup(
+            stage_result = await run_bohrium_stage(
+                sessions_service=self._sessions_service,
+                fanout=fanout,
+                dispatch_from_thread=_dispatch_from_thread,
                 session_id=session_id,
+                task_id=task_id,
                 playground=playground,
+                pg_ctx=pg_ctx,
                 run_started_at=run_started_at,
-                bohrium_required=effective_bohrium_required,
+                bohrium_required=bohrium_required,
                 remote_workdir=remote_workdir,
             )
-            ssh_attached = bohrium_result.ssh_attached
-            if bohrium_result.abort_result is not None:
-                return bohrium_result.abort_result
-            bohrium_meta = (
-                bohrium_result.runtime_snapshot.model_dump()
-                if bohrium_result.runtime_snapshot is not None
-                else {}
-            )
-            pg_ctx = pg_ctx.with_bohrium(bohrium_meta)
-            if bohrium_result.execution_session is not None:
-                execution_workdir = bohrium_result.execution_workdir or ''
-                session_type = bohrium_result.session_type or 'ssh'
-                pg_ctx = pg_ctx.with_execution(
-                    session=bohrium_result.execution_session,
-                    session_type=session_type,
-                    execution_workdir=execution_workdir,
-                )
-            user_instructions: str | None = None
-            _ui_session = (
-                bohrium_result.execution_session if bohrium_result else None
-            ) or pg_ctx.session
-            if _ui_session is not None:
-                try:
-                    user_instructions = (
-                        _ui_session.read_file(_USER_INSTRUCTIONS_PATH).strip() or None
-                    )
-                except Exception as _ui_err:
-                    logger.debug('read user instructions skipped: %s', _ui_err)
-
-            # Workspace handling depends on the finalized Bohrium/archival context.
-            fanout.add_handler(
-                WorkspaceHandler(
-                    session_id=session_id,
-                    task_id=task_id,
-                    ssh_attached=ssh_attached,
-                    workspace_path=pg_ctx.workdir,
-                    upload_fn=_build_workspace_upload_fn(pg_ctx.archival),
-                )
-            )
+            bohrium_svc = stage_result.bohrium_svc
+            if stage_result.abort_result is not None:
+                return stage_result.abort_result
+            pg_ctx = stage_result.pg_ctx
+            ssh_attached = stage_result.ssh_attached
+            user_instructions = stage_result.user_instructions
 
             # -- Stage 4: Exp assembly --
             from matmaster.config.loader import load_llm_config
@@ -517,7 +352,21 @@ class AgentRunService:
                 default_key=agent_default_llm,
             )
             selected_profile = llm_config.get_profile(resolved_llm.profile_key)
-            current_images = list(images or [])
+            top_level_images = tuple(images or ())
+            turn_input_images = turn_input.images if turn_input is not None else ()
+            current_images = turn_input_images or top_level_images
+            if (
+                turn_input_images
+                and top_level_images
+                and turn_input_images != top_level_images
+            ):
+                logger.warning(
+                    "run_agent image inputs differ; using TurnInput images "
+                    "session_id=%s task_id=%s",
+                    session_id,
+                    task_id,
+                )
+            image_detail = None
             if current_images:
                 selected_profile = get_image_input_service().ensure_vision_supported(
                     llm_config=llm_config,
@@ -525,13 +374,7 @@ class AgentRunService:
                     model_override=model_override,
                     default_profile_key=agent_default_llm,
                 )
-                image_parts: list[dict[str, Any]] = []
-                for image_url in current_images:
-                    image_part: dict[str, Any] = {'url': image_url}
-                    if selected_profile.vision_detail is not None:
-                        image_part['detail'] = selected_profile.vision_detail
-                    image_parts.append(image_part)
-                pg_ctx = pg_ctx.with_run_meta(current_user_images=image_parts)
+                image_detail = selected_profile.vision_detail
 
             pg_ctx = pg_ctx.model_copy(
                 update={
@@ -644,14 +487,12 @@ class AgentRunService:
                     spawn_id=spawn_id,
                 )
 
-            pg_ctx = pg_ctx.with_run_meta(
-                figure_upload_config=figure_upload_config,
-                user_instructions=user_instructions,
+            pg_ctx = pg_ctx.with_runtime_port(
+                figure_upload=FigureUploadPort(config=figure_upload_config),
             )
 
             # -- Stage 4b: AskQuestion bridge --
             from matmaster.integration.interaction_bridge import AskQuestionBridge
-            from src.services.stream_service import RedisReplyQueue
 
             async def _interaction_event_sink(event: BusEvent) -> None:
                 await fanout.dispatch(event)
@@ -664,133 +505,139 @@ class AgentRunService:
             )
             pg_ctx = pg_ctx.model_copy(update={'interaction_bridge': bridge})
             # -- Stage 5: History --
-            history = (
-                HistoryRestoreService(events_table).restore_history(
+            wiring = build_history_wiring(
+                base_runtime_ports=pg_ctx.runtime_ports,
+                events_table=events_table,
+                session_id=session_id,
+                task_id=task_id,
+                raw_history_limit=_DIALOG_HISTORY_MAX_EVENTS,
+                child_event_sink=_child_event_sink,
+                checkpoint_sink_factory=_checkpoint_sink_factory,
+                pre_compaction_barrier=fanout.flush_persistence_barrier,
+            )
+            history = wiring.history
+            pg_ctx = pg_ctx.with_runtime_ports(wiring.runtime_ports)
+            if wiring.bohrium_rebuild_events:
+                pg_ctx = pg_ctx.with_metadata(
+                    bohrium_rebuild_events=tuple(wiring.bohrium_rebuild_events),
+                )
+
+            # -- Stage 5b: Phase 2C user_turn_context cutover via ContextAssembler --
+            instructions_bundle = UserInstructions(
+                text=user_instructions.text,
+                hash=user_instructions.hash,
+                truncated=user_instructions.truncated,
+            )
+            pg_ctx = pg_ctx.with_metadata(user_instructions=instructions_bundle)
+
+            skill_resolver = self._build_skill_resolver(
+                exp_config,
+                session=pg_ctx.session,
+            )
+            context_assembler, assembly_ports = build_context_assembler(
+                events_table=events_table,
+                skill_resolver=skill_resolver,
+            )
+            session_events_port = assembly_ports.session_events
+
+            try:
+                intent = await resolve_turn_context_intent(
+                    instructions_hash=instructions_bundle.hash,
                     session_id=session_id,
                     spawn_id=None,
-                    task_id=task_id,
-                    raw_limit=_DIALOG_HISTORY_MAX_EVENTS,
+                    events_port=session_events_port,
                 )
-                if events_table is not None
-                else []
-            )
-            query_events: list[dict] = []
-            if events_table is not None:
-                try:
-                    raw_query_events = events_table.get_session_user_query_events(
-                        session_id
-                    )
-                    query_events = (
-                        raw_query_events if isinstance(raw_query_events, list) else []
-                    )
-                except Exception:
-                    logger.warning(
-                        "attachment manifest: get_session_user_query_events failed for session_id=%s",
-                        session_id,
-                        exc_info=True,
-                    )
-            entries = attachment_manifest.build_available_attachments(query_events)
-            attachment_text = attachment_manifest.format_available_attachments(entries)
-
-            def _get_query_events() -> list[dict]:
-                return list(query_events)
-
-            def _get_all_events() -> list[dict]:
-                if events_table is None:
-                    return []
-                try:
-                    events = events_table.get_session_events(
-                        session_id,
-                        limit=_DIALOG_HISTORY_MAX_EVENTS,
-                    )
-                    return events if isinstance(events, list) else []
-                except Exception:
-                    logger.warning("manifest: get_session_events failed", exc_info=True)
-                    return []
-
-            def _get_latest_checkpoint_covered_until_event_id() -> int | None:
-                if events_table is None:
-                    return None
-                try:
-                    checkpoints = events_table.get_history_checkpoints(
-                        session_id, None, limit=1
-                    )
-                except Exception:
-                    logger.warning(
-                        "manifest: get_history_checkpoints failed",
-                        exc_info=True,
-                    )
-                    return None
-                if not isinstance(checkpoints, list):
-                    return None
-                for checkpoint in checkpoints:
-                    if not isinstance(checkpoint, dict):
-                        continue
-                    content = checkpoint.get("content")
-                    if isinstance(content, dict):
-                        raw = content.get("covered_until_event_id")
-                        if raw is not None:
-                            try:
-                                return int(raw)
-                            except (TypeError, ValueError):
-                                return None
-                return None
-
-            class _RunSessionEventHistory:
-                def query_events(self) -> list[dict[str, Any]]:
-                    return _get_query_events()
-
-                def all_events(self) -> list[dict[str, Any]]:
-                    return _get_all_events()
-
-                def latest_checkpoint_covered_until_event_id(self) -> int | None:
-                    return _get_latest_checkpoint_covered_until_event_id()
-
-            pg_ctx = pg_ctx.with_runtime_ports(
-                PlaygroundRuntimePorts(
-                    child_event_forward_sink=_child_event_sink,
-                    compaction=PlaygroundCompactionPort(
-                        history=_RunSessionEventHistory(),
-                        checkpoint_sink_factory=_checkpoint_sink_factory,
-                        pre_compaction_barrier=fanout.flush_persistence_barrier,
-                    ),
-                )
-            )
-
-            pg_ctx = pg_ctx.with_run_meta(attachment_manifest=attachment_text)
-            bohrium_rebuild_events: list[dict] = []
-            try:
-                if events_table is not None:
-                    bohrium_rebuild_events = events_table.get_bohrium_events(session_id)
             except Exception:
                 logger.warning(
-                    'Failed to load Bohrium events for registry rebuild',
+                    "resolve_turn_context_intent failed; treating current turn as anchor",
                     exc_info=True,
                 )
-            if bohrium_rebuild_events:
-                pg_ctx = pg_ctx.with_run_meta(
-                    bohrium_rebuild_events=bohrium_rebuild_events,
-                )
+                intent = ContextAssemblyIntent.ANCHOR_TURN
 
-            # -- Stage 5b: Runtime user-instructions injection --
-            user_prompt, history = _apply_user_instructions_to_initial_user_query(
-                user_prompt=user_prompt,
-                user_instructions=user_instructions,
-                history=history,
+            pre_turn_history_event_id = (
+                turn_input.pre_turn_history_event_id if turn_input is not None else 0
             )
+            if turn_input is None:
+                turn_input = TurnInput.from_values(
+                    user_text=user_prompt,
+                    files=(),
+                    images=current_images,
+                    image_detail=image_detail if current_images else None,
+                    workspace_paths=(),
+                    pre_turn_history_event_id=pre_turn_history_event_id,
+                )
+            elif current_images:
+                turn_input = TurnInput.from_values(
+                    user_text=turn_input.user_text,
+                    files=turn_input.files,
+                    images=current_images,
+                    image_detail=(
+                        image_detail
+                        if image_detail is not None
+                        else turn_input.attachments.image_detail
+                    ),
+                    workspace_paths=turn_input.workspace_paths,
+                    pre_turn_history_event_id=turn_input.pre_turn_history_event_id,
+                )
+            pg_ctx = pg_ctx.with_metadata(turn_input=turn_input)
+
+            assembly = await context_assembler.assemble_turn(
+                intent=intent,
+                request=TurnAssemblyRequest(
+                    session_id=session_id,
+                    spawn_id=None,
+                    turn_input=turn_input,
+                    user_instructions=instructions_bundle,
+                ),
+            )
+            rendered_message = assembly.user_turn_context.to_message(
+                ContextView.RUNTIME
+            )
+
+            user_turn_payload = {
+                "schema_version": USER_TURN_CONTEXT_SCHEMA_VERSION,
+                "kind": "anchor" if intent.is_anchor_turn else "continuation",
+                "message": rendered_message.model_dump(mode="json"),
+                "user_instructions_hash": (
+                    instructions_bundle.hash if intent.is_anchor_turn else None
+                ),
+                "transform": DEFAULT_TURN_TRANSFORM,
+                "render_version": USER_CONTEXT_RENDER_VERSION,
+            }
+            try:
+                await write_user_turn_context_event(
+                    events_table=events_table,
+                    session_id=session_id,
+                    task_id=task_id,
+                    invocation_id=invocation_id,
+                    spawn_id=None,
+                    payload=user_turn_payload,
+                )
+            except Exception as exc:
+                logger.exception(
+                    "user_turn_context write failed; aborting turn "
+                    "session_id=%s invocation_id=%s",
+                    session_id,
+                    invocation_id,
+                )
+                return ((False, str(exc)), _elapsed_ms())
+
+            user_prompt = rendered_message.content
 
             # Resolve active skills (hot cache + DB rehydrate). Must run
             # AFTER history is available so the snapshot frozen below reflects
             # any skills recovered from past turns.
             active_skills = self._resolve_active_skill_names(
-                session_id, events_table, exp_config, pg_ctx.session
+                session_id,
+                events_table,
             )
 
             def _remember_skill_hit(skill_name: str) -> None:
                 if skill_name:
-                    self._active_skills.setdefault(session_id, set()).add(skill_name)
+                    current = self._active_skills.get(session_id, frozenset())
+                    self._active_skills[session_id] = frozenset((*current, skill_name))
 
-            pg_ctx = pg_ctx.with_run_meta(active_skills=frozenset(active_skills))
+            pg_ctx = pg_ctx.with_metadata(active_skills=frozenset(active_skills))
 
             # -- Stage 6: Generator event stream --
             run_result_event = None
@@ -800,7 +647,7 @@ class AgentRunService:
                     user_prompt,
                     history=history,
                     cancel_token=cancel_token,
-                    skills=pg_ctx.run_meta.get('skill_config'),
+                    skill_resolver=skill_resolver,
                 )
             ) as stream:
                 async for event in stream:
