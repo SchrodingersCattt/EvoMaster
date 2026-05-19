@@ -195,138 +195,34 @@ cases:
       - "构建一个晶体结构"
       - "搜索关于电池材料的文献"
 
-  - skill: inspect-atomic-structure
+  - skill: atomic-structure
     positive:
-      - "看一下这个 CIF 的空间群和 Wyckoff 位点"                                # [imperative][task-only]
-      - "这个 POSCAR 是几维结构，真空层够不够"                                  # [question][task-only]
-      - "看一下这个 CIF 有没有溶剂分子或 disorder 要处理"                            # [imperative][routing]  *v6*
-      - "supercell 做完之后再确认一下原子数和对称性"                            # [workflow][task-only]
-      - "这个 PDB 没有 CRYST1，按周期处理还是按分子处理"                        # [question][routing]
-      - "Wyckoff 位点和点群打一份"                                              # [imperative][task-only]
-      - "这个 slab.cif 的 vacuum 多厚"                                          # [question][file]
-      - "NPT 平衡后的 CONTCAR，跑下一步前先体检"                                # [workflow]
-      - "What's the space group and Wyckoff list of this CIF?"                  # [english][question]
-      - "Before any transform, decide whether this MOF is a molecular crystal"  # [english][workflow]
+      - "看一下这个 CIF 的空间群和 Wyckoff 位点"                                # leaf: inspect
+      - "这个 PDB 没有 CRYST1，先判断按周期结构还是分子处理"                  # leaf: inspect
+      - "搭一个 fcc Ni 的原胞"                                                  # leaf: build
+      - "用空间群 P6_3mc + Wyckoff 位置建一个 wurtzite ZnS"                     # leaf: build
+      - "SMILES CCC=O 转成带 3D 坐标的 SDF"                                     # leaf: build
+      - "Mg-Si-O 三元做一次全局结构搜索"                                        # leaf: sample
+      - "把这个 POSCAR 扩成 3x3x2"                                              # leaf: transform
+      - "TiO2 里随机替换 5% 的 Ti 为 Nb"                                        # leaf: transform
+      - "从 Cu bulk 切 (110) slab，5 层，真空 15 Å"                             # leaf: assemble
+      - "在 Pt(111) top 位放一个 CO 分子"                                       # leaf: assemble
+      - "切 LiCoO2 (003) slab，极性面，auto-fix 偶极"                           # leaf: tasker-polar-surface
+      - "ZnO (0001) 是不是极性面，先判一下再切"                                 # leaf: tasker-polar-surface
+      - "这个分子晶体 CIF 切 (010) 表面，不要切断分子"                          # leaf: operate-molecular-crystal
+      - "CIF 里 Br/Cl 有混乱占位，给一个 ordered 单胞"                          # leaf: operate-molecular-crystal
+      - "文献 SI 这个 CIF 链接，下下来并 validate"                              # leaf: retrieve-structure
+      - "把这个 CIF 转成 POSCAR，元素顺序也理一下"                              # leaf: retrieve-structure
+      - "Build a primitive cell of PbS rocksalt from the lattice constant"      # leaf: build
+      - "Place a single H2O on the bridge site of TiO2(110)"                    # leaf: assemble
     negative:
-      - "帮我用这个结构跑一个 VASP 能带计算"        # → vasp
-      - "下载一下 mp-149 这个晶体的 CIF"            # → retrieve-structure
-      - "把这个 CIF 转成 POSCAR"                    # → retrieve-structure
-      - "构造一个 Si 的 2x2x2 超胞"                 # → transform-atomic-structure
-      - "给这个 slab 顶部加一个 H2O 吸附"           # → assemble-atomic-structure
-
-  - skill: build-atomic-structure
-    positive:
-      - "搭一个 fcc Ni 的原胞"                                                  # [imperative][task-only]
-      - "用空间群 P6_3mc + Wyckoff 位置建一个 wurtzite ZnS"                     # [imperative][explicit]
-      - "SMILES CCC=O 转成带 3D 坐标的 SDF"                                     # [imperative][task-only]
-      - "搭一个 20 mer 的 PVA 链"                                               # [imperative][task-only]
-      - "ZrO2 cubic unit cell 给一个"                                           # [imperative][task-only]
-      - "怎么从空间群直接搭一个 Ruddlesden-Popper 钙钛矿"                       # [question]
-      - "搭一个 GaN wurtzite 单胞，后面要跑 NEB"                                # [imperative][workflow]
-      - "Mg hcp 给定 a/c，用 ASE 拼成单胞"                                      # [imperative][explicit]
-      - "Build a primitive cell of PbS rocksalt from the lattice constant"     # [english]
-      - "Generate a 15-mer polypropylene chain for downstream MD"              # [english][workflow]
-    negative:
-      - "帮我把这个 POSCAR 变成 2x2x2 超胞"          # → transform-atomic-structure
-      - "这个 CIF 文件的对称性是什么"                # → inspect-atomic-structure
-      - "用 CALYPSO 在 LiSi 体系里搜结构"            # → sample-atomic-structures
-      - "下载 mp-22862 这个材料的 CIF"               # → retrieve-structure
-      - "把 H2O 分子吸附到 Cu(111) 表面"             # → assemble-atomic-structure
-
-  - skill: sample-atomic-structures
-    positive:
-      - "Mg-Si-O 三元做一次全局结构搜索"                                        # [imperative][task-only]
-      - "用 CrystalFormer 生成一批高带隙的 ABO3 候选"                           # [imperative][explicit]
-      - "CALYPSO 的 popsize 和 maxgen 在第一性原理体系下怎么配"                 # [question][explicit]
-      - "给定组分做一轮演化搜索，输出候选结构"                                  # [imperative][workflow]
-      - "条件生成一批指定空间群的候选晶体"                                      # [imperative][task-only]
-      - "用 CrystalFormer 采样 20 个 LiCoO2 类似物候选"                         # [imperative][explicit]
-      - "Li-P 二元相图未知组分能不能做结构预测"                                 # [question][task-only]
-      - "用生成模型抽几个新的钙钛矿候选拓扑"                                    # [imperative][task-only]
-      - "Run a CALYPSO global search on the Ti-O system and return top-5 candidates"  # [english][explicit]
-      - "Sample crystal candidates conditioned on bulk modulus > 200 GPa with a generative model"  # [english][task-only]
-    negative:
-      - "从 Materials Project 下载 SrTiO3 的 CIF"      # → retrieve-structure
-      - "帮我用 ASE 生成一个 fcc Cu 晶胞"              # → build-atomic-structure
-      - "把这个 POSCAR 弄成 2x2x2 超胞"                # → transform-atomic-structure
-      - "检查一下这个生成的结构是否合理"               # → inspect-atomic-structure
-      - "用 GPUMD 跑一个分子动力学"                    # → gpumd
-
-  - skill: transform-atomic-structure
-    positive:
-      - "把这个 POSCAR 扩成 3x3x2"                                              # [imperative][task-only]
-      - "给 NaCl 晶胞施加 2% 双轴张应变"                                        # [imperative]
-      - "TiO2 里随机替换 5% 的 Ti 为 Nb"                                        # [imperative]
-      - "在 Si 超胞里造一个 V_Si 空位"                                          # [imperative]  *v6*
-      - "Mn 掺 ZnO 做磁性研究，按 Wyckoff 选 8% 取代位"                         # [imperative][workflow]
-      - "Cu3Au L1_2 有序化从无序固溶体出发怎么做"                               # [question]
-      - "SrTiO3 里掺 La 替 Sr，电荷补偿怎么处理"                                # [question][explicit]
-      - "hcp Mg 晶胞做等比 1% 膨胀"                                             # [imperative]
-      - "Apply an xy shear strain of 0.5% to this CONTCAR"                      # [english][file]
-      - "Create a 2x2x2 supercell of this MgO crystal with a single F-center"  # [english]
-    negative:
-      - "帮我搭一个 Cu(111) slab + H2O 吸附结构"      # → assemble-atomic-structure
-      - "把这个 SMILES 转成 3D 分子"                  # → build-atomic-structure
-      - "帮我看一下这个 CIF 的空间群"                 # → inspect-atomic-structure
-      - "这个是分子晶体，帮我做溶剂分子提取"          # → operate-molecular-crystal
-      - "下载 MP 上的 Fe2O3 结构"                     # → retrieve-structure
-
-  - skill: assemble-atomic-structure
-    positive:
-      - "从 Cu bulk 切 (110) slab，5 层，真空 15 Å"                             # [imperative][task-only]
-      - "在 Pt(111) top 位放一个 CO 分子"                                       # [imperative][task-only]
-      - "Cu(111) + Al(111) 拼一个异质界面"                                      # [imperative][explicit]
-      - "用 PACKMOL 在 60 Å 立方盒里装 300 个乙醇"                              # [imperative][explicit]
-      - "NH3 在 Au(111) 上的吸附结构搭一下"                                     # [imperative][workflow]
-      - "做一个 amorphous PMMA 初始模型，~600 原子"                             # [imperative][task-only]
-      - "Au/MgO(001) 异质界面拼一下，应变 ≤ 3%"                                 # [imperative][task-only]
-      - "两条 polymer 主链做几何 crosslink，输出 LAMMPS 数据文件"               # [imperative][workflow]
-      - "Build a 4-layer Ni(100) slab with 12 Å vacuum"                         # [english]
-      - "Place a single H2O on the bridge site of TiO2(110)"                    # [english][task-only]
-    negative:
-      - "帮我把这个晶胞扩成 2x2x2"                    # → transform-atomic-structure
-      - "用 SMILES 生成苯分子"                        # → build-atomic-structure
-      - "看一下这个 slab 的真空层厚度"                # → inspect-atomic-structure
-      - "切 LiCoO2 (003) 极性面要怎么处理偶极"        # → tasker-polar-surface
-      - "帮我下载石墨烯的 CIF"                        # → retrieve-structure
-
-  - skill: operate-molecular-crystal
-    positive:
-      - "这个分子晶体 CIF 切 (010) 表面，不要切断分子"                          # [imperative][routing]
-      - "CIF 里 Br/Cl 有混乱占位，给一个 ordered 单胞"                          # [imperative]
-      - "把 MOF 里的客体 DMF 清掉只留主体框架"                                  # [imperative][task-only]
-      - "把这个 cocrystal 里 guest 分子单独提一份 XYZ"                          # [imperative][task-only]
-      - "有机层加表面后 sp3 C 缺氢，补全一下"                                   # [imperative][workflow]
-      - "MgO 表面悬挂键按八面体几何补 OH"                                       # [imperative][task-only]
-      - "用 CShM 判一下 Mn 中心是 sq-pyramid 还是 trigonal-bipyramid"           # [imperative][question][explicit]
-      - "这个分子晶体晶胞做 10 个小幅度扰动构型，写 POSCAR"                     # [imperative][task-only]
-      - "Compute the coordination number and CShM shape for the Fe center in this CIF"  # [english]
-      - "Resolve partial occupancy and produce an ordered replica for this disordered CIF"  # [english]
-    negative:
-      - "帮我把这个 POSCAR 做成 2x2x2 supercell"      # → transform-atomic-structure
-      - "构建一个 Cu(111) slab"                        # → assemble-atomic-structure
-      - "用 SMILES 生成乙醇分子"                       # → build-atomic-structure
-      - "看一下这个 CIF 是不是分子晶体"                # → inspect-atomic-structure
-      - "下载这个 MOF 的 CIF 文件"                     # → retrieve-structure
-
-  - skill: tasker-polar-surface
-    positive:
-      - "切 LiCoO2 (003) slab，极性面，auto-fix 偶极"                           # [imperative][task-only]
-      - "MgO (111) 是 Tasker 几型，切的时候要怎么处理"                          # [question][explicit]
-      - "ZnO (0001) 是不是极性面，先判一下再切"                                 # [imperative][workflow]
-      - "NaCl (111) 给一个非极性 slab"                                          # [imperative][task-only]
-      - "SrTiO3 (110) 极性面 slab，按 Tasker auto-fix 跑一遍"                   # [imperative][explicit]
-      - "Al2O3 (0001) 表面建模，注意要不要 reconstruct"                         # [imperative][task-only]
-      - "Fe3O4 (001) 催化体系，slab 选 Tasker 合规的"                           # [imperative][workflow]
-      - "氧化物极性面 reconstruct 后输出 POSCAR"                                # [imperative][task-only]
-      - "Cut a polar PbTiO3 (001) slab with Tasker auto-fix, give me the final POSCAR"  # [english]
-      - "Build a non-polar TiO2 (110) slab and validate the dipole is zero"    # [english]
-    negative:
-      - "帮我从 Cu bulk 切一个 (111) 表面"             # → assemble-atomic-structure
-      - "帮我看一下这个 slab 的真空层厚度"             # → inspect-atomic-structure
-      - "对 Cu3Au 做有序化"                            # → transform-atomic-structure
-      - "构建一个 amorphous SiO2 模型"                 # → assemble-atomic-structure
-      - "用 VASPKIT 算这个 slab 的功函数"              # → vaspkit-postprocess
+      - "帮我用 VASP 算一下这个 POSCAR 的能带"                  # → vasp
+      - "帮我用 LAMMPS 往 GPU 集群上提交 MD 任务"               # → lammps
+      - "用 GPUMD 计算这个材料的热导率"                          # → gpumd
+      - "分析这个 VASP 产生的 XDATCAR 轨迹，计算 RDF"            # → data-analysis / md-analysis
+      - "这是 CP2K 计算的日志和结构，用 dpdata 转成可用于 DeePMD 训练的数据"  # → mlips
+      - "把这个 CIF 提交到 IUCr checkCIF 看一下报告"             # → checkcif-validator
+      - "用 VASPKIT 算这个 slab 的功函数"                       # → vaspkit-postprocess
 
   - skill: checkcif-validator
     positive:
@@ -343,8 +239,8 @@ cases:
     negative:
       - "帮我做 PXRD 的 Rietveld 精修"                 # → pxrd-refinement
       - "标定一下这个 XRD 的峰位"                      # → xrd-analysis
-      - "把这个 CIF 转成 POSCAR"                       # → retrieve-structure
-      - "帮我看一下这个 CIF 的对称性"                  # → inspect-atomic-structure
+      - "把这个 CIF 转成 POSCAR"                       # → atomic-structure
+      - "帮我看一下这个 CIF 的对称性"                  # → atomic-structure
       - "用 GSAS-II 做 Pawley 提取晶胞参数"            # → pxrd-refinement
 
   - skill: pxrd-refinement
@@ -364,7 +260,7 @@ cases:
       - "标定一下这个 XRD 峰对应什么物相"              # → xrd-analysis
       - "用 SHELX 精修这个单晶数据"                    # → (single-crystal, not in scope)
       - "画一下这个 PXRD 数据"                         # → data-analysis
-      - "帮我下载石墨烯的 CIF"                         # → retrieve-structure
+      - "帮我下载石墨烯的 CIF"                         # → atomic-structure
 
   - skill: aissq-explorer
     positive:
@@ -381,28 +277,9 @@ cases:
     negative:
       - "用本地的 DPA-2 模型跑一个 MD"                          # → mlips
       - "帮我训练一个 NEP 势函数"                               # → mlips
-      - "从 Materials Project 下载 SrTiO3"                      # → retrieve-structure
-      - "去 HuggingFace 上把 MACE-MP large 拉下来跑 NPT"         # → retrieve-structure + mlips
-      - "论文 SI 把 SevenNet-l3i5 的权重挂在 figshare 上了，拉下来跑一段 NPT"  # → retrieve-structure + mlips
-
-  - skill: retrieve-structure
-    positive:
-      - "这个 URL 是 POSCAR 直链，下载到 workspace"                             # [imperative][url]
-      - "文献 SI 这个 CIF 链接，下下来并 validate"                              # [imperative][url][workflow]
-      - "这个 supplementary HTML 页面里嵌了结构文件，抓出来"                    # [imperative][webpage]
-      - "把这个 CIF 转成 POSCAR，元素顺序也理一下"                              # [imperative][convert]
-      - "用 convert_format.py 把 CIF 转 LAMMPS data，带 type-map 和 atom-style"  # [imperative][explicit][convert]
-      - "把这条 XYZ 转成 CIF 并保留对称性"                                      # [imperative][convert]
-      - "用 assess_structure.py 验证一下这个 CIF 能不能被 ASE 读"               # [imperative][explicit][validate]
-      - "切完 slab 后跑 assess_structure 验证维度"                              # [imperative][workflow][validate]
-      - "Download this remote POSCAR URL, validate it, then convert to CIF"    # [english][url][convert][validate]
-      - "Fetch the top-3 perovskite CIFs matching ABO3 with formation energy below -2 eV/atom"  # [english][screening]
-    negative:
-      - "用 ASE 给我搭一个 fcc Ni 单胞"                # → build-atomic-structure (moved out)
-      - "把这个 POSCAR 扩成 2x2x2 超胞"                # → transform-atomic-structure (moved out)
-      - "从 Cu bulk 切一个 (111) slab"                  # → assemble-atomic-structure (moved out)
-      - "看一下这个 CIF 的空间群是什么"                # → inspect-atomic-structure (moved out)
-      - "mp-149 的 CIF 帮我搜一下"                     # → mcp-mat-struct-db (simple formula lookup)
+      - "从 Materials Project 下载 SrTiO3"                      # → atomic-structure
+      - "去 HuggingFace 上把 MACE-MP large 拉下来跑 NPT"         # → atomic-structure + mlips
+      - "论文 SI 把 SevenNet-l3i5 的权重挂在 figshare 上了，拉下来跑一段 NPT"  # → atomic-structure + mlips
 
   - skill: composition-optimization
     positive:
@@ -417,8 +294,8 @@ cases:
       - "Run a DART-style composition GA on the Mg-Al-Zn alloy targeting yield strength"  # [english][explicit]
       - "Optimize four-component refractory HEA composition for hot hardness"  # [english]
     negative:
-      - "帮我下载 mp-22862 的 CIF"                     # → retrieve-structure
-      - "用 CALYPSO 搜结构"                            # → sample-atomic-structures
+      - "帮我下载 mp-22862 的 CIF"                     # → atomic-structure
+      - "用 CALYPSO 搜结构"                            # → atomic-structure
       - "帮我做 Si 的 DFT 能带计算"                    # → vasp
-      - "给这个晶胞掺杂 5% Mg"                         # → transform-atomic-structure
+      - "给这个晶胞掺杂 5% Mg"                         # → atomic-structure
       - "训练一个 MLIP 势函数"                         # → mlips
