@@ -112,6 +112,18 @@ Reference-first policy:
 - Prefer local references below for stable and task-aligned guidance.
 - Use official ABACUS/Bohrium web documentation as fallback when local references are insufficient.
 
+### Conditional Routing — read BEFORE acting
+
+| When your task involves… | You MUST read… |
+|--------------------------|----------------|
+| Generating ANY ABACUS input files | Run `scripts/validate_input.py` after writing |
+| Bader charge analysis | `references/advanced_tasks.md` § Bader Charge Analysis Workflow |
+| HSE / hybrid functional band + DOS | `references/input_examples.md` (DOS k-mesh rule) |
+| Multi-element system (≥3 species) | `references/stru_multispecies.md` |
+| Analyzing BANDS_1.dat or DOS output | `references/output_params.md` § Common mistakes |
+| Surface / slab with dipole correction | `references/electric_field.md` |
+| BSSE ghost-atom setup | `references/advanced_tasks.md` § Surface Energy / Bader |
+
 Each entry below ends with an `*Applies to*` line that lists the **material systems and task scenarios actually covered inside that file**. Use it to locate the right reference from the task description — do not rely on filenames alone.
 
 - **Pre-flight validator**: `scripts/validate_input.py` — run before every Bohrium submit.
