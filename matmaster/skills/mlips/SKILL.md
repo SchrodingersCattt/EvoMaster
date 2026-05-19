@@ -88,7 +88,7 @@ The OSS URLs in `reference/dpa_models.md` are a **snapshot** and may rotate. If 
 | cmd | `python {script} {args} > log 2>&1` |
 
 1. Prepare structure (CIF/POSCAR/XYZ) — runs locally, not Bohrium
-2. **Validate**: `python ${SKILL_DIR}/scripts/validate_structure.py --structure <file>` — must PASS before step 3
+2. **Validate**: `python ${SKILL_DIR}/scripts/validate_structure.py --structure <file>` — must PASS before step 3. If FAIL (overlapping atoms / bad geometry): fix the structure locally with ASE (remove overlaps, perturb positions, or rebuild) and re-validate. Do NOT submit an optimization job to fix validation failures — the structure must be physically reasonable before any Bohrium submission.
 3. Copy script(s) + `_calculator.py` to working directory
 4. Submit: `Bohrium(action="submit", input_dir="<dir>", image="<from Models table>", cmd="python optimize_structure.py --structure input.cif --model DPA3.1-3M > log 2>&1", machine="c16_m64_1 * NVIDIA 4090")`
 5. Poll and read `result.json`

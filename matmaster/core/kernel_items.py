@@ -40,6 +40,7 @@ class _KernelState:
     pipeline: IncrementalMessagePipeline = dc_field(
         default_factory=IncrementalMessagePipeline
     )
+    last_emitted_content: str | None = None
 
 
 class _KernelStopRequested(Exception):

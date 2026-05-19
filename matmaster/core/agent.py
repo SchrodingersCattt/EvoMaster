@@ -308,6 +308,7 @@ class AgentKernel:
                 and response.content
                 and not is_trivial_response_text(response.content)
             ):
+                state.last_emitted_content = response.content
                 yield _KernelItem(
                     event=ResponseEvent(
                         source="agent",
@@ -327,11 +328,18 @@ class AgentKernel:
 
             if not response.tool_calls:
                 if not is_valid_natural_finish(response):
-                    yield self._terminal(
-                        state,
-                        "invalid_finish",
-                        finish_detail=build_finish_detail(response),
-                    )
+                    if state.last_emitted_content:
+                        yield self._terminal(
+                            state,
+                            "natural",
+                            final_content=state.last_emitted_content,
+                        )
+                    else:
+                        yield self._terminal(
+                            state,
+                            "invalid_finish",
+                            finish_detail=build_finish_detail(response),
+                        )
                     return
                 state.messages.append(
                     AssistantMessage(

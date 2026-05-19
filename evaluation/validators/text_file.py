@@ -134,6 +134,22 @@ def _parse_numeric_from_text(text: str) -> float | None:
 def _collect_key_values(raw: str, key: str) -> list[str]:
     key_lower = key.strip().lower()
     values: list[str] = []
+
+    # Try JSON parsing first: handles {"key": value} and {"key": "value"}
+    try:
+        import json as _json
+
+        obj = _json.loads(raw)
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                if k.strip().lower() == key_lower:
+                    values.append(str(v))
+            if values:
+                return values
+    except (ValueError, TypeError):
+        pass
+
+    # Fallback: line-based "key value" parsing (INPUT/INCAR style)
     for line in raw.splitlines():
         line_no_comment = re.split(r'[#!]', line, maxsplit=1)[0].strip()
         if not line_no_comment:

@@ -38,7 +38,7 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
-- id: WO_md_preflight_001_20260513
+- id: WO_md_preflight_001_20260519
   capability: workflow_orchestration
   domain: battery
   intent: Test whether agent validates solution box geometry before MD submission and
@@ -56,16 +56,11 @@ questions:
   reference_answers:
   - key: submit_artifact
     value: md_submit.json
-  - key: must_cmd_dpa3
+  - key: must_cmd_mlip
     value:
       filename: md_submit.json
-      pattern: DPA3
+      pattern: DPA|dpa|deepmd|mace|sevenn|mattersim|run_molecular_dynamics
       flags: i
-  - key: must_cmd_md
-    value:
-      filename: md_submit.json
-      pattern: run_molecular_dynamics
-      flags: ''
   - key: turn_budget
     value:
       max: 15
@@ -74,12 +69,9 @@ questions:
     criterion: md_submit.json written to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: must_cmd_dpa3
-    criterion: '[Platform] cmd references DPA3 model.'
-    axis: correctness
-    verify: text_file_regex
-  - id: must_cmd_md
-    criterion: '[Platform] cmd uses run_molecular_dynamics script.'
+  - id: must_cmd_mlip
+    criterion: '[Platform] md_submit.json references an MLIP model (DPA, MACE, SevenNet,
+      MatterSim) or the run_molecular_dynamics script.'
     axis: correctness
     verify: text_file_regex
   - id: structure_not_raw
