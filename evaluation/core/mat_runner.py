@@ -325,29 +325,44 @@ def _guess_trajectory_file(*, run_dir: Path, task_id: str) -> Path | None:
 
 
 def extract_answer_from_trajectory_obj(trajectory: Any) -> str:
-    """Extract final answer from in-memory Trajectory object.
-
-    Concatenates all assistant text responses (in order) so that multi-response
-    outputs are fully captured by the LLM judge.
-    """
+    """Extract final answer from in-memory Trajectory object."""
     dialogs = getattr(trajectory, "dialogs", None)
     if not dialogs:
         return ""
     last_dialog = dialogs[-1]
     messages = getattr(last_dialog, "messages", None) or []
-
-    parts: list[str] = []
-    for message in messages:
+    for message in reversed(messages):
         role = getattr(
             getattr(message, "role", None), "value", getattr(message, "role", "")
         )
         if role != "assistant":
             continue
+        tool_calls = getattr(message, "tool_calls", None) or []
+        finish_msg = _extract_finish_message(tool_calls)
+        if finish_msg:
+            return finish_msg
         content = getattr(message, "content", "") or ""
         if content:
-            parts.append(str(content))
-    return "\n\n".join(parts)
+            return str(content)
+    return ""
 
+
+def _extract_finish_message(tool_calls: Any) -> str:
+    for tool_call in tool_calls:
+        function = getattr(tool_call, "function", tool_call)
+        name = getattr(function, "name", None)
+        if name != "finish":
+            continue
+        arguments = getattr(function, "arguments", "{}")
+        try:
+            payload = json.loads(arguments) if isinstance(arguments, str) else arguments
+        except Exception:
+            payload = {}
+        if isinstance(payload, dict):
+            message = payload.get("message", "")
+            if message:
+                return str(message)
+    return ""
 
 
 def extract_answer_from_trajectory_file(
@@ -381,44 +396,67 @@ def extract_answer_from_trajectory_file(
 
 
 def _extract_answer_from_trajectory_dict(trajectory: dict[str, Any]) -> str:
-    """Extract answer from trajectory dict, concatenating all assistant responses."""
-
-    # Preferred path: assistant_message from recorded steps
+    # Preferred path: assistant_message from recorded step
     steps = trajectory.get("steps")
     if isinstance(steps, list):
-        parts: list[str] = []
-        for step in steps:
+        for step in reversed(steps):
             if not isinstance(step, dict):
                 continue
             assistant_message = step.get("assistant_message")
             if isinstance(assistant_message, dict):
+                finish_msg = _extract_finish_message_from_dict(
+                    assistant_message.get("tool_calls", [])
+                )
+                if finish_msg:
+                    return finish_msg
                 content = assistant_message.get("content")
                 if isinstance(content, str) and content.strip():
-                    parts.append(content)
-        if parts:
-            return "\n\n".join(parts)
+                    return content
 
-    # Fallback path: dialogs/messages
+    # Fallback path: last assistant in dialogs/messages.
     dialogs = trajectory.get("dialogs")
     if isinstance(dialogs, list):
         for dialog in reversed(dialogs):
             messages = dialog.get("messages") if isinstance(dialog, dict) else None
             if not isinstance(messages, list):
                 continue
-            parts = []
-            for message in messages:
+            for message in reversed(messages):
                 if not isinstance(message, dict):
                     continue
                 if message.get("role") != "assistant":
                     continue
+                finish_msg = _extract_finish_message_from_dict(
+                    message.get("tool_calls", [])
+                )
+                if finish_msg:
+                    return finish_msg
                 content = message.get("content")
                 if isinstance(content, str) and content.strip():
-                    parts.append(content)
-            if parts:
-                return "\n\n".join(parts)
+                    return content
     return ""
 
 
+def _extract_finish_message_from_dict(tool_calls: Any) -> str:
+    if not isinstance(tool_calls, list):
+        return ""
+    for tool_call in tool_calls:
+        if not isinstance(tool_call, dict):
+            continue
+        function = tool_call.get("function", {})
+        if not isinstance(function, dict):
+            continue
+        if function.get("name") != "finish":
+            continue
+        arguments = function.get("arguments", {})
+        try:
+            payload = json.loads(arguments) if isinstance(arguments, str) else arguments
+        except Exception:
+            payload = {}
+        if isinstance(payload, dict):
+            message = payload.get("message")
+            if isinstance(message, str) and message.strip():
+                return message
+    return ""
 
 
 def extract_tool_calls_from_trajectory_file(
