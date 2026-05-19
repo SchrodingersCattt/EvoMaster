@@ -969,6 +969,6 @@ def check_space_group(
     )
 
 
-from evaluation.validators.structure_distance import (  # noqa: E402
+from evaluation.validators.structure_distance import (  # noqa: E402, F401
     check_min_interatomic_distance,
 )
