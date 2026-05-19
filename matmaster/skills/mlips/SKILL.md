@@ -79,6 +79,7 @@ The OSS URLs in `reference/dpa_models.md` are a **snapshot** and may rotate. If 
 
 | Script | Usage | Output |
 |--------|-------|--------|
+| `validate_structure.py` | `--structure input.xyz` (run locally before ANY Bohrium submit) | PASS/FAIL + min_dist |
 | `optimize_structure.py` | `--structure in.cif --model DPA3.1-3M [--head head_name] [--relax-cell] [--fmax 0.01]` | `*_optimized.cif`, `result.json` |
 | `calculate_phonon.py` | `--structure in.cif --model DPA3.1-3M [--supercell 5 5 1] --temperatures 300 600 [--calc-tdos] [--mesh 40]` | `phonon_band.png`, `result.json` |
 | `run_molecular_dynamics.py` | `--structure in.cif --model DPA3.1-3M --stages stages.json` | `trajs/*.extxyz`, `final_structure.xyz`, `result.json` |
@@ -95,10 +96,10 @@ The OSS URLs in `reference/dpa_models.md` are a **snapshot** and may rotate. If 
 Before submitting ANY job to Bohrium (optimization, MD, phonon, NEB, elastic — no exceptions), run:
 
 ```bash
-python -c "from ase.io import read; import numpy as np; a=read('STRUCTURE_FILE'); d=a.get_all_distances(); np.fill_diagonal(d,np.inf); md=d.min(); print(f'min_dist={md:.3f} A'); assert md>1.0, f'OVERLAP: {md:.2f} A < 1.0 A — fix structure first'"
+python ${SKILL_DIR}/scripts/validate_structure.py --structure <file>
 ```
 
-Replace `STRUCTURE_FILE` with the actual path. If assertion fails, fix the structure (energy minimization or rebuild) before proceeding. Skipping this step will crash the simulation.
+If it reports FAIL, fix the structure (energy minimization or rebuild) before proceeding. Skipping this step will crash the simulation.
 
 ## Key Rules
 
@@ -116,10 +117,11 @@ Replace `STRUCTURE_FILE` with the actual path. If assertion fails, fix the struc
 ## Submission Workflow
 
 1. Prepare structure (CIF/POSCAR/XYZ)
-2. Copy script(s) + `_calculator.py` to working directory
-3. Submit (DPA — default): `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/dpa-calculator:e13a296f", cmd="python optimize_structure.py --structure input.cif --model DPA3.1-3M > log 2>&1", machine="c16_m64_1 * NVIDIA 4090")`
+2. **Validate**: `python ${SKILL_DIR}/scripts/validate_structure.py --structure <file>` — must PASS before step 3
+3. Copy script(s) + `_calculator.py` to working directory
+4. Submit (DPA — default): `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/dpa-calculator:e13a296f", cmd="python optimize_structure.py --structure input.cif --model DPA3.1-3M > log 2>&1", machine="c16_m64_1 * NVIDIA 4090")`
    Submit (MACE/SevenNet/MatterSim only): replace image with `registry.dp.tech/dptech/dp/native/prod-19853/mlips:dev-0421`
-4. Poll and read `result.json`
+5. Poll and read `result.json`
 
 ## DPA + LAMMPS (requires freeze)
 
