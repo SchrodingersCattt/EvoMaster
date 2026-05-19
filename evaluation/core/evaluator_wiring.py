@@ -7,10 +7,14 @@ from typing import Any
 from evaluation.validators.abacus_input import check_abacus_input
 from evaluation.validators.answer_text import check_answer_json_numeric
 from evaluation.validators.budget import (
-    check_duration_budget,
-    check_token_budget,
-    check_turn_budget,
-    token_usage_record_from_evidence,
+    check_duration_budget as _check_duration_budget,
+    check_token_budget as _check_token_budget,
+    check_turn_budget as _check_turn_budget,
+)
+from evaluation.validators.json_file import (
+    check_json_file_artifacts as _check_json_file_artifacts,
+    check_json_file_numeric_range as _check_json_file_numeric_range,
+    check_json_file_schema as _check_json_file_schema,
 )
 from evaluation.validators.stru_file import check_stru_file
 from evaluation.validators.structure_general import (
@@ -42,12 +46,117 @@ from evaluation.validators.text_file import (
 )
 
 from .evaluator_builders import build_llm_context, build_safety_eval_record  # noqa: F401
-from .evidence import EvidenceBundle
+from .evidence import EvidenceBundle, TokenUsage
 from .schemas import (
     QuestionItem,
     ReferenceAnswer,
     TokenUsageRecord,
 )
+
+
+def token_usage_record_from_evidence(evidence: EvidenceBundle) -> TokenUsageRecord:
+    """Snapshot last LLM turn (raw total_tokens, no cache deduction)."""
+    src = evidence.token_usage_last_turn
+    raw_total = src.total_tokens
+    return TokenUsageRecord(
+        prompt_tokens=src.prompt_tokens,
+        completion_tokens=src.completion_tokens,
+        total_tokens=raw_total,
+        cache_read_tokens=src.cache_read_tokens,
+        total_tokens_effective=raw_total,
+    )
+
+
+def _measured_tokens_from_evidence(evidence: EvidenceBundle) -> int:
+    """Extract measured token count from evidence for budget checks."""
+    lt = evidence.token_usage_last_turn
+    measured = lt.total_tokens
+    if measured <= 0:
+        tu = TokenUsage(
+            prompt_tokens=lt.prompt_tokens,
+            completion_tokens=lt.completion_tokens,
+            total_tokens=lt.total_tokens,
+            cache_read_tokens=lt.cache_read_tokens,
+        )
+        measured = (
+            tu.total_tokens
+            if tu.total_tokens > 0
+            else max(0, tu.prompt_tokens + tu.completion_tokens)
+        )
+    return measured
+
+
+def check_token_budget(
+    *, evidence: EvidenceBundle | None, expected: Any
+) -> tuple[bool, str]:
+    if evidence is None:
+        return True, "no EvidenceBundle provided (skipped)"
+    measured = _measured_tokens_from_evidence(evidence)
+    return _check_token_budget(measured_tokens=measured, expected=expected)
+
+
+def check_turn_budget(
+    *, evidence: EvidenceBundle | None, expected: Any
+) -> tuple[bool, str]:
+    if evidence is None:
+        return True, "no EvidenceBundle provided (skipped)"
+    return _check_turn_budget(total_steps=evidence.total_steps, expected=expected)
+
+
+def check_duration_budget(
+    *, evidence: EvidenceBundle | None, expected: Any
+) -> tuple[bool, str]:
+    if evidence is None or evidence.duration_ms <= 0:
+        return False, "duration_ms not recorded on evidence bundle"
+    return _check_duration_budget(duration_ms=evidence.duration_ms, expected=expected)
+
+
+def check_json_file_schema(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    if evidence is None or not evidence.workspace_dir:
+        return False, "no workspace root"
+    cfg = ref.value if isinstance(ref.value, dict) else {}
+    return _check_json_file_schema(
+        evidence.workspace_dir,
+        filename=cfg.get("filename", ""),
+        required_keys=cfg.get("required_keys", []),
+    )
+
+
+def check_json_file_numeric_range(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    if evidence is None or not evidence.workspace_dir:
+        return False, "no workspace root"
+    cfg = ref.value if isinstance(ref.value, dict) else {}
+    expected = cfg.get("expected")
+    if expected is None:
+        return False, "json_file_numeric_range: missing 'expected' in ref"
+    return _check_json_file_numeric_range(
+        evidence.workspace_dir,
+        filename=cfg.get("filename", ""),
+        key=cfg.get("key", ""),
+        expected=float(expected),
+        tolerance=float(cfg.get("tolerance", 0.0)),
+    )
+
+
+def check_json_file_artifacts(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    if evidence is None or not evidence.workspace_dir:
+        return False, "no workspace root"
+    cfg = ref.value if isinstance(ref.value, dict) else {}
+    return _check_json_file_artifacts(
+        evidence.workspace_dir,
+        filename=cfg.get("filename", ""),
+        path_key=cfg.get("path_key", ""),
+        entries_key=cfg.get("entries_key", ""),
+        expected_count=int(cfg.get("expected_count", 0)),
+        count_tolerance=int(cfg.get("count_tolerance", 0)),
+        count_mode=cfg.get("count_mode", "at_least"),
+    )
 
 
 

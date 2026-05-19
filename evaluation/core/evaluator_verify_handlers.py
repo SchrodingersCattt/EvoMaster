@@ -40,7 +40,7 @@ from .evaluator_wiring import (
     check_token_budget,
     check_turn_budget,
 )
-from evaluation.validators.json_file import (
+from .evaluator_wiring import (
     check_json_file_artifacts,
     check_json_file_numeric_range,
     check_json_file_schema,
