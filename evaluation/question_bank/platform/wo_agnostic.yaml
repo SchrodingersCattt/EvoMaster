@@ -229,18 +229,18 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: PWO_dpa_head_organic_001_20260520
+- id: PWO_dpa_head_organic_001_20260521
   capability: workflow_orchestration
   domain: agnostic
   intent: Test whether agent selects OMol25 DPA head for organic molecule optimization
     rather than defaulting to Omat24 or misusing SPICE2.
-  human_prompt_seed: 请使用 DPA 模型对咖啡因分子做构型优化，输出优化后的结构文件。
+  human_prompt_seed: 请使用 DPA 模型对咖啡因分子做构型优化，输出为 `caffeine_optimized.cif`。
   tags:
   - code_mlip
   data_files: []
   reference_answers:
   - key: optimized_artifact
-    value: '*_optimized.cif'
+    value: caffeine_optimized.cif
   - key: must_head_omol25
     value:
       filename: '*_optimized.cif'
