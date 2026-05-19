@@ -20,8 +20,14 @@ from ase.io import read
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Validate structure before Bohrium submission")
-    parser.add_argument("--structure", required=True, help="Path to structure file (xyz, cif, vasp, etc.)")
+    parser = argparse.ArgumentParser(
+        description="Validate structure before Bohrium submission"
+    )
+    parser.add_argument(
+        "--structure",
+        required=True,
+        help="Path to structure file (xyz, cif, vasp, etc.)",
+    )
     args = parser.parse_args()
 
     atoms = read(args.structure)
@@ -47,7 +53,9 @@ def main():
         )
         sys.exit(1)
 
-    print(f"PASS: {len(atoms)} atoms, min_dist={min_dist:.3f} Å, volume={atoms.cell.volume:.1f} Å³")
+    print(
+        f"PASS: {len(atoms)} atoms, min_dist={min_dist:.3f} Å, volume={atoms.cell.volume:.1f} Å³"
+    )
 
 
 if __name__ == "__main__":
