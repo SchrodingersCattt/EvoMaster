@@ -51,14 +51,14 @@ These are execution stop rules, not suggestions. User requests like "do not ask 
 - **DPA head validity**: DPA head choice is a domain constraint. Do not use default `OMat24/Omat24` when the chemistry maps to a documented specialized head (`OC22`, `Organic_Reactions`, `OMol25`, `ODAC23`), even if the user asks for the default. For surfaces/adsorbate catalysis, check/use `OC22`, not `OMat24/Omat24`. Check/select the domain head first, then ask before changing the requested setup. For user-provided models with multiple heads, run `dp --pt show` to list available heads, present the options to user, and let them choose — do not pick a non-default head based on name alone.
 - **Scale**: hundreds of atoms are typical; thousand-atom systems are heavy but should still be attempted as-is — do NOT preemptively refuse or ask for confirmation based on system size alone. If the job fails due to OOM, then follow the OOM rule below. Only ask before attempting if the user requests reduced prototypes or scaled-down alternatives.
 - **OOM / job failure**: if a Bohrium job fails due to OOM or resource limits, do NOT silently retry with a different model, larger GPU, or alternative engine. STOP and report to user: what failed, why (OOM on which GPU/model), and what options exist (smaller model, LAMMPS route, reduced system). Let user decide.
-- **ASE task scripts FORBIDDEN list** — the following workflows are NOT implementable via ASE task scripts. Do not write custom ASE scripts to simulate them. STOP immediately and propose the correct engine (LAMMPS):
+- **ASE task scripts FORBIDDEN list** — the following workflows are NOT implementable via ASE task scripts. Do not write custom ASE scripts to simulate them. Do not proceed to LAMMPS without asking:
   - MSST / shock / Hugoniot extraction
   - NEMD (non-equilibrium MD with driving fields or gradients)
   - Custom ensembles not in {NVT, NVT-Berendsen, NVT-Langevin, NPT-aniso, NPT-tri, NVE}
   - Custom boundary conditions (non-PBC, deformation, shear)
   - Production campaigns (>10 ns or >10000 atoms)
 
-  If user asks for any of these "using ASE/MLIP scripts", the answer is: the scripts cannot do this. Ask user to approve LAMMPS route.
+  Action: STOP. Tell user "ASE cannot do this. Would you like me to set up a LAMMPS workflow instead?" Wait for confirmation before writing any files.
 - **Capabilities**: generic MLIPs provide energy/forces/stress, not band structures, DOS, gaps, or spectra. Use DFT or specialized ML models only after internal lookup and human choice.
 
 ## Fetching checkpoints
