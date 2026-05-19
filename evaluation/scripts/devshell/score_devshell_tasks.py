@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from evaluation.core.evaluator import BinaryEvaluator
-from evaluation.core.evaluator_helpers import token_usage_record_from_evidence
+from evaluation.core.evaluator_wiring import token_usage_record_from_evidence
 from evaluation.core.evidence import (
     ArtifactRecord,
     EventRecord,

@@ -70,7 +70,7 @@ sys.path.insert(0, str(REPO_ROOT))
 import yaml  # noqa: E402
 
 from evaluation.core.evaluator import BinaryEvaluator  # noqa: E402
-from evaluation.core.evaluator_helpers import (  # noqa: E402
+from evaluation.core.evaluator_wiring import (  # noqa: E402
     token_usage_record_from_evidence,
 )
 from evaluation.core.evidence import (  # noqa: E402

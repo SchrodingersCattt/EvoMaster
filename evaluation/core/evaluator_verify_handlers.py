@@ -11,7 +11,7 @@ at module bottom; do not import this file from anywhere else.
 """
 
 from .evaluator import BinaryEvaluator
-from .evaluator_helpers import (
+from .evaluator_wiring import (
     check_abacus_input_from_evidence,
     check_answer_json_numeric_from_ref,
     check_checkcif_alerts,
@@ -40,7 +40,7 @@ from .evaluator_helpers import (
     check_token_budget,
     check_turn_budget,
 )
-from evaluation.validators.json_file import (
+from .evaluator_wiring import (
     check_json_file_artifacts,
     check_json_file_numeric_range,
     check_json_file_schema,

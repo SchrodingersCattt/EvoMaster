@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .evaluator_helpers import (
+from .evaluator_wiring import (
     build_llm_context,
     build_safety_eval_record,
 )
