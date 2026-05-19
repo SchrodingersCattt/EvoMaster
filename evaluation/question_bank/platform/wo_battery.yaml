@@ -2,11 +2,11 @@ version: v5
 capability: workflow_orchestration
 domain: battery
 questions:
-- id: WO_dpmd_001_20260513
+- id: WO_dpmd_001_20260519
   capability: workflow_orchestration
   domain: battery
-  intent: Test whether agent uses DPA3 default model for DP-MD without searching for
-    system-specific potentials.
+  intent: Test whether agent correctly identifies that no system-specific DP model covers
+    LiCl aqueous (Li+Cl+H+O) and falls back to a universal pretrained DPA model.
   human_prompt_seed: '采用 DP-MD 模拟方法，对 2 mol/L LiCl 水溶液（约 1000 原子）进行
     200 ps NVT 模拟，分析 Li⁺ 的溶剂化结构。请准备好提交配置，输出为 `md_submit.json`。'
   tags:
@@ -15,43 +15,27 @@ questions:
   reference_answers:
   - key: submit_artifact
     value: md_submit.json
-  - key: must_cmd_dpa3
+  - key: must_use_universal_dpa
     value:
       filename: md_submit.json
-      pattern: DPA3
+      pattern: DPA.?[23]|dpa.?[23]|DPA-[23]|deepmd
       flags: i
-  - key: must_cmd_md_script
-    value:
-      filename: md_submit.json
-      pattern: run_molecular_dynamics
-      flags: ''
-  - key: must_image_dpa
-    value:
-      filename: md_submit.json
-      pattern: dpa-calculator
-      flags: ''
   - key: turn_budget
     value:
-      max: 15
+      max: 40
   scoring_checklist:
   - id: submit_artifact
     criterion: md_submit.json written to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: must_cmd_dpa3
-    criterion: '[Platform] cmd references DPA3 model (default for DP-MD).'
-    axis: correctness
-    verify: text_file_regex
-  - id: must_cmd_md_script
-    criterion: '[Platform] cmd uses run_molecular_dynamics script.'
-    axis: correctness
-    verify: text_file_regex
-  - id: must_image_dpa
-    criterion: '[Platform] image references dpa-calculator container.'
+  - id: must_use_universal_dpa
+    criterion: '[Must] md_submit.json references a universal pretrained DPA model (DPA-2
+      or DPA-3 series, or deepmd pair_style) — not a system-specific model that lacks
+      coverage of Li+Cl+H+O.'
     axis: correctness
     verify: text_file_regex
   - id: turn_budget
-    criterion: Agent completes within turn budget (should not waste turns searching for potentials).
+    criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
 - id: WO_md_preflight_001_20260513
