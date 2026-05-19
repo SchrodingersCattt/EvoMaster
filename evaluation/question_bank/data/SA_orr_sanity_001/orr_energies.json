@@ -1,35 +1,35 @@
 {
-  "system": "FeN4-graphene (4x4 supercell, 72 atoms)",
-  "method": "ABACUS PBE LCAO, ecutwfc=100 Ry, kpoints 3x3x1",
   "energies_eV": {
-    "clean_slab": {
-      "energy": -54201.337,
-      "nspin": 2,
+    "OH_ads": {
       "converged": true,
-      "note": "Fe site spin-polarized"
+      "energy": -54208.812,
+      "note": "Fe site spin-polarized",
+      "nspin": 2
     },
     "OOH_ads": {
-      "energy": -53782.541,
-      "nspin": 1,
       "converged": true,
-      "note": "default spin setting"
+      "energy": -53782.541,
+      "note": "default spin setting",
+      "nspin": 1
     },
     "O_ads": {
+      "converged": true,
       "energy": -53795.224,
-      "nspin": 1,
-      "converged": true,
-      "note": "default spin setting"
+      "note": "default spin setting",
+      "nspin": 1
     },
-    "OH_ads": {
-      "energy": -54208.812,
-      "nspin": 2,
+    "clean_slab": {
       "converged": true,
-      "note": "Fe site spin-polarized"
+      "energy": -54201.337,
+      "note": "Fe site spin-polarized",
+      "nspin": 2
     }
   },
+  "instructions": "Calculate the 4-step ORR free energy diagram (OOH*, O*, OH* pathway) using these SCF energies. Apply standard ZPE+entropy corrections: dG_OOH=0.40 eV, dG_O=0.05 eV, dG_OH=0.35 eV. Report overpotential.",
+  "method": "ABACUS PBE LCAO, ecutwfc=100 Ry, kpoints 3x3x1",
   "reference_molecules_eV": {
-    "H2O": -468.271,
-    "H2": -31.736
+    "H2": -31.736,
+    "H2O": -468.271
   },
-  "instructions": "Calculate the 4-step ORR free energy diagram (OOH*, O*, OH* pathway) using these SCF energies. Apply standard ZPE+entropy corrections: dG_OOH=0.40 eV, dG_O=0.05 eV, dG_OH=0.35 eV. Report overpotential."
+  "system": "FeN4-graphene (4x4 supercell, 72 atoms)"
 }

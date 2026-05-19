@@ -350,7 +350,6 @@ def extract_answer_from_trajectory_obj(trajectory: Any) -> str:
     return "\n\n".join(parts)
 
 
-
 def extract_answer_from_trajectory_file(
     path: Path, *, task_id: str | None = None
 ) -> str:
@@ -418,8 +417,6 @@ def _extract_answer_from_trajectory_dict(trajectory: dict[str, Any]) -> str:
             if parts:
                 return "\n\n".join(parts)
     return ""
-
-
 
 
 def extract_tool_calls_from_trajectory_file(

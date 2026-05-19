@@ -1,32 +1,32 @@
 {
   "calculation_info": {
-    "software": "ABACUS 3.7.0",
-    "method": "PBE-LCAO",
     "basis": "DZP",
     "ecutwfc_Ry": 100,
-    "kpoints": "3x3x1"
+    "kpoints": "3x3x1",
+    "method": "PBE-LCAO",
+    "software": "ABACUS 3.7.0"
   },
   "results": {
-    "clean_slab": {
-      "converged": true,
-      "nsteps": 12,
-      "energy": -158412.3847,
-      "natoms": 16,
-      "formula": "Pt16"
-    },
     "CO_molecule": {
       "converged": true,
-      "nsteps": 8,
       "energy": -612.0605,
+      "formula": "CO",
       "natoms": 2,
-      "formula": "CO"
+      "nsteps": 8
     },
     "CO_on_slab": {
       "converged": true,
-      "nsteps": 15,
       "energy": -159025.8452,
+      "formula": "Pt16CO",
       "natoms": 18,
-      "formula": "Pt16CO"
+      "nsteps": 15
+    },
+    "clean_slab": {
+      "converged": true,
+      "energy": -158412.3847,
+      "formula": "Pt16",
+      "natoms": 16,
+      "nsteps": 12
     }
   }
 }
