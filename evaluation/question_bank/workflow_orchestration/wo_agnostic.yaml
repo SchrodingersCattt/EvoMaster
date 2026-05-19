@@ -1666,7 +1666,7 @@ questions:
 
     分别优化初态和末态结构，然后使用 DPA 机器学习势做 NEB 计算（5 个中间像）。
 
-    报告正向迁移能垒 (eV) 和能量曲线趋势，结果写入 `neb_result.json`。
+    报告正向迁移能垒 (eV) 和能量曲线趋势，结果写入 `neb_result.json`（顶层包含 `forward_barrier_eV` 字段）。
 
     '
   tags:
