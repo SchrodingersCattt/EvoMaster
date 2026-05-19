@@ -195,7 +195,10 @@ Question files live in `evaluation/question_bank/<capability>/<xx>_<domain>.yaml
 |----------|---------------|
 | `text_file_contains_all` | All tokens present in file (case-insensitive with `flags: i`) |
 | `text_file_regex` | File content matches regex pattern |
-| `text_file_numeric_range` | Numeric values within [min, max] range |
+| `text_file_numeric_range` | Numeric values within [min, max] range (line-based key-value or JSON) |
+| `json_file_numeric_range` | JSON file value at dot-path key within expected ± tolerance |
+| `json_file_schema` | JSON file is valid and contains required top-level keys |
+| `json_file_artifacts` | Files referenced inside a JSON array exist in workspace |
 | `artifact_exists` | Output file exists in workspace |
 | `token_budget` | Total tokens ≤ max |
 | `turn_budget` | Total steps ≤ max |
