@@ -65,6 +65,16 @@ These are execution stop rules, not suggestions. User requests like "do not ask 
 
 The OSS URLs in `reference/dpa_models.md` are a **snapshot** and may rotate. If you need a model version not listed there, the canonical provenance (file name, byte size, download URL, modify date) of any pretrained MLIP checkpoint, or a new MLIP entirely, **invoke the `aissq-explorer` skill** (`backend.aissquare.com` public registry) — do NOT hand-type OSS URLs. The downloaded `.pt`/`.pth`/`.model` file is then used here exactly the same way.
 
+## Conditional Routing — check BEFORE acting
+
+| When your task involves… | You MUST run… |
+|--------------------------|---------------|
+| Submitting ANY Bohrium job | Pre-Submission Validation above (min_dist check) |
+| NEB calculation | MIC displacement check (see Key Rules § NEB) |
+| User-provided model with multiple heads | `dp --pt show` → present head options to user |
+| Workflow not in {optimize, phonon, MD, elastic, NEB, adsorption} | Check FORBIDDEN list above |
+| Choosing a DPA head for unfamiliar chemistry | `dp --pt show` or `aissq-explorer` query |
+
 ## Task Scripts
 
 | Script | Usage | Output |
