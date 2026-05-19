@@ -1,6 +1,6 @@
 ---
 name: mlips
-description: "MUST use this skill for ANY task involving MLIPs (machine-learning interatomic potentials such as DPA, MACE, SevenNet, MatterSim), DP-MD, DeePMD — structure optimization, phonon, molecular dynamics, elastic constants, NEB, adsorption energy, etc."
+description: "MUST use this skill for ANY task involving MLIPs (machine-learning interatomic potentials such as DPA, MACE, SevenNet, MatterSim) — structure optimization, phonon, molecular dynamics, elastic constants, NEB, adsorption energy, etc."
 skill_type: operator
 ---
 
