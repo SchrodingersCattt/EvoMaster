@@ -601,8 +601,7 @@ def check_struct_file_charge_balance(
         ws,
         filename=cfg.get("filename", "*.cif"),
         oxidation_states={
-            str(k): int(v)
-            for k, v in cfg.get("oxidation_states", {}).items()
+            str(k): int(v) for k, v in cfg.get("oxidation_states", {}).items()
         },
         tolerance=float(cfg.get("tolerance", 0.01)),
     )
