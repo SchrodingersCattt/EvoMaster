@@ -1,8 +1,4 @@
-"""Helper functions for the MATTER binary evaluator.
-
-Keep secondary logic out of ``evaluator.py`` so the main evaluator stays under
-the repository's single-file size limit.
-"""
+"""Helper functions for the MATTER binary evaluator."""
 
 from __future__ import annotations
 
@@ -424,11 +420,6 @@ def check_molcrys_local_env_from_evidence(
     )
 
 
-# ---------------------------------------------------------------------------
-# struct_file_* helpers — bridge evaluator dispatch → structure_general validators
-# ---------------------------------------------------------------------------
-
-
 def _get_workspace(evidence: EvidenceBundle | None) -> tuple[str | None, str | None]:
     """Extract workspace_dir from evidence, return (dir, error_msg)."""
     if evidence is None:
@@ -601,8 +592,7 @@ def check_struct_file_charge_balance(
         ws,
         filename=cfg.get("filename", "*.cif"),
         oxidation_states={
-            str(k): int(v)
-            for k, v in cfg.get("oxidation_states", {}).items()
+            str(k): int(v) for k, v in cfg.get("oxidation_states", {}).items()
         },
         tolerance=float(cfg.get("tolerance", 0.01)),
     )
@@ -1004,11 +994,3 @@ def check_abacus_input_from_evidence(
         expected=expected,
         workspace_resolve=_workspace_resolve_from_ref(ref),
     )
-
-
-# Re-export from evaluator_json_checks to keep import paths stable
-from .evaluator_json_checks import (  # noqa: E402, F401
-    check_json_file_artifacts,
-    check_json_file_numeric_range,
-    check_json_file_schema,
-)

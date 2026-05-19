@@ -16,9 +16,6 @@ from .evaluator_helpers import (
     check_answer_json_numeric_from_ref,
     check_checkcif_alerts,
     check_duration_budget,
-    check_json_file_artifacts,
-    check_json_file_numeric_range,
-    check_json_file_schema,
     check_molcrys_local_env_from_evidence,
     check_molcrys_slab_integrity,
     check_sc005_disorder_formulas,
@@ -42,6 +39,11 @@ from .evaluator_helpers import (
     check_text_file_regex_from_evidence,
     check_token_budget,
     check_turn_budget,
+)
+from .evaluator_json_checks import (
+    check_json_file_artifacts,
+    check_json_file_numeric_range,
+    check_json_file_schema,
 )
 from .evaluator_struct_helpers import (
     check_struct_file_all_occupancy_one,
