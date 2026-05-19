@@ -23159,6 +23159,11 @@
         "pct": 0.0,
         "total": 15
       },
+      "retrieve-structure": {
+        "covered": 0,
+        "pct": 0.0,
+        "total": 24
+      },
       "sample-atomic-structures": {
         "covered": 0,
         "pct": 0.0,
@@ -23173,11 +23178,6 @@
         "covered": 0,
         "pct": 0.0,
         "total": 10
-      },
-      "retrieve-structure": {
-        "covered": 0,
-        "pct": 0.0,
-        "total": 24
       },
       "system_prompt": {
         "covered": 2,
