@@ -328,10 +328,7 @@ class AgentKernel:
 
             if not response.tool_calls:
                 if not is_valid_natural_finish(response):
-                    if (
-                        state.last_emitted_content
-                        and response.finish_reason == "stop"
-                    ):
+                    if state.last_emitted_content and response.finish_reason == "stop":
                         yield self._terminal(
                             state,
                             "natural",
