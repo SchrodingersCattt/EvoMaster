@@ -43,29 +43,11 @@ slices:
       - "@code_mlip,meta_database"
     count: 3
 
-  - target: "Skill: build-atomic-structure"
+  - target: "Skill: atomic-structure"
     type: skill
     slices:
-      - "@struct_build"
-    count: 5
-
-  - target: "Skill: transform-atomic-structure"
-    type: skill
-    slices:
-      - "@struct_transform"
-    count: 9
-
-  - target: "Skill: operate-molecular-crystal"
-    type: skill
-    slices:
-      - "@struct_molcrys"
-    count: 3
-
-  - target: "Skill: tasker-polar-surface"
-    type: skill
-    slices:
-      - "@struct_surface"
-    count: 22
+      - "@struct_build,struct_transform,struct_molcrys,struct_surface,meta_database"
+    count: 39
 
   - target: "Skill: xrd + checkcif"
     type: skill

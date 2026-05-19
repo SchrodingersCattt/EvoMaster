@@ -2,7 +2,7 @@
 name: composition-optimization
 description: Multi-component alloy/material composition optimization via DART GA. Use for alloy composition search, seed design, or converting composition targets to explicit structures.
 skill_type: orchestrator
-depends_on: mcp-mat-compdart, mcp-mat-struct-db, build-atomic-structure, inspect-atomic-structure, mcp-mat-doc
+depends_on: mcp-mat-compdart, mcp-mat-struct-db, atomic-structure, mcp-mat-doc
 ---
 
 <!-- multi-server: mat_compdart, mat_struct_db, mat_sg, mat_sn, mat_doc -->

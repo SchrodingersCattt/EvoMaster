@@ -154,19 +154,18 @@ SKILL_TAG_MAP: dict[str, list[str]] = {
     "cp2k": ["eng_cp2k"],
     "gromacs": ["eng_gromacs"],
     "mlips": ["code_mlip"],
-    "tasker-polar-surface": ["struct_surface"],
-    "build-atomic-structure": ["struct_build"],
-    "transform-atomic-structure": ["struct_transform"],
-    "operate-molecular-crystal": ["struct_molcrys"],
+    "atomic-structure": [
+        "struct_build",
+        "struct_transform",
+        "struct_surface",
+        "struct_molcrys",
+        "meta_database",
+    ],
     "mcp-mat-struct-db": ["meta_database"],
-    "retrieve-structure": ["meta_database"],
     "xrd-analysis": ["char_diffraction"],
     "checkcif-validator": ["char_diffraction"],
     "mcp-mat-xrd": ["char_diffraction"],
     "pxrd-refinement": ["char_diffraction"],
-    "sample-atomic-structures": ["struct_build"],
-    "assemble-atomic-structure": ["struct_surface", "struct_build"],
-    "inspect-atomic-structure": ["struct_build", "struct_transform", "struct_surface"],
 }
 
 # Also match by capability for workflow/general questions
@@ -174,8 +173,7 @@ CAPABILITY_SKILLS: dict[str, list[str]] = {
     "workflow_orchestration": [
         "cp2k",
         "mlips",
-        "build-atomic-structure",
-        "sample-atomic-structures",
+        "atomic-structure",
     ],
     "execution_contract": [
         "vasp",
