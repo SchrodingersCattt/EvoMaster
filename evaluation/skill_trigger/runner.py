@@ -29,6 +29,7 @@ from matmaster.providers.llm_factory import build_provider
 from matmaster.sessions.local import LocalSession
 from matmaster.types.cancellation import CancellationController
 from matmaster.core.playground import PlaygroundContext
+from matmaster.types.run_metadata import RunMetadata
 from matmaster.types.events import ToolCallEvent
 
 logger = logging.getLogger(__name__)
@@ -198,7 +199,7 @@ async def _run_single_repeat(
             session=session,
             llm_provider=llm_provider,
             llm_config=llm_config,
-            run_meta={"source": "skill_trigger_eval", "task_id": task_id},
+            metadata=RunMetadata(source="skill_trigger_eval", task_id=task_id),
         )
         try_attach_local_bohrium_runtime_from_env(session)
 
