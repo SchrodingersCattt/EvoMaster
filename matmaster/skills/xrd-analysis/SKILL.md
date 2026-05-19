@@ -1,6 +1,6 @@
 ---
 name: xrd-analysis
-description: "When the task involves single-crystal XRD (SCXRD) structure solution from HKL/INS/P4P files, or PXRD lattice parameter refinement without GSAS-II. Triggers on: SCXRD structure solution, HKL→CIF conversion, charge-flipping, SHELX pipeline, Pawley lattice refinement from peak positions. NOT for GSAS-II–based PXRD refinement (use pxrd-refinement skill) or XRD phase identification (use mcp-mat-xrd)."
+description: "Use for SCXRD structure solution from HKL/INS/P4P, HKL-to-CIF, charge-flipping/SHELX workflows, or non-GSAS-II PXRD lattice refinement. Not for GSAS-II PXRD refinement or phase ID."
 ---
 
 # XRD Analysis — SCXRD Structure Solution & PXRD Lattice Refinement

@@ -1,6 +1,6 @@
 ---
 name: sample-atomic-structures
-description: "Sample candidate crystal structures from configuration space via dispatcher-side generators: CALYPSO evolutionary sampling and CrystalFormer property-conditional sampling. NOT a database lookup — for fetching known compounds use mcp-mat-struct-db or retrieve-structure. Always asks the user for the explicit space_group; never guesses."
+description: "Use to sample candidate crystal structures from configuration space with CALYPSO or CrystalFormer. Not for known-compound lookup; use mcp-mat-struct-db or retrieve-structure. Requires explicit space group."
 skill_type: mcp-loader
 mcp_server: mat_sg
 depends_on: inspect-atomic-structure
