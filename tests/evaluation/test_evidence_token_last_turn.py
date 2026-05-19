@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from evaluation.core.evaluator_helpers import build_llm_context, check_token_budget
+from evaluation.core.evaluator_wiring import build_llm_context, check_token_budget
 from evaluation.core.evidence import (
     ArtifactRecord,
     CallStatus,

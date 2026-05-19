@@ -10,7 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from evaluation.core.evaluator import BinaryEvaluator
-from evaluation.core.evaluator_helpers import check_duration_budget
+from evaluation.core.evaluator_wiring import check_duration_budget
 from evaluation.core.evidence import EvidenceBundle, TokenUsage
 from evaluation.validators.answer_text import (
     check_answer_json_numeric,
@@ -163,7 +163,7 @@ def test_check_answer_json_numeric_rejects_non_numeric_value() -> None:
 
 def test_check_answer_json_numeric_via_evaluator_helper_dispatch() -> None:
     """End-to-end: ReferenceAnswer.value as a dict drives the verifier."""
-    from evaluation.core.evaluator_helpers import (
+    from evaluation.core.evaluator_wiring import (
         check_answer_json_numeric_from_ref,
     )
     from evaluation.core.schemas import ReferenceAnswer

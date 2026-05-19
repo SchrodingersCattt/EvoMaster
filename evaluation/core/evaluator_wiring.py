@@ -1,4 +1,4 @@
-"""Helper functions for the MATTER binary evaluator."""
+"""Evaluator wiring: unwrap EvidenceBundle → call validators/ functions."""
 
 from __future__ import annotations
 
