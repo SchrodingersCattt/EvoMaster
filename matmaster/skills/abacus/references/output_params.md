@@ -40,3 +40,4 @@ Include in INPUT as needed. Results written to `OUT.ABACUS/`.
 ## Common mistakes
 - Forgetting `out_chg 1` in SCF → NSCF with `init_chg file` fails or recomputes SCF
 - Leaving `symmetry 1` in NSCF band structure → k-path folded, wrong band plot
+- `BANDS_1.dat` eigenvalues are absolute energies (not relative to Fermi level). To identify VBM/CBM and compute band gap, first extract `EFERMI` from `running_scf.log`, then subtract it from all eigenvalues. Without this step, occupied and unoccupied bands cannot be distinguished.
