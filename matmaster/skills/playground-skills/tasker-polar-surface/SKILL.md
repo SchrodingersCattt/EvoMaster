@@ -1,6 +1,6 @@
 ---
 name: tasker-polar-surface
-description: "Use for ionic/polar surface or slab tasks needing Tasker-aware construction, adjustment, or validation of dipole-balanced/symmetric/non-polar terminations."
+description: "Use for ionic, heterovalent, or polar surface/slab tasks needing Tasker-aware construction, adjustment, or validation of dipole-balanced/symmetric/non-polar terminations."
 depends_on: assemble-atomic-structure, mcp-mat-doc
 ---
 
@@ -8,7 +8,7 @@ depends_on: assemble-atomic-structure, mcp-mat-doc
 
 # Tasker Polar Surface Skill
 
-When cutting a surface slab from a bulk crystal (especially ionic or oxide), apply **Tasker's polar surface theory** so the slab is non-polar or correctly handled. Otherwise the cut may be polar and physically unreasonable (e.g. diverging surface energy for Type 3).
+When cutting a surface slab from a bulk crystal (especially ionic or heterovalent), apply **Tasker's polar surface theory** so the slab is non-polar or correctly handled. Otherwise the cut may be polar and physically unreasonable (e.g. diverging surface energy for Type 3).
 
 ## Tasker's three surface types
 
