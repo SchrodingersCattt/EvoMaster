@@ -14,8 +14,8 @@ from datetime import datetime, timezone
 from typing import Any
 
 from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES
+from matmaster.context.sources.turn_input import TurnInput
 from matmaster.types.cancellation import CancellationController
-from matmaster.types.current_input import CurrentInputContext
 from src.dao.redis_dao import get_redis_dao
 from src.services.agent_run_service import get_agent_run_service
 from src.services.sessions_service import get_sessions_service
@@ -210,8 +210,8 @@ def _run_worker_loop() -> None:
             if isinstance(raw_images, list)
             else []
         )
-        current_input_context = CurrentInputContext.from_payload(
-            payload.get('current_input_context')
+        turn_input = TurnInput.from_payload(
+            payload.get('turn_input') or payload.get('current_input_context')
         )
         bohrium_required = bool(payload.get('bohrium_required'))
         raw_remote_workdir = payload.get('remote_workdir')
@@ -317,7 +317,7 @@ def _run_worker_loop() -> None:
                         llm_override=llm_override,
                         model_override=model_override,
                         images=images,
-                        current_input_context=current_input_context,
+                        turn_input=turn_input,
                         remote_workdir=remote_workdir,
                         bohrium_required=bohrium_required,
                     )

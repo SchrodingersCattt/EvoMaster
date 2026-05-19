@@ -8,8 +8,9 @@ from unittest.mock import MagicMock, patch
 
 from matmaster.config.exp import ExpConfig
 from matmaster.core.exp import Exp
+from matmaster.core.playground import PlaygroundContext
 from matmaster.tools.tool_registry import ToolRegistry
-from matmaster.types.context import PlaygroundContext
+from matmaster.types.run_metadata import RunMetadata
 
 
 def _make_skill_dir(tmp_path: Path) -> Path:
@@ -40,6 +41,12 @@ def _make_mcp_yaml(tmp_path: Path) -> None:
             }
         )
     )
+
+
+def _mock_playground_context() -> MagicMock:
+    ctx = MagicMock(spec=PlaygroundContext)
+    ctx.metadata = RunMetadata()
+    return ctx
 
 
 class FakeRemoteSkillSession:
@@ -89,7 +96,7 @@ class TestExpInitSkillTools:
         )
         exp = Exp(cfg)
         registry = ToolRegistry()
-        ctx = MagicMock(spec=PlaygroundContext)
+        ctx = _mock_playground_context()
         ctx.session = MagicMock()
         ctx.execution_workdir = str(tmp_path)
 
@@ -111,7 +118,7 @@ class TestExpInitSkillTools:
         )
         exp = Exp(cfg)
         registry = ToolRegistry()
-        ctx = MagicMock(spec=PlaygroundContext)
+        ctx = _mock_playground_context()
 
         exp._init_skill_tools(ctx, registry)
 
@@ -139,7 +146,7 @@ class TestExpInitSkillTools:
         )
         exp = Exp(cfg)
         registry = ToolRegistry()
-        ctx = MagicMock(spec=PlaygroundContext)
+        ctx = _mock_playground_context()
         ctx.session = MagicMock()
         ctx.execution_workdir = str(tmp_path)
 
@@ -211,7 +218,7 @@ class TestExpInitSkillTools:
         )
         exp = Exp(cfg)
         registry = ToolRegistry()
-        ctx = MagicMock(spec=PlaygroundContext)
+        ctx = _mock_playground_context()
         ctx.session = MagicMock()
         ctx.execution_workdir = str(tmp_path)
 
@@ -260,7 +267,7 @@ class TestExpInitSkillTools:
         )
         exp = Exp(cfg)
         registry = ToolRegistry()
-        ctx = MagicMock(spec=PlaygroundContext)
+        ctx = _mock_playground_context()
         ctx.session = MagicMock()
         ctx.execution_workdir = "/workspace/session-1"
 
@@ -306,7 +313,7 @@ class TestExpInitSkillTools:
         )
         exp = Exp(cfg)
         registry = ToolRegistry()
-        ctx = MagicMock(spec=PlaygroundContext)
+        ctx = _mock_playground_context()
         ctx.session = MagicMock()
         ctx.session.local_user_skills_root = str(user_skill_root)
         ctx.session.remote_project_root = None
@@ -355,7 +362,7 @@ class TestExpInitSkillTools:
         )
         exp = Exp(cfg)
         registry = ToolRegistry()
-        ctx = MagicMock(spec=PlaygroundContext)
+        ctx = _mock_playground_context()
         ctx.session = session
         ctx.execution_workdir = str(tmp_path)
 
@@ -393,7 +400,7 @@ class TestExpInitSkillTools:
         )
         exp = Exp(cfg)
         registry = ToolRegistry()
-        ctx = MagicMock(spec=PlaygroundContext)
+        ctx = _mock_playground_context()
         ctx.session = MagicMock()
         ctx.session.local_user_skills_root = None
         ctx.execution_workdir = str(tmp_path)

@@ -1,8 +1,4 @@
-"""Tests for AgentKernel stream generator features.
-
-Tests _stream_llm_items() sub-generator, _run_items() AssistantStateEvent/SkillHitEvent
-yields, and compactor deque integration. Phase 34 Plan 1 Task 1.
-"""
+"""Tests for AgentKernel stream generator features."""
 
 from __future__ import annotations
 
@@ -10,7 +6,11 @@ from typing import Any
 
 import pytest
 
-from matmaster.core.context_builder import ContextBuilder
+from matmaster.context.system_prompt import SystemPromptBuilder
+from matmaster.core.agent_llm_stream import (
+    _sleep_backoff_with_cancel,
+    stream_llm_items,
+)
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.events import (
     AssistantStateEvent,
@@ -27,8 +27,6 @@ from .agent_kernel_test_helpers import (
     _make_spec,
     _make_tool_registry,
 )
-
-# ── Providers for streaming tests ─────────────────────────
 
 
 class ReasoningThenContentProvider:
@@ -253,20 +251,19 @@ class EmptyThenContentProvider:
 
 
 class TestStreamLlmItems:
-    """Tests for _stream_llm_items() sub-generator."""
+    """Tests for ``stream_llm_items`` (the sub-generator under retry/backoff)."""
 
     @pytest.mark.asyncio
     async def test_yields_thought_and_response_events(self) -> None:
         """Reasoning chunks yield ThoughtEvent, content chunks yield ResponseEvent."""
-        from matmaster.core.agent import AgentKernel, _KernelItem
+        from matmaster.core.kernel_items import _KernelItem
 
         provider = ReasoningThenContentProvider()
         spec = _make_spec(provider=provider)
-        kernel = AgentKernel()
 
         api_messages = [{"role": "user", "content": "test"}]
         items: list[_KernelItem] = []
-        async for item in kernel._stream_llm_items(spec, api_messages, None):
+        async for item in stream_llm_items(spec, api_messages, None):
             items.append(item)
 
         # Should have: start event, reasoning events, thought-complete, content events,
@@ -291,15 +288,14 @@ class TestStreamLlmItems:
     @pytest.mark.asyncio
     async def test_segment_complete_on_reasoning_to_content(self) -> None:
         """ThoughtEvent(complete) emitted when transitioning from reasoning to content."""
-        from matmaster.core.agent import AgentKernel, _KernelItem
+        from matmaster.core.kernel_items import _KernelItem
 
         provider = ReasoningThenContentProvider()
         spec = _make_spec(provider=provider)
-        kernel = AgentKernel()
 
         api_messages = [{"role": "user", "content": "test"}]
         items: list[_KernelItem] = []
-        async for item in kernel._stream_llm_items(spec, api_messages, None):
+        async for item in stream_llm_items(spec, api_messages, None):
             items.append(item)
 
         # Find thought-complete event
@@ -319,15 +315,14 @@ class TestStreamLlmItems:
     @pytest.mark.asyncio
     async def test_response_segment_end_at_stream_end(self) -> None:
         """ResponseEvent(segment_end) emitted at end of content stream."""
-        from matmaster.core.agent import AgentKernel, _KernelItem
+        from matmaster.core.kernel_items import _KernelItem
 
         provider = ReasoningThenContentProvider()
         spec = _make_spec(provider=provider)
-        kernel = AgentKernel()
 
         api_messages = [{"role": "user", "content": "test"}]
         items: list[_KernelItem] = []
-        async for item in kernel._stream_llm_items(spec, api_messages, None):
+        async for item in stream_llm_items(spec, api_messages, None):
             items.append(item)
 
         response_completes = [
@@ -351,15 +346,14 @@ class TestStreamLlmItems:
     @pytest.mark.asyncio
     async def test_final_yield_carries_llm_response(self) -> None:
         """Last yielded _KernelItem carries llm_response field."""
-        from matmaster.core.agent import AgentKernel, _KernelItem
+        from matmaster.core.kernel_items import _KernelItem
 
         provider = ReasoningThenContentProvider()
         spec = _make_spec(provider=provider)
-        kernel = AgentKernel()
 
         api_messages = [{"role": "user", "content": "test"}]
         items: list[_KernelItem] = []
-        async for item in kernel._stream_llm_items(spec, api_messages, None):
+        async for item in stream_llm_items(spec, api_messages, None):
             items.append(item)
 
         # Last item should have llm_response
@@ -374,15 +368,14 @@ class TestStreamLlmItems:
     @pytest.mark.asyncio
     async def test_start_and_end_events(self) -> None:
         """Stream start and end marker events are yielded."""
-        from matmaster.core.agent import AgentKernel, _KernelItem
+        from matmaster.core.kernel_items import _KernelItem
 
         provider = ContentOnlyProvider()
         spec = _make_spec(provider=provider)
-        kernel = AgentKernel()
 
         api_messages = [{"role": "user", "content": "test"}]
         items: list[_KernelItem] = []
-        async for item in kernel._stream_llm_items(spec, api_messages, None):
+        async for item in stream_llm_items(spec, api_messages, None):
             items.append(item)
 
         # First event should be start marker (ThoughtEvent with start state)
@@ -408,7 +401,7 @@ class TestStreamLlmItems:
     @pytest.mark.asyncio
     async def test_same_call_argument_chunks_stay_single_tool_call(self) -> None:
         """Normal argument streaming for one tool call must not be split."""
-        from matmaster.core.agent import AgentKernel, _KernelItem
+        from matmaster.core.kernel_items import _KernelItem
 
         provider = StreamingProvider(
             [
@@ -434,10 +427,9 @@ class TestStreamLlmItems:
             ]
         )
         spec = _make_spec(provider=provider)
-        kernel = AgentKernel()
 
         items: list[_KernelItem] = []
-        async for item in kernel._stream_llm_items(
+        async for item in stream_llm_items(
             spec, [{"role": "user", "content": "test"}], None
         ):
             items.append(item)
@@ -462,21 +454,46 @@ class TestRunItemsAssistantState:
     """_run_items() yields AssistantStateEvent on tool_calls turns."""
 
     @pytest.mark.asyncio
-    async def test_current_user_images_are_sent_as_content_parts(self) -> None:
+    async def test_run_stream_uses_preassembled_task_content_without_legacy_wrap(
+        self,
+    ) -> None:
+        """Phase 2C: kernel passes service-assembled task content through."""
+        from matmaster.core.agent import AgentKernel
+
+        provider = RecordingContentProvider()
+        task = (
+            "<user_instructions>\nUse SI units.\n</user_instructions>"
+            "\n\n"
+            "<current_instruction>\nfit structure\n</current_instruction>"
+        )
+        spec = _make_spec(provider=provider)
+        kernel = AgentKernel()
+
+        async for _event in kernel.run_stream(spec, task):
+            pass
+
+        assert provider.seen_messages
+        user_messages = [
+            message
+            for message in provider.seen_messages[0]
+            if message.get("role") == "user"
+        ]
+        assert user_messages[-1]["content"] == task
+        assert "ATTACHMENT-SHOULD-BE-IGNORED" not in user_messages[-1]["content"]
+
+    @pytest.mark.asyncio
+    async def test_turn_input_images_are_sent_as_content_parts(self) -> None:
+        from matmaster.context.sources.turn_input import TurnInput
         from matmaster.core.agent import AgentKernel
 
         provider = RecordingContentProvider()
         spec = _make_spec(provider=provider).model_copy(
             update={
-                "meta": {
-                    "current_user_images": [
-                        {
-                            "url": "https://oss.example.com/chat/a.png",
-                            "mime_type": "image/png",
-                            "detail": "high",
-                        }
-                    ]
-                }
+                "turn_input": TurnInput.from_values(
+                    user_text="看图",
+                    images=["https://oss.example.com/chat/a.png"],
+                    image_detail="high",
+                )
             }
         )
         kernel = AgentKernel()
@@ -647,7 +664,7 @@ class TestGap1FullToolRunnerActivation:
         registry, _tools = _make_tool_registry()
         catalog = ToolCatalog(registry)
         spec = AgentRuntimeSpec(
-            context_builder=ContextBuilder(),
+            system_prompt_builder=SystemPromptBuilder(),
             llm_provider=provider,
             tool_catalog=catalog,
             # tool_runner intentionally None
@@ -961,12 +978,10 @@ class TestCancellationTokenSupport:
     async def test_sleep_backoff_wakes_early_on_cancel_token(self) -> None:
         import asyncio
 
-        from matmaster.core.agent import AgentKernel, _KernelStopRequested
+        from matmaster.core.kernel_items import _KernelStopRequested
 
         ctrl = CancellationController()
-        task = asyncio.create_task(
-            AgentKernel._sleep_backoff_with_cancel(5.0, ctrl.token)
-        )
+        task = asyncio.create_task(_sleep_backoff_with_cancel(5.0, ctrl.token))
 
         await asyncio.sleep(0.05)
         ctrl.cancel()

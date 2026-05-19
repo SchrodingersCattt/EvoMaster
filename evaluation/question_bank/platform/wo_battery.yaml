@@ -115,7 +115,7 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
-- id: WO_dpmd_custom_model_001_20260513
+- id: WO_dpmd_custom_model_001_20260519
   capability: workflow_orchestration
   domain: battery
   intent: Test whether agent correctly passes a user-provided local DP model path to
@@ -144,8 +144,8 @@ questions:
   - key: must_cmd_md
     value:
       filename: md_submit.json
-      pattern: run_molecular_dynamics
-      flags: ''
+      pattern: run_molecular_dynamics|lmp\s|lammps
+      flags: i
   - key: turn_budget
     value:
       max: 12
@@ -160,7 +160,8 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: must_cmd_md
-    criterion: '[Platform] cmd uses run_molecular_dynamics script.'
+    criterion: '[Platform] cmd invokes MD execution (run_molecular_dynamics script or
+      LAMMPS directly).'
     axis: correctness
     verify: text_file_regex
   - id: no_model_search
