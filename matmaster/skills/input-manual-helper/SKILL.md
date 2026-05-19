@@ -1,6 +1,6 @@
 ---
 name: input-manual-helper
-description: "Use to prepare, adapt, validate, or package runnable engine inputs for ABACUS, CP2K, QE, ABINIT, LAMMPS, ORCA, GROMACS, or PySCF when no dedicated MCP submit workflow exists."
+description: "Use when preparing, adapting, validating, or packaging runnable engine inputs for ABACUS, CP2K, QE, ABINIT, LAMMPS, ORCA, GROMACS, or PySCF where no dedicated MCP submit workflow exists."
 skill_type: operator
 ---
 
