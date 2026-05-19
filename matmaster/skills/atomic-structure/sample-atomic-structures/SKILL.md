@@ -1,6 +1,6 @@
 ---
 name: sample-atomic-structures
-description: "Use when sampling candidate crystal structures from configuration space with CALYPSO or CrystalFormer — not for known-compound lookup (use mcp-mat-struct-db or retrieve-structure instead). Always ask the user for the explicit space group; never guess."
+description: "Use when sampling candidate crystal structures from configuration space with CALYPSO or CrystalFormer — not for known-compound lookup (use mcp-mat-struct-db or retrieve-structure instead)."
 skill_type: mcp-loader
 mcp_server: mat_sg
 depends_on: inspect-atomic-structure
