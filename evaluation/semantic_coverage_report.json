@@ -5740,7 +5740,7 @@
       "rule_type": "general",
       "section": "Cross-Skill Refs",
       "source_name": "inspect-atomic-structure",
-      "text": "`matmaster/skills/playground-skills/structure-manager/scripts/assess_structure.py` remains a quick CLI validation fallback."
+      "text": "`matmaster/skills/playground-skills/retrieve-structure/scripts/assess_structure.py` remains a quick CLI validation fallback."
     },
     {
       "actionability": "testable",
@@ -6390,7 +6390,7 @@
       "rule_type": "general",
       "section": "Cross-Skill Refs",
       "source_name": "operate-molecular-crystal",
-      "text": "`structure-manager` contains additional molecular-crystal slab/passivation helper scripts for known fragile cases."
+      "text": "`retrieve-structure` contains additional molecular-crystal slab/passivation helper scripts for known fragile cases."
     },
     {
       "actionability": "testable",
@@ -13956,7 +13956,7 @@
       "rule_type": "workflow_step",
       "section": "Workflow",
       "source_name": "composition-optimization",
-      "text": "Validate each new structure using `structure-manager` (`assess_structure.py`)."
+      "text": "Validate each new structure using `retrieve-structure` (`assess_structure.py`)."
     },
     {
       "actionability": "testable",
@@ -14222,7 +14222,7 @@
       "rule_type": "general",
       "section": "Tool usage notes",
       "source_name": "composition-optimization",
-      "text": "`structure-manager` -> `assess_structure.py` for sanity checks"
+      "text": "`retrieve-structure` -> `assess_structure.py` for sanity checks"
     },
     {
       "actionability": "testable",
@@ -16457,12 +16457,12 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "structure-manager/acquisition-paths/919",
+      "id": "retrieve-structure/acquisition-paths/919",
       "is_actionable": true,
       "reason": "The rule specifies the MCP database tool naming convention (`mat_struct_db_*`), but none of the evaluation questions have scoring criteria that would detect whether the agent uses the correct MCP tool name versus some other method to access databases.",
       "rule_type": "general",
       "section": "Acquisition Paths",
-      "source_name": "structure-manager",
+      "source_name": "retrieve-structure",
       "text": "**Database (MCP)**: `mat_struct_db_*` — search by formula, composition, material ID, prototype."
     },
     {
@@ -16471,12 +16471,12 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "structure-manager/acquisition-paths/920",
+      "id": "retrieve-structure/acquisition-paths/920",
       "is_actionable": true,
       "reason": "The rule is about structure generation tools (mat_sg_*), but all evaluation questions only test database retrieval and metadata reporting, not the act of building structures from SMILES, Wyckoff positions, prototypes, surfaces, supercells, or defects.",
       "rule_type": "general",
       "section": "Acquisition Paths",
-      "source_name": "structure-manager",
+      "source_name": "retrieve-structure",
       "text": "**Structure generation (MCP)**: `mat_sg_*` — build from SMILES, Wyckoff positions, prototype, surfaces, supercells, defects."
     },
     {
@@ -16485,12 +16485,12 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "structure-manager/acquisition-paths/921",
+      "id": "retrieve-structure/acquisition-paths/921",
       "is_actionable": true,
       "reason": "The rule specifies a literature search workflow with web tools and fallback strategies for paywalls, but all evaluation questions test database retrieval from structured sources (Alexandria, Materials Project, CoREMOF) without requiring web search or handling 403/paywall scenarios.",
       "rule_type": "general",
       "section": "Acquisition Paths",
-      "source_name": "structure-manager",
+      "source_name": "retrieve-structure",
       "text": "**Literature search**: `mat_sn_*` / `web-search` → `extract_info_from_webpage` → `fetch_web_structure.py --url` or `--page`. For 403/paywall, try alternative open-access URLs."
     },
     {
@@ -16499,12 +16499,12 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "structure-manager/acquisition-paths/922",
+      "id": "retrieve-structure/acquisition-paths/922",
       "is_actionable": true,
       "reason": "The rule is about using a specific command-line tool (`fetch_web_structure.py`) for direct download of known file URLs, but none of the evaluation questions require or check for the use of that specific tool or method for file retrieval.",
       "rule_type": "general",
       "section": "Acquisition Paths",
-      "source_name": "structure-manager",
+      "source_name": "retrieve-structure",
       "text": "**Direct download**: `fetch_web_structure.py --url <link>` for known file URLs."
     },
     {
@@ -16513,12 +16513,12 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "structure-manager/acquisition-paths/923",
+      "id": "retrieve-structure/acquisition-paths/923",
       "is_actionable": true,
       "reason": "None of the evaluation questions require or test the specific action of using `fetch_web_structure.py --page <url>` to extract structure files from HTML pages, as all tasks involve direct database queries or given data sources without web page extraction.",
       "rule_type": "general",
       "section": "Acquisition Paths",
-      "source_name": "structure-manager",
+      "source_name": "retrieve-structure",
       "text": "**Web page extraction**: `fetch_web_structure.py --page <url>` to find and download structure files from HTML pages."
     },
     {
@@ -16527,12 +16527,12 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "structure-manager/acquisition-paths/924",
+      "id": "retrieve-structure/acquisition-paths/924",
       "is_actionable": true,
       "reason": "None of the evaluation questions require or test retrieval from gated databases (CCDC, ICSD) where the rule about reporting identifiers without attempting download would be relevant.",
       "rule_type": "general",
       "section": "Acquisition Paths",
-      "source_name": "structure-manager",
+      "source_name": "retrieve-structure",
       "text": "**Gated databases (CCDC, ICSD)**: Report identifiers + crystal parameters from literature. Do not attempt download or reconstruction."
     },
     {
@@ -16541,12 +16541,12 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "structure-manager/scripts/925",
+      "id": "retrieve-structure/scripts/925",
       "is_actionable": true,
       "reason": "The rule specifies a script that outputs JSON with structure validation and analysis fields, but no evaluation question requires running that specific script or checking its output format.",
       "rule_type": "general",
       "section": "Scripts",
-      "source_name": "structure-manager",
+      "source_name": "retrieve-structure",
       "text": "`assess_structure.py` | `--file structure.cif` → JSON: is_valid, dimensionality, formula, warnings"
     },
     {
@@ -16555,12 +16555,12 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "structure-manager/scripts/926",
+      "id": "retrieve-structure/scripts/926",
       "is_actionable": true,
       "reason": "The rule specifies the correct usage of a format conversion script (convert_format.py) with specific arguments, but none of the evaluation questions require or test the agent's ability to execute that specific command or validate its arguments.",
       "rule_type": "general",
       "section": "Scripts",
-      "source_name": "structure-manager",
+      "source_name": "retrieve-structure",
       "text": "`convert_format.py` | `--input in.cif --output POSCAR --output-fmt vasp/poscar [--type-map O H] [--atom-style full]`"
     },
     {
@@ -16569,12 +16569,12 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "structure-manager/scripts/927",
+      "id": "retrieve-structure/scripts/927",
       "is_actionable": true,
       "reason": "The rule is about downloading structure files via a specific script, but none of the evaluation questions require or check for the use of that script or the act of downloading structure files to the workspace.",
       "rule_type": "general",
       "section": "Scripts",
-      "source_name": "structure-manager",
+      "source_name": "retrieve-structure",
       "text": "`fetch_web_structure.py` | `--url <direct_link>` or `--page <html_url>` → downloads structure files"
     },
     {
@@ -16583,12 +16583,12 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "structure-manager/scripts/928",
+      "id": "retrieve-structure/scripts/928",
       "is_actionable": true,
       "reason": "None of the provided evaluation questions require the use of the specific script `build_molecular_crystal_slab.py` with the given parameters, nor do their scoring checklists include criteria that would detect a violation of this rule.",
       "rule_type": "general",
       "section": "Scripts",
-      "source_name": "structure-manager",
+      "source_name": "retrieve-structure",
       "text": "`build_molecular_crystal_slab.py` | `--file input.cif --miller 1 1 0 --layers 4 [-o output.cif]`"
     },
     {
@@ -16597,12 +16597,12 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "structure-manager/scripts/929",
+      "id": "retrieve-structure/scripts/929",
       "is_actionable": true,
       "reason": "The rule specifies a command-line script for surface passivation, but none of the evaluation questions require or assess the use of the `passivate_surface.py` script or its parameters.",
       "rule_type": "general",
       "section": "Scripts",
-      "source_name": "structure-manager",
+      "source_name": "retrieve-structure",
       "text": "`passivate_surface.py` | `slab.cif [-o passivated.cif] [--element Si] [--bond-length 1.48]`"
     },
     {
@@ -16611,12 +16611,12 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "structure-manager/scripts/930",
+      "id": "retrieve-structure/scripts/930",
       "is_actionable": true,
       "reason": "The rule is a documentation note about a script location change, and no evaluation question's scoring checklist includes criteria that would check for the correct path or usage of the 'generate_kpoints.py' script.",
       "rule_type": "general",
       "section": "Scripts",
-      "source_name": "structure-manager",
+      "source_name": "retrieve-structure",
       "text": "~~`generate_kpoints.py`~~ | Moved to `matmaster/skills/vasp/scripts/generate_kpoints.py`"
     },
     {
@@ -16625,12 +16625,12 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "structure-manager/electronic-property-construction/931",
+      "id": "retrieve-structure/electronic-property-construction/931",
       "is_actionable": true,
       "reason": "The rule is a specific technical instruction for constructing band structures using a primitive cell and HighSymmKpath, but none of the evaluation questions involve band structure calculation or require the use of HighSymmKpath, so violating it would not affect any scoring checklist.",
       "rule_type": "general",
       "section": "Electronic Property Construction",
-      "source_name": "structure-manager",
+      "source_name": "retrieve-structure",
       "text": "Band structure: **primitive cell** + `HighSymmKpath(structure)`."
     },
     {
@@ -16639,12 +16639,12 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "structure-manager/electronic-property-construction/932",
+      "id": "retrieve-structure/electronic-property-construction/932",
       "is_actionable": true,
       "reason": "The rule specifies technical parameters for DOS and work function calculations (dense k-mesh, slab vacuum thickness, dipole correction), but all evaluation questions focus on database retrieval, metadata reporting, structure manipulation, or basic property calculation without any scoring criteria that would check for adherence to these specific electronic property construction parameters.",
       "rule_type": "general",
       "section": "Electronic Property Construction",
-      "source_name": "structure-manager",
+      "source_name": "retrieve-structure",
       "text": "DOS: dense uniform k-mesh. Work function: slab ≥ 20 Å vacuum + dipole correction."
     },
     {
@@ -16653,12 +16653,12 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "structure-manager/electronic-property-construction/933",
+      "id": "retrieve-structure/electronic-property-construction/933",
       "is_actionable": true,
       "reason": "The rule 'supercell ≥ 10 Å between images' pertains to defect construction in electronic property simulations, but none of the evaluation questions involve defect modeling, supercell creation, or any scoring criteria that would check for compliance with this specific geometric constraint.",
       "rule_type": "general",
       "section": "Electronic Property Construction",
-      "source_name": "structure-manager",
+      "source_name": "retrieve-structure",
       "text": "Defects: supercell ≥ 10 Å between images."
     },
     {
@@ -16667,12 +16667,12 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "structure-manager/rules/934",
+      "id": "retrieve-structure/rules/934",
       "is_actionable": true,
       "reason": "None of the evaluation questions require delivering CIF/POSCAR files or have scoring criteria that would penalize setting task_completed=partial when those files are missing.",
       "rule_type": "general",
       "section": "Rules",
-      "source_name": "structure-manager",
+      "source_name": "retrieve-structure",
       "text": "If no CIF/POSCAR delivered, `task_completed=partial`."
     },
     {
@@ -16681,12 +16681,12 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "structure-manager/rules/935",
+      "id": "retrieve-structure/rules/935",
       "is_actionable": true,
       "reason": "The rule mandates providing `--type-map` and `--atom-style` for LAMMPS conversions of non-atomic structures, but none of the evaluation questions involve LAMMPS conversions or have scoring criteria that would detect the absence of these parameters.",
       "rule_type": "general",
       "section": "Rules",
-      "source_name": "structure-manager",
+      "source_name": "retrieve-structure",
       "text": "For LAMMPS conversions, always provide `--type-map` and `--atom-style` when non-atomic."
     },
     {
@@ -16695,12 +16695,12 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "structure-manager/rules/936",
+      "id": "retrieve-structure/rules/936",
       "is_actionable": true,
       "reason": "All evaluation questions require specific file artifacts as deliverables, and their scoring checklists explicitly verify the existence of those files, making it impossible to pass by only planning without producing the required structure files.",
       "rule_type": "general",
       "section": "Rules",
-      "source_name": "structure-manager",
+      "source_name": "retrieve-structure",
       "text": "**Deliverable-first**: Prioritize producing actual structure files. Do not stop at planning/spec-generation."
     },
     {
@@ -16709,12 +16709,12 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "structure-manager/rules/937",
+      "id": "retrieve-structure/rules/937",
       "is_actionable": true,
       "reason": "None of the evaluation questions require or check for database identifiers (CCDC REFCODE/ICSD code) when reporting deposited structures, as their scoring checklists focus on general metadata fields, formula matching, and retrieval honesty rather than specific deposition identifiers.",
       "rule_type": "general",
       "section": "Rules",
-      "source_name": "structure-manager",
+      "source_name": "retrieve-structure",
       "text": "Structure identification must include database identifiers (CCDC REFCODE / ICSD code) when deposited."
     },
     {
@@ -16723,12 +16723,12 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "structure-manager/rules/938",
+      "id": "retrieve-structure/rules/938",
       "is_actionable": true,
       "reason": "None of the provided evaluation questions require or check for the execution of `assess_structure.py` after obtaining a new structure, as their scoring checklists focus on artifact creation, metadata correctness, and report grounding without mandating structure assessment.",
       "rule_type": "general",
       "section": "Rules",
-      "source_name": "structure-manager",
+      "source_name": "retrieve-structure",
       "text": "After obtaining any new structure, run `assess_structure.py`. **This is mandatory, not optional.**"
     },
     {
@@ -16737,12 +16737,12 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "structure-manager/rules/939",
+      "id": "retrieve-structure/rules/939",
       "is_actionable": true,
       "reason": "The rule requires providing physical/chemical explanations for structural analysis, but all evaluation questions focus on database retrieval, metadata reporting, or computational workflows without requiring explanatory analysis of structural physics.",
       "rule_type": "general",
       "section": "Rules",
-      "source_name": "structure-manager",
+      "source_name": "retrieve-structure",
       "text": "**Grounding depth**: For structural analysis, provide physical/chemical explanations, not just labels. Trace structural physics of each specific material."
     },
     {
@@ -16751,12 +16751,12 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "structure-manager/rules/940",
+      "id": "retrieve-structure/rules/940",
       "is_actionable": true,
       "reason": "The rule mandates a specific workflow choice between database search and generation, but all evaluation questions only test successful database retrieval or generation outcomes without checking the decision logic between these two approaches.",
       "rule_type": "general",
       "section": "Rules",
-      "source_name": "structure-manager",
+      "source_name": "retrieve-structure",
       "text": "**Deterministic workflow**: When multiple equivalent approaches exist (e.g. database search vs generation), pick the most reliable one consistently. For known materials: database first → generation fa"
     },
     {
@@ -16765,12 +16765,12 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "structure-manager/rules/941",
+      "id": "retrieve-structure/rules/941",
       "is_actionable": true,
       "reason": "The scoring checklists for all questions only verify the existence of final output artifacts and their content correctness, without any criteria that would detect whether intermediate structures were saved during the workflow.",
       "rule_type": "general",
       "section": "Rules",
-      "source_name": "structure-manager",
+      "source_name": "retrieve-structure",
       "text": "**Save early, save often**: Write intermediate structure files to disk before attempting further operations. If a downstream step fails, the intermediate is still deliverable."
     },
     {
@@ -16779,12 +16779,12 @@
       "confidence": "high",
       "covered": false,
       "covered_by": [],
-      "id": "structure-manager/rules/942",
+      "id": "retrieve-structure/rules/942",
       "is_actionable": true,
       "reason": "The rule requires verifying structure properties after transformations using `assess_structure.py`, but none of the evaluation questions involve structure transformation operations or check for post-transformation validation.",
       "rule_type": "general",
       "section": "Rules",
-      "source_name": "structure-manager",
+      "source_name": "retrieve-structure",
       "text": "**Verify after every transformation**: After any operation that changes a structure (supercell, slab, defect, conversion), re-run `assess_structure.py` and verify: (1) formula matches expectations, (2"
     },
     {
@@ -17310,11 +17310,11 @@
       "covered_by": [],
       "id": "tasker-polar-surface/step-3-—-校验与分型收敛（必做）/979",
       "is_actionable": true,
-      "reason": "The rule requires running structure-manager's assess_structure.py for dimensionality and sanity checks, but none of the evaluation questions have scoring criteria that would fail if this specific validation step is omitted.",
+      "reason": "The rule requires running retrieve-structure's assess_structure.py for dimensionality and sanity checks, but none of the evaluation questions have scoring criteria that would fail if this specific validation step is omitted.",
       "rule_type": "general",
       "section": "Step 3 — 校验与分型收敛（必做）",
       "source_name": "tasker-polar-surface",
-      "text": "Run **structure-manager** `assess_structure.py` on the same file for dimensionality and sanity."
+      "text": "Run **retrieve-structure** `assess_structure.py` on the same file for dimensionality and sanity."
     },
     {
       "actionability": "testable",
@@ -17635,11 +17635,11 @@
       "covered_by": [],
       "id": "tasker-polar-surface/3.-interpret-output/1002",
       "is_actionable": true,
-      "reason": "The rule about proceeding to structure-manager after compliance is a workflow directive, not a testable output requirement, and no evaluation question's scoring checklist has criteria that would fail if this procedural step is omitted.",
+      "reason": "The rule about proceeding to retrieve-structure after compliance is a workflow directive, not a testable output requirement, and no evaluation question's scoring checklist has criteria that would fail if this procedural step is omitted.",
       "rule_type": "general",
       "section": "3. Interpret output",
       "source_name": "tasker-polar-surface",
-      "text": "If **compliant** (and literature-consistent when applicable): Proceed to structure-manager (e.g. `assess_structure.py`) if needed, then finish."
+      "text": "If **compliant** (and literature-consistent when applicable): Proceed to retrieve-structure (e.g. `assess_structure.py`) if needed, then finish."
     },
     {
       "actionability": "testable",
@@ -17873,11 +17873,11 @@
       "covered_by": [],
       "id": "tasker-polar-surface/integration/1019",
       "is_actionable": true,
-      "reason": "The rule about using structure-manager for sanity/dimensionality checks after slab confirmation is not tested by any evaluation question's scoring checklist, as no checklist includes criteria that would fail if this specific post-confirmation verification step is omitted.",
+      "reason": "The rule about using retrieve-structure for sanity/dimensionality checks after slab confirmation is not tested by any evaluation question's scoring checklist, as no checklist includes criteria that would fail if this specific post-confirmation verification step is omitted.",
       "rule_type": "general",
       "section": "Integration",
       "source_name": "tasker-polar-surface",
-      "text": "After a compliant slab is confirmed, use structure-manager (e.g. `assess_structure.py`) for sanity/dimensionality if needed."
+      "text": "After a compliant slab is confirmed, use retrieve-structure (e.g. `assess_structure.py`) for sanity/dimensionality if needed."
     },
     {
       "actionability": "testable",
@@ -23159,6 +23159,11 @@
         "pct": 0.0,
         "total": 15
       },
+      "retrieve-structure": {
+        "covered": 0,
+        "pct": 0.0,
+        "total": 24
+      },
       "sample-atomic-structures": {
         "covered": 0,
         "pct": 0.0,
@@ -23173,11 +23178,6 @@
         "covered": 0,
         "pct": 0.0,
         "total": 10
-      },
-      "structure-manager": {
-        "covered": 0,
-        "pct": 0.0,
-        "total": 24
       },
       "system_prompt": {
         "covered": 2,

@@ -64,7 +64,7 @@ Generated: 2026-05-08 02:31 UTC
 | poly-forcefield | 0 | 12 | 0.0% |
 | poly-generator | 0 | 29 | 0.0% |
 | result-analysis | 0 | 15 | 0.0% |
-| structure-manager | 0 | 24 | 0.0% |
+| retrieve-structure | 0 | 24 | 0.0% |
 | vaspkit-postprocess | 0 | 35 | 0.0% |
 | proposal-review | 0 | 25 | 0.0% |
 | pyatb | 0 | 33 | 0.0% |
@@ -174,7 +174,7 @@ Generated: 2026-05-08 02:31 UTC
 - **[workflow_step]** Use the heuristic in [composition_to_structure_heuristics.md](reference/composition_to_structure_heuristics.md).
 - **[workflow_step]** Generate candidate structures via `mat_struct_db_*` / `mat_sg_*` tools.
 - **[workflow_step]** Ensure each structure has explicit lattice, coordinates, and atom-type mapping for downstream DPA tools.
-- **[workflow_step]** Validate each new structure using `structure-manager` (`assess_structure.py`).
+- **[workflow_step]** Validate each new structure using `retrieve-structure` (`assess_structure.py`).
 - **[workflow_step]** **Report results**
 - **[workflow_step]** Provide ranked candidate compositions and associated structures.
 - **[workflow_step]** Include source/provenance of each candidate (user input, DB, generated heuristic, literature evidence).
