@@ -159,3 +159,50 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
+- id: SA_bat_oxpot_001_20260519
+  capability: scientific_analysis
+  domain: battery
+  intent: Compute oxidation potential of electrolyte solvent molecules from vertical
+    ionization potential, testing that the agent uses neutral molecules (not cation
+    complexes) and applies correct reference electrode correction.
+  human_prompt_seed: '请计算 FEC（氟代碳酸乙烯酯，SMILES: C1OC(=O)OC1F）的电化学氧化电位
+    vs Li/Li+，输出到 `fec_oxidation.json`，格式为 `{"E_ox_vs_Li": ...}`。'
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: output_artifact
+    value: fec_oxidation.json
+  - key: eox_range
+    value:
+      filename: fec_oxidation.json
+      checks:
+      - key: E_ox_vs_Li
+        min: 4.5
+        max: 8.0
+  - key: turn_budget
+    value:
+      max: 20
+  - key: token_budget_total
+    value:
+      max: 25000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `fec_oxidation.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: eox_range
+    criterion: Oxidation potential vs Li/Li+ is in a physically reasonable range (4.5-8.0 V).
+      Experimental FEC oxidation stability is ~5-6 V. A value >10 V indicates the agent
+      computed IP from the wrong species (cation complex instead of neutral molecule)
+      or applied wrong reference electrode correction.
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget

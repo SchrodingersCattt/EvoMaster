@@ -97,7 +97,7 @@ banks:
 - path: scientific_analysis/sa_battery.yaml
   capability: scientific_analysis
   domain: battery
-  questions: 2
+  questions: 3
 - path: scientific_analysis/sa_catalysis.yaml
   capability: scientific_analysis
   domain: catalysis
@@ -185,7 +185,7 @@ banks:
 - path: structure_construction/sc_battery.yaml
   capability: structure_construction
   domain: battery
-  questions: 2
+  questions: 3
 - path: structure_construction/sc_polymer.yaml
   capability: structure_construction
   domain: polymer
