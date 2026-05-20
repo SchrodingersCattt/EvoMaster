@@ -41,6 +41,19 @@ Arrange sections so that every term, concept, or name used in a rule has already
 | Rules | "What details matter during execution?" | Scripts + Workflow |
 | Errors | "What went wrong?" | All above |
 
+### Hard Guards / Execution Rules — Before or After Workflow?
+
+Constraint rules (e.g., "always set X", "never omit Y") exist in most operator skills. Their position relative to Workflow depends on their **nature**:
+
+| Nature | Position | Rationale |
+|--------|----------|-----------|
+| **Pre-conditions** — agent must internalize BEFORE writing/acting (e.g., "cal_force 1 for relax") | Before Workflow | Agent loads constraints into working memory, then executes with them active |
+| **Post-checks** — agent verifies AFTER completing a step (e.g., "run validator", "confirm file exists") | After Workflow | Agent finishes the step, then consults the checklist to catch errors |
+
+If a guard is already enforced by a **validator script** that runs in the workflow, it does NOT need to appear as a pre-condition rule — the validator is the post-check. Only state rules in the skill body when:
+1. Violating them causes **silent failure** (no error message, just wrong results), AND
+2. No automated validator catches them.
+
 ### Dependency Analysis Checklist
 
 Before finalizing order, for each rule ask:
