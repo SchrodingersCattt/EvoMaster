@@ -17,6 +17,21 @@ from evaluation.validators.json_file import (
     check_json_file_schema as _check_json_file_schema,
 )
 from evaluation.validators.stru_file import check_stru_file
+from evaluation.validators.structure_general import (
+    check_atom_count,
+    check_bond_angle,
+    check_bond_count,
+    check_bond_length,
+    check_bond_length_range,
+    check_cell_param,
+    check_charge_balance,
+    check_coordination_number,
+    check_file_count,
+    check_formula,
+    check_layer_count,
+    check_stoichiometry_ratio,
+    check_surface_termination,
+)
 from evaluation.validators.structure_molcrys import (
     check_disorder_dan2_integer_formula,
     check_molcrys_local_env,
@@ -30,10 +45,7 @@ from evaluation.validators.text_file import (
     check_text_file_regex,
 )
 
-from .evaluator_builders import (
-    build_llm_context,
-    build_safety_eval_record,
-)  # noqa: F401
+from .evaluator_builders import build_llm_context, build_safety_eval_record  # noqa: F401
 from .evidence import EvidenceBundle, TokenUsage
 from .schemas import (
     QuestionItem,
@@ -147,6 +159,14 @@ def check_json_file_artifacts(
     )
 
 
+
+
+
+
+
+
+
+
 def check_molcrys_slab_integrity(
     *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
 ) -> tuple[bool, str]:
@@ -207,6 +227,268 @@ def _cfg(ref: ReferenceAnswer) -> dict[str, Any]:
 def _workspace_resolve_from_ref(ref: ReferenceAnswer) -> str:
     """Plain-text / artifact checks: recursive (legacy) vs workspace root only."""
     return ref.workspace_resolve or "recursive"
+
+
+def check_struct_file_atom_count(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_atom_count(
+        ws,
+        filename=cfg.get("filename", "*.cif"),
+        expected=int(cfg.get("expected", 0)),
+        tolerance=float(cfg.get("tolerance", 0)),
+        element=str(cfg.get("element")) if cfg.get("element") else None,
+    )
+
+
+def check_struct_file_formula(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_formula(
+        ws,
+        filename=cfg.get("filename", "*.cif"),
+        formula=str(cfg.get("formula", "")),
+    )
+
+
+def check_struct_file_bond_count(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_bond_count(
+        ws,
+        filename=cfg.get("filename", "*.cif"),
+        element_a=str(cfg.get("element_a", "")),
+        element_b=str(cfg.get("element_b", "")),
+        cutoff_A=float(cfg.get("cutoff_A", 2.0)),
+        expected_count=int(cfg.get("expected_count", 0)),
+        tolerance=float(cfg.get("tolerance", 0)),
+    )
+
+
+def check_struct_file_bond_length(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_bond_length(
+        ws,
+        filename=cfg.get("filename", "*.cif"),
+        element_a=str(cfg.get("element_a", "")),
+        element_b=str(cfg.get("element_b", "")),
+        cutoff_A=float(cfg.get("cutoff_A", 3.0)),
+        expected=float(cfg.get("expected", 0)),
+        tolerance=float(cfg.get("tolerance", 0)),
+    )
+
+
+def check_struct_file_bond_length_range(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_bond_length_range(
+        ws,
+        filename=cfg.get("filename", "*.cif"),
+        element_a=str(cfg.get("element_a", "")),
+        element_b=str(cfg.get("element_b", "")),
+        cutoff_A=float(cfg.get("cutoff_A", 3.0)),
+        expected_min=float(cfg.get("expected_min", 0.0)),
+        expected_max=float(cfg.get("expected_max", 0.0)),
+    )
+
+
+def check_struct_file_bond_angle(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+
+    def _opt(name: str) -> float | None:
+        val = cfg.get(name)
+        return None if val is None else float(val)
+
+    return check_bond_angle(
+        ws,
+        filename=cfg.get("filename", "*.cif"),
+        triplet=list(cfg.get("triplet", [])),
+        expected_deg=float(cfg.get("expected_deg", 0)),
+        tolerance_deg=float(cfg.get("tolerance_deg", 5.0)),
+        cutoff_A=float(cfg.get("cutoff_A", 3.0)),
+        cutoff_a_b_A=_opt("cutoff_a_b_A"),
+        cutoff_c_b_A=_opt("cutoff_c_b_A"),
+        cutoff_a_b_min_A=float(cfg.get("cutoff_a_b_min_A", 0.0)),
+        cutoff_c_b_min_A=float(cfg.get("cutoff_c_b_min_A", 0.0)),
+    )
+
+
+def check_struct_file_cell_param(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_cell_param(
+        ws,
+        filename=cfg.get("filename", "*.cif"),
+        param=str(cfg.get("param", "alpha")),
+        expected=float(cfg.get("expected", 0)),
+        tolerance=float(cfg.get("tolerance", 0)),
+    )
+
+
+def check_struct_file_stoichiometry_ratio(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_stoichiometry_ratio(
+        ws,
+        filename=cfg.get("filename", "*.cif"),
+        element_a=str(cfg.get("element_a", "")),
+        element_b=str(cfg.get("element_b", "")),
+        expected_ratio=float(cfg.get("expected_ratio", 0)),
+        tolerance=float(cfg.get("tolerance", 0)),
+    )
+
+
+def check_struct_file_charge_balance(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_charge_balance(
+        ws,
+        filename=cfg.get("filename", "*.cif"),
+        oxidation_states={
+            str(k): int(v) for k, v in cfg.get("oxidation_states", {}).items()
+        },
+        tolerance=float(cfg.get("tolerance", 0.01)),
+    )
+
+
+def check_struct_file_coordination(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_coordination_number(
+        ws,
+        filename=cfg.get("filename", "*.cif"),
+        center_element=str(cfg.get("center_element", "")),
+        expected=int(cfg.get("expected", 0)),
+        tolerance=float(cfg.get("tolerance", 0)),
+        cutoff_A=float(cfg.get("cutoff_A", 2.5)),
+    )
+
+
+def check_struct_file_layer_count(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    if "layer_tol_A" in cfg:
+        layer_tol = float(cfg["layer_tol_A"])
+    elif "gap_threshold_A" in cfg:
+        # Legacy key from older rubrics; now interpreted as plane-merge tolerance (Å).
+        layer_tol = float(cfg["gap_threshold_A"])
+    else:
+        layer_tol = 0.25
+    return check_layer_count(
+        ws,
+        filename=cfg.get("filename", "*.cif"),
+        expected=int(cfg.get("expected", 0)),
+        tolerance=float(cfg.get("tolerance", 0)),
+        axis=str(cfg.get("axis", "z")),
+        layer_tol_A=layer_tol,
+        element=str(cfg.get("element")) if cfg.get("element") else None,
+    )
+
+
+def check_struct_file_count(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_file_count(
+        ws,
+        pattern=cfg.get("pattern", "*.cif"),
+        expected=int(cfg.get("expected", 0)),
+        tolerance=int(cfg.get("tolerance", 0)),
+    )
+
+
+def check_checkcif_alerts(
+    *,
+    evidence: EvidenceBundle | None,
+    ref: ReferenceAnswer,
+) -> tuple[bool, str]:
+    """Evaluate checkcif_no_a_alerts: find CIF in workspace, run checkCIF.
+
+    ref.value must be a dict with optional keys:
+      - filename (str, default '*.cif'): glob pattern to find the CIF
+      - max_a_alerts (int, default 0): maximum allowed A-level alerts
+    """
+    from evaluation.validators.checkcif import check_checkcif_no_a_alerts
+
+    workspace_dir, _ = _get_workspace(evidence)
+    if workspace_dir is None:
+        return False, "no workspace directory available in evidence"
+
+    val = ref.value or {}
+    filename = val.get("filename", "*.cif") if isinstance(val, dict) else "*.cif"
+    max_a_alerts = int(val.get("max_a_alerts", 0)) if isinstance(val, dict) else 0
+
+    return check_checkcif_no_a_alerts(
+        workspace_dir,
+        filename=filename,
+        max_a_alerts=max_a_alerts,
+    )
+
+
+def check_struct_file_surface_termination(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_surface_termination(
+        ws,
+        filename=cfg.get("filename", "*.cif"),
+        element=str(cfg.get("element", "")),
+        axis=str(cfg.get("axis", "z")),
+        side=str(cfg.get("side", "top")),
+        layer_tol_A=float(cfg.get("layer_tol_A", 0.5)),
+    )
 
 
 def check_text_file_contains_all_from_evidence(
@@ -474,13 +756,11 @@ def check_stru_file_from_evidence(
     expected = cfg.get("expected")
     if not filename or not check_type:
         return False, "stru_file_check: need 'filename' and 'check' in ref"
-    min_sites = cfg.get("min_sites", 2)
     return check_stru_file(
         ws,
         filename=filename,
         check=check_type,
         expected=expected,
-        min_sites=min_sites if isinstance(min_sites, int) else 2,
         workspace_resolve=_workspace_resolve_from_ref(ref),
     )
 
