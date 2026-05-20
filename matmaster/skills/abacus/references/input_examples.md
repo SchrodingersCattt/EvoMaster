@@ -222,6 +222,51 @@ deepks_model model.ptg
 
 > **Common mistake**: confusing stage 2 (inference) with label generation. For inference, use `deepks_scf 1` + `deepks_model`. For generating training labels, use `deepks_out_labels 1` + `deepks_scf 0` — but that is a separate workflow not needed for production calculations.
 
+### RT-TDDFT (Real-Time Time-Dependent DFT)
+
+RT-TDDFT uses `calculation md` with `esolver_type tddft`. Two gauge choices:
+
+**Length gauge** (`td_stype 0`):
+```
+INPUT_PARAMETERS
+calculation md
+esolver_type tddft
+basis_type lcao
+td_vext 1
+td_stype 0
+out_dipole 1
+md_nstep 1000
+md_dt 0.002
+pseudo_dir ./
+orbital_dir ./
+```
+
+**Velocity gauge** (`td_stype 1`):
+```
+INPUT_PARAMETERS
+calculation md
+esolver_type tddft
+basis_type lcao
+td_vext 1
+td_stype 1
+out_dipole 1
+md_nstep 1000
+md_dt 0.002
+pseudo_dir ./
+orbital_dir ./
+```
+
+| Parameter | Purpose |
+|-----------|---------|
+| `esolver_type tddft` | Activate RT-TDDFT propagator |
+| `td_vext 1` | Apply time-dependent external field |
+| `td_stype 0` | Length gauge (E-field couples to position) |
+| `td_stype 1` | Velocity gauge (E-field couples to momentum) |
+| `out_dipole 1` | **ALWAYS include** — outputs dipole moment for absorption spectrum extraction |
+| `md_nstep`, `md_dt` | Propagation steps and time step (fs) |
+
+> **`out_dipole` is mandatory for both gauges.** Without it, the absorption spectrum cannot be computed from the time-dependent dipole moment. This applies to BOTH length and velocity gauge.
+
 ### BSSE Ghost Atom INPUT Example (Bulk / Supercell)
 ```
 INPUT_PARAMETERS
