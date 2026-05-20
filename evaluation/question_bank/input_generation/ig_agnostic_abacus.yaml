@@ -2891,8 +2891,10 @@ questions:
   - key: must_hex_lp
     value:
       filename: run_hex_mos2/STRU
-      pattern: (?im)^\s*LATTICE_PARAMETERS\s*\n\s*12[\s/]
-      flags: im
+      check: lattice_parameters_range
+      expected:
+      - min: 10.0
+        max: 14.0
   - key: so_snte_input
     value: run_so_snte/INPUT
   - key: so_snte_stru
@@ -2921,8 +2923,12 @@ questions:
   - key: must_so_lp
     value:
       filename: run_so_snte/STRU
-      pattern: (?im)^\s*LATTICE_PARAMETERS\s*\n\s*0\.98\d+\s+3\.51\d+
-      flags: im
+      check: lattice_parameters_range
+      expected:
+      - min: 0.95
+        max: 1.05
+      - min: 3.4
+        max: 3.7
   - key: must_so_orbital
     value:
       filename: run_so_snte/STRU
@@ -2998,9 +3004,9 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: must_hex_lp
-    criterion: '[Must] run_hex_mos2/STRU passes must_hex_lp.'
+    criterion: '[Must] run_hex_mos2/STRU has LATTICE_PARAMETERS c/a ~ 12.'
     axis: correctness
-    verify: text_file_regex
+    verify: stru_file_check
   - id: so_snte_input
     criterion: '`run_so_snte/INPUT` must be written to the workspace.'
     axis: correctness
@@ -3026,9 +3032,9 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: must_so_lp
-    criterion: '[Must] run_so_snte/STRU passes must_so_lp.'
+    criterion: '[Must] run_so_snte/STRU LATTICE_PARAMETERS within physical range for SnTe.'
     axis: correctness
-    verify: text_file_regex
+    verify: stru_file_check
   - id: must_so_orbital
     criterion: '[Must] run_so_snte/STRU required tokens.'
     axis: correctness

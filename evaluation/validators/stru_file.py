@@ -231,6 +231,26 @@ def _classify_magnetic_order(moments: list[float], *, min_sites: int = 2) -> str
     return "fm"
 
 
+def _parse_lattice_constant(content: str) -> float | None:
+    """Extract LATTICE_CONSTANT value from STRU."""
+    match = re.search(
+        r"LATTICE_CONSTANT\s*\n\s*([-+]?\d+\.?\d*(?:[eE][-+]?\d+)?)",
+        content,
+    )
+    if not match:
+        return None
+    return float(match.group(1))
+
+
+def _parse_lattice_parameters(content: str) -> list[float]:
+    """Extract LATTICE_PARAMETERS values from STRU (may be on one or multiple lines)."""
+    match = re.search(r"LATTICE_PARAMETERS\s*\n(.*?)(?=\n\s*(?:ATOMIC_POSITIONS|\Z))", content, re.DOTALL)
+    if not match:
+        return []
+    nums = re.findall(r"[-+]?\d+\.?\d*(?:[eE][-+]?\d+)?", match.group(1))
+    return [float(x) for x in nums]
+
+
 def _parse_lattice_vectors(content: str) -> list[float] | None:
     """Extract 9 lattice vector components from STRU LATTICE_VECTORS section."""
     match = re.search(
@@ -258,13 +278,12 @@ def check_stru_file(
 
     Supported checks:
     - magnetic_order: expected = 'afm' | 'fm' | 'nonmagnetic'
-      (per-site mag/magmom; FM = all same sign, AFM = opposite signs;
-      ref may include min_sites, default 2)
-    - site_magmom_count_min: expected = int (min coordinate lines with mag/magmom)
-    - site_vector_magmom_count_min: expected = int (min coordinate lines with
-      3-component mag/magmom and nonzero |m|)
-    - species_count: expected = int (number of species)
-    - total_atoms: expected = int (total atom count)
+    - site_magmom_count_min: expected = int
+    - site_vector_magmom_count_min: expected = int
+    - species_count: expected = int
+    - total_atoms: expected = int
+    - lattice_constant_range: expected = {min, max}
+    - lattice_parameters_range: expected = [{min, max}, ...]
     """
     root = Path(workspace_dir)
     fpath = _resolve_file(root, filename, workspace_resolve=workspace_resolve)
@@ -433,6 +452,34 @@ def check_stru_file(
             f"{fpath.name} vs {other_path.name}: lattice vectors are identical "
             f"(max component diff={diff:.6f} Å) — structures appear to be the same phase"
         )
+
+    elif check == "lattice_constant_range":
+        val = _parse_lattice_constant(content)
+        if val is None:
+            return False, f"{fpath.name}: LATTICE_CONSTANT not found"
+        cfg = expected if isinstance(expected, dict) else {}
+        lo = float(cfg.get("min", 0))
+        hi = float(cfg.get("max", 1e9))
+        if lo <= val <= hi:
+            return True, f"{fpath.name}: LATTICE_CONSTANT={val} in [{lo}, {hi}]"
+        return False, f"{fpath.name}: LATTICE_CONSTANT={val} outside [{lo}, {hi}]"
+
+    elif check == "lattice_parameters_range":
+        params = _parse_lattice_parameters(content)
+        if not params:
+            return False, f"{fpath.name}: LATTICE_PARAMETERS not found"
+        checks = expected if isinstance(expected, list) else []
+        for i, rule in enumerate(checks):
+            if i >= len(params):
+                return False, f"{fpath.name}: LATTICE_PARAMETERS has {len(params)} values, need {i+1}"
+            lo = float(rule.get("min", 0))
+            hi = float(rule.get("max", 1e9))
+            if not (lo <= params[i] <= hi):
+                return False, (
+                    f"{fpath.name}: LATTICE_PARAMETERS[{i}]={params[i]} "
+                    f"outside [{lo}, {hi}]"
+                )
+        return True, f"{fpath.name}: LATTICE_PARAMETERS={params} all within range"
 
     else:
         return False, f"unknown stru_file_check check type: {check!r}"
