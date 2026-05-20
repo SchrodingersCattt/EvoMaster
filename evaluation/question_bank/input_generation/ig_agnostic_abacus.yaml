@@ -6212,8 +6212,19 @@ questions:
       filename: run_pw_pt_slab_imp_sol/INPUT
       pattern: (?im)^\s*eb_k\s+\S+
       flags: im
-  - key: variable_imp_sol_semantics
-    value: Implicit solvation SCF per 27_imp_sol—imp_sol 1 with eb_k and related solvent model parameters for PW Pt slab.
+  - key: must_imp_sol_params
+    value:
+      filename: run_pw_pt_slab_imp_sol/INPUT
+      checks:
+      - key: tau
+        min: 1.0e-6
+        max: 1.0e-4
+      - key: sigma_k
+        min: 0.3
+        max: 1.0
+      - key: nc_k
+        min: 1.0e-4
+        max: 1.0e-3
   - key: turn_budget
     value:
       max: 12
@@ -6243,11 +6254,11 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 0.8
-  - id: variable_imp_sol_semantics
-    criterion: '[Variable] Implicit solvation setup matches 27_imp_sol README.'
-    axis: grounding
-    verify: llm_binary_judge
-    weight: 0.5
+  - id: must_imp_sol_params
+    criterion: '[Must] run_pw_pt_slab_imp_sol/INPUT sets solvent model params (tau, sigma_k, nc_k) in physical range.'
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.8
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
