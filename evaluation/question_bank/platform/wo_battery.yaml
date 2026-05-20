@@ -38,7 +38,7 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
-- id: WO_md_preflight_001_20260519
+- id: WO_md_preflight_001_20260520
   capability: workflow_orchestration
   domain: battery
   intent: Test whether agent validates solution box geometry before MD submission and
@@ -59,7 +59,7 @@ questions:
   - key: must_cmd_mlip
     value:
       filename: md_submit.json
-      pattern: DPA|dpa|deepmd|mace|sevenn|mattersim|run_molecular_dynamics
+      pattern: DPA|dpa|deepmd|mace|sevenn|mattersim|run_molecular_dynamics|lammps
       flags: i
   - key: turn_budget
     value:
