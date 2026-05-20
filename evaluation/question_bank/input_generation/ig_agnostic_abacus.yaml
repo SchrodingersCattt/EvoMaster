@@ -3383,13 +3383,13 @@ questions:
   - key: must_noncolin
     value:
       filename: run_fe_nc/INPUT
-      pattern: (?im)^\s*noncolin\s+(?:true|1)\s*$
-      flags: im
+      check: param_enabled
+      expected: noncolin
   - key: must_lspinorb
     value:
       filename: run_fe_nc/INPUT
-      pattern: (?im)^\s*lspinorb\s+(?:true|1)\s*$
-      flags: im
+      check: param_enabled
+      expected: lspinorb
   - key: must_lcao
     value:
       filename: run_fe_nc/INPUT
@@ -3422,13 +3422,13 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: must_noncolin
-    criterion: '[Must] noncolin true.'
+    criterion: '[Must] INPUT has noncolin enabled (true/1).'
     axis: correctness
-    verify: text_file_regex
+    verify: abacus_input_check
   - id: must_lspinorb
-    criterion: '[Must] lspinorb true.'
+    criterion: '[Must] INPUT has lspinorb enabled (true/1).'
     axis: correctness
-    verify: text_file_regex
+    verify: abacus_input_check
   - id: must_lcao
     criterion: '[Must] LCAO SCF paths.'
     axis: correctness

@@ -43,8 +43,32 @@ def check_abacus_input(
         return _check_stru_lattice(root, fpath, content, expected, workspace_resolve)
     elif check == "input_resolves_kpt_contains":
         return _check_kpt_contains(fpath, content, expected)
+    elif check == "param_enabled":
+        return _check_param_enabled(fpath, content, expected)
     else:
         return False, f"unknown abacus_input_check check type: {check!r}"
+
+
+_TRUTHY = {"true", "1", ".true.", "t", "yes"}
+
+
+def _check_param_enabled(
+    fpath: Path,
+    content: str,
+    expected: str | None,
+) -> tuple[bool, str]:
+    """Verify that a boolean parameter in INPUT is enabled (true/1/.true./T)."""
+    param = str(expected or "").strip().lower()
+    if not param:
+        return False, "abacus_input_check param_enabled: 'expected' must be the param name"
+    pattern = re.compile(rf"(?im)^\s*{re.escape(param)}\s+(\S+)")
+    match = pattern.search(content)
+    if not match:
+        return False, f"{fpath.name}: param '{param}' not found"
+    val = match.group(1).strip().lower()
+    if val in _TRUTHY:
+        return True, f"{fpath.name}: {param}={match.group(1)} (enabled)"
+    return False, f"{fpath.name}: {param}={match.group(1)} (not enabled, expected true/1)"
 
 
 def _check_stru_lattice(
