@@ -6630,8 +6630,10 @@ questions:
       filename: run_pw_pt_slab_gate/INPUT
       pattern: (?im)^\s*nelec\s+\d+
       flags: im
-  - key: variable_gate_semantics
-    value: Compensating charge per 31_comp_charge—gate_flag 1 with zgate and block geometry for supercell neutrality under excess charge (nelec).
+  - key: must_gate_efield_dir_vacuum
+    value:
+      filename: run_pw_pt_slab_gate/INPUT
+      check: efield_dir_is_vacuum
   - key: turn_budget
     value:
       max: 12
@@ -6671,11 +6673,11 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 0.8
-  - id: variable_gate_semantics
-    criterion: '[Variable] Compensating charge setup matches 31_comp_charge README.'
-    axis: grounding
-    verify: llm_binary_judge
-    weight: 0.5
+  - id: must_gate_efield_dir_vacuum
+    criterion: '[Must] efield_dir points along the vacuum (longest lattice vector) direction.'
+    axis: correctness
+    verify: abacus_input_check
+    weight: 0.8
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
