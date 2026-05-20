@@ -1,6 +1,6 @@
 ---
 name: assemble-atomic-structure
-description: "Assemble multi-body structures: bulk->slab, adsorbate-on-surface, slab interfaces, PACKMOL amorphous packing, crosslinks. Do NOT use for molecular-crystal slabs (operate-molecular-crystal) or ionic/heterovalent/polar surfaces like ZnO 0001, MgO 111, perovskite 001 (tasker-polar-surface)."
+description: "Use to combine separate existing pieces into one atomistic cell: build a slab from a bulk crystal, place an adsorbate, stack two slabs into an interface, pack a box with PACKMOL, or build a crosslinked network."
 skill_type: operator
 ---
 

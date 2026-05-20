@@ -1,6 +1,6 @@
 ---
 name: inspect-atomic-structure
-description: "Use ONLY for read-only inspection of existing structures: formula, space group, Wyckoff, dimensionality, PBC/vacuum, molecular-crystal cues, disorder/occupancy. Do NOT use when producing a new/modified structure; route build/transform/assemble/retrieve/calculation tasks to those skills."
+description: "Use to parse without modifying existing structure files for structural information, including: space group, Wyckoff sites, formula, dimensionality, periodicity / vacuum, whether it looks like a molecular crystal, disorder or partial occupancies."
 skill_type: operator
 ---
 

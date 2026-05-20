@@ -140,34 +140,23 @@ cases:
 
   - skill: mlips
     positive:
-      - "帮我训练一个机器学习势函数"
-      - "用 DeePMD 训练一个势"
-      - "帮我做一个 MLIP 的训练集"
-      - "怎么评估机器学习势的精度"
-      - "帮我用 NEP 训练一个势函数"
-      - "机器学习势的超参数怎么调"
-      - "帮我用 MACE 做一个势函数"
-      - "怎么做主动学习选点"
-      - "帮我评估这个 MLP 的外推能力"
-      - "用 DP-GEN 做一个迭代训练"
+      - "用本地提供的 DPA3.1 给这个 CIF 做结构优化，relax cell 并输出 optimized CIF"
+      - "用已有 DPA-2 模型通过 ASE 跑一段 300 K NVT 分子动力学"
+      - "用本地提供的  MACE-MP 对这个 POSCAR 做几何优化"
+      - "用本地提供的  SevenNet 给这个晶体算声子谱和热力学 DOS"
+      - "用本地提供的  MatterSim 跑这个结构的短程 MD，保存 extxyz 轨迹"
+      - "用本地提供的  DPA3.1 算这个 relaxed CIF 的弹性矩阵"
+      - "用合适的预训练势函数计算这两个 POSCAR 之间的 NEB 路径"
+      - "用 DPA 的 OC22 head 算 CO 和 OH 在这些 slab 上的吸附能"
+      - "Run quick 10-ps MD for the CO @ Pt system with given checkpoint file of DPA3"
+      - "Given bcc-Fe.cif and local model of MACE, optimize the structure."
     negative:
-      - "帮我用 VASP 做 DFT 计算"
-      - "画一个能量曲线"
-      - "帮我跑一个 MD 模拟"
-      - "构建一个晶体结构"
-      - "搜索关于电池材料的文献"
-
-  - skill: atomic-structure
-    positive:
-      - "先下载一个 CIF，validate 后转 POSCAR，再扩成 2x2x1 并在表面放 CO"
-      - "这个结构任务要先判断是分子晶体还是普通晶体，再决定 build、transform 还是 assemble 路径"
-      - "我有一个含混乱占位的 CIF，想先清理、切 slab、最后检查输出结构"
-    negative:
-      - "帮我用 VASP 算一下这个 POSCAR 的能带"                  # → vasp
-      - "帮我用 LAMMPS 往 GPU 集群上提交 MD 任务"               # → lammps
-      - "用 GPUMD 计算这个材料的热导率"                          # → gpumd
-      - "分析这个 VASP 产生的 XDATCAR 轨迹，计算 RDF"            # → data-analysis / md-analysis
-      - "把这个 CIF 提交到 IUCr checkCIF 看一下报告"             # → checkcif-validator
+      - "帮我训练一个机器学习势函数"                            # no training workflow in mlips
+      - "用 DeePMD 训练一个势"                                  # no training workflow in mlips
+      - "怎么做主动学习选点"                                    # no active-learning workflow in mlips
+      - "用 DP-GEN 做一个迭代训练"                               # no DP-GEN training workflow in mlips
+      - "AIS Square 上 DPA-3-NM 的 checkpoint 哪里下载"          # → aissq-explorer / retrieve-structure
+      - "把这个OUTCAR转换成MLIP训练的数据集"
 
   - skill: inspect-atomic-structure
     positive:
@@ -175,6 +164,13 @@ cases:
       - "这个 PDB 没有 CRYST1，先判断按周期结构还是分子处理"
       - "判断这个 XYZ 是孤立分子、1D 链、2D slab 还是 3D 周期结构"
       - "检查这个 POSCAR 的元素顺序、晶格和真空层是否合理"
+      - "看一下这个 CIF 有没有溶剂分子或 disorder 要处理"
+      - "supercell 做完之后再确认一下原子数和对称性"
+      - "Wyckoff 位点和点群打一份"
+      - "这个 slab.cif 的 vacuum 多厚"
+      - "NPT 平衡后的 CONTCAR，跑下一步前先体检"
+      - "What's the space group and Wyckoff list of this CIF?"
+      - "Before any transform, decide whether this MOF is a molecular crystal"
     negative:
       - "搭一个 fcc Ni 的原胞"                                  # → build-atomic-structure
       - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
@@ -188,6 +184,12 @@ cases:
       - "用空间群 P6_3mc + Wyckoff 位置建一个 wurtzite ZnS"
       - "SMILES CCC=O 转成带 3D 坐标的 SDF"
       - "Build a primitive cell of PbS rocksalt from the lattice constant"
+      - "搭一个 20 mer 的 PVA 链"
+      - "ZrO2 cubic unit cell 给一个"
+      - "怎么从空间群直接搭一个 Ruddlesden-Popper 钙钛矿"
+      - "搭一个 GaN wurtzite 单胞，后面要跑 NEB"
+      - "Mg hcp 给定 a/c，用 ASE 拼成单胞"
+      - "Generate a 15-mer polypropylene chain for downstream MD"
     negative:
       - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
       - "TiO2 里随机替换 5% 的 Ti 为 Nb"                        # → transform-atomic-structure
@@ -200,6 +202,15 @@ cases:
       - "Mg-Si-O 三元做一次全局结构搜索"
       - "用 CALYPSO 对 Li-P-S 体系跑一次 evolutionary crystal structure search"
       - "用 CrystalFormer 按目标带隙条件生成一批候选晶体"
+      - "用 CrystalFormer 生成一批高带隙的 ABO3 候选"
+      - "CALYPSO 的 popsize 和 maxgen 在第一性原理体系下怎么配"
+      - "给定组分做一轮演化搜索，输出候选结构"
+      - "条件生成一批指定空间群的候选晶体"
+      - "用 CrystalFormer 采样 20 个 LiCoO2 类似物候选"
+      - "Li-P 二元相图未知组分能不能做结构预测"
+      - "用生成模型抽几个新的钙钛矿候选拓扑"
+      - "Run a CALYPSO global search on the Ti-O system and return top-5 candidates"
+      - "Sample crystal candidates conditioned on bulk modulus > 200 GPa with a generative model"
     negative:
       - "mp-149 的 CIF 帮我搜一下"                             # → mcp-mat-struct-db
       - "搭一个 fcc Ni 的原胞"                                  # → build-atomic-structure
@@ -213,6 +224,14 @@ cases:
       - "TiO2 里随机替换 5% 的 Ti 为 Nb"
       - "对这个晶胞沿 c 方向施加 2% 拉伸应变"
       - "在 NaCl 超胞里删一个 Cl 做 vacancy defect"
+      - "给 NaCl 晶胞施加 2% 双轴张应变"
+      - "在 Si 超胞里造一个 V_Si 空位"
+      - "Mn 掺 ZnO 做磁性研究，按 Wyckoff 选 8% 取代位"
+      - "Cu3Au L1_2 有序化从无序固溶体出发怎么做"
+      - "SrTiO3 里掺 La 替 Sr，电荷补偿怎么处理"
+      - "hcp Mg 晶胞做等比 1% 膨胀"
+      - "Apply an xy shear strain of 0.5% to this CONTCAR"
+      - "Create a 2x2x2 supercell of this MgO crystal with a single F-center"
     negative:
       - "搭一个 fcc Ni 的原胞"                                  # → build-atomic-structure
       - "从 Cu bulk 切 (110) slab，5 层，真空 15 Å"             # → assemble-atomic-structure
@@ -226,6 +245,13 @@ cases:
       - "在 Pt(111) top 位放一个 CO 分子"
       - "Place a single H2O on the bridge site of TiO2(110)"
       - "把两个 slab 叠成一个异质界面并加真空层"
+      - "Cu(111) + Al(111) 拼一个异质界面"
+      - "用 PACKMOL 在 60 Å 立方盒里装 300 个乙醇"
+      - "NH3 在 Au(111) 上的吸附结构搭一下"
+      - "做一个 amorphous PMMA 初始模型，~600 原子"
+      - "Au/MgO(001) 异质界面拼一下，应变 ≤ 3%"
+      - "两条 polymer 主链做几何 crosslink，输出 LAMMPS 数据文件"
+      - "Build a 4-layer Ni(100) slab with 12 Å vacuum"
     negative:
       - "搭一个 fcc Ni 的原胞"                                  # → build-atomic-structure
       - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
@@ -235,10 +261,17 @@ cases:
 
   - skill: operate-molecular-crystal
     positive:
-      - "这个分子晶体 CIF 切 (010) 表面，不要切断分子"
-      - "CIF 里 Br/Cl 有混乱占位，给一个 ordered 单胞"
+      - "这个药物晶体 CIF 切 (010) 表面，不要切断分子"
       - "把这个 solvate molecular crystal 里的溶剂分子整分子删掉"
       - "给这个有 dangling bond 的有机晶体表面补氢"
+      - "把 MOF 里的客体 DMF 清掉只留主体框架"
+      - "把这个 cocrystal 里 guest 分子单独提一份 XYZ"
+      - "有机层加表面后 sp3 C 缺氢，补全一下"
+      - "MgO 表面悬挂键按八面体几何补 OH"
+      - "这个离散配位单元晶体的金属中心用 CShM 判一下是 sq-pyramid 还是 trigonal-bipyramid"
+      - "基于上传的硝普R-3-羟基哌啶结构的有机阳离子找出极轴并构造翻转极性的结构"
+      - "Compute the coordination number and CShM shape for the Fe center in this CIF"
+      - "Resolve partial occupancy and produce an ordered replica for this disordered CIF"
     negative:
       - "从 Cu bulk 切 (110) slab，5 层，真空 15 Å"             # → assemble-atomic-structure
       - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
@@ -252,6 +285,14 @@ cases:
       - "ZnO (0001) 是不是极性面，先判一下再切"
       - "帮我构造一个 rocksalt MgO(111) 的非极性对称 slab"
       - "判断这个 perovskite (001) slab 的 Tasker type，并给稳定终止面"
+      - "MgO (111) 是 Tasker 几型，切的时候要怎么处理"
+      - "NaCl (111) 给一个非极性 slab"
+      - "SrTiO3 (110) 极性面 slab，按 Tasker auto-fix 跑一遍"
+      - "Al2O3 (0001) 表面建模，注意要不要 reconstruct"
+      - "Fe3O4 (001) 催化体系，slab 选 Tasker 合规的"
+      - "氧化物极性面 reconstruct 后输出 POSCAR"
+      - "Cut a polar PbTiO3 (001) slab with Tasker auto-fix, give me the final POSCAR"
+      - "Build a non-polar TiO2 (110) slab and validate the dipole is zero"
     negative:
       - "从 Cu bulk 切 (110) slab，5 层，真空 15 Å"             # → assemble-atomic-structure
       - "在 Pt(111) top 位放一个 CO 分子"                       # → assemble-atomic-structure

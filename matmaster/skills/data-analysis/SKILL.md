@@ -1,6 +1,6 @@
 ---
 name: data-analysis
-description: "Use for QC, EDA, statistics, fitting, and plots on existing numerical data: CSV/JSON tables, DOS/PDOS, RDF/MSD, band-structure arrays, scatter/histogram/time series, screening results. Trigger on plotting/analyzing existing numbers; do NOT use for new calculations or engine input generation."
+description: "Use when the user wants to read, summarize, or visualize artifacts an earlier run produced — engine logs, computed spectra, MD / DFT trajectories, screening tables, or arbitrary CSV / JSON — including DOS / PDOS, RDF / MSD, or band-structure arrays."
 skill_type: operator
 ---
 
