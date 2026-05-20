@@ -19,6 +19,7 @@ from evaluation.validators.json_file import (
     check_json_file_schema as _check_json_file_schema,
 )
 from evaluation.validators.stru_file import check_stru_file
+from evaluation.validators.structure_density import check_density
 from evaluation.validators.structure_general import (
     check_atom_count,
     check_bond_angle,
@@ -28,7 +29,6 @@ from evaluation.validators.structure_general import (
     check_cell_param,
     check_charge_balance,
     check_coordination_number,
-    check_density,
     check_file_count,
     check_formula,
     check_layer_count,
