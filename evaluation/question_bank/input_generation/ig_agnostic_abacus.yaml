@@ -4007,7 +4007,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_032_20260518
+- id: IG_abacus_032_20260520
   capability: input_generation
   domain: agnostic
   intent: 'LCAO H/S matrix outputs: k-space, real-space, get_s (official 10_hs_matrix).'
@@ -4035,7 +4035,6 @@ questions:
       - calculation scf
       - basis_type lcao
       - out_mat_hs 1
-      - gamma_only 1
       - pseudo_dir
       - orbital_dir
       flags: i
