@@ -31,9 +31,12 @@ RUN pip install --no-cache-dir \
     "dpdata>=0.2.18" \
     "rdkit==2025.9.6" \
     "numpy>=2.0" \
+    "scipy>=1.14" \
+    "pandas>=2.2" \
     "matplotlib==3.10.8" \
     "openpyxl==3.1.5" \
     "python-docx==1.2.0" \
+    "scikit-image>=0.24" \
     requests \
     "scikit-learn==1.8.0" \
     "xgboost-cpu==3.2.0" \
