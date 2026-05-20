@@ -140,22 +140,23 @@ cases:
 
   - skill: mlips
     positive:
-      - "用 DPA3.1 给这个 CIF 做结构优化，relax cell 并输出 optimized CIF"
+      - "用本地提供的 DPA3.1 给这个 CIF 做结构优化，relax cell 并输出 optimized CIF"
       - "用已有 DPA-2 模型通过 ASE 跑一段 300 K NVT 分子动力学"
-      - "用 MACE-MP 对这个 POSCAR 做几何优化"
-      - "用 SevenNet 给这个晶体算声子谱和热力学 DOS"
-      - "用 MatterSim 跑这个结构的短程 MD，保存 extxyz 轨迹"
-      - "用 DPA3.1 算这个 relaxed CIF 的弹性矩阵"
-      - "用 MLIP 跑这两个 POSCAR 之间的 NEB 路径"
+      - "用本地提供的  MACE-MP 对这个 POSCAR 做几何优化"
+      - "用本地提供的  SevenNet 给这个晶体算声子谱和热力学 DOS"
+      - "用本地提供的  MatterSim 跑这个结构的短程 MD，保存 extxyz 轨迹"
+      - "用本地提供的  DPA3.1 算这个 relaxed CIF 的弹性矩阵"
+      - "用合适的预训练势函数计算这两个 POSCAR 之间的 NEB 路径"
       - "用 DPA 的 OC22 head 算 CO 和 OH 在这些 slab 上的吸附能"
-      - "先 validate 这个结构，再用 DPA3.1 做优化和 phonon"
-      - "用本地 MACE checkpoint 接 ASE calculator 跑结构弛豫"
+      - "Run quick 10-ps MD for the CO @ Pt system with given checkpoint file of DPA3"
+      - "Given bcc-Fe.cif and local model of MACE, optimize the structure."
     negative:
       - "帮我训练一个机器学习势函数"                            # no training workflow in mlips
       - "用 DeePMD 训练一个势"                                  # no training workflow in mlips
       - "怎么做主动学习选点"                                    # no active-learning workflow in mlips
       - "用 DP-GEN 做一个迭代训练"                               # no DP-GEN training workflow in mlips
       - "AIS Square 上 DPA-3-NM 的 checkpoint 哪里下载"          # → aissq-explorer / retrieve-structure
+      - "把这个OUTCAR转换成MLIP训练的数据集"
 
   - skill: inspect-atomic-structure
     positive:
