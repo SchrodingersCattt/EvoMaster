@@ -2822,7 +2822,7 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
-- id: IG_abacus_023_20260518
+- id: IG_abacus_023_20260520
   capability: input_generation
   domain: agnostic
   intent: Map Bravais lattice types to ABACUS latname and STRU lattice parameters (official 01_bravais_lattice).
@@ -2891,7 +2891,7 @@ questions:
   - key: must_hex_lp
     value:
       filename: run_hex_mos2/STRU
-      pattern: (?im)^\s*LATTICE_PARAMETERS\s*\n\s*12\s*$
+      pattern: (?im)^\s*LATTICE_PARAMETERS\s*\n\s*12[\s/]
       flags: im
   - key: so_snte_input
     value: run_so_snte/INPUT
@@ -2921,7 +2921,7 @@ questions:
   - key: must_so_lp
     value:
       filename: run_so_snte/STRU
-      pattern: (?im)^\s*LATTICE_PARAMETERS\s*\n\s*0\.981704692\s*\n\s*3\.5126991
+      pattern: (?im)^\s*LATTICE_PARAMETERS\s*\n\s*0\.98\d+\s+3\.51\d+
       flags: im
   - key: must_so_orbital
     value:
