@@ -1,6 +1,6 @@
 ---
 name: tasker-polar-surface
-description: "Use when an ionic, heterovalent, or known polar surface needs Tasker classification, dipole compensation, or symmetric / non-polar termination. Ordinary metal or covalent slabs belong to assemble-atomic-structure."
+description: "Use when an ionic, heterovalent, or known polar surface needs Tasker classification, dipole compensation, or symmetric / non-polar termination. NOT use for metal or charge-neutral molecular crystals."
 depends_on: mcp-mat-doc
 ---
 
