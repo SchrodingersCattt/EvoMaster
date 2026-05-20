@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
 
 
 def _resolve_file(workspace: Path, name: str) -> Path | None:
