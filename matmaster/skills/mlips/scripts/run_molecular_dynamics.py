@@ -21,12 +21,23 @@ Stage keys:
     timestep_ps     Time step (default 0.0005 = 0.5 fs)
     tau_t_ps        Thermostat coupling (default 0.01)
     tau_p_ps        Barostat coupling (default 0.1)
+    equil_frac      Fraction of stage samples discarded as equilibration before
+                    computing the reported mean T/P (default 0.0; e.g. 0.2 =
+                    drop first 20%)
 
 Outputs:
     trajs/stage{N}_{mode}_{T}K.extxyz  — per-stage trajectories
     final_structure.xyz                 — final structure
-    md_simulation.log                   — thermo log
-    result.json                         — summary
+    md_simulation.log                   — thermo log incl. pressure (GPa)
+    result.json                         — summary with per-stage mean T (K),
+                                          pressure (GPa) and volume (A^3)
+
+Pressure is computed via ``atoms.get_stress(include_ideal_gas=True)`` so it
+includes the kinetic (ideal-gas) contribution, matching the instantaneous
+mechanical pressure used by ASE's ``MDLogger`` (in GPa). The reported scalar
+pressure is ``P = -(sxx + syy + szz) / 3`` of the Voigt stress tensor —
+i.e. positive = compression. If the calculator does not implement stress,
+pressure fields are omitted from the log and reported as ``null``.
 """
 
 from __future__ import annotations
@@ -118,17 +129,33 @@ def _build_dynamics(atoms, stage: dict, seed: int):
     raise ValueError(f"Unknown MD mode: {mode}")
 
 
+def _instantaneous_pressure_gpa(atoms):
+    """Return ``(P_iso_GPa, stress_voigt_GPa)`` or ``(None, None)`` on failure.
+
+    Uses ``include_ideal_gas=True`` so the kinetic contribution is added,
+    matching ASE's MDLogger convention. Voigt order is ``(xx, yy, zz, yz, xz, xy)``.
+    """
+    try:
+        s = atoms.get_stress(include_ideal_gas=True) / units.GPa
+    except Exception as exc:
+        log.warning("Stress unavailable from calculator: %s", exc)
+        return None, None
+    p_iso = -(float(s[0]) + float(s[1]) + float(s[2])) / 3.0
+    return p_iso, [float(x) for x in s]
+
+
 def _run_stage(
     atoms, stage: dict, stage_idx: int, save_interval: int, seed: int, log_fh
 ):
-    """Run a single MD stage; return atoms after the run."""
+    """Run a single MD stage; return ``(atoms, stats)``."""
     mode = stage["mode"]
     T = stage.get("temperature_K")
+    P_target = stage.get("pressure")
     ts_ps = stage.get("timestep_ps", 0.0005)
     runtime_ps = stage["runtime_ps"]
     total_steps = int(runtime_ps / ts_ps)
+    equil_frac = float(stage.get("equil_frac", 0.0))
 
-    # Initialize velocities for first stage
     if stage_idx == 0 and T is not None:
         MaxwellBoltzmannDistribution(
             atoms, temperature_K=T, rng=np.random.RandomState(seed)
@@ -142,6 +169,15 @@ def _run_stage(
     traj_file = f"trajs/{tag}.extxyz"
     os.makedirs("trajs", exist_ok=True)
 
+    samples = {
+        "step": [],
+        "T_K": [],
+        "P_GPa": [],
+        "V_A3": [],
+        "E_pot_eV": [],
+        "E_kin_eV": [],
+    }
+
     def _save():
         frame = atoms.copy()
         frame.info["energy"] = float(atoms.get_potential_energy())
@@ -149,18 +185,82 @@ def _run_stage(
         write(traj_file, frame, format="extxyz", append=True)
 
     def _log():
-        e_pot = atoms.get_potential_energy()
-        e_kin = atoms.get_kinetic_energy()
-        temp = e_kin / (1.5 * len(atoms) * units.kB)
-        log_fh.write(f"{dyn.nsteps} {e_pot:.3f} {e_kin:.3f} {temp:.1f}\n")
+        e_pot = float(atoms.get_potential_energy())
+        e_kin = float(atoms.get_kinetic_energy())
+        temp = float(atoms.get_temperature())
+        vol = float(atoms.get_volume())
+        p_iso, _ = _instantaneous_pressure_gpa(atoms)
+
+        samples["step"].append(int(dyn.nsteps))
+        samples["T_K"].append(temp)
+        samples["P_GPa"].append(p_iso if p_iso is not None else float("nan"))
+        samples["V_A3"].append(vol)
+        samples["E_pot_eV"].append(e_pot)
+        samples["E_kin_eV"].append(e_kin)
+
+        p_str = f"{p_iso:.5f}" if p_iso is not None else "nan"
+        log_fh.write(
+            f"{dyn.nsteps} stage{stage_idx + 1} {e_pot:.4f} {e_kin:.4f} "
+            f"{temp:.2f} {p_str} {vol:.3f}\n"
+        )
         log_fh.flush()
 
     dyn.attach(_save, interval=save_interval)
     dyn.attach(_log, interval=save_interval)
 
-    log.info("[Stage %d] %s  T=%s K  steps=%d", stage_idx + 1, mode, T, total_steps)
+    log.info(
+        "[Stage %d] %s  T=%s K  P=%s GPa  steps=%d  (equil_frac=%.2f)",
+        stage_idx + 1,
+        mode,
+        T,
+        P_target,
+        total_steps,
+        equil_frac,
+    )
     dyn.run(total_steps)
-    return atoms
+
+    n = len(samples["T_K"])
+    start = int(n * equil_frac) if n > 1 else 0
+    T_arr = np.asarray(samples["T_K"][start:], dtype=float)
+    P_arr = np.asarray(samples["P_GPa"][start:], dtype=float)
+    V_arr = np.asarray(samples["V_A3"][start:], dtype=float)
+    P_finite = P_arr[np.isfinite(P_arr)] if P_arr.size else P_arr
+
+    def _stat(arr):
+        if arr.size == 0:
+            return None, None
+        return float(np.mean(arr)), float(np.std(arr, ddof=0))
+
+    T_mean, T_std = _stat(T_arr)
+    P_mean, P_std = _stat(P_finite)
+    V_mean, V_std = _stat(V_arr)
+
+    stats = {
+        "stage_idx": stage_idx + 1,
+        "mode": mode,
+        "T_target_K": T,
+        "P_target_GPa": P_target,
+        "runtime_ps": runtime_ps,
+        "timestep_ps": ts_ps,
+        "n_samples": int(n),
+        "n_samples_averaged": int(P_finite.size if P_finite.size else T_arr.size),
+        "equil_frac": equil_frac,
+        "T_mean_K": T_mean,
+        "T_std_K": T_std,
+        "P_mean_GPa": P_mean,
+        "P_std_GPa": P_std,
+        "V_mean_A3": V_mean,
+        "V_std_A3": V_std,
+        "trajectory": traj_file,
+    }
+    log.info(
+        "[Stage %d] mean T = %s K  mean P = %s GPa  (n=%d after equil)",
+        stage_idx + 1,
+        f"{T_mean:.2f}" if T_mean is not None else "n/a",
+        f"{P_mean:.5f}" if P_mean is not None else "n/a",
+        stats["n_samples_averaged"],
+    )
+    return atoms, stats
 
 
 def main() -> None:
@@ -174,10 +274,14 @@ def main() -> None:
     fparam = build_fparam(args.charge, args.spin)
     set_fparam(atoms, fparam)
 
+    stage_stats = []
     with open("md_simulation.log", "w") as log_fh:
-        log_fh.write("step E_pot(eV) E_kin(eV) T(K)\n")
+        log_fh.write("# step stage E_pot(eV) E_kin(eV) T(K) P(GPa) V(A^3)\n")
         for i, stage in enumerate(stages):
-            atoms = _run_stage(atoms, stage, i, args.save_interval, args.seed, log_fh)
+            atoms, stats = _run_stage(
+                atoms, stage, i, args.save_interval, args.seed, log_fh
+            )
+            stage_stats.append(stats)
 
     write("final_structure.xyz", atoms)
 
@@ -187,6 +291,7 @@ def main() -> None:
         "final_structure": "final_structure.xyz",
         "trajectory_dir": "trajs",
         "log_file": "md_simulation.log",
+        "stages": stage_stats,
     }
     Path("result.json").write_text(json.dumps(result, indent=2))
     log.info("MD complete. See result.json.")
