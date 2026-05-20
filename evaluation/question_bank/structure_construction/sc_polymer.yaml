@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: polymer
 questions:
-- id: SC_pe_amorphous_001_20260513v2
+- id: SC_pe_amorphous_001_20260520
   capability: structure_construction
   domain: polymer
   intent: Build an amorphous LDPE model at correct density without trial-and-error
