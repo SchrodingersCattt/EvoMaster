@@ -1,6 +1,6 @@
 ---
-name: skill-authoring
-description: Author or refactor operator SKILL.md files. Use when writing a new skill from scratch, restructuring an existing skill for clarity, or reviewing skill quality. Covers section ordering, dependency analysis, reference routing, and information density principles.
+name: skill-writer
+description: Write or refactor operator SKILL.md files. Use when writing a new skill from scratch, restructuring an existing skill for clarity, or reviewing skill quality. Covers section ordering, dependency analysis, reference routing, and information density principles.
 ---
 
 # Skill Authoring
