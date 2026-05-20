@@ -54,6 +54,19 @@ If a guard is already enforced by a **validator script** that runs in the workfl
 1. Violating them causes **silent failure** (no error message, just wrong results), AND
 2. No automated validator catches them.
 
+### Workflow Organization — Self-Contained vs Separate Definitions
+
+Two valid patterns for organizing workflow dependencies (tables, defaults, routing):
+
+| Pattern | When to use | Example |
+|---------|-------------|---------|
+| **Self-contained** — each workflow step includes all information needed to execute it inline | Skill is long (200+ lines); information is step-specific and not shared across steps | Anthropic `mcp-builder`: Phase 1 includes URLs, framework choices, and examples directly in the step |
+| **Separate definitions + reference** — tables/defaults defined before Workflow, steps say "per X above" | Skill is short (<100 lines); same table/value is referenced by multiple steps or by Gate | ABACUS: Routing table defined once, referenced by Workflow step 2 and also useful independently for orientation |
+
+**Decision rule**: If the skill body is under ~100 lines and the LLM agent reads it all into context at once, separating definitions costs nothing (agent can "look up" without scrolling). If the skill is long (200+ lines), inline everything — content past the agent's attention window may be missed.
+
+For short skills, separating shared definitions also makes maintenance easier — update one table instead of multiple inline copies.
+
 ### Dependency Analysis Checklist
 
 Before finalizing order, for each rule ask:
