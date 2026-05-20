@@ -13,8 +13,8 @@ td_stype 0
 out_dipole 1
 md_nstep 1000
 md_dt 0.002
-pseudo_dir ./
-orbital_dir ./
+pseudo_dir /root/apns-pseudopotentials-v1/
+orbital_dir /root/apns-orbitals-efficiency-v1/
 ```
 
 **Velocity gauge** (`td_stype 1`):
@@ -28,8 +28,8 @@ td_stype 1
 out_dipole 1
 md_nstep 1000
 md_dt 0.002
-pseudo_dir ./
-orbital_dir ./
+pseudo_dir /root/apns-pseudopotentials-v1/
+orbital_dir /root/apns-orbitals-efficiency-v1/
 ```
 
 | Parameter | Purpose |

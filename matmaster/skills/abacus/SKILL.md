@@ -40,17 +40,20 @@ PP/orbital filename lookup:
 
 ## Pre-conditions — Internalize Before Writing
 
-- **AFM-prone oxides** (NiO, FeO, MnO under DFT+U): do not default to FM. Use antiparallel initialization by splitting magnetic species in STRU.
+- **AFM-prone oxides** (NiO, FeO, MnO under DFT+U): do not default to FM. Split magnetic species in STRU (e.g. Ni_up +2.0, Ni_down −2.0) — see `references/stru_format.md` for per-species moment syntax.
 - **DFT+U multi-species**: `orbital_corr` and `hubbard_u` must cover ALL correlated species (same order as ATOMIC_SPECIES).
 - **CIF/POSCAR → STRU**: convert lattice and positions faithfully before applying task-specific parameters.
 - **ecutwfc defaults**: `100` (LCAO), `50` (PW). Task requirements override.
 - **smearing_sigma default**: `0.015` unless task specifies otherwise.
+- **PP/orbital paths**: Always use Bohrium paths in INPUT regardless of whether the task will be submitted:
+  - `pseudo_dir /root/apns-pseudopotentials-v1/`
+  - `orbital_dir /root/apns-orbitals-efficiency-v1/` (LCAO only)
 
 ## Workflow
 
 1. **Read provided STRU** — determine basis_type from presence of `NUMERICAL_ORBITAL`. Reuse PP/orbital filenames exactly.
 2. **Read references** per Routing table above (always read `input_examples.md`; additionally read method-specific file if applicable).
-3. **Resolve PP/orbital** for Bohrium:
+3. **Resolve PP/orbital filenames**:
    - Look up each element in `references/apns_pseudopotentials_v1.list`.
    - For LCAO: also look up `references/apns_orbitals_efficiency_v1.list`.
    - Write resolved filenames into STRU. If unresolvable → STOP (Gate rule).
@@ -65,5 +68,3 @@ PP/orbital filename lookup:
 | image | `registry.dp.tech/dptech/dp/native/hub/mrdic2/abacusp:1.0.3-1778742780` |
 | machine | `c32_m128_cpu` |
 | cmd | `OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1` |
-
-PP path: `/root/apns-pseudopotentials-v1/`. Orbital path: `/root/apns-orbitals-efficiency-v1/`.

@@ -10,7 +10,7 @@ scf_thr 1.0e-7
 scf_nmax 200
 dft_functional hse06
 exx_hybrid_alpha 0.25
-pseudo_dir ./
+pseudo_dir /root/apns-pseudopotentials-v1/
 ```
 
 **LCAO hybrid SCF**:
@@ -23,8 +23,8 @@ scf_thr 1.0e-7
 scf_nmax 200
 dft_functional hse06
 exx_hybrid_alpha 0.25
-pseudo_dir ./
-orbital_dir ./
+pseudo_dir /root/apns-pseudopotentials-v1/
+orbital_dir /root/apns-orbitals-efficiency-v1/
 ```
 
 Valid `dft_functional` values for hybrid: `hse06` (or `hse`, equivalent when compiled with LIBXC), `pbe0`, `b3lyp`. Prefer `hse06` for clarity.

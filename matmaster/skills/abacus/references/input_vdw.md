@@ -8,8 +8,8 @@ basis_type lcao
 ecutwfc 100
 vdw_method d2
 vdw_C6_file c6.txt
-pseudo_dir ./
-orbital_dir ./
+pseudo_dir /root/apns-pseudopotentials-v1/
+orbital_dir /root/apns-orbitals-efficiency-v1/
 ```
 
 **D3(BJ)** (Becke-Johnson damping, no extra file needed):
@@ -19,8 +19,8 @@ calculation scf
 basis_type lcao
 ecutwfc 100
 vdw_method d3_bj
-pseudo_dir ./
-orbital_dir ./
+pseudo_dir /root/apns-pseudopotentials-v1/
+orbital_dir /root/apns-orbitals-efficiency-v1/
 ```
 
 | `vdw_method` | Damping | Extra file | Notes |

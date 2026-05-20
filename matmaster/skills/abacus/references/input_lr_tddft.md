@@ -11,8 +11,8 @@ esolver_type ks-lr
 lr_nstates 10
 lr_solver dav
 abs_gauge velocity
-pseudo_dir ./
-orbital_dir ./
+pseudo_dir /root/apns-pseudopotentials-v1/
+orbital_dir /root/apns-orbitals-efficiency-v1/
 ```
 
 **Molecular system (H2O) — length gauge**:
@@ -24,8 +24,8 @@ esolver_type ks-lr
 lr_nstates 5
 lr_solver dav
 abs_gauge length
-pseudo_dir ./
-orbital_dir ./
+pseudo_dir /root/apns-pseudopotentials-v1/
+orbital_dir /root/apns-orbitals-efficiency-v1/
 ```
 
 | Parameter | Purpose |

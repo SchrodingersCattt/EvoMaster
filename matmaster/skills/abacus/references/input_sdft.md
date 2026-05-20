@@ -16,7 +16,7 @@ nche_sto 100
 method_sto 1
 smearing_method fd
 smearing_sigma 0.6
-pseudo_dir ./
+pseudo_dir /root/apns-pseudopotentials-v1/
 ```
 
 **MD** (high-temperature Al):
@@ -37,7 +37,7 @@ cal_force 1
 md_nstep 10
 md_dt 0.2
 md_tfirst 1160400
-pseudo_dir ./
+pseudo_dir /root/apns-pseudopotentials-v1/
 ```
 
 | Parameter | Purpose |

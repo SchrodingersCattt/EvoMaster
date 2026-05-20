@@ -159,7 +159,7 @@ efield_dir 2
 efield_pos_max 0.95
 efield_pos_dec 0.10
 efield_amp 0.001
-pseudo_dir ./
+pseudo_dir /root/apns-pseudopotentials-v1/
 ```
 
 > **⚠ `dip_cor_flag` distinguishes two different physics:**

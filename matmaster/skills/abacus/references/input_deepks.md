@@ -8,7 +8,7 @@ INPUT_PARAMETERS
 calculation gen_bessel
 basis_type pw
 ecutwfc 50
-pseudo_dir ./
+pseudo_dir /root/apns-pseudopotentials-v1/
 bessel_descriptor_lmax 2
 bessel_descriptor_rcut 6.0
 bessel_descriptor_ecut 60
@@ -24,8 +24,8 @@ basis_type lcao
 ecutwfc 100
 scf_thr 1.0e-7
 scf_nmax 100
-pseudo_dir ./
-orbital_dir ./
+pseudo_dir /root/apns-pseudopotentials-v1/
+orbital_dir /root/apns-orbitals-efficiency-v1/
 deepks_scf 1
 deepks_model model.ptg
 ```
