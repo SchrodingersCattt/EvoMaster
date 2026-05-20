@@ -3480,6 +3480,7 @@ questions:
       - out_band 1
       - lspinorb
       - noncolin
+      - pw_diag_thr
       flags: i
   - key: must_scf_kpt
     value:
@@ -5166,8 +5167,9 @@ questions:
   - key: must_pw_hybrid_functional
     value:
       filename: run_pw_si2_hybrid/INPUT
-      pattern: (?im)^\s*dft_functional\s+(?:pbe0|hse06?|b3lyp)\s*$
-      flags: im
+      check: param_value_in
+      expected: dft_functional
+      allowed: [hse, hse06, pbe0, b3lyp]
   - key: must_pw_hybrid_exx_fraction
     value:
       filename: run_pw_si2_hybrid/INPUT
@@ -5193,8 +5195,9 @@ questions:
   - key: must_lcao_hybrid_functional
     value:
       filename: run_lcao_si2_hybrid/INPUT
-      pattern: (?im)^\s*dft_functional\s+(?:pbe0|hse06?|b3lyp)\s*$
-      flags: im
+      check: param_value_in
+      expected: dft_functional
+      allowed: [hse, hse06, pbe0, b3lyp]
   - key: must_lcao_hybrid_kpt
     value:
       filename: run_lcao_si2_hybrid/KPT
@@ -5238,7 +5241,7 @@ questions:
   - id: must_pw_hybrid_functional
     criterion: '[Must] run_pw_si2_hybrid/INPUT sets a hybrid dft_functional (pbe0/hse/hse06/b3lyp).'
     axis: correctness
-    verify: text_file_regex
+    verify: abacus_input_check
     weight: 1.0
   - id: must_pw_hybrid_exx_fraction
     criterion: '[Must] run_pw_si2_hybrid/INPUT sets exx_hybrid_alpha or hybrid_alpha.'
@@ -5258,7 +5261,7 @@ questions:
   - id: must_lcao_hybrid_functional
     criterion: '[Must] run_lcao_si2_hybrid/INPUT sets a hybrid dft_functional.'
     axis: correctness
-    verify: text_file_regex
+    verify: abacus_input_check
     weight: 1.0
   - id: must_lcao_hybrid_kpt
     criterion: '[Must] run_lcao_si2_hybrid/KPT uses Gamma automatic k-mesh.'
