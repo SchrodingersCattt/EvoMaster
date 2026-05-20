@@ -83,6 +83,25 @@ relax_method bfgs
 
 > **`relax_method`**: Always set explicitly. Use `cg` (conjugate gradient) for atomic relax, `bfgs` (quasi-Newton) for cell-relax. BFGS converges faster for cell optimization via Hessian approximation.
 
+### Noncollinear / Spin-Orbit Coupling (SOC)
+```
+INPUT_PARAMETERS
+calculation scf
+basis_type lcao
+nspin 4
+noncolin 1
+lspinorb 1
+ecutwfc 100
+scf_thr 1.0e-7
+scf_nmax 200
+smearing_method gauss
+smearing_sigma 0.01
+mixing_type broyden
+mixing_beta 0.2
+mixing_ndim 8
+```
+All three are required together: `nspin 4` + `noncolin 1` + `lspinorb 1`. Values `1` and `true` are both valid. Without `nspin 4`, noncollinear/SOC silently falls back to collinear.
+
 ### BSSE Ghost Atom INPUT Example (Bulk / Supercell)
 ```
 INPUT_PARAMETERS
