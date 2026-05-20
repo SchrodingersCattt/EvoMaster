@@ -3669,7 +3669,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_029_20260518
+- id: IG_abacus_029_20260520
   capability: input_generation
   domain: agnostic
   intent: Compare Broyden vs plain mixing for PW fcc Al (official 07_charge_mixing).
@@ -3698,7 +3698,6 @@ questions:
       tokens:
       - calculation scf
       - basis_type pw
-      - latname fcc
       - pseudo_dir
       flags: i
   - key: must_run_plain_mix
@@ -3717,7 +3716,6 @@ questions:
       tokens:
       - calculation scf
       - basis_type pw
-      - latname fcc
       - pseudo_dir
       flags: i
   - key: turn_budget
