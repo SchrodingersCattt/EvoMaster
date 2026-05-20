@@ -71,12 +71,13 @@ If the user provides a complete LAMMPS script, skip preparation and submit direc
 
 ## Submission Workflow
 
-1. Prepare data file (structure + topology)
-2. Generate/write input script
-3. Diagnose: `diagnose_input.py --software lammps --input lammps.in`
-4. Collect all files (input script + data file + potential files)
-5. Submit: `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/lammps-agent:03810da8", cmd="lmp -in lammps.in > log 2>&1", machine="c16_m64_1 * NVIDIA 4090")`
-6. Poll: `Bohrium(action="poll", job_id=<id>)`
+1. **Validate structure**: if the source structure file is user-provided or untrusted, run `python ${SKILL_DIR}/../mlips/scripts/validate_structure.py --structure <file>` to check for overlapping atoms (min_dist > 1.0 Å). If FAIL, fix locally before proceeding. DO NOT skip based on manual inspection.
+2. Prepare data file (structure + topology)
+3. Generate/write input script
+4. Diagnose: `diagnose_input.py --software lammps --input lammps.in`
+5. Collect all files (input script + data file + potential files)
+6. Submit: `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/lammps-agent:03810da8", cmd="lmp -in lammps.in > log 2>&1", machine="c16_m64_1 * NVIDIA 4090")`
+7. Poll: `Bohrium(action="poll", job_id=<id>)`
 
 > For CPU-only runs (non-GPU pair styles), use `machine="c32_m128_cpu"` and adjust image accordingly.
 
