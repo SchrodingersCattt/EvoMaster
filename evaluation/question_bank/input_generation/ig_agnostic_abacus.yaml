@@ -3445,7 +3445,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_027_20260518
+- id: IG_abacus_027_20260520
   capability: input_generation
   domain: agnostic
   intent: PW SOC SCF then NSCF band workflow for GaAs (official 05_soc).
@@ -3467,7 +3467,7 @@ questions:
       - pseudo_dir
       - out_chg 1
       - lspinorb
-      - nspin 4
+      - noncolin
       flags: i
   - key: must_run_gaas_band
     value:
@@ -3479,8 +3479,7 @@ questions:
       - init_chg file
       - out_band 1
       - lspinorb
-      - nspin 4
-      - pw_diag_thr
+      - noncolin
       flags: i
   - key: must_scf_kpt
     value:
