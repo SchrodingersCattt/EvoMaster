@@ -467,9 +467,9 @@ class ChatStreamService:
             return None
 
         if req.replace_last_turn:
-            last_query_ev = self._events_service.table.get_last_user_query_event(sid)
+            last_query_ev = self._events_service.get_last_user_query_event(sid)
             if last_query_ev and last_query_ev.get('id'):
-                self._events_service.table.delete_events_from_id(
+                self._events_service.delete_events_from_id(
                     sid, last_query_ev['id']
                 )
                 logger.info(
