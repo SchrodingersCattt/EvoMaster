@@ -3060,8 +3060,6 @@ questions:
     oss_url: ''
     description: Official STRU from abacus-develop examples/02_scf/02_lcao_Si2
   reference_answers:
-  - key: pw_si2_input
-    value: run_pw_si2/INPUT
   - key: must_run_pw_si2_scf
     value:
       filename: run_pw_si2/INPUT
@@ -3080,8 +3078,6 @@ questions:
       - K_POINTS
       - Gamma
       flags: i
-  - key: lcao_si2_input
-    value: run_lcao_si2/INPUT
   - key: must_run_lcao_si2_scf
     value:
       filename: run_lcao_si2/INPUT
@@ -3196,8 +3192,6 @@ questions:
     oss_url: ''
     description: Official STRU from abacus-develop examples/03_spin_polarized/04_Co6Nb4Os2
   reference_answers:
-  - key: fe_fm_input
-    value: run_fe_fm/INPUT
   - key: must_fe_fm_nspin
     value:
       filename: run_fe_fm/INPUT
@@ -3212,8 +3206,6 @@ questions:
       - pseudo_dir
       - orbital_dir
       flags: i
-  - key: fe_afm_input
-    value: run_fe_afm/INPUT
   - key: must_fe_afm_nspin
     value:
       filename: run_fe_afm/INPUT
@@ -3228,8 +3220,6 @@ questions:
       - pseudo_dir
       - orbital_dir
       flags: i
-  - key: h_atom_input
-    value: run_h_atom/INPUT
   - key: must_h_atom_nspin
     value:
       filename: run_h_atom/INPUT
@@ -3244,8 +3234,6 @@ questions:
       - pseudo_dir
       - orbital_dir
       flags: i
-  - key: co6nb4os2_input
-    value: run_co6nb4os2/INPUT
   - key: must_co6nb4os2_nspin
     value:
       filename: run_co6nb4os2/INPUT
@@ -3462,8 +3450,6 @@ questions:
     oss_url: ''
     description: Official STRU from abacus-develop examples/05_soc/01_pw_GaAs
   reference_answers:
-  - key: run_gaas_scf_input
-    value: run_gaas_scf/INPUT
   - key: must_run_gaas_scf
     value:
       filename: run_gaas_scf/INPUT
@@ -3475,8 +3461,6 @@ questions:
       - lspinorb
       - nspin 4
       flags: i
-  - key: run_gaas_band_input
-    value: run_gaas_band/INPUT
   - key: must_run_gaas_band
     value:
       filename: run_gaas_band/INPUT
@@ -4060,8 +4044,6 @@ questions:
       - pseudo_dir
       - orbital_dir
       flags: i
-  - key: run_hsr_kpt
-    value: run_hsr/KPT
   - key: must_run_get_s
     value:
       filename: run_get_s/INPUT
@@ -4071,8 +4053,6 @@ questions:
       - pseudo_dir
       - orbital_dir
       flags: i
-  - key: run_get_s_kpt
-    value: run_get_s/KPT
   - key: turn_budget
     value:
       max: 16
