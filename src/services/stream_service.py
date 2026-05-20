@@ -456,6 +456,19 @@ class ChatStreamService:
         req_fields = req.model_dump(exclude_unset=True)
         self._sessions_service.ensure_session(sid, user_id=user_id)
 
+        if req.replace_last_turn:
+            from src.dao.chat_events_table import get_chat_events_table
+
+            events_table = get_chat_events_table()
+            last_query_ev = events_table.get_last_user_query_event(sid)
+            if last_query_ev and last_query_ev.get('id'):
+                events_table.delete_events_from_id(sid, last_query_ev['id'])
+                logger.info(
+                    "replace_last_turn: deleted events from id=%s session_id=%s",
+                    last_query_ev['id'],
+                    sid,
+                )
+
         resolved_directory = SessionDirectoryResolver(self._sessions_service).resolve(
             session_id=sid,
             request_directory=req.directory,
