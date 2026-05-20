@@ -1,6 +1,6 @@
 ---
 name: abacus
-description: "Use to RUN ABACUS calculations (SCF, relax, cell-relax, band structure, DOS, MD, work function, BSSE, vacancy, surface energy, DFT+U, phonon, EOS) - prepare inputs, submit to Bohrium, parse results. Contains hard guards on parameters, low-cost benchmark ranges, K-point rules, validation scripts. DO NOT use for literature search about ABACUS, generic DFT theory questions, or input-only handoff without execution."
+description: "Use to RUN ABACUS calculations: SCF, relax/cell-relax, band/DOS, MD, surfaces, defects, DFT+U, phonon, EOS. Covers input prep, Bohrium submit, parsing, parameter guards, K-points, validation. Do NOT use for ABACUS literature search, generic DFT theory, or input-only handoff."
 skill_type: operator
 ---
 

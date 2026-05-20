@@ -1,6 +1,6 @@
 ---
 name: aissq-explorer
-description: "Use ONLY to search the AIS Square public registry (aissquare.com) for MLIP checkpoints or DFT-labeled training datasets when no source is given. DO NOT use if the prompt names a non-AIS-Square source (HuggingFace, figshare, GitHub, local path, explicit URL) - those go to retrieve-structure + mlips. DO NOT use for inference / training with an already-known model - that's mlips."
+description: "Use ONLY to search AIS Square (aissquare.com) for public MLIP checkpoints or DFT-labeled datasets when no source is given. Do NOT use for HuggingFace, figshare, GitHub, local paths, explicit URLs, or already-known models; use retrieve-structure + mlips instead."
 skill_type: operator
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: data-analysis
-description: "Use for QC, EDA, statistics, and plotting on numerical data already produced: CSV/JSON tabular, DOS/PDOS arrays, RDF/MSD curves, band-structure data, scatter/histogram/time-series, screening results. Triggers on '画/分析/拟合/检查' applied to existing numbers (including data emitted by VASP/ABACUS/LAMMPS/GPUMD/Gromacs). DO NOT use for running a new calculation or generating engine inputs."
+description: "Use for QC, EDA, statistics, fitting, and plots on existing numerical data: CSV/JSON tables, DOS/PDOS, RDF/MSD, band-structure arrays, scatter/histogram/time series, screening results. Trigger on plotting/analyzing existing numbers; do NOT use for new calculations or engine input generation."
 skill_type: operator
 ---
 

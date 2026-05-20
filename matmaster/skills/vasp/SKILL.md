@@ -1,6 +1,6 @@
 ---
 name: vasp
-description: "Use to RUN VASP calculations (SCF, relaxation, band structure, DOS, MD, hybrid DFT, SOC, magnetism, DFT+U, optical, NEB, etc.) - INCAR/KPOINTS/POSCAR generation, Bohrium submission, result parsing. DO NOT use for literature search about VASP or for plotting pre-computed band/DOS arrays (that's data-analysis)."
+description: "Use to RUN VASP calculations: SCF, relaxation, band/DOS, MD, hybrid DFT, SOC, magnetism, DFT+U, optical, NEB. Covers INCAR/KPOINTS/POSCAR generation, Bohrium submission, parsing. Do NOT use for VASP literature search or plotting precomputed band/DOS arrays."
 skill_type: operator
 ---
 
