@@ -1,6 +1,6 @@
 ---
 name: gromacs
-description: "MUST use this skill for ANY task involving GROMACS (classical MD NVT/NPT, energy minimization, free energy perturbation, enhanced sampling, system building, solvation, ion addition, etc.)."
+description: "Use to RUN GROMACS molecular dynamics (NVT/NPT, energy minimization, FEP, enhanced sampling, solvation, ion addition, etc.) - biomolecular / soft-matter focus. DO NOT use for other engines (ABACUS / LAMMPS / GPUMD / VASP / CP2K) or for non-MD tasks."
 skill_type: operator
 ---
 

@@ -1,6 +1,6 @@
 ---
 name: vasp
-description: "Use this skill for any VASP-related task: running VASP examples, input file generation (INCAR, KPOINTS, POSCAR), submitting VASP jobs to Bohrium, and VASP workflow guidance. Covers SCF, relaxation, band structure, DOS, MD, hybrid DFT, SOC, magnetism, DFT+U, optical, NEB, and more."
+description: "Use to RUN VASP calculations (SCF, relaxation, band structure, DOS, MD, hybrid DFT, SOC, magnetism, DFT+U, optical, NEB, etc.) - INCAR/KPOINTS/POSCAR generation, Bohrium submission, result parsing. DO NOT use for literature search about VASP or for plotting pre-computed band/DOS arrays (that's data-analysis)."
 skill_type: operator
 ---
 

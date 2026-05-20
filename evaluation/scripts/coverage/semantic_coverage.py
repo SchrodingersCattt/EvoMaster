@@ -173,7 +173,6 @@ SKILL_TAG_MAP: dict[str, list[str]] = {
     "operate-molecular-crystal": ["struct_molcrys"],
     "sample-atomic-structures": ["struct_build"],
     "mcp-mat-struct-db": ["meta_database"],
-    "xrd-analysis": ["char_diffraction"],
     "checkcif-validator": ["char_diffraction"],
     "mcp-mat-xrd": ["char_diffraction"],
     "pxrd-refinement": ["char_diffraction"],

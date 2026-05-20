@@ -1,6 +1,6 @@
 ---
 name: inspect-atomic-structure
-description: "Trigger to inspect existing structures for composition, symmetry, dimensionality, PBC/vacuum setup, molecular-crystal cues, disorder/occupancy issues, or solvent fragments."
+description: "Use ONLY for read-only inspection of an existing structure file (no output structure produced): space group, Wyckoff, dimensionality (0D/1D/2D/3D), PBC/vacuum reporting, molecular-crystal classification, disorder/occupancy reporting. DO NOT trigger when the task produces a new/modified structure: building -> build-atomic-structure, modifying -> transform-atomic-structure, combining -> assemble-atomic-structure, downloading/converting/validating-after-download -> retrieve-structure, running a calculation engine -> that engine's skill."
 skill_type: operator
 ---
 

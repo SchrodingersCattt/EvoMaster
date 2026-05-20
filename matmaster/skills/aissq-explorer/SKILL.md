@@ -1,6 +1,6 @@
 ---
 name: aissq-explorer
-description: "Use to search AIS Square for public MLIP checkpoints or DFT-labeled training datasets when no URL/model ID is pinned: DP-family versions, universal/foundation weights, fine-tuning datasets, or whether a non-DP model is mirrored."
+description: "Use ONLY to search the AIS Square public registry (aissquare.com) for MLIP checkpoints or DFT-labeled training datasets when no source is given. DO NOT use if the prompt names a non-AIS-Square source (HuggingFace, figshare, GitHub, local path, explicit URL) - those go to retrieve-structure + mlips. DO NOT use for inference / training with an already-known model - that's mlips."
 skill_type: operator
 ---
 

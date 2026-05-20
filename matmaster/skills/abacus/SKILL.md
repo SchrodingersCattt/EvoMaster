@@ -1,6 +1,6 @@
 ---
 name: abacus
-description: "MUST use this skill for ANY task involving ABACUS (SCF, relax, cell-relax, band structure, DOS, MD, work function, BSSE, vacancy, surface energy, DFT+U, phonon, EOS). Contains hard guards on parameters, low-cost benchmark ranges, K-point rules, and validation scripts that prevent silent failures."
+description: "Use to RUN ABACUS calculations (SCF, relax, cell-relax, band structure, DOS, MD, work function, BSSE, vacancy, surface energy, DFT+U, phonon, EOS) - prepare inputs, submit to Bohrium, parse results. Contains hard guards on parameters, low-cost benchmark ranges, K-point rules, validation scripts. DO NOT use for literature search about ABACUS, generic DFT theory questions, or input-only handoff without execution."
 skill_type: operator
 ---
 
@@ -82,7 +82,7 @@ correct, runnable files and avoiding silent-failure configurations.
 
 ## Bohrium Submission Defaults
 
-This section is the **single source of truth** for ABACUS `image` / `machine` / `cmd` on Bohrium. Other skills (for example `matmaster/skills/input-manual-helper`) refer here instead of copying the values.
+This section is the **single source of truth** for ABACUS `image` / `machine` / `cmd` on Bohrium. Other skills should refer here instead of copying the values.
 
 Keep the previous default profile unless task/environment explicitly overrides it.
 
