@@ -3358,7 +3358,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_026_20260518
+- id: IG_abacus_026_20260520
   capability: input_generation
   domain: agnostic
   intent: Noncollinear LCAO SCF with SOC for bcc Fe (official 04_noncollinear).
@@ -3383,12 +3383,12 @@ questions:
   - key: must_noncolin
     value:
       filename: run_fe_nc/INPUT
-      pattern: (?im)^\s*noncolin\s+true\s*$
+      pattern: (?im)^\s*noncolin\s+(?:true|1)\s*$
       flags: im
   - key: must_lspinorb
     value:
       filename: run_fe_nc/INPUT
-      pattern: (?im)^\s*lspinorb\s+true\s*$
+      pattern: (?im)^\s*lspinorb\s+(?:true|1)\s*$
       flags: im
   - key: must_lcao
     value:
