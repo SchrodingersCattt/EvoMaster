@@ -1,6 +1,6 @@
 ---
 name: operate-molecular-crystal
-description: "Use to edit a crystal with bonded fragments — organic molecules, organic-inorganic hybrids (MOFs, hybrid perovskites), or polyatomic ions like sulfate / nitrate / carbonate — keeping units intact: cut a surface, remove guests or solvents, resolve disordered occupancies, cap dangling bonds."
+description: "Use to edit a crystal with bonded fragments, including organic molecules, organic-inorganic hybrids, or polyatomic ions keeping units intact: cut surface slabs, remove guests / solvents, resolve disordered parts and convert to computation-ready models, handling bond geometries, cap dangling bonds."
 skill_type: operator
 ---
 
