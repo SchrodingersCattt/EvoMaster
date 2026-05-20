@@ -331,6 +331,10 @@ class ChatSendRequest(BaseModel):
         max_length=2048,
         description="可选，前端传入的本轮 Bohrium 远端 /share 工作目录，随 query 写入历史事件；持久化请用 PUT …/session-directory",
     )
+    replace_last_turn: bool = Field(
+        default=False,
+        description="为 true 时先物理删除最后一条 User/query 及之后的所有事件，再以新 content 发送；用于编辑重发",
+    )
 
     model_config = ConfigDict(
         json_schema_extra={
