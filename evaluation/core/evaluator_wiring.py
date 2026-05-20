@@ -6,17 +6,20 @@ from typing import Any
 
 from evaluation.validators.abacus_input import check_abacus_input
 from evaluation.validators.answer_text import check_answer_json_numeric
-from evaluation.validators.budget import (
-    check_duration_budget as _check_duration_budget,
-    check_token_budget as _check_token_budget,
-    check_turn_budget as _check_turn_budget,
-)
+from evaluation.validators.budget import check_duration_budget as _check_duration_budget
+from evaluation.validators.budget import check_token_budget as _check_token_budget
+from evaluation.validators.budget import check_turn_budget as _check_turn_budget
 from evaluation.validators.json_file import (
     check_json_file_artifacts as _check_json_file_artifacts,
+)
+from evaluation.validators.json_file import (
     check_json_file_numeric_range as _check_json_file_numeric_range,
+)
+from evaluation.validators.json_file import (
     check_json_file_schema as _check_json_file_schema,
 )
 from evaluation.validators.stru_file import check_stru_file
+from evaluation.validators.structure_density import check_density
 from evaluation.validators.structure_general import (
     check_atom_count,
     check_bond_angle,
@@ -45,10 +48,12 @@ from evaluation.validators.text_file import (
     check_text_file_regex,
 )
 
-from .evaluator_builders import build_llm_context, build_safety_eval_record  # noqa: F401
+from .evaluator_builders import (  # noqa: F401
+    build_llm_context,
+    build_safety_eval_record,
+)
 from .evidence import EvidenceBundle, TokenUsage
 from .schemas import (
-    QuestionItem,
     ReferenceAnswer,
     TokenUsageRecord,
 )
@@ -157,14 +162,6 @@ def check_json_file_artifacts(
         count_tolerance=int(cfg.get("count_tolerance", 0)),
         count_mode=cfg.get("count_mode", "at_least"),
     )
-
-
-
-
-
-
-
-
 
 
 def check_molcrys_slab_integrity(
@@ -352,6 +349,23 @@ def check_struct_file_cell_param(
         param=str(cfg.get("param", "alpha")),
         expected=float(cfg.get("expected", 0)),
         tolerance=float(cfg.get("tolerance", 0)),
+    )
+
+
+def check_struct_file_density(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_density(
+        ws,
+        filename=cfg.get("filename", "*.cif"),
+        expected=float(cfg["expected"]) if "expected" in cfg else None,
+        tolerance=float(cfg["tolerance"]) if "tolerance" in cfg else None,
+        min_g_cm3=float(cfg["min_g_cm3"]) if "min_g_cm3" in cfg else None,
+        max_g_cm3=float(cfg["max_g_cm3"]) if "max_g_cm3" in cfg else None,
     )
 
 

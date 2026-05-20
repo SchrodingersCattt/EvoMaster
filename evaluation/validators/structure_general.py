@@ -503,8 +503,6 @@ def check_cell_param(
 # ---------------------------------------------------------------------------
 # 7. Stoichiometry ratio
 # ---------------------------------------------------------------------------
-
-
 def check_stoichiometry_ratio(
     workspace_dir: str | Path,
     *,

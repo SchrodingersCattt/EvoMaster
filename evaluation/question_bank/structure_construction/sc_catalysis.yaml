@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: catalysis
 questions:
-- id: CR_SC_ZnS001_20260508
+- id: CR_SC_ZnS001_20260508v2
   capability: structure_construction
   domain: catalysis
   intent: Build ZnS(001) polar surface slab with 3 layers and 2x2x1 supercell per
@@ -36,6 +36,24 @@ questions:
       filename: ZnS_001_slab.cif
       expected: 24
       tolerance: 0
+  - key: inplane_a
+    value:
+      filename: ZnS_001_slab.cif
+      param: a
+      expected: 7.65
+      tolerance: 0.5
+  - key: inplane_b
+    value:
+      filename: ZnS_001_slab.cif
+      param: b
+      expected: 7.65
+      tolerance: 0.5
+  - key: cell_c_vacuum
+    value:
+      filename: ZnS_001_slab.cif
+      param: c
+      expected: 22.0
+      tolerance: 7.0
   - key: turn_budget
     value:
       max: 22
@@ -64,12 +82,21 @@ questions:
     criterion: The 3-bilayer 2x2x1 ZnS(001) slab contains exactly 24 atoms.
     axis: correctness
     verify: struct_file_atom_count
-  - id: supercell_vacuum_ok
-    criterion: 交付的 ZnS(001) slab 采用 2×2×1 扩胞，真空层 ≥15 Å；若只在答案中声明，必须与 `ZnS_001_slab.cif`
-      的晶胞尺寸和层厚说明一致。
+  - id: inplane_a
+    criterion: The ZnS(001) slab cell a lattice parameter is close to the 2x
+      in-plane surface repeat of zinc-blende ZnS, about sqrt(2)*5.41 A.
     axis: correctness
-    verify: llm_binary_judge
-    weight: 1.0
+    verify: struct_file_cell_param
+  - id: inplane_b
+    criterion: The ZnS(001) slab cell b lattice parameter is close to the 2x
+      in-plane surface repeat of zinc-blende ZnS, about sqrt(2)*5.41 A.
+    axis: correctness
+    verify: struct_file_cell_param
+  - id: cell_c_vacuum
+    criterion: The ZnS(001) slab cell c parameter is large enough to include the
+      slab thickness plus at least approximately 15 A of vacuum.
+    axis: correctness
+    verify: struct_file_cell_param
   - id: polar_handling
     criterion: 答案说明了 ZnS(001) 表面的极性问题，并至少提出一种合理的处理策略（如构建对称 slab、施加偶极修正等），所述策略与交付的结构文件一致。
     axis: grounding
@@ -113,7 +140,7 @@ questions:
     criterion: Total token usage stays within a generous benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: SC_elec_004_20260507v4
+- id: SC_elec_004_20260520
   capability: structure_construction
   domain: catalysis
   intent: Build Ag(001) surface slab and place CO molecule at ontop site for adsorption
@@ -156,6 +183,28 @@ questions:
       element: O
       expected: 1
       tolerance: 0
+  - key: slab_layers_4
+    value:
+      filename: adsorbed_system.vasp
+      expected: 4
+      tolerance: 0
+      axis: z
+      element: Ag
+      layer_tol_A: 0.5
+  - key: cell_c_vacuum
+    value:
+      filename: adsorbed_system.vasp
+      param: c
+      expected: 24.0
+      tolerance: 8.0
+  - key: co_c_down_orientation
+    value:
+      filename: adsorbed_system.vasp
+      element_a: Ag
+      element_b: C
+      cutoff_A: 3.0
+      expected: 2.0
+      tolerance: 0.8
   - key: required_fields
     value:
     - bare_slab_file
@@ -208,12 +257,20 @@ questions:
       and adsorption site description.
     axis: correctness
     verify: llm_binary_judge
-  - id: structure_validity
-    criterion: Slab has 4 atomic layers, vacuum ≥ 15 Å, and CO is placed at ontop
-      site with C-down orientation. Ag and CO loading values are evaluated only by
-      deterministic structure-file checks.
+  - id: slab_layers_4
+    criterion: The adsorbed-system structure retains exactly 4 Ag slab layers along z.
     axis: correctness
-    verify: llm_binary_judge
+    verify: struct_file_layer_count
+  - id: cell_c_vacuum
+    criterion: The adsorbed-system cell c parameter is large enough to include the
+      four-layer Ag slab, CO adsorbate, and approximately 15 A of vacuum.
+    axis: correctness
+    verify: struct_file_cell_param
+  - id: co_c_down_orientation
+    criterion: The adsorbed-system structure has the CO carbon atom close to the Ag
+      surface at the intended initial C-down adsorption distance.
+    axis: correctness
+    verify: struct_file_bond_length
   - id: grounding_source
     criterion: Ag bulk structure uses correct FCC lattice constant; slab is built
       with proper crystallographic orientation and parameters; CO placement uses physically
