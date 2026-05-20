@@ -6728,8 +6728,11 @@ questions:
       - orbital_dir
       - ecutwfc
       flags: i
-  - key: variable_bsse_semantics
-    value: Counterpoise BSSE per 32_bsse—shared INPUT/KPT with STRU_0 (H2O) and fragment STRU_1/2/3 for O and H atoms.
+  - key: must_cp_kspacing
+    value:
+      filename: run_lcao_h2o_cp/INPUT
+      pattern: (?im)^\s*kspacing\s+\S+
+      flags: im
   - key: turn_budget
     value:
       max: 16
@@ -6753,11 +6756,11 @@ questions:
     axis: correctness
     verify: text_file_contains_all
     weight: 1.0
-  - id: variable_bsse_semantics
-    criterion: '[Variable] Counterpoise STRU layout matches 32_bsse README.'
-    axis: grounding
-    verify: llm_binary_judge
-    weight: 0.5
+  - id: must_cp_kspacing
+    criterion: '[Must] run_lcao_h2o_cp/INPUT uses kspacing for adaptive k-mesh across BSSE fragments.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.8
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
