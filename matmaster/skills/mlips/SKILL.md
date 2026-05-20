@@ -1,6 +1,6 @@
 ---
 name: mlips
-description: "Use to run a machine-learning interatomic potential (DPA, MACE, SevenNet, MatterSim) on a real system — optimization, MD, phonon, elastic, NEB — typically through an ASE-based driver script."
+description: "Use to run a machine-learning interatomic potential (including DPA, MACE, SevenNet, MatterSim) related calculation, including optimization, MD, phonon, elastic, NEB — typically through an ASE-based driver script. NOT used for model training and retrieve."
 skill_type: operator
 ---
 
