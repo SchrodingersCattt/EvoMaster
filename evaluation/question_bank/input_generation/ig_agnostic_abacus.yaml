@@ -614,7 +614,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_013_20260512
+- id: IG_abacus_013_20260520
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS input files for Ni FCC lattice-constant energy calculations.
@@ -666,6 +666,8 @@ questions:
   - key: variable_stru_ni_magnetism
     value:
       filename: STRU
+      check: magnetic_order
+      expected: fm
   - key: must_kpt_gamma_dense
     value:
       filename: KPT
@@ -714,9 +716,9 @@ questions:
     verify: text_file_contains_all
     weight: 1.0
   - id: variable_stru_ni_magnetism
-    criterion: '[Variable] STRU provides a reasonable magnetic Ni setup for an FCC lattice-constant scan. Do not require exactly four atoms or exactly 2.0 as the initial moment; species-level magnetism, per-atom `mag` fields, primitive/conventional FCC cells, and comparable positive Ni initial moments are acceptable.'
+    criterion: '[Must] STRU sets FM initial magnetic moments (species-level moment > 0) for Ni.'
     axis: correctness
-    verify: llm_binary_judge
+    verify: stru_file_check
     weight: 0.8
   - id: must_kpt_gamma_dense
     criterion: '[Must] KPT uses a Gamma-centered 3D mesh with each dimension in the 3-20 range.'
