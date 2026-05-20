@@ -481,5 +481,30 @@ def check_stru_file(
                 )
         return True, f"{fpath.name}: LATTICE_PARAMETERS={params} all within range"
 
+    elif check == "cubic_box_range":
+        lc = _parse_lattice_constant(content)
+        if lc is None:
+            lc = 1.0
+        vecs = _parse_lattice_vectors(content)
+        if vecs is None or len(vecs) < 9:
+            return False, f"{fpath.name}: LATTICE_VECTORS not found"
+        lengths = [
+            lc * (vecs[0] ** 2 + vecs[1] ** 2 + vecs[2] ** 2) ** 0.5,
+            lc * (vecs[3] ** 2 + vecs[4] ** 2 + vecs[5] ** 2) ** 0.5,
+            lc * (vecs[6] ** 2 + vecs[7] ** 2 + vecs[8] ** 2) ** 0.5,
+        ]
+        cfg = expected if isinstance(expected, dict) else {}
+        lo = float(cfg.get("min", 0))
+        hi = float(cfg.get("max", 1e9))
+        if all(lo <= l <= hi for l in lengths):
+            return True, (
+                f"{fpath.name}: box edges {[f'{l:.2f}' for l in lengths]} "
+                f"all within [{lo}, {hi}]"
+            )
+        return False, (
+            f"{fpath.name}: box edges {[f'{l:.2f}' for l in lengths]} "
+            f"not all within [{lo}, {hi}]"
+        )
+
     else:
         return False, f"unknown stru_file_check check type: {check!r}"

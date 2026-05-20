@@ -1540,7 +1540,10 @@ questions:
   - key: must_cp_box
     value:
       filename: run_lcao_h2o_cp/STRU_0
-      pattern: (?im)^\s*LATTICE_VECTORS\s*\n\s*20\s+0\s+0
+      check: cubic_box_range
+      expected:
+        min: 18.0
+        max: 22.0
       flags: im
   - key: turn_budget
     value:
@@ -1631,7 +1634,7 @@ questions:
   - id: must_cp_box
     criterion: '[Must] STRU_0 uses ~20 Bohr cubic cell (shared BSSE box).'
     axis: correctness
-    verify: text_file_regex
+    verify: stru_file_check
     weight: 0.8
   - id: turn_budget
     criterion: Agent completes within turn budget.
