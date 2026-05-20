@@ -1,6 +1,6 @@
 ---
 name: gpumd
-description: "Use this skill for GPUMD and NEP tasks: MD, EMD/HNEMD/NEMD, diffusion/MSD, SHC, NEP training or prediction."
+description: "Use to RUN GPUMD or NEP tasks (MD, EMD/HNEMD/NEMD thermal conductivity, diffusion/MSD, SHC, NEP training or prediction). DO NOT use for plotting pre-computed data (RDF / MSD / HAC from arbitrary sources go to data-analysis) or for other MD engines."
 skill_type: operator
 ---
 

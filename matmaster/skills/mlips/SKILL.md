@@ -1,6 +1,6 @@
 ---
 name: mlips
-description: "MUST use for machine-learning interatomic potentials such as DPA, MACE, SevenNet, MatterSim, demonstrating structure optimization, phonon, MD, elastic, NEB, adsorption, training-data preparation, active learning, accuracy and extrapolation evaluation."
+description: "Use to RUN simulations with MLIPs (DPA, MACE, SevenNet, MatterSim) via ASE: optimization, phonon, MD, elastic, NEB, adsorption; also training data, active learning, accuracy/extrapolation checks. Do NOT use for AIS Square discovery or URL model downloads; use aissq-explorer/retrieve-structure."
 skill_type: operator
 ---
 

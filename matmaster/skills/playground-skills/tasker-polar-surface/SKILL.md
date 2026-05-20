@@ -1,6 +1,6 @@
 ---
 name: tasker-polar-surface
-description: "Use for ionic, heterovalent, or polar surface/slab tasks needing Tasker-aware construction, adjustment, or validation of dipole-balanced/symmetric/non-polar terminations."
+description: "Use ONLY for ionic, heterovalent, or known-polar surfaces needing Tasker classification, dipole compensation, or symmetric termination (LiCoO2, ZnO 0001, MgO 111, ABO3 001, fluorite 111). Do NOT use for ordinary metallic/covalent slabs such as Cu, Pt, Au, Si, Ge, graphene."
 depends_on: mcp-mat-doc
 ---
 
