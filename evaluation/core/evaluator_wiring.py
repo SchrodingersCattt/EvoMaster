@@ -790,6 +790,7 @@ def check_abacus_input_from_evidence(
     filename = str(cfg.get("filename", ""))
     check_type = str(cfg.get("check", ""))
     expected = cfg.get("expected")
+    allowed = cfg.get("allowed")
     if not filename or not check_type:
         return False, "abacus_input_check: need 'filename' and 'check' in ref"
     return check_abacus_input(
@@ -797,5 +798,6 @@ def check_abacus_input_from_evidence(
         filename=filename,
         check=check_type,
         expected=expected,
+        allowed=allowed,
         workspace_resolve=_workspace_resolve_from_ref(ref),
     )

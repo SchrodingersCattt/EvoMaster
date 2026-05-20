@@ -20,6 +20,7 @@ def check_abacus_input(
     filename: str,
     check: str,
     expected: str | None = None,
+    allowed: list[str] | None = None,
     workspace_resolve: str = "recursive",
 ) -> tuple[bool, str]:
     """Run a resolution check on an ABACUS INPUT file.
@@ -29,6 +30,8 @@ def check_abacus_input(
       has lattice vectors matching a reference file
     - input_resolves_kpt_contains: verify the KPT resolved from INPUT
       contains a required token (e.g. '4 4 4')
+    - param_enabled: verify a boolean param is set to true/1
+    - param_value_in: verify a param's value is in an allowed list
     """
     root = Path(workspace_dir)
     fpath = _resolve_file(root, filename, workspace_resolve=workspace_resolve)
@@ -45,6 +48,8 @@ def check_abacus_input(
         return _check_kpt_contains(fpath, content, expected)
     elif check == "param_enabled":
         return _check_param_enabled(fpath, content, expected)
+    elif check == "param_value_in":
+        return _check_param_value_in(fpath, content, expected, allowed)
     else:
         return False, f"unknown abacus_input_check check type: {check!r}"
 
@@ -69,6 +74,32 @@ def _check_param_enabled(
     if val in _TRUTHY:
         return True, f"{fpath.name}: {param}={match.group(1)} (enabled)"
     return False, f"{fpath.name}: {param}={match.group(1)} (not enabled, expected true/1)"
+
+
+def _check_param_value_in(
+    fpath: Path,
+    content: str,
+    expected: str | None,
+    allowed: list[str] | None,
+) -> tuple[bool, str]:
+    """Verify that a parameter's value is one of the allowed values (case-insensitive)."""
+    param = str(expected or "").strip().lower()
+    if not param:
+        return False, "abacus_input_check param_value_in: 'expected' must be the param name"
+    if not allowed:
+        return False, "abacus_input_check param_value_in: 'allowed' list must be provided"
+    pattern = re.compile(rf"(?im)^\s*{re.escape(param)}\s+(\S+)")
+    match = pattern.search(content)
+    if not match:
+        return False, f"{fpath.name}: param '{param}' not found"
+    val = match.group(1).strip().lower()
+    allowed_lower = [a.lower() for a in allowed]
+    if val in allowed_lower:
+        return True, f"{fpath.name}: {param}={match.group(1)} (in allowed: {allowed})"
+    return False, (
+        f"{fpath.name}: {param}={match.group(1)} "
+        f"(not in allowed: {allowed})"
+    )
 
 
 def _check_stru_lattice(
