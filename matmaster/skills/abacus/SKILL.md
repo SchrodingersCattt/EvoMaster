@@ -118,6 +118,7 @@ Reference-first policy:
 |--------------------------|----------------|
 | Generating ANY ABACUS input files | Run `scripts/validate_input.py` after writing |
 | Bader charge analysis | `references/advanced_tasks.md` § Bader Charge Analysis Workflow |
+| Wavefunction output / get_wf | `references/advanced_tasks.md` § Wavefunction Output Workflows |
 | HSE / hybrid functional band + DOS | `references/input_examples.md` (DOS k-mesh rule) |
 | Multi-element system (≥3 species) | `references/stru_multispecies.md` |
 | Analyzing BANDS_1.dat or DOS output | `references/output_params.md` § Common mistakes |

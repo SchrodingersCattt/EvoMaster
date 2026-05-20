@@ -238,3 +238,51 @@ OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1 \
 The `add_core_charge.py` script reconstructs approximate core electron density (Gaussian model) and adds it to the valence cube, creating a reference total density. Bader then uses `-ref total_chg.cube` to find basin boundaries on the total density while reporting charges from the valence density.
 
 **Without core augmentation**: Bader will fail silently — atoms with diffuse valence density (Al, Li, etc.) get assigned zero charge, producing physically meaningless results.
+
+---
+
+## Wavefunction Output Workflows
+
+### PW wavefunction output (single-step)
+```
+calculation          scf
+basis_type           pw
+out_wfc_pw           1
+```
+Outputs plane-wave coefficients after SCF converges.
+
+### LCAO wavefunction output (single-step)
+```
+calculation          scf
+basis_type           lcao
+out_wfc_lcao         1
+```
+Outputs LCAO wavefunction coefficients (`wf*.dat`) after SCF converges.
+
+### LCAO get_wf — real-space wavefunction (two-step)
+
+`get_wf` is a **post-processing calculation** that converts LCAO wavefunctions to real-space grid representation. It requires a prior SCF that saved wavefunctions. Two INPUT files are needed:
+
+**Step 1 — SCF** (produces `wf*.dat`):
+```
+calculation          scf
+basis_type           lcao
+out_wfc_lcao         1
+```
+
+**Step 2 — get_wf** (reads `wf*.dat`, outputs real-space wavefunctions):
+```
+calculation          get_wf
+basis_type           lcao
+init_wfc             file
+out_wfc_norm         1
+```
+- `init_wfc file`: read binary wavefunctions from Step 1
+- `out_wfc_norm 1`: output |ψ|² on real-space grid (alternative: `out_wfc_re_im 1` for Re/Im parts)
+- Only works with LCAO basis
+
+**Directory organization**: when running both steps in one Bohrium job, use separate INPUT files (e.g. `INPUT-scf` and `INPUT-getwf`) and a run script that renames them sequentially:
+```bash
+cp INPUT-scf INPUT && mpirun -np 16 abacus > log_scf 2>&1
+cp INPUT-getwf INPUT && mpirun -np 16 abacus > log_getwf 2>&1
+```
