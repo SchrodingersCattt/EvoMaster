@@ -10,9 +10,11 @@ categories:
           - assemble-atomic-structure
           - operate-molecular-crystal
           - sample-atomic-structures
+          - tasker-polar-surface
       structure-search:
         skills:
           - mcp-mat-struct-db
+          - retrieve-structure
       polymer-modeling:
         skills:
           - poly-generator
