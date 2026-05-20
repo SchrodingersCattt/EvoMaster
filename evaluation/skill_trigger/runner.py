@@ -4,9 +4,10 @@ Sends test prompts through the matmaster Exp runtime and checks whether
 the model calls the Skill tool with the expected skill name.
 
 Early-stop: as soon as the model emits a ToolCallEvent for the "Skill" tool,
-the run is cancelled via CancellationToken. Non-Skill tool calls are allowed
+the run is cancelled via CancellationToken, except for configured umbrella
+skills that should route onward to a leaf skill. Non-Skill tool calls are allowed
 to proceed (the model might Read/Bash before deciding which skill to load).
-If max_turns is exhausted without a Skill call, we record "not triggered".
+If max_turns is exhausted without a leaf Skill call, we record "not triggered".
 """
 
 from __future__ import annotations
@@ -37,6 +38,7 @@ logger = logging.getLogger(__name__)
 _DEFAULT_MAX_TURNS = 3
 _DEFAULT_EXP_NAME = "direct"
 _DEFAULT_REPEATS = 3
+_UMBRELLA_PASSTHROUGH = {"atomic-structure"}
 
 
 # ---------------------------------------------------------------------------
@@ -48,6 +50,7 @@ _DEFAULT_REPEATS = 3
 class RepeatResult:
     triggered_skill: str | None = None
     non_skill_tools: list[str] = field(default_factory=list)
+    umbrella_seen: list[str] = field(default_factory=list)
     duration_ms: int = 0
     turns_used: int = 0
     error: str | None = None
@@ -132,12 +135,13 @@ class SkillReport:
 
 
 class _SkillTriggerDetector:
-    """Monitors stream events; cancels as soon as Skill tool is called."""
+    """Monitors stream events and stops after the first leaf Skill call."""
 
     def __init__(self, cancel_ctrl: CancellationController) -> None:
         self._cancel_ctrl = cancel_ctrl
         self.triggered_skill: str | None = None
         self.non_skill_tools: list[str] = []
+        self.umbrella_seen: list[str] = []
         self.turns_seen: int = 0
 
     def on_event(self, event: Any) -> None:
@@ -147,9 +151,13 @@ class _SkillTriggerDetector:
         self.turns_seen += 1
 
         if event.tool_name == "Skill":
-            self.triggered_skill = (
+            skill = (
                 event.arguments.get("skill") or event.arguments.get("skill_name") or ""
             ).lstrip("/")
+            if skill in _UMBRELLA_PASSTHROUGH:
+                self.umbrella_seen.append(skill)
+                return
+            self.triggered_skill = skill
             self._cancel_ctrl.cancel()
         else:
             self.non_skill_tools.append(event.tool_name)
@@ -232,6 +240,7 @@ async def _run_single_repeat(
 
         result.triggered_skill = detector.triggered_skill
         result.non_skill_tools = detector.non_skill_tools
+        result.umbrella_seen = detector.umbrella_seen
         result.turns_used = max(result.turns_used, detector.turns_seen)
 
     except Exception as e:
@@ -426,6 +435,7 @@ def _write_report(reports: list[SkillReport], output_dir: Path) -> None:
                     "repeats": [
                         {
                             "triggered_skill": rep.triggered_skill,
+                            "umbrella_seen": rep.umbrella_seen,
                             "duration_ms": rep.duration_ms,
                             "turns_used": rep.turns_used,
                             "error": rep.error,
@@ -444,6 +454,7 @@ def _write_report(reports: list[SkillReport], output_dir: Path) -> None:
                     "repeats": [
                         {
                             "triggered_skill": rep.triggered_skill,
+                            "umbrella_seen": rep.umbrella_seen,
                             "duration_ms": rep.duration_ms,
                             "turns_used": rep.turns_used,
                             "error": rep.error,
