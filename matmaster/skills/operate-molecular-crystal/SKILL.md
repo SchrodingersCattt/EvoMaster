@@ -1,6 +1,6 @@
 ---
 name: operate-molecular-crystal
-description: "Trigger for molecular-crystal edits/local-geometry repairs: topology-preserved slab cuts, stoichiometry-preserved vacancy/guest removal, desolvation, disorder/occupancy resolution, hydrogen completion, perturbation, coordination/CShM analysis."
+description: "Use to edit a crystal with bonded fragments — organic molecules, organic-inorganic hybrids (MOFs, hybrid perovskites), or polyatomic ions like sulfate / nitrate / carbonate — keeping units intact: cut a surface, remove guests or solvents, resolve disordered occupancies, cap dangling bonds."
 skill_type: operator
 ---
 
