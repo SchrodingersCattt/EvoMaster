@@ -189,8 +189,7 @@ class ChatEventsTable(BaseTable):
                     sql += f' LIMIT {int(limit)}'
                 cursor.execute(sql, params)
                 return [
-                    self._row_to_context_event(row)
-                    for row in list(cursor.fetchall())
+                    self._row_to_context_event(row) for row in list(cursor.fetchall())
                 ]
 
     def query_user_turn_context_by_invocation(
@@ -678,6 +677,37 @@ class ChatEventsTable(BaseTable):
             )
 
         return results
+
+    def get_last_user_query_event(self, session_id: str) -> dict | None:
+        """返回最后一条 User/query 事件的完整行（含 id），用于 replace_last_turn。"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f'''
+                    SELECT id, session_id, source, type, content, task_id, invocation_id, spawn_id, created_at
+                    FROM {self.table_name}
+                    WHERE session_id = %s AND source = 'User' AND type = 'query' AND spawn_id IS NULL
+                    ORDER BY id DESC
+                    LIMIT 1
+                    ''',
+                    (session_id,),
+                )
+                row = cursor.fetchone()
+                return self._row_to_event(row) if row else None
+
+    def delete_events_from_id(self, session_id: str, from_event_id: int) -> int:
+        """物理删除 session 中 id >= from_event_id 的所有事件，返回删除行数。"""
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f'''
+                    DELETE FROM {self.table_name}
+                    WHERE session_id = %s AND id >= %s
+                    ''',
+                    (session_id, from_event_id),
+                )
+                conn.commit()
+                return cursor.rowcount
 
 
 @lru_cache

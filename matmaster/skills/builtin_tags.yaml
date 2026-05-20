@@ -66,7 +66,6 @@ categories:
           - result-analysis
       characterization:
         skills:
-          - xrd-analysis
           - pxrd-refinement
           - checkcif-validator
           - mcp-mat-xrd
@@ -102,5 +101,4 @@ categories:
       system-tools:
         skills:
           - skill-manager
-          - input-manual-helper
           - compliance-guardian

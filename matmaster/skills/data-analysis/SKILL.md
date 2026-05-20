@@ -1,6 +1,6 @@
 ---
 name: data-analysis
-description: "General-purpose data QC, exploratory analysis, and visualization on CSV/JSON tabular data. Load for: missing-value audit, outlier detection (IQR/Z-score), unit consistency checks, statistical summaries, and chart/figure production from experiment metrics or screening results."
+description: "Use for QC, EDA, statistics, fitting, and plots on existing numerical data: CSV/JSON tables, DOS/PDOS, RDF/MSD, band-structure arrays, scatter/histogram/time series, screening results. Trigger on plotting/analyzing existing numbers; do NOT use for new calculations or engine input generation."
 skill_type: operator
 ---
 

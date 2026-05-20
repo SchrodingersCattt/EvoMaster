@@ -58,6 +58,7 @@ VerifyLiteral = Literal[
     'struct_file_bond_length_range',
     'struct_file_bond_angle',
     'struct_file_cell_param',
+    'struct_file_density',
     'struct_file_stoichiometry_ratio',
     'struct_file_charge_balance',
     'struct_file_coordination',

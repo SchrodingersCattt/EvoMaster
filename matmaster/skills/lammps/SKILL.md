@@ -1,6 +1,6 @@
 ---
 name: lammps
-description: "MUST use this skill for ANY task involving LAMMPS (classical MD, Monte Carlo/GCMC, shock MSST, DeePMD and other machine-learning potentials, etc.)."
+description: "Use to RUN LAMMPS calculations (classical MD, Monte Carlo/GCMC, shock MSST, MLIPs via DeePMD/MACE/SevenNet plugins, etc.). DO NOT use for other MD engines (ABACUS / GROMACS / GPUMD), literature search, or pure post-processing of existing LAMMPS output (that's data-analysis)."
 skill_type: operator
 ---
 

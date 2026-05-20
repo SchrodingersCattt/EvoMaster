@@ -1,6 +1,6 @@
 ---
 name: mlips
-description: "MUST use for machine-learning interatomic potentials such as DPA, MACE, SevenNet, MatterSim, demonstrating structure optimization, phonon, MD, elastic, NEB, adsorption, training-data preparation, active learning, accuracy and extrapolation evaluation."
+description: "Use to RUN simulations with MLIPs (DPA, MACE, SevenNet, MatterSim) via ASE: optimization, phonon, MD, elastic, NEB, adsorption; also training data, active learning, accuracy/extrapolation checks. Do NOT use for AIS Square discovery or URL model downloads; use aissq-explorer/retrieve-structure."
 skill_type: operator
 ---
 
@@ -22,7 +22,7 @@ These are execution stop rules, not suggestions. User requests like "do not ask 
   - Production campaigns (>10 ns or >10000 atoms)
 
   Action: STOP. Tell user "ASE cannot do this. Would you like me to set up a LAMMPS workflow instead?" Wait for confirmation before writing any files.
-- **Scale**: hundreds of atoms are typical; thousand-atom systems are heavy but should still be attempted as-is — do NOT preemptively refuse or ask for confirmation based on system size alone. If the job fails due to OOM, then follow the OOM rule below. Only ask before attempting if the user requests reduced prototypes or scaled-down alternatives.
+- **Scale**: hundreds of atoms are typical; thousand-atom systems are heavy but should still be attempted as-is — do NOT preemptively refuse based on system size or estimated wall-time. Do not calculate expected runtime to justify skipping submission. Submit the task; if it fails (OOM, timeout), then follow the OOM rule below. Only ask before attempting if the user requests reduced prototypes or scaled-down alternatives.
 - **OOM / job failure**: if a Bohrium job fails due to OOM or resource limits, do NOT silently retry with a different model, larger GPU, or alternative engine. STOP and report to user: what failed, why (OOM on which GPU/model), and what options exist (smaller model, LAMMPS route, reduced system). Let user decide.
 - **Capabilities**: generic MLIPs provide energy/forces/stress, not band structures, DOS, gaps, or spectra. Use DFT or specialized ML models only after internal lookup and human choice.
 - **Boundary protocol**: if a request changes model/head/scale/workflow/property class, first verify the head/model is available (`dp --pt show <model> model-branch`), then STOP. Do not write scripts, build structures, submit jobs, shrink systems, or switch workflows until the human chooses a route. When stopping, present options as a question ("Which would you prefer: A, B, or C?") — do not unilaterally recommend one route.

@@ -348,6 +348,11 @@ uv run python -m evaluation.skill_trigger --skills your-skill-name --jobs 8
 | `call_count_range` | 分析工具调用次数（建议也配上 ref） |
 | `token_budget` | 用 **最后一轮 LLM** 的原始 ``total_tokens``（**不**扣 cache）：``EvidenceBundle.token_usage_last_turn.total_tokens``（轨迹取 max ``step_id`` 的 ``meta.usage``；无 ``total_tokens`` 时用 prompt+completion 推导）。对 **external baseline** 这类只有整轮汇总、没有 ``usage_vendor_by_turn`` 的摘要，允许用 ``summary.usage.total_tokens / num_turns`` 近似最后一轮。ingest 顶层 ``item["tokens"]`` / ``extra["tokens_last_turn"]`` 与 :func:`evaluation.eval_ingest_client.extract_ingest_tokens` 对齐：有 ``usage_vendor_by_turn`` 时取最后一项的 ``total_tokens``；baseline 若启用近似口径则按 ``summary.usage.total_tokens / num_turns``；其余情况回退到 ``summary.usage.total_tokens``（整表累加标量）。建议配上 ref，格式同 `duration_budget`） |
 
+不要用 `llm_binary_judge` 的 `required_fields` 重复要求 agent 在 final answer
+显式复述已由 deterministic verifier 检查的结构数值（如化学计量比、晶胞角、
+原子数、最小距离）。这些数值应通过 `struct_file_*` / `answer_json_numeric`
+等代码校验；final answer 裁判只保留代码难以判定的解释、grounding 或物理意图。
+
 ---
 
 ## 字段被谁消费（数据流简表）

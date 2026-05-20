@@ -466,6 +466,16 @@ class ChatStreamService:
         if not acquired_ok:
             return None
 
+        if req.replace_last_turn:
+            last_query_ev = self._events_service.get_last_user_query_event(sid)
+            if last_query_ev and last_query_ev.get('id'):
+                self._events_service.delete_events_from_id(sid, last_query_ev['id'])
+                logger.info(
+                    "replace_last_turn: deleted events from id=%s session_id=%s",
+                    last_query_ev['id'],
+                    sid,
+                )
+
         mode = (req.mode or DEFAULT_MODE).strip().lower() or DEFAULT_MODE
         if mode not in SUPPORTED_MODES:
             mode = DEFAULT_MODE
@@ -679,9 +689,8 @@ class ChatStreamService:
             if ctx.turn_input is not None and turn_input_payload is not None:
                 legacy_current_input_payload = {
                     **turn_input_payload,
-                    "pre_query" + "_scope_event_id": (
-                        ctx.turn_input.pre_turn_history_event_id
-                    ),
+                    "pre_query"
+                    + "_scope_event_id": (ctx.turn_input.pre_turn_history_event_id),
                 }
 
             job = {
