@@ -1,6 +1,6 @@
 ---
 name: inspect-atomic-structure
-description: "Use to read what an existing structure file already contains, without modifying it: space group, Wyckoff sites, formula, dimensionality, periodicity / vacuum, whether it looks like a molecular crystal, disorder or partial occupancies."
+description: "Use to parse without modifying existing structure files for structural information, including: space group, Wyckoff sites, formula, dimensionality, periodicity / vacuum, whether it looks like a molecular crystal, disorder or partial occupancies."
 skill_type: operator
 ---
 
