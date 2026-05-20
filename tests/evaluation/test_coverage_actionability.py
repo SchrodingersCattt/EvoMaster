@@ -128,29 +128,29 @@ def test_internal_skill_workflow_rules_are_not_actionable_question_targets() -> 
     rules = apply_actionability(
         [
             _rule(
-                source_name="input-manual-helper",
+                source_name="skill-manager",
                 rule_type="workflow_step",
-                text="For rendered engines, run: `uv run python <skill_dir>/scripts/render_input.py`",
+                text="Resolve skill metadata through the SkillRegistry before editing skill files.",
             ),
             _rule(
-                source_name="input-manual-helper",
+                source_name="skill-manager",
                 rule_type="workflow_step",
-                text="Write `input_prep_manifest.json` with `scripts/write_manifest.py`.",
+                text="Update registry-facing skill metadata after changing skill names.",
             ),
             _rule(
-                source_name="input-manual-helper",
+                source_name="skill-manager",
                 rule_type="workflow_step",
-                text="Resolve `skill_dir` to this skill directory.",
+                text="Resolve the skill root before reading SKILL.md.",
             ),
             _rule(
-                source_name="input-manual-helper",
+                source_name="skill-manager",
                 rule_type="decision_tree",
-                text="Generate or adapt input files for ABACUS, CP2K, QE, ABINIT, LAMMPS, ORCA, GROMACS, or PySCF.",
+                text="Choose whether a request is skill authoring or normal task execution before routing.",
             ),
             _rule(
-                source_name="input-manual-helper",
+                source_name="skill-manager",
                 rule_type="workflow_step",
-                text="For rendered engines, run:",
+                text="For skill-management workflows, inspect the target SKILL.md first.",
             ),
         ],
         config=config,

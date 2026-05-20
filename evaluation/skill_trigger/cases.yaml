@@ -119,25 +119,6 @@ cases:
       - "帮我构建一个表面模型"
       - "这是 CP2K 计算的日志和结构，用 dpdata 转成可用于 DeePMD 训练的数据"
 
-  - skill: input-manual-helper
-    positive:
-      - "帮我准备一套 ABACUS 的计算输入文件"
-      - "检查一下这个 INPUT 文件有没有问题"
-      - "帮我打包这些输入文件准备提交"
-      - "验证一下我的 VASP 输入文件"
-      - "帮我生成一套 QE 的输入"
-      - "这个 CP2K 输入文件哪里写错了"
-      - "帮我适配一下这个输入文件到 Bohrium"
-      - "检查 LAMMPS 输入文件的语法"
-      - "帮我准备 GROMACS 的输入文件"
-      - "帮我诊断一下这个 ORCA 输入为什么报错"
-    negative:
-      - "帮我分析计算结果"
-      - "画一个能带图"
-      - "帮我搜索文献"
-      - "构建一个超胞模型"
-      - "帮我训练一个机器学习势"
-
   - skill: gromacs
     positive:
       - "帮我用 Gromacs 跑一个蛋白质模拟"
@@ -156,25 +137,6 @@ cases:
       - "画一个 RDF 图"
       - "帮我构建一个晶体结构"
       - "用 GPUMD 算热导率"
-
-  - skill: xrd-analysis
-    positive:
-      - "帮我分析一下这个 XRD 数据"
-      - "做一个 XRD 的 Rietveld 精修"
-      - "帮我标定 XRD 的峰位"
-      - "这个 XRD 图谱对应什么物相"
-      - "帮我计算 XRD 的晶粒尺寸"
-      - "用 Scherrer 公式分析一下这个 XRD"
-      - "帮我做 XRD 的物相鉴定"
-      - "分析一下这个粉末 XRD 数据"
-      - "帮我计算 XRD 峰的半高宽"
-      - "对比一下这个 XRD 和标准卡片"
-    negative:
-      - "帮我画一个能带图"
-      - "用 VASP 算能带"
-      - "帮我分析 MD 轨迹"
-      - "构建一个晶体结构"
-      - "帮我做第一性原理计算"
 
   - skill: mlips
     positive:
@@ -312,7 +274,7 @@ cases:
       - "Submit my refined CIF to PLATON checkCIF and summarize the alert table"  # [english]
     negative:
       - "帮我做 PXRD 的 Rietveld 精修"                 # → pxrd-refinement
-      - "标定一下这个 XRD 的峰位"                      # → xrd-analysis
+      - "标定一下这个 XRD 的峰位"                      # → mcp-mat-xrd
       - "把这个 CIF 转成 POSCAR"                       # → atomic-structure
       - "帮我看一下这个 CIF 的对称性"                  # → atomic-structure
       - "用 GSAS-II 做 Pawley 提取晶胞参数"            # → pxrd-refinement
@@ -331,7 +293,7 @@ cases:
       - "Run a Pawley refinement given space group P 6_3/m m c, output cell + ESD"  # [english]
     negative:
       - "帮我把 CIF 提交到 checkCIF 验证一下"          # → checkcif-validator
-      - "标定一下这个 XRD 峰对应什么物相"              # → xrd-analysis
+      - "标定一下这个 XRD 峰对应什么物相"              # → mcp-mat-xrd
       - "用 SHELX 精修这个单晶数据"                    # → (single-crystal, not in scope)
       - "画一下这个 PXRD 数据"                         # → data-analysis
       - "帮我下载石墨烯的 CIF"                         # → atomic-structure
