@@ -433,6 +433,31 @@ efield_amp 0.0
 ```
 Slab KPT for work function (z = vacuum): `20 20 1 0 0 0`
 
+### External Electric Field INPUT Example (28_efield)
+```
+INPUT_PARAMETERS
+calculation scf
+basis_type pw
+ecutwfc 50
+scf_thr 1.0e-7
+scf_nmax 200
+smearing_method gauss
+smearing_sigma 0.015
+efield_flag 1
+dip_cor_flag 0
+efield_dir 2
+efield_pos_max 0.95
+efield_pos_dec 0.10
+efield_amp 0.001
+pseudo_dir ./
+```
+
+> **⚠ `dip_cor_flag` distinguishes two different physics:**
+> - `dip_cor_flag 1` + `efield_amp 0.0` = **dipole correction only** (work function, no external field)
+> - `dip_cor_flag 0` + `efield_amp ≠ 0` = **external electric field** (sawtooth field applied to slab)
+>
+> When a task says "external electric field" or "apply E-field", use `dip_cor_flag 0`. When it says "work function" or "dipole correction", use `dip_cor_flag 1` + `efield_amp 0.0`.
+
 ---
 
 ## Two-Step Electronic Property Workflow
