@@ -148,6 +148,8 @@ smearing_sigma 0.01
 | `nbands` | integer | Bands to compute: `total_electrons/2 + 20` (insulator) or `×1.5` (metal) |
 | `symmetry` | `0` | **Mandatory for line-mode k-paths.** Symmetry folds/reorders k-points. |
 
+> **PW NSCF precision**: for `basis_type pw` NSCF (band or DOS), always set `pw_diag_thr 1.0e-5` or tighter. The default (0.01) is too loose for accurate eigenvalues — band/DOS plots will have noise.
+
 Band structure KPT (line mode, example FCC):
 ```
 K_POINTS
