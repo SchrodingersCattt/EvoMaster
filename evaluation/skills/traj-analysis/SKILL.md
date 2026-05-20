@@ -79,6 +79,14 @@ The goal is to identify *smoothness* issues — not just whether the task comple
 - Agent wasted turns on exploration before acting
 - Agent used wrong tool/approach first, then corrected
 
+**Always report fallback/recovery behavior explicitly.** When a tool or MCP service fails (timeout, error, missing package), the analysis MUST describe:
+1. What failed and why (timeout, missing dep, infra error)
+2. What the agent did next (retry? install? fallback to alternative? give up? ask user?)
+3. Whether the fallback was appropriate and timely
+4. Whether the user was informed of the degradation
+
+Do NOT mark these sessions as "skip" — they reveal important agent resilience patterns. Report them as informational with a note on the recovery quality (good/poor/absent).
+
 For each friction point: consider whether an eval question with a tight turn_budget would force the agent to get it right on the first try. These questions directly reduce wasted turns in production.
 
 **Skill documentation does not guarantee compliance.** Even if a skill clearly documents the correct approach (e.g., "use OC22 head for surface adsorption"), assume the agent might not follow it. Every critical decision point documented in skills should have a corresponding eval question to verify the agent actually applies that knowledge. The eval question ensures the skill works end-to-end, not just exists on paper.
