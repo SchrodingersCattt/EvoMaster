@@ -4121,7 +4121,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_033_20260518
+- id: IG_abacus_033_20260520
   capability: input_generation
   domain: agnostic
   intent: Wavefunction output PW/LCAO SCF and get_wf (official 11_wfc).
