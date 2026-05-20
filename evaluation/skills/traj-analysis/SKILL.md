@@ -128,9 +128,11 @@ Write to `evaluation/traj_analysis/{env}/{YYYY-MM}.json`:
 ```
 
 **Verdict meanings:**
-- `skip`: Not useful (dev test, repeated prompt, old architecture)
-- `informational`: Interesting pattern but no new question needed (already covered)
-- `actionable`: Should generate a new evaluation question
+- `skip`: No agent behavior to analyze (infra failure before any agent action, off-topic non-materials-science query, empty/cancelled session with zero tool calls)
+- `informational`: Agent executed but no new eval question needed. Sub-categories:
+  - `covered`: Issue already tested by an existing eval question (cite the question ID in `eval_recommendation`)
+  - `untestable`: Problem exists but cannot be tested via eval (system bugs like storePath/finish-gate/context-compaction, runtime-dependent issues like web search result quality, efficiency problems without knowledge gaps)
+- `actionable`: Should generate a new evaluation question (exposes a testable domain knowledge gap or methodology error not covered by existing questions)
 
 ### 4. Generate Questions
 
