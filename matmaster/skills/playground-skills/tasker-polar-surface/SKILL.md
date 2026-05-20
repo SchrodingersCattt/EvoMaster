@@ -1,6 +1,6 @@
 ---
 name: tasker-polar-surface
-description: "Use ONLY for ionic, heterovalent, or known-polar surfaces needing Tasker classification, dipole compensation, or symmetric termination (LiCoO2, ZnO 0001, MgO 111, ABO3 001, fluorite 111). Do NOT use for ordinary metallic/covalent slabs such as Cu, Pt, Au, Si, Ge, graphene."
+description: "Use when an ionic, heterovalent, or known polar surface needs Tasker classification, dipole compensation, or symmetric termination, such as LiCoO2, ZnO 0001, MgO 111, or perovskite 001. Ordinary metal or covalent slabs belong to assemble-atomic-structure."
 depends_on: mcp-mat-doc
 ---
 
