@@ -11,11 +11,22 @@ at module bottom; do not import this file from anywhere else.
 """
 
 from .evaluator import BinaryEvaluator
+from .evaluator_struct_helpers import (
+    check_struct_file_all_occupancy_one,
+    check_struct_file_integer_stoichiometry,
+    check_struct_file_min_interatomic_distance,
+    check_struct_file_parsable,
+    check_struct_file_replicas_distinct,
+    check_struct_file_space_group,
+)
 from .evaluator_wiring import (
     check_abacus_input_from_evidence,
     check_answer_json_numeric_from_ref,
     check_checkcif_alerts,
     check_duration_budget,
+    check_json_file_artifacts,
+    check_json_file_numeric_range,
+    check_json_file_schema,
     check_molcrys_local_env_from_evidence,
     check_molcrys_slab_integrity,
     check_sc005_disorder_formulas,
@@ -40,19 +51,6 @@ from .evaluator_wiring import (
     check_text_file_regex_from_evidence,
     check_token_budget,
     check_turn_budget,
-)
-from .evaluator_wiring import (
-    check_json_file_artifacts,
-    check_json_file_numeric_range,
-    check_json_file_schema,
-)
-from .evaluator_struct_helpers import (
-    check_struct_file_all_occupancy_one,
-    check_struct_file_integer_stoichiometry,
-    check_struct_file_min_interatomic_distance,
-    check_struct_file_parsable,
-    check_struct_file_replicas_distinct,
-    check_struct_file_space_group,
 )
 
 _R = BinaryEvaluator._register_verify
