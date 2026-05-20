@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: polymer
 questions:
-- id: SC_pe_amorphous_001_20260513
+- id: SC_pe_amorphous_001_20260513v2
   capability: structure_construction
   domain: polymer
   intent: Build an amorphous LDPE model at correct density without trial-and-error
@@ -27,6 +27,11 @@ questions:
     value:
       filename: PE_amorphous.cif
       min_distance_A: 0.8
+  - key: density_reasonable
+    value:
+      filename: PE_amorphous.cif
+      min_g_cm3: 0.91
+      max_g_cm3: 0.94
   - key: turn_budget
     value:
       max: 10
@@ -49,10 +54,9 @@ questions:
     verify: struct_file_min_interatomic_distance
   - id: density_reasonable
     criterion: The constructed model has a density consistent with LDPE (~0.91-0.94
-      g/cm³). Agent should derive box size from target density and molecular weight
-      rather than guessing.
+      g/cm³), computed directly from the delivered periodic structure file.
     axis: correctness
-    verify: llm_binary_judge
+    verify: struct_file_density
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency

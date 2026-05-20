@@ -140,7 +140,7 @@ questions:
     criterion: Total token usage stays within a generous benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: SC_elec_004_20260507v4
+- id: SC_elec_004_20260507v5
   capability: structure_construction
   domain: catalysis
   intent: Build Ag(001) surface slab and place CO molecule at ontop site for adsorption
@@ -183,6 +183,28 @@ questions:
       element: O
       expected: 1
       tolerance: 0
+  - key: slab_layers_4
+    value:
+      filename: adsorbed_system.vasp
+      expected: 4
+      tolerance: 0
+      axis: z
+      element: Ag
+      layer_tol_A: 0.5
+  - key: cell_c_vacuum
+    value:
+      filename: adsorbed_system.vasp
+      param: c
+      expected: 24.0
+      tolerance: 8.0
+  - key: co_c_down_orientation
+    value:
+      filename: adsorbed_system.vasp
+      element_a: Ag
+      element_b: C
+      cutoff_A: 3.0
+      expected: 2.0
+      tolerance: 0.8
   - key: required_fields
     value:
     - bare_slab_file
@@ -235,12 +257,20 @@ questions:
       and adsorption site description.
     axis: correctness
     verify: llm_binary_judge
-  - id: structure_validity
-    criterion: Slab has 4 atomic layers, vacuum ≥ 15 Å, and CO is placed at ontop
-      site with C-down orientation. Ag and CO loading values are evaluated only by
-      deterministic structure-file checks.
+  - id: slab_layers_4
+    criterion: The adsorbed-system structure retains exactly 4 Ag slab layers along z.
     axis: correctness
-    verify: llm_binary_judge
+    verify: struct_file_layer_count
+  - id: cell_c_vacuum
+    criterion: The adsorbed-system cell c parameter is large enough to include the
+      four-layer Ag slab, CO adsorbate, and approximately 15 A of vacuum.
+    axis: correctness
+    verify: struct_file_cell_param
+  - id: co_c_down_orientation
+    criterion: The adsorbed-system structure has the CO carbon atom close to the Ag
+      surface at the intended initial C-down adsorption distance.
+    axis: correctness
+    verify: struct_file_bond_length
   - id: grounding_source
     criterion: Ag bulk structure uses correct FCC lattice constant; slab is built
       with proper crystallographic orientation and parameters; CO placement uses physically

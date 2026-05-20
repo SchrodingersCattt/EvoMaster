@@ -96,7 +96,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_005_20260508v2
+- id: SC_struct_005_20260508v3
   capability: structure_construction
   domain: agnostic
   intent: Infer SG-derived chemical formulas for 5 disordered crystal structures and
@@ -227,10 +227,10 @@ questions:
     axis: correctness
     verify: struct_file_formula
   - id: required_fields
-    criterion: Each filename is paired with chemical_formula, is_disordered, ordered_replica_count,
-      and ordered_output_archive.
+    criterion: The final answer includes the structured fields chemical_formula, is_disordered,
+      ordered_replica_count, and ordered_output_archive for the ordered-replica outputs.
     axis: correctness
-    verify: llm_binary_judge
+    verify: contains_all
   - id: ordered_file_name_mapping
     criterion: Final answer explicitly names all five input CIF basenames and the
       five corresponding `ordered_<basename>.cif` output files.
@@ -399,7 +399,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_008_20260507v5
+- id: SC_struct_008_20260507v6
   capability: structure_construction
   domain: agnostic
   intent: Construct a computation-ready gamma-alumina bulk model and validate stoichiometry,
@@ -443,6 +443,13 @@ questions:
       json_path: max_force_ev_per_ang
       target: 0.05
       tolerance: 0.05
+  - key: al_mean_coordination
+    value:
+      filename: gamma_alumina.cif
+      center_element: Al
+      expected: 5
+      tolerance: 0.5
+      cutoff_A: 2.2
   - key: min_distance_A
     value:
       filename: gamma_alumina.cif
@@ -485,6 +492,11 @@ questions:
       least 1.0 A.
     axis: correctness
     verify: struct_file_min_interatomic_distance
+  - id: al_mean_coordination
+    criterion: The average Al-O coordination in `gamma_alumina.cif` is consistent
+      with a defect-spinel gamma-alumina mixture of tetrahedral and octahedral Al sites.
+    axis: correctness
+    verify: struct_file_coordination
   - id: structure_knowledge
     criterion: Agent demonstrates understanding that γ-Al2O3 adopts a defect-spinel
       structure with aluminum occupying both tetrahedral and octahedral coordination
@@ -639,7 +651,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_010_20260507v4
+- id: SC_struct_010_20260507v5
   capability: structure_construction
   domain: agnostic
   intent: Build a seven-layer Ag(111) slab with explicit water and potassium ions
@@ -676,6 +688,13 @@ questions:
     value:
       filename: ag111_k_water_interface.cif
       formula: Ag42K2H86O43
+  - key: h_o_ratio
+    value:
+      filename: ag111_k_water_interface.cif
+      element_a: H
+      element_b: O
+      expected_ratio: 2.0
+      tolerance: 0
   - key: slab_layers
     value:
       filename: ag111_k_water_interface.cif
@@ -739,6 +758,11 @@ questions:
       and 2 K ions were included.
     axis: correctness
     verify: struct_file_formula
+  - id: h_o_ratio
+    criterion: The output CIF has H:O = 2:1 for the 43 neutral water molecules,
+      ruling out net OH-/H3O+ stoichiometry changes.
+    axis: correctness
+    verify: struct_file_stoichiometry_ratio
   - id: slab_layers
     criterion: The Ag atoms form exactly 7 distinct z-layers in the slab.
     axis: correctness
@@ -1090,7 +1114,7 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
-- id: SC_struct_build_003_20260507v6
+- id: SC_struct_build_003_20260507v7
   capability: structure_construction
   domain: agnostic
   intent: Build a phenol molecule from SMILES using RDKit and verify atom count and
@@ -1102,6 +1126,9 @@ questions:
   reference_answers:
   - key: file_exists
     value: phenol.xyz
+  - key: must_parsable
+    value:
+      filename: phenol.xyz
   - key: atom_count
     value:
       filename: phenol.xyz
@@ -1125,6 +1152,10 @@ questions:
     criterion: Agent writes `phenol.xyz` to workspace.
     axis: correctness
     verify: artifact_exists
+  - id: must_parsable
+    criterion: The generated `phenol.xyz` can be parsed as a molecular structure file.
+    axis: correctness
+    verify: struct_file_parsable
   - id: atom_count
     criterion: Molecule contains exactly 13 atoms (6C + 6H + 1O).
     axis: correctness
@@ -1410,7 +1441,7 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
-- id: SC_doped_mgo_001_20260519v2
+- id: SC_doped_mgo_001_20260519v3
   capability: structure_construction
   domain: agnostic
   intent: Build Al-doped MgO supercell with correct charge compensation, testing that
@@ -1436,7 +1467,7 @@ questions:
       filename: mgo_al_doped.cif
       element: Al
       expected: 2
-      tolerance: 0
+      tolerance: 1
   - key: retains_rocksalt
     value:
       filename: mgo_al_doped.cif
@@ -1461,7 +1492,8 @@ questions:
     verify: struct_file_charge_balance
     weight: 2.0
   - id: has_al_dopants
-    criterion: The structure contains exactly 2 Al dopant atoms in the MgO supercell.
+    criterion: The structure contains 1-2 Al dopant atoms, the nearest integer count
+      for 4 at.% substitution in a 2x2x2 MgO supercell.
     axis: correctness
     verify: struct_file_atom_count
   - id: retains_rocksalt

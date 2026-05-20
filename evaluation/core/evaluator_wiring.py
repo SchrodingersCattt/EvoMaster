@@ -26,6 +26,7 @@ from evaluation.validators.structure_general import (
     check_cell_param,
     check_charge_balance,
     check_coordination_number,
+    check_density,
     check_file_count,
     check_formula,
     check_layer_count,
@@ -45,7 +46,10 @@ from evaluation.validators.text_file import (
     check_text_file_regex,
 )
 
-from .evaluator_builders import build_llm_context, build_safety_eval_record  # noqa: F401
+from .evaluator_builders import (
+    build_llm_context,
+    build_safety_eval_record,
+)  # noqa: F401
 from .evidence import EvidenceBundle, TokenUsage
 from .schemas import (
     QuestionItem,
@@ -157,14 +161,6 @@ def check_json_file_artifacts(
         count_tolerance=int(cfg.get("count_tolerance", 0)),
         count_mode=cfg.get("count_mode", "at_least"),
     )
-
-
-
-
-
-
-
-
 
 
 def check_molcrys_slab_integrity(
@@ -352,6 +348,23 @@ def check_struct_file_cell_param(
         param=str(cfg.get("param", "alpha")),
         expected=float(cfg.get("expected", 0)),
         tolerance=float(cfg.get("tolerance", 0)),
+    )
+
+
+def check_struct_file_density(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_density(
+        ws,
+        filename=cfg.get("filename", "*.cif"),
+        expected=float(cfg["expected"]) if "expected" in cfg else None,
+        tolerance=float(cfg["tolerance"]) if "tolerance" in cfg else None,
+        min_g_cm3=float(cfg["min_g_cm3"]) if "min_g_cm3" in cfg else None,
+        max_g_cm3=float(cfg["max_g_cm3"]) if "max_g_cm3" in cfg else None,
     )
 
 

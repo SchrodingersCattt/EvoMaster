@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: semiconductor
 questions:
-- id: SC_struct_hetero_20260507v4
+- id: SC_struct_hetero_20260507v5
   capability: structure_construction
   domain: semiconductor
   intent: Build a graphene/h-BN vertical van der Waals heterostructure with controlled
@@ -56,6 +56,11 @@ questions:
       param: c
       expected: 18.35
       tolerance: 2.0
+  - key: total_atoms
+    value:
+      filename: hetero_graphene_hBN.cif
+      expected: 4
+      tolerance: 0
   - key: turn_budget
     value: &id001
       max: 20
@@ -98,6 +103,11 @@ questions:
       bilayer separated by 3.35 A plus approximately 15 A of vacuum.
     axis: correctness
     verify: struct_file_cell_param
+  - id: total_atoms
+    criterion: The output CIF contains the expected 1x1 graphene/h-BN bilayer basis
+      from `hetero_spec.json` with 2 C, 1 B, and 1 N atoms.
+    axis: correctness
+    verify: struct_file_atom_count
   - id: ab_stacking
     criterion: The final answer states that the delivered heterostructure uses
       AB stacking, rather than only reporting generic bilayer construction.
