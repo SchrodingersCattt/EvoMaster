@@ -16,18 +16,25 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .evaluator_prompts import \
-    BINARY_JUDGE_SYSTEM_PROMPT as _BINARY_JUDGE_SYSTEM_PROMPT
-from .evaluator_prompts import \
-    GROUNDING_JUDGE_SYSTEM_PROMPT as _GROUNDING_JUDGE_SYSTEM_PROMPT
-from .evaluator_prompts import \
-    SAFETY_EVAL_SYSTEM_PROMPT as _SAFETY_EVAL_SYSTEM_PROMPT
+from .evaluator_prompts import BINARY_JUDGE_SYSTEM_PROMPT as _BINARY_JUDGE_SYSTEM_PROMPT
+from .evaluator_prompts import (
+    GROUNDING_JUDGE_SYSTEM_PROMPT as _GROUNDING_JUDGE_SYSTEM_PROMPT,
+)
+from .evaluator_prompts import SAFETY_EVAL_SYSTEM_PROMPT as _SAFETY_EVAL_SYSTEM_PROMPT
 from .evaluator_wiring import build_llm_context, build_safety_eval_record
 from .evidence import EvidenceBundle
 from .llm_utils import SyncLLM
-from .schemas import (AxisLiteral, CriterionResult, EvalRunRecord,
-                      LLMRuntimeConfig, QuestionItem, ReferenceAnswer,
-                      SafetyVetoRecord, ScoringCheckItem, TokenUsageRecord)
+from .schemas import (
+    AxisLiteral,
+    CriterionResult,
+    EvalRunRecord,
+    LLMRuntimeConfig,
+    QuestionItem,
+    ReferenceAnswer,
+    SafetyVetoRecord,
+    ScoringCheckItem,
+    TokenUsageRecord,
+)
 
 _eval_logger = logging.getLogger(__name__)
 
