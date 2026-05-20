@@ -8,18 +8,43 @@ Always include **universal baseline**: `calculation`, `basis_type`, `ecutwfc`, `
 | Task | Additional mandatory parameters | Common omission |
 |------|---------------------------------|-----------------|
 | SCF (pre-NSCF) | `out_chg 1` | Forgetting `out_chg` → NSCF cannot read charge |
-| Band (NSCF) | `init_chg file`, `out_band 1`, `nbands`, `symmetry 0` | Leaving `symmetry 1` → k-path folded |
-| DOS (NSCF) | `init_chg file`, `out_dos 1`, `dos_edelta_ev`, `dos_sigma`, `dos_nche`, `nbands`, `symmetry 0` | Missing `dos_nche` for LCAO |
+| Band (NSCF) | `init_chg file`, `out_band 1`, `nbands`, `symmetry 0`; **PW add `pw_diag_thr 1.0e-5`** | Leaving `symmetry 1` → k-path folded; PW missing `pw_diag_thr` → noisy eigenvalues |
+| DOS (NSCF) | `init_chg file`, `out_dos 1`, `dos_edelta_ev`, `dos_sigma`, `dos_nche`, `nbands`, `symmetry 0`; **PW add `pw_diag_thr 1.0e-5`** | Missing `dos_nche` for LCAO; PW missing `pw_diag_thr` → noisy DOS |
 | Relax | **`cal_force 1`**, `force_thr_ev 0.01`, `relax_nmax 100` | Missing `cal_force` → no force output |
 | Cell-relax | **`cal_force 1`**, **`cal_stress 1`**, `force_thr_ev 0.01`, `stress_thr 0.5`, `relax_nmax 100` | Missing `cal_force` or `cal_stress` → relaxation silently broken |
 | Work function / dipole | `out_pot 2`, `efield_flag 1`, `dip_cor_flag 1`, `efield_dir <vacuum>`, `efield_amp 0.0` | Missing `efield_amp 0.0` (pure dipole correction) |
 | Spin-polarized | `nspin 2`, `mixing_beta 0.1`, `mixing_ndim 20`, `mixing_gg0 1.5` | Omitting mixing params → SCF diverges |
 | Slab KPT | Always `1` in vacuum direction (e.g. `20 20 1 0 0 0`) | Using dense mesh in vacuum direction |
 | Supercell / vacancy / defect / BSSE | **`kspacing` in INPUT** (e.g. `kspacing 0.10`) | Using fixed KPT mesh for variable-size supercells |
+| Large supercell (>30 atoms) LCAO | `gamma_only 1` (Gamma-point only, no KPT file needed) | Using multi-k on already-folded supercell BZ |
+| Fixed occupation (ocp) | `ocp 1`, `ocp_set ...`, `nspin 2`, **`gamma_only 1`** | Missing `gamma_only` → band ordering changes with k-points, `ocp_set` indices become wrong |
 
 > **⚠ `force_thr_ev` vs `force_thr`**: Always use `force_thr_ev` (unit: eV/Å). The parameter `force_thr` uses Ry/Bohr — completely different units. `force_thr_ev 0.01` ≈ `force_thr 3.9e-4`. Mixing them up produces absurdly loose or tight thresholds.
 
-> **⚠ Supercell k-points**: For **any supercell** (vacancy, defect, BSSE ghost atoms, adsorption), always use `kspacing` inside INPUT instead of a separate KPT file. This guarantees uniform k-point density that automatically adapts to cell size. Value: `0.10` Å⁻¹ for metals, `0.12`–`0.15` for insulators. For slab supercells: `kspacing 0.10 0.10 1.00` (z=vacuum).
+> **⚠ Supercell k-points**: For **any supercell** (vacancy, defect, BSSE ghost atoms, adsorption), always use `kspacing` inside INPUT instead of a separate KPT file. This guarantees uniform k-point density that automatically adapts to cell size. Value: `0.10` Å⁻¹ for metals, `0.12`–`0.15` for insulators. For slab supercells: `kspacing 0.10 0.10 1.00` (z=vacuum). **Exception**: when `ocp 1` (fixed occupation) is used, ALWAYS use `gamma_only 1` instead of `kspacing` — `ocp_set` indices are only valid at Gamma point.
+
+### Charge Mixing
+
+| `mixing_type` | Use case | `mixing_beta` range | Notes |
+|---------------|----------|---------------------|-------|
+| `broyden` | Default, metals, non-magnetic | 0.7–0.8 | Fast convergence |
+| `pulay` | Magnetic / DFT+U systems | 0.4–0.6 | Add `mixing_ndim 20`, `mixing_gg0 1.5` |
+| `plain` | Debugging / baseline comparison | 0.3–0.4 | Slowest but most stable |
+
+> **Rule**: When setting `mixing_type`, ALWAYS explicitly set `mixing_beta` in the same INPUT. Never rely on the default — it may not converge for your system.
+> When comparing mixing strategies (e.g. broyden vs plain), each INPUT must have its own `mixing_type` + `mixing_beta` pair.
+
+### Ultrasoft Pseudopotential (USPP) — `ecutrho`
+
+When using ultrasoft pseudopotentials (filename often contains `rrkjus` or `us`), you MUST set `ecutrho` explicitly:
+```
+ecutwfc             50
+ecutrho             400
+```
+- `ecutrho` controls the FFT mesh for augmented charge density
+- Typical ratio: `ecutrho` = 8–10 × `ecutwfc` (for USPP)
+- Without `ecutrho`, ABACUS defaults to 4×ecutwfc which is insufficient for USPP — results will have aliasing errors
+- NCPP (norm-conserving) does NOT need `ecutrho` — omit it for NCPP calculations
 
 ### Relaxation INPUT Example
 ```
@@ -34,14 +59,15 @@ smearing_sigma 0.01
 cal_force 1
 force_thr_ev 0.01
 relax_nmax 100
+relax_method cg
 ```
 
 ### Cell Relaxation INPUT Example
 ```
 INPUT_PARAMETERS
 calculation cell-relax
-basis_type lcao
-ecutwfc 100
+basis_type pw
+ecutwfc 50
 scf_thr 1.0e-7
 scf_nmax 100
 smearing_method gauss
@@ -51,8 +77,150 @@ cal_stress 1
 force_thr_ev 0.01
 stress_thr 0.5
 relax_nmax 100
+relax_method bfgs
 ```
 > **Critical**: `cal_force 1` and `cal_stress 1` are BOTH mandatory for cell-relax. Without `cal_force 1`, ABACUS does not compute forces and the optimizer cannot work. Without `cal_stress 1`, cell vectors are not optimized. These are NOT implied by `calculation cell-relax` — you must include them explicitly.
+
+> **`relax_method`**: Always set explicitly. Use `cg` (conjugate gradient) for atomic relax, `bfgs` (quasi-Newton) for cell-relax. BFGS converges faster for cell optimization via Hessian approximation.
+
+### Molecular Dynamics INPUT Examples
+
+**NVE (microcanonical)**:
+```
+INPUT_PARAMETERS
+calculation md
+basis_type lcao
+ecutwfc 100
+scf_thr 1.0e-6
+scf_nmax 100
+smearing_method gauss
+smearing_sigma 0.01
+symmetry 0
+cal_force 1
+cal_stress 1
+md_type nve
+md_nstep 100
+md_dt 1.0
+md_tfirst 300
+init_vel 1
+gamma_only 1
+```
+
+**NVT (canonical, Nosé-Hoover chain)**:
+```
+INPUT_PARAMETERS
+calculation md
+basis_type lcao
+ecutwfc 100
+scf_thr 1.0e-6
+scf_nmax 100
+smearing_method gauss
+smearing_sigma 0.01
+symmetry 0
+cal_force 1
+cal_stress 1
+md_type nvt
+md_thermostat nhc
+md_nstep 100
+md_dt 1.0
+md_tfirst 300
+md_tfreq 1.0
+init_vel 1
+gamma_only 1
+```
+
+MD mandatory parameters:
+
+| Parameter | Purpose |
+|-----------|---------|
+| `symmetry 0` | **CRITICAL** — symmetry breaks MD trajectories (forces get symmetrized incorrectly) |
+| `cal_force 1` | Forces drive atomic motion |
+| `md_type` | `nve`, `nvt`, `npt`, `langevin`, `msst` |
+| `md_thermostat` | Required for NVT: `nhc` (Nosé-Hoover chain), `anderson`, `berendsen`, `rescaling` |
+| `md_nstep` | Number of MD steps |
+| `md_dt` | Time step in fs |
+| `md_tfirst` | Initial temperature (K) |
+
+> **⚠ `symmetry 0` is NON-NEGOTIABLE for MD.** Without it, ABACUS symmetrizes forces at each step, producing unphysical trajectories. This applies to ALL MD types (NVE, NVT, NPT).
+
+### Hybrid Functional (HSE06 / PBE0)
+
+**PW hybrid SCF**:
+```
+INPUT_PARAMETERS
+calculation scf
+basis_type pw
+ecutwfc 50
+scf_thr 1.0e-7
+scf_nmax 200
+dft_functional hse06
+exx_hybrid_alpha 0.25
+pseudo_dir ./
+```
+
+**LCAO hybrid SCF**:
+```
+INPUT_PARAMETERS
+calculation scf
+basis_type lcao
+ecutwfc 100
+scf_thr 1.0e-7
+scf_nmax 200
+dft_functional hse06
+exx_hybrid_alpha 0.25
+pseudo_dir ./
+orbital_dir ./
+```
+
+Valid `dft_functional` values for hybrid: `hse06` (or `hse`, equivalent when compiled with LIBXC), `pbe0`, `b3lyp`. Prefer `hse06` for clarity.
+
+| Parameter | Purpose |
+|-----------|---------|
+| `dft_functional hse06` | HSE06 screened hybrid (25% exact exchange, range-separated) |
+| `dft_functional pbe0` | PBE0 global hybrid (25% exact exchange) |
+| `exx_hybrid_alpha` | Exact-exchange fraction (default 0.25 for HSE06/PBE0; set explicitly for reproducibility) |
+
+### DeePKS Workflow (Two Stages)
+
+DeePKS has two distinct stages — do NOT confuse them:
+
+**Stage 1 — Generate Bessel descriptor projectors** (PW, `calculation gen_bessel`):
+```
+INPUT_PARAMETERS
+calculation gen_bessel
+basis_type pw
+ecutwfc 50
+pseudo_dir ./
+bessel_descriptor_lmax 2
+bessel_descriptor_rcut 6.0
+bessel_descriptor_ecut 60
+bessel_descriptor_smooth 1
+bessel_descriptor_sigma 0.1
+```
+
+**Stage 2 — SCF with trained DeePKS model** (LCAO, `deepks_scf 1`):
+```
+INPUT_PARAMETERS
+calculation scf
+basis_type lcao
+ecutwfc 100
+scf_thr 1.0e-7
+scf_nmax 100
+pseudo_dir ./
+orbital_dir ./
+deepks_scf 1
+deepks_model model.ptg
+```
+
+| Parameter | Stage | Purpose |
+|-----------|-------|---------|
+| `calculation gen_bessel` | 1 | Generate Bessel projector basis |
+| `bessel_descriptor_lmax` | 1 | Max angular momentum for projectors |
+| `bessel_descriptor_rcut` | 1 | Radial cutoff (Bohr) |
+| `deepks_scf 1` | 2 | Enable DeePKS correction during SCF |
+| `deepks_model xxx.ptg` | 2 | Path to trained PyTorch model file (.ptg) |
+
+> **Common mistake**: confusing stage 2 (inference) with label generation. For inference, use `deepks_scf 1` + `deepks_model`. For generating training labels, use `deepks_out_labels 1` + `deepks_scf 0` — but that is a separate workflow not needed for production calculations.
 
 ### BSSE Ghost Atom INPUT Example (Bulk / Supercell)
 ```
@@ -147,8 +315,9 @@ smearing_sigma 0.01
 | `out_band` | `1` | Write band eigenvalues to `BANDS_1.dat` |
 | `nbands` | integer | Bands to compute: `total_electrons/2 + 20` (insulator) or `×1.5` (metal) |
 | `symmetry` | `0` | **Mandatory for line-mode k-paths.** Symmetry folds/reorders k-points. |
+| `pw_diag_thr` | `1.0e-5` | **Mandatory for `basis_type pw` NSCF.** Default 0.01 is too loose — eigenvalues will have 10–100 meV noise, making band gaps and SOC splittings unreliable. |
 
-> **PW NSCF precision**: for `basis_type pw` NSCF (band or DOS), always set `pw_diag_thr 1.0e-5` or tighter. The default (0.01) is too loose for accurate eigenvalues — band/DOS plots will have noise.
+> **⚠ PW NSCF precision**: `pw_diag_thr` is NOT optional for PW band/DOS. Without it, SOC splittings, band gaps, and DOS peaks are quantitatively wrong. Always include `pw_diag_thr 1.0e-5` (or tighter) in any `basis_type pw` NSCF INPUT.
 
 Band structure KPT (line mode, example FCC):
 ```
