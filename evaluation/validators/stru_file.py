@@ -135,13 +135,17 @@ def _vector_mag_norm(vec: tuple[float, float, float]) -> float:
     return (vec[0] ** 2 + vec[1] ** 2 + vec[2] ** 2) ** 0.5
 
 
-def _parse_stru_single_atom_species_moment(content: str) -> list[float]:
-    """Species-level moment line when the cell has exactly one atom (e.g. isolated H)."""
+def _parse_stru_species_level_moments(content: str) -> list[float]:
+    """Parse species-level InitialMagneticMoment, expand to per-atom list.
+
+    Format: Label / Moment / NumberOfAtoms / coords...
+    Each species moment is repeated for all atoms of that species.
+    """
     lines = content.split("\n")
     in_atomic_positions = False
     expect_moment_line = False
     expect_natom_line = False
-    total_atoms = 0
+    atoms_remaining = 0
     pending_species_moment: float | None = None
     collected: list[float] = []
 
@@ -172,25 +176,31 @@ def _parse_stru_single_atom_species_moment(content: str) -> list[float]:
                 natom = int(stripped)
             except ValueError:
                 natom = 0
-            total_atoms += natom
-            if natom == 1 and pending_species_moment is not None:
-                collected.append(pending_species_moment)
+            atoms_remaining = natom
+            if pending_species_moment is not None and natom > 0:
+                collected.extend([pending_species_moment] * natom)
             pending_species_moment = None
+            continue
+
+        if atoms_remaining > 0:
+            atoms_remaining -= 1
             continue
 
         expect_moment_line = True
 
-    if total_atoms == 1 and collected:
-        return collected
-    return []
+    return collected
 
 
 def _site_moments_for_magnetic_order(content: str) -> list[float]:
-    """Moments used for FM/AFM classification: coordinate mag/magmom first, else 1-atom fallback."""
+    """Moments used for FM/AFM classification.
+
+    Priority: per-site mag/magmom on coordinate lines first,
+    then species-level InitialMagneticMoment expanded to per-atom.
+    """
     site = _parse_stru_site_magnetic_moments(content)
     if site:
         return site
-    return _parse_stru_single_atom_species_moment(content)
+    return _parse_stru_species_level_moments(content)
 
 
 def _parse_stru_magnetic_moments(content: str) -> list[float]:
