@@ -7,14 +7,22 @@ from pathlib import Path
 
 from .text_file import _resolve_file
 
+_MAG_MOMENT_LINE = re.compile(
+    r"\bmag(?:mom)?\s+([-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)",
+    re.IGNORECASE,
+)
+_MAG_VECTOR_LINE = re.compile(
+    r"\bmag(?:mom)?\s+"
+    r"([-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)\s+"
+    r"([-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)\s+"
+    r"([-+]?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)",
+    re.IGNORECASE,
+)
+_MAG_EPS = 1e-8
 
-def _parse_stru_magnetic_moments(content: str) -> list[float]:
-    """Extract all atomic magnetic moments from a STRU file.
 
-    Handles both syntaxes:
-    - Species-level: bare number on its own line below species label
-    - Per-atom: `mag <value>` or `magmom <value>` on coordinate lines
-    """
+def _parse_stru_site_magnetic_moments(content: str) -> list[float]:
+    """Per-site moments from `mag` / `magmom` on ATOMIC_POSITIONS coordinate lines."""
     moments: list[float] = []
     lines = content.split("\n")
 
@@ -40,11 +48,6 @@ def _parse_stru_magnetic_moments(content: str) -> list[float]:
             continue
 
         if expect_moment_line:
-            try:
-                mag = float(stripped)
-                moments.append(mag)
-            except ValueError:
-                pass
             expect_moment_line = False
             expect_natom_line = True
             continue
@@ -58,37 +61,164 @@ def _parse_stru_magnetic_moments(content: str) -> list[float]:
             continue
 
         if atoms_remaining > 0:
-            mag_match = re.search(r"\bmag(?:mom)?\s+([-+]?\d+\.?\d*)", stripped)
+            mag_match = _MAG_MOMENT_LINE.search(stripped)
             if mag_match:
                 moments.append(float(mag_match.group(1)))
             atoms_remaining -= 1
-            if atoms_remaining == 0:
-                expect_moment_line = False
             continue
 
-        # Must be a species label line — next line is the moment
         expect_moment_line = True
 
     return moments
 
 
-def _classify_magnetic_order(moments: list[float]) -> str:
-    """Classify magnetic order from a list of moments.
+def _parse_stru_site_vector_magnetic_moments(
+    content: str,
+) -> list[tuple[float, float, float]]:
+    """Per-site 3-component mag/magmom vectors on ATOMIC_POSITIONS coordinate lines."""
+    vectors: list[tuple[float, float, float]] = []
+    lines = content.split("\n")
 
-    Returns: 'afm', 'fm', or 'nonmagnetic'
+    in_atomic_positions = False
+    expect_moment_line = False
+    expect_natom_line = False
+    atoms_remaining = 0
+
+    for line in lines:
+        stripped = line.strip()
+
+        if stripped == "ATOMIC_POSITIONS":
+            in_atomic_positions = True
+            continue
+
+        if not in_atomic_positions:
+            continue
+
+        if not stripped:
+            continue
+
+        if stripped in ("Direct", "Cartesian", "Cartesian_angstrom", "Cartesian_au"):
+            continue
+
+        if expect_moment_line:
+            expect_moment_line = False
+            expect_natom_line = True
+            continue
+
+        if expect_natom_line:
+            expect_natom_line = False
+            try:
+                atoms_remaining = int(stripped)
+            except ValueError:
+                atoms_remaining = 0
+            continue
+
+        if atoms_remaining > 0:
+            vec_match = _MAG_VECTOR_LINE.search(stripped)
+            if vec_match:
+                vectors.append(
+                    (
+                        float(vec_match.group(1)),
+                        float(vec_match.group(2)),
+                        float(vec_match.group(3)),
+                    )
+                )
+            atoms_remaining -= 1
+            continue
+
+        expect_moment_line = True
+
+    return vectors
+
+
+def _vector_mag_norm(vec: tuple[float, float, float]) -> float:
+    return (vec[0] ** 2 + vec[1] ** 2 + vec[2] ** 2) ** 0.5
+
+
+def _parse_stru_single_atom_species_moment(content: str) -> list[float]:
+    """Species-level moment line when the cell has exactly one atom (e.g. isolated H)."""
+    lines = content.split("\n")
+    in_atomic_positions = False
+    expect_moment_line = False
+    expect_natom_line = False
+    total_atoms = 0
+    pending_species_moment: float | None = None
+    collected: list[float] = []
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped == "ATOMIC_POSITIONS":
+            in_atomic_positions = True
+            continue
+        if not in_atomic_positions:
+            continue
+        if not stripped:
+            continue
+        if stripped in ("Direct", "Cartesian", "Cartesian_angstrom", "Cartesian_au"):
+            continue
+
+        if expect_moment_line:
+            try:
+                pending_species_moment = float(stripped)
+            except ValueError:
+                pending_species_moment = None
+            expect_moment_line = False
+            expect_natom_line = True
+            continue
+
+        if expect_natom_line:
+            expect_natom_line = False
+            try:
+                natom = int(stripped)
+            except ValueError:
+                natom = 0
+            total_atoms += natom
+            if natom == 1 and pending_species_moment is not None:
+                collected.append(pending_species_moment)
+            pending_species_moment = None
+            continue
+
+        expect_moment_line = True
+
+    if total_atoms == 1 and collected:
+        return collected
+    return []
+
+
+def _site_moments_for_magnetic_order(content: str) -> list[float]:
+    """Moments used for FM/AFM classification: coordinate mag/magmom first, else 1-atom fallback."""
+    site = _parse_stru_site_magnetic_moments(content)
+    if site:
+        return site
+    return _parse_stru_single_atom_species_moment(content)
+
+
+def _parse_stru_magnetic_moments(content: str) -> list[float]:
+    """Backward-compatible alias."""
+    return _site_moments_for_magnetic_order(content)
+
+
+def _classify_magnetic_order(moments: list[float], *, min_sites: int = 2) -> str:
+    """Classify initial magnetic order from site moments.
+
+    Returns:
+        ``fm`` — >= min_sites nonzero moments, all same sign
+        ``afm`` — >= min_sites nonzero moments, at least one + and one -
+        ``nonmagnetic`` — no nonzero moments
+        ``insufficient`` — fewer than min_sites nonzero moments
     """
-    if not moments:
+    nonzero = [m for m in moments if abs(m) > _MAG_EPS]
+    if not nonzero:
         return "nonmagnetic"
+    if len(nonzero) < min_sites:
+        return "insufficient"
 
-    has_positive = any(m > 0 for m in moments)
-    has_negative = any(m < 0 for m in moments)
+    n_pos = sum(1 for m in nonzero if m > 0)
+    n_neg = sum(1 for m in nonzero if m < 0)
 
-    if has_positive and has_negative:
+    if n_pos > 0 and n_neg > 0:
         return "afm"
-    elif has_positive or has_negative:
-        return "fm"
-    else:
-        return "nonmagnetic"
+    return "fm"
 
 
 def _parse_lattice_vectors(content: str) -> list[float] | None:
@@ -111,12 +241,18 @@ def check_stru_file(
     filename: str,
     check: str,
     expected: str | int | None = None,
+    min_sites: int = 2,
     workspace_resolve: str = "recursive",
 ) -> tuple[bool, str]:
     """Run a structural check on an ABACUS STRU file.
 
     Supported checks:
     - magnetic_order: expected = 'afm' | 'fm' | 'nonmagnetic'
+      (per-site mag/magmom; FM = all same sign, AFM = opposite signs;
+      ref may include min_sites, default 2)
+    - site_magmom_count_min: expected = int (min coordinate lines with mag/magmom)
+    - site_vector_magmom_count_min: expected = int (min coordinate lines with
+      3-component mag/magmom and nonzero |m|)
     - species_count: expected = int (number of species)
     - total_atoms: expected = int (total atom count)
     """
@@ -130,13 +266,42 @@ def check_stru_file(
         return False, f"failed reading {fpath.name}: {exc}"
 
     if check == "magnetic_order":
-        moments = _parse_stru_magnetic_moments(content)
-        actual = _classify_magnetic_order(moments)
-        if actual == expected:
-            return True, f"{fpath.name}: magnetic_order={actual} (moments: {moments})"
+        expected_order = str(expected or "")
+        moments = _site_moments_for_magnetic_order(content)
+        actual = _classify_magnetic_order(moments, min_sites=min_sites)
+        if actual == expected_order:
+            return True, (
+                f"{fpath.name}: magnetic_order={actual} "
+                f"(site moments: {moments}, min_sites={min_sites})"
+            )
         return False, (
-            f"{fpath.name}: magnetic_order={actual}, expected {expected} "
-            f"(moments: {moments})"
+            f"{fpath.name}: magnetic_order={actual}, expected {expected_order!r} "
+            f"(site moments: {moments}, min_sites={min_sites})"
+        )
+
+    elif check == "site_magmom_count_min":
+        site_mags = _parse_stru_site_magnetic_moments(content)
+        required = int(expected or 0)
+        if len(site_mags) >= required:
+            return True, (
+                f"{fpath.name}: {len(site_mags)} site mag/magmom lines (>={required})"
+            )
+        return False, (
+            f"{fpath.name}: {len(site_mags)} site mag/magmom lines, expected >={required}"
+        )
+
+    elif check == "site_vector_magmom_count_min":
+        vectors = _parse_stru_site_vector_magnetic_moments(content)
+        nonzero = [v for v in vectors if _vector_mag_norm(v) > _MAG_EPS]
+        required = int(expected or 0)
+        if len(nonzero) >= required:
+            return True, (
+                f"{fpath.name}: {len(nonzero)} site vector mag/magmom lines "
+                f"(>={required})"
+            )
+        return False, (
+            f"{fpath.name}: {len(nonzero)} site vector mag/magmom lines, "
+            f"expected >={required} (parsed vectors: {vectors})"
         )
 
     elif check == "species_count":

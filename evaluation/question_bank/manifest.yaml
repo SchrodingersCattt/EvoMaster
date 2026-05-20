@@ -69,7 +69,7 @@ banks:
 - path: input_generation/ig_agnostic_abacus.yaml
   capability: input_generation
   domain: agnostic
-  questions: 18
+  questions: 51
 - path: input_generation/ig_agnostic_gpumd.yaml
   capability: input_generation
   domain: agnostic
@@ -113,7 +113,7 @@ banks:
 - path: structure_construction/sc_agnostic.yaml
   capability: structure_construction
   domain: agnostic
-  questions: 15
+  questions: 16
 - path: structure_construction/sc_catalysis.yaml
   capability: structure_construction
   domain: catalysis
