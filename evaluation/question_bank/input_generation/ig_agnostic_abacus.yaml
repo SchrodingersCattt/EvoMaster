@@ -2828,11 +2828,11 @@ questions:
   tags:
   - eng_abacus
   reference_answers:
-  - key: fcc_si_input_artifact
+  - key: fcc_si_input
     value: run_fcc_si/INPUT
-  - key: fcc_si_stru_artifact
+  - key: fcc_si_stru
     value: run_fcc_si/STRU
-  - key: fcc_si_kpt_artifact
+  - key: fcc_si_kpt
     value: run_fcc_si/KPT
   - key: must_fcc_latname
     value:
@@ -2857,11 +2857,11 @@ questions:
       filename: run_fcc_si/KPT
       pattern: (?is)K_POINTS
       flags: im
-  - key: hex_mos2_input_artifact
+  - key: hex_mos2_input
     value: run_hex_mos2/INPUT
-  - key: hex_mos2_stru_artifact
+  - key: hex_mos2_stru
     value: run_hex_mos2/STRU
-  - key: hex_mos2_kpt_artifact
+  - key: hex_mos2_kpt
     value: run_hex_mos2/KPT
   - key: must_hex_latname
     value:
@@ -2891,11 +2891,11 @@ questions:
       filename: run_hex_mos2/STRU
       pattern: (?im)^\s*LATTICE_PARAMETERS\s*\n\s*12\s*$
       flags: im
-  - key: so_snte_input_artifact
+  - key: so_snte_input
     value: run_so_snte/INPUT
-  - key: so_snte_stru_artifact
+  - key: so_snte_stru
     value: run_so_snte/STRU
-  - key: so_snte_kpt_artifact
+  - key: so_snte_kpt
     value: run_so_snte/KPT
   - key: must_so_latname
     value:
@@ -3114,6 +3114,14 @@ questions:
   - key: token_budget_total
     value:
       max: 40000
+  - key: run_pw_si2_in
+    value: run_pw_si2/INPUT
+  - key: run_pw_si2_kp
+    value: run_pw_si2/KPT
+  - key: run_lcao_si2_in
+    value: run_lcao_si2/INPUT
+  - key: run_lcao_si2_kp
+    value: run_lcao_si2/KPT
   scoring_checklist:
   - id: run_pw_si2_in
     criterion: '`run_pw_si2/INPUT` must be written to the workspace.'
@@ -3261,6 +3269,22 @@ questions:
   - key: token_budget_total
     value:
       max: 50000
+  - key: fe_fm_in
+    value: run_fe_fm/INPUT
+  - key: fe_fm_kp
+    value: run_fe_fm/KPT
+  - key: fe_afm_in
+    value: run_fe_afm/INPUT
+  - key: fe_afm_kp
+    value: run_fe_afm/KPT
+  - key: h_atom_in
+    value: run_h_atom/INPUT
+  - key: h_atom_kp
+    value: run_h_atom/KPT
+  - key: co6nb4os2_in
+    value: run_co6nb4os2/INPUT
+  - key: co6nb4os2_kp
+    value: run_co6nb4os2/KPT
   scoring_checklist:
   - id: fe_fm_in
     criterion: '`run_fe_fm/INPUT` must be written to the workspace.'
@@ -3487,6 +3511,14 @@ questions:
   - key: token_budget_total
     value:
       max: 50000
+  - key: run_gaas_scf_in
+    value: run_gaas_scf/INPUT
+  - key: run_gaas_scf_kp
+    value: run_gaas_scf/KPT
+  - key: run_gaas_band_in
+    value: run_gaas_band/INPUT
+  - key: run_gaas_band_kp
+    value: run_gaas_band/KPT
   scoring_checklist:
   - id: run_gaas_scf_in
     criterion: '`run_gaas_scf/INPUT` must be written to the workspace.'
@@ -3589,6 +3621,14 @@ questions:
   - key: token_budget_total
     value:
       max: 40000
+  - key: run_gaussian_in
+    value: run_gaussian/INPUT
+  - key: run_gaussian_kp
+    value: run_gaussian/KPT
+  - key: run_fixed_in
+    value: run_fixed/INPUT
+  - key: run_fixed_kp
+    value: run_fixed/KPT
   scoring_checklist:
   - id: run_gaussian_in
     criterion: '`run_gaussian/INPUT` must be written to the workspace.'
@@ -3698,6 +3738,14 @@ questions:
   - key: token_budget_total
     value:
       max: 40000
+  - key: run_broyden_in
+    value: run_broyden/INPUT
+  - key: run_broyden_kp
+    value: run_broyden/KPT
+  - key: run_plain_in
+    value: run_plain/INPUT
+  - key: run_plain_kp
+    value: run_plain/KPT
   scoring_checklist:
   - id: run_broyden_in
     criterion: '`run_broyden/INPUT` must be written to the workspace.'
@@ -3825,6 +3873,18 @@ questions:
   - key: token_budget_total
     value:
       max: 45000
+  - key: run_pw_al_in
+    value: run_pw_al/INPUT
+  - key: run_pw_al_kp
+    value: run_pw_al/KPT
+  - key: run_lcao_si2_in
+    value: run_lcao_si2/INPUT
+  - key: run_lcao_si2_kp
+    value: run_lcao_si2/KPT
+  - key: run_pw_fe_in
+    value: run_pw_fe/INPUT
+  - key: run_pw_fe_kp
+    value: run_pw_fe/KPT
   scoring_checklist:
   - id: run_pw_al_in
     criterion: '`run_pw_al/INPUT` must be written to the workspace.'
@@ -4022,6 +4082,16 @@ questions:
   - key: token_budget_total
     value:
       max: 45000
+  - key: run_hsk_in
+    value: run_hsk/INPUT
+  - key: run_hsr_in
+    value: run_hsr/INPUT
+  - key: run_hsr_kp
+    value: run_hsr/KPT
+  - key: run_get_s_in
+    value: run_get_s/INPUT
+  - key: run_get_s_kp
+    value: run_get_s/KPT
   scoring_checklist:
   - id: run_hsk_in
     criterion: '`run_hsk/INPUT` must be written to the workspace.'
@@ -4135,6 +4205,18 @@ questions:
   - key: token_budget_total
     value:
       max: 50000
+  - key: run_pw_al_in
+    value: run_pw_al/INPUT
+  - key: run_pw_al_kp
+    value: run_pw_al/KPT
+  - key: run_lcao_si2_in
+    value: run_lcao_si2/INPUT
+  - key: run_lcao_si2_kp
+    value: run_lcao_si2/KPT
+  - key: gwf_scf
+    value: run_lcao_getwf/INPUT-scf
+  - key: gwf_wf
+    value: run_lcao_getwf/INPUT-getwf
   scoring_checklist:
   - id: run_pw_al_in
     criterion: '`run_pw_al/INPUT` must be written to the workspace.'
@@ -4283,6 +4365,22 @@ questions:
   - key: token_budget_total
     value:
       max: 60000
+  - key: run_pw_scf_in
+    value: run_pw_scf/INPUT
+  - key: run_pw_scf_kp
+    value: run_pw_scf/KPT
+  - key: run_pw_band_in
+    value: run_pw_band/INPUT
+  - key: run_pw_band_kp
+    value: run_pw_band/KPT
+  - key: run_lcao_scf_in
+    value: run_lcao_scf/INPUT
+  - key: run_lcao_scf_kp
+    value: run_lcao_scf/KPT
+  - key: run_lcao_band_in
+    value: run_lcao_band/INPUT
+  - key: run_lcao_band_kp
+    value: run_lcao_band/KPT
   scoring_checklist:
   - id: run_pw_scf_in
     criterion: '`run_pw_scf/INPUT` must be written to the workspace.'
@@ -4451,6 +4549,22 @@ questions:
   - key: token_budget_total
     value:
       max: 60000
+  - key: run_pw_scf_in
+    value: run_pw_scf/INPUT
+  - key: run_pw_scf_kp
+    value: run_pw_scf/KPT
+  - key: run_pw_dos_in
+    value: run_pw_dos/INPUT
+  - key: run_pw_dos_kp
+    value: run_pw_dos/KPT
+  - key: run_lcao_scf_in
+    value: run_lcao_scf/INPUT
+  - key: run_lcao_scf_kp
+    value: run_lcao_scf/KPT
+  - key: run_lcao_dos_in
+    value: run_lcao_dos/INPUT
+  - key: run_lcao_dos_kp
+    value: run_lcao_dos/KPT
   scoring_checklist:
   - id: run_pw_scf_in
     criterion: '`run_pw_scf/INPUT` must be written to the workspace.'
@@ -4564,6 +4678,10 @@ questions:
   - key: token_budget_total
     value:
       max: 35000
+  - key: input_artifact
+    value: run_lcao_si2/INPUT
+  - key: kpt_artifact
+    value: run_lcao_si2/KPT
   scoring_checklist:
   - id: input_artifact
     criterion: '`run_lcao_si2/INPUT` must be written to the workspace.'
@@ -4728,6 +4846,10 @@ questions:
   - key: token_budget_total
     value:
       max: 40000
+  - key: input_artifact
+    value: run_pw_fe_uspp/INPUT
+  - key: kpt_artifact
+    value: run_pw_fe_uspp/KPT
   scoring_checklist:
   - id: input_artifact
     criterion: '`run_pw_fe_uspp/INPUT` must be written to the workspace.'
@@ -4828,6 +4950,12 @@ questions:
   - key: token_budget_total
     value:
       max: 45000
+  - key: run_pw_cell_relax_in
+    value: run_pw_cell_relax/INPUT
+  - key: run_pw_cell_relax_kp
+    value: run_pw_cell_relax/KPT
+  - key: run_lcao_relax_in
+    value: run_lcao_relax/INPUT
   scoring_checklist:
   - id: run_pw_cell_relax_in
     criterion: '`run_pw_cell_relax/INPUT` must be written to the workspace.'
