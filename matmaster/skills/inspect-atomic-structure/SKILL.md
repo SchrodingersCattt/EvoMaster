@@ -1,6 +1,6 @@
 ---
 name: inspect-atomic-structure
-description: "Inspect any atomic structure (crystal, molecule, slab, polymer chain) and report formula, symmetry, Wyckoff sites, geometry tables, dimensionality, and is_molecular_crystal routing flag. MUST run before and after every transform/assemble step. Reports structure sanity only — not a substitute for property prediction or relaxation."
+description: "Trigger to inspect existing structures for composition, symmetry, dimensionality, PBC/vacuum setup, molecular-crystal cues, disorder/occupancy issues, or solvent fragments."
 skill_type: operator
 ---
 
@@ -96,5 +96,5 @@ Report these items in the final answer whenever this skill is used:
 - Use `assemble-atomic-structure` for slabs, adsorbates, interfaces, amorphous
   boxes, and crosslinks.
 - Use `operate-molecular-crystal` whenever PBC molecule integrity matters.
-- `matmaster/skills/playground-skills/structure-manager/scripts/assess_structure.py`
+- `matmaster/skills/playground-skills/retrieve-structure/scripts/assess_structure.py`
   remains a quick CLI validation fallback.

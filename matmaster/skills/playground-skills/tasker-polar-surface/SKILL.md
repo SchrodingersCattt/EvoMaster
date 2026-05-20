@@ -1,14 +1,14 @@
 ---
 name: tasker-polar-surface
-description: "Guides slab cutting for ionic and polar crystals using Tasker types (1/2/3). Use built-in script build_slab_tasker_fix.py as the default builder for all surface types, then validate with check_slab_tasker.py and assess_structure.py. If auto-fix fails, explicitly report to user and ask for manual adjustment or temporary acceptance."
-depends_on: assemble-atomic-structure, mcp-mat-doc
+description: "Use for ionic, heterovalent, or polar surface/slab tasks needing Tasker-aware construction, adjustment, or validation of dipole-balanced/symmetric/non-polar terminations."
+depends_on: mcp-mat-doc
 ---
 
 <!-- multi-server: mat_sg, mat_sn, mat_doc -->
 
 # Tasker Polar Surface Skill
 
-When cutting a surface slab from a bulk crystal (especially ionic or oxide), apply **Tasker's polar surface theory** so the slab is non-polar or correctly handled. Otherwise the cut may be polar and physically unreasonable (e.g. diverging surface energy for Type 3).
+When cutting a surface slab from a bulk crystal (especially ionic or heterovalent), apply **Tasker's polar surface theory** so the slab is non-polar or correctly handled. Otherwise the cut may be polar and physically unreasonable (e.g. diverging surface energy for Type 3).
 
 ## Tasker's three surface types
 
@@ -82,7 +82,7 @@ The `-L` (repeat-layers) parameter equals ASE's `layers` arg — one "layer" = *
 - Run **check_slab_tasker.py** on the generated file:
   `python ${SKILL_DIR}/scripts/check_slab_tasker.py --file <slab_path> --tasker_type <provisional_type>` (and `--formula`, `--miller` if known).
   Require `compliant: true`; if not, adjust n_layers or termination (from literature) and rebuild.
-- Run **structure-manager** `assess_structure.py` on the same file for dimensionality and sanity.
+- Run **retrieve-structure** `assess_structure.py` on the same file for dimensionality and sanity.
 Only after both checks pass (and optionally literature/lookup consistency) proceed to finish.
 
 ### Batch processing
@@ -137,7 +137,7 @@ The script prints JSON with `compliant`, `symmetric`, `reason`, `layer_summary`,
 
 - If **non-compliant**: Do **not** call finish. Re-cut with adjusted parameters (symmetric termination, layer count) and run the checker again, or warn the user and offer to re-cut.
 - If **compliant** but **literature_consistent** is false (when lookup was used): Prefer correcting the Tasker type and re-checking, or explicitly note the discrepancy and that the chosen type is still used.
-- If **compliant** (and literature-consistent when applicable): Proceed to structure-manager (e.g. `assess_structure.py`) if needed, then finish.
+- If **compliant** (and literature-consistent when applicable): Proceed to retrieve-structure (e.g. `assess_structure.py`) if needed, then finish.
 
 ## Scripts
 
@@ -164,7 +164,7 @@ The script prints JSON with `compliant`, `symmetric`, `reason`, `layer_summary`,
 - **Unknown/uncertain type**: still build with `build_slab_tasker_fix.py` first, then use checker + literature consistency to converge on final handling path.
 - If `build_slab_tasker_fix.py` fails or checker stays non-compliant after retries, explicitly report to user and request decision: manual adjustment now vs temporarily continue with polar slab.
 - After any slab build, you **must** run `check_slab_tasker.py` on the **actual slab file**. Do not finish without this check or with a non-compliant result unless the user has been explicitly warned.
-- After a compliant slab is confirmed, use structure-manager (e.g. `assess_structure.py`) for sanity/dimensionality if needed.
+- After a compliant slab is confirmed, use retrieve-structure (e.g. `assess_structure.py`) for sanity/dimensionality if needed.
 - **吸附分子**：需要在 slab 上加吸附分子时，优先使用 `add_adsorbate_batch.py`（本地脚本，支持批量），而非 MCP `mat_sg_build_surface_adsorbate`（仅支持单次调用）。尤其是批量场景下必须使用本地脚本。单个结构时两者均可。
 
 ## High-Throughput Adsorption Screening

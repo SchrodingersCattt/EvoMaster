@@ -2,7 +2,6 @@
 name: assemble-atomic-structure
 description: "Assemble multi-body structures from existing pieces: surface slab from bulk, adsorbate on surface, slab/slab interface, amorphous packing (PACKMOL), and geometric crosslink. For molecular-crystal slabs, route to operate-molecular-crystal. For polar Type-3 fixes, route to tasker-polar-surface."
 skill_type: operator
-depends_on: inspect-atomic-structure, operate-molecular-crystal, tasker-polar-surface
 ---
 
 # Assemble Atomic Structure

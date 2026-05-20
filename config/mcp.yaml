@@ -16,7 +16,7 @@ tool_include_only:
   mat_sn: []
   # mat_sg: only sampling (CALYPSO / CrystalFormer) plus the dispatcher
   # job-control trio survives. Build/transform/assemble/inspect have been
-  # localised to the atomic-structure-* operator skills; exposing the legacy
+  # localised to the flat atomic-structure family skills; exposing the legacy
   # mat_sg builders again would let agents bypass local skills.
   mat_sg:
     - "submit_generate_calypso_structures"
@@ -86,7 +86,7 @@ calculation_executors:
       resources:
         envs: {}
     # Only dispatcher job control runs synchronously; submit_generate_* are async.
-    # Other builders/transformers have been localised to atomic-structure-* skills.
+    # Other builders/transformers have been localised to flat atomic-structure family skills.
     sync_tools:
       - query_job_status
       - get_job_results

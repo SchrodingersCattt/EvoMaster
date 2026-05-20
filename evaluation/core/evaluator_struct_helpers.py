@@ -1,8 +1,7 @@
-"""Structure-file verify helpers kept out of evaluator_helpers.py.
+"""Structure-file verify helpers kept out of evaluator_wiring.py.
 
-The main helper module is close to the project's 1000-line limit, so
+The wiring module is close to the project's 1000-line limit, so
 structure-specific wrappers live here and are imported by the verify registry.
-"""
 
 from __future__ import annotations
 

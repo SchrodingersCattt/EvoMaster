@@ -19,7 +19,7 @@ import yaml
 
 from .aggregator import build_summary
 from .evaluator import BinaryEvaluator
-from .evaluator_helpers import token_usage_record_from_evidence
+from .evaluator_wiring import token_usage_record_from_evidence
 from .evidence import EvidenceBundle, EvidenceExtractor
 from .mat_runner import run_mat_task
 from .reporter import append_raw_run, write_reports
