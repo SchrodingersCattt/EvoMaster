@@ -189,8 +189,7 @@ class ChatEventsTable(BaseTable):
                     sql += f' LIMIT {int(limit)}'
                 cursor.execute(sql, params)
                 return [
-                    self._row_to_context_event(row)
-                    for row in list(cursor.fetchall())
+                    self._row_to_context_event(row) for row in list(cursor.fetchall())
                 ]
 
     def query_user_turn_context_by_invocation(

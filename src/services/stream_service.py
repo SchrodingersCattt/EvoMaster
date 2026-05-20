@@ -692,9 +692,8 @@ class ChatStreamService:
             if ctx.turn_input is not None and turn_input_payload is not None:
                 legacy_current_input_payload = {
                     **turn_input_payload,
-                    "pre_query" + "_scope_event_id": (
-                        ctx.turn_input.pre_turn_history_event_id
-                    ),
+                    "pre_query"
+                    + "_scope_event_id": (ctx.turn_input.pre_turn_history_event_id),
                 }
 
             job = {
