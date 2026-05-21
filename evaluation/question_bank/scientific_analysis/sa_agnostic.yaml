@@ -1474,3 +1474,73 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
+- id: SA_polymorph_tio2_001_20260521
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Identify the TiO2 polymorph (rutile vs anatase vs brookite) from a provided
+    CIF file and report its space group and key structural features.
+  human_prompt_seed: '工作区中有一个 TiO2 的 CIF 文件 `TiO2_sample.cif`。请分析该结构属于哪种 TiO2 多晶型（金红石
+    rutile / 锐钛矿 anatase / 板钛矿 brookite），给出空间群符号和编号，并说明判断依据（晶胞参数、配位环境等）。
+
+    将结果写入 `polymorph_report.json`，格式：`{"polymorph": "...", "space_group_symbol":
+    "...", "space_group_number": ..., "reasoning": "..."}`'
+  tags:
+  - struct_build
+  data_files:
+  - key: tio2_cif
+    path: data/SA_polymorph_tio2_001/TiO2_sample.cif
+    oss_url: https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/sa_polymorph_tio2_001/TiO2_rutile_COD9008213.cif
+    description: TiO2 rutile structure from COD (ID 9008213), space group P4_2/mnm
+      (#136), a=b=4.594 A, c=2.959 A.
+  reference_answers:
+  - key: output_artifact
+    value: polymorph_report.json
+  - key: polymorph_correct
+    value:
+      filename: polymorph_report.json
+      pattern: (?i)rutile
+      flags: i
+  - key: space_group_number
+    value:
+      filename: polymorph_report.json
+      checks:
+      - key: space_group_number
+        min: 136
+        max: 136
+  - key: turn_budget
+    value:
+      max: 12
+  - key: token_budget_total
+    value:
+      max: 10000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `polymorph_report.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: polymorph_correct
+    criterion: The report correctly identifies the structure as rutile (not anatase
+      or brookite). Anatase is I4_1/amd (#141) with c/a~2.5; rutile is P4_2/mnm (#136)
+      with c/a~0.64. The provided CIF has a=4.594, c=2.959 (c/a=0.64), which is rutile.
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: space_group_number
+    criterion: Space group number is 136 (P4_2/mnm).
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+  - id: grounding_source
+    criterion: The reasoning references concrete structural features from the CIF
+      (lattice parameters, Ti-O coordination, c/a ratio) rather than just stating
+      the answer without evidence.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
