@@ -36,10 +36,10 @@ cases:
   # ─── DPA / MLIP 计算 ──────────────────────────────────────────────────
 
   - id: rg_05
-    title: "Li₂O DPA MD"
-    prompt: "对Li₂O晶体做分子动力学模拟，300K，1ps"
-    source_session: "934e759f0143475c9a45f783ea0c16ab"
-    notes: "测 DPA MD 基础流程。线上 5 tool calls 丝滑完成。"
+    title: "石墨烯单轴拉伸 (LAMMPS)"
+    prompt: "用LAMMPS模拟石墨烯的单轴拉伸，使用AIREBO势函数，输出应力-应变曲线"
+    source_session: "ddca85e6b2984eca915b29fcb0941739"
+    notes: "测经典 MD (LAMMPS) 端到端流程。线上丝滑完成：AIREBO + velocity 拉伸。"
 
   - id: rg_06
     title: "CO/Pt(111) 吸附能 (DPA)"
