@@ -221,3 +221,11 @@ cases:
     source_month: "2026-04"
     baseline: rough
     friction: "KPT Line 格式最后一个 nk 写 0（应为 1），导致 4 次 Bohrium 提交失败，156 events 完成本应 30 events 的任务"
+
+  - id: rg_r17
+    title: "Zn 盐溶液 DP-MD 全流程"
+    prompt: "采用DP-MD模拟方法，在1 mol/L浓度下，对比ZnSO₄、ZnCl₂、Zn(ClO₄)₂三种锌盐水溶液中Zn²⁺离子的第一水合壳层结构（包括径向分布函数第一峰位置和配位数）及其扩散系数，并分析差异"
+    source_session: "34e0c19d1ef24fdab2cfbe9b7a47fec6"
+    source_month: "2026-04"
+    baseline: rough
+    friction: "手写 ClO₄⁻ 构建代码出 SyntaxError + 盒子只有 345 原子（应 2000+）+ 25 次网络错误，440 events 未完成"
