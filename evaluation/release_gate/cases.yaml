@@ -213,3 +213,11 @@ cases:
     source_month: "2026-04"
     baseline: rough
     friction: "方案正确但 Bohrium 404 x6，无回退，零结果"
+
+  - id: rg_r16
+    title: "Al 能带结构 (ABACUS)"
+    prompt: "计算Al的能带结构"
+    source_session: "c41e63a321c34b67af3d8ece70f796db"
+    source_month: "2026-04"
+    baseline: rough
+    friction: "KPT Line 格式最后一个 nk 写 0（应为 1），导致 4 次 Bohrium 提交失败，156 events 完成本应 30 events 的任务"
