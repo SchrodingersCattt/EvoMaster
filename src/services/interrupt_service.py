@@ -7,7 +7,7 @@ whether the user has queued messages and wants to interrupt tool dispatch.
 import asyncio
 import logging
 
-from src.dao.redis_dao import RedisDao, get_redis_dao
+from src.dao.redis_dao import get_redis_dao
 
 logger = logging.getLogger(__name__)
 
