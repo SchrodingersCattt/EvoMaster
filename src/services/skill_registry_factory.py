@@ -71,6 +71,29 @@ def _disabled_skill_names_from_settings(root: Path) -> set[str]:
     return {name.strip() for name in disabled if isinstance(name, str) and name.strip()}
 
 
+def _disabled_skill_names_from_remote_settings(
+    session: Any, remote_root: str
+) -> set[str]:
+    """Read .settings.json from a remote skill root via session SFTP."""
+    settings_path = remote_root.rstrip("/") + "/.settings.json"
+    try:
+        if not session.path_exists(settings_path):
+            return set()
+        content = session.read_file(settings_path)
+        payload = json.loads(content)
+    except Exception:
+        logger.warning(
+            "Failed to read remote skill settings: %s",
+            settings_path,
+            exc_info=True,
+        )
+        return set()
+    disabled = payload.get("disabled") if isinstance(payload, dict) else None
+    if not isinstance(disabled, list):
+        return set()
+    return {name.strip() for name in disabled if isinstance(name, str) and name.strip()}
+
+
 def build_skill_registry(
     *,
     config_roots: Iterable[str | Path],
@@ -102,6 +125,11 @@ def build_skill_registry(
     }
     for root in roots:
         disabled.update(_disabled_skill_names_from_settings(root))
+    if remote_roots and session is not None:
+        for remote_root in remote_roots:
+            disabled.update(
+                _disabled_skill_names_from_remote_settings(session, remote_root)
+            )
     if disabled:
         registry.remove_skills(disabled)
     return registry
