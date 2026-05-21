@@ -668,6 +668,7 @@ questions:
       filename: STRU
       check: magnetic_order
       expected: fm
+      min_sites: 1
   - key: must_kpt_gamma_dense
     value:
       filename: KPT

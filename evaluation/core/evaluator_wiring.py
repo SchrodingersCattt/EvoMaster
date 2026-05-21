@@ -770,12 +770,16 @@ def check_stru_file_from_evidence(
     expected = cfg.get("expected")
     if not filename or not check_type:
         return False, "stru_file_check: need 'filename' and 'check' in ref"
+    kwargs: dict[str, object] = {}
+    if "min_sites" in cfg:
+        kwargs["min_sites"] = int(cfg["min_sites"])
     return check_stru_file(
         ws,
         filename=filename,
         check=check_type,
         expected=expected,
         workspace_resolve=_workspace_resolve_from_ref(ref),
+        **kwargs,
     )
 
 
