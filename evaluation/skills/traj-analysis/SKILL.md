@@ -126,7 +126,7 @@ Write to `evaluation/traj_analysis/{env}/{YYYY-MM}.json`:
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "environment": "test|prod",
   "month": "2026-05",
   "sessions": {
@@ -140,11 +140,30 @@ Write to `evaluation/traj_analysis/{env}/{YYYY-MM}.json`:
       "verdict": "skip|informational|actionable",
       "summary": "One paragraph description of what happened.",
       "issues": ["issue 1", "issue 2"],
-      "eval_recommendation": "What question to add, or 'none'."
+      "eval_recommendation": "What question to add, or 'none'.",
+      "software_tags": ["ABACUS", "DPA/MLIPs"],
+      "task_type": "计算任务|文献调研|结构建模|Q&A调试|学术写作|数据提取|其他"
     }
   }
 }
 ```
+
+**`software_tags`**: 该 session 涉及的软件/工具列表。使用以下标准词汇：
+- 计算引擎：`ABACUS`, `VASP`, `LAMMPS`, `CP2K`, `ORCA`, `GROMACS`, `GPUMD`
+- ML 势：`DPA/MLIPs`
+- 工作流：`DP-GEN`
+- 分析工具：`XRD`, `TEM/电镜`, `DSC`
+- 建模工具：`pymatgen`, `ASE`, `mat_sg`
+- 检索：`PaperSearch`, `WebSearch`
+
+**`task_type`**: 该 session 的主要任务类型（单选）：
+- `计算任务`：提交了 Bohrium job 或本地执行了 DFT/MD/MLIP 计算
+- `文献调研`：以 PaperSearch/WebSearch 为主的文献检索与总结
+- `结构建模`：构建晶体/表面/界面/分子结构但未提交计算
+- `Q&A/调试`：用户粘贴日志/错误，agent 诊断问题
+- `学术写作`：润色/改写/生成论文段落或 PPT
+- `数据提取`：从 PDF/文献/实验数据中批量提取结构化信息
+- `其他`：不属于以上类别
 
 **Verdict meanings:**
 - `skip`: No agent behavior to analyze (infra failure before any agent action, off-topic non-materials-science query, empty/cancelled session with zero tool calls)
@@ -203,7 +222,20 @@ For `actionable` sessions, design questions following these principles:
     notes: "what capability this tests; what went wrong on prod (if any)"
 ```
 
-### 6. Review Cycle
+### 6. Generate Distribution Summary
+
+每完成一批分析后（或每月分析完成时），在向用户汇报时附带以下统计信息：
+
+1. **软件/工具分布**：统计 `software_tags` 出现频次，按降序排列
+2. **任务类型分布**：统计 `task_type` 各类占比
+3. **Verdict 分布**：skip / informational / actionable 占比
+
+这些统计用于：
+- 发现覆盖盲区（某软件用量大但无对应 eval 题）
+- 跟踪用户行为演变趋势（如 LAMMPS 用量上升则需加强相关 eval）
+- 指导 release gate case 的增删决策
+
+### 7. Review Cycle
 
 After writing questions:
 1. Check for prompt hints (透题): Does the prompt give away any part of the solution?
