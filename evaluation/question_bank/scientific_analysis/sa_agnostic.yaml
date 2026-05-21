@@ -1739,10 +1739,10 @@ questions:
   human_prompt_seed: '工作区中有一份 LiVCl6 固态电解质的分子动力学模拟结果 `diffusion_data.json`，包含
     5 个温度下的 Li 扩散系数和离子电导率，以及 Arrhenius 拟合参数。
 
-    请基于这些数据评估 LiVCl6 作为固态电解质的离子输运性能，并给出你对数据可靠性的判断。
+    请基于这些数据评估 LiVCl6 作为固态电解质的离子输运性能。
 
-    输出 `evaluation_report.json`，格式：`{"performance_summary": "...", "is_reliable":
-    true/false, "issues": [...], "recommendations": [...]}`'
+    输出 `evaluation_report.json`，格式：`{"Ea_eV": ..., "sigma_300K_S_per_cm": ...,
+    "conclusion": "...", "limitations": [...]}`'
   tags:
   - code_mlip
   data_files:
@@ -1753,21 +1753,16 @@ questions:
       values and insufficient simulation time (20ps, 9 Li atoms).
   reference_answers:
   - key: output_artifact
-    value: sanity_report.json
+    value: evaluation_report.json
   - key: identifies_non_monotonic
     value:
-      filename: sanity_report.json
+      filename: evaluation_report.json
       pattern: (?i)(non.?monoton|800.*700|D\(800\).*<.*D\(700\)|700.*>.*800|不单调|非单调|反常|anomal)
       flags: i
   - key: identifies_short_simulation
     value:
-      filename: sanity_report.json
+      filename: evaluation_report.json
       pattern: (?i)(20\s*ps.*short|insufficien|不够|太短|统计.*差|poor.*statistic|longer.*simulat|延长)
-      flags: i
-  - key: is_reliable_false
-    value:
-      filename: sanity_report.json
-      pattern: (?i)"is_reliable"\s*:\s*false
       flags: i
   - key: turn_budget
     value:
@@ -1793,10 +1788,11 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 2.0
-  - id: is_reliable_false
-    criterion: Agent concludes the results are NOT reliable (is_reliable=false).
+  - id: mentions_limitations
+    criterion: The limitations field is non-empty and mentions at least one concrete
+      issue with the simulation (short time, small system, or non-monotonic behavior).
     axis: correctness
-    verify: text_file_regex
+    verify: llm_binary_judge
     weight: 1.5
   - id: grounding_source
     criterion: The analysis references specific data points (e.g., D at 700K vs 800K)
