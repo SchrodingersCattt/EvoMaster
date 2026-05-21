@@ -169,6 +169,8 @@ class AgentKernel:
                         last_reason = "error"
                 raise
             finally:
+                if spec.runtime_ports.interrupt_checker is not None:
+                    spec.runtime_ports.interrupt_checker.cleanup()
                 if spec.hook_executor is not None:
                     await spec.hook_executor.emit(
                         HookEvent.RUN_END,
@@ -396,8 +398,8 @@ class AgentKernel:
                     )
                 )
                 confirmed = await interrupt_checker.wait_for_confirm(timeout=3.0)
+                interrupt_checker.cleanup()
                 if confirmed:
-                    interrupt_checker.cleanup()
                     yield self._terminal(
                         state, "interrupted", final_content=response.content
                     )
