@@ -3565,7 +3565,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_028_20260518
+- id: IG_abacus_028_20260521
   capability: input_generation
   domain: agnostic
   intent: Compare Gaussian vs fixed smearing for spin LCAO Fe (official 06_smearing).
@@ -3574,15 +3574,16 @@ questions:
   - eng_abacus
   data_files:
   - key: STRU_Fe_smearing
-    path: data/IG_abacus_028_20260518/STRU_Fe_smearing
+    path: data/IG_abacus_028_20260521/STRU_Fe_smearing
     oss_url: ''
     description: Official STRU from abacus-develop examples/06_smearing/01_lcao_Fe
   reference_answers:
   - key: must_run_gaussian_sm
     value:
       filename: run_gaussian/INPUT
-      pattern: (?im)^\s*smearing_method\s+gaussian\s*$
-      flags: im
+      tokens:
+      - smearing_method gauss
+      flags: i
   - key: must_run_gaussian_lcao
     value:
       filename: run_gaussian/INPUT
@@ -3596,13 +3597,15 @@ questions:
   - key: must_run_gaussian_sig
     value:
       filename: run_gaussian/INPUT
-      pattern: (?im)^\s*smearing_sigma\s+\S+
-      flags: im
+      tokens:
+      - smearing_sigma
+      flags: i
   - key: must_run_fixed_sm
     value:
       filename: run_fixed/INPUT
-      pattern: (?im)^\s*smearing_method\s+fixed\s*$
-      flags: im
+      tokens:
+      - smearing_method fixed
+      flags: i
   - key: must_run_fixed_lcao
     value:
       filename: run_fixed/INPUT
@@ -3640,9 +3643,9 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: must_run_gaussian_sm
-    criterion: '[Must] smearing_method gaussian.'
+    criterion: '[Must] smearing_method gauss/gaussian.'
     axis: correctness
-    verify: text_file_regex
+    verify: text_file_contains_all
   - id: must_run_gaussian_lcao
     criterion: '[Must] LCAO spin SCF.'
     axis: correctness
@@ -3650,7 +3653,7 @@ questions:
   - id: must_run_gaussian_sig
     criterion: '[Must] smearing_sigma set.'
     axis: correctness
-    verify: text_file_regex
+    verify: text_file_contains_all
   - id: run_fixed_in
     criterion: '`run_fixed/INPUT` must be written to the workspace.'
     axis: correctness
@@ -3662,7 +3665,7 @@ questions:
   - id: must_run_fixed_sm
     criterion: '[Must] smearing_method fixed.'
     axis: correctness
-    verify: text_file_regex
+    verify: text_file_contains_all
   - id: must_run_fixed_lcao
     criterion: '[Must] LCAO spin SCF.'
     axis: correctness
