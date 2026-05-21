@@ -503,3 +503,50 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
+- id: SC_cat_co_orient_001_20260521
+  capability: structure_construction
+  domain: catalysis
+  intent: Build CO adsorption structure on Pt(111) without specifying orientation,
+    testing whether agent knows CO adsorbs C-down on transition metal surfaces.
+  human_prompt_seed: 在 Pt(111) 2×2 超胞 4 层 slab（15 Å 真空）上构建 CO 分子 ontop 吸附初始结构，输出为
+    `Pt111_CO.cif`。
+  tags:
+  - struct_surface
+  data_files: []
+  reference_answers:
+  - key: file_exists
+    value: Pt111_CO.cif
+  - key: co_c_pt_bond
+    value:
+      filename: Pt111_CO.cif
+      element_a: C
+      element_b: Pt
+      cutoff_A: 2.5
+      expected: 1.85
+      tolerance: 0.35
+  - key: turn_budget
+    value:
+      max: 15
+  - key: token_budget_total
+    value:
+      max: 20000
+  scoring_checklist:
+  - id: file_exists
+    criterion: Agent writes `Pt111_CO.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: co_c_down
+    criterion: The CO molecule is oriented C-down (carbon closer to Pt surface). Verified
+      by C-Pt distance being ~1.85 Å (within bond range). If O-down, the nearest C-Pt
+      distance would be >3.0 Å and this check would fail.
+    axis: correctness
+    verify: struct_file_bond_length
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
