@@ -14,23 +14,29 @@ from src.utils.constant import REDIS_URL
 logger = logging.getLogger(__name__)
 
 # interaction reply 多 worker：Redis key 与取消占位值
-INTERACTION_RUN_ACTIVE_KEY = 'chat:run_active:{session_id}'
-INTERACTION_RUN_CONTEXT_KEY = 'chat:run_context:{session_id}'
-INTERACTION_REPLY_LIST_KEY = 'chat:confirmation_reply:{session_id}'
-INTERACTION_CANCEL_VALUE = '__CANCEL__'
+INTERACTION_RUN_ACTIVE_KEY = "chat:run_active:{session_id}"
+INTERACTION_RUN_CONTEXT_KEY = "chat:run_context:{session_id}"
+INTERACTION_REPLY_LIST_KEY = "chat:confirmation_reply:{session_id}"
+INTERACTION_CANCEL_VALUE = "__CANCEL__"
 INTERACTION_RUN_ACTIVE_TTL_SEC = 3600
 
 # 多 worker 时 run 所在 pod 向其它 pod 的 subscribe 流推送事件（Pub/Sub）
-STREAM_CHANNEL_PREFIX = 'chat:stream:'
+STREAM_CHANNEL_PREFIX = "chat:stream:"
 
 # agent run 队列（API 入队，Worker BLPOP）；用户停止标记（Worker 轮询）
-AGENT_RUN_QUEUE_KEY = 'chat:agent_run_queue'
-AGENT_STOP_KEY_PREFIX = 'chat:stop:'
+AGENT_RUN_QUEUE_KEY = "chat:agent_run_queue"
+AGENT_STOP_KEY_PREFIX = "chat:stop:"
 AGENT_STOP_TTL_SEC = 3600
 
 # 队列模式：API 入队后、Worker 接手前，subscribe 流用此标记保持打开，避免误判为「本进程在跑」导致流不关
-SESSION_RUN_QUEUED_KEY_PREFIX = 'matmaster_chat:session_run_queued:'
+SESSION_RUN_QUEUED_KEY_PREFIX = "matmaster_chat:session_run_queued:"
 SESSION_RUN_QUEUED_TTL_SEC = 300
+
+# 用户排队中断：前端有排队消息时设置 hint，Worker checkpoint 处检查
+INTERRUPT_HINT_KEY_PREFIX = "chat:interrupt_hint:"
+INTERRUPT_HINT_TTL_SEC = 60
+INTERRUPT_CONFIRM_KEY_PREFIX = "chat:interrupt_confirm:"
+INTERRUPT_CONFIRM_TTL_SEC = 10
 
 
 def _run_active_key(session_id: str) -> str:
@@ -46,11 +52,19 @@ def _reply_list_key(session_id: str) -> str:
 
 
 def _stop_key(session_id: str, task_id: str) -> str:
-    return AGENT_STOP_KEY_PREFIX + session_id.strip() + ':' + (task_id or '').strip()
+    return AGENT_STOP_KEY_PREFIX + session_id.strip() + ":" + (task_id or "").strip()
 
 
 def _session_run_queued_key(session_id: str) -> str:
-    return SESSION_RUN_QUEUED_KEY_PREFIX + (session_id or '').strip()
+    return SESSION_RUN_QUEUED_KEY_PREFIX + (session_id or "").strip()
+
+
+def _interrupt_hint_key(session_id: str) -> str:
+    return INTERRUPT_HINT_KEY_PREFIX + (session_id or "").strip()
+
+
+def _interrupt_confirm_key(session_id: str) -> str:
+    return INTERRUPT_CONFIRM_KEY_PREFIX + (session_id or "").strip()
 
 
 class RedisDao:
@@ -80,7 +94,7 @@ class RedisDao:
             client.publish(channel, message)
             return True
         except Exception as e:
-            logger.warning('Redis publish failed channel=%s: %s', channel, e)
+            logger.warning("Redis publish failed channel=%s: %s", channel, e)
             return False
 
     def publish_stream_event(self, session_id: str, payload: dict) -> bool:
@@ -91,7 +105,7 @@ class RedisDao:
             return self.publish(channel, message)
         except (TypeError, ValueError) as e:
             logger.warning(
-                'Redis publish_stream_event json failed session_id=%s: %s',
+                "Redis publish_stream_event json failed session_id=%s: %s",
                 session_id,
                 e,
             )
@@ -104,7 +118,7 @@ class RedisDao:
         try:
             return redis.from_url(REDIS_URL, decode_responses=True)
         except Exception as e:
-            logger.warning('Redis client init failed: %s', e)
+            logger.warning("Redis client init failed: %s", e)
             return None
 
     # ---------- interaction reply 多 worker（run_active + reply list）----------
@@ -117,13 +131,13 @@ class RedisDao:
         try:
             client.set(
                 _run_active_key(session_id),
-                '1',
+                "1",
                 ex=INTERACTION_RUN_ACTIVE_TTL_SEC,
             )
             return True
         except Exception as e:
             logger.warning(
-                'Redis set run_active failed session_id=%s: %s', session_id, e
+                "Redis set run_active failed session_id=%s: %s", session_id, e
             )
             return False
 
@@ -137,7 +151,7 @@ class RedisDao:
             client.delete(_run_context_key(session_id))
         except Exception as e:
             logger.warning(
-                'Redis delete run_active/run_context failed session_id=%s: %s',
+                "Redis delete run_active/run_context failed session_id=%s: %s",
                 session_id,
                 e,
             )
@@ -153,7 +167,7 @@ class RedisDao:
             client.set(
                 _run_context_key(session_id),
                 json.dumps(
-                    {'task_id': task_id, 'invocation_id': invocation_id},
+                    {"task_id": task_id, "invocation_id": invocation_id},
                     ensure_ascii=False,
                 ),
                 ex=INTERACTION_RUN_ACTIVE_TTL_SEC,
@@ -161,7 +175,7 @@ class RedisDao:
             return True
         except Exception as e:
             logger.warning(
-                'Redis set run_context failed session_id=%s: %s', session_id, e
+                "Redis set run_context failed session_id=%s: %s", session_id, e
             )
             return False
 
@@ -177,7 +191,7 @@ class RedisDao:
             return json.loads(raw)
         except Exception as e:
             logger.warning(
-                'Redis get run_context failed session_id=%s: %s', session_id, e
+                "Redis get run_context failed session_id=%s: %s", session_id, e
             )
             return None
 
@@ -200,7 +214,7 @@ class RedisDao:
             client.delete(_reply_list_key(session_id))
         except Exception as e:
             logger.warning(
-                'Redis clear reply list failed session_id=%s: %s', session_id, e
+                "Redis clear reply list failed session_id=%s: %s", session_id, e
             )
 
     def rpush_interaction_reply(self, session_id: str, value: str) -> None:
@@ -212,7 +226,7 @@ class RedisDao:
             client.rpush(_reply_list_key(session_id), value)
         except Exception as e:
             logger.warning(
-                'Redis RPUSH interaction_reply failed session_id=%s: %s',
+                "Redis RPUSH interaction_reply failed session_id=%s: %s",
                 session_id,
                 e,
             )
@@ -226,7 +240,7 @@ class RedisDao:
             result = client.blpop(_reply_list_key(session_id), timeout=timeout_sec)
         except Exception as e:
             logger.warning(
-                'Redis BLPOP interaction_reply failed session_id=%s: %s',
+                "Redis BLPOP interaction_reply failed session_id=%s: %s",
                 session_id,
                 e,
             )
@@ -248,7 +262,7 @@ class RedisDao:
             client.lpush(AGENT_RUN_QUEUE_KEY, raw)
             return True
         except Exception as e:
-            logger.warning('Redis LPUSH agent_run_job failed: %s', e)
+            logger.warning("Redis LPUSH agent_run_job failed: %s", e)
             return False
 
     def blpop_agent_run_job(self, timeout_sec: int = 30) -> dict | None:
@@ -259,7 +273,7 @@ class RedisDao:
         try:
             result = client.blpop(AGENT_RUN_QUEUE_KEY, timeout=timeout_sec)
         except Exception as e:
-            logger.warning('Redis BLPOP agent_run_job failed: %s', e)
+            logger.warning("Redis BLPOP agent_run_job failed: %s", e)
             return None
         if result is None:
             return None
@@ -267,7 +281,7 @@ class RedisDao:
         try:
             return json.loads(raw)
         except (TypeError, ValueError) as e:
-            logger.warning('Redis agent_run_job payload json load failed: %s', e)
+            logger.warning("Redis agent_run_job payload json load failed: %s", e)
             return None
 
     def llen_agent_run_queue(self) -> int:
@@ -278,7 +292,7 @@ class RedisDao:
         try:
             return int(client.llen(AGENT_RUN_QUEUE_KEY))  # type: ignore[no-any-return]
         except Exception as e:
-            logger.warning('Redis LLEN agent_run_queue failed: %s', e)
+            logger.warning("Redis LLEN agent_run_queue failed: %s", e)
             return 0
 
     def set_session_run_queued(self, session_id: str) -> bool:
@@ -289,13 +303,13 @@ class RedisDao:
         try:
             client.set(
                 _session_run_queued_key(session_id),
-                '1',
+                "1",
                 ex=SESSION_RUN_QUEUED_TTL_SEC,
             )
             return True
         except Exception as e:
             logger.warning(
-                'Redis set_session_run_queued failed session_id=%s: %s',
+                "Redis set_session_run_queued failed session_id=%s: %s",
                 session_id,
                 e,
             )
@@ -310,7 +324,7 @@ class RedisDao:
             client.delete(_session_run_queued_key(session_id))
         except Exception as e:
             logger.warning(
-                'Redis delete_session_run_queued failed session_id=%s: %s',
+                "Redis delete_session_run_queued failed session_id=%s: %s",
                 session_id,
                 e,
             )
@@ -324,7 +338,7 @@ class RedisDao:
             return client.exists(_session_run_queued_key(session_id)) > 0
         except Exception as e:
             logger.warning(
-                'Redis is_session_run_queued failed session_id=%s: %s',
+                "Redis is_session_run_queued failed session_id=%s: %s",
                 session_id,
                 e,
             )
@@ -341,15 +355,15 @@ class RedisDao:
             return False
         try:
             key = _stop_key(session_id, task_id)
-            client.set(key, '1', ex=AGENT_STOP_TTL_SEC)
+            client.set(key, "1", ex=AGENT_STOP_TTL_SEC)
             # 始终再写 session 级 key，供 Worker 在「仅按 session」时也能看到
-            session_key = _stop_key(session_id, '')
+            session_key = _stop_key(session_id, "")
             if session_key != key:
-                client.set(session_key, '1', ex=AGENT_STOP_TTL_SEC)
+                client.set(session_key, "1", ex=AGENT_STOP_TTL_SEC)
             return True
         except Exception as e:
             logger.warning(
-                'Redis set_stop_requested failed session_id=%s task_id=%s: %s',
+                "Redis set_stop_requested failed session_id=%s task_id=%s: %s",
                 session_id,
                 task_id,
                 e,
@@ -364,8 +378,8 @@ class RedisDao:
         try:
             if client.exists(_stop_key(session_id, task_id)) > 0:
                 return True
-            if (task_id or '').strip():
-                return client.exists(_stop_key(session_id, '')) > 0
+            if (task_id or "").strip():
+                return client.exists(_stop_key(session_id, "")) > 0
             return False
         except Exception:
             return False
@@ -378,28 +392,129 @@ class RedisDao:
         client = self.get_publish_client() or self.create_client()
         if not client:
             logger.warning(
-                'Redis delete_stop_requested: no client (session_id=%s task_id=%s), skip',
+                "Redis delete_stop_requested: no client (session_id=%s task_id=%s), skip",
                 session_id,
-                task_id or '(session-only)',
+                task_id or "(session-only)",
             )
             return
         key_task = _stop_key(session_id, task_id)
-        key_session = _stop_key(session_id, '')
+        key_session = _stop_key(session_id, "")
         try:
             deleted = client.delete(key_task, key_session)
             logger.info(
-                'Redis delete_stop_requested: session_id=%s task_id=%s keys=%s,%s deleted=%s',
+                "Redis delete_stop_requested: session_id=%s task_id=%s keys=%s,%s deleted=%s",
                 session_id,
-                task_id or '(session-only)',
+                task_id or "(session-only)",
                 key_task,
                 key_session,
                 deleted,
             )
         except Exception as e:
             logger.warning(
-                'Redis delete_stop_requested failed session_id=%s task_id=%s: %s',
+                "Redis delete_stop_requested failed session_id=%s task_id=%s: %s",
                 session_id,
                 task_id,
+                e,
+            )
+
+    # ---------- 用户排队中断（interrupt hint / confirm）----------
+
+    def set_interrupt_hint(self, session_id: str) -> bool:
+        """前端有排队消息时设置 hint，Worker checkpoint 处检查。"""
+        client = self.create_client()
+        if not client:
+            return False
+        try:
+            client.set(
+                _interrupt_hint_key(session_id),
+                "1",
+                ex=INTERRUPT_HINT_TTL_SEC,
+            )
+            return True
+        except Exception as e:
+            logger.warning(
+                "Redis set_interrupt_hint failed session_id=%s: %s", session_id, e
+            )
+            return False
+
+    def delete_interrupt_hint(self, session_id: str) -> None:
+        """前端队列清空时删除 hint。"""
+        client = self.create_client()
+        if not client:
+            return
+        try:
+            client.delete(_interrupt_hint_key(session_id))
+        except Exception as e:
+            logger.warning(
+                "Redis delete_interrupt_hint failed session_id=%s: %s", session_id, e
+            )
+
+    def has_interrupt_hint(self, session_id: str) -> bool:
+        """检查是否存在 interrupt hint。"""
+        client = self.create_client()
+        if not client:
+            return False
+        try:
+            return client.exists(_interrupt_hint_key(session_id)) > 0
+        except Exception:
+            return False
+
+    def set_interrupt_confirm(self, session_id: str) -> bool:
+        """前端收到 checkpoint 后确认中断。"""
+        client = self.create_client()
+        if not client:
+            return False
+        try:
+            client.set(
+                _interrupt_confirm_key(session_id),
+                "1",
+                ex=INTERRUPT_CONFIRM_TTL_SEC,
+            )
+            return True
+        except Exception as e:
+            logger.warning(
+                "Redis set_interrupt_confirm failed session_id=%s: %s", session_id, e
+            )
+            return False
+
+    def has_interrupt_confirm(self, session_id: str) -> bool:
+        """检查是否已确认中断。"""
+        client = self.create_client()
+        if not client:
+            return False
+        try:
+            return client.exists(_interrupt_confirm_key(session_id)) > 0
+        except Exception:
+            return False
+
+    def delete_interrupt_confirm(self, session_id: str) -> None:
+        """清除中断确认（checkpoint 流程结束后）。"""
+        client = self.create_client()
+        if not client:
+            return
+        try:
+            client.delete(_interrupt_confirm_key(session_id))
+        except Exception as e:
+            logger.warning(
+                "Redis delete_interrupt_confirm failed session_id=%s: %s",
+                session_id,
+                e,
+            )
+
+    def cleanup_interrupt_keys(self, session_id: str) -> None:
+        """清除该会话所有 interrupt 相关 key（run 结束时调用）。"""
+        client = self.create_client()
+        if not client:
+            return
+        try:
+            client.delete(
+                _interrupt_hint_key(session_id),
+                _interrupt_confirm_key(session_id),
+            )
+        except Exception as e:
+            logger.warning(
+                "Redis cleanup_interrupt_keys failed session_id=%s: %s",
+                session_id,
                 e,
             )
 

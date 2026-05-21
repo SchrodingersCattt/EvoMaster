@@ -240,6 +240,9 @@ def _public_content_for_event(
             content['total_usage'] = payload.get('total_usage', {})
         return content
 
+    if event_type == 'checkpoint':
+        return {'turn_index': payload.get('turn_index')}
+
     if event_type == 'skill_hit':
         return {'skill_name': payload.get('skill_name')}
 
