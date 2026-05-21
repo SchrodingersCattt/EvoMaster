@@ -2,7 +2,8 @@
 
 ## Quick Reference: Mandatory Parameters by Task Type
 
-Always include **universal baseline**: `calculation`, `basis_type`, `ecutwfc`, `scf_thr`, `scf_nmax`, `smearing_method`, `smearing_sigma`.
+Always include **universal baseline**: `calculation`, `basis_type`, `ntype`, `ecutwfc`, `scf_thr`, `scf_nmax`, `smearing_method`, `smearing_sigma`.
+> **`ntype`**: Must equal the number of species in STRU `ATOMIC_SPECIES` section. This is mandatory — ABACUS will fail or behave incorrectly without it.
 > **Basis-aware default**: `ecutwfc 100` is the standard baseline for `basis_type lcao`; for `basis_type pw`, prefer `ecutwfc 50` unless PP/system-specific convergence tests require higher values.
 
 | Task | Additional mandatory parameters | Common omission |
@@ -52,6 +53,7 @@ ecutrho             400
 INPUT_PARAMETERS
 calculation relax
 basis_type lcao
+ntype 1
 ecutwfc 100
 scf_thr 1.0e-7
 scf_nmax 100
@@ -68,6 +70,7 @@ relax_method cg
 INPUT_PARAMETERS
 calculation cell-relax
 basis_type pw
+ntype 1
 ecutwfc 50
 scf_thr 1.0e-7
 scf_nmax 100
@@ -89,6 +92,7 @@ relax_method bfgs
 INPUT_PARAMETERS
 calculation scf
 basis_type lcao
+ntype 1
 nspin 4
 noncolin 1
 lspinorb 1
@@ -108,6 +112,7 @@ All three are required together: `nspin 4` + `noncolin 1` + `lspinorb 1`. Values
 INPUT_PARAMETERS
 calculation scf
 basis_type lcao
+ntype 2
 ecutwfc 100
 scf_thr 1.0e-7
 scf_nmax 100
@@ -129,6 +134,7 @@ kspacing 0.10 0.10 1.00
 INPUT_PARAMETERS
 calculation scf
 basis_type lcao
+ntype 1
 ks_solver pexsi
 pexsi_npole 80
 pexsi_temp 0.1
@@ -149,6 +155,7 @@ orbital_dir /root/apns-orbitals-efficiency-v1/
 INPUT_PARAMETERS
 calculation scf
 basis_type lcao
+ntype 1
 ecutwfc 100
 scf_thr 1.0e-7
 scf_nmax 100
@@ -169,6 +176,7 @@ Slab KPT for work function (z = vacuum): `20 20 1 0 0 0`
 INPUT_PARAMETERS
 calculation scf
 basis_type pw
+ntype 1
 ecutwfc 50
 scf_thr 1.0e-7
 scf_nmax 200
@@ -200,6 +208,7 @@ Electronic property calculations (band structure, DOS) require: SCF → NSCF.
 INPUT_PARAMETERS
 calculation scf
 basis_type lcao
+ntype 1
 ecutwfc 100
 scf_thr 1.0e-7
 scf_nmax 100
@@ -222,6 +231,7 @@ Gamma
 INPUT_PARAMETERS
 calculation nscf
 basis_type lcao
+ntype 1
 ecutwfc 100
 scf_thr 1.0e-7
 scf_nmax 300
@@ -261,6 +271,7 @@ Line
 INPUT_PARAMETERS
 calculation nscf
 basis_type lcao
+ntype 1
 ecutwfc 100
 scf_thr 1.0e-7
 scf_nmax 300
@@ -393,6 +404,7 @@ When a task requests "low-cost", "benchmark", or "minimal cost" parameters:
 
 Before finalizing any INPUT file, verify none of these apply:
 
+- ❌ Missing `ntype` in INPUT → must equal STRU ATOMIC_SPECIES count (validator will reject)
 - ❌ `cell-relax` without `cal_force 1` → optimizer has no forces, **silently broken** (most common error)
 - ❌ `cell-relax` without `cal_stress 1` → cell vectors not optimized
 - ❌ `relax` without `cal_force 1` → same problem, forces not computed

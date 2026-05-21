@@ -5,6 +5,7 @@
 INPUT_PARAMETERS
 calculation scf
 basis_type pw
+ntype 1
 ecutwfc 50
 scf_thr 1.0e-7
 scf_nmax 200
@@ -18,6 +19,7 @@ pseudo_dir /root/apns-pseudopotentials-v1/
 INPUT_PARAMETERS
 calculation scf
 basis_type lcao
+ntype 1
 ecutwfc 100
 scf_thr 1.0e-7
 scf_nmax 200
