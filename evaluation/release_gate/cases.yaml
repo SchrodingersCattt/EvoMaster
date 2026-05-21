@@ -246,13 +246,13 @@ cases:
     baseline: smooth
     notes: "24 events，1 次 SyntaxError 后立即修复，所有参数计算正确"
 
-  - id: rg_s12
+  - id: rg_r19
     title: "LiVCl₆ 离子电导率 (多温度 MD)"
     prompt: "找到LiVCl₆的晶体结构，通过分子动力学模拟计算其离子电导率"
     source_session: "55db4f96e7064166ad59bdce28d878d0"
     source_month: "2026-04"
-    baseline: smooth
-    notes: "200 events，0 errors。DB检索 → DPA优化 → 超胞 → 5温度MD → MSD → Nernst-Einstein → Arrhenius外推"
+    baseline: rough
+    friction: "0 errors 但结果有隐藏问题：D(800K)<D(700K) 非单调（违反 Arrhenius），20ps 产出时间统计性极差（仅 9 个 Li），agent 未指出异常"
 
   - id: rg_s13
     title: "H₂O/Co(0001) 吸附能 + COHP"
