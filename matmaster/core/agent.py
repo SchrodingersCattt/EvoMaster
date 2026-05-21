@@ -41,6 +41,7 @@ from matmaster.core.kernel_items import (
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.events import (
     AssistantStateEvent,
+    CheckpointEvent,
     FinishDetail,
     ResponseEvent,
     ToolCallEvent,
@@ -70,6 +71,7 @@ logger = logging.getLogger(__name__)
 
 _TERMINAL_REASON_TO_STATUS: dict[str, str] = {
     "cancelled": "cancelled",
+    "interrupted": "completed",
     "invalid_finish": "failed",
     "natural": "completed",
     "max_turns": "completed",
@@ -383,6 +385,23 @@ class AgentKernel:
                         arguments=tc.arguments,
                     )
                 )
+
+            # Checkpoint: check if user has queued messages to interrupt
+            interrupt_checker = spec.runtime_ports.interrupt_checker
+            if interrupt_checker is not None and interrupt_checker.has_hint():
+                yield _KernelItem(
+                    event=CheckpointEvent(
+                        source="agent",
+                        turn_index=turn_index,
+                    )
+                )
+                confirmed = await interrupt_checker.wait_for_confirm(timeout=3.0)
+                if confirmed:
+                    interrupt_checker.cleanup()
+                    yield self._terminal(
+                        state, "interrupted", final_content=response.content
+                    )
+                    return
 
             async for item in dispatch_tool_calls(
                 spec=spec,

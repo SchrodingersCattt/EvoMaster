@@ -626,6 +626,78 @@ def set_session_directory(
     return SessionDirectoryApiResponse(data=_session_workspace_data_from_row(row))
 
 
+@router.put(
+    "/{session_id}/interrupt-hint",
+    response_model=BaseResponse,
+    summary="设置排队中断提示",
+    description="前端有排队消息时调用，通知后端在下一个 checkpoint 时暂停等待确认。",
+    operation_id="setChatSessionInterruptHint",
+    responses={
+        403: COMMON_ERROR_RESPONSES[403],
+    },
+)
+def set_interrupt_hint(
+    session_id: str = Path(..., description="会话 ID"),
+    user_id: str | None = Depends(UserService.optional_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    sid = session_id.strip()
+    if not chat_svc.can_access_session(sid, user_id):
+        raise ForbiddenErrorResponse(msg="无权限访问该会话")
+    from src.dao.redis_dao import get_redis_dao
+
+    get_redis_dao().set_interrupt_hint(sid)
+    return BaseResponse(msg="ok")
+
+
+@router.delete(
+    "/{session_id}/interrupt-hint",
+    response_model=BaseResponse,
+    summary="清除排队中断提示",
+    description="前端队列清空时调用，取消中断意图。",
+    operation_id="deleteChatSessionInterruptHint",
+    responses={
+        403: COMMON_ERROR_RESPONSES[403],
+    },
+)
+def delete_interrupt_hint(
+    session_id: str = Path(..., description="会话 ID"),
+    user_id: str | None = Depends(UserService.optional_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    sid = session_id.strip()
+    if not chat_svc.can_access_session(sid, user_id):
+        raise ForbiddenErrorResponse(msg="无权限访问该会话")
+    from src.dao.redis_dao import get_redis_dao
+
+    get_redis_dao().delete_interrupt_hint(sid)
+    return BaseResponse(msg="ok")
+
+
+@router.post(
+    "/{session_id}/interrupt",
+    response_model=BaseResponse,
+    summary="确认中断当前轮次",
+    description="前端收到 checkpoint 事件后调用，确认要中断当前 tool dispatch。幂等：重复调用安全。",
+    operation_id="confirmChatSessionInterrupt",
+    responses={
+        403: COMMON_ERROR_RESPONSES[403],
+    },
+)
+def confirm_interrupt(
+    session_id: str = Path(..., description="会话 ID"),
+    user_id: str | None = Depends(UserService.optional_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    sid = session_id.strip()
+    if not chat_svc.can_access_session(sid, user_id):
+        raise ForbiddenErrorResponse(msg="无权限访问该会话")
+    from src.dao.redis_dao import get_redis_dao
+
+    get_redis_dao().set_interrupt_confirm(sid)
+    return BaseResponse(msg="ok")
+
+
 @router.delete(
     "/{session_id}",
     response_model=BaseResponse,

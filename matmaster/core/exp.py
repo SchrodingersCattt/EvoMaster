@@ -326,6 +326,19 @@ class Exp:
             spawn_id=spawn_id,
         )
 
+    @staticmethod
+    def _build_interrupt_checker(ctx: PlaygroundContext):
+        """Build an InterruptChecker if session_id is available."""
+        session_id = ctx.session_id
+        if not session_id:
+            return None
+        try:
+            from src.services.interrupt_service import RedisInterruptChecker
+
+            return RedisInterruptChecker(session_id)
+        except Exception:
+            return None
+
     # ── Active planes derivation ────────────────────────
 
     @staticmethod
@@ -528,6 +541,7 @@ class Exp:
                 "runtime_ports": KernelRuntimePorts(
                     checkpoint_sink=checkpoint_sink,
                     pre_compaction_barrier=pre_compaction_barrier,
+                    interrupt_checker=self._build_interrupt_checker(ctx),
                 ),
                 "run_identity": self._build_run_identity(ctx, spawn_id=spawn_id),
                 "turn_input": ctx.metadata.turn_input,

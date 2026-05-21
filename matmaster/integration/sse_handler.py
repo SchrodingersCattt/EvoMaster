@@ -127,6 +127,10 @@ class SSEHandler:
         if event_type == 'assistant_state':
             return True
 
+        # checkpoint is pushed to frontend for interrupt flow
+        if event_type == 'checkpoint':
+            return False
+
         # skill_hit is persist-only, not pushed to frontend
         if event_type == 'skill_hit':
             return True

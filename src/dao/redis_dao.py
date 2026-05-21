@@ -32,6 +32,12 @@ AGENT_STOP_TTL_SEC = 3600
 SESSION_RUN_QUEUED_KEY_PREFIX = 'matmaster_chat:session_run_queued:'
 SESSION_RUN_QUEUED_TTL_SEC = 300
 
+# 用户排队中断：前端有排队消息时设置 hint，Worker checkpoint 处检查
+INTERRUPT_HINT_KEY_PREFIX = 'chat:interrupt_hint:'
+INTERRUPT_HINT_TTL_SEC = 60
+INTERRUPT_CONFIRM_KEY_PREFIX = 'chat:interrupt_confirm:'
+INTERRUPT_CONFIRM_TTL_SEC = 10
+
 
 def _run_active_key(session_id: str) -> str:
     return INTERACTION_RUN_ACTIVE_KEY.format(session_id=session_id.strip())
@@ -51,6 +57,14 @@ def _stop_key(session_id: str, task_id: str) -> str:
 
 def _session_run_queued_key(session_id: str) -> str:
     return SESSION_RUN_QUEUED_KEY_PREFIX + (session_id or '').strip()
+
+
+def _interrupt_hint_key(session_id: str) -> str:
+    return INTERRUPT_HINT_KEY_PREFIX + (session_id or '').strip()
+
+
+def _interrupt_confirm_key(session_id: str) -> str:
+    return INTERRUPT_CONFIRM_KEY_PREFIX + (session_id or '').strip()
 
 
 class RedisDao:
@@ -400,6 +414,108 @@ class RedisDao:
                 'Redis delete_stop_requested failed session_id=%s task_id=%s: %s',
                 session_id,
                 task_id,
+                e,
+            )
+
+
+    # ---------- 用户排队中断（interrupt hint / confirm）----------
+
+    def set_interrupt_hint(self, session_id: str) -> bool:
+        """前端有排队消息时设置 hint，Worker checkpoint 处检查。"""
+        client = self.create_client()
+        if not client:
+            return False
+        try:
+            client.set(
+                _interrupt_hint_key(session_id),
+                '1',
+                ex=INTERRUPT_HINT_TTL_SEC,
+            )
+            return True
+        except Exception as e:
+            logger.warning(
+                'Redis set_interrupt_hint failed session_id=%s: %s', session_id, e
+            )
+            return False
+
+    def delete_interrupt_hint(self, session_id: str) -> None:
+        """前端队列清空时删除 hint。"""
+        client = self.create_client()
+        if not client:
+            return
+        try:
+            client.delete(_interrupt_hint_key(session_id))
+        except Exception as e:
+            logger.warning(
+                'Redis delete_interrupt_hint failed session_id=%s: %s', session_id, e
+            )
+
+    def has_interrupt_hint(self, session_id: str) -> bool:
+        """检查是否存在 interrupt hint。"""
+        client = self.create_client()
+        if not client:
+            return False
+        try:
+            return client.exists(_interrupt_hint_key(session_id)) > 0
+        except Exception:
+            return False
+
+    def set_interrupt_confirm(self, session_id: str) -> bool:
+        """前端收到 checkpoint 后确认中断。"""
+        client = self.create_client()
+        if not client:
+            return False
+        try:
+            client.set(
+                _interrupt_confirm_key(session_id),
+                '1',
+                ex=INTERRUPT_CONFIRM_TTL_SEC,
+            )
+            return True
+        except Exception as e:
+            logger.warning(
+                'Redis set_interrupt_confirm failed session_id=%s: %s', session_id, e
+            )
+            return False
+
+    def has_interrupt_confirm(self, session_id: str) -> bool:
+        """检查是否已确认中断。"""
+        client = self.create_client()
+        if not client:
+            return False
+        try:
+            return client.exists(_interrupt_confirm_key(session_id)) > 0
+        except Exception:
+            return False
+
+    def delete_interrupt_confirm(self, session_id: str) -> None:
+        """清除中断确认（checkpoint 流程结束后）。"""
+        client = self.create_client()
+        if not client:
+            return
+        try:
+            client.delete(_interrupt_confirm_key(session_id))
+        except Exception as e:
+            logger.warning(
+                'Redis delete_interrupt_confirm failed session_id=%s: %s',
+                session_id,
+                e,
+            )
+
+    def cleanup_interrupt_keys(self, session_id: str) -> None:
+        """清除该会话所有 interrupt 相关 key（run 结束时调用）。"""
+        client = self.create_client()
+        if not client:
+            return
+        try:
+            client.delete(
+                _interrupt_hint_key(session_id),
+                _interrupt_confirm_key(session_id),
+            )
+        except Exception as e:
+            logger.warning(
+                'Redis cleanup_interrupt_keys failed session_id=%s: %s',
+                session_id,
                 e,
             )
 

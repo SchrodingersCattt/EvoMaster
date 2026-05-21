@@ -127,7 +127,19 @@ class PlaygroundRuntimePorts:
     bohrium: BohriumRuntimePort = field(default_factory=BohriumRuntimePort)
 
 
+@runtime_checkable
+class InterruptChecker(Protocol):
+    """Check and wait for user interrupt at checkpoint boundaries."""
+
+    def has_hint(self) -> bool: ...
+
+    async def wait_for_confirm(self, timeout: float) -> bool: ...
+
+    def cleanup(self) -> None: ...
+
+
 @dataclass(frozen=True)
 class KernelRuntimePorts:
     checkpoint_sink: CheckpointSink | None = None
     pre_compaction_barrier: PreCompactionBarrier | None = None
+    interrupt_checker: InterruptChecker | None = None
