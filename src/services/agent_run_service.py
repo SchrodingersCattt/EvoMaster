@@ -517,6 +517,11 @@ class AgentRunService:
             )
             history = wiring.history
             pg_ctx = pg_ctx.with_runtime_ports(wiring.runtime_ports)
+            from src.services.interrupt_service import RedisInterruptChecker
+
+            pg_ctx = pg_ctx.with_runtime_port(
+                interrupt_checker=RedisInterruptChecker(session_id),
+            )
             if wiring.bohrium_rebuild_events:
                 pg_ctx = pg_ctx.with_metadata(
                     bohrium_rebuild_events=tuple(wiring.bohrium_rebuild_events),

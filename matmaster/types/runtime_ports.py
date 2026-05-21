@@ -125,6 +125,7 @@ class PlaygroundRuntimePorts:
     )
     figure_upload: FigureUploadPort = field(default_factory=FigureUploadPort)
     bohrium: BohriumRuntimePort = field(default_factory=BohriumRuntimePort)
+    interrupt_checker: InterruptChecker | None = None
 
 
 @runtime_checkable
