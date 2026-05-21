@@ -6398,7 +6398,6 @@ questions:
     criterion: '[Must] efield_pos_max and efield_pos_dec set for sawtooth field position.'
     axis: correctness
     verify: text_file_contains_all
-    weight: 1.0
     weight: 0.5
   - id: turn_budget
     criterion: Agent completes within turn budget.
