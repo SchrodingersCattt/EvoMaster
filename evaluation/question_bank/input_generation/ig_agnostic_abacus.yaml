@@ -6538,7 +6538,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_052_20260518
+- id: IG_abacus_052_20260521
   capability: input_generation
   domain: agnostic
   intent: Prepare LCAO SCF inputs with electrostatic potential output per official 30_elec_pot—out_pot 2 for CUBE export.
@@ -6547,9 +6547,17 @@ questions:
   - eng_abacus
   data_files:
   - key: STRU_Si
-    path: data/IG_abacus_052_20260518/STRU_Si
+    path: data/IG_abacus_052_20260521/STRU_Si
     oss_url: ''
     description: Official STRU from abacus-develop examples/30_elec_pot/01_lcao_Si
+  - key: Si_pz_vbc_UPF
+    path: data/IG_abacus_052_20260521/Si.pz-vbc.UPF
+    oss_url: ''
+    description: Pseudopotential file referenced by STRU (placeholder).
+  - key: Si_lda_orbital
+    path: data/IG_abacus_052_20260521/Si_lda_8.0au_50Ry_2s2p1d
+    oss_url: ''
+    description: Numerical orbital file referenced by STRU (placeholder).
   reference_answers:
   - key: epot_input
     value: run_lcao_si_epot/INPUT
