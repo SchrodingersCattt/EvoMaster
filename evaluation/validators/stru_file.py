@@ -300,7 +300,7 @@ def check_stru_file(
 
     if check == "magnetic_order":
         expected_order = str(expected or "")
-        moments = _site_moments_for_magnetic_order(content)
+        moments = _parse_stru_site_magnetic_moments(content)
         actual = _classify_magnetic_order(moments, min_sites=min_sites)
         if actual == expected_order:
             return True, (
