@@ -96,7 +96,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_005_20260508v2
+- id: SC_struct_005_20260520
   capability: structure_construction
   domain: agnostic
   intent: Infer SG-derived chemical formulas for 5 disordered crystal structures and
@@ -227,10 +227,10 @@ questions:
     axis: correctness
     verify: struct_file_formula
   - id: required_fields
-    criterion: Each filename is paired with chemical_formula, is_disordered, ordered_replica_count,
-      and ordered_output_archive.
+    criterion: The final answer includes the structured fields chemical_formula, is_disordered,
+      ordered_replica_count, and ordered_output_archive for the ordered-replica outputs.
     axis: correctness
-    verify: llm_binary_judge
+    verify: contains_all
   - id: ordered_file_name_mapping
     criterion: Final answer explicitly names all five input CIF basenames and the
       five corresponding `ordered_<basename>.cif` output files.
@@ -399,7 +399,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_008_20260507v4
+- id: SC_struct_008_20260520
   capability: structure_construction
   domain: agnostic
   intent: Construct a computation-ready gamma-alumina bulk model and validate stoichiometry,
@@ -443,19 +443,17 @@ questions:
       json_path: max_force_ev_per_ang
       target: 0.05
       tolerance: 0.05
+  - key: al_mean_coordination
+    value:
+      filename: gamma_alumina.cif
+      center_element: Al
+      expected: 5
+      tolerance: 0.5
+      cutoff_A: 2.2
   - key: min_distance_A
     value:
       filename: gamma_alumina.cif
       min_distance_A: 1.0
-  - key: required_fields
-    value:
-    - file_exists
-    - al_o_ratio
-    - cell_angles
-    - tetrahedral_alo
-    - octahedral_alo
-    - min_distance_check
-    - max_force
   - key: turn_budget
     value: *id001
   - key: duration_budget
@@ -494,12 +492,11 @@ questions:
       least 1.0 A.
     axis: correctness
     verify: struct_file_min_interatomic_distance
-  - id: required_fields
-    criterion: The answer explicitly reports the Al:O ratio, all three cell angles,
-      evidence for both tetrahedral and octahedral AlO environments, a minimum-distance
-      sanity check above 1.0 A, and a relaxed maximum-force check below 0.1 eV/A.
+  - id: al_mean_coordination
+    criterion: The average Al-O coordination in `gamma_alumina.cif` is consistent
+      with a defect-spinel gamma-alumina mixture of tetrahedral and octahedral Al sites.
     axis: correctness
-    verify: llm_binary_judge
+    verify: struct_file_coordination
   - id: structure_knowledge
     criterion: Agent demonstrates understanding that γ-Al2O3 adopts a defect-spinel
       structure with aluminum occupying both tetrahedral and octahedral coordination
@@ -548,7 +545,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_009_20260508v2
+- id: SC_struct_009_20260508v3
   capability: structure_construction
   domain: agnostic
   intent: Build a stoichiometric and symmetric CeO2(111) surface with three Ce-O-Ce
@@ -584,13 +581,6 @@ questions:
       axis: z
       side: both
       layer_tol_A: 0.5
-  - key: required_fields
-    value:
-    - file_exists
-    - layer_count
-    - symmetry_check
-    - outermost_O_termination
-    - ce_o_ratio
   - key: turn_budget
     value:
       max: 25
@@ -620,12 +610,6 @@ questions:
       element is O).
     axis: correctness
     verify: struct_file_surface_termination
-  - id: required_fields
-    criterion: The answer explicitly reports the 9-layer construction, a slab-center
-      mirror-equivalence symmetry check, oxygen-terminated outermost layers on both
-      sides, stoichiometric CeO2 ratio, and (111) surface orientation where relevant.
-    axis: correctness
-    verify: llm_binary_judge
   - id: grounding_source
     criterion: The answer explains slab polarity/symmetry, layer stacking for CeO2(111),
       O termination, and Ce:O stoichiometry using `ceo2_111_trilayer.cif`, not textbook-only
@@ -667,7 +651,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_010_20260507v3
+- id: SC_struct_010_20260520
   capability: structure_construction
   domain: agnostic
   intent: Build a seven-layer Ag(111) slab with explicit water and potassium ions
@@ -704,6 +688,13 @@ questions:
     value:
       filename: ag111_k_water_interface.cif
       formula: Ag42K2H86O43
+  - key: h_o_ratio
+    value:
+      filename: ag111_k_water_interface.cif
+      element_a: H
+      element_b: O
+      expected_ratio: 2.0
+      tolerance: 0
   - key: slab_layers
     value:
       filename: ag111_k_water_interface.cif
@@ -733,13 +724,6 @@ questions:
     - supercell_a
     - supercell_b
     - adsorbate_side
-  - key: required_fields
-    value:
-    - file_exists
-    - slab_layers
-    - vacuum_A
-    - interface_side
-    - neutral_water_only
   - key: turn_budget
     value:
       max: 20
@@ -774,6 +758,11 @@ questions:
       and 2 K ions were included.
     axis: correctness
     verify: struct_file_formula
+  - id: h_o_ratio
+    criterion: The output CIF has H:O = 2:1 for the 43 neutral water molecules,
+      ruling out net OH-/H3O+ stoichiometry changes.
+    axis: correctness
+    verify: struct_file_stoichiometry_ratio
   - id: slab_layers
     criterion: The Ag atoms form exactly 7 distinct z-layers in the slab.
     axis: correctness
@@ -797,13 +786,6 @@ questions:
       supercell_b, and adsorbate_side so the same-side placement is explicit.
     axis: correctness
     verify: contains_all
-  - id: required_fields
-    criterion: The answer explicitly reports the output structure file, slab layer
-      check, vacuum thickness near 12 Å, neutral-water-only species (no OH-/H3O+),
-      and that solvent/ions are placed above one side of the slab. Numeric loading
-      values are evaluated only by deterministic structure-file checks.
-    axis: correctness
-    verify: llm_binary_judge
   - id: grounding_source
     criterion: The answer ties the 7-layer Ag(111) slab, explicit solvent loading,
       potassium-ion placement, and vacuum spacing to `ag111_k_water_interface.cif`,
@@ -958,7 +940,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_build_001_20260508v5
+- id: SC_struct_build_001_20260508v6
   capability: structure_construction
   domain: agnostic
   intent: Build FCC copper conventional cell using ASE bulk prototype and verify lattice
@@ -1026,12 +1008,6 @@ questions:
       Fm-3m.
     axis: correctness
     verify: contains_all
-  - id: grounding_source
-    criterion: Final answer explicitly states the lattice constant and space group
-      number from the built structure. Cell size is evaluated only by deterministic
-      structure-file checks.
-    axis: grounding
-    verify: llm_binary_judge
   - id: turn_budget
     criterion: Agent completes the task within the turn budget.
     axis: efficiency
@@ -1040,7 +1016,7 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
-- id: SC_struct_build_002_20260507v5
+- id: SC_struct_build_002_20260507v6
   capability: structure_construction
   domain: agnostic
   intent: Build hexagonal boron nitride (hBN) unit cell from space group and Wyckoff
@@ -1130,12 +1106,6 @@ questions:
       setting.
     axis: correctness
     verify: contains_all
-  - id: grounding_source
-    criterion: Final answer reports lattice parameters, gamma angle, and space-group
-      setting from the built structure. Cell size and element-ratio checks are evaluated
-      only by deterministic structure-file checks.
-    axis: grounding
-    verify: llm_binary_judge
   - id: turn_budget
     criterion: Agent completes the task within the turn budget.
     axis: efficiency
@@ -1144,7 +1114,7 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
-- id: SC_struct_build_003_20260507v5
+- id: SC_struct_build_003_20260520
   capability: structure_construction
   domain: agnostic
   intent: Build a phenol molecule from SMILES using RDKit and verify atom count and
@@ -1156,6 +1126,9 @@ questions:
   reference_answers:
   - key: file_exists
     value: phenol.xyz
+  - key: must_parsable
+    value:
+      filename: phenol.xyz
   - key: atom_count
     value:
       filename: phenol.xyz
@@ -1179,6 +1152,10 @@ questions:
     criterion: Agent writes `phenol.xyz` to workspace.
     axis: correctness
     verify: artifact_exists
+  - id: must_parsable
+    criterion: The generated `phenol.xyz` can be parsed as a molecular structure file.
+    axis: correctness
+    verify: struct_file_parsable
   - id: atom_count
     criterion: Molecule contains exactly 13 atoms (6C + 6H + 1O).
     axis: correctness
@@ -1193,10 +1170,6 @@ questions:
       by deterministic structure-file checks.
     axis: correctness
     verify: contains_all
-  - id: grounding_source
-    criterion: Final answer confirms all atoms have valid 3D coordinates and no overlaps.
-    axis: grounding
-    verify: llm_binary_judge
   - id: turn_budget
     criterion: Agent completes the task within the turn budget.
     axis: efficiency
@@ -1302,7 +1275,74 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
-- id: SC_graphene_001_20260517
+- id: SC_struct_build_004_20260518v2
+  capability: structure_construction
+  domain: agnostic
+  intent: Build MgO rocksalt bulk structure with correct experimental lattice constant
+    without being given the value, testing domain knowledge of common oxide parameters.
+  human_prompt_seed: 构建 MgO 岩盐结构的惯用晶胞，导出为 `mgo_rocksalt.cif`。
+  tags:
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: file_exists
+    value: mgo_rocksalt.cif
+  - key: formula
+    value:
+      filename: mgo_rocksalt.cif
+      formula: Mg4O4
+  - key: cell_a
+    value:
+      filename: mgo_rocksalt.cif
+      param: a
+      expected: 4.211
+      tolerance: 0.02
+  - key: atom_count
+    value:
+      filename: mgo_rocksalt.cif
+      expected: 8
+      tolerance: 0
+  - key: space_group_number
+    value:
+      filename: mgo_rocksalt.cif
+      expected_number: 225
+      symprec: 0.1
+  - key: turn_budget
+    value:
+      max: 10
+  - key: token_budget_total
+    value:
+      max: 20000
+  scoring_checklist:
+  - id: file_exists
+    criterion: Agent writes `mgo_rocksalt.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: formula
+    criterion: Structure formula is MgO (4 Mg + 4 O in conventional cell).
+    axis: correctness
+    verify: struct_file_formula
+  - id: cell_a
+    criterion: Lattice constant a is approximately 4.211 Å (experimental value).
+    axis: correctness
+    verify: struct_file_cell_param
+  - id: atom_count
+    criterion: Conventional rocksalt cell contains 8 atoms (4 Mg + 4 O).
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: space_group_number
+    criterion: The file is identified as space group Fm-3m (225).
+    axis: correctness
+    verify: struct_file_space_group
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
+- id: SC_graphene_001_20260517v2
   capability: structure_construction
   domain: agnostic
   intent: Build a monolayer graphene unit cell with correct hexagonal lattice and verify
@@ -1393,11 +1433,281 @@ questions:
       and hexagonal lattice).
     axis: correctness
     verify: contains_all
-  - id: grounding_source
-    criterion: Final answer reports lattice parameters from the built structure and
-      confirms monolayer geometry. Must not describe a 3D bulk or FCC structure.
-    axis: grounding
-    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
+- id: SC_abacus_bsse_h2o_20260518
+  capability: structure_construction
+  domain: agnostic
+  intent: Build four ABACUS LCAO STRU fragments for gas-phase H2O counterpoise (BSSE)—whole
+    molecule, O-only, and two single-H fragments with ghost/empty species (32_bsse/01_water).
+  human_prompt_seed: '为气相 **H₂O** 的 **counterpoise（BSSE）** 准备四套 ABACUS LCAO **STRU**
+    碎片，写入 `run_lcao_h2o_cp/`：
+
+
+    - `STRU_0`：完整水分子（H₂O）；
+
+    - `STRU_1`：只保留 **O 原子**，两个 H 用 **ghost/empty 物种** 在同几何位置占位；
+
+    - `STRU_2`、`STRU_3`：各只保留 **一个 H 原子**，其余原子用 ghost/empty 占位（对应两个 H
+      碎片）。
+
+
+    四套结构共用同一立方盒子（约 20 Bohr 边长），须含 `NUMERICAL_ORBITAL`。'
+  tags:
+  - struct_surface
+  - eng_abacus
+  reference_answers:
+  - key: cp_stru0
+    value: run_lcao_h2o_cp/STRU_0
+  - key: cp_stru1
+    value: run_lcao_h2o_cp/STRU_1
+  - key: cp_stru2
+    value: run_lcao_h2o_cp/STRU_2
+  - key: cp_stru3
+    value: run_lcao_h2o_cp/STRU_3
+  - key: must_h2o_whole_atoms
+    value:
+      filename: run_lcao_h2o_cp/STRU_0
+      check: total_atoms
+      expected: 3
+  - key: must_h2o_whole_species
+    value:
+      filename: run_lcao_h2o_cp/STRU_0
+      check: species_count
+      expected: 2
+  - key: must_h2o_whole_lcao
+    value:
+      filename: run_lcao_h2o_cp/STRU_0
+      tokens:
+        - NUMERICAL_ORBITAL
+        - ATOMIC_SPECIES
+        - H
+        - O
+      flags: i
+  - key: must_o_frag_atoms
+    value:
+      filename: run_lcao_h2o_cp/STRU_1
+      check: total_atoms
+      expected: 3
+  - key: must_o_frag_ghost
+    value:
+      filename: run_lcao_h2o_cp/STRU_1
+      pattern: (?im)empty|H_empty
+      flags: im
+  - key: must_o_frag_o_present
+    value:
+      filename: run_lcao_h2o_cp/STRU_1
+      tokens:
+        - ATOMIC_SPECIES
+        - O
+      flags: i
+  - key: must_h1_frag_atoms
+    value:
+      filename: run_lcao_h2o_cp/STRU_2
+      check: total_atoms
+      expected: 3
+  - key: must_h1_frag_species
+    value:
+      filename: run_lcao_h2o_cp/STRU_2
+      check: species_count
+      expected: 3
+  - key: must_h1_frag_ghost
+    value:
+      filename: run_lcao_h2o_cp/STRU_2
+      pattern: (?im)empty|H_empty
+      flags: im
+  - key: must_h2_frag_atoms
+    value:
+      filename: run_lcao_h2o_cp/STRU_3
+      check: total_atoms
+      expected: 3
+  - key: must_h2_frag_species
+    value:
+      filename: run_lcao_h2o_cp/STRU_3
+      check: species_count
+      expected: 3
+  - key: must_h2_frag_ghost
+    value:
+      filename: run_lcao_h2o_cp/STRU_3
+      pattern: (?im)empty|H_empty
+      flags: im
+  - key: must_cp_box
+    value:
+      filename: run_lcao_h2o_cp/STRU_0
+      check: cubic_box_range
+      expected:
+        min: 18.0
+        max: 22.0
+      flags: im
+  - key: turn_budget
+    value:
+      max: 14
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 18000
+  scoring_checklist:
+  - id: cp_stru0
+    criterion: run_lcao_h2o_cp/STRU_0 exists.
+    axis: correctness
+    verify: artifact_exists
+  - id: cp_stru1
+    criterion: run_lcao_h2o_cp/STRU_1 exists.
+    axis: correctness
+    verify: artifact_exists
+  - id: cp_stru2
+    criterion: run_lcao_h2o_cp/STRU_2 exists.
+    axis: correctness
+    verify: artifact_exists
+  - id: cp_stru3
+    criterion: run_lcao_h2o_cp/STRU_3 exists.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_h2o_whole_atoms
+    criterion: '[Must] STRU_0 has 3 atoms (one H2O).'
+    axis: correctness
+    verify: stru_file_check
+    weight: 1.0
+  - id: must_h2o_whole_species
+    criterion: '[Must] STRU_0 has H and O species only.'
+    axis: correctness
+    verify: stru_file_check
+    weight: 1.0
+  - id: must_h2o_whole_lcao
+    criterion: '[Must] STRU_0 is LCAO-ready (NUMERICAL_ORBITAL, H, O).'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: must_o_frag_atoms
+    criterion: '[Must] STRU_1 keeps 3 coordinate sites (O + two ghost H).'
+    axis: correctness
+    verify: stru_file_check
+    weight: 1.0
+  - id: must_o_frag_ghost
+    criterion: '[Must] STRU_1 uses ghost/empty species for removed H.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_o_frag_o_present
+    criterion: '[Must] STRU_1 retains real O in ATOMIC_SPECIES.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.8
+  - id: must_h1_frag_atoms
+    criterion: '[Must] STRU_2 has 3 coordinate sites (one H fragment).'
+    axis: correctness
+    verify: stru_file_check
+    weight: 1.0
+  - id: must_h1_frag_species
+    criterion: '[Must] STRU_2 defines three species (H + ghosts).'
+    axis: correctness
+    verify: stru_file_check
+    weight: 0.8
+  - id: must_h1_frag_ghost
+    criterion: '[Must] STRU_2 uses ghost/empty species.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_h2_frag_atoms
+    criterion: '[Must] STRU_3 has 3 coordinate sites (second H fragment).'
+    axis: correctness
+    verify: stru_file_check
+    weight: 1.0
+  - id: must_h2_frag_species
+    criterion: '[Must] STRU_3 defines three species (H + ghosts).'
+    axis: correctness
+    verify: stru_file_check
+    weight: 0.8
+  - id: must_h2_frag_ghost
+    criterion: '[Must] STRU_3 uses ghost/empty species.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_cp_box
+    criterion: '[Must] STRU_0 uses ~20 Bohr cubic cell (shared BSSE box).'
+    axis: correctness
+    verify: stru_file_check
+    weight: 0.8
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration stays within benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: SC_doped_mgo_001_20260520
+  capability: structure_construction
+  domain: agnostic
+  intent: Build Al-doped MgO supercell with correct charge compensation, testing that
+    the agent introduces cation vacancies to maintain charge neutrality for aliovalent
+    doping.
+  human_prompt_seed: 构建 4 at.% Al 掺杂的 MgO 超胞（基于 2×2×2 超胞），导出为 `mgo_al_doped.cif`。
+  tags:
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: file_exists
+    value: mgo_al_doped.cif
+  - key: charge_neutral
+    value:
+      filename: mgo_al_doped.cif
+      oxidation_states:
+        Mg: 2
+        Al: 3
+        O: -2
+      tolerance: 0.01
+  - key: has_al_dopants
+    value:
+      filename: mgo_al_doped.cif
+      element: Al
+      expected: 2
+      tolerance: 1
+  - key: retains_rocksalt
+    value:
+      filename: mgo_al_doped.cif
+      expected_number: 225
+      symprec: 0.2
+  - key: turn_budget
+    value:
+      max: 15
+  - key: token_budget_total
+    value:
+      max: 20000
+  scoring_checklist:
+  - id: file_exists
+    criterion: Agent writes `mgo_al_doped.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: charge_neutral
+    criterion: The structure is charge neutral. For Al3+ substituting Mg2+ in MgO,
+      charge compensation requires 1 Mg vacancy per 2 Al substitutions. Verified by
+      2*N_Mg + 3*N_Al = 2*N_O (formal oxidation state sum equals zero).
+    axis: correctness
+    verify: struct_file_charge_balance
+    weight: 2.0
+  - id: has_al_dopants
+    criterion: The structure contains 1-2 Al dopant atoms, the nearest integer count
+      for 4 at.% substitution in a 2x2x2 MgO supercell.
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: retains_rocksalt
+    criterion: The structure retains the basic rocksalt topology (MgO-type, not a
+      spinel or other phase).
+    axis: correctness
+    verify: struct_file_space_group
   - id: turn_budget
     criterion: Agent completes the task within the turn budget.
     axis: efficiency

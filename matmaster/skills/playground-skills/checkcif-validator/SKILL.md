@@ -1,6 +1,6 @@
 ---
 name: checkcif-validator
-description: "Submit a CIF file to the IUCr checkCIF/PLATON web service for crystal structure validation. Returns alert counts (A/B/C/G levels) and the full HTML report. Use after crystal structure refinement to verify CIF quality before reporting R-factors. A-level alerts indicate serious problems that must be resolved or explained."
+description: "Submit CIFs to IUCr checkCIF/PLATON for crystal-structure validation after refinement; report A/B/C/G alert counts and the HTML report, and flag A-level alerts for resolution or explanation."
 skill_type: operator
 ---
 

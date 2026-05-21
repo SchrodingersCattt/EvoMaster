@@ -16,7 +16,7 @@ mcp_server: mat_struct_db
   1. Extract lattice parameters, space group, and Wyckoff positions from the summary metadata.
   2. Build structures locally with `pymatgen Structure.from_spacegroup(...)` using the extracted parameters.
   3. **Do not** issue additional DB queries trying to get the CIF files — this wastes turns.
-  4. Save built structures as CIF, then validate with `assess_structure.py` if the structure-manager skill is loaded.
+  4. Save built structures as CIF, then validate with `assess_structure.py` if the retrieve-structure skill is loaded.
 
 ## Query Strategies
 

@@ -1,6 +1,6 @@
 ---
 name: vaspkit-postprocess
-description: "VASPKIT post-processing for VASP outputs: K-path (303/302), band structure (211), hybrid-DFT band (252/253), DOS/PDOS (116-120), Fermi surface (262), elastic from file (202), EOS fitting (205), optical (710/711), etc. Use when user has VASP result files (POSCAR, INCAR, EIGENVAL, DOSCAR, KPOINTS, KPATH.in, PROCAR, vasprun.xml as needed) and needs analysis or derived files. Run scripts/run_vaspkit.py with '--task <N>' (e.g. '--task 303'). Does NOT generate POTCAR; pseudopotential not required."
+description: "Use VASPKIT for VASP post-processing from existing outputs: K-path, bands, hybrid bands, DOS/PDOS, Fermi surface, elastic, EOS, or optical analysis. Not for POTCAR generation."
 skill_type: operator
 ---
 

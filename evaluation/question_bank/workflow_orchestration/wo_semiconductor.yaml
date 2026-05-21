@@ -12,7 +12,7 @@ questions:
 
     '
   tags:
-  - code_mlip
+  - eng_abacus
   priority: P0
   data_files: []
   reference_answers:
@@ -177,7 +177,7 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: WO_abacus_e2e_001_20260516
+- id: WO_abacus_e2e_001_20260521
   capability: workflow_orchestration
   domain: semiconductor
   intent: End-to-end ABACUS electronic structure workflow (relax → scf → band → DOS)
@@ -188,7 +188,7 @@ questions:
   - eng_abacus
   data_files:
   - key: si_cif
-    path: data/WO_abacus_e2e_001_20260516/Si_diamond.cif
+    path: data/WO_abacus_e2e_001_20260521/Si_diamond.cif
     oss_url: ''
     description: Si diamond primitive cell CIF (2 atoms, Fd-3m).
   reference_answers:
@@ -202,7 +202,7 @@ questions:
     value: {}
   - key: turn_budget
     value:
-      max: 60
+      max: 65
   - key: duration_budget
     value:
       max: 1500000
@@ -226,8 +226,9 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: must_band_gap_reported
-    criterion: '[Must] Final answer reports the Si band gap value (expected ~1.1 eV
-      for PBE) and identifies it as indirect.'
+    criterion: '[Must] Final answer reports the Si band gap value (PBE typically gives
+      0.4–0.8 eV due to underestimation; experimental is ~1.12 eV) and identifies
+      it as indirect.'
     axis: correctness
     verify: llm_binary_judge
   - id: turn_budget

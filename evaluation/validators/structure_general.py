@@ -30,7 +30,7 @@ try:
 except ImportError:
     pass
 
-_IMPORT_MSG = 'pymatgen not installed; install with: uv sync --extra calculation'
+_IMPORT_MSG = "pymatgen not installed; install with: uv sync --extra calculation"
 
 
 # ---------------------------------------------------------------------------
@@ -83,7 +83,7 @@ def _resolve_files(workspace: Path, pattern: str) -> list[Path]:
 def _load_structure(path: Path) -> Structure | Molecule:
     """Read a CIF / POSCAR / XYZ / … file via pymatgen auto-detection."""
     suffix = path.suffix.lower()
-    if suffix in {'.xyz'}:
+    if suffix in {".xyz"}:
         return Molecule.from_file(str(path))
     return Structure.from_file(str(path))
 
@@ -107,19 +107,19 @@ def check_atom_count(
     root = Path(workspace_dir)
     fpath = _resolve_file(root, filename)
     if fpath is None:
-        return False, f'no file matching {filename!r} in {root}'
+        return False, f"no file matching {filename!r} in {root}"
     try:
         struct = _load_structure(fpath)
     except Exception as exc:
-        return False, f'could not parse {fpath.name}: {exc}'
+        return False, f"could not parse {fpath.name}: {exc}"
     if element:
         actual = float(struct.composition.get(str(element), 0))
-        label = f'{element}_count'
+        label = f"{element}_count"
     else:
         actual = float(len(struct))
-        label = 'atom_count'
+        label = "atom_count"
     hit = abs(actual - expected) <= tolerance
-    return hit, f'{fpath.name}: {label}={actual:g}, expected={expected}±{tolerance}'
+    return hit, f"{fpath.name}: {label}={actual:g}, expected={expected}±{tolerance}"
 
 
 # ---------------------------------------------------------------------------
@@ -139,11 +139,11 @@ def check_formula(
     root = Path(workspace_dir)
     fpath = _resolve_file(root, filename)
     if fpath is None:
-        return False, f'no file matching {filename!r} in {root}'
+        return False, f"no file matching {filename!r} in {root}"
     try:
         struct = _load_structure(fpath)
     except Exception as exc:
-        return False, f'could not parse {fpath.name}: {exc}'
+        return False, f"could not parse {fpath.name}: {exc}"
     comp = struct.composition
     # Compare both reduced and alphabetical formula representations
     actual_reduced = comp.reduced_formula
@@ -155,18 +155,18 @@ def check_formula(
     try:
         expected_comp = Composition(formula)
     except Exception:
-        return False, f'could not parse expected formula {formula!r}'
+        return False, f"could not parse expected formula {formula!r}"
 
     # Normalise: compare element ratios
     if comp.reduced_composition == expected_comp.reduced_composition:
         return (
             True,
-            f'{fpath.name}: formula={actual_reduced} matches expected {formula}',
+            f"{fpath.name}: formula={actual_reduced} matches expected {formula}",
         )
     return (
         False,
-        f'{fpath.name}: formula={actual_reduced} (hill={actual_hill}, alpha={actual_alpha}) '
-        f'does not match expected {formula}',
+        f"{fpath.name}: formula={actual_reduced} (hill={actual_hill}, alpha={actual_alpha}) "
+        f"does not match expected {formula}",
     )
 
 
@@ -191,11 +191,11 @@ def check_bond_count(
     root = Path(workspace_dir)
     fpath = _resolve_file(root, filename)
     if fpath is None:
-        return False, f'no file matching {filename!r} in {root}'
+        return False, f"no file matching {filename!r} in {root}"
     try:
         struct = _load_structure(fpath)
     except Exception as exc:
-        return False, f'could not parse {fpath.name}: {exc}'
+        return False, f"could not parse {fpath.name}: {exc}"
 
     count = 0
     sites = struct.sites
@@ -219,8 +219,8 @@ def check_bond_count(
     hit = abs(count - expected_count) <= tolerance
     return (
         hit,
-        f'{fpath.name}: {element_a}-{element_b} bonds (<{cutoff_A} Å) = {count}, '
-        f'expected={expected_count}±{tolerance}',
+        f"{fpath.name}: {element_a}-{element_b} bonds (<{cutoff_A} Å) = {count}, "
+        f"expected={expected_count}±{tolerance}",
     )
 
 
@@ -265,11 +265,11 @@ def _load_struct_or_err(
         return None, None, _IMPORT_MSG
     fpath = _resolve_file(Path(workspace_dir), filename)
     if fpath is None:
-        return None, None, f'no file matching {filename!r} in {workspace_dir}'
+        return None, None, f"no file matching {filename!r} in {workspace_dir}"
     try:
-        return fpath, _load_structure(fpath), ''
+        return fpath, _load_structure(fpath), ""
     except Exception as exc:
-        return fpath, None, f'could not parse {fpath.name}: {exc}'
+        return fpath, None, f"could not parse {fpath.name}: {exc}"
 
 
 def check_bond_length(
@@ -292,13 +292,13 @@ def check_bond_length(
     if not lengths:
         return (
             False,
-            f'{fpath.name}: no {element_a}-{element_b} bonds found within {cutoff_A} Å',
+            f"{fpath.name}: no {element_a}-{element_b} bonds found within {cutoff_A} Å",
         )
     mean_len = float(np.mean(lengths))
     hit = abs(mean_len - expected) <= tolerance
     return hit, (
-        f'{fpath.name}: mean {element_a}-{element_b} bond length = {mean_len:.4f} Å '
-        f'({len(lengths)} bonds), expected={expected}±{tolerance}'
+        f"{fpath.name}: mean {element_a}-{element_b} bond length = {mean_len:.4f} Å "
+        f"({len(lengths)} bonds), expected={expected}±{tolerance}"
     )
 
 
@@ -326,15 +326,15 @@ def check_bond_length_range(
     if not lengths:
         return (
             False,
-            f'{fpath.name}: no {element_a}-{element_b} bonds found within {cutoff_A} Å',
+            f"{fpath.name}: no {element_a}-{element_b} bonds found within {cutoff_A} Å",
         )
     min_len = float(np.min(lengths))
     max_len = float(np.max(lengths))
     hit = (min_len >= expected_min) and (max_len <= expected_max)
     return hit, (
-        f'{fpath.name}: {element_a}-{element_b} bond lengths (<{cutoff_A} Å): '
-        f'min={min_len:.4f} Å, max={max_len:.4f} Å ({len(lengths)} bonds), '
-        f'expected all in [{expected_min}, {expected_max}] Å'
+        f"{fpath.name}: {element_a}-{element_b} bond lengths (<{cutoff_A} Å): "
+        f"min={min_len:.4f} Å, max={max_len:.4f} Å ({len(lengths)} bonds), "
+        f"expected all in [{expected_min}, {expected_max}] Å"
     )
 
 
@@ -379,16 +379,16 @@ def check_bond_angle(
     if not _PMG_AVAILABLE:
         return False, _IMPORT_MSG
     if len(triplet) != 3:
-        return False, f'triplet must have exactly 3 elements, got {len(triplet)}'
+        return False, f"triplet must have exactly 3 elements, got {len(triplet)}"
 
     root = Path(workspace_dir)
     fpath = _resolve_file(root, filename)
     if fpath is None:
-        return False, f'no file matching {filename!r} in {root}'
+        return False, f"no file matching {filename!r} in {root}"
     try:
         struct = _load_structure(fpath)
     except Exception as exc:
-        return False, f'could not parse {fpath.name}: {exc}'
+        return False, f"could not parse {fpath.name}: {exc}"
 
     cutoff_ab_max = float(cutoff_a_b_A) if cutoff_a_b_A is not None else float(cutoff_A)
     cutoff_cb_max = float(cutoff_c_b_A) if cutoff_c_b_A is not None else float(cutoff_A)
@@ -449,17 +449,17 @@ def check_bond_angle(
     if not angles:
         return (
             False,
-            f'{fpath.name}: no {elem_a}-{elem_b}-{elem_c} angle found '
-            f'within {elem_a}-{elem_b}=[{cutoff_ab_min},{cutoff_ab_max}] Å, '
-            f'{elem_c}-{elem_b}=[{cutoff_cb_min},{cutoff_cb_max}] Å',
+            f"{fpath.name}: no {elem_a}-{elem_b}-{elem_c} angle found "
+            f"within {elem_a}-{elem_b}=[{cutoff_ab_min},{cutoff_ab_max}] Å, "
+            f"{elem_c}-{elem_b}=[{cutoff_cb_min},{cutoff_cb_max}] Å",
         )
 
     mean_angle = float(np.mean(angles))
     hit = abs(mean_angle - expected_deg) <= tolerance_deg
     return (
         hit,
-        f'{fpath.name}: mean {elem_a}-{elem_b}-{elem_c} angle = {mean_angle:.2f}°'
-        f' ({len(angles)} triplets), expected={expected_deg}±{tolerance_deg}',
+        f"{fpath.name}: mean {elem_a}-{elem_b}-{elem_c} angle = {mean_angle:.2f}°"
+        f" ({len(angles)} triplets), expected={expected_deg}±{tolerance_deg}",
     )
 
 
@@ -482,29 +482,27 @@ def check_cell_param(
     root = Path(workspace_dir)
     fpath = _resolve_file(root, filename)
     if fpath is None:
-        return False, f'no file matching {filename!r} in {root}'
+        return False, f"no file matching {filename!r} in {root}"
     try:
         struct = _load_structure(fpath)
     except Exception as exc:
-        return False, f'could not parse {fpath.name}: {exc}'
+        return False, f"could not parse {fpath.name}: {exc}"
     if isinstance(struct, Molecule):
-        return False, f'{fpath.name} is a molecule, not a periodic structure'
+        return False, f"{fpath.name} is a molecule, not a periodic structure"
 
     lattice = struct.lattice
-    valid_params = {'a', 'b', 'c', 'alpha', 'beta', 'gamma'}
+    valid_params = {"a", "b", "c", "alpha", "beta", "gamma"}
     if param not in valid_params:
-        return False, f'unknown lattice param {param!r}; choose from {valid_params}'
+        return False, f"unknown lattice param {param!r}; choose from {valid_params}"
 
     actual = getattr(lattice, param)
     hit = abs(actual - expected) <= tolerance
-    return hit, f'{fpath.name}: {param}={actual:.4f}, expected={expected}±{tolerance}'
+    return hit, f"{fpath.name}: {param}={actual:.4f}, expected={expected}±{tolerance}"
 
 
 # ---------------------------------------------------------------------------
 # 7. Stoichiometry ratio
 # ---------------------------------------------------------------------------
-
-
 def check_stoichiometry_ratio(
     workspace_dir: str | Path,
     *,
@@ -520,11 +518,11 @@ def check_stoichiometry_ratio(
     root = Path(workspace_dir)
     fpath = _resolve_file(root, filename)
     if fpath is None:
-        return False, f'no file matching {filename!r} in {root}'
+        return False, f"no file matching {filename!r} in {root}"
     try:
         struct = _load_structure(fpath)
     except Exception as exc:
-        return False, f'could not parse {fpath.name}: {exc}'
+        return False, f"could not parse {fpath.name}: {exc}"
 
     comp = struct.composition
     count_a = comp.get(element_a, 0)
@@ -532,14 +530,58 @@ def check_stoichiometry_ratio(
     if count_b == 0:
         return (
             False,
-            f'{fpath.name}: element {element_b!r} not found in composition {comp}',
+            f"{fpath.name}: element {element_b!r} not found in composition {comp}",
         )
     actual = count_a / count_b
     hit = abs(actual - expected_ratio) <= tolerance
     return (
         hit,
-        f'{fpath.name}: {element_a}/{element_b} = {count_a}/{count_b} = {actual:.4f}, '
-        f'expected={expected_ratio}±{tolerance}',
+        f"{fpath.name}: {element_a}/{element_b} = {count_a}/{count_b} = {actual:.4f}, "
+        f"expected={expected_ratio}±{tolerance}",
+    )
+
+
+# ---------------------------------------------------------------------------
+# 7b. Charge balance (formal oxidation states)
+# ---------------------------------------------------------------------------
+
+
+def check_charge_balance(
+    workspace_dir: str | Path,
+    *,
+    filename: str,
+    oxidation_states: dict[str, int],
+    tolerance: float = 0.01,
+) -> tuple[bool, str]:
+    """Verify that sum(count_i * oxidation_i) == 0 for an ionic structure.
+
+    oxidation_states: mapping of element symbol to formal charge, e.g.
+    {"Mg": 2, "Al": 3, "O": -2}.
+    """
+    if not _PMG_AVAILABLE:
+        return False, _IMPORT_MSG
+    root = Path(workspace_dir)
+    fpath = _resolve_file(root, filename)
+    if fpath is None:
+        return False, f"no file matching {filename!r} in {root}"
+    try:
+        struct = _load_structure(fpath)
+    except Exception as exc:
+        return False, f"could not parse {fpath.name}: {exc}"
+
+    comp = struct.composition
+    total_charge = 0.0
+    details = []
+    for elem, ox in oxidation_states.items():
+        count = comp.get(elem, 0)
+        total_charge += count * ox
+        details.append(f"{elem}({ox:+d})×{count:g}")
+
+    hit = abs(total_charge) <= tolerance
+    return (
+        hit,
+        f'{fpath.name}: charge = {total_charge:+.2f} [{", ".join(details)}]'
+        f'{" — NEUTRAL" if hit else " — NOT NEUTRAL"}',
     )
 
 
@@ -563,18 +605,18 @@ def check_coordination_number(
     root = Path(workspace_dir)
     fpath = _resolve_file(root, filename)
     if fpath is None:
-        return False, f'no file matching {filename!r} in {root}'
+        return False, f"no file matching {filename!r} in {root}"
     try:
         struct = _load_structure(fpath)
     except Exception as exc:
-        return False, f'could not parse {fpath.name}: {exc}'
+        return False, f"could not parse {fpath.name}: {exc}"
 
     sites = struct.sites
     center_indices = [
         i for i, s in enumerate(sites) if s.species_string == center_element
     ]
     if not center_indices:
-        return False, f'{fpath.name}: element {center_element!r} not found'
+        return False, f"{fpath.name}: element {center_element!r} not found"
 
     coord_numbers: list[int] = []
     for ci in center_indices:
@@ -598,8 +640,8 @@ def check_coordination_number(
     hit = abs(mean_cn - expected) <= tolerance
     return (
         hit,
-        f'{fpath.name}: mean coordination of {center_element} = {mean_cn:.1f} '
-        f'({len(coord_numbers)} centers, cutoff={cutoff_A} Å), expected={expected}±{tolerance}',
+        f"{fpath.name}: mean coordination of {center_element} = {mean_cn:.1f} "
+        f"({len(coord_numbers)} centers, cutoff={cutoff_A} Å), expected={expected}±{tolerance}",
     )
 
 
@@ -614,7 +656,7 @@ def check_layer_count(
     filename: str,
     expected: int,
     tolerance: float = 0,
-    axis: str = 'z',
+    axis: str = "z",
     layer_tol_A: float = 0.25,
     element: str | None = None,
 ) -> tuple[bool, str]:
@@ -630,17 +672,17 @@ def check_layer_count(
     root = Path(workspace_dir)
     fpath = _resolve_file(root, filename)
     if fpath is None:
-        return False, f'no file matching {filename!r} in {root}'
+        return False, f"no file matching {filename!r} in {root}"
     try:
         struct = _load_structure(fpath)
     except Exception as exc:
-        return False, f'could not parse {fpath.name}: {exc}'
+        return False, f"could not parse {fpath.name}: {exc}"
     if isinstance(struct, Molecule):
-        return False, f'{fpath.name} is a molecule, not a periodic structure'
+        return False, f"{fpath.name} is a molecule, not a periodic structure"
 
-    axis_map = {'x': 0, 'y': 1, 'z': 2}
+    axis_map = {"x": 0, "y": 1, "z": 2}
     if axis.lower() not in axis_map:
-        return False, f'axis must be x/y/z, got {axis!r}'
+        return False, f"axis must be x/y/z, got {axis!r}"
     ax = axis_map[axis.lower()]
 
     if element:
@@ -648,15 +690,15 @@ def check_layer_count(
             [
                 s.coords[ax]
                 for s in struct.sites
-                if getattr(s.specie, 'symbol', str(s.specie)) == element
+                if getattr(s.specie, "symbol", str(s.specie)) == element
             ]
         )
     else:
         coords = np.array([s.coords[ax] for s in struct.sites])
     coords_sorted = np.sort(coords)
     if len(coords_sorted) < 2:
-        scope = f' for element {element}' if element else ''
-        return False, f'{fpath.name}: fewer than 2 atoms{scope}'
+        scope = f" for element {element}" if element else ""
+        return False, f"{fpath.name}: fewer than 2 atoms{scope}"
 
     # Count distinct planes: merge atoms within layer_tol_A of the current plane anchor.
     anchor = float(coords_sorted[0])
@@ -668,11 +710,11 @@ def check_layer_count(
             anchor = z
 
     hit = abs(n_layers - expected) <= tolerance
-    scope = f' for element {element}' if element else ''
+    scope = f" for element {element}" if element else ""
     return (
         hit,
-        f'{fpath.name}: {n_layers} layers along {axis}{scope} (layer_tol={tol} Å), '
-        f'expected={expected}±{tolerance}',
+        f"{fpath.name}: {n_layers} layers along {axis}{scope} (layer_tol={tol} Å), "
+        f"expected={expected}±{tolerance}",
     )
 
 
@@ -686,8 +728,8 @@ def check_surface_termination(
     *,
     filename: str,
     element: str,
-    axis: str = 'z',
-    side: str = 'top',
+    axis: str = "z",
+    side: str = "top",
     layer_tol_A: float = 0.5,
 ) -> tuple[bool, str]:
     """Verify that the outermost atomic layer of a slab is of the given element.
@@ -713,17 +755,17 @@ def check_surface_termination(
     root = Path(workspace_dir)
     fpath = _resolve_file(root, filename)
     if fpath is None:
-        return False, f'no file matching {filename!r} in {root}'
+        return False, f"no file matching {filename!r} in {root}"
     try:
         struct = _load_structure(fpath)
     except Exception as exc:
-        return False, f'could not parse {fpath.name}: {exc}'
+        return False, f"could not parse {fpath.name}: {exc}"
     if isinstance(struct, Molecule):
-        return False, f'{fpath.name} is a molecule, not a periodic structure'
+        return False, f"{fpath.name} is a molecule, not a periodic structure"
 
-    axis_map = {'x': 0, 'y': 1, 'z': 2}
+    axis_map = {"x": 0, "y": 1, "z": 2}
     if axis.lower() not in axis_map:
-        return False, f'axis must be x/y/z, got {axis!r}'
+        return False, f"axis must be x/y/z, got {axis!r}"
     ax = axis_map[axis.lower()]
 
     sites = struct.sites
@@ -736,20 +778,20 @@ def check_surface_termination(
         if not layer_elems:
             return (
                 False,
-                f'{fpath.name}: outermost layer is empty (tol={layer_tol_A} Å)',
+                f"{fpath.name}: outermost layer is empty (tol={layer_tol_A} Å)",
             )
         unique = sorted(set(layer_elems))
         has_elem = element in layer_elems
         return (
             has_elem,
-            f'{fpath.name}: outermost {axis}-layer ({extreme_coord:.3f} Å) elements: '
-            f'{unique}, expected {element!r}',
+            f"{fpath.name}: outermost {axis}-layer ({extreme_coord:.3f} Å) elements: "
+            f"{unique}, expected {element!r}",
         )
 
     sides_to_check = []
-    if side in ('top', 'both'):
+    if side in ("top", "both"):
         sides_to_check.append(float(np.max(coords)))
-    if side in ('bottom', 'both'):
+    if side in ("bottom", "both"):
         sides_to_check.append(float(np.min(coords)))
     if not sides_to_check:
         return False, f"side must be 'top', 'bottom', or 'both', got {side!r}"
@@ -758,7 +800,7 @@ def check_surface_termination(
     failed = [(ok, msg) for ok, msg in results if not ok]
     if failed:
         return failed[0]
-    msgs = '; '.join(msg for _, msg in results)
+    msgs = "; ".join(msg for _, msg in results)
     return True, msgs
 
 
@@ -782,7 +824,7 @@ def check_file_count(
     """
     root = Path(workspace_dir)
     if not root.is_dir():
-        return False, f'workspace {root} does not exist or is not a directory'
+        return False, f"workspace {root} does not exist or is not a directory"
 
     hits = [
         p for p in root.rglob("*") if p.is_file() and fnmatch.fnmatch(p.name, pattern)
@@ -791,7 +833,7 @@ def check_file_count(
     ok = abs(n - expected) <= tolerance
     return (
         ok,
-        f'{n} file(s) matching {pattern!r} in workspace (expected={expected}±{tolerance})',
+        f"{n} file(s) matching {pattern!r} in workspace (expected={expected}±{tolerance})",
     )
 
 
@@ -811,17 +853,17 @@ def check_parsable(
     root = Path(workspace_dir)
     fpaths = _resolve_files(root, filename)
     if not fpaths:
-        return False, f'no file matching {filename!r} in {root}'
+        return False, f"no file matching {filename!r} in {root}"
 
     parsed: list[str] = []
     for fpath in fpaths:
         try:
             _load_structure(fpath)
         except Exception as exc:
-            return False, f'could not parse {fpath.name}: {exc}'
+            return False, f"could not parse {fpath.name}: {exc}"
         parsed.append(fpath.name)
 
-    return True, f'parsed {len(parsed)} structure file(s): {parsed}'
+    return True, f"parsed {len(parsed)} structure file(s): {parsed}"
 
 
 # ---------------------------------------------------------------------------
@@ -846,36 +888,36 @@ def check_all_occupancy_one(
     root = Path(workspace_dir)
     fpaths = _resolve_files(root, filename)
     if not fpaths:
-        return False, f'no file matching {filename!r} in {root}'
+        return False, f"no file matching {filename!r} in {root}"
 
     checked_sites = 0
     for fpath in fpaths:
         try:
             struct = _load_structure(fpath)
         except Exception as exc:
-            return False, f'could not parse {fpath.name}: {exc}'
+            return False, f"could not parse {fpath.name}: {exc}"
 
         for idx, site in enumerate(struct.sites):
             species_items = list(site.species.items())
             if len(species_items) != 1:
                 return (
                     False,
-                    f'{fpath.name}: site {idx} has split species '
-                    f'{site.species_string}, expected a single occupancy-1 species',
+                    f"{fpath.name}: site {idx} has split species "
+                    f"{site.species_string}, expected a single occupancy-1 species",
                 )
             specie, occ = species_items[0]
             if abs(float(occ) - 1.0) > tolerance:
                 return (
                     False,
-                    f'{fpath.name}: site {idx} species {specie} occupancy={float(occ):g}, '
-                    f'expected 1±{tolerance}',
+                    f"{fpath.name}: site {idx} species {specie} occupancy={float(occ):g}, "
+                    f"expected 1±{tolerance}",
                 )
             checked_sites += 1
 
     return (
         True,
-        f'all occupancies are 1±{tolerance} across {checked_sites} site(s) '
-        f'in {len(fpaths)} file(s)',
+        f"all occupancies are 1±{tolerance} across {checked_sites} site(s) "
+        f"in {len(fpaths)} file(s)",
     )
 
 
@@ -898,13 +940,13 @@ def check_space_group(
     root = Path(workspace_dir)
     fpath = _resolve_file(root, filename)
     if fpath is None:
-        return False, f'no file matching {filename!r} in {root}'
+        return False, f"no file matching {filename!r} in {root}"
     try:
         struct = _load_structure(fpath)
     except Exception as exc:
-        return False, f'could not parse {fpath.name}: {exc}'
+        return False, f"could not parse {fpath.name}: {exc}"
     if isinstance(struct, Molecule):
-        return False, f'{fpath.name} is a molecule, not a periodic structure'
+        return False, f"{fpath.name} is a molecule, not a periodic structure"
 
     try:
         from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
@@ -915,77 +957,16 @@ def check_space_group(
         actual_number = int(analyzer.get_space_group_number())
         actual_symbol = analyzer.get_space_group_symbol()
     except Exception as exc:
-        return False, f'could not determine space group for {fpath.name}: {exc}'
+        return False, f"could not determine space group for {fpath.name}: {exc}"
 
     ok = actual_number == expected_number
     return (
         ok,
-        f'{fpath.name}: space group #{actual_number} ({actual_symbol}), '
-        f'expected #{expected_number} (symprec={symprec}, angle_tolerance={angle_tolerance})',
+        f"{fpath.name}: space group #{actual_number} ({actual_symbol}), "
+        f"expected #{expected_number} (symprec={symprec}, angle_tolerance={angle_tolerance})",
     )
 
 
-# ---------------------------------------------------------------------------
-# 14. Minimum interatomic distance
-# ---------------------------------------------------------------------------
-
-
-def check_min_interatomic_distance(
-    workspace_dir: str | Path,
-    *,
-    filename: str,
-    min_distance_A: float,
-    elements: list[str] | None = None,
-) -> tuple[bool, str]:
-    """Verify that all selected atom pairs are at least *min_distance_A* apart."""
-    if not _PMG_AVAILABLE:
-        return False, _IMPORT_MSG
-    if not _NP_AVAILABLE:
-        return False, 'numpy not installed; install with: uv sync --extra calculation'
-
-    root = Path(workspace_dir)
-    fpath = _resolve_file(root, filename)
-    if fpath is None:
-        return False, f'no file matching {filename!r} in {root}'
-    try:
-        struct = _load_structure(fpath)
-    except Exception as exc:
-        return False, f'could not parse {fpath.name}: {exc}'
-
-    selected = list(range(len(struct.sites)))
-    if elements:
-        allowed = set(elements)
-        selected = [
-            idx
-            for idx, site in enumerate(struct.sites)
-            if getattr(site.specie, 'symbol', str(site.specie)) in allowed
-        ]
-    if len(selected) < 2:
-        scope = f' for elements {elements}' if elements else ''
-        return False, f'{fpath.name}: fewer than 2 selected sites{scope}'
-
-    min_dist = float('inf')
-    min_pair: tuple[int, int] | None = None
-    if isinstance(struct, Molecule):
-        for pos_i, idx_i in enumerate(selected):
-            for idx_j in selected[pos_i + 1 :]:
-                dist = float(struct.sites[idx_i].distance(struct.sites[idx_j]))
-                if dist < min_dist:
-                    min_dist = dist
-                    min_pair = (idx_i, idx_j)
-    else:
-        matrix = np.asarray(struct.distance_matrix, dtype=float)
-        for pos_i, idx_i in enumerate(selected):
-            for idx_j in selected[pos_i + 1 :]:
-                dist = float(matrix[idx_i, idx_j])
-                if dist < min_dist:
-                    min_dist = dist
-                    min_pair = (idx_i, idx_j)
-
-    ok = min_dist >= min_distance_A
-    pair_msg = f'pair={min_pair}' if min_pair is not None else 'pair=n/a'
-    return (
-        ok,
-        f'{fpath.name}: min interatomic distance = {min_dist:.4f} Å ({pair_msg}), '
-        f'expected >= {min_distance_A} Å',
-    )
+from evaluation.validators.structure_distance import (  # noqa: E402, F401
+    check_min_interatomic_distance,
+)

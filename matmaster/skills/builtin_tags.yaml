@@ -3,17 +3,18 @@ categories:
     groups:
       atomic-structure-ops:
         skills:
-          - build-atomic-structure
+          - atomic-structure
           - inspect-atomic-structure
+          - build-atomic-structure
           - transform-atomic-structure
           - assemble-atomic-structure
+          - operate-molecular-crystal
           - sample-atomic-structures
           - tasker-polar-surface
-          - operate-molecular-crystal
-          - structure-manager
       structure-search:
         skills:
           - mcp-mat-struct-db
+          - retrieve-structure
       polymer-modeling:
         skills:
           - poly-generator
@@ -67,7 +68,6 @@ categories:
           - result-analysis
       characterization:
         skills:
-          - xrd-analysis
           - pxrd-refinement
           - checkcif-validator
           - mcp-mat-xrd
@@ -103,5 +103,4 @@ categories:
       system-tools:
         skills:
           - skill-manager
-          - input-manual-helper
           - compliance-guardian

@@ -90,7 +90,7 @@ mappings:
     detail: "Submitted MLIPs NEB transition-state calculation via Bohrium job"
 
   # -------------------------------------------------------------------------
-  # DFT / MD via built-in Bohrium tool (e.g. ABACUS after input-manual-helper)
+  # DFT / MD via built-in Bohrium tool (e.g. ABACUS submission)
   # -------------------------------------------------------------------------
   - pattern: "Bohrium"
     when_args_contains:

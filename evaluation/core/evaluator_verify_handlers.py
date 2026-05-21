@@ -11,7 +11,15 @@ at module bottom; do not import this file from anywhere else.
 """
 
 from .evaluator import BinaryEvaluator
-from .evaluator_helpers import (
+from .evaluator_struct_helpers import (
+    check_struct_file_all_occupancy_one,
+    check_struct_file_integer_stoichiometry,
+    check_struct_file_min_interatomic_distance,
+    check_struct_file_parsable,
+    check_struct_file_replicas_distinct,
+    check_struct_file_space_group,
+)
+from .evaluator_wiring import (
     check_abacus_input_from_evidence,
     check_answer_json_numeric_from_ref,
     check_checkcif_alerts,
@@ -29,8 +37,10 @@ from .evaluator_helpers import (
     check_struct_file_bond_length,
     check_struct_file_bond_length_range,
     check_struct_file_cell_param,
+    check_struct_file_charge_balance,
     check_struct_file_coordination,
     check_struct_file_count,
+    check_struct_file_density,
     check_struct_file_formula,
     check_struct_file_layer_count,
     check_struct_file_stoichiometry_ratio,
@@ -41,14 +51,6 @@ from .evaluator_helpers import (
     check_text_file_regex_from_evidence,
     check_token_budget,
     check_turn_budget,
-)
-from .evaluator_struct_helpers import (
-    check_struct_file_all_occupancy_one,
-    check_struct_file_integer_stoichiometry,
-    check_struct_file_min_interatomic_distance,
-    check_struct_file_parsable,
-    check_struct_file_replicas_distinct,
-    check_struct_file_space_group,
 )
 
 _R = BinaryEvaluator._register_verify
@@ -152,7 +154,9 @@ for _name, _fn in [
     ("struct_file_bond_length_range", check_struct_file_bond_length_range),
     ("struct_file_bond_angle", check_struct_file_bond_angle),
     ("struct_file_cell_param", check_struct_file_cell_param),
+    ("struct_file_density", check_struct_file_density),
     ("struct_file_stoichiometry_ratio", check_struct_file_stoichiometry_ratio),
+    ("struct_file_charge_balance", check_struct_file_charge_balance),
     ("struct_file_coordination", check_struct_file_coordination),
     ("struct_file_layer_count", check_struct_file_layer_count),
     ("struct_file_parsable", check_struct_file_parsable),

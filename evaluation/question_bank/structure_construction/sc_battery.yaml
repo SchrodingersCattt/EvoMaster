@@ -121,3 +121,75 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
+- id: SC_bat_ltp_001_20260519
+  capability: structure_construction
+  domain: battery
+  intent: Build LiTi2(PO4)3 NASICON structure with correct stoichiometry, testing
+    whether the agent includes all independent oxygen Wyckoff sites in the R-3c cell.
+  human_prompt_seed: 构建 LiTi₂(PO₄)₃ 的 NASICON 结构（空间群 R-3c），输出为 `ltp_nasicon.cif`。
+  tags:
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: file_exists
+    value: ltp_nasicon.cif
+  - key: formula
+    value:
+      filename: ltp_nasicon.cif
+      formula: Li6Ti12P18O72
+  - key: o_count
+    value:
+      filename: ltp_nasicon.cif
+      element: O
+      expected: 72
+      tolerance: 0
+  - key: total_atoms
+    value:
+      filename: ltp_nasicon.cif
+      expected: 108
+      tolerance: 0
+  - key: space_group_number
+    value:
+      filename: ltp_nasicon.cif
+      expected_number: 167
+      symprec: 0.1
+  - key: turn_budget
+    value:
+      max: 15
+  - key: token_budget_total
+    value:
+      max: 20000
+  scoring_checklist:
+  - id: file_exists
+    criterion: Agent writes `ltp_nasicon.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: formula
+    criterion: Structure formula matches LiTi2(PO4)3 stoichiometry (Z=6 gives Li6Ti12P18O72
+      in the hexagonal cell).
+    axis: correctness
+    verify: struct_file_formula
+    weight: 2.0
+  - id: o_count
+    criterion: Structure contains exactly 72 oxygen atoms (from two independent 36f
+      Wyckoff sites). If only one O site is included, there would be only 36 O which
+      breaks PO4 tetrahedra.
+    axis: correctness
+    verify: struct_file_atom_count
+    weight: 2.0
+  - id: total_atoms
+    criterion: Total atom count is 108 (6 Li + 12 Ti + 18 P + 72 O).
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: space_group_number
+    criterion: Structure has R-3c symmetry (space group 167).
+    axis: correctness
+    verify: struct_file_space_group
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget

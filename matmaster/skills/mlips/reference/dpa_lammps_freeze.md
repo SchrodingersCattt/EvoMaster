@@ -1,0 +1,34 @@
+# DPA + LAMMPS (requires freeze)
+
+DPA3 checkpoints (`DPA3.1-3M.pt`, `DPA3.2-5M.pt`) are **multi-task / multi-head** models and **cannot be loaded directly by LAMMPS**. You must first freeze a single head/branch into a `.pth` file. This is DPA-specific (MACE/SevenNet/MatterSim do not need this step).
+
+> Requires `deepmd-kit >= 3.1.0` (check with `dp --version`; the multi-family image reports `v1.3.3.dev2445` which **is** the v3.x codebase).
+
+**Step 1 — list available branches (heads):**
+
+```bash
+dp --pt show DPA-3.2-5M.pt model-branch
+```
+
+Typical DPA3 branches: `OMat24` (default inorganic), `OMol25`, `OC22`, `Organic_Reactions`, `ODAC23`, plus `RANDOM` (randomly initialized fitting net). Pick the branch whose training data best matches your system.
+
+**Step 2 — freeze the chosen branch:**
+
+```bash
+# --model-branch (preferred) or --head both work
+dp --pt freeze -c DPA-3.2-5M.pt -o frozen_model.pth --model-branch [head_name]
+```
+
+**Step 3 — use the frozen `.pth` in LAMMPS** (via the `deepmd` pair style):
+
+```
+pair_style  deepmd frozen_model.pth
+pair_coeff  * *
+```
+
+**Type-map alignment:** The frozen model keeps the full-element type_map by default. LAMMPS data file atom types must use the same element indices (e.g., Fe=26, Ni=28 — not compact 1,2). See `reference/dpa_models.md` § "Use in LAMMPS" for full details and the compact `--type-map` alternative.
+
+Notes:
+- The frozen `.pth` is also directly usable by ASE: `from deepmd.calculator import DP; atoms.calc = DP("frozen_model.pth")`.
+- The ASE workflows provided by this skill (optimize/phonon/MD/elastic/NEB/adsorption) load the **multi-head `.pt`** directly and select the head via `--head`, so freezing is only required when you actually need LAMMPS.
+- For a new downstream system, optionally run `dp --pt change-bias <model.pt> -s <system> --model-branch <Branch>` before freezing to better align the per-element energy bias.

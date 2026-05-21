@@ -37,7 +37,7 @@ Run structural checks before downstream DPA steps:
 - chemically plausible composition and formula
 - expected dimensionality for the task (bulk vs slab vs molecule)
 
-Use `structure-manager` `assess_structure.py` for validation and record warnings.
+Use `retrieve-structure` `assess_structure.py` for validation and record warnings.
 
 ## 6) Escalation policy
 

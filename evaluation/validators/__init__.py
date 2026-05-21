@@ -10,6 +10,7 @@ from .checkcif import (
     check_checkcif_no_a_alerts,
     run_checkcif,
 )
+from .structure_density import check_density
 from .structure_general import (
     check_atom_count,
     check_bond_angle,
@@ -48,6 +49,7 @@ __all__ = [
     'check_bond_length',
     'check_cell_param',
     'check_coordination_number',
+    'check_density',
     'check_file_count',
     'check_formula',
     'check_layer_count',

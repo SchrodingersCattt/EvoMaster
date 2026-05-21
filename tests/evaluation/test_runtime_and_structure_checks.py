@@ -10,7 +10,7 @@ import pytest
 from pydantic import ValidationError
 
 from evaluation.core.evaluator import BinaryEvaluator
-from evaluation.core.evaluator_helpers import check_duration_budget
+from evaluation.core.evaluator_wiring import check_duration_budget
 from evaluation.core.evidence import EvidenceBundle, TokenUsage
 from evaluation.validators.answer_text import (
     check_answer_json_numeric,
@@ -163,7 +163,7 @@ def test_check_answer_json_numeric_rejects_non_numeric_value() -> None:
 
 def test_check_answer_json_numeric_via_evaluator_helper_dispatch() -> None:
     """End-to-end: ReferenceAnswer.value as a dict drives the verifier."""
-    from evaluation.core.evaluator_helpers import (
+    from evaluation.core.evaluator_wiring import (
         check_answer_json_numeric_from_ref,
     )
     from evaluation.core.schemas import ReferenceAnswer
@@ -778,3 +778,100 @@ def test_molcrys_local_env_returns_not_installed_when_missing() -> None:
     )
     assert isinstance(ok, bool)
     assert isinstance(reason, str)
+
+
+# ---------------------------------------------------------------------------
+# stru_file_check magnetic_order: per-site mag/magmom (FM / AFM)
+# ---------------------------------------------------------------------------
+
+_FE_FM_STRU = """ATOMIC_POSITIONS
+Direct
+Fe
+1.0
+2
+0 0 0 mag 5
+0.5 0.5 0.5 mag 5
+"""
+
+_FE_AFM_STRU = _FE_FM_STRU.replace("0.5 0.5 0.5 mag 5", "0.5 0.5 0.5 mag -5")
+
+_FE_LAZY_STRU = """ATOMIC_POSITIONS
+Direct
+Fe
+1.0
+2
+0 0 0 0 0 0
+0.5 0.5 0.5 0 0 0
+"""
+
+
+def test_stru_magnetic_order_fm_same_sign_sites(tmp_path: Path) -> None:
+    from evaluation.validators.stru_file import check_stru_file
+
+    (tmp_path / "STRU").write_text(_FE_FM_STRU, encoding="utf-8")
+    ok, reason = check_stru_file(
+        tmp_path, filename="STRU", check="magnetic_order", expected="fm", min_sites=2
+    )
+    assert ok is True
+    assert "site moments: [5.0, 5.0]" in reason
+
+
+def test_stru_magnetic_order_afm_opposite_sign_sites(tmp_path: Path) -> None:
+    from evaluation.validators.stru_file import check_stru_file
+
+    (tmp_path / "STRU").write_text(_FE_AFM_STRU, encoding="utf-8")
+    ok, reason = check_stru_file(
+        tmp_path, filename="STRU", check="magnetic_order", expected="afm", min_sites=2
+    )
+    assert ok is True
+    assert "-5.0" in reason
+
+
+_FE_NC_STRU = """ATOMIC_POSITIONS
+Direct
+Fe
+1.0
+2
+0.0 0.0 0.0 mag 0 0 5
+0.5 0.5 0.5 mag 0 0 5
+"""
+
+_FE_COL_STRU = _FE_NC_STRU.replace("mag 0 0 5", "mag 5")
+
+
+def test_stru_site_vector_magmom_count_min(tmp_path: Path) -> None:
+    from evaluation.validators.stru_file import check_stru_file
+
+    (tmp_path / "STRU").write_text(_FE_NC_STRU, encoding="utf-8")
+    ok, reason = check_stru_file(
+        tmp_path,
+        filename="STRU",
+        check="site_vector_magmom_count_min",
+        expected=2,
+    )
+    assert ok is True
+    assert "2 site vector" in reason
+
+
+def test_stru_site_vector_magmom_rejects_scalar(tmp_path: Path) -> None:
+    from evaluation.validators.stru_file import check_stru_file
+
+    (tmp_path / "STRU").write_text(_FE_COL_STRU, encoding="utf-8")
+    ok, reason = check_stru_file(
+        tmp_path,
+        filename="STRU",
+        check="site_vector_magmom_count_min",
+        expected=2,
+    )
+    assert ok is False
+
+
+def test_stru_magnetic_order_species_level_moment(tmp_path: Path) -> None:
+    from evaluation.validators.stru_file import check_stru_file
+
+    (tmp_path / "STRU").write_text(_FE_LAZY_STRU, encoding="utf-8")
+    ok, reason = check_stru_file(
+        tmp_path, filename="STRU", check="magnetic_order", expected="fm", min_sites=2
+    )
+    assert ok is True
+    assert "fm" in reason

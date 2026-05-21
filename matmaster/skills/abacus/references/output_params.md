@@ -18,6 +18,38 @@ Include in INPUT as needed. Results written to `OUT.ABACUS/`.
 | `nbands` | integer | auto | Number of bands. Must be explicit for NSCF (> occupied). |
 | `symmetry` | `0`/`1` | `1` | `0` = disable. **Mandatory for NSCF line-mode k-paths.** |
 
+## LCAO Matrix Output (H/S/T/R)
+
+These parameters output Hamiltonian, overlap, and kinetic matrices. **LCAO only** (`basis_type lcao`).
+
+| Parameter | Values | Purpose | k-points needed? |
+|-----------|--------|---------|------------------|
+| `out_mat_hs2` | `0`/`1` | H(k) and S(k) in k-space → `data-HR-sparse_SPIN0.csr` etc. | Yes — needs KPT with multi-k mesh |
+| `out_mat_hs` | `0`/`1` | H(R) and S(R) in real-space → `data-HR-sparse_SPIN0.csr`, `data-SR-sparse_SPIN0.csr` | Yes — needs KPT |
+| `out_mat_r` | `0`/`1` | Position matrix r(R) in real-space → `data-rR-sparse.csr` | Yes — needs KPT |
+| `out_mat_t` | `0`/`1` | Kinetic matrix T(R) → `data-TR-sparse_SPIN0.csr` | Yes — needs KPT |
+| `get_S` | `0`/`1` | Only compute and output overlap matrix S, skip SCF → `SR.csr` | No — use `gamma_only 1` (single k-point) |
+
+> **`get_S 1` is special**: it skips the full SCF and only computes the overlap matrix. Use `gamma_only 1` (no KPT file needed). Commonly used for basis analysis.
+
+### Typical INPUT patterns
+
+**run_hsk/** — H(k) and S(k) in k-space:
+```
+out_mat_hs2 1
+```
+
+**run_hsr/** — H(R) and S(R) in real-space:
+```
+out_mat_hs 1
+```
+
+**run_get_s/** — overlap matrix only (no SCF):
+```
+get_S 1
+gamma_only 1
+```
+
 ## ABACUS Output Files
 
 | File | Produced by | Contains |
@@ -40,3 +72,4 @@ Include in INPUT as needed. Results written to `OUT.ABACUS/`.
 ## Common mistakes
 - Forgetting `out_chg 1` in SCF → NSCF with `init_chg file` fails or recomputes SCF
 - Leaving `symmetry 1` in NSCF band structure → k-path folded, wrong band plot
+- `BANDS_1.dat` eigenvalues are absolute energies (not relative to Fermi level). To identify VBM/CBM and compute band gap, first extract `EFERMI` from `running_scf.log`, then subtract it from all eigenvalues. Without this step, occupied and unoccupied bands cannot be distinguished.

@@ -79,6 +79,14 @@ The goal is to identify *smoothness* issues — not just whether the task comple
 - Agent wasted turns on exploration before acting
 - Agent used wrong tool/approach first, then corrected
 
+**Always report fallback/recovery behavior explicitly.** When a tool or MCP service fails (timeout, error, missing package), the analysis MUST describe:
+1. What failed and why (timeout, missing dep, infra error)
+2. What the agent did next (retry? install? fallback to alternative? give up? ask user?)
+3. Whether the fallback was appropriate and timely
+4. Whether the user was informed of the degradation
+
+Do NOT mark these sessions as "skip" — they reveal important agent resilience patterns. Report them as informational with a note on the recovery quality (good/poor/absent).
+
 For each friction point: consider whether an eval question with a tight turn_budget would force the agent to get it right on the first try. These questions directly reduce wasted turns in production.
 
 **Skill documentation does not guarantee compliance.** Even if a skill clearly documents the correct approach (e.g., "use OC22 head for surface adsorption"), assume the agent might not follow it. Every critical decision point documented in skills should have a corresponding eval question to verify the agent actually applies that knowledge. The eval question ensures the skill works end-to-end, not just exists on paper.
@@ -128,9 +136,11 @@ Write to `evaluation/traj_analysis/{env}/{YYYY-MM}.json`:
 ```
 
 **Verdict meanings:**
-- `skip`: Not useful (dev test, repeated prompt, old architecture)
-- `informational`: Interesting pattern but no new question needed (already covered)
-- `actionable`: Should generate a new evaluation question
+- `skip`: No agent behavior to analyze (infra failure before any agent action, off-topic non-materials-science query, empty/cancelled session with zero tool calls)
+- `informational`: Agent executed but no new eval question needed. Sub-categories:
+  - `covered`: Issue already tested by an existing eval question (cite the question ID in `eval_recommendation`)
+  - `untestable`: Problem exists but cannot be tested via eval (system bugs like storePath/finish-gate/context-compaction, runtime-dependent issues like web search result quality, efficiency problems without knowledge gaps)
+- `actionable`: Should generate a new evaluation question (exposes a testable domain knowledge gap or methodology error not covered by existing questions)
 
 ### 4. Generate Questions
 

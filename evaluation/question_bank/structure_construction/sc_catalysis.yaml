@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: catalysis
 questions:
-- id: CR_SC_ZnS001_20260508
+- id: CR_SC_ZnS001_20260508v2
   capability: structure_construction
   domain: catalysis
   intent: Build ZnS(001) polar surface slab with 3 layers and 2x2x1 supercell per
@@ -36,6 +36,24 @@ questions:
       filename: ZnS_001_slab.cif
       expected: 24
       tolerance: 0
+  - key: inplane_a
+    value:
+      filename: ZnS_001_slab.cif
+      param: a
+      expected: 7.65
+      tolerance: 0.5
+  - key: inplane_b
+    value:
+      filename: ZnS_001_slab.cif
+      param: b
+      expected: 7.65
+      tolerance: 0.5
+  - key: cell_c_vacuum
+    value:
+      filename: ZnS_001_slab.cif
+      param: c
+      expected: 22.0
+      tolerance: 7.0
   - key: turn_budget
     value:
       max: 22
@@ -64,12 +82,21 @@ questions:
     criterion: The 3-bilayer 2x2x1 ZnS(001) slab contains exactly 24 atoms.
     axis: correctness
     verify: struct_file_atom_count
-  - id: supercell_vacuum_ok
-    criterion: 交付的 ZnS(001) slab 采用 2×2×1 扩胞，真空层 ≥15 Å；若只在答案中声明，必须与 `ZnS_001_slab.cif`
-      的晶胞尺寸和层厚说明一致。
+  - id: inplane_a
+    criterion: The ZnS(001) slab cell a lattice parameter is close to the 2x
+      in-plane surface repeat of zinc-blende ZnS, about sqrt(2)*5.41 A.
     axis: correctness
-    verify: llm_binary_judge
-    weight: 1.0
+    verify: struct_file_cell_param
+  - id: inplane_b
+    criterion: The ZnS(001) slab cell b lattice parameter is close to the 2x
+      in-plane surface repeat of zinc-blende ZnS, about sqrt(2)*5.41 A.
+    axis: correctness
+    verify: struct_file_cell_param
+  - id: cell_c_vacuum
+    criterion: The ZnS(001) slab cell c parameter is large enough to include the
+      slab thickness plus at least approximately 15 A of vacuum.
+    axis: correctness
+    verify: struct_file_cell_param
   - id: polar_handling
     criterion: 答案说明了 ZnS(001) 表面的极性问题，并至少提出一种合理的处理策略（如构建对称 slab、施加偶极修正等），所述策略与交付的结构文件一致。
     axis: grounding
@@ -113,7 +140,7 @@ questions:
     criterion: Total token usage stays within a generous benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: SC_elec_004_20260507v4
+- id: SC_elec_004_20260520
   capability: structure_construction
   domain: catalysis
   intent: Build Ag(001) surface slab and place CO molecule at ontop site for adsorption
@@ -156,6 +183,28 @@ questions:
       element: O
       expected: 1
       tolerance: 0
+  - key: slab_layers_4
+    value:
+      filename: adsorbed_system.vasp
+      expected: 4
+      tolerance: 0
+      axis: z
+      element: Ag
+      layer_tol_A: 0.5
+  - key: cell_c_vacuum
+    value:
+      filename: adsorbed_system.vasp
+      param: c
+      expected: 24.0
+      tolerance: 8.0
+  - key: co_c_down_orientation
+    value:
+      filename: adsorbed_system.vasp
+      element_a: Ag
+      element_b: C
+      cutoff_A: 3.0
+      expected: 2.0
+      tolerance: 0.8
   - key: required_fields
     value:
     - bare_slab_file
@@ -208,12 +257,20 @@ questions:
       and adsorption site description.
     axis: correctness
     verify: llm_binary_judge
-  - id: structure_validity
-    criterion: Slab has 4 atomic layers, vacuum ≥ 15 Å, and CO is placed at ontop
-      site with C-down orientation. Ag and CO loading values are evaluated only by
-      deterministic structure-file checks.
+  - id: slab_layers_4
+    criterion: The adsorbed-system structure retains exactly 4 Ag slab layers along z.
     axis: correctness
-    verify: llm_binary_judge
+    verify: struct_file_layer_count
+  - id: cell_c_vacuum
+    criterion: The adsorbed-system cell c parameter is large enough to include the
+      four-layer Ag slab, CO adsorbate, and approximately 15 A of vacuum.
+    axis: correctness
+    verify: struct_file_cell_param
+  - id: co_c_down_orientation
+    criterion: The adsorbed-system structure has the CO carbon atom close to the Ag
+      surface at the intended initial C-down adsorption distance.
+    axis: correctness
+    verify: struct_file_bond_length
   - id: grounding_source
     criterion: Ag bulk structure uses correct FCC lattice constant; slab is built
       with proper crystallographic orientation and parameters; CO placement uses physically
@@ -332,3 +389,117 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
+- id: SC_cat_ads_001_20260519
+  capability: structure_construction
+  domain: catalysis
+  intent: Build catalytic surface intermediates (H*, HCOO*, COOH*) on Pt(111), testing
+    knowledge that H* is atomic hydrogen (not H2), and HCOO*/COOH* are specific radical
+    intermediates with correct bonding geometry.
+  human_prompt_seed: '在 Pt(111) 2×2 超胞 4 层 slab（15 Å 真空）上，分别构建 H*、HCOO*、COOH*
+    三种吸附中间体的初始结构，输出为 `Pt111_H.cif`、`Pt111_HCOO.cif`、`Pt111_COOH.cif`。'
+  tags:
+  - struct_surface
+  data_files: []
+  reference_answers:
+  - key: h_file
+    value: Pt111_H.cif
+  - key: hcoo_file
+    value: Pt111_HCOO.cif
+  - key: cooh_file
+    value: Pt111_COOH.cif
+  - key: h_atom_count
+    value:
+      filename: Pt111_H.cif
+      element: H
+      expected: 1
+      tolerance: 0
+  - key: hcoo_c_count
+    value:
+      filename: Pt111_HCOO.cif
+      element: C
+      expected: 1
+      tolerance: 0
+  - key: hcoo_o_count
+    value:
+      filename: Pt111_HCOO.cif
+      element: O
+      expected: 2
+      tolerance: 0
+  - key: cooh_c_count
+    value:
+      filename: Pt111_COOH.cif
+      element: C
+      expected: 1
+      tolerance: 0
+  - key: cooh_o_count
+    value:
+      filename: Pt111_COOH.cif
+      element: O
+      expected: 2
+      tolerance: 0
+  - key: cooh_h_count
+    value:
+      filename: Pt111_COOH.cif
+      element: H
+      expected: 1
+      tolerance: 0
+  - key: hcoo_ch_bond
+    value:
+      filename: Pt111_HCOO.cif
+      element_a: C
+      element_b: H
+      cutoff_A: 1.3
+      expected: 1.1
+      tolerance: 0.15
+  - key: turn_budget
+    value:
+      max: 20
+  - key: token_budget_total
+    value:
+      max: 25000
+  scoring_checklist:
+  - id: h_file
+    criterion: Agent writes `Pt111_H.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: hcoo_file
+    criterion: Agent writes `Pt111_HCOO.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: cooh_file
+    criterion: Agent writes `Pt111_COOH.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: h_is_atomic
+    criterion: Pt111_H.cif contains exactly 1 hydrogen atom (atomic H*, not H2 molecule).
+      This is the critical test — in catalysis context H* means a single adsorbed
+      hydrogen atom.
+    axis: correctness
+    verify: struct_file_atom_count
+    weight: 2.0
+  - id: hcoo_formula
+    criterion: The HCOO* adsorbate in Pt111_HCOO.cif has composition CHO2 (1C + 1H
+      + 2O, formate anion skeleton). Must NOT be formic acid (HCOOH with 2H+2O).
+    axis: correctness
+    verify: struct_file_atom_count
+    weight: 1.5
+  - id: cooh_formula
+    criterion: The COOH* adsorbate in Pt111_COOH.cif has composition CHO2 (1C + 1H
+      + 2O, carboxyl radical). Must NOT be CO2 (missing H) or formic acid (extra H).
+    axis: correctness
+    verify: struct_file_atom_count
+    weight: 1.5
+  - id: hcoo_ch_bond
+    criterion: In Pt111_HCOO.cif, the H atom is bonded to C (C-H distance ~1.1 Å),
+      confirming correct formate geometry (H-COO) rather than H bonded to O.
+    axis: correctness
+    verify: struct_file_bond_length
+    weight: 1.5
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget

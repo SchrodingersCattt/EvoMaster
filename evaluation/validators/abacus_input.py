@@ -20,6 +20,7 @@ def check_abacus_input(
     filename: str,
     check: str,
     expected: str | None = None,
+    allowed: list[str] | None = None,
     workspace_resolve: str = "recursive",
 ) -> tuple[bool, str]:
     """Run a resolution check on an ABACUS INPUT file.
@@ -29,6 +30,8 @@ def check_abacus_input(
       has lattice vectors matching a reference file
     - input_resolves_kpt_contains: verify the KPT resolved from INPUT
       contains a required token (e.g. '4 4 4')
+    - param_enabled: verify a boolean param is set to true/1
+    - param_value_in: verify a param's value is in an allowed list
     """
     root = Path(workspace_dir)
     fpath = _resolve_file(root, filename, workspace_resolve=workspace_resolve)
@@ -43,8 +46,121 @@ def check_abacus_input(
         return _check_stru_lattice(root, fpath, content, expected, workspace_resolve)
     elif check == "input_resolves_kpt_contains":
         return _check_kpt_contains(fpath, content, expected)
+    elif check == "param_enabled":
+        return _check_param_enabled(fpath, content, expected)
+    elif check == "param_value_in":
+        return _check_param_value_in(fpath, content, expected, allowed)
+    elif check == "efield_dir_is_vacuum":
+        return _check_efield_dir_is_vacuum(root, fpath, content, workspace_resolve)
     else:
         return False, f"unknown abacus_input_check check type: {check!r}"
+
+
+_TRUTHY = {"true", "1", ".true.", "t", "yes"}
+
+
+def _check_param_enabled(
+    fpath: Path,
+    content: str,
+    expected: str | None,
+) -> tuple[bool, str]:
+    """Verify that a boolean parameter in INPUT is enabled (true/1/.true./T)."""
+    param = str(expected or "").strip().lower()
+    if not param:
+        return (
+            False,
+            "abacus_input_check param_enabled: 'expected' must be the param name",
+        )
+    pattern = re.compile(rf"(?im)^\s*{re.escape(param)}\s+(\S+)")
+    match = pattern.search(content)
+    if not match:
+        return False, f"{fpath.name}: param '{param}' not found"
+    val = match.group(1).strip().lower()
+    if val in _TRUTHY:
+        return True, f"{fpath.name}: {param}={match.group(1)} (enabled)"
+    return (
+        False,
+        f"{fpath.name}: {param}={match.group(1)} (not enabled, expected true/1)",
+    )
+
+
+def _check_param_value_in(
+    fpath: Path,
+    content: str,
+    expected: str | None,
+    allowed: list[str] | None,
+) -> tuple[bool, str]:
+    """Verify that a parameter's value is one of the allowed values (case-insensitive)."""
+    param = str(expected or "").strip().lower()
+    if not param:
+        return (
+            False,
+            "abacus_input_check param_value_in: 'expected' must be the param name",
+        )
+    if not allowed:
+        return (
+            False,
+            "abacus_input_check param_value_in: 'allowed' list must be provided",
+        )
+    pattern = re.compile(rf"(?im)^\s*{re.escape(param)}\s+(\S+)")
+    match = pattern.search(content)
+    if not match:
+        return False, f"{fpath.name}: param '{param}' not found"
+    val = match.group(1).strip().lower()
+    allowed_lower = [a.lower() for a in allowed]
+    if val in allowed_lower:
+        return True, f"{fpath.name}: {param}={match.group(1)} (in allowed: {allowed})"
+    return False, (
+        f"{fpath.name}: {param}={match.group(1)} " f"(not in allowed: {allowed})"
+    )
+
+
+def _check_efield_dir_is_vacuum(
+    root: Path,
+    fpath: Path,
+    content: str,
+    workspace_resolve: str,
+) -> tuple[bool, str]:
+    """Verify efield_dir points along the vacuum (longest lattice vector) direction."""
+    dir_match = re.search(r"(?im)^\s*efield_dir\s+(\d+)", content)
+    if not dir_match:
+        return False, f"{fpath.name}: efield_dir not found"
+    efield_dir = int(dir_match.group(1))
+    if efield_dir not in (0, 1, 2):
+        return False, f"{fpath.name}: efield_dir={efield_dir} (must be 0, 1, or 2)"
+
+    stru_name_match = re.search(r"(?im)^\s*stru_file\s+(\S+)", content)
+    stru_name = stru_name_match.group(1) if stru_name_match else "STRU"
+    stru_path = _resolve_file(root, stru_name, workspace_resolve=workspace_resolve)
+    if stru_path is None:
+        stru_path = fpath.parent / stru_name
+    if not stru_path.is_file():
+        return False, f"{fpath.name}: cannot resolve STRU file '{stru_name}'"
+    try:
+        stru_content = stru_path.read_text(encoding="utf-8")
+    except Exception as exc:
+        return False, f"failed reading {stru_path.name}: {exc}"
+
+    vecs = _parse_lattice_vectors(stru_content)
+    if vecs is None or len(vecs) < 9:
+        return False, f"{stru_path.name}: LATTICE_VECTORS not found or incomplete"
+
+    lengths = [
+        (vecs[0] ** 2 + vecs[1] ** 2 + vecs[2] ** 2) ** 0.5,
+        (vecs[3] ** 2 + vecs[4] ** 2 + vecs[5] ** 2) ** 0.5,
+        (vecs[6] ** 2 + vecs[7] ** 2 + vecs[8] ** 2) ** 0.5,
+    ]
+    vacuum_dir = lengths.index(max(lengths))
+
+    if efield_dir == vacuum_dir:
+        return True, (
+            f"{fpath.name}: efield_dir={efield_dir} matches vacuum direction "
+            f"(lattice vector lengths: {[f'{v:.2f}' for v in lengths]})"
+        )
+    return False, (
+        f"{fpath.name}: efield_dir={efield_dir} but vacuum direction is {vacuum_dir} "
+        f"(lattice vector lengths: {[f'{v:.2f}' for v in lengths]})"
+    )
 
 
 def _check_stru_lattice(

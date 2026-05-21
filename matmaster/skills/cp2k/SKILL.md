@@ -1,6 +1,6 @@
 ---
 name: cp2k
-description: "MUST use this skill for ANY task involving CP2K (SCF, geometry/cell optimization, band structure, molecular dynamics, DFT+U, ADMM hybrid functionals, r2SCAN meta-GGA, etc.)."
+description: "Use to RUN CP2K calculations (SCF, geometry/cell optimization, band structure, AIMD, DFT+U, ADMM hybrid functionals, r2SCAN meta-GGA, etc.). DO NOT use for literature search about CP2K or generic DFT theory questions."
 skill_type: operator
 ---
 
