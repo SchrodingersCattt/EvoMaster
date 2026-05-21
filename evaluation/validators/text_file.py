@@ -54,37 +54,54 @@ def _normalize(text: str, *, case_sensitive: bool, normalize_whitespace: bool) -
 def check_text_file_contains_all(
     workspace_dir: str | Path,
     *,
-    filename: str,
+    filename: str | list[str],
     tokens: list[str],
     case_sensitive: bool = False,
     normalize_whitespace: bool = True,
     workspace_resolve: str = 'recursive',
 ) -> tuple[bool, str]:
-    """Check that all tokens are present in a text file."""
-    root = Path(workspace_dir)
-    fpath = _resolve_file(root, filename, workspace_resolve=workspace_resolve)
-    if fpath is None:
-        return False, f'no file matching {filename!r} in {root}'
-    try:
-        raw = fpath.read_text(encoding='utf-8')
-    except Exception as exc:
-        return False, f'failed reading {fpath.name}: {exc}'
+    """Check that all tokens are present in a text file.
 
-    haystack = _normalize(
-        raw, case_sensitive=case_sensitive, normalize_whitespace=normalize_whitespace
-    )
-    missing: list[str] = []
-    for token in tokens:
-        needle = _normalize(
-            str(token),
-            case_sensitive=case_sensitive,
-            normalize_whitespace=normalize_whitespace,
+    If *filename* is a list, passes when ANY one file contains all tokens.
+    """
+    root = Path(workspace_dir)
+    filenames = [filename] if isinstance(filename, str) else filename
+
+    per_file_missing: dict[str, list[str]] = {}
+    for fname in filenames:
+        fpath = _resolve_file(root, fname, workspace_resolve=workspace_resolve)
+        if fpath is None:
+            per_file_missing[fname] = ['(file not found)']
+            continue
+        try:
+            raw = fpath.read_text(encoding='utf-8')
+        except Exception as exc:
+            per_file_missing[fname] = [f'(read error: {exc})']
+            continue
+        haystack = _normalize(
+            raw, case_sensitive=case_sensitive, normalize_whitespace=normalize_whitespace
         )
-        if needle and needle not in haystack:
-            missing.append(str(token))
-    if missing:
-        return False, f'{fpath.name}: missing tokens: {missing}'
-    return True, f'{fpath.name}: all {len(tokens)} tokens found'
+        missing: list[str] = []
+        for token in tokens:
+            needle = _normalize(
+                str(token),
+                case_sensitive=case_sensitive,
+                normalize_whitespace=normalize_whitespace,
+            )
+            if needle and needle not in haystack:
+                missing.append(str(token))
+        if not missing:
+            return True, f'{fpath.name}: all {len(tokens)} tokens found'
+        per_file_missing[fname] = missing
+
+    if len(filenames) == 1:
+        fname = filenames[0]
+        m = per_file_missing.get(fname, [])
+        if m == ['(file not found)']:
+            return False, f'no file matching {fname!r} in {root}'
+        return False, f'{fname}: missing tokens: {m}'
+    details = '; '.join(f'{f}: missing {m}' for f, m in per_file_missing.items())
+    return False, f'no file contains all tokens — {details}'
 
 
 def check_text_file_regex(

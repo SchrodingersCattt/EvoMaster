@@ -519,9 +519,14 @@ def check_text_file_contains_all_from_evidence(
     case_sensitive = bool(cfg.get("case_sensitive", False))
     if "i" in flags:
         case_sensitive = False
+    raw_filename = cfg.get("filename", "")
+    if isinstance(raw_filename, list):
+        filename: str | list[str] = [str(f) for f in raw_filename]
+    else:
+        filename = str(raw_filename)
     return check_text_file_contains_all(
         ws,
-        filename=str(cfg.get("filename", "")),
+        filename=filename,
         tokens=[str(token) for token in raw_tokens],
         case_sensitive=case_sensitive,
         normalize_whitespace=bool(cfg.get("normalize_whitespace", True)),

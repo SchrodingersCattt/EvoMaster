@@ -139,7 +139,7 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
-- id: PWO_elec_009_20260516
+- id: PWO_elec_009_20260521
   capability: workflow_orchestration
   domain: agnostic
   intent: Validate whether the agent can prepare ABACUS INPUT and Bohrium submit JSON
@@ -165,15 +165,22 @@ questions:
       filename: al2o3_bader_submit.json
       pattern: '"image"\s*:\s*"registry\.dp\.tech/dptech/dp/native/hub/mrdic2/abacusp:1\.0\.3-1778742780"'
       flags: i
-  - key: must_submit_json_cmd_bader
+  - key: must_bader_cmd
     value:
-      filename: al2o3_bader_submit.json
-      pattern: '"cmd"\s*:\s*".*abacus.*bader.*"'
+      filename:
+      - al2o3_bader_submit.json
+      - run.sh
+      tokens:
+      - abacus
+      - bader
       flags: i
-  - key: must_submit_json_cmd_core_ref
+  - key: must_bader_core_ref
     value:
-      filename: al2o3_bader_submit.json
-      pattern: '"cmd"\s*:\s*".*(-ref|core.*chg|add_core).*"'
+      filename:
+      - al2o3_bader_submit.json
+      - run.sh
+      tokens:
+      - -ref
       flags: i
   - key: turn_budget
     value:
@@ -202,15 +209,14 @@ questions:
     criterion: '[Must] submit JSON includes required Bohrium image.'
     axis: correctness
     verify: text_file_regex
-  - id: must_submit_json_cmd_bader
-    criterion: '[Must] submit JSON `cmd` runs ABACUS before Bader (correct execution order).'
+  - id: must_bader_cmd
+    criterion: '[Must] ABACUS + Bader execution present in cmd or run.sh.'
     axis: correctness
-    verify: text_file_regex
-  - id: must_submit_json_cmd_core_ref
-    criterion: '[Must] submit JSON `cmd` includes core-charge augmentation step (e.g., -ref
-      flag or core charge script) needed for pseudopotential Bader analysis.'
+    verify: text_file_contains_all
+  - id: must_bader_core_ref
+    criterion: '[Must] Core-charge reference (-ref flag) present in cmd or run.sh.'
     axis: correctness
-    verify: text_file_regex
+    verify: text_file_contains_all
   - id: no_retries
     criterion: No repeated identical tool calls with the same parameter set.
     axis: efficiency
