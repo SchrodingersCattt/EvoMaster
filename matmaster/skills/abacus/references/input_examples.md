@@ -18,6 +18,7 @@ Always include **universal baseline**: `calculation`, `basis_type`, `ecutwfc`, `
 | Supercell / vacancy / defect / BSSE | **`kspacing` in INPUT** (e.g. `kspacing 0.10`) | Using fixed KPT mesh for variable-size supercells |
 | Large supercell (>30 atoms) LCAO | `gamma_only 1` (Gamma-point only, no KPT file needed) | Using multi-k on already-folded supercell BZ |
 | Fixed occupation (ocp) | `ocp 1`, `ocp_set ...`, `nspin 2`, **`gamma_only 1`** | Missing `gamma_only` → band ordering changes with k-points, `ocp_set` indices become wrong |
+| PEXSI solver | `ks_solver pexsi`, `pexsi_npole 80`, `gamma_only 1` | Missing `pexsi_npole` → uses default 40 (less accurate); PEXSI requires LCAO + gamma_only |
 
 > **⚠ `force_thr_ev` vs `force_thr`**: Always use `force_thr_ev` (unit: eV/Å). The parameter `force_thr` uses Ry/Bohr — completely different units. `force_thr_ev 0.01` ≈ `force_thr 3.9e-4`. Mixing them up produces absurdly loose or tight thresholds.
 
@@ -122,6 +123,26 @@ Same as above, but set the vacuum direction of kspacing to `1.00`:
 ```
 kspacing 0.10 0.10 1.00
 ```
+
+### PEXSI Solver INPUT Example (33_pexsi)
+```
+INPUT_PARAMETERS
+calculation scf
+basis_type lcao
+ks_solver pexsi
+pexsi_npole 80
+pexsi_temp 0.1
+ecutwfc 100
+scf_thr 1.0e-6
+scf_nmax 200
+nspin 2
+gamma_only 1
+smearing_method gauss
+smearing_sigma 0.01
+pseudo_dir /root/apns-pseudopotentials-v1/
+orbital_dir /root/apns-orbitals-efficiency-v1/
+```
+> PEXSI requires `basis_type lcao` and `gamma_only 1`. Always set `pexsi_npole` (default 40, use 80 for production).
 
 ### Work Function / Electrostatic Potential INPUT Example
 ```
