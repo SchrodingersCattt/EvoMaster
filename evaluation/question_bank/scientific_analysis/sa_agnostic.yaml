@@ -1550,10 +1550,8 @@ questions:
   intent: Determine the actual adsorption site of H on Zn(0001) from a relaxed structure
     by computing adsorbate-surface distances, detecting whether bridge-to-hollow migration
     occurred.
-  human_prompt_seed: '工作区中有一个 DPA 弛豫后的 H/Zn(0001) 吸附结构 `H_on_Zn0001_relaxed.xyz`（2x2
-    超胞，4 层 slab + 1 个 H 原子）。该 H 原子最初被放置在 bridge 位。
-
-    请分析弛豫后 H 原子的实际吸附位点类型（top / bridge / fcc-hollow / hcp-hollow），并给出判断依据。
+  human_prompt_seed: '工作区中有一个弛豫后的 H/Zn(0001) 吸附结构 `H_on_Zn0001_relaxed.xyz`（2x2
+    超胞，4 层 slab + 1 个 H 原子）。请分析该 H 原子处于什么吸附位点，并给出判断依据。
 
     输出 `site_analysis.json`，格式：`{"actual_site": "...", "coordination":
     ..., "distances_to_nearest_Zn_A": [...], "reasoning": "..."}`'
