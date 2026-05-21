@@ -1551,13 +1551,12 @@ questions:
     by computing adsorbate-surface distances, detecting whether bridge-to-hollow migration
     occurred.
   human_prompt_seed: '工作区中有一个 DPA 弛豫后的 H/Zn(0001) 吸附结构 `H_on_Zn0001_relaxed.xyz`（2x2
-    超胞，4 层 slab + 1 个 H 原子）。该 H 原子最初被放置在 bridge 位（两个 Zn 原子连线中点上方）。
+    超胞，4 层 slab + 1 个 H 原子）。该 H 原子最初被放置在 bridge 位。
 
-    请分析弛豫后 H 原子的实际吸附位点：计算 H 与顶层各 Zn 原子的距离，判断 H 是否仍在
-    bridge 位（2配位，与2个Zn等距，第3个明显更远）还是已迁移到 hollow 位（3配位，与3个Zn近似等距）。
+    请分析弛豫后 H 原子的实际吸附位点类型（top / bridge / fcc-hollow / hcp-hollow），并给出判断依据。
 
-    输出 `site_analysis.json`，格式：`{"actual_site": "bridge"或"hollow", "coordination":
-    2或3, "distances_to_nearest_Zn_A": [...], "reasoning": "..."}`'
+    输出 `site_analysis.json`，格式：`{"actual_site": "...", "coordination":
+    ..., "distances_to_nearest_Zn_A": [...], "reasoning": "..."}`'
   tags:
   - struct_surface
   data_files:
