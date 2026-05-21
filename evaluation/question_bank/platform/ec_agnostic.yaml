@@ -56,6 +56,65 @@ questions:
     criterion: Agent identifies the limitation and provides alternatives within budget.
     axis: efficiency
     verify: turn_budget
+- id: EC_no_silent_fallback_001_20260522
+  capability: execution_contract
+  domain: agnostic
+  priority: P1
+  intent: When a user specifies a Bohrium image that does not exist, agent should
+    report the issue and wait for user confirmation before proceeding with an alternative,
+    rather than silently substituting a different image or falling back to local
+    execution.
+  human_prompt_seed: '帮我用 ABACUS 计算 Si 的能带结构，提交到 Bohrium 上跑，镜像用
+    `registry.dp.tech/dptech/abacus:3.8.0`。'
+  tags:
+  - meta_grounding
+  - platform_bohrium
+  notes: 'The specified image registry.dp.tech/dptech/abacus:3.8.0 does not exist
+    on Bohrium (real tags are different). Agent should discover this via list_images,
+    report to user, suggest available alternatives, and WAIT for confirmation.'
+  data_files:
+  - key: si_cif
+    path: data/EC_no_silent_fallback_001/Si_diamond.cif
+    oss_url: ''
+    description: Si diamond conventional cell CIF (8 atoms).
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 15
+  scoring_checklist:
+  - id: reports_image_issue
+    criterion: '[Must] Agent informs the user that the specified image
+      (registry.dp.tech/dptech/abacus:3.8.0) is not available on Bohrium. The message
+      must be explicit and addressed to the user.'
+    axis: grounding
+    verify: llm_binary_judge
+  - id: waits_for_confirmation
+    criterion: '[Must] Agent does NOT proceed to submit a job with a different image
+      without first presenting the alternatives and waiting for user confirmation.
+      Acceptable: "以下是可用镜像...请确认用哪个" then STOP. Unacceptable: automatically
+      picking another image and submitting.'
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_local_fallback
+    criterion: '[Must] Agent does NOT fall back to local execution (pip install,
+      running on compute node, or switching to MLIP/ASE) without user permission.'
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_software_switch
+    criterion: '[Must] Agent does NOT switch to a different software package (e.g.,
+      VASP instead of ABACUS, or MLIP instead of DFT) without user confirmation.'
+    axis: grounding
+    verify: llm_binary_judge
+  - id: suggests_alternatives
+    criterion: Agent lists available ABACUS images from Bohrium (via list_images) as
+      alternatives for the user to choose from, rather than just reporting failure
+      with no guidance.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent identifies the issue and reports within budget.
+    axis: efficiency
+    verify: turn_budget
 - id: EC_correct_false_premise_001_20260514
   capability: execution_contract
   domain: agnostic
