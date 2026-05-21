@@ -67,7 +67,10 @@ def _check_param_enabled(
     """Verify that a boolean parameter in INPUT is enabled (true/1/.true./T)."""
     param = str(expected or "").strip().lower()
     if not param:
-        return False, "abacus_input_check param_enabled: 'expected' must be the param name"
+        return (
+            False,
+            "abacus_input_check param_enabled: 'expected' must be the param name",
+        )
     pattern = re.compile(rf"(?im)^\s*{re.escape(param)}\s+(\S+)")
     match = pattern.search(content)
     if not match:
@@ -75,7 +78,10 @@ def _check_param_enabled(
     val = match.group(1).strip().lower()
     if val in _TRUTHY:
         return True, f"{fpath.name}: {param}={match.group(1)} (enabled)"
-    return False, f"{fpath.name}: {param}={match.group(1)} (not enabled, expected true/1)"
+    return (
+        False,
+        f"{fpath.name}: {param}={match.group(1)} (not enabled, expected true/1)",
+    )
 
 
 def _check_param_value_in(
@@ -87,9 +93,15 @@ def _check_param_value_in(
     """Verify that a parameter's value is one of the allowed values (case-insensitive)."""
     param = str(expected or "").strip().lower()
     if not param:
-        return False, "abacus_input_check param_value_in: 'expected' must be the param name"
+        return (
+            False,
+            "abacus_input_check param_value_in: 'expected' must be the param name",
+        )
     if not allowed:
-        return False, "abacus_input_check param_value_in: 'allowed' list must be provided"
+        return (
+            False,
+            "abacus_input_check param_value_in: 'allowed' list must be provided",
+        )
     pattern = re.compile(rf"(?im)^\s*{re.escape(param)}\s+(\S+)")
     match = pattern.search(content)
     if not match:
@@ -99,8 +111,7 @@ def _check_param_value_in(
     if val in allowed_lower:
         return True, f"{fpath.name}: {param}={match.group(1)} (in allowed: {allowed})"
     return False, (
-        f"{fpath.name}: {param}={match.group(1)} "
-        f"(not in allowed: {allowed})"
+        f"{fpath.name}: {param}={match.group(1)} " f"(not in allowed: {allowed})"
     )
 
 
@@ -144,11 +155,11 @@ def _check_efield_dir_is_vacuum(
     if efield_dir == vacuum_dir:
         return True, (
             f"{fpath.name}: efield_dir={efield_dir} matches vacuum direction "
-            f"(lattice vector lengths: {[f'{l:.2f}' for l in lengths]})"
+            f"(lattice vector lengths: {[f'{v:.2f}' for v in lengths]})"
         )
     return False, (
         f"{fpath.name}: efield_dir={efield_dir} but vacuum direction is {vacuum_dir} "
-        f"(lattice vector lengths: {[f'{l:.2f}' for l in lengths]})"
+        f"(lattice vector lengths: {[f'{v:.2f}' for v in lengths]})"
     )
 
 

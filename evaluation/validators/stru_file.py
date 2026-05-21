@@ -244,7 +244,11 @@ def _parse_lattice_constant(content: str) -> float | None:
 
 def _parse_lattice_parameters(content: str) -> list[float]:
     """Extract LATTICE_PARAMETERS values from STRU (may be on one or multiple lines)."""
-    match = re.search(r"LATTICE_PARAMETERS\s*\n(.*?)(?=\n\s*(?:ATOMIC_POSITIONS|\Z))", content, re.DOTALL)
+    match = re.search(
+        r"LATTICE_PARAMETERS\s*\n(.*?)(?=\n\s*(?:ATOMIC_POSITIONS|\Z))",
+        content,
+        re.DOTALL,
+    )
     if not match:
         return []
     nums = re.findall(r"[-+]?\d+\.?\d*(?:[eE][-+]?\d+)?", match.group(1))
@@ -471,7 +475,10 @@ def check_stru_file(
         checks = expected if isinstance(expected, list) else []
         for i, rule in enumerate(checks):
             if i >= len(params):
-                return False, f"{fpath.name}: LATTICE_PARAMETERS has {len(params)} values, need {i+1}"
+                return (
+                    False,
+                    f"{fpath.name}: LATTICE_PARAMETERS has {len(params)} values, need {i+1}",
+                )
             lo = float(rule.get("min", 0))
             hi = float(rule.get("max", 1e9))
             if not (lo <= params[i] <= hi):
@@ -496,13 +503,13 @@ def check_stru_file(
         cfg = expected if isinstance(expected, dict) else {}
         lo = float(cfg.get("min", 0))
         hi = float(cfg.get("max", 1e9))
-        if all(lo <= l <= hi for l in lengths):
+        if all(lo <= v <= hi for v in lengths):
             return True, (
-                f"{fpath.name}: box edges {[f'{l:.2f}' for l in lengths]} "
+                f"{fpath.name}: box edges {[f'{v:.2f}' for v in lengths]} "
                 f"all within [{lo}, {hi}]"
             )
         return False, (
-            f"{fpath.name}: box edges {[f'{l:.2f}' for l in lengths]} "
+            f"{fpath.name}: box edges {[f'{v:.2f}' for v in lengths]} "
             f"not all within [{lo}, {hi}]"
         )
 
