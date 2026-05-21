@@ -74,13 +74,17 @@ def _parse_input(path: Path) -> dict[str, str]:
 
 def _count_stru_species(
     stru_path: Path,
-) -> tuple[int, bool, list[tuple[str, str]], list[tuple[str, str]]]:
-    """Count species and return PP/orbital entries as (element, filename)."""
+) -> tuple[int, bool, bool, list[tuple[str, str]], list[tuple[str, str]]]:
+    """Count species and return PP/orbital entries as (element, filename).
+
+    Returns (species_count, has_orbital, has_lattice_vectors, pp_entries, orb_entries).
+    """
     text = stru_path.read_text()
     lines = text.splitlines()
 
     species_count = 0
     has_orbital = False
+    has_lattice_vectors = False
     pp_entries: list[tuple[str, str]] = []
     orbital_raw: list[str] = []
     species_order: list[str] = []
@@ -101,9 +105,13 @@ def _count_stru_species(
             in_numerical_orbital = True
             has_orbital = True
             continue
+        elif upper in ("LATTICE_VECTORS", "LATTICE_PARAMETERS"):
+            in_atomic_species = False
+            in_numerical_orbital = False
+            has_lattice_vectors = True
+            continue
         elif upper in (
             "LATTICE_CONSTANT",
-            "LATTICE_VECTORS",
             "ATOMIC_POSITIONS",
         ):
             in_atomic_species = False
@@ -128,7 +136,7 @@ def _count_stru_species(
     else:
         orb_entries = [("", orb) for orb in orbital_raw]
 
-    return species_count, has_orbital, pp_entries, orb_entries
+    return species_count, has_orbital, has_lattice_vectors, pp_entries, orb_entries
 
 
 def validate_workspace(workspace: Path) -> list[str]:
@@ -176,8 +184,8 @@ def validate_workspace(workspace: Path) -> list[str]:
             )
         elif stru_path.is_file():
             # Validate ntype
-            species_count, has_orbital, pp_entries, orb_entries = _count_stru_species(
-                stru_path
+            species_count, has_orbital, has_lattice_vectors, pp_entries, orb_entries = (
+                _count_stru_species(stru_path)
             )
             ntype_str = params.get("ntype", "")
             if ntype_str:
@@ -200,6 +208,14 @@ def validate_workspace(workspace: Path) -> list[str]:
                 messages.append(
                     f"FAIL {prefix}: ntype is missing from INPUT. "
                     f"Must set ntype={species_count} to match STRU ATOMIC_SPECIES count."
+                )
+
+            # Validate latname when STRU has no LATTICE_VECTORS
+            if not has_lattice_vectors and "latname" not in params:
+                messages.append(
+                    f"FAIL {prefix}: STRU has no LATTICE_VECTORS/LATTICE_PARAMETERS section "
+                    f"and INPUT has no latname. ABACUS cannot determine the lattice. "
+                    f"Add latname (e.g. sc, fcc, bcc, hexagonal) to INPUT."
                 )
 
             # Validate basis_type vs NUMERICAL_ORBITAL
