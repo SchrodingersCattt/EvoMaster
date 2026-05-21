@@ -3052,7 +3052,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_024_20260518
+- id: IG_abacus_024_20260521
   capability: input_generation
   domain: agnostic
   intent: Prepare minimal PW vs LCAO SCF input triplets for Si2 (official 02_scf).
@@ -3061,19 +3061,19 @@ questions:
   - eng_abacus
   data_files:
   - key: STRU_pw_Si2
-    path: data/IG_abacus_024_20260518/STRU_pw_Si2
+    path: data/IG_abacus_024_20260521/STRU_pw_Si2
     oss_url: ''
     description: Official STRU from abacus-develop examples/02_scf/01_pw_Si2
   - key: STRU_lcao_Si2
-    path: data/IG_abacus_024_20260518/STRU_lcao_Si2
+    path: data/IG_abacus_024_20260521/STRU_lcao_Si2
     oss_url: ''
     description: Official STRU from abacus-develop examples/02_scf/02_lcao_Si2
   - key: Si_pz_vbc_UPF
-    path: data/IG_abacus_024_20260518/Si.pz-vbc.UPF
+    path: data/IG_abacus_024_20260521/Si.pz-vbc.UPF
     oss_url: ''
     description: Pseudopotential file referenced by STRU (placeholder).
   - key: Si_lda_orbital
-    path: data/IG_abacus_024_20260518/Si_lda_8.0au_50Ry_2s2p1d
+    path: data/IG_abacus_024_20260521/Si_lda_8.0au_50Ry_2s2p1d
     oss_url: ''
     description: Numerical orbital file referenced by STRU_lcao (placeholder).
   reference_answers:
