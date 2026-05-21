@@ -259,6 +259,14 @@ class QuestionItem(BaseModel):
     data_files: list[DataFileRef] = Field(default_factory=list)
     reference_answers: list[ReferenceAnswer] = Field(default_factory=list)
     scoring_checklist: list[ScoringCheckItem] = Field(default_factory=list)
+    inject_bohrium_failure: bool = Field(
+        default=False,
+        description='When true, eval runner patches BohriumTool._submit to always return inject_failure_message.',
+    )
+    inject_failure_message: str = Field(
+        default='job/create failed: Insufficient account balance, please recharge.',
+        description='Error message returned by patched Bohrium submit.',
+    )
 
     @field_validator('tags', mode='before')
     @classmethod
