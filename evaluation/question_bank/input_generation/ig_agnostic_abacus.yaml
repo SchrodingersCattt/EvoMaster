@@ -6311,7 +6311,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_050_20260518
+- id: IG_abacus_050_20260521
   capability: input_generation
   domain: agnostic
   intent: Prepare PW SCF INPUT for external saw-like electric field on Pt(111) slab per official 28_efield.
@@ -6353,8 +6353,13 @@ questions:
       filename: run_pw_pt_slab_efield/INPUT
       pattern: (?im)^\s*efield_amp\s+(?!0(?:\.0*)?\s*$)\S+
       flags: im
-  - key: variable_efield_semantics
-    value: External electric field per 28_efield—efield_flag 1 with efield_dir/pos/amp; dip_cor_flag 0 (field only, not dipole correction).
+  - key: must_efield_pos
+    value:
+      filename: run_pw_pt_slab_efield/INPUT
+      tokens:
+      - efield_pos_max
+      - efield_pos_dec
+      flags: i
   - key: turn_budget
     value:
       max: 12
@@ -6389,10 +6394,11 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 1.0
-  - id: variable_efield_semantics
-    criterion: '[Variable] External efield setup matches 28_efield README.'
-    axis: grounding
-    verify: llm_binary_judge
+  - id: must_efield_pos
+    criterion: '[Must] efield_pos_max and efield_pos_dec set for sawtooth field position.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
     weight: 0.5
   - id: turn_budget
     criterion: Agent completes within turn budget.
