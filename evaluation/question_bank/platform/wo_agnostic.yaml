@@ -290,3 +290,84 @@ questions:
     criterion: Token usage within budget.
     axis: efficiency
     verify: token_budget
+- id: PWO_vasp_submit_001_20260521
+  capability: workflow_orchestration
+  domain: agnostic
+  priority: P1
+  intent: Test whether agent can correctly submit a VASP calculation to Bohrium on
+    first try, using the correct image startup command (Intel MPI env sourcing) without
+    trial-and-error probing.
+  human_prompt_seed: '帮我用 VASP 计算一个 O₂ 分子的平衡键长和结合能，用 PBE 泛函。'
+  tags:
+  - eng_vasp
+  - platform_bohrium
+  data_files:
+  - key: potcar_O
+    path: data/PWO_vasp_submit_001/POT/PAW_PBE/O/POTCAR
+    oss_url: ''
+    description: VASP PAW_PBE pseudopotential for O (standard, not O_s or O_h).
+  reference_answers:
+  - key: must_vasp_env_source
+    value:
+      check_tool_args: true
+      pattern: source.*(intel|oneapi|setvars|compilervars)
+      flags: i
+  - key: must_vasp_binary_path
+    value:
+      check_tool_args: true
+      pattern: /opt/vasp.*bin/vasp_std|vasp_std
+      flags: ''
+  - key: must_not_bare_mpirun
+    value:
+      check_tool_args: true
+      pattern: ^mpirun\s+-np
+      flags: ''
+      negate: true
+  - key: must_spin_polarized
+    value:
+      filename: '**/INCAR'
+      pattern: ISPIN\s*=\s*2
+      flags: ''
+  - key: must_boxed_molecule
+    value:
+      filename: '**/POSCAR'
+      pattern: '1[0-9]\.|2[0-9]\.'
+      flags: ''
+  - key: turn_budget
+    value:
+      max: 20
+  scoring_checklist:
+  - id: first_submit_success
+    criterion: '[Must] The FIRST Bohrium submission uses a working VASP command (sources
+      Intel env before calling vasp_std). Agent does NOT fail and retry with different
+      mpirun/env combinations.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: must_vasp_env_source
+    criterion: '[Platform] Bohrium cmd includes Intel MPI/oneAPI environment sourcing
+      (source setvars.sh or compilervars.sh) before vasp_std invocation.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: must_spin_polarized
+    criterion: '[Must] INCAR sets ISPIN=2 for O₂ (triplet ground state).'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_boxed_molecule
+    criterion: '[Must] POSCAR uses a large box (≥10Å) for the isolated molecule to
+      avoid periodic image interaction.'
+    axis: correctness
+    verify: text_file_regex
+  - id: reports_bond_length
+    criterion: Agent reports O-O equilibrium bond length (expected ~1.21-1.23 Å from
+      PBE). Value must be physically reasonable.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: reports_binding_energy
+    criterion: Agent reports O₂ binding energy or atomization energy (expected ~5.5-6.2
+      eV for PBE, vs experimental 5.12 eV). Sign and magnitude must be reasonable.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
