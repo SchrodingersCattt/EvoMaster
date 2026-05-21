@@ -3236,3 +3236,54 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+- id: WO_lammps_water_density_001_20260522
+  capability: workflow_orchestration
+  domain: agnostic
+  priority: P1
+  intent: Test whether agent can write a correct LAMMPS input script for liquid water
+    NPT density calculation and submit it successfully on the first try — no retry
+    cycles for scripting bugs (variable ordering, syntax, force field setup).
+  human_prompt_seed: '用 LAMMPS 模拟计算室温常压下水的密度，使用 SPC/E 水模型。报告平衡后的平均密度。'
+  tags:
+  - eng_lammps
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 900000
+  scoring_checklist:
+  - id: first_submit_success
+    criterion: '[Must] The FIRST Bohrium job submission runs to completion (status
+      Finished) without needing a resubmission due to LAMMPS script errors. If the
+      agent submits, gets a Failed status, fixes the script, and resubmits — this
+      check FAILS even if the second attempt succeeds.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: density_physically_correct
+    criterion: '[Must] Agent reports a final average density value that is physically
+      reasonable for SPC/E water at ~300K, 1atm (expected 0.99-1.01 g/cm³). Values
+      outside 0.9-1.1 g/cm³ indicate a fundamental setup error.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: spce_model_correct
+    criterion: '[Must] The LAMMPS script uses SPC/E water parameters correctly:
+      O-H bond 1.0 Å, H-O-H angle 109.47°, LJ epsilon(O)=0.1553 kcal/mol,
+      sigma(O)=3.166 Å, charges qO=-0.8476e qH=+0.4238e (or equivalent).'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: npt_ensemble
+    criterion: Agent uses NPT ensemble (fix npt or equivalent) for the production
+      phase to allow volume fluctuation for density measurement.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
