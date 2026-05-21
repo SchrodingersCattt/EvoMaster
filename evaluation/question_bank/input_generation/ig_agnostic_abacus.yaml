@@ -6828,7 +6828,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_055_20260518
+- id: IG_abacus_055_20260521
   capability: input_generation
   domain: agnostic
   intent: Prepare LCAO spin-polarized SCF inputs with PEXSI solver per official 33_pexsi 01_spin_Fe2.
@@ -6837,7 +6837,7 @@ questions:
   - eng_abacus
   data_files:
   - key: STRU_Fe2
-    path: data/IG_abacus_055_20260518/STRU_Fe2
+    path: data/IG_abacus_055_20260521/STRU_Fe2
     oss_url: ''
     description: Official STRU from abacus-develop examples/33_pexsi/01_spin_Fe2
   reference_answers:
@@ -6872,8 +6872,12 @@ questions:
       tokens:
       - K_POINTS
       flags: i
-  - key: variable_pexsi_semantics
-    value: PEXSI LCAO SCF per 33_pexsi—ks_solver pexsi with pexsi_npole for finite-T/metallic systems; spin-polarized Fe2 example.
+  - key: must_pexsi_gamma_only
+    value:
+      filename: run_lcao_fe2_pexsi/INPUT
+      tokens:
+      - gamma_only 1
+      flags: i
   - key: turn_budget
     value:
       max: 14
@@ -6912,11 +6916,11 @@ questions:
     axis: correctness
     verify: text_file_contains_all
     weight: 0.8
-  - id: variable_pexsi_semantics
-    criterion: '[Variable] PEXSI setup matches 33_pexsi README.'
-    axis: grounding
-    verify: llm_binary_judge
-    weight: 0.5
+  - id: must_pexsi_gamma_only
+    criterion: '[Must] run_lcao_fe2_pexsi/INPUT sets gamma_only 1 (required by PEXSI solver).'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.8
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
