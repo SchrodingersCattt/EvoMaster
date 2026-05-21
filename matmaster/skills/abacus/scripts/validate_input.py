@@ -242,12 +242,14 @@ def validate_workspace(workspace: Path) -> list[str]:
                 if not pp_in_workspace and not (using_apns_pseudo and pp_in_apns_list):
                     messages.append(
                         f"FAIL {prefix}: STRU references pseudopotential '{pp_file}' but it is not found "
-                        f"in workspace and not validated by APNS pseudopotential list."
+                        f"in workspace and not validated by APNS pseudopotential list. "
+                        f"If this PP is user-provided, set pseudo_dir to './' (do NOT remove pseudo_dir)."
                     )
                 if using_apns_pseudo and not pp_in_apns_list:
                     messages.append(
                         f"FAIL {prefix}: pseudo_dir points to APNS, but '{pp_file}' is not in "
-                        f"references/apns_pseudopotentials_v1.list."
+                        f"references/apns_pseudopotentials_v1.list. "
+                        f"Change pseudo_dir to './' since the PP is user-provided (do NOT remove pseudo_dir)."
                     )
                 guessed_pp = bool(
                     re.fullmatch(rf"{re.escape(species)}\.upf", pp_file, re.IGNORECASE)
@@ -268,12 +270,14 @@ def validate_workspace(workspace: Path) -> list[str]:
                 if not orb_in_workspace and not (using_apns_orb and orb_in_apns_list):
                     messages.append(
                         f"FAIL {prefix}: STRU references orbital '{orb_file}' but it is not found "
-                        f"in workspace and not validated by APNS orbital list."
+                        f"in workspace and not validated by APNS orbital list. "
+                        f"If this orbital is user-provided, set orbital_dir to './' (do NOT remove orbital_dir)."
                     )
                 if using_apns_orb and not orb_in_apns_list:
                     messages.append(
                         f"FAIL {prefix}: orbital_dir points to APNS, but '{orb_file}' is not in "
-                        f"references/apns_orbitals_efficiency_v1.list."
+                        f"references/apns_orbitals_efficiency_v1.list. "
+                        f"Change orbital_dir to './' since the orbital is user-provided (do NOT remove orbital_dir)."
                     )
                 if species:
                     has_element_orb = species in apns_orb_by_element
