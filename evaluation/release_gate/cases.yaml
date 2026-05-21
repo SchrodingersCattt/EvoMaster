@@ -245,3 +245,19 @@ cases:
     source_month: "2026-04"
     baseline: smooth
     notes: "24 events，1 次 SyntaxError 后立即修复，所有参数计算正确"
+
+  - id: rg_s12
+    title: "LiVCl₆ 离子电导率 (多温度 MD)"
+    prompt: "找到LiVCl₆的晶体结构，通过分子动力学模拟计算其离子电导率"
+    source_session: "55db4f96e7064166ad59bdce28d878d0"
+    source_month: "2026-04"
+    baseline: smooth
+    notes: "200 events，0 errors。DB检索 → DPA优化 → 超胞 → 5温度MD → MSD → Nernst-Einstein → Arrhenius外推"
+
+  - id: rg_s13
+    title: "H₂O/Co(0001) 吸附能 + COHP"
+    prompt: "计算水分子在Co表面的吸附能，并进行COHP分析"
+    source_session: "7a893ebcfba44e05a046a24a0522616a"
+    source_month: "2026-04"
+    baseline: smooth
+    notes: "DPA OC22 head 快速吸附能 + ABACUS LCAO COHP 键合分析，组合工作流"
