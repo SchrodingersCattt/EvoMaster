@@ -261,3 +261,19 @@ cases:
     source_month: "2026-04"
     baseline: smooth
     notes: "DPA OC22 head 快速吸附能 + ABACUS LCAO COHP 键合分析，组合工作流"
+
+  - id: rg_s14
+    title: "ZnO/TiO₂ CO 吸附对比"
+    prompt: "计算氧化锌和二氧化钛结构，构建平板模型，计算CO在平板模型上的吸附结构，比较结果并写作"
+    source_session: "6a351576c27b4cd28608307eb8694d7c"
+    source_month: "2026-04"
+    baseline: smooth
+    notes: "多材料对比工作流：ZnO(10-10) vs TiO₂(110)，正确选面+OC22 head+Lewis酸性解释"
+
+  - id: rg_r20
+    title: "FeNC 单原子催化 ORR 建模"
+    prompt: "帮我建立一个单原子催化剂FeNC的模型，然后根据ORR的反应中间体搭建几个中间体的模型，具体理论细节与建模细节自己去查文献"
+    source_session: "653b67b5c0b24de48dc6ee10a1fc57da"
+    source_month: "2026-04"
+    baseline: rough
+    friction: "用了 4x4 超胞（文献推荐 5x5+），ABACUS spin-polarized relax 6+小时未完成"
