@@ -178,7 +178,35 @@ For `actionable` sessions, design questions following these principles:
 - Different scenarios of the same capability (e.g., TBG vs CNT) are valid if they test different physical knowledge
 - Same scenario with different parameters (e.g., Si SCF vs Ge SCF) is NOT worth duplicating
 
-### 5. Review Cycle
+### 5. Settle Release Gate Cases
+
+Any session that represents a **reasonable end-to-end computation task** (not too hard, not too niche) should be considered for `evaluation/release_gate/cases.yaml` — regardless of whether the agent handled it smoothly or not.
+
+**Criteria for inclusion:**
+- Task is a standard materials science computation workflow (structure build, DPA/ABACUS calc, property analysis)
+- Moderate complexity (would take 5-30 tool calls if done smoothly)
+- Not dependent on user-specific custom skills or private data
+- If user files are needed, an OSS-accessible copy must exist or be created
+
+**How to add:**
+- `baseline: smooth` — agent completed it cleanly, serves as regression guard
+- `baseline: rough` — agent struggled (retries, wrong approach, knowledge error), drives iteration
+- Include `friction:` field for rough cases describing what went wrong
+- Deduplicate: don't add if the same task type + method is already in `cases.yaml`
+
+**Format:**
+```yaml
+  - id: rg_sNN / rg_rNN
+    title: "short title"
+    prompt: "user prompt as they would naturally ask"
+    source_session: "session_id"
+    source_month: "YYYY-MM"
+    baseline: smooth / rough
+    friction: "what went wrong"  # rough only
+    notes: "optional"            # smooth only
+```
+
+### 6. Review Cycle
 
 After writing questions:
 1. Check for prompt hints (透题): Does the prompt give away any part of the solution?
@@ -199,6 +227,8 @@ evaluation/
 │   └── prod/
 │       ├── 2026-02.json
 │       └── 2026-05.json
+├── release_gate/
+│   └── cases.yaml           (e2e regression cases from real sessions)
 ├── question_bank/
 │   ├── platform/            (platform scope questions)
 │   │   └── ig_agnostic.yaml

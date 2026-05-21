@@ -1,0 +1,215 @@
+# Release Gate Cases
+# 从线上 session 中筛选的端到端计算 case，用于上线前回归。
+# baseline=smooth 的 case 验证不退化；baseline=rough 的 case 驱动迭代。
+# 通过标准：丝滑完成（无 retry、无走弯路、结果正确）。
+#
+# 数据来源：prod 轨迹分析 2026-02 ~ 2026-05
+
+version: 1
+cases:
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # baseline: smooth — 当前已经做好的，确保不退化
+  # ═══════════════════════════════════════════════════════════════════════
+
+  - id: rg_s01
+    title: "Al(001) surface slab"
+    prompt: "构建Al的(001)表面slab，4层原子层，真空层15Å"
+    source_session: "5b76846fd18e481fb68b9d0c6bbddc45"
+    source_month: "2026-03"
+    baseline: smooth
+    notes: "5 tool calls，最简单的 build_bulk → build_surface_slab 路径"
+
+  - id: rg_s02
+    title: "Li₂O DPA MD"
+    prompt: "对Li₂O晶体做分子动力学模拟，300K，1ps"
+    source_session: "934e759f0143475c9a45f783ea0c16ab"
+    source_month: "2026-03"
+    baseline: smooth
+    notes: "5 tool calls，skill → submit MD → monitor → finish"
+
+  - id: rg_s03
+    title: "Pt(111) 功函数 (ABACUS)"
+    prompt: "计算Pt(111)表面的功函数"
+    source_session: "fffc5ed31dd446d0b81f08b9b2136395"
+    source_month: "2026-03"
+    baseline: smooth
+    notes: "9 tool calls，build bulk → slab → submit cal_work_function"
+
+  - id: rg_s04
+    title: "MgB₂ 声子谱 (DPA)"
+    prompt: "从数据库获取MgB₂的结构，计算其声子谱"
+    source_session: "b5b9944f4423437e9d88bc8465093e33"
+    source_month: "2026-03"
+    baseline: smooth
+    notes: "DB fetch → validate → DPA phonon → monitor"
+
+  - id: rg_s05
+    title: "Si 能带结构 (ABACUS)"
+    prompt: "计算硅的能带结构"
+    source_session: "b8f0698c5dcf4238a291392202748a32"
+    source_month: "2026-03"
+    baseline: smooth
+    notes: "标准 ABACUS band 流程，Eg=0.64 eV (PBE)"
+
+  - id: rg_s07
+    title: "CO/Pt(111) 吸附能 (DPA)"
+    prompt: "计算CO分子在Pt(111)表面的吸附能，使用机器学习力场"
+    source_session: "179f12c0-5ad1-4918-a6fc-424260e7aa89"
+    source_month: "2026-03"
+    baseline: smooth
+    notes: "DPA-3.1-3M + OC22 head, 2x2 supercell, E_ads=-0.573 eV"
+
+  - id: rg_s08
+    title: "CrMnFeCoNi HEA SQS"
+    prompt: "构建CrMnFeCoNi等摩尔高熵合金的SQS结构，FCC基体，至少100个原子"
+    source_session: "19a75417e6e042f4a82eed65125fd777"
+    source_month: "2026-05"
+    baseline: smooth
+    notes: "icet SQS，125 atoms"
+
+  - id: rg_s09
+    title: "Pd(111) 功函数 (ABACUS)"
+    prompt: "计算Pd(111)表面的功函数"
+    source_session: "b00ed6f5f12c40269acd1a25c36b1a08"
+    source_month: "2026-03"
+    baseline: smooth
+    notes: "textbook execution，5.079 eV"
+
+  - id: rg_s10
+    title: "刚玉从 DB 获取并 Wyckoff 重建"
+    prompt: "从数据库中找到刚玉(corundum, Al₂O₃)的结构，分析其Wyckoff位置，然后用Wyckoff位置重新构建"
+    source_session: "74d970f982e74d6cb5027283a2975559"
+    source_month: "2026-05"
+    baseline: smooth
+    notes: "DB fetch → pymatgen symmetry → Wyckoff rebuild"
+
+  # ═══════════════════════════════════════════════════════════════════════
+  # baseline: rough — 当前做得不好的，驱动迭代
+  # ═══════════════════════════════════════════════════════════════════════
+
+  # ── 知识/方法论错误 ──
+
+  - id: rg_r01
+    title: "CO/Pt(111) 吸附能 — ABACUS 能量单位"
+    prompt: "用ABACUS计算CO在Pt(111)表面的吸附能"
+    source_session: "e6e7b0a3-e154-4aef"
+    source_month: "2026-03"
+    baseline: rough
+    friction: "把 ABACUS 输出的 eV 误认为 Hartree，乘了 27.21 得到 -22.7 eV"
+
+  - id: rg_r02
+    title: "LiCoO₂ 生成能"
+    prompt: "计算LiCoO₂的生成能"
+    source_session: "3b33bf1fb48245d3a233"
+    source_month: "2026-04"
+    baseline: rough
+    friction: "formula unit 数错，初始得到 +1190 eV"
+
+  - id: rg_r03
+    title: "MgO 掺 Al（异价替换）"
+    prompt: "构建MgO掺4%Al的超胞结构，用于DFT计算"
+    source_session: "d268fd78-07ce-4dbe"
+    source_month: "2026-03"
+    baseline: rough
+    friction: "Al3+ 替 Mg2+ 没做电荷补偿，交付了 +4e 的结构"
+
+  - id: rg_r04
+    title: "C-N 解离势能面扫描"
+    prompt: "计算CH₃NH₃⁺的C-N键解离势能面"
+    source_session: "4312863d-d842-46f6"
+    source_month: "2026-03"
+    baseline: rough
+    friction: "DPA 失败后回退到 Morse 势解析公式当作量化结果交付"
+
+  - id: rg_r05
+    title: "CeO₂(111) Tasker 分类"
+    prompt: "构建CeO₂的(111)表面slab，分析其Tasker极性分类并输出分类结果"
+    source_session: "d359bf02-268c-4930"
+    source_month: "2026-03"
+    baseline: rough
+    friction: "错误分类为 Tasker Type 1（应为 Type 2）"
+
+  - id: rg_r06
+    title: "LDPE 非晶构建 + MD"
+    prompt: "构建低密度聚乙烯(LDPE)的非晶结构并做分子动力学优化"
+    source_session: "c9913871165c4ec0"
+    source_month: "2026-03"
+    baseline: rough
+    friction: "10 次 PACKMOL，最终密度 0.002（应 ~0.92）"
+
+  - id: rg_r07
+    title: "γ-Al₂O₃ 缺陷尖晶石构建"
+    prompt: "构建γ-Al₂O₃的缺陷尖晶石结构"
+    source_session: "c201ab7e-da34-4634"
+    source_month: "2026-03"
+    baseline: rough
+    friction: "晶格常数来源错（用了 MgAl₂O₄），空位排序方法不对"
+
+  # ── 效率问题 ──
+
+  - id: rg_r08
+    title: "Zn 盐溶液 DP-MD"
+    prompt: "用分子动力学模拟比较ZnSO₄、ZnCl₂、Zn(ClO₄)₂三种锌盐水溶液的径向分布函数和扩散系数"
+    source_session: "c78501d0747e4b50"
+    source_month: "2026-03"
+    baseline: rough
+    friction: "22 次文献搜索找 DP 模型，从未提交计算，应直接用 DPA3"
+
+  - id: rg_r09
+    title: "Phenol/Cu(111) 吸附能"
+    prompt: "计算苯酚在Cu(111)表面的吸附能"
+    source_session: "b3519e7aea6b4a5b"
+    source_month: "2026-03"
+    baseline: rough
+    friction: "4 次 DPA 提交反复切换 OC22/SPICE2 head"
+
+  - id: rg_r10
+    title: "咖啡因+腺苷分子构建"
+    prompt: "帮我构建咖啡因和腺苷的分子结构"
+    source_session: "3e102ab9e1ed4f34"
+    source_month: "2026-03"
+    baseline: rough
+    friction: "同一 SMILES 调用 7 次 + 7 次 web search，32 tool calls 完成 2 分子任务"
+
+  - id: rg_r11
+    title: "Al₂O₃ Bader 电荷"
+    prompt: "对Al₂O₃做Bader电荷分析"
+    source_session: "6d1e89c04e17449a"
+    source_month: "2026-04"
+    baseline: rough
+    friction: "180 events 完成 2 步工作流，Bohrium 404 + 路径错 + 超时重试"
+
+  # ── 工具使用/恢复 ──
+
+  - id: rg_r12
+    title: "H₂O/TiO₂(101) 吸附 DPA"
+    prompt: "计算水分子在TiO₂(101)表面的吸附能，用机器学习力场优化"
+    source_session: "4c62cb4b1d6e483b"
+    source_month: "2026-03"
+    baseline: rough
+    friction: "MCP 全部 ClosedResourceError，ASE 脚本补救但过程绕"
+
+  - id: rg_r13
+    title: "DACMOR CIF 加氢"
+    prompt: "对DACMOR的CIF文件补全氢原子"
+    source_session: "fd96a98724064134"
+    source_month: "2026-04"
+    baseline: rough
+    friction: "没用可用的 mat_sg_add_hydrogen 工具，obabel 失败后走了 6+ finish-gate"
+
+  - id: rg_r14
+    title: "MoS₂/WSe₂ 横向异质结"
+    prompt: "构建MoS₂/WSe₂的横向异质结构"
+    source_session: "ab002f99d1ec4725"
+    source_month: "2026-04"
+    baseline: rough
+    friction: "第一次系统错误未向用户报告"
+
+  - id: rg_r15
+    title: "Li/Mo(110) 吸附能"
+    prompt: "计算Li在Mo(110)表面的吸附能"
+    source_session: "cc99c53d68854556"
+    source_month: "2026-04"
+    baseline: rough
+    friction: "方案正确但 Bohrium 404 x6，无回退，零结果"
