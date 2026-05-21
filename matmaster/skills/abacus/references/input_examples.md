@@ -18,7 +18,7 @@ Always include **universal baseline**: `calculation`, `basis_type`, `ntype`, `ec
 | Slab KPT | Always `1` in vacuum direction (e.g. `20 20 1 0 0 0`) | Using dense mesh in vacuum direction |
 | Supercell / vacancy / defect / BSSE | **`kspacing` in INPUT** (e.g. `kspacing 0.10`) | Using fixed KPT mesh for variable-size supercells |
 | Large supercell (>30 atoms) LCAO | `gamma_only 1` (Gamma-point only, no KPT file needed) | Using multi-k on already-folded supercell BZ |
-| Fixed occupation (ocp) | `ocp 1`, `ocp_set ...`, `nspin 2`, **`gamma_only 1`** | Missing `gamma_only` → band ordering changes with k-points, `ocp_set` indices become wrong |
+| Manual orbital occupation (ocp — NOT `smearing_method fixed`) | `ocp 1`, `ocp_set ...`, `nspin 2`, **`gamma_only 1`** | Missing `gamma_only` → band ordering changes with k-points, `ocp_set` indices become wrong |
 | PEXSI solver | `ks_solver pexsi`, `pexsi_npole 80`, `gamma_only 1` | Missing `pexsi_npole` → uses default 40 (less accurate); PEXSI requires LCAO + gamma_only |
 
 > **⚠ `force_thr_ev` vs `force_thr`**: Always use `force_thr_ev` (unit: eV/Å). The parameter `force_thr` uses Ry/Bohr — completely different units. `force_thr_ev 0.01` ≈ `force_thr 3.9e-4`. Mixing them up produces absurdly loose or tight thresholds.
