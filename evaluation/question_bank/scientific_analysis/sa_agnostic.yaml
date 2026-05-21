@@ -1731,3 +1731,83 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
+- id: SA_md_sanity_001_20260521
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Identify reliability issues in MD-derived diffusion coefficient data including
+    non-Arrhenius behavior and insufficient sampling, and recommend improvements.
+  human_prompt_seed: '工作区中有一份 LiVCl6 固态电解质的分子动力学模拟结果 `diffusion_data.json`，包含
+    5 个温度下的 Li 扩散系数和离子电导率，以及 Arrhenius 拟合。
+
+    请对这些结果做科学性检查：数据是否合理？是否存在异常？模拟参数是否足以得到可靠结论？如有问题请指出原因并建议改进方案。
+
+    输出 `sanity_report.json`，格式：`{"issues_found": [...], "is_reliable": true/false,
+    "recommendations": [...]}`'
+  tags:
+  - code_mlip
+  data_files:
+  - key: diffusion_data
+    path: data/SA_md_sanity_001/diffusion_data.json
+    oss_url: https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/sa_md_sanity_001/diffusion_data.json
+    description: MD diffusion results for LiVCl6 at 600-1000K with non-monotonic D
+      values and insufficient simulation time (20ps, 9 Li atoms).
+  reference_answers:
+  - key: output_artifact
+    value: sanity_report.json
+  - key: identifies_non_monotonic
+    value:
+      filename: sanity_report.json
+      pattern: (?i)(non.?monoton|800.*700|D\(800\).*<.*D\(700\)|700.*>.*800|不单调|非单调|反常|anomal)
+      flags: i
+  - key: identifies_short_simulation
+    value:
+      filename: sanity_report.json
+      pattern: (?i)(20\s*ps.*short|insufficien|不够|太短|统计.*差|poor.*statistic|longer.*simulat|延长)
+      flags: i
+  - key: is_reliable_false
+    value:
+      filename: sanity_report.json
+      pattern: (?i)"is_reliable"\s*:\s*false
+      flags: i
+  - key: turn_budget
+    value:
+      max: 10
+  - key: token_budget_total
+    value:
+      max: 10000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `sanity_report.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: identifies_non_monotonic
+    criterion: Agent identifies that D(800K)=4.10e-5 < D(700K)=4.77e-5 is non-monotonic
+      and violates expected Arrhenius behavior for thermally activated diffusion.
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: identifies_short_simulation
+    criterion: Agent identifies that 20ps production with only 9 Li atoms provides
+      insufficient statistics for reliable MSD-derived diffusion coefficients. Typical
+      requirement is 100ps-1ns for converged MSD.
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: is_reliable_false
+    criterion: Agent concludes the results are NOT reliable (is_reliable=false).
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.5
+  - id: grounding_source
+    criterion: The analysis references specific data points (e.g., D at 700K vs 800K)
+      and explains why non-monotonic diffusion is unphysical for a single-phase solid.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
