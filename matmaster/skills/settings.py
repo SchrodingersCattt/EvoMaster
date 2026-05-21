@@ -1,8 +1,8 @@
-"""Skill settings utilities: read disabled skill names from .settings.json.
+"""Skill settings and roots utilities.
 
 Pure utility module shared by core-layer (Exp._init_skill_tools) and
-service-layer (skill_registry_factory). No business logic—just file I/O
-and JSON parsing with safe fallbacks.
+service-layer (skill_registry_factory). No business logic—just file I/O,
+JSON parsing, and session attribute extraction with safe fallbacks.
 """
 
 from __future__ import annotations
@@ -13,6 +13,52 @@ from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Skill roots resolution
+# ---------------------------------------------------------------------------
+
+
+def local_user_skills_root(session: Any | None) -> Path | None:
+    """Extract the local user skills root path from a session object."""
+    if session is None:
+        return None
+    raw = getattr(session, "local_user_skills_root", None)
+    if not isinstance(raw, str):
+        return None
+    root = raw.strip()
+    return Path(root) if root else None
+
+
+def remote_skill_roots(session: Any | None) -> list[str]:
+    """Extract deduplicated remote skill root paths from a session object."""
+    if session is None:
+        return []
+
+    roots: list[str] = []
+    raw_roots = getattr(session, "remote_skill_roots", None)
+    if isinstance(raw_roots, (list, tuple, set)):
+        roots.extend(
+            root.strip() for root in raw_roots if isinstance(root, str) and root.strip()
+        )
+
+    raw_user_root = getattr(session, "remote_user_skills_root", None)
+    if isinstance(raw_user_root, str) and raw_user_root.strip():
+        roots.append(raw_user_root.strip())
+
+    seen: set[str] = set()
+    unique: list[str] = []
+    for root in roots:
+        if root not in seen:
+            seen.add(root)
+            unique.append(root)
+    return unique
+
+
+# ---------------------------------------------------------------------------
+# Disabled skill names
+# ---------------------------------------------------------------------------
 
 
 def disabled_skill_names_from_settings(root: Path) -> set[str]:
