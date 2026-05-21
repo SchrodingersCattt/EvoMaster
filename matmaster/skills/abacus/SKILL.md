@@ -34,10 +34,6 @@ PW and LCAO basis; produces correct, runnable files and avoids silent-failure co
 | Extracting results from output | `references/output_params.md` |
 | Troubleshooting | `references/troubleshooting.md` |
 
-PP/orbital filename lookup:
-- `references/apns_pseudopotentials_v1.list`
-- `references/apns_orbitals_efficiency_v1.list`
-
 ## Pre-conditions — Internalize Before Writing
 
 - **AFM-prone oxides** (NiO, FeO, MnO under DFT+U): do not default to FM. Split magnetic species in STRU (e.g. Ni_up +2.0, Ni_down −2.0) — see `references/stru_format.md` for per-species moment syntax.
@@ -45,7 +41,7 @@ PP/orbital filename lookup:
 - **CIF/POSCAR → STRU**: convert lattice and positions faithfully before applying task-specific parameters.
 - **ecutwfc defaults**: `100` (LCAO), `50` (PW). Task requirements override.
 - **smearing_sigma default**: `0.015` unless task specifies otherwise.
-- **pseudo_dir / orbital_dir**: always present in INPUT — never omit. Path determined by Workflow step 3.
+- **pseudo_dir / orbital_dir**: always present in INPUT — never omit.
 
 ## Workflow
 
