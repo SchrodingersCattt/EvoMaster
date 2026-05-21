@@ -6744,7 +6744,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_054_20260518
+- id: IG_abacus_054_20260521
   capability: input_generation
   domain: agnostic
   intent: Prepare shared LCAO INPUT/KPT for H2O counterpoise BSSE per official 32_bsse.
@@ -6753,19 +6753,19 @@ questions:
   - eng_abacus
   data_files:
   - key: stru_0
-    path: data/IG_abacus_054_20260518/STRU_0
+    path: data/IG_abacus_054_20260521/STRU_0
     oss_url: ''
     description: Official BSSE STRU_0 from examples/32_bsse/01_water.
   - key: stru_1
-    path: data/IG_abacus_054_20260518/STRU_1
+    path: data/IG_abacus_054_20260521/STRU_1
     oss_url: ''
     description: Official BSSE STRU_1 (O fragment) from 32_bsse/01_water.
   - key: stru_2
-    path: data/IG_abacus_054_20260518/STRU_2
+    path: data/IG_abacus_054_20260521/STRU_2
     oss_url: ''
     description: Official BSSE STRU_2 (H fragment) from 32_bsse/01_water.
   - key: stru_3
-    path: data/IG_abacus_054_20260518/STRU_3
+    path: data/IG_abacus_054_20260521/STRU_3
     oss_url: ''
     description: Official BSSE STRU_3 (H fragment) from 32_bsse/01_water.
   reference_answers:
@@ -6785,8 +6785,9 @@ questions:
   - key: must_cp_kspacing
     value:
       filename: run_lcao_h2o_cp/INPUT
-      pattern: (?im)^\s*kspacing\s+\S+
-      flags: im
+      tokens:
+      - gamma_only 1
+      flags: i
   - key: turn_budget
     value:
       max: 16
@@ -6811,9 +6812,9 @@ questions:
     verify: text_file_contains_all
     weight: 1.0
   - id: must_cp_kspacing
-    criterion: '[Must] run_lcao_h2o_cp/INPUT uses kspacing for adaptive k-mesh across BSSE fragments.'
+    criterion: '[Must] run_lcao_h2o_cp/INPUT uses gamma_only 1 (gas-phase molecule).'
     axis: correctness
-    verify: text_file_regex
+    verify: text_file_contains_all
     weight: 0.8
   - id: turn_budget
     criterion: Agent completes within turn budget.
