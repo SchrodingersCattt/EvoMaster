@@ -89,6 +89,17 @@ Do NOT mark these sessions as "skip" — they reveal important agent resilience 
 
 For each friction point: consider whether an eval question with a tight turn_budget would force the agent to get it right on the first try. These questions directly reduce wasted turns in production.
 
+**Eval threshold: "first-try correct", not "eventually correct".** The goal is for the agent to get it right on the first attempt. Self-correction is better than persistent error, but it still indicates a knowledge gap worth testing. Specifically:
+- Agent initially used wrong parameters/values but later self-corrected → **actionable** (should know the correct value upfront)
+- Agent tried wrong tool/approach first, then pivoted to correct one → **actionable** (should pick the right approach immediately)
+- Agent got wrong intermediate result, noticed it was unphysical, and fixed → **actionable** (should compute correctly the first time)
+- Agent chose a suboptimal method that still produces acceptable results (e.g., SCF instead of relax, minimal basis set) → **informational** unless it leads to clearly wrong answers
+
+Only exclude from eval consideration:
+- Pure infrastructure failures (storePath, auth, network) where agent had no choice
+- Tool API limitations agent cannot work around (MCP tool doesn't expose a parameter)
+- Runtime-dependent issues that cannot be stably reproduced in eval (web search results, node availability)
+
 **Skill documentation does not guarantee compliance.** Even if a skill clearly documents the correct approach (e.g., "use OC22 head for surface adsorption"), assume the agent might not follow it. Every critical decision point documented in skills should have a corresponding eval question to verify the agent actually applies that knowledge. The eval question ensures the skill works end-to-end, not just exists on paper.
 
 ### 2. Analyze Session
