@@ -14,13 +14,13 @@ from pathlib import Path
 from typing import Any
 
 from matmaster.skills.registry import SkillRegistry
-from matmaster.skills.settings import \
-    disabled_skill_names_from_remote_settings as \
-    _disabled_skill_names_from_remote_settings
-from matmaster.skills.settings import \
-    disabled_skill_names_from_settings as _disabled_skill_names_from_settings
-from matmaster.skills.settings import \
-    local_user_skills_root as _local_user_skills_root
+from matmaster.skills.settings import (
+    disabled_skill_names_from_remote_settings as _disabled_skill_names_from_remote_settings,
+)
+from matmaster.skills.settings import (
+    disabled_skill_names_from_settings as _disabled_skill_names_from_settings,
+)
+from matmaster.skills.settings import local_user_skills_root as _local_user_skills_root
 from matmaster.skills.settings import remote_skill_roots as _remote_skill_roots
 
 logger = logging.getLogger(__name__)

@@ -30,13 +30,13 @@ from matmaster.context.system_prompt import SystemPromptBuilder
 from matmaster.core.hooks import HookEvent, HookExecutor, SubagentContext
 from matmaster.core.path_access import derive_path_access_roots
 from matmaster.core.playground import PlaygroundContext
-from matmaster.skills.settings import \
-    disabled_skill_names_from_remote_settings as \
-    _disabled_skill_names_from_remote_settings
-from matmaster.skills.settings import \
-    disabled_skill_names_from_settings as _disabled_skill_names_from_settings
-from matmaster.skills.settings import \
-    local_user_skills_root as _local_user_skills_root
+from matmaster.skills.settings import (
+    disabled_skill_names_from_remote_settings as _disabled_skill_names_from_remote_settings,
+)
+from matmaster.skills.settings import (
+    disabled_skill_names_from_settings as _disabled_skill_names_from_settings,
+)
+from matmaster.skills.settings import local_user_skills_root as _local_user_skills_root
 from matmaster.skills.settings import remote_skill_roots as _remote_skill_roots
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.cancellation import CancellationToken
@@ -326,8 +326,7 @@ class Exp:
         # Discard any registry from a prior run so a turn that turns skills off
         # cannot expose stale state to the prompt builder.
         self._skill_registry = None
-        from matmaster.core.runtime_context_assembly import \
-            empty_skill_resolver
+        from matmaster.core.runtime_context_assembly import empty_skill_resolver
 
         self._skill_resolver = skill_resolver or empty_skill_resolver
 
@@ -349,8 +348,7 @@ class Exp:
         from matmaster.core.tool_scheduler import ToolScheduler
         from matmaster.tools.tool_catalog import ToolCatalog
         from matmaster.tools.tool_compiler import ToolCompiler
-        from matmaster.types.topology import (RuntimeTopology,
-                                              SessionCapabilities)
+        from matmaster.types.topology import RuntimeTopology, SessionCapabilities
 
         session_caps = SessionCapabilities()
         if ctx.session is not None and hasattr(ctx.session, "capabilities"):
@@ -418,8 +416,9 @@ class Exp:
             skill_registry=self._skill_registry,
         )
 
-        from matmaster.core.runtime_context_assembly import \
-            build_runtime_context_assembly
+        from matmaster.core.runtime_context_assembly import (
+            build_runtime_context_assembly,
+        )
         from matmaster.tools.builtin.bohrium_tool.registry import JobRegistry
         from matmaster.types.tool_runner_state import ToolRunnerState
 
@@ -575,11 +574,19 @@ class Exp:
         def _want(name: str) -> bool:
             return allowed is None or name in allowed
 
-        from matmaster.tools.builtin import (AskQuestionTool, BashTool,
-                                             BohriumTool, EditTool, GlobTool,
-                                             GrepTool, ReadTool, TodoWriteTool,
-                                             WebFetchTool, WebSearchTool,
-                                             WriteTool)
+        from matmaster.tools.builtin import (
+            AskQuestionTool,
+            BashTool,
+            BohriumTool,
+            EditTool,
+            GlobTool,
+            GrepTool,
+            ReadTool,
+            TodoWriteTool,
+            WebFetchTool,
+            WebSearchTool,
+            WriteTool,
+        )
 
         exec_wd = Path(ctx.execution_workdir)
         has_session = ctx.session is not None
@@ -661,8 +668,7 @@ class Exp:
             return
 
         from matmaster.skills.registry import SkillRegistry
-        from matmaster.tools.builtin.skill_tool import (LegacyUseSkillTool,
-                                                        SkillTool)
+        from matmaster.tools.builtin.skill_tool import LegacyUseSkillTool, SkillTool
         from matmaster.tools.lazy_mcp import LazyMCPConnector, LazyMCPTool
         from matmaster.tools.schema_cache import ToolSchemaCache
 
@@ -727,8 +733,7 @@ class Exp:
 
         if mcp_config.get("calculation_preflight") == "calculation":
             try:
-                from matmaster.mcp.calculation.config_env import \
-                    resolve_mcp_config_path
+                from matmaster.mcp.calculation.config_env import resolve_mcp_config_path
 
                 config_path = resolve_mcp_config_path(config_path)
             except ImportError:
@@ -774,8 +779,7 @@ class Exp:
             allow_builtin_all
             or (allowed_builtin is not None and "PaperSearch" in allowed_builtin)
         ) and "PaperSearch" not in registry:
-            from matmaster.tools.builtin.paper_search_tool import \
-                PaperSearchTool
+            from matmaster.tools.builtin.paper_search_tool import PaperSearchTool
 
             paper_tool = PaperSearchTool(
                 connector=connector,
