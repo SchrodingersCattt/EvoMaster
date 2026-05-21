@@ -31,6 +31,7 @@ PW and LCAO basis; produces correct, runnable files and avoids silent-failure co
 | Surface/slab + dipole/E-field/gate | `references/electric_field.md` |
 | Bader / wavefunction / get_wf | `references/advanced_tasks.md` |
 | DFT+U / phonon / EOS / surface energy | `references/advanced_tasks.md` |
+| H/S matrix output (`out_mat_hs`, `out_mat_hs2`, `get_S`) | `references/output_params.md` |
 | Extracting results from output | `references/output_params.md` |
 | Troubleshooting | `references/troubleshooting.md` |
 
