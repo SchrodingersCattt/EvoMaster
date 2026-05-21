@@ -25,6 +25,17 @@ Always include **universal baseline**: `calculation`, `basis_type`, `ntype`, `ec
 
 > **⚠ Supercell k-points**: For **any supercell** (vacancy, defect, BSSE ghost atoms, adsorption), always use `kspacing` inside INPUT instead of a separate KPT file. This guarantees uniform k-point density that automatically adapts to cell size. Value: `0.10` Å⁻¹ for metals, `0.12`–`0.15` for insulators. For slab supercells: `kspacing 0.10 0.10 1.00` (z=vacuum). **Exception**: when `ocp 1` (fixed occupation) is used, ALWAYS use `gamma_only 1` instead of `kspacing` — `ocp_set` indices are only valid at Gamma point.
 
+### Smearing Method
+
+| `smearing_method` | Use case | `smearing_sigma` | Notes |
+|-------------------|----------|-------------------|-------|
+| `gauss` | Default for metals and general use | 0.01–0.02 | Standard Gaussian smearing |
+| `mp` | Metals requiring better total energy | 0.01–0.02 | Methfessel-Paxton, more accurate forces |
+| `fd` | Finite-temperature DFT | 0.01–0.05 | Fermi-Dirac distribution |
+| `fixed` | Insulators / exact integer occupation | *(ignored)* | No smearing — each state is 0 or 1. **This is NOT the same as `ocp 1`** (manual orbital occupation). Use `fixed` when you want standard SCF without artificial broadening. |
+
+> **⚠ `smearing_method fixed` ≠ `ocp 1`**: `smearing_method fixed` simply uses step-function occupation (no broadening) in a normal SCF. `ocp 1` manually specifies per-orbital occupation numbers and requires `gamma_only 1`. When a task says "fixed smearing" or "fixed occupation method", it means `smearing_method fixed` — not `ocp 1`.
+
 ### Charge Mixing
 
 | `mixing_type` | Use case | `mixing_beta` range | Notes |
