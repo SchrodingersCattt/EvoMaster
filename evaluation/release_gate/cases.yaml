@@ -229,3 +229,19 @@ cases:
     source_month: "2026-04"
     baseline: rough
     friction: "手写 ClO₄⁻ 构建代码出 SyntaxError + 盒子只有 345 原子（应 2000+）+ 25 次网络错误，440 events 未完成"
+
+  - id: rg_r18
+    title: "Zn 表面 H 吸附自由能"
+    prompt: "构建Zn几种常见晶相的表面模型，计算各晶面表面能以筛选最稳定晶面，进而计算该晶面不同位点的H吸附自由能，并进行分析与绘图"
+    source_session: "33f8f39ac00c4f53bb305f3351606bd4"
+    source_month: "2026-04"
+    baseline: rough
+    friction: "mat_sg_build_surface_slab 参数错 3 次 + bridge 位 H 弛豫到 hollow 后 agent 没发现，直到用户质疑才检查"
+
+  - id: rg_s11
+    title: "HEA 热力学参数预测"
+    prompt: "计算AlCr₀.₈CoFeNi高熵合金体系的价电子浓度、混合焓、混合熵、原子尺寸差异参数，并预测该体系是否可以形成固溶体以及可能的晶体结构"
+    source_session: "7f48cebe5cb544c39ab1f8adff4ceb7f"
+    source_month: "2026-04"
+    baseline: smooth
+    notes: "24 events，1 次 SyntaxError 后立即修复，所有参数计算正确"
