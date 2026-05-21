@@ -1737,12 +1737,12 @@ questions:
   intent: Identify reliability issues in MD-derived diffusion coefficient data including
     non-Arrhenius behavior and insufficient sampling, and recommend improvements.
   human_prompt_seed: '工作区中有一份 LiVCl6 固态电解质的分子动力学模拟结果 `diffusion_data.json`，包含
-    5 个温度下的 Li 扩散系数和离子电导率，以及 Arrhenius 拟合。
+    5 个温度下的 Li 扩散系数和离子电导率，以及 Arrhenius 拟合参数。
 
-    请对这些结果做科学性检查：数据是否合理？是否存在异常？模拟参数是否足以得到可靠结论？如有问题请指出原因并建议改进方案。
+    请基于这些数据评估 LiVCl6 作为固态电解质的离子输运性能，并给出你对数据可靠性的判断。
 
-    输出 `sanity_report.json`，格式：`{"issues_found": [...], "is_reliable": true/false,
-    "recommendations": [...]}`'
+    输出 `evaluation_report.json`，格式：`{"performance_summary": "...", "is_reliable":
+    true/false, "issues": [...], "recommendations": [...]}`'
   tags:
   - code_mlip
   data_files:
