@@ -133,46 +133,10 @@ def _remote_skill_roots(session: Any | None) -> list[str]:
     return unique
 
 
-def _disabled_skill_names_from_settings(root: Path) -> set[str]:
-    settings_path = root / ".settings.json"
-    if not settings_path.is_file():
-        return set()
-    try:
-        payload = json.loads(settings_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        _LOGGER.warning(
-            "Failed to read skill settings: %s",
-            settings_path,
-            exc_info=True,
-        )
-        return set()
-    disabled = payload.get("disabled") if isinstance(payload, dict) else None
-    if not isinstance(disabled, list):
-        return set()
-    return {name.strip() for name in disabled if isinstance(name, str) and name.strip()}
-
-
-def _disabled_skill_names_from_remote_settings(
-    session: Any, remote_root: str
-) -> set[str]:
-    """Read .settings.json from a remote skill root via session SFTP."""
-    settings_path = remote_root.rstrip("/") + "/.settings.json"
-    try:
-        if not session.path_exists(settings_path):
-            return set()
-        content = session.read_file(settings_path)
-        payload = json.loads(content)
-    except Exception:
-        _LOGGER.warning(
-            "Failed to read remote skill settings: %s",
-            settings_path,
-            exc_info=True,
-        )
-        return set()
-    disabled = payload.get("disabled") if isinstance(payload, dict) else None
-    if not isinstance(disabled, list):
-        return set()
-    return {name.strip() for name in disabled if isinstance(name, str) and name.strip()}
+from matmaster.skills.settings import (
+    disabled_skill_names_from_remote_settings as _disabled_skill_names_from_remote_settings,
+    disabled_skill_names_from_settings as _disabled_skill_names_from_settings,
+)
 
 
 class Exp:

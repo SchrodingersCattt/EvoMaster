@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from src.services.skill_registry_factory import (
-    _disabled_skill_names_from_remote_settings,
-    build_skill_registry,
+from matmaster.skills.settings import (
+    disabled_skill_names_from_remote_settings,
 )
+from src.services.skill_registry_factory import build_skill_registry
 
 
 def _write_skill(root: Path, name: str, mcp_server: str | None = None) -> None:
@@ -112,7 +112,7 @@ def test_disabled_from_remote_settings_reads_disabled_list() -> None:
     session = _RemoteSession(
         files={"/personal/.matmaster/skills/.settings.json": settings_content}
     )
-    result = _disabled_skill_names_from_remote_settings(
+    result = disabled_skill_names_from_remote_settings(
         session, "/personal/.matmaster/skills"
     )
     assert result == {"vasp", "lammps"}
@@ -120,7 +120,7 @@ def test_disabled_from_remote_settings_reads_disabled_list() -> None:
 
 def test_disabled_from_remote_settings_returns_empty_when_file_missing() -> None:
     session = _RemoteSession(files={})
-    result = _disabled_skill_names_from_remote_settings(
+    result = disabled_skill_names_from_remote_settings(
         session, "/personal/.matmaster/skills"
     )
     assert result == set()
@@ -135,7 +135,7 @@ def test_disabled_from_remote_settings_returns_empty_on_read_error() -> None:
             raise OSError("connection lost")
 
     session = _BrokenSession()
-    result = _disabled_skill_names_from_remote_settings(
+    result = disabled_skill_names_from_remote_settings(
         session, "/personal/.matmaster/skills"
     )
     assert result == set()
@@ -145,7 +145,7 @@ def test_disabled_from_remote_settings_handles_invalid_json() -> None:
     session = _RemoteSession(
         files={"/personal/.matmaster/skills/.settings.json": "not json"}
     )
-    result = _disabled_skill_names_from_remote_settings(
+    result = disabled_skill_names_from_remote_settings(
         session, "/personal/.matmaster/skills"
     )
     assert result == set()
