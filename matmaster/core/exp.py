@@ -528,6 +528,7 @@ class Exp:
                 "runtime_ports": KernelRuntimePorts(
                     checkpoint_sink=checkpoint_sink,
                     pre_compaction_barrier=pre_compaction_barrier,
+                    interrupt_checker=ctx.runtime_ports.interrupt_checker,
                 ),
                 "run_identity": self._build_run_identity(ctx, spawn_id=spawn_id),
                 "turn_input": ctx.metadata.turn_input,
