@@ -866,12 +866,12 @@ def test_stru_site_vector_magmom_rejects_scalar(tmp_path: Path) -> None:
     assert ok is False
 
 
-def test_stru_magnetic_order_rejects_no_site_mag(tmp_path: Path) -> None:
+def test_stru_magnetic_order_species_level_moment(tmp_path: Path) -> None:
     from evaluation.validators.stru_file import check_stru_file
 
     (tmp_path / "STRU").write_text(_FE_LAZY_STRU, encoding="utf-8")
     ok, reason = check_stru_file(
         tmp_path, filename="STRU", check="magnetic_order", expected="fm", min_sites=2
     )
-    assert ok is False
-    assert "nonmagnetic" in reason or "insufficient" in reason
+    assert ok is True
+    assert "fm" in reason
