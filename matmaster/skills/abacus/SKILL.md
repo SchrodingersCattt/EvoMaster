@@ -11,7 +11,7 @@ PW and LCAO basis; produces correct, runnable files and avoids silent-failure co
 ## Gate — STOP Conditions
 
 - **PP/orbital unresolvable**: If an element's PP/orbital is neither found in the APNS lists (`references/apns_pseudopotentials_v1.list` / `references/apns_orbitals_efficiency_v1.list`) NOR provided as a file in the workspace, STOP and report. Do not guess filenames.
-- **ASE Calculator mode**: When ABACUS is used as an ASE Calculator (ASE-driven relax, NEB, vibrations), INPUT must use `calculation scf` only. STOP if task implies internal ABACUS optimizer + ASE control simultaneously.
+- **ASE Calculator mode**: If task uses ASE to drive geometry optimization (ASE Optimizer, NEB, vibrations) AND INPUT has `calculation relax|cell-relax|md` → STOP. ASE-driven workflows require `calculation scf` in INPUT.
 - **Not ABACUS**: Task asks for QE/VASP/CP2K/LAMMPS → this skill does not apply.
 
 ## Reference Routing — Read BEFORE Writing
@@ -45,20 +45,16 @@ PP/orbital filename lookup:
 - **CIF/POSCAR → STRU**: convert lattice and positions faithfully before applying task-specific parameters.
 - **ecutwfc defaults**: `100` (LCAO), `50` (PW). Task requirements override.
 - **smearing_sigma default**: `0.015` unless task specifies otherwise.
-- **PP/orbital paths**:
-  - If PP/orbital filenames are in the APNS lists → use Bohrium APNS paths: `pseudo_dir /root/apns-pseudopotentials-v1/`, `orbital_dir /root/apns-orbitals-efficiency-v1/`
-  - If PP/orbital files are user-provided in workspace (not in APNS lists) → use `pseudo_dir ./`, `orbital_dir ./`
+- **pseudo_dir / orbital_dir**: always present in INPUT — never omit. Path determined by Workflow step 3.
 
 ## Workflow
 
 1. **Read provided STRU** — determine basis_type from presence of `NUMERICAL_ORBITAL`.
 2. **Read references** per Routing table above (always read `input_examples.md`; additionally read method-specific file if applicable).
-3. **Resolve PP/orbital filenames**:
-   - Check if STRU's PP/orbital filenames exist in the APNS lists.
-   - If yes → use APNS paths in INPUT, write APNS filenames into STRU.
-   - If no → check if the files exist in workspace. If yes → use `pseudo_dir ./` / `orbital_dir ./`, keep STRU filenames as-is.
-   - If neither → STOP (Gate rule).
-   - For LCAO: also resolve orbital via `references/apns_orbitals_efficiency_v1.list`.
+3. **Resolve PP/orbital filenames** (check both `apns_pseudopotentials_v1.list` and `apns_orbitals_efficiency_v1.list` for LCAO):
+   - PP/orbital filename in APNS list → ensure STRU uses exact APNS filename, set `pseudo_dir /root/apns-pseudopotentials-v1/`, `orbital_dir /root/apns-orbitals-efficiency-v1/`.
+   - PP/orbital filename NOT in APNS list but file exists in workspace → keep STRU as-is, set `pseudo_dir ./`, `orbital_dir ./`.
+   - Neither in APNS nor in workspace → STOP (Gate rule).
 4. **Write INPUT + KPT** following examples and mandatory-parameter tables from step 2.
 5. **Run validator**: `python ${SKILL_DIR}/scripts/validate_input.py --dir <dir>`. Fix all FAIL items before proceeding.
 6. **Submit to Bohrium** (if task requires execution) — see defaults below.
