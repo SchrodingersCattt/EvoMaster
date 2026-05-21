@@ -1,5 +1,5 @@
 ---
-name: traj-analysis
+name: real-traj-analysis
 description: Analyze real user session trajectories from admin API to identify pain points, extract evaluation question candidates, and track analysis progress. Use when reviewing session quality, finding coverage gaps from real usage, or generating new eval questions from observed failures.
 ---
 
@@ -268,6 +268,6 @@ evaluation/
 └── skills/
     ├── evaluation-iteration/
     │   └── SKILL.md
-    └── traj-analysis/
+    └── real-traj-analysis/
         └── SKILL.md          (this file)
 ```
