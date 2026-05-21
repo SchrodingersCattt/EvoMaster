@@ -4142,26 +4142,38 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_033_20260520
+- id: IG_abacus_033_20260521
   capability: input_generation
   domain: agnostic
   intent: Wavefunction output PW/LCAO SCF and get_wf (official 11_wfc).
-  human_prompt_seed: 准备三套波函数输出输入（`run_pw_al/`、`run_lcao_si2/`、`run_lcao_getwf/`）。读取工作区 STRU，各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。
+  human_prompt_seed: 准备三套波函数输出输入（`run_pw_al/`、`run_lcao_si2/`、`run_lcao_getwf/`）。读取工作区 STRU，各目录编写 `INPUT` 与 `KPT`（只写文件，不运行）。注意部分目录可能需要多个 INPUT 文件。
   tags:
   - eng_abacus
   data_files:
   - key: STRU_Al_pw
-    path: data/IG_abacus_033_20260518/STRU_Al_pw
+    path: data/IG_abacus_033_20260521/STRU_Al_pw
     oss_url: ''
     description: Official STRU from abacus-develop examples/11_wfc/01_pw_scf_Al
   - key: STRU_Si2_lcao
-    path: data/IG_abacus_033_20260518/STRU_Si2_lcao
+    path: data/IG_abacus_033_20260521/STRU_Si2_lcao
     oss_url: ''
     description: Official STRU from abacus-develop examples/11_wfc/02_lcao_scf_Si2
   - key: STRU_Si2_getwf
-    path: data/IG_abacus_033_20260518/STRU_Si2_getwf
+    path: data/IG_abacus_033_20260521/STRU_Si2_getwf
     oss_url: ''
     description: Official STRU from abacus-develop examples/11_wfc/03_lcao_getwf
+  - key: Al_PD04_PBE_UPF
+    path: data/IG_abacus_033_20260521/Al.PD04.PBE.UPF
+    oss_url: ''
+    description: Pseudopotential for Al referenced by STRU_Al_pw (placeholder).
+  - key: Si_pz_vbc_UPF
+    path: data/IG_abacus_033_20260521/Si.pz-vbc.UPF
+    oss_url: ''
+    description: Pseudopotential for Si referenced by STRU_Si2 (placeholder).
+  - key: Si_lda_orbital
+    path: data/IG_abacus_033_20260521/Si_lda_8.0au_50Ry_2s2p1d
+    oss_url: ''
+    description: Numerical orbital for Si referenced by STRU_Si2 (placeholder).
   reference_answers:
   - key: must_run_pw_al
     value:
