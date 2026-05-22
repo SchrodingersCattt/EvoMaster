@@ -384,6 +384,8 @@ class FullToolRunner:
                 copy.deepcopy(effective_args),
                 call_exec_ctx,
             )
+        except asyncio.CancelledError:
+            tr = ToolResult(status="cancelled", content="Run cancelled.")
         except Exception as e:
             tr = ToolResult.from_error(tc.name, e)
         finally:
