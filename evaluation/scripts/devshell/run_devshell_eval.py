@@ -309,9 +309,9 @@ def main() -> int:
     parser.add_argument(
         "--exclude-subagents",
         nargs="*",
-        default=None,
+        default=["verification"],
         metavar="NAME",
-        help="Subagent exp names to exclude from Agent tool (forwarded to mm-devshell).",
+        help="Subagent exp names to exclude from Agent tool (default: verification).",
     )
     args = parser.parse_args()
 

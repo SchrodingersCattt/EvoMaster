@@ -250,9 +250,9 @@ class DevshellAgentLoopCli:
         p.add_argument(
             "--exclude-subagents",
             nargs="*",
-            default=None,
+            default=["verification"],
             metavar="NAME",
-            help="Forwarded to run_devshell_eval --exclude-subagents (e.g. verification).",
+            help="Forwarded to run_devshell_eval --exclude-subagents (default: verification).",
         )
         p.add_argument(
             "--eval-extra-arg",
