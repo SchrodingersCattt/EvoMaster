@@ -1159,7 +1159,7 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
-- id: SC_twist_001_20260513
+- id: SC_twist_001_20260522
   capability: structure_construction
   domain: agnostic
   intent: Build twisted bilayer graphene structure requiring custom scripting beyond
@@ -1182,10 +1182,22 @@ questions:
   - key: must_parsable
     value:
       filename: TBG_21.8deg.cif
+  - key: must_only_carbon
+    value:
+      filename: TBG_21.8deg.cif
+      formula: C1
   - key: must_bilayer_atoms
     value:
       filename: TBG_21.8deg.cif
-      min: 20
+      expected: 28
+      tolerance: 8
+  - key: must_two_layers
+    value:
+      filename: TBG_21.8deg.cif
+      expected: 2
+      tolerance: 0
+      axis: z
+      layer_tol_A: 0.5
   - key: turn_budget
     value:
       max: 20
