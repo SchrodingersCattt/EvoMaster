@@ -6,15 +6,35 @@
   "production": "20 ps per temperature",
   "timestep_fs": 1.0,
   "results": [
-    {"temperature_K": 600, "D_cm2_per_s": 2.39e-5, "sigma_S_per_cm": 0.124},
-    {"temperature_K": 700, "D_cm2_per_s": 4.77e-5, "sigma_S_per_cm": 0.213},
-    {"temperature_K": 800, "D_cm2_per_s": 4.10e-5, "sigma_S_per_cm": 0.160},
-    {"temperature_K": 900, "D_cm2_per_s": 6.33e-5, "sigma_S_per_cm": 0.220},
-    {"temperature_K": 1000, "D_cm2_per_s": 9.53e-5, "sigma_S_per_cm": 0.298}
+    {
+      "temperature_K": 600,
+      "D_cm2_per_s": 2.39e-05,
+      "sigma_S_per_cm": 0.124
+    },
+    {
+      "temperature_K": 700,
+      "D_cm2_per_s": 4.77e-05,
+      "sigma_S_per_cm": 0.213
+    },
+    {
+      "temperature_K": 800,
+      "D_cm2_per_s": 4.1e-05,
+      "sigma_S_per_cm": 0.16
+    },
+    {
+      "temperature_K": 900,
+      "D_cm2_per_s": 6.33e-05,
+      "sigma_S_per_cm": 0.22
+    },
+    {
+      "temperature_K": 1000,
+      "D_cm2_per_s": 9.53e-05,
+      "sigma_S_per_cm": 0.298
+    }
   ],
   "arrhenius_fit": {
     "Ea_eV": 0.156,
-    "D_300K_extrapolated_cm2_per_s": 1.20e-6,
+    "D_300K_extrapolated_cm2_per_s": 1.2e-06,
     "sigma_300K_extrapolated_S_per_cm": 0.0125
   }
 }
