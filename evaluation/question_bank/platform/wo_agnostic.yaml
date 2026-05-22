@@ -370,7 +370,7 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
-- id: PWO_vasp_submit_002_20260522
+- id: PWO_vasp_submit_002_20260523
   capability: workflow_orchestration
   domain: agnostic
   intent: Test VASP input preparation + Bohrium submission config generation.
@@ -400,7 +400,7 @@ questions:
   - key: must_submit_image
     value:
       filename: submit.json
-      pattern: vasp
+      pattern: registry\.dp\.tech/dptech/vasp:\d+\.\d+\.\d+
       flags: i
   - key: must_submit_cmd
     value:
@@ -440,7 +440,9 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: must_submit_image
-    criterion: '[Platform] submit.json references a VASP image.'
+    criterion: '[Platform] submit.json references a full VASP image path with version
+      tag (e.g., registry.dp.tech/dptech/vasp:5.4.4), not a vague name like
+      vasp:latest or just "vasp".'
     axis: correctness
     verify: text_file_regex
   - id: must_submit_cmd
