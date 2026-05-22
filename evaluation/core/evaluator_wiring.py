@@ -256,6 +256,22 @@ def check_struct_file_formula(
     )
 
 
+def check_struct_file_elements_present(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    from evaluation.validators.structure_general import check_elements_present
+
+    return check_elements_present(
+        ws,
+        filename=cfg.get("filename", "*.cif"),
+        elements=list(cfg.get("elements", [])),
+    )
+
+
 def check_struct_file_bond_count(
     *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
 ) -> tuple[bool, str]:

@@ -170,6 +170,39 @@ def check_formula(
     )
 
 
+def check_elements_present(
+    workspace_dir: str | Path,
+    *,
+    filename: str,
+    elements: list[str],
+) -> tuple[bool, str]:
+    """Verify that all listed elements are present in the structure."""
+    if not _PMG_AVAILABLE:
+        return False, _IMPORT_MSG
+    root = Path(workspace_dir)
+    fpath = _resolve_file(root, filename)
+    if fpath is None:
+        return False, f"no file matching {filename!r} in {root}"
+    try:
+        struct = _load_structure(fpath)
+    except Exception as exc:
+        return False, f"could not parse {fpath.name}: {exc}"
+    actual_elements = set(str(el) for el in struct.composition.elements)
+    required = set(elements)
+    missing = required - actual_elements
+    if missing:
+        return (
+            False,
+            f"{fpath.name}: missing elements {sorted(missing)}, "
+            f"found {sorted(actual_elements)}",
+        )
+    return (
+        True,
+        f"{fpath.name}: all required elements {sorted(required)} present "
+        f"(found {sorted(actual_elements)})",
+    )
+
+
 # ---------------------------------------------------------------------------
 # 3. Bond count (number of bonds between element pair shorter than cutoff)
 # ---------------------------------------------------------------------------

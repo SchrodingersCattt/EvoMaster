@@ -41,6 +41,7 @@ from .evaluator_wiring import (
     check_struct_file_coordination,
     check_struct_file_count,
     check_struct_file_density,
+    check_struct_file_elements_present,
     check_struct_file_formula,
     check_struct_file_layer_count,
     check_struct_file_stoichiometry_ratio,
@@ -150,6 +151,7 @@ def _evidence_ref_handler(fn):
 for _name, _fn in [
     ("struct_file_atom_count", check_struct_file_atom_count),
     ("struct_file_formula", check_struct_file_formula),
+    ("struct_file_elements_present", check_struct_file_elements_present),
     ("struct_file_bond_count", check_struct_file_bond_count),
     ("struct_file_bond_length", check_struct_file_bond_length),
     ("struct_file_bond_length_range", check_struct_file_bond_length_range),

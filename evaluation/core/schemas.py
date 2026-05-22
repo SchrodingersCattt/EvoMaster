@@ -53,6 +53,7 @@ VerifyLiteral = Literal[
     # pymatgen-backed structure-file checks
     'struct_file_atom_count',
     'struct_file_formula',
+    'struct_file_elements_present',
     'struct_file_bond_count',
     'struct_file_bond_length',
     'struct_file_bond_length_range',
