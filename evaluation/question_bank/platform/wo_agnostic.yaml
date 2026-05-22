@@ -300,7 +300,6 @@ questions:
   human_prompt_seed: '帮我用 VASP 计算一个 O₂ 分子的平衡键长和结合能，用 PBE 泛函。'
   tags:
   - eng_vasp
-  - platform_bohrium
   data_files:
   - key: potcar_O
     path: data/PWO_vasp_submit_001/POT/PAW_PBE/O/POTCAR

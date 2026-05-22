@@ -67,7 +67,6 @@ questions:
   human_prompt_seed: '帮我用 ABACUS 计算 Si 的能带结构，提交到 Bohrium 上跑。'
   tags:
   - meta_grounding
-  - platform_bohrium
   inject_bohrium_failure: true
   inject_failure_message: Insufficient account balance, please recharge.
   data_files:
