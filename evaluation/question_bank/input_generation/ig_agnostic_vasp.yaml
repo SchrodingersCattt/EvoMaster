@@ -1232,13 +1232,13 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_incar_012_20260507
+- id: IG_incar_012_20260522
   capability: input_generation
   domain: agnostic
-  intent: 'Generate VASP INCAR for NEB transition state search with HSE06 of Prussian blue analogue C24Fe8N24Na4. Fe magnetic, NUPDOWN=20.
+  intent: 'Generate VASP INCAR for NEB transition state search with HSE06 of Prussian blue analogue C24Fe8N24Na4. Agent must identify Fe mixed-valence magnetism and set NUPDOWN=20.
 
     '
-  human_prompt_seed: 为普鲁士蓝类似物 C24Fe8N24Na4 生成一个 NEB(nudged elastic band)+HSE06 过渡态搜索的 VASP INCAR。Fe 含磁性，需要固定总磁矩。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
+  human_prompt_seed: 为普鲁士蓝类似物 C24Fe8N24Na4 生成一个 NEB(nudged elastic band)+HSE06 过渡态搜索的 VASP INCAR。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
   reference_answers:
@@ -1278,6 +1278,11 @@ questions:
     value:
       filename: INCAR
       pattern: ^\s*NSW\s*=
+      flags: im
+  - key: critical_NUPDOWN
+    value:
+      filename: INCAR
+      pattern: ^\s*NUPDOWN\s*=\s*20\b
       flags: im
   - key: turn_budget
     value:
@@ -1326,11 +1331,14 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the user-facing prompt data (material system, calculation type, critical parameters) rather than hallucinated. For the fixed-total-moment requirement, do
-      not require a specific NUPDOWN value unless that numeric value is explicitly stated in the user-facing prompt; judge whether the INCAR attempts a fixed total magnetic moment consistently with the
-      prompt.
+    criterion: The generated INCAR is grounded in the user-facing prompt data (material system, calculation type, critical parameters) rather than hallucinated. All stated tags and values should be
+      consistent with an NEB+HSE06 calculation on this material. Do not fail for any parameter choices that are physically defensible for this system.
     axis: grounding
     verify: llm_binary_judge
+  - id: critical_NUPDOWN
+    criterion: INCAR sets NUPDOWN = 20 (Prussian blue canonical spin state).
+    axis: correctness
+    verify: text_file_regex
   - id: turn_budget
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
