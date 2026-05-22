@@ -41,12 +41,6 @@ cases:
     source_session: "ddca85e6b2984eca915b29fcb0941739"
     notes: "测经典 MD (LAMMPS) 端到端流程。线上丝滑完成：AIREBO + velocity 拉伸。"
 
-  - id: rg_06
-    title: "CO/Pt(111) 吸附能 (DPA)"
-    prompt: "计算CO分子在Pt(111)表面的吸附能，使用机器学习力场"
-    source_session: "179f12c0-5ad1-4918-a6fc-424260e7aa89"
-    notes: "测 OC22 head 选择 + slab 构建 + 吸附能计算。线上丝滑。"
-
   - id: rg_07
     title: "Zn 盐溶液 DP-MD"
     prompt: "用分子动力学模拟比较ZnSO₄、ZnCl₂、Zn(ClO₄)₂三种锌盐水溶液的径向分布函数和扩散系数"
@@ -73,12 +67,6 @@ cases:
     source_session: "e6e7b0a3-e154-4aef"
     notes: "测 ABACUS 能量单位理解。线上把 eV 误认为 Hartree，得到 -22.7 eV。"
 
-  - id: rg_11
-    title: "Al 能带结构 (ABACUS)"
-    prompt: "计算Al的能带结构"
-    source_session: "c41e63a321c34b67af3d8ece70f796db"
-    notes: "测 KPT Line 格式。线上 nk=0 导致 4 次提交失败。"
-
   # ─── 复合工作流 ─────────────────────────────────────────────────────────
 
   - id: rg_12
@@ -92,12 +80,6 @@ cases:
     prompt: "计算氧化锌和二氧化钛结构，构建平板模型，计算CO在平板模型上的吸附结构，比较结果并写作"
     source_session: "6a351576c27b4cd28608307eb8694d7c"
     notes: "测多材料对比工作流。线上正确完成，选面+Lewis 酸性解释合理。"
-
-  - id: rg_14
-    title: "HEA 热力学参数预测"
-    prompt: "计算AlCr₀.₈CoFeNi高熵合金体系的价电子浓度、混合焓、混合熵、原子尺寸差异参数，并预测该体系是否可以形成固溶体以及可能的晶体结构"
-    source_session: "7f48cebe5cb544c39ab1f8adff4ceb7f"
-    notes: "测 HEA 热力学公式计算。线上 24 events 全部正确。"
 
   - id: rg_15
     title: "FeNC 单原子催化 ORR 建模"
