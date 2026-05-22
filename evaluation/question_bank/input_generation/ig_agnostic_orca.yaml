@@ -6,8 +6,8 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Generate ORCA inputs for Hansen Solubility Parameter estimation — agent should
-    recognize that HSP only requires dipole moment and polarizability (OPT + SP with
-    properties), NOT frequency calculations.
+    use COSMO/CPCM solvation model to obtain sigma profiles for COSMO-RS decomposition
+    into dispersion, polar, and hydrogen-bond components. NOT frequency calculations.
   human_prompt_seed: '工作区中有 `molecules.csv`，包含 5 个小分子的 SMILES。请用 ORCA 量化计算估算这些分子的
     Hansen 溶解度参数（δD, δP, δH），生成可直接提交的输入文件。
 
@@ -28,10 +28,10 @@ questions:
       pattern: '^!\s.*\bFREQ\b'
       flags: im
       expect: absent
-  - key: has_polarizability
+  - key: has_cosmo
     value:
       filename: '*.inp'
-      pattern: polar|Polar|POLAR
+      pattern: CPCM|COSMO|cpcm|cosmo
       flags: ''
   - key: turn_budget
     value:
@@ -49,18 +49,19 @@ questions:
     verify: artifact_exists
   - id: no_freq_keyword
     criterion: Input files do NOT contain FREQ keyword — frequency calculation is
-      unnecessary for HSP (which only needs dipole + polarizability).
+      unnecessary for HSP via COSMO-RS.
     axis: correctness
     verify: text_file_regex_absent
-  - id: has_polarizability
-    criterion: Input file requests polarizability calculation (contains Polar keyword
-      or %elprop section).
+  - id: has_cosmo
+    criterion: Input file includes COSMO or CPCM solvation model keywords for
+      generating sigma profiles needed by COSMO-RS HSP decomposition.
     axis: correctness
     verify: text_file_regex
   - id: methodology_sound
-    criterion: Agent's HSP estimation methodology is physically sound — uses dipole
-      moment for δP (Beerbower formula) and polarizability for δD, does not conflate
-      HSP with vibrational properties.
+    criterion: Agent's HSP methodology uses COSMO-RS approach (single-point energy
+      with COSMO solvation → sigma profile → decompose interaction energy into
+      dispersion, polar, and H-bond contributions). Does NOT use naive Beerbower
+      dipole formula or conflate HSP with vibrational properties.
     axis: correctness
     verify: llm_binary_judge
   - id: opt_before_sp
