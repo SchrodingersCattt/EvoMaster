@@ -300,7 +300,8 @@ questions:
   - key: must_atom_count
     value:
       filename: interface_AlN_MoO3.cif
-      min: 20
+      expected: 180
+      tolerance: 160
   - key: turn_budget
     value:
       max: 25
@@ -318,9 +319,10 @@ questions:
     axis: correctness
     verify: struct_file_atom_count
   - id: must_four_elements
-    criterion: '[Must] Interface contains all four elements (Al, N, Mo, O).'
+    criterion: '[Must] Interface contains all four elements (Al, N, Mo, O) from both
+      AlN and MoO3 slabs.'
     axis: correctness
-    verify: struct_file_formula
+    verify: llm_binary_judge
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
