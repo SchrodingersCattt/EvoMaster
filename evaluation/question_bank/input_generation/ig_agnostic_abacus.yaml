@@ -7335,3 +7335,127 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+- id: IG_abacus_062_20260523
+  capability: input_generation
+  domain: agnostic
+  intent: Generate ABACUS PW-SCF inputs for a Fe/Sb/N interface slab. Agent must
+    discover actual PP filenames from the provided pp_library/ directory rather than
+    guessing names.
+  human_prompt_seed: |
+    工作区中有：
+    - `POSCAR`: Fe-Sb-N 界面 slab 结构（82 Fe + 1 Sb + 1 N）
+    - `pp_library/`: 赝势文件目录
+
+    请生成 ABACUS PW 基组的自旋极化 SCF 计算输入文件（INPUT、STRU、KPT），用于计算该界面体系的电子结构。
+
+    赝势使用 `pp_library/` 目录中已有的文件。
+  tags:
+  - eng_abacus
+  data_files:
+  - key: poscar
+    path: data/IG_abacus_062/POSCAR
+    oss_url: ''
+    description: Fe-Sb-N BCC/FCC interface slab POSCAR (84 atoms).
+  - key: pp_fe
+    path: data/IG_abacus_062/pp_library/Fe_ONCV_PBE-1.2.upf
+    oss_url: ''
+    description: Fe pseudopotential file (SG15 ONCV naming).
+  - key: pp_sb
+    path: data/IG_abacus_062/pp_library/Sb_ONCV_PBE-1.1.upf
+    oss_url: ''
+    description: Sb pseudopotential file (SG15 ONCV naming).
+  - key: pp_n
+    path: data/IG_abacus_062/pp_library/N_ONCV_PBE-1.2.upf
+    oss_url: ''
+    description: N pseudopotential file (SG15 ONCV naming).
+  reference_answers:
+  - key: input_artifact
+    value: INPUT
+  - key: stru_artifact
+    value: STRU
+  - key: kpt_artifact
+    value: KPT
+  - key: must_pp_fe
+    value:
+      filename: STRU
+      tokens:
+      - Fe_ONCV_PBE-1.2.upf
+      flags: ''
+  - key: must_pp_sb
+    value:
+      filename: STRU
+      tokens:
+      - Sb_ONCV_PBE-1.1.upf
+      flags: ''
+  - key: must_pp_n
+    value:
+      filename: STRU
+      tokens:
+      - N_ONCV_PBE-1.2.upf
+      flags: ''
+  - key: must_input_core
+    value:
+      filename: INPUT
+      tokens:
+      - calculation scf
+      - basis_type pw
+      - nspin 2
+      flags: i
+  - key: turn_budget
+    value:
+      max: 12
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: input_artifact
+    criterion: Agent writes INPUT to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: stru_artifact
+    criterion: Agent writes STRU to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: kpt_artifact
+    criterion: Agent writes KPT to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_pp_fe
+    criterion: '[Must] STRU references the actual Fe PP filename from pp_library
+      (Fe_ONCV_PBE-1.2.upf), not a guessed/fabricated name.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+  - id: must_pp_sb
+    criterion: '[Must] STRU references the actual Sb PP filename from pp_library
+      (Sb_ONCV_PBE-1.1.upf), not a guessed/fabricated name.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+  - id: must_pp_n
+    criterion: '[Must] STRU references the actual N PP filename from pp_library
+      (N_ONCV_PBE-1.2.upf), not a guessed/fabricated name.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+  - id: must_input_core
+    criterion: '[Must] INPUT uses PW basis with spin polarization for this magnetic
+      Fe-containing interface system.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
