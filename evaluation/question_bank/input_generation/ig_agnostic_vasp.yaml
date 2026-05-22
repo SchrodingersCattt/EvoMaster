@@ -2246,14 +2246,20 @@ questions:
   - key: must_ispin
     value:
       filename: INCAR_mag
-      tokens:
-      - ISPIN = 2
-      flags: i
+      check: param_value
+      param: ISPIN
+      expected: '2'
   - key: must_magmom
     value:
       filename: INCAR_mag
-      pattern: MAGMOM\s*=\s*2\*\d+\.?\d*
-      flags: i
+      check: magmom_atom_count
+      atom_count: 2
+  - key: magmom_range
+    value:
+      filename: INCAR_mag
+      check: magmom_per_atom_range
+      min: 1.0
+      max: 6.0
   - key: must_encut
     value:
       filename: INCAR_mag
@@ -2276,13 +2282,17 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: must_ispin
-    criterion: INCAR_mag contains ISPIN = 2 for spin-polarized calculation.
+    criterion: INCAR_mag sets ISPIN = 2 for spin-polarized calculation.
     axis: correctness
-    verify: text_file_contains_all
+    verify: vasp_incar_check
   - id: must_magmom
-    criterion: INCAR_mag sets MAGMOM for 2 Fe atoms with a nonzero initial magnetic moment.
+    criterion: INCAR_mag sets MAGMOM for exactly 2 atoms.
     axis: correctness
-    verify: text_file_regex
+    verify: vasp_incar_check
+  - id: magmom_range
+    criterion: MAGMOM per-atom values are in reasonable range for Fe (1.0–6.0 μB).
+    axis: correctness
+    verify: vasp_incar_check
   - id: must_encut
     criterion: ENCUT is set to 520 eV.
     axis: correctness

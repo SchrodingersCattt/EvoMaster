@@ -6,6 +6,7 @@ from typing import Any
 
 from evaluation.validators.abacus_input import check_abacus_input
 from evaluation.validators.answer_text import check_answer_json_numeric
+from evaluation.validators.vasp_incar import check_vasp_incar
 from evaluation.validators.budget import check_duration_budget as _check_duration_budget
 from evaluation.validators.budget import check_token_budget as _check_token_budget
 from evaluation.validators.budget import check_turn_budget as _check_turn_budget
@@ -851,5 +852,31 @@ def check_abacus_input_from_evidence(
         check=check_type,
         expected=expected,
         allowed=allowed,
+        workspace_resolve=_workspace_resolve_from_ref(ref),
+    )
+
+
+def check_vasp_incar_from_evidence(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    """Wire ``vasp_incar_check`` verifier from evidence + reference answer."""
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    filename = str(cfg.get("filename", ""))
+    check_type = str(cfg.get("check", ""))
+    if not filename or not check_type:
+        return False, "vasp_incar_check: need 'filename' and 'check' in ref"
+    return check_vasp_incar(
+        ws,
+        filename=filename,
+        check=check_type,
+        param=cfg.get("param"),
+        expected=cfg.get("expected"),
+        min=cfg.get("min"),
+        max=cfg.get("max"),
+        atom_count=cfg.get("atom_count"),
+        species_index=cfg.get("species_index"),
         workspace_resolve=_workspace_resolve_from_ref(ref),
     )

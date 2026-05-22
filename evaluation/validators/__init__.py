@@ -36,6 +36,7 @@ from .text_file import (
     check_text_file_numeric_range,
     check_text_file_regex,
 )
+from .vasp_incar import check_vasp_incar
 
 __all__ = [
     # checkcif (IUCr web service)
@@ -69,4 +70,6 @@ __all__ = [
     'check_molcrys_local_env',
     'check_sc005_other_formulas_in_answer',
     'verify_molecular_slab_layer_scaling',
+    # vasp_incar (VASP INCAR semantic checks)
+    'check_vasp_incar',
 ]
