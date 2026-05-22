@@ -89,7 +89,7 @@ questions:
     frequencies and should use NumFreq or a pure GGA.
   human_prompt_seed: '请为乙醇分子生成 ORCA 输入文件，计算其红外光谱（振动频率 + IR 强度）。
 
-    要求使用 B3LYP/def2-TZVP 级别，先做几何优化再算频率。输出为 `ethanol_ir.inp`。'
+    要求使用 B3LYP/def2-TZVP 级别。输出为 `ethanol_ir.inp`。'
   tags:
   - eng_orca
   data_files: []
