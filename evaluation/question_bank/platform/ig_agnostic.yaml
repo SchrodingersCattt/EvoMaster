@@ -3,7 +3,7 @@ capability: input_generation
 domain: agnostic
 questions:
 - id: PWO_vasp_submit_002_20260522
-  capability: platform_workflow_orchestration
+  capability: workflow_orchestration
   domain: agnostic
   intent: Test VASP input preparation + Bohrium submission config generation.
   human_prompt_seed: '工作区中提供了 Si 金刚石结构 `POSCAR_Si` 和对应的 `POTCAR_Si`。

@@ -54,7 +54,7 @@ def test_planner_exp_config_resolves():
 def test_run_mat_task_passes_planner_mode_to_single_attempt(monkeypatch, tmp_path):
     seen: dict[str, str] = {}
 
-    def fake_run_once(*, prompt, mode, task_id, run_dir, mat_config_path):
+    def fake_run_once(*, prompt, mode, task_id, run_dir, mat_config_path, **kwargs):
         seen["mode"] = mode
         return {
             "task_id": task_id,
