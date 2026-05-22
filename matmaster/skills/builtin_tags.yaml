@@ -5,7 +5,7 @@ categories:
         skills:
           - atomic-structure
           - inspect-atomic-structure
-          - build-atomic-structure
+          - build-crystal-from-params
           - transform-atomic-structure
           - assemble-atomic-structure
           - operate-molecular-crystal

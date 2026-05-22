@@ -39,26 +39,26 @@ reporting success.
 
 1. **No usable input structure yet**
 
-   If the user asks for a known material, database ID, DOI/SI URL, webpage, or
-   file conversion, use `../playground-skills/retrieve-structure/SKILL.md`.
-   Prefer retrieval for known structures; validate and convert after download.
+   If the user gives an explicit prototype/lattice constant or space-group/Wyckoff
+   recipe for a simple inorganic crystal, use
+   `../build-crystal-from-params/SKILL.md`.
 
-   If the user gives a formula/prototype, space group plus Wyckoff positions,
-   lattice constants, SMILES, or polymer sequence and wants a new structure from
-   specification, use `../build-atomic-structure/SKILL.md`.
+   If the request involves a known material, database/DOI/SI source, molecular
+   crystal, polyatomic ionic crystal (NaNO3, CaCO3, K2SO4, ...), or
+   uncertain/implicit coordinates, use
+   `../playground-skills/retrieve-structure/SKILL.md` first.
+   `operate-molecular-crystal` is for operations on an existing molecular-crystal
+   structure, not for building one from scratch.
+
+   Isolated molecules (SMILES -> 3D, derivative enumeration, conformer
+   generation) are handled directly by the agent with RDKit / OpenBabel and do
+   not require a dedicated build skill.
 
    If the user asks for global or property-conditional candidate generation
    rather than a deterministic known structure, use
    `../sample-atomic-structures/SKILL.md`.
 
-2. **Input is an isolated molecule**
-
-   Use `../build-atomic-structure/SKILL.md` for SMILES-to-3D or molecule file
-   generation. If the molecule must be packed in a box, placed on a surface, or
-   combined with another structure, route next to
-   `../assemble-atomic-structure/SKILL.md`.
-
-3. **Input is a molecular crystal or contains molecular fragments under PBC**
+2. **Input is a molecular crystal or contains molecular fragments under PBC**
 
    Priors for `MOLECULAR_CRYSTAL`:
 
@@ -74,7 +74,7 @@ reporting success.
    includes molecular-crystal slab cuts, molecule-cluster vacancies, guest
    extraction, desolvation, and disorder ordering.
 
-4. **Input has disorder or partial occupancy**
+3. **Input has disorder or partial occupancy**
 
    Priors:
 
@@ -86,7 +86,7 @@ reporting success.
    moiety-aware crystallographic fixes. Do not emit fractional stoichiometry as
    a finished structure.
 
-5. **Task is an identity-preserving edit of one periodic lattice**
+4. **Task is an identity-preserving edit of one periodic lattice**
 
    Priors:
 
@@ -100,7 +100,7 @@ reporting success.
    a molecular crystal and the requested edit would break molecular
    connectivity, reroute to `../operate-molecular-crystal/SKILL.md`.
 
-6. **Task combines multiple structural pieces**
+5. **Task combines multiple structural pieces**
 
    Priors:
 
@@ -112,7 +112,7 @@ reporting success.
    Use `../assemble-atomic-structure/SKILL.md`. Inspect every input first and
    the final output after assembly.
 
-7. **Task is a polar or Tasker-sensitive surface**
+6. **Task is a polar or Tasker-sensitive surface**
 
    Priors for suspected polar surface handling:
 
@@ -128,7 +128,7 @@ reporting success.
    finalizing the provisional Tasker type. Always validate the actual slab after
    construction.
 
-8. **Task needs local geometric repair or local environment characterisation**
+7. **Task needs local geometric repair or local environment characterisation**
 
    Priors:
 

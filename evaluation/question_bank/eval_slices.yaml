@@ -55,7 +55,7 @@ slices:
       - "@struct_build,struct_transform,struct_molcrys,struct_surface"
     count: 0
 
-  - target: "Skill: build-atomic-structure"
+  - target: "Skill: build-crystal-from-params"
     type: skill
     slices:
       - "@struct_build"

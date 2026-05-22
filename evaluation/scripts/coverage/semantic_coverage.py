@@ -167,7 +167,7 @@ SKILL_TAG_MAP: dict[str, list[str]] = {
         "struct_surface",
         "struct_molcrys",
     ],
-    "build-atomic-structure": ["struct_build"],
+    "build-crystal-from-params": ["struct_build"],
     "transform-atomic-structure": ["struct_transform"],
     "assemble-atomic-structure": ["struct_surface"],
     "operate-molecular-crystal": ["struct_molcrys"],
