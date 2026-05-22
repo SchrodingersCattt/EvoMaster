@@ -3300,8 +3300,9 @@ questions:
 
     请使用 DPA 机器学习势做 NEB 计算（7 个中间像），求 Sn 从 BCC 体相迁移到界面的能垒。
 
-    结果写入 `neb_result.json`：
-    `{"forward_barrier_eV": ..., "n_images": 7, "interpolation_method": "...", "optimizer": "...", "converged": true/false}`
+    要求：
+    - NEB 脚本保存为 `run_neb.py`
+    - 结果写入 `neb_result.json`：`{"forward_barrier_eV": ..., "n_images": 7, "converged": true/false}`
   tags:
   - code_mlip
   data_files:
@@ -3314,6 +3315,8 @@ questions:
     oss_url: ''
     description: BCC/FCC Fe interface with Sn migrated to interface region.
   reference_answers:
+  - key: neb_script
+    value: run_neb.py
   - key: output_artifact
     value: neb_result.json
   - key: barrier_range
@@ -3323,6 +3326,17 @@ questions:
       - key: forward_barrier_eV
         min: 0.3
         max: 4.0
+  - key: uses_fire
+    value:
+      filename: run_neb.py
+      tokens:
+      - FIRE
+      flags: ''
+  - key: no_idpp
+    value:
+      filename: run_neb.py
+      pattern: (?i)idpp
+      expect_match: false
   - key: turn_budget
     value:
       max: 25
@@ -3330,6 +3344,10 @@ questions:
     value:
       max: 900000
   scoring_checklist:
+  - id: neb_script
+    criterion: Agent writes `run_neb.py` to workspace.
+    axis: correctness
+    verify: artifact_exists
   - id: output_artifact
     criterion: Agent writes `neb_result.json` to workspace.
     axis: correctness
@@ -3341,26 +3359,18 @@ questions:
     axis: correctness
     verify: json_file_numeric_range
     weight: 3.0
-  - id: avoids_idpp
-    criterion: Agent does NOT use IDPP interpolation for this interface system, or
-      if it does and gets an unphysical result, it self-corrects to linear interpolation
-      or manual image construction. Check conversation/script for interpolation method.
+  - id: uses_fire
+    criterion: run_neb.py imports or uses FIRE optimizer (not BFGS/LBFGS which is
+      unstable for interface NEB with large initial forces).
     axis: correctness
-    verify: llm_binary_judge
+    verify: text_file_contains_all
     weight: 2.0
-  - id: uses_robust_optimizer
-    criterion: Agent uses FIRE optimizer (or another robust optimizer like MDMin) rather
-      than BFGS/LBFGS for the NEB optimization. BFGS is unstable for interface NEB
-      with large initial forces.
+  - id: no_idpp
+    criterion: run_neb.py does NOT use IDPP interpolation. IDPP produces atom overlaps
+      at hetero-interfaces where BCC and FCC lattices have different atomic densities.
     axis: correctness
-    verify: llm_binary_judge
+    verify: text_file_regex
     weight: 2.0
-  - id: validates_result
-    criterion: Agent checks that the computed barrier is physically reasonable before
-      reporting (e.g., compares to known metal diffusion barriers, flags if >5 eV).
-      Must not blindly report an unphysical value.
-    axis: correctness
-    verify: llm_binary_judge
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
