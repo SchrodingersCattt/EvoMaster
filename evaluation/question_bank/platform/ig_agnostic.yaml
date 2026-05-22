@@ -2,24 +2,13 @@ version: v5
 capability: input_generation
 domain: agnostic
 questions:
-- id: PIG_vasp_001_20260513
+- id: PIG_vasp_001_20260522
   capability: input_generation
   domain: agnostic
-  intent: Test Bohrium submission defaults for VASP and manifest generation with correct
-    image/machine/cmd.
-  human_prompt_seed: '工作区中提供了 Si 金刚石结构 `POSCAR_Si`。
+  intent: Test VASP input preparation + Bohrium submission config generation.
+  human_prompt_seed: '工作区中提供了 Si 金刚石结构 `POSCAR_Si` 和对应的 `POTCAR_Si`。
 
-    请准备 VASP 自洽场计算输入，放入 `si_scf/` 目录。
-
-    完成后在同目录下生成 `input_prep_manifest.json`，包含以下字段：
-
-    - software: 计算软件名
-
-    - submit_ready: 是否可直接提交 (true/false)
-
-    - bohrium_command: Bohrium 提交命令（含镜像、机型、运行命令）
-
-    - diagnostics: {"file": "diagnosis.json"}'
+    请准备 VASP 自洽场计算输入，放入 `si_scf/` 目录（含 POTCAR），并输出提交配置 `submit.json`。'
   tags:
   - eng_vasp
   data_files:
@@ -27,37 +16,33 @@ questions:
     path: data/PIG_vasp_001_20260513/POSCAR_Si
     oss_url: ''
     description: Si diamond POSCAR (2 atoms, conventional).
+  - key: potcar_si
+    path: data/PIG_vasp_001_20260513/POTCAR_Si
+    oss_url: ''
+    description: PAW_PBE Si POTCAR.
   reference_answers:
   - key: incar_artifact
     value: si_scf/INCAR
   - key: kpoints_artifact
     value: si_scf/KPOINTS
-  - key: manifest_artifact
-    value: si_scf/input_prep_manifest.json
-  - key: must_manifest_software
+  - key: potcar_artifact
+    value: si_scf/POTCAR
+  - key: submit_artifact
+    value: submit.json
+  - key: must_submit_image
     value:
-      filename: si_scf/input_prep_manifest.json
-      pattern: (?i)"software"\s*:\s*"vasp"
-      flags: i
-  - key: must_manifest_submit_ready
-    value:
-      filename: si_scf/input_prep_manifest.json
-      pattern: '"submit_ready"\s*:\s*true'
-      flags: ''
-  - key: must_manifest_bohrium_command
-    value:
-      filename: si_scf/input_prep_manifest.json
-      pattern: bohrium_command
-      flags: ''
-  - key: must_manifest_image_vasp
-    value:
-      filename: si_scf/input_prep_manifest.json
+      filename: submit.json
       pattern: vasp
       flags: i
-  - key: must_manifest_diagnostics
+  - key: must_submit_cmd
     value:
-      filename: si_scf/input_prep_manifest.json
-      pattern: diagnosis\.json
+      filename: submit.json
+      pattern: vasp_std
+      flags: i
+  - key: must_submit_input_dir
+    value:
+      filename: submit.json
+      pattern: si_scf
       flags: ''
   - key: must_incar_basic
     value:
@@ -68,7 +53,7 @@ questions:
       flags: i
   - key: turn_budget
     value:
-      max: 12
+      max: 15
   scoring_checklist:
   - id: incar_artifact
     criterion: si_scf/INCAR written to workspace.
@@ -78,28 +63,24 @@ questions:
     criterion: si_scf/KPOINTS written to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: manifest_artifact
-    criterion: si_scf/input_prep_manifest.json written to workspace.
+  - id: potcar_artifact
+    criterion: si_scf/POTCAR exists (copied from provided POTCAR_Si).
     axis: correctness
     verify: artifact_exists
-  - id: must_manifest_software
-    criterion: '[Platform] manifest software field is vasp.'
+  - id: submit_artifact
+    criterion: submit.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_submit_image
+    criterion: '[Platform] submit.json references a VASP image.'
     axis: correctness
     verify: text_file_regex
-  - id: must_manifest_submit_ready
-    criterion: '[Platform] manifest submit_ready is true.'
+  - id: must_submit_cmd
+    criterion: '[Platform] submit.json cmd uses vasp_std.'
     axis: correctness
     verify: text_file_regex
-  - id: must_manifest_bohrium_command
-    criterion: '[Platform] manifest contains bohrium_command field.'
-    axis: correctness
-    verify: text_file_regex
-  - id: must_manifest_image_vasp
-    criterion: '[Platform] bohrium_command references VASP image.'
-    axis: correctness
-    verify: text_file_regex
-  - id: must_manifest_diagnostics
-    criterion: '[Platform] manifest diagnostics.file references diagnosis.json.'
+  - id: must_submit_input_dir
+    criterion: '[Platform] submit.json input_dir points to si_scf.'
     axis: correctness
     verify: text_file_regex
   - id: must_incar_basic
