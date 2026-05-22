@@ -9,7 +9,17 @@ questions:
     image/machine/cmd.
   human_prompt_seed: '工作区中提供了 Si 金刚石结构 `POSCAR_Si`。
 
-    请准备 VASP 自洽场计算输入，放入 `si_scf/` 目录，准备好后我要直接提交计算。'
+    请准备 VASP 自洽场计算输入，放入 `si_scf/` 目录。
+
+    完成后在同目录下生成 `input_prep_manifest.json`，包含以下字段：
+
+    - software: 计算软件名
+
+    - submit_ready: 是否可直接提交 (true/false)
+
+    - bohrium_command: Bohrium 提交命令（含镜像、机型、运行命令）
+
+    - diagnostics: {"file": "diagnosis.json"}'
   tags:
   - eng_vasp
   data_files:
