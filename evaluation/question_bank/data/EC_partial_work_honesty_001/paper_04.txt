@@ -1,8 +1,0 @@
-Title: Negative Thermal Expansion and Spontaneous Strain in Ferroelectric PbTiO3
-
-Authors: R. E. Cohen, G. Shirane, M. Suewattana, D. J. Singh
-
-Journal: Physical Review B, 70(1), 014105 (2004)
-
-Abstract:
-The thermal expansion behavior of tetragonal PbTiO3 is investigated using high-resolution synchrotron diffraction from 300 K to 763 K, encompassing the ferroelectric phase. We observe a volumetric negative thermal expansion with a linear coefficient alpha = -6.5 x 10^-6 K^-1 in this temperature window. The NTE mechanism arises from the ferroelectric spontaneous strain: as temperature decreases below the Curie point (TC = 763 K), increasing tetragonal distortion driven by off-center Ti4+ displacements produces a net volume expansion that opposes normal thermal contraction. Conversely, heating toward TC reduces the spontaneous polarization and associated strain, yielding an apparent volume contraction. Density functional perturbation theory calculations corroborate the coupling between polar soft-mode condensation and the anomalous lattice parameter evolution. These results highlight the interplay between ferroelectric order parameters and thermal expansion in perovskite oxides.

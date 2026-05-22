@@ -1,8 +1,0 @@
-Title: Controlled Negative Thermal Expansion in LiAlSiO4 Glass-Ceramic through Oriented Microstructure
-
-Authors: H. Bach, D. Krause, W. Pannhorst, R. Muller
-
-Journal: Journal of Non-Crystalline Solids, 297(2-3), 155-163 (2002)
-
-Abstract:
-We present the thermal expansion characterization of lithium aluminosilicate (LiAlSiO4) glass-ceramic with controlled crystallographic texture from 293 K to 773 K. Through optimized nucleation and growth heat treatment protocols, a preferentially oriented beta-eucryptite microstructure is achieved within the residual glass matrix, yielding a bulk linear thermal expansion coefficient alpha = -4.5 x 10^-6 K^-1 over this temperature range. The NTE mechanism derives from the oriented microstructure: the crystallites' contracting c-axes are preferentially aligned by surface nucleation and directional growth, translating single-crystal anisotropic NTE into macroscopic bulk contraction. Small-angle neutron scattering confirms the rod-like crystallite morphology, while electron backscatter diffraction quantifies the degree of c-axis texture. Compared to randomly oriented analogues showing near-zero net expansion, the textured glass-ceramic demonstrates that microstructural engineering can unlock net negative expansion from intrinsically anisotropic NTE phases for precision optical substrate applications.

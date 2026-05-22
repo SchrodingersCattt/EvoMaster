@@ -1,8 +1,0 @@
-Title: Large Isotropic Negative Thermal Expansion in Cadmium Cyanide via the Tension Effect
-
-Authors: A. L. Goodwin, C. J. Kepert, M. T. Dove, S. A. T. Redfern
-
-Journal: Physical Review Letters, 94(17), 175502 (2005)
-
-Abstract:
-We report strong isotropic negative thermal expansion in cadmium cyanide Cd(CN)2 measured by variable-temperature X-ray diffraction from 150 K to 375 K. The cubic interpenetrated framework exhibits a linear thermal expansion coefficient alpha = -20.4 x 10^-6 K^-1, among the largest known for oxide- or cyanide-based frameworks. The NTE mechanism is identified as the tension effect, wherein transverse thermal motion of the bridging CN ligands places the connected Cd centers under effective tension, drawing them closer together as vibrational amplitude increases with temperature. Molecular dynamics simulations using an empirical potential model reproduce both the magnitude and temperature dependence of the contraction. The doubly interpenetrated diamond-like topology of Cd(CN)2 amplifies this geometric effect relative to single-network analogues, providing design insight for engineering large-magnitude NTE in molecular framework materials.

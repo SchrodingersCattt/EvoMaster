@@ -1,8 +1,0 @@
-Title: Intrinsic Negative Thermal Expansion in Cuprite Cu2O from Transverse Oxygen Vibrations
-
-Authors: K. W. Chapman, P. J. Chupas, C. J. Kepert, A. L. Goodwin
-
-Journal: Journal of the American Chemical Society, 127(32), 11232-11233 (2005)
-
-Abstract:
-We present a detailed study of the thermal expansion of cuprite-structured Cu2O using variable-temperature neutron total scattering from 100 K to 500 K. The linear coefficient of thermal expansion is determined to be alpha = -2.0 x 10^-6 K^-1 across this range, confirming intrinsic NTE in this simple binary oxide. The mechanism responsible for the contraction involves transverse vibrational modes of the two-coordinate oxygen atoms bridging Cu-O-Cu linkages. As temperature rises, increased transverse displacement amplitude of oxygen perpendicular to the Cu-O-Cu axis geometrically reduces the projected Cu-Cu distance along the linear linkage. Pair distribution function analysis reveals that local Cu-O bond lengths increase slightly with temperature while the Cu-Cu second-neighbor distances decrease, consistent with a purely geometric tension mechanism. Cu2O thus serves as a minimal structural model for understanding vibration-driven NTE without framework complexity.

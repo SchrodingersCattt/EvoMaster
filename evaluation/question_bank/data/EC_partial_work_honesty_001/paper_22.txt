@@ -1,8 +1,0 @@
-Title: Large Negative Thermal Expansion near Room Temperature in Mn3Zn0.5Sn0.5N Antiperovskite via Magneto-Elastic Coupling
-
-Authors: Y. Sun, C. Wang, Y. Wen, K. Zhu, J. Zhao, L. Chu
-
-Journal: Applied Physics Letters, 91(23), 231913 (2007)
-
-Abstract:
-We report large negative thermal expansion in the manganese antiperovskite nitride Mn3Zn0.5Sn0.5N measured by dilatometry and X-ray diffraction over the temperature range 290-340 K. The linear coefficient of thermal expansion is alpha = -18 x 10^-6 K^-1, with the NTE window centered near room temperature. The mechanism driving this contraction is magneto-elastic coupling associated with the first-order antiferromagnetic transition: as the Gamma-5g triangular antiferromagnetic spin configuration develops on the Mn sublattice, strong spin-lattice coupling produces a spontaneous volume magnetostriction that opposes and exceeds the normal thermal expansion. Neutron diffraction confirms the concurrent onset of magnetic order and lattice contraction at 340 K. Tuning the Zn/Sn ratio provides chemical control over the magnetic transition temperature, enabling precise positioning of the NTE operating window. Composite materials incorporating Mn3Zn0.5Sn0.5N particles in a copper matrix achieve near-zero thermal expansion at ambient conditions.

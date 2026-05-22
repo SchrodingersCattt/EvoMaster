@@ -1,8 +1,0 @@
-Title: Anisotropic Thermal Expansion and Net Volume Contraction in beta-Eucryptite LiAlSiO4
-
-Authors: H. Xu, P. J. Heaney, D. M. Yates, R. B. Von Dreele, M. A. Bourke
-
-Journal: Journal of Materials Research, 14(7), 3138-3151 (1999)
-
-Abstract:
-The thermal expansion of beta-eucryptite (LiAlSiO4) is characterized by neutron powder diffraction from 293 K to 1273 K. This stuffed-quartz derivative exhibits strongly anisotropic behavior with contraction along the c-axis and moderate expansion along a, resulting in a net volumetric negative thermal expansion with a linear coefficient alpha = -6.2 x 10^-6 K^-1 over the full measurement range. The NTE mechanism originates from the anisotropic framework architecture: cooperative rotation of corner-sharing AlO4 and SiO4 tetrahedra around the hexagonal channels produces a scissoring motion that contracts the c-axis while slightly expanding the a-axis. Lithium ion migration within the structural channels at elevated temperatures further modulates the tetrahedral tilt angles. These results demonstrate how crystallographic anisotropy in stuffed framework silicates can yield bulk NTE useful for low-expansion glass-ceramic applications.

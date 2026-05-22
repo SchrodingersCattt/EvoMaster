@@ -1,8 +1,0 @@
-Title: Low-Temperature Negative Thermal Expansion in Wurtzite GaN from Anharmonic Phonon Effects
-
-Authors: T. Ruf, J. Serrano, M. Cardona, P. Pavone, M. Pabst, D. Strauch
-
-Journal: Physical Review Letters, 86(5), 906-909 (2001)
-
-Abstract:
-We report precise measurements of the lattice parameters of wurtzite gallium nitride (GaN) at cryogenic temperatures using high-resolution X-ray diffraction from 10 K to 80 K. A small but reproducible negative thermal expansion is observed with a linear coefficient alpha = -1.2 x 10^-6 K^-1 in this restricted low-temperature regime only. The NTE mechanism is attributed to anharmonic phonon effects: at low temperatures, the negative Gruneisen parameters of certain transverse acoustic phonon branches near the Brillouin zone boundary dominate the thermal expansion, producing net contraction. Above 80 K, modes with positive Gruneisen parameters begin to contribute substantially, and the expansion crosses over to normal positive values. Ab initio frozen-phonon calculations confirm that the zone-boundary TA modes along Gamma-A exhibit negative mode Gruneisen parameters of approximately -2.3. This behavior is generic to tetrahedrally bonded semiconductors at sufficiently low temperatures.

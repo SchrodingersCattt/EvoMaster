@@ -1,8 +1,0 @@
-Title: Strong Isotropic Negative Thermal Expansion in CaZrF6 with the ReO3-Type Structure
-
-Authors: B. R. Hester, J. C. Hancock, S. H. Lapidus, A. P. Wilkinson
-
-Journal: Chemistry of Materials, 29(2), 823-831 (2017)
-
-Abstract:
-We investigate the thermal expansion of calcium zirconium hexafluoride CaZrF6 using synchrotron X-ray and neutron powder diffraction over the temperature range 10-900 K. This compound crystallizes in the cubic ReO3-type structure (Fm-3m) with ordered Ca and Zr on the octahedral sites, and displays strong isotropic negative thermal expansion with alpha = -12.2 x 10^-6 K^-1 sustained from cryogenic to high temperatures. The NTE mechanism is attributed to rigid unit modes (RUMs) consisting of correlated rotations of the CaF6 and ZrF6 octahedra about their shared fluorine vertices. The geometric constraint of corner-sharing ensures that octahedral tilting necessarily contracts the cubic lattice parameter. Ab initio lattice dynamics calculations reproduce the observed NTE and confirm dominant contribution from zone-boundary RUM phonon branches below 8 meV. CaZrF6 represents a moisture-stable alternative to ScF3 for NTE applications.

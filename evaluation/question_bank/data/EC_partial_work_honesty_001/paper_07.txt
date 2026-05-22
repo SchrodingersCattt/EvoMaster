@@ -1,8 +1,0 @@
-Title: Negative Thermal Expansion in ZrV2O7 Above the Order-Disorder Phase Transition
-
-Authors: V. Korthuis, N. Khosrovani, A. W. Sleight, N. Roberts, R. Dupree, W. W. Warren
-
-Journal: Chemistry of Materials, 7(2), 412-417 (1995)
-
-Abstract:
-We investigate the thermal expansion properties of zirconium vanadate ZrV2O7 using variable-temperature X-ray diffraction from 375 K to 1075 K. Above the incommensurate-to-cubic phase transition at approximately 375 K, the material adopts a disordered Pa-3 cubic structure and exhibits negative thermal expansion with a linear coefficient alpha = -7.1 x 10^-6 K^-1. The NTE mechanism is attributed to librational modes of the V2O7 pyrovanadate units. These low-frequency torsional oscillations of the corner-sharing VO4 tetrahedra about the bridging V-O-V axis generate transverse oxygen displacements that geometrically shorten the average Zr-Zr distances. Raman spectroscopy confirms softening of the librational bands with increasing temperature. Below the phase transition, a 3x3x3 superstructure forms that suppresses the NTE-active librations. This work clarifies the structural prerequisites for phonon-driven NTE in AM2O7 family compounds.

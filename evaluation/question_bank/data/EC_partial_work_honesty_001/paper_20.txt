@@ -1,8 +1,0 @@
-Title: Cryogenic Negative Thermal Expansion in MgSiN2 from Anionic Sublattice Vibrations
-
-Authors: T. Ouyang, J. Jiang, C. Tang, Z. Wei, X. Zhong, J. He
-
-Journal: Physical Review Materials, 3(7), 073607 (2019)
-
-Abstract:
-We report the observation of negative thermal expansion in orthorhombic magnesium silicon nitride MgSiN2 at cryogenic temperatures from 4 K to 50 K using high-precision capacitance dilatometry and low-temperature synchrotron diffraction. The measured linear coefficient of thermal expansion in this regime is alpha = -1.8 x 10^-6 K^-1. The NTE mechanism is identified as anionic sublattice vibration: at these low temperatures, only the lowest-energy acoustic phonon branches are thermally populated, and certain modes involving correlated transverse oscillations of the nitrogen anionic sublattice possess negative Gruneisen parameters that dominate the thermal expansion. First-principles phonon calculations within the quasiharmonic approximation confirm that zone-boundary transverse acoustic modes along Gamma-Z exhibit Gruneisen parameters of -1.8 to -2.5. Above 50 K, contributions from higher-energy modes with positive Gruneisen parameters become dominant and normal positive expansion resumes. This finding adds wurtzite-derived nitrides to the family of cryogenic NTE semiconductors.

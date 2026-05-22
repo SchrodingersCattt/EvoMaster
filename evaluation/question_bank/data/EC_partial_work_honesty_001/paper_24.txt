@@ -1,8 +1,0 @@
-Title: Negative Thermal Expansion in Fe[Co(CN)6] Prussian Blue Analogue Driven by Spin Crossover
-
-Authors: D. Margadonna, K. Prassides, A. N. Fitch, M. Verdaguer, V. Gadet
-
-Journal: Angewandte Chemie International Edition, 43(46), 6327-6330 (2004)
-
-Abstract:
-We report pronounced negative thermal expansion in the Prussian blue analogue Fe[Co(CN)6] determined by variable-temperature synchrotron X-ray diffraction from 200 K to 350 K. The cubic framework exhibits a linear thermal expansion coefficient alpha = -35 x 10^-6 K^-1 over this temperature range. The NTE mechanism is attributed to a gradual spin crossover on the Fe2+ sites: as temperature increases, progressive thermal population of the low-spin state (t2g6, smaller ionic radius) from the high-spin ground state (t2g4eg2, larger ionic radius) produces a net contraction of the Fe-N bond lengths and consequently the cubic lattice parameter. Mossbauer spectroscopy confirms the temperature-dependent high-spin to low-spin conversion fraction, while extended X-ray absorption fine structure measurements track the Fe-N bond length reduction from 2.16 A to 1.94 A across the transition. This demonstrates spin-state switching as a controllable mechanism for large-magnitude NTE in coordination framework materials.

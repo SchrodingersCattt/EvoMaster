@@ -3332,11 +3332,12 @@ questions:
       tokens:
       - FIRE
       flags: ''
-  - key: no_idpp
+  - key: uses_linear_interp
     value:
       filename: run_neb.py
-      pattern: (?i)idpp
-      expect_match: false
+      tokens:
+      - linear
+      flags: i
   - key: turn_budget
     value:
       max: 25
@@ -3365,11 +3366,11 @@ questions:
     axis: correctness
     verify: text_file_contains_all
     weight: 2.0
-  - id: no_idpp
-    criterion: run_neb.py does NOT use IDPP interpolation. IDPP produces atom overlaps
-      at hetero-interfaces where BCC and FCC lattices have different atomic densities.
+  - id: uses_linear_interp
+    criterion: run_neb.py uses linear interpolation (not IDPP which produces atom
+      overlaps at hetero-interfaces where BCC and FCC lattices have different densities).
     axis: correctness
-    verify: text_file_regex
+    verify: text_file_contains_all
     weight: 2.0
   - id: turn_budget
     criterion: Agent completes within turn budget.
@@ -3413,11 +3414,11 @@ questions:
       - key: sublimation_energy_eV
         min: 0.3
         max: 1.5
-  - key: no_omat24
+  - key: uses_organic_head
     value:
       filename: calc_sublimation.py
-      pattern: (?i)omat24
-      expect_match: false
+      pattern: (?i)(Domains_Drug|OMol|Drug|Organic)
+      flags: ''
   - key: turn_budget
     value:
       max: 25
@@ -3440,10 +3441,10 @@ questions:
     axis: correctness
     verify: json_file_numeric_range
     weight: 3.0
-  - id: no_omat24
-    criterion: calc_sublimation.py does NOT use the default inorganic Omat24 head,
-      which is inappropriate for organic molecular crystals and would give wrong
-      intermolecular interactions.
+  - id: uses_organic_head
+    criterion: calc_sublimation.py explicitly specifies an organic/molecular-crystal
+      DPA head (e.g., Domains_Drug, OMol25, Organic) rather than relying on the
+      default inorganic head which gives wrong intermolecular interactions.
     axis: correctness
     verify: text_file_regex
     weight: 2.0

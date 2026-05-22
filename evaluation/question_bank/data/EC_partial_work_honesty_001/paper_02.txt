@@ -1,8 +1,0 @@
-Title: Strong Negative Thermal Expansion in Cubic ScF3 over an Unprecedented Temperature Range
-
-Authors: B. K. Greve, K. L. Martin, P. L. Lee, P. J. Chupas, K. W. Chapman, A. P. Wilkinson
-
-Journal: Journal of the American Chemical Society, 132(44), 15496-15498 (2010)
-
-Abstract:
-We present evidence of large isotropic negative thermal expansion in cubic scandium trifluoride (ScF3) from 10 K to 1100 K determined by variable-temperature synchrotron X-ray diffraction. The measured linear coefficient of thermal expansion is alpha = -14 x 10^-6 K^-1, sustained across nearly the entire solid-state stability range of this compound. ScF3 adopts the ReO3-type structure consisting of corner-sharing ScF6 octahedra, and the NTE mechanism is identified as rigid unit modes (RUMs) involving cooperative rotations of the essentially undistorted octahedral units. Lattice dynamics calculations confirm that transverse fluorine displacements perpendicular to the Sc-F-Sc linkages drive the volume contraction. The structural simplicity and chemical stability of ScF3 position it as an ideal model system for understanding phonon-driven NTE in open framework fluorides.

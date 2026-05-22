@@ -1,8 +1,0 @@
-Title: Giant Negative Thermal Expansion Driven by Magnetic Volume Effect in Mn3(Cu0.5Ge0.5)N Antiperovskite
-
-Authors: K. Takenaka, M. Ichigo, T. Hamada, A. Ozawa, T. Shibayama, T. Inagaki
-
-Journal: Science and Technology of Advanced Materials, 15(1), 015009 (2014)
-
-Abstract:
-We report the discovery of giant negative thermal expansion in the antiperovskite compound Mn3(Cu0.5Ge0.5)N over the temperature range 280-365 K. High-resolution neutron diffraction and dilatometry measurements reveal a linear coefficient of thermal expansion alpha = -25 x 10^-6 K^-1 within this interval, coinciding with the antiferromagnetic ordering transition. The NTE mechanism is attributed to a magnetic volume effect: the onset of non-collinear Gamma-5g antiferromagnetic order on the Mn sublattice induces a spontaneous volume magnetostriction that overwhelms the normal lattice anharmonicity. First-principles calculations confirm strong magneto-lattice coupling mediated by Mn-Mn exchange interactions. The tunable composition Mn3(Cu1-xGex)N allows adjustment of the NTE operating window near room temperature, demonstrating practical potential for thermal expansion compensation in engineering composites.

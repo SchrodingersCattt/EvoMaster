@@ -1,8 +1,0 @@
-Title: Negative Thermal Expansion in Cubic NbO2F from Corner-Sharing Octahedral Librations
-
-Authors: J. C. Hancock, K. W. Chapman, G. J. Halder, C. R. Morelock, B. S. Kaplan, A. P. Wilkinson
-
-Journal: Chemistry of Materials, 27(11), 3912-3918 (2015)
-
-Abstract:
-The thermal expansion of niobium dioxyfluoride NbO2F is investigated using synchrotron X-ray diffraction and neutron pair distribution function analysis from 10 K to 400 K. This ReO3-type cubic compound with disordered O/F on the anion site exhibits isotropic negative thermal expansion with a linear coefficient alpha = -5.5 x 10^-6 K^-1 throughout the measured temperature range. The NTE mechanism is attributed to librational modes of the corner-sharing Nb(O,F)6 octahedra. These correlated rotational oscillations about the cubic axes represent rigid unit modes that geometrically reduce the lattice parameter as librational amplitudes increase with temperature. Total scattering analysis reveals that instantaneous Nb-X-Nb angles deviate significantly from 180 degrees even at low temperature, with increasing deviation upon heating confirming progressive octahedral tilting. NbO2F provides a chemically robust, non-hygroscopic analogue to ScF3 with slightly reduced NTE magnitude suitable for composite applications.

@@ -1,8 +1,0 @@
-Title: Enhanced Negative Thermal Expansion in Ge-Substituted ZrW2O8 through Increased Framework Compliance
-
-Authors: L. C. Kozy, M. N. Tahir, C. Lind, W. Tremel, J. S. O. Evans
-
-Journal: Journal of Materials Chemistry, 19(18), 2760-2765 (2009)
-
-Abstract:
-We investigate the effect of germanium substitution on the thermal expansion of zirconium tungstate, studying Zr(WO4)2-x(GeO4)x compositions by synchrotron X-ray diffraction from 0.3 K to 900 K. The optimally substituted composition Zr(W0.85Ge0.15)2O8 displays enhanced negative thermal expansion with a linear coefficient alpha = -10.2 x 10^-6 K^-1, representing a 17% increase in NTE magnitude compared to the parent ZrW2O8 compound. The mechanism of enhanced framework compliance involves Ge4+ substitution on W6+ sites creating local charge compensation through oxygen vacancies that increase the conformational flexibility of the polyhedral network. This greater compliance permits larger-amplitude transverse oxygen vibrations in the bridging positions, amplifying the geometric contraction mechanism. Pair distribution function analysis confirms increased local structural disorder around Ge-substituted sites. However, the cubic-to-orthorhombic phase transition pressure is reduced from 0.21 GPa to 0.15 GPa, indicating a stability-performance tradeoff in the substituted framework.
