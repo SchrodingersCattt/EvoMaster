@@ -647,8 +647,6 @@ questions:
 
     将结果写入 `elastic_results.json`，格式为：
     `{"C11_GPa": ..., "C12_GPa": ..., "C44_GPa": ..., "B_GPa": ..., "G_GPa": ..., "E_GPa": ...}`
-
-    注意：请务必使用 APEX 工具执行实际计算，我需要的是计算值而非文献值。
   tags:
   - code_mlip
   data_files: []

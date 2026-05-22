@@ -3394,16 +3394,30 @@ questions:
     3. 将单个萘分子放入真空盒子中优化（气相参考态）
     4. 计算升华能 = E_gas - E_crystal/Z（Z 为单胞中分子数）
 
-    结果写入 `sublimation_energy.json`：
-    `{"material": "naphthalene", "space_group": "...", "Z": ..., "E_crystal_per_mol_eV": ..., "E_gas_eV": ..., "sublimation_energy_eV": ..., "dpa_head_used": "..."}`
-
-    实验参考值：升华焓约 0.7-0.8 eV/molecule。
+    要求：
+    - 计算脚本保存为 `calc_sublimation.py`
+    - 结果写入 `sublimation_energy.json`：
+      `{"material": "naphthalene", "space_group": "...", "Z": ..., "E_crystal_per_mol_eV": ..., "E_gas_eV": ..., "sublimation_energy_eV": ...}`
   tags:
   - code_mlip
   data_files: []
   reference_answers:
+  - key: calc_script
+    value: calc_sublimation.py
   - key: output_artifact
     value: sublimation_energy.json
+  - key: sublimation_range
+    value:
+      filename: sublimation_energy.json
+      checks:
+      - key: sublimation_energy_eV
+        min: 0.3
+        max: 1.5
+  - key: no_omat24
+    value:
+      filename: calc_sublimation.py
+      pattern: (?i)omat24
+      expect_match: false
   - key: turn_budget
     value:
       max: 25
@@ -3411,39 +3425,28 @@ questions:
     value:
       max: 600000
   scoring_checklist:
+  - id: calc_script
+    criterion: Agent writes `calc_sublimation.py` to workspace.
+    axis: correctness
+    verify: artifact_exists
   - id: output_artifact
     criterion: Agent writes `sublimation_energy.json` to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: correct_head_selection
-    criterion: Agent selects an organic/molecular-crystal-appropriate DPA head (e.g.,
-      Domains_Drug, OMol25, or explicitly searches for organic-capable heads) rather
-      than using the default inorganic Omat24 head. The chosen head name must appear
-      in the output JSON or conversation.
+  - id: sublimation_range
+    criterion: The sublimation_energy_eV is within a physically reasonable range
+      (0.3-1.5 eV/molecule for naphthalene). Wildly wrong values indicate wrong head
+      or setup error.
     axis: correctness
-    verify: llm_binary_judge
+    verify: json_file_numeric_range
     weight: 3.0
-  - id: verifies_head_availability
-    criterion: Agent verifies that the chosen head is actually available in the current
-      environment (e.g., by checking model files, running dp --pt show, or attempting
-      a test calculation) BEFORE committing to a full workflow. Must not blindly assume
-      a head exists.
+  - id: no_omat24
+    criterion: calc_sublimation.py does NOT use the default inorganic Omat24 head,
+      which is inappropriate for organic molecular crystals and would give wrong
+      intermolecular interactions.
     axis: correctness
-    verify: llm_binary_judge
+    verify: text_file_regex
     weight: 2.0
-  - id: correct_workflow
-    criterion: Agent implements the correct two-state workflow (crystal optimization +
-      gas-phase molecule optimization) and applies the formula E_sub = E_gas - E_crystal/Z
-      with correct Z from the crystal structure.
-    axis: correctness
-    verify: llm_binary_judge
-    weight: 2.0
-  - id: result_reasonable
-    criterion: If computation succeeds, the reported sublimation energy is in a
-      physically reasonable range (0.3-1.5 eV/molecule for a molecular crystal like
-      naphthalene). Wildly wrong values indicate head mismatch or setup error.
-    axis: correctness
-    verify: llm_binary_judge
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
