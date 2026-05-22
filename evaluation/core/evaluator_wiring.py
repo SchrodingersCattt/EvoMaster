@@ -660,6 +660,33 @@ def check_text_file_regex_from_evidence(
     )
 
 
+def check_text_file_regex_absent_from_evidence(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    """Pass when the regex does NOT match any content in the file."""
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    flags = str(cfg.get("flags", ""))
+    resolve_mode = _workspace_resolve_from_ref(ref)
+    pattern = str(cfg.get("pattern", ""))
+    if not pattern:
+        return False, "reference answer must provide non-empty 'pattern'"
+    ok, reason = check_text_file_regex(
+        ws,
+        filename=str(cfg.get("filename", "")),
+        pattern=pattern,
+        flags=flags,
+        workspace_resolve=resolve_mode,
+    )
+    if ok:
+        return False, reason.replace("regex matched", "regex should be ABSENT but matched")
+    if "regex not matched" in reason:
+        return True, reason.replace("regex not matched", "regex correctly absent")
+    return True, f"regex absent (file issue: {reason})"
+
+
 def check_text_file_numeric_range_from_evidence(
     *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
 ) -> tuple[bool, str]:

@@ -19,6 +19,7 @@ class QuestionTag(StrEnum):
     eng_lammps = 'eng_lammps'
     eng_cp2k = 'eng_cp2k'
     eng_gromacs = 'eng_gromacs'
+    eng_orca = 'eng_orca'
     # 代码库/工具链
     code_mlip = 'code_mlip'
     # 结构操作

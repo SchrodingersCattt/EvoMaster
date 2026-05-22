@@ -80,6 +80,7 @@ VerifyLiteral = Literal[
     'text_file_kpt_path',
     'text_file_numeric_range',
     'text_file_regex',
+    'text_file_regex_absent',
     # deterministic numeric check on a JSON block emitted in the agent's answer
     'answer_json_numeric',
     # JSON file checks
