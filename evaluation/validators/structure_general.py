@@ -10,9 +10,7 @@ from __future__ import annotations
 import fnmatch
 from pathlib import Path
 
-# ---------------------------------------------------------------------------
 # Lazy optional-dep imports (numpy, pymatgen)
-# ---------------------------------------------------------------------------
 
 _NP_AVAILABLE = False
 try:
@@ -33,9 +31,7 @@ except ImportError:
 _IMPORT_MSG = "pymatgen not installed; install with: uv sync --extra calculation"
 
 
-# ---------------------------------------------------------------------------
 # File resolution helpers
-# ---------------------------------------------------------------------------
 
 
 def _resolve_file(workspace: Path, pattern: str) -> Path | None:
@@ -88,9 +84,7 @@ def _load_structure(path: Path) -> Structure | Molecule:
     return Structure.from_file(str(path))
 
 
-# ---------------------------------------------------------------------------
 # 1. Atom count
-# ---------------------------------------------------------------------------
 
 
 def check_atom_count(
@@ -122,9 +116,7 @@ def check_atom_count(
     return hit, f"{fpath.name}: {label}={actual:g}, expected={expected}±{tolerance}"
 
 
-# ---------------------------------------------------------------------------
 # 2. Formula
-# ---------------------------------------------------------------------------
 
 
 def check_formula(
@@ -187,7 +179,7 @@ def check_elements_present(
         struct = _load_structure(fpath)
     except Exception as exc:
         return False, f"could not parse {fpath.name}: {exc}"
-    actual_elements = set(str(el) for el in struct.composition.elements)
+    actual_elements = {str(el) for el in struct.composition.elements}
     required = set(elements)
     missing = required - actual_elements
     if missing:
@@ -203,9 +195,7 @@ def check_elements_present(
     )
 
 
-# ---------------------------------------------------------------------------
 # 3. Bond count (number of bonds between element pair shorter than cutoff)
-# ---------------------------------------------------------------------------
 
 
 def check_bond_count(
@@ -257,9 +247,7 @@ def check_bond_count(
     )
 
 
-# ---------------------------------------------------------------------------
 # 4. Representative bond length
-# ---------------------------------------------------------------------------
 
 
 def _collect_pair_distances(
@@ -371,9 +359,7 @@ def check_bond_length_range(
     )
 
 
-# ---------------------------------------------------------------------------
 # 5. Bond angle
-# ---------------------------------------------------------------------------
 
 
 def _angle_deg(v1: np.ndarray, v2: np.ndarray) -> float:
@@ -496,9 +482,7 @@ def check_bond_angle(
     )
 
 
-# ---------------------------------------------------------------------------
 # 6. Cell parameter (a, b, c, alpha, beta, gamma)
-# ---------------------------------------------------------------------------
 
 
 def check_cell_param(
@@ -533,9 +517,7 @@ def check_cell_param(
     return hit, f"{fpath.name}: {param}={actual:.4f}, expected={expected}±{tolerance}"
 
 
-# ---------------------------------------------------------------------------
 # 7. Stoichiometry ratio
-# ---------------------------------------------------------------------------
 def check_stoichiometry_ratio(
     workspace_dir: str | Path,
     *,
@@ -574,9 +556,7 @@ def check_stoichiometry_ratio(
     )
 
 
-# ---------------------------------------------------------------------------
 # 7b. Charge balance (formal oxidation states)
-# ---------------------------------------------------------------------------
 
 
 def check_charge_balance(
@@ -618,9 +598,7 @@ def check_charge_balance(
     )
 
 
-# ---------------------------------------------------------------------------
 # 8. Coordination number
-# ---------------------------------------------------------------------------
 
 
 def check_coordination_number(
@@ -678,9 +656,7 @@ def check_coordination_number(
     )
 
 
-# ---------------------------------------------------------------------------
 # 9. Layer count (z-coordinate clustering)
-# ---------------------------------------------------------------------------
 
 
 def check_layer_count(
@@ -751,9 +727,7 @@ def check_layer_count(
     )
 
 
-# ---------------------------------------------------------------------------
 # 10. Surface termination — check outermost layer element along an axis
-# ---------------------------------------------------------------------------
 
 
 def check_surface_termination(
@@ -837,9 +811,7 @@ def check_surface_termination(
     return True, msgs
 
 
-# ---------------------------------------------------------------------------
 # File-count check (no pymatgen needed)
-# ---------------------------------------------------------------------------
 
 
 def check_file_count(
@@ -870,9 +842,7 @@ def check_file_count(
     )
 
 
-# ---------------------------------------------------------------------------
 # 11. Structure-file parseability
-# ---------------------------------------------------------------------------
 
 
 def check_parsable(
@@ -899,9 +869,7 @@ def check_parsable(
     return True, f"parsed {len(parsed)} structure file(s): {parsed}"
 
 
-# ---------------------------------------------------------------------------
 # 12. Occupancy check for ordered CIF replicas
-# ---------------------------------------------------------------------------
 
 
 def check_all_occupancy_one(
@@ -954,9 +922,7 @@ def check_all_occupancy_one(
     )
 
 
-# ---------------------------------------------------------------------------
 # 13. Space group number
-# ---------------------------------------------------------------------------
 
 
 def check_space_group(
@@ -992,7 +958,9 @@ def check_space_group(
     except Exception as exc:
         return False, f"could not determine space group for {fpath.name}: {exc}"
 
-    allowed = expected_number if isinstance(expected_number, list) else [expected_number]
+    allowed = (
+        expected_number if isinstance(expected_number, list) else [expected_number]
+    )
     ok = actual_number in allowed
     expected_str = "/".join(f"#{n}" for n in allowed)
     return (

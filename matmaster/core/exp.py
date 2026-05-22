@@ -404,7 +404,8 @@ class Exp:
                 available_exps = list_model_visible_exps()
                 if self._exclude_subagents:
                     available_exps = [
-                        e for e in available_exps
+                        e
+                        for e in available_exps
                         if e.name not in self._exclude_subagents
                     ]
             agent_tool = AgentTool(
