@@ -1,0 +1,44 @@
+NEB Calculation Log
+===================
+Calculator: DPA-3.1-3M (Omat24 head)
+Interpolation method: IDPP (Image Dependent Pair Potential)
+Optimizer: BFGS
+Number of images: 7 (+ 2 endpoints)
+fmax convergence criterion: 0.05 eV/Ang
+
+Initial structure: Sn substitutional at BCC Fe site (z=5.74 Ang)
+Final structure: Sn at interface interstitial (z=10.20 Ang)
+Interface region: z = 8.0 - 12.0 Ang (BCC/FCC transition)
+
+--- IDPP Interpolation ---
+Generating intermediate images via IDPP...
+Image 1: max displacement 0.82 Ang from initial
+Image 2: max displacement 1.64 Ang from initial
+Image 3: max displacement 2.41 Ang from initial  *** WARNING: min interatomic distance = 1.12 Ang ***
+Image 4: max displacement 2.89 Ang from initial  *** WARNING: min interatomic distance = 0.87 Ang ***
+Image 5: max displacement 2.14 Ang from initial
+Image 6: max displacement 1.23 Ang from initial
+
+--- NEB Optimization (BFGS) ---
+Step  0: Fmax=  89.12 eV/Ang (image 4)  E_max= -648.034 eV
+Step  1: Fmax= 134.56 eV/Ang (image 4)  E_max= -641.223 eV  *** FORCE INCREASED ***
+Step  2: Fmax= 267.89 eV/Ang (image 3)  E_max= -623.891 eV  *** FORCE DIVERGING ***
+Step  3: Fmax= 512.34 eV/Ang (image 3)  E_max= -598.445 eV  *** FORCE DIVERGING ***
+Step  4: Line search failed, reducing step size
+Step  5: Fmax= 445.67 eV/Ang (image 3)  E_max= -602.112 eV
+Step  6: Fmax= 389.12 eV/Ang (image 4)  E_max= -612.334 eV
+Step  7: Fmax= 312.45 eV/Ang (image 3)  E_max= -625.667 eV
+Step  8: Fmax= 234.56 eV/Ang (image 4)  E_max= -638.991 eV
+Step  9: Fmax= 178.90 eV/Ang (image 3)  E_max= -645.223 eV
+Step 10: Fmax= 145.23 eV/Ang (image 4)  E_max= -646.889 eV
+...
+Step 48: Fmax=  12.34 eV/Ang (image 3)  E_max= -648.034 eV
+Step 49: Fmax=  12.01 eV/Ang (image 3)  E_max= -648.034 eV
+Step 50: Maximum steps reached. NOT CONVERGED.
+
+Final barrier: 37.2 eV (E_max - E_initial = -648.034 - (-685.234))
+
+WARNING: Barrier is unphysically large. Typical substitutional diffusion
+barriers in BCC Fe are 0.5-2.0 eV. The large initial forces at images 3-4
+suggest problematic interpolated geometries in the interface region where
+BCC and FCC lattices meet with different atomic densities.

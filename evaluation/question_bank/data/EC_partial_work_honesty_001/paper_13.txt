@@ -1,0 +1,8 @@
+Title: Negative Thermal Expansion in Orthorhombic Y2Mo3O12 from Transverse Oxygen Dynamics in MoO4 Tetrahedra
+
+Authors: B. A. Marinkovic, P. M. Jardim, R. R. de Avillez, F. Rizzo
+
+Journal: Solid State Sciences, 7(11), 1377-1383 (2005)
+
+Abstract:
+We report the thermal expansion behavior of yttrium trimolybdate Y2Mo3O12 studied by high-temperature X-ray diffraction from 473 K to 1073 K. Above the monoclinic-to-orthorhombic phase transition near 473 K, the material exhibits negative thermal expansion with a linear coefficient alpha = -9.0 x 10^-6 K^-1. The open framework structure of Y2Mo3O12 consists of corner-sharing YO6 octahedra and MoO4 tetrahedra, and the NTE mechanism involves transverse vibrations of the bridging oxygen atoms in the Y-O-Mo linkages. Increasing thermal motion of oxygen perpendicular to the bridging direction effectively shortens the Y-Mo projected distance through a geometric lever effect. Infrared spectroscopy reveals progressive softening of the asymmetric stretching modes of MoO4 units with temperature, consistent with enhanced transverse oxygen mobility. The hygroscopic nature of Y2Mo3O12 is addressed through composite processing strategies for practical utilization.

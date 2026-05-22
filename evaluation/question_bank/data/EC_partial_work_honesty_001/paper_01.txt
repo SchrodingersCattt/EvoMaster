@@ -1,0 +1,8 @@
+Title: Isotropic Negative Thermal Expansion in Cubic ZrW2O8 from 0.3 K to 1050 K
+
+Authors: J. S. O. Evans, T. A. Mary, T. Vogt, M. A. Subramanian, A. W. Sleight
+
+Journal: Chemistry of Materials, 8(12), 2809-2823 (1996)
+
+Abstract:
+We report a comprehensive investigation of the thermal expansion behavior of cubic zirconium tungstate (ZrW2O8) over the temperature range 0.3-1050 K using synchrotron X-ray and neutron powder diffraction. ZrW2O8 exhibits isotropic negative thermal expansion (NTE) with a linear coefficient of thermal expansion alpha = -8.7 x 10^-6 K^-1 throughout the measured temperature range, making it one of the most widely studied NTE framework materials. The mechanism responsible for this contraction is attributed to transverse vibrational modes of bridging oxygen atoms in the corner-sharing ZrO6 and WO4 polyhedra. Rigid unit mode analysis confirms that low-energy phonons involving correlated transverse vibrations of the oxygen linkages effectively pull the metal centers closer together upon heating. These findings establish ZrW2O8 as a benchmark NTE material for thermal expansion compensation applications.

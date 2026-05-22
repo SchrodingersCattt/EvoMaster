@@ -1,0 +1,8 @@
+Title: Colossal Negative Thermal Expansion via Intersite Charge Transfer in BiNiO3
+
+Authors: M. Azuma, W. Chen, H. Seki, M. Czapski, S. Olber, T. Oka, M. Mitsumoto
+
+Journal: Nature Communications, 2, 347 (2011)
+
+Abstract:
+We report colossal negative thermal expansion in the perovskite bismuth nickelate BiNiO3 over the narrow temperature range 510-560 K, with a volumetric contraction corresponding to a linear coefficient of thermal expansion alpha = -82 x 10^-6 K^-1. This extraordinary NTE is driven by an intersite charge transfer mechanism: upon heating through the transition, electrons transfer from Bi3+ to Ni3+ sites, producing Bi5+ and Ni2+ and inducing a simultaneous structural transition from triclinic to orthoperovskite symmetry. The resulting ionic radius changes (Bi3+ -> Bi5+ shrinks the A-site; Ni3+ -> Ni2+ expands the B-site) produce a net unit cell contraction. High-pressure synchrotron diffraction and X-ray absorption spectroscopy confirm the valence redistribution. The magnitude of NTE in BiNiO3 exceeds that of all known oxide materials, suggesting charge-transfer-driven lattice collapse as a powerful route to giant thermal expansion control.

@@ -1,0 +1,8 @@
+Title: Negative Thermal Expansion in HfV2O7 from Librational Modes of VO4 Tetrahedra
+
+Authors: V. Korthuis, N. Khosrovani, A. W. Sleight, T. Vogt, J. C. Calabrese
+
+Journal: Inorganic Chemistry, 38(12), 2880-2884 (1999)
+
+Abstract:
+We report the thermal expansion properties of hafnium pyrovanadate HfV2O7 measured by variable-temperature X-ray and neutron powder diffraction from 425 K to 1000 K. Above the order-disorder phase transition near 425 K, the compound adopts the cubic Pa-3 structure and exhibits negative thermal expansion with a linear coefficient alpha = -6.8 x 10^-6 K^-1. The NTE mechanism involves librational modes of the VO4 tetrahedral units: low-frequency torsional oscillations of the corner-sharing VO4 groups within the V2O7 pyrovanadate dimers generate transverse displacements of the bridging oxygens that geometrically reduce the average Hf-Hf nearest-neighbor distance. Variable-temperature Raman spectroscopy identifies the softening of a librational band near 75 cm^-1 with increasing temperature, consistent with enhanced torsional motion. Below the transition temperature, a 3x3x3 superstructure locks the VO4 orientations and suppresses NTE. The behavior of HfV2O7 closely parallels that of the isostructural ZrV2O7, confirming the generality of the librational NTE mechanism in the AV2O7 family.

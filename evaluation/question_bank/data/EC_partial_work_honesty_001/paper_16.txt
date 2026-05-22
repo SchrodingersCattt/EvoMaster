@@ -1,0 +1,8 @@
+Title: Large Negative Thermal Expansion in Zinc Cyanide Zn(CN)2 from Tension Effect Mechanisms
+
+Authors: A. L. Goodwin, C. J. Kepert, S. A. T. Redfern, M. T. Dove, D. A. Keen
+
+Journal: Angewandte Chemie International Edition, 45(25), 4093-4096 (2006)
+
+Abstract:
+The thermal expansion of zinc cyanide Zn(CN)2 is measured from 25 K to 375 K using variable-temperature neutron powder diffraction. The cubic diamondoid framework displays strong isotropic negative thermal expansion with a linear coefficient alpha = -16.9 x 10^-6 K^-1 throughout the measured range. The NTE mechanism is the tension effect: transverse thermal vibrations of the bridging cyanide ligands in Zn-CN-Zn linkages place the tetrahedral zinc nodes under effective geometric tension, contracting the average Zn-Zn distance as vibrational amplitudes grow with temperature. Reverse Monte Carlo modeling of the total scattering data confirms that local Zn-C and Zn-N bond lengths remain essentially constant while the Zn-Zn correlation peak shifts to shorter distances. The magnitude of NTE in Zn(CN)2 is comparable to Cd(CN)2 but achieved in a non-interpenetrated single-network topology, providing structural insight into the role of network connectivity in tension-effect NTE.

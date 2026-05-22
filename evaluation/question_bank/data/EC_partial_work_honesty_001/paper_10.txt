@@ -1,0 +1,8 @@
+Title: Colossal Positive and Negative Thermal Expansion in the Framework Material Ag3[Co(CN)6]
+
+Authors: A. L. Goodwin, M. Calleja, M. J. Conterio, M. T. Dove, J. S. O. Evans, D. A. Keen, L. Peters, M. G. Tucker
+
+Journal: Science, 319(5864), 794-797 (2008)
+
+Abstract:
+We report the discovery of colossal uniaxial thermal expansion in silver hexacyanocobaltate Ag3[Co(CN)6], measured by variable-temperature neutron diffraction from 16 K to 500 K. Along the trigonal c-axis, the material exhibits extreme negative thermal expansion with alpha_c = -130 x 10^-6 K^-1 (colossal NTE), while the a-axis shows equally extreme positive thermal expansion of +150 x 10^-6 K^-1. The mechanism derives from a wine-rack-like topology of the framework: argentophilic Ag-Ag interactions within the ab-plane layers couple to the Co-CN-Ag-NC-Co linkages such that in-plane expansion drives contraction along c through a geometric hinge effect. Density functional theory confirms the role of Ag d10-d10 interactions in softening the in-plane potential. The magnitude of anisotropic thermal expansion in Ag3[Co(CN)6] exceeds all previously known crystalline materials.

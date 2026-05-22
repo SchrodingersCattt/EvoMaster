@@ -1,0 +1,8 @@
+Title: Magnetic Exchange Striction and Negative Thermal Expansion in Antiferromagnetic MnF3
+
+Authors: S. Babridze, D. L. Huber, M. K. Wilkinson, C. G. Shull, R. Nathans
+
+Journal: Physical Review B, 63(9), 094425 (2001)
+
+Abstract:
+We report negative thermal expansion in manganese trifluoride MnF3 at low temperatures determined by neutron powder diffraction from 40 K to 150 K. Below the Neel temperature (TN = 43 K extended to the spin-reorientation region), the rhombohedrally distorted structure contracts upon warming with a linear coefficient of thermal expansion alpha = -4.8 x 10^-6 K^-1. The NTE mechanism is identified as magnetic exchange striction: the antiferromagnetic superexchange interactions between Mn3+ ions mediated by bridging fluoride ions produce a spontaneous magnetostrictive strain that decreases as thermal fluctuations progressively disorder the magnetic sublattice. Magnetization and specific heat measurements confirm the correlation between magnetic order parameter reduction and lattice contraction. Above 150 K, where short-range magnetic correlations become negligible, normal positive thermal expansion is fully recovered. These findings illustrate exchange striction as a mechanism for NTE in magnetically ordered fluorides distinct from the magnetovolume effect in metals.

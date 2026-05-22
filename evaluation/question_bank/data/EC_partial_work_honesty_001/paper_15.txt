@@ -1,0 +1,8 @@
+Title: Near-Zero Thermal Expansion via Magnetovolume Effect in Fe-Ni Invar Alloy Revisited
+
+Authors: M. van Schilfgaarde, I. A. Abrikosov, B. Johansson, O. E. Peil
+
+Journal: Physical Review B, 52(14), 10405-10413 (1995)
+
+Abstract:
+We present a reinvestigation of the thermal expansion anomaly in face-centered cubic Fe-35at%Ni Invar alloy using precision capacitance dilatometry from 273 K to 500 K combined with magnetization measurements. The linear coefficient of thermal expansion is determined as alpha = -0.5 x 10^-6 K^-1, representing near-zero but slightly negative expansion in the ferromagnetic regime below the Curie temperature. The NTE mechanism is the magnetovolume effect: the large spontaneous volume magnetostriction associated with the high-spin ferromagnetic state of Fe atoms on the fcc lattice compensates and slightly overcompensates the normal phonon-driven expansion. As temperature increases and the magnetic moment decreases, the equilibrium volume shrinks. Spin-polarized total energy calculations within the disordered local moment framework reproduce the 2-gamma state model and the observed anomalous expansion coefficient. These results confirm the purely electronic-magnetic origin of the Invar effect without invoking structural phase transitions.

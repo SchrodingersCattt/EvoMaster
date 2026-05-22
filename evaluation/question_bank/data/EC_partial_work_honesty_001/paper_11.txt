@@ -1,0 +1,8 @@
+Title: Low-Temperature Negative Thermal Expansion in Type-II Silicon Clathrate from Guest Atom Rattling
+
+Authors: F. Tournus, B. Masenelli, X. Blase, A. San-Miguel, P. Melinon, M. Treilleux
+
+Journal: Physical Review Letters, 93(4), 045502 (2004)
+
+Abstract:
+We report anomalous negative thermal expansion in type-II silicon clathrate (Si136 framework with encapsulated Na guest atoms) at low temperatures from 50 K to 150 K. Precision capacitance dilatometry and low-temperature X-ray diffraction yield a linear coefficient of thermal expansion alpha = -3.5 x 10^-6 K^-1 in this temperature window. The NTE mechanism is attributed to guest rattling modes: the loosely bound Na atoms confined within the oversized Si28 and Si20 cages undergo large-amplitude anharmonic vibrations that couple to the host framework phonons. These guest-host interactions effectively stiffen certain framework modes while promoting cage-contracting distortions. Inelastic neutron scattering identifies a localized Einstein-like mode near 6 meV consistent with Na rattling. Above 150 K, normal positive expansion resumes as higher-energy framework modes dominate. This work demonstrates guest-driven NTE as a distinct mechanism in clathrate thermoelectrics.

@@ -1,0 +1,8 @@
+Title: Moderate Negative Thermal Expansion in Ta2Mo2O11 from Framework Rocking Motions
+
+Authors: C. Baiz, P. Baxter, M. A. Rodriguez, J. Lind, T. M. Nenoff
+
+Journal: Journal of Solid State Chemistry, 228, 156-163 (2015)
+
+Abstract:
+We characterize the thermal expansion of tantalum molybdate Ta2Mo2O11 using variable-temperature synchrotron X-ray diffraction from 300 K to 1000 K. This mixed-metal oxide adopts a monoclinic framework structure built from corner- and edge-sharing TaO6 octahedra linked by MoO4 tetrahedra, and exhibits bulk negative thermal expansion with a linear coefficient alpha = -3.2 x 10^-6 K^-1 over the entire measured range. The NTE mechanism involves cooperative framework rocking motions in which rigid polyhedral building units undergo correlated oscillatory tilting about their shared oxygen hinges. Variable-temperature Raman spectroscopy reveals anomalous softening of lattice modes below 100 cm^-1 attributable to these low-energy rocking vibrations. Thermal gravimetric analysis confirms phase stability to at least 1050 K with no decomposition or phase transitions. Ta2Mo2O11 demonstrates that moderate NTE can be sustained in dense oxide frameworks without the moisture sensitivity problems common to the A2M3O12 family.
