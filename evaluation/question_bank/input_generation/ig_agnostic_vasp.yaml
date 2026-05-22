@@ -2308,38 +2308,38 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Generate VASP INCAR for NiO — agent must identify strong correlation and apply DFT+U with reasonable U value.
-  human_prompt_seed: '工作区中有 NiO.vasp（氧化镍 POSCAR）。请生成静态计算 INCAR 文件 `INCAR_dftu`。PBE 泛函，ENCUT=550 eV。'
+  human_prompt_seed: '工作区中有 NiO.vasp（氧化镍 POSCAR）。请生成静态计算 INCAR 文件 `INCAR`。PBE 泛函，ENCUT=550 eV。'
   tags:
   - eng_vasp
   data_files: []
   reference_answers:
-  - key: incar_dftu_artifact
-    value: INCAR_dftu
+  - key: incar_artifact
+    value: INCAR
   - key: must_ldau
     value:
-      filename: INCAR_dftu
+      filename: INCAR
       tokens:
       - LDAU = .TRUE.
       flags: i
   - key: must_ldautype
     value:
-      filename: INCAR_dftu
+      filename: INCAR
       tokens:
       - LDAUTYPE = 2
       flags: i
   - key: must_ldaul
     value:
-      filename: INCAR_dftu
+      filename: INCAR
       pattern: LDAUL\s*=\s*2\s+(-1|0)
       flags: i
   - key: must_ldauu
     value:
-      filename: INCAR_dftu
+      filename: INCAR
       pattern: LDAUU\s*=\s*\d+\.?\d*\s+0
       flags: i
   - key: ldauu_range
     value:
-      filename: INCAR_dftu
+      filename: INCAR
       checks:
       - key: LDAUU
         component: 1
@@ -2356,12 +2356,12 @@ questions:
       max: 10000
   - key: must_ispin
     value:
-      filename: INCAR_dftu
+      filename: INCAR
       pattern: ISPIN\s*=\s*2
       flags: i
   scoring_checklist:
-  - id: incar_dftu_artifact
-    criterion: INCAR_dftu file exists in workspace.
+  - id: incar_artifact
+    criterion: INCAR file exists in workspace.
     axis: correctness
     verify: artifact_exists
   - id: must_ldau
@@ -2385,7 +2385,7 @@ questions:
     axis: correctness
     verify: text_file_numeric_range
   - id: must_ispin
-    criterion: INCAR_dftu sets ISPIN = 2 (required for antiferromagnetic NiO).
+    criterion: INCAR sets ISPIN = 2 (required for antiferromagnetic NiO).
     axis: correctness
     verify: text_file_regex
   - id: no_retries

@@ -76,8 +76,11 @@ Running the VASP binary locally is not allowed (commercial license).
 
 - **Hybrid DFT (HSE06)**: `LHFCALC = .TRUE.`, `HFSCREEN = 0.2`,
   `ALGO = Damped` or `All`, `TIME = 0.4`.
-- **DFT+U**: `LDAU = .TRUE.`, `LDAUTYPE = 2` (Dudarev), `LDAUL`/`LDAUU`/
-  `LDAUJ` arrays matching species order in POSCAR.
+- **DFT+U**: Required for strongly correlated systems (e.g., NiO, FeO, MnO,
+  CoO, transition-metal oxides with localized d/f electrons). Set
+  `LDAU = .TRUE.`, `LDAUTYPE = 2` (Dudarev), `LDAUL`/`LDAUU`/`LDAUJ` arrays
+  matching species order in POSCAR. U values are material-specific — look up
+  published values for the target material before assigning.
 - **Meta-GGA (SCAN/R2SCAN)**: `LASPH = .TRUE.` required.
 - **Elastic tensor**: `IBRION = 6`, `ISIF = 3`, `NFREE = 2`.
 - **Dispersion**: layered/MOF/organic/surface systems → `IVDW = 11` or `12`.
