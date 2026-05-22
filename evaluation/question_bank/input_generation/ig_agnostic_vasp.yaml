@@ -2304,15 +2304,11 @@ questions:
     axis: efficiency
     verify: token_budget
     criterion: Total token usage stays within benchmark ceiling.
-- id: IG_vasp_dftu_001_20260508
+- id: IG_vasp_dftu_001_20260522
   capability: input_generation
   domain: agnostic
-  intent: Generate VASP INCAR for NiO with DFT+U (Dudarev) settings.
-  human_prompt_seed: '工作区中有 NiO.vasp（NaCl结构氧化镍，4个原子：2 Ni + 2 O，POSCAR 中原子顺序为 Ni O）。
-
-    NiO 是强关联反铁磁绝缘体，Ni 3d 电子存在强 on-site Coulomb 相互作用。 请生成考虑强关联效应的静态计算 INCAR 文件 `INCAR_dftu`。
-
-    要求使用 Hubbard U 校正，Ni 的有效 U 值取 6.2 eV。 PBE 泛函，ENCUT=550 eV。'
+  intent: Generate VASP INCAR for NiO — agent must identify strong correlation and apply DFT+U with reasonable U value.
+  human_prompt_seed: '工作区中有 NiO.vasp（氧化镍 POSCAR）。请生成静态计算 INCAR 文件 `INCAR_dftu`。PBE 泛函，ENCUT=550 eV。'
   tags:
   - eng_vasp
   data_files: []
@@ -2324,14 +2320,12 @@ questions:
       filename: INCAR_dftu
       tokens:
       - LDAU = .TRUE.
-      - LDAU=.TRUE.
       flags: i
   - key: must_ldautype
     value:
       filename: INCAR_dftu
       tokens:
       - LDAUTYPE = 2
-      - LDAUTYPE=2
       flags: i
   - key: must_ldaul
     value:
@@ -2341,8 +2335,16 @@ questions:
   - key: must_ldauu
     value:
       filename: INCAR_dftu
-      pattern: LDAUU\s*=\s*6\.2\s+0
+      pattern: LDAUU\s*=\s*\d+\.?\d*\s+0
       flags: i
+  - key: ldauu_range
+    value:
+      filename: INCAR_dftu
+      checks:
+      - key: LDAUU
+        component: 1
+        min: 4.0
+        max: 8.0
   - key: turn_budget
     value:
       max: 12
@@ -2375,17 +2377,17 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: must_ldauu
-    criterion: LDAUU array sets 6.2 for Ni and 0 for O, matching POSCAR species order.
+    criterion: LDAUU array sets a nonzero U for Ni and 0 for O, matching POSCAR species order.
     axis: correctness
     verify: text_file_regex
+  - id: ldauu_range
+    criterion: LDAUU value for Ni is within literature range (4.0–8.0 eV).
+    axis: correctness
+    verify: text_file_numeric_range
   - id: must_ispin
     criterion: INCAR_dftu sets ISPIN = 2 (required for antiferromagnetic NiO).
     axis: correctness
     verify: text_file_regex
-  - id: grounding_dftu
-    criterion: Agent explains the physical basis for U value choice and why Dudarev (not Liechtenstein) method is appropriate.
-    axis: grounding
-    verify: llm_binary_judge
   - id: no_retries
     axis: efficiency
     verify: no_retries
