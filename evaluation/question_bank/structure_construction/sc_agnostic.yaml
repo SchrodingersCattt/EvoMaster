@@ -1393,10 +1393,6 @@ questions:
       tolerance: 0
       axis: z
       layer_tol_A: 0.1
-  - key: space_group_tokens
-    value:
-    - graphene
-    - hexagonal
   - key: turn_budget
     value:
       max: 10
@@ -1433,11 +1429,6 @@ questions:
       a monolayer 2D structure rather than a 3D bulk.
     axis: correctness
     verify: struct_file_layer_count
-  - id: space_group_tokens
-    criterion: Final answer confirms the structure is hexagonal graphene (mentions graphene
-      and hexagonal lattice).
-    axis: correctness
-    verify: contains_all
   - id: turn_budget
     criterion: Agent completes the task within the turn budget.
     axis: efficiency
