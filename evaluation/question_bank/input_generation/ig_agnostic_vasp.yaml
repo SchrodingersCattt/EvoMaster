@@ -2433,17 +2433,15 @@ questions:
   - key: must_metagga
     value:
       filename: INCAR_r2scan
-      tokens:
-      - METAGGA = R2SCAN
-      - METAGGA=R2SCAN
-      flags: i
+      check: param_value
+      param: METAGGA
+      expected: R2SCAN
   - key: must_lasph
     value:
       filename: INCAR_r2scan
-      tokens:
-      - LASPH = .TRUE.
-      - LASPH=.TRUE.
-      flags: i
+      check: param_value
+      param: LASPH
+      expected: .TRUE.
   - key: must_isif3
     value:
       filename: INCAR_r2scan
@@ -2471,11 +2469,11 @@ questions:
   - id: must_metagga
     criterion: METAGGA = R2SCAN is set for r2SCAN functional.
     axis: correctness
-    verify: text_file_contains_all
+    verify: vasp_incar_check
   - id: must_lasph
     criterion: LASPH = .TRUE. is set (required for meta-GGA calculations).
     axis: correctness
-    verify: text_file_contains_all
+    verify: vasp_incar_check
   - id: must_isif3
     criterion: ISIF = 3 for full cell+ion relaxation.
     axis: correctness
