@@ -396,3 +396,22 @@ cases:
       - "帮我做 Si 的 DFT 能带计算"                    # → vasp
       - "给这个晶胞掺杂 5% Mg"                         # → atomic-structure
       - "训练一个 MLIP 势函数"                         # → mlips
+
+  - skill: mcp-mat-nmr
+    positive:
+      - "我有一组 1H 和 13C 化学位移数据，帮我推断分子结构"
+      - "这个分子的 NMR 化学位移预测一下"
+      - "给定 SMILES，预测一下它的碳谱和氢谱"
+      - "我测了一个未知化合物的 NMR 谱，氢谱位移是 1.2, 3.4, 7.2 ppm，推一下可能的结构"
+      - "帮我从 NMR 数据库里查一下这组化学位移对应什么分子"
+      - "反向预测：已知 13C 位移为 20.1, 128.3, 130.5, 170.2 ppm，推断结构"
+      - "预测一下对乙酰氨基酚的 1H NMR 化学位移"
+      - "这个 NMR 谱图数据跟哪个候选分子最匹配"
+      - "我有一个分子式 C10H12O2，加上 NMR 数据，帮我判断结构"
+      - "Predict the 13C NMR chemical shifts for caffeine"
+    negative:
+      - "帮我用 ORCA 算 IR 光谱"                        # → orca
+      - "画一下这个分子的结构图"                        # → build-atomic-structure
+      - "搜索一篇关于 NMR 技术的文献"                  # → paper search, not NMR tool
+      - "帮我用 Gaussian 优化这个分子"                  # → other QC software
+      - "分析这个质谱数据"                              # → data-analysis

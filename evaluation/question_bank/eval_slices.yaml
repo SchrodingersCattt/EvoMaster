@@ -115,6 +115,12 @@ slices:
       - "@eng_gromacs"
     count: 1
 
+  - target: "Skill: orca"
+    type: skill
+    slices:
+      - "@eng_orca"
+    count: 2
+
   # ── Tools ───────────────────────────────────────────────────────────
 
   - target: "Tool: mcp-mat-struct-db"
