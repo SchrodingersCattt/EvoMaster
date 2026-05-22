@@ -2,101 +2,13 @@ version: v5
 capability: input_generation
 domain: agnostic
 questions:
-- id: PWO_vasp_submit_002_20260522
-  capability: workflow_orchestration
-  domain: agnostic
-  intent: Test VASP input preparation + Bohrium submission config generation.
-  human_prompt_seed: '工作区中提供了 Si 金刚石结构 `POSCAR_Si` 和对应的 `POTCAR_Si`。
-
-    请准备 VASP 自洽场计算输入，放入 `si_scf/` 目录（含 POTCAR），并输出提交配置 `submit.json`。'
-  tags:
-  - eng_vasp
-  data_files:
-  - key: poscar_si
-    path: data/PIG_vasp_001_20260513/POSCAR_Si
-    oss_url: ''
-    description: Si diamond POSCAR (2 atoms, conventional).
-  - key: potcar_si
-    path: data/PIG_vasp_001_20260513/POTCAR_Si
-    oss_url: ''
-    description: PAW_PBE Si POTCAR.
-  reference_answers:
-  - key: incar_artifact
-    value: si_scf/INCAR
-  - key: kpoints_artifact
-    value: si_scf/KPOINTS
-  - key: potcar_artifact
-    value: si_scf/POTCAR
-  - key: submit_artifact
-    value: submit.json
-  - key: must_submit_image
-    value:
-      filename: submit.json
-      pattern: vasp
-      flags: i
-  - key: must_submit_cmd
-    value:
-      filename: submit.json
-      pattern: vasp_std
-      flags: i
-  - key: must_submit_input_dir
-    value:
-      filename: submit.json
-      pattern: si_scf
-      flags: ''
-  - key: must_incar_basic
-    value:
-      filename: si_scf/INCAR
-      tokens:
-      - ENCUT
-      - ISMEAR
-      flags: i
-  - key: turn_budget
-    value:
-      max: 15
-  scoring_checklist:
-  - id: incar_artifact
-    criterion: si_scf/INCAR written to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: kpoints_artifact
-    criterion: si_scf/KPOINTS written to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: potcar_artifact
-    criterion: si_scf/POTCAR exists (copied from provided POTCAR_Si).
-    axis: correctness
-    verify: artifact_exists
-  - id: submit_artifact
-    criterion: submit.json written to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: must_submit_image
-    criterion: '[Platform] submit.json references a VASP image.'
-    axis: correctness
-    verify: text_file_regex
-  - id: must_submit_cmd
-    criterion: '[Platform] submit.json cmd uses vasp_std.'
-    axis: correctness
-    verify: text_file_regex
-  - id: must_submit_input_dir
-    criterion: '[Platform] submit.json input_dir points to si_scf.'
-    axis: correctness
-    verify: text_file_regex
-  - id: must_incar_basic
-    criterion: '[Must] INCAR contains ENCUT and ISMEAR.'
-    axis: correctness
-    verify: text_file_contains_all
-  - id: turn_budget
-    criterion: Agent completes within turn budget.
-    axis: efficiency
-    verify: turn_budget
 - id: PIG_abacus_convert_001_20260513
   capability: input_generation
   domain: agnostic
   intent: Test CIF to STRU conversion with correct LATTICE_CONSTANT, element ordering,
     and PP/orbital filename resolution for Bohrium runtime.
-  human_prompt_seed: '工作区中有一个 Pd(111) slab 的 CIF 文件 `Pd111_slab.cif`（16 个 Pd 原子，4 层）。
+  human_prompt_seed: '工作区中有一个 Pd(111) slab 的 CIF 文件 `Pd111_slab.cif`（16 个 Pd 原子，4
+    层）。
 
     请将其转换为 ABACUS LCAO 格式并准备好 SCF 计算输入，我要直接提交跑。'
   tags:
@@ -184,7 +96,8 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: must_pd_pp
-    criterion: '[Must] STRU Pd species has valid .upf pseudopotential filename matching Bohrium runtime.'
+    criterion: '[Must] STRU Pd species has valid .upf pseudopotential filename matching
+      Bohrium runtime.'
     axis: correctness
     verify: text_file_regex
   - id: must_pd_orb

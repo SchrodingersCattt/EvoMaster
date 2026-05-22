@@ -7,9 +7,9 @@ questions:
   domain: agnostic
   intent: Set up a real DP model fine-tuning workflow given training data and a base
     model, producing training config and submission artifacts.
-  human_prompt_seed: '工作区中有 NaCl 体系的 DFT 训练数据 `train_data/`（dpdata 格式，含
-    energy/force/virial），基础模型为 `DPA2-base.pt`。请对该模型进行 fine-tune 以获得
-    NaCl 专用势函数。输出训练配置文件 `finetune_input.json` 和提交配置 `finetune_submit.json`。'
+  human_prompt_seed: 工作区中有 NaCl 体系的 DFT 训练数据 `train_data/`（dpdata 格式，含 energy/force/virial），基础模型为
+    `DPA2-base.pt`。请对该模型进行 fine-tune 以获得 NaCl 专用势函数。输出训练配置文件 `finetune_input.json`
+    和提交配置 `finetune_submit.json`。
   tags:
   - code_mlip
   data_files:
@@ -81,8 +81,8 @@ questions:
   domain: agnostic
   intent: Test whether agent knows MACE-MP-0 can be used directly by name via mlips
     skill without manually downloading the model file.
-  human_prompt_seed: '请使用 MACE-MP-0 势函数对工作区中的 `nacl_bulk.cif`（NaCl 岩盐结构，64
-    原子超胞）进行结构优化，输出提交配置 `opt_submit.json`。'
+  human_prompt_seed: 请使用 MACE-MP-0 势函数对工作区中的 `nacl_bulk.cif`（NaCl 岩盐结构，64 原子超胞）进行结构优化，输出提交配置
+    `opt_submit.json`。
   tags:
   - code_mlip
   data_files:
@@ -131,8 +131,8 @@ questions:
     verify: text_file_regex
   - id: no_download_attempt
     criterion: Agent did NOT attempt to manually download the MACE model file from
-      GitHub or other URLs. It should know that MACE-MP-0 is a known model name
-      supported directly by the mlips skill scripts.
+      GitHub or other URLs. It should know that MACE-MP-0 is a known model name supported
+      directly by the mlips skill scripts.
     axis: efficiency
     verify: llm_binary_judge
   - id: turn_budget
@@ -144,8 +144,8 @@ questions:
   domain: agnostic
   intent: Validate whether the agent can prepare ABACUS INPUT and Bohrium submit JSON
     for an Al2O3 Bader workflow without running calculations.
-  human_prompt_seed: "对 Al₂O₃ 准备 ABACUS Bader 电荷分析所需文件和 Bohrium 提交配置（文件名\
-    \ `al2o3_bader_submit.json`）。本题只检验输入文件与提交 JSON，不要投递或执行计算。"
+  human_prompt_seed: 对 Al₂O₃ 准备 ABACUS Bader 电荷分析所需文件和 Bohrium 提交配置（文件名 `al2o3_bader_submit.json`）。本题只检验输入文件与提交
+    JSON，不要投递或执行计算。
   tags:
   - eng_abacus
   data_files: []
@@ -197,8 +197,8 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: must_input_core
-    criterion: '[Must] INPUT contains ABACUS Bader prerequisite keys (`calculation scf`,
-      `out_chg 1`).'
+    criterion: '[Must] INPUT contains ABACUS Bader prerequisite keys (`calculation
+      scf`, `out_chg 1`).'
     axis: correctness
     verify: llm_binary_judge
   - id: submit_json_artifact
@@ -297,7 +297,7 @@ questions:
   intent: Test whether agent can correctly submit a VASP calculation to Bohrium on
     first try, using the correct image startup command (Intel MPI env sourcing) without
     trial-and-error probing.
-  human_prompt_seed: '帮我用 VASP 计算一个 O₂ 分子的平衡键长和结合能，用 PBE 泛函。'
+  human_prompt_seed: 帮我用 VASP 计算一个 O₂ 分子的平衡键长和结合能，用 PBE 泛函。
   tags:
   - eng_vasp
   data_files:
@@ -330,7 +330,7 @@ questions:
   - key: must_boxed_molecule
     value:
       filename: '**/POSCAR'
-      pattern: '1[0-9]\.|2[0-9]\.'
+      pattern: 1[0-9]\.|2[0-9]\.
       flags: ''
   - key: turn_budget
     value:
@@ -366,6 +366,95 @@ questions:
       eV for PBE, vs experimental 5.12 eV). Sign and magnitude must be reasonable.
     axis: correctness
     verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: PWO_vasp_submit_002_20260522
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Test VASP input preparation + Bohrium submission config generation.
+  human_prompt_seed: '工作区中提供了 Si 金刚石结构 `POSCAR_Si` 和对应的 `POTCAR_Si`。
+
+    请准备 VASP 自洽场计算输入，放入 `si_scf/` 目录（含 POTCAR），并输出提交配置 `submit.json`。'
+  tags:
+  - eng_vasp
+  data_files:
+  - key: poscar_si
+    path: data/PIG_vasp_001_20260513/POSCAR_Si
+    oss_url: ''
+    description: Si diamond POSCAR (2 atoms, conventional).
+  - key: potcar_si
+    path: data/PIG_vasp_001_20260513/POTCAR_Si
+    oss_url: ''
+    description: PAW_PBE Si POTCAR.
+  reference_answers:
+  - key: incar_artifact
+    value: si_scf/INCAR
+  - key: kpoints_artifact
+    value: si_scf/KPOINTS
+  - key: potcar_artifact
+    value: si_scf/POTCAR
+  - key: submit_artifact
+    value: submit.json
+  - key: must_submit_image
+    value:
+      filename: submit.json
+      pattern: vasp
+      flags: i
+  - key: must_submit_cmd
+    value:
+      filename: submit.json
+      pattern: vasp_std
+      flags: i
+  - key: must_submit_input_dir
+    value:
+      filename: submit.json
+      pattern: si_scf
+      flags: ''
+  - key: must_incar_basic
+    value:
+      filename: si_scf/INCAR
+      tokens:
+      - ENCUT
+      - ISMEAR
+      flags: i
+  - key: turn_budget
+    value:
+      max: 15
+  scoring_checklist:
+  - id: incar_artifact
+    criterion: si_scf/INCAR written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: kpoints_artifact
+    criterion: si_scf/KPOINTS written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: potcar_artifact
+    criterion: si_scf/POTCAR exists (copied from provided POTCAR_Si).
+    axis: correctness
+    verify: artifact_exists
+  - id: submit_artifact
+    criterion: submit.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_submit_image
+    criterion: '[Platform] submit.json references a VASP image.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_submit_cmd
+    criterion: '[Platform] submit.json cmd uses vasp_std.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_submit_input_dir
+    criterion: '[Platform] submit.json input_dir points to si_scf.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_incar_basic
+    criterion: '[Must] INCAR contains ENCUT and ISMEAR.'
+    axis: correctness
+    verify: text_file_contains_all
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency

@@ -161,11 +161,11 @@ banks:
 - path: platform/ig_agnostic.yaml
   capability: input_generation
   domain: agnostic
-  questions: 4
+  questions: 3
 - path: platform/wo_agnostic.yaml
   capability: workflow_orchestration
   domain: agnostic
-  questions: 5
+  questions: 6
 - path: platform/wo_catalysis.yaml
   capability: workflow_orchestration
   domain: catalysis
@@ -177,7 +177,7 @@ banks:
 - path: platform/ec_agnostic.yaml
   capability: execution_contract
   domain: agnostic
-  questions: 2
+  questions: 4
 - path: input_generation/ig_semiconductor_abacus.yaml
   capability: input_generation
   domain: semiconductor
