@@ -13,10 +13,11 @@ Running the VASP binary locally is not allowed (commercial license).
 
 - **FORBIDDEN**: VASP literature search, plotting precomputed band/DOS arrays, POTCAR generation.
   Action: STOP. Tell user "This task is outside the VASP skill scope." Wait.
-- **STOP if task asks to generate only INCAR** and the user did not explicitly
-  say "only INCAR": always produce **INCAR + KPOINTS + POSCAR** together.
-  POTCAR is license-restricted — note recommended pseudopotentials but never
-  generate the file.
+- **Default output set**: When a task says "generate input files" or "prepare
+  inputs" without specifying which files, produce **INCAR + KPOINTS + POSCAR**.
+  If the task explicitly asks for a single file (e.g., "generate an INCAR"),
+  produce only that file. POTCAR is license-restricted — note recommended
+  pseudopotentials but never generate it.
 
 ## Scripts
 
@@ -41,6 +42,7 @@ Running the VASP binary locally is not allowed (commercial license).
   to get max ENMAX, then set ENCUT ≥ 1.3× that value. Typical: 400–520 eV.
 - **Band structure / DOS requires two-step**: SCF (uniform k-mesh) → NSCF with
   `ICHARG = 11` (band) or `ICHARG = 11` + dense mesh (DOS).
+- **Static / NSCF calculations**: `IBRION = -1` (or omit), `NSW = 0`.
 - **Projected band / PDOS / magnetic-moment analysis**: set `LORBIT = 11`
   unless the task explicitly requests another projection mode.
 
@@ -60,7 +62,7 @@ Running the VASP binary locally is not allowed (commercial license).
 | Condition | Action |
 |-----------|--------|
 | System contains Z ≥ 57 elements (lanthanides, actinides, 5d/6p: Hf, Ta, W, Re, Os, Ir, Pt, Au, Hg, Tl, Pb, Bi, Lu, etc.) AND task is band/DOS | Enable SOC: `LSORBIT = .TRUE.`, `ISPIN = 2`, `ISYM = 0`. Use `vasp_ncl`. |
-| System contains Z ≥ 57 elements AND task is relaxation/SCF | Mention SOC relevance to user; enable if requested or if band topology matters |
+| System contains Z ≥ 57 elements AND task is relaxation/SCF | Use AskQuestion: "体系含重元素，是否需要开启自旋-轨道耦合(SOC)？" Enable if user confirms. |
 | No heavy elements (Z < 57) | SOC not needed |
 
 - `LMAXMIX = 4` for d-electron systems; `LMAXMIX = 6` for f-electron systems.
