@@ -49,10 +49,9 @@ from evaluation.validators.text_file import (
 )
 from evaluation.validators.vasp_incar import check_vasp_incar
 
-from .evaluator_builders import (
-    build_llm_context,  # noqa: F401
-    build_safety_eval_record,
-)
+from .evaluator_builders import build_llm_context, build_safety_eval_record
+
+__all__ = ["build_llm_context", "build_safety_eval_record"]
 from .evidence import EvidenceBundle, TokenUsage
 from .schemas import ReferenceAnswer, TokenUsageRecord
 
