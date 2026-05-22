@@ -22,8 +22,17 @@ ionic, and covalent crystals. If inspection shows a molecular crystal, route to
    - `random`: reproducible random indices with a fixed seed.
    - `ordered`: choose symmetry-related sites or ordered sublattices.
    - `wyckoff`: choose sites from explicit Wyckoff labels.
-6. If valence changes, require explicit oxidation states or a charge
-   compensation strategy.
+6. If dopant valence differs from host, apply charge compensation **before**
+   writing the output:
+
+   | Substitution | Compensation | Example |
+   |-------------|--------------|---------|
+   | Higher-valence cation (e.g. Al³⁺→Mg²⁺) | Remove cation(s): 1 vacancy per 2 extra charges | 2 Al³⁺ in MgO → remove 1 Mg²⁺ |
+   | Lower-valence cation (e.g. Li⁺→Mg²⁺) | Remove anion(s) or add interstitial | 2 Li⁺ in MgO → remove 1 O²⁻ |
+   | Same valence (e.g. Ni²⁺→Mg²⁺) | None needed | Direct substitution |
+
+   If the user does not specify a strategy, default to cation/anion vacancy.
+   Never output an aliovalent-doped structure without neutralizing the charge.
 
 ## Local API
 
@@ -48,12 +57,33 @@ structure.apply_strain([[0.02, 0, 0], [0, 0, 0], [0, 0, 0]])
 structure.to(filename="strained.cif")
 ```
 
-Doping and defects can be written inline with `pymatgen` site selection for
-simple cases. For charge compensation, ordered Wyckoff targeting, or multiple
-doping rules, drive selection with `pymatgen.analysis.structure_analyzer.
-SpacegroupAnalyzer` plus explicit Wyckoff filtering, then write the doped
-structure with `Structure.replace_species` / `Structure.remove_sites`. Run the
-full doping/defect acceptance checklist below before reporting success.
+Aliovalent doping with vacancy compensation (e.g. Al³⁺ in MgO):
+
+```python
+from pymatgen.core import Structure
+import numpy as np
+
+struct = Structure.from_file("supercell.cif")
+# 1. Substitute: replace 2 Mg with Al
+mg_indices = [i for i, s in enumerate(struct) if s.species_string == "Mg"]
+rng = np.random.default_rng(seed=42)
+sub_indices = rng.choice(mg_indices, size=2, replace=False).tolist()
+for idx in sub_indices:
+    struct[idx] = "Al"
+# 2. Charge compensation: remove 1 Mg vacancy (2×Al³⁺ - 2×Mg²⁺ = +2 → need -2 → remove 1 Mg²⁺)
+remaining_mg = [i for i, s in enumerate(struct) if s.species_string == "Mg"]
+vac_idx = rng.choice(remaining_mg, size=1).tolist()
+struct.remove_sites(vac_idx)
+# 3. Verify neutrality
+charge = sum({"Mg": 2, "Al": 3, "O": -2}[s.species_string] for s in struct)
+assert charge == 0, f"Charge imbalance: {charge}"
+struct.to(filename="doped.cif")
+```
+
+For simple same-valence doping or defects, inline `pymatgen` site selection is
+sufficient. For ordered Wyckoff targeting or multiple doping rules, use
+`SpacegroupAnalyzer` plus explicit Wyckoff filtering. Run the full
+doping/defect acceptance checklist below before reporting success.
 
 ## Hard Guards
 
