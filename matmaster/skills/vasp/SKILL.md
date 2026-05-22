@@ -57,6 +57,11 @@ Running the VASP binary locally is not allowed (commercial license).
 
 - **Spin-polarized**: `ISPIN = 2`; set `MAGMOM` per atom. Use the element's
   formal oxidation state to estimate initial moments (e.g., Fe³⁺ high-spin → 5).
+- **NUPDOWN / MAGMOM for multi-site or mixed-valence systems**: Do not assume
+  spin states — the same element can be high-spin or low-spin depending on
+  coordination environment (e.g., octahedral strong-field ligands force
+  low-spin). Look up the material's established magnetic ground state before
+  assigning values.
 - **SOC decision table**:
 
 | Condition | Action |
