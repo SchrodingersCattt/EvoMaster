@@ -7141,9 +7141,9 @@ questions:
   intent: Generate ABACUS INPUT for cell-relax of a large magnetic iron phosphate
     (NFPP) with DFT+U. Agent must choose conservative SCF mixing parameters suitable
     for a 48-atom magnetic system rather than defaults that cause charge sloshing.
-  human_prompt_seed: '工作区中有 NFPP (Na₄Fe₃(PO₄)₂P₂O₇) 的 STRU 文件 `STRU_NFPP`（48
-    原子，Fe 磁性）。请准备 ABACUS LCAO cell-relax 计算输入，使用 DFT+U（Fe 3d, U=3.5
-    eV），在 `nfpp_relax/` 目录下生成 INPUT 和 KPT（只写文件，不运行）。'
+  human_prompt_seed: '工作区中有 NFPP (Na₄Fe₃(PO₄)₂P₂O₇) 的 STRU 文件 `STRU_NFPP`。请准备
+    ABACUS LCAO cell-relax 计算输入，使用 DFT+U（Fe 3d, U=3.5 eV），在 `nfpp_relax/`
+    目录下生成 INPUT 和 KPT（只写文件，不运行）。'
   tags:
   - eng_abacus
   data_files:
