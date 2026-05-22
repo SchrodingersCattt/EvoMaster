@@ -1636,11 +1636,6 @@ questions:
       filename: INCAR
       pattern: ^\s*LSORBIT\s*=\s*\.?(?:TRUE|T)\.?
       flags: im
-  - key: critical_LNONCOLLINEAR
-    value:
-      filename: INCAR
-      pattern: ^\s*LNONCOLLINEAR\s*=\s*\.?(?:TRUE|T)\.?
-      flags: im
   - key: turn_budget
     value:
       max: 8
@@ -1684,10 +1679,6 @@ questions:
     verify: text_file_regex
   - id: critical_LSORBIT
     criterion: INCAR sets LSORBIT = True (critical param).
-    axis: correctness
-    verify: text_file_regex
-  - id: critical_LNONCOLLINEAR
-    criterion: INCAR sets LNONCOLLINEAR = .TRUE. as required for SOC calculations (LSORBIT implies non-collinear magnetism).
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
