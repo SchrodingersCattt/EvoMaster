@@ -37,10 +37,21 @@ For each session, read through intermediate tool call arguments and results. Ass
 - Wrong tool/approach → pivoted: **actionable**
 - Wrong result → noticed and fixed: **actionable**
 
+**Job submission failures deserve special scrutiny.** When a Bohrium/computation job fails, classify root cause:
+
+| Root cause | Actionable? | Example |
+|-----------|-------------|---------|
+| Agent's wrong parameters in script/input | **YES** | mixing_beta too high → SCF diverge; wrong PP filename; IDPP at interface |
+| Agent's wrong image/command/path | Maybe | Image typo (environment-specific, hard to test stably) |
+| Agent didn't validate before submit | **YES** | Skipped `ls pp_library/` → wrong filenames; skipped geometry check → OOM |
+| Pure infra (storePath, quota, network) | No | Agent had no way to avoid |
+
+The key question: **could the agent have avoided this failure with domain knowledge or a simple check?** If yes → actionable.
+
 Only exclude from eval consideration:
 - Pure infrastructure failures where agent had no choice (storePath, auth, network)
 - Tool API limitations agent cannot work around
-- Runtime-dependent issues that cannot be stably reproduced
+- Runtime-dependent issues that cannot be stably reproduced (e.g., image name changes, version-specific API behavior)
 
 **Skill docs do not guarantee compliance.** Every critical decision point in skills should have a corresponding eval question.
 
