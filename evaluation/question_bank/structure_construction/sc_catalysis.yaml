@@ -299,7 +299,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: SC_zn_slab_001_20260513
+- id: SC_zn_slab_001_20260522
   capability: structure_construction
   domain: catalysis
   intent: Build Zn HCP surface slabs for multiple low-index facets.
@@ -325,18 +325,29 @@ questions:
   - key: must_parsable_1120
     value:
       filename: Zn_11-20.cif
+  - key: must_only_zn_0001
+    value:
+      filename: Zn_0001.cif
+      formula: Zn1
+  - key: must_only_zn_1010
+    value:
+      filename: Zn_10-10.cif
+      formula: Zn1
   - key: must_atom_count_0001
     value:
       filename: Zn_0001.cif
-      min: 4
+      expected: 4
+      tolerance: 4
   - key: must_atom_count_1010
     value:
       filename: Zn_10-10.cif
-      min: 4
+      expected: 4
+      tolerance: 4
   - key: must_atom_count_1120
     value:
       filename: Zn_11-20.cif
-      min: 4
+      expected: 8
+      tolerance: 4
   - key: turn_budget
     value:
       max: 20
