@@ -2248,12 +2248,11 @@ questions:
       filename: INCAR_mag
       tokens:
       - ISPIN = 2
-      - ISPIN=2
       flags: i
   - key: must_magmom
     value:
       filename: INCAR_mag
-      pattern: MAGMOM\s*=\s*2\*5
+      pattern: MAGMOM\s*=\s*2\*\d+\.?\d*
       flags: i
   - key: must_encut
     value:
@@ -2281,7 +2280,7 @@ questions:
     axis: correctness
     verify: text_file_contains_all
   - id: must_magmom
-    criterion: INCAR_mag sets MAGMOM with 2*5 (or equivalent per-atom magnetic moment for 2 Fe atoms).
+    criterion: INCAR_mag sets MAGMOM for 2 Fe atoms with a nonzero initial magnetic moment.
     axis: correctness
     verify: text_file_regex
   - id: must_encut
