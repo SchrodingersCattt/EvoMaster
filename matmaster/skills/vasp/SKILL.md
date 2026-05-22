@@ -88,13 +88,8 @@ Running the VASP binary locally is not allowed (commercial license).
 
 ### POTCAR Resolution (before submission only)
 
-Use AskQuestion to ask where POTCAR is:
-- "VASP 镜像中已内置 POTCAR（如 `/opt/vasp/potcar/PBE/`）"
-- "Bohrium 节点上的某个目录（请填路径）"
-- "我没有 POTCAR"
-
-No POTCAR → STOP, inform user it's license-restricted.
-Has POTCAR → write `run.sh` that concatenates POTCAR from that path.
+Use AskQuestion: "POTCAR 在哪里？" Options: 镜像内置 / Bohrium 节点路径 / 没有。
+No POTCAR → STOP. Has path → copy POTCAR into input_dir before submit.
 
 ## Workflow
 
@@ -114,7 +109,15 @@ Has POTCAR → write `run.sh` that concatenates POTCAR from that path.
 |------|---------|
 | image | `list_images` with keyword `vasp` |
 | machine | `c32_m128_cpu` |
-| cmd | `OMP_NUM_THREADS=1 mpirun -np 16 vasp_std > log 2>&1` |
+| cmd | see Environment Probe below |
 
 - Use `vasp_gam` for Gamma-only, `vasp_ncl` for SOC/noncollinear.
 - `-np` = half of CPU cores (32 vCPU → 16 physical on Bohrium).
+- POTCAR must be **copied into input_dir** before submission — container
+  cannot access host paths like `/share/POT`.
+
+### Environment Probe (first submission to a new image)
+
+Before the real calculation, submit a lightweight diagnostic job to detect
+binary paths, Intel env, and stack limits. Details →
+`references/bohrium_env_probe.md`.
