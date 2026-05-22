@@ -35,6 +35,12 @@ atoms = bulk("NaCl", crystalstructure="rocksalt", a=5.64, cubic=True)
 write("nacl.cif", atoms)
 ```
 
+Common ASE `bulk(..., crystalstructure=...)` names include `sc`, `fcc`,
+`bcc`, `hcp`, `rhombohedral`, `orthorhombic`, `mcl`, `diamond`,
+`zincblende`, `rocksalt`, `cesiumchloride`, `fluorite`, and `wurtzite`. If ASE
+rejects a prototype name, do not hand-write replacement coordinates; switch to a
+documented Wyckoff construction or retrieve a known structure.
+
 Wyckoff construction:
 
 ```python
