@@ -7242,3 +7242,96 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+
+- id: IG_abacus_061_20260522
+  capability: input_generation
+  domain: agnostic
+  intent: Generate ABACUS INPUT for cell-relax of NFPP without being told to use DFT+U.
+    Agent must recognize that Fe 3d is strongly correlated and proactively apply
+    Hubbard U correction with a physically reasonable U value.
+  human_prompt_seed: '工作区中有 NFPP (Na₄Fe₃(PO₄)₂P₂O₇) 的 STRU 文件 `STRU_NFPP`。请准备
+    ABACUS LCAO cell-relax 计算输入，在 `nfpp_relax/` 目录下生成 INPUT 和 KPT（只写文件，不运行）。'
+  tags:
+  - eng_abacus
+  data_files:
+  - key: STRU_NFPP
+    path: data/IG_abacus_061_20260522/STRU_NFPP
+    oss_url: ''
+    description: NFPP Pna21 structure, 48 atoms (Na4 Fe6 P8 O30), Fe magnetized at
+      2 μB.
+  reference_answers:
+  - key: input_artifact
+    value: nfpp_relax/INPUT
+  - key: kpt_artifact
+    value: nfpp_relax/KPT
+  - key: must_lcao_relax
+    value:
+      filename: nfpp_relax/INPUT
+      flags: i
+      tokens:
+      - basis_type lcao
+      - calculation cell-relax
+      - nspin 2
+      - pseudo_dir
+      - orbital_dir
+  - key: must_dftu
+    value:
+      filename: nfpp_relax/INPUT
+      flags: im
+      pattern: (?im)^\s*dft_plus_u\s+1
+  - key: must_hubbard_u_value
+    value:
+      filename: nfpp_relax/INPUT
+      flags: im
+      pattern: (?im)^\s*orbital_corr.*Fe|hubbard_u.*[2-6]\.|Fe.*[2-6]\.
+  - key: turn_budget
+    value:
+      max: 14
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: input_artifact
+    criterion: nfpp_relax/INPUT exists.
+    axis: correctness
+    verify: artifact_exists
+  - id: kpt_artifact
+    criterion: nfpp_relax/KPT exists.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_lcao_relax
+    criterion: '[Must] INPUT sets LCAO basis, cell-relax calculation, nspin 2, and
+      explicit pseudo/orbital dirs.'
+    axis: correctness
+    verify: text_file_contains_all
+  - id: must_dftu
+    criterion: '[Must] Agent proactively enables DFT+U (dft_plus_u 1) without being
+      told — Fe 3d in a phosphate framework is strongly correlated and requires
+      Hubbard correction for correct electronic structure and magnetic ordering.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_hubbard_u_value
+    criterion: '[Must] Hubbard U value for Fe 3d is physically reasonable (2-6 eV,
+      typically 3-5 eV for Fe in phosphates/oxides).'
+    axis: correctness
+    verify: text_file_regex
+  - id: spin_polarized
+    criterion: INPUT sets nspin 2 for spin-polarized calculation — NFPP has magnetic
+      Fe ions that require explicit spin treatment.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
