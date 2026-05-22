@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: battery
 questions:
-- id: SC_solution_box_001_20260513
+- id: SC_solution_box_001_20260522
   capability: structure_construction
   domain: battery
   intent: Build an electrolyte solution box at specified concentration and atom count.
@@ -19,8 +19,12 @@ questions:
   - key: must_atom_count
     value:
       filename: ZnSO4_solution.cif
-      min: 1500
-      max: 2500
+      expected: 2000
+      tolerance: 500
+  - key: must_elements
+    value:
+      filename: ZnSO4_solution.cif
+      elements: [Zn, S, O, H]
   - key: min_distance
     value:
       filename: ZnSO4_solution.cif
@@ -41,22 +45,10 @@ questions:
     criterion: '[Must] Total atom count is approximately 2000 (1500-2500 acceptable).'
     axis: correctness
     verify: struct_file_atom_count
-  - id: must_has_zn
-    criterion: '[Must] Structure contains Zn atoms.'
+  - id: must_elements
+    criterion: '[Must] Structure contains all required elements (Zn, S, O, H).'
     axis: correctness
-    verify: struct_file_formula
-  - id: must_has_s
-    criterion: '[Must] Structure contains S atoms.'
-    axis: correctness
-    verify: struct_file_formula
-  - id: must_has_o
-    criterion: '[Must] Structure contains O atoms.'
-    axis: correctness
-    verify: struct_file_formula
-  - id: must_has_h
-    criterion: '[Must] Structure contains H atoms (water).'
-    axis: correctness
-    verify: struct_file_formula
+    verify: struct_file_elements_present
   - id: min_distance
     criterion: '[Must] No overlapping atoms — minimum interatomic distance at least 0.8 Å.'
     axis: correctness
