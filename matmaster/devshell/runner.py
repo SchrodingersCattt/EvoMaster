@@ -43,6 +43,7 @@ class DevRunner:
         resolved_route: Any = None,
         stream_hook: DevStreamHook | None = None,
         exp_config: ExpConfig | None = None,
+        exclude_subagents: list[str] | None = None,
     ) -> None:
         self._config = config
         self._workdir = workdir
@@ -50,6 +51,7 @@ class DevRunner:
         self._llm_config = llm_config
         self._resolved_route = resolved_route
         self._stream_hook = stream_hook or DevStreamHook()
+        self._exclude_subagents: frozenset[str] = frozenset(exclude_subagents or ())
 
         # Build PlaygroundContext
         session = self._create_session(config, workdir)
@@ -135,7 +137,7 @@ class DevRunner:
         """
         from matmaster.core.stream_drain import DrainResult, drain_run_stream
 
-        exp = Exp(self._exp_config)
+        exp = Exp(self._exp_config, exclude_subagents=self._exclude_subagents)
 
         async def _run_once() -> DrainResult:
             try:

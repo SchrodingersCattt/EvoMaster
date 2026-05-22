@@ -62,6 +62,13 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     common.add_argument(
+        "--exclude-subagents",
+        nargs="*",
+        default=None,
+        metavar="NAME",
+        help="Subagent exp names to exclude from Agent tool (e.g. --exclude-subagents verification).",
+    )
+    common.add_argument(
         "--config",
         type=Path,
         default=None,
@@ -243,6 +250,7 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
         resolved_route=resolved,
         stream_hook=stream_hook,
         exp_config=exp_override,
+        exclude_subagents=getattr(args, "exclude_subagents", None),
     )
     return runner, config, llm_config, resolved
 
