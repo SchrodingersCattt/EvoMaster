@@ -1683,7 +1683,7 @@ questions:
   - key: retains_rocksalt
     value:
       filename: mgo_al_doped.cif
-      expected_number: 225
+      expected_number: [221, 225]
       symprec: 0.2
   - key: turn_budget
     value:

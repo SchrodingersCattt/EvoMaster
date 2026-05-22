@@ -930,7 +930,7 @@ def check_space_group(
     workspace_dir: str | Path,
     *,
     filename: str,
-    expected_number: int,
+    expected_number: int | list[int],
     symprec: float = 0.1,
     angle_tolerance: float = 5.0,
 ) -> tuple[bool, str]:
@@ -959,11 +959,13 @@ def check_space_group(
     except Exception as exc:
         return False, f"could not determine space group for {fpath.name}: {exc}"
 
-    ok = actual_number == expected_number
+    allowed = expected_number if isinstance(expected_number, list) else [expected_number]
+    ok = actual_number in allowed
+    expected_str = "/".join(f"#{n}" for n in allowed)
     return (
         ok,
         f"{fpath.name}: space group #{actual_number} ({actual_symbol}), "
-        f"expected #{expected_number} (symprec={symprec}, angle_tolerance={angle_tolerance})",
+        f"expected {expected_str} (symprec={symprec}, angle_tolerance={angle_tolerance})",
     )
 
 

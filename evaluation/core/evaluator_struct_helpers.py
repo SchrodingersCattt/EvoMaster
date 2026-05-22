@@ -70,10 +70,15 @@ def check_struct_file_space_group(
     if err:
         return False, err
     cfg = _cfg(ref)
+    raw = cfg.get('expected_number', cfg.get('expected', 0))
+    if isinstance(raw, list):
+        expected_number = [int(n) for n in raw]
+    else:
+        expected_number = int(raw)
     return check_space_group(
         ws,
         filename=str(cfg.get('filename', '*.cif')),
-        expected_number=int(cfg.get('expected_number', cfg.get('expected', 0))),
+        expected_number=expected_number,
         symprec=float(cfg.get('symprec', 0.1)),
         angle_tolerance=float(cfg.get('angle_tolerance', 5.0)),
     )
