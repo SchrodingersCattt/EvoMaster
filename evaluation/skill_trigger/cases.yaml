@@ -187,8 +187,8 @@ cases:
       - "怎么从空间群直接搭一个 Ruddlesden-Popper 钙钛矿"
       - "搭一个 GaN wurtzite 单胞，后面要跑 NEB"
       - "Mg hcp 给定 a/c，用 ASE 拼成单胞"
-      - "Construct a diamond Si conventional cell with a = 5.43 Å as input for VASP"
-      - "用 Fd-3m origin choice 2 搭一个 MgAl2O4 spinel"
+      - "Construct a diamond Si conventional cell with a = 5.43 Å"
+      - "Build spinel-structured MgAl2O4"
       - "Build the cubic BaTiO3 unit cell with Pm-3m and a = 4.00 Å"
     negative:
       - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
@@ -202,7 +202,7 @@ cases:
       - "Generate a 15-mer polypropylene chain for downstream MD" # → poly-generator
       - "从文献 CIF 链接构建 NaNO3"                             # → retrieve-structure
       - "用参数直接搭 CaCO3 / K2SO4 这种多原子离子晶体"          # → retrieve-structure
-      - "构建一个分子晶体 unit cell"                            # → retrieve-structure
+      - "构建RDX的分子晶体结构"                               # → retrieve-structure
 
   - skill: sample-atomic-structures
     positive:
