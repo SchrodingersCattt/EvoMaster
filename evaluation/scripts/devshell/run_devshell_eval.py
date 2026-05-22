@@ -306,6 +306,13 @@ def main() -> int:
             "(EvalIngestRequest.baseline_channel; default: claude_code)."
         ),
     )
+    parser.add_argument(
+        "--exclude-subagents",
+        nargs="*",
+        default=None,
+        metavar="NAME",
+        help="Subagent exp names to exclude from Agent tool (forwarded to mm-devshell).",
+    )
     args = parser.parse_args()
 
     if args.no_eval_ingest and args.eval_ingest_pending_only:
@@ -542,6 +549,7 @@ def main() -> int:
             model=primary_route,
             exp_cli=exp_cli,
             verbose=bool(args.verbose),
+            exclude_subagents=args.exclude_subagents,
         )
 
         prepared_tasks.append(
@@ -656,6 +664,7 @@ def main() -> int:
                 model=fallback_model,
                 exp_cli=prepared["exp_cli"],
                 verbose=bool(prepared["verbose"]),
+                exclude_subagents=args.exclude_subagents,
             )
             rc2, d2, summary2 = _run_devshell_task(
                 cmd=cmd_fb,
