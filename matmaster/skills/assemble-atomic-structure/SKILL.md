@@ -96,6 +96,6 @@ the recipe and the acceptance numbers; do not silently substitute heuristics.
 
 - `operate-molecular-crystal`: molecular-crystal slabs and molecule-preserving
   operations.
-- `build-atomic-structure`: build molecules, bulk cells, and polymer chains used
-  as assembly inputs.
+- `build-crystal-from-params`: build simple inorganic bulk cells used as
+  assembly inputs.
 - `tasker-polar-surface`: required fallback for polar slabs.

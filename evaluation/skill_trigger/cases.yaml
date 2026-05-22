@@ -172,30 +172,37 @@ cases:
       - "What's the space group and Wyckoff list of this CIF?"
       - "Before any transform, decide whether this MOF is a molecular crystal"
     negative:
-      - "搭一个 fcc Ni 的原胞"                                  # → build-atomic-structure
+      - "搭一个 fcc Ni 的原胞"                                  # → build-crystal-from-params
       - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
       - "在 Pt(111) top 位放一个 CO 分子"                       # → assemble-atomic-structure
       - "文献 SI 这个 CIF 链接，下下来并 validate"              # → retrieve-structure
       - "帮我用 VASP 算一下这个 POSCAR 的能带"                  # → vasp
 
-  - skill: build-atomic-structure
+  - skill: build-crystal-from-params
     positive:
       - "搭一个 fcc Ni 的原胞"
       - "用空间群 P6_3mc + Wyckoff 位置建一个 wurtzite ZnS"
-      - "SMILES CCC=O 转成带 3D 坐标的 SDF"
       - "Build a primitive cell of PbS rocksalt from the lattice constant"
-      - "搭一个 20 mer 的 PVA 链"
       - "ZrO2 cubic unit cell 给一个"
       - "怎么从空间群直接搭一个 Ruddlesden-Popper 钙钛矿"
       - "搭一个 GaN wurtzite 单胞，后面要跑 NEB"
       - "Mg hcp 给定 a/c，用 ASE 拼成单胞"
-      - "Generate a 15-mer polypropylene chain for downstream MD"
+      - "Construct a diamond Si conventional cell with a = 5.43 Å"
+      - "Build spinel-structured MgAl2O4"
+      - "Build the cubic BaTiO3 unit cell with Pm-3m and a = 4.00 Å"
     negative:
       - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
       - "TiO2 里随机替换 5% 的 Ti 为 Nb"                        # → transform-atomic-structure
       - "从 Cu bulk 切 (110) slab，5 层，真空 15 Å"             # → assemble-atomic-structure
       - "文献 SI 这个 CIF 链接，下下来并 validate"              # → retrieve-structure
       - "用 CALYPSO 搜 Mg-Si-O 的候选晶体结构"                  # → sample-atomic-structures
+      - "SMILES CCC=O 转成带 3D 坐标的 SDF"                    # → agent direct RDKit
+      - "枚举碳酸乙烯酯的氟代衍生物并生成 3D 构象"              # → agent direct RDKit
+      - "搭一个 20 mer 的 PVA 链"                               # → poly-generator
+      - "Generate a 15-mer polypropylene chain for downstream MD" # → poly-generator
+      - "从文献 CIF 链接构建 NaNO3"                             # → retrieve-structure
+      - "用参数直接搭 CaCO3 / K2SO4 这种多原子离子晶体"          # → retrieve-structure
+      - "构建RDX的分子晶体结构"                               # → retrieve-structure
 
   - skill: sample-atomic-structures
     positive:
@@ -213,7 +220,7 @@ cases:
       - "Sample crystal candidates conditioned on bulk modulus > 200 GPa with a generative model"
     negative:
       - "mp-149 的 CIF 帮我搜一下"                             # → mcp-mat-struct-db
-      - "搭一个 fcc Ni 的原胞"                                  # → build-atomic-structure
+      - "搭一个 fcc Ni 的原胞"                                  # → build-crystal-from-params
       - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
       - "文献 SI 这个 CIF 链接，下下来并 validate"              # → retrieve-structure
       - "帮我用 VASP 做结构优化"                                # → vasp
@@ -233,7 +240,7 @@ cases:
       - "Apply an xy shear strain of 0.5% to this CONTCAR"
       - "Create a 2x2x2 supercell of this MgO crystal with a single F-center"
     negative:
-      - "搭一个 fcc Ni 的原胞"                                  # → build-atomic-structure
+      - "搭一个 fcc Ni 的原胞"                                  # → build-crystal-from-params
       - "从 Cu bulk 切 (110) slab，5 层，真空 15 Å"             # → assemble-atomic-structure
       - "这个分子晶体 CIF 切 (010) 表面，不要切断分子"          # → operate-molecular-crystal
       - "切 LiCoO2 (003) slab，极性面，auto-fix 偶极"           # → tasker-polar-surface
@@ -253,7 +260,7 @@ cases:
       - "两条 polymer 主链做几何 crosslink，输出 LAMMPS 数据文件"
       - "Build a 4-layer Ni(100) slab with 12 Å vacuum"
     negative:
-      - "搭一个 fcc Ni 的原胞"                                  # → build-atomic-structure
+      - "搭一个 fcc Ni 的原胞"                                  # → build-crystal-from-params
       - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
       - "这个分子晶体 CIF 切 (010) 表面，不要切断分子"          # → operate-molecular-crystal
       - "ZnO (0001) 是不是极性面，先判一下再切"                 # → tasker-polar-surface
@@ -275,7 +282,7 @@ cases:
     negative:
       - "从 Cu bulk 切 (110) slab，5 层，真空 15 Å"             # → assemble-atomic-structure
       - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
-      - "搭一个 fcc Ni 的原胞"                                  # → build-atomic-structure
+      - "搭一个 fcc Ni 的原胞"                                  # → build-crystal-from-params
       - "切 LiCoO2 (003) slab，极性面，auto-fix 偶极"           # → tasker-polar-surface
       - "帮我用 CP2K 做分子动力学"                              # → cp2k
 
@@ -371,7 +378,7 @@ cases:
       - "Download this remote POSCAR URL, validate it, then convert to CIF"    # [english][url][convert][validate]
       - "Fetch the top-3 perovskite CIFs matching ABO3 with formation energy below -2 eV/atom"  # [english][screening]
     negative:
-      - "用 ASE 给我搭一个 fcc Ni 单胞"                # → build-atomic-structure (moved out)
+      - "用 ASE 给我搭一个 fcc Ni 单胞"                # → build-crystal-from-params (moved out)
       - "把这个 POSCAR 扩成 2x2x2 超胞"                # → transform-atomic-structure (moved out)
       - "从 Cu bulk 切一个 (111) slab"                  # → assemble-atomic-structure (moved out)
       - "看一下这个 CIF 的空间群是什么"                # → inspect-atomic-structure (moved out)

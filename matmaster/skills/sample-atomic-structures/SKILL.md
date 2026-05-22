@@ -78,5 +78,5 @@ Recipe:
 ## Cross-Skill Refs
 
 - `inspect-atomic-structure`: validate every sampled candidate.
-- `build-atomic-structure`: deterministic prototypes and Wyckoff builds.
+- `build-crystal-from-params`: deterministic simple inorganic prototypes and Wyckoff builds.
 - `mcp-mat-struct-db`: known-structure retrieval.
