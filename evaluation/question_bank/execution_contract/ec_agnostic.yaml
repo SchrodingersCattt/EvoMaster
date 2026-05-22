@@ -681,3 +681,49 @@ questions:
     criterion: Agent responds within budget.
     axis: efficiency
     verify: turn_budget
+- id: EC_image_verify_001_20260523
+  capability: execution_contract
+  domain: agnostic
+  priority: P1
+  intent: When submitting a Bohrium job, agent must verify image availability from
+    the provided image list rather than guessing image names.
+  human_prompt_seed: '工作区中有 `available_images.txt`，列出了当前 Bohrium 平台可用的容器镜像（每行一个）。
+
+    请为 ABACUS PW-SCF 计算编写提交脚本 `submit.sh`，其中引用的镜像名称必须来自
+    `available_images.txt` 中列出的镜像。不要猜测镜像名称。
+
+    '
+  tags: []
+  data_files:
+  - key: available_images
+    path: data/EC_image_verify_001/available_images.txt
+    oss_url: ''
+    description: List of available Bohrium container images (one per line).
+  reference_answers:
+  - key: submit_artifact
+    value: submit.sh
+  - key: image_from_list
+    value:
+      filename: submit.sh
+      tokens:
+      - registry.dp.tech/dptech/abacus:3.8.0-user
+      flags: ''
+  - key: turn_budget
+    value:
+      max: 8
+  scoring_checklist:
+  - id: submit_artifact
+    criterion: Agent writes `submit.sh` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: image_from_list
+    criterion: submit.sh references an image name that actually appears in available_images.txt
+      (e.g., `registry.dp.tech/dptech/abacus:3.8.0-user`), NOT a guessed name like
+      `registry.dp.tech/dptech/abacus:latest`.
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget

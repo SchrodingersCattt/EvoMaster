@@ -1,0 +1,8 @@
+registry.dp.tech/dptech/prod-11045/abacus:3.7.5-user
+registry.dp.tech/dptech/abacus:3.8.0-user
+registry.dp.tech/dptech/prod-11045/deepmd-kit:3.0.1-cuda12.4
+registry.dp.tech/dptech/prod-11045/lammps:2024.08.29-cuda12.4
+registry.dp.tech/dptech/vasp:5.4.4
+registry.dp.tech/dptech/orca:6.0.0
+registry.dp.tech/dptech/prod-11045/cp2k:2024.3
+registry.dp.tech/dptech/gromacs:2024.1

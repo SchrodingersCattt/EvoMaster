@@ -272,3 +272,78 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+- id: IG_cp2k_004_20260523
+  capability: input_generation
+  domain: agnostic
+  intent: Generate CP2K GEO_OPT input for water molecule. Agent must write input file
+    locally, not reference internal skill paths.
+  human_prompt_seed: '请为水分子 (H2O) 准备一个 CP2K 几何优化计算的输入文件。使用 PBE 泛函、DZVP 基组、GTH
+    赝势。将完整的 CP2K 输入文件写入 `water_opt.inp`。
+
+    '
+  tags:
+  - eng_cp2k
+  data_files: []
+  reference_answers:
+  - key: input_artifact
+    value: water_opt.inp
+  - key: required_keywords
+    value:
+      filename: water_opt.inp
+      tokens:
+      - '&GLOBAL'
+      - '&FORCE_EVAL'
+      - GEO_OPT
+      - PBE
+      - DZVP
+      - GTH
+      flags: i
+  - key: has_coord_section
+    value:
+      filename: water_opt.inp
+      pattern: (?i)&COORD
+      flags: ''
+  - key: has_h_coordinates
+    value:
+      filename: water_opt.inp
+      pattern: (?i)H\s+\d+\.\d+\s+\d+\.\d+\s+\d+\.\d+
+      flags: ''
+  - key: turn_budget
+    value:
+      max: 8
+  - key: duration_budget
+    value:
+      max: 7200000
+  scoring_checklist:
+  - id: input_artifact
+    criterion: Agent writes `water_opt.inp` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: required_keywords
+    criterion: The input file contains essential CP2K sections and keywords (&GLOBAL,
+      &FORCE_EVAL, GEO_OPT, PBE, DZVP, GTH).
+    axis: correctness
+    verify: text_file_contains_all
+  - id: has_coord_section
+    criterion: The input file contains a &COORD section with inline atomic coordinates.
+    axis: correctness
+    verify: text_file_regex
+  - id: has_h_coordinates
+    criterion: The input file contains explicit H atom coordinates (not just a reference
+      to an external file or skill path).
+    axis: correctness
+    verify: text_file_regex
+  - id: grounding_source
+    criterion: The CP2K input is a complete, self-contained file that could be run
+      directly. It does NOT reference internal paths like /share/.matmaster/, /skills/,
+      or /templates/.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget

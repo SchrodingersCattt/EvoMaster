@@ -3456,3 +3456,75 @@ questions:
     criterion: Wall-clock time within budget.
     axis: efficiency
     verify: duration_budget
+- id: WO_mech_012_20260523
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute equation of state for Ti3AlC using DPA MLIP. Agent must use correct
+    modern ASE import for cell filter (ase.filters, not deprecated ase.constraints).
+  human_prompt_seed: '使用 DPA 机器学习势计算 Ti3AlC 的状态方程（Birch-Murnaghan 拟合）。
+
+    请编写脚本完成以下步骤：
+    1. 构建 Ti3AlC 结构
+    2. 在平衡体积附近做体积扫描（至少 5 个点）
+    3. 对每个体积做结构优化（允许原子弛豫，固定体积）
+    4. 拟合 Birch-Murnaghan 状态方程
+
+    脚本保存为 `calc_eos.py`，结果写入 `eos_result.json`：
+    `{"B0_GPa": ..., "V0_A3": ..., "E0_eV": ...}`
+
+    '
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: calc_script
+    value: calc_eos.py
+  - key: output_artifact
+    value: eos_result.json
+  - key: correct_import
+    value:
+      filename: calc_eos.py
+      pattern: from\s+ase\.filters\s+import
+      flags: ''
+  - key: B0_range
+    value:
+      filename: eos_result.json
+      checks:
+      - key: B0_GPa
+        min: 100
+        max: 400
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 600000
+  scoring_checklist:
+  - id: calc_script
+    criterion: Agent writes `calc_eos.py` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: output_artifact
+    criterion: Agent writes `eos_result.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: correct_import
+    criterion: calc_eos.py imports cell filter from the correct modern module `ase.filters`
+      (e.g., ExpCellFilter or FrechetCellFilter), NOT from the deprecated `ase.constraints`
+      module.
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: B0_range
+    criterion: The fitted bulk modulus B0_GPa is within a physically reasonable range
+      (100-400 GPa for Ti3AlC).
+    axis: correctness
+    verify: json_file_numeric_range
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget

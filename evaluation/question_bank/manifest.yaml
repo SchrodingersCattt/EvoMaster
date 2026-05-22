@@ -61,7 +61,7 @@ banks:
 - path: execution_contract/ec_agnostic.yaml
   capability: execution_contract
   domain: agnostic
-  questions: 12
+  questions: 13
 - path: input_generation/ig_agnostic_vasp.yaml
   capability: input_generation
   domain: agnostic
@@ -77,11 +77,11 @@ banks:
 - path: input_generation/ig_agnostic_lammps.yaml
   capability: input_generation
   domain: agnostic
-  questions: 2
+  questions: 3
 - path: input_generation/ig_agnostic_cp2k.yaml
   capability: input_generation
   domain: agnostic
-  questions: 3
+  questions: 4
 - path: input_generation/ig_agnostic_gromacs.yaml
   capability: input_generation
   domain: agnostic
@@ -141,7 +141,7 @@ banks:
 - path: workflow_orchestration/wo_agnostic.yaml
   capability: workflow_orchestration
   domain: agnostic
-  questions: 39
+  questions: 40
 - path: workflow_orchestration/wo_agnostic_gpumd_nep_clean.yaml
   capability: workflow_orchestration
   domain: agnostic
