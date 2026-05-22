@@ -56,9 +56,15 @@ recommended pseudopotentials but do not generate the file.
 - **Finite-difference elastic tensor**: set `IBRION = 6`, `ISIF = 3`,
   `POTIM` to the requested displacement amplitude, and `NFREE = 2` unless a
   higher-order finite-difference stencil is explicitly requested.
-- **SOC/heavy-element calculations**: set `LSORBIT = .TRUE.`, `ISPIN = 2`,
+- **SOC/heavy-element calculations**: When the system contains elements with
+  Z ≥ 57 (lanthanides, actinides, 5d/6p heavy elements such as Hf, Ta, W, Re,
+  Os, Ir, Pt, Au, Hg, Tl, Pb, Bi, Lu, etc.), **always explicitly consider
+  whether spin-orbit coupling is needed**. For band structure and DOS
+  calculations of heavy-element systems, SOC is typically important and should
+  be enabled. To enable SOC: set `LSORBIT = .TRUE.`, `ISPIN = 2`,
   `LNONCOLLINEAR = .TRUE.` (implicit), and `ISYM = 0`; set `LMAXMIX = 4`
-  unless f-electrons require `LMAXMIX = 6`.
+  unless f-electrons require `LMAXMIX = 6`. Use `vasp_ncl` instead of
+  `vasp_std` for SOC runs.
 - **Hybrid DFT (HSE06)**: `LHFCALC = .TRUE.`, `HFSCREEN = 0.2`,
   `ALGO = Damped` or `All`, `TIME = 0.4`.
 - **DFT+U**: `LDAU = .TRUE.`, `LDAUTYPE = 2` (Dudarev), `LDAUL`, `LDAUU`,
