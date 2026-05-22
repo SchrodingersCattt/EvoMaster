@@ -104,3 +104,23 @@ cases:
     prompt: "帮我建立一个单原子催化剂FeNC的模型，然后根据ORR的反应中间体搭建几个中间体的模型，具体理论细节与建模细节自己去查文献"
     source_session: "653b67b5c0b24de48dc6ee10a1fc57da"
     notes: "测文献驱动的复杂建模。线上用了偏小的 4x4 超胞。"
+
+  # ─── 回归守卫（已知失败模式修复验证）──────────────────────────────────────
+
+  - id: rg_16
+    title: "ORCA 几何优化 端到端"
+    prompt: "使用ORCA对水分子做几何优化，使用B3LYP/def2-TZVP泛函基组，提交到Bohrium运行"
+    source_session: "1c2d69007a41484fb2ed5992515eea07"
+    notes: "测 ORCA 从输入生成到 Bohrium 提交到结果解析全流程。线上丝滑完成。"
+
+  - id: rg_17
+    title: "磁性 Fe 磷酸盐 ABACUS SCF 参数"
+    prompt: "对Na₄Fe₃(PO₄)₂P₂O₇做ABACUS自洽场计算，注意这是含磁性Fe的大体系"
+    source_session: "8644540e62f04f13a959bd402b24a4eb"
+    notes: "测磁性体系 SCF 参数选择。线上用 mixing_beta=0.1 导致 13 个 job 全部 charge sloshing。正确值 ≤0.05。"
+
+  - id: rg_18
+    title: "CH₃NH₃⁺ C-N 解离曲线"
+    prompt: "计算CH₃NH₃⁺的C-N键解离势能面（1.2-3.0 Å），使用量子力学方法"
+    source_session: "4312863d-d842-46f6-9"
+    notes: "测 PES 扫描方法选择。线上 DPA 失败后用 Morse 势代替——严禁经典势代替 QM。应用 PySCF/ORCA 替代。"
