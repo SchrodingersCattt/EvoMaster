@@ -399,7 +399,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_008_20260520
+- id: SC_struct_008_20260522
   capability: structure_construction
   domain: agnostic
   intent: Construct a computation-ready gamma-alumina bulk model and validate stoichiometry,
@@ -420,24 +420,11 @@ questions:
       element_b: O
       expected_ratio: 0.6667
       tolerance: 0.0334
-  - key: alpha_deg
+  - key: space_group_gamma_alumina
     value:
       filename: gamma_alumina.cif
-      param: alpha
-      expected: 90.0
-      tolerance: 2.0
-  - key: beta_deg
-    value:
-      filename: gamma_alumina.cif
-      param: beta
-      expected: 90.0
-      tolerance: 2.0
-  - key: gamma_deg
-    value:
-      filename: gamma_alumina.cif
-      param: gamma
-      expected: 90.0
-      tolerance: 2.0
+      expected_number: [12, 227]
+      symprec: 0.2
   - key: max_force_eV_A
     value:
       json_path: max_force_ev_per_ang
@@ -470,18 +457,12 @@ questions:
       2:3 within 5%.
     axis: correctness
     verify: struct_file_stoichiometry_ratio
-  - id: alpha_deg
-    criterion: The alpha cell angle read from gamma_alumina.cif is close to 90 degrees.
+  - id: space_group_gamma_alumina
+    criterion: The space group of gamma_alumina.cif is either Fd-3m (#227, cubic
+      defect-spinel) or C2/m (#12, Digne/Krokidis monoclinic model), both accepted
+      as γ-Al₂O₃ representations.
     axis: correctness
-    verify: struct_file_cell_param
-  - id: beta_deg
-    criterion: The beta cell angle read from gamma_alumina.cif is close to 90 degrees.
-    axis: correctness
-    verify: struct_file_cell_param
-  - id: gamma_deg
-    criterion: The gamma cell angle read from gamma_alumina.cif is close to 90 degrees.
-    axis: correctness
-    verify: struct_file_cell_param
+    verify: struct_file_space_group
   - id: max_force_eV_A
     criterion: The reported relaxed maximum force in `<eval_results>` is below 0.1
       eV/A.
