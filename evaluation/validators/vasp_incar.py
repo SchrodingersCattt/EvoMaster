@@ -130,12 +130,9 @@ def check_vasp_incar(
         bad = [(i, v) for i, v in enumerate(moments) if not (lo <= v <= hi)]
         if bad:
             return False, (
-                f"{fpath.name}: MAGMOM atoms out of range [{lo}, {hi}]: "
-                f"{bad[:5]}"
+                f"{fpath.name}: MAGMOM atoms out of range [{lo}, {hi}]: " f"{bad[:5]}"
             )
-        return True, (
-            f"{fpath.name}: MAGMOM all {len(moments)} atoms in [{lo}, {hi}]"
-        )
+        return True, (f"{fpath.name}: MAGMOM all {len(moments)} atoms in [{lo}, {hi}]")
 
     elif check == "magmom_atom_count":
         if "MAGMOM" not in params:
