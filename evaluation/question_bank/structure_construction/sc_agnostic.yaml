@@ -1233,7 +1233,7 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
-- id: SC_cnt_001_20260513
+- id: SC_cnt_001_20260522
   capability: structure_construction
   domain: agnostic
   intent: Build a single-walled carbon nanotube from chiral indices.
@@ -1347,7 +1347,7 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
-- id: SC_graphene_001_20260517v2
+- id: SC_graphene_001_20260522
   capability: structure_construction
   domain: agnostic
   intent: Build a monolayer graphene unit cell with correct hexagonal lattice and verify
@@ -1644,7 +1644,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: SC_doped_mgo_001_20260520
+- id: SC_doped_mgo_001_20260522
   capability: structure_construction
   domain: agnostic
   intent: Build Al-doped MgO supercell with correct charge compensation, testing that

@@ -271,7 +271,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_interface_001_20260513
+- id: SC_interface_001_20260522
   capability: structure_construction
   domain: semiconductor
   intent: Build a heterostructure interface between two materials with lattice mismatch
