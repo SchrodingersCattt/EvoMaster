@@ -3287,6 +3287,88 @@ questions:
     criterion: Wall-clock time within budget.
     axis: efficiency
     verify: duration_budget
+- id: WO_neb_interface_001_20260522
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute Sn migration barrier at BCC/FCC Fe interface via DPA NEB. Agent must
+    avoid IDPP interpolation (causes atom overlaps at interfaces) and use a robust
+    optimizer (FIRE over BFGS) to obtain a physical barrier.
+  human_prompt_seed: |
+    工作区中有 BCC(110)/FCC(111) 铁异质界面的两个结构文件：
+    - `initial.xyz`: 初态，Sn 在 BCC 侧替位位置
+    - `final.xyz`: 末态，Sn 迁移到界面区域
+
+    请使用 DPA 机器学习势做 NEB 计算（7 个中间像），求 Sn 从 BCC 体相迁移到界面的能垒。
+
+    结果写入 `neb_result.json`：
+    `{"forward_barrier_eV": ..., "n_images": 7, "interpolation_method": "...", "optimizer": "...", "converged": true/false}`
+  tags:
+  - code_mlip
+  data_files:
+  - key: initial_structure
+    path: data/SA_neb_interface_001/initial.xyz
+    oss_url: ''
+    description: BCC/FCC Fe interface with Sn at BCC substitutional site.
+  - key: final_structure
+    path: data/SA_neb_interface_001/final.xyz
+    oss_url: ''
+    description: BCC/FCC Fe interface with Sn migrated to interface region.
+  reference_answers:
+  - key: output_artifact
+    value: neb_result.json
+  - key: barrier_range
+    value:
+      filename: neb_result.json
+      checks:
+      - key: forward_barrier_eV
+        min: 0.3
+        max: 4.0
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 900000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `neb_result.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: barrier_physical
+    criterion: The forward_barrier_eV in neb_result.json is within a physically
+      reasonable range (0.3-4.0 eV) for substitutional migration at a metal interface.
+      A value >10 eV indicates failed interpolation or optimizer divergence.
+    axis: correctness
+    verify: json_file_numeric_range
+    weight: 3.0
+  - id: avoids_idpp
+    criterion: Agent does NOT use IDPP interpolation for this interface system, or
+      if it does and gets an unphysical result, it self-corrects to linear interpolation
+      or manual image construction. Check conversation/script for interpolation method.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: uses_robust_optimizer
+    criterion: Agent uses FIRE optimizer (or another robust optimizer like MDMin) rather
+      than BFGS/LBFGS for the NEB optimization. BFGS is unstable for interface NEB
+      with large initial forces.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: validates_result
+    criterion: Agent checks that the computed barrier is physically reasonable before
+      reporting (e.g., compares to known metal diffusion barriers, flags if >5 eV).
+      Must not blindly report an unphysical value.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
 - id: WO_mlip_molcrystal_head_001_20260522
   capability: workflow_orchestration
   domain: agnostic
