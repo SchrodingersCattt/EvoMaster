@@ -101,7 +101,10 @@ The OSS URLs in `reference/dpa_models.md` are a **snapshot** and may rotate. If 
 - **Convergence**: `--fmax 0.01` for optimization, `--fmax 0.05` for NEB.
 - **Cell relaxation**: `--relax-cell` for equilibrium properties (elastic, phonon).
 - **Elastic**: Input MUST be fully relaxed (run optimize first with `--relax-cell`).
-- **NEB**: Both structures must be relaxed, same atoms in same order. Avoid CIF format for NEB endpoints — CIF writers wrap fractional coordinates back into [0,1). Use POSCAR or XYZ instead. MUST run this MIC check after constructing endpoints, before submitting NEB:
+- **NEB**: Both structures must be relaxed, same atoms in same order. Avoid CIF format for NEB endpoints — CIF writers wrap fractional coordinates back into [0,1). Use POSCAR or XYZ instead.
+  - **Interpolation**: Use IDPP for bulk/homogeneous systems. For **hetero-interfaces** (BCC/FCC, grain boundaries, dissimilar lattice junctions), IDPP causes atom overlaps due to density mismatch — use `method="linear"` instead.
+  - **Optimizer**: Use FIRE for interface/defect NEB (large initial forces from interpolation). BFGS/LBFGS are fine for bulk NEB with small displacements.
+  - MUST run this MIC check after constructing endpoints, before submitting NEB:
   ```bash
   python -c "from ase.io import read; import numpy as np; ini=read('INITIAL'); fin=read('FINAL'); diff=fin.positions-ini.positions; cell=ini.cell.lengths(); diff-=np.round(diff/cell)*cell; md=np.linalg.norm(diff,axis=1).max(); print(f'max_disp={md:.3f} A'); assert md<cell.min()/2, f'MIC FAIL: {md:.2f} A — fix endpoint coords'"
   ```

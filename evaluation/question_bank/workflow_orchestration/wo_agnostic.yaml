@@ -3287,7 +3287,7 @@ questions:
     criterion: Wall-clock time within budget.
     axis: efficiency
     verify: duration_budget
-- id: WO_neb_interface_001_20260522
+- id: WO_neb_interface_001_20260524
   capability: workflow_orchestration
   domain: agnostic
   intent: Compute Sn migration barrier at BCC/FCC Fe interface via DPA NEB. Agent must
@@ -3322,10 +3322,9 @@ questions:
   - key: barrier_physical
     value:
       filename: neb_result.json
-      checks:
-      - key: forward_barrier_eV
-        min: 0.3
-        max: 4.0
+      key: forward_barrier_eV
+      expected: 2.15
+      tolerance: 1.85
   - key: uses_fire
     value:
       filename: run_neb.py
