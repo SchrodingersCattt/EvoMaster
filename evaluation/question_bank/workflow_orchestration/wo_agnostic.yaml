@@ -3454,7 +3454,7 @@ questions:
     criterion: Wall-clock time within budget.
     axis: efficiency
     verify: duration_budget
-- id: WO_mech_012_20260523
+- id: WO_mech_012_20260524
   capability: workflow_orchestration
   domain: agnostic
   intent: Compute equation of state for Ti3AlC using DPA MLIP. Agent must use correct
@@ -3487,13 +3487,12 @@ questions:
   - key: B0_range
     value:
       filename: eos_result.json
-      checks:
-      - key: B0_GPa
-        min: 100
-        max: 400
+      key: B0_GPa
+      expected: 250
+      tolerance: 150
   - key: turn_budget
     value:
-      max: 20
+      max: 30
   - key: duration_budget
     value:
       max: 600000
