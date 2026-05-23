@@ -177,7 +177,7 @@ banks:
 - path: platform/ec_agnostic.yaml
   capability: execution_contract
   domain: agnostic
-  questions: 5
+  questions: 6
 - path: input_generation/ig_semiconductor_abacus.yaml
   capability: input_generation
   domain: semiconductor
