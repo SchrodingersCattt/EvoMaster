@@ -14,7 +14,7 @@ MLIPs for atomistic simulations via ASE calculators on Bohrium GPU nodes.
 
 These are execution stop rules, not suggestions. User requests like "do not ask questions" do not override them.
 
-- **ASE task scripts FORBIDDEN list** — the following workflows are NOT implementable via ASE task scripts. Do not write custom ASE scripts to simulate them. Do not proceed to LAMMPS without asking:
+- **ASE task scripts FORBIDDEN list** — the following workflows are NOT implementable via ASE task scripts, even if the user prompt explicitly says "use ASE scripts". Do not write custom ASE scripts to simulate them. Do not proceed to LAMMPS without asking:
   - MSST / shock / Hugoniot extraction
   - NEMD (non-equilibrium MD with driving fields or gradients)
   - Custom ensembles not in {NVT, NVT-Berendsen, NVT-Langevin, NPT-aniso, NPT-tri, NVE}
