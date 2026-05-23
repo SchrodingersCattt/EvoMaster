@@ -417,7 +417,7 @@ def test_phase2_split_banks_have_expected_question_ids() -> None:
     assert "WO_elec_001_20260411v2" in wo_semi_ids
     assert "WO_elec_009_20260515" in wo_semi_ids
     wo_cat_ids = [q["id"] for q in catalysis_bank["questions"]]
-    assert "WO_elec_007_20260515" in wo_cat_ids
+    assert "WO_elec_007_20260523" in wo_cat_ids
     assert "WO_struct_001_20260404" in wo_cat_ids
     assert "WO_struct_002_20260404" in wo_cat_ids
 
@@ -428,4 +428,4 @@ def test_manifest_active_totals_after_phase2_splits() -> None:
     manifest = yaml.safe_load((bank_root / "manifest.yaml").read_text(encoding="utf-8"))
 
     assert len(manifest["banks"]) == 40
-    assert sum(int(entry["questions"]) for entry in manifest["banks"]) == 273
+    assert sum(int(entry["questions"]) for entry in manifest["banks"]) == 274
