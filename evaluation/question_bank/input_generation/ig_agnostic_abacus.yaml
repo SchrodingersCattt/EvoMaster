@@ -2079,7 +2079,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS PW bulk-and-slab inputs for Al fcc(100) surface-energy convergence using bulk, 5-layer slab, and 7-layer slab structures.
-  human_prompt_seed: "工作区中提供了 Al fcc(100) 的体相与两种厚度 slab 结构（bulk_al_fcc.stru、slab_al_fcc100_5l.stru、slab_al_fcc100_7l.stru）。\n\n请为表面能收敛测试准备 ABACUS 平面波输入和 K 点文件。将结果写入当前目录：`INPUT_bulk_relax`、`INPUT_slab5`、`INPUT_slab7`、`KPT_bulk`、`KPT_slab`。\n"
+  human_prompt_seed: "工作区中提供了 Al fcc(100) 的体相与两种厚度 slab 结构（bulk_al_fcc.stru、slab_al_fcc100_5l.stru、slab_al_fcc100_7l.stru）。\n\n请为表面能收敛测试准备 ABACUS 平面波输入和 K 点文件。将结果写入当前目录：`INPUT_bulk`、`INPUT_slab5`、`INPUT_slab7`、`KPT_bulk`、`KPT_slab`。\n"
   tags:
   - eng_abacus
   - struct_surface
@@ -2097,9 +2097,9 @@ questions:
     oss_url: ''
     description: Seven-layer Al fcc(100) slab with selective-relaxation flags.
   reference_answers:
-  - key: must_input_bulk_relax_core
+  - key: must_input_bulk_core
     value:
-      filename: INPUT_bulk_relax
+      filename: INPUT_bulk
       tokens:
       - calculation cell-relax
       - basis_type pw
@@ -2118,9 +2118,9 @@ questions:
       - calculation relax
       - basis_type pw
       flags: i
-  - key: must_input_bulk_relax_cal_force_stress
+  - key: must_input_bulk_cal_force_stress
     value:
-      filename: INPUT_bulk_relax
+      filename: INPUT_bulk
       tokens:
       - cal_force 1
       - cal_stress 1
@@ -2143,16 +2143,16 @@ questions:
       filename: KPT_slab
       pattern: ^\s*\d+\s+\d+\s+1(?:\s+\d+){0,3}\s*$
       flags: m
-  - key: suggested_input_bulk_relax_numerics
+  - key: suggested_input_bulk_numerics
     value:
-      filename: INPUT_bulk_relax
+      filename: INPUT_bulk
       checks:
       - key: ecutwfc
         min: 35
         max: 100
   - key: variable_input_bulk_smearing_or_mixing
     value:
-      filename: INPUT_bulk_relax
+      filename: INPUT_bulk
       checks:
       - key: smearing_method
         allow_missing_key: true
@@ -2183,8 +2183,8 @@ questions:
       filename: KPT_slab
       pattern: ^\s*(?:1[2-9]|[2-9]\d|[1-9]\d{2,})\s+(?:1[2-9]|[2-9]\d|[1-9]\d{2,})\s+1(?:\s+\d+){0,3}\s*$
       flags: m
-  - key: input_bulk_relax_artifact
-    value: INPUT_bulk_relax
+  - key: input_bulk_artifact
+    value: INPUT_bulk
   - key: input_slab5_artifact
     value: INPUT_slab5
   - key: input_slab7_artifact
@@ -2227,8 +2227,8 @@ questions:
     value:
       max: 35000
   scoring_checklist:
-  - id: must_input_bulk_relax_core
-    criterion: '[Must] INPUT_bulk_relax uses PW cell-relax core controls.'
+  - id: must_input_bulk_core
+    criterion: '[Must] INPUT_bulk uses PW cell-relax core controls.'
     axis: correctness
     verify: text_file_contains_all
     weight: 1.0
@@ -2242,8 +2242,8 @@ questions:
     axis: correctness
     verify: text_file_contains_all
     weight: 1.0
-  - id: must_input_bulk_relax_cal_force_stress
-    criterion: '[Must] INPUT_bulk_relax explicitly sets cal_force 1 and cal_stress 1, required for cell-relax calculations.'
+  - id: must_input_bulk_cal_force_stress
+    criterion: '[Must] INPUT_bulk explicitly sets cal_force 1 and cal_stress 1, required for cell-relax calculations.'
     axis: correctness
     verify: text_file_contains_all
     weight: 1.0
@@ -2262,13 +2262,13 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 1.0
-  - id: suggested_input_bulk_relax_numerics
-    criterion: '[Suggested] INPUT_bulk_relax follows benchmark numeric settings (`ecutwfc` in a reasonable low-cost range).'
+  - id: suggested_input_bulk_numerics
+    criterion: '[Suggested] INPUT_bulk follows benchmark numeric settings (`ecutwfc` in a reasonable low-cost range).'
     axis: correctness
     verify: text_file_numeric_range
     weight: 0.6
   - id: variable_input_bulk_smearing_or_mixing
-    criterion: '[Variable] If INPUT_bulk_relax includes smearing/mixing parameters, they should be reasonable for this benchmark family; omission should not be treated as failure.'
+    criterion: '[Variable] If INPUT_bulk includes smearing/mixing parameters, they should be reasonable for this benchmark family; omission should not be treated as failure.'
     axis: correctness
     verify: text_file_numeric_range
     weight: 0.3
@@ -2277,8 +2277,8 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 0.3
-  - id: input_bulk_relax_artifact
-    criterion: Generated deliverables count even if the final answer does not quote file contents; `INPUT_bulk_relax` must be written to the workspace.
+  - id: input_bulk_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `INPUT_bulk` must be written to the workspace.
     axis: correctness
     verify: artifact_exists
     weight: 0.2
