@@ -78,6 +78,7 @@ VerifyLiteral = Literal[
     "checkcif_no_a_alerts",
     # plain-text file checks
     "text_file_contains_all",
+    "text_file_excludes_all",
     "text_file_kpt_path",
     "text_file_numeric_range",
     "text_file_regex",
@@ -332,6 +333,7 @@ class QuestionItem(BaseModel):
             "struct_file_space_group",
             "struct_file_min_interatomic_distance",
             "text_file_contains_all",
+            "text_file_excludes_all",
             "text_file_kpt_path",
             "text_file_numeric_range",
             "text_file_regex",
