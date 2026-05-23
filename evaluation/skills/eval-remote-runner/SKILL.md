@@ -54,22 +54,26 @@ ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST \
 
 ```bash
 ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST \
-  "cd /root/matmaster-evo && nohup flock -n /tmp/eval.lock \
+  "cd /root/matmaster-evo && \
+   export http_proxy='http://ga.xdptech.com:8118' && \
+   export https_proxy='http://ga.xdptech.com:8118' && \
+   nohup flock -n /tmp/eval.lock \
     uv run python evaluation/scripts/devshell/run_devshell_eval.py \
       --slices '<slice>' \
       --model '<model_route_key>' \
       --jobs 8 \
+      --k 3 \
       --eval-ingest-pending-only \
     > /tmp/eval_run.log 2>&1 &"
 ```
-
 
 Common parameters:
 - `--slices`: `@struct_surface`, `structure_construction`, `input_generation`, etc.
 - `--model`: `global.anthropic.claude-opus-4-6-v1` (default), `claude-sonnet-4-6`, `claude-haiku-4-5`
 - `--jobs`: parallelism (default 8)
-- `--repeats`: how many times each question is run (default 3)
-- `--notify`: send Feishu notification when done
+- `--k N`: repeat each question N times (default 3). NOT `--repeats`.
+- `--limit N`: only run N tasks total (useful for testing)
+- `--no-clean-results`: preserve prior run results
 
 ### 1b. Score and Submit (MANDATORY after run completes)
 
@@ -82,7 +86,10 @@ writes the score back, and POSTs to tools-server:
 
 ```bash
 ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST \
-  "cd /root/matmaster-evo && uv run python evaluation/scripts/devshell/score_devshell_tasks.py \
+  "cd /root/matmaster-evo && \
+   export http_proxy='http://ga.xdptech.com:8118' && \
+   export https_proxy='http://ga.xdptech.com:8118' && \
+   uv run python evaluation/scripts/devshell/score_devshell_tasks.py \
     --run-dir results/devshell_eval_<timestamp> --submit"
 ```
 
@@ -93,16 +100,12 @@ ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST \
   "ls -dt /root/matmaster-evo/results/devshell_eval_* | head -1"
 ```
 
-**If `--eval-ingest-pending-only` was NOT used during the run**: there will be
-no `pending_ingest/` directory and scoring cannot submit results. In that case
-you must re-run the eval with `--eval-ingest-pending-only`.
-
 ### 2. Check Progress
 
 ```bash
 ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST \
   "cd /root/matmaster-evo && python3 -c \"
-import json, glob
+import json
 from pathlib import Path
 
 run_dirs = sorted(Path('results').glob('devshell_eval_*'))
@@ -205,10 +208,62 @@ ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST \
 | `gemini-3-flash-preview` | Gemini 3 Flash |
 | `matmaster/qwen3.6-plus` | Qwen 3.6 Plus |
 
+## Pitfalls & Lessons Learned
+
+### Proxy is required for `uv run`
+
+The remote machine cannot access GitHub directly. **Every SSH command that uses
+`uv run` must explicitly export proxy env vars**:
+
+```bash
+export http_proxy='http://ga.xdptech.com:8118'
+export https_proxy='http://ga.xdptech.com:8118'
+```
+
+`.bashrc` proxy settings do NOT take effect in non-interactive SSH sessions
+(e.g. `ssh host "command"`). You must inline the exports in every command.
+
+### `--eval-ingest-pending-only` is mandatory
+
+Without this flag, `run_devshell_eval.py` POSTs raw results directly to
+tools-server **without scores**. Then `score_devshell_tasks.py --submit`
+cannot find `pending_ingest/` files to update and submit. Result: scoring
+runs but nothing appears on the frontend.
+
+**Correct flow**: run with `--eval-ingest-pending-only` → score with `--submit`.
+
+### Repeat parameter is `--k`, not `--repeats`
+
+The flag to control how many times each question is repeated is `--k N`,
+not `--repeats N`. The latter does not exist and will cause an argument error.
+
+### `score_devshell_tasks.py` requires `--run-dir`
+
+The run directory is passed via `--run-dir <path>`, not as a positional argument.
+
+### First `uv run` on a fresh machine is slow
+
+`uv run` syncs all dependencies from `pyproject.toml` before executing. On a
+fresh machine this includes compiling C extensions (e.g. lxml for Python 3.13
+which lacks prebuilt wheels). This is a one-time cost but can take 5-10 minutes.
+If it appears stuck, check `/proc/<pid>/fd/` for open `.so` files being compiled.
+
+### `run_devshell_eval.py` does NOT evaluate scoring checklists
+
+It only runs the agent, collects workspace artifacts, and writes raw results.
+The actual per-criterion evaluation (text_file_contains_all, struct_file_*,
+llm_binary_judge, etc.) happens in `score_devshell_tasks.py`. Without running
+this second step, the frontend shows no checklist-level pass/fail data.
+
+### Exit code 0 ≠ all criteria passed
+
+`devshell_exit_code == 0` only means the agent session completed without
+crashing. It does NOT mean the agent's output passes all scoring criteria.
+Always run `score_devshell_tasks.py` for the real pass/fail determination.
+
 ## Important Notes
 
 - **Never kill a running eval** — always check status first before triggering
 - The remote machine cleans `results/` by default at each run start; use `--no-clean-results` to preserve prior runs
 - `flock -n /tmp/eval.lock` ensures mutual exclusion — if a run is in progress, the new command exits immediately
-- Eval results are also ingested to tools-server and visible on the evaluation dashboard
 - After runs complete, use the `evaluation-iteration` skill to query results from the API and analyze failures
