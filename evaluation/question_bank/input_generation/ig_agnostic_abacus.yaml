@@ -7433,6 +7433,11 @@ questions:
       - basis_type pw
       - nspin 2
       flags: i
+  - key: must_coord_keyword
+    value:
+      filename: STRU
+      pattern: (?i)(Direct|Cartesian_angstrom)
+      flags: ''
   - key: turn_budget
     value:
       max: 12
@@ -7473,6 +7478,13 @@ questions:
     axis: correctness
     verify: text_file_contains_all
     weight: 2.0
+  - id: must_coord_keyword
+    criterion: '[Must] STRU uses correct coordinate keyword — either `Direct`
+      (fractional) or `Cartesian_angstrom` (Angstrom units). Using bare `Cartesian`
+      with Angstrom values is wrong (ABACUS interprets it as Bohr*lattice_constant).'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.5
   - id: must_input_core
     criterion: '[Must] INPUT uses PW basis with spin polarization for this magnetic
       Fe-containing interface system.'
