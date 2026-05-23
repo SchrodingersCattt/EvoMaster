@@ -2193,21 +2193,39 @@ questions:
     value: KPT_bulk
   - key: kpt_slab_artifact
     value: KPT_slab
-  - key: grounding_source
+  - key: stru_bulk_intact
     value:
-      filenames:
-      - bulk_al_fcc.stru
-      - slab_al_fcc100_5l.stru
-      - slab_al_fcc100_7l.stru
+      filename: bulk_al_fcc.stru
+      tokens:
+      - LATTICE_CONSTANT
+      - '1.889726'
+      - 0.000000000000    0.500000000000    0.500000000000 1 1 1
+      flags: ''
+  - key: stru_slab5_intact
+    value:
+      filename: slab_al_fcc100_5l.stru
+      tokens:
+      - '7.6513590200098225'
+      - 0.500000000000    0.500000000000    0.100000000000 0 0 0
+      - 0.000000000000    0.000000000000    0.400000000000 1 1 1
+      flags: ''
+  - key: stru_slab7_intact
+    value:
+      filename: slab_al_fcc100_7l.stru
+      tokens:
+      - '7.6513590200098225'
+      - 0.000000000000    0.000000000000    0.200000000000 0 0 0
+      - 0.500000000000    0.500000000000    0.500000000000 1 1 1
+      flags: ''
   - key: turn_budget
     value:
-      max: 8
+      max: 20
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 35000
   scoring_checklist:
   - id: must_input_bulk_relax_core
     criterion: '[Must] INPUT_bulk_relax uses PW cell-relax core controls.'
@@ -2284,10 +2302,24 @@ questions:
     axis: correctness
     verify: artifact_exists
     weight: 0.2
-  - id: grounding_source
-    criterion: The generated files are grounded in the three provided STRU files; no unrelated structural edits are introduced beyond preparing inputs for bulk and slab calculations.
+  - id: stru_bulk_intact
+    criterion: The provided bulk_al_fcc.stru file remains unmodified in the workspace
+      (lattice constant and atomic positions preserved).
     axis: grounding
-    verify: llm_binary_judge
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: stru_slab5_intact
+    criterion: The provided slab_al_fcc100_5l.stru file remains unmodified (lattice
+      constant and selective-dynamics flags preserved).
+    axis: grounding
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: stru_slab7_intact
+    criterion: The provided slab_al_fcc100_7l.stru file remains unmodified (lattice
+      constant and selective-dynamics flags preserved).
+    axis: grounding
+    verify: text_file_contains_all
+    weight: 1.0
   - id: turn_budget
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
