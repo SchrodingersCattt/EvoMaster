@@ -61,11 +61,11 @@ cases:
     source_session: "fffc5ed31dd446d0b81f08b9b2136395"
     notes: "测 ABACUS cal_work_function 全流程。线上丝滑。"
 
-  - id: rg_10
-    title: "CO/Pt(111) 吸附能 (ABACUS)"
-    prompt: "用ABACUS计算CO在Pt(111)表面的吸附能"
-    source_session: "e6e7b0a3-e154-4aef"
-    notes: "测 ABACUS 能量单位理解。线上把 eV 误认为 Hartree，得到 -22.7 eV。"
+  - id: rg_19
+    title: "graphene/h-BN NEMD 界面热阻 (GPUMD)"
+    prompt: "使用GPUMD计算graphene/h-BN横向异质界面的界面热阻，采用NEMD方法"
+    source_session: "0c832c7ac83c417287af6dc05bf3eb9f"
+    notes: "测 GPUMD NEMD 端到端：结构构建(分组) + run.in 语法(heat_lan/fix/compute_temperature) + 后处理。线上丝滑完成。"
 
   # ─── 复合工作流 ─────────────────────────────────────────────────────────
 
