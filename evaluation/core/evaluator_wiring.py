@@ -130,16 +130,21 @@ def check_json_file_numeric_range(
     if evidence is None or not evidence.workspace_dir:
         return False, "no workspace root"
     cfg = ref.value if isinstance(ref.value, dict) else {}
-    expected = cfg.get("expected")
-    if expected is None:
-        return False, "json_file_numeric_range: missing 'expected' in ref"
-    return _check_json_file_numeric_range(
-        evidence.workspace_dir,
-        filename=cfg.get("filename", ""),
-        key=cfg.get("key", ""),
-        expected=float(expected),
-        tolerance=float(cfg.get("tolerance", 0.0)),
-    )
+    kwargs: dict = {
+        "filename": cfg.get("filename", ""),
+        "key": cfg.get("key", ""),
+    }
+    if "min" in cfg or "max" in cfg:
+        if "min" in cfg:
+            kwargs["min"] = float(cfg["min"])
+        if "max" in cfg:
+            kwargs["max"] = float(cfg["max"])
+    elif cfg.get("expected") is not None:
+        kwargs["expected"] = float(cfg["expected"])
+        kwargs["tolerance"] = float(cfg.get("tolerance", 0.0))
+    else:
+        return False, "json_file_numeric_range: need 'expected' or 'min'/'max' in ref"
+    return _check_json_file_numeric_range(evidence.workspace_dir, **kwargs)
 
 
 def check_json_file_artifacts(

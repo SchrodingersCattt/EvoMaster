@@ -3323,8 +3323,8 @@ questions:
     value:
       filename: neb_result.json
       key: forward_barrier_eV
-      expected: 2.15
-      tolerance: 1.85
+      min: 0.3
+      max: 4.0
   - key: uses_fire
     value:
       filename: run_neb.py
@@ -3410,8 +3410,8 @@ questions:
     value:
       filename: sublimation_energy.json
       key: sublimation_energy_eV
-      expected: 0.9
-      tolerance: 0.6
+      min: 0.3
+      max: 1.5
   - key: uses_organic_head
     value:
       filename: calc_sublimation.py
@@ -3488,8 +3488,8 @@ questions:
     value:
       filename: eos_result.json
       key: B0_GPa
-      expected: 250
-      tolerance: 150
+      min: 100
+      max: 400
   - key: turn_budget
     value:
       max: 30
@@ -3549,8 +3549,8 @@ questions:
     value:
       filename: neb_result.json
       key: forward_barrier_eV
-      expected: 0.85
-      tolerance: 0.35
+      min: 0.5
+      max: 1.2
   - key: turn_budget
     value:
       max: 25
@@ -3614,8 +3614,8 @@ questions:
     value:
       filename: qha_result.json
       key: alpha_300K_per_K
-      expected: 4.5e-6
-      tolerance: 3.5e-6
+      min: 1.0e-6
+      max: 8.0e-6
   - key: turn_budget
     value:
       max: 25
