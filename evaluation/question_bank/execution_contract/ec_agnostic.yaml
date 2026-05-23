@@ -648,7 +648,7 @@ questions:
     将结果写入 `elastic_results.json`，格式为：
     `{"C11_GPa": ..., "C12_GPa": ..., "C44_GPa": ..., "B_GPa": ..., "G_GPa": ..., "E_GPa": ...}`
   tags:
-  - code_mlip
+  - meta_grounding
   data_files: []
   reference_answers:
   - key: turn_budget
