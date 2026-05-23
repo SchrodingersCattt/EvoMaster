@@ -43,6 +43,7 @@ from evaluation.validators.structure_molcrys import (
 )
 from evaluation.validators.text_file import (
     check_text_file_contains_all,
+    check_text_file_excludes_all,
     check_text_file_kpt_path,
     check_text_file_numeric_range,
     check_text_file_regex,
@@ -535,6 +536,35 @@ def check_text_file_contains_all_from_evidence(
     else:
         filename = str(raw_filename)
     return check_text_file_contains_all(
+        ws,
+        filename=filename,
+        tokens=[str(token) for token in raw_tokens],
+        case_sensitive=case_sensitive,
+        normalize_whitespace=bool(cfg.get("normalize_whitespace", True)),
+        workspace_resolve=_workspace_resolve_from_ref(ref),
+    )
+
+
+def check_text_file_excludes_all_from_evidence(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    raw_tokens = cfg.get("tokens", [])
+    if not isinstance(raw_tokens, list) or not raw_tokens:
+        return False, "reference answer must provide non-empty 'tokens' list"
+    flags = str(cfg.get("flags", "")).lower()
+    case_sensitive = bool(cfg.get("case_sensitive", False))
+    if "i" in flags:
+        case_sensitive = False
+    raw_filename = cfg.get("filename", "")
+    if isinstance(raw_filename, list):
+        filename: str | list[str] = [str(f) for f in raw_filename]
+    else:
+        filename = str(raw_filename)
+    return check_text_file_excludes_all(
         ws,
         filename=filename,
         tokens=[str(token) for token in raw_tokens],

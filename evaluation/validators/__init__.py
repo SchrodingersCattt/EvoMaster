@@ -32,6 +32,7 @@ from .structure_molcrys import (
 )
 from .text_file import (
     check_text_file_contains_all,
+    check_text_file_excludes_all,
     check_text_file_kpt_path,
     check_text_file_numeric_range,
     check_text_file_regex,
@@ -58,6 +59,7 @@ __all__ = [
     'check_surface_termination',
     # text_file (plain text file checks)
     'check_text_file_contains_all',
+    'check_text_file_excludes_all',
     'check_text_file_kpt_path',
     'check_text_file_numeric_range',
     'check_text_file_regex',

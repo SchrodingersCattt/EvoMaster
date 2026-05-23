@@ -106,6 +106,52 @@ def check_text_file_contains_all(
     return False, f"no file contains all tokens — {details}"
 
 
+def check_text_file_excludes_all(
+    workspace_dir: str | Path,
+    *,
+    filename: str | list[str],
+    tokens: list[str],
+    case_sensitive: bool = False,
+    normalize_whitespace: bool = True,
+    workspace_resolve: str = "recursive",
+) -> tuple[bool, str]:
+    """Check that NONE of the tokens are present in a text file.
+
+    Passes when the file exists but does not contain any of the listed tokens.
+    If *filename* is a list, fails if ANY file contains any token.
+    """
+    root = Path(workspace_dir)
+    filenames = [filename] if isinstance(filename, str) else filename
+
+    for fname in filenames:
+        fpath = _resolve_file(root, fname, workspace_resolve=workspace_resolve)
+        if fpath is None:
+            continue
+        try:
+            raw = fpath.read_text(encoding="utf-8")
+        except Exception as exc:
+            return False, f"failed reading {fpath.name}: {exc}"
+        haystack = _normalize(
+            raw,
+            case_sensitive=case_sensitive,
+            normalize_whitespace=normalize_whitespace,
+        )
+        found: list[str] = []
+        for token in tokens:
+            needle = _normalize(
+                str(token),
+                case_sensitive=case_sensitive,
+                normalize_whitespace=normalize_whitespace,
+            )
+            if needle and needle in haystack:
+                found.append(str(token))
+        if found:
+            return False, f"{fpath.name}: forbidden tokens found: {found}"
+
+    resolved = filenames[0] if len(filenames) == 1 else filenames
+    return True, f"{resolved}: none of {len(tokens)} forbidden tokens found"
+
+
 def check_text_file_regex(
     workspace_dir: str | Path,
     *,

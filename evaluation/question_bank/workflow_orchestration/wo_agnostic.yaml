@@ -3608,19 +3608,18 @@ questions:
     value: calc_qha.py
   - key: output_artifact
     value: qha_result.json
-  - key: correct_qha_import
+  - key: no_deprecated_qha_import
     value:
       filename: calc_qha.py
       tokens:
-      - from phonopy.qha
-      flags: ''
+      - from phonopy import PhonopyQHA
+      flags: i
   - key: alpha_range
     value:
       filename: qha_result.json
-      checks:
-      - key: alpha_300K_per_K
-        min: 1.0e-6
-        max: 8.0e-6
+      key: alpha_300K_per_K
+      expected: 4.5e-6
+      tolerance: 3.5e-6
   - key: turn_budget
     value:
       max: 25
@@ -3636,11 +3635,12 @@ questions:
     criterion: Agent writes `qha_result.json` to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: correct_qha_import
-    criterion: '[Must] calc_qha.py imports PhonopyQHA from the correct submodule
-      (phonopy.qha), not from top-level phonopy which was deprecated in phonopy>=2.7.'
+  - id: no_deprecated_qha_import
+    criterion: '[Must] calc_qha.py does NOT use deprecated top-level import
+      `from phonopy import PhonopyQHA` (removed in phonopy>=2.7). Using
+      `from phonopy.qha import PhonopyQHA` or manual QHA implementation are both acceptable.'
     axis: correctness
-    verify: text_file_contains_all
+    verify: text_file_excludes_all
     weight: 2.0
   - id: alpha_range
     criterion: The thermal expansion coefficient at 300K is physically reasonable
