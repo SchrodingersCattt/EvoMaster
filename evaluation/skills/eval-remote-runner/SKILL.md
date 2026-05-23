@@ -68,6 +68,29 @@ Common parameters:
 - `--repeats`: how many times each question is run (default 3)
 - `--notify`: send Feishu notification when done
 
+### 1b. Score and Submit (after run completes)
+
+**IMPORTANT**: `run_devshell_eval.py` only runs the agent and uploads raw artifacts.
+It does NOT evaluate scoring_checklist items. You must run scoring separately
+after the run completes for results to appear on the frontend dashboard:
+
+```bash
+ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST \
+  "cd /root/matmaster-evo && uv run python evaluation/scripts/devshell/score_devshell_tasks.py \
+    results/devshell_eval_<timestamp> --submit"
+```
+
+Find the latest run directory:
+
+```bash
+ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST \
+  "ls -dt /root/matmaster-evo/results/devshell_eval_* | head -1"
+```
+
+Without `--submit`, scoring results are only written locally. With `--submit`,
+they are POSTed to tools-server and appear on the evaluation dashboard with
+per-checklist-item pass/fail.
+
 ### 2. Check Progress
 
 ```bash
