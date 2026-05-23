@@ -55,7 +55,7 @@ ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST \
 ```bash
 ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST \
   "cd /root/matmaster-evo && nohup flock -n /tmp/eval.lock \
-    .venv/bin/python evaluation/scripts/devshell/run_devshell_eval.py \
+    uv run python evaluation/scripts/devshell/run_devshell_eval.py \
       --slices '<slice>' \
       --model '<model_route_key>' \
       --jobs 8 \
@@ -63,8 +63,6 @@ ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST \
     > /tmp/eval_run.log 2>&1 &"
 ```
 
-Note: Use `.venv/bin/python` instead of `uv run` to avoid dependency resolution
-issues on machines with limited network access.
 
 Common parameters:
 - `--slices`: `@struct_surface`, `structure_construction`, `input_generation`, etc.
@@ -84,7 +82,7 @@ writes the score back, and POSTs to tools-server:
 
 ```bash
 ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST \
-  "cd /root/matmaster-evo && .venv/bin/python evaluation/scripts/devshell/score_devshell_tasks.py \
+  "cd /root/matmaster-evo && uv run python evaluation/scripts/devshell/score_devshell_tasks.py \
     --run-dir results/devshell_eval_<timestamp> --submit"
 ```
 
