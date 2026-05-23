@@ -46,10 +46,9 @@ RUN pip install --no-cache-dir \
     "matminer==0.10.0" \
     "pint>=0.24"
 
-# MolCrysKit is installed from the release tarball so this image does not need git.
-ARG MOLCRYS_KIT_REF=v0.2.0
+# MolCrysKit is published on PyPI; pull the latest release (unpinned, auto-updates on rebuild).
 RUN pip install --no-cache-dir \
-    "https://github.com/SchrodingersCattt/MolCrysKit/archive/refs/tags/${MOLCRYS_KIT_REF}.tar.gz" \
+    "molcrys-kit" \
     "packmol>=21.2.1"
 
 # 默认留空：本地可用 docker build --build-arg 传入。remote-image 流水线由 ci/remote_transfer_prepare.py
