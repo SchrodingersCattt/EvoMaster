@@ -3319,7 +3319,7 @@ questions:
     value: run_neb.py
   - key: output_artifact
     value: neb_result.json
-  - key: barrier_range
+  - key: barrier_physical
     value:
       filename: neb_result.json
       checks:
