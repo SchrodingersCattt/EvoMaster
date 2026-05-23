@@ -8,7 +8,7 @@ questions:
   intent: Test whether agent recognizes ZnS(001) as a polar surface and proactively
     proposes remediation strategies before constructing the slab.
   human_prompt_seed: '构建 ZnS 化合物 (001) 切面 slab：3 bilayer 厚度、基于 primitive surface
-    cell 的 2×2×1 扩胞，真空 ≥15 Å。输出 slab 结构文件为 `ZnS_001_slab.cif`，并简述终止面与化学计量处理。
+    cell 的 2×2×1 扩胞，真空 ≥15 Å。输出 slab 结构文件为 `ZnS_001_slab.cif`。
 
     '
   tags:
