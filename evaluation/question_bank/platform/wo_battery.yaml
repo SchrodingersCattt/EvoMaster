@@ -17,9 +17,12 @@ questions:
     value: md_submit.json
   - key: must_use_universal_dpa
     value:
-      filename: md_submit.json
+      filenames:
+      - md_submit.json
+      - lammps.in
       pattern: DPA.?[23]|dpa.?[23]|DPA-[23]|deepmd
       flags: i
+      min_match_count: 1
   - key: turn_budget
     value:
       max: 40
