@@ -55,8 +55,12 @@ $SSH_CMD "cd /root/matmaster-evo && $PROXY && \
 Key flags:
 - `--eval-ingest-pending-only` — **MANDATORY**. Writes pending files for step 2.
 - `--k N` — repeats per question (NOT `--repeats`). Default 3.
+- `--slices` — use `@tag_name` for tags (e.g. `'@struct_surface'`). Without `@` it matches capability names.
 - `--limit N` — cap total tasks (for testing).
 - `--no-clean-results` — keep prior results.
+
+**Fallback if `uv run` fails** (e.g. GitHub unreachable for `molcrys-kit`):
+replace `uv run python` with `.venv/bin/python` to skip dependency resolution.
 
 ### Step 2: Score and Submit
 
@@ -67,6 +71,8 @@ $SSH_CMD "cd /root/matmaster-evo && $PROXY && \
   uv run python evaluation/scripts/devshell/score_devshell_tasks.py \
     --run-dir \$(ls -dt results/devshell_eval_* | head -1) --submit"
 ```
+
+Same `.venv/bin/python` fallback applies here if `uv run` fails.
 
 Without this step, the frontend shows NO checklist-level pass/fail data.
 

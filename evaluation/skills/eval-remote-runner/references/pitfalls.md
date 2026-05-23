@@ -50,3 +50,41 @@ this second step, the frontend shows no checklist-level pass/fail data.
 `devshell_exit_code == 0` only means the agent session completed without
 crashing. It does NOT mean the agent's output passes all scoring criteria.
 Always run `score_devshell_tasks.py` for the real pass/fail determination.
+
+## `uv run` fails when GitHub is unreachable (molcrys-kit)
+
+`uv sync` / `uv run` tries to fetch `molcrys-kit` from GitHub on every
+invocation if the package isn't cached. When the proxy can't reach GitHub
+(or direct access is also flaky), this causes a timeout and the eval never
+starts.
+
+**Workaround**: if `.venv` already has the core dependencies installed,
+bypass `uv run` and launch directly with `.venv/bin/python`:
+
+```bash
+.venv/bin/python evaluation/scripts/devshell/run_devshell_eval.py ...
+```
+
+This skips dependency resolution entirely. Only safe when the venv is
+already in a good state (check with `.venv/bin/python -c "import matmaster"`).
+
+## Slice syntax: tags need `@` prefix
+
+`--slices 'struct_surface'` treats `struct_surface` as a **capability** name
+(matching `question.capability`). To filter by **tag**, prefix with `@`:
+
+```bash
+--slices '@struct_surface'
+```
+
+Without `@`, the filter matches zero questions and raises:
+`ValueError: No questions remaining after applying --slices / --questions filters`
+
+## Scoring pass rate unexpectedly low
+
+If pass rate looks too low, check whether optional checklist items
+(`token_budget_total`, `turn_budget`, `efficiency_judge`, `no_retries`) are
+being treated as required. The CLI and agent-loop paths should both use
+`_DEVSHELL_AGENT_INGEST_OPTIONAL_IDS` to exclude these from the binary 0/100
+score. If they're not excluded, every task that exceeds token/turn budgets
+will score 0 even if the actual work is correct.
