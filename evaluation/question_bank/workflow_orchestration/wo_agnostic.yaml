@@ -3585,3 +3585,75 @@ questions:
     criterion: Wall-clock time within budget.
     axis: efficiency
     verify: duration_budget
+- id: WO_qha_cte_001_20260523
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute thermal expansion coefficient of Si via QHA (quasi-harmonic
+    approximation) using DPA. Agent must correctly import PhonopyQHA from
+    phonopy.qha (not top-level phonopy) and produce physical CTE values.
+  human_prompt_seed: |
+    请使用 DPA 机器学习势 + 准谐近似(QHA)方法计算金刚石 Si 的线热膨胀系数 α(T)。
+
+    要求：
+    - 在平衡体积附近取 5 个体积点
+    - 每个体积做 phonon 计算（有限位移法）
+    - 用 QHA 拟合得到 α(T)，报告 300K 处的值
+    - 脚本保存为 `calc_qha.py`
+    - 结果写入 `qha_result.json`：`{"alpha_300K_per_K": ..., "n_volumes": 5}`
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: calc_script
+    value: calc_qha.py
+  - key: output_artifact
+    value: qha_result.json
+  - key: correct_qha_import
+    value:
+      filename: calc_qha.py
+      tokens:
+      - from phonopy.qha
+      flags: ''
+  - key: alpha_range
+    value:
+      filename: qha_result.json
+      checks:
+      - key: alpha_300K_per_K
+        min: 1.0e-6
+        max: 8.0e-6
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 900000
+  scoring_checklist:
+  - id: calc_script
+    criterion: Agent writes `calc_qha.py` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: output_artifact
+    criterion: Agent writes `qha_result.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: correct_qha_import
+    criterion: '[Must] calc_qha.py imports PhonopyQHA from the correct submodule
+      (phonopy.qha), not from top-level phonopy which was deprecated in phonopy>=2.7.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+  - id: alpha_range
+    criterion: The thermal expansion coefficient at 300K is physically reasonable
+      for Si (experimental ~2.6e-6 /K, DPA typically 2-5e-6 /K). Values outside
+      1-8e-6 /K indicate methodology error.
+    axis: correctness
+    verify: json_file_numeric_range
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
