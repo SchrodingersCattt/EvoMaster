@@ -244,6 +244,11 @@ def main() -> int:
         help="When writing claude_review.md, include human_prompt_seed from the question bank.",
     )
     parser.add_argument(
+        "--notify",
+        action="store_true",
+        help="Send Feishu notification with scoring summary after all tasks complete.",
+    )
+    parser.add_argument(
         "--no-eval-ingest",
         action="store_true",
         help="Disable evaluation ingest (no POST to tools-server ingest API).",
@@ -954,6 +959,20 @@ def main() -> int:
         print(
             f"Pack for Claude (skipped): uv run python evaluation/scripts/devshell/export_devshell_review_bundle.py --run-dir {run_dir}",
             file=sys.stderr,
+        )
+
+    if args.notify:
+        from evaluation.devshell_agent.feishu_round_notify import (
+            notify_after_scoring_async,
+        )
+
+        notify_after_scoring_async(
+            run_dir=run_dir,
+            ingest_result={
+                "attempted": True,
+                "ok": not ingest_failed,
+                "stderr_tail": "",
+            },
         )
 
     if any_failed:
