@@ -1443,7 +1443,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_dpa_005_20260521
+- id: WO_mlip_dpa_005_20260524
   capability: workflow_orchestration
   domain: agnostic
   intent: Compute Cu FCC single-vacancy migration barrier with DPA via NEB; report forward
@@ -1456,7 +1456,7 @@ questions:
 
     分别优化初态和末态结构，然后使用 DPA 机器学习势做 NEB 计算（5 个中间像）。
 
-    报告正向迁移能垒 (eV) 和能量曲线趋势，结果写入 `neb_result.json`（顶层包含 `forward_barrier_eV` 字段）。
+    报告正向迁移能垒 (eV) 和能量曲线趋势，结果写入 `neb_result.json`，格式：`{"forward_barrier_eV": ..., "n_images": ..., "converged": true/false}`。
 
     '
   tags:
@@ -1479,7 +1479,7 @@ questions:
     - energy_profile
   - key: turn_budget
     value:
-      max: 24
+      max: 35
   - key: duration_budget
     value:
       max: 7200000
