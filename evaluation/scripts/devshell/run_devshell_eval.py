@@ -545,6 +545,11 @@ def main() -> int:
         console_log_file = log_dir / "devshell_console.log"
 
         primary_route = (args.model or "").strip() or None
+        inject_failure = (
+            question.inject_failure_message
+            if getattr(question, 'inject_bohrium_failure', False)
+            else None
+        )
         cmd = build_mm_devshell_run_cmd(
             py=py,
             workspace_path=workspace_path,
@@ -555,6 +560,7 @@ def main() -> int:
             exp_cli=exp_cli,
             verbose=bool(args.verbose),
             exclude_subagents=args.exclude_subagents,
+            inject_bohrium_failure=inject_failure,
         )
 
         prepared_tasks.append(
@@ -575,6 +581,7 @@ def main() -> int:
                 "mm_py": py,
                 "exp_cli": exp_cli,
                 "verbose": bool(args.verbose),
+                "inject_bohrium_failure": inject_failure,
             }
         )
 
@@ -670,6 +677,7 @@ def main() -> int:
                 exp_cli=prepared["exp_cli"],
                 verbose=bool(prepared["verbose"]),
                 exclude_subagents=args.exclude_subagents,
+                inject_bohrium_failure=prepared.get("inject_bohrium_failure"),
             )
             rc2, d2, summary2 = _run_devshell_task(
                 cmd=cmd_fb,

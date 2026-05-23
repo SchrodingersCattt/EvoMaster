@@ -26,6 +26,26 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _patch_bohrium_submit(runtime: Any, error_message: str) -> None:
+    """Monkey-patch BohriumTool._submit to always return an error (eval-only)."""
+    from matmaster.tools.builtin.bohrium_tool.tool import BohriumTool
+    from matmaster.tools.tool_result import ToolResult
+
+    catalog = runtime.spec.tool_catalog
+    if catalog is None:
+        return
+    registry = getattr(catalog, '_registry', None)
+    if registry is None:
+        return
+    tool = registry.get('Bohrium')
+    if tool is None or not isinstance(tool, BohriumTool):
+        return
+    tool._submit = lambda args: ToolResult(
+        status="error",
+        content=f"job/create failed: {error_message}",
+    )
+
+
 class DevRunner:
     """Per-run assembly: build_runtime -> kernel.run_stream -> drain -> history.
 
@@ -44,6 +64,7 @@ class DevRunner:
         stream_hook: DevStreamHook | None = None,
         exp_config: ExpConfig | None = None,
         exclude_subagents: list[str] | None = None,
+        inject_bohrium_failure: str | None = None,
     ) -> None:
         self._config = config
         self._workdir = workdir
@@ -52,6 +73,7 @@ class DevRunner:
         self._resolved_route = resolved_route
         self._stream_hook = stream_hook or DevStreamHook()
         self._exclude_subagents: frozenset[str] = frozenset(exclude_subagents or ())
+        self._inject_bohrium_failure = inject_bohrium_failure
 
         # Build PlaygroundContext
         session = self._create_session(config, workdir)
@@ -158,6 +180,9 @@ class DevRunner:
 
                 runtime = await exp.build_runtime(self._pg_ctx)
                 spec = runtime.spec
+
+                if self._inject_bohrium_failure:
+                    _patch_bohrium_submit(runtime, self._inject_bohrium_failure)
 
                 # Devshell bypasses Exp.run_stream(), so it must inject
                 # cancellation into the session and tool catalog itself.
