@@ -1807,3 +1807,89 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
+- id: SA_polymorph_vo2_001_20260523
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Identify the VO2 polymorph (rutile vs monoclinic M1) from a provided CIF
+    file. The M1 phase has pseudo-tetragonal metrics (a~c) that may confuse loose
+    symmetry detection into reporting tetragonal rather than monoclinic.
+  human_prompt_seed: '工作区中有 `VO2_sample.cif`，请鉴定这个 VO2 结构属于哪种相（金红石相 R、单斜
+    M1 相、或其他），报告空间群和晶格参数。将结果写入 `vo2_phase.json`：`{"phase_name": "...",
+    "space_group_symbol": "...", "space_group_number": ..., "lattice_a": ...,
+    "lattice_b": ..., "lattice_c": ..., "beta_deg": ...}`'
+  tags:
+  - struct_build
+  data_files:
+  - key: vo2_cif
+    path: data/SA_polymorph_vo2_001/VO2_sample.cif
+    oss_url: ''
+    description: 'VO2 M1 monoclinic phase (P2_1/c, #14), a=5.383, b=4.492, c=5.382,
+      beta=122.61. Pseudo-tetragonal metrics (a~c) are a known trap for symmetry
+      detection with loose tolerance.'
+  reference_answers:
+  - key: output_artifact
+    value: vo2_phase.json
+  - key: space_group_number
+    value:
+      filename: vo2_phase.json
+      checks:
+      - key: space_group_number
+        min: 14
+        max: 14
+  - key: beta_monoclinic
+    value:
+      filename: vo2_phase.json
+      checks:
+      - key: beta_deg
+        min: 120
+        max: 125
+  - key: phase_name_regex
+    value:
+      filename: vo2_phase.json
+      pattern: (?i)(M1|monoclinic|P2.?1.?/c)
+      flags: i
+  - key: turn_budget
+    value:
+      max: 10
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `vo2_phase.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: space_group_number
+    criterion: Space group number is exactly 14 (P2_1/c, monoclinic). If agent
+      reports 136 (P4_2/mnm, tetragonal rutile) it has been fooled by the
+      pseudo-tetragonal a~c metrics under loose symprec.
+    axis: correctness
+    verify: json_file_numeric_range
+    weight: 2.0
+  - id: beta_monoclinic
+    criterion: Beta angle is reported between 120-125 deg (monoclinic). A value
+      of 90 would indicate the agent incorrectly assigned tetragonal symmetry.
+    axis: correctness
+    verify: json_file_numeric_range
+    weight: 1.5
+  - id: phase_name_regex
+    criterion: The phase is identified as M1 or monoclinic or P2_1/c (not rutile
+      or tetragonal). The CIF explicitly states P 1 21/c 1 and has beta=122.61,
+      so the agent must recognize this as the monoclinic M1 phase.
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: grounding_source
+    criterion: The reasoning references concrete structural features from the CIF
+      (lattice parameters a~c, beta>>90, space group header) rather than just
+      stating the answer without evidence.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget

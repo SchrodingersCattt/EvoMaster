@@ -3528,3 +3528,99 @@ questions:
     criterion: Wall-clock time within budget.
     axis: efficiency
     verify: duration_budget
+- id: WO_neb_endpoint_relax_001_20260523
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute vacancy migration barrier in BCC Fe via NEB. The final-state
+    structure is intentionally NOT pre-relaxed — agent must detect this and relax
+    it before running NEB, otherwise the barrier will be unphysically high.
+  human_prompt_seed: '工作区中有 BCC Fe 单空位迁移的两个结构：
+    - `initial_relaxed.xyz`: 初态（已弛豫，空位在 site A）
+    - `final_unrelaxed.xyz`: 末态（未弛豫，原子从 site B 移除形成空位）
+
+    请用 DPA 机器学习势计算空位迁移能垒（NEB，5 个中间像）。
+
+    要求：
+    - NEB 脚本保存为 `run_neb.py`
+    - 结果写入 `neb_result.json`：`{"forward_barrier_eV": ..., "n_images": 5, "converged": true/false}`'
+  tags:
+  - code_mlip
+  - struct_transform
+  data_files:
+  - key: initial_relaxed
+    path: data/WO_neb_endpoint_relax_001/initial_relaxed.xyz
+    oss_url: ''
+    description: 53-atom BCC Fe 3x3x3 supercell with vacancy at corner site (0,0,0),
+      atoms relaxed around vacancy (slight inward displacement ~0.02 A).
+  - key: final_unrelaxed
+    path: data/WO_neb_endpoint_relax_001/final_unrelaxed.xyz
+    oss_url: ''
+    description: 53-atom BCC Fe 3x3x3 supercell with vacancy at body-center site
+      (1.435,1.435,1.435), atoms at PERFECT BCC lattice positions (deliberately
+      NOT relaxed). Agent must relax this before NEB.
+  reference_answers:
+  - key: neb_script
+    value: run_neb.py
+  - key: output_artifact
+    value: neb_result.json
+  - key: relaxes_final_state
+    value:
+      filename: run_neb.py
+      pattern: (?i)(optimi[zs]e|relax|minimize).*final
+      flags: i
+  - key: forward_barrier_eV
+    value:
+      filename: neb_result.json
+      checks:
+      - key: forward_barrier_eV
+        min: 0.5
+        max: 1.2
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 900000
+  scoring_checklist:
+  - id: neb_script
+    criterion: Agent writes `run_neb.py` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: output_artifact
+    criterion: Agent writes `neb_result.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: relaxes_final_state
+    criterion: The NEB script contains evidence that the agent relaxes/optimizes
+      the final state before running NEB. Without this step the unrelaxed endpoint
+      produces an unphysical barrier (~5 eV instead of ~0.67 eV). Pattern checks
+      for optimize/relax/minimize near "final".
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: forward_barrier_eV
+    criterion: The forward migration barrier is within 0.5-1.2 eV (known BCC Fe
+      vacancy migration ~0.67 eV with DPA). A value >2 eV indicates the agent
+      did not relax the final endpoint before NEB.
+    axis: correctness
+    verify: json_file_numeric_range
+    weight: 2.0
+  - id: grounding_source
+    criterion: The barrier value is derived from NEB calculation on the provided
+      structures, not from literature recall. The script must load the provided
+      XYZ files.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: efficiency_judge
+    criterion: The workflow (detect unrelaxed endpoint, relax it, run NEB, parse
+      barrier) completes without unnecessary repeated NEB runs or redundant steps.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget

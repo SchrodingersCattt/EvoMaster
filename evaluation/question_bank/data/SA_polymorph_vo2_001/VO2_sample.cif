@@ -1,0 +1,21 @@
+data_VO2_M1
+_symmetry_space_group_name_H-M   'P 1 21/c 1'
+_cell_length_a   5.3830
+_cell_length_b   4.4920
+_cell_length_c   5.3820
+_cell_angle_alpha   90.000
+_cell_angle_beta   122.610
+_cell_angle_gamma   90.000
+
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+V1 V 0.23940 0.97500 0.02500
+V2 V 0.76060 0.52500 0.47500
+O1 O 0.10110 0.21100 0.20800
+O2 O 0.39890 0.71100 0.29200
+O3 O 0.60110 0.28900 0.70800
+O4 O 0.89890 0.78900 0.79200
