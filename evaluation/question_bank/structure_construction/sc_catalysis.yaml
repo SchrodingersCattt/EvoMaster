@@ -580,7 +580,7 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
-- id: SC_cat_co_orient_001_20260521
+- id: SC_cat_co_orient_001_20260523
   capability: structure_construction
   domain: catalysis
   intent: Build CO adsorption structure on Pt(111) without specifying orientation,
@@ -606,13 +606,13 @@ questions:
       max: 15
   - key: token_budget_total
     value:
-      max: 20000
+      max: 25000
   scoring_checklist:
   - id: file_exists
     criterion: Agent writes `Pt111_CO.cif` to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: co_c_down
+  - id: co_c_pt_bond
     criterion: The CO molecule is oriented C-down (carbon closer to Pt surface). Verified
       by C-Pt distance being ~1.85 Å (within bond range). If O-down, the nearest C-Pt
       distance would be >3.0 Å and this check would fail.
