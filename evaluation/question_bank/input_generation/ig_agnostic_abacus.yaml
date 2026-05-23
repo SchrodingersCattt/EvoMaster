@@ -2075,7 +2075,7 @@ questions:
     axis: efficiency
     verify: token_budget
   priority: P0
-- id: IG_abacus_005_20260508
+- id: IG_abacus_005_20260523
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS PW bulk-and-slab inputs for Al fcc(100) surface-energy convergence using bulk, 5-layer slab, and 7-layer slab structures.
