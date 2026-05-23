@@ -2079,7 +2079,7 @@ questions:
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS PW bulk-and-slab inputs for Al fcc(100) surface-energy convergence using bulk, 5-layer slab, and 7-layer slab structures.
-  human_prompt_seed: "工作区中提供了体相与两种厚度 slab 的 Al fcc(100) 结构。\n\n请为表面能收敛测试准备 ABACUS 平面波输入：\n1) 体相输入使用 cell-relax。\n2) 两个 slab 输入使用离子弛豫，并保留原 STRU 中已有的固定/弛豫标记，不修改给定结构。\n3) 提供体相与 slab 各自匹配的 K 点文件；其中 slab 需采用各向异性采样并在法向使用单点。\n\n将结果写入当前目录：`INPUT_bulk_relax`、`INPUT_slab5`、`INPUT_slab7`、`KPT_bulk`、`KPT_slab`。\n"
+  human_prompt_seed: "工作区中提供了 Al fcc(100) 的体相与两种厚度 slab 结构（bulk_al_fcc.stru、slab_al_fcc100_5l.stru、slab_al_fcc100_7l.stru）。\n\n请为表面能收敛测试准备 ABACUS 平面波输入和 K 点文件。将结果写入当前目录：`INPUT_bulk_relax`、`INPUT_slab5`、`INPUT_slab7`、`KPT_bulk`、`KPT_slab`。\n"
   tags:
   - eng_abacus
   - struct_surface
