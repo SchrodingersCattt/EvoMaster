@@ -51,22 +51,34 @@ this second step, the frontend shows no checklist-level pass/fail data.
 crashing. It does NOT mean the agent's output passes all scoring criteria.
 Always run `score_devshell_tasks.py` for the real pass/fail determination.
 
-## `uv run` fails when GitHub is unreachable (molcrys-kit)
+## `uv run` fails due to proxy/network misconfiguration
 
-`uv sync` / `uv run` tries to fetch `molcrys-kit` from GitHub on every
-invocation if the package isn't cached. When the proxy can't reach GitHub
-(or direct access is also flaky), this causes a timeout and the eval never
-starts.
+The remote machine's network topology:
+- **Direct → PyPI**: ✅ works
+- **Direct → GitHub**: unstable (sometimes OK, sometimes timeout)
+- **Proxy (`ga.xdptech.com:8118`) → PyPI**: ❌ connection reset
+- **Proxy → GitHub**: ❌ timeout
+- **Proxy → LLM API (ai-gateway-global.dp.tech)**: ✅ required
 
-**Workaround**: if `.venv` already has the core dependencies installed,
-bypass `uv run` and launch directly with `.venv/bin/python`:
+The proxy is needed for LLM API calls during eval, but `uv run` inherits
+the proxy env vars and routes PyPI/GitHub traffic through it, causing
+dependency resolution to fail (`hatchling`, `molcrys-kit`, etc.).
+
+**Workaround for launching eval**: bypass `uv run` and use `.venv/bin/python`
+directly (proxy still set for LLM API, but Python doesn't use it for imports):
 
 ```bash
 .venv/bin/python evaluation/scripts/devshell/run_devshell_eval.py ...
 ```
 
-This skips dependency resolution entirely. Only safe when the venv is
-already in a good state (check with `.venv/bin/python -c "import matmaster"`).
+Only safe when the venv is already synced (check with
+`.venv/bin/python -c "import matmaster"`).
+
+**Impact on agent during eval**: agent's tool calls that use `uv run`
+(e.g. `validate_structure.py`) will also fail. This causes silent
+degradation — agent loses validation signals and may rationalize skipping
+checks. No fix at skill level; requires infra fix (e.g. `no_proxy` for
+PyPI/GitHub, or pre-synced venv that doesn't trigger resolution).
 
 ## Slice syntax: tags need `@` prefix
 
