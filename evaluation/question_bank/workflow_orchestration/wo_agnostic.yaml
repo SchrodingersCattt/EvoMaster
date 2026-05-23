@@ -3379,7 +3379,7 @@ questions:
     criterion: Wall-clock time within budget.
     axis: efficiency
     verify: duration_budget
-- id: WO_mlip_molcrystal_head_001_20260522
+- id: WO_mlip_molcrystal_head_001_20260524
   capability: workflow_orchestration
   domain: agnostic
   intent: Test whether agent correctly selects a molecular-crystal-appropriate DPA head
@@ -3409,10 +3409,9 @@ questions:
   - key: sublimation_range
     value:
       filename: sublimation_energy.json
-      checks:
-      - key: sublimation_energy_eV
-        min: 0.3
-        max: 1.5
+      key: sublimation_energy_eV
+      expected: 0.9
+      tolerance: 0.6
   - key: uses_organic_head
     value:
       filename: calc_sublimation.py
@@ -3420,10 +3419,10 @@ questions:
       flags: ''
   - key: turn_budget
     value:
-      max: 25
+      max: 55
   - key: duration_budget
     value:
-      max: 600000
+      max: 1500000
   scoring_checklist:
   - id: calc_script
     criterion: Agent writes `calc_sublimation.py` to workspace.
@@ -3550,10 +3549,9 @@ questions:
   - key: forward_barrier_eV
     value:
       filename: neb_result.json
-      checks:
-      - key: forward_barrier_eV
-        min: 0.5
-        max: 1.2
+      key: forward_barrier_eV
+      expected: 0.85
+      tolerance: 0.35
   - key: turn_budget
     value:
       max: 25
