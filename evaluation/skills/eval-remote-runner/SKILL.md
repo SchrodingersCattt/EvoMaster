@@ -53,7 +53,7 @@ ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST \
 
 Common parameters:
 - `--slices`: `@struct_surface`, `structure_construction`, `input_generation`, etc.
-- `--model`: `bedrock-claude-opus` (default), `claude-sonnet-4-6`, `global.anthropic.claude-opus-4-6-v1`
+- `--model`: `global.anthropic.claude-opus-4-6-v1` (default), `claude-sonnet-4-6`, `claude-haiku-4-5`
 - `--jobs`: parallelism (default 8)
 - `--repeats`: how many times each question is run (default 3)
 - `--notify`: send Feishu notification when done
@@ -159,7 +159,6 @@ ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST \
 
 | Key | Model |
 |---|---|
-| `bedrock-claude-opus` | Claude Opus 4.6 (Bedrock) |
 | `global.anthropic.claude-opus-4-6-v1` | Claude Opus 4.6 (Global) |
 | `claude-opus-4-6` | Claude Opus 4.6 (LiteLLM) |
 | `claude-sonnet-4-6` | Claude Sonnet 4.6 |
