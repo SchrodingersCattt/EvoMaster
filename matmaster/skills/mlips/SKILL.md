@@ -76,11 +76,9 @@ The OSS URLs in `reference/dpa_models.md` are a **snapshot** and may rotate. If 
 | `run_neb.py` | `--initial ini.cif --final fin.cif --model DPA3.1-3M [--images 5]` | `neb_band.pdf`, `result.json` |
 | `calculate_adsorption.py` | `--slabs s1.cif s2.cif --adsorbates CO H OH --model DPA3.1-3M --head OC22` | `adsorption_results.json` |
 
-**MD stages.json**: `[{"mode": "NVT", "temperature_K": 300, "runtime_ps": 5, "timestep_ps": 0.0005}]`. Modes: NVT, NVT-Berendsen, NVT-Langevin, NPT-aniso, NPT-tri, NVE. Optional per-stage key `"equil_frac": 0.2` discards the first 20% of samples before averaging T/P for that stage (default 0.0 = average over the whole stage).
+**MD stages.json**: `[{"mode": "NVT", "temperature_K": 300, "runtime_ps": 5, "timestep_ps": 0.0005}]`. Modes: NVT, NVT-Berendsen, NVT-Langevin, NPT-aniso, NPT-tri, NVE. For output format, pressure conventions, and reporting rules → `reference/md_output_format.md`
 
-**MD pressure & averages** (`result.json["stages"]`): instantaneous pressure is computed as `P = -(sxx+syy+szz)/3` from `atoms.get_stress(include_ideal_gas=True)` (matches ASE `MDLogger`; includes the kinetic / ideal-gas contribution; units GPa, positive = compression). Each stage entry reports `T_mean_K`, `T_std_K`, `P_mean_GPa`, `P_std_GPa`, `V_mean_A3`, `V_std_A3`, `n_samples_averaged` and `equil_frac`. Pressure fields are `null` if the calculator does not implement stress (rare — all built-in DPA/MACE/SevenNet/MatterSim calculators do). Per-step values are also written column-wise to `md_simulation.log` (`step stage E_pot E_kin T(K) P(GPa) V(A^3)`) for plotting / re-averaging.
-
-**Adsorption built-in adsorbates**: H, C, O, N, CO, CO2, H2, H2O, OH, OOH, COOH, HCOO, CHO. Copy both `_calculator.py` and `calculate_adsorption.py` to working directory.
+**Adsorption**: built-in adsorbates and setup → `reference/md_output_format.md` (bottom section).
 
 ## Submission Workflow
 
@@ -114,5 +112,5 @@ The OSS URLs in `reference/dpa_models.md` are a **snapshot** and may rotate. If 
   ```
   If it fails, the migrating atom's coordinates cross a cell boundary — shift by one lattice vector so the straight-line path is the shortest.
 - **Chain outputs**: Use `*_optimized.cif` from optimization as input to subsequent tasks. Save intermediate results under task filenames before starting next step.
-- **MD reporting**: For NPT runs, always report `result.json["stages"][i]["T_mean_K"]` and `["P_mean_GPa"]` (with ±std). For multi-stage protocols (equilibration + production), report production-stage averages, not the whole-trajectory averages. Set `"equil_frac": 0.2` (or larger) on a production stage when you want the script itself to drop the initial transient.
+- **MD reporting**: Report production-stage `T_mean_K` and `P_mean_GPa` (with ±std), not whole-trajectory averages → `reference/md_output_format.md`
 - **DPA + LAMMPS**: When LAMMPS is needed, freeze the multi-head model first → see `reference/dpa_lammps_freeze.md`
