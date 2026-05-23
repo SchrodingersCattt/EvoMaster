@@ -461,3 +461,50 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
+- id: PWO_dpa_head_case_001_20260523
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Test whether agent uses the correct case-sensitive DPA head name when
+    user specifies DPA-3.2-5M model. The head for DPA-3.2 is `OMat24` (capital M),
+    distinct from DPA-3.1's `Omat24` (lowercase m).
+  human_prompt_seed: |
+    请使用 DPA-3.2-5M 模型对 MgO 做结构优化，输出提交配置 `opt_submit.json`。
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: submit_artifact
+    value: opt_submit.json
+  - key: must_dpa32
+    value:
+      filename: opt_submit.json
+      pattern: DPA.?3\.?2
+      flags: ''
+  - key: must_head_omat24_capital
+    value:
+      filename: opt_submit.json
+      pattern: OMat24
+      flags: ''
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: submit_artifact
+    criterion: Agent writes `opt_submit.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_dpa32
+    criterion: '[Platform] cmd references DPA-3.2 model.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_head_omat24_capital
+    criterion: '[Platform] cmd uses head name `OMat24` (capital M) which is the correct
+      casing for DPA-3.2-5M. Using `Omat24` (lowercase m) is wrong for this model
+      version and will cause a head-not-found error.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
