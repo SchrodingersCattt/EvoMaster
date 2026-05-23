@@ -48,18 +48,23 @@ ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST \
   "ps aux | grep 'run_devshell_eval\|run_devshell_agent_loop' | grep -v grep"
 ```
 
-3. If idle, start a run (use `flock` to prevent double-runs):
+3. If idle, start a run (use `flock` to prevent double-runs).
+   **IMPORTANT**: Always use `--eval-ingest-pending-only` so that scoring can
+   be done separately and results properly submitted to the frontend:
 
 ```bash
 ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST \
   "cd /root/matmaster-evo && nohup flock -n /tmp/eval.lock \
-    uv run python evaluation/scripts/devshell/run_devshell_eval.py \
+    .venv/bin/python evaluation/scripts/devshell/run_devshell_eval.py \
       --slices '<slice>' \
       --model '<model_route_key>' \
       --jobs 8 \
-      --notify \
+      --eval-ingest-pending-only \
     > /tmp/eval_run.log 2>&1 &"
 ```
+
+Note: Use `.venv/bin/python` instead of `uv run` to avoid dependency resolution
+issues on machines with limited network access.
 
 Common parameters:
 - `--slices`: `@struct_surface`, `structure_construction`, `input_generation`, etc.
@@ -68,16 +73,19 @@ Common parameters:
 - `--repeats`: how many times each question is run (default 3)
 - `--notify`: send Feishu notification when done
 
-### 1b. Score and Submit (after run completes)
+### 1b. Score and Submit (MANDATORY after run completes)
 
-**IMPORTANT**: `run_devshell_eval.py` only runs the agent and uploads raw artifacts.
-It does NOT evaluate scoring_checklist items. You must run scoring separately
-after the run completes for results to appear on the frontend dashboard:
+**IMPORTANT**: `run_devshell_eval.py` only runs the agent and writes
+`pending_ingest/<task_id>.json` files (without scores). You MUST run scoring
+separately for per-checklist-item results to appear on the frontend dashboard.
+
+The scoring step reads `pending_ingest/` files, evaluates each checklist item,
+writes the score back, and POSTs to tools-server:
 
 ```bash
 ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST \
-  "cd /root/matmaster-evo && uv run python evaluation/scripts/devshell/score_devshell_tasks.py \
-    results/devshell_eval_<timestamp> --submit"
+  "cd /root/matmaster-evo && .venv/bin/python evaluation/scripts/devshell/score_devshell_tasks.py \
+    --run-dir results/devshell_eval_<timestamp> --submit"
 ```
 
 Find the latest run directory:
@@ -87,9 +95,9 @@ ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST \
   "ls -dt /root/matmaster-evo/results/devshell_eval_* | head -1"
 ```
 
-Without `--submit`, scoring results are only written locally. With `--submit`,
-they are POSTed to tools-server and appear on the evaluation dashboard with
-per-checklist-item pass/fail.
+**If `--eval-ingest-pending-only` was NOT used during the run**: there will be
+no `pending_ingest/` directory and scoring cannot submit results. In that case
+you must re-run the eval with `--eval-ingest-pending-only`.
 
 ### 2. Check Progress
 
