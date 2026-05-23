@@ -533,25 +533,39 @@ questions:
     criterion: Agent writes `Pt111_COOH.cif` to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: h_is_atomic
+  - id: h_atom_count
     criterion: Pt111_H.cif contains exactly 1 hydrogen atom (atomic H*, not H2 molecule).
       This is the critical test — in catalysis context H* means a single adsorbed
       hydrogen atom.
     axis: correctness
     verify: struct_file_atom_count
     weight: 2.0
-  - id: hcoo_formula
-    criterion: The HCOO* adsorbate in Pt111_HCOO.cif has composition CHO2 (1C + 1H
-      + 2O, formate anion skeleton). Must NOT be formic acid (HCOOH with 2H+2O).
+  - id: hcoo_c_count
+    criterion: Pt111_HCOO.cif contains exactly 1 carbon atom (HCOO* formate skeleton).
     axis: correctness
     verify: struct_file_atom_count
-    weight: 1.5
-  - id: cooh_formula
-    criterion: The COOH* adsorbate in Pt111_COOH.cif has composition CHO2 (1C + 1H
-      + 2O, carboxyl radical). Must NOT be CO2 (missing H) or formic acid (extra H).
+    weight: 1.0
+  - id: hcoo_o_count
+    criterion: Pt111_HCOO.cif contains exactly 2 oxygen atoms (HCOO* formate skeleton).
     axis: correctness
     verify: struct_file_atom_count
-    weight: 1.5
+    weight: 1.0
+  - id: cooh_c_count
+    criterion: Pt111_COOH.cif contains exactly 1 carbon atom (COOH* carboxyl radical).
+    axis: correctness
+    verify: struct_file_atom_count
+    weight: 1.0
+  - id: cooh_o_count
+    criterion: Pt111_COOH.cif contains exactly 2 oxygen atoms (COOH* carboxyl radical).
+    axis: correctness
+    verify: struct_file_atom_count
+    weight: 1.0
+  - id: cooh_h_count
+    criterion: Pt111_COOH.cif contains exactly 1 hydrogen atom (COOH* carboxyl radical,
+      not formic acid with extra H).
+    axis: correctness
+    verify: struct_file_atom_count
+    weight: 1.0
   - id: hcoo_ch_bond
     criterion: In Pt111_HCOO.cif, the H atom is bonded to C (C-H distance ~1.1 Å),
       confirming correct formate geometry (H-COO) rather than H bonded to O.
