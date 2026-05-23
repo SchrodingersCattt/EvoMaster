@@ -13,7 +13,6 @@ questions:
     '
   tags:
   - struct_surface
-  - polar_surface
   data_files: []
   reference_answers:
   - key: turn_budget
@@ -81,7 +80,6 @@ questions:
     '
   tags:
   - struct_surface
-  - polar_surface
   data_files: []
   reference_answers:
   - key: file_exists
