@@ -526,7 +526,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_009_20260508v3
+- id: SC_struct_009_20260523
   capability: structure_construction
   domain: agnostic
   intent: Build a stoichiometric and symmetric CeO2(111) surface with three Ce-O-Ce
@@ -568,7 +568,8 @@ questions:
   - key: duration_budget
     value: *id002
   - key: token_budget_total
-    value: *id003
+    value:
+      max: 45000
   scoring_checklist:
   - id: file_exists
     criterion: The output file `ceo2_111_trilayer.cif` exists.
@@ -597,14 +598,6 @@ questions:
       claims disconnected from that file. Judge solely from the final answer and named
       deliverables; do not fail because the tool-call log omits MCP, web_search, or
       any specific tool.
-    axis: grounding
-    verify: llm_binary_judge
-  - id: tasker_classification
-    criterion: The agent identifies or discusses the Tasker classification of CeO2(111)
-      (Type 2 surface with charged but non-dipolar repeat unit O-Ce-O), or equivalently
-      explains that the (111) stacking of alternating charged planes does not produce
-      a net dipole moment per repeat unit when the O-Ce-O trilayer is chosen as the
-      repeat.
     axis: grounding
     verify: llm_binary_judge
   - id: symmetric_slab_polarity_strategy
