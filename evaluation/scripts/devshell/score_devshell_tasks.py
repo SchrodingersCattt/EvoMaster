@@ -818,7 +818,7 @@ def main() -> int:
         eval_ingest_timeout=float(args.eval_ingest_timeout),
         score_jobs=max(1, int(args.score_jobs)),
         parallel_checklist_workers=max(1, int(args.parallel_checklist_workers)),
-        ingest_optional_checklist_ids=frozenset(),
+        ingest_optional_checklist_ids=_DEVSHELL_AGENT_INGEST_OPTIONAL_IDS,
     )
 
 
