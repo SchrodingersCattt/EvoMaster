@@ -31,14 +31,24 @@ The remote repo is at: `/root/matmaster-evo`
 
 ### 1. Trigger an Eval Run
 
-Before triggering, verify no run is in progress:
+Before triggering:
+
+1. **Push local changes** and **pull on remote**:
+
+```bash
+git push origin eval
+ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST \
+  "cd /root/matmaster-evo && git pull origin eval"
+```
+
+2. **Verify no run is in progress**:
 
 ```bash
 ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST \
   "ps aux | grep 'run_devshell_eval\|run_devshell_agent_loop' | grep -v grep"
 ```
 
-If idle, start a run (use `flock` to prevent double-runs):
+3. If idle, start a run (use `flock` to prevent double-runs):
 
 ```bash
 ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST \
