@@ -8,7 +8,7 @@ skill_type: operator
 
 MLIPs for atomistic simulations via ASE calculators on Bohrium GPU nodes.
 
-> **Scope: DPA-first.** All scripts and examples default to DPA. Other families (MACE, SevenNet, MatterSim) are supported through the **same unified ASE calculator interface** in `_calculator.py`. The multi-family image ships all four families preinstalled; use DPA as the primary model and switch family only when needed.
+> **Scope: DPA-first.** All scripts and examples default to DPA. Other families (MACE, SevenNet, MatterSim) are supported through the **same unified ASE calculator interface** in `_calculator.py` — see `reference/calculator_dispatch.md` for multi-family dispatch details. The multi-family image ships all four families preinstalled; use DPA as the primary model and switch family only when needed.
 
 ## Capability Gate
 
@@ -25,7 +25,7 @@ These are execution stop rules, not suggestions. User requests like "do not ask 
 - **Scale**: hundreds of atoms are typical; thousand-atom systems are heavy but should still be attempted as-is — do NOT preemptively refuse based on system size or estimated wall-time. Do not calculate expected runtime to justify skipping submission. Submit the task; if it fails (OOM, timeout), then follow the OOM rule below. Only ask before attempting if the user requests reduced prototypes or scaled-down alternatives.
 - **OOM / job failure**: if a Bohrium job fails due to OOM or resource limits, do NOT silently retry with a different model, larger GPU, or alternative engine. STOP and report to user: what failed, why (OOM on which GPU/model), and what options exist (smaller model, LAMMPS route, reduced system). Let user decide.
 - **Capabilities**: generic MLIPs provide energy/forces/stress, not band structures, DOS, gaps, or spectra. Use DFT or specialized ML models only after internal lookup and human choice.
-- **Boundary protocol**: if a request changes model/head/scale/workflow/property class, first verify the head/model is available (`dp --pt show <model> model-branch`), then STOP. Do not write scripts, build structures, submit jobs, shrink systems, or switch workflows until the human chooses a route. When stopping, present options as a question ("Which would you prefer: A, B, or C?") — do not unilaterally recommend one route.
+- **Boundary protocol**: if a request changes model, head, system scale (>2x atom count), workflow type (optimization→MD→NEB→phonon), or target property (energy→elastic→phonon→transport), first verify the head/model is available (`dp --pt show <model> model-branch`), then STOP. Do not write scripts, build structures, submit jobs, shrink systems, or switch workflows until the human chooses a route. When stopping, present options as a question ("Which would you prefer: A, B, or C?") — do not unilaterally recommend one route.
 
 ## Models
 
