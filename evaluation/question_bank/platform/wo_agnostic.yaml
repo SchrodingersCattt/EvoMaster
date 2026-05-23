@@ -508,3 +508,56 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
+- id: PWO_gpumd_phonon_001_20260523
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: End-to-end GPUMD phonon dispersion for Si using NEP potential. Agent must
+    know GPUMD requires GPU node and select correct machine type without being told.
+  human_prompt_seed: |
+    使用 GPUMD 计算 Si 金刚石结构的声子色散关系。
+
+    要求：
+    - 使用 NEP 势函数（Si 体系，从 GPUMD 官方 examples 或已有资源获取）
+    - 提交到 Bohrium 运行
+    - 报告 Gamma 点光学支频率
+    - 结果写入 `phonon_result.json`：`{"gamma_optical_THz": ..., "method": "gpumd"}`
+  tags:
+  - eng_gpumd
+  data_files: []
+  reference_answers:
+  - key: output_artifact
+    value: phonon_result.json
+  - key: gamma_optical_range
+    value:
+      filename: phonon_result.json
+      checks:
+      - key: gamma_optical_THz
+        min: 14.0
+        max: 17.0
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 900000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `phonon_result.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: gamma_optical_range
+    criterion: '[Must] Si Gamma-point optical branch frequency is within 14-17 THz
+      (experimental ~15.5 THz). Values far outside indicate wrong potential, wrong
+      supercell, or incorrect post-processing. If agent submitted to CPU node,
+      GPUMD will fail silently (no log) and no result will be produced.'
+    axis: correctness
+    verify: json_file_numeric_range
+    weight: 3.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget

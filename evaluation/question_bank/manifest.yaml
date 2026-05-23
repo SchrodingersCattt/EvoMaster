@@ -145,7 +145,7 @@ banks:
 - path: workflow_orchestration/wo_agnostic_gpumd_nep_clean.yaml
   capability: workflow_orchestration
   domain: agnostic
-  questions: 5
+  questions: 4
 - path: workflow_orchestration/wo_battery.yaml
   capability: workflow_orchestration
   domain: battery
@@ -165,7 +165,7 @@ banks:
 - path: platform/wo_agnostic.yaml
   capability: workflow_orchestration
   domain: agnostic
-  questions: 7
+  questions: 8
 - path: platform/wo_catalysis.yaml
   capability: workflow_orchestration
   domain: catalysis
