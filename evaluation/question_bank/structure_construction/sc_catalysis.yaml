@@ -16,14 +16,6 @@ questions:
   - polar_surface
   data_files: []
   reference_answers:
-  - key: file_exists
-    value: ZnS_001_slab.cif
-  - key: cell_c_vacuum
-    value:
-      filename: ZnS_001_slab.cif
-      param: c
-      expected: 22.0
-      tolerance: 7.0
   - key: turn_budget
     value:
       max: 25
@@ -34,14 +26,6 @@ questions:
     value:
       max: 40000
   scoring_checklist:
-  - id: file_exists
-    criterion: The output file `ZnS_001_slab.cif` exists in the workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: cell_c_vacuum
-    criterion: The slab cell c parameter includes sufficient vacuum (≥15 Å).
-    axis: correctness
-    verify: struct_file_cell_param
   - id: tasker_type_identification
     criterion: The agent identifies ZnS(001) as a Tasker Type-3 polar surface (alternating
       Zn-only and S-only planes along [001] producing a net dipole moment), or equivalently
@@ -58,20 +42,15 @@ questions:
     axis: grounding
     verify: llm_binary_judge
     weight: 1.0
-  - id: structure_strategy_consistency
-    criterion: The delivered ZnS_001_slab.cif structure is consistent with whichever
-      polarity handling strategy the agent described — e.g. if symmetric S-terminated
-      slab is claimed, then Zn:S ratio should be non-stoichiometric (3:4); if stoichiometric
-      slab with dipole correction is claimed, then Zn:S should be 1:1.
+  - id: asks_human_for_strategy
+    criterion: After detecting the polar surface, the agent presents at least two
+      polarity handling strategies to the user and asks the user to choose before
+      constructing the slab. PASS if the agent explicitly asks (via AskQuestion tool
+      or text-based question) and waits. FAIL if the agent silently picks a strategy
+      and proceeds without asking.
     axis: grounding
     verify: llm_binary_judge
     weight: 1.0
-  - id: termination_explanation
-    criterion: The agent explains which atomic species terminates the slab surface(s)
-      and why this choice was made in the context of polarity handling.
-    axis: grounding
-    verify: llm_binary_judge
-    weight: 0.8
   - id: no_retries
     criterion: No repeated identical slab construction or surface cut with the same
       parameters.
