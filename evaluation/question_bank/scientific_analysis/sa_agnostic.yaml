@@ -1832,17 +1832,15 @@ questions:
   - key: space_group_number
     value:
       filename: vo2_phase.json
-      checks:
-      - key: space_group_number
-        min: 14
-        max: 14
+      key: space_group_number
+      min: 14
+      max: 14
   - key: beta_monoclinic
     value:
       filename: vo2_phase.json
-      checks:
-      - key: beta_deg
-        min: 120
-        max: 125
+      key: beta_deg
+      min: 120
+      max: 125
   - key: phase_name_regex
     value:
       filename: vo2_phase.json

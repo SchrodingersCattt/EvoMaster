@@ -530,10 +530,9 @@ questions:
   - key: gamma_optical_range
     value:
       filename: phonon_result.json
-      checks:
-      - key: gamma_optical_THz
-        min: 14.0
-        max: 17.0
+      key: gamma_optical_THz
+      min: 14.0
+      max: 17.0
   - key: turn_budget
     value:
       max: 25

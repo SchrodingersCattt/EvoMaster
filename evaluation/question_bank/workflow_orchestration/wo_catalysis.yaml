@@ -23,10 +23,9 @@ questions:
   - key: wf_range
     value:
       filename: work_function.json
-      checks:
-      - key: work_function_eV
-        min: 4.5
-        max: 6.5
+      key: work_function_eV
+      min: 4.5
+      max: 6.5
   - key: turn_budget
     value:
       max: 25
