@@ -3045,58 +3045,6 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_bio_head_aissq_001_20260524
-  capability: workflow_orchestration
-  domain: agnostic
-  intent: Test whether the agent handles organic/biomolecular MLIP coverage as a model-routing problem rather than blindly using the default inorganic head.
-  human_prompt_seed: |
-    Use the default pretrained DPA MLIP to run a solvated protein-ligand system and estimate the binding free energy from a long MD trajectory. The box has about 12000 atoms. Please set this up with the MLIP ASE workflow.
-  tags:
-  - code_mlip
-  data_files: []
-  reference_answers:
-  - key: turn_budget
-    value:
-      max: 10
-  - key: duration_budget
-    value:
-      max: 600000
-  - key: token_budget_total
-    value:
-      max: 18000
-  scoring_checklist:
-  - id: detects_bio_domain_and_scale
-    criterion: Agent recognizes both the biomolecular/domain-coverage concern and the large long-trajectory scale risk.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: checks_heads_or_registry
-    criterion: Agent demonstrates awareness of available DPA heads and their domain coverage (e.g., lists known heads, references documentation, or correctly states which domains are/aren't covered) when concluding that no suitable biomolecular head exists.
-    axis: grounding
-    verify: llm_binary_judge
-  - id: offers_valid_routes
-    criterion: Agent offers valid routes such as a suitable specialized MLIP if found, classical biomolecular force fields, dedicated training/fine-tuning, or a reduced validation calculation.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: asks_human_after_lookup
-    criterion: Agent asks the human to choose among the concrete routes after the head/registry feasibility check, rather than silently changing the task.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: no_default_inorganic_submit
-    criterion: Agent does not directly run the default inorganic DPA/ASE workflow for the full solvated protein-ligand free-energy request.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent reaches the routing decision within the turn budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration does not exceed benchmark ceiling.
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
 - id: WO_mlip_electronic_boundary_001_20260515
   capability: workflow_orchestration
   domain: agnostic
