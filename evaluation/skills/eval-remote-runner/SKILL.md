@@ -78,50 +78,15 @@ Without this step, the frontend shows NO checklist-level pass/fail data.
 
 ## Monitoring
 
-Check progress → `references/monitoring_scripts.md`
-
 Quick check (no Python):
 
 ```bash
 $SSH_CMD "wc -l /root/matmaster-evo/results/devshell_eval_*/raw_runs.jsonl"
 ```
 
-### Periodic Progress Reporting
+When process count drops to 0, the eval is done — immediately run Step 2 (score and submit).
 
-Use `/loop` to set up recurring progress checks during a running eval:
-
-```
-/loop 10m ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST "cd /root/matmaster-evo && wc -l results/devshell_eval_*/raw_runs.jsonl 2>/dev/null; echo '---'; tail -5 /tmp/eval_run.log 2>/dev/null; echo '---'; ps aux | grep 'run_devshell_eval\|run_devshell_agent_loop' | grep -v grep | wc -l"
-```
-
-This reports every 10 minutes:
-1. Number of completed runs (`raw_runs.jsonl` line count)
-2. Last 5 lines of the eval log (shows recent task status)
-3. Number of active eval processes (0 = eval finished)
-
-When process count drops to 0, the eval is done — proceed to Step 2 (score and submit).
-
-### macOS Desktop Notifications
-
-Use `osascript` to push a popup after each progress check (no extra install needed):
-
-```bash
-osascript -e 'tell application "System Events" to display dialog "已完成 N 条，M 个进程活跃中" with title "Eval Progress" buttons {"OK"} default button "OK" giving up after 5'
-```
-
-`giving up after 5` makes the dialog auto-dismiss after 5 seconds so it doesn't block.
-
-Note: `display notification` (notification center) may require terminal notification permissions. The `display dialog` approach above works without extra setup.
-
-### Auto-Score on Completion
-
-When monitoring detects process count = 0, immediately run Step 2 (score and submit) without waiting for the next loop cycle. This ensures results are available on the frontend as soon as possible.
-
-## Tuning `--jobs`
-
-- The remote machine (30 vCPU, 112GB RAM) is heavily underutilized at `--jobs 8` — the bottleneck is API I/O, not CPU.
-- To check if you're hitting rate limits: `grep -i '429\|rate\|retry' /tmp/eval_run.log`
-- If no 429 errors appear, increase `--jobs` (try 16 → 20). Dial back if rate-limit errors show up.
+For periodic reporting (`/loop`), desktop notifications, and tuning `--jobs` → `references/monitoring_scripts.md`
 
 ## Hard Rules
 

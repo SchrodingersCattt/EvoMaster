@@ -2,6 +2,37 @@
 
 Inline Python scripts for SSH execution. Replace `<question_id>` with actual ID.
 
+## Periodic Progress Reporting (`/loop`)
+
+Use `/loop` to set up recurring progress checks during a running eval:
+
+```
+/loop 10m ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST "cd /root/matmaster-evo && wc -l results/devshell_eval_*/raw_runs.jsonl 2>/dev/null; echo '---'; tail -5 /tmp/eval_run.log 2>/dev/null; echo '---'; ps aux | grep 'run_devshell_eval\|run_devshell_agent_loop' | grep -v grep | wc -l"
+```
+
+This reports every 10 minutes:
+1. Number of completed runs (`raw_runs.jsonl` line count)
+2. Last 5 lines of the eval log (shows recent task status)
+3. Number of active eval processes (0 = eval finished)
+
+### macOS Desktop Notifications
+
+Use `osascript` to push a popup after each progress check (no extra install needed):
+
+```bash
+osascript -e 'tell application "System Events" to display dialog "已完成 N 条，M 个进程活跃中" with title "Eval Progress" buttons {"OK"} default button "OK" giving up after 5'
+```
+
+`giving up after 5` makes the dialog auto-dismiss after 5 seconds so it doesn't block.
+
+Note: `display notification` (notification center) may require terminal notification permissions. The `display dialog` approach above works without extra setup.
+
+## Tuning `--jobs`
+
+- The remote machine (30 vCPU, 112GB RAM) is heavily underutilized at `--jobs 8` — the bottleneck is API I/O, not CPU.
+- To check if you're hitting rate limits: `grep -i '429\|rate\|retry' /tmp/eval_run.log`
+- If no 429 errors appear, increase `--jobs` (try 16 → 20). Dial back if rate-limit errors show up.
+
 ## Check Progress
 
 ```bash
