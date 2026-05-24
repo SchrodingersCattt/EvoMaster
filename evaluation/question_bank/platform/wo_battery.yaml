@@ -142,9 +142,10 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: no_model_search
-    criterion: Agent did NOT spend turns searching the web or papers for DP models,
-      downloading alternative models, or attempting to parse the .pt file contents.
-      It should directly use the provided lifsi_dme.pt path.
+    criterion: Agent did NOT search the web for alternative models, download other
+      models, or use low-level binary parsing (torch.load, zipfile, xxd, hexdump)
+      to inspect the .pt file. Using `dp --pt show` to check type_map or model
+      metadata is acceptable.
     axis: efficiency
     verify: llm_binary_judge
   - id: turn_budget
