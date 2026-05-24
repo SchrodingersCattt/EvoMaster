@@ -37,7 +37,7 @@ def _patch_bohrium_submit(runtime: Any, error_message: str) -> None:
     registry = getattr(catalog, '_registry', None)
     if registry is None:
         return
-    tool = registry.get('Bohrium')
+    tool = registry.get_raw('Bohrium')
     if tool is None or not isinstance(tool, BohriumTool):
         return
     tool._submit = lambda args: ToolResult(
