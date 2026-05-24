@@ -86,6 +86,21 @@ Quick check (no Python):
 $SSH_CMD "wc -l /root/matmaster-evo/results/devshell_eval_*/raw_runs.jsonl"
 ```
 
+### Periodic Progress Reporting
+
+Use `/loop` to set up recurring progress checks during a running eval:
+
+```
+/loop 10m ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST "cd /root/matmaster-evo && wc -l results/devshell_eval_*/raw_runs.jsonl 2>/dev/null; echo '---'; tail -5 /tmp/eval_run.log 2>/dev/null; echo '---'; ps aux | grep 'run_devshell_eval\|run_devshell_agent_loop' | grep -v grep | wc -l"
+```
+
+This reports every 10 minutes:
+1. Number of completed runs (`raw_runs.jsonl` line count)
+2. Last 5 lines of the eval log (shows recent task status)
+3. Number of active eval processes (0 = eval finished)
+
+When process count drops to 0, the eval is done — proceed to Step 2 (score and submit).
+
 ## Hard Rules
 
 - **Never kill a running eval** — check `ps` first.
