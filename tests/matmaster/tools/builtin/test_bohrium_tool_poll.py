@@ -50,7 +50,7 @@ class TestPollWithRegistry:
         assert isinstance(result, ToolResult)
         payload = json.loads(result.content)
         assert payload["status"] == "Running"
-        assert payload["next_check_seconds"] == 30
+        assert payload["next_check_seconds"] == 5
         assert payload.get("cached") is not True
         assert registry.get("job-1").poll_count == 1
 

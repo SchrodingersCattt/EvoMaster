@@ -229,7 +229,7 @@ questions:
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
     verify: turn_budget
-  - id: duration_budget_007
+  - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
       a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
@@ -355,7 +355,7 @@ questions:
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
     verify: turn_budget
-  - id: duration_budget_008
+  - id: duration_budget
     criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
       a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
@@ -477,7 +477,7 @@ questions:
     axis: correctness
     verify: llm_binary_judge
     weight: 1.0
-  - id: turn_budget_qe
+  - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
@@ -572,7 +572,7 @@ questions:
     axis: correctness
     verify: llm_binary_judge
     weight: 1.5
-  - id: turn_budget_abacus
+  - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget

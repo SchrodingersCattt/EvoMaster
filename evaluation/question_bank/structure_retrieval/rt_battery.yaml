@@ -117,7 +117,6 @@ questions:
     输出 CIF 文件到 `NFPP.cif`，并用 pymatgen 验证空间群是否正确。'
   tags:
   - meta_database
-  - eng_battery
   data_files: []
   reference_answers:
   - key: cif_artifact

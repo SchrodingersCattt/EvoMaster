@@ -18,6 +18,7 @@ class QuestionTag(StrEnum):
     eng_gpumd = 'eng_gpumd'
     eng_lammps = 'eng_lammps'
     eng_cp2k = 'eng_cp2k'
+    eng_qe = 'eng_qe'
     eng_gromacs = 'eng_gromacs'
     eng_orca = 'eng_orca'
     # 代码库/工具链
