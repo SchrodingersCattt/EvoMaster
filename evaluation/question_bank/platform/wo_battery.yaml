@@ -92,7 +92,7 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
-- id: WO_dpmd_custom_model_001_20260520
+- id: WO_dpmd_custom_model_001_20260524
   capability: workflow_orchestration
   domain: battery
   intent: Test whether agent correctly passes a user-provided local DP model path to

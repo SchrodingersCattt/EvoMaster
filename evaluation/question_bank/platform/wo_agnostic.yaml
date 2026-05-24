@@ -461,7 +461,7 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
-- id: PWO_dpa_head_case_001_20260523
+- id: PWO_dpa_head_case_001_20260524
   capability: workflow_orchestration
   domain: agnostic
   intent: Test whether agent uses the correct case-sensitive DPA head name when
