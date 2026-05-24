@@ -137,11 +137,11 @@ banks:
 - path: workflow_orchestration/wo_alloy.yaml
   capability: workflow_orchestration
   domain: alloy
-  questions: 6
+  questions: 5
 - path: workflow_orchestration/wo_agnostic.yaml
   capability: workflow_orchestration
   domain: agnostic
-  questions: 42
+  questions: 41
 - path: workflow_orchestration/wo_agnostic_gpumd_nep_clean.yaml
   capability: workflow_orchestration
   domain: agnostic
@@ -177,7 +177,11 @@ banks:
 - path: platform/ec_agnostic.yaml
   capability: execution_contract
   domain: agnostic
-  questions: 7
+  questions: 8
+- path: platform/ec_alloy.yaml
+  capability: execution_contract
+  domain: alloy
+  questions: 1
 - path: input_generation/ig_semiconductor_abacus.yaml
   capability: input_generation
   domain: semiconductor
