@@ -100,7 +100,7 @@ questions:
   human_prompt_seed: '我在工作区训练了一个针对 LiFSI/DME 电解液的 DP 模型 `lifsi_dme.pt`。请用该模型对
     工作区中的 `electrolyte_box.xyz` 进行 50 ps NPT 300K MD 模拟，输出提交配置 `md_submit.json`。'
   tags:
-  - code_mlip
+  - eng_lammps
   data_files:
   - key: model_file
     path: data/WO_dpmd_custom_model_001/lifsi_dme.pt
