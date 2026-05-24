@@ -19,6 +19,7 @@ from evaluation.validators.json_file import (
     check_json_file_schema as _check_json_file_schema,
 )
 from evaluation.validators.stru_file import check_stru_file
+from evaluation.validators.md_submit import check_md_submit_structure_min_distance
 from evaluation.validators.structure_density import check_density
 from evaluation.validators.structure_general import (
     check_atom_count,
@@ -399,6 +400,20 @@ def check_struct_file_stoichiometry_ratio(
         element_b=str(cfg.get("element_b", "")),
         expected_ratio=float(cfg.get("expected_ratio", 0)),
         tolerance=float(cfg.get("tolerance", 0)),
+    )
+
+
+def check_md_submit_structure_min_dist(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_md_submit_structure_min_distance(
+        ws,
+        submit_file=str(cfg.get("submit_file", "md_submit.json")),
+        min_distance_A=float(cfg.get("min_distance_A", 1.0)),
     )
 
 

@@ -68,6 +68,7 @@ VerifyLiteral = Literal[
     "struct_file_all_occupancy_one",
     "struct_file_space_group",
     "struct_file_min_interatomic_distance",
+    "md_submit_structure_min_dist",
     # file-system check (no pymatgen needed)
     "struct_file_count",
     # surface termination check
@@ -332,6 +333,7 @@ class QuestionItem(BaseModel):
             "struct_file_all_occupancy_one",
             "struct_file_space_group",
             "struct_file_min_interatomic_distance",
+            "md_submit_structure_min_dist",
             "text_file_contains_all",
             "text_file_excludes_all",
             "text_file_kpt_path",

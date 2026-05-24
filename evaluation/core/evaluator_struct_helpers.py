@@ -103,6 +103,7 @@ def check_struct_file_min_interatomic_distance(
     )
 
 
+
 def check_struct_file_integer_stoichiometry(
     *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
 ) -> tuple[bool, str]:

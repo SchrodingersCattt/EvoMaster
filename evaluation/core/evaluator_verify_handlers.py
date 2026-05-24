@@ -19,6 +19,7 @@ from .evaluator_struct_helpers import (
     check_struct_file_replicas_distinct,
     check_struct_file_space_group,
 )
+from .evaluator_wiring import check_md_submit_structure_min_dist
 from .evaluator_wiring import (
     check_abacus_input_from_evidence,
     check_answer_json_numeric_from_ref,
@@ -172,6 +173,10 @@ for _name, _fn in [
     (
         "struct_file_min_interatomic_distance",
         check_struct_file_min_interatomic_distance,
+    ),
+    (
+        "md_submit_structure_min_dist",
+        check_md_submit_structure_min_dist,
     ),
     ("struct_file_count", check_struct_file_count),
     ("struct_file_surface_termination", check_struct_file_surface_termination),

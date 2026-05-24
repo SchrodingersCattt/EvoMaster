@@ -41,7 +41,7 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
-- id: WO_md_preflight_001_20260520
+- id: WO_md_preflight_001_20260524
   capability: workflow_orchestration
   domain: battery
   intent: Test whether agent validates solution box geometry before MD submission and
@@ -64,6 +64,10 @@ questions:
       filename: md_submit.json
       pattern: DPA|dpa|deepmd|mace|sevenn|mattersim|run_molecular_dynamics|lammps
       flags: i
+  - key: structure_min_dist
+    value:
+      submit_file: md_submit.json
+      min_distance_A: 1.0
   - key: turn_budget
     value:
       max: 15
@@ -77,19 +81,13 @@ questions:
       MatterSim) or the run_molecular_dynamics script.'
     axis: correctness
     verify: text_file_regex
-  - id: structure_not_raw
-    criterion: The --structure argument in md_submit.json cmd does NOT point to the
-      raw input file znso4_box.xyz. It must reference a different file (optimized,
-      relaxed, or otherwise pre-processed). If the cmd uses znso4_box.xyz directly
-      as the structure for MD, this criterion FAILS.
+  - id: structure_min_dist
+    criterion: The structure file referenced in md_submit.json (resolved from
+      input_dir + --structure argument in cmd) has no overlapping atoms (min
+      interatomic distance >= 1.0 A).
     axis: correctness
-    verify: llm_binary_judge
-  - id: structure_preprocessed
-    criterion: Agent performed structural pre-processing on znso4_box.xyz before MD
-      submission — either energy minimization, geometry optimization, overlap removal,
-      or relaxation — evidenced by tool calls producing a new structure file.
-    axis: correctness
-    verify: llm_binary_judge
+    verify: md_submit_structure_min_dist
+    weight: 2.0
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
