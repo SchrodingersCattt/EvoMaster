@@ -3379,7 +3379,7 @@ questions:
     criterion: Wall-clock time within budget.
     axis: efficiency
     verify: duration_budget
-- id: WO_mlip_molcrystal_head_001_20260524
+- id: WO_mlip_molcrystal_head_001_20260524v2
   capability: workflow_orchestration
   domain: agnostic
   intent: Test whether agent correctly selects a molecular-crystal-appropriate DPA head
@@ -3396,6 +3396,7 @@ questions:
 
     要求：
     - 计算脚本保存为 `calc_sublimation.py`
+    - 从晶体中提取的单分子保存为 `molecule.xyz`
     - 结果写入 `sublimation_energy.json`：
       `{"material": "naphthalene", "space_group": "...", "Z": ..., "E_crystal_per_mol_eV": ..., "E_gas_eV": ..., "sublimation_energy_eV": ...}`
   tags:
@@ -3406,6 +3407,14 @@ questions:
     value: calc_sublimation.py
   - key: output_artifact
     value: sublimation_energy.json
+  - key: molecule_file
+    value: molecule.xyz
+  - key: molecule_correct_atoms
+    value:
+      filename: molecule.xyz
+      tokens:
+      - '18'
+      flags: ''
   - key: sublimation_range
     value:
       filename: sublimation_energy.json
@@ -3432,6 +3441,16 @@ questions:
     criterion: Agent writes `sublimation_energy.json` to workspace.
     axis: correctness
     verify: artifact_exists
+  - id: molecule_file
+    criterion: Agent writes extracted single molecule to `molecule.xyz`.
+    axis: correctness
+    verify: artifact_exists
+  - id: molecule_correct_atoms
+    criterion: Extracted molecule has correct atom count (18 atoms for C10H8).
+      Wrong count indicates failed PBC unwrapping or incomplete molecule extraction.
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
   - id: sublimation_range
     criterion: The sublimation_energy_eV is within a physically reasonable range
       (0.3-1.5 eV/molecule for naphthalene). Wildly wrong values indicate wrong head
