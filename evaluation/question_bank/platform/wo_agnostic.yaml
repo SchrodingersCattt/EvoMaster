@@ -633,3 +633,127 @@ questions:
     criterion: Wall-clock time within budget.
     axis: efficiency
     verify: duration_budget
+- id: PWO_qe_scf_001_20260524
+  capability: workflow_orchestration
+  domain: agnostic
+  priority: P1
+  intent: End-to-end QE pw.x SCF workflow for MgO with platform submission and
+    result retrieval. Agent must produce correct pw.x input, submit to Bohrium
+    (not run locally), wait for completion, and report total energy. From real
+    trajectory where agents repeatedly tried to run pw.x locally.
+  human_prompt_seed: '请帮我对 MgO 岩盐结构做一次 Quantum ESPRESSO pw.x 的 SCF 单点能计算。
+    结构参数：Fm-3m, a=4.21 Å, Mg 在 (0,0,0), O 在 (0.5,0.5,0.5)。
+    使用 PBE 泛函、ecutwfc=60 Ry、4×4×4 k 点网格。帮我跑一下看看总能是多少。'
+  tags:
+  - eng_qe
+  data_files: []
+  reference_answers:
+  - key: input_artifact
+    value:
+      filename: '*.in'
+      glob: true
+  - key: must_scf_calc
+    value:
+      filename: '*.in'
+      pattern: (?im)calculation\s*=\s*['"]?scf['"]?
+      flags: im
+      glob: true
+  - key: must_ecutwfc
+    value:
+      filename: '*.in'
+      pattern: (?im)ecutwfc\s*=\s*60
+      flags: im
+      glob: true
+  - key: must_pbe
+    value:
+      filename: '*.in'
+      pattern: (?im)input_dft\s*=\s*['"]?pbe['"]?
+      flags: im
+      glob: true
+  - key: must_nat_2
+    value:
+      filename: '*.in'
+      pattern: (?im)nat\s*=\s*2
+      flags: im
+      glob: true
+  - key: must_ntyp_2
+    value:
+      filename: '*.in'
+      pattern: (?im)ntyp\s*=\s*2
+      flags: im
+      glob: true
+  - key: must_kpoints
+    value:
+      filename: '*.in'
+      pattern: (?m)^\s*4\s+4\s+4
+      flags: m
+      glob: true
+  - key: turn_budget
+    value:
+      max: 15
+  scoring_checklist:
+  - id: input_artifact
+    criterion: A pw.x input file (*.in) is written to workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: must_scf_calc
+    criterion: '[Must] Input sets calculation = scf.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_ecutwfc
+    criterion: '[Must] ecutwfc is set to 60 Ry as user requested.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_pbe
+    criterion: '[Must] PBE functional is specified via input_dft.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_nat_2
+    criterion: '[Must] nat=2 for the primitive MgO cell (1 Mg + 1 O).'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_ntyp_2
+    criterion: '[Must] ntyp=2 (Mg and O species).'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_kpoints
+    criterion: '[Must] K_POINTS grid includes 4 4 4.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: no_local_execution
+    criterion: '[Must] Agent does NOT attempt to run pw.x locally (no execute_bash
+      with pw.x command). It must submit to Bohrium platform for execution.'
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: bohrium_submission
+    criterion: '[Platform] Agent submits the job to Bohrium using the bohrium-job skill
+      or equivalent submission mechanism with a QE image.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: correct_lattice
+    criterion: The input file contains correct MgO rocksalt lattice parameters (a=4.21
+      Angstrom or equivalent in Bohr, ibrav=2 for FCC, or explicit CELL_PARAMETERS
+      consistent with Fm-3m a=4.21).
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: reports_total_energy
+    criterion: '[Must] Agent waits for the Bohrium job to complete, retrieves the
+      output, and reports the total energy of MgO. The value should be in the range
+      of -930 to -960 Ry (or equivalent in eV) for PBE MgO with this setup.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
