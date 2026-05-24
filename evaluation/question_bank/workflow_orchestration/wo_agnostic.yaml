@@ -3473,7 +3473,7 @@ questions:
     criterion: Wall-clock time within budget.
     axis: efficiency
     verify: duration_budget
-- id: WO_mech_012_20260524
+- id: WO_mech_012_20260524v2
   capability: workflow_orchestration
   domain: agnostic
   intent: Compute equation of state for Ti3AlC using DPA MLIP. Agent must use correct
@@ -3503,6 +3503,12 @@ questions:
       filename: calc_eos.py
       pattern: from\s+ase\.filters\s+import
       flags: ''
+  - key: correct_structure
+    value:
+      filename: calc_eos.py
+      tokens:
+      - hexagonal
+      flags: i
   - key: B0_range
     value:
       filename: eos_result.json
@@ -3530,6 +3536,12 @@ questions:
       module.
     axis: correctness
     verify: text_file_regex
+    weight: 2.0
+  - id: correct_structure
+    criterion: calc_eos.py uses the correct hexagonal MAX phase structure for Ti3AlC
+      (P63/mmc), NOT a cubic perovskite/anti-perovskite structure.
+    axis: correctness
+    verify: text_file_contains_all
     weight: 2.0
   - id: B0_range
     criterion: The fitted bulk modulus B0_GPa is within a physically reasonable range
