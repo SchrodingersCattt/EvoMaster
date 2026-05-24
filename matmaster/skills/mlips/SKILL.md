@@ -112,7 +112,7 @@ The OSS URLs in `reference/dpa_models.md` are a **snapshot** and may rotate. If 
   ```
   If it fails, the migrating atom's coordinates cross a cell boundary — shift by one lattice vector so the straight-line path is the shortest.
 - **QHA thermal expansion**: For quasi-harmonic thermal expansion (CTE) calculations, see `reference/qha_workflow.md` — covers PhonopyQHA API, data shapes, Vinet EOS fitting, and known model limitations.
-- **Molecular crystal sublimation**: For sublimation energy of organic crystals, see `reference/molecular_crystal.md` — covers head selection (OMol25), molecule extraction across PBC, and gas-phase pbc=True requirement.
+- **Molecular crystal sublimation**: For sublimation energy of organic crystals, see `reference/molecular_crystal.md` — covers head selection (OMol25), molecule extraction across PBC, and gas-phase pbc=True requirement. **CRITICAL: if E_sub > 5 eV, do NOT switch heads — the issue is molecule extraction or pbc setup.**
 - **Chain outputs**: Use `*_optimized.cif` from optimization as input to subsequent tasks. Save intermediate results under task filenames before starting next step.
 - **MD reporting**: Report production-stage `T_mean_K` and `P_mean_GPa` (with ±std), not whole-trajectory averages → `reference/md_output_format.md`
 - **DPA + LAMMPS**: When LAMMPS is needed, freeze the multi-head model first → see `reference/dpa_lammps_freeze.md`
