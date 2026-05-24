@@ -103,3 +103,73 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+- id: SR_polyanion_formula_001_20260524
+  capability: structure_retrieval
+  domain: battery
+  priority: P1
+  intent: Test retrieval of a polyanion cathode material where the full structural
+    formula (with grouped anions like (PO₄)₂P₂O₇) will not match database entries
+    directly. Agent must recognize that databases store reduced/simplified formulae
+    and try alternative query forms (e.g., Na4Fe3P4O15 instead of Na4Fe3(PO4)2P2O7).
+    From real trajectory where agent spent 168 events failing with full formula while
+    simplified formula hit immediately.
+  human_prompt_seed: '请从结构数据库中获取 Na₄Fe₃(PO₄)₂P₂O₇ 的晶体结构，空间群应为 Pna2₁。
+    输出 CIF 文件到 `NFPP.cif`，并用 pymatgen 验证空间群是否正确。'
+  tags:
+  - meta_database
+  - eng_battery
+  data_files: []
+  reference_answers:
+  - key: cif_artifact
+    value: NFPP.cif
+  - key: must_formula_in_cif
+    value:
+      filename: NFPP.cif
+      pattern: (?i)(Na.*Fe.*P.*O|Na4Fe3P4O15)
+      flags: i
+  - key: must_spacegroup_verified
+    value:
+      filename: '*'
+      pattern: (?i)(Pna2.1|Pna21|P\s*n\s*a\s*2.*1|space.group.*33)
+      flags: i
+      glob: true
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: cif_artifact
+    criterion: Agent writes NFPP.cif (or equivalent CIF) to workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: must_formula_in_cif
+    criterion: '[Must] CIF file contains Na-Fe-P-O compound matching Na4Fe3P4O15
+      stoichiometry.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: spacegroup_correct
+    criterion: '[Must] Agent verifies (via pymatgen or CIF header) that the retrieved
+      structure has space group Pna2₁ (or #33). If the structure does not match, agent
+      must report the discrepancy rather than delivering a wrong structure.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: formula_adaptation
+    criterion: '[Must] Agent does NOT give up after initial query failure. It tries
+      at least one alternative formula representation (reduced formula, Hill notation,
+      or element-only query) when the full polyanion formula fails to match.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: no_manual_construction
+    criterion: Agent retrieves the structure from a database rather than manually
+      constructing it from literature Wyckoff positions. Manual CIF construction from
+      scraped coordinates is fragile and error-prone.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
