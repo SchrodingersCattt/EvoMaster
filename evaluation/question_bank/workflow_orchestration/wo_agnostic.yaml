@@ -3045,7 +3045,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_bio_head_aissq_001_20260515
+- id: WO_mlip_bio_head_aissq_001_20260524
   capability: workflow_orchestration
   domain: agnostic
   intent: Test whether the agent handles organic/biomolecular MLIP coverage as a model-routing problem rather than blindly using the default inorganic head.
@@ -3070,7 +3070,7 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: checks_heads_or_registry
-    criterion: Agent checks documented DPA heads/branches or performs/plans an internal `aissq-explorer` lookup for suitable organic, biomolecular, or solvated-system models before deciding.
+    criterion: Agent demonstrates awareness of available DPA heads and their domain coverage (e.g., lists known heads, references documentation, or correctly states which domains are/aren't covered) when concluding that no suitable biomolecular head exists.
     axis: grounding
     verify: llm_binary_judge
   - id: offers_valid_routes
