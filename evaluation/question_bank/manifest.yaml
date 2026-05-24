@@ -193,7 +193,7 @@ banks:
 - path: structure_construction/sc_battery.yaml
   capability: structure_construction
   domain: battery
-  questions: 3
+  questions: 4
 - path: structure_construction/sc_polymer.yaml
   capability: structure_construction
   domain: polymer
