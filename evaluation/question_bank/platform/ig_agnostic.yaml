@@ -374,7 +374,7 @@ questions:
     agents repeatedly trying to run pw.x locally on test nodes where QE is broken.
   human_prompt_seed: '请帮我对 MgO 岩盐结构做一次 Quantum ESPRESSO pw.x 的 SCF 单点能计算。
     结构参数：Fm-3m, a=4.21 Å, Mg 在 (0,0,0), O 在 (0.5,0.5,0.5)。
-    使用 PBE 泛函、ecutwfc=60 Ry、4×4×4 k 点网格。计算准备好后提交运行。'
+    使用 PBE 泛函、ecutwfc=60 Ry、4×4×4 k 点网格。帮我跑一下看看总能是多少。'
   tags:
   - eng_qe
   data_files: []
