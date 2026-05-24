@@ -213,7 +213,7 @@ questions:
     axis: correctness
     verify: artifact_exists
     weight: 1.0
-  - id: correct_supercell_formula
+  - id: correct_supercell_composition
     criterion: '[Must] CIF contains Al and has composition consistent with 2×1×1
       NFPP supercell with one P→Al substitution (Na32Fe24Al1P31O120).'
     axis: correctness
@@ -222,6 +222,17 @@ questions:
       filename: NFPP_Al_doped.cif
       must_contain_elements: [Na, Fe, Al, P, O]
       must_not_contain_elements: []
+    weight: 1.0
+  - id: correct_atom_count
+    criterion: '[Must] The doped supercell has approximately 208 atoms (2×104 from
+      the unit cell). Acceptable range: 195-220. Structures with < 100 atoms
+      indicate the 2×1×1 supercell was not properly constructed.'
+    axis: correctness
+    verify: struct_file_atom_count
+    verify_params:
+      filename: NFPP_Al_doped.cif
+      min_atoms: 195
+      max_atoms: 220
     weight: 1.5
   - id: po4_site_discrimination
     criterion: '[Must] Agent distinguishes PO₄ (isolated tetrahedral) sites from
