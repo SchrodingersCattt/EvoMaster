@@ -198,8 +198,8 @@ questions:
   human_prompt_seed: '请获取 Na₄Fe₃(PO₄)₂P₂O₇（NFPP）结构（空间群 Pna2₁），构建 2×1×1 超胞，
     然后用 Al 替换一个 P 原子来模拟掺杂。输出掺杂后的结构到 `NFPP_Al_doped.cif`。'
   tags:
-  - eng_battery
-  - struct_doping
+  - struct_build
+  - meta_database
   data_files: []
   reference_answers:
   - key: cif_artifact
