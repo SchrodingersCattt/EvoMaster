@@ -88,6 +88,8 @@ ssh -p $PORT $USER@$HOST "ps aux | grep 'run_devshell_eval\|run_devshell_agent_l
 
 Each tick: SSH check → macOS popup (auto-dismiss 5s) → if PROCS=0, auto-score and cancel loop.
 
+**Note**: `/loop` only fires while REPL is idle. During active conversation it will not trigger — this is normal, not a lost job. Check `CronList` to confirm it still exists.
+
 ### Step 3: Score and Submit
 
 Run only after process count = 0:
@@ -100,6 +102,8 @@ ssh -p $PORT $USER@$HOST "cd /root/matmaster-evo && \
 ```
 
 Without this step, the frontend shows NO checklist-level pass/fail data. Same `.venv/bin/python` fallback applies.
+
+**Note**: Scoring 200+ tasks takes 2-5 minutes. Use a long timeout (300s) or run in background.
 
 ## Troubleshooting
 
