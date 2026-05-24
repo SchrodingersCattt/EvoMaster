@@ -662,8 +662,8 @@ questions:
     wasting attempts on inorganic-focused struct_db. Also tests awareness that common
     fatty acids have multiple polymorphs and the correct one must be identified.
     From real trajectory where struct_db returned irrelevant C-H-O compounds.
-  human_prompt_seed: '请获取硬脂酸（stearic acid, C₁₈H₃₆O₂）的 C 型多晶型的晶体结构。
-    需要单斜晶系的那个（长轴 a ≈ 40 Å）。输出 CIF 文件到 `stearic_acid_C.cif`。'
+  human_prompt_seed: '请获取硬脂酸（stearic acid, C₁₈H₃₆O₂）的 C 型多晶型的晶体结构，
+    输出 CIF 文件到 `stearic_acid_C.cif`。'
   tags:
   - meta_database
   data_files: []
