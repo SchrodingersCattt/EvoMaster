@@ -129,7 +129,7 @@ banks:
 - path: structure_retrieval/rt_agnostic.yaml
   capability: structure_retrieval
   domain: agnostic
-  questions: 8
+  questions: 9
 - path: structure_retrieval/rt_battery.yaml
   capability: structure_retrieval
   domain: battery
