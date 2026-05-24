@@ -552,11 +552,11 @@ questions:
     axis: correctness
     verify: json_file_numeric_range
     weight: 3.0
-  - id: turn_budget_gpumd
+  - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
-  - id: duration_budget_gpumd
+  - id: duration_budget
     criterion: Wall-clock time within budget.
     axis: efficiency
     verify: duration_budget

@@ -234,7 +234,7 @@ questions:
       a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
-  - id: token_budget_total_007
+  - id: token_budget_total
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
@@ -360,7 +360,7 @@ questions:
       a generous benchmark ceiling (tunable per deployment).
     axis: efficiency
     verify: duration_budget
-  - id: token_budget_total_008
+  - id: token_budget_total
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
@@ -484,7 +484,7 @@ questions:
     axis: correctness
     verify: llm_binary_judge
     weight: 1.5
-  - id: turn_budget_qe_scf
+  - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
