@@ -196,16 +196,14 @@ questions:
     physically reasonable (~1.7-1.9 Å). From real trajectory where agent produced
     Al-O = 0.989 Å without checking.
   human_prompt_seed: '请获取 Na₄Fe₃(PO₄)₂P₂O₇（NFPP）结构（空间群 Pna2₁），构建 2×1×1 超胞，
-    然后用 Al 替换一个 P 原子来模拟掺杂。输出掺杂后的结构 CIF 文件。'
+    然后用 Al 替换一个 P 原子来模拟掺杂。输出掺杂后的结构到 `NFPP_Al_doped.cif`。'
   tags:
   - eng_battery
   - struct_doping
   data_files: []
   reference_answers:
   - key: cif_artifact
-    value:
-      filename: '*.cif'
-      glob: true
+    value: NFPP_Al_doped.cif
   - key: turn_budget
     value:
       max: 15
