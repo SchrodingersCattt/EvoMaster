@@ -214,11 +214,14 @@ questions:
     verify: artifact_exists
     weight: 1.0
   - id: correct_supercell_formula
-    criterion: '[Must] The supercell formula is consistent with a 2×1×1 NFPP supercell
-      with one P→Al substitution: Na32Fe24Al1P31O120 (or equivalent with correct
-      total O count of 120 for 2 formula units × 4 = 8 formula units).'
+    criterion: '[Must] CIF contains Al and has composition consistent with 2×1×1
+      NFPP supercell with one P→Al substitution (Na32Fe24Al1P31O120).'
     axis: correctness
-    verify: llm_binary_judge
+    verify: struct_file_composition
+    verify_params:
+      filename: NFPP_Al_doped.cif
+      must_contain_elements: [Na, Fe, Al, P, O]
+      must_not_contain_elements: []
     weight: 1.5
   - id: po4_site_discrimination
     criterion: '[Must] Agent distinguishes PO₄ (isolated tetrahedral) sites from
@@ -229,12 +232,16 @@ questions:
     verify: llm_binary_judge
     weight: 2.0
   - id: al_o_distance_reasonable
-    criterion: '[Must] Agent reports Al-O nearest-neighbor distances AND they are
-      physically reasonable (1.6-2.0 Å for tetrahedral Al-O). If any reported
-      distance is < 1.4 Å or > 2.5 Å, the structure is unphysical and should be
-      flagged by the agent as needing correction.'
+    criterion: '[Must] The CIF structure has physically reasonable Al-O distances
+      (1.4-2.2 Å). Distances < 1.0 Å or > 3.0 Å indicate an unphysical structure.'
     axis: correctness
-    verify: llm_binary_judge
+    verify: struct_file_bond_range
+    verify_params:
+      filename: NFPP_Al_doped.cif
+      element_pair: [Al, O]
+      min_distance: 1.4
+      max_distance: 2.2
+      n_neighbors: 4
     weight: 2.5
   - id: retrieves_from_database
     criterion: Agent retrieves the NFPP structure from struct_db (using simplified
