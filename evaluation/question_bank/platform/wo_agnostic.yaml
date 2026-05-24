@@ -480,10 +480,10 @@ questions:
       filename: opt_submit.json
       pattern: DPA.?3\.?2
       flags: ''
-  - key: must_head_omat24_capital
+  - key: no_wrong_head_case
     value:
       filename: opt_submit.json
-      pattern: OMat24
+      pattern: Omat24
       flags: ''
   - key: turn_budget
     value:
@@ -497,12 +497,12 @@ questions:
     criterion: '[Platform] cmd references DPA-3.2 model.'
     axis: correctness
     verify: text_file_regex
-  - id: must_head_omat24_capital
-    criterion: '[Platform] cmd uses head name `OMat24` (capital M) which is the correct
-      casing for DPA-3.2-5M. Using `Omat24` (lowercase m) is wrong for this model
-      version and will cause a head-not-found error.'
+  - id: no_wrong_head_case
+    criterion: '[Platform] cmd does NOT use `Omat24` (lowercase m, which is the DPA-3.1
+      head name). For DPA-3.2-5M, either omit --head (default is OMat24) or explicitly
+      write `OMat24` (capital M). Writing `Omat24` will cause a head-not-found error.'
     axis: correctness
-    verify: text_file_regex
+    verify: text_file_regex_absent
     weight: 2.0
   - id: turn_budget
     criterion: Agent completes within turn budget.
