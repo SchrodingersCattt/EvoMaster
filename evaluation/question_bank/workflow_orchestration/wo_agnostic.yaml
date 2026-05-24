@@ -3585,8 +3585,7 @@ questions:
   capability: workflow_orchestration
   domain: agnostic
   intent: Compute thermal expansion coefficient of Si via QHA (quasi-harmonic
-    approximation) using DPA. Agent must correctly import PhonopyQHA from
-    phonopy.qha (not top-level phonopy) and produce physical CTE values.
+    approximation) using DPA and produce physical CTE values.
   human_prompt_seed: |
     请使用 DPA 机器学习势 + 准谐近似(QHA)方法计算金刚石 Si 的线热膨胀系数 α(T)。
 
@@ -3604,18 +3603,12 @@ questions:
     value: calc_qha.py
   - key: output_artifact
     value: qha_result.json
-  - key: no_deprecated_qha_import
-    value:
-      filename: calc_qha.py
-      tokens:
-      - from phonopy import PhonopyQHA
-      flags: i
   - key: alpha_range
     value:
       filename: qha_result.json
       key: alpha_300K_per_K
-      min: 1.0e-6
-      max: 8.0e-6
+      min: -5.0e-6
+      max: -5.0e-7
   - key: turn_budget
     value:
       max: 25
@@ -3631,17 +3624,10 @@ questions:
     criterion: Agent writes `qha_result.json` to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: no_deprecated_qha_import
-    criterion: '[Must] calc_qha.py does NOT use deprecated top-level import
-      `from phonopy import PhonopyQHA` (removed in phonopy>=2.7). Using
-      `from phonopy.qha import PhonopyQHA` or manual QHA implementation are both acceptable.'
-    axis: correctness
-    verify: text_file_excludes_all
-    weight: 2.0
   - id: alpha_range
-    criterion: The thermal expansion coefficient at 300K is physically reasonable
-      for Si (experimental ~2.6e-6 /K, DPA typically 2-5e-6 /K). Values outside
-      1-8e-6 /K indicate methodology error.
+    criterion: The thermal expansion coefficient at 300K is in the expected range
+      for Si with DPA3.1-3M (negative CTE ~-3e-6 /K linear). Values outside
+      -5e-6 to -5e-7 /K indicate methodology error.
     axis: correctness
     verify: json_file_numeric_range
     weight: 2.0

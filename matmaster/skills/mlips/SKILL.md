@@ -111,6 +111,7 @@ The OSS URLs in `reference/dpa_models.md` are a **snapshot** and may rotate. If 
   python -c "from ase.io import read; import numpy as np; ini=read('INITIAL'); fin=read('FINAL'); diff=fin.positions-ini.positions; cell=ini.cell.lengths(); diff-=np.round(diff/cell)*cell; md=np.linalg.norm(diff,axis=1).max(); print(f'max_disp={md:.3f} A'); assert md<cell.min()/2, f'MIC FAIL: {md:.2f} A — fix endpoint coords'"
   ```
   If it fails, the migrating atom's coordinates cross a cell boundary — shift by one lattice vector so the straight-line path is the shortest.
+- **QHA thermal expansion**: For quasi-harmonic thermal expansion (CTE) calculations, see `reference/qha_workflow.md` — covers PhonopyQHA API, data shapes, Vinet EOS fitting, and known model limitations.
 - **Chain outputs**: Use `*_optimized.cif` from optimization as input to subsequent tasks. Save intermediate results under task filenames before starting next step.
 - **MD reporting**: Report production-stage `T_mean_K` and `P_mean_GPa` (with ±std), not whole-trajectory averages → `reference/md_output_format.md`
 - **DPA + LAMMPS**: When LAMMPS is needed, freeze the multi-head model first → see `reference/dpa_lammps_freeze.md`
