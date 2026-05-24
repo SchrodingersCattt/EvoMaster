@@ -65,6 +65,11 @@ structure.to(filename="structure.cif")
 - Do not guess missing lattice constants, space-group settings, origin choice,
   or Wyckoff coordinates. Ask the user, retrieve a known structure, or cite the
   data source used.
+- **Ternary or higher compounds (3+ elements) almost always require Wyckoff
+  construction or database retrieval.** Do NOT assume a simple prototype
+  (perovskite, anti-perovskite, etc.) without verifying — many ternary phases
+  (MAX phases, Heusler alloys, spinels) have specific space groups that differ
+  from naive guesses. When in doubt, use `retrieve-structure`.
 - For space groups with multiple settings or origin choices, record the exact
   setting/origin used. Convert literature coordinates before calling
   `from_spacegroup` when the source uses a different origin choice.
