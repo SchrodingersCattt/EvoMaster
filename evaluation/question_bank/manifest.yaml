@@ -161,7 +161,7 @@ banks:
 - path: platform/ig_agnostic.yaml
   capability: input_generation
   domain: agnostic
-  questions: 4
+  questions: 5
 - path: platform/wo_agnostic.yaml
   capability: workflow_orchestration
   domain: agnostic
