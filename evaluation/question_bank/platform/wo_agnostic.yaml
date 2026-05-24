@@ -552,6 +552,79 @@ questions:
     axis: correctness
     verify: json_file_numeric_range
     weight: 3.0
+  - id: turn_budget_gpumd
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget_gpumd
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
+- id: PWO_abacus_phonon_001_20260524
+  capability: workflow_orchestration
+  domain: agnostic
+  priority: P1
+  intent: End-to-end ABACUS phonon dispersion calculation for Si using finite
+    displacement method with phonopy. Agent must prepare ABACUS inputs, submit SCF
+    and force constant calculations to Bohrium (not run locally), use phonopy for
+    post-processing, and report the Gamma-point optical frequency. From real
+    trajectory where agent tried to install ABACUS+phonopy locally instead of
+    using Bohrium images.
+  human_prompt_seed: '工作区中有 Si 金刚石结构的 CIF 文件 `Si.cif`（2 原子原胞）。
+    请用 ABACUS 计算 Si 的声子色散曲线（有限位移法），沿 G-X-K-G 路径绘制，
+    并报告 Gamma 点光学支频率（THz）。'
+  tags:
+  - eng_abacus
+  data_files:
+  - key: si_cif
+    path: data/PWO_abacus_phonon_001/Si.cif
+    oss_url: ''
+    description: Si diamond primitive cell CIF (2 atoms).
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 7200000
+  scoring_checklist:
+  - id: abacus_input_generated
+    criterion: '[Must] Agent generates ABACUS input files (INPUT, STRU, KPT) with
+      appropriate settings for force constant calculation.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: uses_phonopy
+    criterion: '[Must] Agent uses phonopy (finite displacement method) to generate
+      displaced structures and post-process force constants into phonon dispersion.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: no_local_abacus
+    criterion: '[Must] Agent does NOT attempt to install or run ABACUS locally. All
+      ABACUS calculations must be submitted to Bohrium with an ABACUS image.'
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.5
+  - id: bohrium_submission
+    criterion: '[Platform] Agent submits ABACUS force calculation jobs to Bohrium
+      using bohrium-job skill with an ABACUS image.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: gamma_optical_frequency
+    criterion: '[Must] Agent reports Si Gamma-point optical frequency. Expected value
+      is approximately 15-16 THz (experimental 15.5 THz). Values outside 13-18 THz
+      indicate a problem with the calculation or post-processing.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: dispersion_plot_or_data
+    criterion: Agent produces a phonon dispersion plot (PNG/PDF) or structured data
+      file showing frequencies along the G-X-K-G path.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.0
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency

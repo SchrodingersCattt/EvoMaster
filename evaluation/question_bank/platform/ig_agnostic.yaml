@@ -477,7 +477,14 @@ questions:
     axis: correctness
     verify: llm_binary_judge
     weight: 1.0
-  - id: turn_budget
+  - id: reports_total_energy
+    criterion: '[Must] Agent waits for the Bohrium job to complete, retrieves the
+      output, and reports the total energy of MgO. The value should be in the range
+      of -930 to -960 Ry (or equivalent in eV) for PBE MgO with this setup.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: turn_budget_qe_scf
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
