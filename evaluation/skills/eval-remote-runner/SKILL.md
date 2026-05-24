@@ -52,7 +52,7 @@ ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST "cd /root/matmaster-evo && \
 ```
 
 Key flags:
-- `--eval-ingest-pending-only` — **MANDATORY**. Writes pending files for step 2.
+- `--eval-ingest-pending-only` — **MANDATORY**. Writes pending files for step 3.
 - `--k N` — repeats per question (NOT `--repeats`). Default 3.
 - `--slices` — use `@tag_name` for tags (e.g. `'@struct_surface'`). Without `@` it matches capability names.
 - `--limit N` — cap total tasks (for testing).
@@ -75,7 +75,7 @@ For desktop notifications and tuning `--jobs` → `references/monitoring_scripts
 
 ### Step 3: Score and Submit
 
-Run **after step 1 completes**. Evaluates all scoring_checklist items and POSTs to tools-server:
+Run **after eval finishes** (Step 2 reports process count = 0). Evaluates all scoring_checklist items and POSTs to tools-server:
 
 ```bash
 ssh -p $EVAL_SSH_PORT $EVAL_SSH_USER@$EVAL_SSH_HOST "cd /root/matmaster-evo && \
