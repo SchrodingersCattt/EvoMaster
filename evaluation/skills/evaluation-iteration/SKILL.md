@@ -144,6 +144,8 @@ curl -s -H "Authorization: Bearer $MATMASTER_TOOLS_EVALUATION_BEARER" \
 
 Question files live in `evaluation/question_bank/<capability>/<xx>_<domain>.yaml`.
 
+For field mapping rules (capability, domain, tags, ID prefix, file location, skill correspondence) → `references/question_taxonomy.md`
+
 ### Key Fields
 
 ```yaml
