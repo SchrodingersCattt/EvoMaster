@@ -757,3 +757,74 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
+- id: PWO_orca_tddft_001_20260525
+  capability: workflow_orchestration
+  domain: agnostic
+  priority: P1
+  intent: End-to-end ORCA TD-DFT excited-state calculation for a small organic
+    molecule. Agent must build 3D structure from SMILES, prepare ORCA input with
+    correct TD-DFT syntax, submit to Bohrium with correct ORCA image (from orca
+    skill), and report the lowest singlet excitation energy and oscillator strength.
+    From real trajectory where agent spent 536 events failing because it never
+    loaded orca skill to get the correct image.
+  human_prompt_seed: '请用 ORCA 计算萘 (naphthalene, C₁₀H₈) 的第一激发态吸收波长。
+    先做几何优化（B3LYP/def2-SVP），然后在优化结构上做 TD-DFT（PBE0/def2-SVP，5 个根）。
+    报告 S₁ 的激发能 (eV) 和振子强度。'
+  tags:
+  - eng_orca
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  scoring_checklist:
+  - id: correct_orca_tddft_input
+    criterion: '[Must] Agent writes an ORCA input file with correct TD-DFT syntax:
+      functional (PBE0), basis (def2-SVP), and %tddft block with nroots=5.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: two_step_workflow
+    criterion: '[Must] Agent performs geometry optimization BEFORE TD-DFT. Either
+      as two separate jobs or using ORCA compound job syntax. TD-DFT must NOT be
+      run on an unoptimized structure.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: loads_orca_skill
+    criterion: '[Must] Agent loads the orca skill to obtain the correct ORCA image
+      and submission parameters, rather than guessing image names.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: bohrium_submission
+    criterion: '[Platform] Agent submits ORCA jobs to Bohrium with the correct ORCA
+      image from the skill documentation.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: reports_excitation_energy
+    criterion: '[Must] Agent reports the S₁ excitation energy. Expected value for
+      naphthalene PBE0/def2-SVP is approximately 4.0-4.5 eV (experimental ~4.0 eV).
+      Values outside 3.5-5.0 eV indicate a problem.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: reports_oscillator_strength
+    criterion: Agent reports the oscillator strength (f) for the S₁ state of
+      naphthalene. Expected f is small (~0.0-0.05) since S₁ is symmetry-forbidden
+      (¹Lb state).'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
