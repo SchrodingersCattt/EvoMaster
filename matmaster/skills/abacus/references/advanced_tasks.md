@@ -25,6 +25,8 @@ Reference for multi-step and specialized ABACUS workflows not covered by `input_
 
 **Goal**: γ = (E_slab − n × E_bulk) / (2A)
 
+**⚠️ Common mistake**: Using `calculation scf` for bulk. Bulk **must** use `calculation cell-relax` with `cal_force 1` and `cal_stress 1` to obtain the equilibrium lattice constant — otherwise E_bulk is not at the energy minimum and γ will be wrong.
+
 **Files to generate**:
 
 | File | Purpose |
