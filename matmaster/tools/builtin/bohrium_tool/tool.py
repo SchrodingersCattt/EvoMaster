@@ -297,7 +297,7 @@ class BohriumTool(BuiltinTool):
         )
 
     # Short-polling constants
-    _POLL_INTERVAL: ClassVar[int] = 8  # seconds between API checks
+    _POLL_INTERVAL: ClassVar[int] = 5  # seconds between API checks
     _POLL_MAX_WAIT: ClassVar[int] = 60  # max seconds to block per poll call
 
     async def execute_with_context(
@@ -373,7 +373,10 @@ class BohriumTool(BuiltinTool):
             except (json.JSONDecodeError, TypeError):
                 return normalized
             status_str = str(data.get("status", "")).strip().lower()
-            if status_str not in ("running", "submitted", "pending"):
+            if status_str not in (
+                "running", "submitted", "pending",
+                "prepared", "scheduling", "uploading", "wait",
+            ):
                 return normalized
 
             # Still running — sleep and retry if within window
