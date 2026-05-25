@@ -1919,7 +1919,7 @@ questions:
     value: 3
     tolerance: 0
     description: Three independent molecular species (ClO4-, EA2+, homopiperazinium).
-  - key: ea_cn
+  - key: correct_cn_value
     value: 10
     tolerance: 1
     description: EA2+ is surrounded by ~10 ClO4- in first coordination shell.
