@@ -73,6 +73,14 @@ calculation get_s
 - Forces: lines after `TOTAL-FORCE (eV/Angstrom)`
 - Stress: lines after `TOTAL-STRESS (KBAR)`
 
+## Population Analysis
+
+| Parameter | Values | Purpose | Basis |
+|-----------|--------|---------|-------|
+| `out_mul` | `0`/`1` | Mulliken population analysis → `OUT.${suffix}/mulliken.txt` | LCAO only |
+
+> **⚠️ The parameter is `out_mul`, NOT `out_mulliken`**. ABACUS uses the abbreviated form.
+
 ## Common mistakes
 - Forgetting `out_chg 1` in SCF → NSCF with `init_chg file` fails or recomputes SCF
 - Leaving `symmetry 1` in NSCF band structure → k-path folded, wrong band plot
