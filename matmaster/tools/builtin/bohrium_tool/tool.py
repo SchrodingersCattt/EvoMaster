@@ -340,7 +340,7 @@ class BohriumTool(BuiltinTool):
         arguments: dict[str, Any],
         registry: JobRegistry | None,
     ) -> str | ToolResult:
-        """Internal short-polling loop: query API every ~8s, up to 60s.
+        """Internal short-polling loop: query API every _POLL_INTERVAL seconds, up to _POLL_MAX_WAIT.
 
         Returns as soon as the job reaches a non-running state, or after
         the max wait window expires (returning the latest Running status).
