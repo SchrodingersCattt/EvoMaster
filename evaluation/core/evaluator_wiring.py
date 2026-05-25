@@ -537,6 +537,130 @@ def check_struct_file_surface_termination(
     )
 
 
+def check_struct_file_composition(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    from evaluation.validators.structure_general import (
+        _PMG_AVAILABLE,
+        _IMPORT_MSG,
+        _load_structure,
+        _resolve_file,
+    )
+    from pathlib import Path
+
+    if not _PMG_AVAILABLE:
+        return False, _IMPORT_MSG
+    filename = cfg.get("filename", "*.cif")
+    root = Path(ws)
+    fpath = _resolve_file(root, filename)
+    if fpath is None:
+        return False, f"no file matching {filename!r} in {root}"
+    try:
+        struct = _load_structure(fpath)
+    except Exception as exc:
+        return False, f"could not parse {fpath.name}: {exc}"
+    actual_elements = {str(el) for el in struct.composition.elements}
+    must_contain = set(cfg.get("must_contain_elements", []))
+    must_not = set(cfg.get("must_not_contain_elements", []))
+    missing = must_contain - actual_elements
+    if missing:
+        return False, (
+            f"{fpath.name}: missing required elements {sorted(missing)}, "
+            f"found {sorted(actual_elements)}"
+        )
+    unwanted = must_not & actual_elements
+    if unwanted:
+        return False, (
+            f"{fpath.name}: contains forbidden elements {sorted(unwanted)}, "
+            f"found {sorted(actual_elements)}"
+        )
+    return True, (
+        f"{fpath.name}: composition check passed — "
+        f"elements {sorted(actual_elements)} "
+        f"(required: {sorted(must_contain)})"
+    )
+
+
+def check_struct_file_bond_range(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    from evaluation.validators.structure_general import (
+        _PMG_AVAILABLE,
+        _IMPORT_MSG,
+        _load_structure,
+        _resolve_file,
+    )
+    from pathlib import Path
+
+    if not _PMG_AVAILABLE:
+        return False, _IMPORT_MSG
+    filename = cfg.get("filename", "*.cif")
+    root = Path(ws)
+    fpath = _resolve_file(root, filename)
+    if fpath is None:
+        return False, f"no file matching {filename!r} in {root}"
+    try:
+        struct = _load_structure(fpath)
+    except Exception as exc:
+        return False, f"could not parse {fpath.name}: {exc}"
+
+    element_pair = cfg.get("element_pair", [])
+    if len(element_pair) != 2:
+        return False, "element_pair must have exactly 2 elements"
+    elem_a, elem_b = element_pair
+    min_dist = float(cfg.get("min_distance", 0.0))
+    max_dist = float(cfg.get("max_distance", 5.0))
+    n_neighbors = int(cfg.get("n_neighbors", 0))
+
+    import numpy as np
+
+    sites = struct.sites
+    a_indices = [i for i, s in enumerate(sites) if s.species_string == elem_a]
+    b_indices = [i for i, s in enumerate(sites) if s.species_string == elem_b]
+    if not a_indices:
+        return False, f"{fpath.name}: element {elem_a!r} not found"
+    if not b_indices:
+        return False, f"{fpath.name}: element {elem_b!r} not found"
+
+    violations = []
+    all_nn_dists: list[float] = []
+    for ai in a_indices:
+        dists = []
+        for bi in b_indices:
+            if ai == bi:
+                continue
+            d = struct.get_distance(ai, bi)
+            dists.append(d)
+        dists.sort()
+        nn = dists[:n_neighbors] if n_neighbors > 0 else [d for d in dists if d <= max_dist * 1.5]
+        all_nn_dists.extend(nn)
+        for d in nn:
+            if d < min_dist or d > max_dist:
+                violations.append(d)
+
+    if not all_nn_dists:
+        return False, f"{fpath.name}: no {elem_a}-{elem_b} distances found"
+    mean_d = float(np.mean(all_nn_dists))
+    if violations:
+        return False, (
+            f"{fpath.name}: {len(violations)} {elem_a}-{elem_b} distances "
+            f"outside [{min_dist}, {max_dist}] Å "
+            f"(mean={mean_d:.3f} Å, worst={min(violations):.3f}/{max(violations):.3f} Å)"
+        )
+    return True, (
+        f"{fpath.name}: all {len(all_nn_dists)} {elem_a}-{elem_b} nearest-neighbor "
+        f"distances in [{min_dist}, {max_dist}] Å (mean={mean_d:.3f} Å)"
+    )
+
+
 def check_text_file_contains_all_from_evidence(
     *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
 ) -> tuple[bool, str]:

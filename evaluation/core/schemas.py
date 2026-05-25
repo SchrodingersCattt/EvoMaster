@@ -75,6 +75,9 @@ VerifyLiteral = Literal[
     "struct_file_surface_termination",
     "struct_file_integer_stoichiometry",
     "struct_file_replicas_distinct",
+    # composition & bond-range checks
+    "struct_file_composition",
+    "struct_file_bond_range",
     # IUCr checkCIF web service (single-crystal XRD validation)
     "checkcif_no_a_alerts",
     # plain-text file checks
