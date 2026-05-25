@@ -6778,11 +6778,11 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_054_20260521
+- id: IG_abacus_054_20260525
   capability: input_generation
   domain: agnostic
   intent: Prepare shared LCAO INPUT/KPT for H2O counterpoise BSSE per official 32_bsse.
-  human_prompt_seed: "为气相 H₂O counterpoise（BSSE）准备共享 LCAO 输入。读取工作区 STRU，在 `run_lcao_h2o_cp/` 编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
+  human_prompt_seed: "为气相 H₂O counterpoise（BSSE）准备 LCAO 输入。工作区有 STRU_0 ~ STRU_3 四个子计算的结构文件，在 `run_lcao_h2o_cp/` 编写一个共享的 `INPUT` 与 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
   data_files:
@@ -6824,13 +6824,13 @@ questions:
       flags: i
   - key: turn_budget
     value:
-      max: 16
+      max: 18
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 22000
+      max: 40000
   scoring_checklist:
   - id: cp_input
     criterion: run_lcao_h2o_cp/INPUT exists.
