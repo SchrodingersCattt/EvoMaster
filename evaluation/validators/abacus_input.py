@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from .kpt_line import _parse_kpt_line
 from .stru_file import _parse_lattice_vectors
 from .text_file import _resolve_file
 
@@ -318,6 +319,22 @@ def _check_kpoint_density(
     except Exception as exc:
         return False, f"failed reading {kpt_path.name}: {exc}"
 
+    mode, points = _parse_kpt_line(kpt_content)
+    if mode is not None:
+        # Line mode KPT — check that segment nk values are adequate
+        nk_values = [p["nk"] for p in points[:-1]] if len(points) > 1 else []
+        if nk_values and all(v >= min_k for v in nk_values):
+            return True, (
+                f"{kpt_path.name}: Line mode, segment nk={set(nk_values)} "
+                f"(all >= {min_k}, resolved from {fpath.name})"
+            )
+        if nk_values:
+            return False, (
+                f"{kpt_path.name}: Line mode, segment nk={nk_values} — "
+                f"some < {min_k} (resolved from {fpath.name})"
+            )
+
+    # Gamma/MP mesh mode
     mesh_match = re.search(
         r"(?:Gamma|MP|Monkhorst-Pack)\s*\n\s*(\d+)\s+(\d+)\s+(\d+)",
         kpt_content,
@@ -326,7 +343,7 @@ def _check_kpoint_density(
     if not mesh_match:
         return False, (
             f"{kpt_path.name}: could not parse k-point mesh "
-            f"(expected Gamma/MP line followed by N1 N2 N3)"
+            f"(expected Gamma/MP line followed by N1 N2 N3, or Line mode)"
         )
     k1, k2, k3 = int(mesh_match.group(1)), int(mesh_match.group(2)), int(mesh_match.group(3))
     if k1 >= min_k and k2 >= min_k and k3 >= min_k:
