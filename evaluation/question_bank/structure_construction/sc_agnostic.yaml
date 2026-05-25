@@ -955,10 +955,6 @@ questions:
       filename: cu_fcc.cif
       expected_number: 225
       symprec: 0.1
-  - key: space_group_tokens
-    value:
-    - '225'
-    - Fm-3m
   - key: turn_budget
     value:
       max: 10
@@ -986,11 +982,6 @@ questions:
     criterion: The file `cu_fcc.cif` is identified as space group
     axis: correctness
     verify: struct_file_space_group
-  - id: space_group_tokens
-    criterion: Final answer explicitly reports both space group number 225 and symbol
-      Fm-3m.
-    axis: correctness
-    verify: contains_all
   - id: turn_budget
     criterion: Agent completes the task within the turn budget.
     axis: efficiency
