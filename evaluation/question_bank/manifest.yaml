@@ -77,7 +77,7 @@ banks:
 - path: input_generation/ig_agnostic_lammps.yaml
   capability: input_generation
   domain: agnostic
-  questions: 3
+  questions: 4
 - path: input_generation/ig_agnostic_cp2k.yaml
   capability: input_generation
   domain: agnostic
@@ -141,7 +141,7 @@ banks:
 - path: workflow_orchestration/wo_agnostic.yaml
   capability: workflow_orchestration
   domain: agnostic
-  questions: 41
+  questions: 43
 - path: workflow_orchestration/wo_agnostic_gpumd_nep_clean.yaml
   capability: workflow_orchestration
   domain: agnostic

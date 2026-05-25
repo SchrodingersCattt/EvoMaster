@@ -254,3 +254,70 @@ questions:
     criterion: Wall-clock run duration does not exceed ceiling.
     axis: efficiency
     verify: duration_budget
+- id: IG_lammps_tensile_bond_001_20260525
+  capability: input_generation
+  domain: agnostic
+  scope: knowledge
+  intent: Generate a LAMMPS input script for uniaxial tensile deformation of FCC Cu
+    that tracks bond length and bond angle evolution during straining. Agent must
+    correctly use compute bond/local and compute angle/local with appropriate
+    output commands.
+  human_prompt_seed: "生成 LAMMPS 输入文件，对 FCC Cu 单晶进行 z 方向单轴拉伸模拟，\
+    并追踪拉伸过程中键长和键角的演化。\n\n要求：\n- EAM 势\n- 300K NVT 平衡后施加应变\n\
+    - 输出键长分布和键角分布随应变的变化数据\n- 输出为 `in.tensile_cu`\n"
+  tags:
+  - eng_lammps
+  source_session: df8f13e0856f4b2eb6b05312409a780c
+  data_files: []
+  reference_answers:
+  - key: input_artifact
+    value: in.tensile_cu
+  - key: turn_budget
+    value:
+      max: 12
+  - key: token_budget_total
+    value:
+      max: 10000
+  scoring_checklist:
+  - id: input_artifact
+    criterion: Agent writes `in.tensile_cu` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: compute_bond_local
+    criterion: Input uses `compute bond/local` or `compute pair/local` to
+      extract per-bond distance information during deformation.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.5
+  - id: compute_angle_local
+    criterion: Input uses `compute angle/local` to extract per-angle
+      values during deformation for bond angle distribution tracking.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.5
+  - id: deformation_applied
+    criterion: Input applies uniaxial strain along z using `fix deform`
+      with appropriate strain rate after equilibration.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: output_evolution_data
+    criterion: Bond/angle data is output at multiple strain increments
+      using fix ave/histo, dump local, or equivalent periodic output.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: equilibration_before_deform
+    criterion: Script includes thermal equilibration (NVT or NPT at 300K)
+      before starting deformation.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget

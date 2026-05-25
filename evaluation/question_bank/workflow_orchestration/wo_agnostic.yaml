@@ -3611,3 +3611,153 @@ questions:
     criterion: Wall-clock time within budget.
     axis: efficiency
     verify: duration_budget
+- id: WO_glassy_carbon_001_20260525
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Construct a glassy carbon structure via melt-quench MD using an MLIP.
+    Agent must choose adequate parameters — density ≥1.8 g/cm³, slow quench
+    (≥80 ps total cooling), and ≥200 atoms — to produce a physically reasonable
+    amorphous carbon network.
+  human_prompt_seed: "使用 DPA 机器学习力场通过 melt-quench 方法构建玻璃碳(glassy carbon)结构。\n\
+    报告最终结构的密度、sp³ 比例和径向分布函数第一峰位置。\n输出结构文件 `glassy_carbon.xyz`\
+    \ 和分析结果 `gc_analysis.json`。\n"
+  tags:
+  - code_mlip
+  source_session: 4bde5fa1c16443e082053fe7319902a9
+  data_files: []
+  reference_answers:
+  - key: structure_artifact
+    value: glassy_carbon.xyz
+  - key: analysis_artifact
+    value: gc_analysis.json
+  - key: turn_budget
+    value:
+      max: 40
+  - key: duration_budget
+    value:
+      max: 14400000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: structure_artifact
+    criterion: Agent writes `glassy_carbon.xyz` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: analysis_artifact
+    criterion: Agent writes `gc_analysis.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: adequate_density
+    criterion: The target/initial density for the melt-quench box is at least
+      1.8 g/cm³. Glassy carbon has experimental density 1.4-2.1 g/cm³, but MD
+      melt-quench requires starting at higher density (≥1.8) to form the
+      cross-linked sp2/sp3 network. A density of 1.5 or below will produce
+      a disconnected or gas-like structure.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: adequate_quench_rate
+    criterion: The total cooling time from melt temperature to room temperature
+      is at least 80 ps. Faster quench (e.g., 30 ps total) does not allow
+      sufficient structural relaxation to form the characteristic mixed sp2/sp3
+      amorphous network. Multi-step cooling with annealing stages is preferred.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.5
+  - id: adequate_system_size
+    criterion: The simulation uses at least 200 carbon atoms. Fewer than 128
+      atoms gives poor statistics for amorphous structure characterization
+      (RDF, ring statistics, sp3 fraction).
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: melt_temperature_reasonable
+    criterion: The melting/liquid phase temperature is at least 5000 K (carbon
+      melts above 4000 K). Lower temperatures will not fully disorder the
+      initial structure.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: reports_sp3_fraction
+    criterion: The analysis reports sp3 fraction (or sp2/sp3 ratio) based on
+      coordination number analysis (CN=4 → sp3, CN=3 → sp2).
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
+- id: WO_gromacs_cnt_001_20260525
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Run a GROMACS MD simulation of a periodic (10,10) armchair single-wall
+    carbon nanotube. Agent must handle the key challenges of periodic molecular
+    systems in GROMACS — x2top with -pbc flag, periodic_molecules=yes in mdp,
+    and Ryckaert-Bellemans dihedral type.
+  human_prompt_seed: "使用 GROMACS 对一根周期性 (10,10) 扶手椅型单壁碳纳米管进行 NVT 分子动力学模拟（300K，10ps）。\n\
+    从结构构建、力场准备、拓扑生成到 MD 运行，完成全流程。\n输出最终结构 `cnt_nvt.gro`。\n"
+  tags:
+  - eng_gromacs
+  source_session: a48482e4b58d484eb8cf8ebe4bceff93
+  data_files: []
+  reference_answers:
+  - key: output_artifact
+    value: cnt_nvt.gro
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes a final NVT structure file to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: periodic_molecules_yes
+    criterion: The mdp file(s) contain `periodic_molecules = yes` (or
+      `periodic-molecules = yes`). Without this, GROMACS will break bonds
+      that cross the periodic boundary of the nanotube along its axis.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: x2top_pbc_flag
+    criterion: The topology generation step uses `gmx x2top` with the `-pbc`
+      flag to detect bonds across periodic boundaries. Without -pbc, the
+      covalent bonds wrapping around the tube axis will be missing.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.5
+  - id: ryckaert_bellemans_dihedral
+    criterion: The force field or topology uses Ryckaert-Bellemans dihedral
+      function (GROMACS type 3) for the carbon dihedral angles, consistent
+      with OPLS-AA treatment of aromatic/graphitic carbons.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: cnt_structure_correct
+    criterion: The CNT structure has the tube axis along one periodic
+      dimension, with vacuum in the other two directions (≥1 nm gap).
+      Atom count is a multiple of 40 for (10,10) armchair CNT.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
