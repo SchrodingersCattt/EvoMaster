@@ -1,6 +1,6 @@
 ---
 name: retrieve-structure
-description: "Trigger to acquire crystal structure files: retrieve from databases, literature, direct URL, or supplementary HTML; also format conversion and post-download validation."
+description: "Obtain correct crystal structures for known materials — from databases, literature, or generation tools. Use this (not manual construction) whenever the material is a known compound and you are not given explicit Wyckoff coordinates or lattice parameters by the user. Also handles format conversion and post-download validation."
 skill_type: operator
 depends_on: mcp-mat-struct-db, mcp-mat-doc
 ---
