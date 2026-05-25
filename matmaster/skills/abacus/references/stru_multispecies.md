@@ -230,13 +230,25 @@ The downloaded archive has two directories:
 
 ---
 
-## CIF → STRU Conversion
+## CIF/POSCAR → STRU Conversion
 
-When starting from CIF/POSCAR, convert first — do NOT hand-write STRU:
+When starting from CIF/POSCAR, **always convert programmatically** — do NOT hand-write coordinates (especially for >10 atoms; hand-copying 80+ coordinate lines wastes turns and invites counting errors):
+
+**Option 1** — convert_format.py (if available):
 ```bash
 uv run python ${STRUCTURE_MANAGER}/scripts/convert_format.py \
   --input structure.cif --output STRU --output-fmt abacus/stru
 ```
+
+**Option 2** — inline pymatgen/Python (always available, preferred for POSCAR):
+```python
+from pymatgen.core import Structure
+s = Structure.from_file("POSCAR")
+# Build STRU content programmatically from s.lattice, s.species, s.frac_coords
+```
+
+**⚠️ Never use sub-agents or manual copy for coordinate conversion.** Write a single Python script that reads the input file and outputs the complete STRU in one pass.
+
 Then **read the generated STRU** to verify:
 1. ntype matches element count
 2. PP filenames are reasonable (you may need to rename to match downloaded files)
