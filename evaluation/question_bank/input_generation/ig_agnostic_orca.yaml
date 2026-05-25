@@ -1,0 +1,240 @@
+version: v5
+capability: input_generation
+domain: agnostic
+questions:
+- id: IG_orca_001_20260522
+  capability: input_generation
+  domain: agnostic
+  intent: Generate ORCA inputs for Hansen Solubility Parameter estimation — agent should
+    use COSMO/CPCM solvation model to obtain sigma profiles for COSMO-RS decomposition
+    into dispersion, polar, and hydrogen-bond components. NOT frequency calculations.
+  human_prompt_seed: '工作区中有 `molecules.csv`，包含 5 个小分子的 SMILES。请用 ORCA 量化计算估算这些分子的
+    Hansen 溶解度参数（δD, δP, δH），生成可直接提交的输入文件。
+
+    要求使用 B3LYP/def2-TZVP 级别。'
+  tags:
+  - eng_orca
+  data_files:
+  - key: molecules_csv
+    path: data/IG_orca_001/molecules.csv
+    oss_url: ''
+    description: CSV with 5 molecules (Name, SMILES, Molar_Volume).
+  reference_answers:
+  - key: input_artifact
+    value: '*.inp'
+  - key: no_freq_keyword
+    value:
+      filename: '*.inp'
+      pattern: '^!\s.*\bFREQ\b'
+      flags: im
+      expect: absent
+  - key: has_cosmo
+    value:
+      filename: '*.inp'
+      pattern: CPCM|COSMO|cpcm|cosmo
+      flags: ''
+  - key: turn_budget
+    value:
+      max: 12
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 10000
+  scoring_checklist:
+  - id: input_artifact
+    criterion: Agent generates ORCA `.inp` file(s) in workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: no_freq_keyword
+    criterion: Input files do NOT contain FREQ keyword — frequency calculation is
+      unnecessary for HSP via COSMO-RS.
+    axis: correctness
+    verify: text_file_regex_absent
+  - id: has_cosmo
+    criterion: Input file includes COSMO or CPCM solvation model keywords for
+      generating sigma profiles needed by COSMO-RS HSP decomposition.
+    axis: correctness
+    verify: text_file_regex
+  - id: methodology_sound
+    criterion: Agent's HSP methodology uses COSMO-RS approach (single-point energy
+      with COSMO solvation → sigma profile → decompose interaction energy into
+      dispersion, polar, and H-bond contributions). Does NOT use naive Beerbower
+      dipole formula or conflate HSP with vibrational properties.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: opt_before_sp
+    criterion: Workflow includes geometry optimization before single-point property
+      calculation (either in same input as multi-step, or separate files).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+
+- id: IG_orca_002_20260522
+  capability: input_generation
+  domain: agnostic
+  intent: Generate ORCA input for IR spectrum calculation — agent must know that hybrid
+    functionals (B3LYP) in ORCA 6 do not support analytical second derivatives for
+    frequencies and should use NumFreq or a pure GGA.
+  human_prompt_seed: '请为乙醇分子生成 ORCA 输入文件，计算其红外光谱（振动频率 + IR 强度）。
+
+    要求使用 B3LYP/def2-TZVP 级别。输出为 `ethanol_ir.inp`。'
+  tags:
+  - eng_orca
+  data_files: []
+  reference_answers:
+  - key: input_artifact
+    value: ethanol_ir.inp
+  - key: no_analytical_freq_with_hybrid
+    value:
+      filename: ethanol_ir.inp
+      pattern: '^!\s*.*B3LYP.*\bFREQ\b|^!\s*.*\bFREQ\b.*B3LYP'
+      flags: im
+      expect: absent
+  - key: has_numfreq_or_pure_gga
+    value:
+      filename: ethanol_ir.inp
+      pattern: NumFreq|NUMFREQ|numfreq|BP86|PBE\b|TPSS|r2SCAN
+      flags: ''
+  - key: turn_budget
+    value:
+      max: 10
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: input_artifact
+    criterion: Agent writes `ethanol_ir.inp` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: no_analytical_freq_with_hybrid
+    criterion: Input does NOT combine hybrid functional (B3LYP) with analytical FREQ
+      on the same job line — ORCA 6 lacks analytical second derivatives for hybrids.
+    axis: correctness
+    verify: text_file_regex_absent
+  - id: valid_freq_strategy
+    criterion: Agent uses a valid frequency strategy — either NumFreq with B3LYP,
+      or a two-step approach (pure GGA OPT+FREQ then B3LYP SP), or explicitly switches
+      to a pure GGA for the frequency step.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: ir_output_requested
+    criterion: Input file or workflow will produce IR intensities (not just frequencies).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: geometry_opt_included
+    criterion: Workflow includes geometry optimization before frequency calculation.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+
+- id: IG_orca_003_20260525
+  capability: input_generation
+  domain: agnostic
+  scope: knowledge
+  intent: Generate a two-step ORCA workflow (geometry optimization + TD-DFT) where
+    the second step reads the optimized geometry from the first step's output file.
+    Agent must use correct xyzfile syntax without trailing asterisk.
+  human_prompt_seed: "请为苯甲醛(benzaldehyde)生成 ORCA 输入文件，完成以下两步计算：\n\
+    1. 几何优化（B3LYP/def2-SVP）\n2. 基于优化构型的 TD-DFT 计算（PBE0/def2-SV(P)，10 个激发态）\n\
+    \n输出两个输入文件 `opt.inp` 和 `tddft.inp`，以及一个 `run.sh` 脚本按顺序执行。\n"
+  tags:
+  - eng_orca
+  source_session: be3ee75c086e411ebd87c069d5337a33
+  data_files: []
+  reference_answers:
+  - key: opt_inp
+    value: opt.inp
+  - key: tddft_inp
+    value: tddft.inp
+  - key: run_sh
+    value: run.sh
+  - key: tddft_reads_opt_geometry
+    value:
+      filename: tddft.inp
+      pattern: \*\s*xyzfile\s+\d+\s+\d+\s+\S+\.xyz\s*$
+      flags: m
+  - key: no_trailing_asterisk
+    value:
+      filename: tddft.inp
+      pattern: \*\s*xyzfile\s+\d+\s+\d+\s+\S+\.xyz\s*\*
+      flags: m
+      expect: absent
+  - key: turn_budget
+    value:
+      max: 10
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: opt_inp_exists
+    criterion: Agent writes `opt.inp` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: tddft_inp_exists
+    criterion: Agent writes `tddft.inp` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: tddft_reads_opt_geometry
+    criterion: The tddft.inp uses `* xyzfile 0 1 <name>.xyz` to read the optimized
+      geometry produced by the first step.
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.5
+  - id: no_trailing_asterisk_on_xyzfile
+    criterion: The xyzfile coordinate line does NOT have a trailing asterisk. In ORCA
+      only inline coordinate blocks (`* xyz 0 1 ... *`) use a closing `*`. The
+      xyzfile form must NOT have one — a trailing `*` causes a parse error.
+    axis: correctness
+    verify: text_file_regex_absent
+    weight: 3.0
+  - id: opt_has_geometry
+    criterion: opt.inp contains valid molecular coordinates and includes OPT keyword
+      with B3LYP/def2-SVP.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: tddft_has_nroots
+    criterion: tddft.inp includes a %tddft block with nroots 10.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: run_sh_sequential
+    criterion: run.sh executes opt.inp before tddft.inp in sequence.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget

@@ -53,10 +53,30 @@ PACKMOL is available in the Bohrium remote image after this branch:
 packmol < packmol.inp
 ```
 
-For interface lattice matching, drive `pymatgen.analysis.interfaces` (e.g.
-`SubstrateAnalyzer` / `CoherentInterfaceBuilder`) directly: enumerate matched
-in-plane vectors, screen by strain budget, and fall back to a manual stacking
-recipe if no candidate fits. Crosslink networks can be assembled with
+For interface lattice matching, use `ZSLGenerator` from
+`pymatgen.analysis.interfaces.zsl`:
+
+```python
+from pymatgen.analysis.interfaces.zsl import ZSLGenerator
+from pymatgen.core.surface import SlabGenerator
+
+# Slab generation — use filter_out_sym_slabs=False to avoid
+# StructureMatcher numpy compatibility issues
+slab_gen = SlabGenerator(bulk, miller, min_slab_size=8, min_vacuum_size=15)
+slabs = slab_gen.get_slabs(symmetrize=False, filter_out_sym_slabs=False)
+
+# Lattice matching — enumerate all matches, sort by area
+zsl = ZSLGenerator(max_area_ratio_tol=0.09, max_angle_tol=0.01,
+                   max_length_tol=0.03)
+matches = list(zsl(slab_a.lattice.matrix[:2], slab_b.lattice.matrix[:2],
+                   lowest=True))
+# Sort by interface area and pick the smallest within strain budget
+matches.sort(key=lambda m: m.match_area)
+```
+
+Higher-level `SubstrateAnalyzer`/`CoherentInterfaceBuilder` can also work but
+may trigger internal bugs; `ZSLGenerator` is more robust. Fall back to manual
+stacking if no candidate fits. Crosslink networks can be assembled with
 `networkx`-driven bond candidates plus `ase.geometry` distance checks. Document
 the recipe and the acceptance numbers; do not silently substitute heuristics.
 
@@ -96,6 +116,6 @@ the recipe and the acceptance numbers; do not silently substitute heuristics.
 
 - `operate-molecular-crystal`: molecular-crystal slabs and molecule-preserving
   operations.
-- `build-atomic-structure`: build molecules, bulk cells, and polymer chains used
-  as assembly inputs.
+- `build-crystal-from-params`: build simple inorganic bulk cells used as
+  assembly inputs.
 - `tasker-polar-surface`: required fallback for polar slabs.

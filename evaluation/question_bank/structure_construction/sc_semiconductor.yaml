@@ -271,18 +271,18 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_interface_001_20260513
+- id: SC_interface_001_20260525
   capability: structure_construction
   domain: semiconductor
   intent: Build a heterostructure interface between two materials with lattice mismatch
-    handling.
+    handling, choosing the smallest-area supercell match.
   human_prompt_seed: '请构建 AlN(0001) / MoO₃(010) 异质结界面结构。
 
     要求：
 
     1. 分别切出两种材料的合适表面 slab
 
-    2. 进行晶格匹配，应变控制在 5% 以内
+    2. 进行晶格匹配，应变控制在 5% 以内，优先选择面积最小的匹配方案
 
     3. 将两个 slab 堆叠形成界面结构
 
@@ -297,13 +297,18 @@ questions:
   - key: must_parsable
     value:
       filename: interface_AlN_MoO3.cif
+  - key: must_four_elements
+    value:
+      filename: interface_AlN_MoO3.cif
+      elements: [Al, N, Mo, O]
   - key: must_atom_count
     value:
       filename: interface_AlN_MoO3.cif
-      min: 20
+      expected: 150
+      tolerance: 100
   - key: turn_budget
     value:
-      max: 25
+      max: 35
   scoring_checklist:
   - id: interface_artifact
     criterion: interface_AlN_MoO3.cif written to workspace.
@@ -314,13 +319,16 @@ questions:
     axis: correctness
     verify: struct_file_parsable
   - id: must_atom_count
-    criterion: '[Must] Interface has at least 20 atoms (reasonable slab thickness).'
+    criterion: '[Must] Interface atom count is consistent with a small-area lattice
+      match (expected ~150±100 atoms, i.e. 50-250). Exceeding 250 atoms indicates
+      the agent did not prioritize the smallest-area match as instructed.'
     axis: correctness
     verify: struct_file_atom_count
   - id: must_four_elements
-    criterion: '[Must] Interface contains all four elements (Al, N, Mo, O).'
+    criterion: '[Must] Interface contains all four elements (Al, N, Mo, O) from both
+      AlN and MoO3 slabs.'
     axis: correctness
-    verify: struct_file_formula
+    verify: struct_file_elements_present
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency

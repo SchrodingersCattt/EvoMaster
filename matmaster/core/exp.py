@@ -118,9 +118,16 @@ class Exp:
     run_stream() delegates to build_runtime then kernel.run_stream with cleanup guarantee.
     """
 
-    def __init__(self, config: ExpConfig, *, allow_spawn: bool = True) -> None:
+    def __init__(
+        self,
+        config: ExpConfig,
+        *,
+        allow_spawn: bool = True,
+        exclude_subagents: frozenset[str] | None = None,
+    ) -> None:
         self._config = config
         self._allow_spawn = allow_spawn
+        self._exclude_subagents: frozenset[str] = exclude_subagents or frozenset()
         self._cleanup_callbacks: list[Callable[[], Any]] = []
         # Core-layer registry serves SkillTool registration and the
         # registry-wide system prompt prefix. Service-layer resolver state is
@@ -395,6 +402,12 @@ class Exp:
                     skill_resolver=self._skill_resolver,
                 )
                 available_exps = list_model_visible_exps()
+                if self._exclude_subagents:
+                    available_exps = [
+                        e
+                        for e in available_exps
+                        if e.name not in self._exclude_subagents
+                    ]
             agent_tool = AgentTool(
                 session=ctx.session,
                 workdir=(

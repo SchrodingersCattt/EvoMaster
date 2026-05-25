@@ -10,6 +10,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from .kpt_line import _parse_kpt_line
 from .stru_file import _parse_lattice_vectors
 from .text_file import _resolve_file
 
@@ -22,6 +23,8 @@ def check_abacus_input(
     expected: str | None = None,
     allowed: list[str] | None = None,
     workspace_resolve: str = "recursive",
+    kspacing_range: tuple[float, float] | None = None,
+    min_kpoints: int | None = None,
 ) -> tuple[bool, str]:
     """Run a resolution check on an ABACUS INPUT file.
 
@@ -32,6 +35,8 @@ def check_abacus_input(
       contains a required token (e.g. '4 4 4')
     - param_enabled: verify a boolean param is set to true/1
     - param_value_in: verify a param's value is in an allowed list
+    - kpoint_density: verify INPUT has kspacing in range OR KPT file has
+      adequate k-point mesh (each direction >= min_kpoints)
     """
     root = Path(workspace_dir)
     fpath = _resolve_file(root, filename, workspace_resolve=workspace_resolve)
@@ -52,6 +57,10 @@ def check_abacus_input(
         return _check_param_value_in(fpath, content, expected, allowed)
     elif check == "efield_dir_is_vacuum":
         return _check_efield_dir_is_vacuum(root, fpath, content, workspace_resolve)
+    elif check == "kpoint_density":
+        return _check_kpoint_density(
+            fpath, content, kspacing_range=kspacing_range, min_kpoints=min_kpoints
+        )
     else:
         return False, f"unknown abacus_input_check check type: {check!r}"
 
@@ -249,4 +258,100 @@ def _check_kpt_contains(
     return False, (
         f"{kpt_path.name} (resolved from {fpath.name}) does NOT contain "
         f"{token!r} — wrong k-point mesh selected"
+    )
+
+
+def _check_kpoint_density(
+    fpath: Path,
+    content: str,
+    *,
+    kspacing_range: tuple[float, float] | None = None,
+    min_kpoints: int | None = None,
+) -> tuple[bool, str]:
+    """Verify k-point sampling is adequate via kspacing, gamma_only, OR KPT file.
+
+    Pass if any of:
+    1. INPUT contains ``kspacing`` within [lo, hi], OR
+    2. INPUT contains ``gamma_only 1`` (equivalent to Gamma 1×1×1), OR
+    3. A KPT file (resolved from INPUT) has a Gamma/MP mesh where each
+       direction has at least ``min_kpoints`` points.
+    """
+    lo, hi = kspacing_range if kspacing_range else (0.04, 0.15)
+    min_k = min_kpoints if min_kpoints else 4
+
+    kspacing_match = re.search(
+        r"(?im)^\s*kspacing\s+([-+]?\d+\.?\d*(?:[eE][-+]?\d+)?(?:\s+[-+]?\d+\.?\d*(?:[eE][-+]?\d+)?)*)",
+        content,
+    )
+    if kspacing_match:
+        vals = re.findall(r"[-+]?\d+\.?\d*(?:[eE][-+]?\d+)?", kspacing_match.group(1))
+        numerics = [float(v) for v in vals]
+        if all(lo <= v <= hi for v in numerics):
+            return True, (
+                f"{fpath.name}: kspacing={numerics} within [{lo}, {hi}]"
+            )
+        return False, (
+            f"{fpath.name}: kspacing={numerics} outside [{lo}, {hi}]"
+        )
+
+    gamma_only_match = re.search(
+        r"(?im)^\s*gamma_only\s+(1|true|\.true\.)\s*$", content
+    )
+    if gamma_only_match and min_k <= 1:
+        return True, (
+            f"{fpath.name}: gamma_only=1 (Gamma-point only, valid for min_kpoints={min_k})"
+        )
+
+    kpt_name_match = re.search(r"(?im)^\s*kpoint_file\s+(\S+)", content)
+    kpt_name = kpt_name_match.group(1) if kpt_name_match else "KPT"
+    kpt_path = fpath.parent / kpt_name
+    if not kpt_path.is_file():
+        if gamma_only_match:
+            return False, (
+                f"{fpath.name}: gamma_only=1 but min_kpoints={min_k} requires denser mesh"
+            )
+        return False, (
+            f"{fpath.name}: no kspacing/gamma_only in INPUT and KPT file "
+            f"'{kpt_name}' not found — no k-point sampling defined"
+        )
+    try:
+        kpt_content = kpt_path.read_text(encoding="utf-8")
+    except Exception as exc:
+        return False, f"failed reading {kpt_path.name}: {exc}"
+
+    mode, points = _parse_kpt_line(kpt_content)
+    if mode is not None:
+        # Line mode KPT — check that segment nk values are adequate
+        nk_values = [p["nk"] for p in points[:-1]] if len(points) > 1 else []
+        if nk_values and all(v >= min_k for v in nk_values):
+            return True, (
+                f"{kpt_path.name}: Line mode, segment nk={set(nk_values)} "
+                f"(all >= {min_k}, resolved from {fpath.name})"
+            )
+        if nk_values:
+            return False, (
+                f"{kpt_path.name}: Line mode, segment nk={nk_values} — "
+                f"some < {min_k} (resolved from {fpath.name})"
+            )
+
+    # Gamma/MP mesh mode
+    mesh_match = re.search(
+        r"(?:Gamma|MP|Monkhorst-Pack)\s*\n\s*(\d+)\s+(\d+)\s+(\d+)",
+        kpt_content,
+        re.IGNORECASE,
+    )
+    if not mesh_match:
+        return False, (
+            f"{kpt_path.name}: could not parse k-point mesh "
+            f"(expected Gamma/MP line followed by N1 N2 N3, or Line mode)"
+        )
+    k1, k2, k3 = int(mesh_match.group(1)), int(mesh_match.group(2)), int(mesh_match.group(3))
+    if k1 >= min_k and k2 >= min_k and k3 >= min_k:
+        return True, (
+            f"{kpt_path.name}: k-mesh {k1}×{k2}×{k3} "
+            f"(all >= {min_k}, resolved from {fpath.name})"
+        )
+    return False, (
+        f"{kpt_path.name}: k-mesh {k1}×{k2}×{k3} — "
+        f"some directions < {min_k} (resolved from {fpath.name})"
     )

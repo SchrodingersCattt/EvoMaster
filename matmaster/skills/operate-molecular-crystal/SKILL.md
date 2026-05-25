@@ -19,16 +19,17 @@ skill_type: operator
 
 ## Install
 
-`molcrys-kit` is not on PyPI. Install from the GitHub release tarball with
-`pip` (works inside Bohrium remote shells too — do not rely on `uv`):
+`molcrys-kit` is published on PyPI. Install with `pip`
+(works inside Bohrium remote shells too — do not rely on `uv`):
 
 ```bash
-pip install "https://github.com/SchrodingersCattt/MolCrysKit/archive/refs/tags/v0.2.0.tar.gz"
+pip install molcrys-kit
 ```
 
-Pinned to **v0.2.0** for reproducibility. Axis D and the moiety-aware
-hydrogen completion in axis C are still on `main`; see
-"Advanced (main-only features)" below.
+The project depends on the latest published release (currently 0.3.0+);
+rebuilds pick up new versions automatically. If you need axis D or the
+moiety-aware hydrogen completion in axis C ahead of a release, see
+"Advanced (main-only features)" below for an ad-hoc GitHub install.
 
 All snippets run **locally** in the agent's Python environment in seconds. Do
 **not** submit to Bohrium for any of them.
@@ -323,7 +324,8 @@ polyhedra = find_polyhedra(
 ```
 
 If a task genuinely needs axis D (e.g. classifying a CN=11 tricapped cube vs.
-pentagonal antiprism around a ClO4 cage), install `main` ad-hoc:
+pentagonal antiprism around a ClO4 cage) and the feature has not yet shipped
+to PyPI, install `main` ad-hoc:
 
 ```bash
 pip install "https://github.com/SchrodingersCattt/MolCrysKit/archive/refs/heads/main.tar.gz"
@@ -331,7 +333,7 @@ pip install "https://github.com/SchrodingersCattt/MolCrysKit/archive/refs/heads/
 
 When you do this, **state the commit hash** the analysis was run against in
 the final answer — `main` evolves daily and the commit is needed for
-reproducibility. Default reproducible runs stay on **v0.2.0**; do not
+reproducibility. Default reproducible runs stay on the PyPI release; do not
 silently switch the rest of the workflow to `main`.
 
 ---

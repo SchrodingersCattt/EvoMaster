@@ -55,7 +55,7 @@ slices:
       - "@struct_build,struct_transform,struct_molcrys,struct_surface"
     count: 0
 
-  - target: "Skill: build-atomic-structure"
+  - target: "Skill: build-crystal-from-params"
     type: skill
     slices:
       - "@struct_build"
@@ -114,6 +114,12 @@ slices:
     slices:
       - "@eng_gromacs"
     count: 1
+
+  - target: "Skill: orca"
+    type: skill
+    slices:
+      - "@eng_orca"
+    count: 2
 
   # ── Tools ───────────────────────────────────────────────────────────
 

@@ -551,17 +551,19 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: WO_kinetic_001_20260504
+- id: WO_kinetic_001_20260525
   capability: workflow_orchestration
   domain: agnostic
-  intent: 'Compute graphene phonon dispersion: build structure, calculate force constants,
-    extract Gamma optical maximum.'
-  human_prompt_seed: '计算石墨烯的声子色散关系：构建石墨烯原胞， 计算力常数矩阵（有限位移法或 DFPT），沿 G-M-K-G 路径绘制声子色散， 提取 Gamma
-    点最高光学支频率 (cm-1)。
+  intent: 'Compute graphene phonon dispersion: build structure, calculate force constants
+    with MLIP, extract Gamma optical maximum.'
+  human_prompt_seed: '使用机器学习势函数计算石墨烯的声子色散关系：构建石墨烯原胞，
+    计算力常数矩阵，沿 Γ-M-K-Γ 路径绘制声子色散，
+    提取 Gamma 点最高光学支频率 (cm⁻¹)。
 
     '
   tags:
   - struct_build
+  - code_mlip
   data_files: []
   reference_answers:
   - key: gamma_optical_max_cm1
@@ -1443,7 +1445,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_dpa_005_20260521
+- id: WO_mlip_dpa_005_20260524
   capability: workflow_orchestration
   domain: agnostic
   intent: Compute Cu FCC single-vacancy migration barrier with DPA via NEB; report forward
@@ -1456,7 +1458,7 @@ questions:
 
     分别优化初态和末态结构，然后使用 DPA 机器学习势做 NEB 计算（5 个中间像）。
 
-    报告正向迁移能垒 (eV) 和能量曲线趋势，结果写入 `neb_result.json`（顶层包含 `forward_barrier_eV` 字段）。
+    报告正向迁移能垒 (eV) 和能量曲线趋势，结果写入 `neb_result.json`，格式：`{"forward_barrier_eV": ..., "n_images": ..., "converged": true/false}`。
 
     '
   tags:
@@ -1479,7 +1481,7 @@ questions:
     - energy_profile
   - key: turn_budget
     value:
-      max: 24
+      max: 35
   - key: duration_budget
     value:
       max: 7200000
@@ -3045,58 +3047,6 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_bio_head_aissq_001_20260515
-  capability: workflow_orchestration
-  domain: agnostic
-  intent: Test whether the agent handles organic/biomolecular MLIP coverage as a model-routing problem rather than blindly using the default inorganic head.
-  human_prompt_seed: |
-    Use the default pretrained DPA MLIP to run a solvated protein-ligand system and estimate the binding free energy from a long MD trajectory. The box has about 12000 atoms. Please set this up with the MLIP ASE workflow.
-  tags:
-  - code_mlip
-  data_files: []
-  reference_answers:
-  - key: turn_budget
-    value:
-      max: 10
-  - key: duration_budget
-    value:
-      max: 600000
-  - key: token_budget_total
-    value:
-      max: 18000
-  scoring_checklist:
-  - id: detects_bio_domain_and_scale
-    criterion: Agent recognizes both the biomolecular/domain-coverage concern and the large long-trajectory scale risk.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: checks_heads_or_registry
-    criterion: Agent checks documented DPA heads/branches or performs/plans an internal `aissq-explorer` lookup for suitable organic, biomolecular, or solvated-system models before deciding.
-    axis: grounding
-    verify: llm_binary_judge
-  - id: offers_valid_routes
-    criterion: Agent offers valid routes such as a suitable specialized MLIP if found, classical biomolecular force fields, dedicated training/fine-tuning, or a reduced validation calculation.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: asks_human_after_lookup
-    criterion: Agent asks the human to choose among the concrete routes after the head/registry feasibility check, rather than silently changing the task.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: no_default_inorganic_submit
-    criterion: Agent does not directly run the default inorganic DPA/ASE workflow for the full solvated protein-ligand free-energy request.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: turn_budget
-    criterion: Agent reaches the routing decision within the turn budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration does not exceed benchmark ceiling.
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
 - id: WO_mlip_electronic_boundary_001_20260515
   capability: workflow_orchestration
   domain: agnostic
@@ -3236,3 +3186,428 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+- id: WO_lammps_water_density_001_20260522
+  capability: workflow_orchestration
+  domain: agnostic
+  priority: P1
+  intent: Test whether agent can write a correct LAMMPS input script for liquid water
+    NPT density calculation and submit it successfully on the first try — no retry
+    cycles for scripting bugs (variable ordering, syntax, force field setup).
+  human_prompt_seed: '用 LAMMPS 模拟计算室温常压下水的密度，使用 SPC/E 水模型。报告平衡后的平均密度。'
+  tags:
+  - eng_lammps
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 900000
+  scoring_checklist:
+  - id: first_submit_success
+    criterion: '[Must] The FIRST Bohrium job submission runs to completion (status
+      Finished) without needing a resubmission due to LAMMPS script errors. If the
+      agent submits, gets a Failed status, fixes the script, and resubmits — this
+      check FAILS even if the second attempt succeeds.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: density_physically_correct
+    criterion: '[Must] Agent reports a final average density value that is physically
+      reasonable for SPC/E water at ~300K, 1atm (expected 0.99-1.01 g/cm³). Values
+      outside 0.9-1.1 g/cm³ indicate a fundamental setup error.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: spce_model_correct
+    criterion: '[Must] The LAMMPS script uses SPC/E water parameters correctly:
+      O-H bond 1.0 Å, H-O-H angle 109.47°, LJ epsilon(O)=0.1553 kcal/mol,
+      sigma(O)=3.166 Å, charges qO=-0.8476e qH=+0.4238e (or equivalent).'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: npt_ensemble
+    criterion: Agent uses NPT ensemble (fix npt or equivalent) for the production
+      phase to allow volume fluctuation for density measurement.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
+- id: WO_neb_interface_001_20260524v2
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute Sn migration barrier at BCC/FCC Fe interface via DPA NEB. Agent must
+    avoid IDPP interpolation (causes atom overlaps at interfaces) and use a robust
+    optimizer (FIRE over BFGS) to obtain a physical barrier.
+  human_prompt_seed: |
+    工作区中有 BCC(110)/FCC(111) 铁异质界面的两个结构文件：
+    - `initial.xyz`: 初态，Sn 在 BCC 侧替位位置
+    - `final.xyz`: 末态，Sn 迁移到界面区域
+
+    请使用 DPA 机器学习势做 NEB 计算（7 个中间像），求 Sn 从 BCC 体相迁移到界面的能垒。
+
+    要求：
+    - NEB 脚本保存为 `run_neb.py`
+    - 结果写入 `neb_result.json`：`{"forward_barrier_eV": ..., "n_images": 7, "converged": true/false}`
+  tags:
+  - code_mlip
+  data_files:
+  - key: initial_structure
+    path: data/SA_neb_interface_001/initial.xyz
+    oss_url: ''
+    description: BCC/FCC Fe interface with Sn at BCC substitutional site.
+  - key: final_structure
+    path: data/SA_neb_interface_001/final.xyz
+    oss_url: ''
+    description: BCC/FCC Fe interface with Sn migrated to interface region.
+  reference_answers:
+  - key: neb_script
+    value: run_neb.py
+  - key: output_artifact
+    value: neb_result.json
+  - key: barrier_physical
+    value:
+      filename: neb_result.json
+      key: forward_barrier_eV
+      min: 0.3
+      max: 4.0
+  - key: uses_fire
+    value:
+      filename: run_neb.py
+      tokens:
+      - FIRE
+      flags: ''
+  - key: uses_linear_interp
+    value:
+      filename: run_neb.py
+      tokens:
+      - linear
+      flags: i
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 900000
+  scoring_checklist:
+  - id: neb_script
+    criterion: Agent writes `run_neb.py` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: output_artifact
+    criterion: Agent writes `neb_result.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: barrier_physical
+    criterion: The forward_barrier_eV in neb_result.json is within a physically
+      reasonable range (0.3-4.0 eV) for substitutional migration at a metal interface.
+      A value >10 eV indicates failed interpolation or optimizer divergence.
+    axis: correctness
+    verify: json_file_numeric_range
+    weight: 3.0
+  - id: uses_fire
+    criterion: run_neb.py imports or uses FIRE optimizer (not BFGS/LBFGS which is
+      unstable for interface NEB with large initial forces).
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+  - id: uses_linear_interp
+    criterion: run_neb.py uses linear interpolation (not IDPP which produces atom
+      overlaps at hetero-interfaces where BCC and FCC lattices have different densities).
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
+- id: WO_mlip_molcrystal_head_001_20260524v2
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Test whether agent correctly selects a molecular-crystal-appropriate DPA head
+    (not the default inorganic Omat24) for computing sublimation energy of an organic
+    crystal, and verifies head availability before running.
+  human_prompt_seed: |
+    请使用 DPA 机器学习势计算萘 (naphthalene, C10H8) 分子晶体的升华能（sublimation energy）。
+
+    工作流程：
+    1. 从结构数据库获取萘的分子晶体结构（或自建 P21/c 单胞）
+    2. 优化晶体结构
+    3. 将单个萘分子放入真空盒子中优化（气相参考态）
+    4. 计算升华能 = E_gas - E_crystal/Z（Z 为单胞中分子数）
+
+    要求：
+    - 计算脚本保存为 `calc_sublimation.py`
+    - 从晶体中提取的单分子保存为 `molecule.xyz`
+    - 结果写入 `sublimation_energy.json`：
+      `{"material": "naphthalene", "space_group": "...", "Z": ..., "E_crystal_per_mol_eV": ..., "E_gas_eV": ..., "sublimation_energy_eV": ...}`
+  tags:
+  - code_mlip
+  - struct_molcrys
+  data_files: []
+  reference_answers:
+  - key: calc_script
+    value: calc_sublimation.py
+  - key: output_artifact
+    value: sublimation_energy.json
+  - key: molecule_file
+    value: molecule.xyz
+  - key: molecule_correct_atoms
+    value:
+      filename: molecule.xyz
+      tokens:
+      - '18'
+      flags: ''
+  - key: sublimation_range
+    value:
+      filename: sublimation_energy.json
+      key: sublimation_energy_eV
+      min: 0.3
+      max: 1.5
+  - key: uses_organic_head
+    value:
+      filename: calc_sublimation.py
+      pattern: (?i)(Domains_Drug|OMol|Drug|Organic)
+      flags: ''
+  - key: turn_budget
+    value:
+      max: 55
+  - key: duration_budget
+    value:
+      max: 1500000
+  scoring_checklist:
+  - id: calc_script
+    criterion: Agent writes `calc_sublimation.py` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: output_artifact
+    criterion: Agent writes `sublimation_energy.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: molecule_file
+    criterion: Agent writes extracted single molecule to `molecule.xyz`.
+    axis: correctness
+    verify: artifact_exists
+  - id: molecule_correct_atoms
+    criterion: Extracted molecule has correct atom count (18 atoms for C10H8).
+      Wrong count indicates failed PBC unwrapping or incomplete molecule extraction.
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+  - id: sublimation_range
+    criterion: The sublimation_energy_eV is within a physically reasonable range
+      (0.3-1.5 eV/molecule for naphthalene). Wildly wrong values indicate wrong head
+      or setup error.
+    axis: correctness
+    verify: json_file_numeric_range
+    weight: 3.0
+  - id: uses_organic_head
+    criterion: calc_sublimation.py explicitly specifies an organic/molecular-crystal
+      DPA head (e.g., Domains_Drug, OMol25, Organic) rather than relying on the
+      default inorganic head which gives wrong intermolecular interactions.
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
+- id: WO_mech_012_20260525
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute equation of state for Ti3AlC using DPA MLIP. Agent must use correct
+    modern ASE import for cell filter (ase.filters, not deprecated ase.constraints).
+  human_prompt_seed: '使用 DPA 机器学习势计算 Ti3AlC 的状态方程（Birch-Murnaghan 拟合）。
+
+    请编写脚本完成以下步骤：
+    1. 构建 Ti3AlC 结构
+    2. 在平衡体积附近做体积扫描（至少 5 个点）
+    3. 对每个体积做结构优化（允许原子弛豫，固定体积）
+    4. 拟合 Birch-Murnaghan 状态方程
+
+    脚本保存为 `calc_eos.py`，结果写入 `eos_result.json`：
+    `{"B0_GPa": ..., "V0_A3": ..., "E0_eV": ...}`
+
+    '
+  tags:
+  - code_mlip
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: calc_script
+    value: calc_eos.py
+  - key: output_artifact
+    value: eos_result.json
+  - key: correct_import
+    value:
+      filename: calc_eos.py
+      pattern: from\s+ase\.filters\s+import
+      flags: ''
+  - key: B0_range
+    value:
+      filename: eos_result.json
+      key: B0_GPa
+      min: 100
+      max: 400
+  - key: turn_budget
+    value:
+      max: 35
+  - key: duration_budget
+    value:
+      max: 600000
+  scoring_checklist:
+  - id: calc_script
+    criterion: Agent writes `calc_eos.py` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: output_artifact
+    criterion: Agent writes `eos_result.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: correct_import
+    criterion: calc_eos.py imports cell filter from the correct modern module `ase.filters`
+      (e.g., ExpCellFilter or FrechetCellFilter), NOT from the deprecated `ase.constraints`
+      module.
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: B0_range
+    criterion: The fitted bulk modulus B0_GPa is within a physically reasonable range
+      (100-400 GPa for Ti3AlC).
+    axis: correctness
+    verify: json_file_numeric_range
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
+- id: WO_neb_endpoint_relax_001_20260523
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute vacancy migration barrier in BCC Fe from scratch via DPA NEB.
+    Agent must build structures, relax both endpoints, then run NEB. Tests whether
+    agent knows to relax endpoints without being told.
+  human_prompt_seed: |
+    请用 DPA 机器学习势计算 BCC Fe 中单空位的迁移能垒。
+
+    步骤自行决定，最终结果写入：
+    - 脚本：`run_neb.py`
+    - 结果：`neb_result.json`，格式 `{"forward_barrier_eV": ..., "n_images": ..., "converged": true/false}`
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: neb_script
+    value: run_neb.py
+  - key: output_artifact
+    value: neb_result.json
+  - key: forward_barrier_eV
+    value:
+      filename: neb_result.json
+      key: forward_barrier_eV
+      min: 0.5
+      max: 1.2
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 900000
+  scoring_checklist:
+  - id: neb_script
+    criterion: Agent writes `run_neb.py` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: output_artifact
+    criterion: Agent writes `neb_result.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: forward_barrier_eV
+    criterion: The forward migration barrier is within 0.5-1.2 eV (known BCC Fe
+      vacancy migration ~0.67 eV with DPA). A value >2 eV indicates the agent
+      skipped endpoint relaxation or used wrong methodology.
+    axis: correctness
+    verify: json_file_numeric_range
+    weight: 3.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
+- id: WO_qha_cte_001_20260524
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Compute thermal expansion coefficient of Si via QHA (quasi-harmonic
+    approximation) using DPA and produce physical CTE values.
+  human_prompt_seed: |
+    请使用 DPA 机器学习势 + 准谐近似(QHA)方法计算金刚石 Si 的线热膨胀系数 α(T)。
+
+    要求：
+    - 在平衡体积附近取 5 个体积点
+    - 每个体积做 phonon 计算（有限位移法）
+    - 用 QHA 拟合得到 α(T)，报告 300K 处的值
+    - 脚本保存为 `calc_qha.py`
+    - 结果写入 `qha_result.json`：`{"alpha_300K_per_K": ..., "n_volumes": 5}`
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: calc_script
+    value: calc_qha.py
+  - key: output_artifact
+    value: qha_result.json
+  - key: alpha_range
+    value:
+      filename: qha_result.json
+      key: alpha_300K_per_K
+      min: -5.0e-6
+      max: -5.0e-7
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 900000
+  scoring_checklist:
+  - id: calc_script
+    criterion: Agent writes `calc_qha.py` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: output_artifact
+    criterion: Agent writes `qha_result.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: alpha_range
+    criterion: The thermal expansion coefficient at 300K is in the expected range
+      for Si with DPA3.1-3M (negative CTE ~-3e-6 /K linear). Values outside
+      -5e-6 to -5e-7 /K indicate methodology error.
+    axis: correctness
+    verify: json_file_numeric_range
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget

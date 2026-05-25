@@ -10,9 +10,7 @@ from __future__ import annotations
 import fnmatch
 from pathlib import Path
 
-# ---------------------------------------------------------------------------
 # Lazy optional-dep imports (numpy, pymatgen)
-# ---------------------------------------------------------------------------
 
 _NP_AVAILABLE = False
 try:
@@ -33,9 +31,7 @@ except ImportError:
 _IMPORT_MSG = "pymatgen not installed; install with: uv sync --extra calculation"
 
 
-# ---------------------------------------------------------------------------
 # File resolution helpers
-# ---------------------------------------------------------------------------
 
 
 def _resolve_file(workspace: Path, pattern: str) -> Path | None:
@@ -88,9 +84,7 @@ def _load_structure(path: Path) -> Structure | Molecule:
     return Structure.from_file(str(path))
 
 
-# ---------------------------------------------------------------------------
 # 1. Atom count
-# ---------------------------------------------------------------------------
 
 
 def check_atom_count(
@@ -122,9 +116,7 @@ def check_atom_count(
     return hit, f"{fpath.name}: {label}={actual:g}, expected={expected}±{tolerance}"
 
 
-# ---------------------------------------------------------------------------
 # 2. Formula
-# ---------------------------------------------------------------------------
 
 
 def check_formula(
@@ -170,9 +162,40 @@ def check_formula(
     )
 
 
-# ---------------------------------------------------------------------------
+def check_elements_present(
+    workspace_dir: str | Path,
+    *,
+    filename: str,
+    elements: list[str],
+) -> tuple[bool, str]:
+    """Verify that all listed elements are present in the structure."""
+    if not _PMG_AVAILABLE:
+        return False, _IMPORT_MSG
+    root = Path(workspace_dir)
+    fpath = _resolve_file(root, filename)
+    if fpath is None:
+        return False, f"no file matching {filename!r} in {root}"
+    try:
+        struct = _load_structure(fpath)
+    except Exception as exc:
+        return False, f"could not parse {fpath.name}: {exc}"
+    actual_elements = {str(el) for el in struct.composition.elements}
+    required = set(elements)
+    missing = required - actual_elements
+    if missing:
+        return (
+            False,
+            f"{fpath.name}: missing elements {sorted(missing)}, "
+            f"found {sorted(actual_elements)}",
+        )
+    return (
+        True,
+        f"{fpath.name}: all required elements {sorted(required)} present "
+        f"(found {sorted(actual_elements)})",
+    )
+
+
 # 3. Bond count (number of bonds between element pair shorter than cutoff)
-# ---------------------------------------------------------------------------
 
 
 def check_bond_count(
@@ -224,9 +247,7 @@ def check_bond_count(
     )
 
 
-# ---------------------------------------------------------------------------
 # 4. Representative bond length
-# ---------------------------------------------------------------------------
 
 
 def _collect_pair_distances(
@@ -338,9 +359,7 @@ def check_bond_length_range(
     )
 
 
-# ---------------------------------------------------------------------------
 # 5. Bond angle
-# ---------------------------------------------------------------------------
 
 
 def _angle_deg(v1: np.ndarray, v2: np.ndarray) -> float:
@@ -463,9 +482,7 @@ def check_bond_angle(
     )
 
 
-# ---------------------------------------------------------------------------
 # 6. Cell parameter (a, b, c, alpha, beta, gamma)
-# ---------------------------------------------------------------------------
 
 
 def check_cell_param(
@@ -500,9 +517,7 @@ def check_cell_param(
     return hit, f"{fpath.name}: {param}={actual:.4f}, expected={expected}±{tolerance}"
 
 
-# ---------------------------------------------------------------------------
 # 7. Stoichiometry ratio
-# ---------------------------------------------------------------------------
 def check_stoichiometry_ratio(
     workspace_dir: str | Path,
     *,
@@ -541,9 +556,7 @@ def check_stoichiometry_ratio(
     )
 
 
-# ---------------------------------------------------------------------------
 # 7b. Charge balance (formal oxidation states)
-# ---------------------------------------------------------------------------
 
 
 def check_charge_balance(
@@ -585,9 +598,7 @@ def check_charge_balance(
     )
 
 
-# ---------------------------------------------------------------------------
 # 8. Coordination number
-# ---------------------------------------------------------------------------
 
 
 def check_coordination_number(
@@ -645,9 +656,7 @@ def check_coordination_number(
     )
 
 
-# ---------------------------------------------------------------------------
 # 9. Layer count (z-coordinate clustering)
-# ---------------------------------------------------------------------------
 
 
 def check_layer_count(
@@ -718,9 +727,7 @@ def check_layer_count(
     )
 
 
-# ---------------------------------------------------------------------------
 # 10. Surface termination — check outermost layer element along an axis
-# ---------------------------------------------------------------------------
 
 
 def check_surface_termination(
@@ -804,9 +811,7 @@ def check_surface_termination(
     return True, msgs
 
 
-# ---------------------------------------------------------------------------
 # File-count check (no pymatgen needed)
-# ---------------------------------------------------------------------------
 
 
 def check_file_count(
@@ -837,9 +842,7 @@ def check_file_count(
     )
 
 
-# ---------------------------------------------------------------------------
 # 11. Structure-file parseability
-# ---------------------------------------------------------------------------
 
 
 def check_parsable(
@@ -866,9 +869,7 @@ def check_parsable(
     return True, f"parsed {len(parsed)} structure file(s): {parsed}"
 
 
-# ---------------------------------------------------------------------------
 # 12. Occupancy check for ordered CIF replicas
-# ---------------------------------------------------------------------------
 
 
 def check_all_occupancy_one(
@@ -921,16 +922,14 @@ def check_all_occupancy_one(
     )
 
 
-# ---------------------------------------------------------------------------
 # 13. Space group number
-# ---------------------------------------------------------------------------
 
 
 def check_space_group(
     workspace_dir: str | Path,
     *,
     filename: str,
-    expected_number: int,
+    expected_number: int | list[int],
     symprec: float = 0.1,
     angle_tolerance: float = 5.0,
 ) -> tuple[bool, str]:
@@ -959,11 +958,118 @@ def check_space_group(
     except Exception as exc:
         return False, f"could not determine space group for {fpath.name}: {exc}"
 
-    ok = actual_number == expected_number
+    allowed = (
+        expected_number if isinstance(expected_number, list) else [expected_number]
+    )
+    ok = actual_number in allowed
+    expected_str = "/".join(f"#{n}" for n in allowed)
     return (
         ok,
         f"{fpath.name}: space group #{actual_number} ({actual_symbol}), "
-        f"expected #{expected_number} (symprec={symprec}, angle_tolerance={angle_tolerance})",
+        f"expected {expected_str} (symprec={symprec}, angle_tolerance={angle_tolerance})",
+    )
+
+
+def check_composition(
+    workspace_dir: str | Path,
+    *,
+    filename: str,
+    must_contain_elements: list[str] | None = None,
+    must_not_contain_elements: list[str] | None = None,
+) -> tuple[bool, str]:
+    """Verify structure contains (or excludes) specified elements."""
+    if not _PMG_AVAILABLE:
+        return False, _IMPORT_MSG
+    root = Path(workspace_dir)
+    fpath = _resolve_file(root, filename)
+    if fpath is None:
+        return False, f"no file matching {filename!r} in {root}"
+    try:
+        struct = _load_structure(fpath)
+    except Exception as exc:
+        return False, f"could not parse {fpath.name}: {exc}"
+    actual_elements = {str(el) for el in struct.composition.elements}
+    must_contain = set(must_contain_elements or [])
+    must_not = set(must_not_contain_elements or [])
+    missing = must_contain - actual_elements
+    if missing:
+        return False, (
+            f"{fpath.name}: missing required elements {sorted(missing)}, "
+            f"found {sorted(actual_elements)}"
+        )
+    unwanted = must_not & actual_elements
+    if unwanted:
+        return False, (
+            f"{fpath.name}: contains forbidden elements {sorted(unwanted)}, "
+            f"found {sorted(actual_elements)}"
+        )
+    return True, (
+        f"{fpath.name}: composition check passed — "
+        f"elements {sorted(actual_elements)} "
+        f"(required: {sorted(must_contain)})"
+    )
+
+
+def check_bond_range(
+    workspace_dir: str | Path,
+    *,
+    filename: str,
+    element_a: str,
+    element_b: str,
+    min_distance: float = 0.0,
+    max_distance: float = 5.0,
+    n_neighbors: int = 0,
+) -> tuple[bool, str]:
+    """Verify nearest-neighbor distances for an element pair are within range."""
+    if not _PMG_AVAILABLE:
+        return False, _IMPORT_MSG
+    if not _NP_AVAILABLE:
+        return False, "numpy not installed"
+    root = Path(workspace_dir)
+    fpath = _resolve_file(root, filename)
+    if fpath is None:
+        return False, f"no file matching {filename!r} in {root}"
+    try:
+        struct = _load_structure(fpath)
+    except Exception as exc:
+        return False, f"could not parse {fpath.name}: {exc}"
+
+    sites = struct.sites
+    a_indices = [i for i, s in enumerate(sites) if s.species_string == element_a]
+    b_indices = [i for i, s in enumerate(sites) if s.species_string == element_b]
+    if not a_indices:
+        return False, f"{fpath.name}: element {element_a!r} not found"
+    if not b_indices:
+        return False, f"{fpath.name}: element {element_b!r} not found"
+
+    violations = []
+    all_nn_dists: list[float] = []
+    for ai in a_indices:
+        dists = []
+        for bi in b_indices:
+            if ai == bi:
+                continue
+            d = struct.get_distance(ai, bi)
+            dists.append(d)
+        dists.sort()
+        nn = dists[:n_neighbors] if n_neighbors > 0 else [d for d in dists if d <= max_distance * 1.5]
+        all_nn_dists.extend(nn)
+        for d in nn:
+            if d < min_distance or d > max_distance:
+                violations.append(d)
+
+    if not all_nn_dists:
+        return False, f"{fpath.name}: no {element_a}-{element_b} distances found"
+    mean_d = float(np.mean(all_nn_dists))
+    if violations:
+        return False, (
+            f"{fpath.name}: {len(violations)} {element_a}-{element_b} distances "
+            f"outside [{min_distance}, {max_distance}] Å "
+            f"(mean={mean_d:.3f} Å, worst={min(violations):.3f}/{max(violations):.3f} Å)"
+        )
+    return True, (
+        f"{fpath.name}: all {len(all_nn_dists)} {element_a}-{element_b} nearest-neighbor "
+        f"distances in [{min_distance}, {max_distance}] Å (mean={mean_d:.3f} Å)"
     )
 
 

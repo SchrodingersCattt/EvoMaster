@@ -49,7 +49,7 @@ _QUESTION_BANK_DIR = REPO_ROOT / "evaluation" / "question_bank"
 
 # Used only by :func:`score_devshell_tasks_for_agent_loop` (in-process).
 _DEVSHELL_AGENT_INGEST_OPTIONAL_IDS = frozenset(
-    {"token_budget_total", "turn_budget", "efficiency_judge", "no_retries"}
+    {"token_budget_total", "turn_budget", "duration_budget", "efficiency_judge", "no_retries"}
 )
 _EVIDENCE_MAPPING_PATH = REPO_ROOT / "evaluation" / "core" / "evidence_mapping.yaml"
 _META_FILENAMES = frozenset(
@@ -818,7 +818,7 @@ def main() -> int:
         eval_ingest_timeout=float(args.eval_ingest_timeout),
         score_jobs=max(1, int(args.score_jobs)),
         parallel_checklist_workers=max(1, int(args.parallel_checklist_workers)),
-        ingest_optional_checklist_ids=frozenset(),
+        ingest_optional_checklist_ids=_DEVSHELL_AGENT_INGEST_OPTIONAL_IDS,
     )
 
 

@@ -128,6 +128,26 @@ def _run_mat_task_with_playground(
     }
 
 
+def _patch_bohrium_submit(runtime: Any, error_message: str) -> None:
+    """Monkey-patch BohriumTool._submit to always return an error (eval-only)."""
+    from matmaster.tools.builtin.bohrium_tool.tool import BohriumTool
+    from matmaster.tools.tool_result import ToolResult
+
+    catalog = runtime.spec.tool_catalog
+    if catalog is None:
+        return
+    registry = getattr(catalog, '_registry', None)
+    if registry is None:
+        return
+    tool = registry.get('Bohrium')
+    if tool is None or not isinstance(tool, BohriumTool):
+        return
+    tool._submit = lambda args: ToolResult(
+        status="error",
+        content=f"job/create failed: {error_message}",
+    )
+
+
 def _run_mat_task_once(
     *,
     prompt: str,
@@ -135,6 +155,7 @@ def _run_mat_task_once(
     task_id: str,
     run_dir: Path,
     mat_config_path: Path,
+    inject_bohrium_failure: str | None = None,
 ) -> dict[str, Any]:
     """Single agent invocation (no empty-completion retry)."""
     if get_playground_class is not _DEFAULT_GET_PLAYGROUND_CLASS:
@@ -183,6 +204,8 @@ def _run_mat_task_once(
 
         try:
             runtime = await exp.build_runtime(pg_ctx)
+            if inject_bohrium_failure:
+                _patch_bohrium_submit(runtime, inject_bohrium_failure)
             return await drain_run_stream(
                 runtime.kernel.run_stream(runtime.spec, prompt)
             )
@@ -236,6 +259,7 @@ def run_mat_task(
     run_dir: Path,
     mat_config_path: Path,
     empty_completion_max_retries: int = 1,
+    inject_bohrium_failure: str | None = None,
 ) -> dict[str, Any]:
     """Run one Mat Master evaluation task and extract answer text.
 
@@ -249,6 +273,8 @@ def run_mat_task(
             ``reason=natural`` (or legacy playground without reason), no tool calls, and
             an empty answer, re-run the task up to this many extra times to mitigate
             transient empty LLM streams. ``duration_ms`` sums all attempts.
+        inject_bohrium_failure: If set, patches BohriumTool._submit to return this
+            error message on every submit call (eval-only fault injection).
     """
     if empty_completion_max_retries < 0:
         raise ValueError("empty_completion_max_retries must be >= 0")
@@ -259,6 +285,7 @@ def run_mat_task(
         task_id=task_id,
         run_dir=run_dir,
         mat_config_path=mat_config_path,
+        inject_bohrium_failure=inject_bohrium_failure,
     )
     total_duration_ms = int(last.get("duration_ms") or 0)
     retries_done = 0
@@ -278,6 +305,7 @@ def run_mat_task(
             task_id=task_id,
             run_dir=run_dir,
             mat_config_path=mat_config_path,
+            inject_bohrium_failure=inject_bohrium_failure,
         )
         total_duration_ms += int(last.get("duration_ms") or 0)
         retries_done += 1

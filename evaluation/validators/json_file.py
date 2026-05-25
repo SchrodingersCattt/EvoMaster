@@ -64,10 +64,19 @@ def check_json_file_numeric_range(
     *,
     filename: str,
     key: str,
-    expected: float,
+    expected: float | None = None,
     tolerance: float = 0.0,
+    min: float | None = None,
+    max: float | None = None,
 ) -> tuple[bool, str]:
-    """Check a numeric value inside a JSON file is within expected range."""
+    """Check a numeric value inside a JSON file is within range.
+
+    Supports two modes:
+    - ``expected`` + ``tolerance``: value must be within expected ± tolerance
+    - ``min`` / ``max``: value must be within [min, max] (inclusive)
+
+    If both are provided, ``min``/``max`` takes precedence.
+    """
     if not filename or not key:
         return False, 'json_file_numeric_range: need filename and key'
     root = Path(workspace_dir)
@@ -85,6 +94,16 @@ def check_json_file_numeric_range(
         val = float(val)
     except (TypeError, ValueError):
         return False, f'{key} = {val!r} is not numeric'
+
+    if min is not None or max is not None:
+        lo = float(min) if min is not None else float('-inf')
+        hi = float(max) if max is not None else float('inf')
+        if lo <= val <= hi:
+            return True, f'{key} = {val} (within [{lo}, {hi}])'
+        return False, f'{key} = {val} outside [{lo}, {hi}]'
+
+    if expected is None:
+        return False, "json_file_numeric_range: missing 'expected' in ref"
     diff = abs(val - float(expected))
     if diff <= float(tolerance):
         return True, f'{key} = {val} (expected {expected} ± {tolerance})'

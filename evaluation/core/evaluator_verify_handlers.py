@@ -19,8 +19,10 @@ from .evaluator_struct_helpers import (
     check_struct_file_replicas_distinct,
     check_struct_file_space_group,
 )
+from .evaluator_wiring import check_md_submit_structure_min_dist
 from .evaluator_wiring import (
     check_abacus_input_from_evidence,
+    check_kpt_line_from_evidence,
     check_answer_json_numeric_from_ref,
     check_checkcif_alerts,
     check_duration_budget,
@@ -36,21 +38,28 @@ from .evaluator_wiring import (
     check_struct_file_bond_count,
     check_struct_file_bond_length,
     check_struct_file_bond_length_range,
+    check_struct_file_bond_range,
     check_struct_file_cell_param,
     check_struct_file_charge_balance,
+    check_struct_file_composition,
     check_struct_file_coordination,
     check_struct_file_count,
     check_struct_file_density,
+    check_struct_file_elements_present,
     check_struct_file_formula,
     check_struct_file_layer_count,
     check_struct_file_stoichiometry_ratio,
     check_struct_file_surface_termination,
+    check_csv_row_count_from_evidence,
     check_text_file_contains_all_from_evidence,
+    check_text_file_excludes_all_from_evidence,
     check_text_file_kpt_path_from_evidence,
     check_text_file_numeric_range_from_evidence,
+    check_text_file_regex_absent_from_evidence,
     check_text_file_regex_from_evidence,
     check_token_budget,
     check_turn_budget,
+    check_vasp_incar_from_evidence,
 )
 
 _R = BinaryEvaluator._register_verify
@@ -149,6 +158,7 @@ def _evidence_ref_handler(fn):
 for _name, _fn in [
     ("struct_file_atom_count", check_struct_file_atom_count),
     ("struct_file_formula", check_struct_file_formula),
+    ("struct_file_elements_present", check_struct_file_elements_present),
     ("struct_file_bond_count", check_struct_file_bond_count),
     ("struct_file_bond_length", check_struct_file_bond_length),
     ("struct_file_bond_length_range", check_struct_file_bond_length_range),
@@ -168,17 +178,28 @@ for _name, _fn in [
         "struct_file_min_interatomic_distance",
         check_struct_file_min_interatomic_distance,
     ),
+    (
+        "md_submit_structure_min_dist",
+        check_md_submit_structure_min_dist,
+    ),
     ("struct_file_count", check_struct_file_count),
     ("struct_file_surface_termination", check_struct_file_surface_termination),
+    ("struct_file_composition", check_struct_file_composition),
+    ("struct_file_bond_range", check_struct_file_bond_range),
+    ("csv_row_count", check_csv_row_count_from_evidence),
     ("text_file_contains_all", check_text_file_contains_all_from_evidence),
+    ("text_file_excludes_all", check_text_file_excludes_all_from_evidence),
     ("text_file_kpt_path", check_text_file_kpt_path_from_evidence),
     ("text_file_numeric_range", check_text_file_numeric_range_from_evidence),
     ("text_file_regex", check_text_file_regex_from_evidence),
+    ("text_file_regex_absent", check_text_file_regex_absent_from_evidence),
     ("json_file_schema", check_json_file_schema),
     ("json_file_numeric_range", check_json_file_numeric_range),
     ("json_file_artifacts", check_json_file_artifacts),
     ("stru_file_check", check_stru_file_from_evidence),
     ("abacus_input_check", check_abacus_input_from_evidence),
+    ("kpt_line_check", check_kpt_line_from_evidence),
+    ("vasp_incar_check", check_vasp_incar_from_evidence),
 ]:
     BinaryEvaluator._VERIFY_REGISTRY[_name] = (_evidence_ref_handler(_fn), True)
 

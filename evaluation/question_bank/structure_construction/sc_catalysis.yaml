@@ -2,13 +2,80 @@ version: v5
 capability: structure_construction
 domain: catalysis
 questions:
-- id: CR_SC_ZnS001_20260508v2
+- id: CR_SC_ZnS001_polarity_20260523
   capability: structure_construction
   domain: catalysis
-  intent: Build ZnS(001) polar surface slab with 3 layers and 2x2x1 supercell per
-    doc 3.1.2.
-  human_prompt_seed: 'ZnS 化合物 (001) 切面 slab：3 层厚度、2×2×1 扩胞，真空 ≥15 Å。若为极性表面，说明是否采用对称
-    slab 或偶极修正策略。输出 slab 结构文件为 `ZnS_001_slab.cif`，并简述终止面/化学计量处理。
+  intent: Test whether agent recognizes ZnS(001) as a polar surface and proactively
+    proposes remediation strategies before constructing the slab.
+  human_prompt_seed: '构建 ZnS 化合物 (001) 切面 slab：3 bilayer 厚度、基于 primitive surface
+    cell 的 2×2×1 扩胞，真空 ≥15 Å。输出 slab 结构文件为 `ZnS_001_slab.cif`。
+
+    '
+  tags:
+  - struct_surface
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 40000
+  scoring_checklist:
+  - id: tasker_type_identification
+    criterion: The agent identifies ZnS(001) as a Tasker Type-3 polar surface (alternating
+      Zn-only and S-only planes along [001] producing a net dipole moment), or equivalently
+      states that the surface is polar due to its stacking of mono-element charged
+      layers.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: polar_surface_remedy
+    criterion: The agent explicitly discusses at least two physically motivated remedies
+      for the Type-3 polarity — such as constructing a symmetric slab with matching
+      top/bottom terminations, applying a dipole correction, surface reconstruction,
+      or pseudohydrogen passivation.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: asks_human_for_strategy
+    criterion: After detecting the polar surface, the agent presents at least two
+      polarity handling strategies to the user and asks the user to choose before
+      constructing the slab. PASS if the agent explicitly asks (via AskQuestion tool
+      or text-based question) and waits. FAIL if the agent silently picks a strategy
+      and proceeds without asking.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: no_retries
+    criterion: No repeated identical slab construction or surface cut with the same
+      parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within a generous benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: CR_SC_ZnS001_symmetric_20260523
+  capability: structure_construction
+  domain: catalysis
+  intent: Build ZnS(001) symmetric S-terminated slab with precise structural parameters
+    given an explicit polarity handling strategy.
+  human_prompt_seed: '构建 ZnS 闪锌矿 (001) 极性表面 slab，采用对称 S 终止策略消除宏观偶极。要求：基于
+    primitive surface cell 的 2×2×1 扩胞，3 个 Zn-S bilayer（即顶底均为 S 层，共 7 个原子面），真空层
+    ≥15 Å。输出结构文件为 `ZnS_001_slab.cif`。
 
     '
   tags:
@@ -21,7 +88,7 @@ questions:
     value:
       filename: ZnS_001_slab.cif
       expected: 7
-      tolerance: 2
+      tolerance: 1
       axis: z
       layer_tol_A: 0.5
   - key: zn_s_ratio
@@ -29,12 +96,12 @@ questions:
       filename: ZnS_001_slab.cif
       element_a: Zn
       element_b: S
-      expected_ratio: 1.0
-      tolerance: 0.01
+      expected_ratio: 0.75
+      tolerance: 0.05
   - key: slab_atom_count
     value:
       filename: ZnS_001_slab.cif
-      expected: 24
+      expected: 28
       tolerance: 0
   - key: inplane_a
     value:
@@ -56,77 +123,60 @@ questions:
       tolerance: 7.0
   - key: turn_budget
     value:
-      max: 22
+      max: 20
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 24000
+      max: 30000
   scoring_checklist:
   - id: file_exists
     criterion: The output file `ZnS_001_slab.cif` exists in the workspace.
     axis: correctness
     verify: artifact_exists
   - id: slab_layer_count
-    criterion: The number of distinct atomic z-planes in ZnS_001_slab.cif is approximately
-      5-9 (expected 7 ± 2), consistent with 3 Zn-S bilayers of zinc-blende (001).
-      Atoms within 0.5 Å along z are merged into one plane.
+    criterion: The slab has 7 distinct atomic z-planes (S-Zn-S-Zn-S-Zn-S), consistent
+      with 3 bilayers plus symmetric S termination on both sides. Atoms within 0.5
+      Å along z are merged into one plane.
     axis: correctness
     verify: struct_file_layer_count
   - id: zn_s_ratio
-    criterion: The output slab preserves Zn:S = 1:1 stoichiometry.
+    criterion: The Zn:S stoichiometry ratio is approximately 0.75 (3 Zn layers vs
+      4 S layers in the symmetric S-terminated slab).
     axis: correctness
     verify: struct_file_stoichiometry_ratio
   - id: slab_atom_count
-    criterion: The 3-bilayer 2x2x1 ZnS(001) slab contains exactly 24 atoms.
+    criterion: The symmetric S-terminated 2×2×1 slab contains exactly 28 atoms (7
+      layers × 4 atoms/layer).
     axis: correctness
     verify: struct_file_atom_count
   - id: inplane_a
-    criterion: The ZnS(001) slab cell a lattice parameter is close to the 2x
-      in-plane surface repeat of zinc-blende ZnS, about sqrt(2)*5.41 A.
+    criterion: The slab cell a parameter matches 2× the primitive surface cell of
+      ZnS(001), approximately 7.65 Å.
     axis: correctness
     verify: struct_file_cell_param
   - id: inplane_b
-    criterion: The ZnS(001) slab cell b lattice parameter is close to the 2x
-      in-plane surface repeat of zinc-blende ZnS, about sqrt(2)*5.41 A.
+    criterion: The slab cell b parameter matches 2× the primitive surface cell of
+      ZnS(001), approximately 7.65 Å.
     axis: correctness
     verify: struct_file_cell_param
   - id: cell_c_vacuum
-    criterion: The ZnS(001) slab cell c parameter is large enough to include the
-      slab thickness plus at least approximately 15 A of vacuum.
+    criterion: The slab cell c parameter includes the slab thickness plus at least
+      15 Å of vacuum.
     axis: correctness
     verify: struct_file_cell_param
-  - id: polar_handling
-    criterion: 答案说明了 ZnS(001) 表面的极性问题，并至少提出一种合理的处理策略（如构建对称 slab、施加偶极修正等），所述策略与交付的结构文件一致。
-    axis: grounding
+  - id: mirror_symmetry
+    criterion: The slab has mirror symmetry about its central plane — both top and
+      bottom surfaces are S-terminated, ensuring zero net dipole moment along z.
+    axis: correctness
     verify: llm_binary_judge
-  - id: tasker_type_identification
-    criterion: The agent identifies ZnS(001) as a Tasker Type-3 polar surface (alternating
-      Zn-only and S-only planes along [001] producing a net dipole moment), or equivalently
-      states that the surface is polar due to its stacking of mono-element charged
-      layers.
-    axis: grounding
-    verify: llm_binary_judge
-  - id: polar_surface_remedy
-    criterion: The agent explicitly discusses at least one physically motivated remedy
-      for the Type-3 polarity — such as constructing a symmetric slab with matching
-      top/bottom terminations, applying a dipole correction in the vacuum, or reconstructing/passivating
-      the surface to quench the macroscopic dipole.
-    axis: grounding
-    verify: llm_binary_judge
+    weight: 1.0
   - id: no_retries
     criterion: No repeated identical slab construction or surface cut with the same
       parameters.
     axis: efficiency
     verify: no_retries
-  - id: efficiency_judge
-    criterion: The ZnS(001) slab construction and polar-surface handling complete
-      without gratuitously repeated identical tool calls. Tool-discovery fallback
-      (e.g. trying an MCP tool that errors, then switching to a script-based approach)
-      is acceptable and should NOT be counted as redundancy.
-    axis: efficiency
-    verify: llm_binary_judge
   - id: turn_budget
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
@@ -299,7 +349,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: SC_zn_slab_001_20260513
+- id: SC_zn_slab_001_20260522
   capability: structure_construction
   domain: catalysis
   intent: Build Zn HCP surface slabs for multiple low-index facets.
@@ -325,18 +375,29 @@ questions:
   - key: must_parsable_1120
     value:
       filename: Zn_11-20.cif
+  - key: must_only_zn_0001
+    value:
+      filename: Zn_0001.cif
+      formula: Zn1
+  - key: must_only_zn_1010
+    value:
+      filename: Zn_10-10.cif
+      formula: Zn1
   - key: must_atom_count_0001
     value:
       filename: Zn_0001.cif
-      min: 4
+      expected: 4
+      tolerance: 4
   - key: must_atom_count_1010
     value:
       filename: Zn_10-10.cif
-      min: 4
+      expected: 4
+      tolerance: 4
   - key: must_atom_count_1120
     value:
       filename: Zn_11-20.cif
-      min: 4
+      expected: 8
+      tolerance: 4
   - key: turn_budget
     value:
       max: 20
@@ -389,7 +450,7 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
-- id: SC_cat_ads_001_20260519
+- id: SC_cat_ads_001_20260523
   capability: structure_construction
   domain: catalysis
   intent: Build catalytic surface intermediates (H*, HCOO*, COOH*) on Pt(111), testing
@@ -470,31 +531,92 @@ questions:
     criterion: Agent writes `Pt111_COOH.cif` to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: h_is_atomic
+  - id: h_atom_count
     criterion: Pt111_H.cif contains exactly 1 hydrogen atom (atomic H*, not H2 molecule).
       This is the critical test — in catalysis context H* means a single adsorbed
       hydrogen atom.
     axis: correctness
     verify: struct_file_atom_count
     weight: 2.0
-  - id: hcoo_formula
-    criterion: The HCOO* adsorbate in Pt111_HCOO.cif has composition CHO2 (1C + 1H
-      + 2O, formate anion skeleton). Must NOT be formic acid (HCOOH with 2H+2O).
+  - id: hcoo_c_count
+    criterion: Pt111_HCOO.cif contains exactly 1 carbon atom (HCOO* formate skeleton).
     axis: correctness
     verify: struct_file_atom_count
-    weight: 1.5
-  - id: cooh_formula
-    criterion: The COOH* adsorbate in Pt111_COOH.cif has composition CHO2 (1C + 1H
-      + 2O, carboxyl radical). Must NOT be CO2 (missing H) or formic acid (extra H).
+    weight: 1.0
+  - id: hcoo_o_count
+    criterion: Pt111_HCOO.cif contains exactly 2 oxygen atoms (HCOO* formate skeleton).
     axis: correctness
     verify: struct_file_atom_count
-    weight: 1.5
+    weight: 1.0
+  - id: cooh_c_count
+    criterion: Pt111_COOH.cif contains exactly 1 carbon atom (COOH* carboxyl radical).
+    axis: correctness
+    verify: struct_file_atom_count
+    weight: 1.0
+  - id: cooh_o_count
+    criterion: Pt111_COOH.cif contains exactly 2 oxygen atoms (COOH* carboxyl radical).
+    axis: correctness
+    verify: struct_file_atom_count
+    weight: 1.0
+  - id: cooh_h_count
+    criterion: Pt111_COOH.cif contains exactly 1 hydrogen atom (COOH* carboxyl radical,
+      not formic acid with extra H).
+    axis: correctness
+    verify: struct_file_atom_count
+    weight: 1.0
   - id: hcoo_ch_bond
     criterion: In Pt111_HCOO.cif, the H atom is bonded to C (C-H distance ~1.1 Å),
       confirming correct formate geometry (H-COO) rather than H bonded to O.
     axis: correctness
     verify: struct_file_bond_length
     weight: 1.5
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
+- id: SC_cat_co_orient_001_20260523
+  capability: structure_construction
+  domain: catalysis
+  intent: Build CO adsorption structure on Pt(111) without specifying orientation,
+    testing whether agent knows CO adsorbs C-down on transition metal surfaces.
+  human_prompt_seed: 在 Pt(111) 2×2 超胞 4 层 slab（15 Å 真空）上构建 CO 分子 ontop 吸附初始结构，输出为
+    `Pt111_CO.cif`。
+  tags:
+  - struct_surface
+  data_files: []
+  reference_answers:
+  - key: file_exists
+    value: Pt111_CO.cif
+  - key: co_c_pt_bond
+    value:
+      filename: Pt111_CO.cif
+      element_a: C
+      element_b: Pt
+      cutoff_A: 2.5
+      expected: 1.85
+      tolerance: 0.35
+  - key: turn_budget
+    value:
+      max: 15
+  - key: token_budget_total
+    value:
+      max: 25000
+  scoring_checklist:
+  - id: file_exists
+    criterion: Agent writes `Pt111_CO.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: co_c_pt_bond
+    criterion: The CO molecule is oriented C-down (carbon closer to Pt surface). Verified
+      by C-Pt distance being ~1.85 Å (within bond range). If O-down, the nearest C-Pt
+      distance would be >3.0 Å and this check would fail.
+    axis: correctness
+    verify: struct_file_bond_length
+    weight: 2.0
   - id: turn_budget
     criterion: Agent completes the task within the turn budget.
     axis: efficiency

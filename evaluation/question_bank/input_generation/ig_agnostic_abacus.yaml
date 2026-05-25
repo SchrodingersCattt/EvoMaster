@@ -1198,14 +1198,13 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_017_20260515
+- id: IG_abacus_017_20260525
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS PBE+U LCAO cell-relax input directories for comparing rocksalt and square-planar NiO phases.
   human_prompt_seed: "我想用 ABACUS 比较 NiO 两种候选结构的相对稳定性：一个是常规岩盐相，另一个是 Ni 处于平面四配位环境的变形相。请先只准备后续计算需要的输入文件。\n计算方法统一采用 LCAO 基组；两套输入应使用一致的计算精度、赝势/轨道来源和 k 点采样策略，便于之后做能量比较。\n这一步应先完成可变晶胞的结构优化：同时优化晶胞参数和原子位置。\n工作区已经提供了 `POSCAR_rocksalt` 和 `POSCAR_square_planar`，请在当前目录下分别建立 `nio_rocksalt/` 和 `nio_square_planar/`，把对应 POSCAR 转写为 ABACUS `STRU`，并写入对应的 ABACUS `INPUT`。不要运行计算，也不要提交任务。"
   tags:
   - eng_abacus
-  - struct_transform
   data_files:
   - key: rocksalt_poscar
     path: data/IG_abacus_017_20260512/POSCAR_rocksalt
@@ -1293,12 +1292,12 @@ questions:
       - key: relax_nmax
         min: 20
         max: 300
-      - key: kspacing
-        min: 0.04
-        max: 0.15
-        if_component_count_in:
-        - 1
-        - 3
+  - key: must_rocksalt_kpoint_density
+    value:
+      filename: nio_rocksalt/INPUT
+      check: kpoint_density
+      kspacing_range: [0.04, 0.15]
+      min_kpoints: 4
   - key: must_square_numerics
     value:
       filename: nio_square_planar/INPUT
@@ -1312,12 +1311,12 @@ questions:
       - key: relax_nmax
         min: 20
         max: 300
-      - key: kspacing
-        min: 0.04
-        max: 0.15
-        if_component_count_in:
-        - 1
-        - 3
+  - key: must_square_kpoint_density
+    value:
+      filename: nio_square_planar/INPUT
+      check: kpoint_density
+      kspacing_range: [0.04, 0.15]
+      min_kpoints: 4
   - key: must_rocksalt_stru_species_orbitals
     value:
       filename: nio_rocksalt/STRU
@@ -1412,14 +1411,24 @@ questions:
     verify: text_file_regex
     weight: 0.8
   - id: must_rocksalt_numerics
-    criterion: '[Must] Rocksalt INPUT uses reasonable LCAO DFT+U cell-relax numerical controls, including ecutwfc, scf_thr, force/stress thresholds, relax_nmax, and kspacing.'
+    criterion: '[Must] Rocksalt INPUT uses reasonable LCAO DFT+U cell-relax numerical controls (ecutwfc, scf_thr, relax_nmax).'
     axis: correctness
     verify: text_file_numeric_range
     weight: 0.8
+  - id: must_rocksalt_kpoint_density
+    criterion: '[Must] Rocksalt INPUT defines adequate k-point sampling via kspacing or KPT file.'
+    axis: correctness
+    verify: abacus_input_check
+    weight: 0.8
   - id: must_square_numerics
-    criterion: '[Must] Square-planar INPUT uses reasonable LCAO DFT+U cell-relax numerical controls, including ecutwfc, scf_thr, force/stress thresholds, relax_nmax, and kspacing.'
+    criterion: '[Must] Square-planar INPUT uses reasonable LCAO DFT+U cell-relax numerical controls (ecutwfc, scf_thr, relax_nmax).'
     axis: correctness
     verify: text_file_numeric_range
+    weight: 0.8
+  - id: must_square_kpoint_density
+    criterion: '[Must] Square-planar INPUT defines adequate k-point sampling via kspacing or KPT file.'
+    axis: correctness
+    verify: abacus_input_check
     weight: 0.8
   - id: must_rocksalt_stru_species_orbitals
     criterion: '[Must] Rocksalt STRU uses APNS Ni/O pseudopotential and orbital names and valid structure sections.'
@@ -2075,14 +2084,13 @@ questions:
     axis: efficiency
     verify: token_budget
   priority: P0
-- id: IG_abacus_005_20260508
+- id: IG_abacus_005_20260523
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS PW bulk-and-slab inputs for Al fcc(100) surface-energy convergence using bulk, 5-layer slab, and 7-layer slab structures.
-  human_prompt_seed: "工作区中提供了体相与两种厚度 slab 的 Al fcc(100) 结构。\n\n请为表面能收敛测试准备 ABACUS 平面波输入：\n1) 体相输入使用 cell-relax。\n2) 两个 slab 输入使用离子弛豫，并保留原 STRU 中已有的固定/弛豫标记，不修改给定结构。\n3) 提供体相与 slab 各自匹配的 K 点文件；其中 slab 需采用各向异性采样并在法向使用单点。\n\n将结果写入当前目录：`INPUT_bulk_relax`、`INPUT_slab5`、`INPUT_slab7`、`KPT_bulk`、`KPT_slab`。\n"
+  human_prompt_seed: "工作区中提供了 Al fcc(100) 的体相与两种厚度 slab 结构（bulk_al_fcc.stru、slab_al_fcc100_5l.stru、slab_al_fcc100_7l.stru）。\n\n请为表面能收敛测试准备 ABACUS 平面波输入和 K 点文件。将结果写入当前目录：`INPUT_bulk`、`INPUT_slab5`、`INPUT_slab7`、`KPT_bulk`、`KPT_slab`。\n"
   tags:
   - eng_abacus
-  - struct_surface
   data_files:
   - key: bulk_al_fcc
     path: data/IG_abacus_005_20260406/bulk_al_fcc.stru
@@ -2097,9 +2105,9 @@ questions:
     oss_url: ''
     description: Seven-layer Al fcc(100) slab with selective-relaxation flags.
   reference_answers:
-  - key: must_input_bulk_relax_core
+  - key: must_input_bulk_core
     value:
-      filename: INPUT_bulk_relax
+      filename: INPUT_bulk
       tokens:
       - calculation cell-relax
       - basis_type pw
@@ -2118,9 +2126,9 @@ questions:
       - calculation relax
       - basis_type pw
       flags: i
-  - key: must_input_bulk_relax_cal_force_stress
+  - key: must_input_bulk_cal_force_stress
     value:
-      filename: INPUT_bulk_relax
+      filename: INPUT_bulk
       tokens:
       - cal_force 1
       - cal_stress 1
@@ -2143,16 +2151,16 @@ questions:
       filename: KPT_slab
       pattern: ^\s*\d+\s+\d+\s+1(?:\s+\d+){0,3}\s*$
       flags: m
-  - key: suggested_input_bulk_relax_numerics
+  - key: suggested_input_bulk_numerics
     value:
-      filename: INPUT_bulk_relax
+      filename: INPUT_bulk
       checks:
       - key: ecutwfc
         min: 35
         max: 100
   - key: variable_input_bulk_smearing_or_mixing
     value:
-      filename: INPUT_bulk_relax
+      filename: INPUT_bulk
       checks:
       - key: smearing_method
         allow_missing_key: true
@@ -2183,8 +2191,8 @@ questions:
       filename: KPT_slab
       pattern: ^\s*(?:1[2-9]|[2-9]\d|[1-9]\d{2,})\s+(?:1[2-9]|[2-9]\d|[1-9]\d{2,})\s+1(?:\s+\d+){0,3}\s*$
       flags: m
-  - key: input_bulk_relax_artifact
-    value: INPUT_bulk_relax
+  - key: input_bulk_artifact
+    value: INPUT_bulk
   - key: input_slab5_artifact
     value: INPUT_slab5
   - key: input_slab7_artifact
@@ -2193,24 +2201,42 @@ questions:
     value: KPT_bulk
   - key: kpt_slab_artifact
     value: KPT_slab
-  - key: grounding_source
+  - key: stru_bulk_intact
     value:
-      filenames:
-      - bulk_al_fcc.stru
-      - slab_al_fcc100_5l.stru
-      - slab_al_fcc100_7l.stru
+      filename: bulk_al_fcc.stru
+      tokens:
+      - LATTICE_CONSTANT
+      - '1.889726'
+      - 0.000000000000    0.500000000000    0.500000000000 1 1 1
+      flags: ''
+  - key: stru_slab5_intact
+    value:
+      filename: slab_al_fcc100_5l.stru
+      tokens:
+      - '7.6513590200098225'
+      - 0.500000000000    0.500000000000    0.100000000000 0 0 0
+      - 0.000000000000    0.000000000000    0.400000000000 1 1 1
+      flags: ''
+  - key: stru_slab7_intact
+    value:
+      filename: slab_al_fcc100_7l.stru
+      tokens:
+      - '7.6513590200098225'
+      - 0.000000000000    0.000000000000    0.200000000000 0 0 0
+      - 0.500000000000    0.500000000000    0.500000000000 1 1 1
+      flags: ''
   - key: turn_budget
     value:
-      max: 8
+      max: 20
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 8000
+      max: 35000
   scoring_checklist:
-  - id: must_input_bulk_relax_core
-    criterion: '[Must] INPUT_bulk_relax uses PW cell-relax core controls.'
+  - id: must_input_bulk_core
+    criterion: '[Must] INPUT_bulk uses PW cell-relax core controls.'
     axis: correctness
     verify: text_file_contains_all
     weight: 1.0
@@ -2224,8 +2250,8 @@ questions:
     axis: correctness
     verify: text_file_contains_all
     weight: 1.0
-  - id: must_input_bulk_relax_cal_force_stress
-    criterion: '[Must] INPUT_bulk_relax explicitly sets cal_force 1 and cal_stress 1, required for cell-relax calculations.'
+  - id: must_input_bulk_cal_force_stress
+    criterion: '[Must] INPUT_bulk explicitly sets cal_force 1 and cal_stress 1, required for cell-relax calculations.'
     axis: correctness
     verify: text_file_contains_all
     weight: 1.0
@@ -2244,13 +2270,13 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 1.0
-  - id: suggested_input_bulk_relax_numerics
-    criterion: '[Suggested] INPUT_bulk_relax follows benchmark numeric settings (`ecutwfc` in a reasonable low-cost range).'
+  - id: suggested_input_bulk_numerics
+    criterion: '[Suggested] INPUT_bulk follows benchmark numeric settings (`ecutwfc` in a reasonable low-cost range).'
     axis: correctness
     verify: text_file_numeric_range
     weight: 0.6
   - id: variable_input_bulk_smearing_or_mixing
-    criterion: '[Variable] If INPUT_bulk_relax includes smearing/mixing parameters, they should be reasonable for this benchmark family; omission should not be treated as failure.'
+    criterion: '[Variable] If INPUT_bulk includes smearing/mixing parameters, they should be reasonable for this benchmark family; omission should not be treated as failure.'
     axis: correctness
     verify: text_file_numeric_range
     weight: 0.3
@@ -2259,8 +2285,8 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 0.3
-  - id: input_bulk_relax_artifact
-    criterion: Generated deliverables count even if the final answer does not quote file contents; `INPUT_bulk_relax` must be written to the workspace.
+  - id: input_bulk_artifact
+    criterion: Generated deliverables count even if the final answer does not quote file contents; `INPUT_bulk` must be written to the workspace.
     axis: correctness
     verify: artifact_exists
     weight: 0.2
@@ -2284,10 +2310,24 @@ questions:
     axis: correctness
     verify: artifact_exists
     weight: 0.2
-  - id: grounding_source
-    criterion: The generated files are grounded in the three provided STRU files; no unrelated structural edits are introduced beyond preparing inputs for bulk and slab calculations.
+  - id: stru_bulk_intact
+    criterion: The provided bulk_al_fcc.stru file remains unmodified in the workspace
+      (lattice constant and atomic positions preserved).
     axis: grounding
-    verify: llm_binary_judge
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: stru_slab5_intact
+    criterion: The provided slab_al_fcc100_5l.stru file remains unmodified (lattice
+      constant and selective-dynamics flags preserved).
+    axis: grounding
+    verify: text_file_contains_all
+    weight: 1.0
+  - id: stru_slab7_intact
+    criterion: The provided slab_al_fcc100_7l.stru file remains unmodified (lattice
+      constant and selective-dynamics flags preserved).
+    axis: grounding
+    verify: text_file_contains_all
+    weight: 1.0
   - id: turn_budget
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
@@ -2940,7 +2980,7 @@ questions:
       flags: i
   - key: turn_budget
     value:
-      max: 16
+      max: 25
   - key: duration_budget
     value:
       max: 7200000
@@ -4080,7 +4120,7 @@ questions:
       flags: i
   - key: turn_budget
     value:
-      max: 16
+      max: 20
   - key: duration_budget
     value:
       max: 7200000
@@ -5325,11 +5365,11 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_043_20260518
+- id: IG_abacus_043_20260525
   capability: input_generation
   domain: agnostic
   intent: Prepare DeePKS projector-generation and LCAO SCF-with-model inputs per official 21_deepks—gen_bessel vs deepks_scf/deepks_model.
-  human_prompt_seed: "准备 DeePKS 两套输入（`run_pw_h2o_gen_bessel/`、`run_lcao_h2o_deepks/`）。读取工作区 STRU，各目录编写 `INPUT`；需要 k 点的目录另写 `KPT`（只写文件，不运行）。"
+  human_prompt_seed: "准备 DeePKS 两套输入（`run_pw_h2o_gen_bessel/`、`run_lcao_h2o_deepks/`）。读取工作区 STRU，各目录编写 `INPUT`（只写文件，不运行）。"
   tags:
   - eng_abacus
   data_files:
@@ -5346,8 +5386,12 @@ questions:
     value: run_pw_h2o_gen_bessel/INPUT
   - key: deepks_input_artifact
     value: run_lcao_h2o_deepks/INPUT
-  - key: deepks_kpt_artifact
-    value: run_lcao_h2o_deepks/KPT
+  - key: must_deepks_kpoint
+    value:
+      filename: run_lcao_h2o_deepks/INPUT
+      check: kpoint_density
+      kspacing_range: [0.01, 1.0]
+      min_kpoints: 1
   - key: must_bessel_input
     value:
       filename: run_pw_h2o_gen_bessel/INPUT
@@ -5388,24 +5432,17 @@ questions:
       filename: run_lcao_h2o_deepks/INPUT
       pattern: (?im)^\s*deepks_model\s+\S+\.ptg\s*$
       flags: im
-  - key: must_deepks_kpt
-    value:
-      filename: run_lcao_h2o_deepks/KPT
-      tokens:
-      - K_POINTS
-      - Gamma
-      flags: i
   - key: variable_deepks_workflow
     value: DeePKS per 21_deepks—PW gen_bessel for projectors; LCAO SCF with deepks_scf and deepks_model path to a .ptg file.
   - key: turn_budget
     value:
-      max: 16
+      max: 22
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 22000
+      max: 35000
   scoring_checklist:
   - id: bessel_input_artifact
     criterion: run_pw_h2o_gen_bessel/INPUT exists.
@@ -5415,10 +5452,11 @@ questions:
     criterion: run_lcao_h2o_deepks/INPUT exists.
     axis: correctness
     verify: artifact_exists
-  - id: deepks_kpt_artifact
-    criterion: run_lcao_h2o_deepks/KPT exists.
+  - id: must_deepks_kpoint
+    criterion: '[Must] run_lcao_h2o_deepks/INPUT defines k-point sampling (gamma_only or KPT file).'
     axis: correctness
-    verify: artifact_exists
+    verify: abacus_input_check
+    weight: 0.8
   - id: must_bessel_input
     criterion: '[Must] run_pw_h2o_gen_bessel/INPUT is PW gen_bessel with Bessel descriptors.'
     axis: correctness
@@ -5449,11 +5487,6 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 1.0
-  - id: must_deepks_kpt
-    criterion: '[Must] run_lcao_h2o_deepks/KPT uses Gamma automatic k-mesh.'
-    axis: correctness
-    verify: text_file_contains_all
-    weight: 0.8
   - id: variable_deepks_workflow
     criterion: '[Variable] DeePKS two-stage setup matches 21_deepks README.'
     axis: grounding
@@ -6743,11 +6776,11 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_054_20260521
+- id: IG_abacus_054_20260525
   capability: input_generation
   domain: agnostic
   intent: Prepare shared LCAO INPUT/KPT for H2O counterpoise BSSE per official 32_bsse.
-  human_prompt_seed: "为气相 H₂O counterpoise（BSSE）准备共享 LCAO 输入。读取工作区 STRU，在 `run_lcao_h2o_cp/` 编写 `INPUT` 与 `KPT`（只写文件，不运行）。"
+  human_prompt_seed: "为气相 H₂O counterpoise（BSSE）准备 LCAO 输入。工作区有 STRU_0 ~ STRU_3 四个子计算的结构文件，在 `run_lcao_h2o_cp/` 编写一个共享的 `INPUT` 与 `KPT`（只写文件，不运行）。"
   tags:
   - eng_abacus
   data_files:
@@ -6789,13 +6822,13 @@ questions:
       flags: i
   - key: turn_budget
     value:
-      max: 16
+      max: 18
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 22000
+      max: 40000
   scoring_checklist:
   - id: cp_input
     criterion: run_lcao_h2o_cp/INPUT exists.
@@ -7038,6 +7071,432 @@ questions:
     axis: grounding
     verify: llm_binary_judge
     weight: 0.5
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: IG_abacus_057_20260525
+  capability: input_generation
+  domain: agnostic
+  intent: Generate ABACUS KPT file in Line mode for Al FCC band structure calculation
+    with correct endpoint format (last nk=1).
+  human_prompt_seed: 请为 Al (FCC, a=4.05 Å) 的能带计算准备 ABACUS KPT 文件。使用 Line 模式，沿高对称路径
+    Γ → X → W → K → Γ → L，每段 20 个插值点。将 KPT 文件写入当前目录。
+  tags:
+  - eng_abacus
+  data_files: []
+  reference_answers:
+  - key: kpt_artifact
+    value: KPT
+  - key: must_kpt_line_mode
+    value:
+      filename: KPT
+      check: mode
+  - key: must_kpt_endpoint_nk1
+    value:
+      filename: KPT
+      check: last_nk
+      expected: 1
+  - key: must_not_kpt_endpoint_nk0
+    value:
+      filename: KPT
+      check: no_nk_zero
+  - key: must_kpt_segment_count
+    value:
+      filename: KPT
+      check: segment_count
+      expected: 6
+  - key: must_kpt_nk_per_segment
+    value:
+      filename: KPT
+      check: nk_per_segment
+      expected:
+        min: 15
+        max: 50
+  - key: turn_budget
+    value:
+      max: 10
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 20000
+  scoring_checklist:
+  - id: kpt_artifact
+    criterion: Agent writes KPT file to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_kpt_line_mode
+    criterion: '[Must] KPT file is valid ABACUS Line mode format.'
+    axis: correctness
+    verify: kpt_line_check
+    weight: 1.0
+  - id: must_kpt_endpoint_nk1
+    criterion: '[Must] Last high-symmetry point has nk=1 (endpoint marker required by ABACUS).'
+    axis: correctness
+    verify: kpt_line_check
+    weight: 2.0
+  - id: must_not_kpt_endpoint_nk0
+    criterion: '[Must] No k-point has nk=0 (invalid in ABACUS Line mode).'
+    axis: correctness
+    verify: kpt_line_check
+    weight: 2.0
+  - id: must_kpt_segment_count
+    criterion: '[Must] 6 high-symmetry points (G-X-W-K-G-L).'
+    axis: correctness
+    verify: kpt_line_check
+    weight: 0.8
+  - id: must_kpt_nk_per_segment
+    criterion: '[Must] Each segment has 15-50 interpolation points.'
+    axis: correctness
+    verify: kpt_line_check
+    weight: 0.5
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+
+- id: IG_abacus_060_20260522
+  capability: input_generation
+  domain: agnostic
+  intent: Generate ABACUS INPUT for cell-relax of a large magnetic iron phosphate
+    (NFPP) with DFT+U. Agent must choose conservative SCF mixing parameters suitable
+    for a 48-atom magnetic system rather than defaults that cause charge sloshing.
+  human_prompt_seed: '工作区中有 NFPP (Na₄Fe₃(PO₄)₂P₂O₇) 的 STRU 文件 `STRU_NFPP`。请准备
+    ABACUS LCAO cell-relax 计算输入，使用 DFT+U（Fe 3d, U=3.5 eV），在 `nfpp_relax/`
+    目录下生成 INPUT 和 KPT（只写文件，不运行）。'
+  tags:
+  - eng_abacus
+  data_files:
+  - key: STRU_NFPP
+    path: data/IG_abacus_060_20260522/STRU_NFPP
+    oss_url: ''
+    description: NFPP Pna21 structure, 48 atoms (Na4 Fe6 P8 O30), Fe magnetized at
+      2 μB.
+  reference_answers:
+  - key: input_artifact
+    value: nfpp_relax/INPUT
+  - key: kpt_artifact
+    value: nfpp_relax/KPT
+  - key: must_lcao_relax
+    value:
+      filename: nfpp_relax/INPUT
+      flags: i
+      tokens:
+      - basis_type lcao
+      - calculation cell-relax
+      - nspin 2
+      - pseudo_dir
+      - orbital_dir
+  - key: must_dftu
+    value:
+      filename: nfpp_relax/INPUT
+      flags: im
+      pattern: (?im)^\s*dft_plus_u\s+1
+  - key: must_mixing_beta_conservative
+    value:
+      filename: nfpp_relax/INPUT
+      flags: im
+      pattern: (?im)^\s*mixing_beta\s+0\.0[1-5]\d*\s*$
+  - key: must_smearing_adequate
+    value:
+      filename: nfpp_relax/INPUT
+      flags: im
+      pattern: (?im)^\s*smearing_sigma\s+0\.0[0-9][5-9]\d*|smearing_sigma\s+0\.0[1-9]\d*
+  - key: turn_budget
+    value:
+      max: 22
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 40000
+  scoring_checklist:
+  - id: input_artifact
+    criterion: nfpp_relax/INPUT exists.
+    axis: correctness
+    verify: artifact_exists
+  - id: kpt_artifact
+    criterion: nfpp_relax/KPT exists.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_lcao_relax
+    criterion: '[Must] INPUT sets LCAO basis, cell-relax calculation, nspin 2, and
+      explicit pseudo/orbital dirs.'
+    axis: correctness
+    verify: text_file_contains_all
+  - id: must_dftu
+    criterion: '[Must] INPUT enables DFT+U (dft_plus_u 1).'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_mixing_beta_conservative
+    criterion: '[Must] mixing_beta is conservative (0.01-0.05) for this large magnetic
+      system. Default 0.1 or higher causes charge sloshing and SCF divergence.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_smearing_adequate
+    criterion: '[Must] smearing_sigma is adequate (>= 0.005 Ry) for Fe 3d states
+      near Fermi level. Too narrow (0.001-0.002) causes poor DOS sampling.'
+    axis: correctness
+    verify: text_file_regex
+  - id: has_mixing_beta_mag
+    criterion: INPUT includes mixing_beta_mag for separate magnetic moment mixing,
+      which stabilizes SCF convergence in spin-polarized systems.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: physical_params_reasonable
+    criterion: Overall INPUT parameters are physically reasonable for a 48-atom magnetic
+      iron phosphate cell-relax (scf_nmax >= 200, force threshold reasonable, Hubbard
+      U on Fe 3d ~3-5 eV).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+
+- id: IG_abacus_061_20260522
+  capability: input_generation
+  domain: agnostic
+  intent: Generate ABACUS INPUT for cell-relax of NFPP without being told to use DFT+U.
+    Agent must recognize that Fe 3d is strongly correlated and proactively apply
+    Hubbard U correction with a physically reasonable U value.
+  human_prompt_seed: '工作区中有 NFPP (Na₄Fe₃(PO₄)₂P₂O₇) 的 STRU 文件 `STRU_NFPP`。请准备
+    ABACUS LCAO cell-relax 计算输入，在 `nfpp_relax/` 目录下生成 INPUT 和 KPT（只写文件，不运行）。'
+  tags:
+  - eng_abacus
+  data_files:
+  - key: STRU_NFPP
+    path: data/IG_abacus_061_20260522/STRU_NFPP
+    oss_url: ''
+    description: NFPP Pna21 structure, 48 atoms (Na4 Fe6 P8 O30), Fe magnetized at
+      2 μB.
+  reference_answers:
+  - key: input_artifact
+    value: nfpp_relax/INPUT
+  - key: kpt_artifact
+    value: nfpp_relax/KPT
+  - key: must_lcao_relax
+    value:
+      filename: nfpp_relax/INPUT
+      flags: i
+      tokens:
+      - basis_type lcao
+      - calculation cell-relax
+      - nspin 2
+      - pseudo_dir
+      - orbital_dir
+  - key: must_dftu
+    value:
+      filename: nfpp_relax/INPUT
+      flags: im
+      pattern: (?im)^\s*dft_plus_u\s+1
+  - key: must_hubbard_u_value
+    value:
+      filename: nfpp_relax/INPUT
+      flags: im
+      pattern: (?im)^\s*orbital_corr.*Fe|hubbard_u.*[2-6]\.|Fe.*[2-6]\.
+  - key: turn_budget
+    value:
+      max: 22
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 40000
+  scoring_checklist:
+  - id: input_artifact
+    criterion: nfpp_relax/INPUT exists.
+    axis: correctness
+    verify: artifact_exists
+  - id: kpt_artifact
+    criterion: nfpp_relax/KPT exists.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_lcao_relax
+    criterion: '[Must] INPUT sets LCAO basis, cell-relax calculation, nspin 2, and
+      explicit pseudo/orbital dirs.'
+    axis: correctness
+    verify: text_file_contains_all
+  - id: must_dftu
+    criterion: '[Must] Agent proactively enables DFT+U (dft_plus_u 1) without being
+      told — Fe 3d in a phosphate framework is strongly correlated and requires
+      Hubbard correction for correct electronic structure and magnetic ordering.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_hubbard_u_value
+    criterion: '[Must] Hubbard U value for Fe 3d is physically reasonable (2-6 eV,
+      typically 3-5 eV for Fe in phosphates/oxides).'
+    axis: correctness
+    verify: text_file_regex
+  - id: spin_polarized
+    criterion: INPUT sets nspin 2 for spin-polarized calculation — NFPP has magnetic
+      Fe ions that require explicit spin treatment.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: IG_abacus_062_20260523
+  capability: input_generation
+  domain: agnostic
+  intent: Generate ABACUS PW-SCF inputs for a Fe/Sb/N interface slab. Agent must
+    discover actual PP filenames from the provided pp_library/ directory rather than
+    guessing names.
+  human_prompt_seed: |
+    工作区中有：
+    - `POSCAR`: Fe-Sb-N 界面 slab 结构（82 Fe + 1 Sb + 1 N）
+    - `pp_library/`: 赝势文件目录
+
+    请生成 ABACUS PW 基组的自旋极化 SCF 计算输入文件（INPUT、STRU、KPT），用于计算该界面体系的电子结构。
+
+    赝势使用 `pp_library/` 目录中已有的文件。
+  tags:
+  - eng_abacus
+  data_files:
+  - key: poscar
+    path: data/IG_abacus_062/POSCAR
+    oss_url: ''
+    description: Fe-Sb-N BCC/FCC interface slab POSCAR (84 atoms).
+  - key: pp_fe
+    path: data/IG_abacus_062/pp_library/Fe_ONCV_PBE-1.2.upf
+    oss_url: ''
+    description: Fe pseudopotential file (SG15 ONCV naming).
+  - key: pp_sb
+    path: data/IG_abacus_062/pp_library/Sb_ONCV_PBE-1.1.upf
+    oss_url: ''
+    description: Sb pseudopotential file (SG15 ONCV naming).
+  - key: pp_n
+    path: data/IG_abacus_062/pp_library/N_ONCV_PBE-1.2.upf
+    oss_url: ''
+    description: N pseudopotential file (SG15 ONCV naming).
+  reference_answers:
+  - key: input_artifact
+    value: INPUT
+  - key: stru_artifact
+    value: STRU
+  - key: kpt_artifact
+    value: KPT
+  - key: must_pp_fe
+    value:
+      filename: STRU
+      tokens:
+      - Fe_ONCV_PBE-1.2.upf
+      flags: ''
+  - key: must_pp_sb
+    value:
+      filename: STRU
+      tokens:
+      - Sb_ONCV_PBE-1.1.upf
+      flags: ''
+  - key: must_pp_n
+    value:
+      filename: STRU
+      tokens:
+      - N_ONCV_PBE-1.2.upf
+      flags: ''
+  - key: must_input_core
+    value:
+      filename: INPUT
+      tokens:
+      - calculation scf
+      - basis_type pw
+      - nspin 2
+      flags: i
+  - key: must_coord_keyword
+    value:
+      filename: STRU
+      pattern: (?i)(Direct|Cartesian_angstrom)
+      flags: ''
+  - key: turn_budget
+    value:
+      max: 18
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 35000
+  scoring_checklist:
+  - id: input_artifact
+    criterion: Agent writes INPUT to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: stru_artifact
+    criterion: Agent writes STRU to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: kpt_artifact
+    criterion: Agent writes KPT to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_pp_fe
+    criterion: '[Must] STRU references the actual Fe PP filename from pp_library
+      (Fe_ONCV_PBE-1.2.upf), not a guessed/fabricated name.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+  - id: must_pp_sb
+    criterion: '[Must] STRU references the actual Sb PP filename from pp_library
+      (Sb_ONCV_PBE-1.1.upf), not a guessed/fabricated name.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+  - id: must_pp_n
+    criterion: '[Must] STRU references the actual N PP filename from pp_library
+      (N_ONCV_PBE-1.2.upf), not a guessed/fabricated name.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+  - id: must_coord_keyword
+    criterion: '[Must] STRU uses correct coordinate keyword — either `Direct`
+      (fractional) or `Cartesian_angstrom` (Angstrom units). Using bare `Cartesian`
+      with Angstrom values is wrong (ABACUS interprets it as Bohr*lattice_constant).'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.5
+  - id: must_input_core
+    criterion: '[Must] INPUT uses PW basis with spin polarization for this magnetic
+      Fe-containing interface system.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency

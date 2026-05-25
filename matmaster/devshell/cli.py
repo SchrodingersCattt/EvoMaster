@@ -62,6 +62,13 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     common.add_argument(
+        "--exclude-subagents",
+        nargs="*",
+        default=None,
+        metavar="NAME",
+        help="Subagent exp names to exclude from Agent tool (e.g. --exclude-subagents verification).",
+    )
+    common.add_argument(
         "--config",
         type=Path,
         default=None,
@@ -135,6 +142,13 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="PATH",
         help="Also write the same JSON line to this file",
+    )
+    run_p.add_argument(
+        "--inject-bohrium-failure",
+        type=str,
+        default=None,
+        metavar="MSG",
+        help="Patch BohriumTool._submit to always return this error (eval-only)",
     )
 
     return parser
@@ -243,6 +257,8 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
         resolved_route=resolved,
         stream_hook=stream_hook,
         exp_config=exp_override,
+        exclude_subagents=getattr(args, "exclude_subagents", None),
+        inject_bohrium_failure=getattr(args, "inject_bohrium_failure", None),
     )
     return runner, config, llm_config, resolved
 

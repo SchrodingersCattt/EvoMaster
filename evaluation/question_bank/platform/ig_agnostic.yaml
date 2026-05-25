@@ -2,110 +2,13 @@ version: v5
 capability: input_generation
 domain: agnostic
 questions:
-- id: PIG_vasp_001_20260513
-  capability: input_generation
-  domain: agnostic
-  intent: Test Bohrium submission defaults for VASP and manifest generation with correct
-    image/machine/cmd.
-  human_prompt_seed: '工作区中提供了 Si 金刚石结构 `POSCAR_Si`。
-
-    请准备 VASP 自洽场计算输入，放入 `si_scf/` 目录，准备好后我要直接提交计算。'
-  tags:
-  - eng_vasp
-  data_files:
-  - key: poscar_si
-    path: data/PIG_vasp_001_20260513/POSCAR_Si
-    oss_url: ''
-    description: Si diamond POSCAR (2 atoms, conventional).
-  reference_answers:
-  - key: incar_artifact
-    value: si_scf/INCAR
-  - key: kpoints_artifact
-    value: si_scf/KPOINTS
-  - key: manifest_artifact
-    value: si_scf/input_prep_manifest.json
-  - key: must_manifest_software
-    value:
-      filename: si_scf/input_prep_manifest.json
-      pattern: (?i)"software"\s*:\s*"vasp"
-      flags: i
-  - key: must_manifest_submit_ready
-    value:
-      filename: si_scf/input_prep_manifest.json
-      pattern: '"submit_ready"\s*:\s*true'
-      flags: ''
-  - key: must_manifest_bohrium_command
-    value:
-      filename: si_scf/input_prep_manifest.json
-      pattern: bohrium_command
-      flags: ''
-  - key: must_manifest_image_vasp
-    value:
-      filename: si_scf/input_prep_manifest.json
-      pattern: vasp
-      flags: i
-  - key: must_manifest_diagnostics
-    value:
-      filename: si_scf/input_prep_manifest.json
-      pattern: diagnosis\.json
-      flags: ''
-  - key: must_incar_basic
-    value:
-      filename: si_scf/INCAR
-      tokens:
-      - ENCUT
-      - ISMEAR
-      flags: i
-  - key: turn_budget
-    value:
-      max: 12
-  scoring_checklist:
-  - id: incar_artifact
-    criterion: si_scf/INCAR written to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: kpoints_artifact
-    criterion: si_scf/KPOINTS written to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: manifest_artifact
-    criterion: si_scf/input_prep_manifest.json written to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: must_manifest_software
-    criterion: '[Platform] manifest software field is vasp.'
-    axis: correctness
-    verify: text_file_regex
-  - id: must_manifest_submit_ready
-    criterion: '[Platform] manifest submit_ready is true.'
-    axis: correctness
-    verify: text_file_regex
-  - id: must_manifest_bohrium_command
-    criterion: '[Platform] manifest contains bohrium_command field.'
-    axis: correctness
-    verify: text_file_regex
-  - id: must_manifest_image_vasp
-    criterion: '[Platform] bohrium_command references VASP image.'
-    axis: correctness
-    verify: text_file_regex
-  - id: must_manifest_diagnostics
-    criterion: '[Platform] manifest diagnostics.file references diagnosis.json.'
-    axis: correctness
-    verify: text_file_regex
-  - id: must_incar_basic
-    criterion: '[Must] INCAR contains ENCUT and ISMEAR.'
-    axis: correctness
-    verify: text_file_contains_all
-  - id: turn_budget
-    criterion: Agent completes within turn budget.
-    axis: efficiency
-    verify: turn_budget
 - id: PIG_abacus_convert_001_20260513
   capability: input_generation
   domain: agnostic
   intent: Test CIF to STRU conversion with correct LATTICE_CONSTANT, element ordering,
     and PP/orbital filename resolution for Bohrium runtime.
-  human_prompt_seed: '工作区中有一个 Pd(111) slab 的 CIF 文件 `Pd111_slab.cif`（16 个 Pd 原子，4 层）。
+  human_prompt_seed: '工作区中有一个 Pd(111) slab 的 CIF 文件 `Pd111_slab.cif`（16 个 Pd 原子，4
+    层）。
 
     请将其转换为 ABACUS LCAO 格式并准备好 SCF 计算输入，我要直接提交跑。'
   tags:
@@ -193,7 +96,8 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: must_pd_pp
-    criterion: '[Must] STRU Pd species has valid .upf pseudopotential filename matching Bohrium runtime.'
+    criterion: '[Must] STRU Pd species has valid .upf pseudopotential filename matching
+      Bohrium runtime.'
     axis: correctness
     verify: text_file_regex
   - id: must_pd_orb
@@ -460,3 +364,193 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
+- id: PIG_abacus_bader_001_20260525
+  capability: input_generation
+  domain: agnostic
+  priority: P1
+  intent: Test ABACUS input generation for Bader charge analysis with platform submission.
+    Agent must prepare ABACUS inputs (INPUT/STRU/KPT with out_chg=1) in the specified
+    output directory and submit to Bohrium rather than attempting local installation.
+  human_prompt_seed: '工作区中有 Al₂O₃ 的 CIF 文件 `Al2O3.cif`（刚玉结构，R-3c，10原子）。
+    请用 ABACUS 对其做 SCF 计算并输出电荷密度，我后续要做 Bader 电荷分析看 Al-O 之间的电荷转移。
+    帮我把输入文件放在 `abacus_bader/` 目录下并提交运行。'
+  tags:
+  - eng_abacus
+  data_files:
+  - key: cif_file
+    path: data/PIG_abacus_bader_001/Al2O3.cif
+    oss_url: ''
+    description: Al2O3 corundum CIF (R-3c, 10 atoms).
+  reference_answers:
+  - key: input_artifact
+    value: abacus_bader/INPUT
+  - key: stru_artifact
+    value: abacus_bader/STRU
+  - key: must_out_chg
+    value:
+      filename: abacus_bader/INPUT
+      pattern: (?im)out_chg\s+(1|true|T)
+      flags: im
+  - key: must_scf
+    value:
+      filename: abacus_bader/INPUT
+      pattern: (?im)calculation\s+scf
+      flags: im
+  - key: must_pseudo_dir
+    value:
+      filename: abacus_bader/INPUT
+      pattern: (?im)pseudo_dir\s+\S+
+      flags: im
+  - key: must_al_and_o_species
+    value:
+      filename: abacus_bader/STRU
+      check: species_elements
+      expected: [Al, O]
+  - key: turn_budget
+    value:
+      max: 35
+  scoring_checklist:
+  - id: input_artifact
+    criterion: INPUT file written to abacus_bader/ directory.
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: stru_artifact
+    criterion: STRU file written to abacus_bader/ directory.
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: must_out_chg
+    criterion: '[Must] INPUT enables charge density output (out_chg = 1) required
+      for downstream Bader analysis.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: must_scf
+    criterion: '[Must] INPUT sets calculation to scf.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_pseudo_dir
+    criterion: '[Must] INPUT specifies pseudo_dir pointing to Bohrium runtime path.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_al_and_o_species
+    criterion: '[Must] STRU ATOMIC_SPECIES section contains both Al and O.'
+    axis: correctness
+    verify: stru_file_check
+    weight: 1.0
+  - id: no_local_install
+    criterion: '[Must] Agent does NOT attempt to install ABACUS locally (no conda
+      install, pip install, mamba install, apt install of ABACUS). It must use
+      Bohrium platform submission with an ABACUS image.'
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: bohrium_submission
+    criterion: '[Platform] Agent submits the job to Bohrium using bohrium-job skill
+      or equivalent with an ABACUS image (registry.dp.tech/dptech/...).'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: PIG_cp2k_tm_001_20260524
+  capability: input_generation
+  domain: agnostic
+  priority: P1
+  intent: Test CP2K input generation for a transition-metal oxide system that requires
+    conservative SCF mixing settings, plus platform submission. Agent must (1) set
+    appropriate MIXING for Fe-containing system (Broyden or low-alpha Pulay, not
+    default ALPHA=0.4), (2) submit to Bohrium not run/install locally, (3) not modify
+    any platform script source code. From real trajectory where agent sed-edited
+    submit_job.py and used default mixing leading to SCF oscillation.
+  human_prompt_seed: '工作区中有 Fe₂O₃（hematite，R-3c）的 CIF 文件 `Fe2O3.cif`（10原子原胞）。
+    请用 CP2K 对其做 PBE+U (U_eff=4.0 eV on Fe 3d) 的 SCF 单点能计算。
+    使用 DZVP-MOLOPT-SR-GTH 基组、截断能 600 Ry、k 点 Gamma only。
+    帮我准备好输入并跑一下。'
+  tags:
+  - eng_cp2k
+  data_files:
+  - key: cif_file
+    path: data/PIG_cp2k_tm_001/Fe2O3.cif
+    oss_url: ''
+    description: Fe2O3 hematite CIF (R-3c, 10 atoms).
+  reference_answers:
+  - key: input_artifact
+    value: '*.inp'
+  - key: must_pbe_u
+    value:
+      filename: '*.inp'
+      pattern: (?is)&DFT\+U.*U_MINUS_J\s+4\.0|U_MINUS_J\s+\[eV\]\s+4\.0|U_MINUS_J_ALPHA\s+4\.0
+      flags: is
+      glob: true
+  - key: must_fe_and_o
+    value:
+      filename: '*.inp'
+      pattern: (?im)(Fe.*O|O.*Fe)
+      flags: im
+      glob: true
+  - key: must_cutoff_600
+    value:
+      filename: '*.inp'
+      pattern: (?im)CUTOFF\s+600
+      flags: im
+      glob: true
+  - key: must_mixing_conservative
+    value:
+      filename: '*.inp'
+      pattern: (?is)&MIXING.*((BROYDEN|PULAY).*ALPHA\s+0\.[01]\d*|ALPHA\s+0\.[01]\d*.*(BROYDEN|PULAY))
+      flags: is
+      glob: true
+  - key: turn_budget
+    value:
+      max: 15
+  scoring_checklist:
+  - id: input_artifact
+    criterion: A CP2K input file (*.inp) is written to workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: must_dft_plus_u
+    criterion: '[Must] Input enables DFT+U with U_eff=4.0 eV on Fe 3d states.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: must_cutoff_600
+    criterion: '[Must] CUTOFF is set to 600 Ry as requested.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_mixing_conservative
+    criterion: '[Must] SCF MIXING uses a conservative scheme for this transition-metal
+      system — either BROYDEN_MIXING or PULAY with ALPHA <= 0.2. Default ALPHA=0.4
+      Pulay will cause oscillation for Fe oxides.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: must_fe_and_o
+    criterion: '[Must] Input contains both Fe and O species in COORD or TOPOLOGY.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: no_local_install_or_source_modify
+    criterion: '[Must] Agent does NOT install CP2K locally (conda/pip/mamba) AND does
+      NOT modify any platform script source code (no sed on submit_job.py or similar).
+      It must submit to Bohrium with a CP2K image.'
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: bohrium_submission
+    criterion: '[Platform] Agent submits the job to Bohrium using bohrium-job skill
+      with a CP2K image.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget

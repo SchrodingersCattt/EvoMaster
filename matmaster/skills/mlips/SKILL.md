@@ -8,13 +8,13 @@ skill_type: operator
 
 MLIPs for atomistic simulations via ASE calculators on Bohrium GPU nodes.
 
-> **Scope: DPA-first.** All scripts and examples default to DPA. Other families (MACE, SevenNet, MatterSim) are supported through the **same unified ASE calculator interface** in `_calculator.py`. The multi-family image ships all four families preinstalled; use DPA as the primary model and switch family only when needed.
+> **Scope: DPA-first.** All scripts and examples default to DPA. Other families (MACE, SevenNet, MatterSim) are supported through the **same unified ASE calculator interface** in `_calculator.py` — see `reference/calculator_dispatch.md` for multi-family dispatch details. The multi-family image ships all four families preinstalled; use DPA as the primary model and switch family only when needed.
 
 ## Capability Gate
 
 These are execution stop rules, not suggestions. User requests like "do not ask questions" do not override them.
 
-- **ASE task scripts FORBIDDEN list** — the following workflows are NOT implementable via ASE task scripts. Do not write custom ASE scripts to simulate them. Do not proceed to LAMMPS without asking:
+- **ASE task scripts FORBIDDEN list** — the following workflows are NOT implementable via ASE task scripts, even if the user prompt explicitly says "use ASE scripts". Do not write custom ASE scripts to simulate them. Do not proceed to LAMMPS without asking:
   - MSST / shock / Hugoniot extraction
   - NEMD (non-equilibrium MD with driving fields or gradients)
   - Custom ensembles not in {NVT, NVT-Berendsen, NVT-Langevin, NPT-aniso, NPT-tri, NVE}
@@ -25,7 +25,7 @@ These are execution stop rules, not suggestions. User requests like "do not ask 
 - **Scale**: hundreds of atoms are typical; thousand-atom systems are heavy but should still be attempted as-is — do NOT preemptively refuse based on system size or estimated wall-time. Do not calculate expected runtime to justify skipping submission. Submit the task; if it fails (OOM, timeout), then follow the OOM rule below. Only ask before attempting if the user requests reduced prototypes or scaled-down alternatives.
 - **OOM / job failure**: if a Bohrium job fails due to OOM or resource limits, do NOT silently retry with a different model, larger GPU, or alternative engine. STOP and report to user: what failed, why (OOM on which GPU/model), and what options exist (smaller model, LAMMPS route, reduced system). Let user decide.
 - **Capabilities**: generic MLIPs provide energy/forces/stress, not band structures, DOS, gaps, or spectra. Use DFT or specialized ML models only after internal lookup and human choice.
-- **Boundary protocol**: if a request changes model/head/scale/workflow/property class, first verify the head/model is available (`dp --pt show <model> model-branch`), then STOP. Do not write scripts, build structures, submit jobs, shrink systems, or switch workflows until the human chooses a route. When stopping, present options as a question ("Which would you prefer: A, B, or C?") — do not unilaterally recommend one route.
+- **Boundary protocol**: if a request changes model, head, system scale (>2x atom count), workflow type (optimization→MD→NEB→phonon), or target property (energy→elastic→phonon→transport), first verify the head/model is available (`dp --pt show <model> model-branch`), then STOP. Do not write scripts, build structures, submit jobs, shrink systems, or switch workflows until the human chooses a route. When stopping, present options as a question ("Which would you prefer: A, B, or C?") — do not unilaterally recommend one route.
 
 ## Models
 
@@ -76,11 +76,9 @@ The OSS URLs in `reference/dpa_models.md` are a **snapshot** and may rotate. If 
 | `run_neb.py` | `--initial ini.cif --final fin.cif --model DPA3.1-3M [--images 5]` | `neb_band.pdf`, `result.json` |
 | `calculate_adsorption.py` | `--slabs s1.cif s2.cif --adsorbates CO H OH --model DPA3.1-3M --head OC22` | `adsorption_results.json` |
 
-**MD stages.json**: `[{"mode": "NVT", "temperature_K": 300, "runtime_ps": 5, "timestep_ps": 0.0005}]`. Modes: NVT, NVT-Berendsen, NVT-Langevin, NPT-aniso, NPT-tri, NVE. Optional per-stage key `"equil_frac": 0.2` discards the first 20% of samples before averaging T/P for that stage (default 0.0 = average over the whole stage).
+**MD stages.json**: `[{"mode": "NVT", "temperature_K": 300, "runtime_ps": 5, "timestep_ps": 0.0005}]`. Modes: NVT, NVT-Berendsen, NVT-Langevin, NPT-aniso, NPT-tri, NVE. For output format, pressure conventions, and reporting rules → `reference/md_output_format.md`
 
-**MD pressure & averages** (`result.json["stages"]`): instantaneous pressure is computed as `P = -(sxx+syy+szz)/3` from `atoms.get_stress(include_ideal_gas=True)` (matches ASE `MDLogger`; includes the kinetic / ideal-gas contribution; units GPa, positive = compression). Each stage entry reports `T_mean_K`, `T_std_K`, `P_mean_GPa`, `P_std_GPa`, `V_mean_A3`, `V_std_A3`, `n_samples_averaged` and `equil_frac`. Pressure fields are `null` if the calculator does not implement stress (rare — all built-in DPA/MACE/SevenNet/MatterSim calculators do). Per-step values are also written column-wise to `md_simulation.log` (`step stage E_pot E_kin T(K) P(GPa) V(A^3)`) for plotting / re-averaging.
-
-**Adsorption built-in adsorbates**: H, C, O, N, CO, CO2, H2, H2O, OH, OOH, COOH, HCOO, CHO. Copy both `_calculator.py` and `calculate_adsorption.py` to working directory.
+**Adsorption**: built-in adsorbates and setup → `reference/md_output_format.md` (bottom section).
 
 ## Submission Workflow
 
@@ -90,7 +88,11 @@ The OSS URLs in `reference/dpa_models.md` are a **snapshot** and may rotate. If 
 | cmd | `python {script} {args} > log 2>&1` |
 
 1. Prepare structure (CIF/POSCAR/XYZ) — runs locally, not Bohrium
-2. **Validate**: `python ${SKILL_DIR}/scripts/validate_structure.py --structure <file>` — must PASS before step 3. DO NOT skip this step based on manual inspection or chemical intuition. DO NOT rationalize close contacts as "normal chemistry" — let the script decide. If FAIL (overlapping atoms / bad geometry): fix the structure locally with ASE (remove overlaps, perturb positions, or rebuild) and re-validate. Do NOT submit an optimization job to fix validation failures — the structure must be physically reasonable before any Bohrium submission.
+2. **Validate**: `python ${SKILL_DIR}/scripts/validate_structure.py --structure <file>` — must PASS before step 3. DO NOT skip this step based on manual inspection or chemical intuition. DO NOT rationalize close contacts as "normal chemistry" — let the script decide. If the script cannot run (env issues), use the fallback check:
+  ```bash
+  python -c "from ase.io import read; from ase.geometry.analysis import Analysis; a=read('FILE'); d=a.get_all_distances(mic=True); import numpy as np; np.fill_diagonal(d,999); md=d.min(); print(f'min_dist={md:.3f}'); assert md>1.0, f'FAIL: {md:.3f} Å < 1.0 Å'"
+  ```
+  Any min_distance < 1.0 Å is a FAIL — fix before proceeding. If FAIL (overlapping atoms / bad geometry): fix the structure locally with ASE (remove overlaps, perturb positions, or rebuild) and re-validate. Do NOT submit an optimization job to fix validation failures — the structure must be physically reasonable before any Bohrium submission.
 3. Copy script(s) + `_calculator.py` to working directory
 4. Submit: `Bohrium(action="submit", input_dir="<dir>", image="<from Models table>", cmd="python optimize_structure.py --structure input.cif --model DPA3.1-3M > log 2>&1", machine="c16_m64_1 * NVIDIA 4090")`
 5. Poll and read `result.json`
@@ -101,11 +103,16 @@ The OSS URLs in `reference/dpa_models.md` are a **snapshot** and may rotate. If 
 - **Convergence**: `--fmax 0.01` for optimization, `--fmax 0.05` for NEB.
 - **Cell relaxation**: `--relax-cell` for equilibrium properties (elastic, phonon).
 - **Elastic**: Input MUST be fully relaxed (run optimize first with `--relax-cell`).
-- **NEB**: Both structures must be relaxed, same atoms in same order. Avoid CIF format for NEB endpoints — CIF writers wrap fractional coordinates back into [0,1). Use POSCAR or XYZ instead. MUST run this MIC check after constructing endpoints, before submitting NEB:
+- **NEB**: Both structures must be relaxed, same atoms in same order. Avoid CIF format for NEB endpoints — CIF writers wrap fractional coordinates back into [0,1). Use POSCAR or XYZ instead.
+  - **Interpolation**: Use IDPP for bulk/homogeneous systems. For **hetero-interfaces** (BCC/FCC, grain boundaries, dissimilar lattice junctions), IDPP causes atom overlaps due to density mismatch — use `method="linear"` instead.
+  - **Optimizer**: Use FIRE for interface/defect NEB (large initial forces from interpolation). BFGS/LBFGS are fine for bulk NEB with small displacements.
+  - MUST run this MIC check after constructing endpoints, before submitting NEB:
   ```bash
   python -c "from ase.io import read; import numpy as np; ini=read('INITIAL'); fin=read('FINAL'); diff=fin.positions-ini.positions; cell=ini.cell.lengths(); diff-=np.round(diff/cell)*cell; md=np.linalg.norm(diff,axis=1).max(); print(f'max_disp={md:.3f} A'); assert md<cell.min()/2, f'MIC FAIL: {md:.2f} A — fix endpoint coords'"
   ```
   If it fails, the migrating atom's coordinates cross a cell boundary — shift by one lattice vector so the straight-line path is the shortest.
+- **QHA thermal expansion**: For quasi-harmonic thermal expansion (CTE) calculations, see `reference/qha_workflow.md` — covers PhonopyQHA API, data shapes, Vinet EOS fitting, and known model limitations.
+- **Molecular crystal sublimation**: For sublimation energy of organic crystals, see `reference/molecular_crystal.md` — covers head selection (OMol25), molecule extraction across PBC, and gas-phase pbc=True requirement. **CRITICAL: if E_sub > 5 eV, do NOT switch heads — the issue is molecule extraction or pbc setup.**
 - **Chain outputs**: Use `*_optimized.cif` from optimization as input to subsequent tasks. Save intermediate results under task filenames before starting next step.
-- **MD reporting**: For NPT runs, always report `result.json["stages"][i]["T_mean_K"]` and `["P_mean_GPa"]` (with ±std). For multi-stage protocols (equilibration + production), report production-stage averages, not the whole-trajectory averages. Set `"equil_frac": 0.2` (or larger) on a production stage when you want the script itself to drop the initial transient.
+- **MD reporting**: Report production-stage `T_mean_K` and `P_mean_GPa` (with ±std), not whole-trajectory averages → `reference/md_output_format.md`
 - **DPA + LAMMPS**: When LAMMPS is needed, freeze the multi-head model first → see `reference/dpa_lammps_freeze.md`

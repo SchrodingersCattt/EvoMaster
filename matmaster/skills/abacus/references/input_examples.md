@@ -15,11 +15,14 @@ Always include **universal baseline**: `calculation`, `basis_type`, `ntype`, `ec
 | Cell-relax | **`cal_force 1`**, **`cal_stress 1`**, `force_thr_ev 0.01`, `stress_thr 0.5`, `relax_nmax 100` | Missing `cal_force` or `cal_stress` → relaxation silently broken |
 | Work function / dipole | `out_pot 2`, `efield_flag 1`, `dip_cor_flag 1`, `efield_dir <vacuum>`, `efield_amp 0.0` | Missing `efield_amp 0.0` (pure dipole correction) |
 | Spin-polarized | `nspin 2`, `mixing_beta 0.1`, `mixing_ndim 20`, `mixing_gg0 1.5` | Omitting mixing params → SCF diverges |
+| DFT+U (strongly correlated) | `dft_plus_u 1`, `orbital_corr`, `hubbard_u`, `nspin 2` | See DFT+U section below |
 | Slab KPT | Always `1` in vacuum direction (e.g. `20 20 1 0 0 0`) | Using dense mesh in vacuum direction |
 | Supercell / vacancy / defect / BSSE | **`kspacing` in INPUT** (e.g. `kspacing 0.10`) | Using fixed KPT mesh for variable-size supercells |
 | Large supercell (>30 atoms) LCAO | `gamma_only 1` (Gamma-point only, no KPT file needed) | Using multi-k on already-folded supercell BZ |
 | Manual orbital occupation (ocp — NOT `smearing_method fixed`) | `ocp 1`, `ocp_set ...`, `nspin 2`, **`gamma_only 1`** | Missing `gamma_only` → band ordering changes with k-points, `ocp_set` indices become wrong |
 | PEXSI solver | `ks_solver pexsi`, `pexsi_npole 80`, `gamma_only 1` | Missing `pexsi_npole` → uses default 40 (less accurate); PEXSI requires LCAO + gamma_only |
+
+> **⚠ `latname` values (exact strings, no abbreviations)**: `sc`, `fcc`, `bcc`, `hexagonal`, `trigonal`, `st`, `bct`, `so`, `baco`, `fco`, `bco`, `sm`, `bacm`, `triclinic`. Do NOT use abbreviations like `hex` — ABACUS will quit with "latname not supported!".
 
 > **⚠ `force_thr_ev` vs `force_thr`**: Always use `force_thr_ev` (unit: eV/Å). The parameter `force_thr` uses Ry/Bohr — completely different units. `force_thr_ev 0.01` ≈ `force_thr 3.9e-4`. Mixing them up produces absurdly loose or tight thresholds.
 
@@ -41,11 +44,39 @@ Always include **universal baseline**: `calculation`, `basis_type`, `ntype`, `ec
 | `mixing_type` | Use case | `mixing_beta` range | Notes |
 |---------------|----------|---------------------|-------|
 | `broyden` | Default, metals, non-magnetic | 0.7–0.8 | Fast convergence |
-| `pulay` | Magnetic / DFT+U systems | 0.4–0.6 | Add `mixing_ndim 20`, `mixing_gg0 1.5` |
+| `pulay` | Magnetic / DFT+U (small systems, <20 atoms) | 0.4–0.6 | Add `mixing_ndim 20`, `mixing_gg0 1.5` |
+| `pulay` | **Large magnetic systems (>30 atoms, DFT+U)** | **0.01–0.05** | See below |
 | `plain` | Debugging / baseline comparison | 0.3–0.4 | Slowest but most stable |
+
+> **⚠️ Large magnetic/DFT+U systems (>30 atoms)**: Use very conservative `mixing_beta 0.01–0.05` to prevent charge sloshing. Also add `mixing_beta_mag 1.6` (separate magnetic moment mixing rate) and increase `scf_nmax` to 200+ since convergence is slow. Without these, SCF will oscillate indefinitely for systems like iron phosphates, transition-metal oxides, etc.
 
 > **Rule**: When setting `mixing_type`, ALWAYS explicitly set `mixing_beta` in the same INPUT. Never rely on the default — it may not converge for your system.
 > When comparing mixing strategies (e.g. broyden vs plain), each INPUT must have its own `mixing_type` + `mixing_beta` pair.
+
+### DFT+U — When and How
+
+**When to use DFT+U**: Systems containing transition-metal 3d or rare-earth 4f electrons in localized environments (oxides, phosphates, fluorides, sulfides). Standard PBE severely over-delocalizes these electrons, giving wrong band gaps, magnetic moments, and relative phase energies.
+
+**Must-use cases** (always add DFT+U without being asked):
+- Fe, Co, Ni, Mn, Cr, V, Ti in oxides/phosphates/silicates (e.g. LiFePO₄, NiO, Fe₂O₃, NFPP)
+- Cu in cuprates, Ce/U in f-electron systems
+
+**Typical U values** (eV, on 3d orbitals):
+| Element | U range | Common choice |
+|---------|---------|---------------|
+| Fe | 3.0–5.0 | 3.5–4.0 |
+| Co | 3.0–5.0 | 3.3 |
+| Ni | 5.0–7.0 | 5.0–6.0 |
+| Mn | 3.5–5.0 | 4.0 |
+| V | 3.0–4.0 | 3.25 |
+| Ti | 2.5–4.0 | 3.0 |
+
+**ABACUS syntax**:
+```
+dft_plus_u      1
+orbital_corr    2 -1        # 2=d for Fe, -1=none for O (one per species in STRU order)
+hubbard_u       3.5 0.0     # U values matching orbital_corr
+```
 
 ### Ultrasoft Pseudopotential (USPP) — `ecutrho`
 

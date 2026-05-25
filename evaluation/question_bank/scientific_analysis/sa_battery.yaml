@@ -206,3 +206,56 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
+- id: SA_bat_formation_001_20260521
+  capability: scientific_analysis
+  domain: battery
+  intent: Compute formation energy of LiCoO2 from ABACUS total energies, testing
+    correct determination of formula units (Z value) from cell composition.
+  human_prompt_seed: '工作区中有 ABACUS 计算结果文件 `abacus_energies.json`，包含 LiCoO2 体相、Li
+    金属、Co 金属和 O2 分子的总能量。请计算 LiCoO2 的生成能（每 formula unit），输出到 `formation_energy.json`，格式为
+    `{"E_f_per_fu": ...}`。'
+  tags:
+  - eng_abacus
+  data_files:
+  - key: energies
+    path: data/SA_formation_energy_001/abacus_energies.json
+    oss_url: ''
+    description: ABACUS total energies for LiCoO2 (R-3m, 12 atoms), Li metal, Co
+      metal, and O2 molecule.
+  reference_answers:
+  - key: output_artifact
+    value: formation_energy.json
+  - key: ef_range
+    value:
+      filename: formation_energy.json
+      checks:
+      - key: E_f_per_fu
+        min: -5.0
+        max: -2.0
+  - key: turn_budget
+    value:
+      max: 10
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `formation_energy.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: ef_range
+    criterion: Formation energy is in physically reasonable range (-2 to -5 eV/f.u.
+      for LiCoO2). The correct answer is -3.5 eV/f.u. If agent miscounts formula
+      units (e.g. Z=4 instead of Z=3 for R-3m Li3Co3O6 with 12 atoms), result would
+      be +7.3 eV/f.u. which fails this range check.
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget

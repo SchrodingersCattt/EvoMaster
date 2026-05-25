@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: battery
 questions:
-- id: SC_solution_box_001_20260513
+- id: SC_solution_box_001_20260522
   capability: structure_construction
   domain: battery
   intent: Build an electrolyte solution box at specified concentration and atom count.
@@ -19,8 +19,12 @@ questions:
   - key: must_atom_count
     value:
       filename: ZnSO4_solution.cif
-      min: 1500
-      max: 2500
+      expected: 2000
+      tolerance: 500
+  - key: must_elements
+    value:
+      filename: ZnSO4_solution.cif
+      elements: [Zn, S, O, H]
   - key: min_distance
     value:
       filename: ZnSO4_solution.cif
@@ -41,22 +45,10 @@ questions:
     criterion: '[Must] Total atom count is approximately 2000 (1500-2500 acceptable).'
     axis: correctness
     verify: struct_file_atom_count
-  - id: must_has_zn
-    criterion: '[Must] Structure contains Zn atoms.'
+  - id: must_elements
+    criterion: '[Must] Structure contains all required elements (Zn, S, O, H).'
     axis: correctness
-    verify: struct_file_formula
-  - id: must_has_s
-    criterion: '[Must] Structure contains S atoms.'
-    axis: correctness
-    verify: struct_file_formula
-  - id: must_has_o
-    criterion: '[Must] Structure contains O atoms.'
-    axis: correctness
-    verify: struct_file_formula
-  - id: must_has_h
-    criterion: '[Must] Structure contains H atoms (water).'
-    axis: correctness
-    verify: struct_file_formula
+    verify: struct_file_elements_present
   - id: min_distance
     criterion: '[Must] No overlapping atoms — minimum interatomic distance at least 0.8 Å.'
     axis: correctness
@@ -65,7 +57,7 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
-- id: SC_ec_fluorination_001_20260513
+- id: SC_ec_fluorination_001_20260525
   capability: structure_construction
   domain: battery
   intent: Enumerate fluorine-substituted derivatives of EC molecule and output SMILES
@@ -88,6 +80,26 @@ questions:
       - smiles
       - n_fluorine
       flags: ''
+  - key: min_data_rows
+    value:
+      filename: ec_fluorinated.csv
+      min: 4
+      max: 10
+  - key: has_mono_f
+    value:
+      filename: ec_fluorinated.csv
+      pattern: ',1\s*$'
+      flags: m
+  - key: has_di_f
+    value:
+      filename: ec_fluorinated.csv
+      pattern: ',2\s*$'
+      flags: m
+  - key: has_tri_f
+    value:
+      filename: ec_fluorinated.csv
+      pattern: ',3\s*$'
+      flags: m
   - key: turn_budget
     value:
       max: 20
@@ -100,14 +112,23 @@ questions:
     criterion: '[Must] CSV contains required columns (name, smiles, n_fluorine).'
     axis: correctness
     verify: text_file_contains_all
-  - id: correct_count
-    criterion: The total number of unique derivatives after symmetry deduplication is
-      correct. EC has 4 H atoms on 2 symmetry-inequivalent positions (2 on CH2-O and
-      2 on CH2-O), so expected unique counts are approximately 2 (mono-F) + 3 (di-F)
-      + 2 (tri-F) = 7 unique SMILES, though exact count depends on symmetry treatment.
-      Accept 6-10 unique entries.
+  - id: min_data_rows
+    criterion: CSV contains 4-10 data rows (unique derivatives from symmetry
+      deduplication).
     axis: correctness
-    verify: llm_binary_judge
+    verify: csv_row_count
+  - id: has_mono_f
+    criterion: CSV contains at least one mono-fluorinated derivative (n_fluorine=1).
+    axis: correctness
+    verify: text_file_regex
+  - id: has_di_f
+    criterion: CSV contains at least one di-fluorinated derivative (n_fluorine=2).
+    axis: correctness
+    verify: text_file_regex
+  - id: has_tri_f
+    criterion: CSV contains at least one tri-fluorinated derivative (n_fluorine=3).
+    axis: correctness
+    verify: text_file_regex
   - id: valid_smiles
     criterion: All SMILES in the CSV are valid (parseable by RDKit) and each contains
       the correct number of F atoms matching n_fluorine column.
@@ -193,3 +214,138 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
+- id: SC_nfpp_al_dope_001_20260525
+  capability: structure_construction
+  domain: battery
+  priority: P1
+  intent: Test Al-doped NFPP supercell construction with structural sanity
+    verification. Agent must (1) retrieve the NFPP structure, (2) correctly identify
+    PO₄ vs P₂O₇ phosphorus sites, (3) substitute one PO₄-site P with Al in a
+    2×1×1 supercell, and (4) verify that the resulting Al-O bond lengths are
+    physically reasonable (~1.7-1.9 Å). From real trajectory where agent produced
+    Al-O = 0.989 Å without checking.
+  human_prompt_seed: '请获取 Na₄Fe₃(PO₄)₂P₂O₇（NFPP）结构（空间群 Pna2₁），构建 2×1×1 超胞，
+    然后用 Al 替换一个 P 原子来模拟掺杂。输出掺杂后的结构到 `NFPP_Al_doped.cif`。'
+  tags:
+  - struct_build
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: cif_artifact
+    value: NFPP_Al_doped.cif
+  - key: correct_supercell_composition
+    value:
+      filename: NFPP_Al_doped.cif
+      must_contain_elements: [Na, Fe, Al, P, O]
+      must_not_contain_elements: []
+  - key: correct_atom_count
+    value:
+      filename: NFPP_Al_doped.cif
+      expected: 208
+      tolerance: 13
+  - key: al_o_distance_reasonable
+    value:
+      filename: NFPP_Al_doped.cif
+      element_pair: [Al, O]
+      min_distance: 1.4
+      max_distance: 2.2
+      n_neighbors: 4
+  - key: turn_budget
+    value:
+      max: 15
+  scoring_checklist:
+  - id: cif_artifact
+    criterion: Agent writes a doped NFPP CIF file to workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: correct_supercell_composition
+    criterion: '[Must] CIF contains Al and has composition consistent with 2×1×1
+      NFPP supercell with one P→Al substitution (Na32Fe24Al1P31O120).'
+    axis: correctness
+    verify: struct_file_composition
+    weight: 1.0
+  - id: correct_atom_count
+    criterion: '[Must] The doped supercell has approximately 208 atoms (2×104 from
+      the unit cell). Acceptable range: 195-221.'
+    axis: correctness
+    verify: struct_file_atom_count
+    weight: 1.5
+  - id: po4_site_discrimination
+    criterion: '[Must] Agent distinguishes PO₄ (isolated tetrahedral) sites from
+      P₂O₇ (corner-sharing bridging) sites. The substituted P must be from a PO₄
+      group, not from a P₂O₇ bridge. Evidence: coordination analysis, P-P distance
+      check, or explicit mention of PO₄ vs P₂O₇ discrimination logic.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: al_o_distance_reasonable
+    criterion: '[Must] The CIF structure has physically reasonable Al-O distances
+      (1.4-2.2 Å). Distances < 1.0 Å or > 3.0 Å indicate an unphysical structure.'
+    axis: correctness
+    verify: struct_file_bond_range
+    weight: 2.5
+  - id: retrieves_from_database
+    criterion: Agent retrieves the NFPP structure from struct_db (using simplified
+      formula Na4Fe3P4O15 if needed) rather than manually constructing from
+      literature Wyckoff positions.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: SC_latp_composition_001_20260525v2
+  capability: structure_construction
+  domain: battery
+  intent: Construct Al-doped LATP structure from LiTi₂(PO₄)₃ R-3c cell with
+    correct stoichiometry (integer substitution or partial occupancy both valid).
+  human_prompt_seed: "基于 LiTi₂(PO₄)₃ 的 R-3c 单胞（Z=6），构建\
+    \ Li₁.₁₅Al₀.₁₅Ti₁.₈₅(PO₄)₃ 掺杂结构，输出为 `LATP_x015.cif`。\n"
+  tags:
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: cif_artifact
+    value: LATP_x015.cif
+  - key: must_parsable
+    value:
+      filename: LATP_x015.cif
+  - key: has_required_elements
+    value:
+      filename: LATP_x015.cif
+      must_contain_elements: [Li, Al, Ti, P, O]
+      must_not_contain_elements: []
+  - key: al_ti_ratio
+    value:
+      filename: LATP_x015.cif
+      element_a: Al
+      element_b: Ti
+      expected_ratio: 0.081
+      tolerance: 0.04
+  - key: turn_budget
+    value:
+      max: 18
+  scoring_checklist:
+  - id: cif_artifact
+    criterion: Agent writes LATP_x015.cif to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_parsable
+    criterion: '[Must] Output CIF is parsable.'
+    axis: correctness
+    verify: struct_file_parsable
+  - id: has_required_elements
+    criterion: '[Must] CIF contains all five elements (Li, Al, Ti, P, O) of LATP.'
+    axis: correctness
+    verify: struct_file_composition
+  - id: al_ti_ratio
+    criterion: '[Must] Al/Ti ratio is approximately 0.15/1.85 ≈ 0.081 (tolerance
+      ±0.04 to accept both integer approximation and partial occupancy).'
+    axis: correctness
+    verify: struct_file_stoichiometry_ratio
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget

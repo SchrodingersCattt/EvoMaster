@@ -2,7 +2,7 @@ version: v5
 capability: workflow_orchestration
 domain: catalysis
 questions:
-- id: WO_dpa_head_001_20260513
+- id: WO_dpa_head_001_20260523
   capability: workflow_orchestration
   domain: catalysis
   intent: Test whether agent selects the correct DPA model head (OC22) for a surface
@@ -27,6 +27,11 @@ questions:
       filename: adsorption_submit.json
       pattern: optimize_structure
       flags: ''
+  - key: must_image_dpa
+    value:
+      filename: adsorption_submit.json
+      pattern: dpa-calculator
+      flags: i
   - key: turn_budget
     value:
       max: 15
@@ -42,6 +47,11 @@ questions:
     verify: text_file_regex
   - id: must_optimize
     criterion: '[Platform] cmd references optimize_structure script for geometry optimization.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_image_dpa
+    criterion: '[Platform] image field references the DPA-specific image (dpa-calculator),
+      not the multi-family mlips image or a generic deepmd-kit image.'
     axis: correctness
     verify: text_file_regex
   - id: three_systems

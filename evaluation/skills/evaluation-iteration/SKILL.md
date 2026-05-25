@@ -144,6 +144,8 @@ curl -s -H "Authorization: Bearer $MATMASTER_TOOLS_EVALUATION_BEARER" \
 
 Question files live in `evaluation/question_bank/<capability>/<xx>_<domain>.yaml`.
 
+For field mapping rules (capability, domain, tags, ID prefix, file location, skill correspondence) → `references/question_taxonomy.md`
+
 ### Key Fields
 
 ```yaml
@@ -195,11 +197,15 @@ Question files live in `evaluation/question_bank/<capability>/<xx>_<domain>.yaml
 |----------|---------------|
 | `text_file_contains_all` | All tokens present in file (case-insensitive with `flags: i`) |
 | `text_file_regex` | File content matches regex pattern |
+| `text_file_regex_absent` | File content does NOT match regex (absence check) |
 | `text_file_numeric_range` | Numeric values within [min, max] range (line-based key-value or JSON) |
 | `json_file_numeric_range` | JSON file value at dot-path key within expected ± tolerance |
 | `json_file_schema` | JSON file is valid and contains required top-level keys |
 | `json_file_artifacts` | Files referenced inside a JSON array exist in workspace |
 | `artifact_exists` | Output file exists in workspace |
+| `stru_file_check` | ABACUS STRU structural checks (species_count, species_elements, magnetic_order, total_atoms, lattice_*) |
+| `abacus_input_check` | ABACUS INPUT resolution checks (kpoint_density, param_enabled, param_value_in, efield_dir_is_vacuum) |
+| `kpt_line_check` | ABACUS KPT Line-mode checks (mode, segment_count, last_nk, no_nk_zero, nk_per_segment) |
 | `token_budget` | Total tokens ≤ max |
 | `turn_budget` | Total steps ≤ max |
 | `duration_budget` | Duration ≤ max ms |

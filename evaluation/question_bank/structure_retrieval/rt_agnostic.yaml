@@ -652,3 +652,72 @@ questions:
     criterion: Agent retrieves or constructs the structure efficiently.
     axis: efficiency
     verify: turn_budget
+- id: SR_organic_polymorph_001_20260524
+  capability: structure_retrieval
+  domain: agnostic
+  priority: P1
+  intent: Test retrieval of an organic molecular crystal structure that is NOT in
+    typical inorganic databases (Materials Project, Alexandria, OQMD). Agent must
+    recognize the target is an organic molecule and route to COD or CSD rather than
+    wasting attempts on inorganic-focused struct_db. Also tests awareness that common
+    fatty acids have multiple polymorphs and the correct one must be identified.
+    From real trajectory where struct_db returned irrelevant C-H-O compounds.
+  human_prompt_seed: '请获取硬脂酸（stearic acid, C₁₈H₃₆O₂）的 C 型多晶型的晶体结构，
+    输出 CIF 文件到 `stearic_acid_C.cif`。'
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: cif_artifact
+    value: stearic_acid_C.cif
+  - key: must_organic_formula
+    value:
+      filename: stearic_acid_C.cif
+      pattern: (?i)(C18.*H36.*O2|C.*H.*O.*stearic|octadecanoic)
+      flags: i
+  - key: must_long_axis
+    value:
+      filename: stearic_acid_C.cif
+      pattern: (?m)(39\.\d|40\.\d|41\.\d)
+      flags: m
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: cif_artifact
+    criterion: Agent writes stearic_acid_C.cif to workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: correct_polymorph
+    criterion: '[Must] The CIF corresponds to the C-form polymorph of stearic acid,
+      identifiable by a long axis ~40 Å (monoclinic, characteristic bilayer spacing).
+      It is NOT the B-form (~88 Å long axis) or E-form.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: must_long_axis
+    criterion: '[Must] CIF contains a cell parameter of approximately 39-41 Å,
+      confirming the C-form bilayer spacing.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.5
+  - id: valid_organic_structure
+    criterion: '[Must] The CIF contains C, H, O atoms with stoichiometry consistent
+      with stearic acid (C18H36O2). It must NOT be an inorganic oxide or random
+      C-H-O compound from Materials Project.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: uses_appropriate_source
+    criterion: Agent retrieves the structure from an organic crystal database (COD,
+      CSD/CCDC, or equivalent) rather than only trying inorganic databases. If
+      struct_db is tried and fails, agent should pivot to web search for COD/CSD
+      within 2-3 attempts.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget

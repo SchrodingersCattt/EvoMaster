@@ -6,6 +6,7 @@ from typing import Any
 
 from evaluation.validators.abacus_input import check_abacus_input
 from evaluation.validators.answer_text import check_answer_json_numeric
+from evaluation.validators.kpt_line import check_kpt_line
 from evaluation.validators.budget import check_duration_budget as _check_duration_budget
 from evaluation.validators.budget import check_token_budget as _check_token_budget
 from evaluation.validators.budget import check_turn_budget as _check_turn_budget
@@ -19,6 +20,7 @@ from evaluation.validators.json_file import (
     check_json_file_schema as _check_json_file_schema,
 )
 from evaluation.validators.stru_file import check_stru_file
+from evaluation.validators.md_submit import check_md_submit_structure_min_distance
 from evaluation.validators.structure_density import check_density
 from evaluation.validators.structure_general import (
     check_atom_count,
@@ -42,21 +44,17 @@ from evaluation.validators.structure_molcrys import (
     verify_molecular_slab_layer_scaling,
 )
 from evaluation.validators.text_file import (
+    check_csv_row_count,
     check_text_file_contains_all,
+    check_text_file_excludes_all,
     check_text_file_kpt_path,
     check_text_file_numeric_range,
     check_text_file_regex,
 )
+from evaluation.validators.vasp_incar import check_vasp_incar
 
-from .evaluator_builders import (  # noqa: F401
-    build_llm_context,
-    build_safety_eval_record,
-)
 from .evidence import EvidenceBundle, TokenUsage
-from .schemas import (
-    ReferenceAnswer,
-    TokenUsageRecord,
-)
+from .schemas import ReferenceAnswer, TokenUsageRecord
 
 
 def token_usage_record_from_evidence(evidence: EvidenceBundle) -> TokenUsageRecord:
@@ -135,16 +133,21 @@ def check_json_file_numeric_range(
     if evidence is None or not evidence.workspace_dir:
         return False, "no workspace root"
     cfg = ref.value if isinstance(ref.value, dict) else {}
-    expected = cfg.get("expected")
-    if expected is None:
-        return False, "json_file_numeric_range: missing 'expected' in ref"
-    return _check_json_file_numeric_range(
-        evidence.workspace_dir,
-        filename=cfg.get("filename", ""),
-        key=cfg.get("key", ""),
-        expected=float(expected),
-        tolerance=float(cfg.get("tolerance", 0.0)),
-    )
+    kwargs: dict = {
+        "filename": cfg.get("filename", ""),
+        "key": cfg.get("key", ""),
+    }
+    if "min" in cfg or "max" in cfg:
+        if "min" in cfg:
+            kwargs["min"] = float(cfg["min"])
+        if "max" in cfg:
+            kwargs["max"] = float(cfg["max"])
+    elif cfg.get("expected") is not None:
+        kwargs["expected"] = float(cfg["expected"])
+        kwargs["tolerance"] = float(cfg.get("tolerance", 0.0))
+    else:
+        return False, "json_file_numeric_range: need 'expected' or 'min'/'max' in ref"
+    return _check_json_file_numeric_range(evidence.workspace_dir, **kwargs)
 
 
 def check_json_file_artifacts(
@@ -253,6 +256,22 @@ def check_struct_file_formula(
         ws,
         filename=cfg.get("filename", "*.cif"),
         formula=str(cfg.get("formula", "")),
+    )
+
+
+def check_struct_file_elements_present(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    from evaluation.validators.structure_general import check_elements_present
+
+    return check_elements_present(
+        ws,
+        filename=cfg.get("filename", "*.cif"),
+        elements=list(cfg.get("elements", [])),
     )
 
 
@@ -386,6 +405,20 @@ def check_struct_file_stoichiometry_ratio(
     )
 
 
+def check_md_submit_structure_min_dist(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_md_submit_structure_min_distance(
+        ws,
+        submit_file=str(cfg.get("submit_file", "md_submit.json")),
+        min_distance_A=float(cfg.get("min_distance_A", 1.0)),
+    )
+
+
 def check_struct_file_charge_balance(
     *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
 ) -> tuple[bool, str]:
@@ -505,6 +538,46 @@ def check_struct_file_surface_termination(
     )
 
 
+def check_struct_file_composition(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    from evaluation.validators.structure_general import check_composition
+
+    return check_composition(
+        ws,
+        filename=cfg.get("filename", "*.cif"),
+        must_contain_elements=list(cfg.get("must_contain_elements", [])),
+        must_not_contain_elements=list(cfg.get("must_not_contain_elements", [])),
+    )
+
+
+def check_struct_file_bond_range(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    element_pair = cfg.get("element_pair", [])
+    if len(element_pair) != 2:
+        return False, "element_pair must have exactly 2 elements"
+    from evaluation.validators.structure_general import check_bond_range
+
+    return check_bond_range(
+        ws,
+        filename=cfg.get("filename", "*.cif"),
+        element_a=str(element_pair[0]),
+        element_b=str(element_pair[1]),
+        min_distance=float(cfg.get("min_distance", 0.0)),
+        max_distance=float(cfg.get("max_distance", 5.0)),
+        n_neighbors=int(cfg.get("n_neighbors", 0)),
+    )
+
+
 def check_text_file_contains_all_from_evidence(
     *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
 ) -> tuple[bool, str]:
@@ -525,6 +598,35 @@ def check_text_file_contains_all_from_evidence(
     else:
         filename = str(raw_filename)
     return check_text_file_contains_all(
+        ws,
+        filename=filename,
+        tokens=[str(token) for token in raw_tokens],
+        case_sensitive=case_sensitive,
+        normalize_whitespace=bool(cfg.get("normalize_whitespace", True)),
+        workspace_resolve=_workspace_resolve_from_ref(ref),
+    )
+
+
+def check_text_file_excludes_all_from_evidence(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    raw_tokens = cfg.get("tokens", [])
+    if not isinstance(raw_tokens, list) or not raw_tokens:
+        return False, "reference answer must provide non-empty 'tokens' list"
+    flags = str(cfg.get("flags", "")).lower()
+    case_sensitive = bool(cfg.get("case_sensitive", False))
+    if "i" in flags:
+        case_sensitive = False
+    raw_filename = cfg.get("filename", "")
+    if isinstance(raw_filename, list):
+        filename: str | list[str] = [str(f) for f in raw_filename]
+    else:
+        filename = str(raw_filename)
+    return check_text_file_excludes_all(
         ws,
         filename=filename,
         tokens=[str(token) for token in raw_tokens],
@@ -657,6 +759,53 @@ def check_text_file_regex_from_evidence(
         pattern=pattern,
         flags=flags,
         workspace_resolve=resolve_mode,
+    )
+
+
+def check_text_file_regex_absent_from_evidence(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    """Pass when the regex does NOT match any content in the file."""
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    flags = str(cfg.get("flags", ""))
+    resolve_mode = _workspace_resolve_from_ref(ref)
+    pattern = str(cfg.get("pattern", ""))
+    if not pattern:
+        return False, "reference answer must provide non-empty 'pattern'"
+    ok, reason = check_text_file_regex(
+        ws,
+        filename=str(cfg.get("filename", "")),
+        pattern=pattern,
+        flags=flags,
+        workspace_resolve=resolve_mode,
+    )
+    if ok:
+        return False, reason.replace(
+            "regex matched", "regex should be ABSENT but matched"
+        )
+    if "regex not matched" in reason:
+        return True, reason.replace("regex not matched", "regex correctly absent")
+    return True, f"regex absent (file issue: {reason})"
+
+
+def check_csv_row_count_from_evidence(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    min_rows = int(cfg["min"]) if "min" in cfg else None
+    max_rows = int(cfg["max"]) if "max" in cfg else None
+    return check_csv_row_count(
+        ws,
+        filename=str(cfg.get("filename", "")),
+        min_rows=min_rows,
+        max_rows=max_rows,
+        workspace_resolve=_workspace_resolve_from_ref(ref),
     )
 
 
@@ -802,11 +951,66 @@ def check_abacus_input_from_evidence(
     allowed = cfg.get("allowed")
     if not filename or not check_type:
         return False, "abacus_input_check: need 'filename' and 'check' in ref"
+    kwargs: dict[str, object] = {}
+    if "kspacing_range" in cfg:
+        r = cfg["kspacing_range"]
+        kwargs["kspacing_range"] = (float(r[0]), float(r[1]))
+    if "min_kpoints" in cfg:
+        kwargs["min_kpoints"] = int(cfg["min_kpoints"])
     return check_abacus_input(
         ws,
         filename=filename,
         check=check_type,
         expected=expected,
         allowed=allowed,
+        workspace_resolve=_workspace_resolve_from_ref(ref),
+        **kwargs,
+    )
+
+
+def check_kpt_line_from_evidence(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    """Wire ``kpt_line_check`` verifier from evidence + reference answer."""
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    filename = str(cfg.get("filename", ""))
+    check_type = str(cfg.get("check", ""))
+    expected = cfg.get("expected")
+    if not filename or not check_type:
+        return False, "kpt_line_check: need 'filename' and 'check' in ref"
+    return check_kpt_line(
+        ws,
+        filename=filename,
+        check=check_type,
+        expected=expected,
+        workspace_resolve=_workspace_resolve_from_ref(ref),
+    )
+
+
+def check_vasp_incar_from_evidence(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    """Wire ``vasp_incar_check`` verifier from evidence + reference answer."""
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    filename = str(cfg.get("filename", ""))
+    check_type = str(cfg.get("check", ""))
+    if not filename or not check_type:
+        return False, "vasp_incar_check: need 'filename' and 'check' in ref"
+    return check_vasp_incar(
+        ws,
+        filename=filename,
+        check=check_type,
+        param=cfg.get("param"),
+        expected=cfg.get("expected"),
+        min=cfg.get("min"),
+        max=cfg.get("max"),
+        atom_count=cfg.get("atom_count"),
+        species_index=cfg.get("species_index"),
         workspace_resolve=_workspace_resolve_from_ref(ref),
     )

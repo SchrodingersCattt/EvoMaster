@@ -90,6 +90,8 @@ def build_mm_devshell_run_cmd(
     model: str | None,
     exp_cli: str | None,
     verbose: bool,
+    exclude_subagents: list[str] | None = None,
+    inject_bohrium_failure: str | None = None,
 ) -> list[str | Path]:
     """Build ``python -m matmaster.devshell run ...`` argv (single task)."""
     cmd: list[str | Path] = [
@@ -110,6 +112,10 @@ def build_mm_devshell_run_cmd(
     if model:
         cmd.extend(["--model", model])
     cmd.extend(_mm_devshell_exp_cmd_suffix(exp_cli))
+    if exclude_subagents:
+        cmd.extend(["--exclude-subagents", *exclude_subagents])
+    if inject_bohrium_failure:
+        cmd.extend(["--inject-bohrium-failure", inject_bohrium_failure])
     if verbose:
         cmd.append("--verbose")
     return cmd

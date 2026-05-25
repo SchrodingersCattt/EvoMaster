@@ -2,7 +2,7 @@ version: v5
 capability: structure_construction
 domain: polymer
 questions:
-- id: SC_pe_amorphous_001_20260520
+- id: SC_pe_amorphous_001_20260522
   capability: structure_construction
   domain: polymer
   intent: Build an amorphous LDPE model at correct density without trial-and-error
@@ -21,8 +21,8 @@ questions:
   - key: must_atom_count
     value:
       filename: PE_amorphous.cif
-      min: 350
-      max: 700
+      expected: 500
+      tolerance: 200
   - key: min_distance
     value:
       filename: PE_amorphous.cif
@@ -34,7 +34,7 @@ questions:
       max_g_cm3: 0.94
   - key: turn_budget
     value:
-      max: 10
+      max: 20
   scoring_checklist:
   - id: pe_artifact
     criterion: PE_amorphous.cif written to workspace.
@@ -45,7 +45,7 @@ questions:
     axis: correctness
     verify: struct_file_parsable
   - id: must_atom_count
-    criterion: '[Must] Total atom count is approximately 500 (350-700 acceptable).'
+    criterion: '[Must] Total atom count is approximately 500 (300-700 acceptable).'
     axis: correctness
     verify: struct_file_atom_count
   - id: min_distance

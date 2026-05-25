@@ -248,6 +248,13 @@ class DevshellAgentLoopCli:
             help="Forwarded to run_devshell_eval --task-timeout",
         )
         p.add_argument(
+            "--exclude-subagents",
+            nargs="*",
+            default=["verification"],
+            metavar="NAME",
+            help="Forwarded to run_devshell_eval --exclude-subagents (default: verification).",
+        )
+        p.add_argument(
             "--eval-extra-arg",
             action="append",
             default=[],
@@ -313,7 +320,12 @@ class DevshellAgentLoopCli:
                 if args.eval_config is not None
                 else repo_root / "evaluation" / "config.yaml"
             ),
-            extra_args=list(args.eval_extra_arg),
+            extra_args=list(args.eval_extra_arg)
+            + (
+                ["--exclude-subagents"] + args.exclude_subagents
+                if args.exclude_subagents
+                else []
+            ),
             k=args.k,
             fallback_model=fb_loop,
         )

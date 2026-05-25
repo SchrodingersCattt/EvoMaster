@@ -91,7 +91,7 @@ Report these items in the final answer whenever this skill is used:
 
 ## Cross-Skill Refs
 
-- Use `build-atomic-structure` when there is no input structure yet.
+- Use `build-crystal-from-params` for explicit simple inorganic crystal parameters.
 - Use `transform-atomic-structure` for single-structure mutations.
 - Use `assemble-atomic-structure` for slabs, adsorbates, interfaces, amorphous
   boxes, and crosslinks.

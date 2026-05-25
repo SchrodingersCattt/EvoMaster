@@ -333,8 +333,8 @@ class BohriumTool(BuiltinTool):
                         "cached": True,
                         "seconds_until_fresh": remaining,
                         "message": (
-                            f"Cached status. Fresh check available in {remaining}s. "
-                            "Do other work first."
+                            f"Cached status. Poll again in exactly {remaining}s — "
+                            "do NOT sleep longer."
                         ),
                     }
                 )
@@ -409,8 +409,7 @@ class BohriumTool(BuiltinTool):
         data["next_check_seconds"] = interval
         data["message"] = (
             f'Job is {data.get("status", "Running")}. '
-            f"Suggested next check in {interval}s. "
-            "Continue other work before polling again."
+            f"Poll again in exactly {interval}s — do NOT sleep longer."
         )
         updated = ToolResult(
             status=result.status,

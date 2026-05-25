@@ -269,6 +269,23 @@ def _parse_lattice_vectors(content: str) -> list[float] | None:
     return [float(x) for x in nums[:9]]
 
 
+_SPECIES_SECTION_RE = re.compile(
+    r"ATOMIC_SPECIES\s*\n(.*?)(?=\n\s*(?:NUMERICAL_ORBITAL|LATTICE_CONSTANT|LATTICE_VECTORS|\Z))",
+    re.DOTALL,
+)
+
+
+def _parse_species_lines(content: str) -> list[str] | None:
+    """Extract non-empty lines from the ATOMIC_SPECIES section.
+
+    Returns None if section not found.
+    """
+    m = _SPECIES_SECTION_RE.search(content)
+    if not m:
+        return None
+    return [line.strip() for line in m.group(1).strip().split("\n") if line.strip()]
+
+
 def check_stru_file(
     workspace_dir: str | Path,
     *,
@@ -338,22 +355,30 @@ def check_stru_file(
         )
 
     elif check == "species_count":
-        species_section = re.search(
-            r"ATOMIC_SPECIES\s*\n(.*?)(?=\n\s*(?:NUMERICAL_ORBITAL|LATTICE_CONSTANT|LATTICE_VECTORS|\Z))",
-            content,
-            re.DOTALL,
-        )
-        if not species_section:
+        species_lines = _parse_species_lines(content)
+        if species_lines is None:
             return False, f"{fpath.name}: ATOMIC_SPECIES section not found"
-        species_lines = [
-            line
-            for line in species_section.group(1).strip().split("\n")
-            if line.strip()
-        ]
         actual_count = len(species_lines)
         if actual_count == int(expected or 0):
             return True, f"{fpath.name}: species_count={actual_count}"
         return False, f"{fpath.name}: species_count={actual_count}, expected {expected}"
+
+    elif check == "species_elements":
+        species_lines = _parse_species_lines(content)
+        if species_lines is None:
+            return False, f"{fpath.name}: ATOMIC_SPECIES section not found"
+        actual_elements = [line.split()[0] for line in species_lines]
+        expected_elements = expected if isinstance(expected, list) else []
+        missing = [e for e in expected_elements if e not in actual_elements]
+        if not missing:
+            return True, (
+                f"{fpath.name}: ATOMIC_SPECIES contains all expected elements "
+                f"{expected_elements} (found: {actual_elements})"
+            )
+        return False, (
+            f"{fpath.name}: ATOMIC_SPECIES missing elements {missing} "
+            f"(expected: {expected_elements}, found: {actual_elements})"
+        )
 
     elif check == "total_atoms":
         total = 0

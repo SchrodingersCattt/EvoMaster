@@ -1232,13 +1232,13 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_incar_012_20260507
+- id: IG_incar_012_20260522
   capability: input_generation
   domain: agnostic
-  intent: 'Generate VASP INCAR for NEB transition state search with HSE06 of Prussian blue analogue C24Fe8N24Na4. Fe magnetic, NUPDOWN=20.
+  intent: 'Generate VASP INCAR for NEB transition state search with HSE06 of Prussian blue analogue C24Fe8N24Na4. Agent must identify Fe mixed-valence magnetism and set NUPDOWN=20.
 
     '
-  human_prompt_seed: 为普鲁士蓝类似物 C24Fe8N24Na4 生成一个 NEB(nudged elastic band)+HSE06 过渡态搜索的 VASP INCAR。Fe 含磁性，需要固定总磁矩。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
+  human_prompt_seed: 为普鲁士蓝类似物 C24Fe8N24Na4 生成一个 NEB(nudged elastic band)+HSE06 过渡态搜索的 VASP INCAR。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
   reference_answers:
@@ -1278,6 +1278,11 @@ questions:
     value:
       filename: INCAR
       pattern: ^\s*NSW\s*=
+      flags: im
+  - key: critical_NUPDOWN
+    value:
+      filename: INCAR
+      pattern: ^\s*NUPDOWN\s*=\s*20\b
       flags: im
   - key: turn_budget
     value:
@@ -1326,11 +1331,14 @@ questions:
     axis: correctness
     verify: llm_binary_judge
   - id: grounding_source
-    criterion: The generated INCAR is grounded in the user-facing prompt data (material system, calculation type, critical parameters) rather than hallucinated. For the fixed-total-moment requirement, do
-      not require a specific NUPDOWN value unless that numeric value is explicitly stated in the user-facing prompt; judge whether the INCAR attempts a fixed total magnetic moment consistently with the
-      prompt.
+    criterion: The generated INCAR is grounded in the user-facing prompt data (material system, calculation type, critical parameters) rather than hallucinated. All stated tags and values should be
+      consistent with an NEB+HSE06 calculation on this material. Do not fail for any parameter choices that are physically defensible for this system.
     axis: grounding
     verify: llm_binary_judge
+  - id: critical_NUPDOWN
+    criterion: INCAR sets NUPDOWN = 20 (Prussian blue canonical spin state).
+    axis: correctness
+    verify: text_file_regex
   - id: turn_budget
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
@@ -1462,7 +1470,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_incar_014_20260508
+- id: IG_incar_014_20260523
   capability: input_generation
   domain: agnostic
   intent: 'Generate VASP INCAR for static calculation of hydrogen-passivated SiO2 slab H16O24Si12. Insulator, fixed cell (ISIF=2).
@@ -1480,7 +1488,6 @@ questions:
       filename: INCAR
       tokens:
       - ISIF
-      - IVDW
       flags: i
   - key: optional_IBRION
     value:
@@ -1499,21 +1506,16 @@ questions:
       flags: im
   - key: turn_budget
     value:
-      max: 8
+      max: 10
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 15000
+      max: 20000
   - key: reasonable_params
     value:
       filename: INCAR
-  - key: critical_IVDW
-    value:
-      filename: INCAR
-      pattern: ^\s*IVDW\s*=\s*(?:11|12)\b
-      flags: im
   - key: correct_ISMEAR_insulator
     value:
       filename: INCAR
@@ -1571,10 +1573,6 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-  - id: critical_IVDW
-    criterion: INCAR sets IVDW = 11 or 12 (critical param).
-    axis: correctness
-    verify: text_file_regex
 - id: IG_incar_015_20260508
   capability: input_generation
   domain: agnostic
@@ -1628,11 +1626,6 @@ questions:
       filename: INCAR
       pattern: ^\s*LSORBIT\s*=\s*\.?(?:TRUE|T)\.?
       flags: im
-  - key: critical_LNONCOLLINEAR
-    value:
-      filename: INCAR
-      pattern: ^\s*LNONCOLLINEAR\s*=\s*\.?(?:TRUE|T)\.?
-      flags: im
   - key: turn_budget
     value:
       max: 8
@@ -1676,10 +1669,6 @@ questions:
     verify: text_file_regex
   - id: critical_LSORBIT
     criterion: INCAR sets LSORBIT = True (critical param).
-    axis: correctness
-    verify: text_file_regex
-  - id: critical_LNONCOLLINEAR
-    criterion: INCAR sets LNONCOLLINEAR = .TRUE. as required for SOC calculations (LSORBIT implies non-collinear magnetism).
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
@@ -2247,15 +2236,20 @@ questions:
   - key: must_ispin
     value:
       filename: INCAR_mag
-      tokens:
-      - ISPIN = 2
-      - ISPIN=2
-      flags: i
+      check: param_value
+      param: ISPIN
+      expected: '2'
   - key: must_magmom
     value:
       filename: INCAR_mag
-      pattern: MAGMOM\s*=\s*2\*5
-      flags: i
+      check: magmom_atom_count
+      atom_count: 2
+  - key: magmom_range
+    value:
+      filename: INCAR_mag
+      check: magmom_per_atom_range
+      min: 1.0
+      max: 6.0
   - key: must_encut
     value:
       filename: INCAR_mag
@@ -2278,13 +2272,17 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: must_ispin
-    criterion: INCAR_mag contains ISPIN = 2 for spin-polarized calculation.
+    criterion: INCAR_mag sets ISPIN = 2 for spin-polarized calculation.
     axis: correctness
-    verify: text_file_contains_all
+    verify: vasp_incar_check
   - id: must_magmom
-    criterion: INCAR_mag sets MAGMOM with 2*5 (or equivalent per-atom magnetic moment for 2 Fe atoms).
+    criterion: INCAR_mag sets MAGMOM for exactly 2 atoms.
     axis: correctness
-    verify: text_file_regex
+    verify: vasp_incar_check
+  - id: magmom_range
+    criterion: MAGMOM per-atom values are in reasonable range for Fe (1.0–6.0 μB).
+    axis: correctness
+    verify: vasp_incar_check
   - id: must_encut
     criterion: ENCUT is set to 520 eV.
     axis: correctness
@@ -2305,45 +2303,47 @@ questions:
     axis: efficiency
     verify: token_budget
     criterion: Total token usage stays within benchmark ceiling.
-- id: IG_vasp_dftu_001_20260508
+- id: IG_vasp_dftu_001_20260522
   capability: input_generation
   domain: agnostic
-  intent: Generate VASP INCAR for NiO with DFT+U (Dudarev) settings.
-  human_prompt_seed: '工作区中有 NiO.vasp（NaCl结构氧化镍，4个原子：2 Ni + 2 O，POSCAR 中原子顺序为 Ni O）。
-
-    NiO 是强关联反铁磁绝缘体，Ni 3d 电子存在强 on-site Coulomb 相互作用。 请生成考虑强关联效应的静态计算 INCAR 文件 `INCAR_dftu`。
-
-    要求使用 Hubbard U 校正，Ni 的有效 U 值取 6.2 eV。 PBE 泛函，ENCUT=550 eV。'
+  intent: Generate VASP INCAR for NiO — agent must identify strong correlation and apply DFT+U with reasonable U value.
+  human_prompt_seed: '工作区中有 NiO.vasp（氧化镍 POSCAR）。请生成静态计算 INCAR 文件 `INCAR`。PBE 泛函，ENCUT=550 eV。'
   tags:
   - eng_vasp
   data_files: []
   reference_answers:
-  - key: incar_dftu_artifact
-    value: INCAR_dftu
+  - key: incar_artifact
+    value: INCAR
   - key: must_ldau
     value:
-      filename: INCAR_dftu
+      filename: INCAR
       tokens:
       - LDAU = .TRUE.
-      - LDAU=.TRUE.
       flags: i
   - key: must_ldautype
     value:
-      filename: INCAR_dftu
+      filename: INCAR
       tokens:
       - LDAUTYPE = 2
-      - LDAUTYPE=2
       flags: i
   - key: must_ldaul
     value:
-      filename: INCAR_dftu
+      filename: INCAR
       pattern: LDAUL\s*=\s*2\s+(-1|0)
       flags: i
   - key: must_ldauu
     value:
-      filename: INCAR_dftu
-      pattern: LDAUU\s*=\s*6\.2\s+0
+      filename: INCAR
+      pattern: LDAUU\s*=\s*\d+\.?\d*\s+0
       flags: i
+  - key: ldauu_range
+    value:
+      filename: INCAR
+      checks:
+      - key: LDAUU
+        component: 1
+        min: 4.0
+        max: 8.0
   - key: turn_budget
     value:
       max: 12
@@ -2355,12 +2355,12 @@ questions:
       max: 10000
   - key: must_ispin
     value:
-      filename: INCAR_dftu
+      filename: INCAR
       pattern: ISPIN\s*=\s*2
       flags: i
   scoring_checklist:
-  - id: incar_dftu_artifact
-    criterion: INCAR_dftu file exists in workspace.
+  - id: incar_artifact
+    criterion: INCAR file exists in workspace.
     axis: correctness
     verify: artifact_exists
   - id: must_ldau
@@ -2376,17 +2376,17 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: must_ldauu
-    criterion: LDAUU array sets 6.2 for Ni and 0 for O, matching POSCAR species order.
+    criterion: LDAUU array sets a nonzero U for Ni and 0 for O, matching POSCAR species order.
     axis: correctness
     verify: text_file_regex
+  - id: ldauu_range
+    criterion: LDAUU value for Ni is within literature range (4.0–8.0 eV).
+    axis: correctness
+    verify: text_file_numeric_range
   - id: must_ispin
-    criterion: INCAR_dftu sets ISPIN = 2 (required for antiferromagnetic NiO).
+    criterion: INCAR sets ISPIN = 2 (required for antiferromagnetic NiO).
     axis: correctness
     verify: text_file_regex
-  - id: grounding_dftu
-    criterion: Agent explains the physical basis for U value choice and why Dudarev (not Liechtenstein) method is appropriate.
-    axis: grounding
-    verify: llm_binary_judge
   - id: no_retries
     axis: efficiency
     verify: no_retries
@@ -2423,17 +2423,15 @@ questions:
   - key: must_metagga
     value:
       filename: INCAR_r2scan
-      tokens:
-      - METAGGA = R2SCAN
-      - METAGGA=R2SCAN
-      flags: i
+      check: param_value
+      param: METAGGA
+      expected: R2SCAN
   - key: must_lasph
     value:
       filename: INCAR_r2scan
-      tokens:
-      - LASPH = .TRUE.
-      - LASPH=.TRUE.
-      flags: i
+      check: param_value
+      param: LASPH
+      expected: .TRUE.
   - key: must_isif3
     value:
       filename: INCAR_r2scan
@@ -2461,11 +2459,11 @@ questions:
   - id: must_metagga
     criterion: METAGGA = R2SCAN is set for r2SCAN functional.
     axis: correctness
-    verify: text_file_contains_all
+    verify: vasp_incar_check
   - id: must_lasph
     criterion: LASPH = .TRUE. is set (required for meta-GGA calculations).
     axis: correctness
-    verify: text_file_contains_all
+    verify: vasp_incar_check
   - id: must_isif3
     criterion: ISIF = 3 for full cell+ion relaxation.
     axis: correctness

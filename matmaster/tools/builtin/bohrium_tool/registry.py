@@ -17,7 +17,17 @@ from dataclasses import dataclass, field
 
 def next_interval(poll_count: int) -> int:
     """Seconds until next fresh poll is allowed after ``poll_count`` polls."""
-    return min(3600, 30 * 2**poll_count)
+    if poll_count <= 0:
+        return 5
+    if poll_count <= 1:
+        return 10
+    if poll_count <= 2:
+        return 15
+    if poll_count <= 3:
+        return 30
+    if poll_count <= 4:
+        return 45
+    return min(3600, 60 * 2 ** (poll_count - 5))
 
 
 def classify_poll_status(status: str) -> str:

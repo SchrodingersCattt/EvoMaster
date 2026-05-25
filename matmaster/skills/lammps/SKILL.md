@@ -67,7 +67,7 @@ If the user provides a complete LAMMPS script, skip preparation and submit direc
 - **pair_style cutoff**: check consistency with the potential; LJ typically 10-12 A, Coulomb needs Ewald/PPPM for periodic
 - **Thermostat/barostat**: Nose-Hoover (`fix nvt/npt`) with appropriate Tdamp/Pdamp (typically 100*timestep for T, 1000*timestep for P)
 - **Periodic boundaries**: `boundary p p p` for bulk; adjust for surfaces/slabs
-- **DeePMD**: verify model covers all elements in the system; check type_map ordering
+- **DeePMD**: verify model covers all elements in the system; check type_map ordering with `dp --pt show <model.pt> type-map`. Do NOT use `torch.load`, `zipfile`, or binary inspection to parse model files.
 
 ## Submission Workflow
 

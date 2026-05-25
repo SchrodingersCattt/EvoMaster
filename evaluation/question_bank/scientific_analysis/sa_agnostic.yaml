@@ -1474,3 +1474,420 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
+- id: SA_polymorph_tio2_001_20260521
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Identify the TiO2 polymorph (rutile vs anatase vs brookite) from a provided
+    CIF file and report its space group and key structural features.
+  human_prompt_seed: '工作区中有一个 TiO2 的 CIF 文件 `TiO2_sample.cif`。请分析该结构属于哪种 TiO2 多晶型（金红石
+    rutile / 锐钛矿 anatase / 板钛矿 brookite），给出空间群符号和编号，并说明判断依据（晶胞参数、配位环境等）。
+
+    将结果写入 `polymorph_report.json`，格式：`{"polymorph": "...", "space_group_symbol":
+    "...", "space_group_number": ..., "reasoning": "..."}`'
+  tags:
+  - struct_build
+  data_files:
+  - key: tio2_cif
+    path: data/SA_polymorph_tio2_001/TiO2_sample.cif
+    oss_url: https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/sa_polymorph_tio2_001/TiO2_rutile_COD9008213.cif
+    description: TiO2 rutile structure from COD (ID 9008213), space group P4_2/mnm
+      (#136), a=b=4.594 A, c=2.959 A.
+  reference_answers:
+  - key: output_artifact
+    value: polymorph_report.json
+  - key: polymorph_correct
+    value:
+      filename: polymorph_report.json
+      pattern: (?i)rutile
+      flags: i
+  - key: space_group_number
+    value:
+      filename: polymorph_report.json
+      checks:
+      - key: space_group_number
+        min: 136
+        max: 136
+  - key: turn_budget
+    value:
+      max: 12
+  - key: token_budget_total
+    value:
+      max: 10000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `polymorph_report.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: polymorph_correct
+    criterion: The report correctly identifies the structure as rutile (not anatase
+      or brookite). Anatase is I4_1/amd (#141) with c/a~2.5; rutile is P4_2/mnm (#136)
+      with c/a~0.64. The provided CIF has a=4.594, c=2.959 (c/a=0.64), which is rutile.
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: space_group_number
+    criterion: Space group number is 136 (P4_2/mnm).
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+  - id: grounding_source
+    criterion: The reasoning references concrete structural features from the CIF
+      (lattice parameters, Ti-O coordination, c/a ratio) rather than just stating
+      the answer without evidence.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
+- id: SA_ads_site_001_20260521
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Determine the actual adsorption site of H on Zn(0001) from a relaxed structure
+    by computing adsorbate-surface distances, detecting whether bridge-to-hollow migration
+    occurred.
+  human_prompt_seed: '工作区中有一个弛豫后的 H/Zn(0001) 吸附结构 `H_on_Zn0001_relaxed.xyz`（2x2
+    超胞，4 层 slab + 1 个 H 原子）。请分析该 H 原子处于什么吸附位点，并给出判断依据。
+
+    输出 `site_analysis.json`，格式：`{"actual_site": "...", "coordination":
+    ..., "distances_to_nearest_Zn_A": [...], "reasoning": "..."}`'
+  tags:
+  - struct_surface
+  data_files:
+  - key: relaxed_structure
+    path: data/SA_ads_site_001/H_on_Zn0001_relaxed.xyz
+    oss_url: https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/sa_ads_site_001/H_on_Zn0001_relaxed.xyz
+    description: DPA-relaxed H on Zn(0001) 2x2 4-layer slab. H initially at bridge
+      site but relaxed to hollow (3-fold coordinated, ~1.82 A to 3 nearest Zn).
+  reference_answers:
+  - key: output_artifact
+    value: site_analysis.json
+  - key: actual_site_hollow
+    value:
+      filename: site_analysis.json
+      pattern: (?i)hollow
+      flags: i
+  - key: coordination_3
+    value:
+      filename: site_analysis.json
+      checks:
+      - key: coordination
+        min: 3
+        max: 3
+  - key: turn_budget
+    value:
+      max: 12
+  - key: token_budget_total
+    value:
+      max: 10000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `site_analysis.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: actual_site_hollow
+    criterion: Agent correctly identifies the site as hollow (3-fold coordinated),
+      not bridge. The 3 nearest Zn-H distances are all ~1.82 A (equal within 0.05 A),
+      indicating 3-fold coordination. A bridge site would show 2 short + 1 long distance.
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: coordination_3
+    criterion: Coordination number is reported as 3.
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+  - id: grounding_source
+    criterion: The reasoning includes computed Zn-H distances and explains the criterion
+      for distinguishing bridge (2 short + 1 long) from hollow (3 approximately equal).
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
+- id: SA_hea_thermo_001_20260521
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Calculate HEA thermodynamic parameters (VEC, deltaH_mix, deltaS_mix, delta,
+    Omega) and predict solid solution formation for a given composition.
+  human_prompt_seed: '请计算 AlCr₀.₈CoFeNi 高熵合金体系的以下热力学参数，并预测是否能形成单相固溶体：
+
+    1. 价电子浓度 VEC
+
+    2. 混合熵 ΔS_mix
+
+    3. 混合焓 ΔH_mix（使用 Miedema 模型的二元混合焓数据）
+
+    4. 原子尺寸差异参数 δ
+
+    5. Yang-Zhang Ω 参数
+
+    将结果写入 `hea_prediction.json`，格式：`{"composition": "AlCr0.8CoFeNi", "VEC":
+    ..., "deltaS_mix_J_per_mol_K": ..., "deltaH_mix_kJ_per_mol": ..., "delta_percent":
+    ..., "Omega": ..., "prediction": "solid_solution"或"intermetallic"或"amorphous",
+    "predicted_structure": "FCC"或"BCC"或"FCC+BCC"}`'
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: output_artifact
+    value: hea_prediction.json
+  - key: vec_check
+    value:
+      filename: hea_prediction.json
+      checks:
+      - key: VEC
+        min: 7.0
+        max: 7.5
+  - key: deltaS_check
+    value:
+      filename: hea_prediction.json
+      checks:
+      - key: deltaS_mix_J_per_mol_K
+        min: 12.5
+        max: 14.0
+  - key: deltaH_check
+    value:
+      filename: hea_prediction.json
+      checks:
+      - key: deltaH_mix_kJ_per_mol
+        min: -18.0
+        max: -8.0
+  - key: delta_check
+    value:
+      filename: hea_prediction.json
+      checks:
+      - key: delta_percent
+        min: 4.5
+        max: 6.5
+  - key: omega_check
+    value:
+      filename: hea_prediction.json
+      checks:
+      - key: Omega
+        min: 1.2
+        max: 2.5
+  - key: turn_budget
+    value:
+      max: 12
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `hea_prediction.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: vec_check
+    criterion: VEC is approximately 7.25 (correct value for Al(3)+Cr(6)*0.8+Co(9)+Fe(8)+Ni(10)
+      / 4.8).
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+  - id: deltaS_check
+    criterion: Mixing entropy is approximately 13.35 J/(mol*K) (5-component near-equimolar
+      system).
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+  - id: deltaH_check
+    criterion: Mixing enthalpy is negative and in reasonable range (-8 to -18 kJ/mol)
+      for an Al-containing transition metal HEA.
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+  - id: delta_check
+    criterion: Atomic size mismatch parameter delta is approximately 5.5% (Al is significantly
+      larger than the TMs).
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+  - id: omega_check
+    criterion: Yang-Zhang Omega parameter is >1.1 (solid solution formation criterion).
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+  - id: prediction_solid_solution
+    criterion: Agent predicts solid solution formation (all 4 criteria pass — Omega>1.1,
+      delta<6.6%, deltaH in range, deltaS high). Structure prediction should include
+      BCC or FCC+BCC (VEC=7.25 is in the FCC/BCC transition zone 6.87-8.0).
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
+- id: SA_md_sanity_001_20260521
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Identify reliability issues in MD-derived diffusion coefficient data including
+    non-Arrhenius behavior and insufficient sampling, and recommend improvements.
+  human_prompt_seed: '工作区中有一份 LiVCl6 固态电解质的分子动力学模拟结果 `diffusion_data.json`，包含
+    5 个温度下的 Li 扩散系数和离子电导率，以及 Arrhenius 拟合参数。
+
+    请基于这些数据评估 LiVCl6 作为固态电解质的离子输运性能。
+
+    输出 `evaluation_report.json`，格式：`{"Ea_eV": ..., "sigma_300K_S_per_cm": ...,
+    "conclusion": "...", "limitations": [...]}`'
+  tags:
+  - code_mlip
+  data_files:
+  - key: diffusion_data
+    path: data/SA_md_sanity_001/diffusion_data.json
+    oss_url: https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/sa_md_sanity_001/diffusion_data.json
+    description: MD diffusion results for LiVCl6 at 600-1000K with non-monotonic D
+      values and insufficient simulation time (20ps, 9 Li atoms).
+  reference_answers:
+  - key: output_artifact
+    value: evaluation_report.json
+  - key: identifies_non_monotonic
+    value:
+      filename: evaluation_report.json
+      pattern: (?i)(non.?monoton|800.*700|D\(800\).*<.*D\(700\)|700.*>.*800|不单调|非单调|反常|anomal)
+      flags: i
+  - key: identifies_short_simulation
+    value:
+      filename: evaluation_report.json
+      pattern: (?i)(20\s*ps.*short|insufficien|不够|太短|统计.*差|poor.*statistic|longer.*simulat|延长)
+      flags: i
+  - key: turn_budget
+    value:
+      max: 10
+  - key: token_budget_total
+    value:
+      max: 10000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `sanity_report.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: identifies_non_monotonic
+    criterion: Agent identifies that D(800K)=4.10e-5 < D(700K)=4.77e-5 is non-monotonic
+      and violates expected Arrhenius behavior for thermally activated diffusion.
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: identifies_short_simulation
+    criterion: Agent identifies that 20ps production with only 9 Li atoms provides
+      insufficient statistics for reliable MSD-derived diffusion coefficients. Typical
+      requirement is 100ps-1ns for converged MSD.
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: mentions_limitations
+    criterion: The limitations field is non-empty and mentions at least one concrete
+      issue with the simulation (short time, small system, or non-monotonic behavior).
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: grounding_source
+    criterion: The analysis references specific data points (e.g., D at 700K vs 800K)
+      and explains why non-monotonic diffusion is unphysical for a single-phase solid.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
+- id: SA_polymorph_vo2_001_20260523
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Identify the VO2 polymorph (rutile vs monoclinic M1) from a provided CIF
+    file. The M1 phase has pseudo-tetragonal metrics (a~c) that may confuse loose
+    symmetry detection into reporting tetragonal rather than monoclinic.
+  human_prompt_seed: '工作区中有 `VO2_sample.cif`，请鉴定这个 VO2 结构属于哪种相（金红石相 R、单斜
+    M1 相、或其他），报告空间群和晶格参数。将结果写入 `vo2_phase.json`：`{"phase_name": "...",
+    "space_group_symbol": "...", "space_group_number": ..., "lattice_a": ...,
+    "lattice_b": ..., "lattice_c": ..., "beta_deg": ...}`'
+  tags:
+  - struct_build
+  data_files:
+  - key: vo2_cif
+    path: data/SA_polymorph_vo2_001/VO2_sample.cif
+    oss_url: ''
+    description: 'VO2 M1 monoclinic phase (P2_1/c, #14), a=5.383, b=4.492, c=5.382,
+      beta=122.61. Pseudo-tetragonal metrics (a~c) are a known trap for symmetry
+      detection with loose tolerance.'
+  reference_answers:
+  - key: output_artifact
+    value: vo2_phase.json
+  - key: space_group_number
+    value:
+      filename: vo2_phase.json
+      key: space_group_number
+      min: 14
+      max: 14
+  - key: beta_monoclinic
+    value:
+      filename: vo2_phase.json
+      key: beta_deg
+      min: 120
+      max: 125
+  - key: phase_name_regex
+    value:
+      filename: vo2_phase.json
+      pattern: (?i)(M1|monoclinic|P2.?1.?/c)
+      flags: i
+  - key: turn_budget
+    value:
+      max: 10
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `vo2_phase.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: space_group_number
+    criterion: Space group number is exactly 14 (P2_1/c, monoclinic). If agent
+      reports 136 (P4_2/mnm, tetragonal rutile) it has been fooled by the
+      pseudo-tetragonal a~c metrics under loose symprec.
+    axis: correctness
+    verify: json_file_numeric_range
+    weight: 2.0
+  - id: beta_monoclinic
+    criterion: Beta angle is reported between 120-125 deg (monoclinic). A value
+      of 90 would indicate the agent incorrectly assigned tetragonal symmetry.
+    axis: correctness
+    verify: json_file_numeric_range
+    weight: 1.5
+  - id: phase_name_regex
+    criterion: The phase is identified as M1 or monoclinic or P2_1/c (not rutile
+      or tetragonal). The CIF explicitly states P 1 21/c 1 and has beta=122.61,
+      so the agent must recognize this as the monoclinic M1 phase.
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: grounding_source
+    criterion: The reasoning references concrete structural features from the CIF
+      (lattice parameters a~c, beta>>90, space group header) rather than just
+      stating the answer without evidence.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
