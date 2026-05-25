@@ -157,75 +157,74 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_elec_diffusion_001_20260525
+- id: WO_elec_diffusion_001_20260526
   capability: workflow_orchestration
   domain: battery
   scope: platform
-  intent: Compute the self-diffusion coefficient of Li⁺ in a 1 mol/L LiPF6/EC liquid
-    electrolyte via MLIP MD. The agent must choose an adequate production time
-    (≥200 ps) and verify MSD linearity before reporting D.
-  human_prompt_seed: "使用 DPA 机器学习力场对 1 mol/L LiPF₆/EC 液态电解液体系进行分子动力学模拟，\
-    计算 300K 下 Li⁺ 的自扩散系数。\n\n要求：\n- 体系约 400-600 原子（4-6 个 LiPF₆ + 对应数量 EC 分子）\n\
-    - NVT 系综，300K\n- 报告 Li⁺ 自扩散系数（单位 cm²/s）\n"
+  intent: Prepare MD submission for Li⁺ diffusion calculation in LiPF6/EC electrolyte.
+    Tests system building (PACKMOL), MD parameter selection (thermostat, production
+    time), and correct model/head choice for organic systems.
+  human_prompt_seed: "使用 DPA 机器学习力场准备 1 mol/L LiPF₆/EC 液态电解液体系的分子动力学模拟提交配置，\
+    用于计算 300K 下 Li⁺ 的自扩散系数。\n\n要求：\n- 体系约 400-600 原子（4-6 个 LiPF₆ + 对应数量\
+    \ EC 分子）\n- 包含平衡阶段和 production 阶段，production 时间需满足扩散系数收敛需求\n- 输出\
+    \ `md_submit.json` 提交配置\n"
   tags:
   - code_mlip
-  source_session: 5f7f7485cce64440ba5ce8b1fd2db4fc
   data_files: []
   reference_answers:
-  - key: production_time_ps
+  - key: submit_artifact
+    value: md_submit.json
+  - key: must_cmd_mlip
     value:
-      min: 200
-    unit: ps
-    description: Production MD time must be ≥200 ps for reliable diffusion coefficient.
-  - key: diffusion_coefficient
+      filename: md_submit.json
+      pattern: DPA|dpa|deepmd|run_molecular_dynamics
+      flags: i
+  - key: production_time_check
     value:
-      order_of_magnitude: -6
-      tolerance_log10: 1.5
-    unit: cm2/s
-    description: Li+ diffusion in 1M LiPF6/EC at 300K is typically 1e-7 to 1e-5 cm2/s.
+      filename: md_submit.json
+      pattern: '200|250|300|400|500'
+  - key: structure_min_dist
+    value:
+      submit_file: md_submit.json
+      min_distance_A: 0.8
   - key: turn_budget
     value:
-      max: 40
+      max: 30
   - key: duration_budget
     value:
-      max: 14400000
-  - key: token_budget_total
-    value:
-      max: 15000
+      max: 900000
   scoring_checklist:
-  - id: production_time_adequate
-    criterion: The MD production (data-collection) phase is at least 200 ps. A production
-      time of 30 ps or less is a clear failure — insufficient for converged MSD in
-      liquid electrolytes where Li+ D ~ 1e-6 cm2/s.
+  - id: submit_artifact
+    criterion: md_submit.json written to workspace.
     axis: correctness
-    verify: llm_binary_judge
-    weight: 3.0
-  - id: msd_linearity_checked
-    criterion: Agent verifies that MSD has entered the linear (diffusive) regime before
-      fitting D. Evidence includes checking MSD slope stability, excluding ballistic
-      regime, or plotting MSD vs time.
+    verify: artifact_exists
+  - id: must_cmd_mlip
+    criterion: md_submit.json references a DPA model or the run_molecular_dynamics script.
     axis: correctness
-    verify: llm_binary_judge
+    verify: text_file_regex
+  - id: structure_min_dist
+    criterion: The structure file referenced in md_submit.json has no overlapping atoms
+      (min interatomic distance >= 0.8 A).
+    axis: correctness
+    verify: md_submit_structure_min_dist
     weight: 2.0
-  - id: equilibration_excluded
-    criterion: The equilibration phase is excluded from MSD calculation. Agent uses a
-      separate equilibration stage or discards initial trajectory data.
-    axis: correctness
-    verify: llm_binary_judge
-    weight: 1.5
-  - id: diffusion_reported
-    criterion: A numerical Li+ diffusion coefficient is reported with correct units (cm2/s).
-      The value should be in the range 1e-7 to 1e-5 for this system at 300K.
-    axis: correctness
-    verify: llm_binary_judge
-    weight: 1.5
   - id: system_composition_reasonable
     criterion: The simulated system has approximately 1 mol/L LiPF6 concentration with
       the correct ratio of Li, P, F, and EC molecules. Box size and density are
       physically reasonable (~1.2-1.4 g/cm3 for EC-based electrolyte).
     axis: correctness
     verify: llm_binary_judge
-    weight: 1.0
+  - id: production_time_adequate
+    criterion: The MD stages configuration includes a production phase of at least 200 ps
+      for reliable diffusion coefficient estimation.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: thermostat_choice
+    criterion: Production stage uses a thermostat suitable for transport property calculation
+      (Nose-Hoover, Berendsen, or NVE) rather than Langevin which adds artificial friction.
+    axis: correctness
+    verify: llm_binary_judge
   - id: turn_budget
     criterion: Agent completes the task within the turn budget.
     axis: efficiency
@@ -234,7 +233,3 @@ questions:
     criterion: Wall-clock run duration does not exceed benchmark ceiling.
     axis: efficiency
     verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
