@@ -67,10 +67,10 @@ questions:
   - key: structure_min_dist
     value:
       submit_file: md_submit.json
-      min_distance_A: 1.0
+      min_distance_A: 0.8
   - key: turn_budget
     value:
-      max: 15
+      max: 30
   scoring_checklist:
   - id: submit_artifact
     criterion: md_submit.json written to workspace.
@@ -84,7 +84,7 @@ questions:
   - id: structure_min_dist
     criterion: The structure file referenced in md_submit.json (resolved from
       input_dir + --structure argument in cmd) has no overlapping atoms (min
-      interatomic distance >= 1.0 A).
+      interatomic distance >= 0.8 A, allowing for bonded O-H/N-H pairs).
     axis: correctness
     verify: md_submit_structure_min_dist
     weight: 2.0
