@@ -23,9 +23,9 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent.parent
 CASES_PATH = PROJECT_ROOT / "evaluation" / "release_gate" / "cases.yaml"
 
 ENV_URLS = {
-    "test": "https://matmaster.test.bohrium.com/bohrapi/v1/matmaster-evo/api/v1/chat",
-    "uat": "https://matmaster.uat.bohrium.com/bohrapi/v1/matmaster-evo/api/v1/chat",
-    "prod": "https://matmaster.bohrium.com/bohrapi/v1/matmaster-evo/api/v1/chat",
+    "test": "https://matmaster-evo.test.bohrium.com/api/v1/chat",
+    "uat": "https://matmaster-evo.uat.bohrium.com/api/v1/chat",
+    "prod": "https://matmaster-evo.bohrium.com/api/v1/chat",
 }
 
 
@@ -51,6 +51,9 @@ def fire_case(
     user_id: str,
     directory: str,
     mode: str = "direct",
+    bohrium_project_id: int | None = None,
+    org_id: str | None = None,
+    model: str | None = None,
 ) -> dict:
     url = f"{base_url}/sessions/{session_id}/stream"
     headers = {
@@ -58,11 +61,17 @@ def fire_case(
         "Content-Type": "application/json",
         "Accept": "text/event-stream",
     }
+    if org_id:
+        headers["X-Org-Id"] = str(org_id)
     body = {
         "content": prompt,
         "mode": mode,
         "directory": directory,
     }
+    if bohrium_project_id is not None:
+        body["bohrium_project_id"] = bohrium_project_id
+    if model:
+        body["model"] = model
 
     resp = requests.post(url, json=body, headers=headers, stream=True, timeout=30)
 
@@ -83,6 +92,15 @@ def fire_case(
             confirmed = True
             break
     resp.close()
+
+    # Persist session_directory so it appears in frontend list grouped by directory
+    dir_url = f"{base_url}/sessions/{session_id}/session-directory"
+    requests.put(
+        dir_url,
+        json={"directory": directory},
+        headers=headers,
+        timeout=10,
+    )
 
     return {"status": "fired" if confirmed else "fired_unconfirmed"}
 
@@ -117,6 +135,11 @@ def main():
         help="Agent mode (default: direct)",
     )
     parser.add_argument(
+        "--model",
+        default="global.anthropic.claude-opus-4-6-v1",
+        help="Model route key (default: global.anthropic.claude-opus-4-6-v1)",
+    )
+    parser.add_argument(
         "--parallel",
         type=int,
         default=1,
@@ -127,6 +150,17 @@ def main():
         type=float,
         default=2.0,
         help="Delay between sequential fires in seconds (default: 2.0)",
+    )
+    parser.add_argument(
+        "--bohrium-project-id",
+        type=int,
+        default=None,
+        help="Bohrium project ID (default: from .env.{env} BOHRIUM_PROJECT_ID)",
+    )
+    parser.add_argument(
+        "--org-id",
+        default=None,
+        help="Bohrium org ID (default: from .env.{env} BOHRIUM_ORG_ID)",
     )
     parser.add_argument(
         "--dry-run",
@@ -148,6 +182,30 @@ def main():
     if not user_id:
         print("ERROR: --user-id required (or set BOHRIUM_USER_ID in .env.test)")
         sys.exit(1)
+
+    # Resolve bohrium_project_id
+    bohrium_project_id = args.bohrium_project_id
+    if bohrium_project_id is None:
+        env_file = PROJECT_ROOT / f".env.{args.env}"
+        if not env_file.exists():
+            env_file = PROJECT_ROOT / ".env.test"
+        if env_file.exists():
+            for line in env_file.read_text().splitlines():
+                if line.startswith("BOHRIUM_PROJECT_ID="):
+                    bohrium_project_id = int(line.split("=", 1)[1].strip())
+                    break
+
+    # Resolve org_id
+    org_id = args.org_id
+    if not org_id:
+        env_file = PROJECT_ROOT / f".env.{args.env}"
+        if not env_file.exists():
+            env_file = PROJECT_ROOT / ".env.test"
+        if env_file.exists():
+            for line in env_file.read_text().splitlines():
+                if line.startswith("BOHRIUM_ORG_ID="):
+                    org_id = line.split("=", 1)[1].strip()
+                    break
 
     # Resolve directory
     directory = args.directory
@@ -176,6 +234,9 @@ def main():
     print(f"Environment: {args.env}")
     print(f"Base URL:    {base_url}")
     print(f"User ID:     {user_id}")
+    print(f"Org ID:      {org_id}")
+    print(f"Project ID:  {bohrium_project_id}")
+    print(f"Model:       {args.model}")
     print(f"Directory:   {directory}")
     print(f"Mode:        {args.mode}")
     print(f"Cases:       {len(cases)}")
@@ -202,6 +263,9 @@ def main():
             user_id=user_id,
             directory=directory,
             mode=args.mode,
+            bohrium_project_id=bohrium_project_id,
+            org_id=org_id,
+            model=args.model,
         )
         results.append({"case_id": case["id"], "session_id": sid, **result})
         print(result["status"])
