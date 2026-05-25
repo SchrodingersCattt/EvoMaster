@@ -2911,7 +2911,7 @@ questions:
   - key: must_hex_latname
     value:
       filename: run_hex_mos2/INPUT
-      pattern: (?im)^\s*latname\s+hex(?:agonal)?\s*$
+      pattern: (?im)^\s*latname\s+hexagonal\s*$
       flags: im
   - key: must_hex_pw
     value:

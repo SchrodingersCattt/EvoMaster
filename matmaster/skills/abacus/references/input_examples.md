@@ -21,6 +21,8 @@ Always include **universal baseline**: `calculation`, `basis_type`, `ntype`, `ec
 | Manual orbital occupation (ocp — NOT `smearing_method fixed`) | `ocp 1`, `ocp_set ...`, `nspin 2`, **`gamma_only 1`** | Missing `gamma_only` → band ordering changes with k-points, `ocp_set` indices become wrong |
 | PEXSI solver | `ks_solver pexsi`, `pexsi_npole 80`, `gamma_only 1` | Missing `pexsi_npole` → uses default 40 (less accurate); PEXSI requires LCAO + gamma_only |
 
+> **⚠ `latname` values (exact strings, no abbreviations)**: `sc`, `fcc`, `bcc`, `hexagonal`, `trigonal`, `st`, `bct`, `so`, `baco`, `fco`, `bco`, `sm`, `bacm`, `triclinic`. Do NOT use abbreviations like `hex` — ABACUS will quit with "latname not supported!".
+
 > **⚠ `force_thr_ev` vs `force_thr`**: Always use `force_thr_ev` (unit: eV/Å). The parameter `force_thr` uses Ry/Bohr — completely different units. `force_thr_ev 0.01` ≈ `force_thr 3.9e-4`. Mixing them up produces absurdly loose or tight thresholds.
 
 > **⚠ Supercell k-points**: For **any supercell** (vacancy, defect, BSSE ghost atoms, adsorption), always use `kspacing` inside INPUT instead of a separate KPT file. This guarantees uniform k-point density that automatically adapts to cell size. Value: `0.10` Å⁻¹ for metals, `0.12`–`0.15` for insulators. For slab supercells: `kspacing 0.10 0.10 1.00` (z=vacuum). **Exception**: when `ocp 1` (fixed occupation) is used, ALWAYS use `gamma_only 1` instead of `kspacing` — `ocp_set` indices are only valid at Gamma point.
