@@ -24,30 +24,34 @@ These parameters output Hamiltonian, overlap, and kinetic matrices. **LCAO only*
 
 | Parameter | Values | Purpose | k-points needed? |
 |-----------|--------|---------|------------------|
-| `out_mat_hs2` | `0`/`1` | H(k) and S(k) in k-space → `data-HR-sparse_SPIN0.csr` etc. | Yes — needs KPT with multi-k mesh |
-| `out_mat_hs` | `0`/`1` | H(R) and S(R) in real-space → `data-HR-sparse_SPIN0.csr`, `data-SR-sparse_SPIN0.csr` | Yes — needs KPT |
+| `out_mat_hs` | `0`/`1` | H(k) and S(k) in k-space → `hks1k1_nao.txt`, `sks1k1_nao.txt` (one per k-point) | Yes — needs KPT with multi-k mesh |
+| `out_mat_hs2` | `0`/`1` | H(R) and S(R) in real-space CSR → `data-HR-sparse_SPIN0.csr`, `data-SR-sparse_SPIN0.csr` | Yes — needs KPT |
 | `out_mat_r` | `0`/`1` | Position matrix r(R) in real-space → `data-rR-sparse.csr` | Yes — needs KPT |
 | `out_mat_t` | `0`/`1` | Kinetic matrix T(R) → `data-TR-sparse_SPIN0.csr` | Yes — needs KPT |
-| `get_S` | `0`/`1` | Only compute and output overlap matrix S, skip SCF → `SR.csr` | No — use `gamma_only 1` (single k-point) |
 
-> **`get_S 1` is special**: it skips the full SCF and only computes the overlap matrix. Use `gamma_only 1` (no KPT file needed). Commonly used for basis analysis.
+> **⚠️ `out_mat_hs` vs `out_mat_hs2`**: These are easy to confuse. `out_mat_hs` = **k-space** (one file per k-point). `out_mat_hs2` = **real-space** (CSR sparse format). The naming is counterintuitive — remember "hs2" = R-space.
+
+### `calculation get_s` — overlap matrix only
+
+Use `calculation get_s` (a dedicated calculation type) to extract the overlap matrix S without running a full SCF. Outputs `SR.csr` in the same CSR format as `out_mat_hs2`. Requires KPT file (use `gamma_only 0` for multi-k).
 
 ### Typical INPUT patterns
 
 **run_hsk/** — H(k) and S(k) in k-space:
 ```
-out_mat_hs2 1
+calculation scf
+out_mat_hs 1
 ```
 
 **run_hsr/** — H(R) and S(R) in real-space:
 ```
-out_mat_hs 1
+calculation scf
+out_mat_hs2 1
 ```
 
 **run_get_s/** — overlap matrix only (no SCF):
 ```
-get_S 1
-gamma_only 1
+calculation get_s
 ```
 
 ## ABACUS Output Files
