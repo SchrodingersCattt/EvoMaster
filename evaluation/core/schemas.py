@@ -94,6 +94,8 @@ VerifyLiteral = Literal[
     "stru_file_check",
     # ABACUS INPUT resolution checks
     "abacus_input_check",
+    # ABACUS KPT Line-mode checks
+    "kpt_line_check",
     # VASP INCAR semantic checks
     "vasp_incar_check",
 ]
@@ -345,6 +347,7 @@ class QuestionItem(BaseModel):
             "json_file_artifacts",
             "stru_file_check",
             "abacus_input_check",
+            "kpt_line_check",
             "vasp_incar_check",
         }
         for item in self.scoring_checklist:
