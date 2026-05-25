@@ -106,11 +106,19 @@ The OSS URLs in `reference/dpa_models.md` are a **snapshot** and may rotate. If 
 - **NEB**: Both structures must be relaxed, same atoms in same order. Avoid CIF format for NEB endpoints — CIF writers wrap fractional coordinates back into [0,1). Use POSCAR or XYZ instead.
   - **Interpolation**: Use IDPP for bulk/homogeneous systems. For **hetero-interfaces** (BCC/FCC, grain boundaries, dissimilar lattice junctions), IDPP causes atom overlaps due to density mismatch — use `method="linear"` instead.
   - **Optimizer**: Use FIRE for interface/defect NEB (large initial forces from interpolation). BFGS/LBFGS are fine for bulk NEB with small displacements.
-  - MUST run this MIC check after constructing endpoints, before submitting NEB:
-  ```bash
-  python -c "from ase.io import read; import numpy as np; ini=read('INITIAL'); fin=read('FINAL'); diff=fin.positions-ini.positions; cell=ini.cell.lengths(); diff-=np.round(diff/cell)*cell; md=np.linalg.norm(diff,axis=1).max(); print(f'max_disp={md:.3f} A'); assert md<cell.min()/2, f'MIC FAIL: {md:.2f} A — fix endpoint coords'"
+  - **Endpoint construction**: when building the final state for NEB (e.g., vacancy migration), ALWAYS use MIC displacement to set the migrating atom's final position. Never assign absolute target coordinates directly — IDPP interpolates in Cartesian space and will follow the raw coordinate difference, not the periodic shortest path.
+  ```python
+  # WRONG: final.positions[idx] = target_pos  (raw diff may be 7 Å even if MIC is 2.5 Å)
+  # RIGHT: compute MIC displacement and add to current position
+  disp = target_pos - ini.positions[idx]
+  disp -= np.round(disp / cell_lengths) * cell_lengths
+  final.positions[idx] = ini.positions[idx] + disp
   ```
-  If it fails, the migrating atom's coordinates cross a cell boundary — shift by one lattice vector so the straight-line path is the shortest.
+  - MUST run this displacement check after constructing endpoints, before submitting NEB:
+  ```bash
+  python -c "from ase.io import read; import numpy as np; ini=read('INITIAL'); fin=read('FINAL'); raw=fin.positions-ini.positions; cell=ini.cell.lengths(); mic=raw-np.round(raw/cell)*cell; raw_max=np.linalg.norm(raw,axis=1).max(); mic_max=np.linalg.norm(mic,axis=1).max(); print(f'raw_max={raw_max:.3f} mic_max={mic_max:.3f} A'); assert np.allclose(raw,mic,atol=1e-6), f'PBC WRAP BUG: raw_max={raw_max:.2f} != mic_max={mic_max:.2f} — rebuild final with MIC displacement method above'"
+  ```
+  This catches the case where MIC distance is small but raw coordinates jump across the cell boundary — which causes IDPP to interpolate the long way around.
 - **QHA thermal expansion**: For quasi-harmonic thermal expansion (CTE) calculations, see `reference/qha_workflow.md` — covers PhonopyQHA API, data shapes, Vinet EOS fitting, and known model limitations.
 - **Molecular crystal sublimation**: For sublimation energy of organic crystals, see `reference/molecular_crystal.md` — covers head selection (OMol25), molecule extraction across PBC, and gas-phase pbc=True requirement. **CRITICAL: if E_sub > 5 eV, do NOT switch heads — the issue is molecule extraction or pbc setup.**
 - **Chain outputs**: Use `*_optimized.cif` from optimization as input to subsequent tasks. Save intermediate results under task filenames before starting next step.
