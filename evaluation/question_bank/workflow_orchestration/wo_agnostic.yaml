@@ -551,13 +551,14 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: WO_kinetic_001_20260504
+- id: WO_kinetic_001_20260525
   capability: workflow_orchestration
   domain: agnostic
-  intent: 'Compute graphene phonon dispersion: build structure, calculate force constants,
-    extract Gamma optical maximum.'
-  human_prompt_seed: '计算石墨烯的声子色散关系：构建石墨烯原胞， 计算力常数矩阵（有限位移法或 DFPT），沿 G-M-K-G 路径绘制声子色散， 提取 Gamma
-    点最高光学支频率 (cm-1)。
+  intent: 'Compute graphene phonon dispersion: build structure, calculate force constants
+    with MLIP, extract Gamma optical maximum.'
+  human_prompt_seed: '使用机器学习势函数计算石墨烯的声子色散关系：构建石墨烯原胞，
+    计算力常数矩阵，沿 Γ-M-K-Γ 路径绘制声子色散，
+    提取 Gamma 点最高光学支频率 (cm⁻¹)。
 
     '
   tags:
