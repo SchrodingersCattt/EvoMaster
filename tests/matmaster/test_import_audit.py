@@ -105,7 +105,7 @@ class TestPhase30FullIsolation:
     # 23 violations resolved since Plan 01 (exp.py, playground.py, tools/, integration/).
     KNOWN_VIOLATIONS: frozenset[str] = frozenset(
         {
-            "matmaster/skills/playground-skills/retrieve-structure/scripts/fetch_web_structure.py:L30",
+            "matmaster/skills/retrieve-structure/scripts/fetch_web_structure.py:L30",
         }
     )
 

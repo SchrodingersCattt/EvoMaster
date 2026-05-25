@@ -1,6 +1,6 @@
 ---
 name: retrieve-structure
-description: "Obtain correct crystal structures for known materials — from databases, literature, or generation tools. Use this (not manual construction) whenever the material is a known compound and you are not given explicit Wyckoff coordinates or lattice parameters by the user. Also handles format conversion and post-download validation."
+description: "Obtain correct crystal structures for known materials from databases or generation tools. Use instead of manual construction when the material is known and no explicit Wyckoff/lattice parameters are given."
 skill_type: operator
 depends_on: mcp-mat-struct-db, mcp-mat-doc
 ---
