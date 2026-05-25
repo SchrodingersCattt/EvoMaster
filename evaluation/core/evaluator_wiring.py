@@ -891,6 +891,12 @@ def check_abacus_input_from_evidence(
     allowed = cfg.get("allowed")
     if not filename or not check_type:
         return False, "abacus_input_check: need 'filename' and 'check' in ref"
+    kwargs: dict[str, object] = {}
+    if "kspacing_range" in cfg:
+        r = cfg["kspacing_range"]
+        kwargs["kspacing_range"] = (float(r[0]), float(r[1]))
+    if "min_kpoints" in cfg:
+        kwargs["min_kpoints"] = int(cfg["min_kpoints"])
     return check_abacus_input(
         ws,
         filename=filename,
@@ -898,6 +904,7 @@ def check_abacus_input_from_evidence(
         expected=expected,
         allowed=allowed,
         workspace_resolve=_workspace_resolve_from_ref(ref),
+        **kwargs,
     )
 
 

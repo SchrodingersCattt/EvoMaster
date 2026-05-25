@@ -1198,7 +1198,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_017_20260515
+- id: IG_abacus_017_20260525
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS PBE+U LCAO cell-relax input directories for comparing rocksalt and square-planar NiO phases.
@@ -1293,12 +1293,12 @@ questions:
       - key: relax_nmax
         min: 20
         max: 300
-      - key: kspacing
-        min: 0.04
-        max: 0.15
-        if_component_count_in:
-        - 1
-        - 3
+  - key: must_rocksalt_kpoint_density
+    value:
+      filename: nio_rocksalt/INPUT
+      check: kpoint_density
+      kspacing_range: [0.04, 0.15]
+      min_kpoints: 4
   - key: must_square_numerics
     value:
       filename: nio_square_planar/INPUT
@@ -1312,12 +1312,12 @@ questions:
       - key: relax_nmax
         min: 20
         max: 300
-      - key: kspacing
-        min: 0.04
-        max: 0.15
-        if_component_count_in:
-        - 1
-        - 3
+  - key: must_square_kpoint_density
+    value:
+      filename: nio_square_planar/INPUT
+      check: kpoint_density
+      kspacing_range: [0.04, 0.15]
+      min_kpoints: 4
   - key: must_rocksalt_stru_species_orbitals
     value:
       filename: nio_rocksalt/STRU
@@ -1412,14 +1412,24 @@ questions:
     verify: text_file_regex
     weight: 0.8
   - id: must_rocksalt_numerics
-    criterion: '[Must] Rocksalt INPUT uses reasonable LCAO DFT+U cell-relax numerical controls, including ecutwfc, scf_thr, force/stress thresholds, relax_nmax, and kspacing.'
+    criterion: '[Must] Rocksalt INPUT uses reasonable LCAO DFT+U cell-relax numerical controls (ecutwfc, scf_thr, relax_nmax).'
     axis: correctness
     verify: text_file_numeric_range
     weight: 0.8
+  - id: must_rocksalt_kpoint_density
+    criterion: '[Must] Rocksalt INPUT defines adequate k-point sampling via kspacing or KPT file.'
+    axis: correctness
+    verify: abacus_input_check
+    weight: 0.8
   - id: must_square_numerics
-    criterion: '[Must] Square-planar INPUT uses reasonable LCAO DFT+U cell-relax numerical controls, including ecutwfc, scf_thr, force/stress thresholds, relax_nmax, and kspacing.'
+    criterion: '[Must] Square-planar INPUT uses reasonable LCAO DFT+U cell-relax numerical controls (ecutwfc, scf_thr, relax_nmax).'
     axis: correctness
     verify: text_file_numeric_range
+    weight: 0.8
+  - id: must_square_kpoint_density
+    criterion: '[Must] Square-planar INPUT defines adequate k-point sampling via kspacing or KPT file.'
+    axis: correctness
+    verify: abacus_input_check
     weight: 0.8
   - id: must_rocksalt_stru_species_orbitals
     criterion: '[Must] Rocksalt STRU uses APNS Ni/O pseudopotential and orbital names and valid structure sections.'
