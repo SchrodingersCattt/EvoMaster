@@ -158,10 +158,9 @@ questions:
     (≥200 ps) and verify MSD linearity before reporting D.
   human_prompt_seed: "使用 DPA 机器学习力场对 1 mol/L LiPF₆/EC 液态电解液体系进行分子动力学模拟，\
     计算 300K 下 Li⁺ 的自扩散系数。\n\n要求：\n- 体系约 400-600 原子（4-6 个 LiPF₆ + 对应数量 EC 分子）\n\
-    - NVT 系综，300K\n- 报告 Li⁺ 自扩散系数（单位 cm²/s）\n- 给出 MSD 曲线的线性区间判据\n"
+    - NVT 系综，300K\n- 报告 Li⁺ 自扩散系数（单位 cm²/s）\n"
   tags:
   - code_mlip
-  - char_transport
   source_session: 5f7f7485cce64440ba5ce8b1fd2db4fc
   data_files: []
   reference_answers:
