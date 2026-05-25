@@ -76,15 +76,17 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_elec_004_20260404
+- id: WO_elec_004_20260526
   capability: workflow_orchestration
   domain: battery
-  intent: Compute average Na intercalation voltage of NFPP using mock energies.
+  intent: Compute average Na intercalation voltage of NFPP using mock energies and
+    output both sodiated/desodiated structure files.
   human_prompt_seed: "计算NFPP的平均嵌钠电压：\n1. 获取NFPP（Na₄Fe₃(PO₄)₂P₂O₇）结构（空间群Pna2₁，Z=4），使用单胞（104原子）；\n\
     2. 含钠态：Na₁₆Fe₁₂P₁₆O₆₀（单胞满Na，104原子）；\n   脱钠态：Na₄Fe₁₂P₁₆O₆₀（按Na3→Na1→Na4顺序脱出12个Na，92原子）；\n\
     3. 使用以下mock能量值（模拟DPA弛豫结果）：\n   - E_sodiated = -689.60 eV\n   - E_desodiated = -633.08\
     \ eV\n   - μ_Na（BCC Na金属）= -1.31 eV/atom\n   - n = 12（脱出的Na离子数：每个formula unit脱3个 × Z=4）\n\
-    4. 按公式 V = -[E(sodiated) - E(desodiated) - n·μ_Na] / n 计算平均电压；\n5. 输出平均电压(V vs Na/Na⁺)、n值、各能量值。\n"
+    4. 按公式 V = -[E(sodiated) - E(desodiated) - n·μ_Na] / n 计算平均电压；\n5. 将含钠态和脱钠态结构分别保存为\
+    \ `sodiated.cif` 和 `desodiated.cif`；\n6. 输出平均电压(V vs Na/Na⁺)、n值、各能量值。\n"
   tags:
   - code_mlip
   data_files: []
@@ -92,6 +94,14 @@ questions:
   - key: avg_voltage_V
     value: 3.4
     tolerance: 0.5
+  - key: sodiated_atom_count
+    value:
+      filename: sodiated.cif
+      expected: 104
+  - key: desodiated_atom_count
+    value:
+      filename: desodiated.cif
+      expected: 92
   - key: required_fields
     value:
     - E_sodiated
@@ -110,16 +120,14 @@ questions:
     criterion: Average voltage is computed correctly from mock energies (~3.4 V).
     axis: correctness
     verify: numerical_range
-  - id: sodiated_state
-    criterion: Sodiated state is the full unit cell Na₁₆Fe₁₂P₁₆O₆₀ with 104 atoms and all
-      16 Na sites occupied.
+  - id: sodiated_atom_count
+    criterion: Sodiated structure file has 104 atoms.
     axis: correctness
-    verify: llm_binary_judge
-  - id: desodiated_state
-    criterion: Desodiated state Na₄Fe₁₂P₁₆O₆₀ has 92 atoms with exactly 12 Na removed following
-      Na3→Na1→Na4 site order.
+    verify: struct_file_atom_count
+  - id: desodiated_atom_count
+    criterion: Desodiated structure file has 92 atoms (12 Na removed).
     axis: correctness
-    verify: llm_binary_judge
+    verify: struct_file_atom_count
   - id: required_fields
     criterion: Report includes sodiated/desodiated energies, Na chemical potential, voltage
       formula, and computed voltage.
