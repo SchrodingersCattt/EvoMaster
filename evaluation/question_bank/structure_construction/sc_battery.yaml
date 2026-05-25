@@ -233,6 +233,23 @@ questions:
   reference_answers:
   - key: cif_artifact
     value: NFPP_Al_doped.cif
+  - key: correct_supercell_composition
+    value:
+      filename: NFPP_Al_doped.cif
+      must_contain_elements: [Na, Fe, Al, P, O]
+      must_not_contain_elements: []
+  - key: correct_atom_count
+    value:
+      filename: NFPP_Al_doped.cif
+      expected: 208
+      tolerance: 13
+  - key: al_o_distance_reasonable
+    value:
+      filename: NFPP_Al_doped.cif
+      element_pair: [Al, O]
+      min_distance: 1.4
+      max_distance: 2.2
+      n_neighbors: 4
   - key: turn_budget
     value:
       max: 15
@@ -247,21 +264,12 @@ questions:
       NFPP supercell with one P→Al substitution (Na32Fe24Al1P31O120).'
     axis: correctness
     verify: struct_file_composition
-    verify_params:
-      filename: NFPP_Al_doped.cif
-      must_contain_elements: [Na, Fe, Al, P, O]
-      must_not_contain_elements: []
     weight: 1.0
   - id: correct_atom_count
     criterion: '[Must] The doped supercell has approximately 208 atoms (2×104 from
-      the unit cell). Acceptable range: 195-220. Structures with < 100 atoms
-      indicate the 2×1×1 supercell was not properly constructed.'
+      the unit cell). Acceptable range: 195-221.'
     axis: correctness
     verify: struct_file_atom_count
-    verify_params:
-      filename: NFPP_Al_doped.cif
-      min_atoms: 195
-      max_atoms: 220
     weight: 1.5
   - id: po4_site_discrimination
     criterion: '[Must] Agent distinguishes PO₄ (isolated tetrahedral) sites from
@@ -276,12 +284,6 @@ questions:
       (1.4-2.2 Å). Distances < 1.0 Å or > 3.0 Å indicate an unphysical structure.'
     axis: correctness
     verify: struct_file_bond_range
-    verify_params:
-      filename: NFPP_Al_doped.cif
-      element_pair: [Al, O]
-      min_distance: 1.4
-      max_distance: 2.2
-      n_neighbors: 4
     weight: 2.5
   - id: retrieves_from_database
     criterion: Agent retrieves the NFPP structure from struct_db (using simplified
