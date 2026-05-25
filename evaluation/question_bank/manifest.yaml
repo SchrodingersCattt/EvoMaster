@@ -149,7 +149,7 @@ banks:
 - path: workflow_orchestration/wo_battery.yaml
   capability: workflow_orchestration
   domain: battery
-  questions: 2
+  questions: 3
 - path: workflow_orchestration/wo_catalysis.yaml
   capability: workflow_orchestration
   domain: catalysis
@@ -193,7 +193,7 @@ banks:
 - path: structure_construction/sc_battery.yaml
   capability: structure_construction
   domain: battery
-  questions: 4
+  questions: 5
 - path: structure_construction/sc_polymer.yaml
   capability: structure_construction
   domain: polymer
