@@ -3694,6 +3694,95 @@ questions:
     criterion: Wall-clock time within budget.
     axis: efficiency
     verify: duration_budget
+- id: WO_polymer_melt_001_20260525
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Build and equilibrate a long-chain polymer melt using the Kremer-Grest
+    bead-spring model in LAMMPS. Agent must choose a simulation box large
+    enough relative to chain end-to-end distance (L > 2×Re) to avoid
+    finite-size artifacts from chains interacting with their periodic images.
+  human_prompt_seed: "使用 LAMMPS Kremer-Grest 珠弹簧模型构建长链线性聚合物熔体\
+    （链长 N=200，密度 ρ=0.85σ⁻³），完成平衡化。\n报告末端距 Re 和回转半径 Rg。\n\
+    输出平衡后结构 `polymer_melt.data`。\n"
+  tags:
+  - eng_lammps
+  source_session: 03fa120fa6ae4cdda38f49641565c4fa
+  data_files: []
+  reference_answers:
+  - key: output_artifact
+    value: polymer_melt.data
+  - key: turn_budget
+    value:
+      max: 40
+  - key: duration_budget
+    value:
+      max: 14400000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `polymer_melt.data` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: box_size_vs_re
+    criterion: The simulation box linear dimension L must satisfy L > 2×Re
+      where Re is the chain end-to-end distance (Re ≈ N^0.5 × b ≈ 14σ for
+      N=200 Kremer-Grest). A box with L < 2×Re (~28σ) means chains interact
+      with their own periodic images, producing unphysical correlations.
+      Agent should use enough chains to fill a box of L ≥ 30σ (typically
+      ≥200 chains for N=200 at ρ=0.85).
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: slow_pushoff_or_equivalent
+    criterion: Agent uses a soft-potential push-off stage (pair_style soft)
+      or equivalent method to remove initial overlaps before switching to
+      the FENE+LJ potential. Direct FENE without push-off causes bond
+      breakage.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.5
+  - id: fene_potential_correct
+    criterion: The production potential uses FENE bonds (bond_style fene)
+      with standard Kremer-Grest parameters (K=30, R0=1.5, epsilon=1,
+      sigma=1) and LJ pair interactions (pair_style lj/cut with
+      cutoff ~2.5σ or WCA at 2^(1/6)σ).
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: equilibration_verified
+    criterion: Agent verifies equilibration by checking at least one of
+      mean-square internal distances R2(n) ~ n scaling, Rg convergence
+      over time, or MSD exceeding Rg2 (chains diffused their own size).
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: reports_re_rg
+    criterion: Agent reports numerical values for end-to-end distance Re
+      and radius of gyration Rg. For N=200 Kremer-Grest at ρ=0.85,
+      expected Re ≈ 12-16σ and Rg ≈ 5-7σ.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: correct_lammps_binary
+    criterion: '[Platform] Agent uses the correct LAMMPS binary name and
+      invocation for the chosen Bohrium image. For lammps-agent image, the
+      binary is `lmp`; for lammps:29Sep2021, it is `lmp_mpi` with mpirun.
+      Agent must not blindly guess binary names — should either follow
+      skill docs or probe the image first.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
 - id: WO_gromacs_cnt_001_20260525
   capability: workflow_orchestration
   domain: agnostic
