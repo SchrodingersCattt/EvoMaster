@@ -89,7 +89,7 @@ banks:
 - path: input_generation/ig_agnostic_orca.yaml
   capability: input_generation
   domain: agnostic
-  questions: 2
+  questions: 3
 - path: safety_refusal/sf_agnostic.yaml
   capability: safety_refusal
   domain: agnostic
