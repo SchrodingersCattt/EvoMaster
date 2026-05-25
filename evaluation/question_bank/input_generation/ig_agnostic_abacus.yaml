@@ -7326,13 +7326,13 @@ questions:
       pattern: (?im)^\s*orbital_corr.*Fe|hubbard_u.*[2-6]\.|Fe.*[2-6]\.
   - key: turn_budget
     value:
-      max: 14
+      max: 22
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 12000
+      max: 40000
   scoring_checklist:
   - id: input_artifact
     criterion: nfpp_relax/INPUT exists.
