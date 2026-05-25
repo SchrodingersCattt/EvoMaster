@@ -1205,7 +1205,6 @@ questions:
   human_prompt_seed: "我想用 ABACUS 比较 NiO 两种候选结构的相对稳定性：一个是常规岩盐相，另一个是 Ni 处于平面四配位环境的变形相。请先只准备后续计算需要的输入文件。\n计算方法统一采用 LCAO 基组；两套输入应使用一致的计算精度、赝势/轨道来源和 k 点采样策略，便于之后做能量比较。\n这一步应先完成可变晶胞的结构优化：同时优化晶胞参数和原子位置。\n工作区已经提供了 `POSCAR_rocksalt` 和 `POSCAR_square_planar`，请在当前目录下分别建立 `nio_rocksalt/` 和 `nio_square_planar/`，把对应 POSCAR 转写为 ABACUS `STRU`，并写入对应的 ABACUS `INPUT`。不要运行计算，也不要提交任务。"
   tags:
   - eng_abacus
-  - struct_transform
   data_files:
   - key: rocksalt_poscar
     path: data/IG_abacus_017_20260512/POSCAR_rocksalt
@@ -2092,7 +2091,6 @@ questions:
   human_prompt_seed: "工作区中提供了 Al fcc(100) 的体相与两种厚度 slab 结构（bulk_al_fcc.stru、slab_al_fcc100_5l.stru、slab_al_fcc100_7l.stru）。\n\n请为表面能收敛测试准备 ABACUS 平面波输入和 K 点文件。将结果写入当前目录：`INPUT_bulk`、`INPUT_slab5`、`INPUT_slab7`、`KPT_bulk`、`KPT_slab`。\n"
   tags:
   - eng_abacus
-  - struct_surface
   data_files:
   - key: bulk_al_fcc
     path: data/IG_abacus_005_20260406/bulk_al_fcc.stru
