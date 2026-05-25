@@ -1891,3 +1891,90 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
+- id: SA_molcrys_cn_001_20260525
+  capability: scientific_analysis
+  domain: agnostic
+  scope: knowledge
+  intent: Identify independent molecular species in a molecular crystal CIF and
+    compute the coordination number of one species around another using
+    molecule-center-of-mass distances rather than raw atomic distances.
+  human_prompt_seed: "工作区中有 `HPEP.cif`。请完成以下分析：\n\
+    1. 识别晶格中所有独立的分子组分（种类、化学式、数量）；\n\
+    2. 计算最小有机阳离子到最近邻阴离子的第一配位壳层配位数；\n\
+    3. 输出结果到 `coordination_report.json`，格式：\n\
+    \   `{\"molecule_types\": [...], \"cation_anion_coordination_number\": N}`\n"
+  tags:
+  - struct_molcrys
+  source_session: 55ccbe48163247d391f93c270bf26bb2
+  data_files:
+  - key: hpep_cif
+    path: data/SA_molcrys_cn_001/HPEP.cif
+    oss_url: ''
+    description: Molecular crystal CIF (P21/c, Z=4) containing ethylenediammonium
+      (EA2+), homopiperazinium cation, and perchlorate (ClO4-) ions.
+  reference_answers:
+  - key: output_artifact
+    value: coordination_report.json
+  - key: molecule_type_count
+    value: 3
+    tolerance: 0
+    description: Three independent molecular species (ClO4-, EA2+, homopiperazinium).
+  - key: ea_cn
+    value: 10
+    tolerance: 1
+    description: EA2+ is surrounded by ~10 ClO4- in first coordination shell.
+  - key: turn_budget
+    value:
+      max: 20
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `coordination_report.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: uses_graph_molecule_identification
+    criterion: Agent identifies molecules using bond-graph connectivity analysis
+      (e.g., pymatgen MoleculeGraph, networkx connected components on bond graph,
+      or equivalent). Must NOT rely on manual atom-type heuristics or assume
+      molecule identity from formula alone without structural decomposition.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: uses_com_for_coordination
+    criterion: Coordination number is computed using molecule center-of-mass (COM)
+      distances or centroid distances between molecular units, NOT raw atom-atom
+      distances. Atom-atom distance analysis would give meaningless CN values for
+      molecular crystals since each molecule contains many atoms at varying
+      distances.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.5
+  - id: correct_molecule_count
+    criterion: Agent identifies exactly 3 independent molecular species in the
+      asymmetric unit (perchlorate anion ClO4-, ethylenediammonium EA2+, and a
+      larger organic cation). Minor naming variations are acceptable.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: correct_cn_value
+    criterion: The reported EA-ClO4 coordination number is approximately 10
+      (range 9-11 acceptable depending on cutoff distance). This corresponds
+      to the bicapped dodecahedral geometry described in literature.
+    axis: correctness
+    verify: json_file_numeric_range
+    verify_params:
+      filename: coordination_report.json
+      json_path: cation_anion_coordination_number
+      min_value: 9
+      max_value: 11
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
