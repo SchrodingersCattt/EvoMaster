@@ -364,17 +364,16 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: PIG_abacus_bader_001_20260524
+- id: PIG_abacus_bader_001_20260525
   capability: input_generation
   domain: agnostic
   priority: P1
   intent: Test ABACUS input generation for Bader charge analysis with platform submission.
-    Agent must prepare ABACUS inputs (INPUT/STRU/KPT with out_chg=1) and submit to
-    Bohrium rather than attempting local installation or execution. From real trajectory
-    where agent spent 300s+ trying conda/pip/mamba install ABACUS locally.
+    Agent must prepare ABACUS inputs (INPUT/STRU/KPT with out_chg=1) in the specified
+    output directory and submit to Bohrium rather than attempting local installation.
   human_prompt_seed: '工作区中有 Al₂O₃ 的 CIF 文件 `Al2O3.cif`（刚玉结构，R-3c，10原子）。
     请用 ABACUS 对其做 SCF 计算并输出电荷密度，我后续要做 Bader 电荷分析看 Al-O 之间的电荷转移。
-    帮我把输入准备好并跑一下。'
+    帮我把输入文件放在 `abacus_bader/` 目录下并提交运行。'
   tags:
   - eng_abacus
   data_files:
@@ -384,40 +383,40 @@ questions:
     description: Al2O3 corundum CIF (R-3c, 10 atoms).
   reference_answers:
   - key: input_artifact
-    value: INPUT
+    value: abacus_bader/INPUT
   - key: stru_artifact
-    value: STRU
+    value: abacus_bader/STRU
   - key: must_out_chg
     value:
-      filename: INPUT
+      filename: abacus_bader/INPUT
       pattern: (?im)out_chg\s+(1|true|T)
       flags: im
   - key: must_scf
     value:
-      filename: INPUT
+      filename: abacus_bader/INPUT
       pattern: (?im)calculation\s+scf
       flags: im
   - key: must_pseudo_dir
     value:
-      filename: INPUT
+      filename: abacus_bader/INPUT
       pattern: (?im)pseudo_dir\s+\S+
       flags: im
   - key: must_al_and_o_species
     value:
-      filename: STRU
-      pattern: (?im)(Al.*O|O.*Al)
-      flags: im
+      filename: abacus_bader/STRU
+      check: species_elements
+      expected: [Al, O]
   - key: turn_budget
     value:
-      max: 15
+      max: 35
   scoring_checklist:
   - id: input_artifact
-    criterion: INPUT file written to workspace.
+    criterion: INPUT file written to abacus_bader/ directory.
     axis: correctness
     verify: artifact_exists
     weight: 1.0
   - id: stru_artifact
-    criterion: STRU file written to workspace.
+    criterion: STRU file written to abacus_bader/ directory.
     axis: correctness
     verify: artifact_exists
     weight: 1.0
@@ -438,9 +437,9 @@ questions:
     verify: text_file_regex
     weight: 1.0
   - id: must_al_and_o_species
-    criterion: '[Must] STRU contains both Al and O atomic species.'
+    criterion: '[Must] STRU ATOMIC_SPECIES section contains both Al and O.'
     axis: correctness
-    verify: text_file_regex
+    verify: stru_file_check
     weight: 1.0
   - id: no_local_install
     criterion: '[Must] Agent does NOT attempt to install ABACUS locally (no conda

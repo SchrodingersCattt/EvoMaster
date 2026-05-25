@@ -355,6 +355,31 @@ def check_stru_file(
             return True, f"{fpath.name}: species_count={actual_count}"
         return False, f"{fpath.name}: species_count={actual_count}, expected {expected}"
 
+    elif check == "species_elements":
+        species_section = re.search(
+            r"ATOMIC_SPECIES\s*\n(.*?)(?=\n\s*(?:NUMERICAL_ORBITAL|LATTICE_CONSTANT|LATTICE_VECTORS|\Z))",
+            content,
+            re.DOTALL,
+        )
+        if not species_section:
+            return False, f"{fpath.name}: ATOMIC_SPECIES section not found"
+        actual_elements = [
+            line.strip().split()[0]
+            for line in species_section.group(1).strip().split("\n")
+            if line.strip()
+        ]
+        expected_elements = expected if isinstance(expected, list) else []
+        missing = [e for e in expected_elements if e not in actual_elements]
+        if not missing:
+            return True, (
+                f"{fpath.name}: ATOMIC_SPECIES contains all expected elements "
+                f"{expected_elements} (found: {actual_elements})"
+            )
+        return False, (
+            f"{fpath.name}: ATOMIC_SPECIES missing elements {missing} "
+            f"(expected: {expected_elements}, found: {actual_elements})"
+        )
+
     elif check == "total_atoms":
         total = 0
         lines = content.split("\n")
