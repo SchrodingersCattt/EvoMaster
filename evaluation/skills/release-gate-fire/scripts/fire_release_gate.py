@@ -4,7 +4,7 @@ Each case is POSTed to the stream API as an independent session.
 The worker runs independently — we close the connection after confirming HTTP 200.
 
 Usage:
-    uv run python evaluation/skills/release-gate-fire/scripts/fire_release_gate.py --env test --user-id 110680
+    uv run python evaluation/skills/release-gate-fire/scripts/fire_release_gate.py --env test
     uv run python evaluation/skills/release-gate-fire/scripts/fire_release_gate.py --env uat --cases rg_01,rg_05
     uv run python evaluation/skills/release-gate-fire/scripts/fire_release_gate.py --env test --directory /share/eval/my_run
 """

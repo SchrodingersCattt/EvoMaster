@@ -47,7 +47,7 @@ Body:
     "mode": "direct",
     "model": "global.anthropic.claude-opus-4-6-v1",
     "directory": "<grouping directory>",
-    "bohrium_project_id": 12791
+    "bohrium_project_id": "<from .env.{env}>"
   }
 Response: SSE stream (event: ag-ui, data: JSON)
 
