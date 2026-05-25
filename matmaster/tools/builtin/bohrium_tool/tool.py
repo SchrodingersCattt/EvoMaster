@@ -276,9 +276,10 @@ class BohriumTool(BuiltinTool):
             'prepend "cd <path> &&" or any directory change. '
             'cmd MUST end with "> log 2>&1" (auto-appended if missing).\n'
             '- **poll**: check job status with built-in waiting (up to ~60s). '
-            'Internally polls the API every few seconds and returns as soon as the job '
-            'finishes or fails. If still running after ~60s, returns the latest status. '
-            'Call poll again to continue waiting. Does not download artifacts.\n'
+            'Internally polls the API every few seconds and returns as soon '
+            'as the job finishes or fails. If still running after ~60s, '
+            'returns the latest status. Call poll again to continue waiting. '
+            'Does not download artifacts.\n'
             '- **download**: download artifacts for a finished or failed job into result_dir. '
             'Use only after poll reports Finished or Failed. Requires result_dir; '
             'retrieves logs and artifacts for analysis.\n'
@@ -340,8 +341,9 @@ class BohriumTool(BuiltinTool):
         arguments: dict[str, Any],
         registry: JobRegistry | None,
     ) -> str | ToolResult:
-        """Internal short-polling loop: query API every _POLL_INTERVAL seconds, up to _POLL_MAX_WAIT.
+        """Internal short-polling loop.
 
+        Queries the API every _POLL_INTERVAL seconds, up to _POLL_MAX_WAIT.
         Returns as soon as the job reaches a non-running state, or after
         the max wait window expires (returning the latest Running status).
         """
@@ -357,7 +359,9 @@ class BohriumTool(BuiltinTool):
             try:
                 result = await asyncio.to_thread(self._execute, arguments)
             except Exception as exc:
-                self.logger.error("Tool %s poll failed: %s", self.name, exc, exc_info=True)
+                self.logger.error(
+                    "Tool %s poll failed: %s", self.name, exc, exc_info=True
+                )
                 return f"Error: {exc}"
 
             normalized = normalize_tool_result(result)
@@ -374,8 +378,13 @@ class BohriumTool(BuiltinTool):
                 return normalized
             status_str = str(data.get("status", "")).strip().lower()
             if status_str not in (
-                "running", "submitted", "pending",
-                "prepared", "scheduling", "uploading", "wait",
+                "running",
+                "submitted",
+                "pending",
+                "prepared",
+                "scheduling",
+                "uploading",
+                "wait",
             ):
                 return normalized
 
