@@ -5441,13 +5441,13 @@ questions:
     value: DeePKS per 21_deepks—PW gen_bessel for projectors; LCAO SCF with deepks_scf and deepks_model path to a .ptg file.
   - key: turn_budget
     value:
-      max: 16
+      max: 22
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 22000
+      max: 35000
   scoring_checklist:
   - id: bessel_input_artifact
     criterion: run_pw_h2o_gen_bessel/INPUT exists.
