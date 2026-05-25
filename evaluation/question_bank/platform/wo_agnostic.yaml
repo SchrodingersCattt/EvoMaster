@@ -828,3 +828,78 @@ questions:
     criterion: Wall-clock time within budget.
     axis: efficiency
     verify: duration_budget
+- id: PWO_qe_bands_001_20260526
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: End-to-end QE band structure calculation for Si submitted to Bohrium.
+    Agent must perform SCF then bands along high-symmetry path, correctly
+    locate pseudopotential files in the QE Docker image, and report band gap.
+  human_prompt_seed: "使用 Quantum ESPRESSO 计算 Si 的能带结构（金刚石结构，a=5.43 Å）。\n\
+    沿 Γ-X-L-Γ 高对称路径计算能带，报告带隙类型和带隙值。\n"
+  tags:
+  - eng_qe
+  source_session: 2f6940567d1e4d3e936c253e3279afd5
+  data_files: []
+  reference_answers:
+  - key: gap_type
+    value: indirect
+  - key: gap_value_eV
+    value: 0.55
+    tolerance: 0.3
+    description: DFT-PBE Si band gap is ~0.5-0.7 eV (underestimates expt 1.12 eV).
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: two_step_workflow
+    criterion: Agent performs SCF calculation first, then a non-self-consistent bands
+      calculation along the high-symmetry k-path. Both steps must use pw.x.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.5
+  - id: pseudopotential_resolved
+    criterion: Agent correctly locates and uses a Si pseudopotential file from the
+      QE Docker image filesystem (not a broken download or 404 file). The
+      pseudo_dir in the input must point to a valid directory containing the PP.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: kpath_highsym
+    criterion: The bands calculation uses a high-symmetry k-path that includes at
+      least Gamma, X, and L points for the FCC Brillouin zone.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: gap_type_indirect
+    criterion: Agent correctly identifies Si as having an indirect band gap
+      (VBM at Gamma, CBM near X).
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: gap_value_reasonable
+    criterion: Reported band gap is in the DFT-PBE range for Si (0.4-0.8 eV).
+      Values outside this range indicate a calculation error.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: submitted_to_bohrium
+    criterion: '[Platform] Calculation is submitted to Bohrium using the QE image,
+      not run locally.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
