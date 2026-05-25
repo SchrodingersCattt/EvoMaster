@@ -44,6 +44,7 @@ from evaluation.validators.structure_molcrys import (
     verify_molecular_slab_layer_scaling,
 )
 from evaluation.validators.text_file import (
+    check_csv_row_count,
     check_text_file_contains_all,
     check_text_file_excludes_all,
     check_text_file_kpt_path,
@@ -788,6 +789,24 @@ def check_text_file_regex_absent_from_evidence(
     if "regex not matched" in reason:
         return True, reason.replace("regex not matched", "regex correctly absent")
     return True, f"regex absent (file issue: {reason})"
+
+
+def check_csv_row_count_from_evidence(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    min_rows = int(cfg["min"]) if "min" in cfg else None
+    max_rows = int(cfg["max"]) if "max" in cfg else None
+    return check_csv_row_count(
+        ws,
+        filename=str(cfg.get("filename", "")),
+        min_rows=min_rows,
+        max_rows=max_rows,
+        workspace_resolve=_workspace_resolve_from_ref(ref),
+    )
 
 
 def check_text_file_numeric_range_from_evidence(

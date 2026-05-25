@@ -83,8 +83,8 @@ questions:
   - key: min_data_rows
     value:
       filename: ec_fluorinated.csv
-      pattern: '^.+,.+,\d+\r?\n.+,.+,\d+\r?\n.+,.+,\d+\r?\n.+,.+,\d+'
-      flags: m
+      min: 4
+      max: 10
   - key: has_mono_f
     value:
       filename: ec_fluorinated.csv
@@ -113,10 +113,10 @@ questions:
     axis: correctness
     verify: text_file_contains_all
   - id: min_data_rows
-    criterion: CSV contains at least 4 data rows (minimum unique derivatives from
-      symmetry deduplication).
+    criterion: CSV contains 4-10 data rows (unique derivatives from symmetry
+      deduplication).
     axis: correctness
-    verify: text_file_regex
+    verify: csv_row_count
   - id: has_mono_f
     criterion: CSV contains at least one mono-fluorinated derivative (n_fluorine=1).
     axis: correctness

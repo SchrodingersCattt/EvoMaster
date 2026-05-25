@@ -512,3 +512,40 @@ def check_text_file_kpt_path(
         True,
         f"{fpath.name}: matched required points {points} with tol={tol}, indices={indices}",
     )
+
+
+def check_csv_row_count(
+    workspace_dir: str | Path,
+    *,
+    filename: str,
+    min_rows: int | None = None,
+    max_rows: int | None = None,
+    workspace_resolve: str = "recursive",
+) -> tuple[bool, str]:
+    """Check that a CSV file has a data-row count within [min_rows, max_rows].
+
+    Skips the first line (header). Blank lines are ignored.
+    """
+    root = Path(workspace_dir)
+    fpath = _resolve_file(root, filename, workspace_resolve=workspace_resolve)
+    if fpath is None:
+        return False, f"no file matching {filename!r} in {root}"
+    try:
+        lines = fpath.read_text(encoding="utf-8").splitlines()
+    except Exception as exc:
+        return False, f"failed reading {fpath.name}: {exc}"
+
+    data_lines = [ln for ln in lines[1:] if ln.strip()]
+    count = len(data_lines)
+
+    if min_rows is not None and count < min_rows:
+        return False, f"{fpath.name}: row_count={count}, expected >= {min_rows}"
+    if max_rows is not None and count > max_rows:
+        return False, f"{fpath.name}: row_count={count}, expected <= {max_rows}"
+
+    bounds = []
+    if min_rows is not None:
+        bounds.append(f">= {min_rows}")
+    if max_rows is not None:
+        bounds.append(f"<= {max_rows}")
+    return True, f"{fpath.name}: row_count={count}, expected {' and '.join(bounds)}"
