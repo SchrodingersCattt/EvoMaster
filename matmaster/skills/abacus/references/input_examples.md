@@ -43,8 +43,11 @@ Always include **universal baseline**: `calculation`, `basis_type`, `ntype`, `ec
 | `mixing_type` | Use case | `mixing_beta` range | Notes |
 |---------------|----------|---------------------|-------|
 | `broyden` | Default, metals, non-magnetic | 0.7–0.8 | Fast convergence |
-| `pulay` | Magnetic / DFT+U systems | 0.4–0.6 | Add `mixing_ndim 20`, `mixing_gg0 1.5` |
+| `pulay` | Magnetic / DFT+U (small systems, <20 atoms) | 0.4–0.6 | Add `mixing_ndim 20`, `mixing_gg0 1.5` |
+| `pulay` | **Large magnetic systems (>30 atoms, DFT+U)** | **0.01–0.05** | See below |
 | `plain` | Debugging / baseline comparison | 0.3–0.4 | Slowest but most stable |
+
+> **⚠️ Large magnetic/DFT+U systems (>30 atoms)**: Use very conservative `mixing_beta 0.01–0.05` to prevent charge sloshing. Also add `mixing_beta_mag 1.6` (separate magnetic moment mixing rate) and increase `scf_nmax` to 200+ since convergence is slow. Without these, SCF will oscillate indefinitely for systems like iron phosphates, transition-metal oxides, etc.
 
 > **Rule**: When setting `mixing_type`, ALWAYS explicitly set `mixing_beta` in the same INPUT. Never rely on the default — it may not converge for your system.
 > When comparing mixing strategies (e.g. broyden vs plain), each INPUT must have its own `mixing_type` + `mixing_beta` pair.
