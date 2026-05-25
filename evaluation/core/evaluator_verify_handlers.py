@@ -22,6 +22,7 @@ from .evaluator_struct_helpers import (
 from .evaluator_wiring import check_md_submit_structure_min_dist
 from .evaluator_wiring import (
     check_abacus_input_from_evidence,
+    check_kpt_line_from_evidence,
     check_answer_json_numeric_from_ref,
     check_checkcif_alerts,
     check_duration_budget,
@@ -191,6 +192,7 @@ for _name, _fn in [
     ("json_file_artifacts", check_json_file_artifacts),
     ("stru_file_check", check_stru_file_from_evidence),
     ("abacus_input_check", check_abacus_input_from_evidence),
+    ("kpt_line_check", check_kpt_line_from_evidence),
     ("vasp_incar_check", check_vasp_incar_from_evidence),
 ]:
     BinaryEvaluator._VERIFY_REGISTRY[_name] = (_evidence_ref_handler(_fn), True)

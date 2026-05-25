@@ -6,6 +6,7 @@ from typing import Any
 
 from evaluation.validators.abacus_input import check_abacus_input
 from evaluation.validators.answer_text import check_answer_json_numeric
+from evaluation.validators.kpt_line import check_kpt_line
 from evaluation.validators.budget import check_duration_budget as _check_duration_budget
 from evaluation.validators.budget import check_token_budget as _check_token_budget
 from evaluation.validators.budget import check_turn_budget as _check_turn_budget
@@ -905,6 +906,28 @@ def check_abacus_input_from_evidence(
         allowed=allowed,
         workspace_resolve=_workspace_resolve_from_ref(ref),
         **kwargs,
+    )
+
+
+def check_kpt_line_from_evidence(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    """Wire ``kpt_line_check`` verifier from evidence + reference answer."""
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    filename = str(cfg.get("filename", ""))
+    check_type = str(cfg.get("check", ""))
+    expected = cfg.get("expected")
+    if not filename or not check_type:
+        return False, "kpt_line_check: need 'filename' and 'check' in ref"
+    return check_kpt_line(
+        ws,
+        filename=filename,
+        check=check_type,
+        expected=expected,
+        workspace_resolve=_workspace_resolve_from_ref(ref),
     )
 
 

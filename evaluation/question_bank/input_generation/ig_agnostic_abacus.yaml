@@ -7085,7 +7085,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_057_20260521
+- id: IG_abacus_057_20260525
   capability: input_generation
   domain: agnostic
   intent: Generate ABACUS KPT file in Line mode for Al FCC band structure calculation
@@ -7098,27 +7098,31 @@ questions:
   reference_answers:
   - key: kpt_artifact
     value: KPT
-  - key: must_kpt_line_header
+  - key: must_kpt_line_mode
     value:
       filename: KPT
-      pattern: (?im)^\s*K_POINTS\s*\n\s*\d+\s*\n\s*Line\b
-      flags: im
+      check: mode
   - key: must_kpt_endpoint_nk1
     value:
       filename: KPT
-      pattern: (?m)^[\s\S]*\n\s*[-+]?\d*\.?\d+\s+[-+]?\d*\.?\d+\s+[-+]?\d*\.?\d+\s+1\s*$
-      flags: m
+      check: last_nk
+      expected: 1
   - key: must_not_kpt_endpoint_nk0
     value:
       filename: KPT
-      pattern: (?m)^.*[-+]?\d*\.?\d+\s+[-+]?\d*\.?\d+\s+[-+]?\d*\.?\d+\s+0\s*$
-      flags: m
-      expect_match: false
+      check: no_nk_zero
   - key: must_kpt_segment_count
     value:
       filename: KPT
-      pattern: (?im)^\s*6\s*$
-      flags: im
+      check: segment_count
+      expected: 6
+  - key: must_kpt_nk_per_segment
+    value:
+      filename: KPT
+      check: nk_per_segment
+      expected:
+        min: 15
+        max: 50
   - key: turn_budget
     value:
       max: 10
@@ -7127,36 +7131,37 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 10000
+      max: 20000
   scoring_checklist:
   - id: kpt_artifact
     criterion: Agent writes KPT file to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: must_kpt_line_header
-    criterion: '[Must] KPT file uses ABACUS Line mode format (K_POINTS header followed
-      by segment count and "Line" keyword).'
+  - id: must_kpt_line_mode
+    criterion: '[Must] KPT file is valid ABACUS Line mode format.'
     axis: correctness
-    verify: text_file_regex
+    verify: kpt_line_check
     weight: 1.0
   - id: must_kpt_endpoint_nk1
-    criterion: '[Must] The last high-symmetry point (L) has nk=1 as the endpoint marker.
-      In ABACUS KPT Line format, the final point of the entire path must have nk=1
-      (not 0), otherwise ABACUS fails to parse the k-path.'
+    criterion: '[Must] Last high-symmetry point has nk=1 (endpoint marker required by ABACUS).'
     axis: correctness
-    verify: text_file_regex
+    verify: kpt_line_check
     weight: 2.0
   - id: must_not_kpt_endpoint_nk0
-    criterion: '[Must] No k-point line ends with nk=0. A value of 0 for the interpolation
-      count is invalid in ABACUS KPT Line mode and causes runtime failure.'
+    criterion: '[Must] No k-point has nk=0 (invalid in ABACUS Line mode).'
     axis: correctness
-    verify: text_file_regex
+    verify: kpt_line_check
     weight: 2.0
   - id: must_kpt_segment_count
-    criterion: '[Must] The number of high-symmetry points is 6 (G-X-W-K-G-L as specified).'
+    criterion: '[Must] 6 high-symmetry points (G-X-W-K-G-L).'
     axis: correctness
-    verify: text_file_regex
+    verify: kpt_line_check
     weight: 0.8
+  - id: must_kpt_nk_per_segment
+    criterion: '[Must] Each segment has 15-50 interpolation points.'
+    axis: correctness
+    verify: kpt_line_check
+    weight: 0.5
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
