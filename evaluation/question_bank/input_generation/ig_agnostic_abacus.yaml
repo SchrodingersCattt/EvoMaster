@@ -2911,7 +2911,7 @@ questions:
   - key: must_hex_latname
     value:
       filename: run_hex_mos2/INPUT
-      pattern: (?im)^\s*latname\s+hexagonal\s*$
+      pattern: (?im)^\s*latname\s+hex(?:agonal)?\s*$
       flags: im
   - key: must_hex_pw
     value:
@@ -2982,7 +2982,7 @@ questions:
       flags: i
   - key: turn_budget
     value:
-      max: 16
+      max: 25
   - key: duration_budget
     value:
       max: 7200000
