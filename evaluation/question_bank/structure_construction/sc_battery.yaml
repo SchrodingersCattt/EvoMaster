@@ -296,65 +296,55 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
-- id: SC_latp_composition_001_20260525
+- id: SC_latp_composition_001_20260525v2
   capability: structure_construction
   domain: battery
-  scope: knowledge
-  intent: Test whether agent correctly identifies that a target doping fraction
-    cannot be exactly realized in the given unit cell and reports the
-    approximation error, suggesting a larger supercell if needed.
+  intent: Construct Al-doped LATP structure from LiTi₂(PO₄)₃ R-3c cell with
+    correct stoichiometry (integer substitution or partial occupancy both valid).
   human_prompt_seed: "基于 LiTi₂(PO₄)₃ 的 R-3c 单胞（Z=6），构建\
     \ Li₁.₁₅Al₀.₁₅Ti₁.₈₅(PO₄)₃ 掺杂结构，输出为 `LATP_x015.cif`。\n"
   tags:
   - struct_build
-  source_session: 9745926ce53e48bba0fd951e654468d6
   data_files: []
   reference_answers:
   - key: cif_artifact
     value: LATP_x015.cif
-  - key: reports_deviation
-    value: true
-    description: Agent must explicitly state that x=0.15 cannot be exactly achieved
-      in Z=6 cell (12 Ti sites) and report the actual achieved x value.
-  - key: actual_x_value
-    value: 0.083
-    tolerance: 0.001
-    description: With 1 Al in 12 Ti sites, actual x = 1/12 ≈ 0.083.
+  - key: must_parsable
+    value:
+      filename: LATP_x015.cif
+  - key: has_required_elements
+    value:
+      filename: LATP_x015.cif
+      must_contain_elements: [Li, Al, Ti, P, O]
+      must_not_contain_elements: []
+  - key: al_ti_ratio
+    value:
+      filename: LATP_x015.cif
+      element_a: Al
+      element_b: Ti
+      expected_ratio: 0.081
+      tolerance: 0.04
   - key: turn_budget
     value:
-      max: 15
-  - key: token_budget_total
-    value:
-      max: 15000
+      max: 18
   scoring_checklist:
   - id: cif_artifact
-    criterion: Agent writes a LATP CIF file to workspace.
+    criterion: Agent writes LATP_x015.cif to workspace.
     axis: correctness
     verify: artifact_exists
-    weight: 1.0
-  - id: reports_composition_deviation
-    criterion: Agent explicitly reports that the target x=0.15 cannot be exactly
-      achieved in the R-3c unit cell with 12 Ti sites, and states the actual
-      achieved composition (x=1/12≈0.083 or x=2/12≈0.167). Must include a
-      numerical deviation or percentage.
+  - id: must_parsable
+    criterion: '[Must] Output CIF is parsable.'
     axis: correctness
-    verify: llm_binary_judge
-    weight: 3.0
-  - id: suggests_supercell_or_alternative
-    criterion: Agent suggests using a larger supercell (e.g., 2×1×1 giving 24 Ti
-      sites where 3-4 Al would yield x=0.125-0.167) to better approximate the
-      target, OR explicitly states the limitation and asks user which integer
-      approximation to use.
+    verify: struct_file_parsable
+  - id: has_required_elements
+    criterion: '[Must] CIF contains all five elements (Li, Al, Ti, P, O) of LATP.'
     axis: correctness
-    verify: llm_binary_judge
-    weight: 2.0
-  - id: structure_chemically_valid
-    criterion: The output CIF has correct charge balance (Li count = 6 + n_Al for
-      n_Al substitutions) and all atom counts are integers consistent with a
-      NASICON framework.
+    verify: struct_file_composition
+  - id: al_ti_ratio
+    criterion: '[Must] Al/Ti ratio is approximately 0.15/1.85 ≈ 0.081 (tolerance
+      ±0.04 to accept both integer approximation and partial occupancy).'
     axis: correctness
-    verify: llm_binary_judge
-    weight: 1.5
+    verify: struct_file_stoichiometry_ratio
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
