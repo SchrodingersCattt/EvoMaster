@@ -5367,11 +5367,11 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_043_20260518
+- id: IG_abacus_043_20260525
   capability: input_generation
   domain: agnostic
   intent: Prepare DeePKS projector-generation and LCAO SCF-with-model inputs per official 21_deepks—gen_bessel vs deepks_scf/deepks_model.
-  human_prompt_seed: "准备 DeePKS 两套输入（`run_pw_h2o_gen_bessel/`、`run_lcao_h2o_deepks/`）。读取工作区 STRU，各目录编写 `INPUT`；需要 k 点的目录另写 `KPT`（只写文件，不运行）。"
+  human_prompt_seed: "准备 DeePKS 两套输入（`run_pw_h2o_gen_bessel/`、`run_lcao_h2o_deepks/`）。读取工作区 STRU，各目录编写 `INPUT`（只写文件，不运行）。"
   tags:
   - eng_abacus
   data_files:
@@ -5388,8 +5388,12 @@ questions:
     value: run_pw_h2o_gen_bessel/INPUT
   - key: deepks_input_artifact
     value: run_lcao_h2o_deepks/INPUT
-  - key: deepks_kpt_artifact
-    value: run_lcao_h2o_deepks/KPT
+  - key: must_deepks_kpoint
+    value:
+      filename: run_lcao_h2o_deepks/INPUT
+      check: kpoint_density
+      kspacing_range: [0.01, 1.0]
+      min_kpoints: 1
   - key: must_bessel_input
     value:
       filename: run_pw_h2o_gen_bessel/INPUT
@@ -5430,13 +5434,6 @@ questions:
       filename: run_lcao_h2o_deepks/INPUT
       pattern: (?im)^\s*deepks_model\s+\S+\.ptg\s*$
       flags: im
-  - key: must_deepks_kpt
-    value:
-      filename: run_lcao_h2o_deepks/KPT
-      tokens:
-      - K_POINTS
-      - Gamma
-      flags: i
   - key: variable_deepks_workflow
     value: DeePKS per 21_deepks—PW gen_bessel for projectors; LCAO SCF with deepks_scf and deepks_model path to a .ptg file.
   - key: turn_budget
@@ -5457,10 +5454,11 @@ questions:
     criterion: run_lcao_h2o_deepks/INPUT exists.
     axis: correctness
     verify: artifact_exists
-  - id: deepks_kpt_artifact
-    criterion: run_lcao_h2o_deepks/KPT exists.
+  - id: must_deepks_kpoint
+    criterion: '[Must] run_lcao_h2o_deepks/INPUT defines k-point sampling (gamma_only or KPT file).'
     axis: correctness
-    verify: artifact_exists
+    verify: abacus_input_check
+    weight: 0.8
   - id: must_bessel_input
     criterion: '[Must] run_pw_h2o_gen_bessel/INPUT is PW gen_bessel with Bessel descriptors.'
     axis: correctness
@@ -5491,11 +5489,6 @@ questions:
     axis: correctness
     verify: text_file_regex
     weight: 1.0
-  - id: must_deepks_kpt
-    criterion: '[Must] run_lcao_h2o_deepks/KPT uses Gamma automatic k-mesh.'
-    axis: correctness
-    verify: text_file_contains_all
-    weight: 0.8
   - id: variable_deepks_workflow
     criterion: '[Variable] DeePKS two-stage setup matches 21_deepks README.'
     axis: grounding

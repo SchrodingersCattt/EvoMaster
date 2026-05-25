@@ -267,11 +267,12 @@ def _check_kpoint_density(
     kspacing_range: tuple[float, float] | None = None,
     min_kpoints: int | None = None,
 ) -> tuple[bool, str]:
-    """Verify k-point sampling is adequate via kspacing OR KPT file.
+    """Verify k-point sampling is adequate via kspacing, gamma_only, OR KPT file.
 
-    Pass if either:
+    Pass if any of:
     1. INPUT contains ``kspacing`` within [lo, hi], OR
-    2. A KPT file (resolved from INPUT) has a Gamma/MP mesh where each
+    2. INPUT contains ``gamma_only 1`` (equivalent to Gamma 1×1×1), OR
+    3. A KPT file (resolved from INPUT) has a Gamma/MP mesh where each
        direction has at least ``min_kpoints`` points.
     """
     lo, hi = kspacing_range if kspacing_range else (0.04, 0.15)
@@ -292,12 +293,24 @@ def _check_kpoint_density(
             f"{fpath.name}: kspacing={numerics} outside [{lo}, {hi}]"
         )
 
+    gamma_only_match = re.search(
+        r"(?im)^\s*gamma_only\s+(1|true|\.true\.)\s*$", content
+    )
+    if gamma_only_match and min_k <= 1:
+        return True, (
+            f"{fpath.name}: gamma_only=1 (Gamma-point only, valid for min_kpoints={min_k})"
+        )
+
     kpt_name_match = re.search(r"(?im)^\s*kpoint_file\s+(\S+)", content)
     kpt_name = kpt_name_match.group(1) if kpt_name_match else "KPT"
     kpt_path = fpath.parent / kpt_name
     if not kpt_path.is_file():
+        if gamma_only_match:
+            return False, (
+                f"{fpath.name}: gamma_only=1 but min_kpoints={min_k} requires denser mesh"
+            )
         return False, (
-            f"{fpath.name}: no kspacing in INPUT and KPT file "
+            f"{fpath.name}: no kspacing/gamma_only in INPUT and KPT file "
             f"'{kpt_name}' not found — no k-point sampling defined"
         )
     try:
