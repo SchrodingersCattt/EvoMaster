@@ -3330,15 +3330,16 @@ questions:
     criterion: Wall-clock time within budget.
     axis: efficiency
     verify: duration_budget
-- id: WO_mech_012_20260525
+- id: WO_mech_012_20260526
   capability: workflow_orchestration
   domain: agnostic
-  intent: Compute equation of state for Ti3AlC using DPA MLIP. Agent must use correct
-    modern ASE import for cell filter (ase.filters, not deprecated ase.constraints).
-  human_prompt_seed: '使用 DPA 机器学习势计算 Ti3AlC 的状态方程（Birch-Murnaghan 拟合）。
+  intent: Compute equation of state for hexagonal MAX phase Ti3AlC using DPA MLIP.
+    Agent must use correct modern ASE import for cell filter (ase.filters, not deprecated
+    ase.constraints).
+  human_prompt_seed: '使用 DPA 机器学习势计算六方 MAX 相 Ti3AlC（空间群 P6₃/mmc）的状态方程（Birch-Murnaghan 拟合）。
 
     请编写脚本完成以下步骤：
-    1. 构建 Ti3AlC 结构
+    1. 构建 Ti3AlC 六方 MAX 相结构
     2. 在平衡体积附近做体积扫描（至少 5 个点）
     3. 对每个体积做结构优化（允许原子弛豫，固定体积）
     4. 拟合 Birch-Murnaghan 状态方程
