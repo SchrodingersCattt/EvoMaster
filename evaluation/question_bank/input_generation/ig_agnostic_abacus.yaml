@@ -7448,13 +7448,13 @@ questions:
       flags: ''
   - key: turn_budget
     value:
-      max: 12
+      max: 18
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 15000
+      max: 35000
   scoring_checklist:
   - id: input_artifact
     criterion: Agent writes INPUT to workspace.
