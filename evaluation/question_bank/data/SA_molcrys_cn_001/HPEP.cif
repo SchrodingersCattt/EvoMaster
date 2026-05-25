@@ -122,7 +122,7 @@ _reflns_special_details
 ;
  Reflections were merged by SHELXL according to the crystal
  class for the calculation of statistics and refinement.
- 
+
  _reflns_Friedel_fraction is defined as the number of unique
  Friedel pairs measured divided by the number that would be
  possible theoretically, ignoring centric projections and
@@ -153,7 +153,7 @@ _refine_ls_restrained_S_all        1.148
 _refine_ls_shift/su_max            0.001
 _refine_ls_shift/su_mean           0.000
 _refine_ls_structure_factor_coef   Fsqd
-_refine_ls_weighting_details      
+_refine_ls_weighting_details
  'w=1/[\s^2^(Fo^2^)+(0.1166P)^2^+1.3503P] where P=(Fo^2^+2Fc^2^)/3'
 _refine_ls_weighting_scheme        calc
 _refine_ls_wR_factor_gt            0.1884
