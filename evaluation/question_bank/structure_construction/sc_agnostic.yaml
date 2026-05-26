@@ -1721,3 +1721,151 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
+- id: SC_monomer_smiles_001_20260526
+  capability: structure_construction
+  domain: agnostic
+  intent: Test whether the agent correctly recalls SMILES for acrylate/vinyl-ester
+    monomers and builds 3D structures with the correct ester-bond direction (carbonyl
+    adjacent to vinyl vs oxygen adjacent to vinyl).
+  human_prompt_seed: '构建以下 3 个 NTD 光刻胶相关单体的 3D 分子结构（xyz 格式），每个单独保存：
+
+    1. tert-Butyl acrylate (tBA) -> `tBA.xyz`
+
+    2. Vinyl acetate (VAc) -> `VAc.xyz`
+
+    3. Cyclohexyl methacrylate (CHMA) -> `CHMA.xyz`
+
+    '
+  tags:
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: tba_file
+    value: tBA.xyz
+  - key: vac_file
+    value: VAc.xyz
+  - key: chma_file
+    value: CHMA.xyz
+  - key: tba_atoms
+    value:
+      filename: tBA.xyz
+      expected: 21
+      tolerance: 0
+  - key: vac_atoms
+    value:
+      filename: VAc.xyz
+      expected: 12
+      tolerance: 0
+  - key: chma_atoms
+    value:
+      filename: CHMA.xyz
+      expected: 28
+      tolerance: 0
+  - key: tba_composition
+    value:
+      filename: tBA.xyz
+      formula: C7H12O2
+  - key: vac_composition
+    value:
+      filename: VAc.xyz
+      formula: C4H6O2
+  - key: chma_composition
+    value:
+      filename: CHMA.xyz
+      formula: C10H16O2
+  - key: tba_co_bond
+    value:
+      filename: tBA.xyz
+      element_a: C
+      element_b: O
+      cutoff_A: 1.5
+      expected_count: 2
+      tolerance: 0
+  - key: tba_cc_double_bond
+    value:
+      filename: tBA.xyz
+      element_a: C
+      element_b: C
+      cutoff_A: 1.4
+      expected_count: 1
+      tolerance: 0
+  - key: tba_ester_angle
+    value:
+      filename: tBA.xyz
+      triplet: [O, C, C]
+      expected_deg: 120
+      tolerance_deg: 10
+      cutoff_A: 1.6
+      cutoff_a_b_A: 1.5
+      cutoff_c_b_A: 1.5
+  - key: turn_budget
+    value:
+      max: 15
+  - key: token_budget_total
+    value:
+      max: 24000
+  scoring_checklist:
+  - id: tba_file
+    criterion: tBA.xyz written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: vac_file
+    criterion: VAc.xyz written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: chma_file
+    criterion: CHMA.xyz written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: tba_atoms
+    criterion: tBA.xyz contains exactly 21 atoms (C7H12O2).
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: vac_atoms
+    criterion: VAc.xyz contains exactly 12 atoms (C4H6O2).
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: chma_atoms
+    criterion: CHMA.xyz contains exactly 28 atoms (C10H16O2).
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: tba_composition
+    criterion: tBA.xyz has molecular formula C7H12O2 (tert-butyl acrylate).
+    axis: correctness
+    verify: struct_file_composition
+  - id: vac_composition
+    criterion: VAc.xyz has molecular formula C4H6O2 (vinyl acetate).
+    axis: correctness
+    verify: struct_file_composition
+  - id: chma_composition
+    criterion: CHMA.xyz has molecular formula C10H16O2 (cyclohexyl methacrylate).
+    axis: correctness
+    verify: struct_file_composition
+  - id: tba_co_bond
+    criterion: tBA structure has exactly 2 C-O bonds within 1.5 A, confirming ester
+      linkage (C(=O)-O-C). If the ester direction were reversed (vinyl-O-C(=O)), the
+      C-O bond count at this cutoff would still be 2 but the bond angle test below
+      would fail.
+    axis: correctness
+    verify: struct_file_bond_count
+  - id: tba_cc_double_bond
+    criterion: tBA has exactly 1 C=C double bond (distance < 1.4 A), confirming the
+      vinyl group CH2=CH- is present.
+    axis: correctness
+    verify: struct_file_bond_count
+  - id: tba_ester_angle
+    criterion: In tBA, the O-C-C angle at the carbonyl carbon is approximately 120
+      degrees (sp2 trigonal). This verifies the carbonyl C is bonded to both an O
+      and another C (the vinyl carbon), confirming the acrylate ester direction
+      CH2=CH-C(=O)-O-R rather than the incorrect vinyl ester CH2=CH-O-C(=O)-R.
+    axis: correctness
+    verify: struct_file_bond_angle
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
