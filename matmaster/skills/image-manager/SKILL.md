@@ -32,8 +32,8 @@ If any is empty → STOP. Inform user that image management is unavailable in th
 
 1. **List** — check current private images
 2. **Build** — base64-encode Dockerfile, submit; poll list every 30s until new image shows `status == 2` (timeout after 10 min)
-3. **Verify** — automatically after build succeeds; try debug node (Approach A: SSH), fall back to job submission (Approach B: Bohrium tool). Do NOT ask user whether to verify — always verify.
-4. **Report** — show verification results with usage example, and suggest creating a skill if the image supports a specific workflow (see Post-Verification below)
+3. **Verify** — automatically after build succeeds. Use Approach B (job submission) by default; use Approach A (SSH node) only when interactive debugging is needed. Do NOT ask user whether to verify — always verify.
+4. **Report** — show verification results with usage example, and suggest creating a skill (see Post-Verification below)
 
 Each step maps to a command in the API Reference below.
 
@@ -99,59 +99,12 @@ curl -s -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
 
 ### Debug Verification
 
-Two approaches — try node first, fall back to job submission if unavailable.
+Two approaches — prefer Approach B (more reliable); use Approach A when SSH interaction is needed.
 
-#### Approach A: Debug Node (SSH access)
+- **Approach A** (SSH debug node): `references/debug_node.md` — use when you need to interactively explore the image filesystem or debug issues that require a shell session.
+- **Approach B** (job submission, preferred): submit a test script via Bohrium tool. Faster and more reliable.
 
-First query available machine resources:
-
-```bash
-curl -s -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
-  "${BOHRIUM_BASE_URL}/openapi/v1/node/resources" \
-  | python3 -c "import sys,json; d=json.load(sys.stdin)['data']; [print(f\"  {m['label']} (value={m['value']})\") for m in d.get('cpuList',[])+d.get('gpuList',[])]"
-```
-
-Then create a node using an available SKU:
-
-```bash
-curl -s -X POST -H "accessKey: ${BOHRIUM_ACCESS_KEY}" -H "Content-Type: application/json" \
-  -d '{
-    "projectId": '"${BOHRIUM_PROJECT_ID}"',
-    "name": "image-debug",
-    "imageId": <IMAGE_ID>,
-    "machineConfig": {"type": 0, "value": <SKU_VALUE>, "label": "<SKU_LABEL>"},
-    "diskSize": 20
-  }' \
-  "${BOHRIUM_BASE_URL}/openapi/v1/node/add" \
-  | python3 -m json.tool
-```
-
-Response gives `{"data": {"machineId": <MACHINE_ID>}}`. Wait ~30s for node to boot, then fetch SSH credentials:
-
-```bash
-curl -s -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
-  "${BOHRIUM_BASE_URL}/openapi/v1/node/<MACHINE_ID>" \
-  | python3 -m json.tool
-```
-
-Connect using `domainName`, `nodeUser`, `nodePwd` from response:
-
-```bash
-ssh <nodeUser>@<domainName>
-```
-
-After verification, clean up:
-
-```bash
-curl -s -X POST -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
-  "${BOHRIUM_BASE_URL}/openapi/v1/node/stop/<MACHINE_ID>"
-curl -s -X POST -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
-  "${BOHRIUM_BASE_URL}/openapi/v1/node/del/<MACHINE_ID>"
-```
-
-If node creation fails (resource unavailable), use Approach B.
-
-#### Approach B: Job Submission (fallback)
+#### Approach B: Job Submission (preferred)
 
 Submit a test script using the Bohrium tool with the new image URL:
 
@@ -190,7 +143,7 @@ Bohrium(action="submit",
         cmd="python3 your_script.py > log 2>&1")
 ```
 
-2. **Suggest skill creation** if the image supports a repeatable workflow:
+2. **Suggest skill creation**:
 
 > 这个镜像可以作为一个可复用的计算环境。需要我帮你把它封装成一个 skill 吗？
 > 这样以后用到这个环境时，agent 可以自动选用正确的镜像和参数。
