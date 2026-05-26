@@ -303,10 +303,10 @@ questions:
     verify: llm_binary_judge
     weight: 3.0
   - id: informs_tool_unavailable
-    criterion: Agent explicitly informs the user that APEX is not available or cannot
+    criterion: 'Agent explicitly informs the user that APEX is not available or cannot
       run in this environment (acceptable: missing backends, not integrated, cannot
       execute). It must NOT silently deliver numbers from an alternative method as
-      if they were APEX results.
+      if they were APEX results.'
     axis: correctness
     verify: llm_binary_judge
     weight: 2.0
