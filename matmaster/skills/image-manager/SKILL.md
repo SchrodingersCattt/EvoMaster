@@ -18,12 +18,12 @@ Runtime-injected environment variables:
 
 | Variable | Description |
 |----------|-------------|
-| `BOHRIUM_OPENAPI_BASE_COM` | API base URL |
+| `BOHRIUM_BASE_URL` | API base URL for image/node endpoints |
 | `BOHRIUM_ACCESS_KEY` | User's access key |
 | `BOHRIUM_PROJECT_ID` | Default project ID |
 
 ```bash
-echo "API_BASE=${BOHRIUM_OPENAPI_BASE_COM}" "PROJECT_ID=${BOHRIUM_PROJECT_ID}" "AK=${BOHRIUM_ACCESS_KEY:+set}"
+echo "BASE=${BOHRIUM_BASE_URL}" "PROJECT_ID=${BOHRIUM_PROJECT_ID}" "AK=${BOHRIUM_ACCESS_KEY:+set}"
 ```
 
 If any is empty → STOP. Inform user that image management is unavailable in the current session.
@@ -31,8 +31,8 @@ If any is empty → STOP. Inform user that image management is unavailable in th
 ## Workflow
 
 1. **List** — check current private images
-2. **Build** — submit Dockerfile; poll list every 30s until new image shows `status == 2` (timeout after 10 min)
-3. **Verify** (optional) — create debug node with the new image, SSH in, confirm environment, then clean up node
+2. **Build** — base64-encode Dockerfile, submit; poll list every 30s until new image shows `status == 2` (timeout after 10 min)
+3. **Verify** (optional) — try creating a debug node (Approach A: SSH); if resources unavailable, submit a test job (Approach B: Bohrium tool)
 
 Each step maps to a command in the API Reference below.
 
@@ -42,7 +42,7 @@ Each step maps to a command in the API Reference below.
 
 ```bash
 curl -s -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
-  "${BOHRIUM_OPENAPI_BASE_COM}/openapi/v2/image/private?device=container&type=image&page=1&pageSize=20" \
+  "${BOHRIUM_BASE_URL}/openapi/v2/image/private?device=container&type=image&page=1&pageSize=20" \
   | python3 -m json.tool
 ```
 
@@ -59,32 +59,30 @@ Response `.data.items` key fields:
 
 ### Build Image
 
+The `dockerfile` field must be **base64-encoded**. Plain text causes `decode err`.
+
 Optionally validate first:
 
 ```bash
 curl -s -X POST -H "accessKey: ${BOHRIUM_ACCESS_KEY}" -H "Content-Type: application/json" \
   -d '{"dockerfile": "<DOCKERFILE_CONTENT>"}' \
-  "${BOHRIUM_OPENAPI_BASE_COM}/openapi/v2/image/dockerfile/check"
+  "${BOHRIUM_BASE_URL}/openapi/v2/image/dockerfile/check"
 ```
 
-Then submit:
+Then submit (note: dockerfile is base64):
 
 ```bash
+DOCKERFILE_B64=$(echo -n "FROM registry.dp.tech/dptech/ubuntu:22.04-py3.10
+RUN pip install --no-cache-dir ase" | base64 -w 0)
+
 curl -s -X POST -H "accessKey: ${BOHRIUM_ACCESS_KEY}" -H "Content-Type: application/json" \
-  -d '{
-    "name": "<IMAGE_NAME>",
-    "projectId": '"${BOHRIUM_PROJECT_ID}"',
-    "device": "container",
-    "desc": "<DESCRIPTION>",
-    "buildType": 1,
-    "dockerfile": "<DOCKERFILE_CONTENT>"
-  }' \
-  "${BOHRIUM_OPENAPI_BASE_COM}/openapi/v2/image/private" \
+  -d "{\"name\":\"<IMAGE_NAME>\",\"projectId\":${BOHRIUM_PROJECT_ID},\"device\":\"container\",\"desc\":\"<DESCRIPTION>\",\"buildType\":1,\"dockerfile\":\"${DOCKERFILE_B64}\"}" \
+  "${BOHRIUM_BASE_URL}/openapi/v2/image/private" \
   | python3 -m json.tool
 ```
 
-- `name` — image name (no registry prefix)
-- `dockerfile` — Dockerfile content, newlines as `\n`
+- `name` — image name (no registry prefix), e.g. `my-env:v1`
+- `dockerfile` — base64-encoded Dockerfile content
 - `desc` — optional description
 - Base images must be from `registry.dp.tech`. Common base: `registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1`
 
@@ -94,13 +92,25 @@ Poll command (filter by name):
 
 ```bash
 curl -s -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
-  "${BOHRIUM_OPENAPI_BASE_COM}/openapi/v2/image/private?device=container&type=image&page=1&pageSize=5" \
+  "${BOHRIUM_BASE_URL}/openapi/v2/image/private?device=container&type=image&page=1&pageSize=5" \
   | python3 -c "import sys,json; [print(f\"{i['name']} status={i['status']}\") for i in json.load(sys.stdin)['data']['items'] if '<IMAGE_NAME>' in i.get('name','')]"
 ```
 
 ### Debug Verification
 
-Create a minimal node with the new image:
+Two approaches — try node first, fall back to job submission if unavailable.
+
+#### Approach A: Debug Node (SSH access)
+
+First query available machine resources:
+
+```bash
+curl -s -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
+  "${BOHRIUM_BASE_URL}/openapi/v1/node/resources" \
+  | python3 -c "import sys,json; d=json.load(sys.stdin)['data']; [print(f\"  {m['label']} (value={m['value']})\") for m in d.get('cpuList',[])+d.get('gpuList',[])]"
+```
+
+Then create a node using an available SKU:
 
 ```bash
 curl -s -X POST -H "accessKey: ${BOHRIUM_ACCESS_KEY}" -H "Content-Type: application/json" \
@@ -108,10 +118,10 @@ curl -s -X POST -H "accessKey: ${BOHRIUM_ACCESS_KEY}" -H "Content-Type: applicat
     "projectId": '"${BOHRIUM_PROJECT_ID}"',
     "name": "image-debug",
     "imageId": <IMAGE_ID>,
-    "machineConfig": {"type": 0, "value": 388, "label": "c2_m4_cpu"},
+    "machineConfig": {"type": 0, "value": <SKU_VALUE>, "label": "<SKU_LABEL>"},
     "diskSize": 20
   }' \
-  "${BOHRIUM_OPENAPI_BASE_COM}/openapi/v1/node/add" \
+  "${BOHRIUM_BASE_URL}/openapi/v1/node/add" \
   | python3 -m json.tool
 ```
 
@@ -119,7 +129,7 @@ Response gives `{"data": {"machineId": <MACHINE_ID>}}`. Wait ~30s for node to bo
 
 ```bash
 curl -s -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
-  "${BOHRIUM_OPENAPI_BASE_COM}/openapi/v1/node/<MACHINE_ID>" \
+  "${BOHRIUM_BASE_URL}/openapi/v1/node/<MACHINE_ID>" \
   | python3 -m json.tool
 ```
 
@@ -133,10 +143,35 @@ After verification, clean up:
 
 ```bash
 curl -s -X POST -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
-  "${BOHRIUM_OPENAPI_BASE_COM}/openapi/v1/node/stop/<MACHINE_ID>"
+  "${BOHRIUM_BASE_URL}/openapi/v1/node/stop/<MACHINE_ID>"
 curl -s -X POST -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
-  "${BOHRIUM_OPENAPI_BASE_COM}/openapi/v1/node/del/<MACHINE_ID>"
+  "${BOHRIUM_BASE_URL}/openapi/v1/node/del/<MACHINE_ID>"
 ```
+
+If node creation fails (resource unavailable), use Approach B.
+
+#### Approach B: Job Submission (fallback)
+
+Submit a test script using the Bohrium tool with the new image URL:
+
+```
+Bohrium(action="submit",
+        image="<IMAGE_URL_FROM_LIST>",
+        machine="c2_m4_cpu",
+        input_dir="<dir_with_test_script>",
+        cmd="bash test.sh > log 2>&1")
+```
+
+Write a `test.sh` that verifies key packages:
+
+```bash
+#!/bin/bash
+python3 -c "import ase; print(f'ASE {ase.__version__}')"
+python3 -c "import numpy; print(f'NumPy {numpy.__version__}')"
+# add other checks as needed
+```
+
+Poll with `Bohrium(action="poll")`, then download and read log to confirm.
 
 ## Error Handling
 
@@ -144,7 +179,8 @@ All responses: `{"code": int, "data": ..., "msg": "..."}`. Success = `code == 0`
 
 | Error | Cause | Fix |
 |-------|-------|-----|
+| `decode err` | Dockerfile not base64-encoded | Encode with `base64 -w 0` before submitting |
 | `dockerfile err` | Invalid Dockerfile | Ensure FROM base exists in `registry.dp.tech` |
 | `no permission` | Not image owner | Can only manage own images |
-| `There is no resource` | SKU out of stock | Try different `machineConfig` value |
+| `There is no resource` | SKU out of stock | Query `/node/resources` for available SKUs, or use Approach B |
 | `record not found` | Wrong node ID | Use `machineId` from create response, not `nodeId` |
