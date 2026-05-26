@@ -8,52 +8,69 @@ skill_type: operator
 
 Manage private container images on Bohrium: list, build, and verify via debug nodes.
 
+## Capability Gate
+
+- **STOP** if user wants to browse/search public images, submit compute jobs, or manage nodes for non-image purposes. Inform user this skill only covers private image lifecycle.
+
 ## Prerequisites
 
-The following environment variables are injected by the runtime:
+Runtime-injected environment variables:
 
 | Variable | Description |
 |----------|-------------|
-| `BOHRIUM_OPENAPI_BASE_COM` | API base URL (auto-resolved by environment) |
-| `BOHRIUM_ACCESS_KEY` | User's access key for authentication |
-| `BOHRIUM_PROJECT_ID` | User's default project ID |
-
-Check before proceeding:
+| `BOHRIUM_OPENAPI_BASE_COM` | API base URL |
+| `BOHRIUM_ACCESS_KEY` | User's access key |
+| `BOHRIUM_PROJECT_ID` | Default project ID |
 
 ```bash
-echo "API_BASE=${BOHRIUM_OPENAPI_BASE_COM}"
-echo "PROJECT_ID=${BOHRIUM_PROJECT_ID}"
-echo "ACCESS_KEY=${BOHRIUM_ACCESS_KEY:+set}"
+echo "API_BASE=${BOHRIUM_OPENAPI_BASE_COM}" "PROJECT_ID=${BOHRIUM_PROJECT_ID}" "AK=${BOHRIUM_ACCESS_KEY:+set}"
 ```
 
-If any is empty, inform the user that image management is unavailable in the current session.
+If any is empty → STOP. Inform user that image management is unavailable in the current session.
 
-## Operations
+## Workflow
 
-### 1. List Private Images
+1. **List** — check current private images
+2. **Build** — submit Dockerfile; poll list every 30s until new image shows `status == 2` (timeout after 10 min)
+3. **Verify** (optional) — create debug node with the new image, SSH in, confirm environment, then clean up node
+
+Each step maps to a command in the API Reference below.
+
+## API Reference
+
+### List Private Images
 
 ```bash
-curl -s \
-  -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
+curl -s -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
   "${BOHRIUM_OPENAPI_BASE_COM}/openapi/v2/image/private?device=container&type=private&page=1&pageSize=20" \
   | python3 -m json.tool
 ```
 
-Response `.data.items` is an array of image objects. Key fields:
-- `id` — image ID (used for node creation)
-- `name` — image name with tag (e.g. `my-env:v1`)
-- `url` — full registry URL (e.g. `registry.dp.tech/dptech/dp/native/prod-xxx/my-env:v1`)
-- `size` — image size
-- `status` — 2 = ready
-- `desc` — description
-- `createTime`
+Response `.data.items` key fields:
 
-### 2. Build Image (from Dockerfile)
+| Field | Description |
+|-------|-------------|
+| `id` | Image ID (used as `imageId` when creating nodes) |
+| `name` | Name with tag, e.g. `my-env:v1` |
+| `url` | Full registry URL |
+| `size` | Image size |
+| `status` | `2` = ready, other = building/failed |
+| `createTime` | Creation timestamp |
+
+### Build Image
+
+Optionally validate first:
 
 ```bash
-curl -s -X POST \
-  -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
-  -H "Content-Type: application/json" \
+curl -s -X POST -H "accessKey: ${BOHRIUM_ACCESS_KEY}" -H "Content-Type: application/json" \
+  -d '{"dockerfile": "<DOCKERFILE_CONTENT>"}' \
+  "${BOHRIUM_OPENAPI_BASE_COM}/openapi/v2/image/dockerfile/check"
+```
+
+Then submit:
+
+```bash
+curl -s -X POST -H "accessKey: ${BOHRIUM_ACCESS_KEY}" -H "Content-Type: application/json" \
   -d '{
     "name": "<IMAGE_NAME>",
     "projectId": '"${BOHRIUM_PROJECT_ID}"',
@@ -66,42 +83,19 @@ curl -s -X POST \
   | python3 -m json.tool
 ```
 
-**Parameters:**
+- `name` — image name (no registry prefix)
+- `dockerfile` — Dockerfile content, newlines as `\n`
+- `desc` — optional description
+- Base images must be from `registry.dp.tech`. Common base: `registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1`
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `name` | yes | Image name (without registry prefix) |
-| `projectId` | yes | From `$BOHRIUM_PROJECT_ID` |
-| `device` | yes | Always `container` |
-| `desc` | no | Human-readable description |
-| `buildType` | yes | Always `1` (Dockerfile) |
-| `dockerfile` | yes | Dockerfile content as a string (newlines as `\n`) |
+After submission, poll the list command every 30s. Image is ready when `status == 2`. If not ready after 10 min, inform user the build may have failed.
 
-**Dockerfile tips:**
-- Base images must exist in `registry.dp.tech`. Common bases: `registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1`
-- Build is async on server side. After creation, poll the image list until `status == 2`.
+### Debug Verification
 
-### 3. Check Dockerfile Validity
-
-Before building, optionally validate:
+Create a minimal node with the new image:
 
 ```bash
-curl -s -X POST \
-  -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '{"dockerfile": "<DOCKERFILE_CONTENT>"}' \
-  "${BOHRIUM_OPENAPI_BASE_COM}/openapi/v2/image/dockerfile/check" \
-  | python3 -m json.tool
-```
-
-### 4. Debug: Create a Node with the New Image
-
-After building, spin up a lightweight node to verify the image:
-
-```bash
-curl -s -X POST \
-  -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
-  -H "Content-Type: application/json" \
+curl -s -X POST -H "accessKey: ${BOHRIUM_ACCESS_KEY}" -H "Content-Type: application/json" \
   -d '{
     "projectId": '"${BOHRIUM_PROJECT_ID}"',
     "name": "image-debug",
@@ -113,59 +107,36 @@ curl -s -X POST \
   | python3 -m json.tool
 ```
 
-Response: `{"code": 0, "data": {"machineId": <MACHINE_ID>}}`
-
-Then fetch node details to get SSH credentials:
+Response gives `{"data": {"machineId": <MACHINE_ID>}}`. Fetch SSH credentials:
 
 ```bash
-curl -s \
-  -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
+curl -s -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
   "${BOHRIUM_OPENAPI_BASE_COM}/openapi/v1/node/<MACHINE_ID>" \
   | python3 -m json.tool
 ```
 
-Key fields for SSH:
-- `domainName` — SSH host (e.g. `cset1427218.bohrium.tech`)
-- `nodeUser` — usually `root`
-- `nodePwd` — password
-
-Connect: `ssh <nodeUser>@<domainName>` (password from response).
-
-### 5. Debug: Clean Up Node
-
-After verification, stop and delete the debug node:
+Connect using `domainName`, `nodeUser`, `nodePwd` from response:
 
 ```bash
-# Stop
-curl -s -X POST \
-  -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
-  "${BOHRIUM_OPENAPI_BASE_COM}/openapi/v1/node/stop/<MACHINE_ID>" \
-  | python3 -m json.tool
-
-# Delete
-curl -s -X POST \
-  -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
-  "${BOHRIUM_OPENAPI_BASE_COM}/openapi/v1/node/del/<MACHINE_ID>" \
-  | python3 -m json.tool
+ssh <nodeUser>@<domainName>
 ```
 
-## Workflow
+After verification, clean up:
 
-Typical image development cycle:
-
-1. **List** existing images to check current state
-2. **Check** Dockerfile validity (optional)
-3. **Build** — submit Dockerfile, poll list until `status == 2`
-4. **Verify** — create debug node with the new image ID, SSH in, confirm packages/tools are present
-5. **Clean up** — stop and delete the debug node
+```bash
+curl -s -X POST -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
+  "${BOHRIUM_OPENAPI_BASE_COM}/openapi/v1/node/stop/<MACHINE_ID>"
+curl -s -X POST -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
+  "${BOHRIUM_OPENAPI_BASE_COM}/openapi/v1/node/del/<MACHINE_ID>"
+```
 
 ## Error Handling
 
-All responses follow `{"code": int, "data": ..., "msg": "..."}`. Check `code == 0` for success.
+All responses: `{"code": int, "data": ..., "msg": "..."}`. Success = `code == 0`.
 
 | Error | Cause | Fix |
 |-------|-------|-----|
 | `dockerfile err` | Invalid Dockerfile | Ensure FROM base exists in `registry.dp.tech` |
 | `no permission` | Not image owner | Can only manage own images |
-| `There is no resource for the selected machine` | SKU out of stock | Try a different `machineConfig` value |
-| Node detail returns `record not found` | Wrong ID | Use `machineId` from create response, not `nodeId` |
+| `There is no resource` | SKU out of stock | Try different `machineConfig` value |
+| `record not found` | Wrong node ID | Use `machineId` from create response, not `nodeId` |
