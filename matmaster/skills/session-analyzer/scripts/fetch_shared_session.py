@@ -17,8 +17,8 @@ import argparse
 import json
 import re
 import sys
-import urllib.request
 import urllib.error
+import urllib.request
 from typing import Any
 
 SHARE_URL_PATTERNS = [
@@ -26,7 +26,9 @@ SHARE_URL_PATTERNS = [
     re.compile(r"https?://[^/]+/share/([a-f0-9]+)"),
 ]
 
-API_PATH_TEMPLATE = "/bohrapi/v1/matmaster-evo/pubapi/v1/chat/sessions/{session_id}/stream"
+API_PATH_TEMPLATE = (
+    "/bohrapi/v1/matmaster-evo/pubapi/v1/chat/sessions/{session_id}/stream"
+)
 
 DEFAULT_MAX_CONTENT_LEN = 2000
 SUMMARY_EVENT_TYPES = {"query", "thought", "response", "run_result"}
@@ -66,9 +68,7 @@ def fetch_sse_events(base_url: str, session_id: str, timeout: int = 30) -> list[
         resp = urllib.request.urlopen(req, timeout=timeout)
     except urllib.error.HTTPError as e:
         error_body = e.read().decode("utf-8", errors="replace") if e.fp else ""
-        raise RuntimeError(
-            f"HTTP {e.code} from {api_url}: {error_body[:500]}"
-        ) from e
+        raise RuntimeError(f"HTTP {e.code} from {api_url}: {error_body[:500]}") from e
 
     events: list[dict] = []
     try:
@@ -87,7 +87,7 @@ def fetch_sse_events(base_url: str, session_id: str, timeout: int = 30) -> list[
                 break
             if ev_type == "session_status" and ev.get("status") == "idle":
                 break
-    except (TimeoutError, OSError):
+    except OSError:
         pass
     finally:
         resp.close()
@@ -111,7 +111,9 @@ def truncate_content(content: Any, max_len: int) -> Any:
                     + f"\n[truncated, original: {len(result_field)} chars]",
                 }
             elif len(serialized) > max_len:
-                return json.loads(serialized[:max_len] + '"')  # noqa: this won't work cleanly
+                return json.loads(
+                    serialized[:max_len] + '"'
+                )  # noqa: this won't work cleanly
         return content
     return content
 
@@ -161,12 +163,14 @@ def format_summary(events: list[dict], max_content_len: int) -> dict:
             if isinstance(content, dict):
                 is_error = content.get("is_error") or content.get("isError")
                 if is_error:
-                    failed_tools.append({
-                        "name": content.get("name", ""),
-                        "error": _truncate_str(
-                            content.get("result", ""), max_content_len
-                        ),
-                    })
+                    failed_tools.append(
+                        {
+                            "name": content.get("name", ""),
+                            "error": _truncate_str(
+                                content.get("result", ""), max_content_len
+                            ),
+                        }
+                    )
             continue
 
         if ev_type in SUMMARY_EVENT_TYPES:
@@ -181,11 +185,13 @@ def format_summary(events: list[dict], max_content_len: int) -> dict:
             elif isinstance(content, str):
                 content = _truncate_str(content, max_content_len)
 
-            summary_events.append({
-                "source": source,
-                "type": ev_type,
-                "content": content,
-            })
+            summary_events.append(
+                {
+                    "source": source,
+                    "type": ev_type,
+                    "content": content,
+                }
+            )
 
     # Deduplicate consecutive tool names into a compact trace
     tool_trace = _compact_tool_trace(tool_call_names)
@@ -211,11 +217,13 @@ def format_full(events: list[dict], max_content_len: int) -> dict:
             content = _safe_truncate_dict(content, max_content_len)
         elif isinstance(content, str):
             content = _truncate_str(content, max_content_len)
-        formatted.append({
-            "source": ev.get("source", ""),
-            "type": ev_type,
-            "content": content,
-        })
+        formatted.append(
+            {
+                "source": ev.get("source", ""),
+                "type": ev_type,
+                "content": content,
+            }
+        )
     return {
         "mode": "full",
         "total_events": len(formatted),
@@ -236,11 +244,13 @@ def format_raw(
             content = _safe_truncate_dict(content, max_content_len)
         elif isinstance(content, str):
             content = _truncate_str(content, max_content_len)
-        formatted.append({
-            "source": ev.get("source", ""),
-            "type": ev.get("type", ""),
-            "content": content,
-        })
+        formatted.append(
+            {
+                "source": ev.get("source", ""),
+                "type": ev.get("type", ""),
+                "content": content,
+            }
+        )
     return {
         "mode": "raw",
         "filter": event_types,
