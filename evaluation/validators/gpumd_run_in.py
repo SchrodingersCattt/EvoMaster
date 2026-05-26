@@ -56,6 +56,8 @@ def check_gpumd_run_in(
         return _check_ensemble_type(fpath, lines, allowed)
     elif check == "has_keyword":
         return _check_has_keyword(fpath, lines, expected)
+    elif check == "has_any_keyword_set":
+        return _check_has_any_keyword_set(fpath, lines, allowed)
     elif check == "keyword_before":
         return _check_keyword_before(fpath, lines, expected)
     elif check == "param_count":
@@ -110,6 +112,44 @@ def _check_has_keyword(
     if not missing:
         return True, f"{fpath.name}: all keywords found: {keywords}"
     return False, f"{fpath.name}: missing keywords: {missing}"
+
+
+def _check_has_any_keyword_set(
+    fpath: Path,
+    lines: list[list[str]],
+    allowed: list[str] | list[list[str]] | None,
+) -> tuple[bool, str]:
+    """Pass if at least one keyword set is fully present (OR between sets).
+
+    allowed is a list of keyword sets, e.g.:
+      [["compute_phonon", "replicate"], ["compute_dos"]]
+    means: pass if (compute_phonon AND replicate) OR (compute_dos) are present.
+
+    If allowed is a flat list of strings, each string is treated as a single-keyword set.
+    """
+    if not allowed:
+        return False, "gpumd_run_in_check has_any_keyword_set: 'allowed' list required"
+
+    present_keywords = {line[0].lower() for line in lines}
+
+    sets: list[list[str]] = []
+    for item in allowed:
+        if isinstance(item, list):
+            sets.append(item)
+        else:
+            sets.append([str(item)])
+
+    for kw_set in sets:
+        missing = [kw for kw in kw_set if kw.lower() not in present_keywords]
+        if not missing:
+            return True, (
+                f"{fpath.name}: keyword set {kw_set} fully present"
+            )
+
+    return False, (
+        f"{fpath.name}: none of the allowed keyword sets found: {sets} "
+        f"(present commands: {sorted(present_keywords)})"
+    )
 
 
 def _check_keyword_before(

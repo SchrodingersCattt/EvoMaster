@@ -59,16 +59,19 @@ questions:
     axis: correctness
     verify: text_file_contains_all
 
-- id: WO_gpumdnep_002_20260428
+- id: WO_gpumdnep_002_20260526
   capability: workflow_orchestration
   domain: agnostic
   intent: Predict Si phonon spectrum using Si_Fan_2019 Tersoff mini potential and assess optical-branch frequency.
-  human_prompt_seed: '获取https://raw.githubusercontent.com/brucefan1983/GPUMD/master/potentials/tersoff/Si_Fan_2019.txt，使用这个势函数采取gpumd计算Si的声子谱，计算出Si光学支频率'
+  human_prompt_seed: |
+    获取 https://raw.githubusercontent.com/brucefan1983/GPUMD/master/potentials/tersoff/Si_Fan_2019.txt，使用这个势函数采取 GPUMD 计算 Si 的声子谱，计算出 Si 光学支频率。
+    请将输入文件保存为工作区根目录下的 `run.in`。
   tags: [eng_gpumd]
   data_files: []
   reference_answers:
   - key: run_input_artifact
     value: run.in
+    workspace_resolve: root
   - key: si_fan_potential_token
     value:
       filename: run.in
@@ -76,13 +79,13 @@ questions:
       - potential
       - Si_Fan_2019.txt
       flags: i
-  - key: phonon_core_tokens
+  - key: phonon_method_keywords
     value:
       filename: run.in
-      tokens:
-      - replicate
-      - compute_phonon
-      flags: i
+      check: has_any_keyword_set
+      allowed:
+      - [compute_phonon, replicate]
+      - [compute_dos]
   - key: si_optical_branch_15thz
     value: {}
   scoring_checklist:
@@ -94,10 +97,10 @@ questions:
     criterion: "`run.in` 使用 `Si_Fan_2019.txt` 势函数。"
     axis: correctness
     verify: text_file_contains_all
-  - id: phonon_core_tokens
-    criterion: "`run.in` 包含 `replicate` 与 `compute_phonon` 两个关键设置。"
+  - id: phonon_method_keywords
+    criterion: "`run.in` 使用声子计算方法（`compute_phonon`+`replicate` 或 `compute_dos`）。"
     axis: correctness
-    verify: text_file_contains_all
+    verify: gpumd_run_in_check
   - id: si_optical_branch_15thz
     criterion: Si 光学支结果在约 15 THz 量级（可接受小范围偏差）。
     axis: correctness
