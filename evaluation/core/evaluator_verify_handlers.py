@@ -10,6 +10,9 @@ Importing this module has the side effect of populating
 at module bottom; do not import this file from anywhere else.
 """
 
+from evaluation.validators.gpumd_run_in import check_gpumd_run_in
+from evaluation.validators.vasp_incar import check_vasp_incar
+
 from .evaluator import BinaryEvaluator
 from .evaluator_struct_helpers import (
     check_struct_file_all_occupancy_one,
@@ -19,17 +22,18 @@ from .evaluator_struct_helpers import (
     check_struct_file_replicas_distinct,
     check_struct_file_space_group,
 )
-from .evaluator_wiring import check_md_submit_structure_min_dist
 from .evaluator_wiring import (
+    _make_domain_check_handler,
     check_abacus_input_from_evidence,
-    check_gpumd_run_in_from_evidence,
-    check_kpt_line_from_evidence,
     check_answer_json_numeric_from_ref,
     check_checkcif_alerts,
+    check_csv_row_count_from_evidence,
     check_duration_budget,
     check_json_file_artifacts,
     check_json_file_numeric_range,
     check_json_file_schema,
+    check_kpt_line_from_evidence,
+    check_md_submit_structure_min_dist,
     check_molcrys_local_env_from_evidence,
     check_molcrys_slab_integrity,
     check_sc005_disorder_formulas,
@@ -51,7 +55,6 @@ from .evaluator_wiring import (
     check_struct_file_layer_count,
     check_struct_file_stoichiometry_ratio,
     check_struct_file_surface_termination,
-    check_csv_row_count_from_evidence,
     check_text_file_contains_all_from_evidence,
     check_text_file_excludes_all_from_evidence,
     check_text_file_kpt_path_from_evidence,
@@ -60,7 +63,6 @@ from .evaluator_wiring import (
     check_text_file_regex_from_evidence,
     check_token_budget,
     check_turn_budget,
-    check_vasp_incar_from_evidence,
 )
 
 _R = BinaryEvaluator._register_verify
@@ -149,6 +151,25 @@ def _h_molcrys_env(ctx):
 @_R("checkcif_no_a_alerts")
 def _h_checkcif(ctx):
     return check_checkcif_alerts(evidence=ctx["evidence"], ref=ctx["ref"])
+
+
+# ---------------------------------------------------------------------------
+# Domain-specific validators wired via the factory in evaluator_wiring.
+# vasp_incar and gpumd_run_in are generated here (not in evaluator_wiring)
+# to keep that file under the 1000-line limit.
+# ---------------------------------------------------------------------------
+
+check_vasp_incar_from_evidence = _make_domain_check_handler(
+    "vasp_incar_check",
+    check_vasp_incar,
+    cfg_keys=("param", "expected", "min", "max", "atom_count", "species_index"),
+)
+
+check_gpumd_run_in_from_evidence = _make_domain_check_handler(
+    "gpumd_run_in_check",
+    check_gpumd_run_in,
+    cfg_keys=("expected", "allowed"),
+)
 
 
 # Bulk-register (evidence, ref) handlers

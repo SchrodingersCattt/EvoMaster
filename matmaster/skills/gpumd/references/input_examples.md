@@ -229,4 +229,3 @@ compute_phonon 0.01
 - Output: `omega2.out` — each row is one k-point, columns are ω² eigenvalues (units: THz²). Frequency ν = √(ω²) / (2π) in THz.
 - `kpoints.in` first line: number of points per segment. Subsequent lines: fractional k-coordinates.
 - Number of branches = 3 × atoms_in_primitive_cell (e.g., Si diamond → 6 branches: 3 acoustic + 3 optical).
-

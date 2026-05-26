@@ -101,6 +101,8 @@ VerifyLiteral = Literal[
     "kpt_line_check",
     # VASP INCAR semantic checks
     "vasp_incar_check",
+    # GPUMD run.in semantic checks
+    "gpumd_run_in_check",
     # CSV row count check
     "csv_row_count",
 ]
@@ -354,6 +356,7 @@ class QuestionItem(BaseModel):
             "abacus_input_check",
             "kpt_line_check",
             "vasp_incar_check",
+            "gpumd_run_in_check",
             "csv_row_count",
         }
         for item in self.scoring_checklist:

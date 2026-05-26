@@ -77,7 +77,10 @@ def _check_ensemble_type(
 ) -> tuple[bool, str]:
     """Verify ensemble keyword uses one of the allowed types."""
     if not allowed:
-        return False, "gpumd_run_in_check ensemble_type: 'allowed' list must be provided"
+        return (
+            False,
+            "gpumd_run_in_check ensemble_type: 'allowed' list must be provided",
+        )
 
     ensemble_lines = [line for line in lines if line[0].lower() == "ensemble"]
     if not ensemble_lines:
@@ -94,7 +97,9 @@ def _check_ensemble_type(
                 f"{fpath.name}: ensemble type '{line[1]}' is in allowed: {allowed}"
             )
 
-    found_types = [line[1] if len(line) >= 2 else "(no type)" for line in ensemble_lines]
+    found_types = [
+        line[1] if len(line) >= 2 else "(no type)" for line in ensemble_lines
+    ]
     return False, (
         f"{fpath.name}: ensemble type(s) {found_types} not in allowed: {allowed}"
     )
@@ -146,9 +151,7 @@ def _check_has_any_keyword_set(
     for kw_set in sets:
         missing = [kw for kw in kw_set if kw.lower() not in present_keywords]
         if not missing:
-            return True, (
-                f"{fpath.name}: keyword set {kw_set} fully present"
-            )
+            return True, (f"{fpath.name}: keyword set {kw_set} fully present")
 
     return False, (
         f"{fpath.name}: none of the allowed keyword sets found: {sets} "
@@ -191,14 +194,23 @@ def _check_min_keyword_count(
     """
     keyword = expected if isinstance(expected, str) else None
     if not keyword:
-        return False, "gpumd_run_in_check min_keyword_count: 'expected' must be keyword name"
+        return (
+            False,
+            "gpumd_run_in_check min_keyword_count: 'expected' must be keyword name",
+        )
     if not allowed or len(allowed) < 1:
-        return False, "gpumd_run_in_check min_keyword_count: 'allowed' must be ['<min_count>']"
+        return (
+            False,
+            "gpumd_run_in_check min_keyword_count: 'allowed' must be ['<min_count>']",
+        )
 
     try:
         min_count = int(allowed[0])
     except (TypeError, ValueError):
-        return False, f"gpumd_run_in_check min_keyword_count: invalid count '{allowed[0]}'"
+        return (
+            False,
+            f"gpumd_run_in_check min_keyword_count: invalid count '{allowed[0]}'",
+        )
 
     keyword_lower = keyword.lower()
     count = sum(1 for line in lines if line[0].lower() == keyword_lower)
@@ -266,7 +278,10 @@ def _check_param_count(
     if not keyword:
         return False, "gpumd_run_in_check param_count: 'expected' must be keyword name"
     if not allowed:
-        return False, "gpumd_run_in_check param_count: 'allowed' list of counts required"
+        return (
+            False,
+            "gpumd_run_in_check param_count: 'allowed' list of counts required",
+        )
 
     allowed_counts: list[int] = []
     for a in allowed:
