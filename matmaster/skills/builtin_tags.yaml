@@ -103,4 +103,5 @@ categories:
       system-tools:
         skills:
           - skill-manager
+          - image-manager
           - compliance-guardian
