@@ -42,7 +42,7 @@ Each step maps to a command in the API Reference below.
 
 ```bash
 curl -s -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
-  "${BOHRIUM_OPENAPI_BASE_COM}/openapi/v2/image/private?device=container&type=private&page=1&pageSize=20" \
+  "${BOHRIUM_OPENAPI_BASE_COM}/openapi/v2/image/private?device=container&type=image&page=1&pageSize=20" \
   | python3 -m json.tool
 ```
 
@@ -88,7 +88,15 @@ curl -s -X POST -H "accessKey: ${BOHRIUM_ACCESS_KEY}" -H "Content-Type: applicat
 - `desc` — optional description
 - Base images must be from `registry.dp.tech`. Common base: `registry.dp.tech/dptech/ubuntu:22.04-py3.10-cuda12.1`
 
-After submission, poll the list command every 30s. Image is ready when `status == 2`. If not ready after 10 min, inform user the build may have failed.
+After submission, poll every 30s until the new image shows `status == 2`. Timeout after 10 min — inform user the build may have failed.
+
+Poll command (filter by name):
+
+```bash
+curl -s -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
+  "${BOHRIUM_OPENAPI_BASE_COM}/openapi/v2/image/private?device=container&type=image&page=1&pageSize=5" \
+  | python3 -c "import sys,json; [print(f\"{i['name']} status={i['status']}\") for i in json.load(sys.stdin)['data']['items'] if '<IMAGE_NAME>' in i.get('name','')]"
+```
 
 ### Debug Verification
 
@@ -107,7 +115,7 @@ curl -s -X POST -H "accessKey: ${BOHRIUM_ACCESS_KEY}" -H "Content-Type: applicat
   | python3 -m json.tool
 ```
 
-Response gives `{"data": {"machineId": <MACHINE_ID>}}`. Fetch SSH credentials:
+Response gives `{"data": {"machineId": <MACHINE_ID>}}`. Wait ~30s for node to boot, then fetch SSH credentials:
 
 ```bash
 curl -s -H "accessKey: ${BOHRIUM_ACCESS_KEY}" \
