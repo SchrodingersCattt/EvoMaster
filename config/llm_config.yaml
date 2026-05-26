@@ -120,9 +120,9 @@ profiles:
     max_retries: 3
     retry_delay: 1.0
 
-  qwen_latest_series_invite_beta_v23:
+  qwen_3_7_max:
     provider: "openai"
-    model: "matmaster/qwen-latest-series-invite-beta-v23"
+    model: "matmaster/qwen3.7-max"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
     reasoning_protocol: "openai_reasoning_effort"
@@ -204,8 +204,8 @@ routes:
     profile: qwen_3_6_plus
   "matmaster/qwen3.6-max-preview":
     profile: qwen_3_6_max_preview
-  "matmaster/qwen-latest-series-invite-beta-v23":
-    profile: qwen_latest_series_invite_beta_v23
+  "matmaster/qwen3.7-max":
+    profile: qwen_3_7_max
   "matmaster/dsk-v4p":
     profile: deepseek_v4_pro
   "global.anthropic.claude-opus-4-6-v1":
