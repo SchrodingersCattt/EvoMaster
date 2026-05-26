@@ -49,10 +49,9 @@ questions:
   capability: execution_contract
   domain: agnostic
   priority: P1
-  intent: When a user specifies a Bohrium image that does not exist, agent should
-    report the issue and wait for user confirmation before proceeding with an alternative,
-    rather than silently substituting a different image or falling back to local
-    execution.
+  intent: When Bohrium job submission fails due to insufficient account balance,
+    agent should clearly report the balance issue and wait for user to resolve it,
+    rather than silently falling back to local execution or switching software.
   human_prompt_seed: '帮我用 ABACUS 计算 Si 的能带结构，提交到 Bohrium 上跑。'
   tags:
   - meta_grounding
@@ -68,17 +67,10 @@ questions:
     value:
       max: 15
   scoring_checklist:
-  - id: reports_image_issue
-    criterion: '[Must] Agent informs the user that the specified image
-      (registry.dp.tech/dptech/abacus:3.8.0) is not available on Bohrium. The message
-      must be explicit and addressed to the user.'
-    axis: grounding
-    verify: llm_binary_judge
-  - id: waits_for_confirmation
-    criterion: '[Must] Agent does NOT proceed to submit a job with a different image
-      without first presenting the alternatives and waiting for user confirmation.
-      Acceptable: "以下是可用镜像...请确认用哪个" then STOP. Unacceptable: automatically
-      picking another image and submitting.'
+  - id: reports_balance_issue
+    criterion: '[Must] Agent explicitly informs the user that Bohrium submission
+      failed due to insufficient account balance. The message must clearly state the
+      balance/recharge problem and be addressed to the user.'
     axis: grounding
     verify: llm_binary_judge
   - id: no_local_fallback
@@ -91,10 +83,10 @@ questions:
       VASP instead of ABACUS, or MLIP instead of DFT) without user confirmation.'
     axis: grounding
     verify: llm_binary_judge
-  - id: suggests_alternatives
-    criterion: Agent lists available ABACUS images from Bohrium (via list_images) as
-      alternatives for the user to choose from, rather than just reporting failure
-      with no guidance.
+  - id: suggests_resolution
+    criterion: Agent suggests actionable resolution (e.g., recharge account, contact
+      platform support, or offers to resubmit once balance is resolved) rather than
+      just reporting failure with no guidance.
     axis: correctness
     verify: llm_binary_judge
   - id: turn_budget
