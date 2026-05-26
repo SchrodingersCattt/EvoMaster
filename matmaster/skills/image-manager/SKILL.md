@@ -32,7 +32,8 @@ If any is empty → STOP. Inform user that image management is unavailable in th
 
 1. **List** — check current private images
 2. **Build** — base64-encode Dockerfile, submit; poll list every 30s until new image shows `status == 2` (timeout after 10 min)
-3. **Verify** (optional) — try creating a debug node (Approach A: SSH); if resources unavailable, submit a test job (Approach B: Bohrium tool)
+3. **Verify** — automatically after build succeeds; try debug node (Approach A: SSH), fall back to job submission (Approach B: Bohrium tool). Do NOT ask user whether to verify — always verify.
+4. **Report** — show verification results with usage example, and suggest creating a skill if the image supports a specific workflow (see Post-Verification below)
 
 Each step maps to a command in the API Reference below.
 
@@ -172,6 +173,29 @@ python3 -c "import numpy; print(f'NumPy {numpy.__version__}')"
 ```
 
 Poll with `Bohrium(action="poll")`, then download and read log to confirm.
+
+### Post-Verification
+
+After verification passes, always:
+
+1. **Show usage example** tailored to the image content:
+
+```
+镜像已验证通过，可用于提交任务：
+
+Bohrium(action="submit",
+        image="<IMAGE_URL>",
+        machine="c2_m4_cpu",
+        input_dir="<your_input_dir>",
+        cmd="python3 your_script.py > log 2>&1")
+```
+
+2. **Suggest skill creation** if the image supports a repeatable workflow:
+
+> 这个镜像可以作为一个可复用的计算环境。需要我帮你把它封装成一个 skill 吗？
+> 这样以后用到这个环境时，agent 可以自动选用正确的镜像和参数。
+
+If user agrees, load `skill-manager` skill to handle the upload.
 
 ## Error Handling
 
