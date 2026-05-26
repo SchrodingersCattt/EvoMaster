@@ -327,7 +327,7 @@ questions:
     criterion: Agent responds within budget.
     axis: efficiency
     verify: turn_budget
-- id: EC_mlip_bio_head_001_20260524
+- id: EC_mlip_bio_head_001_20260526
   capability: execution_contract
   domain: agnostic
   intent: When user requests MLIP workflow for a biomolecular system that no DPA
@@ -360,7 +360,7 @@ questions:
       coverage (e.g., lists known heads, references documentation, or correctly
       states which domains are/aren't covered) when concluding that no suitable
       biomolecular head exists.
-    axis: grounding
+    axis: correctness
     verify: llm_binary_judge
   - id: offers_valid_routes
     criterion: Agent offers valid routes such as classical biomolecular force fields,
