@@ -109,39 +109,35 @@ generation 150000
 - `neuron 40` is slightly larger than default for a binary system.
 - Monitor `loss.out` convergence; increase `generation` if loss hasn't plateaued.
 
-## Example 5: Active Learning with Multi-Potential Observer
+## Example 5: Multi-Potential Observer / Active Learning
+
+Two or more `potential` lines enable observer mode. First potential drives dynamics, rest are observers.
 
 ```
 potential  nep_v1.txt
 potential  nep_v2.txt
 
-velocity   500
+velocity   300
 time_step  1
 
-# NVT with active-learning trigger
-ensemble   nvt_ber 500 500 100
-active     100 0.1
+# NVE production — observe mode (unbiased comparison)
+ensemble   nve
 dump_observer 1000 observe
 dump_thermo 1000
-run        500000
+run        100000
 ```
 
 **Key points:**
-- Two `potential` lines: first drives the MD, second is the observer.
-- `active 100 0.1`: check disagreement every 100 steps, save if max force difference > 0.1 eV/A.
-- `dump_observer 1000 observe`: write per-potential predictions every 1000 steps.
-- `observe` mode outputs individual potentials; use `average` for averaged predictions.
+- `dump_observer <interval> observe`: writes per-potential energies/forces. Output: `observer.out`.
+- `dump_observer <interval> average`: writes averaged predictions (for ensemble averaging).
+- For **active learning**, add `active 100 0.1` and use NVT (`nvt_ber`) instead of NVE — saves configurations when max force disagreement > threshold (eV/Å).
+- Without `active` keyword: no configurations saved, only statistics recorded.
 
 ## Example 6: NEMD Thermal Conductivity (Source-Sink Method)
 
 Non-equilibrium MD with heat source and sink groups.
 
-**Prerequisites**: `model.xyz` must have a `group` column defining at least 3 groups:
-- Group 0: bulk atoms
-- Group 1: heat source slab
-- Group 2: heat sink slab
-
-See `references/model_xyz_format.md` for the extended XYZ format with group columns.
+**Prerequisites**: `model.xyz` must have a `group` column. Example: groups 0/8 = walls (fixed), group 1 = source, group 7 = sink, groups 2-6 = transport region.
 
 ```
 potential  nep.txt
@@ -154,19 +150,22 @@ ensemble   nvt_nhc 300 300 100
 dump_thermo 1000
 run        200000
 
-# Stage 2: NEMD production (heat_nhc, 2 ns)
-ensemble   heat_nhc 300 300 100 source 1 sink 2
+# Stage 2: NEMD production (2 ns)
+fix        0
+fix        8
+ensemble   heat_lan 300 300 100 source 1 sink 7
 compute_temperature group_method 0
 dump_thermo 1000
 run        2000000
 ```
 
 **Key points:**
-- `heat_nhc 300 300 100 source 1 sink 2`: NHC thermostat at 300 K, source=group 1, sink=group 2.
+- `heat_lan <T1> <T2> <Tcouple> source <g_src> sink <g_sink>`: Langevin NEMD source/sink.
+- Alternative ensembles: `heat_nhc` (Nose-Hoover) or `heat_bdp` (BDP) — same parameter syntax.
+- `fix <group_id>`: freezes atoms in that group (wall boundary condition).
+- `compute_temperature group_method 0`: per-group temperature output for temperature profile.
 - Groups must be defined in `model.xyz` with a `group:I:1` column.
-- `compute_temperature group_method 0` outputs per-group temperatures for the temperature profile.
-- Alternative ensembles: `heat_lan` (Langevin) or `heat_bdp` (BDP) with the same syntax.
-- `compute_temperature` and `dump_thermo` must be re-specified — they reset after each `run`.
+- `compute_temperature` and `dump_thermo` reset after each `run` — re-specify for subsequent blocks.
 
 ## Example 7: Phonon Density of States (DOS)
 
@@ -231,60 +230,3 @@ compute_phonon 0.01
 - `kpoints.in` first line: number of points per segment. Subsequent lines: fractional k-coordinates.
 - Number of branches = 3 × atoms_in_primitive_cell (e.g., Si diamond → 6 branches: 3 acoustic + 3 optical).
 
-## Example 9: Multi-Potential Observer Mode
-
-Evaluate multiple potentials on the same trajectory without active learning.
-
-```
-potential  nep_v1.txt
-potential  nep_v2.txt
-
-velocity   300
-time_step  1
-
-# NVE production — observe mode
-ensemble   nve
-dump_observer 1000 observe
-dump_thermo 1000
-run        100000
-```
-
-**Key points:**
-- Two or more `potential` lines: first drives the dynamics, rest are observers.
-- `ensemble nve` is required for unbiased observation (thermostat would mask force differences).
-- `dump_observer <interval> observe`: writes per-potential energies/forces every N steps. Output: `observer.out`.
-- `dump_observer <interval> average`: writes averaged predictions across all potentials. Use this for ensemble averaging rather than disagreement monitoring.
-- Observer mode without `active` keyword: no configurations are saved, only statistics are recorded.
-
-## Example 10: NEMD with Langevin Source/Sink (heat_lan)
-
-Interface thermal transport using group-based heat source and sink.
-
-**Prerequisites**: `model.xyz` must have a `group` column. Groups 0 and 8 are wall atoms (fixed), group 1 is heat source, group 7 is heat sink, groups 2-6 are transport region.
-
-```
-potential  nep.txt
-
-velocity   300
-time_step  1
-
-# Stage 1: Equilibration (NVT, 200 ps)
-ensemble   nvt_nhc 300 300 100
-dump_thermo 1000
-run        200000
-
-# Stage 2: NEMD production (2 ns)
-fix        0
-fix        8
-ensemble   heat_lan 300 300 100 source 1 sink 7
-compute_temperature group_method 0
-dump_thermo 1000
-run        2000000
-```
-
-**Key points:**
-- `heat_lan <T1> <T2> <Tcouple> source <g_src> sink <g_sink>`: Langevin NEMD. `<Tcouple>` in steps.
-- `fix <group_id>`: freezes atoms in that group (wall boundary condition).
-- Alternative ensembles: `heat_nhc` (Nose-Hoover) or `heat_bdp` (BDP) — same parameter syntax.
-- `compute_temperature group_method 0`: writes per-group temperatures for temperature profile analysis.
-- Source/sink groups must be defined in `model.xyz` group column.
