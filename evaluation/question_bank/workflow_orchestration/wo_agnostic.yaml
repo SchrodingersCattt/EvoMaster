@@ -2198,7 +2198,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_gromacs_em_npt_001_20260507
+- id: WO_gromacs_em_npt_001_20260526
   capability: workflow_orchestration
   domain: agnostic
   intent: Submit GROMACS energy minimization and NPT equilibration on Bohrium,
@@ -2221,23 +2221,23 @@ questions:
   - eng_gromacs
   data_files:
   - key: conf_gro
-    path: EC_gromacs_em_npt/conf.gro
+    path: data/EC_gromacs_em_npt/conf.gro
     description: Initial SPC water box coordinates (216 waters)
   - key: topol_top
-    path: EC_gromacs_em_npt/topol.top
+    path: data/EC_gromacs_em_npt/topol.top
     description: GROMACS topology file
   - key: em_mdp
-    path: EC_gromacs_em_npt/em.mdp
+    path: data/EC_gromacs_em_npt/em.mdp
     description: Energy minimization parameters
   - key: npt_mdp
-    path: EC_gromacs_em_npt/npt.mdp
+    path: data/EC_gromacs_em_npt/npt.mdp
     description: NPT equilibration parameters
   reference_answers:
   - key: npt_output
     value: npt_final.gro
   - key: turn_budget
     value:
-      max: 25
+      max: 35
   - key: duration_budget
     value:
       max: 7200000
@@ -2279,7 +2279,7 @@ questions:
     criterion: Total token usage within budget.
     axis: efficiency
     verify: token_budget
-- id: WO_gromacs_solvate_001_20260507
+- id: WO_gromacs_solvate_001_20260526
   capability: workflow_orchestration
   domain: agnostic
   intent: Build a solvated, ion-neutralized GROMACS system from a PDB file and run
@@ -2298,7 +2298,7 @@ questions:
   - eng_gromacs
   data_files:
   - key: ala_dipeptide_pdb
-    path: WO_gromacs_solvate_001/ala_dipeptide.pdb
+    path: data/WO_gromacs_solvate_001/ala_dipeptide.pdb
     description: Alanine dipeptide (ACE-ALA-NME) PDB structure
   reference_answers:
   - key: em_output

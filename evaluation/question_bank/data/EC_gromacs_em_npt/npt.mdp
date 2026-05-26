@@ -15,10 +15,10 @@ ns_type     = grid
 
 ; Electrostatics
 coulombtype = PME
-rcoulomb    = 1.0
+rcoulomb    = 0.9
 
 ; VdW
-rvdw        = 1.0
+rvdw        = 0.9
 
 ; Temperature coupling
 tcoupl      = V-rescale
