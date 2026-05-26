@@ -508,7 +508,7 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
-- id: PWO_gpumd_phonon_001_20260523
+- id: PWO_gpumd_phonon_001_20260526
   capability: workflow_orchestration
   domain: agnostic
   intent: End-to-end GPUMD phonon dispersion for Si using NEP potential. Agent must
@@ -520,7 +520,7 @@ questions:
     - 使用 NEP 势函数（Si 体系，从 GPUMD 官方 examples 或已有资源获取）
     - 提交到 Bohrium 运行
     - 报告 Gamma 点光学支频率
-    - 结果写入 `phonon_result.json`：`{"gamma_optical_THz": ..., "method": "gpumd"}`
+    - 结果写入工作区根目录 `phonon_result.json`：`{"gamma_optical_THz": ..., "method": "gpumd"}`
   tags:
   - eng_gpumd
   data_files: []
@@ -535,10 +535,10 @@ questions:
       max: 17.0
   - key: turn_budget
     value:
-      max: 25
+      max: 40
   - key: duration_budget
     value:
-      max: 900000
+      max: 1500000
   scoring_checklist:
   - id: output_artifact
     criterion: Agent writes `phonon_result.json` to workspace.
