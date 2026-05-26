@@ -106,16 +106,19 @@ questions:
     axis: correctness
     verify: llm_binary_judge
 
-- id: WO_gpumdnep_003_20260428
+- id: WO_gpumdnep_003_20260526
   capability: workflow_orchestration
   domain: agnostic
   intent: Compute graphene DOS and heat capacity with GPUMD using Graphene_Lindsay_2010_modified potential.
-  human_prompt_seed: '获取 https://raw.githubusercontent.com/brucefan1983/GPUMD/master/potentials/tersoff/Graphene_Lindsay_2010_modified.txt，生成可直接运行的 `run.in`,采用 GPUMD 计算石墨烯 DOS 与热容。'
+  human_prompt_seed: |
+    获取 https://raw.githubusercontent.com/brucefan1983/GPUMD/master/potentials/tersoff/Graphene_Lindsay_2010_modified.txt，生成可直接运行的 `run.in`，采用 GPUMD 计算石墨烯 DOS 与热容。
+    请将输入文件保存为工作区根目录下的 `run.in`。
   tags: [eng_gpumd]
   data_files: []
   reference_answers:
   - key: run_input_artifact
     value: run.in
+    workspace_resolve: root
   - key: graphene_potential_token
     value:
       filename: run.in
@@ -123,14 +126,17 @@ questions:
       - potential
       - Graphene_Lindsay_2010_modified.txt
       flags: i
-  - key: dos_core_tokens
+  - key: dos_ensemble_nve
     value:
       filename: run.in
-      tokens:
-      - ensemble nve
-      - compute_dos
-      flags: i
-  - key: heat_capacity_3kb_per_atom
+      check: ensemble_type
+      allowed: [nve]
+  - key: dos_has_compute_dos
+    value:
+      filename: run.in
+      check: has_keyword
+      expected: [compute_dos]
+  - key: heat_capacity_reasonable
     value: {}
   scoring_checklist:
   - id: run_input_artifact
@@ -141,12 +147,17 @@ questions:
     criterion: "`run.in` 使用 `Graphene_Lindsay_2010_modified.txt` 势函数。"
     axis: correctness
     verify: text_file_contains_all
-  - id: dos_core_tokens
-    criterion: "`run.in` 包含 `ensemble nve` 与 `compute_dos` 两个关键参数。"
+  - id: dos_ensemble_nve
+    criterion: "`run.in` 使用 NVE 系综（DOS 计算需要微正则系综）。"
     axis: correctness
-    verify: text_file_contains_all
-  - id: heat_capacity_3kb_per_atom
-    criterion: 石墨烯热容结果应在约 `3.0 k_B/atom`（可接受小范围偏差）。
+    verify: gpumd_run_in_check
+  - id: dos_has_compute_dos
+    criterion: "`run.in` 包含 `compute_dos` 命令。"
+    axis: correctness
+    verify: gpumd_run_in_check
+  - id: heat_capacity_reasonable
+    criterion: 石墨烯热容结果物理合理：高温区趋向经典极限（Cv/3R → 1），量子修正后
+      在 1000K 时约 2.0-2.5 k_B/atom，2000K 时约 2.7-3.0 k_B/atom。
     axis: correctness
     verify: llm_binary_judge
 
