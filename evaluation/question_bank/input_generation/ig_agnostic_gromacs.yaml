@@ -164,11 +164,12 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_gromacs_003_20260526
+- id: IG_gromacs_003_20260527
   capability: input_generation
   domain: agnostic
   intent: Parameterize 乙醇 with GAFF and validate minimal GROMACS run on Bohrium.
-  human_prompt_seed: "请为分子 `乙醇`（SMILES: `CCO`）完成 GROMACS 小分子参数化与最小可运行验证。使用 `GAFF` 力场路线，投递任务，输出结果"
+  human_prompt_seed: "请为分子 `乙醇`（SMILES: `CCO`）完成 GROMACS 小分子参数化与最小可运行验证。使用 `GAFF` 力场路线，投递任务。\n\
+    将所有产物（提交脚本、参数化文件、运行日志、验证报告）整理到 `run_ligand_ethanol_gaff/` 目录下。"
   tags:
   - eng_gromacs
   data_files: []
@@ -196,13 +197,13 @@ questions:
     value: 能量最小化收敛：日志中出现 "converged to Fmax"，或 nsteps 用完时 Epot < 初始值。
   - key: turn_budget
     value:
-      max: 16
+      max: 30
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 22000
+      max: 40000
   scoring_checklist:
   - id: run_script_artifact
     criterion: '`run_ligand_ethanol_gaff/run.sh` exists in workspace.'
@@ -258,11 +259,12 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_gromacs_004_20260526
+- id: IG_gromacs_004_20260527
   capability: input_generation
   domain: agnostic
   intent: Parameterize 丙酮 with GAFF2 and validate minimal GROMACS run on Bohrium.
-  human_prompt_seed: "请为分子 `丙酮`（SMILES: `CC(=O)C`）完成 GROMACS 小分子参数化与最小可运行验证。使用 `GAFF2` 力场路线，投递任务，输出结果"
+  human_prompt_seed: "请为分子 `丙酮`（SMILES: `CC(=O)C`）完成 GROMACS 小分子参数化与最小可运行验证。使用 `GAFF2` 力场路线，投递任务。\n\
+    将所有产物（提交脚本、参数化文件、运行日志、验证报告）整理到 `run_ligand_acetone_gaff2/` 目录下。"
   tags:
   - eng_gromacs
   data_files: []
@@ -290,13 +292,13 @@ questions:
     value: 能量最小化收敛：日志中出现 "converged to Fmax"，或 nsteps 用完时 Epot < 初始值。
   - key: turn_budget
     value:
-      max: 16
+      max: 30
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 22000
+      max: 40000
   scoring_checklist:
   - id: run_script_artifact
     criterion: '`run_ligand_acetone_gaff2/run.sh` exists in workspace.'
@@ -352,11 +354,12 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_gromacs_005_20260526
+- id: IG_gromacs_005_20260527
   capability: input_generation
   domain: agnostic
   intent: Parameterize 乙酸乙酯 with OPLS-AA and validate minimal GROMACS run on Bohrium.
-  human_prompt_seed: "请为分子 `乙酸乙酯`（SMILES: `CCOC(=O)C`）完成 GROMACS 小分子参数化与最小可运行验证。使用 `OPLS-AA` 力场路线，投递任务，输出结果"
+  human_prompt_seed: "请为分子 `乙酸乙酯`（SMILES: `CCOC(=O)C`）完成 GROMACS 小分子参数化与最小可运行验证。使用 `OPLS-AA` 力场路线，投递任务。\n\
+    将所有产物（提交脚本、参数化文件、运行日志、验证报告）整理到 `run_ligand_ethyl_acetate_opls/` 目录下。"
   tags:
   - eng_gromacs
   data_files: []
@@ -384,13 +387,13 @@ questions:
     value: 能量最小化收敛：日志中出现 "converged to Fmax"，或 nsteps 用完时 Epot < 初始值。
   - key: turn_budget
     value:
-      max: 16
+      max: 30
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 22000
+      max: 40000
   scoring_checklist:
   - id: run_script_artifact
     criterion: '`run_ligand_ethyl_acetate_opls/run.sh` exists in workspace.'
