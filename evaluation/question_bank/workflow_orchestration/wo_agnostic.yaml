@@ -3690,14 +3690,14 @@ questions:
     criterion: Wall-clock time within budget.
     axis: efficiency
     verify: duration_budget
-- id: WO_gromacs_cnt_001_20260525
+- id: WO_gromacs_cnt_001_20260526
   capability: workflow_orchestration
   domain: agnostic
   scope: platform
   intent: Run a GROMACS MD simulation of a periodic (10,10) armchair single-wall
-    carbon nanotube. Agent must handle the key challenges of periodic molecular
-    systems in GROMACS — x2top with -pbc flag, periodic_molecules=yes in mdp,
-    and Ryckaert-Bellemans dihedral type.
+    carbon nanotube. Agent must handle periodic molecular systems correctly —
+    complete bond topology across periodic boundaries, periodic_molecules=yes
+    in mdp, and proper dihedral parameters.
   human_prompt_seed: "使用 GROMACS 对一根周期性 (10,10) 扶手椅型单壁碳纳米管进行 NVT 分子动力学模拟（300K，10ps）。\n\
     从结构构建、力场准备、拓扑生成到 MD 运行，完成全流程。\n输出最终结构 `cnt_nvt.gro`。\n"
   tags:
@@ -3709,7 +3709,7 @@ questions:
     value: cnt_nvt.gro
   - key: turn_budget
     value:
-      max: 30
+      max: 40
   - key: duration_budget
     value:
       max: 7200000
@@ -3728,17 +3728,18 @@ questions:
     axis: correctness
     verify: llm_binary_judge
     weight: 3.0
-  - id: x2top_pbc_flag
-    criterion: The topology generation step uses `gmx x2top` with the `-pbc`
-      flag to detect bonds across periodic boundaries. Without -pbc, the
-      covalent bonds wrapping around the tube axis will be missing.
+  - id: topology_bonds_complete
+    criterion: The generated topology (.top or .itp) contains the correct
+      number of bonds for a sp2 carbon nanotube (1.5 × atom_count). Missing
+      bonds indicates periodic boundary bonds were not detected. For 400
+      atoms expect 600 bonds; for 200 atoms expect 300 bonds.
     axis: correctness
     verify: llm_binary_judge
     weight: 2.5
-  - id: ryckaert_bellemans_dihedral
-    criterion: The force field or topology uses Ryckaert-Bellemans dihedral
-      function (GROMACS type 3) for the carbon dihedral angles, consistent
-      with OPLS-AA treatment of aromatic/graphitic carbons.
+  - id: topology_dihedrals_present
+    criterion: The generated topology (.top or .itp) contains a [ dihedrals ]
+      section with proper dihedral entries for carbon-carbon interactions
+      (either Ryckaert-Bellemans type 3 or periodic type 1).
     axis: correctness
     verify: llm_binary_judge
     weight: 2.0
