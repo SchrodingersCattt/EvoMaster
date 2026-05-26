@@ -27,6 +27,32 @@ GROMACS is a high-performance molecular dynamics package primarily designed for 
 > For different GROMACS versions: `Bohrium(action="list_images", keyword="gromacs")`.
 > When submitting multiple systems in parallel, use **distinct file names** (e.g. `sysA_init.gro`, `sysB_init.gro`) to avoid Bohrium upload cache collisions.
 
+## Small-molecule ligand route (GAFF/GAFF2/OPLS)
+
+Use this section when the goal is organic small-molecule parameterization that actually runs in GROMACS, not only file generation.
+
+Supported routes:
+
+- `ACPYPE` + `Antechamber/parmchk2` -> `GAFF/GAFF2`
+- `LigParGen` -> `OPLS-AA`
+
+Route selection:
+
+- Choose `ACPYPE` for GAFF/GAFF2 requests or AmberTools-style workflows.
+- Choose `LigParGen` for OPLS requests.
+- Use `Open Babel` for `SMILES` to `mol2/pdb` conversion when needed.
+
+Pass criteria for this ligand workflow:
+
+- At least one requested route must finish end-to-end with `grompp` + short `mdrun` and no topology/parameter fatal errors.
+- GAFF/GAFF2 route should produce `*_GMX.gro`, `*_GMX.itp`, `*_GMX.top`.
+- If OPLS is requested but LigParGen/BOSS backend is missing, explicitly report dependency gap instead of claiming success.
+
+Recommended acceptance checks:
+
+- **MUST**: parameterization outputs are generated and runnable.
+- **SHOULD**: minimization converges (`converged to Fmax`) or, if `nsteps` is exhausted, final `Epot` is lower than initial `Epot`.
+
 ## Input Preparation
 
 GROMACS uses three core files: **topology** (`.top`), **coordinates** (`.gro`), and **simulation parameters** (`.mdp`).
