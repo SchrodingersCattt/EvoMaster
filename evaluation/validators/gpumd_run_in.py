@@ -62,6 +62,8 @@ def check_gpumd_run_in(
         return _check_keyword_before(fpath, lines, expected)
     elif check == "first_keyword":
         return _check_first_keyword(fpath, lines, expected)
+    elif check == "min_keyword_count":
+        return _check_min_keyword_count(fpath, lines, expected, allowed)
     elif check == "param_count":
         return _check_param_count(fpath, lines, expected, allowed)
     else:
@@ -173,6 +175,40 @@ def _check_first_keyword(
         return True, f"{fpath.name}: first command is '{lines[0][0]}'"
     return False, (
         f"{fpath.name}: first command is '{lines[0][0]}', expected '{keyword}'"
+    )
+
+
+def _check_min_keyword_count(
+    fpath: Path,
+    lines: list[list[str]],
+    expected: str | list[str] | None,
+    allowed: list[str] | None,
+) -> tuple[bool, str]:
+    """Verify a keyword appears at least N times.
+
+    expected: keyword name (str)
+    allowed: ["<min_count>"] — minimum required occurrences
+    """
+    keyword = expected if isinstance(expected, str) else None
+    if not keyword:
+        return False, "gpumd_run_in_check min_keyword_count: 'expected' must be keyword name"
+    if not allowed or len(allowed) < 1:
+        return False, "gpumd_run_in_check min_keyword_count: 'allowed' must be ['<min_count>']"
+
+    try:
+        min_count = int(allowed[0])
+    except (TypeError, ValueError):
+        return False, f"gpumd_run_in_check min_keyword_count: invalid count '{allowed[0]}'"
+
+    keyword_lower = keyword.lower()
+    count = sum(1 for line in lines if line[0].lower() == keyword_lower)
+
+    if count >= min_count:
+        return True, (
+            f"{fpath.name}: '{keyword}' appears {count} time(s) (required >= {min_count})"
+        )
+    return False, (
+        f"{fpath.name}: '{keyword}' appears {count} time(s), required >= {min_count}"
     )
 
 

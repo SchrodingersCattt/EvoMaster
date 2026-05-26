@@ -307,10 +307,9 @@ questions:
   - key: observer_multi_potential
     value:
       filename: run.in
-      tokens:
-      - potential
-      - potential
-      flags: i
+      check: min_keyword_count
+      expected: potential
+      allowed: ['2']
   - key: observer_basic_keywords
     value:
       filename: run.in
@@ -329,7 +328,7 @@ questions:
   - id: observer_multi_potential
     criterion: "`run.in` 包含至少两行 `potential`（多势函数模式）。"
     axis: correctness
-    verify: text_file_contains_all
+    verify: gpumd_run_in_check
   - id: observer_basic_keywords
     criterion: "`run.in` 包含 `velocity`、`time_step`、`run` 基本关键字。"
     axis: correctness
@@ -356,10 +355,9 @@ questions:
   - key: observer_multi_potential
     value:
       filename: run.in
-      tokens:
-      - potential
-      - potential
-      flags: i
+      check: min_keyword_count
+      expected: potential
+      allowed: ['2']
   - key: observer_basic_keywords
     value:
       filename: run.in
@@ -378,7 +376,7 @@ questions:
   - id: observer_multi_potential
     criterion: "`run.in` 包含至少两行 `potential`（多势函数模式）。"
     axis: correctness
-    verify: text_file_contains_all
+    verify: gpumd_run_in_check
   - id: observer_basic_keywords
     criterion: "`run.in` 包含 `velocity`、`time_step`、`run` 基本关键字。"
     axis: correctness
