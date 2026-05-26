@@ -7,6 +7,7 @@ from .answer_text import (
 )
 from .checkcif import CheckCIFResult, check_checkcif_no_a_alerts, run_checkcif
 from .gpumd_run_in import check_gpumd_run_in
+from .gromacs_top import check_gromacs_top
 from .structure_density import check_density
 from .structure_general import (
     check_atom_count,
@@ -71,6 +72,8 @@ __all__ = [
     "verify_molecular_slab_layer_scaling",
     # gpumd_run_in (GPUMD run.in semantic checks)
     "check_gpumd_run_in",
+    # gromacs_top (GROMACS topology semantic checks)
+    "check_gromacs_top",
     # vasp_incar (VASP INCAR semantic checks)
     "check_vasp_incar",
 ]

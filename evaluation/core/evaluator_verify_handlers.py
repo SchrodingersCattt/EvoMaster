@@ -11,6 +11,7 @@ at module bottom; do not import this file from anywhere else.
 """
 
 from evaluation.validators.gpumd_run_in import check_gpumd_run_in
+from evaluation.validators.gromacs_top import check_gromacs_top
 from evaluation.validators.vasp_incar import check_vasp_incar
 
 from .evaluator import BinaryEvaluator
@@ -171,6 +172,12 @@ check_gpumd_run_in_from_evidence = _make_domain_check_handler(
     cfg_keys=("expected", "allowed"),
 )
 
+check_gromacs_top_from_evidence = _make_domain_check_handler(
+    "gromacs_top_check",
+    check_gromacs_top,
+    cfg_keys=("expected", "allowed"),
+)
+
 
 # Bulk-register (evidence, ref) handlers
 def _evidence_ref_handler(fn):
@@ -223,6 +230,7 @@ for _name, _fn in [
     ("kpt_line_check", check_kpt_line_from_evidence),
     ("vasp_incar_check", check_vasp_incar_from_evidence),
     ("gpumd_run_in_check", check_gpumd_run_in_from_evidence),
+    ("gromacs_top_check", check_gromacs_top_from_evidence),
 ]:
     BinaryEvaluator._VERIFY_REGISTRY[_name] = (_evidence_ref_handler(_fn), True)
 

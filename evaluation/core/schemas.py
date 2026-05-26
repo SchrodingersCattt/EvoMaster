@@ -103,6 +103,8 @@ VerifyLiteral = Literal[
     "vasp_incar_check",
     # GPUMD run.in semantic checks
     "gpumd_run_in_check",
+    # GROMACS topology semantic checks
+    "gromacs_top_check",
     # CSV row count check
     "csv_row_count",
 ]
@@ -357,6 +359,7 @@ class QuestionItem(BaseModel):
             "kpt_line_check",
             "vasp_incar_check",
             "gpumd_run_in_check",
+            "gromacs_top_check",
             "csv_row_count",
         }
         for item in self.scoring_checklist:

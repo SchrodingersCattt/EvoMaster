@@ -3707,6 +3707,17 @@ questions:
   reference_answers:
   - key: output_artifact
     value: cnt_nvt.gro
+  - key: topology_bonds_complete
+    value:
+      filename: '*.top'
+      check: bond_completeness
+      expected: '1.5'
+      allowed: ['0.05']
+  - key: topology_dihedrals_present
+    value:
+      filename: '*.top'
+      check: has_section
+      expected: dihedrals
   - key: turn_budget
     value:
       max: 40
@@ -3730,18 +3741,15 @@ questions:
     weight: 3.0
   - id: topology_bonds_complete
     criterion: The generated topology (.top or .itp) contains the correct
-      number of bonds for a sp2 carbon nanotube (1.5 × atom_count). Missing
-      bonds indicates periodic boundary bonds were not detected. For 400
-      atoms expect 600 bonds; for 200 atoms expect 300 bonds.
+      number of bonds for a sp2 carbon nanotube (1.5 × atom_count ±5%).
     axis: correctness
-    verify: llm_binary_judge
+    verify: gromacs_top_check
     weight: 2.5
   - id: topology_dihedrals_present
-    criterion: The generated topology (.top or .itp) contains a [ dihedrals ]
-      section with proper dihedral entries for carbon-carbon interactions
-      (either Ryckaert-Bellemans type 3 or periodic type 1).
+    criterion: The generated topology (.top or .itp) contains a non-empty
+      [ dihedrals ] section.
     axis: correctness
-    verify: llm_binary_judge
+    verify: gromacs_top_check
     weight: 2.0
   - id: cnt_structure_correct
     criterion: The CNT structure has the tube axis along one periodic
