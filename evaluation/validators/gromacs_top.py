@@ -111,9 +111,15 @@ def _check_section_count_range(
     allowed: ["<min>", "<max>"]
     """
     if not expected or not isinstance(expected, str):
-        return False, "gromacs_top_check section_count_range: 'expected' must be section name"
+        return (
+            False,
+            "gromacs_top_check section_count_range: 'expected' must be section name",
+        )
     if not allowed or len(allowed) < 2:
-        return False, "gromacs_top_check section_count_range: 'allowed' must be ['<min>', '<max>']"
+        return (
+            False,
+            "gromacs_top_check section_count_range: 'allowed' must be ['<min>', '<max>']",
+        )
 
     try:
         min_count = int(allowed[0])
