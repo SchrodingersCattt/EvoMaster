@@ -60,6 +60,8 @@ def check_gpumd_run_in(
         return _check_has_any_keyword_set(fpath, lines, allowed)
     elif check == "keyword_before":
         return _check_keyword_before(fpath, lines, expected)
+    elif check == "first_keyword":
+        return _check_first_keyword(fpath, lines, expected)
     elif check == "param_count":
         return _check_param_count(fpath, lines, expected, allowed)
     else:
@@ -149,6 +151,28 @@ def _check_has_any_keyword_set(
     return False, (
         f"{fpath.name}: none of the allowed keyword sets found: {sets} "
         f"(present commands: {sorted(present_keywords)})"
+    )
+
+
+def _check_first_keyword(
+    fpath: Path,
+    lines: list[list[str]],
+    expected: str | list[str] | None,
+) -> tuple[bool, str]:
+    """Verify that the first non-comment command is the expected keyword."""
+    if not expected:
+        return False, "gpumd_run_in_check first_keyword: 'expected' must be provided"
+
+    keyword = expected if isinstance(expected, str) else expected[0]
+
+    if not lines:
+        return False, f"{fpath.name}: file has no commands"
+
+    first_cmd = lines[0][0].lower()
+    if first_cmd == keyword.lower():
+        return True, f"{fpath.name}: first command is '{lines[0][0]}'"
+    return False, (
+        f"{fpath.name}: first command is '{lines[0][0]}', expected '{keyword}'"
     )
 
 
