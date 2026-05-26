@@ -147,16 +147,19 @@ questions:
     axis: correctness
     verify: llm_binary_judge
 
-- id: WO_gpumdnep_004_20260428
+- id: WO_gpumdnep_004_20260526
   capability: workflow_orchestration
   domain: agnostic
   intent: Compute Si thermal expansion coefficient with GPUMD using Si_Fan_2019 Tersoff mini potential.
-  human_prompt_seed: '获取 https://raw.githubusercontent.com/brucefan1983/GPUMD/master/potentials/tersoff/Si_Fan_2019.txt，使用这个势函数采用 GPUMD 计算 Si 的热膨胀系数。'
+  human_prompt_seed: |
+    获取 https://raw.githubusercontent.com/brucefan1983/GPUMD/master/potentials/tersoff/Si_Fan_2019.txt，使用这个势函数采用 GPUMD 计算 Si 的热膨胀系数。
+    请将输入文件保存为工作区根目录下的 `run.in`。
   tags: [eng_gpumd]
   data_files: []
   reference_answers:
   - key: run_input_artifact
     value: run.in
+    workspace_resolve: root
   - key: si_fan_potential_token
     value:
       filename: run.in
@@ -164,14 +167,16 @@ questions:
       - potential
       - Si_Fan_2019.txt
       flags: i
-  - key: thermal_expansion_core_tokens
+  - key: thermal_expansion_ensemble
     value:
       filename: run.in
-      tokens:
-      - ensemble npt_ber
-      - dump_thermo
-      - run
-      flags: i
+      check: ensemble_type
+      allowed: [npt_ber, npt_scr]
+  - key: thermal_expansion_has_keywords
+    value:
+      filename: run.in
+      check: has_keyword
+      expected: [dump_thermo, run]
   - key: thermal_expansion_alpha_717e6
     value: {}
   scoring_checklist:
@@ -183,10 +188,14 @@ questions:
     criterion: "`run.in` 使用 `Si_Fan_2019.txt` 势函数。"
     axis: correctness
     verify: text_file_contains_all
-  - id: thermal_expansion_core_tokens
-    criterion: "`run.in` 包含 `ensemble npt_ber`、`dump_thermo`、`run` 三个关键参数。"
+  - id: thermal_expansion_ensemble
+    criterion: "`run.in` 使用 NPT 系综（`npt_ber` 或 `npt_scr`）。"
     axis: correctness
-    verify: text_file_contains_all
+    verify: gpumd_run_in_check
+  - id: thermal_expansion_has_keywords
+    criterion: "`run.in` 包含 `dump_thermo` 和 `run` 关键命令。"
+    axis: correctness
+    verify: gpumd_run_in_check
   - id: thermal_expansion_alpha_717e6
     criterion: 热膨胀系数结果应在约 `α = 7.17 × 10⁻⁶ K⁻¹`（可接受小范围偏差）。
     axis: correctness

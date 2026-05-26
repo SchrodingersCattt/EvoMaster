@@ -37,6 +37,7 @@ from .text_file import (
     check_text_file_numeric_range,
     check_text_file_regex,
 )
+from .gpumd_run_in import check_gpumd_run_in
 from .vasp_incar import check_vasp_incar
 
 __all__ = [
@@ -72,6 +73,8 @@ __all__ = [
     'check_molcrys_local_env',
     'check_sc005_other_formulas_in_answer',
     'verify_molecular_slab_layer_scaling',
+    # gpumd_run_in (GPUMD run.in semantic checks)
+    'check_gpumd_run_in',
     # vasp_incar (VASP INCAR semantic checks)
     'check_vasp_incar',
 ]

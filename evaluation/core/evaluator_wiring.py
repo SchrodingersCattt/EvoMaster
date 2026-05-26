@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from evaluation.validators.abacus_input import check_abacus_input
+from evaluation.validators.gpumd_run_in import check_gpumd_run_in
 from evaluation.validators.answer_text import check_answer_json_numeric
 from evaluation.validators.kpt_line import check_kpt_line
 from evaluation.validators.budget import check_duration_budget as _check_duration_budget
@@ -1012,5 +1013,27 @@ def check_vasp_incar_from_evidence(
         max=cfg.get("max"),
         atom_count=cfg.get("atom_count"),
         species_index=cfg.get("species_index"),
+        workspace_resolve=_workspace_resolve_from_ref(ref),
+    )
+
+
+def check_gpumd_run_in_from_evidence(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    """Wire ``gpumd_run_in_check`` verifier from evidence + reference answer."""
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    filename = str(cfg.get("filename", ""))
+    check_type = str(cfg.get("check", ""))
+    if not filename or not check_type:
+        return False, "gpumd_run_in_check: need 'filename' and 'check' in ref"
+    return check_gpumd_run_in(
+        ws,
+        filename=filename,
+        check=check_type,
+        expected=cfg.get("expected"),
+        allowed=cfg.get("allowed"),
         workspace_resolve=_workspace_resolve_from_ref(ref),
     )

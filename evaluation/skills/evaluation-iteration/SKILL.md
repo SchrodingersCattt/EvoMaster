@@ -206,6 +206,7 @@ For field mapping rules (capability, domain, tags, ID prefix, file location, ski
 | `stru_file_check` | ABACUS STRU structural checks (species_count, species_elements, magnetic_order, total_atoms, lattice_*) |
 | `abacus_input_check` | ABACUS INPUT resolution checks (kpoint_density, param_enabled, param_value_in, efield_dir_is_vacuum) |
 | `kpt_line_check` | ABACUS KPT Line-mode checks (mode, segment_count, last_nk, no_nk_zero, nk_per_segment) |
+| `gpumd_run_in_check` | GPUMD run.in semantic checks (ensemble_type, has_keyword, keyword_before, param_count) |
 | `token_budget` | Total tokens ≤ max |
 | `turn_budget` | Total steps ≤ max |
 | `duration_budget` | Duration ≤ max ms |
