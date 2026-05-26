@@ -12,7 +12,7 @@ GROMACS is a high-performance molecular dynamics package primarily designed for 
 
 | Item | Default Value (CPU) |
 |------|---------------------|
-| image | `registry.dp.tech/dptech/gromacs:2022.2` |
+| image | `registry.dp.tech/dptech/dp/native/hub/mrdic2/a1:1.0.1-1779698340` |
 | machine | `c32_m128_cpu` (32 cores, 128 GB RAM) |
 | cmd | `bash run.sh > log 2>&1` |
 
@@ -100,6 +100,7 @@ If the user provides `.gro` + `.top` + `.mdp` (or a pre-built `.tpr`), skip prep
 5. **`genion` requires a `.tpr`** — Run `grompp` first to produce the `.tpr`, then feed it to `genion`.
 6. **DO NOT run `gmx_mpi` locally** — `gmx_mpi` is only available in the Bohrium image. All GROMACS commands (including system building) must be in the submitted `run.sh`.
 7. **Interactive selections via pipe** — Commands that need interactive group input (e.g. `genion`, `make_ndx`) must use `echo "GROUP" | gmx_mpi ...` in the script.
+8. **Use the skill default image** — Submit with `registry.dp.tech/dptech/dp/native/hub/mrdic2/a1:1.0.1-1779698340` unless the user explicitly requests another image.
 
 ## Submission Workflow
 
@@ -107,7 +108,7 @@ If the user provides `.gro` + `.top` + `.mdp` (or a pre-built `.tpr`), skip prep
 2. Write a `run.sh` that chains all steps (system building if needed + grompp + mdrun)
 3. Ensure all files (`.gro`, `.top`, `.mdp`, `run.sh`) are in one directory
 4. Submit:
-   `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/gromacs:2022.2", cmd="bash run.sh > log 2>&1")`
+   `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/dp/native/hub/mrdic2/a1:1.0.1-1779698340", cmd="bash run.sh > log 2>&1")`
 5. Poll: `Bohrium(action="poll", job_id=<id>)`
 6. Download: `Bohrium(action="download", job_id=<id>, result_dir="<output_dir>")`
 
