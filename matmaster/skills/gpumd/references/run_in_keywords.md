@@ -61,9 +61,18 @@ potential  <path>            # second potential → enables observer / active le
 fix  <group_id>             # freeze group (wall / boundary atoms)
 ```
 
+## Phonon / Structural Keywords
+
+These keywords do NOT require `run` — they execute immediately.
+
+| Keyword | Syntax | Purpose |
+|---------|--------|---------|
+| `replicate` | `replicate <N1> <N2> <N3>` | Build supercell from primitive cell before simulation. Required for `compute_phonon`. Size must satisfy `2 * phonon_cutoff < box_length`. |
+| `compute_phonon` | `compute_phonon <delta>` | Finite-displacement phonon calculation. `delta` in Å (typical: 0.01). No `run` needed — exits after computing. Requires `kpoints.in`. Output: `omega2.out`. |
+
 ## Compute Keywords
 
-All `compute_*` keywords must appear **before** the `run` in the same block.
+All `compute_*` keywords (except `compute_phonon`) must appear **before** the `run` in the same block.
 
 | Keyword | Syntax | Purpose |
 |---------|--------|---------|

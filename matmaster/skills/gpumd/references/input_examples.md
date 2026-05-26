@@ -195,3 +195,96 @@ run        200000
 - Frequency resolution = max_omega / num_omega = 50/400 = 0.125 THz.
 - Correlation time window = 5 x 200 x 1 fs = 1 ps.
 - For species-resolved DOS, append `group_method <idx> group_id <id>`.
+
+## Example 8: Phonon Dispersion (Finite Displacement)
+
+Compute phonon dispersion using GPUMD's built-in finite-displacement method.
+
+**Required files:**
+- `model.xyz`: primitive cell (e.g. 2-atom Si diamond)
+- `kpoints.in`: high-symmetry k-path
+- `run.in`: with `replicate` and `compute_phonon`
+
+```
+# kpoints.in — FCC Brillouin zone path: G-X-U|K-G-L-W-X
+100
+0.000 0.000 0.000  # G
+0.500 0.000 0.500  # X
+0.625 0.250 0.625  # U (equivalent to K)
+0.000 0.000 0.000  # G
+0.500 0.500 0.500  # L
+0.500 0.250 0.750  # W
+0.500 0.000 0.500  # X
+```
+
+```
+# run.in
+potential  nep.txt
+replicate  8 8 8
+compute_phonon 0.01
+```
+
+**Key points:**
+- `replicate N1 N2 N3`: builds supercell from primitive cell. Supercell must be large enough that `2 * phonon_cutoff < box_length` in each direction. GPUMD will warn "Replicate in X >= N" if too small.
+- `compute_phonon <delta>`: finite displacement (Å). Typical: 0.01. No `run` command needed — it exits after computing force constants.
+- Output: `omega2.out` — each row is one k-point, columns are ω² eigenvalues (units: THz²). Frequency ν = √(ω²) / (2π) in THz.
+- `kpoints.in` first line: number of points per segment. Subsequent lines: fractional k-coordinates.
+- Number of branches = 3 × atoms_in_primitive_cell (e.g., Si diamond → 6 branches: 3 acoustic + 3 optical).
+
+## Example 9: Multi-Potential Observer Mode
+
+Evaluate multiple potentials on the same trajectory without active learning.
+
+```
+potential  nep_v1.txt
+potential  nep_v2.txt
+
+velocity   300
+time_step  1
+
+# NVE production — observe mode
+ensemble   nve
+dump_observer 1000 observe
+dump_thermo 1000
+run        100000
+```
+
+**Key points:**
+- Two or more `potential` lines: first drives the dynamics, rest are observers.
+- `ensemble nve` is required for unbiased observation (thermostat would mask force differences).
+- `dump_observer <interval> observe`: writes per-potential energies/forces every N steps. Output: `observer.out`.
+- `dump_observer <interval> average`: writes averaged predictions across all potentials. Use this for ensemble averaging rather than disagreement monitoring.
+- Observer mode without `active` keyword: no configurations are saved, only statistics are recorded.
+
+## Example 10: NEMD with Langevin Source/Sink (heat_lan)
+
+Interface thermal transport using group-based heat source and sink.
+
+**Prerequisites**: `model.xyz` must have a `group` column. Groups 0 and 8 are wall atoms (fixed), group 1 is heat source, group 7 is heat sink, groups 2-6 are transport region.
+
+```
+potential  nep.txt
+
+velocity   300
+time_step  1
+
+# Stage 1: Equilibration (NVT, 200 ps)
+ensemble   nvt_nhc 300 300 100
+dump_thermo 1000
+run        200000
+
+# Stage 2: NEMD production (2 ns)
+fix        0
+fix        8
+ensemble   heat_lan 300 300 100 source 1 sink 7
+compute_temperature group_method 0
+dump_thermo 1000
+run        2000000
+```
+
+**Key points:**
+- `heat_lan <T1> <T2> <Tcouple> source <g_src> sink <g_sink>`: Langevin NEMD. `<Tcouple>` in steps.
+- `fix <group_id>`: freezes atoms in that group (wall boundary condition).
+- Alternative ensembles: `heat_nhc` (Nose-Hoover) or `heat_bdp` (BDP) — same parameter syntax.
+- `compute_temperature group_method 0`: writes per-group temperatures for temperature profile analysis.
+- Source/sink groups must be defined in `model.xyz` group column.
