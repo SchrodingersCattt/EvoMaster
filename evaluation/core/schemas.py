@@ -108,6 +108,8 @@ VerifyLiteral = Literal[
     "gromacs_top_check",
     # CSV row count check
     "csv_row_count",
+    # Tool call existence check
+    "tool_call_exists",
 ]
 
 AxisLiteral = Literal["correctness", "grounding", "efficiency"]
@@ -362,6 +364,7 @@ class QuestionItem(BaseModel):
             "gpumd_run_in_check",
             "gromacs_top_check",
             "csv_row_count",
+            "tool_call_exists",
         }
         for item in self.scoring_checklist:
             if item.verify in _needs_ref and item.id not in ref_keys:
