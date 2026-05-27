@@ -57,7 +57,7 @@ banks:
 - path: data_diagnosis/dd_agnostic.yaml
   capability: data_diagnosis
   domain: agnostic
-  questions: 2
+  questions: 3
 - path: execution_contract/ec_agnostic.yaml
   capability: execution_contract
   domain: agnostic
@@ -77,7 +77,7 @@ banks:
 - path: input_generation/ig_agnostic_lammps.yaml
   capability: input_generation
   domain: agnostic
-  questions: 4
+  questions: 5
 - path: input_generation/ig_agnostic_cp2k.yaml
   capability: input_generation
   domain: agnostic

@@ -101,3 +101,77 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+- id: DD_vasp_scf_diverge_001_20260528
+  capability: data_diagnosis
+  domain: agnostic
+  intent: Test whether agent can diagnose SCF oscillation in a VASP DFT+U calculation
+    and propose concrete parameter adjustments rather than blindly retrying.
+  human_prompt_seed: '我的 VASP DFT+U 计算（FeN4C单原子催化剂吸附*OOH）SCF不收敛，能量在
+    -424到-428 eV之间振荡了200步。OSZICAR和INCAR片段在以下地址：
+
+    - `OSZICAR_fragment.txt` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/DD_vasp_scf_diverge_001/OSZICAR_fragment.txt`
+
+    - `INCAR_original.txt` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/DD_vasp_scf_diverge_001/INCAR_original.txt`
+
+    请诊断原因并给出修改后的INCAR参数。
+
+    '
+  tags:
+  - eng_vasp
+  data_files:
+  - key: oszicar
+    path: data/DD_vasp_scf_diverge_001/OSZICAR_fragment.txt
+    description: VASP OSZICAR showing SCF oscillation for DFT+U system.
+  - key: incar
+    path: data/DD_vasp_scf_diverge_001/INCAR_original.txt
+    description: Original INCAR with too-aggressive mixing for DFT+U.
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 10
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: diagnoses_mixing_issue
+    criterion: Agent identifies that AMIX=0.2 is too aggressive for a DFT+U spin-
+      polarized system and causes charge/spin sloshing (SCF oscillation). The energy
+      oscillating between -424 and -428 eV without converging is classic charge
+      density mixing instability.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: reduces_amix
+    criterion: Agent recommends reducing AMIX to 0.01-0.05 range (and optionally
+      BMIX to 1e-5 or smaller, AMIX_MAG to 0.01-0.05) to stabilize the charge
+      mixing for DFT+U.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: suggests_algo_change
+    criterion: Agent recommends switching ALGO from Normal to All (or adding
+      IALGO=48/ALGO=Damped) which is more robust for DFT+U systems with
+      near-degenerate spin states.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: suggests_contcar_restart
+    criterion: Agent recommends restarting from CONTCAR (ISTART=1) if available,
+      since a partially-converged wavefunction is a better starting point than
+      random initialization for difficult SCF problems.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: does_not_just_retry
+    criterion: Agent does NOT suggest simply resubmitting the same INCAR without
+      changes. It must propose concrete parameter modifications.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget

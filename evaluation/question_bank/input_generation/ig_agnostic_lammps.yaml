@@ -321,3 +321,64 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
+- id: IG_lammps_deepmd_typemap_001_20260528
+  capability: input_generation
+  domain: agnostic
+  intent: Test whether agent correctly specifies element names in DeePMD pair_coeff
+    command for a multi-element system, ensuring proper type_map mapping.
+  human_prompt_seed: '为含能材料 EAP（乙二胺高氯酸盐，化学式 C₂H₁₂N₂Cl₂O₈，包含 H/C/N/O/Cl
+    五种元素）写一个 LAMMPS DeePMD 分子动力学输入脚本。模型文件为 `model.pb`（全周期表
+    118元素type_map）。体系232原子，2500K NVT模拟100ps，时间步0.1fs。输出 `in.lammps`。
+
+    '
+  tags:
+  - eng_lammps
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: input_file
+    value: in.lammps
+  - key: must_pair_coeff_elements
+    value:
+      filename: in.lammps
+      pattern: (?i)pair_coeff\s+\*\s+\*\s+\S+\s+H\s+C\s+N\s+O\s+Cl
+  - key: turn_budget
+    value:
+      max: 10
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: input_file
+    criterion: in.lammps written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_pair_coeff_elements
+    criterion: '[Must] pair_coeff line explicitly lists element names after model
+      file (e.g., pair_coeff * * model.pb H C N O Cl). Without element names,
+      DeePMD maps type 1->H, 2->He, 3->Li... which is completely wrong for a
+      5-element system. The element order must match the atom type order in the
+      data file.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 3.0
+  - id: has_deepmd_pair_style
+    criterion: Script uses pair_style deepmd with the model file.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: correct_temperature
+    criterion: NVT thermostat set to 2500K as requested.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: correct_timestep
+    criterion: Timestep is 0.1 fs (0.0001 ps in metal units or equivalent).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
