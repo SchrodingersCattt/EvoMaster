@@ -1721,7 +1721,7 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
-- id: SC_monomer_smiles_001_20260526
+- id: SC_monomer_smiles_001_20260527
   capability: structure_construction
   domain: agnostic
   intent: Test whether the agent correctly recalls SMILES for acrylate/vinyl-ester
@@ -1779,7 +1779,7 @@ questions:
       element_a: C
       element_b: O
       cutoff_A: 1.5
-      expected_count: 2
+      expected_count: 3
       tolerance: 0
   - key: tba_cc_double_bond
     value:
@@ -1842,10 +1842,9 @@ questions:
     axis: correctness
     verify: struct_file_composition
   - id: tba_co_bond
-    criterion: tBA structure has exactly 2 C-O bonds within 1.5 A, confirming ester
-      linkage (C(=O)-O-C). If the ester direction were reversed (vinyl-O-C(=O)), the
-      C-O bond count at this cutoff would still be 2 but the bond angle test below
-      would fail.
+    criterion: tBA structure has exactly 3 C-O bonds within 1.5 A (C=O at ~1.22 A,
+      C(carbonyl)-O at ~1.35 A, O-C(tert-butyl) at ~1.45 A), confirming the ester
+      linkage C(=O)-O-C(CH3)3.
     axis: correctness
     verify: struct_file_bond_count
   - id: tba_cc_double_bond
