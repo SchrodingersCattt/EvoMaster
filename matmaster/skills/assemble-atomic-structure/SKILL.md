@@ -63,6 +63,7 @@ For interface lattice matching, use `ZSLGenerator` from
 `pymatgen.analysis.interfaces.zsl`:
 
 ```python
+import numpy as np
 from pymatgen.analysis.interfaces.zsl import ZSLGenerator
 from pymatgen.core.surface import SlabGenerator
 
