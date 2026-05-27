@@ -12,7 +12,7 @@ GROMACS is a high-performance molecular dynamics package primarily designed for 
 
 | Item | Default Value (CPU) |
 |------|---------------------|
-| image | `registry.dp.tech/dptech/gromacs:2022.2` |
+| image | `registry.dp.tech/dptech/dp/native/hub/mrdic2/a1:1.0.1-1779698340` |
 | machine | `c32_m128_cpu` (32 cores, 128 GB RAM) |
 | cmd | `bash run.sh > log 2>&1` |
 
@@ -21,11 +21,37 @@ GROMACS is a high-performance molecular dynamics package primarily designed for 
 | machine | `c8_m32_1 * NVIDIA 4090` |
 | cmd | `bash run.sh > log 2>&1` (add `-gpu_id 0` to mdrun in script) |
 
-> **The Bohrium GROMACS image has `gmx_mpi` only (not `gmx`).** Do NOT use `-ntmpi` (thread-MPI is not compiled in).
-> Adjust `grompp` arguments to match actual filenames.
+> **The image has `gmx` only (thread-MPI + CUDA build, GROMACS 2024.2).** There is NO `gmx_mpi`.
+> Use `-ntmpi` and `-ntomp` to control parallelism (see Parallel Execution below).
 > For GPU options: `Bohrium(action="list_machines", machine_type="gpu", keyword="4090")`.
 > For different GROMACS versions: `Bohrium(action="list_images", keyword="gromacs")`.
 > When submitting multiple systems in parallel, use **distinct file names** (e.g. `sysA_init.gro`, `sysB_init.gro`) to avoid Bohrium upload cache collisions.
+
+### run.sh Preamble (REQUIRED)
+
+Every `run.sh` must start with:
+
+```bash
+#!/bin/bash
+set -e
+export PATH="/usr/local/gmx-2024.2/bin:$PATH"
+```
+
+The `gmx` binary is at `/usr/local/gmx-2024.2/bin/gmx` but is NOT in the default PATH.
+
+### Parallel Execution
+
+This is a **thread-MPI** build. Do NOT use `mpirun`/`mpiexec`.
+
+```bash
+# CPU-only: use all 32 cores
+gmx mdrun -deffnm em -ntmpi 1 -ntomp 32
+
+# GPU: 1 MPI rank, all CPU threads for PME offload
+gmx mdrun -deffnm md -ntmpi 1 -ntomp 8 -gpu_id 0 -nb gpu -pme gpu
+```
+
+For short EM jobs, defaults (`gmx mdrun -deffnm em -v`) are fine — GROMACS auto-detects threads.
 
 ## Small-molecule ligand route (GAFF/GAFF2/OPLS)
 
@@ -33,20 +59,47 @@ Use this section when the goal is organic small-molecule parameterization that a
 
 Supported routes:
 
-- `ACPYPE` + `Antechamber/parmchk2` -> `GAFF/GAFF2`
-- `LigParGen` -> `OPLS-AA`
+- `ACPYPE` + `Antechamber/parmchk2` -> `GAFF/GAFF2` — **fully available in image**
+- `LigParGen` + `BOSS` -> `OPLS-AA` — **requires user-provided BOSS package** (see below)
 
 Route selection:
 
 - Choose `ACPYPE` for GAFF/GAFF2 requests or AmberTools-style workflows.
-- Choose `LigParGen` for OPLS requests.
-- Use `Open Babel` for `SMILES` to `mol2/pdb` conversion when needed.
+- Choose `LigParGen` for OPLS requests (only if user provides BOSS).
+- Use `Open Babel` or `RDKit` for `SMILES` to `mol2/pdb` conversion when needed.
+
+### GAFF/GAFF2 route (ready to use)
+
+Tools available in image: `acpype` (2023.10.27), `antechamber`, `parmchk2`, `tleap` (AmberTools 24.8), `obabel` (3.1.1), `rdkit` (2025.9.5).
+
+```bash
+# In run.sh:
+acpype -i molecule.mol2 -c bcc -a gaff2
+# Produces: molecule.acpype/molecule_GMX.{gro,itp,top}
+```
+
+### OPLS-AA route (needs BOSS from user)
+
+BOSS is **academic-free but closed-source** software from Yale (Jorgensen group). LigParGen requires BOSS's `xZCM1A` binary for CM1A charge calculation.
+
+**Before submitting**: ask the user if they have a BOSS package available. If they provide a path (e.g. `/share/boss0824.tar.gz`), include it in input_dir and deploy in run.sh:
+
+```bash
+# In run.sh:
+tar xzf boss0824.tar.gz
+export BOSSdir=$(pwd)/boss
+# Fix PATH for LigParGen to find BOSS executables
+export PATH="$BOSSdir:$PATH"
+python -m LigParGen -s 'CCO' -r MOL -c 0 -o 0
+```
+
+If user does NOT have BOSS: report that OPLS-AA parameterization requires the BOSS package, and suggest using the LigParGen web server (https://traken.chem.yale.edu/ligpargen/) manually or switching to GAFF/GAFF2 route.
 
 Pass criteria for this ligand workflow:
 
 - At least one requested route must finish end-to-end with `grompp` + short `mdrun` and no topology/parameter fatal errors.
 - GAFF/GAFF2 route should produce `*_GMX.gro`, `*_GMX.itp`, `*_GMX.top`.
-- If OPLS is requested but LigParGen/BOSS backend is missing, explicitly report dependency gap instead of claiming success.
+- If OPLS is requested but BOSS is unavailable, explicitly report dependency gap instead of claiming success.
 
 Recommended acceptance checks:
 
@@ -66,25 +119,22 @@ uv run python scripts/render_input.py --software gromacs --task md --output md.m
 
 ### System Building (inside `run.sh`, executed on Bohrium)
 
-These commands run inside the submitted `run.sh` — `gmx_mpi` is only available in the Bohrium image, NOT locally.
+These commands run inside the submitted `run.sh` — `gmx` is only available in the Bohrium image, NOT locally.
 
-The image's shared data lives at `$GMXLIB` (typically `/opt/gromacs-2022.2/share/gromacs/top/`). Topology `#include` directives (e.g. `#include "oplsaa.ff/forcefield.itp"`) resolve against this path automatically. When referencing data files explicitly (e.g. `spc216.gro`), use the full path:
+The image's shared data lives at `$GMXLIB` (typically `/usr/local/gmx-2024.2/share/gromacs/top/`). Topology `#include` directives (e.g. `#include "oplsaa.ff/forcefield.itp"`) resolve against this path automatically. When referencing data files explicitly (e.g. `spc216.gro`), use the full path:
 
 ```bash
-GMXTOP=$(find /opt -type d -name "top" -path "*/gromacs/*" 2>/dev/null | head -1)
-if [ ! -d "$GMXTOP" ]; then
-    GMXTOP=$(find /usr/local -type d -name "top" -path "*/gromacs/*" 2>/dev/null | head -1)
-fi
+GMXTOP=$(find /usr/local -type d -name "top" -path "*/gromacs/*" 2>/dev/null | head -1)
 ```
 
 | Step | Command | Purpose |
 |------|---------|---------|
-| Topology from PDB | `gmx_mpi pdb2gmx -f input.pdb -o processed.gro -water spce` | Generate `.top` + `.gro` from PDB |
-| Edit box | `gmx_mpi editconf -f input.gro -o box.gro -d 1.0 -bt cubic` | Set box with padding |
-| Solvate | `gmx_mpi solvate -cp box.gro -cs $GMXTOP/spc216.gro -o solvated.gro -p topol.top` | Add solvent (`-p` updates existing `.top`) |
-| Ion prep | `gmx_mpi grompp -f ions.mdp -c solvated.gro -p topol.top -o ions.tpr -maxwarn 3` | Prepare `.tpr` for genion |
-| Add ions | `echo "SOL" \| gmx_mpi genion -s ions.tpr -o ionized.gro -p topol.top -pname NA -nname CL -neutral` | Neutralize system |
-| Index groups | `gmx_mpi make_ndx -f conf.gro -o index.ndx` | Create custom groups |
+| Topology from PDB | `gmx pdb2gmx -f input.pdb -o processed.gro -water spce` | Generate `.top` + `.gro` from PDB |
+| Edit box | `gmx editconf -f input.gro -o box.gro -d 1.0 -bt cubic` | Set box with padding |
+| Solvate | `gmx solvate -cp box.gro -cs $GMXTOP/spc216.gro -o solvated.gro -p topol.top` | Add solvent (`-p` updates existing `.top`) |
+| Ion prep | `gmx grompp -f ions.mdp -c solvated.gro -p topol.top -o ions.tpr -maxwarn 3` | Prepare `.tpr` for genion |
+| Add ions | `echo "SOL" \| gmx genion -s ions.tpr -o ionized.gro -p topol.top -pname NA -nname CL -neutral` | Neutralize system |
+| Index groups | `gmx make_ndx -f conf.gro -o index.ndx` | Create custom groups |
 
 ### Ready-to-run files
 
@@ -122,14 +172,14 @@ If the user provides `.gro` + `.top` + `.mdp` (or a pre-built `.tpr`), skip prep
 
 ## Key Rules
 
-1. **Chain all steps in one script** — When a workflow has multiple sequential steps (EM → NVT → NPT), write a single `run.sh` that executes them all. Always start with `set -e` so the script aborts on first failure. Each Bohrium submission has ~1 min overhead for scheduling; avoid submitting steps separately.
-2. **`gmx_mpi solvate -p` requires the topology to exist** — The `-p` flag *updates* an existing `.top` with solvent molecule counts. If the topology doesn't exist yet, omit `-p` and manually add `[ molecules ]` entries, or create the topology first.
+1. **Chain all steps in one script** — When a workflow has multiple sequential steps (EM → NVT → NPT), write a single `run.sh` that executes them all. Always start with `set -e` and the PATH export so the script aborts on first failure. Each Bohrium submission has ~1 min overhead for scheduling; avoid submitting steps separately.
+2. **`gmx solvate -p` requires the topology to exist** — The `-p` flag *updates* an existing `.top` with solvent molecule counts. If the topology doesn't exist yet, omit `-p` and manually add `[ molecules ]` entries, or create the topology first.
 3. **Use provided input files directly** — If the user provides `.gro` + `.top` + `.mdp`, do NOT recreate them. Write a `run.sh` that references them as-is for `grompp`.
 4. **`grompp -maxwarn 3`** — Always pass `-maxwarn 3` (at minimum) to avoid grompp aborting on non-fatal notes (e.g. overridden mdp parameters).
 5. **`genion` requires a `.tpr`** — Run `grompp` first to produce the `.tpr`, then feed it to `genion`.
-6. **DO NOT run `gmx_mpi` locally** — `gmx_mpi` is only available in the Bohrium image. All GROMACS commands (including system building) must be in the submitted `run.sh`.
-7. **Interactive selections via pipe** — Commands that need interactive group input (e.g. `genion`, `make_ndx`) must use `echo "GROUP" | gmx_mpi ...` in the script.
-8. **Use the skill default image** — Submit with `registry.dp.tech/dptech/gromacs:2022.2` unless the user explicitly requests another image.
+6. **DO NOT run `gmx` locally** — `gmx` is only available in the Bohrium image. All GROMACS commands (including system building) must be in the submitted `run.sh`.
+7. **Interactive selections via pipe** — Commands that need interactive group input (e.g. `genion`, `make_ndx`) must use `echo "GROUP" | gmx ...` in the script.
+8. **Use the skill default image** — Submit with `registry.dp.tech/dptech/dp/native/hub/mrdic2/a1:1.0.1-1779698340` unless the user explicitly requests another image.
 
 ## Submission Workflow
 
@@ -137,7 +187,7 @@ If the user provides `.gro` + `.top` + `.mdp` (or a pre-built `.tpr`), skip prep
 2. Write a `run.sh` that chains all steps (system building if needed + grompp + mdrun)
 3. Ensure all files (`.gro`, `.top`, `.mdp`, `run.sh`) are in one directory
 4. Submit:
-   `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/gromacs:2022.2", cmd="bash run.sh > log 2>&1")`
+   `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/dp/native/hub/mrdic2/a1:1.0.1-1779698340", cmd="bash run.sh > log 2>&1")`
 5. Poll: `Bohrium(action="poll", job_id=<id>)`
 6. Download: `Bohrium(action="download", job_id=<id>, result_dir="<output_dir>")`
 

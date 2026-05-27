@@ -2279,7 +2279,7 @@ questions:
     criterion: Total token usage within budget.
     axis: efficiency
     verify: token_budget
-- id: WO_gromacs_solvate_001_20260526
+- id: WO_gromacs_solvate_001_20260527
   capability: workflow_orchestration
   domain: agnostic
   intent: Build a solvated, ion-neutralized GROMACS system from a PDB file and run
@@ -2306,13 +2306,13 @@ questions:
   - key: single_submission
     value:
       filename: run.sh
-      tokens: [gmx_mpi pdb2gmx, gmx_mpi solvate, genion, gmx_mpi mdrun]
+      tokens: [pdb2gmx, solvate, genion, mdrun]
       case_sensitive: false
-  - key: gmx_mpi_used
+  - key: gmx_binary_used
     value:
       filename: run.sh
-      tokens: [gmx_mpi]
-      case_sensitive: true
+      pattern: "\\b(gmx|gmx_mpi)\\s+(pdb2gmx|grompp|mdrun)"
+      flags: i
   - key: maxwarn_used
     value:
       filename: run.sh
@@ -2324,7 +2324,7 @@ questions:
   - key: genion_pipe
     value:
       filename: run.sh
-      pattern: "echo.*\\|.*gmx_mpi\\s+genion|printf.*\\|.*gmx_mpi\\s+genion"
+      pattern: "echo.*\\|.*(gmx|gmx_mpi)\\s+genion|printf.*\\|.*(gmx|gmx_mpi)\\s+genion"
       flags: i
   - key: turn_budget
     value:
@@ -2341,17 +2341,17 @@ questions:
       run.sh script submitted once to Bohrium.
     axis: correctness
     verify: text_file_contains_all
-  - id: gmx_mpi_used
-    criterion: The run.sh script uses `gmx_mpi` for GROMACS commands.
+  - id: gmx_binary_used
+    criterion: The run.sh script uses `gmx` or `gmx_mpi` for GROMACS commands.
     axis: correctness
-    verify: text_file_contains_all
+    verify: text_file_regex
   - id: no_local_gmx
     criterion: Agent does NOT attempt to run any gmx/gmx_mpi command locally (outside
       of the Bohrium submission).
     axis: correctness
     verify: llm_binary_judge
   - id: genion_pipe
-    criterion: The genion command uses echo/pipe (e.g. `echo "SOL" | gmx_mpi genion ...`)
+    criterion: The genion command uses echo/pipe (e.g. `echo "SOL" | gmx genion ...`)
       to provide interactive group selection.
     axis: correctness
     verify: text_file_regex
