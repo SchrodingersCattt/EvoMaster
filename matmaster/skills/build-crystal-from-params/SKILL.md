@@ -22,9 +22,10 @@ crystal-building mistakes that silently produce plausible but wrong structures.
    NaCl rocksalt a=5.64, ZnO wurtzite a=3.25 c=5.21).
 3. Space group plus Wyckoff coordinates: use
    `pymatgen.Structure.from_spacegroup`.
-4. Complex/ambiguous material, molecular crystal, polyatomic ionic crystal,
-   DOI/SI/database source, or incomplete Wyckoff coordinates: route to
-   `retrieve-structure` first instead of constructing from guessed parameters.
+4. Molecular crystal, polyatomic ionic crystal (CaCO3, K2SO4, etc.),
+   DOI/SI/database source, or incomplete Wyckoff coordinates: this skill
+   cannot safely construct these — stop and report that a database lookup
+   or literature retrieval is needed.
 
 ## Local API
 
