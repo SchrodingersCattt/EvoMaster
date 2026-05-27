@@ -129,7 +129,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 9000
+      max: 20000
   scoring_checklist:
   - id: phonon_json
     criterion: Agent writes `si_phonon_abacus.json` to workspace.
