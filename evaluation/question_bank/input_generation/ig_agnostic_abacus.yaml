@@ -7509,3 +7509,79 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+- id: IG_abacus_nio_kmesh_001_20260527
+  capability: input_generation
+  domain: agnostic
+  intent: Test whether agent sets adequate k-point mesh for NiO bulk (small unit cell,
+    AFM insulator) in ABACUS, and correctly configures DFT+U and spin initialization.
+  human_prompt_seed: '为 NiO 岩盐结构（conventional cell, 8 atoms）准备 ABACUS LCAO
+    DFT+U SCF 输入，计算 AFM-II 基态能量和 band gap。输出到 `run_nio_afm/` 目录。
+
+    '
+  tags:
+  - eng_abacus
+  data_files: []
+  reference_answers:
+  - key: input_artifact
+    value: run_nio_afm/INPUT
+  - key: kpt_artifact
+    value: run_nio_afm/KPT
+  - key: stru_artifact
+    value: run_nio_afm/STRU
+  - key: must_kpt_mesh
+    value:
+      filename: run_nio_afm/KPT
+      pattern: (?m)^\s*[4-9]\s+[4-9]\s+[4-9]\s+
+  - key: turn_budget
+    value:
+      max: 15
+  - key: token_budget_total
+    value:
+      max: 20000
+  scoring_checklist:
+  - id: input_artifact
+    criterion: run_nio_afm/INPUT exists.
+    axis: correctness
+    verify: artifact_exists
+  - id: kpt_artifact
+    criterion: run_nio_afm/KPT exists.
+    axis: correctness
+    verify: artifact_exists
+  - id: stru_artifact
+    criterion: run_nio_afm/STRU exists.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_kpt_mesh
+    criterion: '[Must] KPT file specifies a k-mesh of at least 4x4x4 for the 8-atom
+      NiO conventional cell. Gamma-only (1x1x1) is completely insufficient for
+      this small cell and will give unconverged energies. A typical choice is
+      4x4x4 to 8x8x8 for NiO conv cell (a~4.17 A).'
+    axis: correctness
+    verify: text_file_regex
+    weight: 3.0
+  - id: has_dft_plus_u
+    criterion: '[Must] INPUT contains dft_plus_u or orbital_corr setting to enable
+      Hubbard U correction for Ni-3d orbitals. NiO without DFT+U gives metallic
+      ground state (wrong).'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: has_nspin2
+    criterion: '[Must] INPUT sets nspin=2 for spin-polarized calculation.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: afm_init_magmom
+    criterion: '[Must] STRU sets alternating positive/negative initial magnetic
+      moments on Ni atoms for AFM-II ordering (e.g., +2/-2 or +5/-5 for initial
+      guess). All Ni atoms having the same sign would be FM, not AFM.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
