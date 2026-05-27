@@ -12,6 +12,8 @@ class QuestionTag(StrEnum):
     meta_database = 'meta_database'
     # 行为合约：基于证据回答、不编造
     meta_grounding = 'meta_grounding'
+    # 行为合约：需要向用户澄清/确认才能继续
+    meta_clarification = 'meta_clarification'
     # 计算引擎
     eng_vasp = 'eng_vasp'
     eng_abacus = 'eng_abacus'
