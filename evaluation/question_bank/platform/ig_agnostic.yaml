@@ -124,7 +124,7 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
-- id: PIG_abacus_007_20260516
+- id: PIG_abacus_007_20260527
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS Si LCAO-SCF inputs and Bohrium submission configuration.
@@ -243,7 +243,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: PIG_abacus_008_20260516
+- id: PIG_abacus_008_20260527
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS Si PW-SCF inputs and Bohrium submission configuration.
