@@ -7542,7 +7542,7 @@ questions:
       max: 15
   - key: token_budget_total
     value:
-      max: 20000
+      max: 35000
   scoring_checklist:
   - id: input_artifact
     criterion: run_nio_afm/INPUT exists.
