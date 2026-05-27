@@ -43,7 +43,7 @@ PW and LCAO basis; produces correct, runnable files and avoids silent-failure co
 - **ecutwfc defaults**: `100` (LCAO), `50` (PW). Task requirements override.
 - **smearing_sigma default**: `0.015` unless task specifies otherwise.
 - **pseudo_dir / orbital_dir**: always present in INPUT — never omit.
-- **Metal slab k-points**: in-plane mesh ≥ 12×12 (hard floor). Vacuum direction always `1`. Use `kspacing 0.10 0.10 1.00` for supercells.
+- **Slab k-points**: if smearing is `gauss`/`mp`/`fd` (metallic), in-plane mesh ≥ 12×12 (hard floor). Vacuum direction always `1`. Validator enforces this post-hoc but getting it right avoids a fix cycle.
 
 ## Workflow
 
