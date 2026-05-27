@@ -91,6 +91,7 @@ VerifyLiteral = Literal[
     "answer_json_numeric",
     # JSON file checks
     "json_file_schema",
+    "json_file_key_values",
     "json_file_numeric_range",
     "json_file_artifacts",
     # STRU file checks

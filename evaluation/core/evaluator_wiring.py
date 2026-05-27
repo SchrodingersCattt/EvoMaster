@@ -13,6 +13,9 @@ from evaluation.validators.json_file import (
     check_json_file_artifacts as _check_json_file_artifacts,
 )
 from evaluation.validators.json_file import (
+    check_json_file_key_values as _check_json_file_key_values,
+)
+from evaluation.validators.json_file import (
     check_json_file_numeric_range as _check_json_file_numeric_range,
 )
 from evaluation.validators.json_file import (
@@ -147,6 +150,19 @@ def check_json_file_numeric_range(
     else:
         return False, "json_file_numeric_range: need 'expected' or 'min'/'max' in ref"
     return _check_json_file_numeric_range(evidence.workspace_dir, **kwargs)
+
+
+def check_json_file_key_values(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    if evidence is None or not evidence.workspace_dir:
+        return False, "no workspace root"
+    cfg = ref.value if isinstance(ref.value, dict) else {}
+    return _check_json_file_key_values(
+        evidence.workspace_dir,
+        filename=cfg.get("filename", ""),
+        checks=cfg.get("checks", []),
+    )
 
 
 def check_json_file_artifacts(

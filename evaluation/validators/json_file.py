@@ -113,6 +113,61 @@ def check_json_file_numeric_range(
     )
 
 
+def check_json_file_key_values(
+    workspace_dir: str | Path,
+    *,
+    filename: str,
+    checks: list[dict[str, object]],
+) -> tuple[bool, str]:
+    """Check that specific keys in a JSON file contain expected substrings or match patterns.
+
+    Each check dict has:
+      - key: dot-path to the value (e.g. "image" or "config.machine")
+      - contains: substring that must appear in the string value (case-insensitive)
+      - pattern: regex the string value must match (optional, alternative to contains)
+    """
+    import re as _re
+
+    if not filename:
+        return False, "json_file_key_values: no filename provided"
+    root = Path(workspace_dir)
+    fpath = _resolve_file(root, filename)
+    if fpath is None:
+        return False, f"no file matching '{filename}' in {workspace_dir}"
+    try:
+        data = json.loads(fpath.read_text(encoding="utf-8"))
+    except ValueError as exc:
+        return False, f"{filename} is not valid JSON: {exc}"
+
+    passed: list[str] = []
+    failed: list[str] = []
+    for chk in checks or []:
+        key = chk.get("key", "")
+        val = _traverse_dotted(data, key)
+        if val is None:
+            failed.append(f"key '{key}' not found")
+            continue
+        val_str = str(val)
+        contains = chk.get("contains")
+        pattern = chk.get("pattern")
+        if contains is not None:
+            if str(contains).lower() in val_str.lower():
+                passed.append(f"{key}: contains '{contains}'")
+            else:
+                failed.append(f"{key}: '{contains}' not in '{val_str}'")
+        elif pattern is not None:
+            if _re.search(str(pattern), val_str):
+                passed.append(f"{key}: matches pattern")
+            else:
+                failed.append(f"{key}: pattern not matched in '{val_str}'")
+        else:
+            passed.append(f"{key}: exists")
+
+    if failed:
+        return False, f"{filename}: {'; '.join(failed)}"
+    return True, f"{filename}: all {len(passed)} checks passed"
+
+
 def check_json_file_artifacts(
     workspace_dir: str | Path,
     *,

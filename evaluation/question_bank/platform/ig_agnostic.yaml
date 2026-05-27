@@ -144,8 +144,13 @@ questions:
   - key: must_submit_json_core
     value:
       filename: submit_job.json
-      pattern: (?is)"image"\s*:\s*"registry\.dp\.tech/dptech/dp/native/hub/mrdic2/abacusp:1\.0\.3-1778742780".*"machine"\s*:\s*"c32_m128_cpu".*"cmd"\s*:\s*"[^"]*abacus[^"]*"
-      flags: im
+      checks:
+      - key: image
+        contains: "abacusp:1.0.3-1778742780"
+      - key: machine
+        contains: c32_m128_cpu
+      - key: cmd
+        contains: abacus
   - key: must_input_pseudo_dir
     value:
       filename: INPUT
@@ -201,7 +206,7 @@ questions:
     criterion: '[Must] submit_job.json uses the expected ABACUS Bohrium image, machine,
       and command.'
     axis: correctness
-    verify: text_file_regex
+    verify: json_file_key_values
     weight: 1.0
   - id: must_input_pseudo_dir
     criterion: '[Must] INPUT points ABACUS to the APNS pseudopotential directory.'
@@ -258,8 +263,13 @@ questions:
   - key: must_submit_json_core
     value:
       filename: submit_job.json
-      pattern: (?is)(?=.*"image"\s*:\s*"registry\.dp\.tech/dptech/dp/native/hub/mrdic2/abacusp:1\.0\.3-1778742780")(?=.*"machine"\s*:\s*"c32_m128_cpu")(?=.*"cmd"\s*:\s*"[^"]*abacus[^"]*")
-      flags: im
+      checks:
+      - key: image
+        contains: "abacusp:1.0.3-1778742780"
+      - key: machine
+        contains: c32_m128_cpu
+      - key: cmd
+        contains: abacus
   - key: must_input_pw_core
     value:
       filename: INPUT
@@ -322,7 +332,7 @@ questions:
     criterion: '[Must] submit_job.json uses the expected ABACUS Bohrium image, machine,
       and command.'
     axis: correctness
-    verify: text_file_regex
+    verify: json_file_key_values
     weight: 1.0
   - id: must_input_pw_core
     criterion: '[Must] INPUT uses ABACUS PW SCF core controls.'
