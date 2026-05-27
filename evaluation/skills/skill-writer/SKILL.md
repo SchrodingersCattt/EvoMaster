@@ -251,3 +251,4 @@ Use when reviewing a finished SKILL.md:
 - [ ] Total length ≤ 120 lines (excluding frontmatter/blank lines) — if over, audit what can move to reference
 - [ ] Low-frequency paths (< 20% of tasks) in reference files, not SKILL.md body
 - [ ] Every imperative rule passes operability test (agent can act without inference)
+- [ ] No cross-skill name coupling — STOP rules state why, not where to route
