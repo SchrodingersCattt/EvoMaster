@@ -18,26 +18,26 @@ PW and LCAO basis; produces correct, runnable files and avoids silent-failure co
 
 | Task involves | Read |
 |---------------|------|
-| **Any INPUT generation** | `references/input_examples.md` ← always |
-| Multi-element (>=3 species) | `references/stru_multispecies.md` |
-| Writing/editing STRU | `references/stru_format.md` |
-| Molecular dynamics | `references/input_md.md` |
-| Hybrid functional (HSE/PBE0) | `references/input_hybrid.md` |
-| DeePKS | `references/input_deepks.md` |
-| RT-TDDFT | `references/input_rt_tddft.md` |
-| Stochastic DFT | `references/input_sdft.md` |
-| LR-TDDFT | `references/input_lr_tddft.md` |
-| van der Waals (D2/D3) | `references/input_vdw.md` |
-| Surface/slab + dipole/E-field/gate | `references/electric_field.md` |
-| Bader / wavefunction / get_wf | `references/advanced_tasks.md` |
-| DFT+U / phonon / EOS / surface energy | `references/advanced_tasks.md` |
-| H/S matrix output (`out_mat_hs`, `out_mat_hs2`, `get_S`) | `references/output_params.md` |
-| Extracting results from output | `references/output_params.md` |
-| Troubleshooting | `references/troubleshooting.md` |
+| **Any INPUT generation** | `${SKILL_DIR}/references/input_examples.md` ← always |
+| Multi-element (>=3 species) | `${SKILL_DIR}/references/stru_multispecies.md` |
+| Writing/editing STRU | `${SKILL_DIR}/references/stru_format.md` |
+| Molecular dynamics | `${SKILL_DIR}/references/input_md.md` |
+| Hybrid functional (HSE/PBE0) | `${SKILL_DIR}/references/input_hybrid.md` |
+| DeePKS | `${SKILL_DIR}/references/input_deepks.md` |
+| RT-TDDFT | `${SKILL_DIR}/references/input_rt_tddft.md` |
+| Stochastic DFT | `${SKILL_DIR}/references/input_sdft.md` |
+| LR-TDDFT | `${SKILL_DIR}/references/input_lr_tddft.md` |
+| van der Waals (D2/D3) | `${SKILL_DIR}/references/input_vdw.md` |
+| Surface/slab + dipole/E-field/gate | `${SKILL_DIR}/references/electric_field.md` |
+| Bader / wavefunction / get_wf | `${SKILL_DIR}/references/advanced_tasks.md` |
+| DFT+U / phonon / EOS / surface energy | `${SKILL_DIR}/references/advanced_tasks.md` |
+| H/S matrix output (`out_mat_hs`, `out_mat_hs2`, `get_S`) | `${SKILL_DIR}/references/output_params.md` |
+| Extracting results from output | `${SKILL_DIR}/references/output_params.md` |
+| Troubleshooting | `${SKILL_DIR}/references/troubleshooting.md` |
 
 ## Pre-conditions — Internalize Before Writing
 
-- **AFM-prone oxides** (NiO, FeO, MnO under DFT+U): do not default to FM. Split magnetic species in STRU (e.g. Ni_up +2.0, Ni_down −2.0) — see `references/stru_format.md` for per-species moment syntax.
+- **AFM-prone oxides** (NiO, FeO, MnO under DFT+U): do not default to FM. Split magnetic species in STRU (e.g. Ni_up +2.0, Ni_down −2.0) — see `${SKILL_DIR}/references/stru_format.md` for per-species moment syntax.
 - **DFT+U multi-species**: `orbital_corr` and `hubbard_u` must cover ALL correlated species (same order as ATOMIC_SPECIES).
 - **CIF/POSCAR → STRU**: convert lattice and positions faithfully before applying task-specific parameters.
 - **ecutwfc defaults**: `100` (LCAO), `50` (PW). Task requirements override.
