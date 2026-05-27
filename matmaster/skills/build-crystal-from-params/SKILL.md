@@ -1,6 +1,6 @@
 ---
 name: build-crystal-from-params
-description: "Build simple inorganic crystals from prototype name, lattice parameters, or space-group/Wyckoff data. Covers well-known binary compounds (NaCl, NiO, Si, ZnS, etc.) whose lattice constants are standard literature values. Not for molecular crystals or complex polyatomic compounds with ambiguous structures."
+description: "Build simple inorganic crystals from prototype name, lattice parameters, or space-group/Wyckoff data. Covers well-known binaries (NaCl, NiO, Si, ZnS, etc.) with standard lattice constants. Not for molecular crystals or complex polyatomic compounds with ambiguous structures."
 skill_type: operator
 ---
 
