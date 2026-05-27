@@ -33,6 +33,7 @@ def check_abacus_input(
       has lattice vectors matching a reference file
     - input_resolves_kpt_contains: verify the KPT resolved from INPUT
       contains a required token (e.g. '4 4 4')
+    - param_exists: verify a param is present (any value)
     - param_enabled: verify a boolean param is set to true/1
     - param_value_in: verify a param's value is in an allowed list
     - kpoint_density: verify INPUT has kspacing in range OR KPT file has
@@ -51,6 +52,8 @@ def check_abacus_input(
         return _check_stru_lattice(root, fpath, content, expected, workspace_resolve)
     elif check == "input_resolves_kpt_contains":
         return _check_kpt_contains(fpath, content, expected)
+    elif check == "param_exists":
+        return _check_param_exists(fpath, content, expected)
     elif check == "param_enabled":
         return _check_param_enabled(fpath, content, expected)
     elif check == "param_value_in":
@@ -63,6 +66,25 @@ def check_abacus_input(
         )
     else:
         return False, f"unknown abacus_input_check check type: {check!r}"
+
+
+def _check_param_exists(
+    fpath: Path,
+    content: str,
+    expected: str | None,
+) -> tuple[bool, str]:
+    """Verify that a parameter is present in INPUT (any value)."""
+    param = str(expected or "").strip().lower()
+    if not param:
+        return (
+            False,
+            "abacus_input_check param_exists: 'expected' must be the param name",
+        )
+    pattern = re.compile(rf"(?im)^\s*{re.escape(param)}\s+(\S+)")
+    match = pattern.search(content)
+    if not match:
+        return False, f"{fpath.name}: param '{param}' not found"
+    return True, f"{fpath.name}: {param}={match.group(1)} (present)"
 
 
 _TRUTHY = {"true", "1", ".true.", "t", "yes"}

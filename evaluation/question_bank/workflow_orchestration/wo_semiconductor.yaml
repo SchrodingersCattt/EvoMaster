@@ -2,13 +2,13 @@ version: v5
 capability: workflow_orchestration
 domain: semiconductor
 questions:
-- id: WO_elec_001_20260411v2
+- id: WO_elec_001_20260528
   capability: workflow_orchestration
   domain: semiconductor
   intent: 'Run band-structure workflow for Si: locate structure, compute bands along high-symmetry
     path, report gap.'
-  human_prompt_seed: '计算 Si 的能带结构：从数据库获取金刚石结构 Si，先做 SCF 计算， 然后沿高对称 k 路径 (G-X-L-G) 计算能带，判断带隙类型（直接/间接）并输出带隙值
-    (eV)。 注意 DFT 带隙与实验值的偏差，给出不确定性说明。
+  human_prompt_seed: '使用 ABACUS 计算 Si 的能带结构：从数据库获取金刚石结构 Si，先做 SCF 计算，然后沿高对称
+    k 路径 (G-X-L-G) 计算能带，判断带隙类型（直接/间接）并输出带隙值 (eV)。注意 DFT 带隙与实验值的偏差，给出不确定性说明。
 
     '
   tags:

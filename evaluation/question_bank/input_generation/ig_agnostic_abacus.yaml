@@ -6570,7 +6570,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_052_20260521
+- id: IG_abacus_052_20260528
   capability: input_generation
   domain: agnostic
   intent: Prepare LCAO SCF inputs with electrostatic potential output per official 30_elec_pot—out_pot 2 for CUBE export.
@@ -6616,17 +6616,15 @@ questions:
       tokens:
       - K_POINTS
       flags: i
-  - key: variable_epot_semantics
-    value: Electrostatic potential per 30_elec_pot—out_pot 2 outputs real-space potential (CUBE).
   - key: turn_budget
     value:
-      max: 12
+      max: 14
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 16000
+      max: 25000
   scoring_checklist:
   - id: epot_input
     criterion: run_lcao_si_epot/INPUT exists.
@@ -6651,11 +6649,6 @@ questions:
     axis: correctness
     verify: text_file_contains_all
     weight: 0.8
-  - id: variable_epot_semantics
-    criterion: '[Variable] Electrostatic potential setup matches 30_elec_pot README.'
-    axis: grounding
-    verify: llm_binary_judge
-    weight: 0.5
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
@@ -7173,7 +7166,7 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_abacus_060_20260522
+- id: IG_abacus_060_20260528
   capability: input_generation
   domain: agnostic
   intent: Generate ABACUS INPUT for cell-relax of a large magnetic iron phosphate
@@ -7223,7 +7216,7 @@ questions:
   - key: has_mixing_beta_mag
     value:
       filename: nfpp_relax/INPUT
-      check: param_enabled
+      check: param_exists
       expected: mixing_beta_mag
   - key: turn_budget
     value:

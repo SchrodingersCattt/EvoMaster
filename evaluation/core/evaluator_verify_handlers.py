@@ -101,6 +101,35 @@ def _h_no_retries(ctx):
     return BinaryEvaluator._check_no_retries(evidence=ctx["evidence"])
 
 
+@_R("tool_call_exists")
+def _h_tool_call_exists(ctx):
+    """Check that at least one tool call with the given name(s) exists."""
+    evidence = ctx["evidence"]
+    ref = ctx["ref"]
+    if evidence is None:
+        return False, "no tool call evidence available"
+    value = ref.value
+    if isinstance(value, str):
+        names = [value]
+    elif isinstance(value, list):
+        names = [str(v) for v in value]
+    elif isinstance(value, dict):
+        names = [str(value.get("tool_name", ""))]
+    else:
+        return False, f"tool_call_exists: invalid ref value type: {type(value)}"
+    names_lower = [n.lower() for n in names if n]
+    if not names_lower:
+        return False, "tool_call_exists: no tool name specified"
+    found = [
+        tc.tool_name
+        for tc in evidence.tool_calls
+        if tc.tool_name.lower() in names_lower
+    ]
+    if found:
+        return True, f"tool call found: {found[0]} ({len(found)} call(s))"
+    return False, f"no tool call matching {names} in {len(evidence.tool_calls)} calls"
+
+
 @_R("artifact_exists")
 def _h_artifact_exists(ctx):
     return BinaryEvaluator._check_artifact_exists(
