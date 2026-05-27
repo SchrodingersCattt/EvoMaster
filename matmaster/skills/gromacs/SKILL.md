@@ -57,16 +57,27 @@ For short EM jobs, defaults (`gmx mdrun -deffnm em -v`) are fine — GROMACS aut
 
 Use this section when the goal is organic small-molecule parameterization that actually runs in GROMACS, not only file generation.
 
-Supported routes:
+### Route overview
 
-- `ACPYPE` + `Antechamber/parmchk2` -> `GAFF/GAFF2` — **fully available in image**
-- `LigParGen` + `BOSS` -> `OPLS-AA` — **requires user-provided BOSS package** (see below)
+| Route | Force field | Available in image | Notes |
+|-------|------------|-------------------|-------|
+| `acpype -a gaff` | GAFF | ✅ Ready | AM1-BCC charges |
+| `acpype -a gaff2` | GAFF2 | ✅ Ready | AM1-BCC charges (recommended) |
+| `acpype -a opls` | OPLS-AA | ✅ Ready | AM1-BCC charges, OPLS atom types |
+| `gmx pdb2gmx -ff oplsaa` | OPLS-AA | ✅ Ready | For standard residues (protein, nucleic acid, common solvents) |
+| `LigParGen + BOSS` | OPLS-AA | ⚠️ Needs BOSS | CM1A-LBCC charges (most accurate for OPLS) |
 
-Route selection:
+### Route selection logic
 
-- Choose `ACPYPE` for GAFF/GAFF2 requests or AmberTools-style workflows.
-- Choose `LigParGen` for OPLS requests (only if user provides BOSS).
-- Use `Open Babel` or `RDKit` for `SMILES` to `mol2/pdb` conversion when needed.
+When user requests **GAFF/GAFF2**: use `acpype -a gaff2` directly.
+
+When user requests **OPLS-AA for small molecules**: **ask the user** which approach:
+1. **`acpype -a opls`** — ready to use, good enough for most cases
+2. **`LigParGen + BOSS`** — highest accuracy (CM1A-LBCC charges), but requires user to provide BOSS package path
+
+When user requests **OPLS-AA for biomolecules** (protein, peptide, nucleic acid): use `gmx pdb2gmx -ff oplsaa` (no extra tooling needed).
+
+Use `Open Babel` or `RDKit` for `SMILES` to `mol2/pdb` conversion when needed.
 
 ### GAFF/GAFF2 route (ready to use)
 
@@ -78,30 +89,39 @@ acpype -i molecule.mol2 -c bcc -a gaff2
 # Produces: molecule.acpype/molecule_GMX.{gro,itp,top}
 ```
 
-### OPLS-AA route (needs BOSS from user)
+### OPLS-AA via ACPYPE (ready to use)
 
-BOSS is **academic-free but closed-source** software from Yale (Jorgensen group). LigParGen requires BOSS's `xZCM1A` binary for CM1A charge calculation.
+```bash
+# In run.sh:
+acpype -i molecule.mol2 -c bcc -a opls
+# Produces: molecule.acpype/molecule_GMX_OPLS.{itp,top}
+```
 
-**Before submitting**: ask the user if they have a BOSS package available. If they provide a path (e.g. `/share/boss0824.tar.gz`), include it in input_dir and deploy in run.sh:
+Uses AM1-BCC charges with OPLS-AA atom types. Suitable for most organic small molecules.
+
+### OPLS-AA via LigParGen + BOSS (highest accuracy, needs user input)
+
+BOSS is **academic-free but closed-source** software from Yale (Jorgensen group). LigParGen requires BOSS's `xZCM1A` binary for CM1A-LBCC charge calculation.
+
+**Before submitting**: ask the user if they have a BOSS package. If they provide a path (e.g. `/share/boss0824.tar.gz`), include it in input_dir and deploy in run.sh:
 
 ```bash
 # In run.sh:
 tar xzf boss0824.tar.gz
 export BOSSdir=$(pwd)/boss
-# Fix PATH for LigParGen to find BOSS executables
 export PATH="$BOSSdir:$PATH"
 python -m LigParGen -s 'CCO' -r MOL -c 0 -o 0
 ```
 
-If user does NOT have BOSS: report that OPLS-AA parameterization requires the BOSS package, and suggest using the LigParGen web server (https://traken.chem.yale.edu/ligpargen/) manually or switching to GAFF/GAFF2 route.
+If user does NOT have BOSS: inform them this route requires the BOSS package, and suggest `acpype -a opls` as an alternative or the LigParGen web server (https://traken.chem.yale.edu/ligpargen/) for manual use.
 
-Pass criteria for this ligand workflow:
+### Pass criteria
 
 - At least one requested route must finish end-to-end with `grompp` + short `mdrun` and no topology/parameter fatal errors.
 - GAFF/GAFF2 route should produce `*_GMX.gro`, `*_GMX.itp`, `*_GMX.top`.
-- If OPLS is requested but BOSS is unavailable, explicitly report dependency gap instead of claiming success.
+- OPLS route should produce `*_GMX_OPLS.itp`/`.top` (ACPYPE) or LigParGen output files.
 
-Recommended acceptance checks:
+### Acceptance checks
 
 - **MUST**: parameterization outputs are generated and runnable.
 - **SHOULD**: minimization converges (`converged to Fmax`) or, if `nsteps` is exhausted, final `Epot` is lower than initial `Epot`.
