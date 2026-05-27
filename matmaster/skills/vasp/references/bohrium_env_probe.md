@@ -41,7 +41,7 @@ Poll immediately — no sleep needed, finishes in seconds.
 ## Standard cmd Template (after probe)
 
 ```bash
-source /opt/intel/oneapi/setvars.sh > /dev/null 2>&1 && ulimit -s unlimited && OMP_NUM_THREADS=1 mpirun -np 64 vasp_std > log 2>&1
+source /opt/intel/oneapi/setvars.sh > /dev/null 2>&1 && ulimit -s unlimited && OMP_NUM_THREADS=1 mpirun -np 32 vasp_std > log 2>&1
 ```
 
 Adjust binary (`vasp_gam`/`vasp_ncl`) and `-np` based on task and probe results.

@@ -35,7 +35,7 @@ Image has **`gmx` only** (GROMACS 2024.2, thread-MPI + CUDA). No `gmx_mpi`. Do N
 ## Parallel Execution
 
 ```bash
-# CPU (64 cores): auto-detect is fine for short jobs
+# CPU (32 physical cores): auto-detect is fine for short jobs
 gmx mdrun -deffnm em -v
 
 # CPU (explicit): maximize throughput for long MD

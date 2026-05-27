@@ -231,7 +231,7 @@ kspacing        0.10
 
 **Bohrium cmd chain**:
 ```bash
-OMP_NUM_THREADS=1 mpirun -np 64 abacus > log 2>&1 \
+OMP_NUM_THREADS=1 mpirun -np 32 abacus > log 2>&1 \
   && cd OUT.{suffix} \
   && python3 ../add_core_charge.py SPIN1_CHG.cube total_chg.cube \
   && bader SPIN1_CHG.cube -ref total_chg.cube > bader.log 2>&1
@@ -285,6 +285,6 @@ out_wfc_norm         1
 
 **Directory organization**: when running both steps in one Bohrium job, use separate INPUT files (e.g. `INPUT-scf` and `INPUT-getwf`) and a run script that renames them sequentially:
 ```bash
-cp INPUT-scf INPUT && mpirun -np 64 abacus > log_scf 2>&1
-cp INPUT-getwf INPUT && mpirun -np 64 abacus > log_getwf 2>&1
+cp INPUT-scf INPUT && mpirun -np 32 abacus > log_scf 2>&1
+cp INPUT-getwf INPUT && mpirun -np 32 abacus > log_getwf 2>&1
 ```

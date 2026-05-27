@@ -13,7 +13,7 @@ PySCF (Python-based Simulations of Chemistry Framework) is a Python library for 
 | Item | Default Value |
 |------|---------------|
 | image | `registry.dp.tech/dptech/dp/native/prod-19853/pyscf-geometric:dev-260305` |
-| machine | `c64_m256_cpu` (64 cores, 256 GB RAM) |
+| machine | `c64_m256_cpu` (32 physical cores, 256 GB RAM) |
 | cmd | `python {script_name} > log 2>&1` |
 
 > Replace `{script_name}` with the actual Python script name (e.g. `run_pyscf.py`).
@@ -88,7 +88,7 @@ PySCF scripts are Python code; there is no `render_input.py` or `diagnose_input.
 | `charge` | Total molecular charge | integer |
 | `spin` | 2S (number of unpaired electrons) | 0, 1, 2, ... |
 | `verbose` | Output level | 4 (normal), 5 (debug) |
-| `max_memory` | Memory limit in MB | 4000 (per 64-core machine: ~4 GB/core) |
+| `max_memory` | Memory limit in MB | 8000 (per 32-core machine: ~8 GB/core) |
 
 ## Required Files
 
