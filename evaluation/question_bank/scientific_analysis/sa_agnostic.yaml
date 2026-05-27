@@ -1978,3 +1978,75 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
+- id: SA_struct_type_id_001_20260527
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Test whether agent correctly identifies crystal structure types from space
+    group, atom count per cell, and composition, distinguishing Heusler L21 (Fm-3m,
+    16 atoms) from Laves C15 MgCu2 (Fd-3m, 24 atoms).
+  human_prompt_seed: '以下是用生成模型得到的5个候选晶体结构，请鉴定每个结构的结构类型，并说明判断依据。
+
+    | # | 化学式 | 空间群 | 晶格常数 a (A) | 原子数/cell |
+    |---|--------|--------|---------------|------------|
+    | 1 | Li3Hg | Fm-3m (#225) | 6.58 | 16 |
+    | 2 | Ba2YIrO6 | Fm-3m (#225) | 8.53 | 40 |
+    | 3 | EuMgCu2 | Fm-3m (#225) | 6.76 | 16 |
+    | 4 | Mg2FeAu | Fm-3m (#225) | 6.35 | 16 |
+    | 5 | K2TaTlBr6 | Fm-3m (#225) | 12.13 | 40 |
+
+    请输出 JSON，每个结构包含 structure_type 和 reasoning 字段。
+
+    '
+  tags:
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 10
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: eumagcu2_not_laves
+    criterion: Agent correctly identifies EuMgCu2 (Fm-3m, 16 atoms) as Heusler L21
+      type (Cu2EuMg, X2YZ with X@8c, Y@4a, Z@4b), NOT as Laves C15 MgCu2 type.
+      The key reasoning is that Laves C15 has space group Fd-3m (#227) with 24
+      atoms per cell, which is incompatible with Fm-3m (#225) and 16 atoms.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: li3hg_type
+    criterion: Agent identifies Li3Hg (Fm-3m, 16 atoms, A3B) as L12/Cu3Au type
+      or AuCu3 type structure.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: ba2yiro6_type
+    criterion: Agent identifies Ba2YIrO6 (Fm-3m, 40 atoms) as double perovskite
+      (elpasolite, A2BB'O6 type).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: mg2feau_type
+    criterion: Agent identifies Mg2FeAu (Fm-3m, 16 atoms, X2YZ) as Heusler L21
+      or inverse Heusler type.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: k2tatlbr6_type
+    criterion: Agent identifies K2TaTlBr6 (Fm-3m, 40 atoms) as double perovskite
+      halide (A2BB'X6 type).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: uses_sg_atom_count_logic
+    criterion: Agent explicitly uses the combination of space group number, atoms
+      per cell, and stoichiometry to determine structure type, rather than just
+      guessing from composition alone.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget

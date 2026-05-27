@@ -458,3 +458,73 @@ questions:
     criterion: Token usage within budget.
     axis: efficiency
     verify: token_budget
+- id: WO_seg_energy_isif_001_20260527
+  capability: workflow_orchestration
+  domain: alloy
+  intent: Test whether agent correctly chooses cell-fixed ionic relaxation (ISIF=2)
+    for doped interface models in a segregation energy workflow, rather than full cell
+    relaxation (ISIF=3) which introduces inconsistent strain artifacts between models.
+  human_prompt_seed: '帮我设计一个 VASP 计算方案，计算 Sn 在 BCC-Fe/FCC-Fe (K-S取向) 界面处的偏聚能。
+
+    已有模型：84原子周期性界面超胞（无真空层），x/y方向有~4%晶格失配。
+
+    需要的计算模型：
+
+    1. interface_clean（纯Fe界面）
+
+    2. interface_Sn（Sn替换界面处一个Fe）
+
+    3. bulk_clean（纯BCC-Fe体相参考）
+
+    4. bulk_Sn（Sn替换体相一个Fe）
+
+    请输出每个模型的 INCAR 关键参数（特别是 ISIF、IBRION、NSW、ENCUT、ISPIN），并说明参数选择的理由。
+
+    '
+  tags:
+  - eng_vasp
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 15
+  - key: token_budget_total
+    value:
+      max: 20000
+  scoring_checklist:
+  - id: isif_interface_doped
+    criterion: Agent sets ISIF=2 (ions only) for the doped interface model
+      (interface_Sn), OR explicitly states that cell dimensions must be kept
+      consistent with the clean interface to ensure energy comparability in
+      segregation energy calculations. ISIF=3 for doped models is WRONG because
+      different cell relaxation between clean and doped introduces strain artifacts
+      into the segregation energy difference.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: isif_clean_rationale
+    criterion: Agent explains the two-step strategy for the clean interface (ISIF=3
+      first to get equilibrium cell, then use that fixed cell for all doped models),
+      OR directly sets ISIF=2 for all interface models with a pre-optimized cell.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: consistent_cell_principle
+    criterion: Agent explicitly states the principle that all models in a segregation
+      energy calculation must use the same cell dimensions to ensure energy
+      differences are physically meaningful and not contaminated by strain.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: spin_polarized
+    criterion: Agent sets ISPIN=2 for Fe-based magnetic system.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
