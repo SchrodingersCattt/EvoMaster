@@ -7220,6 +7220,11 @@ questions:
       filename: nfpp_relax/INPUT
       flags: im
       pattern: (?im)^\s*smearing_sigma\s+0\.0[0-9][5-9]\d*|smearing_sigma\s+0\.0[1-9]\d*
+  - key: has_mixing_beta_mag
+    value:
+      filename: nfpp_relax/INPUT
+      check: param_enabled
+      expected: mixing_beta_mag
   - key: turn_budget
     value:
       max: 22
@@ -7258,10 +7263,10 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: has_mixing_beta_mag
-    criterion: INPUT includes mixing_beta_mag for separate magnetic moment mixing,
-      which stabilizes SCF convergence in spin-polarized systems.
+    criterion: '[Must] INPUT includes mixing_beta_mag for separate magnetic moment
+      mixing, stabilizing SCF convergence in spin-polarized DFT+U systems.'
     axis: correctness
-    verify: llm_binary_judge
+    verify: abacus_input_check
   - id: physical_params_reasonable
     criterion: Overall INPUT parameters are physically reasonable for a 48-atom magnetic
       iron phosphate cell-relax (scf_nmax >= 200, force threshold reasonable, Hubbard
