@@ -1,6 +1,6 @@
 ---
 name: build-crystal-from-params
-description: "Build simple inorganic crystals from prototype name, lattice parameters, or space-group/Wyckoff data. Covers well-known binary compounds (NaCl, NiO, Si, ZnS, etc.) whose lattice constants are standard literature values. Not for molecular crystals or complex polyatomic compounds with ambiguous structures; route to retrieve-structure instead."
+description: "Build simple inorganic crystals from prototype name, lattice parameters, or space-group/Wyckoff data. Covers well-known binary compounds (NaCl, NiO, Si, ZnS, etc.) whose lattice constants are standard literature values. Not for molecular crystals or complex polyatomic compounds with ambiguous structures."
 skill_type: operator
 ---
 
@@ -77,7 +77,8 @@ structure.to(filename="structure.cif")
   construction or database retrieval.** Do NOT assume a simple prototype
   (perovskite, anti-perovskite, etc.) without verifying — many ternary phases
   (MAX phases, Heusler alloys, spinels) have specific space groups that differ
-  from naive guesses. When in doubt, use `retrieve-structure`.
+  from naive guesses. When in doubt, retrieve from a database rather than
+  constructing from guessed parameters.
 - For space groups with multiple settings or origin choices, record the exact
   setting/origin used. Convert literature coordinates before calling
   `from_spacegroup` when the source uses a different origin choice.
