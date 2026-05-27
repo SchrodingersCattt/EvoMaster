@@ -3988,7 +3988,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_031_20260521
+- id: IG_abacus_031_20260527
   capability: input_generation
   domain: agnostic
   intent: LCAO gamma-only SCF outputting density matrix (official 09_density_matrix).
@@ -4028,7 +4028,7 @@ questions:
   - key: must_dm
     value:
       filename: run_lcao_si2/INPUT
-      pattern: (?im)^\s*out_dm[k1]?\s+1\s*$
+      pattern: (?im)^\s*out_dm(?:k)?\s+1\s*$
       flags: im
   - key: turn_budget
     value:
