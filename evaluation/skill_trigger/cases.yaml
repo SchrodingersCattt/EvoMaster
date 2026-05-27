@@ -191,6 +191,7 @@ cases:
       - "Build spinel-structured MgAl2O4"
       - "Build the cubic BaTiO3 unit cell with Pm-3m and a = 4.00 Å"
       - "搭一个 NiO rocksalt conventional cell，8 原子"
+      - "为 NiO 岩盐结构 conventional cell 准备 ABACUS DFT+U 计算输入"
     negative:
       - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
       - "TiO2 里随机替换 5% 的 Ti 为 Nb"                        # → transform-atomic-structure
