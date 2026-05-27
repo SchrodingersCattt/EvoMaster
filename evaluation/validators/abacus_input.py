@@ -96,16 +96,12 @@ def _check_param_enabled(
     expected: str | None,
 ) -> tuple[bool, str]:
     """Verify that a boolean parameter in INPUT is enabled (true/1/.true./T)."""
+    exists, msg = _check_param_exists(fpath, content, expected)
+    if not exists:
+        return False, msg
     param = str(expected or "").strip().lower()
-    if not param:
-        return (
-            False,
-            "abacus_input_check param_enabled: 'expected' must be the param name",
-        )
     pattern = re.compile(rf"(?im)^\s*{re.escape(param)}\s+(\S+)")
     match = pattern.search(content)
-    if not match:
-        return False, f"{fpath.name}: param '{param}' not found"
     val = match.group(1).strip().lower()
     if val in _TRUTHY:
         return True, f"{fpath.name}: {param}={match.group(1)} (enabled)"
