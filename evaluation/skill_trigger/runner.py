@@ -151,11 +151,6 @@ class _SkillTriggerDetector:
         self.turns_seen: int = 0
 
     @property
-    def triggered_skill(self) -> str | None:
-        """First skill that was triggered (compat)."""
-        return self.triggered_skills[0] if self.triggered_skills else None
-
-    @property
     def target_hit(self) -> bool:
         return self._target_skill in self.triggered_skills
 

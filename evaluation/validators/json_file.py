@@ -1,4 +1,4 @@
-"""JSON file validators: schema, numeric range, and artifact checks.
+"""JSON file validators: schema, numeric range, key-value, and artifact checks.
 
 Pure functions — accept workspace_dir and parameters, not EvidenceBundle.
 """
@@ -6,6 +6,7 @@ Pure functions — accept workspace_dir and parameters, not EvidenceBundle.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 
@@ -126,7 +127,6 @@ def check_json_file_key_values(
       - contains: substring that must appear in the string value (case-insensitive)
       - pattern: regex the string value must match (optional, alternative to contains)
     """
-    import re as _re
 
     if not filename:
         return False, "json_file_key_values: no filename provided"
@@ -156,7 +156,7 @@ def check_json_file_key_values(
             else:
                 failed.append(f"{key}: '{contains}' not in '{val_str}'")
         elif pattern is not None:
-            if _re.search(str(pattern), val_str):
+            if re.search(str(pattern), val_str):
                 passed.append(f"{key}: matches pattern")
             else:
                 failed.append(f"{key}: pattern not matched in '{val_str}'")

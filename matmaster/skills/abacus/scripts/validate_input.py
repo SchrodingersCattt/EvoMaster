@@ -330,7 +330,6 @@ def validate_workspace(workspace: Path) -> list[str]:
                         k1, k2, k3 = int(mesh_parts[0]), int(mesh_parts[1]), int(mesh_parts[2])
                         is_slab = k3 == 1 and k1 > 1 and k2 > 1
                         if is_slab:
-                            basis = params.get("basis_type", "pw")
                             smearing = params.get("smearing_method", "gauss")
                             is_metal = smearing in ("gauss", "mp", "marzari-vanderbilt", "fd")
                             if is_metal and (k1 < 12 or k2 < 12):
