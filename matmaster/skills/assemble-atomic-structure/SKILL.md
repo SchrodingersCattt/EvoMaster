@@ -72,6 +72,17 @@ matches = list(zsl(slab_a.lattice.matrix[:2], slab_b.lattice.matrix[:2],
                    lowest=True))
 # Sort by interface area and pick the smallest within strain budget
 matches.sort(key=lambda m: m.match_area)
+
+# Strain calculation — use the pre-computed sl_vectors from ZSLMatch,
+# do NOT recompute via transformation @ original_lattice (breaks for
+# non-orthogonal cells like hexagonal).
+def calc_strain(m):
+    fa, fb = np.linalg.norm(m.film_sl_vectors[0]), np.linalg.norm(m.film_sl_vectors[1])
+    sa, sb = np.linalg.norm(m.substrate_sl_vectors[0]), np.linalg.norm(m.substrate_sl_vectors[1])
+    return abs(fa - sa) / sa, abs(fb - sb) / sb
+
+best = min((m for m in matches if max(calc_strain(m)) < 0.05),
+           key=lambda m: m.match_area)
 ```
 
 Higher-level `SubstrateAnalyzer`/`CoherentInterfaceBuilder` can also work but
