@@ -53,6 +53,12 @@ PACKMOL is available in the Bohrium remote image after this branch:
 packmol < packmol.inp
 ```
 
+**PACKMOL convergence check**: exit code 0 does NOT guarantee convergence.
+Parse stdout for `"SOLUTION CONVERGED"`. If output contains only
+`"best solution found"`, the minimum distance constraint was NOT satisfied
+and the structure will have atomic overlaps. In that case, increase the box
+size or reduce tolerance before accepting the output.
+
 For interface lattice matching, use `ZSLGenerator` from
 `pymatgen.analysis.interfaces.zsl`:
 
