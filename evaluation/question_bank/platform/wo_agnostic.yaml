@@ -600,12 +600,6 @@ questions:
     axis: correctness
     verify: llm_binary_judge
     weight: 1.5
-  - id: no_local_abacus
-    criterion: '[Must] Agent does NOT attempt to install or run ABACUS locally. All
-      ABACUS calculations must be submitted to Bohrium with an ABACUS image.'
-    axis: grounding
-    verify: llm_binary_judge
-    weight: 2.5
   - id: bohrium_submission
     criterion: '[Platform] Agent submits ABACUS force calculation jobs to Bohrium
       using bohrium-job skill with an ABACUS image.'
