@@ -20,12 +20,12 @@ Include in INPUT as needed. Results written to `OUT.ABACUS/`.
 
 ## Density Matrix Output (LCAO only)
 
-| Parameter | Condition | Purpose |
-|-----------|-----------|---------|
-| `out_dm 1` | `gamma_only 0` (multi-k) | Density matrix D(k) for each k-point |
-| `out_dm1 1` | `gamma_only 1` (Γ-only) | Density matrix at Γ |
+| Parameter (develop) | Parameter (3.10-LTS) | Purpose |
+|---------------------|---------------------|---------|
+| `out_dmk 1` | `out_dm 1` | D(k) — k-space density matrix (supports both gamma-only and multi-k) |
+| `out_dmr 1` | `out_dm1 1` | D(R) — real-space density matrix in CSR format (multi-k only) |
 
-> **⚠️ Use `out_dm1` when `gamma_only 1`; use `out_dm` when `gamma_only 0`.** Using the wrong variant silently produces no output.
+> **⚠️ `out_dm` and `out_dm1` are LTS-era names. In develop, use `out_dmk` (k-space) or `out_dmr` (R-space).** For "output density matrix" tasks, use `out_dmk`/`out_dm`. Do NOT use `out_dm1`/`out_dmr` unless real-space CSR format is specifically requested.
 
 ## LCAO Matrix Output (H/S/T/R)
 
