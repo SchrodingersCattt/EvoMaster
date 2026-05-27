@@ -6,215 +6,76 @@ skill_type: operator
 
 # GROMACS Skill
 
-GROMACS is a high-performance molecular dynamics package primarily designed for simulations of proteins, lipids, and nucleic acids, but widely used for any system with classical force fields.
+## Bohrium Config
 
-## Bohrium Submission Config
+| Item | CPU (default) | GPU |
+|------|--------------|-----|
+| image | `registry.dp.tech/dptech/dp/native/hub/mrdic2/a1:1.0.1-1779698340` | same |
+| machine | `c32_m128_cpu` | `c8_m32_1 * NVIDIA 4090` |
+| cmd | `bash run.sh > log 2>&1` | same |
 
-| Item | Default Value (CPU) |
-|------|---------------------|
-| image | `registry.dp.tech/dptech/dp/native/hub/mrdic2/a1:1.0.1-1779698340` |
-| machine | `c32_m128_cpu` (32 cores, 128 GB RAM) |
-| cmd | `bash run.sh > log 2>&1` |
+Image has **`gmx` only** (GROMACS 2024.2, thread-MPI + CUDA). No `gmx_mpi`. Do NOT use `mpirun`.
 
-| Item | GPU Alternative |
-|------|-----------------|
-| machine | `c8_m32_1 * NVIDIA 4090` |
-| cmd | `bash run.sh > log 2>&1` (add `-gpu_id 0` to mdrun in script) |
+## Key Rules
 
-> **The image has `gmx` only (thread-MPI + CUDA build, GROMACS 2024.2).** There is NO `gmx_mpi`.
-> Use `-ntmpi` and `-ntomp` to control parallelism (see Parallel Execution below).
-> For GPU options: `Bohrium(action="list_machines", machine_type="gpu", keyword="4090")`.
-> For different GROMACS versions: `Bohrium(action="list_images", keyword="gromacs")`.
-> When submitting multiple systems in parallel, use **distinct file names** (e.g. `sysA_init.gro`, `sysB_init.gro`) to avoid Bohrium upload cache collisions.
+1. **run.sh preamble** — every script starts with:
+   ```bash
+   #!/bin/bash
+   set -e
+   export PATH="/usr/local/gmx-2024.2/bin:$PATH"
+   ```
+2. **Chain all steps in one script** — EM → NVT → NPT in a single `run.sh`. Each Bohrium submission has ~1 min scheduling overhead.
+3. **DO NOT run `gmx` locally** — all GROMACS commands go in the submitted `run.sh`.
+4. **`grompp -maxwarn 3`** — always pass to avoid abort on non-fatal notes.
+5. **`genion` requires a `.tpr`** — run `grompp` first, then `echo "SOL" | gmx genion -s ions.tpr ...`.
+6. **`gmx solvate -p` requires topology to exist** — create topology (via `pdb2gmx`) before calling solvate with `-p`.
+7. **Use provided files directly** — if user gives `.gro` + `.top` + `.mdp`, reference as-is in `run.sh`.
+8. **Interactive commands via pipe** — `echo "GROUP" | gmx genion ...`, `echo "0" | gmx make_ndx ...`.
 
-### run.sh Preamble (REQUIRED)
-
-Every `run.sh` must start with:
-
-```bash
-#!/bin/bash
-set -e
-export PATH="/usr/local/gmx-2024.2/bin:$PATH"
-```
-
-The `gmx` binary is at `/usr/local/gmx-2024.2/bin/gmx` but is NOT in the default PATH.
-
-### Parallel Execution
-
-This is a **thread-MPI** build. Do NOT use `mpirun`/`mpiexec`.
+## Parallel Execution
 
 ```bash
-# CPU-only: use all 32 cores
-gmx mdrun -deffnm em -ntmpi 1 -ntomp 32
+# CPU (32 cores): auto-detect is fine for short jobs
+gmx mdrun -deffnm em -v
 
-# GPU: 1 MPI rank, all CPU threads for PME offload
+# CPU (explicit): maximize throughput for long MD
+gmx mdrun -deffnm md -ntmpi 1 -ntomp 32
+
+# GPU:
 gmx mdrun -deffnm md -ntmpi 1 -ntomp 8 -gpu_id 0 -nb gpu -pme gpu
 ```
 
-For short EM jobs, defaults (`gmx mdrun -deffnm em -v`) are fine — GROMACS auto-detects threads.
-
-## Small-molecule ligand route (GAFF/GAFF2/OPLS)
-
-Use this section when the goal is organic small-molecule parameterization that actually runs in GROMACS, not only file generation.
-
-### Route overview
-
-| Route | Force field | Available in image | Notes |
-|-------|------------|-------------------|-------|
-| `acpype -a gaff` | GAFF | ✅ Ready | AM1-BCC charges |
-| `acpype -a gaff2` | GAFF2 | ✅ Ready | AM1-BCC charges (recommended) |
-| `acpype -a opls` | OPLS-AA | ✅ Ready | AM1-BCC charges, OPLS atom types |
-| `gmx pdb2gmx -ff oplsaa` | OPLS-AA | ✅ Ready | For standard residues (protein, nucleic acid, common solvents) |
-| `LigParGen + BOSS` | OPLS-AA | ⚠️ Needs BOSS | CM1A-LBCC charges (most accurate for OPLS) |
-
-### Route selection logic
-
-When user requests **GAFF/GAFF2**: use `acpype -a gaff2` directly.
-
-When user requests **OPLS-AA for small molecules**: **ask the user** which approach:
-1. **`acpype -a opls`** — ready to use, good enough for most cases
-2. **`LigParGen + BOSS`** — highest accuracy (CM1A-LBCC charges), but requires user to provide BOSS package path
-
-When user requests **OPLS-AA for biomolecules** (protein, peptide, nucleic acid): use `gmx pdb2gmx -ff oplsaa` (no extra tooling needed).
-
-Use `Open Babel` or `RDKit` for `SMILES` to `mol2/pdb` conversion when needed.
-
-### GAFF/GAFF2 route (ready to use)
-
-Tools available in image: `acpype` (2023.10.27), `antechamber`, `parmchk2`, `tleap` (AmberTools 24.8), `obabel` (3.1.1), `rdkit` (2025.9.5).
-
-```bash
-# In run.sh:
-acpype -i molecule.mol2 -c bcc -a gaff2
-# Produces: molecule.acpype/molecule_GMX.{gro,itp,top}
-```
-
-### OPLS-AA via ACPYPE (ready to use)
-
-```bash
-# In run.sh:
-acpype -i molecule.mol2 -c bcc -a opls
-# Produces: molecule.acpype/molecule_GMX_OPLS.{itp,top}
-```
-
-Uses AM1-BCC charges with OPLS-AA atom types. Suitable for most organic small molecules.
-
-### OPLS-AA via LigParGen + BOSS (highest accuracy, needs user input)
-
-BOSS is **academic-free but closed-source** software from Yale (Jorgensen group). LigParGen requires BOSS's `xZCM1A` binary for CM1A-LBCC charge calculation.
-
-**Before submitting**: ask the user if they have a BOSS package. If they provide a path (e.g. `/share/boss0824.tar.gz`), include it in input_dir and deploy in run.sh:
-
-```bash
-# In run.sh:
-tar xzf boss0824.tar.gz
-export BOSSdir=$(pwd)/boss
-export PATH="$BOSSdir:$PATH"
-python -m LigParGen -s 'CCO' -r MOL -c 0 -o 0
-```
-
-If user does NOT have BOSS: inform them this route requires the BOSS package, and suggest `acpype -a opls` as an alternative or the LigParGen web server (https://traken.chem.yale.edu/ligpargen/) for manual use.
-
-### Pass criteria
-
-- At least one requested route must finish end-to-end with `grompp` + short `mdrun` and no topology/parameter fatal errors.
-- GAFF/GAFF2 route should produce `*_GMX.gro`, `*_GMX.itp`, `*_GMX.top`.
-- OPLS route should produce `*_GMX_OPLS.itp`/`.top` (ACPYPE) or LigParGen output files.
-
-### Acceptance checks
-
-- **MUST**: parameterization outputs are generated and runnable.
-- **SHOULD**: minimization converges (`converged to Fmax`) or, if `nsteps` is exhausted, final `Epot` is lower than initial `Epot`.
-
-## Input Preparation
-
-GROMACS uses three core files: **topology** (`.top`), **coordinates** (`.gro`), and **simulation parameters** (`.mdp`).
-
-### Using render_input.py (for .mdp generation)
-
-```bash
-# Generate mdp file
-uv run python scripts/render_input.py --software gromacs --task md --output md.mdp
-```
-
-### System Building (inside `run.sh`, executed on Bohrium)
-
-These commands run inside the submitted `run.sh` — `gmx` is only available in the Bohrium image, NOT locally.
-
-The image's shared data lives at `$GMXLIB` (typically `/usr/local/gmx-2024.2/share/gromacs/top/`). Topology `#include` directives (e.g. `#include "oplsaa.ff/forcefield.itp"`) resolve against this path automatically. When referencing data files explicitly (e.g. `spc216.gro`), use the full path:
+## System Building Commands (inside run.sh)
 
 ```bash
 GMXTOP=$(find /usr/local -type d -name "top" -path "*/gromacs/*" 2>/dev/null | head -1)
 ```
 
-| Step | Command | Purpose |
-|------|---------|---------|
-| Topology from PDB | `gmx pdb2gmx -f input.pdb -o processed.gro -water spce` | Generate `.top` + `.gro` from PDB |
-| Edit box | `gmx editconf -f input.gro -o box.gro -d 1.0 -bt cubic` | Set box with padding |
-| Solvate | `gmx solvate -cp box.gro -cs $GMXTOP/spc216.gro -o solvated.gro -p topol.top` | Add solvent (`-p` updates existing `.top`) |
-| Ion prep | `gmx grompp -f ions.mdp -c solvated.gro -p topol.top -o ions.tpr -maxwarn 3` | Prepare `.tpr` for genion |
-| Add ions | `echo "SOL" \| gmx genion -s ions.tpr -o ionized.gro -p topol.top -pname NA -nname CL -neutral` | Neutralize system |
-| Index groups | `gmx make_ndx -f conf.gro -o index.ndx` | Create custom groups |
+| Step | Command |
+|------|---------|
+| Topology from PDB | `gmx pdb2gmx -f input.pdb -o processed.gro -water spce` |
+| Edit box | `gmx editconf -f input.gro -o box.gro -d 1.0 -bt cubic` |
+| Solvate | `gmx solvate -cp box.gro -cs $GMXTOP/spc216.gro -o solvated.gro -p topol.top` |
+| Ion prep | `gmx grompp -f ions.mdp -c solvated.gro -p topol.top -o ions.tpr -maxwarn 3` |
+| Add ions | `echo "SOL" \| gmx genion -s ions.tpr -o ionized.gro -p topol.top -pname NA -nname CL -neutral` |
 
-### Ready-to-run files
-
-If the user provides `.gro` + `.top` + `.mdp` (or a pre-built `.tpr`), skip preparation.
-
-## Task Types
-
-| Task | Description | Key MDP Settings |
-|------|-------------|------------------|
-| em | Energy minimization | `integrator = steep`, `emtol`, `nsteps` |
-| nvt | NVT equilibration | `integrator = md`, `tcoupl = V-rescale`, `ref_t` |
-| npt | NPT equilibration | `tcoupl = V-rescale`, `pcoupl = Parrinello-Rahman`, `ref_p` |
-| md | Production MD | `integrator = md`, `nsteps`, `dt`, output frequencies |
-| fep | Free energy perturbation | `free_energy = yes`, `init_lambda_state`, `fep_lambdas` |
-
-## Required Files
-
-- **Topology** (`.top`): force field parameters, molecule definitions
-- **Coordinates** (`.gro` or `.pdb`): system coordinates, box dimensions
-- **MDP file** (`.mdp`): simulation parameters
-- **Force field**: referenced in `.top`; typically AMBER, CHARMM, OPLS-AA, GROMOS
-- **Index file** (`.ndx`): optional, for custom groups
-- **Restraint files** (`.itp`): optional position restraints
-
-## Physical Checks
-
-- **timestep**: 2 fs with LINCS constraints on H-bonds (`constraint_algorithm = lincs`); 1 fs without constraints
-- **Thermostat**: V-rescale (`tcoupl = V-rescale`, `tau_t = 0.1`) for equilibration and production
-- **Barostat**: Berendsen for equilibration, Parrinello-Rahman for production NPT (`tau_p = 2.0`)
-- **Cutoffs**: typically `rcoulomb = 1.0`, `rvdw = 1.0` nm; PME for long-range electrostatics (`coulombtype = PME`)
-- **Neighbor list**: `nstlist = 10`, `ns_type = grid`, `verlet-buffer-tolerance` for Verlet scheme
-- **Output frequency**: `nstxout-compressed = 5000` (every 10 ps at dt=2fs) for trajectory; `nstenergy = 500` for energy
-- **Box size**: minimum image convention requires box dimension > 2 * rcoulomb; check `gmx editconf -d 1.0` padding
-- **Periodic boundary conditions**: `pbc = xyz` for standard 3D periodic
-
-## Key Rules
-
-1. **Chain all steps in one script** — When a workflow has multiple sequential steps (EM → NVT → NPT), write a single `run.sh` that executes them all. Always start with `set -e` and the PATH export so the script aborts on first failure. Each Bohrium submission has ~1 min overhead for scheduling; avoid submitting steps separately.
-2. **`gmx solvate -p` requires the topology to exist** — The `-p` flag *updates* an existing `.top` with solvent molecule counts. If the topology doesn't exist yet, omit `-p` and manually add `[ molecules ]` entries, or create the topology first.
-3. **Use provided input files directly** — If the user provides `.gro` + `.top` + `.mdp`, do NOT recreate them. Write a `run.sh` that references them as-is for `grompp`.
-4. **`grompp -maxwarn 3`** — Always pass `-maxwarn 3` (at minimum) to avoid grompp aborting on non-fatal notes (e.g. overridden mdp parameters).
-5. **`genion` requires a `.tpr`** — Run `grompp` first to produce the `.tpr`, then feed it to `genion`.
-6. **DO NOT run `gmx` locally** — `gmx` is only available in the Bohrium image. All GROMACS commands (including system building) must be in the submitted `run.sh`.
-7. **Interactive selections via pipe** — Commands that need interactive group input (e.g. `genion`, `make_ndx`) must use `echo "GROUP" | gmx ...` in the script.
-8. **Use the skill default image** — Submit with `registry.dp.tech/dptech/dp/native/hub/mrdic2/a1:1.0.1-1779698340` unless the user explicitly requests another image.
-
-## Submission Workflow
+## Execution Workflow
 
 1. Prepare input files locally (MDP, structure, topology — or use provided files)
-2. Write a `run.sh` that chains all steps (system building if needed + grompp + mdrun)
-3. Ensure all files (`.gro`, `.top`, `.mdp`, `run.sh`) are in one directory
-4. Submit:
-   `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/dp/native/hub/mrdic2/a1:1.0.1-1779698340", cmd="bash run.sh > log 2>&1")`
-5. Poll: `Bohrium(action="poll", job_id=<id>)`
-6. Download: `Bohrium(action="download", job_id=<id>, result_dir="<output_dir>")`
+2. Write `run.sh` (preamble + system building if needed + `grompp` + `mdrun`)
+3. Place all files in one directory
+4. `Bohrium(action="submit", input_dir="<dir>", image="<image from Config>", cmd="bash run.sh > log 2>&1")`
+5. `Bohrium(action="poll", job_id=<id>)` — repeat until Finished/Failed
+6. `Bohrium(action="download", job_id=<id>, result_dir="<output_dir>")`
+
+## Ligand Parameterization
+
+For small-molecule force field parameterization (GAFF/GAFF2/OPLS-AA) → `references/ligand_parameterization.md`
+
+## Physical Checks & MDP Defaults
+
+For timestep, thermostat, barostat, cutoff, box size rules → `references/physical_checks.md`
 
 ## Post-Processing
 
-After job completion, use the **md-analysis** skill for trajectory analysis (RMSD, RMSF, gyration radius, MSD, RDF, H-bonds, energy).
-
-## Reference
-
-Official documentation: `site:manual.gromacs.org`
+After job completion, use the **md-analysis** skill for trajectory analysis (RMSD, RMSF, RDF, MSD, H-bonds, energy).
