@@ -10,13 +10,20 @@ Use this skill when multiple structural pieces are combined into one simulation
 object: bulk to slab, adsorbate on slab, slab/slab interface, packed amorphous
 cell, or crosslinked network. The output must be a concrete structure file.
 
+## Capability Gate
+
+- **STOP** if the task only modifies a single structure in-place (supercell,
+  strain, doping, defect). This skill assembles multiple pieces together.
+- **STOP** if the input is a molecular crystal and the operation requires
+  preserving molecular connectivity. This skill cuts at atomic level.
+
 ## Decision Tree
 
 1. Inspect all input structures first.
 2. For ordinary inorganic/metal/covalent bulk slabs, use ASE or pymatgen slab
    generation.
-3. For polar ionic surfaces, route through `tasker-polar-surface` before
-   accepting the slab.
+3. For polar ionic surfaces (Type-3), try symmetric terminations or even layers
+   before accepting a polar asymmetric slab.
 4. For adsorbates, build or inspect the molecule first, then choose site type
    (`ontop`, `bridge`, `hollow`) and orientation.
 5. For interfaces, match in-plane lattice vectors and reject excessive strain.
@@ -94,24 +101,18 @@ best = min((m for m in matches if max(calc_strain(m)) < 0.05),
 
 Higher-level `SubstrateAnalyzer`/`CoherentInterfaceBuilder` can also work but
 may trigger internal bugs; `ZSLGenerator` is more robust. Fall back to manual
-stacking if no candidate fits. Crosslink networks can be assembled with
-`networkx`-driven bond candidates plus `ase.geometry` distance checks. Document
-the recipe and the acceptance numbers; do not silently substitute heuristics.
+stacking if no candidate fits.
 
 ## Hard Guards
 
-- Output filename and extension MUST exactly match the caller's specification
-  (spelling, casing, abbreviation, suffix). Never substitute conventional
-  aliases (e.g. do not rename `ag111_k_water_interface.cif` to
-  `ag_water.cif`, or `ceo2_111_trilayer.cif` to `ceo2_111.cif`). Evaluators
-  check the exact string before opening the file.
+- Output filename and extension MUST exactly match the caller's specification.
+  Never substitute conventional aliases (e.g. do not rename
+  `ag111_k_water_interface.cif` to `ag_water.cif`). Evaluators check the exact
+  string.
 - Slab vacuum must be at least 15 A unless the user explicitly accepts a smaller
   test structure.
 - Binary compounds: an N-bilayer request corresponds to 2N atomic planes. Do
   not treat bilayers as individual atomic layers.
-- Polar Type-3 surfaces (for example zinc blende (001), wurtzite (0001)) need
-  even layers or symmetric terminations when possible. Try terminations before
-  accepting a polar asymmetric slab.
 - Interfaces must report in-plane strain. If any in-plane strain exceeds 20%,
   stop or ask the user to accept the mismatch.
 - Amorphous packing must specify exactly two of `box_size`, `density`, and
@@ -128,12 +129,5 @@ the recipe and the acceptance numbers; do not silently substitute heuristics.
 - Adsorbate outputs report site type, anchor atom, height, and orientation.
 - Interface outputs report strain and stacking axis.
 - Amorphous outputs report molecule counts, box size, and resulting density.
-- The final structure is inspected with `inspect-atomic-structure`.
-
-## Cross-Skill Refs
-
-- `operate-molecular-crystal`: molecular-crystal slabs and molecule-preserving
-  operations.
-- `build-crystal-from-params`: build simple inorganic bulk cells used as
-  assembly inputs.
-- `tasker-polar-surface`: required fallback for polar slabs.
+- Final structure validated: dimensionality, formula, minimum interatomic
+  distance (no overlaps).
