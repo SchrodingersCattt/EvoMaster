@@ -47,11 +47,13 @@ PW and LCAO basis; produces correct, runnable files and avoids silent-failure co
 ## Workflow
 
 1. **Read provided STRU** — determine basis_type from presence of `NUMERICAL_ORBITAL`.
-2. **Read references** per Routing table above (always read `input_examples.md`; additionally read method-specific file if applicable).
+2. **Read references** per Routing table above (always read `${SKILL_DIR}/references/input_examples.md`; additionally read method-specific file if applicable).
 3. **Resolve PP/orbital filenames** — read `${SKILL_DIR}/references/apns_pseudopotentials_v1.list` and `${SKILL_DIR}/references/apns_orbitals_efficiency_v1.list` for LCAO (do NOT grep `/root/apns-*` on the filesystem):
-   - PP/orbital filename in APNS list → ensure STRU uses exact APNS filename, set `pseudo_dir /root/apns-pseudopotentials-v1/`, `orbital_dir /root/apns-orbitals-efficiency-v1/`. These are Bohrium runtime paths (pre-installed in the Docker image); they will NOT exist in the local workspace — do not fallback to `./` because the directory is absent locally.
+   - PP/orbital filename in APNS list → ensure STRU uses exact APNS filename, set `pseudo_dir /root/apns-pseudopotentials-v1/`, `orbital_dir /root/apns-orbitals-efficiency-v1/`.
    - PP/orbital filename NOT in APNS list but file exists in workspace → keep STRU as-is, set `pseudo_dir ./`, `orbital_dir ./`.
    - Neither in APNS nor in workspace → STOP (Gate rule).
+
+   > **⚠ `/root/apns-*` are Bohrium runtime paths** (pre-installed in the Docker image). They will NOT exist in the local workspace — do not fallback to `./` because the directory is absent locally.
 4. **Write INPUT + KPT** following examples and mandatory-parameter tables from step 2.
 5. **Run validator**: `python ${SKILL_DIR}/scripts/validate_input.py --dir <dir>`. Fix all FAIL items before proceeding.
 6. **Submit to Bohrium** (if task requires execution) — see defaults below.
