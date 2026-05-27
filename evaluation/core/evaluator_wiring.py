@@ -879,20 +879,7 @@ def check_text_file_kpt_path_from_evidence(
 def check_answer_json_numeric_from_ref(
     *, answer: str, ref: ReferenceAnswer
 ) -> tuple[bool, str]:
-    """Wire ``answer_json_numeric`` from a ``ReferenceAnswer`` config.
-
-    Reference answer schema (``ref.value`` is a dict)::
-
-        value:
-          json_path: rtp.303K.V   # dot-separated dict keys in the answer JSON
-          target: 999.81          # numeric target (or use ref-level ``value``+``tolerance``)
-          tolerance: 20.0         # absolute tolerance
-
-    For backward compatibility, when ``ref.value`` is plain numeric, ``target``
-    falls back to that value and ``tolerance`` to ``ref.tolerance`` — but
-    ``json_path`` must always be supplied via the dict form (otherwise we
-    cannot know which field to read).
-    """
+    """Wire ``answer_json_numeric`` from a ``ReferenceAnswer`` config."""
     cfg = _cfg(ref)
     json_path = str(cfg.get("json_path", "")).strip()
     if not json_path:

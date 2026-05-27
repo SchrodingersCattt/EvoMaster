@@ -305,12 +305,8 @@ def _check_kpoint_density(
         vals = re.findall(r"[-+]?\d+\.?\d*(?:[eE][-+]?\d+)?", kspacing_match.group(1))
         numerics = [float(v) for v in vals]
         if all(lo <= v <= hi for v in numerics):
-            return True, (
-                f"{fpath.name}: kspacing={numerics} within [{lo}, {hi}]"
-            )
-        return False, (
-            f"{fpath.name}: kspacing={numerics} outside [{lo}, {hi}]"
-        )
+            return True, (f"{fpath.name}: kspacing={numerics} within [{lo}, {hi}]")
+        return False, (f"{fpath.name}: kspacing={numerics} outside [{lo}, {hi}]")
 
     gamma_only_match = re.search(
         r"(?im)^\s*gamma_only\s+(1|true|\.true\.)\s*$", content
@@ -363,7 +359,11 @@ def _check_kpoint_density(
             f"{kpt_path.name}: could not parse k-point mesh "
             f"(expected Gamma/MP line followed by N1 N2 N3, or Line mode)"
         )
-    k1, k2, k3 = int(mesh_match.group(1)), int(mesh_match.group(2)), int(mesh_match.group(3))
+    k1, k2, k3 = (
+        int(mesh_match.group(1)),
+        int(mesh_match.group(2)),
+        int(mesh_match.group(3)),
+    )
     if k1 >= min_k and k2 >= min_k and k3 >= min_k:
         return True, (
             f"{kpt_path.name}: k-mesh {k1}×{k2}×{k3} "

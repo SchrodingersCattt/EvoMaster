@@ -141,9 +141,7 @@ class SkillReport:
 class _SkillTriggerDetector:
     """Monitors stream events and stops when the target skill appears."""
 
-    def __init__(
-        self, cancel_ctrl: CancellationController, target_skill: str
-    ) -> None:
+    def __init__(self, cancel_ctrl: CancellationController, target_skill: str) -> None:
         self._cancel_ctrl = cancel_ctrl
         self._target_skill = target_skill
         self.triggered_skills: list[str] = []

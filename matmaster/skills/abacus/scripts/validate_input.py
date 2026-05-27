@@ -321,17 +321,26 @@ def validate_workspace(workspace: Path) -> list[str]:
         if not has_kspacing and kpt_name in all_files:
             kpt_path = workspace / kpt_name
             kpt_text = kpt_path.read_text()
-            kpt_lines = [l.strip() for l in kpt_text.splitlines() if l.strip()]
+            kpt_lines = [ln.strip() for ln in kpt_text.splitlines() if ln.strip()]
             # Parse Gamma/MP mesh: last data line should be "N1 N2 N3 ..."
             if len(kpt_lines) >= 4:
                 mesh_parts = kpt_lines[-1].split()
                 if len(mesh_parts) >= 3:
                     try:
-                        k1, k2, k3 = int(mesh_parts[0]), int(mesh_parts[1]), int(mesh_parts[2])
+                        k1, k2, k3 = (
+                            int(mesh_parts[0]),
+                            int(mesh_parts[1]),
+                            int(mesh_parts[2]),
+                        )
                         is_slab = k3 == 1 and k1 > 1 and k2 > 1
                         if is_slab:
                             smearing = params.get("smearing_method", "gauss")
-                            is_metal = smearing in ("gauss", "mp", "marzari-vanderbilt", "fd")
+                            is_metal = smearing in (
+                                "gauss",
+                                "mp",
+                                "marzari-vanderbilt",
+                                "fd",
+                            )
                             if is_metal and (k1 < 12 or k2 < 12):
                                 messages.append(
                                     f"FAIL {prefix}: Slab with metallic smearing detected but "
