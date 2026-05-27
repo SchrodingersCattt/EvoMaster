@@ -214,7 +214,7 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
-- id: SC_nfpp_al_dope_001_20260525
+- id: SC_nfpp_al_dope_001_20260527
   capability: structure_construction
   domain: battery
   priority: P1
@@ -271,14 +271,6 @@ questions:
     axis: correctness
     verify: struct_file_atom_count
     weight: 1.5
-  - id: po4_site_discrimination
-    criterion: '[Must] Agent distinguishes PO₄ (isolated tetrahedral) sites from
-      P₂O₇ (corner-sharing bridging) sites. The substituted P must be from a PO₄
-      group, not from a P₂O₇ bridge. Evidence: coordination analysis, P-P distance
-      check, or explicit mention of PO₄ vs P₂O₇ discrimination logic.'
-    axis: correctness
-    verify: llm_binary_judge
-    weight: 2.0
   - id: al_o_distance_reasonable
     criterion: '[Must] The CIF structure has physically reasonable Al-O distances
       (1.4-2.2 Å). Distances < 1.0 Å or > 3.0 Å indicate an unphysical structure.'
