@@ -88,7 +88,7 @@ PySCF scripts are Python code; there is no `render_input.py` or `diagnose_input.
 | `charge` | Total molecular charge | integer |
 | `spin` | 2S (number of unpaired electrons) | 0, 1, 2, ... |
 | `verbose` | Output level | 4 (normal), 5 (debug) |
-| `max_memory` | Memory limit in MB | 4000 (per 32-core machine: ~4 GB/core) |
+| `max_memory` | Memory limit in MB | 4000 (per 64-core machine: ~4 GB/core) |
 
 ## Required Files
 
