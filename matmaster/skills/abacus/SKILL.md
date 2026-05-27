@@ -10,7 +10,7 @@ PW and LCAO basis; produces correct, runnable files and avoids silent-failure co
 
 ## Gate — STOP Conditions
 
-- **PP/orbital unresolvable**: If an element's PP/orbital is neither found in the APNS lists (`references/apns_pseudopotentials_v1.list` / `references/apns_orbitals_efficiency_v1.list`) NOR provided as a file in the workspace, STOP and report. Do not guess filenames.
+- **PP/orbital unresolvable**: If an element's PP/orbital is neither found in the APNS lists (`${SKILL_DIR}/references/apns_pseudopotentials_v1.list` / `${SKILL_DIR}/references/apns_orbitals_efficiency_v1.list`) NOR provided as a file in the workspace, STOP and report. Do not guess filenames.
 - **ASE Calculator mode**: If task uses ASE to drive geometry optimization (ASE Optimizer, NEB, vibrations) AND INPUT has `calculation relax|cell-relax|md` → STOP. ASE-driven workflows require `calculation scf` in INPUT.
 - **Not ABACUS**: Task asks for QE/VASP/CP2K/LAMMPS → this skill does not apply.
 
