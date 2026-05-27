@@ -23,7 +23,7 @@ which mpirun && mpirun --version 2>&1 | head -3
 ## Submit
 
 ```
-Bohrium(action="submit", image="<vasp_image>", machine="c32_m128_cpu",
+Bohrium(action="submit", image="<vasp_image>", machine="c64_m256_cpu",
         input_dir="<probe_dir>", cmd="bash probe.sh > log 2>&1")
 ```
 

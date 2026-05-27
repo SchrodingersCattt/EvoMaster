@@ -108,7 +108,7 @@ No POTCAR → STOP. Has path → copy POTCAR into input_dir before submit.
 | Item | Default |
 |------|---------|
 | image | `list_images` with keyword `vasp` |
-| machine | `c32_m128_cpu` |
+| machine | `c64_m256_cpu` |
 | cmd | see Environment Probe below |
 
 - Use `vasp_gam` for Gamma-only, `vasp_ncl` for SOC/noncollinear.

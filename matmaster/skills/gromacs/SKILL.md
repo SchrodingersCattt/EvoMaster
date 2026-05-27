@@ -11,7 +11,7 @@ skill_type: operator
 | Item | CPU (default) | GPU |
 |------|--------------|-----|
 | image | `registry.dp.tech/dptech/dp/native/hub/mrdic2/a1:1.0.1-1779698340` | same |
-| machine | `c32_m128_cpu` | `c8_m32_1 * NVIDIA 4090` |
+| machine | `c64_m256_cpu` | `c8_m32_1 * NVIDIA 4090` |
 | cmd | `bash run.sh > log 2>&1` | same |
 
 Image has **`gmx` only** (GROMACS 2024.2, thread-MPI + CUDA). No `gmx_mpi`. Do NOT use `mpirun`.
@@ -35,7 +35,7 @@ Image has **`gmx` only** (GROMACS 2024.2, thread-MPI + CUDA). No `gmx_mpi`. Do N
 ## Parallel Execution
 
 ```bash
-# CPU (32 cores): auto-detect is fine for short jobs
+# CPU (64 cores): auto-detect is fine for short jobs
 gmx mdrun -deffnm em -v
 
 # CPU (explicit): maximize throughput for long MD

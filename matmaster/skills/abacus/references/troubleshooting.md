@@ -115,14 +115,14 @@ Bohrium(action="submit",
   input_dir="<dir>",
   image="registry.dp.tech/dptech/abacus:LTSv3.10.1",
   cmd="OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1",
-  machine="c32_m128_cpu")
+  machine="c64_m256_cpu")
 
 # Two-step (band/DOS) - use run.sh
 Bohrium(action="submit",
   input_dir="<dir>",
   image="registry.dp.tech/dptech/abacus:LTSv3.10.1",
   cmd="bash run.sh > log 2>&1",
-  machine="c32_m128_cpu")
+  machine="c64_m256_cpu")
 ```
 
 ## PP/Orbital Download

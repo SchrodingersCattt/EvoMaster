@@ -13,8 +13,8 @@ Quantum ESPRESSO (QE) is an integrated suite of codes for electronic-structure c
 | Item | Default Value |
 |------|---------------|
 | image | `registry.dp.tech/dptech/quantum-espresso:7.1` |
-| machine | `c32_m128_cpu` (32 cores, 128 GB RAM) |
-| cmd | `OMP_NUM_THREADS=1 mpirun -np 32 pw.x -i {input_file} > log 2>&1` |
+| machine | `c64_m256_cpu` (64 cores, 256 GB RAM) |
+| cmd | `OMP_NUM_THREADS=1 mpirun -np 64 pw.x -i {input_file} > log 2>&1` |
 
 > Replace `{input_file}` with the actual `.in` or `.pw` filename.
 > Match `-np` to the machine core count.
@@ -70,7 +70,7 @@ If the user provides a complete QE input file, skip preparation and submit direc
 2. Generate: `render_input.py --software qe --task scf --structure struct.cif --output pw.in`
 3. Diagnose: `diagnose_input.py --software qe --input pw.in`
 4. Collect files into one directory
-5. Submit: `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/quantum-espresso:7.1", cmd="OMP_NUM_THREADS=1 mpirun -np 32 pw.x -i pw.in > log 2>&1")`
+5. Submit: `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/quantum-espresso:7.1", cmd="OMP_NUM_THREADS=1 mpirun -np 64 pw.x -i pw.in > log 2>&1")`
 6. Poll: `Bohrium(action="poll", job_id=<id>)`
 
 ## Reference

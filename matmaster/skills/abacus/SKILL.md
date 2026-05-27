@@ -64,5 +64,5 @@ PW and LCAO basis; produces correct, runnable files and avoids silent-failure co
 | Item | Default |
 |------|---------|
 | image | `registry.dp.tech/dptech/dp/native/hub/mrdic2/abacusp:1.0.3-1778742780` |
-| machine | `c32_m128_cpu` |
+| machine | `c64_m256_cpu` |
 | cmd | `OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1` |
