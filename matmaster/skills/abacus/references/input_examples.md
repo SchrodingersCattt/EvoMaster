@@ -26,7 +26,7 @@ Always include **universal baseline**: `calculation`, `basis_type`, `ntype`, `ec
 
 > **⚠ `force_thr_ev` vs `force_thr`**: Always use `force_thr_ev` (unit: eV/Å). The parameter `force_thr` uses Ry/Bohr — completely different units. `force_thr_ev 0.01` ≈ `force_thr 3.9e-4`. Mixing them up produces absurdly loose or tight thresholds.
 
-> **⚠ Supercell k-points**: For **any supercell** (vacancy, defect, BSSE ghost atoms, adsorption), always use `kspacing` inside INPUT instead of a separate KPT file. This guarantees uniform k-point density that automatically adapts to cell size. Value: `0.10` Å⁻¹ for metals, `0.12`–`0.15` for insulators. For slab supercells: `kspacing 0.10 0.10 1.00` (z=vacuum). **Exception**: when `ocp 1` (fixed occupation) is used, ALWAYS use `gamma_only 1` instead of `kspacing` — `ocp_set` indices are only valid at Gamma point.
+> **⚠ Supercell k-points**: For **any supercell** (vacancy, defect, BSSE ghost atoms, adsorption), always use `kspacing` inside INPUT instead of a separate KPT file. This guarantees uniform k-point density that automatically adapts to cell size. Value: `0.10` Å⁻¹ for metals, `0.12`–`0.15` for insulators. For slab supercells: `kspacing 0.10 0.10 1.00` (z=vacuum). **Exceptions**: (1) when `ocp 1` (fixed occupation) is used, ALWAYS use `gamma_only 1` instead of `kspacing` — `ocp_set` indices are only valid at Gamma point; (2) **gas-phase molecules** in a large vacuum box (≥15 Å) — use `gamma_only 1` (not `kspacing`), since only the Γ point is physically meaningful.
 
 ### Smearing Method
 
@@ -170,6 +170,24 @@ Same as above, but set the vacuum direction of kspacing to `1.00`:
 ```
 kspacing 0.10 0.10 1.00
 ```
+
+### BSSE Ghost Atom INPUT Example (Gas-phase molecule)
+For isolated molecules in a large vacuum box (≥15 Å), use `gamma_only 1` instead of `kspacing`:
+```
+INPUT_PARAMETERS
+calculation scf
+basis_type lcao
+ntype 3
+ecutwfc 100
+scf_thr 1.0e-7
+scf_nmax 100
+smearing_method gauss
+smearing_sigma 0.015
+gamma_only 1
+pseudo_dir ./
+orbital_dir ./
+```
+> Gas-phase BSSE: `gamma_only 1` is mandatory. Do NOT use `kspacing` — a single Γ point is sufficient for a molecule in vacuum.
 
 ### PEXSI Solver INPUT Example (33_pexsi)
 ```
