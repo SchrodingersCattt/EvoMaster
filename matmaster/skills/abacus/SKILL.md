@@ -1,6 +1,6 @@
 ---
 name: abacus
-description: "Use to RUN ABACUS calculations: SCF, relax/cell-relax, band/DOS, MD, surfaces, defects, DFT+U, phonon, EOS. Covers input prep, Bohrium submit, parsing, parameter guards, K-points, validation. Do NOT use for ABACUS literature search, generic DFT theory, or input-only handoff."
+description: "Use to PREPARE or RUN ABACUS calculations: SCF, relax/cell-relax, band/DOS, MD, surfaces, defects, DFT+U, phonon, EOS. Covers input prep (even if not submitting), Bohrium submit, parsing, parameter guards, K-points, validation. Do NOT use for ABACUS literature search or generic DFT theory."
 skill_type: operator
 ---
 
@@ -48,8 +48,8 @@ PW and LCAO basis; produces correct, runnable files and avoids silent-failure co
 
 1. **Read provided STRU** — determine basis_type from presence of `NUMERICAL_ORBITAL`.
 2. **Read references** per Routing table above (always read `input_examples.md`; additionally read method-specific file if applicable).
-3. **Resolve PP/orbital filenames** (check both `apns_pseudopotentials_v1.list` and `apns_orbitals_efficiency_v1.list` for LCAO):
-   - PP/orbital filename in APNS list → ensure STRU uses exact APNS filename, set `pseudo_dir /root/apns-pseudopotentials-v1/`, `orbital_dir /root/apns-orbitals-efficiency-v1/`.
+3. **Resolve PP/orbital filenames** — read `${SKILL_DIR}/references/apns_pseudopotentials_v1.list` and `${SKILL_DIR}/references/apns_orbitals_efficiency_v1.list` for LCAO (do NOT grep `/root/apns-*` on the filesystem):
+   - PP/orbital filename in APNS list → ensure STRU uses exact APNS filename, set `pseudo_dir /root/apns-pseudopotentials-v1/`, `orbital_dir /root/apns-orbitals-efficiency-v1/`. These are Bohrium runtime paths (pre-installed in the Docker image); they will NOT exist in the local workspace — do not fallback to `./` because the directory is absent locally.
    - PP/orbital filename NOT in APNS list but file exists in workspace → keep STRU as-is, set `pseudo_dir ./`, `orbital_dir ./`.
    - Neither in APNS nor in workspace → STOP (Gate rule).
 4. **Write INPUT + KPT** following examples and mandatory-parameter tables from step 2.
