@@ -4028,7 +4028,7 @@ questions:
   - key: must_dm
     value:
       filename: run_lcao_si2/INPUT
-      pattern: (?im)^\s*out_dm(?:k)?\s+1\s*$
+      pattern: (?im)^\s*out_dm[k1]?\s+1\s*$
       flags: im
   - key: turn_budget
     value:

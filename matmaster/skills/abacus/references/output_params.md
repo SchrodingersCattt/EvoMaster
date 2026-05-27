@@ -18,6 +18,15 @@ Include in INPUT as needed. Results written to `OUT.ABACUS/`.
 | `nbands` | integer | auto | Number of bands. Must be explicit for NSCF (> occupied). |
 | `symmetry` | `0`/`1` | `1` | `0` = disable. **Mandatory for NSCF line-mode k-paths.** |
 
+## Density Matrix Output (LCAO only)
+
+| Parameter | Condition | Purpose |
+|-----------|-----------|---------|
+| `out_dm 1` | `gamma_only 0` (multi-k) | Density matrix D(k) for each k-point |
+| `out_dm1 1` | `gamma_only 1` (Γ-only) | Density matrix at Γ |
+
+> **⚠️ Use `out_dm1` when `gamma_only 1`; use `out_dm` when `gamma_only 0`.** Using the wrong variant silently produces no output.
+
 ## LCAO Matrix Output (H/S/T/R)
 
 These parameters output Hamiltonian, overlap, and kinetic matrices. **LCAO only** (`basis_type lcao`).
