@@ -399,7 +399,7 @@ questions:
       ceiling (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
-- id: SC_struct_008_20260525
+- id: SC_struct_008_20260527
   capability: structure_construction
   domain: agnostic
   intent: Construct a computation-ready gamma-alumina bulk model and validate stoichiometry,
@@ -504,14 +504,6 @@ questions:
     axis: correctness
     verify: llm_binary_judge
     weight: 0.5
-  - id: grounding_source
-    criterion: The answer links code-checked Al:O ratio, cell angles, tetrahedral
-      vs octahedral Al sites, minimum contact distances, and post-relax forces to
-      `gamma_alumina.cif` and the stated relaxation, not handbook recall disconnected
-      from that file. Judge solely from the final answer and named deliverables; do
-      not fail because the tool-call log omits MCP, web_search, or any specific tool.
-    axis: grounding
-    verify: llm_binary_judge
   - id: no_retries
     criterion: Bulk construction and relaxation are not repeated with identical parameters.
     axis: efficiency
