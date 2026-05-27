@@ -18,7 +18,7 @@ GROMACS is a high-performance molecular dynamics package primarily designed for 
 
 | Item | GPU Alternative |
 |------|-----------------|
-| machine | `c6_m60_1 * NVIDIA 4090` |
+| machine | `c8_m32_1 * NVIDIA 4090` |
 | cmd | `bash run.sh > log 2>&1` (add `-gpu_id 0` to mdrun in script) |
 
 > **The Bohrium GROMACS image has `gmx_mpi` only (not `gmx`).** Do NOT use `-ntmpi` (thread-MPI is not compiled in).
