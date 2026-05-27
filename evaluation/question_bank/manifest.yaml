@@ -105,7 +105,7 @@ banks:
 - path: scientific_analysis/sa_catalysis.yaml
   capability: scientific_analysis
   domain: catalysis
-  questions: 1
+  questions: 2
 - path: scientific_analysis/sa_polymer.yaml
   capability: scientific_analysis
   domain: polymer

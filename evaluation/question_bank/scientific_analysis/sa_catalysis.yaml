@@ -198,3 +198,72 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+- id: SA_co2rr_screening_001_20260527
+  capability: scientific_analysis
+  domain: catalysis
+  intent: Test whether agent critically evaluates computational CO2RR screening results
+    against experimental consensus, identifying physically implausible predictions
+    (e.g., Au predicted as HCOOH catalyst when it is experimentally a well-known CO-selective
+    catalyst).
+  human_prompt_seed: '以下是一组 MLIP 快速筛选得到的 CO2RR 吸附能数据（纯金属表面）。请分析这些数据，
+    确定每种金属/晶面的最优 CO2RR 产物，并给出筛选建议（Top-3 催化剂候选）。
+    数据文件：`co2rr_screening.csv`
+
+    文件地址：`https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/SA_co2rr_screening_001/co2rr_screening.csv`
+
+    输出 JSON 格式结果，包含每种金属/晶面的 best_product 和 reliability 评级（high/medium/low）。
+
+    '
+  tags:
+  - char_electrochem
+  data_files:
+  - key: screening_csv
+    path: data/SA_co2rr_screening_001/co2rr_screening.csv
+    description: MLIP-computed CO2RR adsorption free energies for pure metals.
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 20
+  - key: token_budget_total
+    value:
+      max: 30000
+  scoring_checklist:
+  - id: au100_anomaly
+    criterion: Agent flags Au(100) as having LOW reliability or explicitly warns that
+      the MLIP prediction contradicts experimental consensus. Au is experimentally
+      a well-known CO-selective catalyst (FE>90%) and any prediction of HCOOH as
+      best product should be flagged as suspicious.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: au111_product
+    criterion: Agent correctly identifies CO as the best product for Au(111), consistent
+      with both the data (U_L_CO is less negative than U_L_HCOOH) and experimental
+      consensus.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: au100_flags_issue
+    criterion: Agent reports that the data predicts HCOOH as thermodynamically favored
+      for Au(100), but explicitly flags this as unreliable or contradicting experiments.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: identifies_dG_COOH_outlier
+    criterion: Agent specifically identifies the Au(100) dG_COOH=-2.21 eV value as
+      an outlier (much more negative than other Au facets at -1.03 and -1.35 eV),
+      suggesting MLIP overprediction of COOH binding on Au(100).
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: recommends_dft_validation
+    criterion: Agent recommends DFT validation or recalculation for the flagged anomalous
+      result, rather than simply accepting the MLIP screening output.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
