@@ -259,3 +259,74 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
+- id: SA_ne_conductivity_001_20260527
+  capability: scientific_analysis
+  domain: battery
+  intent: Test whether agent correctly computes Nernst-Einstein ionic conductivity
+    from MD-derived diffusion coefficients, with proper unit conversions (cm2/s to
+    m2/s, S/m to mS/cm).
+  human_prompt_seed: '以下是一组 LiPF6/EC/EMC 电解液体系 10 ns NVT MD 模拟的扩散系数结果，请计算
+    Nernst-Einstein 离子电导率，评估结果的合理性。
+
+    体系参数：
+
+    - 离子对数：20 (20 Li+ + 20 PF6-)
+
+    - 模拟盒子：立方，边长 3.0 nm
+
+    - 温度：298.15 K
+
+    - D(Li+) = 4.8 x 10^-7 cm2/s（MSD线性拟合，2-8 ns区间）
+
+    - D(PF6-) = 3.2 x 10^-7 cm2/s（MSD线性拟合，2-8 ns区间）
+
+    请输出 JSON 结果，包含：sigma_mScm（电导率，单位 mS/cm）和 assessment（对结果合理性的评估）。
+
+    '
+  tags:
+  - char_electrochem
+  data_files: []
+  reference_answers:
+  - key: sigma_value
+    value:
+      json_path: sigma_mScm
+      target: 3.69
+      tolerance: 0.5
+  - key: turn_budget
+    value:
+      max: 10
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: sigma_value
+    criterion: Nernst-Einstein conductivity is approximately 3.7 mS/cm. The correct
+      formula is sigma = N*e^2*(D_plus + D_minus)/(kB*T*V), converted from S/m to
+      mS/cm by multiplying by 10 (since 1 S/m = 10 mS/cm). Common error is using
+      factor 0.1 instead of 10, giving 0.037 mS/cm (100x too low).
+    axis: correctness
+    verify: answer_json_numeric
+    weight: 3.0
+  - id: unit_conversion_correct
+    criterion: Agent explicitly states or demonstrates the correct unit conversion
+      chain (cm2/s to m2/s via 1e-4, then S/m to mS/cm via factor 10), and the final
+      result is in the correct order of magnitude (1-10 mS/cm, not 0.01-0.1 mS/cm).
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: experimental_comparison
+    criterion: Agent proactively compares the computed NE conductivity with experimental
+      values for 1M LiPF6/EC-EMC (~8-10 mS/cm) and explains why the NE result is
+      lower (ion correlation effects, finite-size box, or NE overestimation of
+      transport number). The key test is whether agent independently recalls or
+      searches for the experimental reference without being told.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
