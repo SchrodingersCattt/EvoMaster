@@ -1,6 +1,6 @@
 ---
 name: transform-atomic-structure
-description: "Transform existing non-molecular crystal structures: supercell, strain, doping, vacancy/defect, ordering, or in-place mutation. For molecular crystals use operate-molecular-crystal; for multi-structure assembly use assemble-atomic-structure."
+description: "Transform existing non-molecular crystal structures: supercell, strain, doping, vacancy/defect, ordering, or in-place mutation. Not for molecular crystals (bond-breaking risk) or multi-structure assembly (slab+adsorbate, interface, packing)."
 skill_type: operator
 ---
 
@@ -12,16 +12,25 @@ ionic, and covalent crystals.
 
 ## Capability Gate
 
-- **STOP** if `inspect-atomic-structure` shows `is_molecular_crystal=true`.
-  This skill does not handle molecular crystals — individual atom removal or
-  bond cutting would destroy molecules.
+- **STOP** if the input is a molecular crystal (e.g. MOF with organic linkers,
+  pharmaceutical polymorph, polymer crystal). This skill operates at the atomic
+  level — individual atom removal or substitution would break molecules.
 - **STOP** if the task requires combining multiple structures (slab+adsorbate,
   interface, amorphous packing). This skill only transforms a single structure
   in-place.
 
 ## Decision Tree
 
-1. Run `inspect-atomic-structure` on the input.
+1. Inspect the input structure:
+   ```python
+   from pymatgen.core import Structure
+   from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+   struct = Structure.from_file("input.cif")
+   print(f"Formula: {struct.formula}, Atoms: {len(struct)}")
+   sga = SpacegroupAnalyzer(struct, symprec=0.1)
+   print(f"Space group: {sga.get_space_group_symbol()} ({sga.get_space_group_number()})")
+   print(f"Ordered: {struct.is_ordered}")
+   ```
 2. If the user requests only cell multiplication, use a supercell matrix.
 3. If the user requests strain/shear, apply a deformation gradient and decide
    whether atom coordinates should scale with the lattice.
@@ -114,7 +123,7 @@ sufficient. For ordered Wyckoff targeting or multiple doping rules, use
 ## Acceptance Checklist
 
 - Input and output filenames are both reported.
-- `inspect-atomic-structure` was run before and after the operation.
+- Structure validated before and after (dimensionality, formula, min distance).
 - Formula, atom count, and lattice change match the requested transformation.
 - For stochastic operations, the seed and selected site summary are reported.
 
