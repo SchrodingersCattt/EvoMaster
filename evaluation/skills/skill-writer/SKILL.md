@@ -158,6 +158,14 @@ Format:
 
 Anti-pattern: burying STOP conditions inside model selection rules or execution details. If the agent has to read 80% of the skill before encountering a gate, the gate arrives too late.
 
+**No cross-skill name coupling**: a STOP rule should state *why* this skill
+cannot handle the task, not *which other skill* to route to. Routing is the
+system's job. Naming other skills creates maintenance coupling — if the target
+skill is renamed or split, every referencing skill breaks silently.
+
+Bad: `STOP → route to \`assemble-atomic-structure\``
+Good: `STOP — this skill only transforms a single structure in-place.`
+
 ## Scripts Section
 
 The Task Scripts table is the agent's lookup for "which tool do I call." Requirements:
