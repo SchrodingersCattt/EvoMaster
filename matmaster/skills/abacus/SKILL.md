@@ -48,7 +48,6 @@ PW and LCAO basis; produces correct, runnable files and avoids silent-failure co
 ## Workflow
 
 1. **Read provided STRU** — determine basis_type from presence of `NUMERICAL_ORBITAL`.
-   - If no STRU exists in workspace and task requires one, invoke `build-crystal-from-params` (for simple inorganic crystals with known prototype/lattice) or `retrieve-structure` (for complex/known materials) to generate it FIRST. Do NOT hand-write STRU coordinates from memory.
 2. **Read references** per Routing table above (always read `${SKILL_DIR}/references/input_examples.md`; additionally read method-specific file if applicable).
 3. **Resolve PP/orbital filenames** — read `${SKILL_DIR}/references/apns_pseudopotentials_v1.list` and `${SKILL_DIR}/references/apns_orbitals_efficiency_v1.list` for LCAO (do NOT grep `/root/apns-*` on the filesystem):
    - PP/orbital filename in APNS list → ensure STRU uses exact APNS filename, set `pseudo_dir /root/apns-pseudopotentials-v1/`, `orbital_dir /root/apns-orbitals-efficiency-v1/`.
