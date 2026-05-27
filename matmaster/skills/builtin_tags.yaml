@@ -104,4 +104,5 @@ categories:
         skills:
           - skill-manager
           - image-manager
+          - session-analyzer
           - compliance-guardian
