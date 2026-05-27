@@ -33,6 +33,10 @@ ionic, and covalent crystals. If inspection shows a molecular crystal, route to
 
    If the user does not specify a strategy, default to cation/anion vacancy.
    Never output an aliovalent-doped structure without neutralizing the charge.
+   **Priority**: charge neutrality > target concentration. In small supercells
+   the exact requested at.% is often unachievable; round the dopant count to
+   the nearest charge-neutral integer set, even if the resulting concentration
+   deviates from the request.
 
 ## Local API
 
