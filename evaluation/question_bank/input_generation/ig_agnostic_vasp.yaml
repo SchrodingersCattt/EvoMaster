@@ -997,7 +997,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_incar_010_20260508
+- id: IG_incar_010_20260528
   capability: input_generation
   domain: agnostic
   intent: 'Generate VASP INCAR for spin-orbit coupling calculation of heavy-element halide Br6H6Pb2S2. Pb SOC is significant.
@@ -1223,7 +1223,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_incar_012_20260522
+- id: IG_incar_012_20260528
   capability: input_generation
   domain: agnostic
   intent: 'Generate VASP INCAR for NEB transition state search with HSE06 of Prussian blue analogue C24Fe8N24Na4. Agent must identify Fe mixed-valence magnetism and set NUPDOWN=20.
