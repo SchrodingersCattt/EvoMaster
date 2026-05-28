@@ -56,6 +56,7 @@ def check_vasp_incar(
     check: str,
     param: str | None = None,
     expected: Any = None,
+    allowed: list[str] | None = None,
     min: float | None = None,
     max: float | None = None,
     atom_count: int | None = None,
@@ -67,6 +68,7 @@ def check_vasp_incar(
     Supported checks:
     - param_set: verify param exists in INCAR
     - param_value: verify param equals expected (handles .TRUE./.FALSE.)
+    - param_value_in: verify param value is one of allowed list (case-insensitive)
     - param_range: verify numeric param within [min, max]
     - magmom_per_atom_range: expand MAGMOM, check each atom's value in [min, max]
     - magmom_atom_count: expand MAGMOM, check total atom count matches
@@ -105,6 +107,17 @@ def check_vasp_incar(
         if ok:
             return True, f"{fpath.name}: {tag}={params[tag]} matches expected"
         return False, f"{fpath.name}: {tag}={params[tag]}, expected {expected}"
+
+    elif check == "param_value_in":
+        if tag not in params:
+            return False, f"{fpath.name}: {tag} not found"
+        if not allowed:
+            return False, "param_value_in: 'allowed' list must be provided"
+        actual = params[tag].strip().lower()
+        allowed_lower = [v.lower() for v in allowed]
+        if actual in allowed_lower:
+            return True, f"{fpath.name}: {tag}={params[tag]}, in allowed {allowed}"
+        return False, f"{fpath.name}: {tag}={params[tag]}, not in allowed {allowed}"
 
     elif check == "param_range":
         if tag not in params:

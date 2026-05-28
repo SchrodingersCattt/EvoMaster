@@ -113,7 +113,7 @@ questions:
 
     - `INCAR_original.txt` -> `https://bohrium-agent-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/evaluation/DD_vasp_scf_diverge_001/INCAR_original.txt`
 
-    请诊断原因并给出修改后的INCAR参数。
+    请诊断原因并将修改后的完整INCAR写入 `INCAR_modified` 文件。
 
     '
   tags:
@@ -131,7 +131,26 @@ questions:
       max: 10
   - key: token_budget_total
     value:
-      max: 15000
+      max: 20000
+  - key: reduces_amix
+    value:
+      filename: INCAR_modified
+      check: param_range
+      param: AMIX
+      min: 0.01
+      max: 0.1
+  - key: suggests_algo_change
+    value:
+      filename: INCAR_modified
+      check: param_value_in
+      param: ALGO
+      allowed: [All, Damped]
+  - key: suggests_contcar_restart
+    value:
+      filename: INCAR_modified
+      check: param_value
+      param: ISTART
+      expected: '1'
   scoring_checklist:
   - id: diagnoses_mixing_issue
     criterion: Agent identifies that AMIX=0.2 is too aggressive for a DFT+U spin-
@@ -142,25 +161,22 @@ questions:
     verify: llm_binary_judge
     weight: 2.0
   - id: reduces_amix
-    criterion: Agent recommends reducing AMIX to 0.01-0.05 range (and optionally
-      BMIX to 1e-5 or smaller, AMIX_MAG to 0.01-0.05) to stabilize the charge
+    criterion: Modified INCAR sets AMIX in the 0.01-0.1 range to stabilize charge
       mixing for DFT+U.
     axis: correctness
-    verify: llm_binary_judge
+    verify: vasp_incar_check
     weight: 3.0
   - id: suggests_algo_change
-    criterion: Agent recommends switching ALGO from Normal to All (or adding
-      IALGO=48/ALGO=Damped) which is more robust for DFT+U systems with
-      near-degenerate spin states.
+    criterion: Modified INCAR sets ALGO to All or Damped, which is more robust for
+      DFT+U systems with near-degenerate spin states.
     axis: correctness
-    verify: llm_binary_judge
+    verify: vasp_incar_check
     weight: 2.0
   - id: suggests_contcar_restart
-    criterion: Agent recommends restarting from CONTCAR (ISTART=1) if available,
-      since a partially-converged wavefunction is a better starting point than
-      random initialization for difficult SCF problems.
+    criterion: Modified INCAR sets ISTART=1 to restart from a partially-converged
+      wavefunction rather than random initialization.
     axis: correctness
-    verify: llm_binary_judge
+    verify: vasp_incar_check
   - id: does_not_just_retry
     criterion: Agent does NOT suggest simply resubmitting the same INCAR without
       changes. It must propose concrete parameter modifications.
