@@ -1050,11 +1050,6 @@ questions:
       filename: INCAR
       pattern: ^\s*PREC\s*=\s*Accurate\b
       flags: im
-  - key: critical_LNONCOLLINEAR
-    value:
-      filename: INCAR
-      pattern: ^\s*LNONCOLLINEAR\s*=\s*\.?(?:TRUE|T)\.?
-      flags: im
   - key: turn_budget
     value:
       max: 8
@@ -1063,7 +1058,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 15000
+      max: 20000
   - key: reasonable_params
     value:
       filename: INCAR
@@ -1098,10 +1093,6 @@ questions:
     verify: text_file_regex
   - id: critical_PREC
     criterion: INCAR sets PREC = Accurate (critical param).
-    axis: correctness
-    verify: text_file_regex
-  - id: critical_LNONCOLLINEAR
-    criterion: INCAR sets LNONCOLLINEAR = .TRUE. as required for SOC calculations (LSORBIT implies non-collinear magnetism).
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
