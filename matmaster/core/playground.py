@@ -17,7 +17,8 @@ from __future__ import annotations
 
 import logging
 import threading
-from dataclasses import replace
+from collections.abc import Mapping
+from dataclasses import fields as dataclass_fields, replace
 from pathlib import Path
 from typing import Any
 
@@ -122,32 +123,42 @@ class PlaygroundContext(BaseModel):
         snapshot: BohriumRuntimeSnapshot,
     ) -> PlaygroundContext:
         """Return a new frozen instance with typed Bohrium runtime snapshot."""
-        return self.with_runtime_port(bohrium=BohriumRuntimePort(snapshot=snapshot))
+        return self.with_updates(
+            runtime_ports={"bohrium": BohriumRuntimePort(snapshot=snapshot)}
+        )
 
-    def with_runtime_ports(
+    def with_updates(
         self,
-        runtime_ports: PlaygroundRuntimePorts,
+        *,
+        metadata: Mapping[str, Any] | None = None,
+        runtime_ports: Mapping[str, Any] | None = None,
     ) -> PlaygroundContext:
-        """Return a new frozen instance with runtime capability ports updated."""
-        return self.model_copy(update={"runtime_ports": runtime_ports})
+        """Return a new frozen instance with selected nested fields updated."""
+        update: dict[str, Any] = {}
 
-    def with_runtime_port(self, **fields: Any) -> PlaygroundContext:
-        """Return a new instance with selected runtime port fields replaced."""
-        if not fields:
-            return self
-        return self.with_runtime_ports(replace(self.runtime_ports, **fields))
+        if runtime_ports:
+            runtime_port_names = {
+                field.name for field in dataclass_fields(PlaygroundRuntimePorts)
+            }
+            unknown = set(runtime_ports) - runtime_port_names
+            if unknown:
+                names = ", ".join(sorted(unknown))
+                raise ValueError(f"Unknown PlaygroundRuntimePorts field(s): {names}")
+            update["runtime_ports"] = replace(
+                self.runtime_ports,
+                **dict(runtime_ports),
+            )
 
-    def with_metadata(self, **fields: Any) -> PlaygroundContext:
-        """Return a new frozen instance with typed run metadata fields merged."""
-        if not fields:
+        if metadata:
+            unknown = set(metadata) - set(RunMetadata.model_fields)
+            if unknown:
+                names = ", ".join(sorted(unknown))
+                raise ValueError(f"Unknown RunMetadata field(s): {names}")
+            update["metadata"] = self.metadata.model_copy(update=dict(metadata))
+
+        if not update:
             return self
-        unknown = set(fields) - set(RunMetadata.model_fields)
-        if unknown:
-            names = ", ".join(sorted(unknown))
-            raise ValueError(f"Unknown RunMetadata field(s): {names}")
-        data = {name: getattr(self.metadata, name) for name in RunMetadata.model_fields}
-        data.update(fields)
-        return self.model_copy(update={"metadata": RunMetadata.model_validate(data)})
+        return self.model_copy(update=update)
 
 
 class Playground:
@@ -218,8 +229,7 @@ class Playground:
         """
         if not isinstance(metadata, RunMetadata):
             raise TypeError(
-                f"prepare() requires RunMetadata, got {type(metadata).__name__}. "
-                "dict input was removed in run-meta-refactor P2."
+                f"prepare() requires RunMetadata, got {type(metadata).__name__}."
             )
 
         workspace_path = self._resolve_workspace_path_explicit(

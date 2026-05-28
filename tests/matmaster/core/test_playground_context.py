@@ -45,14 +45,14 @@ def test_playground_context_metadata_is_typed_runmetadata() -> None:
 
     assert isinstance(ctx.metadata, RunMetadata)
 
-    updated = ctx.with_metadata(task_id="task-1")
+    updated = ctx.with_updates(metadata={"task_id": "task-1"})
 
     assert updated is not ctx
     assert updated.metadata.task_id == "task-1"
     assert ctx.metadata.task_id == ""
 
 
-def test_with_metadata_rejects_unknown_fields() -> None:
+def test_with_updates_metadata_rejects_unknown_fields() -> None:
     ctx = PlaygroundContext(
         workdir=Path("/tmp/work"),
         session_type="local",
@@ -60,7 +60,7 @@ def test_with_metadata_rejects_unknown_fields() -> None:
     )
 
     with pytest.raises(ValueError, match="Unknown RunMetadata field"):
-        ctx.with_metadata(ghost_field="x")
+        ctx.with_updates(metadata={"ghost_field": "x"})
 
 
 class TestWorkspaceArchivalConfig:
@@ -487,17 +487,17 @@ class TestPlaygroundContextRuntimePorts:
         assert "runtime_ports" not in ctx.model_dump()
         assert "runtime_ports" not in ctx.model_dump(mode="json")
 
-    def test_with_runtime_ports_returns_new_instance_and_preserves_fields(self) -> None:
-        from matmaster.types.runtime_ports import (
-            EmptySessionEventHistory,
-            PlaygroundCompactionPort,
-            PlaygroundRuntimePorts,
-        )
+    def test_with_updates_can_update_metadata_and_runtime_ports_together(
+        self,
+    ) -> None:
+        from matmaster.types.figures import FigureUploadConfig
+        from matmaster.types.runtime_ports import FigureUploadPort
 
-        ports = PlaygroundRuntimePorts(
-            compaction=PlaygroundCompactionPort(
-                history=EmptySessionEventHistory(),
-            )
+        cfg = FigureUploadConfig(
+            session_id="sess-1",
+            task_id="task-1",
+            asset_key_prefix="figures/sess-1/task-1",
+            upload_bytes=lambda data, name: f"https://oss.example/{name}",
         )
         ctx = PlaygroundContext(
             workdir=Path("/tmp/work"),
@@ -508,18 +508,21 @@ class TestPlaygroundContextRuntimePorts:
             metadata=RunMetadata(task_id="task-1"),
         )
 
-        updated = ctx.with_runtime_ports(ports)
+        updated = ctx.with_updates(
+            metadata={"source": "web"},
+            runtime_ports={"figure_upload": FigureUploadPort(config=cfg)},
+        )
 
         assert updated is not ctx
-        assert updated.runtime_ports is ports
-        assert ctx.runtime_ports is not ports
+        assert updated.runtime_ports.figure_upload.config is cfg
+        assert updated.metadata.source == "web"
         assert updated.workdir == ctx.workdir
         assert updated.session_type == "ssh"
         assert updated.execution_workdir == "/remote/work"
         assert updated.env_vars == {"A": "B"}
-        assert updated.metadata == RunMetadata(task_id="task-1")
+        assert updated.metadata.task_id == "task-1"
 
-    def test_with_runtime_port_merges_single_field_only(self) -> None:
+    def test_with_updates_runtime_ports_merges_single_field_only(self) -> None:
         from matmaster.types.figures import FigureUploadConfig
         from matmaster.types.runtime_ports import (
             EmptySessionEventHistory,
@@ -548,12 +551,24 @@ class TestPlaygroundContextRuntimePorts:
             ),
         )
 
-        updated = ctx.with_runtime_port(figure_upload=FigureUploadPort(config=cfg))
+        updated = ctx.with_updates(
+            runtime_ports={"figure_upload": FigureUploadPort(config=cfg)}
+        )
 
         assert updated is not ctx
         assert updated.runtime_ports.figure_upload.config is cfg
         assert updated.runtime_ports.child_event_forward_sink is child_sink
         assert updated.runtime_ports.compaction.history is history
+
+    def test_with_updates_runtime_ports_rejects_unknown_fields(self) -> None:
+        ctx = PlaygroundContext(
+            workdir=Path("/tmp/work"),
+            session_type="local",
+            cache_area=Path("/tmp/cache"),
+        )
+
+        with pytest.raises(ValueError, match="Unknown PlaygroundRuntimePorts field"):
+            ctx.with_updates(runtime_ports={"ghost_port": object()})
 
     def test_model_validate_accepts_runtime_ports_dataclass(self) -> None:
         from matmaster.types.runtime_ports import PlaygroundRuntimePorts

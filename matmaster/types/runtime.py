@@ -82,8 +82,6 @@ class AgentRuntimeSpec(BaseModel):
 
     # Annotations are Any to avoid circular imports across the runtime stack.
     # The model_validator below enforces runtime type contracts.
-    # Phase 2C v3.1: reserved entry points for the Phase 3 compaction cutover.
-    # Kernel/compactor do not consume these fields in Phase 2C.
     context_assembler: Any | None = None
     user_instructions_port: Any | None = None
     session_events_port: Any | None = None

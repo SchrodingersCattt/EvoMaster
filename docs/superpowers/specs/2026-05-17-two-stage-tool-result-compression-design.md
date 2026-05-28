@@ -66,6 +66,9 @@ This design turns tool result compression into a first-class two-stage system.
 - Do not rewrite historical `tool_result` events in place.
 - Do not require Phase 1 to implement subagent/fork replacement inheritance.
 - Do not use `run_meta` as a storage or service-object transport.
+- Do not store filesystem paths in any `ToolResult` field. Paths are an
+  implementation detail of `ToolResultStorage` and must remain encapsulated
+  within storage service implementations.
 
 ## 4. Design Overview
 
@@ -142,18 +145,43 @@ The module owns:
 
 ### 5.2 Core Types
 
+Storage objects are split into a public ref and a service-internal entry. The
+public ref is the only object that may appear on `ToolResult`,
+`ToolResultEvent.payload`, persisted events, or DB records. The internal entry
+never leaves the storage service.
+
 ```python
 @dataclass(frozen=True)
-class ToolResultStorageRecord:
+class ToolStorageRef:
+    """Public-safe, ToolResult-embeddable storage reference.
+
+    This is the only storage object that may appear in ToolResult,
+    ToolResultEvent.payload, persisted events, or DB records.
+    """
     schema_version: Literal["tool_result_storage.v1"]
     tool_call_id: str
     tool_name: str
     storage_ref: str
-    path: str
     sha256: str
     original_chars: int
     replacement_chars: int
     truncated: bool
+
+
+@dataclass(frozen=True)
+class _LocalStorageEntry:
+    """Storage-service-internal record. NEVER exposed via ToolResult.
+
+    Carries the absolute path used by LocalToolResultStorage to resolve
+    refs back to file content. Other storage implementations may define
+    their own internal entry types (e.g. S3 keys, workspace handles).
+    """
+    storage_ref: str
+    path: Path
+    sha256: str
+    tool_call_id: str
+    tool_name: str
+    original_chars: int
 
 
 @dataclass(frozen=True)
@@ -169,8 +197,16 @@ class ToolResultReplacementRecord:
     truncated: bool
 ```
 
-`ToolResultStorageRecord` is the internal storage fact. It may include absolute
-paths because it stays server-side.
+`ToolStorageRef` is the public-safe handle. It is path-free by construction.
+Consumers obtain a `ToolStorageRef` from `ToolResultEvent.payload["tool_storage"]`
+or from `ToolResult.payload["tool_storage"]`, then pass it to
+`storage.load_full(ref)` when they need the original content.
+
+`_LocalStorageEntry` is the implementation-private form for
+`LocalToolResultStorage`. It carries the absolute path but is never returned
+from any public method and never embedded in `ToolResult`. Alternative storage
+backends (object storage, workspace storage) define their own internal entry
+type and never expose physical addresses to callers.
 
 `ToolResultReplacementRecord` is the exact model-visible decision. Its
 `replacement` string is stored instead of regenerated so resume behavior is not
@@ -196,9 +232,12 @@ content is replaced:
 }
 ```
 
-This payload must not include absolute local paths. Absolute paths belong in
-`ToolResult.meta["tool_storage"]`, not in frontend-visible or DB-visible
-payload.
+This payload must not include absolute local paths. Absolute paths must not
+appear in `ToolResult` at all — not in `payload`, not in `meta`, not in
+`content`. Storage paths are encapsulated inside `ToolResultStorage`
+implementations and accessed only via `storage.load_full(ref)`. Consumers
+requiring full content obtain a `ToolStorageRef` from
+`payload["tool_storage"]` and pass it to the storage service.
 
 Existing payload keys, especially `payload["figures"]`, must be preserved.
 Storage metadata is additive.
@@ -212,9 +251,17 @@ Use a `.matmaster`-scoped location:
 {control_root}/.matmaster/tool-results/{tool_call_id}/metadata.json
 ```
 
-For backward compatibility with current tests and any diagnostic code,
-`ToolResult.meta["full_result_path"]` remains present and points to
-`result.txt`.
+This layout is an internal detail of `LocalToolResultStorage`. Callers never
+read these paths directly. Path-to-ref mapping is private to the storage
+implementation, so future migration to an alternative backend (object storage,
+workspace storage) does not require any caller changes.
+
+The previous `_truncate_result` implementation wrote
+`meta["full_result_path"]`. This field is removed in the new design. Diagnostic
+code that previously read `meta["full_result_path"]` must migrate to
+`payload["tool_storage"]["storage_ref"]` and call `storage.load_full(ref)`.
+Existing tests that assert on `meta["full_result_path"]` should be rewritten
+to assert on storage round-trip behavior.
 
 ### 5.5 Replacement String
 
@@ -264,6 +311,77 @@ The existing semantics of `max_result_chars` remain:
 - `len(content) <= max_result_chars`: result passes through unchanged.
 - `len(content) > max_result_chars`: full content is stored and model-visible
   content becomes the stable replacement string.
+
+### 5.8 Storage Service Protocol
+
+`ToolResultStorage` is a Protocol. The default implementation is
+`LocalToolResultStorage`. Other implementations may target object storage,
+workspace-scoped storage, or remote stores without changing callers.
+
+```python
+class ToolResultStorage(Protocol):
+    async def store_full(
+        self,
+        *,
+        content: str,
+        tool_call_id: str,
+        tool_name: str,
+    ) -> ToolStorageRef:
+        """Persist full content, return a path-free public ref."""
+        ...
+
+    async def load_full(self, ref: ToolStorageRef) -> str | None:
+        """Resolve ref to full content. Returns None if missing or sha256
+        mismatch. Implementations must not return partial content."""
+        ...
+
+    async def process_result(
+        self,
+        *,
+        result: ToolResult,
+        tool_call_id: str,
+        tool_name: str,
+        max_visible_chars: int,
+    ) -> ToolResult:
+        """High-level helper: if oversized, store full content and return
+        a new ToolResult whose content is the replacement string and whose
+        payload includes a ToolStorageRef."""
+        ...
+```
+
+Callers (`FullToolRunner`, history restore, future diagnostic endpoints) must
+use this protocol. They must not construct or read storage paths directly.
+`LocalToolResultStorage.__init__` accepts a `root: Path` parameter; the
+path-to-ref mapping is private to that instance and is never exported.
+
+### 5.9 Service Injection
+
+`ToolResultStorage` is constructed at experiment assembly time
+(`matmaster/core/exp.py`) using the playground-provided `control_root`.
+`FullToolRunner` receives the storage instance through its constructor and
+stores it as a private attribute. The runner must not construct storage paths
+from `topology.control_root` directly; that responsibility belongs to the
+storage service.
+
+```python
+# Exp assembly
+tool_storage = LocalToolResultStorage(
+    root=playground_ctx.control_root / ".matmaster" / "tool-results",
+)
+runner = FullToolRunner(
+    catalog=...,
+    structural_validation=...,
+    capability_policy=...,
+    scheduler=...,
+    topology=...,
+    tool_storage=tool_storage,
+    hook_executor=...,
+)
+```
+
+This injection point is the single place where `control_root` and the storage
+root directory are connected. Future backends override only the constructor
+argument; everything downstream stays unchanged.
 
 ## 6. Phase 2 Detailed Design
 
@@ -545,7 +663,11 @@ aggregate replacements when event persistence is unavailable.
 - Full tool results may contain credentials, tokens, paths, or scientific data.
 - Stored result files and metadata should be written with owner-only
   permissions where supported.
-- Public payloads must not include absolute control-plane paths.
+- `ToolResult` must not include absolute control-plane paths in any field
+  (`content`, `payload`, `meta`). Paths exist only inside `ToolResultStorage`
+  implementations, which expose access exclusively through `load_full(ref)`.
+  This invariant prevents control-plane filesystem layout from leaking into
+  events, DB, SSE streams, or restored history.
 - Logs must not print full tool result content.
 - `sha256` values are allowed in metadata and public payloads because they
   support integrity checks without exposing content.
@@ -556,10 +678,17 @@ aggregate replacements when event persistence is unavailable.
 
 - Oversized `ToolResult` is stored under `.matmaster/tool-results`.
 - Returned `ToolResult.content` is the stable replacement string.
-- `ToolResult.meta["tool_storage"]` includes the internal path.
-- `ToolResult.meta["full_result_path"]` remains present for compatibility.
-- `ToolResult.payload["tool_storage"]` is public-safe and contains no absolute
-  path.
+- `ToolResult.meta` does not contain any field whose value is a filesystem
+  path. In particular, `meta["full_result_path"]` is absent.
+- `ToolResult.payload["tool_storage"]` is a `ToolStorageRef` dict with no
+  `path` key and no other field that exposes a filesystem location.
+- `storage.load_full(ref)` round-trips the original content and verifies the
+  sha256 against the stored value.
+- `storage.load_full(ref)` returns `None` when the underlying file is missing
+  or when sha256 does not match.
+- Storage service is the only object that knows the on-disk path; tests must
+  obtain content via `load_full`, not by constructing paths from
+  `tool_call_id`.
 - Existing `payload["figures"]` survives storage replacement.
 - History restore reconstructs `ToolMessage.content` as the replacement string.
 - Compaction summary input consumes replacement text, not full stored text.
@@ -591,8 +720,10 @@ aggregate replacements when event persistence is unavailable.
 1. Add `matmaster/tools/tool_storage.py`.
 2. Replace `FullToolRunner._truncate_result` with `ToolResultStorage`.
 3. Propagate `payload["tool_storage"]` through `ToolResultEvent`.
-4. Preserve existing truncation tests while updating expectations for the new
-   `.matmaster/tool-results` path.
+4. Rewrite existing truncation tests: replace assertions on
+   `meta["full_result_path"]` with `storage.load_full(ref)` round-trip checks.
+   Update path expectations to use the new `.matmaster/tool-results` location
+   through storage service helpers, not direct path construction.
 5. Add history restore and compaction integration tests.
 
 ### Phase 2 Rollout
@@ -620,6 +751,13 @@ aggregate replacements when event persistence is unavailable.
 5. Authenticated retrieval of full stored tool results is out of scope for the
    first implementation. The storage format should not prevent adding such an
    endpoint later.
+6. Absolute storage paths are not part of the `ToolResult` data contract. They
+   live inside `ToolResultStorage` implementations only. This decision is
+   stricter than an earlier draft, which permitted paths in
+   `ToolResult.meta` as a server-side field. The stricter rule prevents path
+   leakage through any future serialization or persistence change and avoids
+   creating two parallel access paths to the same resource
+   (`load_full(ref)` vs direct path read).
 
 ## 14. Implementation Principles
 

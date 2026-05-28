@@ -87,6 +87,348 @@ PR 步骤：
 
 ---
 
+## R6: SkillRegistry 在 service 层与 core 层重复构造，且行为已分叉
+
+### 现状
+
+两处独立构造 `SkillRegistry`，输入字段集合不一致：
+
+| 字段 | `src/services/agent_run_service.py:164` `_build_skill_registry` | `matmaster/core/exp.py:705` `_init_skill_tools` |
+|---|---|---|
+| `skills_root` (str / list[str]) | ✅ | ✅ |
+| `_local_user_skills_root(ctx.session)` | ❌ 不读 | ✅ append 到 roots |
+| `remote_roots` | ✅ | ✅ |
+| `_disabled_skill_names_from_settings(root)` + `skills_cfg.disabled_skill_names` | ❌ | ✅ |
+| `registry.remove_skills(disabled)` | ❌ | ✅ |
+
+service 层的 registry 喂给 `resolve_active_skills(events, registry)` 做 active
+skill 还原（用于 prompt 的"已加载 skill"显示 + LazyMCP replay）；core 层的
+registry 真正注册 `SkillTool` / `LazyMCPTool` 到运行时工具集（决定哪个工具能被
+LLM 调用）。
+
+### 为什么是问题
+
+不是字节级 / 函数级重复，而是**行为已分叉**：
+
+- 当 session 配了本地 user skill root，service 层 registry 看不到 → 该 root
+  下的 skill 永远不会被 service 层视作 active → prompt 里"已加载 skill"列表
+  与 runtime 实际可用 skill 不一致。
+- 当 settings 或 config 禁用了某个 skill，service 层 registry 仍把它视作
+  可恢复 → service 层可能把"已禁用但曾命中的 skill"塞回 active 集合 → core
+  层不会注册它，但 prompt / active MCP replay 以为它在。
+
+prompt rendering / LazyMCP activate / tool catalog 三者依据的"已加载 skill
+集合"不一致，是真实的一致性 bug 风险，而不是 cosmetic 重复。
+
+### 推迟原因
+
+修复需要决策两件事：
+
+1. **抽 helper 的归属**：候选位置 `matmaster/skills/build.py` 新模块或
+   `matmaster/skills/registry.py` 顶层增加一个 `build_skill_registry(...)`，
+   接受 `(skills_root, session, *, disabled_names, apply_settings_disable)`
+   组合参数，service 层与 core 层都调它。
+2. **disabled 规则是否对 service 层 rehydration 也生效**——这是产品决策。
+   理论上 service 层与 core 层视图应一致，但需要先确认 active-skill
+   rehydration 是否有意要"包含历史命中过但现在已禁用的 skill"用于审计 /
+   显示。决策前不要偷偷统一。
+
+涉及测试：
+- `tests/services/test_agent_run_*` 覆盖 service 层 registry 构造
+- `tests/matmaster/core/test_exp_skills.py` 覆盖 core 层 skill init
+- 新增 invariant 测试：service 层 active-skill 集合 ⊆ core 层 registered-skill
+  集合（除非 disabled 规则被显式豁免）
+
+### 建议落地方案
+
+独立 PR：`refactor(skills): consolidate SkillRegistry construction`
+
+风险点：
+
+- service 层 `_build_skill_registry` 在 `agent_run_service.py:224` 和 `:541`
+  被调用，影响 prompt 里 `<active_skills>` 显示与 LazyMCP replay；统一前后
+  prompt 输出可能变化，需要回归 prompt baseline 测试。
+- helper 跨 `src/services/` 与 `matmaster/core/` 调用，需满足
+  `tests/matmaster/context/test_phase4_static_boundaries.py` 的边界规则。
+
+---
+
+## R7: SessionEvent 反序列化逻辑错置在 matmaster/context/，导致跨层语义分叉
+
+> 独立执行计划已迁移到
+> [2026-05-17-r7-session-event-decoding.md](2026-05-17-r7-session-event-decoding.md)。
+> 本节只保留问题摘要与关键设计决策；执行时以独立 plan 为准，完成后只开一次 PR。
+
+### 现状
+
+`matmaster/context/scanner.py:17-84` 定义了一组从 DAO row dict 反序列化为
+`SessionEvent` 的函数：
+
+- `_freeze_json_value` — 把 Python 值递归冻结为 `JsonValue` 树
+- `_coerce_content` — 把任意 content 字段规整为 `JsonObject`
+- `coerce_event_id` — 把任意 id 字段 try-int 化
+- `_coerce_optional_str` — 把任意 optional string 字段 strip + null 化
+- `coerce_session_events(rows: Iterable[Mapping]) -> tuple[SessionEvent, ...]`
+  — 顶层反序列化入口，输入是 `list[dict]`，输出是 typed tuple
+
+`src/services/context_assembly_ports.py:27-105` 又定义了一份**功能等价但语义
+分叉**的反序列化：
+
+- `_freeze_json_value` / `_freeze_json_object` / `AppSessionEventsPort._row_to_event`
+
+两份代码的存在违反了仓库的分层约束（matmaster/* 不应依赖 src/*，也不应该
+知道 DB row 的字段名）。matmaster 里出现 DAO row → typed object 的转换器是
+**架构违规**——这段代码应该完全在 service 层。
+
+#### 调用图
+
+```
+src/services/agent_run_service.py:545 (run_agent path)
+  └─ build_context_assembler(events_table=...)
+       └─ AppSessionEventsPort  ── 反序列化 Path B ──→ ContextAssembler
+
+src/services/agent_run_service.py:225 (active skill rehydration)
+  └─ coerce_session_events(raw_events) ── 反序列化 Path A ──→ resolve_active_skills
+
+matmaster/core/runtime_context_assembly.py:128 (runtime compaction path)
+  └─ RuntimeHistorySessionEventsPort (matmaster 内)
+       └─ history_port.query_context_events ── 返回 list[dict]
+            └─ coerce_session_events ── 反序列化 Path A ──→ ContextAssembler
+```
+
+同一份 DB rows，在 runtime compaction 路径走 Path A，在 prompt assembly
+重建路径走 Path B，**两条路径产生 schema 不同的 `SessionEvent`** 喂给同一个
+`ContextAssembler`。
+
+### 为什么会形成这个结构
+
+直接原因在 `RuntimeHistorySessionEventsPort` 这个 adapter
+（`matmaster/core/runtime_context_assembly.py:58-70`）：
+
+- 它接收的 `history_port` 来自 `_RunSessionEventHistory`
+  （`src/services/agent_run_history_wiring.py:156-184`），后者实现
+  `SessionEventHistoryPort` protocol（`matmaster/types/runtime_ports.py:52`），
+  **该 protocol 的 `query_context_events` 返回 `list[dict[str, Any]]`**。
+- 为了把 dict 升级为 typed `SessionEvent`，桥接逻辑被写在了 matmaster 里
+  （在 service 层做更合理）。
+- 后续 Phase 2A 引入 `SessionEventsPort` + `AppSessionEventsPort`，但
+  `SessionEventHistoryPort` 这个早期 protocol 没同步升级，留下迁移期 shim。
+
+scanner.py 这个文件名暗示"扫描 typed events"，但反序列化器和真正的扫描函数
+（`scan_skill_hits` / `_skill_name_from_content` / `SkillHitRecord`）被混在
+同一个文件，掩盖了职责违规。
+
+### 10 项行为差异（B1 完整清单）
+
+| # | 维度 | Path A（scanner） | Path B（ports） | 风险等级 |
+|---|------|-------------------|------------------|----------|
+| D1 | 未识别 Python 类型 | `str()` 降级 | 抛 `TypeError` | 高（生产稳健性 vs schema drift 防御对立） |
+| D2 | 非 mapping content 包装 key | `{"content": ...}` | `{"value": ...}` | 高（`scan_skill_hits` 依赖 "content" key） |
+| D3 | None content | `{}` | `{"value": None}` | 低（下游断言一致） |
+| D4 | 无合法 id | 丢弃整行 | `id=0` sentinel | 高（正确性 bug） |
+| D5 | 非 Mapping row | `continue` 跳过 | 抛 KeyError/TypeError | 低 |
+| D6 | event_type 备用键 | 仅 "type" | "type" or "event_type" | 低 |
+| D7 | event_type strip | ✅ | ❌ | 中 |
+| D8 | source/task_id/... normalize | "" → None + strip | 原值透传 | 中 |
+| D9 | 时间字段 | 注入 `content.created_at` | 无顶层字段；DAO context row 实际输出 `created_at_ms` | 中（skill hit 时间 metadata 需要顶层字段） |
+| D10 | 顶层 schema 综合差异 | 含注入 created_at + "content" 包装 | 不含时间字段 + "value" 包装 | 综合后果 |
+
+测试约定冲突（必须改测试才能统一）：
+
+- `test_freeze_json_object_rejects_non_json_schema_drift`
+  （`tests/matmaster/services/test_context_assembly_ports.py:184`）显式依赖
+  Path B 的 `TypeError` 行为。
+- `test_app_session_events_port_preserves_falsy_raw_content`
+  （`tests/matmaster/services/test_context_assembly_ports.py:181`）显式断言
+  `{"value": ""}`。
+- `test_coerce_session_events_drops_rows_without_int_id`
+  （`tests/matmaster/context/test_scanner.py:80`）显式约定丢弃无合法 id 的 row。
+- `test_scan_skill_hits_accepts_legacy_string_content_via_coerce`
+  （`tests/matmaster/context/test_scanner.py:107`）间接依赖 Path A 的
+  "content" 包装 key。
+
+### 终态方案（已对齐决策）
+
+**决策 1**：反序列化器放在 `src/services/session_event_codec.py`（新模块）。
+
+**决策 2**：行为对齐方向 — 保留 ports 严格行为 + 加
+`SessionEvent.created_at_ms`：
+
+- D1：抛 `TypeError`（schema drift 早期发现）
+- D2：codec 写 `{"value": ...}`（更中性，避免
+  `SessionEvent.content.content` 嵌套混淆）；`scan_skill_hits` 兼容
+  `skill_name` / `value` / 迁移期 `content` 三种 key，避免 legacy string
+  skill_hit 在中间态丢失。
+- D3：`None` content 保留为 `{"value": None}`，与 ports 当前行为一致。
+- D4：丢弃无合法 id 的 row（修正 ports 现行的 id=0 bug）
+- D5：bulk `decode_session_events()` 跳过非 Mapping row；单 row
+  `row_to_event()` 抛 `TypeError`。
+- D6：codec 支持 `type` 或 `event_type`。
+- D7：codec 对 event type 执行 strip。
+- D8：codec 对 `source` / `task_id` / `invocation_id` / `spawn_id`
+  执行 strip，并把空字符串归一为 None。
+- D9：删除 content 注入，给 `SessionEvent` 加
+  `created_at_ms: int | None = None` 顶层字段；codec 同时兼容
+  DAO 的 `created_at_ms` 与原始 datetime `created_at` 输入。
+
+**决策 3**：合并 `_RunSessionEventHistory` 与 `AppSessionEventsPort` —
+让前者直接实现 `SessionEventsPort` protocol，删除 matmaster 里的
+`RuntimeHistorySessionEventsPort` adapter。
+
+#### Before / After 架构
+
+```
+Before:
+  DAO → list[dict] ──┬─→ _RunSessionEventHistory (返回 list[dict])
+                    │     └─→ RuntimeHistorySessionEventsPort (matmaster)
+                    │           └─→ coerce_session_events (matmaster)
+                    │                 └─→ ContextAssembler
+                    └─→ AppSessionEventsPort._row_to_event (service)
+                          └─→ ContextAssembler
+
+After:
+  DAO → list[dict] ──→ session_event_codec.row_to_event (唯一反序列化点)
+                          │
+                          ├─→ _RunSessionEventHistory (实现 SessionEventsPort)
+                          │     └─→ ContextAssembler
+                          └─→ AppSessionEventsPort
+                                └─→ ContextAssembler
+
+  matmaster/context/scanner.py:
+    - 删除反序列化函数（coerce_session_events 等）
+    - 保留 scan_skill_hits / _skill_name_from_content / SkillHitRecord
+```
+
+### 实施 Phase 拆分（单 PR 内分阶段 commit / checkpoint，可单独回滚）
+
+以下 Phase 只作为实现顺序与验证 checkpoint，不作为 PR 边界。R7 应在所有
+目标 Phase 完成、测试通过并确认中间兼容风险已消除后，再统一提交一次 PR。
+
+#### Phase 1：新建 codec，零行为变化
+
+- 新建 `src/services/session_event_codec.py`，把
+  `AppSessionEventsPort._row_to_event` + `_freeze_json_value` +
+  `_freeze_json_object` 抽出来变成模块级 `row_to_event` /
+  `decode_session_events`。
+- `AppSessionEventsPort._row_to_event` 改成转发到 codec。
+- 新建 `tests/matmaster/services/test_session_event_codec.py`，迁移现有
+  ports 测试 + 加边界 case。
+- 风险：极低（纯重命名/移动）。验证：`tests/matmaster/services/`、
+  `tests/matmaster/context/` 全绿。
+
+#### Phase 2：行为对齐（关键风险点）
+
+- 在 codec 里实现决策 2 选定的行为：
+  - D2：保留 `{"value": ...}` 包装
+  - D4：实现 `coerce_event_id` 等价逻辑，无合法 id 时返回 None；
+    `decode_session_events` 过滤 None
+  - D1：保留 `TypeError`
+- 配套改测试断言（`test_freeze_json_object_rejects_non_json_schema_drift`
+  保留；`test_app_session_events_port_preserves_falsy_raw_content` 保留；
+  新增 D4 丢弃测试）。
+- 修 D2 耦合点：`matmaster/context/scanner.py:_skill_name_from_content`
+  改成读取 `content.get("skill_name") or content.get("value") or
+  content.get("content")`，并保留 string content 直接处理的分支（兼容
+  scanner 内现有调用 site）。
+- 风险：中。涉及产品决策落地，需要团队 review。
+- 验证：`tests/matmaster/context/`、`tests/matmaster/services/`、
+  `tests/services/` 全绿；新增 D2 / D4 回归测试。
+
+#### Phase 3：升级 `_RunSessionEventHistory` 到 typed contract
+
+- 改 `matmaster/types/runtime_ports.py` 的 `SessionEventHistoryPort` protocol：
+  - 方案 A：把 `query_context_events(...) -> list[dict]` 改成
+    `load_events(query: SessionEventQuery) -> tuple[SessionEvent, ...]`
+    （与 `SessionEventsPort` 完全对齐）。
+  - 方案 B：保留 `query_context_events` 名字但改返回类型。
+- 改 `agent_run_history_wiring._RunSessionEventHistory` 实现新签名，内部
+  调用 codec。
+- 删除 `matmaster/core/runtime_context_assembly.py` 的
+  `RuntimeHistorySessionEventsPort` adapter，让 `_RunSessionEventHistory`
+  直接作为 `ContextAssemblyPorts.session_events`。
+- 改所有测试 mock 的 history_port（grep `query_context_events.*list\[dict\]`，
+  预估 5-8 个 mock）。
+- 风险：中-高。protocol 变更，多处 import 改动。
+- 验证：`test_phase4_static_boundaries` + 全套 services 测试 +
+  `test_hook_wiring` + `test_agent_kernel_compaction`。
+
+#### Phase 4：删除 matmaster/context/scanner.py 的反序列化函数
+
+- 从 scanner.py 删除 `_freeze_json_value` / `_coerce_content` /
+  `coerce_session_events` / `coerce_event_id` / `_coerce_optional_str`。
+- 保留 `scan_skill_hits` / `_skill_name_from_content` / `SkillHitRecord`。
+- 删除或迁移 `matmaster/context/sources/attachments.py` 中只消费 raw row 的
+  `scan_legacy_attachment_entries`，避免 Phase 4 删除 `coerce_event_id` 后出现
+  确定性 ImportError；当前 grep 显示该 legacy scanner 只有测试引用，可直接
+  删除函数与对应测试。
+- 改 `src/services/agent_run_service.py:225`
+  `coerce_session_events(raw_events)` 改用
+  `session_event_codec.decode_session_events`。
+- 改 `tests/matmaster/context/test_scanner.py` 删除反序列化相关测试（已迁移
+  到 codec 测试）。
+- 改 `tests/matmaster/context/sources/test_*.py` 里 `coerce_session_events`
+  调用为直接构造 typed `SessionEvent` fixture；core context 测试不要 import
+  service codec。
+- 风险：中。删 public-ish API（很多测试 import 这些），但替换路径已经在
+  Phase 1 准备好。
+- 验证：全套 `tests/matmaster/context/`、`tests/matmaster/services/`、
+  `tests/services/`。
+
+#### Phase 5：`SessionEvent.created_at_ms` 字段提升
+
+- 改 `matmaster/context/ports.py` 给 SessionEvent 加
+  `created_at_ms: int | None = None`。
+- codec 不再注入 created_at 到 content，改写顶层 `created_at_ms` 字段。
+- `scan_skill_hits` 改用 `event.created_at_ms`。
+- 更新所有 SessionEvent fixture（grep `SessionEvent(`，预估 30+ 处）。
+- 风险：低-中。fixture 更新机械化但量大。
+- 验证：全仓 grep 对比 fixture；history_checkpoint_codec 不依赖
+  SessionEvent.created_at_ms（确认 schema 兼容）。
+
+### 测试覆盖策略
+
+新增三类测试：
+
+1. **codec 单元测试**：D1-D9 维度各一个测试 + empty rows / 非 Mapping row /
+   None content / bool id 等边界 case
+2. **路径等价测试**：
+   ```python
+   async def test_run_session_event_history_equivalent_to_app_port():
+       """同一份 DB row，两条路径返回完全相等的 SessionEvent。"""
+       rows = [...]
+       via_run_history = await _RunSessionEventHistory(table).load_events(query)
+       via_app_port = await AppSessionEventsPort(table).load_events(query)
+       assert via_run_history == via_app_port  # Phase 3 完成后必然成立
+   ```
+3. **边界检查测试加强**：`test_phase4_static_boundaries.py` 增加：
+   `matmaster/context/scanner.py` 不应出现 `Mapping[str, Any]` 类型的输入参数
+   （即不接受 raw dict），且 `matmaster/context/*` 不应 import
+   `src.services.session_event_codec`
+
+### 风险全景
+
+| 风险 | 概率 | 影响 | 缓解 |
+|------|------|------|------|
+| D2 改 `_skill_name_from_content` 改错导致 legacy skill_hit 丢失 | 中 | active skill rehydration 漏 skill | Phase 2 加 `skill_name` / `value` / `content` 三种 key 的回归测试 |
+| Phase 3 protocol 变更遗漏某个测试 mock | 中 | CI 测试失败 | Phase 3 提交前全仓 grep `query_context_events.*-> list` |
+| Phase 4 删除 scanner 函数后 `attachments.py` 遗留 `coerce_event_id` import | 中 | 确定性 ImportError | Phase 4 删除只被测试使用的 `scan_legacy_attachment_entries`，并加 grep 检查 |
+| Phase 5 SessionEvent schema 变更影响 history_checkpoint 持久化格式 | 低-中 | 老 checkpoint 反序列化失败 | 单独验证 history_checkpoint_codec 不依赖 SessionEvent.created_at_ms |
+
+### 建议落地方案
+
+只在完成后进行一次 PR：
+
+- **PR**: `refactor(context): unify SessionEvent decoding`
+  （覆盖 Phase 1-5，或在开工前明确移出不做的 optional scope）
+
+Phase 1-4 是必须的根因修复；Phase 5 是 schema 改进。若 Phase 5 纳入本轮
+R7，则必须在同一个最终 PR 中完成；若决定延期，应先从本轮 scope 中移出并在
+PR 描述里说明，不再为 R7 单独开后续 PR。详细任务、测试命令与代码片段见
+独立计划：
+[2026-05-17-r7-session-event-decoding.md](2026-05-17-r7-session-event-decoding.md)。
+
+---
+
 ## E3: `_run_items` 每轮重复 `canonicalize_messages_for_provider` + `normalize_and_validate_openai_messages` 是 O(turns²)
 
 ### 现状

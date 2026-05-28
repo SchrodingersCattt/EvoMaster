@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -147,11 +146,8 @@ class DevRunner:
 
                 # Inject forward sink before build_runtime so child agent spawn
                 # closures capture the runtime port.
-                self._pg_ctx = self._pg_ctx.with_runtime_ports(
-                    replace(
-                        self._pg_ctx.runtime_ports,
-                        child_event_forward_sink=_on_event,
-                    )
+                self._pg_ctx = self._pg_ctx.with_updates(
+                    runtime_ports={"child_event_forward_sink": _on_event}
                 )
 
                 runtime = await exp.build_runtime(self._pg_ctx)

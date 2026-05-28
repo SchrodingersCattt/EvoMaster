@@ -509,8 +509,10 @@ class TestBuildRuntimeFullToolRunner:
         )
         config = _make_exp_config()
         exp = Exp(config)
-        ctx = _make_playground_context().with_runtime_port(
-            figure_upload=FigureUploadPort(config=figure_upload_config)
+        ctx = _make_playground_context().with_updates(
+            runtime_ports={
+                "figure_upload": FigureUploadPort(config=figure_upload_config)
+            }
         )
 
         runtime = await exp.build_runtime(ctx)

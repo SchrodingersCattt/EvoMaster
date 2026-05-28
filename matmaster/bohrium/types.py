@@ -39,12 +39,12 @@ class BohriumCredentials:
 
 
 class BohriumRuntimeSnapshot(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
-    session_type: str
-    execution_workdir: str
-    remote_workspace_root: str
-    remote_project_root: str
+    session_type: str = ""
+    execution_workdir: str = ""
+    remote_workspace_root: str = ""
+    remote_project_root: str = ""
     node_id: int | None = None
     node_ip: str | None = None
     ssh_attached: bool = False

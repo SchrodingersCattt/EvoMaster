@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Mapping
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from typing import Any
@@ -46,25 +47,18 @@ def _make_mock_pg_ctx() -> MagicMock:
     ctx.with_bohrium.return_value = ctx
     ctx.with_execution.return_value = ctx
 
-    def _with_runtime_ports(runtime_ports: PlaygroundRuntimePorts) -> MagicMock:
-        ctx.runtime_ports = runtime_ports
+    def _with_updates(
+        *,
+        metadata: Mapping[str, Any] | None = None,
+        runtime_ports: Mapping[str, Any] | None = None,
+    ) -> MagicMock:
+        if runtime_ports:
+            ctx.runtime_ports = replace(ctx.runtime_ports, **dict(runtime_ports))
+        if metadata:
+            ctx.metadata = ctx.metadata.model_copy(update=dict(metadata))
         return ctx
 
-    ctx.with_runtime_ports.side_effect = _with_runtime_ports
-
-    def _with_runtime_port(**fields: Any) -> MagicMock:
-        if fields:
-            ctx.runtime_ports = replace(ctx.runtime_ports, **fields)
-        return ctx
-
-    ctx.with_runtime_port.side_effect = _with_runtime_port
-
-    def _with_metadata(**fields: Any) -> MagicMock:
-        if fields:
-            ctx.metadata = ctx.metadata.model_copy(update=fields)
-        return ctx
-
-    ctx.with_metadata.side_effect = _with_metadata
+    ctx.with_updates.side_effect = _with_updates
 
     def _model_copy(*, update: dict[str, Any] | None = None, **_: Any) -> MagicMock:
         if update:

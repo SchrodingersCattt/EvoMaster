@@ -9,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from matmaster.context.ports import UserInstructions
 from matmaster.context.sources.turn_input import TurnInput
 
+BohriumRebuildEvent = dict[str, Any]
+
 
 class RunIdentity(BaseModel):
     """Runtime identity shared by PlaygroundContext and AgentRuntimeSpec."""
@@ -35,4 +37,6 @@ class RunMetadata(BaseModel):
     turn_input: TurnInput | None = None
     user_instructions: UserInstructions | None = None
     active_skills: frozenset[str] = Field(default_factory=frozenset)
-    bohrium_rebuild_events: tuple[Any, ...] = Field(default_factory=tuple)
+    bohrium_rebuild_events: tuple[BohriumRebuildEvent, ...] = Field(
+        default_factory=tuple
+    )

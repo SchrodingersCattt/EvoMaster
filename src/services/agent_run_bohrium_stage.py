@@ -21,7 +21,6 @@ from matmaster.core.playground import WorkspaceArchivalConfig
 from matmaster.integration.fanout import RunEventFanout
 from matmaster.integration.workspace_handler import WorkspaceHandler
 from matmaster.types.figures import FigureUploadConfig
-from matmaster.types.runtime_ports import BohriumRuntimeSnapshot
 from src.dao.oss_io import upload_bytes_to_oss
 from src.services.agent_run_bohrium import BohriumSetupService
 from src.services.user_turn_context_service import (
@@ -72,18 +71,6 @@ def _build_figure_upload_config(*, session_id: str, task_id: str) -> FigureUploa
     )
 
 
-def _optional_str(value: Any) -> str | None:
-    return value if isinstance(value, str) and value else None
-
-
-def _optional_int(value: Any) -> int | None:
-    return value if isinstance(value, int) else None
-
-
-def _optional_bool(value: Any) -> bool | None:
-    return value if isinstance(value, bool) else None
-
-
 async def run_bohrium_stage(
     *,
     sessions_service: Any,
@@ -119,33 +106,8 @@ async def run_bohrium_stage(
             ssh_attached=ssh_attached,
             user_instructions=load_user_instructions_from_session(None),
         )
-    runtime_snapshot = getattr(bohrium_result, "runtime_snapshot", None)
-    if runtime_snapshot is not None:
-        ssh_attached_snapshot = _optional_bool(
-            getattr(runtime_snapshot, "ssh_attached", None)
-        )
-        ssh_attached_value = (
-            ssh_attached_snapshot
-            if ssh_attached_snapshot is not None
-            else bool(getattr(bohrium_result, "ssh_attached", False))
-        )
-        snapshot = BohriumRuntimeSnapshot(
-            ssh_attached=ssh_attached_value,
-            node_id=_optional_int(getattr(runtime_snapshot, "node_id", None)),
-            remote_project_root=_optional_str(
-                getattr(runtime_snapshot, "remote_project_root", None)
-            ),
-            remote_workspace_root=_optional_str(
-                getattr(runtime_snapshot, "remote_workspace_root", None)
-            ),
-        )
-        if (
-            snapshot.ssh_attached
-            or snapshot.node_id is not None
-            or snapshot.remote_project_root is not None
-            or snapshot.remote_workspace_root is not None
-        ):
-            pg_ctx = pg_ctx.with_bohrium(snapshot)
+    if bohrium_result.runtime_snapshot is not None:
+        pg_ctx = pg_ctx.with_bohrium(bohrium_result.runtime_snapshot)
     if bohrium_result.execution_session is not None:
         execution_workdir = bohrium_result.execution_workdir or ''
         session_type = bohrium_result.session_type or 'ssh'

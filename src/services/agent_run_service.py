@@ -275,8 +275,8 @@ class AgentRunService:
                 session_id=session_id,
             )
             if turn_input is not None:
-                pg_ctx = pg_ctx.with_metadata(
-                    turn_input=turn_input,
+                pg_ctx = pg_ctx.with_updates(
+                    metadata={"turn_input": turn_input},
                 )
             try:
                 events_table = get_chat_events_table()
@@ -487,8 +487,10 @@ class AgentRunService:
                     spawn_id=spawn_id,
                 )
 
-            pg_ctx = pg_ctx.with_runtime_port(
-                figure_upload=FigureUploadPort(config=figure_upload_config),
+            pg_ctx = pg_ctx.with_updates(
+                runtime_ports={
+                    "figure_upload": FigureUploadPort(config=figure_upload_config),
+                },
             )
 
             # -- Stage 4b: AskQuestion bridge --
@@ -506,20 +508,27 @@ class AgentRunService:
             pg_ctx = pg_ctx.model_copy(update={'interaction_bridge': bridge})
             # -- Stage 5: History --
             wiring = build_history_wiring(
-                base_runtime_ports=pg_ctx.runtime_ports,
                 events_table=events_table,
                 session_id=session_id,
                 task_id=task_id,
                 raw_history_limit=_DIALOG_HISTORY_MAX_EVENTS,
-                child_event_sink=_child_event_sink,
                 checkpoint_sink_factory=_checkpoint_sink_factory,
                 pre_compaction_barrier=fanout.flush_persistence_barrier,
             )
             history = wiring.history
-            pg_ctx = pg_ctx.with_runtime_ports(wiring.runtime_ports)
+            pg_ctx = pg_ctx.with_updates(
+                runtime_ports={
+                    "child_event_forward_sink": _child_event_sink,
+                    "compaction": wiring.compaction,
+                },
+            )
             if wiring.bohrium_rebuild_events:
-                pg_ctx = pg_ctx.with_metadata(
-                    bohrium_rebuild_events=tuple(wiring.bohrium_rebuild_events),
+                pg_ctx = pg_ctx.with_updates(
+                    metadata={
+                        "bohrium_rebuild_events": tuple(
+                            wiring.bohrium_rebuild_events
+                        ),
+                    },
                 )
 
             # -- Stage 5b: Phase 2C user_turn_context cutover via ContextAssembler --
@@ -528,7 +537,9 @@ class AgentRunService:
                 hash=user_instructions.hash,
                 truncated=user_instructions.truncated,
             )
-            pg_ctx = pg_ctx.with_metadata(user_instructions=instructions_bundle)
+            pg_ctx = pg_ctx.with_updates(
+                metadata={"user_instructions": instructions_bundle}
+            )
 
             skill_resolver = self._build_skill_resolver(
                 exp_config,
@@ -579,7 +590,7 @@ class AgentRunService:
                     workspace_paths=turn_input.workspace_paths,
                     pre_turn_history_event_id=turn_input.pre_turn_history_event_id,
                 )
-            pg_ctx = pg_ctx.with_metadata(turn_input=turn_input)
+            pg_ctx = pg_ctx.with_updates(metadata={"turn_input": turn_input})
 
             assembly = await context_assembler.assemble_turn(
                 intent=intent,
@@ -637,7 +648,9 @@ class AgentRunService:
                     current = self._active_skills.get(session_id, frozenset())
                     self._active_skills[session_id] = frozenset((*current, skill_name))
 
-            pg_ctx = pg_ctx.with_metadata(active_skills=frozenset(active_skills))
+            pg_ctx = pg_ctx.with_updates(
+                metadata={"active_skills": frozenset(active_skills)}
+            )
 
             # -- Stage 6: Generator event stream --
             run_result_event = None

@@ -10,11 +10,26 @@ from collections.abc import Awaitable
 from dataclasses import dataclass, field
 from typing import Any, NotRequired, Protocol, TypedDict, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict
-
+from matmaster.bohrium.types import BohriumRuntimeSnapshot
 from matmaster.context.ports import SessionEvent, SessionEventQuery
 from matmaster.types.events import BusEvent
 from matmaster.types.figures import FigureUploadConfig
+
+__all__ = [
+    "BohriumRuntimePort",
+    "BohriumRuntimeSnapshot",
+    "BusEventSink",
+    "CheckpointSink",
+    "CheckpointSinkFactory",
+    "CompactionCheckpointPayload",
+    "EmptySessionEventHistory",
+    "FigureUploadPort",
+    "KernelRuntimePorts",
+    "PlaygroundCompactionPort",
+    "PlaygroundRuntimePorts",
+    "PreCompactionBarrier",
+    "SessionEventHistoryPort",
+]
 
 
 class CompactionCheckpointPayload(TypedDict):
@@ -99,17 +114,6 @@ class PlaygroundCompactionPort:
 @dataclass(frozen=True)
 class FigureUploadPort:
     config: FigureUploadConfig | None = None
-
-
-class BohriumRuntimeSnapshot(BaseModel):
-    """Narrow Bohrium runtime snapshot for path/runtime consumers."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    ssh_attached: bool = False
-    node_id: int | None = None
-    remote_project_root: str | None = None
-    remote_workspace_root: str | None = None
 
 
 @dataclass(frozen=True)

@@ -85,6 +85,7 @@ MatMaster 的对话与任务执行以 **根目录 `app.py` + `src/`（API）** �
 - `run_meta` 只承载临时被动运行 metadata，例如 `task_id`、`active_skills`、`attachment_manifest`。不得向 `run_meta` 注入服务能力 callback、sink、factory、barrier 或外部 service 对象。
 - `session_id` 是 `PlaygroundContext.session_id` 顶层显式字段，不得通过 `run_meta` 流通；当前轮图片输入属于 `TurnInput.attachments.images` / `image_detail`，不得恢复 `run_meta["current_user_images"]` 路径。
 - 服务能力 callback 必须通过 `PlaygroundContext.runtime_ports` / `AgentRuntimeSpec.runtime_ports` 传递。`RuntimePorts` 是窄能力端口，不是 typed 版 `run_meta`。
+- `PlaygroundContext` 的 nested 更新统一走 `with_updates(...)`：`metadata={...}` 用于运行事实数据，`runtime_ports={...}` 用于运行能力端口。调用方不得手写 `PlaygroundRuntimePorts(...)` 做全量替换；runtime port patch 由 `with_updates(runtime_ports={...})` 内部通过 `dataclasses.replace` 合并，以避免丢失 sibling ports。
 - `RuntimePorts` 及其子端口不得包含 `extra`、`metadata`、`state`、`context`、`services`、`payload` 或 `dict[str, Any]` 这类兜底字段；也不得用允许任意 extra fields 的 typed model 绕过该限制。
 - 新增 RuntimePorts 字段前必须说明消费者、调用时机、返回值语义和异常语义。
 - `HookExecutor` 专指事件扩展系统，用于 observe/intercept/rewrite 运行过程事件。不得把需要返回业务数据或承担顺序屏障语义的服务端口伪装成 `HookExecutor` handler。

@@ -1,8 +1,7 @@
-"""History restore + runtime ports wiring for run_agent.
+"""History restore + compaction port wiring for run_agent.
 
-Bundles history restore via ``ModelHistoryRestoreService`` with the
-``PlaygroundRuntimePorts`` adapter that exposes raw event lookups to the
-compaction subsystem.
+Bundles history restore via ``ModelHistoryRestoreService`` with the compaction
+port that exposes raw event lookups to the compaction subsystem.
 """
 
 from __future__ import annotations
@@ -10,16 +9,13 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any, TypeVar
 
 from matmaster.context.ports import SessionEvent, SessionEventQuery
-from matmaster.types.runtime_ports import (
-    PlaygroundCompactionPort,
-    PlaygroundRuntimePorts,
-)
-from src.services.session_event_codec import decode_session_events
+from matmaster.types.runtime_ports import PlaygroundCompactionPort
 from src.services.model_history_restore_service import ModelHistoryRestoreService
+from src.services.session_event_codec import decode_session_events
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +27,7 @@ class HistoryWiringResult:
     """Bundle of history-related values produced for a single run_agent call."""
 
     history: list
-    runtime_ports: PlaygroundRuntimePorts
+    compaction: PlaygroundCompactionPort
     bohrium_rebuild_events: list[dict]
 
 
@@ -63,16 +59,14 @@ def _safe_event_call(
 
 def build_history_wiring(
     *,
-    base_runtime_ports: PlaygroundRuntimePorts,
     events_table: Any | None,
     session_id: str,
     task_id: str,
     raw_history_limit: int,
-    child_event_sink: Callable,
     checkpoint_sink_factory: Callable,
     pre_compaction_barrier: Callable,
 ) -> HistoryWiringResult:
-    """Assemble history + attachments + runtime_ports for a single run."""
+    """Assemble history + compaction runtime capability for a single run."""
     history = (
         ModelHistoryRestoreService(events_table).restore_history(
             session_id=session_id,
@@ -184,14 +178,10 @@ def build_history_wiring(
         def latest_scope_event_id(self) -> int | None:
             return _get_latest_scope_event_id()
 
-    runtime_ports = replace(
-        base_runtime_ports,
-        child_event_forward_sink=child_event_sink,
-        compaction=PlaygroundCompactionPort(
-            history=_RunSessionEventHistory(),
-            checkpoint_sink_factory=checkpoint_sink_factory,
-            pre_compaction_barrier=pre_compaction_barrier,
-        ),
+    compaction = PlaygroundCompactionPort(
+        history=_RunSessionEventHistory(),
+        checkpoint_sink_factory=checkpoint_sink_factory,
+        pre_compaction_barrier=pre_compaction_barrier,
     )
 
     bohrium_rebuild_events = _safe_event_call(
@@ -206,6 +196,6 @@ def build_history_wiring(
 
     return HistoryWiringResult(
         history=history,
-        runtime_ports=runtime_ports,
+        compaction=compaction,
         bohrium_rebuild_events=bohrium_rebuild_events,
     )
