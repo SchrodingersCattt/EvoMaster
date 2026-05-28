@@ -3766,3 +3766,78 @@ questions:
     criterion: Wall-clock time within budget.
     axis: efficiency
     verify: duration_budget
+- id: WO_electrolyte_diffusion_001_20260528
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: End-to-end LAMMPS MD simulation of a simple electrolyte to compute Li+
+    diffusion coefficient at two temperatures, verifying that the result obeys
+    physically expected trends (D decreases with T) and is in reasonable range.
+  human_prompt_seed: '用 LAMMPS 模拟 LiCl 水溶液（1M浓度，SPC/E水模型 + 简单LJ离子），
+    分别在 300K 和 360K 下做 NVT production MD，每个温度至少 500ps。从MSD计算
+    Li⁺ 的扩散系数 D(Li⁺)。
+
+    报告两个温度的 D(Li⁺) 值（单位 cm²/s），并评估结果的合理性。
+
+    '
+  tags:
+  - eng_lammps
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 40
+  - key: duration_budget
+    value:
+      max: 1800000
+  - key: token_budget_total
+    value:
+      max: 25000
+  scoring_checklist:
+  - id: d_ratio_physical
+    criterion: '[Must] D(360K)/D(300K) > 1.0 (diffusion MUST increase with temperature
+      — Arrhenius behavior). If ratio < 1.0 the simulation is too short or has
+      errors. Agent must not report anti-Arrhenius results without flagging them
+      as unphysical.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: d_300k_reasonable
+    criterion: D(Li+) at 300K is in the range 0.5-3.0 x 10^-5 cm2/s for dilute
+      aqueous Li+ (experimental ~1.0 x 10^-5 cm2/s). SPC/E typically gives
+      slightly higher D than experiment. Values outside 0.1-10 x 10^-5 indicate
+      simulation too short or force field error.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: sufficient_production_time
+    criterion: Agent runs at least 500 ps of NVT production at each temperature
+      (as requested). If agent runs less than 500 ps, the MSD may not reach the
+      diffusive regime, especially at 300K. Agent should submit to Bohrium GPU
+      node rather than running locally on CPU if local execution is too slow.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: msd_diffusive_regime
+    criterion: Agent verifies that MSD is in the linear (diffusive) regime before
+      extracting D from slope. This means checking that MSD vs time is linear
+      (not ballistic/caged) in the fitting window, or using Einstein relation
+      with appropriate time window excluding short-time ballistic motion.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: first_submit_success
+    criterion: The LAMMPS simulation job completes successfully on the first
+      Bohrium submission without script errors requiring resubmission.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
