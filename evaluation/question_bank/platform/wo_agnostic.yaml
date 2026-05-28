@@ -400,7 +400,7 @@ questions:
   - key: must_submit_image
     value:
       filename: submit.json
-      pattern: registry\.dp\.tech/dptech/vasp:\d+\.\d+\.\d+
+      pattern: registry\.dp\.tech/.+vasp:\d+\.\d+\.\d+
       flags: i
   - key: must_submit_cmd
     value:
