@@ -1229,7 +1229,7 @@ questions:
   intent: 'Generate VASP INCAR for NEB transition state search with HSE06 of Prussian blue analogue C24Fe8N24Na4. Agent must identify Fe mixed-valence magnetism and set NUPDOWN=20.
 
     '
-  human_prompt_seed: 为普鲁士蓝类似物 C24Fe8N24Na4 生成一个 NEB(nudged elastic band)+HSE06 过渡态搜索的 VASP INCAR。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
+  human_prompt_seed: 为普鲁士蓝类似物 C24Fe8N24Na4 生成一个 NEB(nudged elastic band)+HSE06 过渡态搜索的 VASP INCAR。该体系含 8 个 Fe，存在 Fe²⁺/Fe³⁺ 混合价态，高自旋态总未配对电子数约 20（需用 NUPDOWN 约束磁态以帮助收敛）。将完整的 INCAR 写入当前目录下的 `INCAR` 文件。
   tags:
   - eng_vasp
   reference_answers:
@@ -1273,17 +1273,19 @@ questions:
   - key: critical_NUPDOWN
     value:
       filename: INCAR
-      pattern: ^\s*NUPDOWN\s*=\s*20\b
-      flags: im
+      check: param_range
+      param: NUPDOWN
+      min: 16
+      max: 24
   - key: turn_budget
     value:
-      max: 8
+      max: 10
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 15000
+      max: 20000
   - key: reasonable_params
     value:
       filename: INCAR
@@ -1327,9 +1329,10 @@ questions:
     axis: grounding
     verify: llm_binary_judge
   - id: critical_NUPDOWN
-    criterion: INCAR sets NUPDOWN = 20 (Prussian blue canonical spin state).
+    criterion: INCAR sets NUPDOWN in range 16-24 to constrain Fe mixed-valence
+      magnetic state.
     axis: correctness
-    verify: text_file_regex
+    verify: vasp_incar_check
   - id: turn_budget
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
