@@ -104,7 +104,7 @@ No POTCAR → STOP. Has path → copy POTCAR into input_dir before submit.
    in-plane, 1 in vacuum; band → line-mode; DOS → ≥2× SCF density; molecule → Γ.
 4. **INCAR** — apply Hard Guards above. For full tag reference →
    `references/incar_tags.md`. For worked examples → `references/input_examples.md`.
-5. **Validate** — `scripts/validate_incar.py -f INCAR -t <type> [--enmax <val>]`.
+5. **Validate** — `scripts/validate_incar.py -f INCAR -t <type> [--enmax <val>] [--elements Ca,Ta,Os,O]`.
 6. **Submit** (if requested) — resolve POTCAR first (see above), then Bohrium.
 
 ## Bohrium Submission

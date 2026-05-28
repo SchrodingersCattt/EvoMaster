@@ -183,6 +183,22 @@ def validate_incar(
             "SOC calculations must be spin-polarized."
         )
 
+    # D013: Heavy elements (Z>=57) without SOC consideration
+    _HEAVY_ELEMENTS = {
+        "La", "Ce", "Pr", "Nd", "Pm", "Sm", "Eu", "Gd", "Tb", "Dy", "Ho",
+        "Er", "Tm", "Yb", "Lu", "Hf", "Ta", "W", "Re", "Os", "Ir", "Pt",
+        "Au", "Hg", "Tl", "Pb", "Bi", "Po", "At", "Rn", "Fr", "Ra", "Ac",
+        "Th", "Pa", "U", "Np", "Pu", "Am", "Cm",
+    }
+    elements = info.get("elements", [])
+    heavy_found = [e for e in elements if e in _HEAVY_ELEMENTS]
+    if heavy_found and lsorbit not in (".TRUE.", "T", ".T."):
+        warnings.append(
+            f"System contains heavy elements {heavy_found} (Z>=57) but LSORBIT is not set. "
+            "Consider whether spin-orbit coupling is needed for accurate results. "
+            "If not needed for this calculation step, mention SOC as a follow-up consideration."
+        )
+
     # ── Pulay stress check ──
     isif = _as_int(_get(tags, "ISIF"), 2)
     if isif >= 3:
