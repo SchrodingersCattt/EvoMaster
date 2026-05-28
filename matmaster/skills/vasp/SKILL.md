@@ -60,8 +60,9 @@ Running the VASP binary locally is not allowed (commercial license).
 - **NUPDOWN / MAGMOM for multi-site or mixed-valence systems**: Do not assume
   spin states — the same element can be high-spin or low-spin depending on
   coordination environment (e.g., octahedral strong-field ligands force
-  low-spin). Look up the material's established magnetic ground state before
-  assigning values.
+  low-spin). For mixed-valence systems, derive NUPDOWN from charge balance +
+  ligand-field analysis → see `references/incar_tags.md` §NUPDOWN for the
+  step-by-step procedure.
 - **SOC decision table**:
 
 | Condition | Action |

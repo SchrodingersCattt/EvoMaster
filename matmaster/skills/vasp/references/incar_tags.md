@@ -52,7 +52,23 @@ values, and critical notes.
 |---------------|--------|----------|--------------------------|-------|
 | ISPIN         | int    | 1        | 1, 2                     | 1=non-spin; 2=spin-polarized |
 | MAGMOM        | array  | 1.0/atom | per-atom moments         | e.g., `4*5.0 4*-5.0 8*0.6` for AFM Fe8O8 |
+| NUPDOWN       | int    | -1 (off) | total N↑ − N↓           | Constrains total spin. Use for mixed-valence or hard-to-converge magnetic states |
 | LORBIT        | int    | 0        | 10, 11, 12               | 10=DOSCAR+lm-PROCAR; 11=same+phase; needed for PDOS |
+
+### NUPDOWN for mixed-valence systems
+
+When a system has the same element in multiple oxidation states (e.g., Fe²⁺/Fe³⁺), determine NUPDOWN by:
+
+1. **Assign oxidation states** from charge balance (e.g., A₄Fe₈(CN)₂₄: Na⁺₄ + Fe₈ + CN⁻₂₄ → Fe avg +2.5 → 4×Fe²⁺ + 4×Fe³⁺)
+2. **Determine spin state per site** from ligand field:
+   - Strong-field ligands (CN⁻, CO) → low-spin
+   - Weak-field ligands (N-end of CN⁻, O²⁻, H₂O) → high-spin
+3. **Count unpaired electrons** per site using d-electron config:
+   - Fe²⁺ (d⁶) low-spin: t₂g⁶ → 0 unpaired
+   - Fe²⁺ (d⁶) high-spin: t₂g⁴eg² → 4 unpaired
+   - Fe³⁺ (d⁵) low-spin: t₂g⁵ → 1 unpaired
+   - Fe³⁺ (d⁵) high-spin: t₂g³eg² → 5 unpaired
+4. **Sum all sites** → NUPDOWN = total unpaired electrons
 
 ## 5. Spin-Orbit Coupling (SOC)
 
