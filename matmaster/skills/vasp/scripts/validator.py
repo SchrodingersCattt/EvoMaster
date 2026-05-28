@@ -175,6 +175,14 @@ def validate_incar(
             "VASP will use default (1.0 per atom) which may not converge to correct magnetic state."
         )
 
+    # D012: LSORBIT requires ISPIN=2
+    lsorbit = _get(tags, "LSORBIT", "").strip().upper()
+    if lsorbit in (".TRUE.", "T", ".T.") and ispin != 2:
+        errors.append(
+            "LSORBIT=.TRUE. requires ISPIN=2. "
+            "SOC calculations must be spin-polarized."
+        )
+
     # ── Pulay stress check ──
     isif = _as_int(_get(tags, "ISIF"), 2)
     if isif >= 3:

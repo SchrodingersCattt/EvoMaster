@@ -68,8 +68,11 @@ Running the VASP binary locally is not allowed (commercial license).
 | Condition | Action |
 |-----------|--------|
 | System contains Z ≥ 57 elements (lanthanides, actinides, 5d/6p: Hf, Ta, W, Re, Os, Ir, Pt, Au, Hg, Tl, Pb, Bi, Lu, etc.) AND task is band/DOS | Enable SOC: `LSORBIT = .TRUE.`, `ISPIN = 2`, `ISYM = 0`. Use `vasp_ncl`. |
-| System contains Z ≥ 57 elements AND task is relaxation/SCF | Use AskQuestion: "体系含重元素，是否需要开启自旋-轨道耦合(SOC)？" Enable if user confirms. |
+| System contains Z ≥ 57 elements AND task is relaxation/SCF | Use AskQuestion: "体系含重元素，是否需要开启自旋-轨道耦合(SOC)？" Enable if user confirms → set `LSORBIT = .TRUE.`, `ISPIN = 2`, `ISYM = 0`. Use `vasp_ncl`. |
+| User explicitly requests SOC | Set `LSORBIT = .TRUE.`, `ISPIN = 2`, `ISYM = 0`. Use `vasp_ncl`. |
 | No heavy elements (Z < 57) | SOC not needed |
+
+  **Rule**: `LSORBIT = .TRUE.` always requires `ISPIN = 2` — never set LSORBIT without ISPIN=2.
 
 - `LMAXMIX = 4` for d-electron systems; `LMAXMIX = 6` for f-electron systems.
 
