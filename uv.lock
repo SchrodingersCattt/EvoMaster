@@ -2062,7 +2062,7 @@ requires-dist = [
     { name = "pycryptodome", specifier = ">=3.21.0" },
     { name = "pydantic" },
     { name = "pyfiglet", marker = "extra == 'calculation'", specifier = "==0.8.post1" },
-    { name = "pymatgen", marker = "extra == 'calculation'", specifier = ">=2024.1" },
+    { name = "pymatgen", marker = "extra == 'calculation'", specifier = ">=2024.1,<2026" },
     { name = "pymupdf" },
     { name = "pymysql", specifier = ">=1.1.2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.2" },
