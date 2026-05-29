@@ -97,12 +97,9 @@ def _restore_playground_session(
     original_session: Any,
     original_owns_session: bool,
 ) -> None:
-    """Restore pg.session / _owns_session / agent.session after a transient SSH swap."""
+    """Restore pg.session / _owns_session after a transient SSH swap."""
     pg.session = original_session
     pg._owns_session = original_owns_session
-    _agent = getattr(pg, 'agent', None)
-    if _agent is not None:
-        _agent.session = original_session
 
 
 def _restore_bohrium_runtime_state(session_id: str, pg: Any | None) -> None:
@@ -707,9 +704,6 @@ def _setup_bohrium_for_run(
                 )
                 pg.session = ssh_session
                 pg._owns_session = False
-                _agent = getattr(pg, 'agent', None)
-                if _agent is not None:
-                    _agent.session = ssh_session
                 swapped = True
                 _store_bohrium_runtime(
                     session_id,
