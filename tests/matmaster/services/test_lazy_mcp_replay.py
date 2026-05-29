@@ -88,7 +88,7 @@ async def test_run_agent_uses_hot_cache_when_present(monkeypatch):
             invocation_id="inv-hot-cache",
         )
 
-    snapshot = svc._test_fake_exp.last_ctx.metadata.active_skills
+    snapshot = svc._test_fake_exp.last_ctx.request.active_skills
     assert snapshot == frozenset({"pxrd"})
     assert isinstance(snapshot, frozenset)
     assert called["n"] == 1
@@ -178,7 +178,7 @@ async def test_run_agent_rehydrates_from_db_on_cache_miss(tmp_path, monkeypatch)
             )
 
     assert svc._active_skills["sess-rehydrate"] == frozenset({"pxrd", "sg"})
-    snapshot = svc._test_fake_exp.last_ctx.metadata.active_skills
+    snapshot = svc._test_fake_exp.last_ctx.request.active_skills
     assert snapshot == frozenset({"pxrd", "sg"})
 
 
@@ -211,7 +211,11 @@ async def test_run_agent_rehydrates_remote_skill_from_session_root(
 
     async with _patched_service([run_result]) as (svc, _, __):
         svc._active_skills = {}
-        svc._test_pg_ctx.session = session
+        # ExecutionEnvironment is frozen; rebind the active session by rebuilding
+        # the playground's base environment (prepare() reads pg._base_env).
+        svc._test_playground._base_env = svc._test_environment.model_copy(
+            update={"session": session}
+        )
 
         from matmaster.config.exp import ExpConfig, ExpSkillsConfig
 
@@ -250,5 +254,5 @@ async def test_run_agent_rehydrates_remote_skill_from_session_root(
             )
 
     assert svc._active_skills["sess-remote-rehydrate"] == frozenset({"remote-skill"})
-    snapshot = svc._test_fake_exp.last_ctx.metadata.active_skills
+    snapshot = svc._test_fake_exp.last_ctx.request.active_skills
     assert snapshot == frozenset({"remote-skill"})

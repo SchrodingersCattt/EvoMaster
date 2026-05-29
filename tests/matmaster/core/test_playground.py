@@ -13,8 +13,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from matmaster.core.playground import (
+    ExecutionEnvironment,
     Playground,
-    PlaygroundContext,
     WorkspaceArchivalConfig,
 )
 from matmaster.sessions.local import LocalSession
@@ -54,19 +54,19 @@ def _metadata(run_dir: Path | None = None, task_id: str = "") -> RunMetadata:
 
 
 # ---------------------------------------------------------------------------
-# prepare() returns PlaygroundContext
+# prepare() returns ExecutionEnvironment
 # ---------------------------------------------------------------------------
 
 
 class TestPrepare:
-    def test_returns_playground_context(self, tmp_path: Path) -> None:
+    def test_returns_execution_environment(self, tmp_path: Path) -> None:
         pg = _make_playground(tmp_path)
         run_dir = tmp_path / "runs" / "run-001"
         run_dir.mkdir(parents=True)
 
         ctx = pg.prepare(_metadata(run_dir, "t1"))
 
-        assert isinstance(ctx, PlaygroundContext)
+        assert isinstance(ctx, ExecutionEnvironment)
         assert ctx.session_type == "local"
         pg.cleanup()
 

@@ -16,6 +16,7 @@ from matmaster.types.events import BusEvent
 from matmaster.types.figures import FigureUploadConfig
 
 __all__ = [
+    "AgentRunPorts",
     "BohriumRuntimePort",
     "BohriumRuntimeSnapshot",
     "BusEventSink",
@@ -26,7 +27,6 @@ __all__ = [
     "FigureUploadPort",
     "KernelRuntimePorts",
     "PlaygroundCompactionPort",
-    "PlaygroundRuntimePorts",
     "PreCompactionBarrier",
     "SessionEventHistoryPort",
 ]
@@ -122,13 +122,21 @@ class BohriumRuntimePort:
 
 
 @dataclass(frozen=True)
-class PlaygroundRuntimePorts:
+class AgentRunPorts:
+    """Narrow runtime capability ports carried by AgentRunRequest.
+
+    The service layer injects these per run. It intentionally does *not* carry
+    the Bohrium snapshot: that is physical execution info and lives on
+    ``ExecutionEnvironment.bohrium`` instead. Stays a narrow capability
+    contract -- only callable / sink / barrier / capability, never a metadata
+    or ``dict[str, Any]`` bag.
+    """
+
     child_event_forward_sink: BusEventSink | None = None
     compaction: PlaygroundCompactionPort = field(
         default_factory=PlaygroundCompactionPort
     )
     figure_upload: FigureUploadPort = field(default_factory=FigureUploadPort)
-    bohrium: BohriumRuntimePort = field(default_factory=BohriumRuntimePort)
 
 
 @dataclass(frozen=True)

@@ -10,7 +10,8 @@ import pytest
 from matmaster.config.exp import ExpConfig, ExpSkillsConfig, ExpToolsConfig
 from matmaster.config.loader import load_base_system_prompt
 from matmaster.core.exp import Exp
-from matmaster.core.playground import PlaygroundContext
+from matmaster.core.playground import ExecutionEnvironment
+from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.providers.openai_provider import OpenAIProvider
 from matmaster.sessions.local import LocalSession
 from matmaster.types.run_metadata import RunMetadata
@@ -34,15 +35,18 @@ def test_devshell_mcp_only_struct_db_skill_and_lazy_mcp(
     session = LocalSession(workspace_path=workdir)
     session.open()
 
-    ctx = PlaygroundContext(
-        workdir=workdir,
-        session_type="local",
-        cache_area=cache_area,
-        session=session,
-        llm_provider=OpenAIProvider(model="gpt-4o-mini", api_key="sk-test"),
-        config_dir=None,
-        llm_config=None,
-        metadata=RunMetadata(source="test"),
+    ctx = AgentRunContext(
+        environment=ExecutionEnvironment(
+            workdir=workdir,
+            session_type="local",
+            cache_area=cache_area,
+            session=session,
+            metadata=RunMetadata(source="test"),
+        ),
+        request=AgentRunRequest(
+            llm_provider=OpenAIProvider(model="gpt-4o-mini", api_key="sk-test"),
+            llm_config=None,
+        ),
     )
 
     exp_cfg = ExpConfig(
@@ -100,15 +104,18 @@ def test_mcp_runtime_patch_limits_mat_sg_lazy_tools(
     session = LocalSession(workspace_path=workdir)
     session.open()
 
-    ctx = PlaygroundContext(
-        workdir=workdir,
-        session_type="local",
-        cache_area=cache_area,
-        session=session,
-        llm_provider=OpenAIProvider(model="gpt-4o-mini", api_key="sk-test"),
-        config_dir=None,
-        llm_config=None,
-        metadata=RunMetadata(source="test"),
+    ctx = AgentRunContext(
+        environment=ExecutionEnvironment(
+            workdir=workdir,
+            session_type="local",
+            cache_area=cache_area,
+            session=session,
+            metadata=RunMetadata(source="test"),
+        ),
+        request=AgentRunRequest(
+            llm_provider=OpenAIProvider(model="gpt-4o-mini", api_key="sk-test"),
+            llm_config=None,
+        ),
     )
 
     # mat_sg now only ships sampling + job-control tools in the schema cache;

@@ -12,7 +12,7 @@ import pytest
 
 import matmaster.config.loader as matmaster_loader
 from matmaster.bohrium.types import BohriumRuntimeSnapshot
-from matmaster.core.playground import PlaygroundContext
+from matmaster.core.playground import ExecutionEnvironment
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.run_metadata import RunMetadata
 from tests.matmaster.core.conftest import MockLLMProvider
@@ -402,13 +402,13 @@ def test_run_agent_loads_exp_config_without_passing_skill_sync_to_bohrium_setup(
     svc = AgentRunService(sessions_service=mock_sessions_svc)
 
     mock_pg = MagicMock()
-    mock_pg_ctx = PlaygroundContext(
+    mock_pg_env = ExecutionEnvironment(
         workdir=tmp_path / 'workspace',
         session_type='local',
         cache_area=tmp_path / 'cache',
         metadata=RunMetadata(run_dir=str(tmp_path), task_id='test-task'),
     )
-    mock_pg.prepare.return_value = mock_pg_ctx
+    mock_pg.prepare.return_value = mock_pg_env
     mock_pg.config_path = Path('config/config.yaml')
     mock_pg.session = None
     captured_setup_kwargs: dict[str, Any] = {}
@@ -490,13 +490,13 @@ def test_execution_binding_before_build_runtime(
     svc = AgentRunService(sessions_service=mock_sessions_svc)
 
     mock_pg = MagicMock()
-    mock_pg_ctx = PlaygroundContext(
+    mock_pg_env = ExecutionEnvironment(
         workdir=tmp_path / 'workspace',
         session_type='local',
         cache_area=tmp_path / 'cache',
         metadata=RunMetadata(run_dir=str(tmp_path), task_id='test-task'),
     )
-    mock_pg.prepare.return_value = mock_pg_ctx
+    mock_pg.prepare.return_value = mock_pg_env
     mock_pg.config_path = Path('config/config.yaml')
     mock_pg.session = None
 
@@ -578,11 +578,11 @@ def test_execution_binding_before_build_runtime(
             )
         )
 
-    pg_passed = captured_run_stream_args['ctx']
-    assert pg_passed.session is mock_exec
-    assert pg_passed.session_type == 'ssh'
-    assert pg_passed.execution_workdir == '/remote/ws'
-    snapshot = pg_passed.runtime_ports.bohrium.snapshot
+    ctx_passed = captured_run_stream_args['ctx']
+    assert ctx_passed.environment.session is mock_exec
+    assert ctx_passed.environment.session_type == 'ssh'
+    assert ctx_passed.environment.execution_workdir == '/remote/ws'
+    snapshot = ctx_passed.environment.bohrium.snapshot
     assert snapshot is not None
     assert snapshot.ssh_attached is True
     assert snapshot.remote_workspace_root == '/share'

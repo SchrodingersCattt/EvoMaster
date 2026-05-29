@@ -10,7 +10,7 @@ A :class:`SubagentOrchestrator` owns one parent agent's spawn lifecycle:
 
 It depends only on narrow seams -- a child-run factory (which actually builds
 and runs the child agent), a hook executor, and the child-event sink -- never on
-the service fanout, ``PlaygroundContext``, or Exp internals. Exp keeps the job of
+the service fanout, ``AgentRunContext``, or Exp internals. Exp keeps the job of
 *assembling* the child runtime (the factory it injects); the orchestrator owns
 *running* the spawn.
 """

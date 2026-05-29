@@ -19,7 +19,7 @@ from matmaster.context.ports import (
     hash_user_instructions,
 )
 from matmaster.context.session import SessionContextBuilder
-from matmaster.core.playground import PlaygroundContext
+from matmaster.core.run_context import AgentRunContext
 from matmaster.types.runtime import AgentRuntimeSpec
 from matmaster.types.runtime_ports import EmptySessionEventHistory
 
@@ -59,7 +59,7 @@ class _EmptySessionJobsPort:
 def build_runtime_context_assembly(
     *,
     spec: AgentRuntimeSpec,
-    ctx: PlaygroundContext,
+    ctx: AgentRunContext,
     skill_resolver: SkillResolver,
     spawn_id: str | None,
     logger: logging.Logger,
@@ -68,11 +68,11 @@ def build_runtime_context_assembly(
     if spec.llm_provider is None:
         return RuntimeContextAssembly()
 
-    history_port = ctx.runtime_ports.compaction.history
+    history_port = ctx.request.ports.compaction.history
     if history_port is None:
         history_port = EmptySessionEventHistory()
 
-    user_instructions = ctx.metadata.user_instructions or UserInstructions(
+    user_instructions = ctx.request.user_instructions or UserInstructions(
         text="",
         hash=hash_user_instructions(""),
         truncated=False,
@@ -94,11 +94,13 @@ def build_runtime_context_assembly(
             config=spec.compaction,
             context_assembler=context_assembler,
             user_instructions=user_instructions,
-            session_id=ctx.session_id,
+            session_id=ctx.environment.session_id,
             spawn_id=spawn_id,
             runtime_covered_until_provider=history_port.latest_scope_event_id,
             event_sink=None,
-            compaction_scope=f'{ctx.metadata.task_id}:{spawn_id or "root"}',
+            compaction_scope=(
+                f'{ctx.environment.metadata.task_id}:{spawn_id or "root"}'
+            ),
         ),
         context_assembler=context_assembler,
         assembly_ports=assembly_ports,

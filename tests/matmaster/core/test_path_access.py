@@ -3,12 +3,12 @@ from __future__ import annotations
 from pathlib import Path
 
 from matmaster.core.path_access import derive_path_access_roots
-from matmaster.core.playground import PlaygroundContext
+from matmaster.core.playground import ExecutionEnvironment
 from matmaster.types.runtime_ports import BohriumRuntimeSnapshot
 
 
 def test_path_access_reads_typed_bohrium_snapshot() -> None:
-    ctx = PlaygroundContext(
+    env = ExecutionEnvironment(
         workdir=Path("/tmp/work"),
         session_type="local",
         cache_area=Path("/tmp/cache"),
@@ -21,7 +21,7 @@ def test_path_access_reads_typed_bohrium_snapshot() -> None:
         )
     )
 
-    roots = derive_path_access_roots(ctx)
+    roots = derive_path_access_roots(env)
 
     assert ("/share/project", "runtime") in {(root.root, root.kind) for root in roots}
     assert ("/share/.matmaster", "project_runtime") in {

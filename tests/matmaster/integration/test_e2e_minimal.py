@@ -13,7 +13,8 @@ from typing import Any
 from matmaster.config.exp import ExpConfig
 from matmaster.core.agent import AgentKernel
 from matmaster.core.exp import Exp
-from matmaster.core.playground import PlaygroundContext
+from matmaster.core.playground import ExecutionEnvironment
+from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.types.events import ResponseEvent, RunResultEvent
 from matmaster.types.messages import LLMResponse, StreamChunk
 
@@ -36,13 +37,15 @@ class MinimalMockLLMProvider:
         yield StreamChunk(content="minimal response", finish_reason="stop")
 
 
-def _make_minimal_ctx(tmp_path: Path, llm_provider: Any = None) -> PlaygroundContext:
-    """Create a minimal PlaygroundContext (no archival, no env vars)."""
-    return PlaygroundContext(
-        workdir=tmp_path / "workspace",
-        session_type="local",
-        cache_area=tmp_path / "cache",
-        llm_provider=llm_provider,
+def _make_minimal_ctx(tmp_path: Path, llm_provider: Any = None) -> AgentRunContext:
+    """Create a minimal AgentRunContext (no archival, no env vars)."""
+    return AgentRunContext(
+        environment=ExecutionEnvironment(
+            workdir=tmp_path / "workspace",
+            session_type="local",
+            cache_area=tmp_path / "cache",
+        ),
+        request=AgentRunRequest(llm_provider=llm_provider),
     )
 
 

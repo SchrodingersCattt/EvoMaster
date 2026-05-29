@@ -21,7 +21,8 @@ from matmaster.core.hooks import (
     HookOutcome,
     HookResult,
 )
-from matmaster.core.playground import PlaygroundContext
+from matmaster.core.playground import ExecutionEnvironment
+from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.core.structural_validation import StructuralValidation
 from matmaster.core.tool_runner import FullToolRunner
 from matmaster.core.tool_scheduler import ToolScheduler
@@ -241,14 +242,16 @@ class TestExpWiring:
         tmp_path: Path,
     ) -> None:
         exp = Exp(ExpConfig(name="test"))
-        ctx = PlaygroundContext(
-            workdir=tmp_path,
-            execution_workdir=str(tmp_path / "exec"),
-            session_type="local",
-            cache_area=tmp_path / "cache",
-            session_id="session-1",
-            metadata=RunMetadata(task_id="task-1"),
-            llm_provider=MockLLMProvider(),
+        ctx = AgentRunContext(
+            environment=ExecutionEnvironment(
+                workdir=tmp_path,
+                execution_workdir=str(tmp_path / "exec"),
+                session_type="local",
+                cache_area=tmp_path / "cache",
+                session_id="session-1",
+                metadata=RunMetadata(task_id="task-1"),
+            ),
+            request=AgentRunRequest(llm_provider=MockLLMProvider()),
         )
 
         with patch("matmaster.core.agent.AgentKernel"):
@@ -717,13 +720,15 @@ class TestSpawnGuardWiring:
 
         monkeypatch.setattr(exp_module, "Exp", RecordingExp)
 
-        ctx = PlaygroundContext(
-            workdir=tmp_path,
-            execution_workdir=str(tmp_path / "exec"),
-            session_type="local",
-            cache_area=tmp_path / "cache",
-            session_id="session-1",
-            llm_provider=MockLLMProvider(),
+        ctx = AgentRunContext(
+            environment=ExecutionEnvironment(
+                workdir=tmp_path,
+                execution_workdir=str(tmp_path / "exec"),
+                session_type="local",
+                cache_area=tmp_path / "cache",
+                session_id="session-1",
+            ),
+            request=AgentRunRequest(llm_provider=MockLLMProvider()),
         )
 
         parent = original_exp(ExpConfig(name="parent"))
@@ -765,13 +770,15 @@ class TestSpawnGuardWiring:
 
         monkeypatch.setattr(exp_module, "Exp", RecordingExp)
 
-        ctx = PlaygroundContext(
-            workdir=tmp_path,
-            execution_workdir=str(tmp_path / "exec"),
-            session_type="local",
-            cache_area=tmp_path / "cache",
-            session_id="session-1",
-            llm_provider=MockLLMProvider(),
+        ctx = AgentRunContext(
+            environment=ExecutionEnvironment(
+                workdir=tmp_path,
+                execution_workdir=str(tmp_path / "exec"),
+                session_type="local",
+                cache_area=tmp_path / "cache",
+                session_id="session-1",
+            ),
+            request=AgentRunRequest(llm_provider=MockLLMProvider()),
         )
 
         def sentinel_resolver(events):
@@ -840,13 +847,15 @@ class TestSpawnGuardWiring:
         async def sink(event) -> None:
             forwarded.append(event)
 
-        ctx = PlaygroundContext(
-            workdir=tmp_path,
-            execution_workdir=str(tmp_path / "exec"),
-            session_type="local",
-            cache_area=tmp_path / "cache",
-            session_id="session-1",
-            llm_provider=MockLLMProvider(),
+        ctx = AgentRunContext(
+            environment=ExecutionEnvironment(
+                workdir=tmp_path,
+                execution_workdir=str(tmp_path / "exec"),
+                session_type="local",
+                cache_area=tmp_path / "cache",
+                session_id="session-1",
+            ),
+            request=AgentRunRequest(llm_provider=MockLLMProvider()),
         )
 
         parent = original_exp(ExpConfig(name="parent"))

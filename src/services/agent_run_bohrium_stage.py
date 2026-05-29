@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from matmaster.context.ports import UserInstructions
-from matmaster.core.playground import WorkspaceArchivalConfig
+from matmaster.core.playground import ExecutionEnvironment, WorkspaceArchivalConfig
 from matmaster.integration.fanout import RunEventFanout
 from matmaster.integration.workspace_handler import WorkspaceHandler
 from matmaster.types.figures import FigureUploadConfig
@@ -35,7 +35,7 @@ class BohriumStageResult:
 
     abort_result: Any | None
     bohrium_svc: BohriumSetupService
-    pg_ctx: Any
+    environment: ExecutionEnvironment
     ssh_attached: bool
     user_instructions: UserInstructions
 
@@ -79,12 +79,17 @@ async def run_bohrium_stage(
     session_id: str,
     task_id: str,
     playground: Any,
-    pg_ctx: Any,
+    environment: ExecutionEnvironment,
     run_started_at: float,
     bohrium_required: bool,
     remote_workdir: str | None,
 ) -> BohriumStageResult:
-    """Run Bohrium setup and thread the resulting runtime context."""
+    """Run Bohrium setup and physically rebind the execution environment.
+
+    Bohrium evolves only the *physical* environment (session swap + execution
+    workdir + bohrium snapshot) via ``with_execution`` / ``with_bohrium``; the
+    per-run ``AgentRunRequest`` is assembled later by the service.
+    """
     bohrium_svc = BohriumSetupService(
         sessions_service,
         event_sink=dispatch_from_thread,
@@ -102,23 +107,23 @@ async def run_bohrium_stage(
         return BohriumStageResult(
             abort_result=bohrium_result.abort_result,
             bohrium_svc=bohrium_svc,
-            pg_ctx=pg_ctx,
+            environment=environment,
             ssh_attached=ssh_attached,
             user_instructions=load_user_instructions_from_session(None),
         )
     if bohrium_result.runtime_snapshot is not None:
-        pg_ctx = pg_ctx.with_bohrium(bohrium_result.runtime_snapshot)
+        environment = environment.with_bohrium(bohrium_result.runtime_snapshot)
     if bohrium_result.execution_session is not None:
         execution_workdir = bohrium_result.execution_workdir or ''
         session_type = bohrium_result.session_type or 'ssh'
-        pg_ctx = pg_ctx.with_execution(
+        environment = environment.with_execution(
             session=bohrium_result.execution_session,
             session_type=session_type,
             execution_workdir=execution_workdir,
         )
     _ui_session = (
         bohrium_result.execution_session if bohrium_result else None
-    ) or pg_ctx.session
+    ) or environment.session
     user_instructions = load_user_instructions_from_session(_ui_session)
 
     fanout.add_handler(
@@ -126,15 +131,15 @@ async def run_bohrium_stage(
             session_id=session_id,
             task_id=task_id,
             ssh_attached=ssh_attached,
-            workspace_path=pg_ctx.workdir,
-            upload_fn=_build_workspace_upload_fn(pg_ctx.archival),
+            workspace_path=environment.workdir,
+            upload_fn=_build_workspace_upload_fn(environment.archival),
         )
     )
 
     return BohriumStageResult(
         abort_result=None,
         bohrium_svc=bohrium_svc,
-        pg_ctx=pg_ctx,
+        environment=environment,
         ssh_attached=ssh_attached,
         user_instructions=user_instructions,
     )

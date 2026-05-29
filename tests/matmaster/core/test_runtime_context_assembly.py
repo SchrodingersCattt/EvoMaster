@@ -6,7 +6,8 @@ from collections.abc import AsyncIterator
 from matmaster.context.assembly import ContextRenderOptions
 from matmaster.context.ports import ActiveSkill, SessionEvent, UserInstructions
 from matmaster.context.system_prompt import SystemPromptBuilder
-from matmaster.core.playground import PlaygroundContext
+from matmaster.core.playground import ExecutionEnvironment
+from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.core.runtime_context_assembly import (
     build_runtime_context_assembly,
     build_session_context_factory,
@@ -80,12 +81,14 @@ def test_runtime_context_assembly_ignores_tool_render_ghosts(tmp_path) -> None:
         llm_provider=_Provider(),
         system_prompt_builder=SystemPromptBuilder(),
     )
-    ctx = PlaygroundContext(
-        workdir=tmp_path,
-        session_type="local",
-        session_id="sess-1",
-        cache_area=tmp_path / "cache",
-        metadata=RunMetadata(),
+    ctx = AgentRunContext(
+        environment=ExecutionEnvironment(
+            workdir=tmp_path,
+            session_type="local",
+            session_id="sess-1",
+            cache_area=tmp_path / "cache",
+            metadata=RunMetadata(),
+        ),
     )
 
     assembly = build_runtime_context_assembly(
@@ -114,12 +117,15 @@ def test_user_instructions_hash_is_not_recomputed_in_assembly(tmp_path) -> None:
         hash="sha256:already-computed",
         truncated=True,
     )
-    ctx = PlaygroundContext(
-        workdir=tmp_path,
-        session_type="local",
-        session_id="sess-1",
-        cache_area=tmp_path / "cache",
-        metadata=RunMetadata(task_id="task-1", user_instructions=bundle),
+    ctx = AgentRunContext(
+        environment=ExecutionEnvironment(
+            workdir=tmp_path,
+            session_type="local",
+            session_id="sess-1",
+            cache_area=tmp_path / "cache",
+            metadata=RunMetadata(task_id="task-1"),
+        ),
+        request=AgentRunRequest(user_instructions=bundle),
     )
 
     assembly = build_runtime_context_assembly(

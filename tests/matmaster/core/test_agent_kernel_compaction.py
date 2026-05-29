@@ -787,10 +787,11 @@ class TestExpCheckpointSinkScopeResolution:
     ) -> None:
         from matmaster.config.exp import ExpConfig
         from matmaster.core.exp import Exp
-        from matmaster.core.playground import PlaygroundContext
+        from matmaster.core.playground import ExecutionEnvironment
+        from matmaster.core.run_context import AgentRunContext, AgentRunRequest
         from matmaster.types.runtime_ports import (
+            AgentRunPorts,
             PlaygroundCompactionPort,
-            PlaygroundRuntimePorts,
         )
 
         parent_sink = object()
@@ -803,17 +804,21 @@ class TestExpCheckpointSinkScopeResolution:
                 return child_sink
             return parent_sink
 
-        ctx = PlaygroundContext(
-            workdir=tmp_path,
-            session_type="local",
-            cache_area=tmp_path / "cache",
-            execution_workdir=str(tmp_path),
-            llm_provider=ContentOnlyProvider(),
-            metadata=RunMetadata(),
-            runtime_ports=PlaygroundRuntimePorts(
-                compaction=PlaygroundCompactionPort(
-                    checkpoint_sink_factory=checkpoint_sink_factory,
-                )
+        ctx = AgentRunContext(
+            environment=ExecutionEnvironment(
+                workdir=tmp_path,
+                session_type="local",
+                cache_area=tmp_path / "cache",
+                execution_workdir=str(tmp_path),
+                metadata=RunMetadata(),
+            ),
+            request=AgentRunRequest(
+                llm_provider=ContentOnlyProvider(),
+                ports=AgentRunPorts(
+                    compaction=PlaygroundCompactionPort(
+                        checkpoint_sink_factory=checkpoint_sink_factory,
+                    )
+                ),
             ),
         )
         exp = Exp(ExpConfig(name="test"))

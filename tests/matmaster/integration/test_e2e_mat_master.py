@@ -19,7 +19,8 @@ import pytest
 from matmaster.config.exp import ExpConfig
 from matmaster.core.agent import AgentKernel
 from matmaster.core.exp import Exp
-from matmaster.core.playground import PlaygroundContext
+from matmaster.core.playground import ExecutionEnvironment
+from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.events import (
     ResponseEvent,
@@ -180,14 +181,25 @@ class EchoTool:
 # ── Helper ────────────────────────────────────────────
 
 
-def _make_pg_ctx(tmp_path: Path, llm_provider: Any = None) -> PlaygroundContext:
-    """Create a test PlaygroundContext using tmp_path."""
-    return PlaygroundContext(
+def _make_environment(tmp_path: Path) -> ExecutionEnvironment:
+    """Create a test ExecutionEnvironment (physical substrate) using tmp_path.
+
+    Mirrors what ``Playground.prepare()`` produces, so it is the correct return
+    value for ``mock_pg.prepare``.
+    """
+    return ExecutionEnvironment(
         workdir=tmp_path / 'workspace',
         session_type='local',
         cache_area=tmp_path / 'cache',
         metadata=RunMetadata(run_dir=str(tmp_path), task_id='test-task'),
-        llm_provider=llm_provider,
+    )
+
+
+def _make_run_ctx(tmp_path: Path, llm_provider: Any = None) -> AgentRunContext:
+    """Create a test AgentRunContext (environment + request) using tmp_path."""
+    return AgentRunContext(
+        environment=_make_environment(tmp_path),
+        request=AgentRunRequest(llm_provider=llm_provider),
     )
 
 
@@ -212,7 +224,7 @@ class TestMatMasterE2EPipeline:
     async def test_mat_master_e2e_pipeline(self, tmp_path: Path) -> None:
         """E2E: Playground.prepare() -> Exp.build_runtime() -> Kernel.run_stream() with mock LLM."""
         mock_llm = MockLLMProvider()
-        pg_ctx = _make_pg_ctx(tmp_path, llm_provider=mock_llm)
+        pg_ctx = _make_run_ctx(tmp_path, llm_provider=mock_llm)
 
         exp = Exp(self._EXP_CONFIG)
         runtime = await exp.build_runtime(pg_ctx)
@@ -228,7 +240,7 @@ class TestMatMasterE2EPipeline:
     async def test_mat_master_e2e_with_tool_call(self, tmp_path: Path) -> None:
         """E2E: Pipeline with a tool call and tool result via generator."""
         mock_llm = MockLLMProviderWithToolCall()
-        pg_ctx = _make_pg_ctx(tmp_path, llm_provider=mock_llm)
+        pg_ctx = _make_run_ctx(tmp_path, llm_provider=mock_llm)
         echo_tool = EchoTool()
 
         exp = Exp(self._EXP_CONFIG)
@@ -274,8 +286,8 @@ class TestMatMasterRunAgentE2E:
 
         # Patch Playground to return test context
         mock_pg = MagicMock()
-        mock_pg_ctx = _make_pg_ctx(tmp_path)
-        mock_pg.prepare.return_value = mock_pg_ctx
+        mock_environment = _make_environment(tmp_path)
+        mock_pg.prepare.return_value = mock_environment
         mock_pg.config_path = Path('config/config.yaml')
         mock_pg.session = None
 
@@ -377,8 +389,8 @@ class TestMatMasterRunAgentE2E:
         mock_load_config.return_value = MagicMock()
 
         mock_pg = MagicMock()
-        mock_pg_ctx = _make_pg_ctx(tmp_path)
-        mock_pg.prepare.return_value = mock_pg_ctx
+        mock_environment = _make_environment(tmp_path)
+        mock_pg.prepare.return_value = mock_environment
         mock_pg.config_path = Path('config/config.yaml')
         mock_pg.session = None
 
@@ -490,8 +502,8 @@ class TestMatMasterRunAgentE2E:
         mock_load_config.return_value = MagicMock()
 
         mock_pg = MagicMock()
-        mock_pg_ctx = _make_pg_ctx(tmp_path)
-        mock_pg.prepare.return_value = mock_pg_ctx
+        mock_environment = _make_environment(tmp_path)
+        mock_pg.prepare.return_value = mock_environment
         mock_pg.config_path = Path('config/config.yaml')
         mock_pg.session = None
 
@@ -560,8 +572,8 @@ class TestMatMasterRunAgentE2E:
         mock_load_config.return_value = MagicMock()
 
         mock_pg = MagicMock()
-        mock_pg_ctx = _make_pg_ctx(tmp_path)
-        mock_pg.prepare.return_value = mock_pg_ctx
+        mock_environment = _make_environment(tmp_path)
+        mock_pg.prepare.return_value = mock_environment
         mock_pg.config_path = Path('config/config.yaml')
         mock_pg.session = None
 
@@ -694,8 +706,8 @@ class TestMatMasterRunAgentE2E:
         mock_load_config.return_value = MagicMock()
 
         mock_pg = MagicMock()
-        mock_pg_ctx = _make_pg_ctx(tmp_path)
-        mock_pg.prepare.return_value = mock_pg_ctx
+        mock_environment = _make_environment(tmp_path)
+        mock_pg.prepare.return_value = mock_environment
         mock_pg.config_path = Path('config/config.yaml')
         mock_pg.session = None
 
@@ -778,8 +790,8 @@ class TestMatMasterRunAgentE2E:
         mock_load_config.return_value = MagicMock()
 
         mock_pg = MagicMock()
-        mock_pg_ctx = _make_pg_ctx(tmp_path)
-        mock_pg.prepare.return_value = mock_pg_ctx
+        mock_environment = _make_environment(tmp_path)
+        mock_pg.prepare.return_value = mock_environment
         mock_pg.config_path = Path('config/config.yaml')
         mock_pg.session = None
 
@@ -879,8 +891,8 @@ class TestMatMasterRunAgentE2E:
         mock_load_config.return_value = MagicMock()
 
         mock_pg = MagicMock()
-        mock_pg_ctx = _make_pg_ctx(tmp_path)
-        mock_pg.prepare.return_value = mock_pg_ctx
+        mock_environment = _make_environment(tmp_path)
+        mock_pg.prepare.return_value = mock_environment
         mock_pg.config_path = Path('config/config.yaml')
         mock_pg.session = None
 

@@ -10,7 +10,8 @@ import pytest
 from matmaster.config.exp import ExpConfig, ExpSubagentMeta, ExpToolsConfig
 from matmaster.core.exp import Exp
 from matmaster.core.hooks import HookExecutor
-from matmaster.core.playground import PlaygroundContext
+from matmaster.core.playground import ExecutionEnvironment
+from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.runtime import (
     AgentRuntime,
@@ -22,16 +23,45 @@ from matmaster.types.tool_runner_state import ToolRunnerState
 from tests.matmaster.core.conftest import MockLLMProvider
 
 
-def _make_ctx(*, with_llm: bool = False) -> PlaygroundContext:
-    """Create a minimal PlaygroundContext for testing."""
-    kwargs: dict = dict(
-        workdir=Path('/tmp/test'),
-        session_type='local',
-        cache_area=Path('/tmp/cache'),
-    )
+_UNSET = object()
+
+
+def _make_ctx(
+    *,
+    with_llm: bool = False,
+    workdir: Path | None = None,
+    execution_workdir: str | None = None,
+    session: object = _UNSET,
+    interaction_bridge: object = None,
+) -> AgentRunContext:
+    """Create an AgentRunContext for testing (physical env + runtime request).
+
+    Routes the common test fixtures through one builder so the
+    environment/request split stays consistent. ``workdir`` defaults to
+    ``/tmp/test`` (cache under ``/tmp/cache``); when given, cache lives under it.
+    ``session`` is omitted unless passed (so ``session=None`` is distinct from
+    not passing it).
+    """
+    wd = Path('/tmp/test') if workdir is None else workdir
+    cache_area = Path('/tmp/cache') if workdir is None else wd / 'cache'
+    env_kwargs: dict = {
+        'workdir': wd,
+        'session_type': 'local',
+        'cache_area': cache_area,
+    }
+    if execution_workdir is not None:
+        env_kwargs['execution_workdir'] = execution_workdir
+    if session is not _UNSET:
+        env_kwargs['session'] = session
+    request_kwargs: dict = {}
     if with_llm:
-        kwargs['llm_provider'] = MockLLMProvider()
-    return PlaygroundContext(**kwargs)
+        request_kwargs['llm_provider'] = MockLLMProvider()
+    if interaction_bridge is not None:
+        request_kwargs['interaction_bridge'] = interaction_bridge
+    return AgentRunContext(
+        environment=ExecutionEnvironment(**env_kwargs),
+        request=AgentRunRequest(**request_kwargs),
+    )
 
 
 class _Bridge:
@@ -122,7 +152,7 @@ class TestExpAssemble:
         exp = Exp(ExpConfig(name='test'))
         ctx = _make_ctx(with_llm=True)
         spec = await exp.assemble(ctx)
-        assert spec.llm_provider is ctx.llm_provider
+        assert spec.llm_provider is ctx.request.llm_provider
 
 
 # ── TestExpBuildRuntime ──────────────────────────────────
@@ -149,7 +179,7 @@ class TestExpBuildRuntime:
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
 
-        assert runtime.spec.llm_provider is ctx.llm_provider
+        assert runtime.spec.llm_provider is ctx.request.llm_provider
 
     async def test_build_runtime_has_no_bus_parameter(self) -> None:
         """build_runtime() no longer accepts bus parameter (Phase 36 de-bus)."""
@@ -188,13 +218,11 @@ class TestExpBuildRuntime:
                 tools=ExpToolsConfig(builtin=["Read"]),
             )
         )
-        ctx = PlaygroundContext(
+        ctx = _make_ctx(
             workdir=tmp_path,
             execution_workdir=str(tmp_path / "exec"),
-            session_type="local",
-            cache_area=tmp_path / "cache",
             session=MagicMock(spec=Session),
-            llm_provider=MockLLMProvider(),
+            with_llm=True,
         )
 
         with patch("matmaster.core.agent.AgentKernel"):
@@ -221,13 +249,11 @@ class TestExpBuildRuntime:
                 tools=ExpToolsConfig(builtin=["Bash"]),
             )
         )
-        ctx = PlaygroundContext(
+        ctx = _make_ctx(
             workdir=tmp_path,
             execution_workdir=str(tmp_path / "exec"),
-            session_type="local",
-            cache_area=tmp_path / "cache",
             session=MagicMock(spec=Session),
-            llm_provider=MockLLMProvider(),
+            with_llm=True,
         )
 
         with patch("matmaster.core.agent.AgentKernel"):
@@ -265,13 +291,11 @@ class TestExpBuildRuntime:
                 ),
             )
         )
-        ctx = PlaygroundContext(
+        ctx = _make_ctx(
             workdir=tmp_path,
             execution_workdir=str(tmp_path / "exec"),
-            session_type="local",
-            cache_area=tmp_path / "cache",
             session=MagicMock(spec=Session),
-            llm_provider=MockLLMProvider(),
+            with_llm=True,
         )
 
         with patch("matmaster.core.agent.AgentKernel"):
@@ -309,13 +333,11 @@ class TestExpBuildRuntime:
                 tools=ExpToolsConfig(builtin=["Agent"]),
             )
         )
-        ctx = PlaygroundContext(
+        ctx = _make_ctx(
             workdir=tmp_path,
             execution_workdir=str(tmp_path / "exec"),
-            session_type="local",
-            cache_area=tmp_path / "cache",
             session=MagicMock(spec=Session),
-            llm_provider=MockLLMProvider(),
+            with_llm=True,
         )
         meta = ExpSubagentMeta.model_validate(
             {
@@ -407,13 +429,7 @@ class TestRuntimeScope:
         catalog = MagicMock()
         runtime = MagicMock()
         runtime.spec = MagicMock(tool_catalog=catalog)
-        ctx = PlaygroundContext(
-            workdir=tmp_path,
-            session_type="local",
-            cache_area=tmp_path / "cache",
-            session=session,
-            llm_provider=MockLLMProvider(),
-        )
+        ctx = _make_ctx(workdir=tmp_path, session=session, with_llm=True)
         token = MagicMock()
         with patch.object(exp, "build_runtime", AsyncMock(return_value=runtime)):
             async with exp.runtime_scope(ctx, token):
@@ -491,14 +507,16 @@ class TestSystemPromptOverride:
 class TestExpBuiltinTools:
     """_init_builtin_tools CC-name registration: native builtin tools."""
 
-    def _make_ctx_with_session(self, tmp_path: Path) -> PlaygroundContext:
-        """Create PlaygroundContext with a mock session for builtin tool tests."""
-        return PlaygroundContext(
-            workdir=tmp_path,
-            session_type='local',
-            cache_area=tmp_path / 'cache',
-            session=MagicMock(spec=Session),
-            llm_provider=MockLLMProvider(),
+    def _make_ctx_with_session(self, tmp_path: Path) -> AgentRunContext:
+        """Create AgentRunContext with a mock session for builtin tool tests."""
+        return AgentRunContext(
+            environment=ExecutionEnvironment(
+                workdir=tmp_path,
+                session_type='local',
+                cache_area=tmp_path / 'cache',
+                session=MagicMock(spec=Session),
+            ),
+            request=AgentRunRequest(llm_provider=MockLLMProvider()),
         )
 
     def _build_registry(self, tmp_path: Path) -> tuple[Exp, ToolRegistry]:
@@ -560,13 +578,7 @@ class TestExpBuiltinTools:
         from matmaster.tools.tool_registry import ToolRegistry
 
         exp = Exp(ExpConfig(name='test'))
-        ctx = PlaygroundContext(
-            workdir=tmp_path,
-            session_type='local',
-            cache_area=tmp_path / 'cache',
-            session=None,
-            llm_provider=MockLLMProvider(),
-        )
+        ctx = _make_ctx(workdir=tmp_path, session=None, with_llm=True)
         registry = ToolRegistry()
         exp._init_builtin_tools(ctx, registry, ['*'])
         assert len(registry) == 5
@@ -622,14 +634,16 @@ class TestExecutionWorkdirBinding:
         *,
         control: Path,
         execution: Path,
-    ) -> PlaygroundContext:
-        return PlaygroundContext(
-            workdir=control,
-            execution_workdir=str(execution),
-            session_type='local',
-            cache_area=tmp_path / 'cache',
-            session=MagicMock(spec=Session),
-            llm_provider=MockLLMProvider(),
+    ) -> AgentRunContext:
+        return AgentRunContext(
+            environment=ExecutionEnvironment(
+                workdir=control,
+                execution_workdir=str(execution),
+                session_type='local',
+                cache_area=tmp_path / 'cache',
+                session=MagicMock(spec=Session),
+            ),
+            request=AgentRunRequest(llm_provider=MockLLMProvider()),
         )
 
     def test_execution_side_tools_use_execution_workdir(self, tmp_path: Path) -> None:
@@ -680,7 +694,7 @@ class TestExpCompaction:
 
         exp = Exp(ExpConfig(name='test'))
         ctx = MagicMock()
-        ctx.llm_provider = None
+        ctx.request.llm_provider = None
 
         spec = await exp.assemble(ctx)
         assert isinstance(spec.compaction, CompactionConfig)
@@ -689,7 +703,7 @@ class TestExpCompaction:
     async def test_assemble_default_compaction(self) -> None:
         exp = Exp(ExpConfig(name="test"))
         ctx = MagicMock()
-        ctx.llm_provider = None
+        ctx.request.llm_provider = None
 
         spec = await exp.assemble(ctx)
         assert spec.compaction.strategy == "summary"
@@ -720,13 +734,11 @@ async def test_build_runtime_registers_todowrite_without_session(
             tools=ExpToolsConfig(builtin=["TodoWrite"]),
         )
     )
-    ctx = PlaygroundContext(
+    ctx = _make_ctx(
         workdir=tmp_path,
         execution_workdir=str(tmp_path / "exec"),
-        session_type="local",
-        cache_area=tmp_path / "cache",
         session=None,
-        llm_provider=MockLLMProvider(),
+        with_llm=True,
     )
 
     with patch("matmaster.core.agent.AgentKernel"):
@@ -744,13 +756,11 @@ async def test_build_runtime_registers_bohrium_without_session(tmp_path: Path) -
             tools=ExpToolsConfig(builtin=["Bohrium"]),
         )
     )
-    ctx = PlaygroundContext(
+    ctx = _make_ctx(
         workdir=tmp_path,
         execution_workdir=str(tmp_path / "exec"),
-        session_type="local",
-        cache_area=tmp_path / "cache",
         session=None,
-        llm_provider=MockLLMProvider(),
+        with_llm=True,
     )
 
     with patch("matmaster.core.agent.AgentKernel"):
@@ -769,13 +779,11 @@ async def test_build_runtime_registers_ask_question_when_bridge_available(
             tools=ExpToolsConfig(builtin=["AskQuestion"]),
         )
     )
-    ctx = PlaygroundContext(
+    ctx = _make_ctx(
         workdir=tmp_path,
         execution_workdir=str(tmp_path / "exec"),
-        session_type="local",
-        cache_area=tmp_path / "cache",
+        with_llm=True,
         interaction_bridge=_Bridge(),
-        llm_provider=MockLLMProvider(),
     )
 
     with patch("matmaster.core.agent.AgentKernel"):
@@ -794,13 +802,17 @@ async def test_build_runtime_hides_ask_question_when_bridge_missing(
             tools=ExpToolsConfig(builtin=["AskQuestion"]),
         )
     )
-    ctx = PlaygroundContext(
-        workdir=tmp_path,
-        execution_workdir=str(tmp_path / "exec"),
-        session_type="local",
-        cache_area=tmp_path / "cache",
-        interaction_bridge=None,
-        llm_provider=MockLLMProvider(),
+    ctx = AgentRunContext(
+        environment=ExecutionEnvironment(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path / "exec"),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+        ),
+        request=AgentRunRequest(
+            interaction_bridge=None,
+            llm_provider=MockLLMProvider(),
+        ),
     )
 
     with patch("matmaster.core.agent.AgentKernel"):
@@ -820,13 +832,11 @@ async def test_build_runtime_includes_ask_question_for_builtin_star(
             tools=ExpToolsConfig(builtin=["*"]),
         )
     )
-    ctx = PlaygroundContext(
+    ctx = _make_ctx(
         workdir=tmp_path,
         execution_workdir=str(tmp_path / "exec"),
-        session_type="local",
-        cache_area=tmp_path / "cache",
+        with_llm=True,
         interaction_bridge=_Bridge(),
-        llm_provider=MockLLMProvider(),
     )
 
     with patch("matmaster.core.agent.AgentKernel"):
@@ -845,13 +855,11 @@ async def test_child_runtime_hides_ask_question_even_when_bridge_exists(
             tools=ExpToolsConfig(builtin=["AskQuestion"]),
         )
     )
-    ctx = PlaygroundContext(
+    ctx = _make_ctx(
         workdir=tmp_path,
         execution_workdir=str(tmp_path / "exec"),
-        session_type="local",
-        cache_area=tmp_path / "cache",
+        with_llm=True,
         interaction_bridge=_Bridge(),
-        llm_provider=MockLLMProvider(),
     )
 
     with patch("matmaster.core.agent.AgentKernel"):
@@ -873,13 +881,15 @@ async def test_bohrium_tool_receives_session(tmp_path: Path) -> None:
             tools=ExpToolsConfig(builtin=["Bohrium"]),
         )
     )
-    ctx = PlaygroundContext(
-        workdir=tmp_path,
-        execution_workdir=str(tmp_path / "exec"),
-        session_type="local",
-        cache_area=tmp_path / "cache",
-        session=mock_session,
-        llm_provider=MockLLMProvider(),
+    ctx = AgentRunContext(
+        environment=ExecutionEnvironment(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path / "exec"),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+            session=mock_session,
+        ),
+        request=AgentRunRequest(llm_provider=MockLLMProvider()),
     )
 
     with patch("matmaster.core.agent.AgentKernel"):
@@ -905,13 +915,11 @@ async def test_bohrium_tool_session_none_when_no_session(tmp_path: Path) -> None
             tools=ExpToolsConfig(builtin=["Bohrium"]),
         )
     )
-    ctx = PlaygroundContext(
+    ctx = _make_ctx(
         workdir=tmp_path,
         execution_workdir=str(tmp_path / "exec"),
-        session_type="local",
-        cache_area=tmp_path / "cache",
         session=None,
-        llm_provider=MockLLMProvider(),
+        with_llm=True,
     )
 
     with patch("matmaster.core.agent.AgentKernel"):
@@ -938,13 +946,11 @@ async def test_build_runtime_registers_agent_by_cc_name(tmp_path: Path) -> None:
             tools=ExpToolsConfig(builtin=["Agent"]),
         )
     )
-    ctx = PlaygroundContext(
+    ctx = _make_ctx(
         workdir=tmp_path,
         execution_workdir=str(tmp_path / "exec"),
-        session_type="local",
-        cache_area=tmp_path / "cache",
         session=MagicMock(spec=Session),
-        llm_provider=MockLLMProvider(),
+        with_llm=True,
     )
 
     with patch("matmaster.core.agent.AgentKernel"):
@@ -966,13 +972,11 @@ async def test_build_runtime_hides_agent_when_allow_spawn_false(tmp_path: Path) 
         ),
         allow_spawn=False,
     )
-    ctx = PlaygroundContext(
+    ctx = _make_ctx(
         workdir=tmp_path,
         execution_workdir=str(tmp_path / "exec"),
-        session_type="local",
-        cache_area=tmp_path / "cache",
         session=MagicMock(spec=Session),
-        llm_provider=MockLLMProvider(),
+        with_llm=True,
     )
 
     with patch("matmaster.core.agent.AgentKernel"):

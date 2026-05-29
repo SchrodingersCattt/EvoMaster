@@ -45,13 +45,13 @@ from .messages import (
     UserMessage,
 )
 from .runtime_ports import (
+    AgentRunPorts,
     BusEventSink,
     CheckpointSink,
     CheckpointSinkFactory,
     EmptySessionEventHistory,
     KernelRuntimePorts,
     PlaygroundCompactionPort,
-    PlaygroundRuntimePorts,
     PreCompactionBarrier,
     SessionEventHistoryPort,
 )
@@ -126,6 +126,7 @@ __all__ = [
     "ToolMessage",
     "UserMessage",
     # runtime
+    "AgentRunPorts",
     "AgentRuntimeSpec",
     "BusEventSink",
     "CheckpointSink",
@@ -134,7 +135,6 @@ __all__ = [
     "EmptySessionEventHistory",
     "KernelRuntimePorts",
     "PlaygroundCompactionPort",
-    "PlaygroundRuntimePorts",
     "PreCompactionBarrier",
     "SessionEventHistoryPort",
     # tool runtime v2

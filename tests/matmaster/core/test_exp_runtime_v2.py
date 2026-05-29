@@ -13,6 +13,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from matmaster.core.playground import ExecutionEnvironment
+from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.messages import (
     LLMResponse,
@@ -99,10 +101,9 @@ async def test_build_runtime_uses_runtime_ports_history(
 ) -> None:
     from matmaster.config.exp import ExpConfig
     from matmaster.core.exp import Exp
-    from matmaster.core.playground import PlaygroundContext
     from matmaster.types.runtime_ports import (
+        AgentRunPorts,
         PlaygroundCompactionPort,
-        PlaygroundRuntimePorts,
     )
 
     class RuntimeHistory:
@@ -122,14 +123,18 @@ async def test_build_runtime_uses_runtime_ports_history(
         def latest_scope_event_id(self):
             return 25
 
-    ctx = PlaygroundContext(
-        workdir=tmp_path,
-        execution_workdir=str(tmp_path),
-        session_type="local",
-        cache_area=tmp_path / "cache",
-        llm_provider=_MockProvider(),
-        runtime_ports=PlaygroundRuntimePorts(
-            compaction=PlaygroundCompactionPort(history=RuntimeHistory()),
+    ctx = AgentRunContext(
+        environment=ExecutionEnvironment(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+        ),
+        request=AgentRunRequest(
+            llm_provider=_MockProvider(),
+            ports=AgentRunPorts(
+                compaction=PlaygroundCompactionPort(history=RuntimeHistory()),
+            ),
         ),
     )
 
@@ -147,14 +152,15 @@ async def test_build_runtime_missing_runtime_history_has_no_scope_boundary(
 ) -> None:
     from matmaster.config.exp import ExpConfig
     from matmaster.core.exp import Exp
-    from matmaster.core.playground import PlaygroundContext
 
-    ctx = PlaygroundContext(
-        workdir=tmp_path,
-        execution_workdir=str(tmp_path),
-        session_type="local",
-        cache_area=tmp_path / "cache",
-        llm_provider=_MockProvider(),
+    ctx = AgentRunContext(
+        environment=ExecutionEnvironment(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+        ),
+        request=AgentRunRequest(llm_provider=_MockProvider()),
     )
 
     runtime = await Exp(ExpConfig(name="test")).build_runtime(ctx)
@@ -169,20 +175,23 @@ async def test_build_runtime_passes_turn_input_to_kernel_spec(
     from matmaster.config.exp import ExpConfig
     from matmaster.context.sources.turn_input import TurnInput
     from matmaster.core.exp import Exp
-    from matmaster.core.playground import PlaygroundContext
 
     turn_input = TurnInput.from_values(
         user_text="current task",
         files=["https://oss.example.com/chat/current.cif"],
         pre_turn_history_event_id=12,
     )
-    ctx = PlaygroundContext(
-        workdir=tmp_path,
-        execution_workdir=str(tmp_path),
-        session_type="local",
-        cache_area=tmp_path / "cache",
-        llm_provider=_MockProvider(),
-        metadata=RunMetadata(turn_input=turn_input),
+    ctx = AgentRunContext(
+        environment=ExecutionEnvironment(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+        ),
+        request=AgentRunRequest(
+            llm_provider=_MockProvider(),
+            turn_input=turn_input,
+        ),
     )
 
     runtime = await Exp(ExpConfig(name="test")).build_runtime(ctx)
@@ -196,18 +205,17 @@ def _make_playground_context(
     session: Any = None,
     llm_provider: Any = None,
 ) -> Any:
-    """Build a minimal PlaygroundContext-like object."""
-    from matmaster.core.playground import PlaygroundContext
-
-    ctx = PlaygroundContext(
-        workdir=Path(workdir),
-        session_type="local",
-        cache_area=Path("/tmp/test-cache"),
-        execution_workdir=execution_workdir,
-        session=session or _MockSession(),
-        llm_provider=llm_provider or _MockProvider(),
+    """Build a minimal AgentRunContext for build_runtime tests."""
+    return AgentRunContext(
+        environment=ExecutionEnvironment(
+            workdir=Path(workdir),
+            session_type="local",
+            cache_area=Path("/tmp/test-cache"),
+            execution_workdir=execution_workdir,
+            session=session or _MockSession(),
+        ),
+        request=AgentRunRequest(llm_provider=llm_provider or _MockProvider()),
     )
-    return ctx
 
 
 def _make_exp_config(**overrides: Any) -> Any:
@@ -266,10 +274,15 @@ class TestBuildRuntimeFullToolRunner:
 
         config = _make_exp_config()
         exp = Exp(config)
-        ctx = _make_playground_context().model_copy(
+        base = _make_playground_context()
+        ctx = base.model_copy(
             update={
-                "session_id": "sess-explicit",
-                "metadata": RunMetadata(task_id="task-1"),
+                "environment": base.environment.model_copy(
+                    update={
+                        "session_id": "sess-explicit",
+                        "metadata": RunMetadata(task_id="task-1"),
+                    }
+                ),
             }
         )
 
@@ -350,7 +363,7 @@ class TestBuildRuntimeFullToolRunner:
 
     @pytest.mark.asyncio
     async def test_topology_has_correct_paths(self) -> None:
-        """RuntimeTopology paths match PlaygroundContext."""
+        """RuntimeTopology paths match the ExecutionEnvironment."""
         from matmaster.core.exp import Exp
 
         config = _make_exp_config()
@@ -414,8 +427,13 @@ class TestBuildRuntimeFullToolRunner:
 
         config = _make_exp_config()
         exp = Exp(config)
-        ctx = _make_playground_context().with_bohrium(
-            BohriumRuntimeSnapshot(remote_workspace_root="/share")
+        base = _make_playground_context()
+        ctx = base.model_copy(
+            update={
+                "environment": base.environment.with_bohrium(
+                    BohriumRuntimeSnapshot(remote_workspace_root="/share")
+                ),
+            }
         )
 
         runtime = await exp.build_runtime(ctx)
@@ -454,31 +472,34 @@ class TestBuildRuntimeFullToolRunner:
 
         config = _make_exp_config()
         exp = Exp(config)
-        ctx = _make_playground_context().model_copy(
+        base = _make_playground_context()
+        ctx = base.model_copy(
             update={
-                "metadata": RunMetadata(
-                    bohrium_rebuild_events=(
-                        {
-                            "action": "submit",
-                            "job_id": "job-1",
-                            "job_name": "alpha",
-                            "status": "Submitted",
-                            "cached": False,
-                        },
-                        {
-                            "action": "poll",
-                            "job_id": "job-1",
-                            "status": "Running",
-                            "cached": False,
-                        },
-                        {
-                            "action": "poll",
-                            "job_id": "job-1",
-                            "status": "Running",
-                            "cached": True,
-                        },
-                    )
-                )
+                "request": base.request.model_copy(
+                    update={
+                        "bohrium_rebuild_events": (
+                            {
+                                "action": "submit",
+                                "job_id": "job-1",
+                                "job_name": "alpha",
+                                "status": "Submitted",
+                                "cached": False,
+                            },
+                            {
+                                "action": "poll",
+                                "job_id": "job-1",
+                                "status": "Running",
+                                "cached": False,
+                            },
+                            {
+                                "action": "poll",
+                                "job_id": "job-1",
+                                "status": "Running",
+                                "cached": True,
+                            },
+                        )
+                    }
+                ),
             }
         )
 
@@ -499,7 +520,7 @@ class TestBuildRuntimeFullToolRunner:
     ) -> None:
         from matmaster.core.exp import Exp
         from matmaster.types.figures import FigureUploadConfig
-        from matmaster.types.runtime_ports import FigureUploadPort
+        from matmaster.types.runtime_ports import AgentRunPorts, FigureUploadPort
 
         figure_upload_config = FigureUploadConfig(
             session_id="sess-1",
@@ -509,9 +530,16 @@ class TestBuildRuntimeFullToolRunner:
         )
         config = _make_exp_config()
         exp = Exp(config)
-        ctx = _make_playground_context().with_updates(
-            runtime_ports={
-                "figure_upload": FigureUploadPort(config=figure_upload_config)
+        base = _make_playground_context()
+        ctx = base.model_copy(
+            update={
+                "request": base.request.model_copy(
+                    update={
+                        "ports": AgentRunPorts(
+                            figure_upload=FigureUploadPort(config=figure_upload_config)
+                        )
+                    }
+                ),
             }
         )
 
@@ -646,7 +674,7 @@ class TestRunStream:
             events.append(event)
 
         assert len(events) == 1
-        assert ctx.session._cancel_token is controller.token
+        assert ctx.environment.session._cancel_token is controller.token
         catalog.inject_cancel_token.assert_called_once_with(controller.token)
         assert observed["task"] == "test task"
         assert observed["cancel_token"] is controller.token
@@ -778,18 +806,19 @@ class TestActivePlanesNewNames:
         """WebSearch in builtin_cfg activates EXTERNAL_SERVICE plane."""
         from matmaster.config.exp import ExpConfig
         from matmaster.core.exp import Exp
-        from matmaster.core.playground import PlaygroundContext
         from matmaster.types.topology import ToolPlane
 
         config = ExpConfig(name="test", tools={"builtin": ["WebSearch"]})
         exp = Exp(config)
-        ctx = PlaygroundContext(
-            workdir=tmp_path,
-            execution_workdir=str(tmp_path / "exec"),
-            session_type="local",
-            cache_area=tmp_path / "cache",
-            session=None,
-            llm_provider=_MockProvider(),
+        ctx = AgentRunContext(
+            environment=ExecutionEnvironment(
+                workdir=tmp_path,
+                execution_workdir=str(tmp_path / "exec"),
+                session_type="local",
+                cache_area=tmp_path / "cache",
+                session=None,
+            ),
+            request=AgentRunRequest(llm_provider=_MockProvider()),
         )
 
         runtime = await exp.build_runtime(ctx)

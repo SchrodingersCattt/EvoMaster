@@ -29,8 +29,9 @@ from matmaster.types.run_metadata import RunMetadata
 from tests.matmaster.services.agent_run_stream_fixtures import (
     _FakeExp,
     _make_cancel_token,
-    _make_mock_pg_ctx,
+    _make_mock_environment,
     _make_mock_playground,
+    _make_mock_session,
     _patched_service,
     _standard_patches,
 )
@@ -78,7 +79,7 @@ async def test_run_agent_injects_cancel_token_into_session_and_exp():
             invocation_id='inv-cancel-token',
         )
 
-    assert svc._test_pg_ctx.session._cancel_token is cancel_token
+    assert svc._test_session._cancel_token is cancel_token
     assert svc._test_fake_exp.last_run_kwargs is not None
     assert svc._test_fake_exp.last_run_kwargs['cancel_token'] is cancel_token
 
@@ -99,10 +100,10 @@ async def test_run_agent_injects_child_event_forward_sink_into_runtime_ports():
         )
 
     assert ok is True
-    ports = svc._test_fake_exp.last_ctx.runtime_ports
+    ports = svc._test_fake_exp.last_ctx.request.ports
     injected = ports.child_event_forward_sink
     assert callable(injected)
-    assert svc._test_fake_exp.last_ctx.metadata.task_id == 'task-1'
+    assert svc._test_fake_exp.last_ctx.environment.metadata.task_id == 'task-1'
 
 
 @pytest.mark.asyncio
@@ -126,7 +127,7 @@ async def test_run_agent_passes_session_id_to_playground_prepare():
     assert prepare_call.kwargs["session_id"] == "sess-explicit"
     assert "task_id" not in prepare_call.kwargs
     assert "session_id" not in RunMetadata.model_fields
-    assert svc._test_fake_exp.last_ctx.session_id == "sess-explicit"
+    assert svc._test_fake_exp.last_ctx.environment.session_id == "sess-explicit"
 
 
 @pytest.mark.asyncio
@@ -151,15 +152,15 @@ async def test_run_agent_injects_figure_upload_via_runtime_ports():
         )
 
     ctx = svc._test_fake_exp.last_ctx
-    figure_cfg = ctx.runtime_ports.figure_upload.config
+    figure_cfg = ctx.request.ports.figure_upload.config
     assert figure_cfg is not None
     assert isinstance(figure_cfg, FigureUploadConfig)
     assert figure_cfg.session_id == 'sess-1'
     assert figure_cfg.task_id == 'task-1'
     assert callable(figure_cfg.upload_bytes)
     assert "figure_upload_config" not in RunMetadata.model_fields
-    assert ctx.runtime_ports.child_event_forward_sink is not None
-    assert ctx.runtime_ports.compaction.history is not None
+    assert ctx.request.ports.child_event_forward_sink is not None
+    assert ctx.request.ports.compaction.history is not None
 
 
 @pytest.mark.asyncio
@@ -186,7 +187,7 @@ async def test_run_agent_injects_turn_input_into_pg_ctx_metadata():
         )
 
     assert ok is True
-    assert svc._test_fake_exp.last_ctx.metadata.turn_input == turn_input
+    assert svc._test_fake_exp.last_ctx.request.turn_input == turn_input
 
 
 @pytest.mark.asyncio
@@ -215,9 +216,9 @@ async def test_agent_run_service_keeps_compaction_history_without_attachment_run
             invocation_id='inv-attachments',
         )
 
-    svc._test_fake_exp.last_ctx.metadata
+    svc._test_fake_exp.last_ctx.environment.metadata
     assert "attachment_manifest" not in RunMetadata.model_fields
-    history = svc._test_fake_exp.last_ctx.runtime_ports.compaction.history
+    history = svc._test_fake_exp.last_ctx.request.ports.compaction.history
     assert history is not None
     assert callable(history.query_events)
     assert history.query_events()[0]["files"] == [
@@ -247,7 +248,7 @@ async def test_agent_run_service_keeps_compaction_history_without_attachment_run
         order="asc",
     )
     assert callable(
-        svc._test_fake_exp.last_ctx.runtime_ports.compaction.pre_compaction_barrier
+        svc._test_fake_exp.last_ctx.request.ports.compaction.pre_compaction_barrier
     )
 
 
@@ -299,7 +300,7 @@ async def test_run_agent_uses_model_history_restore_service_and_injects_spawn_aw
 
         checkpoint_cls.assert_called_once_with(svc._test_events_table)
         checkpoint_sink_factory = (
-            svc._test_fake_exp.last_ctx.runtime_ports.compaction.checkpoint_sink_factory
+            svc._test_fake_exp.last_ctx.request.ports.compaction.checkpoint_sink_factory
         )
         assert callable(checkpoint_sink_factory)
 
@@ -346,7 +347,7 @@ def test_run_agent_injects_bohrium_rebuild_events_into_pg_ctx_metadata():
 
     assert ok is True
     svc._test_events_table.get_bohrium_events.assert_called_once_with('sess-1')
-    assert svc._test_fake_exp.last_ctx.metadata.bohrium_rebuild_events == tuple(
+    assert svc._test_fake_exp.last_ctx.request.bohrium_rebuild_events == tuple(
         rebuild_events
     )
 
@@ -384,7 +385,7 @@ async def test_stream_events_reach_handlers_via_fanout():
 @pytest.mark.asyncio
 async def test_child_event_sink_reaches_sse_and_persistence():
     async def child_then_parent(ctx):
-        await ctx.runtime_ports.child_event_forward_sink(
+        await ctx.request.ports.child_event_forward_sink(
             ResponseEvent(
                 source='MatMaster:direct',
                 spawn_id='childdeadbeef123',
@@ -450,7 +451,7 @@ async def test_run_agent_writes_user_turn_context_and_passes_same_runtime_task()
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
 
     async with _patched_service([run_result]) as (svc, _sse, _persist):
-        svc._test_pg_ctx.session.read_file.return_value = "Prefer concise answers."
+        svc._test_session.read_file.return_value = "Prefer concise answers."
         svc._test_events_table.get_recent_context_anchor_events.return_value = []
         svc._test_events_table.query_user_turn_context_by_invocation.return_value = None
 
@@ -493,7 +494,7 @@ async def test_run_agent_user_turn_context_records_full_provider_facing_with_att
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
 
     async with _patched_service([run_result]) as (svc, _sse, _persist):
-        svc._test_pg_ctx.session.read_file.return_value = "Use SI units."
+        svc._test_session.read_file.return_value = "Use SI units."
         svc._test_events_table.get_recent_context_anchor_events.return_value = []
         svc._test_events_table.query_user_turn_context_by_invocation.return_value = None
         svc._test_events_table.get_session_user_query_events.return_value = [
@@ -565,7 +566,7 @@ async def test_run_agent_writes_continuation_when_instruction_hash_matches():
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
 
     async with _patched_service([run_result]) as (svc, _sse, _persist):
-        svc._test_pg_ctx.session.read_file.return_value = "Stable preference."
+        svc._test_session.read_file.return_value = "Stable preference."
         svc._test_events_table.query_context_events.return_value = [
             {
                 "id": 1,
@@ -609,7 +610,7 @@ async def test_run_agent_aborts_when_user_turn_context_write_fails():
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
 
     async with _patched_service([run_result]) as (svc, _sse, _persist):
-        svc._test_pg_ctx.session.read_file.return_value = "Use SI units."
+        svc._test_session.read_file.return_value = "Use SI units."
         svc._test_events_table.get_recent_context_anchor_events.return_value = []
         svc._test_events_table.query_user_turn_context_by_invocation.return_value = None
         svc._test_events_table.add_event.return_value = False
@@ -634,7 +635,7 @@ async def test_run_agent_aborts_when_invocation_id_missing():
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
 
     async with _patched_service([run_result]) as (svc, _sse, _persist):
-        svc._test_pg_ctx.session.read_file.return_value = "Use SI units."
+        svc._test_session.read_file.return_value = "Use SI units."
         svc._test_events_table.get_recent_context_anchor_events.return_value = []
         svc._test_events_table.query_user_turn_context_by_invocation.return_value = None
 
@@ -666,7 +667,7 @@ async def test_run_agent_idempotent_skip_when_user_turn_context_already_exists()
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
 
     async with _patched_service([run_result]) as (svc, _sse, _persist):
-        svc._test_pg_ctx.session.read_file.return_value = "Use SI units."
+        svc._test_session.read_file.return_value = "Use SI units."
         svc._test_events_table.get_recent_context_anchor_events.return_value = []
 
         instructions_hash = hash_user_instructions("Use SI units.")
@@ -811,8 +812,8 @@ async def test_exception_emits_error_and_closed():
         history_restore_cls = mocks[6]
         redis_fn = mocks[7]
 
-        pg_ctx = _make_mock_pg_ctx()
-        pg = _make_mock_playground(pg_ctx)
+        environment = _make_mock_environment(_make_mock_session())
+        pg = _make_mock_playground(environment)
         pg_mgr = MagicMock()
         pg_mgr.get_or_create.return_value = pg
         pg_mgr_cls.return_value = pg_mgr
@@ -840,7 +841,9 @@ async def test_exception_emits_error_and_closed():
         bohrium_result = MagicMock()
         bohrium_result.ssh_attached = False
         bohrium_result.abort_result = None
+        bohrium_result.runtime_snapshot = None
         bohrium_result.execution_session = None
+        bohrium_result.session_type = None
         bohrium_result._asdict.return_value = {
             'ssh_attached': False,
             'abort_result': None,

@@ -152,7 +152,7 @@ class TestDevRunner:
             result = runner.run("test", cancel_token=controller.token)
 
         assert result.reason == "cancelled"
-        assert runner._pg_ctx.session._cancel_token is controller.token
+        assert runner._environment.session._cancel_token is controller.token
         catalog.inject_cancel_token.assert_called_once_with(controller.token)
         assert observed["task"] == "test"
         assert observed["cancel_token"] is controller.token

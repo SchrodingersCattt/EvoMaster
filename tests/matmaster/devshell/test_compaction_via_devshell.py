@@ -189,26 +189,27 @@ class TestDefaultDevshellPath:
         """Exp.assemble() 产出的 CompactionConfig 默认存在且不再暴露 enabled。"""
         from matmaster.config.exp import ExpConfig
         from matmaster.core.exp import Exp
-        from matmaster.core.playground import PlaygroundContext
+        from matmaster.core.playground import ExecutionEnvironment
+        from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 
         config = ExpConfig(name="test", max_turns=5)
         exp = Exp(config)
 
-        # 构造最小 PlaygroundContext
+        # 构造最小 AgentRunContext
         import tempfile
         from pathlib import Path
 
         with tempfile.TemporaryDirectory() as tmpdir:
             workdir = Path(tmpdir)
-            ctx = PlaygroundContext(
-                workdir=workdir,
-                session_type="local",
-                cache_area=workdir / ".cache",
-                session=None,
-                llm_provider=None,
-                config_dir=None,
-                llm_config=None,
-                metadata=RunMetadata(),
+            ctx = AgentRunContext(
+                environment=ExecutionEnvironment(
+                    workdir=workdir,
+                    session_type="local",
+                    cache_area=workdir / ".cache",
+                    session=None,
+                    metadata=RunMetadata(),
+                ),
+                request=AgentRunRequest(llm_provider=None, llm_config=None),
             )
             spec = await exp.assemble(ctx)
 

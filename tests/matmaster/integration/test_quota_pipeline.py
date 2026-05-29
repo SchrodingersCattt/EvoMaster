@@ -16,7 +16,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from matmaster.core.playground import PlaygroundContext
+from matmaster.core.playground import ExecutionEnvironment
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.messages import LLMResponse, StreamChunk
 from matmaster.types.run_metadata import RunMetadata
@@ -134,8 +134,8 @@ def _async_collect(payloads: list) -> Callable:
     return _cb
 
 
-def _make_ctx(tmp_path: Path) -> PlaygroundContext:
-    return PlaygroundContext(
+def _make_ctx(tmp_path: Path) -> ExecutionEnvironment:
+    return ExecutionEnvironment(
         workdir=tmp_path / 'workspace',
         session_type='local',
         cache_area=tmp_path / 'cache',

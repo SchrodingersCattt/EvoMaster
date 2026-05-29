@@ -15,7 +15,8 @@ from typing import Any
 from matmaster.bohrium.runtime import try_attach_local_bohrium_runtime_from_env
 from matmaster.config.loader import load_exp_config, load_llm_config
 from matmaster.core.exp import Exp
-from matmaster.core.playground import PlaygroundContext
+from matmaster.core.playground import ExecutionEnvironment
+from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.providers.llm_factory import build_provider
 from matmaster.sessions.local import LocalSession
 from matmaster.types.messages import AssistantMessage
@@ -162,15 +163,19 @@ def _run_mat_task_once(
     session = LocalSession(workspace_path=workspace)
     session.open()
 
-    # 4. Build PlaygroundContext
-    pg_ctx = PlaygroundContext(
-        workdir=workspace,
-        session_type="local",
-        cache_area=cache_area,
-        session=session,
-        llm_provider=llm_provider,
-        llm_config=llm_config,
-        metadata=RunMetadata(source="evaluation", task_id=task_id),
+    # 4. Build the run context (Phase 3 split: environment + request)
+    pg_ctx = AgentRunContext(
+        environment=ExecutionEnvironment(
+            workdir=workspace,
+            session_type="local",
+            cache_area=cache_area,
+            session=session,
+            metadata=RunMetadata(source="evaluation", task_id=task_id),
+        ),
+        request=AgentRunRequest(
+            llm_provider=llm_provider,
+            llm_config=llm_config,
+        ),
     )
     try_attach_local_bohrium_runtime_from_env(session)
 

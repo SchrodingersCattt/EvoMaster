@@ -10,7 +10,7 @@ from pydantic import TypeAdapter, ValidationError
 from matmaster.types.events import ResponseEvent
 from matmaster.types.figures import FigureUploadConfig
 from matmaster.types.runtime_ports import (
-    BohriumRuntimePort,
+    AgentRunPorts,
     BohriumRuntimeSnapshot,
     BusEventSink,
     CheckpointSink,
@@ -19,7 +19,6 @@ from matmaster.types.runtime_ports import (
     FigureUploadPort,
     KernelRuntimePorts,
     PlaygroundCompactionPort,
-    PlaygroundRuntimePorts,
 )
 
 
@@ -48,18 +47,17 @@ async def test_empty_session_event_history_load_events_returns_empty() -> None:
     ) == ()
 
 
-def test_playground_runtime_ports_defaults_are_narrow() -> None:
-    ports = PlaygroundRuntimePorts()
+def test_agent_run_ports_defaults_are_narrow() -> None:
+    ports = AgentRunPorts()
 
     assert ports.child_event_forward_sink is None
     assert isinstance(ports.compaction, PlaygroundCompactionPort)
     assert isinstance(ports.figure_upload, FigureUploadPort)
-    assert isinstance(ports.bohrium, BohriumRuntimePort)
     assert ports.figure_upload.config is None
-    assert ports.bohrium.snapshot is None
     assert ports.compaction.history is None
     assert ports.compaction.checkpoint_sink_factory is None
     assert ports.compaction.pre_compaction_barrier is None
+    assert not hasattr(ports, "bohrium")
     assert not hasattr(ports, "extra")
     assert not hasattr(ports, "metadata")
     assert not hasattr(ports, "state")

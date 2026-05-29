@@ -39,9 +39,8 @@ async def test_run_agent_builds_turn_input_from_images_without_image_metadata_ke
             )
 
     assert ok is True
-    metadata = svc._test_fake_exp.last_ctx.metadata
     assert "current_user_images" not in RunMetadata.model_fields
-    turn_input = metadata.turn_input
+    turn_input = svc._test_fake_exp.last_ctx.request.turn_input
     assert isinstance(turn_input, TurnInput)
     assert turn_input.images == ("https://oss.example.com/chat/a.png",)
     assert turn_input.attachments.image_detail == "high"
@@ -81,7 +80,7 @@ async def test_run_agent_enriches_existing_turn_input_images_with_detail():
             )
 
     assert ok is True
-    enriched = svc._test_fake_exp.last_ctx.metadata.turn_input
+    enriched = svc._test_fake_exp.last_ctx.request.turn_input
     assert isinstance(enriched, TurnInput)
     assert enriched.images == ("https://oss.example.com/chat/a.png",)
     assert enriched.pre_turn_history_event_id == 12
@@ -121,6 +120,6 @@ async def test_run_agent_validates_images_from_turn_input_without_top_level_imag
 
     assert ok is True
     image_service.ensure_vision_supported.assert_called_once()
-    enriched = svc._test_fake_exp.last_ctx.metadata.turn_input
+    enriched = svc._test_fake_exp.last_ctx.request.turn_input
     assert enriched.images == ("https://oss.example.com/chat/a.png",)
     assert enriched.attachments.image_detail == "high"

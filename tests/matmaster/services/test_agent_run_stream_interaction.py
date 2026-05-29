@@ -17,7 +17,7 @@ from .agent_run_stream_fixtures import (
 @pytest.mark.asyncio
 async def test_ask_question_bridge_events_go_through_fanout_and_persistence():
     async def ask_then_finish(ctx):
-        await ctx.interaction_bridge.ask(
+        await ctx.request.interaction_bridge.ask(
             request_id="aq_1",
             questions=[
                 {
@@ -83,7 +83,7 @@ async def test_ask_question_bridge_events_go_through_fanout_and_persistence():
 @pytest.mark.asyncio
 async def test_ask_question_tool_result_reaches_sse_before_run_result():
     async def ask_then_emit_tool_result(ctx):
-        await ctx.interaction_bridge.ask(
+        await ctx.request.interaction_bridge.ask(
             request_id="aq_1",
             questions=[
                 {

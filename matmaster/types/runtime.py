@@ -48,7 +48,7 @@ class CompactionConfig(BaseModel):
 class AgentRuntimeSpec(BaseModel):
     """Agent runtime spec contract emitted by the Exp layer.
 
-    Built by Exp.assemble(ctx: PlaygroundContext) and passed to
+    Built by Exp.assemble(ctx: AgentRunContext) and passed to
     AgentKernel.run_stream(spec, task). frozen=True ensures the spec
     is immutable during kernel execution.
     """

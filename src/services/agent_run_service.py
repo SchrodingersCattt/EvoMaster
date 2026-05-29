@@ -26,6 +26,7 @@ from matmaster.context.scanner import scan_skill_hits
 from matmaster.context.sections import ContextView
 from matmaster.context.sources.turn_input import TurnInput
 from matmaster.core.playground import PlaygroundManager
+from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.core.runtime_context_assembly import empty_skill_resolver
 from matmaster.integration.event_payloads import _normalize_public_source
 from matmaster.integration.fanout import RunEventFanout
@@ -42,7 +43,7 @@ from matmaster.types.events import (
     ToolResultEvent,
 )
 from matmaster.types.run_metadata import RunMetadata
-from matmaster.types.runtime_ports import FigureUploadPort
+from matmaster.types.runtime_ports import AgentRunPorts, FigureUploadPort
 from src.dao.chat_events_table import get_chat_events_table
 from src.dao.redis_dao import get_redis_dao
 from src.services.agent_run_bohrium_stage import (
@@ -270,14 +271,12 @@ class AgentRunService:
             task_id = task_id or ('ws_' + uuid.uuid4().hex[:16])
             playground = self._pg_manager.get_or_create(session_id)
             run_dir = str(_project_root / 'runs' / RUN_ID_WEB)
-            pg_ctx = playground.prepare(
+            # Physical substrate from Playground; the per-run AgentRunRequest
+            # (turn input, llm, ports, ...) is assembled once near Stage 6.
+            environment = playground.prepare(
                 RunMetadata(run_dir=run_dir, task_id=task_id),
                 session_id=session_id,
             )
-            if turn_input is not None:
-                pg_ctx = pg_ctx.with_updates(
-                    metadata={"turn_input": turn_input},
-                )
             try:
                 events_table = get_chat_events_table()
             except Exception:
@@ -326,7 +325,7 @@ class AgentRunService:
                 session_id=session_id,
                 task_id=task_id,
                 playground=playground,
-                pg_ctx=pg_ctx,
+                environment=environment,
                 run_started_at=run_started_at,
                 bohrium_required=bohrium_required,
                 remote_workdir=remote_workdir,
@@ -334,7 +333,7 @@ class AgentRunService:
             bohrium_svc = stage_result.bohrium_svc
             if stage_result.abort_result is not None:
                 return stage_result.abort_result
-            pg_ctx = stage_result.pg_ctx
+            environment = stage_result.environment
             ssh_attached = stage_result.ssh_attached
             user_instructions = stage_result.user_instructions
 
@@ -370,22 +369,17 @@ class AgentRunService:
                 )
                 image_detail = selected_profile.vision_detail
 
-            pg_ctx = pg_ctx.model_copy(
-                update={
-                    'llm_provider': build_provider(
-                        llm_config,
-                        model_override=model_override,
-                        llm_override=llm_override,
-                        default_profile_key=agent_default_llm,
-                    ),
-                    'llm_config': llm_config,
-                }
+            llm_provider = build_provider(
+                llm_config,
+                model_override=model_override,
+                llm_override=llm_override,
+                default_profile_key=agent_default_llm,
             )
 
             exp = Exp(exp_config)
 
-            if pg_ctx.session is not None:
-                pg_ctx.session._cancel_token = cancel_token
+            if environment.session is not None:
+                environment.session._cancel_token = cancel_token
 
             checkpoint_service = (
                 HistoryCheckpointService(events_table)
@@ -481,12 +475,6 @@ class AgentRunService:
                     spawn_id=spawn_id,
                 )
 
-            pg_ctx = pg_ctx.with_updates(
-                runtime_ports={
-                    "figure_upload": FigureUploadPort(config=figure_upload_config),
-                },
-            )
-
             # -- Stage 4b: AskQuestion bridge --
             from matmaster.integration.interaction_bridge import AskQuestionBridge
 
@@ -499,7 +487,6 @@ class AgentRunService:
                 reply_queue=RedisReplyQueue(session_id),
                 timeout_seconds=1800,
             )
-            pg_ctx = pg_ctx.model_copy(update={'interaction_bridge': bridge})
             # -- Stage 5: History --
             wiring = build_history_wiring(
                 events_table=events_table,
@@ -510,29 +497,15 @@ class AgentRunService:
                 pre_compaction_barrier=fanout.flush_persistence_barrier,
             )
             history = wiring.history
-            pg_ctx = pg_ctx.with_updates(
-                runtime_ports={
-                    "child_event_forward_sink": _child_event_sink,
-                    "compaction": wiring.compaction,
-                },
-            )
-            if wiring.bohrium_rebuild_events:
-                pg_ctx = pg_ctx.with_updates(
-                    metadata={
-                        "bohrium_rebuild_events": tuple(
-                            wiring.bohrium_rebuild_events
-                        ),
-                    },
-                )
-
-            # -- Stage 5b: Phase 2C user_turn_context cutover via ContextAssembler --
-            pg_ctx = pg_ctx.with_updates(
-                metadata={"user_instructions": user_instructions}
+            bohrium_rebuild_events = (
+                tuple(wiring.bohrium_rebuild_events)
+                if wiring.bohrium_rebuild_events
+                else ()
             )
 
             skill_resolver = self._build_skill_resolver(
                 exp_config,
-                session=pg_ctx.session,
+                session=environment.session,
             )
             context_assembler, assembly_ports = build_context_assembler(
                 events_table=events_table,
@@ -579,7 +552,6 @@ class AgentRunService:
                     workspace_paths=turn_input.workspace_paths,
                     pre_turn_history_event_id=turn_input.pre_turn_history_event_id,
                 )
-            pg_ctx = pg_ctx.with_updates(metadata={"turn_input": turn_input})
 
             assembly = await context_assembler.assemble_turn(
                 intent=intent,
@@ -637,8 +609,27 @@ class AgentRunService:
                     current = self._active_skills.get(session_id, frozenset())
                     self._active_skills[session_id] = frozenset((*current, skill_name))
 
-            pg_ctx = pg_ctx.with_updates(
-                metadata={"active_skills": frozenset(active_skills)}
+            # -- Assemble the per-run request once, then compose the context.
+            # This replaces the former ~9 with_updates / model_copy injections
+            # the service did on a "frozen" PlaygroundContext: the physical
+            # environment and the runtime request are now separate, honestly
+            # owned objects.
+            pg_ctx = AgentRunContext(
+                environment=environment,
+                request=AgentRunRequest(
+                    llm_provider=llm_provider,
+                    llm_config=llm_config,
+                    interaction_bridge=bridge,
+                    turn_input=turn_input,
+                    user_instructions=user_instructions,
+                    active_skills=frozenset(active_skills),
+                    bohrium_rebuild_events=bohrium_rebuild_events,
+                    ports=AgentRunPorts(
+                        child_event_forward_sink=_child_event_sink,
+                        compaction=wiring.compaction,
+                        figure_upload=FigureUploadPort(config=figure_upload_config),
+                    ),
+                ),
             )
 
             # -- Stage 6: Generator event stream --

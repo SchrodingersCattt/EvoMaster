@@ -11,8 +11,9 @@ from matmaster.types.events import RunResultEvent, ThoughtEvent
 from tests.matmaster.services.test_agent_run_stream import (
     _FakeExp,
     _make_cancel_token,
-    _make_mock_pg_ctx,
+    _make_mock_environment,
     _make_mock_playground,
+    _make_mock_session,
     _patched_service,
     _standard_patches,
 )
@@ -31,7 +32,7 @@ async def test_run_agent_idempotent_skip_when_user_turn_context_already_exists()
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
 
     async with _patched_service([run_result]) as (svc, _sse, _persist):
-        svc._test_pg_ctx.session.read_file.return_value = "Use SI units."
+        svc._test_session.read_file.return_value = "Use SI units."
         svc._test_events_table.get_recent_context_anchor_events.return_value = []
 
         instructions_hash = hash_user_instructions("Use SI units.")
@@ -176,8 +177,8 @@ async def test_exception_emits_error_and_closed():
         history_restore_cls = mocks[6]
         redis_fn = mocks[7]
 
-        pg_ctx = _make_mock_pg_ctx()
-        pg = _make_mock_playground(pg_ctx)
+        environment = _make_mock_environment(_make_mock_session())
+        pg = _make_mock_playground(environment)
         pg_mgr = MagicMock()
         pg_mgr.get_or_create.return_value = pg
         pg_mgr_cls.return_value = pg_mgr
@@ -205,7 +206,9 @@ async def test_exception_emits_error_and_closed():
         bohrium_result = MagicMock()
         bohrium_result.ssh_attached = False
         bohrium_result.abort_result = None
+        bohrium_result.runtime_snapshot = None
         bohrium_result.execution_session = None
+        bohrium_result.session_type = None
         bohrium_result._asdict.return_value = {
             'ssh_attached': False,
             'abort_result': None,
