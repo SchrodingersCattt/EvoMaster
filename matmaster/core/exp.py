@@ -454,7 +454,6 @@ class Exp:
 
         system_prompt_builder = SystemPromptBuilder()
         system_prompt = system_prompt_builder.build_system_prompt(
-            ctx,
             registry,
             system_prompt=self._config.system_prompt,
             identity=self._config.developer_instructions,
