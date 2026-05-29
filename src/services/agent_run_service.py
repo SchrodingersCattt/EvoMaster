@@ -21,7 +21,7 @@ from matmaster.context.assembly import (
     ContextAssemblyIntent,
     TurnAssemblyRequest,
 )
-from matmaster.context.ports import SkillResolver, UserInstructions
+from matmaster.context.ports import SkillResolver
 from matmaster.context.scanner import scan_skill_hits
 from matmaster.context.sections import ContextView
 from matmaster.context.sources.turn_input import TurnInput
@@ -526,13 +526,8 @@ class AgentRunService:
                 )
 
             # -- Stage 5b: Phase 2C user_turn_context cutover via ContextAssembler --
-            instructions_bundle = UserInstructions(
-                text=user_instructions.text,
-                hash=user_instructions.hash,
-                truncated=user_instructions.truncated,
-            )
             pg_ctx = pg_ctx.with_updates(
-                metadata={"user_instructions": instructions_bundle}
+                metadata={"user_instructions": user_instructions}
             )
 
             skill_resolver = self._build_skill_resolver(
@@ -547,7 +542,7 @@ class AgentRunService:
 
             try:
                 intent = await resolve_turn_context_intent(
-                    instructions_hash=instructions_bundle.hash,
+                    instructions_hash=user_instructions.hash,
                     session_id=session_id,
                     spawn_id=None,
                     events_port=session_events_port,
@@ -592,7 +587,7 @@ class AgentRunService:
                     session_id=session_id,
                     spawn_id=None,
                     turn_input=turn_input,
-                    user_instructions=instructions_bundle,
+                    user_instructions=user_instructions,
                 ),
             )
             rendered_message = assembly.user_turn_context.to_message(
@@ -604,7 +599,7 @@ class AgentRunService:
                 "kind": "anchor" if intent.is_anchor_turn else "continuation",
                 "message": rendered_message.model_dump(mode="json"),
                 "user_instructions_hash": (
-                    instructions_bundle.hash if intent.is_anchor_turn else None
+                    user_instructions.hash if intent.is_anchor_turn else None
                 ),
                 "transform": DEFAULT_TURN_TRANSFORM,
                 "render_version": USER_CONTEXT_RENDER_VERSION,

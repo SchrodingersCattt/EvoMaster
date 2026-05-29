@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from matmaster.context.ports import UserInstructions
 from matmaster.core.playground import WorkspaceArchivalConfig
 from matmaster.integration.fanout import RunEventFanout
 from matmaster.integration.workspace_handler import WorkspaceHandler
@@ -24,7 +25,6 @@ from matmaster.types.figures import FigureUploadConfig
 from src.dao.oss_io import upload_bytes_to_oss
 from src.services.agent_run_bohrium import BohriumSetupService
 from src.services.user_turn_context_service import (
-    UserInstructionsInfo,
     load_user_instructions_from_session,
 )
 
@@ -37,7 +37,7 @@ class BohriumStageResult:
     bohrium_svc: BohriumSetupService
     pg_ctx: Any
     ssh_attached: bool
-    user_instructions: UserInstructionsInfo
+    user_instructions: UserInstructions
 
 
 def _build_workspace_upload_fn(
