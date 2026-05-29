@@ -57,7 +57,7 @@ class Compactor:
             trigger_tokens=plan.trigger_tokens,
             retained_turns=0,
             failure_reason=None,
-            base_snapshot=[messages[1].model_dump(mode="json")],
+            base_messages=[messages[1].model_dump(mode="json")],
         )
 
     async def apply_fallback(self, plan, messages, *, failure_reason):
@@ -73,7 +73,7 @@ class Compactor:
             trigger_tokens=plan.trigger_tokens,
             retained_turns=len(messages) - 1,
             failure_reason=failure_reason,
-            base_snapshot=None,
+            base_messages=None,
         )
 
 

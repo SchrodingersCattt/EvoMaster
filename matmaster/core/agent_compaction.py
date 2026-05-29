@@ -110,7 +110,7 @@ async def run_compaction_plan(
     should_checkpoint = (
         checkpoint_sink is not None
         and result.durability == "durable"
-        and result.base_snapshot is not None
+        and result.base_messages is not None
     )
     if should_checkpoint:
         try:
@@ -128,7 +128,7 @@ async def run_compaction_plan(
                 )
             covered_until_event_id = await checkpoint_sink(
                 payload=payload,
-                base_messages=result.base_snapshot,
+                base_messages=result.base_messages,
             )
         except Exception as exc:
             failure_reason = str(exc)

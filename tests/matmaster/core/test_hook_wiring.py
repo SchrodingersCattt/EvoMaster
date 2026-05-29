@@ -107,7 +107,7 @@ class FakeCompactor:
             trigger_tokens=plan.trigger_tokens,
             retained_turns=1,
             failure_reason=None,
-            base_snapshot=None,
+            base_messages=None,
         )
 
 
@@ -171,7 +171,7 @@ class DoubleEventCompactor:
             trigger_tokens=plan.trigger_tokens,
             retained_turns=1,
             failure_reason=None,
-            base_snapshot=None,
+            base_messages=None,
         )
 
 

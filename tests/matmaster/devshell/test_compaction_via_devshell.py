@@ -445,8 +445,8 @@ class TestCompactionResults:
         assert result.strategy == "summary"
         assert result.trigger_tokens > 0
         assert result.retained_turns == 0
-        assert result.base_snapshot is not None
-        assert [item["role"] for item in result.base_snapshot] == ["user"]
+        assert result.base_messages is not None
+        assert [item["role"] for item in result.base_messages] == ["user"]
 
     async def test_fallback_result_strategy(self) -> None:
         """回退策略的 result.strategy 字段为 sliding_window。"""
@@ -468,7 +468,7 @@ class TestCompactionResults:
         assert result.strategy == "sliding_window"
         assert result.durability == "ephemeral"
         assert result.failure_reason
-        assert result.base_snapshot is None
+        assert result.base_messages is None
 
     async def test_no_event_without_bus(self) -> None:
         """无 event_sink 时仍能完成压缩。"""
@@ -599,7 +599,7 @@ class TestToolTruncationFallback:
         assert result.strategy == "sliding_window"
         assert result.durability == "ephemeral"
         assert result.failure_reason
-        assert result.base_snapshot is None
+        assert result.base_messages is None
 
     async def test_no_truncation_below_threshold(self) -> None:
         """即使只有 1 turn，未超阈值不截断。"""

@@ -666,7 +666,7 @@ async def test_compaction_checkpoint_assembles_v1_session_attachments(
         "Recovered summary with fresh attachment",
     )
 
-    assert result.base_snapshot is not None
+    assert result.base_messages is not None
     assert result.checkpoint_covered_until_event_id is not None
     checkpoint_sink = HistoryCheckpointService(events_table).build_checkpoint_sink(
         fanout=fanout,
@@ -685,7 +685,7 @@ async def test_compaction_checkpoint_assembles_v1_session_attachments(
             "user_instructions_text": result.user_instructions_text,
             "user_instructions_hash": result.user_instructions_hash,
         },
-        base_messages=result.base_snapshot,
+        base_messages=result.base_messages,
     )
 
     checkpoint = events_table.history_checkpoints(spawn_id=None)[0]
@@ -765,7 +765,7 @@ async def test_two_v1_compactions_chain_and_restore_from_latest(
             "user_instructions_text": first_result.user_instructions_text,
             "user_instructions_hash": first_result.user_instructions_hash,
         },
-        base_messages=first_result.base_snapshot,
+        base_messages=first_result.base_messages,
     )
 
     _seed_scope_events(
@@ -785,7 +785,7 @@ async def test_two_v1_compactions_chain_and_restore_from_latest(
     )
     second_messages = [
         SystemMessage(content="system prompt"),
-        UserMessage(content=first_result.base_snapshot[0]["content"]),
+        UserMessage(content=first_result.base_messages[0]["content"]),
         AssistantMessage(content="answer between compactions"),
         UserMessage(content="question between compactions"),
     ]
@@ -818,7 +818,7 @@ async def test_two_v1_compactions_chain_and_restore_from_latest(
             "user_instructions_text": second_result.user_instructions_text,
             "user_instructions_hash": second_result.user_instructions_hash,
         },
-        base_messages=second_result.base_snapshot,
+        base_messages=second_result.base_messages,
     )
 
     _seed_scope_events(

@@ -191,7 +191,7 @@ class CompactionResult:
     trigger_tokens: int
     retained_turns: int
     failure_reason: str | None
-    base_snapshot: list[dict[str, Any]] | None
+    base_messages: list[dict[str, Any]] | None
     checkpoint_covered_until_event_id: int | None = None
     user_instructions_text: str = ""
     user_instructions_hash: str = _EMPTY_USER_INSTRUCTIONS_HASH
@@ -509,7 +509,7 @@ class ContextCompactor:
             trigger_tokens=plan.trigger_tokens,
             retained_turns=0,
             failure_reason=None,
-            base_snapshot=[checkpoint_user_msg.model_dump(mode="json")],
+            base_messages=[checkpoint_user_msg.model_dump(mode="json")],
             checkpoint_covered_until_event_id=assembly.covered_until_event_id,
             user_instructions_text=assembly.user_instructions_text,
             user_instructions_hash=assembly.user_instructions_hash,
@@ -544,7 +544,7 @@ class ContextCompactor:
             trigger_tokens=plan.trigger_tokens,
             retained_turns=len(tail),
             failure_reason=failure_reason,
-            base_snapshot=None,
+            base_messages=None,
         )
 
 

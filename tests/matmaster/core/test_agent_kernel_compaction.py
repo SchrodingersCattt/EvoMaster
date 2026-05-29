@@ -87,7 +87,7 @@ class _DurablePreflightCompactor:
         from matmaster.context.compaction import CompactionResult
 
         compact_message = _v1_compacted_user_message()
-        base_snapshot = [
+        base_messages = [
             compact_message.model_dump(mode="json"),
         ]
         messages[:] = [
@@ -103,7 +103,7 @@ class _DurablePreflightCompactor:
             trigger_tokens=plan.trigger_tokens,
             retained_turns=1,
             failure_reason=None,
-            base_snapshot=base_snapshot,
+            base_messages=base_messages,
             checkpoint_covered_until_event_id=41,
             user_instructions_text="Use SI units.",
             user_instructions_hash="sha256:abc",
@@ -171,7 +171,7 @@ class _LifecycleCompactor:
             trigger_tokens=plan.trigger_tokens,
             retained_turns=1,
             failure_reason=None,
-            base_snapshot=[
+            base_messages=[
                 compact_message.model_dump(mode="json"),
             ],
             checkpoint_covered_until_event_id=41,
@@ -200,7 +200,7 @@ class _EphemeralFallbackCompactor(_LifecycleCompactor):
             trigger_tokens=plan.trigger_tokens,
             retained_turns=0,
             failure_reason=failure_reason,
-            base_snapshot=None,
+            base_messages=None,
         )
 
 
@@ -537,7 +537,7 @@ class _BoundaryOverrideCompactor(_DurablePreflightCompactor):
         from matmaster.context.compaction import CompactionResult
 
         compact_message = _v1_compacted_user_message()
-        base_snapshot = [
+        base_messages = [
             compact_message.model_dump(mode="json"),
         ]
         messages[:] = [
@@ -553,7 +553,7 @@ class _BoundaryOverrideCompactor(_DurablePreflightCompactor):
             trigger_tokens=plan.trigger_tokens,
             retained_turns=1,
             failure_reason=None,
-            base_snapshot=base_snapshot,
+            base_messages=base_messages,
             checkpoint_covered_until_event_id=41,
             user_instructions_text="Use SI units.",
             user_instructions_hash="sha256:abc",
