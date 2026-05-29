@@ -346,12 +346,6 @@ class AgentRunService:
             llm_config = load_llm_config(_project_root / 'config' / 'llm_config.yaml')
 
             agent_default_llm = _get_agent_default_llm()
-            resolved_llm = llm_config.resolve_route(
-                model_override=model_override,
-                llm_override=llm_override,
-                default_key=agent_default_llm,
-            )
-            selected_profile = llm_config.get_profile(resolved_llm.profile_key)
             top_level_images = tuple(images or ())
             turn_input_images = turn_input.images if turn_input is not None else ()
             current_images = turn_input_images or top_level_images
