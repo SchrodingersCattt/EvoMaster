@@ -145,10 +145,9 @@ class ChatEventsTable(BaseTable):
         limit: int | None = None,
         order: str = 'asc',
     ) -> list[dict]:
-        """Read events for Phase 2 context assembly ports.
+        """Read events for context assembly ports.
 
-        This is a read-only helper. Phase 2A adds it for AppSessionEventsPort,
-        but no runtime path calls the port until Phase 2C.
+        Read-only helper backing ``AppSessionEventsPort.load_events``.
         """
         if order not in {'asc', 'desc'}:
             raise ValueError("order must be 'asc' or 'desc'")

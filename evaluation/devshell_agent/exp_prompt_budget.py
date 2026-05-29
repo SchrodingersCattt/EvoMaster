@@ -5,7 +5,7 @@ agent start: ``SystemPromptBuilder.build_system_prompt()`` output only. Local
 builtin / skill tool guidance now lives in ``function.description``, so it is
 intentionally excluded from this budget.
 
-Uses the same tiktoken model encoding as ``matmaster.core.context_compactor``.
+Uses the same tiktoken model encoding as ``matmaster.context.compaction``.
 """
 
 from __future__ import annotations
