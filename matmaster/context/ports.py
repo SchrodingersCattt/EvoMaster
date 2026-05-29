@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +16,17 @@ class UserInstructions:
     text: str
     hash: str
     truncated: bool = False
+
+
+def hash_user_instructions(text: str) -> str:
+    """Canonical AGENT.md content hash: ``sha256:`` + hex of raw utf-8 bytes.
+
+    Defined here so the runtime and service layers share one implementation.
+    The hash drives anchor-vs-continuation turn intent, so any divergence would
+    silently break AGENT.md change detection. Operates on raw text (no strip):
+    trailing-whitespace changes must still produce a new hash.
+    """
+    return f"sha256:{hashlib.sha256(text.encode('utf-8')).hexdigest()}"
 
 
 class UserInstructionsPort(Protocol):

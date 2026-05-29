@@ -8,7 +8,6 @@ truncation if summarization fails.
 from __future__ import annotations
 
 import functools
-import hashlib
 import json
 import logging
 from collections.abc import Awaitable, Callable
@@ -20,7 +19,7 @@ from matmaster.context.assembly import (
     ContextAssembler,
     ContextAssemblyIntent,
 )
-from matmaster.context.ports import UserInstructions
+from matmaster.context.ports import UserInstructions, hash_user_instructions
 from matmaster.context.sections import ContextView
 from matmaster.context.sources.turn_input import (
     TurnInput,
@@ -41,7 +40,7 @@ from matmaster.types.runtime import CompactionConfig
 
 logger = logging.getLogger(__name__)
 
-_EMPTY_USER_INSTRUCTIONS_HASH = f"sha256:{hashlib.sha256(b'').hexdigest()}"
+_EMPTY_USER_INSTRUCTIONS_HASH = hash_user_instructions("")
 
 SUMMARY_USER_REQUEST_TEMPLATE = """\
 <compact_request>

@@ -9,10 +9,11 @@ deduplication.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
 from dataclasses import dataclass
 from typing import Any, Literal
+
+from matmaster.context.ports import hash_user_instructions
 
 logger = logging.getLogger(__name__)
 
@@ -30,11 +31,6 @@ class UserInstructionsInfo:
     text: str
     hash: str
     truncated: bool = False
-
-
-def hash_user_instructions(text: str) -> str:
-    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
-    return f"sha256:{digest}"
 
 
 def truncate_utf8(text: str, max_bytes: int) -> tuple[str, bool]:

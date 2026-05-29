@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -17,6 +16,7 @@ from matmaster.context.ports import (
     SessionJobsQuery,
     SkillResolver,
     UserInstructions,
+    hash_user_instructions,
 )
 from matmaster.context.session import SessionContextBuilder
 from matmaster.core.playground import PlaygroundContext
@@ -36,10 +36,6 @@ class RuntimeContextAssembly:
 def empty_skill_resolver(_events: tuple[SessionEvent, ...]) -> tuple[ActiveSkill, ...]:
     """Default SkillResolver for paths that do not wire one explicitly."""
     return ()
-
-
-def _hash_user_instructions(text: str) -> str:
-    return "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
 def build_session_context_factory(
@@ -78,7 +74,7 @@ def build_runtime_context_assembly(
 
     user_instructions = ctx.metadata.user_instructions or UserInstructions(
         text="",
-        hash=_hash_user_instructions(""),
+        hash=hash_user_instructions(""),
         truncated=False,
     )
     assembly_ports = ContextAssemblyPorts(
