@@ -137,40 +137,30 @@ class DevRunner:
         exp = Exp(self._exp_config)
 
         async def _run_once() -> DrainResult:
-            try:
-                # Build on_event callback for real-time forwarding
-                def _on_event(event: BusEvent) -> None:
-                    self._stream_hook.on_event(event)
-                    if event_observer is not None:
-                        event_observer.emit(event)
+            # Build on_event callback for real-time forwarding
+            def _on_event(event: BusEvent) -> None:
+                self._stream_hook.on_event(event)
+                if event_observer is not None:
+                    event_observer.emit(event)
 
-                # Inject forward sink before build_runtime so child agent spawn
-                # closures capture the runtime port.
-                self._pg_ctx = self._pg_ctx.with_updates(
-                    runtime_ports={"child_event_forward_sink": _on_event}
-                )
+            # Inject forward sink before build_runtime so child agent spawn
+            # closures capture the runtime port.
+            self._pg_ctx = self._pg_ctx.with_updates(
+                runtime_ports={"child_event_forward_sink": _on_event}
+            )
 
-                runtime = await exp.build_runtime(self._pg_ctx)
-                spec = runtime.spec
-
-                # Devshell bypasses Exp.run_stream(), so it must inject
-                # cancellation into the session and tool catalog itself.
-                if cancel_token is not None:
-                    catalog = getattr(spec, "tool_catalog", None)
-                    if catalog is not None:
-                        catalog.inject_cancel_token(cancel_token)
-                    session = self._pg_ctx.session
-                    if session is not None:
-                        session._cancel_token = cancel_token
-
+            # Share Exp's runtime lifecycle (build + cancel injection + cleanup)
+            # instead of hand-copying it; cleanup is guaranteed by the scope.
+            async with exp.runtime_scope(self._pg_ctx, cancel_token) as runtime:
                 return await drain_run_stream(
                     runtime.kernel.run_stream(
-                        spec, task, history=self.history, cancel_token=cancel_token
+                        runtime.spec,
+                        task,
+                        history=self.history,
+                        cancel_token=cancel_token,
                     ),
                     on_event=_on_event,
                 )
-            finally:
-                await exp._run_cleanup_callbacks()
 
         result = asyncio.run(_run_once())
 

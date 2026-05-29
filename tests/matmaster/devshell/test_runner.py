@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, create_autospec, patch
 
+from matmaster.core.exp import Exp
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.messages import StreamChunk
 from matmaster.types.session import Session
@@ -141,12 +142,8 @@ class TestDevRunner:
         fake_result.num_turns = 0
         fake_result.usage = {}
 
-        fake_exp = MagicMock()
-        fake_exp.build_runtime = AsyncMock(return_value=runtime)
-        fake_exp._run_cleanup_callbacks = AsyncMock()
-
         with (
-            patch("matmaster.devshell.runner.Exp", return_value=fake_exp),
+            patch.object(Exp, "build_runtime", AsyncMock(return_value=runtime)),
             patch(
                 "matmaster.core.stream_drain.drain_run_stream",
                 new=AsyncMock(return_value=fake_result),
@@ -184,13 +181,10 @@ class TestDevRunner:
         runtime.spec = MagicMock(tool_catalog=None)
         runtime.kernel = MagicMock()
         runtime.kernel.run_stream.return_value = object()
-        fake_exp = MagicMock()
-        fake_exp.build_runtime = AsyncMock(return_value=runtime)
-        fake_exp._run_cleanup_callbacks = AsyncMock()
         observer = DevEventObserver()
 
         with (
-            patch("matmaster.devshell.runner.Exp", return_value=fake_exp),
+            patch.object(Exp, "build_runtime", AsyncMock(return_value=runtime)),
             patch(
                 "matmaster.core.stream_drain.drain_run_stream",
                 new=AsyncMock(return_value=fake_result),

@@ -7,11 +7,15 @@ and executes the agent loop (run_stream).
 Three-phase lifecycle:
 1. assemble(ctx) -- pure data transform: config + ctx -> AgentRuntimeSpec
 2. build_runtime(ctx) -- resource creation: tools, prompt, kernel -> AgentRuntime
-3. run_stream(ctx, task, ...) -- build_runtime -> kernel.run_stream -> cleanup
+3. run_stream(ctx, task, ...) -- thin driver over runtime_scope()
+
+The run lifecycle (build_runtime -> cancel-token injection -> cleanup) lives in
+runtime_scope(), a reusable async context manager shared by both run_stream()
+and devshell, so neither hand-copies build/inject/cleanup.
 
 Cleanup: Exp owns capability resource cleanup via _cleanup_callbacks.
-run_stream() wraps kernel.run_stream in try/finally to guarantee cleanup
-even when the kernel raises.
+runtime_scope() wraps the run in try/finally to guarantee cleanup even when the
+kernel raises.
 """
 
 from __future__ import annotations
@@ -21,6 +25,7 @@ import json
 import logging
 import uuid
 from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -543,24 +548,26 @@ class Exp:
             cleanup=self._run_cleanup_callbacks,
         )
 
-    # ── Phase 3: run_stream ────────────────────────────────
+    # ── Phase 3: runtime scope + run_stream ────────────────
 
-    async def run_stream(
+    @asynccontextmanager
+    async def runtime_scope(
         self,
         ctx: PlaygroundContext,
-        task: str,
-        *,
-        history: list[Message] | None = None,
         cancel_token: CancellationToken | None = None,
+        *,
         skills: dict[str, Any] | None = None,
         skill_resolver: SkillResolver | None = None,
         spawn_id: str | None = None,
-    ) -> AsyncIterator[Any]:
-        """build_runtime -> kernel.run_stream -> cleanup.
+    ) -> AsyncIterator[AgentRuntime]:
+        """Reusable run lifecycle: build_runtime -> cancel-token injection
+        -> (caller drives kernel.run_stream) -> guaranteed cleanup.
 
-        Async generator that yields BusEvent from the kernel generator.
-        try/finally ensures cleanup runs on normal completion, break,
-        and exception.
+        Yields the built AgentRuntime; the caller drives
+        ``runtime.kernel.run_stream(...)`` itself. The try/finally guarantees
+        capability cleanup on normal completion, break, and exception, so every
+        driver (service run_stream, devshell) shares one lifecycle instead of
+        hand-copying build/inject/cleanup.
         """
         try:
             runtime = await self.build_runtime(
@@ -578,12 +585,38 @@ class Exp:
             if cancel_token is not None and catalog is not None:
                 catalog.inject_cancel_token(cancel_token)
 
-            async for event in runtime.kernel.run_stream(
-                spec, task, history=history, cancel_token=cancel_token
-            ):
-                yield event
+            yield runtime
         finally:
             await self._run_cleanup_callbacks()
+
+    async def run_stream(
+        self,
+        ctx: PlaygroundContext,
+        task: str,
+        *,
+        history: list[Message] | None = None,
+        cancel_token: CancellationToken | None = None,
+        skills: dict[str, Any] | None = None,
+        skill_resolver: SkillResolver | None = None,
+        spawn_id: str | None = None,
+    ) -> AsyncIterator[Any]:
+        """Thin driver over :meth:`runtime_scope`.
+
+        Async generator that yields BusEvent from the kernel generator.
+        Cleanup is guaranteed by the scope's try/finally on normal completion,
+        break, and exception.
+        """
+        async with self.runtime_scope(
+            ctx,
+            cancel_token,
+            skills=skills,
+            skill_resolver=skill_resolver,
+            spawn_id=spawn_id,
+        ) as runtime:
+            async for event in runtime.kernel.run_stream(
+                runtime.spec, task, history=history, cancel_token=cancel_token
+            ):
+                yield event
 
     # ── Capability initialization helpers ────────────────
 

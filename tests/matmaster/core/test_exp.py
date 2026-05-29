@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -369,6 +369,57 @@ class TestExpCleanup:
         await exp._run_cleanup_callbacks()
 
         assert exp._cleanup_callbacks == []
+
+
+# ── TestRuntimeScope ─────────────────────────────────────
+
+
+class TestRuntimeScope:
+    """runtime_scope() owns the reusable build -> inject -> cleanup lifecycle."""
+
+    async def test_yields_built_runtime(self, tmp_path: Path) -> None:
+        exp = Exp(ExpConfig(name="test"))
+        runtime = MagicMock()
+        runtime.spec = MagicMock(tool_catalog=None)
+        ctx = _make_ctx(with_llm=True)
+        with patch.object(exp, "build_runtime", AsyncMock(return_value=runtime)):
+            async with exp.runtime_scope(ctx) as scoped:
+                assert scoped is runtime
+
+    async def test_cleanup_runs_on_exception(self, tmp_path: Path) -> None:
+        exp = Exp(ExpConfig(name="test"))
+        cb = MagicMock()
+        exp._register_cleanup(cb)
+        runtime = MagicMock()
+        runtime.spec = MagicMock(tool_catalog=None)
+        ctx = _make_ctx(with_llm=True)
+        with patch.object(exp, "build_runtime", AsyncMock(return_value=runtime)):
+            with pytest.raises(ValueError, match="boom"):
+                async with exp.runtime_scope(ctx):
+                    raise ValueError("boom")
+        cb.assert_called_once()
+
+    async def test_injects_cancel_token_into_session_and_catalog(
+        self, tmp_path: Path
+    ) -> None:
+        exp = Exp(ExpConfig(name="test"))
+        session = MagicMock(spec=Session)
+        catalog = MagicMock()
+        runtime = MagicMock()
+        runtime.spec = MagicMock(tool_catalog=catalog)
+        ctx = PlaygroundContext(
+            workdir=tmp_path,
+            session_type="local",
+            cache_area=tmp_path / "cache",
+            session=session,
+            llm_provider=MockLLMProvider(),
+        )
+        token = MagicMock()
+        with patch.object(exp, "build_runtime", AsyncMock(return_value=runtime)):
+            async with exp.runtime_scope(ctx, token):
+                pass
+        assert session._cancel_token is token
+        catalog.inject_cancel_token.assert_called_once_with(token)
 
 
 # ── TestIdentityOverride ────────────────────────────────
