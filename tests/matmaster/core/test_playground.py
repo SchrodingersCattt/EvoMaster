@@ -307,18 +307,6 @@ class TestSessionManagement:
         old_session.close.assert_called_once()
         assert pg.session is new_session
 
-    def test_attach_session_propagates_to_agent(self, tmp_path: Path) -> None:
-        pg = _make_playground(tmp_path)
-        mock_agent = MagicMock()
-        pg.agent = mock_agent
-
-        mock_session = MagicMock()
-        mock_session.is_open = True
-
-        pg.attach_session(mock_session)
-
-        assert mock_agent.session is mock_session
-
     def test_detach_session(self, tmp_path: Path) -> None:
         pg = _make_playground(tmp_path)
         mock_session = MagicMock()
@@ -329,18 +317,6 @@ class TestSessionManagement:
 
         assert pg.session is None
         mock_session.close.assert_called_once()
-
-    def test_detach_session_clears_agent_ref(self, tmp_path: Path) -> None:
-        pg = _make_playground(tmp_path)
-        mock_agent = MagicMock()
-        pg.agent = mock_agent
-        mock_session = MagicMock()
-        mock_session.is_open = True
-        pg.session = mock_session
-
-        pg.detach_session()
-
-        assert mock_agent.session is None
 
     def test_detach_session_skips_local(self, tmp_path: Path) -> None:
         pg = _make_playground(tmp_path)

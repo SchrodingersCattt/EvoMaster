@@ -198,9 +198,7 @@ class Playground:
         # Kept directly writable (per Pitfall 3: agent_run_bohrium.py
         # does ``pg.session = ssh_session`` and ``pg._owns_session = False``)
         self.session: Session | None = None
-        self.agent: Any = None
         self._owns_session: bool = False
-        self._prepare_metadata: RunMetadata | None = None
         self._log_file_handler: logging.FileHandler | None = None
         self._log_file_stream = None
 
@@ -259,7 +257,6 @@ class Playground:
         cache_area.mkdir(parents=True, exist_ok=True)
 
         self._setup_logging_explicit(metadata.run_dir, metadata.task_id)
-        self._prepare_metadata = metadata
         return PlaygroundContext(
             workdir=workspace_path,
             session_type=self._session_type,
@@ -310,10 +307,6 @@ class Playground:
         if not self.session.is_open:
             self.session.open()
             self.logger.info('Attached session opened: %s', type(session).__name__)
-
-        if self.agent is not None:
-            self.agent.session = self.session
-            self.logger.debug('Agent session reference updated')
 
     def attach_ssh_session(
         self,
@@ -374,10 +367,6 @@ class Playground:
 
         self.session = None
 
-        if self.agent is not None:
-            self.agent.session = None
-            self.logger.debug('Agent session reference cleared')
-
     # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
@@ -425,13 +414,6 @@ class Playground:
         if task_id:
             return Path(run_dir) / 'workspaces' / task_id
         return Path(run_dir) / 'workspace'
-
-    def _resolve_workspace_path(self, metadata: RunMetadata) -> Path:
-        """Determine workspace directory path from typed run metadata."""
-        return self._resolve_workspace_path_explicit(
-            metadata.run_dir,
-            metadata.task_id,
-        )
 
     def _setup_logging_explicit(
         self,
@@ -498,32 +480,6 @@ class Playground:
     def _collect_env_vars(self) -> dict[str, str]:
         """Collect environment variables to include in context."""
         return {}
-
-    def _setup_session(self) -> None:
-        """Create and open a session, restoring after Bohrium detach.
-
-        Called by ``cleanup_bohrium_after_run`` after ``detach_session()``.
-        """
-        if self.session is not None:
-            if not self.session.is_open:
-                self.session.open()
-            return
-        if self._prepare_metadata is None:
-            self.logger.warning(
-                '_setup_session: no prepare() metadata; cannot restore session'
-            )
-            return
-        workspace_path = self._resolve_workspace_path(self._prepare_metadata)
-        effective_config = {
-            **self._session_config,
-            "workspace_path": str(workspace_path),
-            "working_dir": str(workspace_path),
-        }
-        self._session_config = effective_config
-        self.session = self._create_session_from_config()
-        self._owns_session = True
-        if not self.session.is_open:
-            self.session.open()
 
 
 class PlaygroundManager:
