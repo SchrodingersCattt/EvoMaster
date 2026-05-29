@@ -23,7 +23,6 @@ from __future__ import annotations
 import inspect
 import json
 import logging
-import uuid
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -32,7 +31,7 @@ from typing import TYPE_CHECKING, Any
 from matmaster.config.exp import ExpConfig
 from matmaster.context.ports import SkillResolver
 from matmaster.context.system_prompt import SystemPromptBuilder
-from matmaster.core.hooks import HookEvent, HookExecutor, SubagentContext
+from matmaster.core.hooks import HookExecutor
 from matmaster.core.path_access import derive_path_access_roots
 from matmaster.core.playground import PlaygroundContext
 from matmaster.tools.tool_registry import ToolRegistry
@@ -216,97 +215,39 @@ class Exp:
                 )
         self._cleanup_callbacks.clear()
 
-    # ── Spawn function factory ────────────────────────────
+    # ── Child runtime factory ─────────────────────────────
 
-    @staticmethod
-    def _make_spawn_fn(
-        ctx: PlaygroundContext,
-        source_prefix: str,
-        hook_executor: HookExecutor | None = None,
-        skill_resolver: SkillResolver | None = None,
-    ) -> Any:
-        """Create async spawn_fn closure capturing parent runtime context.
+    def _make_child_run_factory(
+        self, ctx: PlaygroundContext
+    ) -> Callable[..., AsyncIterator[Any]]:
+        """Seam :class:`SubagentOrchestrator` uses to run one child agent.
 
-        The returned async callable creates a child Exp from exp_name,
-        runs it via child_exp.run_stream() with the parent's PlaygroundContext,
-        drains the event stream, and returns the final content.
+        Exp owns *assembling* the child runtime -- load its config, construct a
+        child Exp with spawn disabled (one-level recursion cap), and drive its
+        ``run_stream`` with the parent ``ctx``. The orchestrator owns the spawn
+        lifecycle (id, hooks, event retag, drain) around the returned stream.
         """
+        skill_resolver = self._skill_resolver
 
-        async def spawn_fn(
+        def child_run_factory(
             exp_name: str,
             task: str,
+            *,
             cancel_token: CancellationToken | None = None,
-        ) -> str:
+            spawn_id: str | None = None,
+        ) -> AsyncIterator[Any]:
             from matmaster.config.loader import load_exp_config
-            from matmaster.core.stream_drain import drain_run_stream
 
-            child_config = load_exp_config(exp_name)
-            child_exp = Exp(child_config, allow_spawn=False)
-            child_source = f"{source_prefix}:{exp_name}"
-            child_spawn_id = uuid.uuid4().hex[:16]
-            parent_session_id = ctx.session_id
-            event_sink = ctx.runtime_ports.child_event_forward_sink
-
-            async def _forward_child_event(event: Any) -> None:
-                if event_sink is None:
-                    return
-                try:
-                    forwarded = event.model_copy(
-                        update={
-                            "source": child_source,
-                            "spawn_id": child_spawn_id,
-                        }
-                    )
-                    result = event_sink(forwarded)
-                    if inspect.isawaitable(result):
-                        await result
-                except Exception:
-                    logging.getLogger(__name__).warning(
-                        "subagent event forwarding failed type=%s spawn_id=%s",
-                        getattr(event, "type", "?"),
-                        child_spawn_id,
-                        exc_info=True,
-                    )
-
-            if hook_executor is not None:
-                await hook_executor.emit(
-                    HookEvent.SUBAGENT_START,
-                    SubagentContext(
-                        agent_id=child_spawn_id,
-                        agent_type=exp_name,
-                        parent_session_id=parent_session_id,
-                        task_preview=task[:200],
-                    ),
-                )
-            try:
-                drain = await drain_run_stream(
-                    child_exp.run_stream(
-                        ctx,
-                        task,
-                        cancel_token=cancel_token,
-                        spawn_id=child_spawn_id,
-                        skill_resolver=skill_resolver,
-                    ),
-                    on_event=_forward_child_event,
-                )
-            finally:
-                if hook_executor is not None:
-                    await hook_executor.emit(
-                        HookEvent.SUBAGENT_STOP,
-                        SubagentContext(
-                            agent_id=child_spawn_id,
-                            agent_type=exp_name,
-                            parent_session_id=parent_session_id,
-                            task_preview=task[:200],
-                        ),
-                    )
-            if drain.status == "completed" and drain.final_content:
-                return drain.final_content
-            return (
-                f"SubAgent finished with status={drain.status}, reason={drain.reason}"
+            child_exp = Exp(load_exp_config(exp_name), allow_spawn=False)
+            return child_exp.run_stream(
+                ctx,
+                task,
+                cancel_token=cancel_token,
+                spawn_id=spawn_id,
+                skill_resolver=skill_resolver,
             )
 
-        return spawn_fn
+        return child_run_factory
 
     # ── Phase 1: assemble ────────────────────────────────
 
@@ -438,12 +379,15 @@ class Exp:
             spawn_fn = None
             available_exps = None
             if self._allow_spawn:
-                spawn_fn = self._make_spawn_fn(
-                    ctx,
-                    source_prefix="MatMaster",
+                from matmaster.core.subagent_orchestrator import SubagentOrchestrator
+
+                orchestrator = SubagentOrchestrator(
+                    child_run_factory=self._make_child_run_factory(ctx),
+                    child_event_sink=ctx.runtime_ports.child_event_forward_sink,
                     hook_executor=hook_executor,
-                    skill_resolver=self._skill_resolver,
+                    parent_session_id=ctx.session_id,
                 )
+                spawn_fn = orchestrator.make_spawn_fn()
                 available_exps = list_model_visible_exps()
             agent_tool = AgentTool(
                 session=ctx.session,

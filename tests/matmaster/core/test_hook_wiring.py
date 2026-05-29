@@ -13,6 +13,7 @@ from matmaster.context.system_prompt import SystemPromptBuilder
 from matmaster.core.agent import AgentKernel
 from matmaster.core.capability_policy import DefaultCapabilityPolicy
 from matmaster.core.exp import Exp
+from matmaster.core.subagent_orchestrator import SubagentOrchestrator
 from matmaster.core.hooks import (
     CompactionContext,
     HookEvent,
@@ -44,6 +45,16 @@ from matmaster.types.topology import ToolPlane
 from tests.conftest import MockAsyncTool
 
 from .conftest import MockLLMProvider
+
+
+def _stub_child_run_factory(exp_name, task, *, cancel_token=None, spawn_id=None):
+    """Child-run factory stub: an empty stream (drain_run_stream is patched)."""
+
+    async def _gen():
+        if False:
+            yield None
+
+    return _gen()
 from .test_full_tool_runner import _make_ctx, _make_tc, _make_topology
 
 
@@ -248,10 +259,7 @@ class TestExpWiring:
         assert runtime.spec.tool_runner._hook_executor is runtime.spec.hook_executor
 
     @pytest.mark.asyncio
-    async def test_make_spawn_fn_emits_subagent_start_and_stop(
-        self,
-        tmp_path: Path,
-    ) -> None:
+    async def test_orchestrator_emits_subagent_start_and_stop(self) -> None:
         started = []
         stopped = []
         executor = HookExecutor()
@@ -265,15 +273,6 @@ class TestExpWiring:
         executor.on(HookEvent.SUBAGENT_START, on_start)
         executor.on(HookEvent.SUBAGENT_STOP, on_stop)
 
-        ctx = PlaygroundContext(
-            workdir=tmp_path,
-            execution_workdir=str(tmp_path / "exec"),
-            session_type="local",
-            cache_area=tmp_path / "cache",
-            session_id="session-1",
-            llm_provider=MockLLMProvider(),
-        )
-
         async def fake_drain_run_stream(_stream, on_event=None):
             return SimpleNamespace(
                 status="completed",
@@ -281,22 +280,16 @@ class TestExpWiring:
                 reason="natural",
             )
 
-        with (
-            patch(
-                "matmaster.config.loader.load_exp_config",
-                return_value=ExpConfig(name="direct"),
-            ),
-            patch(
-                "matmaster.core.stream_drain.drain_run_stream",
-                side_effect=fake_drain_run_stream,
-            ),
+        orchestrator = SubagentOrchestrator(
+            child_run_factory=_stub_child_run_factory,
+            hook_executor=executor,
+            parent_session_id="session-1",
+        )
+        with patch(
+            "matmaster.core.stream_drain.drain_run_stream",
+            side_effect=fake_drain_run_stream,
         ):
-            spawn_fn = Exp._make_spawn_fn(
-                ctx,
-                source_prefix="MatMaster",
-                hook_executor=executor,
-            )
-            result = await spawn_fn("direct", "summarize this task")
+            result = await orchestrator.make_spawn_fn()("direct", "summarize this task")
 
         assert result == "child done"
         assert len(started) == 1
@@ -307,28 +300,13 @@ class TestExpWiring:
         assert stopped[0].agent_id == started[0].agent_id
 
     @pytest.mark.asyncio
-    async def test_make_spawn_fn_forwards_child_events_with_source_and_spawn_id(
+    async def test_orchestrator_forwards_child_events_with_source_and_spawn_id(
         self,
-        tmp_path: Path,
     ) -> None:
-        from matmaster.types.runtime_ports import PlaygroundRuntimePorts
-
         forwarded = []
 
         async def sink(event) -> None:
             forwarded.append(event)
-
-        ctx = PlaygroundContext(
-            workdir=tmp_path,
-            execution_workdir=str(tmp_path / "exec"),
-            session_type="local",
-            cache_area=tmp_path / "cache",
-            session_id="session-1",
-            llm_provider=MockLLMProvider(),
-            runtime_ports=PlaygroundRuntimePorts(
-                child_event_forward_sink=sink,
-            ),
-        )
 
         async def fake_drain_run_stream(_stream, on_event=None):
             if on_event is not None:
@@ -347,18 +325,16 @@ class TestExpWiring:
                 reason="natural",
             )
 
-        with (
-            patch(
-                "matmaster.config.loader.load_exp_config",
-                return_value=ExpConfig(name="direct"),
-            ),
-            patch(
-                "matmaster.core.stream_drain.drain_run_stream",
-                side_effect=fake_drain_run_stream,
-            ),
+        orchestrator = SubagentOrchestrator(
+            child_run_factory=_stub_child_run_factory,
+            child_event_sink=sink,
+            parent_session_id="session-1",
+        )
+        with patch(
+            "matmaster.core.stream_drain.drain_run_stream",
+            side_effect=fake_drain_run_stream,
         ):
-            spawn_fn = Exp._make_spawn_fn(ctx, source_prefix="MatMaster")
-            result = await spawn_fn("direct", "summarize this task")
+            result = await orchestrator.make_spawn_fn()("direct", "summarize this task")
 
         assert result == "child done"
         assert len(forwarded) == 2
@@ -367,28 +343,11 @@ class TestExpWiring:
         assert len({event.spawn_id for event in forwarded}) == 1
 
     @pytest.mark.asyncio
-    async def test_make_spawn_fn_uses_runtime_ports_child_event_forward_sink(
-        self,
-        tmp_path: Path,
-    ) -> None:
-        from matmaster.types.runtime_ports import PlaygroundRuntimePorts
-
+    async def test_orchestrator_uses_child_event_sink(self) -> None:
         forwarded = []
 
         async def sink(event) -> None:
             forwarded.append(event)
-
-        ctx = PlaygroundContext(
-            workdir=tmp_path,
-            execution_workdir=str(tmp_path / "exec"),
-            session_type="local",
-            cache_area=tmp_path / "cache",
-            session_id="session-1",
-            llm_provider=MockLLMProvider(),
-            runtime_ports=PlaygroundRuntimePorts(
-                child_event_forward_sink=sink,
-            ),
-        )
 
         async def fake_drain_run_stream(_stream, on_event=None):
             if on_event is not None:
@@ -399,18 +358,16 @@ class TestExpWiring:
                 reason="natural",
             )
 
-        with (
-            patch(
-                "matmaster.config.loader.load_exp_config",
-                return_value=ExpConfig(name="direct"),
-            ),
-            patch(
-                "matmaster.core.stream_drain.drain_run_stream",
-                side_effect=fake_drain_run_stream,
-            ),
+        orchestrator = SubagentOrchestrator(
+            child_run_factory=_stub_child_run_factory,
+            child_event_sink=sink,
+            parent_session_id="session-1",
+        )
+        with patch(
+            "matmaster.core.stream_drain.drain_run_stream",
+            side_effect=fake_drain_run_stream,
         ):
-            spawn_fn = Exp._make_spawn_fn(ctx, source_prefix="MatMaster")
-            result = await spawn_fn("direct", "summarize this task")
+            result = await orchestrator.make_spawn_fn()("direct", "summarize this task")
 
         assert result == "child done"
         assert len(forwarded) == 1
@@ -418,19 +375,9 @@ class TestExpWiring:
         assert forwarded[0].spawn_id
 
     @pytest.mark.asyncio
-    async def test_make_spawn_fn_without_event_sink_still_returns_child_summary(
+    async def test_orchestrator_without_event_sink_still_returns_child_summary(
         self,
-        tmp_path: Path,
     ) -> None:
-        ctx = PlaygroundContext(
-            workdir=tmp_path,
-            execution_workdir=str(tmp_path / "exec"),
-            session_type="local",
-            cache_area=tmp_path / "cache",
-            session_id="session-1",
-            llm_provider=MockLLMProvider(),
-        )
-
         async def fake_drain_run_stream(_stream, on_event=None):
             if on_event is not None:
                 await on_event(ResponseEvent(source="agent", content="child answer"))
@@ -440,18 +387,16 @@ class TestExpWiring:
                 reason="natural",
             )
 
-        with (
-            patch(
-                "matmaster.config.loader.load_exp_config",
-                return_value=ExpConfig(name="direct"),
-            ),
-            patch(
-                "matmaster.core.stream_drain.drain_run_stream",
-                side_effect=fake_drain_run_stream,
-            ),
+        orchestrator = SubagentOrchestrator(
+            child_run_factory=_stub_child_run_factory,
+            child_event_sink=None,
+            parent_session_id="session-1",
+        )
+        with patch(
+            "matmaster.core.stream_drain.drain_run_stream",
+            side_effect=fake_drain_run_stream,
         ):
-            spawn_fn = Exp._make_spawn_fn(ctx, source_prefix="MatMaster")
-            result = await spawn_fn("direct", "summarize this task")
+            result = await orchestrator.make_spawn_fn()("direct", "summarize this task")
 
         assert result == "child done"
 
@@ -748,10 +693,10 @@ class TestAgentKernelHookWiring:
 
 
 class TestSpawnGuardWiring:
-    """_make_spawn_fn creates child Exp with allow_spawn=False."""
+    """_make_child_run_factory builds the child Exp with allow_spawn=False."""
 
     @pytest.mark.asyncio
-    async def test_make_spawn_fn_constructs_child_exp_with_allow_spawn_false(
+    async def test_child_run_factory_constructs_child_exp_with_allow_spawn_false(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
@@ -770,13 +715,6 @@ class TestSpawnGuardWiring:
                 if False:
                     yield None
 
-        async def fake_drain_run_stream(_stream, on_event=None):
-            return SimpleNamespace(
-                status="completed",
-                final_content="child done",
-                reason="natural",
-            )
-
         monkeypatch.setattr(exp_module, "Exp", RecordingExp)
 
         ctx = PlaygroundContext(
@@ -788,28 +726,20 @@ class TestSpawnGuardWiring:
             llm_provider=MockLLMProvider(),
         )
 
-        with (
-            patch(
-                "matmaster.config.loader.load_exp_config",
-                return_value=ExpConfig(name="direct"),
-            ),
-            patch(
-                "matmaster.core.stream_drain.drain_run_stream",
-                side_effect=fake_drain_run_stream,
-            ),
-        ):
-            spawn_fn = original_exp._make_spawn_fn(
-                ctx,
-                source_prefix="MatMaster",
-                hook_executor=HookExecutor(),
-            )
-            result = await spawn_fn("direct", "summarize this task")
+        parent = original_exp(ExpConfig(name="parent"))
+        factory = parent._make_child_run_factory(ctx)
 
-        assert result == "child done"
+        with patch(
+            "matmaster.config.loader.load_exp_config",
+            return_value=ExpConfig(name="direct"),
+        ):
+            child_stream = factory("direct", "summarize this task", spawn_id="x")
+
         assert created_allow_spawn[-1] is False
+        await child_stream.aclose()
 
     @pytest.mark.asyncio
-    async def test_make_spawn_fn_propagates_skill_resolver_to_child_exp(
+    async def test_child_run_factory_propagates_skill_resolver_to_child_exp(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
@@ -833,13 +763,6 @@ class TestSpawnGuardWiring:
 
                 return _gen()
 
-        async def fake_drain_run_stream(_stream, on_event=None):
-            return SimpleNamespace(
-                status="completed",
-                final_content="child done",
-                reason="natural",
-            )
-
         monkeypatch.setattr(exp_module, "Exp", RecordingExp)
 
         ctx = PlaygroundContext(
@@ -854,23 +777,96 @@ class TestSpawnGuardWiring:
         def sentinel_resolver(events):
             return ()
 
-        with (
-            patch(
-                "matmaster.config.loader.load_exp_config",
-                return_value=ExpConfig(name="direct"),
-            ),
-            patch(
-                "matmaster.core.stream_drain.drain_run_stream",
-                side_effect=fake_drain_run_stream,
-            ),
+        parent = original_exp(ExpConfig(name="parent"))
+        parent._skill_resolver = sentinel_resolver
+        factory = parent._make_child_run_factory(ctx)
+
+        with patch(
+            "matmaster.config.loader.load_exp_config",
+            return_value=ExpConfig(name="direct"),
         ):
-            spawn_fn = original_exp._make_spawn_fn(
-                ctx,
-                source_prefix="MatMaster",
-                hook_executor=HookExecutor(),
-                skill_resolver=sentinel_resolver,
-            )
-            result = await spawn_fn("direct", "summarize this task")
+            child_stream = factory("direct", "summarize this task", spawn_id="x")
+
+        assert captured_kwargs["skill_resolver"] is sentinel_resolver
+        await child_stream.aclose()
+
+    @pytest.mark.asyncio
+    async def test_orchestrator_with_real_factory_threads_spawn_id_end_to_end(
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Seam lock: real factory + orchestrator + real drain_run_stream.
+
+        Guards the kwarg contract (cancel_token/spawn_id) that the loose
+        ``Callable[..., AsyncIterator[Any]]`` factory alias cannot, and proves
+        the spawn_id the child run receives is the same one stamped onto every
+        forwarded event.
+        """
+        import matmaster.core.exp as exp_module
+
+        original_exp = exp_module.Exp
+        received: dict[str, object] = {}
+
+        class RecordingExp:
+            def __init__(self, config, *, allow_spawn: bool = True) -> None:
+                self.config = config
+                self.allow_spawn = allow_spawn
+
+            def run_stream(
+                self, ctx, task, *, cancel_token=None, spawn_id=None, skill_resolver=None
+            ):
+                received["spawn_id"] = spawn_id
+                received["allow_spawn"] = self.allow_spawn
+
+                async def _gen():
+                    yield ResponseEvent(source="agent", content="child answer")
+                    yield RunResultEvent(
+                        source="agent",
+                        status="completed",
+                        reason="natural",
+                        final_content="child done",
+                        num_turns=1,
+                        usage={},
+                        messages=[],
+                    )
+
+                return _gen()
+
+        monkeypatch.setattr(exp_module, "Exp", RecordingExp)
+
+        forwarded = []
+
+        async def sink(event) -> None:
+            forwarded.append(event)
+
+        ctx = PlaygroundContext(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path / "exec"),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+            session_id="session-1",
+            llm_provider=MockLLMProvider(),
+        )
+
+        parent = original_exp(ExpConfig(name="parent"))
+        orchestrator = SubagentOrchestrator(
+            child_run_factory=parent._make_child_run_factory(ctx),
+            child_event_sink=sink,
+            hook_executor=HookExecutor(),
+            parent_session_id="session-1",
+        )
+
+        # drain_run_stream runs for REAL here (only load_exp_config is patched).
+        with patch(
+            "matmaster.config.loader.load_exp_config",
+            return_value=ExpConfig(name="direct"),
+        ):
+            result = await orchestrator.make_spawn_fn()("direct", "summarize this task")
 
         assert result == "child done"
-        assert captured_kwargs["skill_resolver"] is sentinel_resolver
+        assert received["allow_spawn"] is False
+        assert received["spawn_id"]
+        assert len(forwarded) == 1
+        assert forwarded[0].source == "MatMaster:direct"
+        assert forwarded[0].spawn_id == received["spawn_id"]
