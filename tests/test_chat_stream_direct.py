@@ -167,7 +167,7 @@ def test_worker_payload_legacy_current_input_keeps_boundary_name() -> None:
         user_text="hello",
         pre_turn_history_event_id=42,
     )
-    legacy_boundary_key = "pre_query" + "_scope_event_id"
+    legacy_boundary_key = "pre_query_scope_event_id"
     legacy_payload = {
         **turn_input.to_payload(),
         legacy_boundary_key: turn_input.pre_turn_history_event_id,

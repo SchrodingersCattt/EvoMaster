@@ -170,7 +170,7 @@ class ChatStreamService:
             value = self._events_service.get_latest_scope_event_id(session_id, None)
         except Exception:
             logger.warning(
-                "failed to snapshot pre-query scope event id session_id=%s",
+                "failed to snapshot pre_turn_history_event_id session_id=%s",
                 session_id,
                 exc_info=True,
             )
@@ -675,11 +675,18 @@ class ChatStreamService:
             turn_input_payload = (
                 ctx.turn_input.to_payload() if ctx.turn_input is not None else None
             )
+            # Backward-compat wire channel (2026-05-29 cleanup, audit N2):
+            # workers enqueued before the TurnInput cutover consume the legacy
+            # 'current_input_context' payload, whose history boundary lives under
+            # the 'pre_query_scope_event_id' key. Keep emitting it until all
+            # in-flight pre-cutover Redis jobs have drained, then drop this block
+            # (see .planning/context-refactor/CLEANUP-AUDIT.md N2). Plain string
+            # (not concatenated) so the key stays greppable for that removal.
             legacy_current_input_payload = None
             if ctx.turn_input is not None and turn_input_payload is not None:
                 legacy_current_input_payload = {
                     **turn_input_payload,
-                    "pre_query" + "_scope_event_id": (
+                    "pre_query_scope_event_id": (
                         ctx.turn_input.pre_turn_history_event_id
                     ),
                 }
