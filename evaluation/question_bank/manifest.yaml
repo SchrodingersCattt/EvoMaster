@@ -105,7 +105,7 @@ banks:
 - path: scientific_analysis/sa_agnostic.yaml
   capability: scientific_analysis
   domain: agnostic
-  questions: 24
+  questions: 26
 - path: scientific_analysis/sa_battery.yaml
   capability: scientific_analysis
   domain: battery
@@ -209,7 +209,7 @@ banks:
 - path: input_generation/ig_agnostic.yaml
   capability: input_generation
   domain: agnostic
-  questions: 3
+  questions: 5
 - path: input_generation/ig_alloy.yaml
   capability: input_generation
   domain: alloy

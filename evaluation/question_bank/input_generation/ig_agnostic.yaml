@@ -397,3 +397,210 @@ questions:
     axis: efficiency
     verify: token_budget
     criterion: '[Must] Agent used fewer than 80000 total tokens.'
+- id: IG_qe_001_20250618
+  capability: input_generation
+  domain: agnostic
+  intent: Generate a Quantum ESPRESSO pw.x SCF input file for diamond with converged parameters as described
+    in Mounet & Marzari (2005), using GGA-PBE, 40 Ry wavefunction cutoff, and an 8x8x8 Monkhorst-Pack
+    k-mesh.
+  human_prompt_seed: 'Generate a Quantum ESPRESSO pw.x SCF input file for diamond (primitive cell) using
+    the parameters from Mounet & Marzari (2005): GGA-PBE functional, 40 Ry wavefunction cutoff, appropriate
+    charge-density cutoff ratio, and an 8x8x8 Monkhorst-Pack k-mesh. Save the input as diamond_scf.in
+    in the current directory.'
+  tags:
+  - eng_qe
+  data_files: []
+  reference_answers:
+  - key: artifact_scf_input
+    value:
+      checks:
+      - key: file_exists
+        expected: true
+        tolerance: 0
+      filename: diamond_scf.in
+  - key: grounding_source
+    value:
+      filename: diamond_scf.in
+  - key: contains_functional
+    value:
+      tokens:
+      - input_dft
+      - PBE
+      filename: diamond_scf.in
+  - key: contains_ecutwfc
+    value:
+      checks:
+      - key: ecutwfc
+        expected: 40.0
+        tolerance: 0
+      filename: diamond_scf.in
+  - key: contains_kmesh
+    value:
+      tokens:
+      - '8'
+      - '8'
+      - '8'
+      filename: diamond_scf.in
+  - key: contains_pseudo
+    value:
+      tokens:
+      - C
+      - .UPF
+      filename: diamond_scf.in
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_scf_input
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The file diamond_scf.in exists and is a valid QE pw.x input.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The input file content is grounded in the source paper''s computational parameters.'
+  - id: contains_functional
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The input specifies GGA-PBE (PBE) as the exchange-correlation functional via input_dft.'
+  - id: contains_ecutwfc
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] The wavefunction cutoff ecutwfc is set to 40 Ry.'
+  - id: contains_kmesh
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The k-point mesh is 8x8x8 Monkhorst-Pack.'
+  - id: contains_pseudo
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] A carbon ultrasoft pseudopotential (.UPF) is referenced.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completed within turn budget.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent did not require retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completed within duration budget.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent completed within token budget.'
+- id: IG_qe_002_20250618
+  capability: input_generation
+  domain: agnostic
+  intent: Generate a Quantum ESPRESSO ph.x input file for DFPT phonon calculation of diamond on an 8x8x8
+    q-point grid with acoustic sum rule, using the same convergence parameters as the SCF calculation.
+  human_prompt_seed: 'Generate a Quantum ESPRESSO ph.x input file for a DFPT phonon calculation of diamond
+    on an 8x8x8 q-point grid. Apply the acoustic sum rule. Use consistent parameters with the SCF run:
+    GGA-PBE, 40 Ry wavefunction cutoff, 8x8x8 k-mesh. Save the input as diamond_phonon.in in the current
+    directory.'
+  tags:
+  - eng_qe
+  data_files: []
+  reference_answers:
+  - key: artifact_phonon_input
+    value:
+      checks:
+      - key: file_exists
+        expected: true
+        tolerance: 0
+      filename: diamond_phonon.in
+  - key: grounding_source
+    value:
+      filename: diamond_phonon.in
+  - key: contains_qmesh
+    value:
+      tokens:
+      - '8'
+      - '8'
+      - '8'
+      filename: diamond_phonon.in
+  - key: contains_asr
+    value:
+      tokens:
+      - asr
+      - '''simple'''
+      filename: diamond_phonon.in
+  - key: contains_tr2_ph
+    value:
+      checks:
+      - key: tr2_ph
+        max: 1.0e-10
+        min: 1.0e-14
+        allow_missing_key: true
+      filename: diamond_phonon.in
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_phonon_input
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The file diamond_phonon.in exists and is a valid QE ph.x input.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The input file content is grounded in the source paper''s computational parameters.'
+  - id: contains_qmesh
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The q-point grid is 8x8x8.'
+  - id: contains_asr
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The acoustic sum rule (asr) is enabled.'
+  - id: contains_tr2_ph
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Variable] The phonon convergence threshold tr2_ph is a reasonable small value (~1e-12).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completed within turn budget.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent did not require retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completed within duration budget.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent completed within token budget.'

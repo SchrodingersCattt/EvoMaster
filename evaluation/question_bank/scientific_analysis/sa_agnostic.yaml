@@ -2425,3 +2425,171 @@ questions:
     verify: token_budget
     weight: 0.0
     criterion: '[Must] Total token usage within 100000.'
+- id: SA_pymatgen_002_20250618
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Compute the linear thermal expansion coefficient of diamond at 300 K using the quasi-harmonic
+    approximation (QHA) from phonon frequencies calculated at multiple lattice parameters, and compare
+    with the paper's reported value of ~1.0e-6 K^-1 at 300 K.
+  human_prompt_seed: Compute the linear thermal expansion coefficient of diamond at 300 K using the quasi-harmonic
+    approximation. Use phonon frequencies at multiple lattice parameters (from 6.76 to 6.85 Bohr) to construct
+    the vibrational free energy F(a,T), minimize it at each T to find equilibrium a(T), then differentiate
+    numerically to get alpha = (1/a)(da/dT) at 300 K. Save results to diamond_thermal_expansion.json with
+    key 'alpha_300K' in units of 10^-6 K^-1.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_thermal_expansion
+    value:
+      checks:
+      - key: file_exists
+        expected: true
+        tolerance: 0
+      filename: diamond_thermal_expansion.json
+  - key: grounding_source
+    value:
+      filename: diamond_thermal_expansion.json
+  - key: alpha_300k
+    value:
+      checks:
+      - key: alpha_300K
+        max: 2.5
+        min: 0.5
+        expected: 1.0
+        allow_missing_key: false
+      filename: diamond_thermal_expansion.json
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 120000
+  scoring_checklist:
+  - id: artifact_thermal_expansion
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The file diamond_thermal_expansion.json exists and contains valid JSON.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The results are grounded in the source paper''s QHA thermal expansion approach
+      for diamond.'
+  - id: alpha_300k
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] The linear thermal expansion coefficient alpha at 300 K is between 0.5 and
+      2.5 x 10^-6 K^-1 (reference: ~1.0 x 10^-6 K^-1 from Fig. 15).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completed within turn budget.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent did not require retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completed within duration budget.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent completed within token budget.'
+- id: SA_pymatgen_001_20250618
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Fit a Birch-Murnaghan equation of state to diamond total-energy vs. lattice-constant data and
+    extract the equilibrium lattice parameter and bulk modulus, comparing with the reported values of
+    a0=6.743 a.u. and B0=432 GPa.
+  human_prompt_seed: Using pymatgen, perform a Birch-Murnaghan equation-of-state fit for diamond. Generate
+    at least 7 volume points around the equilibrium volume (mp-65), compute the total energy at each using
+    a DFT calculator (or use pre-computed energies if available), fit the EOS, and report the equilibrium
+    lattice parameter in Bohr and the bulk modulus in GPa. Save results to diamond_eos_fit.json.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_eos_fit
+    value:
+      checks:
+      - key: file_exists
+        expected: true
+        tolerance: 0
+      filename: diamond_eos_fit.json
+  - key: grounding_source
+    value:
+      filename: diamond_eos_fit.json
+  - key: eos_lattice_param
+    value:
+      checks:
+      - key: a0_bohr
+        max: 6.8
+        min: 6.7
+        expected: 6.743
+      filename: diamond_eos_fit.json
+  - key: eos_bulk_modulus
+    value:
+      checks:
+      - key: B0_GPa
+        max: 450
+        min: 420
+        expected: 432
+      filename: diamond_eos_fit.json
+  - key: turn_budget
+    value:
+      max: 25
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 120000
+  scoring_checklist:
+  - id: artifact_eos_fit
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The file diamond_eos_fit.json exists and contains valid JSON.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The results are grounded in the source paper''s Birch-Murnaghan EOS fitting approach.'
+  - id: eos_lattice_param
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] The fitted equilibrium lattice parameter a0 is between 6.70 and 6.80 Bohr
+      (reference: 6.743 Bohr).'
+  - id: eos_bulk_modulus
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] The fitted bulk modulus B0 is between 420 and 450 GPa (reference: 432 GPa).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completed within turn budget.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent did not require retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completed within duration budget.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent completed within token budget.'
