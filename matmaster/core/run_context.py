@@ -49,6 +49,9 @@ class AgentRunRequest(BaseModel):
     # instantiated providers bypass Pydantic's strict isinstance check.
     llm_provider: Any = None
     llm_config: Any = None
+    llm_model: str | None = None
+    llm_model_profile: str | None = None
+    llm_model_route: str | None = None
     interaction_bridge: Any = Field(default=None, repr=False, exclude=True)
     turn_input: TurnInput | None = None
     user_instructions: UserInstructions | None = None

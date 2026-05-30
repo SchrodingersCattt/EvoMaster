@@ -73,7 +73,7 @@ class RuntimeTopology(BaseModel):
     """Execution topology for an agent run.
 
     Captures the session kind, workspace roots, active tool planes,
-    and session capabilities. Built by Exp.assemble() and consumed
+    and session capabilities. Built by Exp.build_runtime() and consumed
     by ToolRunner/ToolScheduler.
     """
 

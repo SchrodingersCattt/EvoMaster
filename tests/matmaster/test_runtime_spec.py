@@ -1,77 +1,112 @@
+"""Type-boundary tests for the kernel runtime trio (spec sections 9.1 / 5.2).
+
+AgentRuntimeSpec is gone; the kernel-facing runtime is now
+AgentKernelSpec (config) + AgentKernelResources (live) bundled as
+AgentKernelRuntime. The kernel-facing runtime must not expose context
+assembly internals.
+"""
+
 from __future__ import annotations
+
+import dataclasses
 
 import pytest
 
-from matmaster.context.system_prompt import SystemPromptBuilder
-from matmaster.types.runtime import AgentRuntimeSpec
+from matmaster.types.run_metadata import RunIdentity
+from matmaster.types.runtime import (
+    AgentKernelResources,
+    AgentKernelRuntime,
+    AgentKernelSpec,
+    CompactionConfig,
+)
 
 
-def _ctx_builder() -> SystemPromptBuilder:
-    return SystemPromptBuilder()
-
-
-def test_spec_accepts_no_context_assembler_or_ports() -> None:
-    spec = AgentRuntimeSpec(system_prompt_builder=_ctx_builder())
-    assert spec.context_assembler is None
-    assert spec.user_instructions_port is None
-    assert spec.session_events_port is None
-    assert spec.session_jobs_port is None
-
-
-def test_spec_accepts_real_context_assembler() -> None:
-    from matmaster.context.assembly import ContextAssembler
-    from matmaster.context.ports import ContextAssemblyPorts
-
-    class _StubEventsPort:
-        async def load_events(self, _query):  # noqa: ARG002
-            return ()
-
-    assembler = ContextAssembler(
-        ports=ContextAssemblyPorts(session_events=_StubEventsPort())
+def _kernel_spec() -> AgentKernelSpec:
+    return AgentKernelSpec(
+        system_prompt="sys",
+        max_turns=10,
+        compaction=CompactionConfig(),
+        run_identity=RunIdentity(),
     )
-    spec = AgentRuntimeSpec(
-        system_prompt_builder=_ctx_builder(),
-        context_assembler=assembler,
+
+
+def test_kernel_spec_holds_only_config_fields() -> None:
+    names = {f.name for f in dataclasses.fields(AgentKernelSpec)}
+    assert names == {
+        "system_prompt",
+        "max_turns",
+        "compaction",
+        "run_identity",
+        "turn_input",
+        "llm_model",
+        "llm_model_profile",
+        "llm_model_route",
+    }
+
+
+def test_kernel_resources_holds_live_resource_fields() -> None:
+    names = {f.name for f in dataclasses.fields(AgentKernelResources)}
+    assert names == {
+        "llm_provider",
+        "runtime_ports",
+        "tool_runner",
+        "tool_catalog",
+        "runtime_topology",
+        "hook_executor",
+        "compactor",
+        "capability_policy",
+        "structural_validation",
+    }
+
+
+def test_kernel_runtime_pairs_spec_and_resources() -> None:
+    names = {f.name for f in dataclasses.fields(AgentKernelRuntime)}
+    assert names == {"spec", "resources"}
+
+
+def test_kernel_spec_is_frozen() -> None:
+    spec = _kernel_spec()
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        spec.max_turns = 5  # type: ignore[misc]
+
+
+def test_kernel_resources_is_frozen() -> None:
+    resources = AgentKernelResources(
+        llm_provider=object(),
+        runtime_ports=object(),
+        tool_runner=object(),
+        tool_catalog=object(),
+        runtime_topology=object(),
     )
-    assert spec.context_assembler is assembler
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        resources.tool_runner = object()  # type: ignore[misc]
 
 
-def test_spec_rejects_non_assembler_type_for_context_assembler() -> None:
-    with pytest.raises(ValueError, match="context_assembler"):
-        AgentRuntimeSpec(
-            system_prompt_builder=_ctx_builder(),
-            context_assembler="not-an-assembler",
-        )
+def test_agent_runtime_spec_type_is_removed() -> None:
+    import matmaster.types.runtime as runtime_module
+
+    assert not hasattr(runtime_module, "AgentRuntimeSpec")
 
 
-def test_spec_accepts_real_user_instructions_port() -> None:
-    from src.services.context_assembly_ports import AppUserInstructionsPort
+def test_kernel_spec_does_not_expose_assembly_internals() -> None:
+    """Spec 5.2 / 7.2: kernel-facing config never carries assembly internals."""
+    spec = _kernel_spec()
+    assert not hasattr(spec, "context_assembler")
+    assert not hasattr(spec, "session_events_port")
+    assert not hasattr(spec, "session_jobs_port")
+    assert not hasattr(spec, "system_prompt_builder")
+    assert not hasattr(spec, "user_instructions_port")
 
-    spec = AgentRuntimeSpec(
-        system_prompt_builder=_ctx_builder(),
-        user_instructions_port=AppUserInstructionsPort(),
+
+def test_kernel_resources_does_not_expose_assembly_internals() -> None:
+    resources = AgentKernelResources(
+        llm_provider=object(),
+        runtime_ports=object(),
+        tool_runner=object(),
+        tool_catalog=object(),
+        runtime_topology=object(),
     )
-    assert isinstance(spec.user_instructions_port, AppUserInstructionsPort)
-
-
-def test_spec_accepts_real_session_events_port() -> None:
-    from src.services.context_assembly_ports import AppSessionEventsPort
-
-    class _EventsTable:
-        def query_context_events(self, **_kwargs):
-            return []
-
-    port = AppSessionEventsPort(events_table=_EventsTable())
-    spec = AgentRuntimeSpec(
-        system_prompt_builder=_ctx_builder(),
-        session_events_port=port,
-    )
-    assert spec.session_events_port is port
-
-
-def test_spec_accepts_optional_session_jobs_port_as_none() -> None:
-    spec = AgentRuntimeSpec(
-        system_prompt_builder=_ctx_builder(),
-        session_jobs_port=None,
-    )
-    assert spec.session_jobs_port is None
+    assert not hasattr(resources, "context_assembler")
+    assert not hasattr(resources, "session_events_port")
+    assert not hasattr(resources, "session_jobs_port")
+    assert not hasattr(resources, "user_instructions_port")

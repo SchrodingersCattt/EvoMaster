@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator, Callable
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -134,7 +135,7 @@ def _async_collect(payloads: list) -> Callable:
     return _cb
 
 
-def _make_ctx(tmp_path: Path) -> ExecutionEnvironment:
+def _make_environment(tmp_path: Path) -> ExecutionEnvironment:
     return ExecutionEnvironment(
         workdir=tmp_path / 'workspace',
         session_type='local',
@@ -150,7 +151,7 @@ def _make_cancel_token(*, cancelled: bool = False):
     return controller.token
 
 
-def _build_patched_service(mock_llm, mock_sessions_svc=None, mock_pg_ctx=None):
+def _build_patched_service(mock_llm, mock_sessions_svc=None, mock_environment=None):
     """Build an AgentRunService with standard mocks applied."""
     AgentRunService = pytest.importorskip(
         "src.services.agent_run_service",
@@ -162,12 +163,12 @@ def _build_patched_service(mock_llm, mock_sessions_svc=None, mock_pg_ctx=None):
         mock_sessions_svc.get_session_user_id.return_value = 'user-123'
 
     svc = AgentRunService(sessions_service=mock_sessions_svc)
-    # mock_llm stored for _run_with_quota_mock to wire up via build_provider patch
+    # mock_llm stored for _run_with_quota_mock to wire up via build_provider_bundle patch
     svc._test_mock_llm = mock_llm
 
     mock_pg = MagicMock()
-    if mock_pg_ctx is not None:
-        mock_pg.prepare.return_value = mock_pg_ctx
+    if mock_environment is not None:
+        mock_pg.prepare.return_value = mock_environment
     mock_pg.config_path = Path('config/config.yaml')
     mock_pg.session = None
 
@@ -193,8 +194,15 @@ def _run_with_quota_mock(
         patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
         patch('src.services.agent_run_service.use_quota', use_quota_mock),
         patch(
-            'matmaster.providers.llm_factory.build_provider',
-            return_value=svc._test_mock_llm,
+            'matmaster.providers.llm_factory.build_provider_bundle',
+            return_value=SimpleNamespace(
+                provider=svc._test_mock_llm,
+                model="test-model",
+                model_profile="test-profile",
+                model_route="test-route",
+                provider_name="test-provider",
+                model_family="test-family",
+            ),
         ),
         patch('matmaster.config.loader.load_llm_config', return_value=MagicMock()),
     ):
@@ -256,9 +264,9 @@ class TestQuotaDeductedOnSuccess:
 
     def test_quota_deducted_on_success(self, tmp_path: Path) -> None:
         """Verify use_quota called when kernel completes successfully."""
-        pg_ctx = _make_ctx(tmp_path)
+        environment = _make_environment(tmp_path)
         mock_llm = _SuccessLLM()
-        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+        svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
 
         async def mock_use_quota(uid, **kwargs):
             pass
@@ -269,9 +277,9 @@ class TestQuotaDeductedOnSuccess:
 
     def test_run_result_event_is_sent_on_success(self, tmp_path: Path) -> None:
         """Verify run_agent emits run_result and stream_closed on success."""
-        pg_ctx = _make_ctx(tmp_path)
+        environment = _make_environment(tmp_path)
         mock_llm = _SuccessLLM()
-        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+        svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
         payloads: list[dict[str, Any]] = []
 
         async def mock_use_quota(uid, **kwargs):
@@ -315,9 +323,9 @@ class TestQuotaDeductedOnSuccess:
         streaming chunks already deliver content; the duplicate caused
         double-render.  Only run_result → stream_closed ordering is verified.
         """
-        pg_ctx = _make_ctx(tmp_path)
+        environment = _make_environment(tmp_path)
         mock_llm = _SuccessLLM()
-        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+        svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
         payloads: list[dict[str, Any]] = []
 
         async def mock_use_quota(uid, **kwargs):
@@ -342,9 +350,9 @@ class TestQuotaNotDeductedOnCancel:
 
     def test_quota_not_deducted_on_cancel(self, tmp_path: Path) -> None:
         """Verify use_quota NOT called when task is cancelled."""
-        pg_ctx = _make_ctx(tmp_path)
+        environment = _make_environment(tmp_path)
         mock_llm = _SuccessLLM()  # LLM would succeed, but the token is pre-cancelled
-        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+        svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
 
         # Pre-cancel before run -> kernel returns cancelled immediately
         cancel_token = _make_cancel_token(cancelled=True)
@@ -360,9 +368,9 @@ class TestQuotaNotDeductedOnCancel:
 
     def test_cancelled_run_emits_stream_closed_event(self, tmp_path: Path) -> None:
         """Verify cancelled runs still emit stream_closed for frontend stream closure."""
-        pg_ctx = _make_ctx(tmp_path)
+        environment = _make_environment(tmp_path)
         mock_llm = _SuccessLLM()
-        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+        svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
         payloads: list[dict[str, Any]] = []
 
         cancel_token = _make_cancel_token(cancelled=True)
@@ -392,9 +400,9 @@ class TestQuotaNotDeductedOnCancel:
 
     def test_cancelled_run_returns_failure_result(self, tmp_path: Path) -> None:
         """Verify cancelled runs return a failure result for Worker notifications."""
-        pg_ctx = _make_ctx(tmp_path)
+        environment = _make_environment(tmp_path)
         mock_llm = _SuccessLLM()
-        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+        svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
 
         cancel_token = _make_cancel_token(cancelled=True)
 
@@ -421,9 +429,9 @@ class TestQuotaNotDeductedOnError:
 
     def test_quota_not_deducted_on_error(self, tmp_path: Path) -> None:
         """Verify use_quota NOT called when kernel raises exception."""
-        pg_ctx = _make_ctx(tmp_path)
+        environment = _make_environment(tmp_path)
         mock_llm = _ErrorLLM()
-        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+        svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
 
         async def mock_use_quota(uid, **kwargs):
             pass
@@ -434,9 +442,9 @@ class TestQuotaNotDeductedOnError:
 
     def test_error_run_emits_stream_closed_event(self, tmp_path: Path) -> None:
         """Verify error runs emit stream_closed after the error event."""
-        pg_ctx = _make_ctx(tmp_path)
+        environment = _make_environment(tmp_path)
         mock_llm = _ErrorLLM()
-        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+        svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
         payloads: list[dict[str, Any]] = []
 
         async def mock_use_quota(uid, **kwargs):
@@ -464,9 +472,9 @@ class TestQuotaNotDeductedOnError:
 
     def test_error_run_returns_failure_result(self, tmp_path: Path) -> None:
         """Verify exception paths return failure so Worker won't notify success."""
-        pg_ctx = _make_ctx(tmp_path)
+        environment = _make_environment(tmp_path)
         mock_llm = _ErrorLLM()
-        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+        svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
 
         async def mock_use_quota(uid, **kwargs):
             pass
@@ -487,9 +495,9 @@ class TestQuotaNotDeductedOnError:
 
     def test_quota_not_deducted_on_invalid_finish(self, tmp_path: Path) -> None:
         """Verify use_quota NOT called when run_result validation fails."""
-        pg_ctx = _make_ctx(tmp_path)
+        environment = _make_environment(tmp_path)
         mock_llm = _InvalidFinishLLM()
-        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+        svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
 
         async def mock_use_quota(uid, **kwargs):
             pass
@@ -502,9 +510,9 @@ class TestQuotaNotDeductedOnError:
         self, tmp_path: Path
     ) -> None:
         """Verify invalid finishes emit a visible error before closing the stream."""
-        pg_ctx = _make_ctx(tmp_path)
+        environment = _make_environment(tmp_path)
         mock_llm = _InvalidFinishLLM()
-        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+        svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
         payloads: list[dict[str, Any]] = []
 
         async def mock_use_quota(uid, **kwargs):
@@ -553,9 +561,9 @@ class TestQuotaNotDeductedOnError:
 
     def test_invalid_finish_returns_failure_result(self, tmp_path: Path) -> None:
         """Verify failed finish states return failure for Worker status updates."""
-        pg_ctx = _make_ctx(tmp_path)
+        environment = _make_environment(tmp_path)
         mock_llm = _InvalidFinishLLM()
-        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+        svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
 
         async def mock_use_quota(uid, **kwargs):
             pass
@@ -577,9 +585,9 @@ class TestQuotaNotDeductedOnError:
         self, tmp_path: Path
     ) -> None:
         """Verify empty stop finish validation failure skips quota deduction."""
-        pg_ctx = _make_ctx(tmp_path)
+        environment = _make_environment(tmp_path)
         mock_llm = _EmptyStopLLM()
-        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+        svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
 
         async def mock_use_quota(uid, **kwargs):
             pass
@@ -592,9 +600,9 @@ class TestQuotaNotDeductedOnError:
         self, tmp_path: Path
     ) -> None:
         """Verify empty stop finishes use the public invalid_finish stream shape."""
-        pg_ctx = _make_ctx(tmp_path)
+        environment = _make_environment(tmp_path)
         mock_llm = _EmptyStopLLM()
-        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+        svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
         payloads: list[dict[str, Any]] = []
 
         async def mock_use_quota(uid, **kwargs):
@@ -642,9 +650,9 @@ class TestQuotaNotDeductedOnError:
         self, tmp_path: Path
     ) -> None:
         """Verify empty stop invalid_finish returns failure for Worker status."""
-        pg_ctx = _make_ctx(tmp_path)
+        environment = _make_environment(tmp_path)
         mock_llm = _EmptyStopLLM()
-        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+        svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
 
         async def mock_use_quota(uid, **kwargs):
             pass
@@ -666,9 +674,9 @@ class TestQuotaNotDeductedOnError:
         self, tmp_path: Path
     ) -> None:
         """Verify empty-value sentinel finish validation skips quota deduction."""
-        pg_ctx = _make_ctx(tmp_path)
+        environment = _make_environment(tmp_path)
         mock_llm = _SentinelStopLLM()
-        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+        svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
 
         async def mock_use_quota(uid, **kwargs):
             pass
@@ -681,9 +689,9 @@ class TestQuotaNotDeductedOnError:
         self, tmp_path: Path
     ) -> None:
         """Verify sentinel answers use the public invalid_finish stream shape."""
-        pg_ctx = _make_ctx(tmp_path)
+        environment = _make_environment(tmp_path)
         mock_llm = _SentinelStopLLM()
-        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+        svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
         payloads: list[dict[str, Any]] = []
 
         async def mock_use_quota(uid, **kwargs):
@@ -730,9 +738,9 @@ class TestQuotaDeduction:
 
     def test_quota_deduction(self, tmp_path: Path) -> None:
         """Verify use_quota called via native await."""
-        pg_ctx = _make_ctx(tmp_path)
+        environment = _make_environment(tmp_path)
         mock_llm = _SuccessLLM()
-        svc, mock_pg = _build_patched_service(mock_llm, mock_pg_ctx=pg_ctx)
+        svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
 
         use_quota_calls = []
 

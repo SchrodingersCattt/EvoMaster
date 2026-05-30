@@ -14,8 +14,8 @@ from matmaster.core.playground import ExecutionEnvironment
 from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.runtime import (
+    AgentKernelRuntime,
     AgentRuntime,
-    AgentRuntimeSpec,
 )
 from matmaster.types.session import Session
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
@@ -72,7 +72,7 @@ class _Bridge:
 def _tool_names(runtime) -> set[str]:
     return {
         item["function"]["name"]
-        for item in runtime.spec.tool_catalog.build_definitions()
+        for item in runtime.kernel_runtime.resources.tool_catalog.build_definitions()
     }
 
 
@@ -103,45 +103,40 @@ class TestExpConstruction:
         assert isinstance(exp._config, ExpConfig)
 
 
-# ── TestExpAssemble ──────────────────────────────────────
+# ── TestExpBuildRuntimeConfig ────────────────────────────
 
 
-class TestExpAssemble:
-    """assemble() transforms config + ctx into AgentRuntimeSpec."""
+class TestExpBuildRuntimeConfig:
+    """build_runtime() maps config + ctx into the kernel runtime spec.
 
-    async def test_returns_agent_runtime_spec(self) -> None:
-        """assemble() returns an AgentRuntimeSpec instance."""
-        exp = Exp(ExpConfig(name='test'))
-        ctx = _make_ctx()
-        spec = await exp.assemble(ctx)
-        assert isinstance(spec, AgentRuntimeSpec)
+    Migrated from the old assemble() data-transform tests: assemble() is
+    deleted, so these assert the same config values on the kernel runtime
+    produced by build_runtime() instead.
+    """
 
     async def test_max_turns_from_config(self) -> None:
-        """max_turns in config propagates to spec."""
+        """max_turns in config propagates to the kernel spec."""
         exp = Exp(ExpConfig(name='test', max_turns=50))
-        ctx = _make_ctx()
-        spec = await exp.assemble(ctx)
-        assert spec.max_turns == 50
+        ctx = _make_ctx(with_llm=True)
+        with patch("matmaster.core.agent.AgentKernel"):
+            runtime = await exp.build_runtime(ctx)
+        assert runtime.kernel_runtime.spec.max_turns == 50
 
     async def test_max_turns_default(self) -> None:
         """Default max_turns is 100 when not in config."""
         exp = Exp(ExpConfig(name='test'))
-        ctx = _make_ctx()
-        spec = await exp.assemble(ctx)
-        assert spec.max_turns == 100
-
-    async def test_assemble_does_not_expose_guards_field(self) -> None:
-        """Guard 配置已移除，assemble 产出的 spec 不再暴露 guards 字段。"""
-        exp = Exp(ExpConfig(name='test'))
-        ctx = _make_ctx()
-        spec = await exp.assemble(ctx)
-        assert "guards" not in type(spec).model_fields
+        ctx = _make_ctx(with_llm=True)
+        with patch("matmaster.core.agent.AgentKernel"):
+            runtime = await exp.build_runtime(ctx)
+        assert runtime.kernel_runtime.spec.max_turns == 100
 
     async def test_runtime_identity_defaults_empty(self) -> None:
-        """Runtime identity is explicit and empty at assemble time."""
+        """Runtime identity is explicit and empty for a top-level run."""
         exp = Exp(ExpConfig(name='test'))
-        ctx = _make_ctx()
-        spec = await exp.assemble(ctx)
+        ctx = _make_ctx(with_llm=True)
+        with patch("matmaster.core.agent.AgentKernel"):
+            runtime = await exp.build_runtime(ctx)
+        spec = runtime.kernel_runtime.spec
         assert spec.run_identity.task_id == ""
         assert spec.run_identity.session_id == ""
         assert spec.run_identity.spawn_id is None
@@ -151,8 +146,12 @@ class TestExpAssemble:
         """llm_provider comes from ctx, not config."""
         exp = Exp(ExpConfig(name='test'))
         ctx = _make_ctx(with_llm=True)
-        spec = await exp.assemble(ctx)
-        assert spec.llm_provider is ctx.request.llm_provider
+        with patch("matmaster.core.agent.AgentKernel"):
+            runtime = await exp.build_runtime(ctx)
+        assert (
+            runtime.kernel_runtime.resources.llm_provider
+            is ctx.request.llm_provider
+        )
 
 
 # ── TestExpBuildRuntime ──────────────────────────────────
@@ -179,7 +178,10 @@ class TestExpBuildRuntime:
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
 
-        assert runtime.spec.llm_provider is ctx.request.llm_provider
+        assert (
+            runtime.kernel_runtime.resources.llm_provider
+            is ctx.request.llm_provider
+        )
 
     async def test_build_runtime_has_no_bus_parameter(self) -> None:
         """build_runtime() does not accept a bus parameter."""
@@ -199,7 +201,9 @@ class TestExpBuildRuntime:
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
 
-        assert isinstance(runtime.spec.hook_executor, HookExecutor)
+        assert isinstance(
+            runtime.kernel_runtime.resources.hook_executor, HookExecutor
+        )
 
     async def test_runtime_has_cleanup_callable(self) -> None:
         """AgentRuntime.cleanup is a callable."""
@@ -229,7 +233,7 @@ class TestExpBuildRuntime:
             runtime = await exp.build_runtime(ctx)
 
         assert exp._cleanup_callbacks
-        state = runtime.spec.tool_runner.state
+        state = runtime.kernel_runtime.resources.tool_runner.state
         assert isinstance(state, ToolRunnerState)
 
         matching_callbacks = [
@@ -259,20 +263,22 @@ class TestExpBuildRuntime:
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
 
-        assert "Base persona text." in runtime.spec.system_prompt
-        assert "# Tools" in runtime.spec.system_prompt
+        spec = runtime.kernel_runtime.spec
+        resources = runtime.kernel_runtime.resources
+        assert "Base persona text." in spec.system_prompt
+        assert "# Tools" in spec.system_prompt
         assert "Use the tools declared in function calling." in (
-            runtime.spec.system_prompt
+            spec.system_prompt
         )
         assert "Use dedicated tools instead of shell equivalents" not in (
-            runtime.spec.system_prompt
+            spec.system_prompt
         )
         desc_ctx = ToolDescriptionContext(
-            session_kind=runtime.spec.runtime_topology.session_kind,
-            workspace_root=runtime.spec.runtime_topology.workspace_root,
-            topology=runtime.spec.runtime_topology,
+            session_kind=resources.runtime_topology.session_kind,
+            workspace_root=resources.runtime_topology.workspace_root,
+            topology=resources.runtime_topology,
         )
-        defs = runtime.spec.tool_catalog.build_definitions(desc_ctx)
+        defs = resources.tool_catalog.build_definitions(desc_ctx)
         bash_def = next(d for d in defs if d["function"]["name"] == "Bash")
         assert (
             "Use dedicated tools instead of shell equivalents"
@@ -301,7 +307,8 @@ class TestExpBuildRuntime:
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
 
-        sys_prompt = runtime.spec.system_prompt
+        resources = runtime.kernel_runtime.resources
+        sys_prompt = runtime.kernel_runtime.spec.system_prompt
 
         assert "Base." in sys_prompt
         assert "# Tools" in sys_prompt
@@ -311,11 +318,11 @@ class TestExpBuildRuntime:
         assert "ripgrep" not in sys_prompt.lower()
 
         desc_ctx = ToolDescriptionContext(
-            session_kind=runtime.spec.runtime_topology.session_kind,
-            workspace_root=runtime.spec.runtime_topology.workspace_root,
-            topology=runtime.spec.runtime_topology,
+            session_kind=resources.runtime_topology.session_kind,
+            workspace_root=resources.runtime_topology.workspace_root,
+            topology=resources.runtime_topology,
         )
-        defs = runtime.spec.tool_catalog.build_definitions(desc_ctx)
+        defs = resources.tool_catalog.build_definitions(desc_ctx)
         by_name = {d["function"]["name"]: d["function"]["description"] for d in defs}
 
         assert "Use dedicated tools instead of shell equivalents" in by_name["Bash"]
@@ -358,7 +365,9 @@ class TestExpBuildRuntime:
         ):
             runtime = await exp.build_runtime(ctx)
 
-        raw_tool = runtime.spec.tool_catalog.registry.get_raw("Agent")
+        raw_tool = runtime.kernel_runtime.resources.tool_catalog.registry.get_raw(
+            "Agent"
+        )
         assert raw_tool is not None
         assert raw_tool._available_exps == (meta,)
 
@@ -402,7 +411,7 @@ class TestRuntimeScope:
     async def test_yields_built_runtime(self, tmp_path: Path) -> None:
         exp = Exp(ExpConfig(name="test"))
         runtime = MagicMock()
-        runtime.spec = MagicMock(tool_catalog=None)
+        runtime.kernel_runtime = MagicMock(resources=MagicMock(tool_catalog=None))
         ctx = _make_ctx(with_llm=True)
         with patch.object(exp, "build_runtime", AsyncMock(return_value=runtime)):
             async with exp.runtime_scope(ctx) as scoped:
@@ -413,7 +422,7 @@ class TestRuntimeScope:
         cb = MagicMock()
         exp._register_cleanup(cb)
         runtime = MagicMock()
-        runtime.spec = MagicMock(tool_catalog=None)
+        runtime.kernel_runtime = MagicMock(resources=MagicMock(tool_catalog=None))
         ctx = _make_ctx(with_llm=True)
         with patch.object(exp, "build_runtime", AsyncMock(return_value=runtime)):
             with pytest.raises(ValueError, match="boom"):
@@ -428,7 +437,7 @@ class TestRuntimeScope:
         session = MagicMock(spec=Session)
         catalog = MagicMock()
         runtime = MagicMock()
-        runtime.spec = MagicMock(tool_catalog=catalog)
+        runtime.kernel_runtime = MagicMock(resources=MagicMock(tool_catalog=catalog))
         ctx = _make_ctx(workdir=tmp_path, session=session, with_llm=True)
         token = MagicMock()
         with patch.object(exp, "build_runtime", AsyncMock(return_value=runtime)):
@@ -455,7 +464,10 @@ class TestIdentityOverride:
         ctx = _make_ctx(with_llm=True)
         runtime = await exp.build_runtime(ctx)
 
-        assert 'I am a materials scientist.' in runtime.spec.system_prompt
+        assert (
+            'I am a materials scientist.'
+            in runtime.kernel_runtime.spec.system_prompt
+        )
 
     async def test_default_identity_when_not_set(self) -> None:
         """Empty developer_instructions means no identity section in prompt."""
@@ -468,7 +480,7 @@ class TestIdentityOverride:
         ctx = _make_ctx(with_llm=True)
         runtime = await exp.build_runtime(ctx)
 
-        assert '# Identity' not in runtime.spec.system_prompt
+        assert '# Identity' not in runtime.kernel_runtime.spec.system_prompt
 
 
 class TestSystemPromptOverride:
@@ -485,7 +497,9 @@ class TestSystemPromptOverride:
         ctx = _make_ctx(with_llm=True)
         runtime = await exp.build_runtime(ctx)
 
-        assert 'Base persona text.' in runtime.spec.system_prompt
+        assert (
+            'Base persona text.' in runtime.kernel_runtime.spec.system_prompt
+        )
 
     async def test_empty_system_prompt_skips_section(self) -> None:
         exp = Exp(
@@ -498,7 +512,7 @@ class TestSystemPromptOverride:
         ctx = _make_ctx(with_llm=True)
         runtime = await exp.build_runtime(ctx)
 
-        assert '# System' not in runtime.spec.system_prompt
+        assert '# System' not in runtime.kernel_runtime.spec.system_prompt
 
 
 # ── TestExpBuiltinTools ─────────────────────────────────
@@ -602,7 +616,8 @@ class TestExpBuiltinTools:
             runtime = await exp.build_runtime(ctx)
 
         registered_names = {
-            t.name for t in runtime.spec.tool_catalog.registry.all_tools
+            t.name
+            for t in runtime.kernel_runtime.resources.tool_catalog.registry.all_tools
         }
         assert registered_names == {'Bash', 'Read'}
 
@@ -619,7 +634,7 @@ class TestExpBuiltinTools:
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
 
-        assert len(runtime.spec.tool_catalog.registry) == 0
+        assert len(runtime.kernel_runtime.resources.tool_catalog.registry) == 0
 
 
 # ── TestExecutionWorkdirBinding ─────────────────────────
@@ -681,7 +696,7 @@ class TestExecutionWorkdirBinding:
             runtime = await exp.build_runtime(ctx)
         agents = [
             t
-            for t in runtime.spec.tool_catalog.registry.all_tools
+            for t in runtime.kernel_runtime.resources.tool_catalog.registry.all_tools
             if isinstance(t, AgentTool)
         ]
         assert len(agents) == 1
@@ -689,24 +704,27 @@ class TestExecutionWorkdirBinding:
 
 
 class TestExpCompaction:
-    async def test_assemble_compaction_defaults_present(self) -> None:
+    async def test_build_runtime_compaction_defaults_present(self) -> None:
         from matmaster.types.runtime import CompactionConfig
 
-        exp = Exp(ExpConfig(name='test'))
-        ctx = MagicMock()
-        ctx.request.llm_provider = None
+        exp = Exp(ExpConfig(name='test', tools=ExpToolsConfig(builtin=[])))
+        ctx = _make_ctx(with_llm=True)
 
-        spec = await exp.assemble(ctx)
-        assert isinstance(spec.compaction, CompactionConfig)
-        assert "enabled" not in type(spec.compaction).model_fields
+        with patch("matmaster.core.agent.AgentKernel"):
+            runtime = await exp.build_runtime(ctx)
 
-    async def test_assemble_default_compaction(self) -> None:
-        exp = Exp(ExpConfig(name="test"))
-        ctx = MagicMock()
-        ctx.request.llm_provider = None
+        compaction = runtime.kernel_runtime.spec.compaction
+        assert isinstance(compaction, CompactionConfig)
+        assert "enabled" not in type(compaction).model_fields
 
-        spec = await exp.assemble(ctx)
-        assert spec.compaction.strategy == "summary"
+    async def test_build_runtime_default_compaction(self) -> None:
+        exp = Exp(ExpConfig(name="test", tools=ExpToolsConfig(builtin=[])))
+        ctx = _make_ctx(with_llm=True)
+
+        with patch("matmaster.core.agent.AgentKernel"):
+            runtime = await exp.build_runtime(ctx)
+
+        assert runtime.kernel_runtime.spec.compaction.strategy == "summary"
 
     async def test_build_runtime_creates_compactor_when_llm_exists(self) -> None:
         exp = Exp(ExpConfig(name="test", tools=ExpToolsConfig(builtin=[])))
@@ -715,9 +733,10 @@ class TestExpCompaction:
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
 
-        assert runtime.spec.compactor is not None
+        compactor = runtime.kernel_runtime.resources.compactor
+        assert compactor is not None
         removed_attr = "_summary" + "_provider"
-        assert not hasattr(runtime.spec.compactor, removed_attr)
+        assert not hasattr(compactor, removed_attr)
 
 
 # ── TestSessionlessBuiltins ────────────────────────────
@@ -744,7 +763,10 @@ async def test_build_runtime_registers_todowrite_without_session(
     with patch("matmaster.core.agent.AgentKernel"):
         runtime = await exp.build_runtime(ctx)
 
-    assert runtime.spec.tool_catalog.get_tool("TodoWrite") is not None
+    assert (
+        runtime.kernel_runtime.resources.tool_catalog.get_tool("TodoWrite")
+        is not None
+    )
 
 
 @pytest.mark.asyncio
@@ -766,7 +788,10 @@ async def test_build_runtime_registers_bohrium_without_session(tmp_path: Path) -
     with patch("matmaster.core.agent.AgentKernel"):
         runtime = await exp.build_runtime(ctx)
 
-    assert runtime.spec.tool_catalog.get_tool("Bohrium") is not None
+    assert (
+        runtime.kernel_runtime.resources.tool_catalog.get_tool("Bohrium")
+        is not None
+    )
 
 
 @pytest.mark.asyncio
@@ -818,7 +843,10 @@ async def test_build_runtime_hides_ask_question_when_bridge_missing(
     with patch("matmaster.core.agent.AgentKernel"):
         runtime = await exp.build_runtime(ctx)
 
-    assert runtime.spec.tool_catalog.get_tool("AskQuestion") is not None
+    assert (
+        runtime.kernel_runtime.resources.tool_catalog.get_tool("AskQuestion")
+        is not None
+    )
     assert "AskQuestion" not in _tool_names(runtime)
 
 
@@ -865,7 +893,10 @@ async def test_child_runtime_hides_ask_question_even_when_bridge_exists(
     with patch("matmaster.core.agent.AgentKernel"):
         runtime = await exp.build_runtime(ctx, spawn_id="child-1")
 
-    assert runtime.spec.tool_catalog.get_tool("AskQuestion") is not None
+    assert (
+        runtime.kernel_runtime.resources.tool_catalog.get_tool("AskQuestion")
+        is not None
+    )
     assert "AskQuestion" not in _tool_names(runtime)
 
 
@@ -897,7 +928,7 @@ async def test_bohrium_tool_receives_session(tmp_path: Path) -> None:
 
     bohrium_tools = [
         t
-        for t in runtime.spec.tool_catalog.registry.all_tools
+        for t in runtime.kernel_runtime.resources.tool_catalog.registry.all_tools
         if isinstance(t, BohriumTool)
     ]
     assert len(bohrium_tools) == 1
@@ -927,7 +958,7 @@ async def test_bohrium_tool_session_none_when_no_session(tmp_path: Path) -> None
 
     bohrium_tools = [
         t
-        for t in runtime.spec.tool_catalog.registry.all_tools
+        for t in runtime.kernel_runtime.resources.tool_catalog.registry.all_tools
         if isinstance(t, BohriumTool)
     ]
     assert len(bohrium_tools) == 1
@@ -956,7 +987,10 @@ async def test_build_runtime_registers_agent_by_cc_name(tmp_path: Path) -> None:
     with patch("matmaster.core.agent.AgentKernel"):
         runtime = await exp.build_runtime(ctx)
 
-    assert runtime.spec.tool_catalog.get_tool("Agent") is not None
+    assert (
+        runtime.kernel_runtime.resources.tool_catalog.get_tool("Agent")
+        is not None
+    )
 
 
 # ── TestSpawnGuard ─────────────────────────────────────
@@ -982,6 +1016,6 @@ async def test_build_runtime_hides_agent_when_allow_spawn_false(tmp_path: Path) 
     with patch("matmaster.core.agent.AgentKernel"):
         runtime = await exp.build_runtime(ctx)
 
-    tool = runtime.spec.tool_catalog.get_tool("Agent")
+    tool = runtime.kernel_runtime.resources.tool_catalog.get_tool("Agent")
     assert tool is not None
     assert tool.tool_spec.exposed_to_model is False

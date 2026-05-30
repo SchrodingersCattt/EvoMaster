@@ -138,7 +138,7 @@ class Playground:
             session_config={"workspace_path": "/tmp/ws"},
         )
         ctx = pg.prepare(RunMetadata(run_dir="/tmp/runs/run-001", task_id="t1"))
-        # ... pass ctx to Exp.assemble() ...
+        # ... pass ctx to Exp.build_runtime() ...
         pg.cleanup()
     """
 

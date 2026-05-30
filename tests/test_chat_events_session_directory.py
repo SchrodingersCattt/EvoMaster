@@ -33,6 +33,34 @@ def test_add_history_event_persists_session_directory_metadata_without_files():
     }
 
 
+def test_add_history_event_persists_requested_model_metadata():
+    table = MagicMock()
+    sessions = MagicMock()
+    service = ChatEventsService(events_table=table, sessions_service=sessions)
+
+    service.add_history_event(
+        "sess-1",
+        {
+            "source": "User",
+            "type": "query",
+            "content": "run",
+            "mode": "direct",
+            "task_id": "task-1",
+            "invocation_id": "inv-1",
+            "requested_llm": "opus",
+            "requested_model": "claude-opus-4-6",
+        },
+        user_id="user-1",
+    )
+
+    stored_content = table.add_event.call_args.args[3]
+    assert stored_content == {
+        "content": "run",
+        "requested_llm": "opus",
+        "requested_model": "claude-opus-4-6",
+    }
+
+
 def test_row_to_event_unpacks_session_directory_metadata():
     row = {
         "id": 1,
@@ -57,6 +85,32 @@ def test_row_to_event_unpacks_session_directory_metadata():
     assert event["content"] == "run"
     assert event["session_directory"] == "/share/case"
     assert event["session_directory_source"] == "session"
+
+
+def test_row_to_event_unpacks_requested_model_metadata():
+    row = {
+        "id": 1,
+        "session_id": "sess-1",
+        "source": "User",
+        "type": "query",
+        "content": json.dumps(
+            {
+                "content": "run",
+                "requested_llm": "opus",
+                "requested_model": "claude-opus-4-6",
+            }
+        ),
+        "task_id": "task-1",
+        "invocation_id": "inv-1",
+        "spawn_id": None,
+        "created_at": None,
+    }
+
+    event = ChatEventsTable._row_to_event(row)
+
+    assert event["content"] == "run"
+    assert event["requested_llm"] == "opus"
+    assert event["requested_model"] == "claude-opus-4-6"
 
 
 class _Cursor:

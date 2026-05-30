@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
@@ -164,7 +165,7 @@ async def test_run_agent_injects_figure_upload_via_runtime_ports():
 
 
 @pytest.mark.asyncio
-async def test_run_agent_injects_turn_input_into_pg_ctx_metadata():
+async def test_run_agent_injects_turn_input_into_request():
     from matmaster.context.sources.turn_input import TurnInput
 
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
@@ -316,7 +317,7 @@ async def test_run_agent_uses_model_history_restore_service_and_injects_spawn_aw
         assert built_sink is checkpoint_sink
 
 
-def test_run_agent_injects_bohrium_rebuild_events_into_pg_ctx_metadata():
+def test_run_agent_injects_bohrium_rebuild_events_into_request():
     run_result = RunResultEvent(source='agent', status='completed', reason='natural')
     rebuild_events = [
         {
@@ -871,8 +872,13 @@ async def test_exception_emits_error_and_closed():
             patch('matmaster.config.loader.load_exp_config', return_value=MagicMock()),
             patch('matmaster.config.loader.load_llm_config', return_value=MagicMock()),
             patch(
-                'matmaster.providers.llm_factory.build_provider',
-                return_value=MagicMock(),
+                'matmaster.providers.llm_factory.build_provider_bundle',
+                return_value=SimpleNamespace(
+                    provider=MagicMock(),
+                    model="test-model",
+                    model_profile="test-profile",
+                    model_route="test-route",
+                ),
             ),
             patch('matmaster.core.exp.Exp', new=lambda config: error_exp),
         ):

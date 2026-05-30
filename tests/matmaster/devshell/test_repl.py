@@ -351,7 +351,7 @@ class TestShowTools:
         mock_runtime = MagicMock()
         mock_catalog = MagicMock()
         mock_catalog.registry = mock_registry
-        mock_runtime.spec.tool_catalog = mock_catalog
+        mock_runtime.kernel_runtime.resources.tool_catalog = mock_catalog
 
         with patch("matmaster.core.exp.Exp") as MockExp:
             MockExp.return_value.build_runtime = AsyncMock(return_value=mock_runtime)

@@ -3,7 +3,7 @@
 BuiltinTool ABC — base class for all matmaster builtin tools.
 
 Satisfies the Tool Protocol (name/description/json_schema/execute).
-Construction injection: session/workdir passed at Exp assemble time.
+Construction injection: session/workdir passed at Exp build_runtime time.
 Kernel sees only Tool Protocol interface.
 
 execute() is async, delegates to sync _execute() via asyncio.to_thread.

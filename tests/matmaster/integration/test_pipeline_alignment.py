@@ -127,12 +127,16 @@ class TestEventSequenceAlignment:
         exp = Exp(config)
         runtime = await exp.build_runtime(ctx)
         # Register test tool via catalog overlay for version-bumped injection
-        runtime.spec.tool_catalog.register_overlay(tool, source="test")
+        runtime.kernel_runtime.resources.tool_catalog.register_overlay(
+            tool, source="test"
+        )
 
         # Collect events from kernel.run_stream() generator
         kernel = AgentKernel()
         events = []
-        async for event in kernel.run_stream(runtime.spec, "alignment test"):
+        async for event in kernel.run_stream(
+            runtime.kernel_runtime, "alignment test"
+        ):
             events.append(event)
 
         # Extract event type sequence

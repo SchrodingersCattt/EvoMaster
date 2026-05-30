@@ -10,7 +10,7 @@ from __future__ import annotations
 import pytest
 
 from matmaster.config.llm import LLMConfig, LLMProfileConfig, LLMRouteConfig
-from matmaster.providers.llm_factory import build_provider
+from matmaster.providers.llm_factory import build_provider, build_provider_bundle
 
 
 @pytest.fixture()
@@ -89,6 +89,23 @@ class TestBuildProvider:
             llm_override="opus",
         )
         assert provider._model == "claude-sonnet-4-6"
+
+    def test_build_provider_bundle_exposes_resolved_model_identity(
+        self, llm_config: LLMConfig
+    ) -> None:
+        """Provider construction and persisted model identity share one route resolution."""
+        bundle = build_provider_bundle(
+            llm_config,
+            model_override="claude-sonnet-4-6",
+            llm_override="opus",
+        )
+
+        assert bundle.provider._model == "claude-sonnet-4-6"
+        assert bundle.model == "claude-sonnet-4-6"
+        assert bundle.model_profile == "sonnet"
+        assert bundle.model_route == "claude-sonnet-4-6"
+        assert bundle.provider_name == "openai"
+        assert bundle.model_family == "claude-4.6"
 
     def test_stream_timeout_passed(self) -> None:
         """stream_timeout and stream_idle_timeout from profile are passed to provider."""

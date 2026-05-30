@@ -69,7 +69,7 @@ def test_devshell_mcp_only_struct_db_skill_and_lazy_mcp(
         exp = Exp(exp_cfg)
         try:
             runtime = await exp.build_runtime(ctx)
-            reg = runtime.spec.tool_catalog.registry
+            reg = runtime.kernel_runtime.resources.tool_catalog.registry
             names = _tool_names(reg)
             assert "use_skill" in names
             assert "mat_struct_db_fetch_structures_from_db" not in names
@@ -143,7 +143,7 @@ def test_mcp_runtime_patch_limits_mat_sg_lazy_tools(
         exp = Exp(exp_cfg)
         try:
             runtime = await exp.build_runtime(ctx)
-            reg = runtime.spec.tool_catalog.registry
+            reg = runtime.kernel_runtime.resources.tool_catalog.registry
             assert "mat_sg_build_surface_slab" not in _tool_names(reg)
 
             use_skill = next(t for t in reg.all_tools if t.name == "use_skill")

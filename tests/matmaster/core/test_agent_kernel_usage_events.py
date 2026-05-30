@@ -9,7 +9,7 @@ import pytest
 from matmaster.types.events import ResponseEvent, RunResultEvent
 from matmaster.types.run_metadata import RunIdentity
 
-from .agent_kernel_test_helpers import _make_spec
+from .agent_kernel_test_helpers import make_kernel_runtime
 from .test_agent_kernel_stream import (
     ContentOnlyProvider,
     EmptyThenContentProvider,
@@ -23,10 +23,10 @@ async def test_response_segment_end_at_stream_end() -> None:
     from matmaster.core.kernel_items import _KernelItem
 
     provider = ReasoningThenContentProvider()
-    spec = _make_spec(provider=provider)
+    kernel_runtime = make_kernel_runtime(provider=provider)
     items: list[_KernelItem] = []
     async for item in stream_llm_items(
-        spec, [{"role": "user", "content": "test"}], None
+        kernel_runtime.resources, [{"role": "user", "content": "test"}], None
     ):
         items.append(item)
 
@@ -54,7 +54,7 @@ async def test_run_stream_emits_usage_bearing_response_complete() -> None:
 
     events: list[Any] = []
     async for event in AgentKernel().run_stream(
-        _make_spec(provider=ContentOnlyProvider()), "test task"
+        make_kernel_runtime(provider=ContentOnlyProvider()), "test task"
     ):
         events.append(event)
 
@@ -77,7 +77,7 @@ async def test_retry_discarded_attempt_does_not_emit_usage_response_complete() -
     provider = EmptyThenContentProvider()
     events: list[Any] = []
     async for event in AgentKernel().run_stream(
-        _make_spec(provider=provider), "test task"
+        make_kernel_runtime(provider=provider), "test task"
     ):
         events.append(event)
 
@@ -94,11 +94,12 @@ async def test_retry_discarded_attempt_does_not_emit_usage_response_complete() -
 async def test_child_runtime_does_not_emit_usage_response_complete() -> None:
     from matmaster.core.agent import AgentKernel
 
-    spec = _make_spec(provider=ContentOnlyProvider()).model_copy(
-        update={"run_identity": RunIdentity(spawn_id="child-1")}
+    kernel_runtime = make_kernel_runtime(
+        provider=ContentOnlyProvider(),
+        run_identity=RunIdentity(spawn_id="child-1"),
     )
     events: list[Any] = []
-    async for event in AgentKernel().run_stream(spec, "child task"):
+    async for event in AgentKernel().run_stream(kernel_runtime, "child task"):
         events.append(event)
 
     assert not [
@@ -116,7 +117,7 @@ async def test_completed_run_result_usage_matches_distinct_response_turn_usage()
 
     events: list[Any] = []
     async for event in AgentKernel().run_stream(
-        _make_spec(provider=ContentOnlyProvider()), "test task"
+        make_kernel_runtime(provider=ContentOnlyProvider()), "test task"
     ):
         events.append(event)
 

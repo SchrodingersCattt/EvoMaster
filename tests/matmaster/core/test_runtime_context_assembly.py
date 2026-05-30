@@ -5,7 +5,6 @@ from collections.abc import AsyncIterator
 
 from matmaster.context.assembly import ContextRenderOptions
 from matmaster.context.ports import ActiveSkill, SessionEvent, UserInstructions
-from matmaster.context.system_prompt import SystemPromptBuilder
 from matmaster.core.playground import ExecutionEnvironment
 from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.core.runtime_context_assembly import (
@@ -15,7 +14,7 @@ from matmaster.core.runtime_context_assembly import (
 )
 from matmaster.types.messages import LLMResponse, StreamChunk
 from matmaster.types.run_metadata import RunMetadata
-from matmaster.types.runtime import AgentRuntimeSpec
+from matmaster.types.runtime import CompactionConfig
 
 
 class _Provider:
@@ -77,10 +76,6 @@ def test_empty_skill_resolver_returns_empty_tuple() -> None:
 
 
 def test_runtime_context_assembly_ignores_tool_render_ghosts(tmp_path) -> None:
-    spec = AgentRuntimeSpec(
-        llm_provider=_Provider(),
-        system_prompt_builder=SystemPromptBuilder(),
-    )
     ctx = AgentRunContext(
         environment=ExecutionEnvironment(
             workdir=tmp_path,
@@ -92,26 +87,25 @@ def test_runtime_context_assembly_ignores_tool_render_ghosts(tmp_path) -> None:
     )
 
     assembly = build_runtime_context_assembly(
-        spec=spec,
+        llm_provider=_Provider(),
+        compaction=CompactionConfig(),
         ctx=ctx,
         skill_resolver=empty_skill_resolver,
         spawn_id=None,
         logger=logging.getLogger(__name__),
     )
 
-    assert assembly.context_assembler is not None
-    assert assembly.context_assembler._render_options == ContextRenderOptions()
-    assert assembly.context_assembler._session_context_factory is not None
-    builder = assembly.context_assembler._session_context_factory(())
+    assert assembly.context_runtime is not None
+    assembler = assembly.context_runtime.assembler
+    assert assembler is not None
+    assert assembler._render_options == ContextRenderOptions()
+    assert assembler._session_context_factory is not None
+    builder = assembler._session_context_factory(())
     assert builder.legal_mcp_servers is None
     assert builder.schemas_by_server is None
 
 
 def test_user_instructions_hash_is_not_recomputed_in_assembly(tmp_path) -> None:
-    spec = AgentRuntimeSpec(
-        llm_provider=_Provider(),
-        system_prompt_builder=SystemPromptBuilder(),
-    )
     bundle = UserInstructions(
         text="Use project-specific units.",
         hash="sha256:already-computed",
@@ -129,7 +123,8 @@ def test_user_instructions_hash_is_not_recomputed_in_assembly(tmp_path) -> None:
     )
 
     assembly = build_runtime_context_assembly(
-        spec=spec,
+        llm_provider=_Provider(),
+        compaction=CompactionConfig(),
         ctx=ctx,
         skill_resolver=empty_skill_resolver,
         spawn_id=None,

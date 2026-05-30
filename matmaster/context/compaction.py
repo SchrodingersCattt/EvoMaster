@@ -124,15 +124,6 @@ def estimate_tokens(messages: list[Message], safety_margin: float = 1.0) -> int:
     return int(total * safety_margin)
 
 
-def estimate_json_tokens(obj: Any, safety_margin: float = 1.0) -> int:
-    """Estimate token count for an arbitrary JSON-serializable object."""
-    text = json.dumps(obj, ensure_ascii=False)
-    enc = _get_encoder()
-    if enc is not None:
-        return int(len(enc.encode(text)) * safety_margin)
-    return int(max(len(text) // 4, 1) * safety_margin)
-
-
 def _truncate_tool_message_for_summary(msg: ToolMessage) -> ToolMessage:
     content = msg.content or ""
     head = content[:_TRUNCATE_HEAD_CHARS]
@@ -204,7 +195,6 @@ class SummaryInputPreparation:
     truncated_tool_call_ids: tuple[str, ...]
     original_tokens: int
     prepared_tokens: int
-    tool_schema_tokens: int
     request_tokens: int
     message_budget: int
 
@@ -215,7 +205,6 @@ def prepare_messages_for_summary_call(
     phase: Literal["preflight", "runtime"],
     turn_input: TurnInput | None,
     compact_request: UserMessage,
-    tool_definitions: list[dict] | None,
     context_limit: int,
     reserved_summary_tokens: int,
     safety_margin_tokens: int = 5_000,
@@ -234,9 +223,8 @@ def prepare_messages_for_summary_call(
         turn_input=turn_input,
     )
     input_budget = context_limit - reserved_summary_tokens - safety_margin_tokens
-    tool_schema_tokens = estimate_json_tokens(tool_definitions or [])
     request_tokens = estimate_tokens([compact_request], safety_margin=1.1)
-    message_budget = input_budget - tool_schema_tokens - request_tokens
+    message_budget = input_budget - request_tokens
     if message_budget <= 0:
         raise ValueError("summary message budget non-positive")
 
@@ -247,7 +235,6 @@ def prepare_messages_for_summary_call(
             truncated_tool_call_ids=(),
             original_tokens=prepared_tokens,
             prepared_tokens=prepared_tokens,
-            tool_schema_tokens=tool_schema_tokens,
             request_tokens=request_tokens,
             message_budget=message_budget,
         )
@@ -282,7 +269,6 @@ def prepare_messages_for_summary_call(
         truncated_tool_call_ids=tuple(truncated_ids),
         original_tokens=original_tokens,
         prepared_tokens=prepared_tokens,
-        tool_schema_tokens=tool_schema_tokens,
         request_tokens=request_tokens,
         message_budget=message_budget,
     )
@@ -316,7 +302,6 @@ async def call_summary_llm(
         phase=phase,
         turn_input=turn_input,
         compact_request=compact_request,
-        tool_definitions=tool_definitions,
         context_limit=context_limit,
         reserved_summary_tokens=reserved_summary_tokens,
         safety_margin_tokens=safety_margin_tokens,

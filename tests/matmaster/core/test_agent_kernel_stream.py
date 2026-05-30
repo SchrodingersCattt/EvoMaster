@@ -6,7 +6,6 @@ from typing import Any
 
 import pytest
 
-from matmaster.context.system_prompt import SystemPromptBuilder
 from matmaster.core.agent_llm_stream import (
     _sleep_backoff_with_cancel,
     stream_llm_items,
@@ -20,12 +19,11 @@ from matmaster.types.events import (
     ThoughtEvent,
 )
 from matmaster.types.messages import LLMResponse, StreamChunk, ToolCallData
-from matmaster.types.runtime import AgentRuntimeSpec
 
 from .agent_kernel_test_helpers import (
     StreamingProvider,
-    _make_spec,
     _make_tool_registry,
+    make_kernel_runtime,
 )
 
 
@@ -259,11 +257,13 @@ class TestStreamLlmItems:
         from matmaster.core.kernel_items import _KernelItem
 
         provider = ReasoningThenContentProvider()
-        spec = _make_spec(provider=provider)
+        kernel_runtime = make_kernel_runtime(provider=provider)
 
         api_messages = [{"role": "user", "content": "test"}]
         items: list[_KernelItem] = []
-        async for item in stream_llm_items(spec, api_messages, None):
+        async for item in stream_llm_items(
+            kernel_runtime.resources, api_messages, None
+        ):
             items.append(item)
 
         # Should have: start event, reasoning events, thought-complete, content events,
@@ -291,11 +291,13 @@ class TestStreamLlmItems:
         from matmaster.core.kernel_items import _KernelItem
 
         provider = ReasoningThenContentProvider()
-        spec = _make_spec(provider=provider)
+        kernel_runtime = make_kernel_runtime(provider=provider)
 
         api_messages = [{"role": "user", "content": "test"}]
         items: list[_KernelItem] = []
-        async for item in stream_llm_items(spec, api_messages, None):
+        async for item in stream_llm_items(
+            kernel_runtime.resources, api_messages, None
+        ):
             items.append(item)
 
         # Find thought-complete event
@@ -318,11 +320,13 @@ class TestStreamLlmItems:
         from matmaster.core.kernel_items import _KernelItem
 
         provider = ReasoningThenContentProvider()
-        spec = _make_spec(provider=provider)
+        kernel_runtime = make_kernel_runtime(provider=provider)
 
         api_messages = [{"role": "user", "content": "test"}]
         items: list[_KernelItem] = []
-        async for item in stream_llm_items(spec, api_messages, None):
+        async for item in stream_llm_items(
+            kernel_runtime.resources, api_messages, None
+        ):
             items.append(item)
 
         response_completes = [
@@ -349,11 +353,13 @@ class TestStreamLlmItems:
         from matmaster.core.kernel_items import _KernelItem
 
         provider = ReasoningThenContentProvider()
-        spec = _make_spec(provider=provider)
+        kernel_runtime = make_kernel_runtime(provider=provider)
 
         api_messages = [{"role": "user", "content": "test"}]
         items: list[_KernelItem] = []
-        async for item in stream_llm_items(spec, api_messages, None):
+        async for item in stream_llm_items(
+            kernel_runtime.resources, api_messages, None
+        ):
             items.append(item)
 
         # Last item should have llm_response
@@ -370,12 +376,14 @@ class TestStreamLlmItems:
         """Stream start and end marker events are yielded."""
         from matmaster.core.kernel_items import _KernelItem
 
-        provider = ContentOnlyProvider()
-        spec = _make_spec(provider=provider)
+        provider = ReasoningThenContentProvider()
+        kernel_runtime = make_kernel_runtime(provider=provider)
 
         api_messages = [{"role": "user", "content": "test"}]
         items: list[_KernelItem] = []
-        async for item in stream_llm_items(spec, api_messages, None):
+        async for item in stream_llm_items(
+            kernel_runtime.resources, api_messages, None
+        ):
             items.append(item)
 
         # First event should be start marker (ThoughtEvent with start state)
@@ -426,11 +434,11 @@ class TestStreamLlmItems:
                 StreamChunk(finish_reason="stop"),
             ]
         )
-        spec = _make_spec(provider=provider)
+        kernel_runtime = make_kernel_runtime(provider=provider)
 
         items: list[_KernelItem] = []
         async for item in stream_llm_items(
-            spec, [{"role": "user", "content": "test"}], None
+            kernel_runtime.resources, [{"role": "user", "content": "test"}], None
         ):
             items.append(item)
 
@@ -466,10 +474,10 @@ class TestRunItemsAssistantState:
             "\n\n"
             "<current_instruction>\nfit structure\n</current_instruction>"
         )
-        spec = _make_spec(provider=provider)
+        kernel_runtime = make_kernel_runtime(provider=provider)
         kernel = AgentKernel()
 
-        async for _event in kernel.run_stream(spec, task):
+        async for _event in kernel.run_stream(kernel_runtime, task):
             pass
 
         assert provider.seen_messages
@@ -487,19 +495,18 @@ class TestRunItemsAssistantState:
         from matmaster.core.agent import AgentKernel
 
         provider = RecordingContentProvider()
-        spec = _make_spec(provider=provider).model_copy(
-            update={
-                "turn_input": TurnInput.from_values(
-                    user_text="看图",
-                    images=["https://oss.example.com/chat/a.png"],
-                    image_detail="high",
-                )
-            }
+        kernel_runtime = make_kernel_runtime(
+            provider=provider,
+            turn_input=TurnInput.from_values(
+                user_text="看图",
+                images=["https://oss.example.com/chat/a.png"],
+                image_detail="high",
+            ),
         )
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(spec, "看图"):
+        async for event in kernel.run_stream(kernel_runtime, "看图"):
             events.append(event)
 
         user_message = provider.seen_messages[0][-1]
@@ -522,11 +529,11 @@ class TestRunItemsAssistantState:
 
         provider = ToolCallStreamProvider()
         registry, _ = _make_tool_registry()
-        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel_runtime = make_kernel_runtime(provider=provider, tool_registry=registry)
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(spec, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, "test task"):
             events.append(event)
 
         assistant_state_events = [
@@ -540,6 +547,99 @@ class TestRunItemsAssistantState:
         assert assistant_state_events[0].turn_usage != {}
 
     @pytest.mark.asyncio
+    async def test_llm_output_events_include_model_identity(self) -> None:
+        """Persistable LLM output events carry the resolved model identity."""
+        from matmaster.core.agent import AgentKernel
+
+        provider = ReasoningThenContentProvider()
+        kernel_runtime = make_kernel_runtime(
+            provider=provider,
+            llm_model="claude-opus-4-6",
+            llm_model_profile="opus",
+            llm_model_route="bedrock-claude-opus",
+        )
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(kernel_runtime, "test task"):
+            events.append(event)
+
+        complete_response = next(
+            e
+            for e in events
+            if isinstance(e, ResponseEvent) and e.stream_state == "complete"
+        )
+        run_result = next(e for e in events if isinstance(e, RunResultEvent))
+        complete_thought = next(
+            e
+            for e in events
+            if isinstance(e, ThoughtEvent) and e.stream_state == "complete"
+        )
+
+        for event in (complete_response, run_result, complete_thought):
+            assert event.model == "claude-opus-4-6"
+            assert event.model_profile == "opus"
+            assert event.model_route == "bedrock-claude-opus"
+
+    @pytest.mark.asyncio
+    async def test_streaming_llm_output_events_do_not_include_model_identity(
+        self,
+    ) -> None:
+        """Ephemeral SSE deltas keep their existing payload shape."""
+        from matmaster.core.agent import AgentKernel
+
+        provider = ReasoningThenContentProvider()
+        kernel_runtime = make_kernel_runtime(
+            provider=provider,
+            llm_model="claude-opus-4-6",
+            llm_model_profile="opus",
+            llm_model_route="bedrock-claude-opus",
+        )
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(kernel_runtime, "test task"):
+            events.append(event)
+
+        streaming_events = [
+            e
+            for e in events
+            if isinstance(e, (ThoughtEvent, ResponseEvent))
+            and e.stream_state != "complete"
+        ]
+        assert streaming_events
+        for event in streaming_events:
+            assert event.model is None
+            assert event.model_profile is None
+            assert event.model_route is None
+
+    @pytest.mark.asyncio
+    async def test_assistant_state_event_includes_model_identity(self) -> None:
+        """Tool-call assistant_state events carry the resolved model identity."""
+        from matmaster.core.agent import AgentKernel
+
+        provider = ToolCallStreamProvider()
+        registry, _ = _make_tool_registry()
+        kernel_runtime = make_kernel_runtime(
+            provider=provider,
+            tool_registry=registry,
+            llm_model="claude-opus-4-6",
+            llm_model_profile="opus",
+            llm_model_route="bedrock-claude-opus",
+        )
+        kernel = AgentKernel()
+
+        events: list[Any] = []
+        async for event in kernel.run_stream(kernel_runtime, "test task"):
+            events.append(event)
+
+        assistant_state = next(e for e in events if isinstance(e, AssistantStateEvent))
+
+        assert assistant_state.model == "claude-opus-4-6"
+        assert assistant_state.model_profile == "opus"
+        assert assistant_state.model_route == "bedrock-claude-opus"
+
+    @pytest.mark.asyncio
     async def test_assistant_state_drops_trivial_tool_call_preamble_content(
         self,
     ) -> None:
@@ -548,11 +648,11 @@ class TestRunItemsAssistantState:
 
         provider = TrivialToolPreambleProvider()
         registry, _ = _make_tool_registry(tool_names=["test_tool"])
-        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel_runtime = make_kernel_runtime(provider=provider, tool_registry=registry)
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(spec, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, "test task"):
             events.append(event)
 
         assistant_state_events = [
@@ -574,11 +674,11 @@ class TestRunItemsSkillHit:
 
         provider = SkillStreamProvider()
         registry, _ = _make_tool_registry(tool_names=["Skill", "test_tool"])
-        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel_runtime = make_kernel_runtime(provider=provider, tool_registry=registry)
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(spec, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, "test task"):
             events.append(event)
 
         skill_hit_events = [e for e in events if isinstance(e, SkillHitEvent)]
@@ -592,11 +692,11 @@ class TestRunItemsSkillHit:
 
         provider = ToolCallStreamProvider()
         registry, _ = _make_tool_registry()
-        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel_runtime = make_kernel_runtime(provider=provider, tool_registry=registry)
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(spec, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, "test task"):
             events.append(event)
 
         skill_hit_events = [e for e in events if isinstance(e, SkillHitEvent)]
@@ -634,19 +734,19 @@ class TestGap1FullToolRunnerActivation:
             ]
         )
 
-        spec = _make_spec(provider=provider, tool_registry=registry)
-        # Inject tool_runner via model_copy (frozen model)
-        spec = spec.model_copy(update={"tool_runner": mock_runner})
+        kernel_runtime = make_kernel_runtime(
+            provider=provider, tool_registry=registry, tool_runner=mock_runner
+        )
 
         kernel = AgentKernel()
         items: list[_KernelItem] = []
-        async for item in kernel.run_stream(spec, "test task"):
+        async for item in kernel.run_stream(kernel_runtime, "test task"):
             items.append(item)
 
         # FullToolRunner.execute_batch should have been called
         assert (
             mock_runner.execute_batch.called
-        ), "spec.tool_runner.execute_batch() should be called when tool_runner is present"
+        ), "tool_runner.execute_batch() should be called when tool_runner is present"
         # Verify ToolExecutionContext was passed
         call_args = mock_runner.execute_batch.call_args
         ctx_arg = call_args[0][1]  # second positional arg
@@ -659,22 +759,37 @@ class TestGap1FullToolRunnerActivation:
         """When spec.tool_runner is None, _run_items() raises RuntimeError."""
         from matmaster.core.agent import AgentKernel
         from matmaster.tools.tool_catalog import ToolCatalog
+        from matmaster.types.run_metadata import RunIdentity
+        from matmaster.types.runtime import (
+            AgentKernelResources,
+            AgentKernelRuntime,
+            AgentKernelSpec,
+            CompactionConfig,
+        )
+        from matmaster.types.runtime_ports import KernelRuntimePorts
 
         provider = ToolCallStreamProvider()
         registry, _tools = _make_tool_registry()
         catalog = ToolCatalog(registry)
-        spec = AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-            llm_provider=provider,
-            tool_catalog=catalog,
-            # tool_runner intentionally None
-            max_turns=5,
-            system_prompt="test",
+        kernel_runtime = AgentKernelRuntime(
+            spec=AgentKernelSpec(
+                system_prompt="test",
+                max_turns=5,
+                compaction=CompactionConfig(),
+                run_identity=RunIdentity(),
+            ),
+            resources=AgentKernelResources(
+                llm_provider=provider,
+                runtime_ports=KernelRuntimePorts(),
+                tool_runner=None,  # intentionally None
+                tool_catalog=catalog,
+                runtime_topology=catalog._topology,
+            ),
         )
 
         kernel = AgentKernel()
         with pytest.raises(RuntimeError, match="No tool_runner"):
-            async for _event in kernel.run_stream(spec, "test task"):
+            async for _event in kernel.run_stream(kernel_runtime, "test task"):
                 pass
 
 
@@ -688,11 +803,11 @@ class TestGap2RunStreamYieldsBusEvent:
         from matmaster.types.events import RunResultEvent
 
         provider = ContentOnlyProvider()
-        spec = _make_spec(provider=provider)
+        kernel_runtime = make_kernel_runtime(provider=provider)
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(spec, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, "test task"):
             events.append(event)
 
         # No event should be a _KernelItem
@@ -721,11 +836,11 @@ class TestGap2RunStreamYieldsBusEvent:
 
         provider = ToolCallStreamProvider()
         registry, _ = _make_tool_registry()
-        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel_runtime = make_kernel_runtime(provider=provider, tool_registry=registry)
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(spec, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, "test task"):
             events.append(event)
 
         for event in events:
@@ -749,11 +864,11 @@ class TestEmptyFinalResponseInvalidFinish:
         from matmaster.core.agent import AgentKernel
 
         provider = EmptyStopProvider()
-        spec = _make_spec(provider=provider)
+        kernel_runtime = make_kernel_runtime(provider=provider)
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(spec, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, "test task"):
             events.append(event)
 
         assert isinstance(events[-1], RunResultEvent)
@@ -766,11 +881,11 @@ class TestEmptyFinalResponseInvalidFinish:
         from matmaster.core.agent import AgentKernel
 
         provider = EmptyStopProvider(content="   ")
-        spec = _make_spec(provider=provider)
+        kernel_runtime = make_kernel_runtime(provider=provider)
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(spec, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, "test task"):
             events.append(event)
 
         assert isinstance(events[-1], RunResultEvent)
@@ -783,11 +898,11 @@ class TestEmptyFinalResponseInvalidFinish:
         from matmaster.core.agent import AgentKernel
 
         provider = ContentOnlyProvider()
-        spec = _make_spec(provider=provider)
+        kernel_runtime = make_kernel_runtime(provider=provider)
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(spec, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, "test task"):
             events.append(event)
 
         assert isinstance(events[-1], RunResultEvent)
@@ -801,11 +916,11 @@ class TestEmptyFinalResponseInvalidFinish:
 
         provider = SkillStreamProvider()
         registry, _ = _make_tool_registry(tool_names=["Skill", "test_tool"])
-        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel_runtime = make_kernel_runtime(provider=provider, tool_registry=registry)
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(spec, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, "test task"):
             events.append(event)
 
         assert any(isinstance(event, SkillHitEvent) for event in events)
@@ -818,11 +933,11 @@ class TestEmptyFinalResponseInvalidFinish:
         from matmaster.core.agent import AgentKernel
 
         provider = EmptyThenContentProvider()
-        spec = _make_spec(provider=provider)
+        kernel_runtime = make_kernel_runtime(provider=provider)
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(spec, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, "test task"):
             events.append(event)
 
         assert provider.call_count == 2
@@ -839,11 +954,11 @@ class TestEmptyFinalResponseInvalidFinish:
 
         provider = EmptyStopProvider()
         provider.max_retries = 2
-        spec = _make_spec(provider=provider)
+        kernel_runtime = make_kernel_runtime(provider=provider)
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(spec, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, "test task"):
             events.append(event)
 
         assert provider.call_count == 2
@@ -859,11 +974,11 @@ class TestEmptyFinalResponseInvalidFinish:
 
         provider = EmptyStopProvider(reasoning="thinking only")
         provider.max_retries = 2
-        spec = _make_spec(provider=provider)
+        kernel_runtime = make_kernel_runtime(provider=provider)
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(spec, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, "test task"):
             events.append(event)
 
         assert provider.call_count == 2
@@ -895,12 +1010,13 @@ class TestGap3CatalogVersionInvalidation:
             ]
         )
 
-        spec = _make_spec(provider=provider, tool_registry=registry)
-        spec = spec.model_copy(update={"tool_catalog": mock_catalog})
+        kernel_runtime = make_kernel_runtime(
+            provider=provider, tool_registry=registry, tool_catalog=mock_catalog
+        )
 
         kernel = AgentKernel()
         events: list[Any] = []
-        async for event in kernel.run_stream(spec, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, "test task"):
             events.append(event)
 
         # Catalog's build_definitions should have been called
@@ -933,12 +1049,13 @@ class TestGap3CatalogVersionInvalidation:
             ]
         )
 
-        spec = _make_spec(provider=provider, tool_registry=registry)
-        spec = spec.model_copy(update={"tool_catalog": mock_catalog})
+        kernel_runtime = make_kernel_runtime(
+            provider=provider, tool_registry=registry, tool_catalog=mock_catalog
+        )
 
         kernel = AgentKernel()
         events = []
-        async for event in kernel.run_stream(spec, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, "test task"):
             events.append(event)
 
         # build_definitions called once on first turn, but NOT re-called
@@ -959,14 +1076,14 @@ class TestCancellationTokenSupport:
         from matmaster.core.agent import AgentKernel
 
         provider = ContentOnlyProvider()
-        spec = _make_spec(provider=provider)
+        kernel_runtime = make_kernel_runtime(provider=provider)
         kernel = AgentKernel()
         ctrl = CancellationController()
         ctrl.cancel()
 
         events: list[Any] = []
         async for event in kernel.run_stream(
-            spec, "test task", cancel_token=ctrl.token
+            kernel_runtime, "test task", cancel_token=ctrl.token
         ):
             events.append(event)
 

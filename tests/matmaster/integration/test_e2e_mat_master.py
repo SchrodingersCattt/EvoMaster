@@ -1,4 +1,4 @@
-"""E2E pipeline tests for mat_master: Playground.prepare() -> Exp.assemble() -> Kernel.run_stream().
+"""E2E pipeline tests for mat_master: Playground.prepare() -> Exp.build_runtime() -> Kernel.run_stream().
 
 All external dependencies mocked per D-10. Tests verify pipeline connectivity
 and correct event flow without requiring real LLM/Redis/Bohrium.
@@ -231,7 +231,7 @@ class TestMatMasterE2EPipeline:
 
         kernel = AgentKernel()
         events = []
-        async for event in kernel.run_stream(runtime.spec, 'test task'):
+        async for event in kernel.run_stream(runtime.kernel_runtime, 'test task'):
             events.append(event)
 
         response_events = [e for e in events if isinstance(e, ResponseEvent)]
@@ -246,11 +246,13 @@ class TestMatMasterE2EPipeline:
         exp = Exp(self._EXP_CONFIG)
         runtime = await exp.build_runtime(agent_run_ctx)
         # Register echo tool via catalog overlay for version-bumped injection
-        runtime.spec.tool_catalog.register_overlay(echo_tool, source='test')
+        runtime.kernel_runtime.resources.tool_catalog.register_overlay(
+            echo_tool, source='test'
+        )
 
         kernel = AgentKernel()
         events = []
-        async for event in kernel.run_stream(runtime.spec, 'call echo tool'):
+        async for event in kernel.run_stream(runtime.kernel_runtime, 'call echo tool'):
             events.append(event)
 
         tool_call_events = [e for e in events if isinstance(e, ToolCallEvent)]

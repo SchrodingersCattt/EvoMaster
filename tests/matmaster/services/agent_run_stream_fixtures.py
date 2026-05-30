@@ -3,6 +3,7 @@ from __future__ import annotations
 import inspect
 from contextlib import asynccontextmanager
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -100,10 +101,12 @@ class _FakeExp:
 
     async def build_runtime(self, *args: Any, **kwargs: Any) -> Any:
         runtime = MagicMock()
-        spec = MagicMock()
-        spec.hook_executor = None
-        spec.tool_catalog = None
-        runtime.spec = spec
+        resources = MagicMock()
+        resources.hook_executor = None
+        resources.tool_catalog = None
+        kernel_runtime = MagicMock()
+        kernel_runtime.resources = resources
+        runtime.kernel_runtime = kernel_runtime
         return runtime
 
     async def _run_cleanup_callbacks(self) -> None:
@@ -257,13 +260,21 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
         events_table_fn.return_value = events_table
 
         fake_exp = _FakeExp(events)
+        provider_bundle = SimpleNamespace(
+            provider=MagicMock(),
+            model="test-model",
+            model_profile="test-profile",
+            model_route="test-route",
+            provider_name="openai",
+            model_family="test-family",
+        )
 
         with (
             patch('matmaster.config.loader.load_exp_config', return_value=MagicMock()),
             patch('matmaster.config.loader.load_llm_config', return_value=MagicMock()),
             patch(
-                'matmaster.providers.llm_factory.build_provider',
-                return_value=MagicMock(),
+                'matmaster.providers.llm_factory.build_provider_bundle',
+                return_value=provider_bundle,
             ),
             patch('matmaster.core.exp.Exp', new=lambda config: fake_exp),
         ):

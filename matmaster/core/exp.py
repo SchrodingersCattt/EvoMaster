@@ -1,17 +1,18 @@
 """Exp -- config-driven assembly layer.
 
-Exp is a concrete class that transforms an ExpConfig + AgentRunContext
-into an AgentRuntimeSpec (assemble), builds runtime resources (build_runtime),
-and executes the agent loop (run_stream).
+Exp is a concrete class that transforms an ExpConfig + AgentRunContext into an
+AgentRuntime (build_runtime) and executes the agent loop (run_stream). The
+AgentRuntime bundles the kernel, the kernel-facing AgentKernelRuntime
+(AgentKernelSpec + AgentKernelResources), and a cleanup callable.
 
 The ``AgentRunContext`` it consumes keeps physical facts under
 ``ctx.environment`` (ExecutionEnvironment) and per-run runtime ingredients
 under ``ctx.request`` (AgentRunRequest).
 
 Lifecycle:
-1. assemble(ctx) -- pure data transform: config + ctx -> AgentRuntimeSpec
-2. build_runtime(ctx) -- resource creation: tools, prompt, kernel -> AgentRuntime
-3. run_stream(ctx, task, ...) -- thin driver over runtime_scope()
+1. build_runtime(ctx) -- one-shot assembly: config + ctx -> tools, prompt,
+   kernel_spec + kernel_resources -> AgentRuntime
+2. run_stream(ctx, task, ...) -- thin driver over runtime_scope()
 
 The run lifecycle (build_runtime -> cancel-token injection -> cleanup) lives in
 runtime_scope(), a reusable async context manager shared by both run_stream()
@@ -41,7 +42,12 @@ from matmaster.core.run_context import AgentRunContext
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.run_metadata import RunIdentity
-from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec
+from matmaster.types.runtime import (
+    AgentKernelResources,
+    AgentKernelRuntime,
+    AgentKernelSpec,
+    AgentRuntime,
+)
 from matmaster.types.runtime_ports import KernelRuntimePorts
 
 if TYPE_CHECKING:
@@ -166,8 +172,8 @@ class Exp:
     Instantiated with an ExpConfig. exp_name comes from config.name
     (defaults to 'direct').
 
-    assemble() is a pure data transform: config + ctx -> AgentRuntimeSpec.
-    build_runtime() creates resources (ToolRegistry, SystemPromptBuilder, Kernel).
+    build_runtime() creates resources (ToolRegistry, SystemPromptBuilder, Kernel)
+    and assembles kernel_spec + kernel_resources into an AgentKernelRuntime.
     run_stream() delegates to build_runtime then kernel.run_stream with cleanup guarantee.
     """
 
@@ -253,16 +259,7 @@ class Exp:
 
         return child_run_factory
 
-    # ── Assemble ─────────────────────────────────────────
-
-    async def assemble(self, ctx: AgentRunContext) -> AgentRuntimeSpec:
-        """Data transform: config + ctx -> AgentRuntimeSpec."""
-        return AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-            llm_provider=ctx.request.llm_provider,
-            max_turns=self._config.max_turns,
-            compaction=self._config.compaction,
-        )
+    # ── Run identity ─────────────────────────────────────
 
     @staticmethod
     def _build_run_identity(
@@ -311,12 +308,12 @@ class Exp:
         skill_resolver: SkillResolver | None = None,
         spawn_id: str | None = None,
     ) -> AgentRuntime:
-        """Resource creation: assemble -> tools -> prompt -> kernel.
+        """One-shot assembly: tools -> prompt -> context assembly -> kernel.
 
         Constructs FullToolRunner + ToolCatalog + RuntimeTopology as the
-        default execution path.
+        default execution path, then bundles kernel_spec + kernel_resources
+        into an AgentKernelRuntime (see the §5.4 six-step ordering).
         """
-        spec = await self.assemble(ctx)
         env = ctx.environment
         request = ctx.request
 
@@ -422,7 +419,8 @@ class Exp:
         from matmaster.types.tool_runner_state import ToolRunnerState
 
         runtime_context = build_runtime_context_assembly(
-            spec=spec,
+            llm_provider=request.llm_provider,
+            compaction=self._config.compaction,
             ctx=ctx,
             skill_resolver=self._skill_resolver,
             spawn_id=spawn_id,
@@ -457,35 +455,34 @@ class Exp:
         if callable(checkpoint_sink_factory):
             checkpoint_sink = checkpoint_sink_factory(spawn_id=spawn_id)
         pre_compaction_barrier = request.ports.compaction.pre_compaction_barrier
-        spec = spec.model_copy(
-            update={
-                "tool_catalog": catalog,
-                "tool_runner": full_runner,
-                "runtime_topology": topology,
-                "capability_policy": capability_policy,
-                "structural_validation": structural_validation,
-                "system_prompt": system_prompt,
-                "system_prompt_builder": system_prompt_builder,
-                "hook_executor": hook_executor,
-                "compactor": runtime_context.compactor,
-                "context_assembler": runtime_context.context_assembler,
-                "session_events_port": (
-                    runtime_context.assembly_ports.session_events
-                    if runtime_context.assembly_ports is not None
-                    else None
-                ),
-                "session_jobs_port": (
-                    runtime_context.assembly_ports.session_jobs
-                    if runtime_context.assembly_ports is not None
-                    else None
-                ),
-                "runtime_ports": KernelRuntimePorts(
-                    checkpoint_sink=checkpoint_sink,
-                    pre_compaction_barrier=pre_compaction_barrier,
-                ),
-                "run_identity": self._build_run_identity(ctx, spawn_id=spawn_id),
-                "turn_input": request.turn_input,
-            }
+
+        kernel_spec = AgentKernelSpec(
+            system_prompt=system_prompt,
+            max_turns=self._config.max_turns,
+            compaction=self._config.compaction,
+            run_identity=self._build_run_identity(ctx, spawn_id=spawn_id),
+            turn_input=request.turn_input,
+            llm_model=request.llm_model,
+            llm_model_profile=request.llm_model_profile,
+            llm_model_route=request.llm_model_route,
+        )
+        kernel_resources = AgentKernelResources(
+            llm_provider=request.llm_provider,
+            runtime_ports=KernelRuntimePorts(
+                checkpoint_sink=checkpoint_sink,
+                pre_compaction_barrier=pre_compaction_barrier,
+            ),
+            tool_runner=full_runner,
+            tool_catalog=catalog,
+            runtime_topology=topology,
+            hook_executor=hook_executor,
+            compactor=runtime_context.compactor,
+            capability_policy=capability_policy,
+            structural_validation=structural_validation,
+        )
+        kernel_runtime = AgentKernelRuntime(
+            spec=kernel_spec,
+            resources=kernel_resources,
         )
 
         from matmaster.core.agent import AgentKernel
@@ -494,7 +491,7 @@ class Exp:
 
         return AgentRuntime(
             kernel=kernel,
-            spec=spec,
+            kernel_runtime=kernel_runtime,
             cleanup=self._run_cleanup_callbacks,
         )
 
@@ -526,12 +523,12 @@ class Exp:
                 skill_resolver=skill_resolver,
                 spawn_id=spawn_id,
             )
-            spec = runtime.spec
+            kernel_runtime = runtime.kernel_runtime
             if ctx.environment.session is not None:
                 ctx.environment.session._cancel_token = cancel_token
 
             # Inject cancel_token into tools for cancel propagation.
-            catalog = getattr(spec, "tool_catalog", None)
+            catalog = kernel_runtime.resources.tool_catalog
             if cancel_token is not None and catalog is not None:
                 catalog.inject_cancel_token(cancel_token)
 
@@ -564,7 +561,10 @@ class Exp:
             spawn_id=spawn_id,
         ) as runtime:
             async for event in runtime.kernel.run_stream(
-                runtime.spec, task, history=history, cancel_token=cancel_token
+                runtime.kernel_runtime,
+                task,
+                history=history,
+                cancel_token=cancel_token,
             ):
                 yield event
 

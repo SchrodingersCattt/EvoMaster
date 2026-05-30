@@ -513,6 +513,10 @@ class ChatStreamService:
             'task_id': task_id,
             'invocation_id': invocation_id,
         }
+        if llm:
+            user_msg['requested_llm'] = llm
+        if model:
+            user_msg['requested_model'] = model
         if req.files:
             user_msg['files'] = list(req.files)
         if req.images:

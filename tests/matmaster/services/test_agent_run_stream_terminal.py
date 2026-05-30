@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -235,8 +236,13 @@ async def test_exception_emits_error_and_closed():
             patch('matmaster.config.loader.load_exp_config', return_value=MagicMock()),
             patch('matmaster.config.loader.load_llm_config', return_value=MagicMock()),
             patch(
-                'matmaster.providers.llm_factory.build_provider',
-                return_value=MagicMock(),
+                'matmaster.providers.llm_factory.build_provider_bundle',
+                return_value=SimpleNamespace(
+                    provider=MagicMock(),
+                    model="test-model",
+                    model_profile="test-profile",
+                    model_route="test-route",
+                ),
             ),
             patch('matmaster.core.exp.Exp', new=lambda config: error_exp),
         ):

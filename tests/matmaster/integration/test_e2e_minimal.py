@@ -67,7 +67,7 @@ class TestMinimalE2EPipeline:
         # Collect events from kernel.run_stream() generator
         kernel = AgentKernel()
         events = []
-        async for event in kernel.run_stream(runtime.spec, "minimal test task"):
+        async for event in kernel.run_stream(runtime.kernel_runtime, "minimal test task"):
             events.append(event)
 
         # Generator should have emitted ResponseEvent(s)

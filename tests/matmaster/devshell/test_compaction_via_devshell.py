@@ -211,10 +211,11 @@ class TestDefaultDevshellPath:
                 ),
                 request=AgentRunRequest(llm_provider=None, llm_config=None),
             )
-            spec = await exp.assemble(ctx)
+            runtime = await exp.build_runtime(ctx)
+            kernel_runtime = runtime.kernel_runtime
 
-        assert "enabled" not in type(spec.compaction).model_fields
-        assert spec.compactor is None, "assemble 阶段不应创建 compactor 实例"
+        compaction = kernel_runtime.spec.compaction
+        assert "enabled" not in type(compaction).model_fields
 
     async def test_compactor_skips_when_below_threshold(self) -> None:
         """默认启用压缩时，低于阈值也应保持原消息不变。"""

@@ -340,7 +340,7 @@ class AgentRunService:
             # -- Stage 4: Exp assembly --
             from matmaster.config.loader import load_llm_config
             from matmaster.core.exp import Exp
-            from matmaster.providers.llm_factory import build_provider
+            from matmaster.providers.llm_factory import build_provider_bundle
 
             llm_config = load_llm_config(_project_root / "config" / "llm_config.yaml")
 
@@ -369,12 +369,13 @@ class AgentRunService:
                 )
                 image_detail = selected_profile.vision_detail
 
-            llm_provider = build_provider(
+            llm_bundle = build_provider_bundle(
                 llm_config,
                 model_override=model_override,
                 llm_override=llm_override,
                 default_profile_key=agent_default_llm,
             )
+            llm_provider = llm_bundle.provider
 
             exp = Exp(exp_config)
 
@@ -615,6 +616,9 @@ class AgentRunService:
                 request=AgentRunRequest(
                     llm_provider=llm_provider,
                     llm_config=llm_config,
+                    llm_model=llm_bundle.model,
+                    llm_model_profile=llm_bundle.model_profile,
+                    llm_model_route=llm_bundle.model_route,
                     interaction_bridge=bridge,
                     turn_input=turn_input,
                     user_instructions=user_instructions,

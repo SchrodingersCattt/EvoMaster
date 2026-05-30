@@ -209,6 +209,49 @@ AgentKernel
 
 `AgentKernel` 只知道 `compactor`，不知道 `ContextAssembler` 与 session event port。
 
+### 5.4 `assemble()` 在新方案下的处置
+
+旧 `AgentRuntimeSpec` 时代，`Exp.assemble()` 的存在理由是：先 frozen 一个壳，再让
+`build_runtime()` 通过 `spec.model_copy(update=...)` 把活对象灌进去。新方案把
+spec 拆成 `AgentKernelSpec`（frozen dataclass，全部纯配置）和
+`AgentKernelResources`（frozen dataclass，全部活对象）之后，两段式装配的实际收益
+消失：
+
+- `AgentKernelSpec.system_prompt` 仍必须在 `build_runtime()` 里等 registry
+  与 skill_registry 装好之后才能渲染。
+- `AgentKernelSpec.run_identity` 仍必须等 `spawn_id` 才能定。
+- `AgentKernelSpec.turn_input` 是 `ctx.request.turn_input` 的直接透传。
+- 剩下的 `max_turns` 与 `compaction` 直接来自 `self._config`，无需独立阶段。
+
+如果保留 `assemble()`，它要么返回"半填充的 `AgentKernelSpec`"——这等于复活
+`model_copy(update=...)` 反模式；要么返回一组散字段供 `build_runtime` 拼装——
+这是 `_build_run_identity()` 这种私有静态方法已经能干的事。两种都不增加表达力。
+
+因此本设计直接删除 `Exp.assemble()` 作为 public 方法。Exp 的对外 surface
+缩为：
+
+```python
+class Exp:
+    async def build_runtime(self, ctx: AgentRunContext, *, ...) -> AgentRuntime: ...
+
+    @asynccontextmanager
+    async def runtime_scope(self, ctx: AgentRunContext, ...) -> AsyncIterator[AgentRuntime]: ...
+
+    async def run_stream(self, ctx: AgentRunContext, task: str, ...) -> AsyncIterator[BusEvent]: ...
+```
+
+`build_runtime()` 内部按以下顺序一次性构造：
+
+1. 解析纯计算字段（`_build_run_identity` / `_derive_active_planes` /
+   `derive_path_access_roots` / `session_caps` 抽取），保留为私有静态方法以便单测。
+2. 构造 `ToolRegistry`、`ToolCatalog`、`HookExecutor` 等活对象。
+3. 渲染 `system_prompt`。
+4. 构造 `RuntimeContextAssembly`（含 `ContextCompactor`）。
+5. 一次性构造 `kernel_spec` 与 `kernel_resources`，组装成 `AgentKernelRuntime`。
+6. 返回 `AgentRuntime(kernel, kernel_runtime, cleanup)`。
+
+中间步骤的纯计算逻辑仍可通过私有静态方法复用，但不再包装成阶段性 public API。
+
 ## 6. 字段去向
 
 当前 `AgentRuntimeSpec` 字段按以下规则迁移。
@@ -287,8 +330,11 @@ AgentKernel
 
 修改 `matmaster/core/exp.py`：
 
-- 保留 `assemble()`，返回 `AgentKernelSpec` 的基础配置。
-- `build_runtime()` 构造 `kernel_spec`、`kernel_resources`、`kernel_runtime`。
+- 删除 `Exp.assemble()` 这一 public 方法（理由见 §5.4）。
+- `build_runtime()` 按 §5.4 的六步顺序一次性构造 `kernel_spec`、
+  `kernel_resources`、`kernel_runtime`，不再拆两段。
+- 纯计算字段（`run_identity`、`active_planes`、`path_access_roots` 等）
+  保留为私有静态方法以便单测。
 - 返回 `AgentRuntime(kernel=kernel, kernel_runtime=kernel_runtime, cleanup=...)`。
 
 ### 阶段二：调整 kernel 调用
@@ -341,6 +387,25 @@ tool_definitions = ensure_tool_definitions(kernel_resources, state)
 - 第一轮迁移中接收 `kernel_spec` 与 `kernel_resources`。
 - 需要 provider 的位置统一从 `kernel_resources.llm_provider` 读取。
 - 需要 identity 的位置统一从 `kernel_spec.run_identity` 读取。
+
+阶段三所有 helper 改造完成后，必须为每个 helper 增加一条 *参数 surface 单测*，
+显式断言它能接受的最小参数集合。示例：
+
+```python
+import inspect
+
+def test_dispatch_tool_calls_signature_does_not_accept_kernel_runtime():
+    sig = inspect.signature(dispatch_tool_calls)
+    params = set(sig.parameters)
+    assert params == {"tool_calls", "tool_runner", "max_turns", "state", "cancel_token"}
+    assert "kernel_runtime" not in params
+    assert "spec" not in params
+```
+
+这道闸是为了防止以后图省事重新接回整个 `kernel_runtime`，把本次重构的"依赖
+最小化"成果稀释成纯命名变更。任何往这些 helper 加 `kernel_runtime` 参数的
+PR，都必须先显式修改 §9.5 的 surface 测试，并在 PR 描述里给出"为什么必须
+接整个 runtime"的具体理由。
 
 ### 阶段四：收束 context assembly objects
 
@@ -413,6 +478,30 @@ def test_kernel_runtime_does_not_expose_context_assembly_internals():
 - durable summary 仍写入 `history_checkpoint.v1`。
 - fallback sliding window 仍不写 checkpoint。
 
+### 9.5 Helper 参数 surface 测试
+
+针对阶段三收窄过的每个 helper，写一条独立的参数集合断言测试。这是 §10
+验收标准的硬性条件，不允许 skip 或注释掉。
+
+- `dispatch_tool_calls`：参数集合恒等于
+  `{tool_calls, tool_runner, max_turns, state, cancel_token}`，
+  显式断言 `kernel_runtime` 与 `spec` 不在其中。
+- `run_compaction_plan`：参数集合分别从 `kernel_spec` 与 `kernel_resources`
+  拆出，断言 `kernel_runtime` 不作为单一参数出现。
+- `agent_llm_stream` 各 helper：provider 走 `kernel_resources.llm_provider`，
+  identity 走 `kernel_spec.run_identity`，断言不存在 `kernel_runtime` 透传。
+- `Exp` 公共 surface：断言 `hasattr(Exp, "assemble") is False`（§5.4 决策）。
+
+### 9.6 Exp surface 测试
+
+`tests/matmaster/core/test_exp_runtime_v2.py` 新增：
+
+```python
+def test_exp_public_surface_after_v2():
+    public = {name for name in vars(Exp) if not name.startswith("_")}
+    assert public == {"build_runtime", "runtime_scope", "run_stream"}
+```
+
 ## 10. 验收标准
 
 - `AgentKernel.run_stream()` 不再接收 `AgentRuntimeSpec`。
@@ -425,6 +514,10 @@ def test_kernel_runtime_does_not_expose_context_assembly_internals():
 - 压缩行为与 checkpoint 行为保持不变。
 - 所有新增变量名遵守本 spec 第 4 节命名规范。
 - 测试不通过旧字段访问验证 wiring。
+- `Exp.assemble()` 已删除，`Exp` 对外 surface 仅包含 `build_runtime`、
+  `runtime_scope`、`run_stream`（§5.4 / §9.6）。
+- §9.5 列出的全部 helper 参数 surface 测试通过；阶段三任何 helper 不接
+  `kernel_runtime` 作为参数。
 
 ## 11. 备选方案
 
@@ -471,6 +564,25 @@ def test_kernel_runtime_does_not_expose_context_assembly_internals():
 - 测试需要一次性更新旧字段访问。
 
 本设计采用方案 C。
+
+### 方案 D：保留 `Exp.assemble()` 作为纯数据 transform
+
+优点：
+
+- 与旧版 API 形状最接近，调用方迁移成本最低。
+- 保留"配置装配 vs 资源创建"两阶段的概念分层。
+
+缺点：
+
+- 新方案下 `AgentKernelSpec` 是 frozen dataclass，无法产出半填充版本。assemble
+  返回的对象要么是散字段（与私有静态方法等价），要么靠 `dataclasses.replace`
+  增量补齐（即复活旧 `model_copy(update=...)` 反模式）。
+- `system_prompt` 必须等 registry 装好才能渲染，`run_identity` 必须等
+  `spawn_id` 才能确定，assemble 实际可填字段退化为 `max_turns + compaction`
+  两个 config 直读项，独立阶段没有表达力收益。
+- 多出一个 public 方法，未来读者必须额外理解"为什么这一层薄到几乎不存在"。
+
+本设计不采用。
 
 ## 12. 后续实现原则
 

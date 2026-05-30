@@ -1,7 +1,13 @@
-"""Tests for AgentRuntimeSpec, CompactionConfig, and AgentRuntime frozen models."""
+"""Tests for the kernel runtime contracts and CompactionConfig.
+
+Covers the frozen-dataclass runtime trio (AgentKernelSpec / AgentKernelResources
+/ AgentKernelRuntime), the AgentRuntime bundle, KernelResult, the pydantic
+CompactionConfig, and the matmaster.types re-export surface.
+"""
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import AsyncIterator
 from dataclasses import FrozenInstanceError
 from typing import Any
@@ -10,24 +16,24 @@ import pytest
 from pydantic import ValidationError
 
 from matmaster.context.sources.turn_input import TurnInput
-from matmaster.context.system_prompt import SystemPromptBuilder
-from matmaster.core.hooks import HookExecutor
-from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import LLMResponse, StreamChunk
 from matmaster.types.run_metadata import RunIdentity
 from matmaster.types.runtime import (
+    AgentKernelResources,
+    AgentKernelRuntime,
+    AgentKernelSpec,
     AgentRuntime,
-    AgentRuntimeSpec,
     CompactionConfig,
     KernelResult,
 )
+from matmaster.types.runtime_ports import KernelRuntimePorts
 
 # ── Test helpers ───────────────────────────────────────
 
 
 class _MockLLMProvider:
-    """LLMProvider Protocol-conforming mock for runtime spec tests."""
+    """LLMProvider Protocol-conforming mock for runtime resource tests."""
 
     async def __aenter__(self) -> _MockLLMProvider:
         return self
@@ -54,6 +60,31 @@ class _MockLLMProvider:
         yield StreamChunk(content="mock", finish_reason="stop")
 
 
+def _make_kernel_spec(**overrides: Any) -> AgentKernelSpec:
+    """Build an AgentKernelSpec with sane test defaults."""
+    base: dict[str, Any] = {
+        "system_prompt": "",
+        "max_turns": 100,
+        "compaction": CompactionConfig(),
+        "run_identity": RunIdentity(),
+    }
+    base.update(overrides)
+    return AgentKernelSpec(**base)
+
+
+def _make_kernel_resources(**overrides: Any) -> AgentKernelResources:
+    """Build an AgentKernelResources with simple stubs for live fields."""
+    base: dict[str, Any] = {
+        "llm_provider": _MockLLMProvider(),
+        "runtime_ports": KernelRuntimePorts(),
+        "tool_runner": object(),
+        "tool_catalog": object(),
+        "runtime_topology": object(),
+    }
+    base.update(overrides)
+    return AgentKernelResources(**base)
+
+
 # ── CompactionConfig ────────────────────────────────────
 
 
@@ -64,6 +95,8 @@ class TestCompactionConfig:
         assert config.context_limit == 200_000
         assert config.trigger_ratio == 0.9
         assert config.strategy == "summary"
+        assert config.reserved_summary_tokens == 8_000
+        assert config.summary_safety_margin_tokens == 2_000
         removed_field = "compaction" + "_llm"
         assert not hasattr(config, removed_field)
 
@@ -102,59 +135,7 @@ class TestCompactionConfigUpdate:
             cfg.trigger_ratio = 0.8
 
 
-# ── AgentRuntimeSpec ────────────────────────────────────
-
-
-def test_agent_runtime_spec_requires_system_prompt_builder_field() -> None:
-    with pytest.raises(ValueError, match="system_prompt_builder"):
-        AgentRuntimeSpec()
-
-
-def test_agent_runtime_spec_requires_system_prompt_builder() -> None:
-    spec = AgentRuntimeSpec(system_prompt_builder=SystemPromptBuilder())
-
-    assert isinstance(spec.system_prompt_builder, SystemPromptBuilder)
-
-
-def test_agent_runtime_spec_rejects_legacy_builder_keyword() -> None:
-    legacy_key = "context" + "_builder"
-
-    with pytest.raises(ValueError):
-        AgentRuntimeSpec(**{legacy_key: SystemPromptBuilder()})
-
-
-def test_agent_runtime_spec_has_typed_run_identity_and_turn_input() -> None:
-    turn_input = TurnInput.from_values(user_text="hello")
-    identity = RunIdentity(task_id="task-1", session_id="session-1", spawn_id="child")
-
-    spec = AgentRuntimeSpec(
-        system_prompt_builder=SystemPromptBuilder(),
-        run_identity=identity,
-        turn_input=turn_input,
-    )
-
-    assert spec.run_identity is identity
-    assert spec.turn_input is turn_input
-
-
-def test_agent_runtime_spec_has_no_meta_dict_bag() -> None:
-    assert "meta" not in AgentRuntimeSpec.model_fields
-
-
-def test_agent_runtime_spec_rejects_legacy_meta_dict_bag() -> None:
-    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
-        AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-            meta={"task_id": "task-1"},
-        )
-
-
-def test_agent_runtime_spec_rejects_turn_input_inside_legacy_meta() -> None:
-    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
-        AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-            meta={"turn_input": TurnInput.from_values(user_text="hello")},
-        )
+# ── RunIdentity ─────────────────────────────────────────
 
 
 def test_run_identity_rejects_extra_fields() -> None:
@@ -162,162 +143,169 @@ def test_run_identity_rejects_extra_fields() -> None:
         RunIdentity(task_id="task-1", run_dir="/tmp/run")
 
 
-def test_run_identity_is_single_sourced() -> None:
-    from matmaster.types.run_metadata import RunIdentity as CanonicalRunIdentity
-
-    field = AgentRuntimeSpec.model_fields["run_identity"]
-
-    assert field.annotation is CanonicalRunIdentity
+# ── AgentKernelSpec ─────────────────────────────────────
 
 
-class TestAgentRuntimeSpec:
+class TestAgentKernelSpec:
+    """AgentKernelSpec: frozen config-only dataclass (no live resources)."""
+
     def test_minimal_instantiation(self) -> None:
-        provider = _MockLLMProvider()
-        spec = AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-            llm_provider=provider,
-        )
-        assert spec.llm_provider is not None
-
-    def test_defaults(self) -> None:
-        spec = AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-        )
-        assert spec.max_turns == 100
-        assert spec.hook_executor is None
+        spec = _make_kernel_spec()
         assert spec.system_prompt == ""
-        assert isinstance(spec.compaction, CompactionConfig)
-        assert "guards" not in AgentRuntimeSpec.model_fields
-
-    def test_frozen(self) -> None:
-        spec = AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-            llm_provider=_MockLLMProvider(),
-        )
-        with pytest.raises(ValidationError):
-            spec.max_turns = 50
-
-    def test_max_turns_field_exists_and_defaults_to_100(self) -> None:
-        """CONT-05: TerminationPolicy simplified to AgentRuntimeSpec.max_turns."""
-        spec = AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-            llm_provider=_MockLLMProvider(),
-        )
-        assert isinstance(spec.max_turns, int)
         assert spec.max_turns == 100
+        assert isinstance(spec.compaction, CompactionConfig)
+        assert isinstance(spec.run_identity, RunIdentity)
+        assert spec.turn_input is None
 
-    def test_serialization(self) -> None:
-        spec = AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-            llm_provider=_MockLLMProvider(),
-            max_turns=50,
-            system_prompt="You are a scientist.",
+    def test_custom_config_values(self) -> None:
+        spec = _make_kernel_spec(max_turns=50, system_prompt="You are a scientist.")
+        assert spec.max_turns == 50
+        assert spec.system_prompt == "You are a scientist."
+
+    def test_typed_run_identity_and_turn_input(self) -> None:
+        turn_input = TurnInput.from_values(user_text="hello")
+        identity = RunIdentity(
+            task_id="task-1", session_id="session-1", spawn_id="child"
         )
-        data = spec.model_dump()
-        assert data["max_turns"] == 50
-        assert data["system_prompt"] == "You are a scientist."
-        assert "llm_provider" in data
-        assert "guards" not in data
-        assert "hook_executor" in data
-        assert "compaction" in data
 
-    # ── New typed field tests ──────────────────────────
+        spec = _make_kernel_spec(run_identity=identity, turn_input=turn_input)
+
+        assert spec.run_identity is identity
+        assert spec.turn_input is turn_input
+
+    def test_run_identity_is_single_sourced(self) -> None:
+        from matmaster.types.run_metadata import RunIdentity as CanonicalRunIdentity
+
+        fields = {f.name: f for f in dataclasses.fields(AgentKernelSpec)}
+        assert fields["run_identity"].type in (
+            CanonicalRunIdentity,
+            "RunIdentity",
+        )
+
+    def test_fields(self) -> None:
+        names = {f.name for f in dataclasses.fields(AgentKernelSpec)}
+        assert names == {
+            "system_prompt",
+            "max_turns",
+            "compaction",
+            "run_identity",
+            "turn_input",
+            "llm_model",
+            "llm_model_profile",
+            "llm_model_route",
+        }
+
+    def test_frozen_rejects_mutation(self) -> None:
+        spec = _make_kernel_spec()
+        with pytest.raises(FrozenInstanceError):
+            spec.max_turns = 50  # type: ignore[misc]
+        with pytest.raises(FrozenInstanceError):
+            spec.system_prompt = "changed"  # type: ignore[misc]
+
+
+# ── AgentKernelResources ────────────────────────────────
+
+
+class TestAgentKernelResources:
+    """AgentKernelResources: frozen live-resources dataclass."""
+
+    def test_minimal_instantiation(self) -> None:
+        resources = _make_kernel_resources()
+        assert resources.llm_provider is not None
+        assert isinstance(resources.runtime_ports, KernelRuntimePorts)
+        assert resources.tool_runner is not None
+        assert resources.tool_catalog is not None
+        assert resources.runtime_topology is not None
+
+    def test_optional_fields_default_none(self) -> None:
+        resources = _make_kernel_resources()
+        assert resources.hook_executor is None
+        assert resources.compactor is None
+        assert resources.capability_policy is None
+        assert resources.structural_validation is None
 
     def test_llm_provider_typed_as_protocol(self) -> None:
-        """llm_provider field accepts LLMProvider Protocol-conforming objects."""
         provider = _MockLLMProvider()
         assert isinstance(provider, LLMProvider)
 
-        spec = AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-            llm_provider=provider,
-        )
-        assert isinstance(spec.llm_provider, LLMProvider)
+        resources = _make_kernel_resources(llm_provider=provider)
+        assert resources.llm_provider is provider
+        assert isinstance(resources.llm_provider, LLMProvider)
 
-    def test_hook_executor_accepts_executor_instance(self) -> None:
-        """hook_executor field accepts HookExecutor instances."""
+    def test_hook_executor_holds_instance(self) -> None:
+        from matmaster.core.hooks import HookExecutor
+
         executor = HookExecutor()
-        spec = AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-            llm_provider=_MockLLMProvider(),
-            hook_executor=executor,
-        )
-        assert isinstance(spec.llm_provider, LLMProvider)
-        assert spec.hook_executor is executor
+        resources = _make_kernel_resources(hook_executor=executor)
+        assert resources.hook_executor is executor
 
-    def test_hook_executor_rejects_non_executor_objects(self) -> None:
-        """hook_executor remains limited to the hook dispatch contract."""
-        with pytest.raises(ValidationError, match="hook_executor"):
-            AgentRuntimeSpec(
-                system_prompt_builder=SystemPromptBuilder(),
-                llm_provider=_MockLLMProvider(),
-                hook_executor=object(),
-            )
-
-
-class TestAgentRuntimeSpecCompactor:
-    def test_compactor_default_none(self) -> None:
-        spec = AgentRuntimeSpec(system_prompt_builder=SystemPromptBuilder())
-        assert spec.compactor is None
-
-    def test_compactor_accepts_object(self) -> None:
+    def test_compactor_holds_object(self) -> None:
         class FakeCompactor:
             pass
 
-        spec = AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-            compactor=FakeCompactor(),
+        compactor = FakeCompactor()
+        resources = _make_kernel_resources(compactor=compactor)
+        assert resources.compactor is compactor
+
+    def test_runtime_ports_holds_instance(self) -> None:
+        async def checkpoint_sink(*, payload, base_messages):
+            return 12
+
+        ports = KernelRuntimePorts(checkpoint_sink=checkpoint_sink)
+        resources = _make_kernel_resources(runtime_ports=ports)
+        assert resources.runtime_ports is ports
+
+    def test_runtime_ports_default_has_none_ports(self) -> None:
+        resources = _make_kernel_resources()
+        assert resources.runtime_ports.checkpoint_sink is None
+        assert resources.runtime_ports.pre_compaction_barrier is None
+
+    def test_fields(self) -> None:
+        names = {f.name for f in dataclasses.fields(AgentKernelResources)}
+        assert names == {
+            "llm_provider",
+            "runtime_ports",
+            "tool_runner",
+            "tool_catalog",
+            "runtime_topology",
+            "hook_executor",
+            "compactor",
+            "capability_policy",
+            "structural_validation",
+        }
+
+    def test_frozen_rejects_mutation(self) -> None:
+        resources = _make_kernel_resources()
+        with pytest.raises(FrozenInstanceError):
+            resources.compactor = "new"  # type: ignore[misc]
+        with pytest.raises(FrozenInstanceError):
+            resources.llm_provider = object()  # type: ignore[misc]
+
+
+# ── AgentKernelRuntime ──────────────────────────────────
+
+
+class TestAgentKernelRuntime:
+    """AgentKernelRuntime: frozen bundle of spec + resources."""
+
+    def test_creation(self) -> None:
+        spec = _make_kernel_spec()
+        resources = _make_kernel_resources()
+        runtime = AgentKernelRuntime(spec=spec, resources=resources)
+
+        assert runtime.spec is spec
+        assert runtime.resources is resources
+
+    def test_fields(self) -> None:
+        names = {f.name for f in dataclasses.fields(AgentKernelRuntime)}
+        assert names == {"spec", "resources"}
+
+    def test_frozen_rejects_mutation(self) -> None:
+        runtime = AgentKernelRuntime(
+            spec=_make_kernel_spec(), resources=_make_kernel_resources()
         )
-        assert spec.compactor is not None
-
-    def test_compactor_frozen_reference(self) -> None:
-        spec = AgentRuntimeSpec(system_prompt_builder=SystemPromptBuilder())
-        with pytest.raises(Exception, match="frozen"):
-            spec.compactor = "new"
-
-
-# ── Edge case tests (QUAL-01) ─────────────────────────
-
-
-class TestAgentRuntimeSpecFrozenRejectMutation:
-    """QUAL-01: Attempt to modify frozen spec fields -> error."""
-
-    def test_agent_runtime_spec_frozen_reject_mutation(self) -> None:
-        spec = AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-            llm_provider=_MockLLMProvider(),
-        )
-        with pytest.raises(ValidationError):
-            spec.max_turns = 50
-        with pytest.raises(ValidationError):
-            spec.system_prompt = "changed"
-
-
-class TestAgentRuntimeSpecDefaults:
-    """QUAL-01: Default values for all optional fields."""
-
-    def test_agent_runtime_spec_defaults(self) -> None:
-        spec = AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-            llm_provider=_MockLLMProvider(),
-        )
-        assert spec.max_turns == 100
-        assert spec.system_prompt == ""
-        assert spec.hook_executor is None
-        assert "guards" not in AgentRuntimeSpec.model_fields
-
-
-class TestAgentRuntimeSpecArbitraryTypes:
-    """QUAL-01: LLMProvider accepted as arbitrary type."""
-
-    def test_agent_runtime_spec_arbitrary_types(self) -> None:
-        provider = _MockLLMProvider()
-        spec = AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-            llm_provider=provider,
-        )
-        assert spec.llm_provider is provider
-        assert isinstance(spec.llm_provider, LLMProvider)
+        with pytest.raises(FrozenInstanceError):
+            runtime.spec = _make_kernel_spec()  # type: ignore[misc]
 
 
 # ── AgentRuntime ────────────────────────────────────────
@@ -326,35 +314,42 @@ class TestAgentRuntimeSpecArbitraryTypes:
 class TestAgentRuntime:
     """AgentRuntime frozen dataclass — runtime bundle from Exp.build_runtime()."""
 
-    def _make_spec(self) -> AgentRuntimeSpec:
-        return AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-            llm_provider=_MockLLMProvider(),
+    def _make_kernel_runtime(self) -> AgentKernelRuntime:
+        return AgentKernelRuntime(
+            spec=_make_kernel_spec(), resources=_make_kernel_resources()
         )
 
     def test_agent_runtime_creation(self) -> None:
-        """AgentRuntime holds kernel, spec, and cleanup callable."""
+        """AgentRuntime holds kernel, kernel_runtime, and cleanup callable."""
         mock_kernel = object()
-        spec = self._make_spec()
+        kernel_runtime = self._make_kernel_runtime()
         cleanup_called: list[bool] = []
 
         def cleanup() -> None:
             cleanup_called.append(True)
 
-        runtime = AgentRuntime(kernel=mock_kernel, spec=spec, cleanup=cleanup)
+        runtime = AgentRuntime(
+            kernel=mock_kernel, kernel_runtime=kernel_runtime, cleanup=cleanup
+        )
 
         assert runtime.kernel is mock_kernel
-        assert runtime.spec is spec
+        assert runtime.kernel_runtime is kernel_runtime
         assert runtime.cleanup is cleanup
         # Verify cleanup callable works
         runtime.cleanup()
         assert cleanup_called == [True]
 
+    def test_agent_runtime_fields(self) -> None:
+        names = {f.name for f in dataclasses.fields(AgentRuntime)}
+        assert names == {"kernel", "kernel_runtime", "cleanup"}
+
     def test_agent_runtime_is_frozen(self) -> None:
         """AgentRuntime is frozen — reassignment raises FrozenInstanceError."""
-        mock_kernel = object()
-        spec = self._make_spec()
-        runtime = AgentRuntime(kernel=mock_kernel, spec=spec, cleanup=lambda: None)
+        runtime = AgentRuntime(
+            kernel=object(),
+            kernel_runtime=self._make_kernel_runtime(),
+            cleanup=lambda: None,
+        )
 
         with pytest.raises(FrozenInstanceError):
             runtime.kernel = object()  # type: ignore[misc]
@@ -396,117 +391,6 @@ class TestKernelResult:
             kr.status = "failed"  # type: ignore[misc]
 
 
-# ── Tool Runtime v2 fields (Phase 32-02) ─────────────────
-
-
-class TestAgentRuntimeSpecToolRuntimeV2Fields:
-    """Phase 32-02: 5 new optional fields default to None for backward compat."""
-
-    def test_new_fields_default_none(self) -> None:
-        """All 5 new fields default to None when not provided."""
-        spec = AgentRuntimeSpec(system_prompt_builder=SystemPromptBuilder())
-        assert spec.tool_runner is None
-        assert spec.tool_catalog is None
-        assert spec.runtime_topology is None
-        assert spec.capability_policy is None
-        assert spec.structural_validation is None
-
-    def test_backward_compat_with_existing_constructor(self) -> None:
-        """Existing _make_spec() pattern (no new fields) still works."""
-        spec = AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-            llm_provider=_MockLLMProvider(),
-            hook_executor=None,
-            max_turns=10,
-            system_prompt="You are a test agent",
-        )
-        assert spec.llm_provider is not None
-        assert spec.tool_runner is None
-        assert spec.tool_catalog is None
-
-    def test_tool_runner_field_accepts_protocol_implementation(self) -> None:
-        """tool_runner field accepts a ToolRunner-compatible implementation."""
-
-        class _StubToolRunner:
-            async def execute_batch(
-                self, tool_calls, ctx, *, on_result=None
-            ) -> list[tuple[Any, Any]]:
-                return []
-
-        runner = _StubToolRunner()
-
-        spec = AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(), tool_runner=runner
-        )
-
-        assert spec.tool_runner is runner
-
-    def test_tool_catalog_field_accepts_catalog(self) -> None:
-        """tool_catalog field accepts ToolCatalog instance."""
-        from matmaster.tools.tool_catalog import ToolCatalog
-
-        registry = ToolRegistry()
-        catalog = ToolCatalog(registry)
-
-        spec = AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-            tool_catalog=catalog,
-        )
-        assert spec.tool_catalog is catalog
-
-    def test_runtime_topology_field_accepts_topology(self) -> None:
-        """runtime_topology field accepts RuntimeTopology instance."""
-        from matmaster.types.topology import RuntimeTopology
-
-        topo = RuntimeTopology(
-            session_kind="local",
-            control_root="/tmp",
-            workspace_root="/tmp/workspace",
-        )
-        spec = AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(), runtime_topology=topo
-        )
-        assert spec.runtime_topology is topo
-        assert spec.runtime_topology.session_kind == "local"
-
-    def test_model_dump_includes_new_fields(self) -> None:
-        """model_dump() output includes the 5 new fields."""
-        spec = AgentRuntimeSpec(system_prompt_builder=SystemPromptBuilder())
-        data = spec.model_dump()
-        assert "tool_runner" in data
-        assert "tool_catalog" in data
-        assert "runtime_topology" in data
-        assert "capability_policy" in data
-        assert "structural_validation" in data
-        # All should be None
-        assert data["tool_runner"] is None
-        assert data["tool_catalog"] is None
-
-    def test_tool_runner_rejects_invalid_type(self) -> None:
-        """tool_runner field rejects non-ToolRunner objects at construction."""
-        with pytest.raises(ValidationError, match="tool_runner must be ToolRunner"):
-            AgentRuntimeSpec(
-                system_prompt_builder=SystemPromptBuilder(), tool_runner=object()
-            )
-
-    def test_tool_catalog_rejects_invalid_type(self) -> None:
-        """tool_catalog field rejects non-ToolCatalog objects at construction."""
-        with pytest.raises(ValidationError, match="tool_catalog must be ToolCatalog"):
-            AgentRuntimeSpec(
-                system_prompt_builder=SystemPromptBuilder(),
-                tool_catalog="not a catalog",
-            )
-
-    def test_runtime_topology_rejects_invalid_type(self) -> None:
-        """runtime_topology field rejects non-RuntimeTopology objects."""
-        with pytest.raises(
-            ValidationError, match="runtime_topology must be RuntimeTopology"
-        ):
-            AgentRuntimeSpec(
-                system_prompt_builder=SystemPromptBuilder(), runtime_topology=42
-            )
-
-
 # ── Types re-export from matmaster.types (Phase 32) ───
 
 
@@ -531,48 +415,3 @@ class TestTypesReExport:
         from matmaster.types import ToolDecision
 
         assert hasattr(ToolDecision, "model_fields")
-
-
-class TestAgentRuntimeSpecRuntimePorts:
-    def test_runtime_ports_default_exists_and_is_excluded_from_dump(self) -> None:
-        from matmaster.types.runtime_ports import KernelRuntimePorts
-
-        spec = AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-        )
-
-        assert isinstance(spec.runtime_ports, KernelRuntimePorts)
-        assert spec.runtime_ports.checkpoint_sink is None
-        assert spec.runtime_ports.pre_compaction_barrier is None
-        assert "runtime_ports" not in spec.model_dump()
-        assert "runtime_ports" not in spec.model_dump(mode="json", fallback=repr)
-
-    def test_runtime_ports_accepts_kernel_ports_instance(self) -> None:
-        from matmaster.types.runtime_ports import KernelRuntimePorts
-
-        async def checkpoint_sink(*, payload, base_messages):
-            return 12
-
-        ports = KernelRuntimePorts(checkpoint_sink=checkpoint_sink)
-        spec = AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-            llm_provider=_MockLLMProvider(),
-            runtime_ports=ports,
-        )
-
-        assert spec.runtime_ports is ports
-
-    def test_model_validate_accepts_runtime_ports_dataclass(self) -> None:
-        from matmaster.types.runtime_ports import KernelRuntimePorts
-
-        ports = KernelRuntimePorts()
-
-        spec = AgentRuntimeSpec.model_validate(
-            {
-                "system_prompt_builder": SystemPromptBuilder(),
-                "llm_provider": _MockLLMProvider(),
-                "runtime_ports": ports,
-            }
-        )
-
-        assert spec.runtime_ports == ports

@@ -3,7 +3,7 @@ from __future__ import annotations
 from matmaster.core.agent import ensure_tool_definitions
 from matmaster.core.kernel_items import _KernelState
 from matmaster.types.messages import SystemMessage
-from matmaster.types.runtime import AgentRuntimeSpec
+from matmaster.types.runtime import AgentKernelResources
 
 
 class Catalog:
@@ -16,28 +16,35 @@ class Catalog:
         return [{"type": "function", "function": {"name": f"tool_v{self.version}"}}]
 
 
-def _spec(catalog=None, topology=None):
-    return AgentRuntimeSpec.model_construct(
+def _resources(catalog=None, topology=None):
+    """Build minimal AgentKernelResources for ensure_tool_definitions tests.
+
+    ensure_tool_definitions only reads tool_catalog / runtime_topology; the other
+    required resource fields are irrelevant here so they get simple stubs.
+    """
+    return AgentKernelResources(
+        llm_provider=object(),
+        runtime_ports=object(),
+        tool_runner=object(),
         tool_catalog=catalog,
         runtime_topology=topology,
-        system_prompt_builder=object(),
     )
 
 
 def test_ensure_tool_definitions_returns_none_without_catalog() -> None:
     state = _KernelState(messages=[SystemMessage(content="sys")])
 
-    assert ensure_tool_definitions(_spec(), state) is None
+    assert ensure_tool_definitions(_resources(), state) is None
     assert state.cached_tool_definitions is None
 
 
 def test_ensure_tool_definitions_caches_same_list_object() -> None:
     catalog = Catalog()
     state = _KernelState(messages=[SystemMessage(content="sys")])
-    spec = _spec(catalog)
+    resources = _resources(catalog)
 
-    first = ensure_tool_definitions(spec, state)
-    second = ensure_tool_definitions(spec, state)
+    first = ensure_tool_definitions(resources, state)
+    second = ensure_tool_definitions(resources, state)
 
     assert first is second
     assert catalog.calls == [None]
@@ -46,11 +53,11 @@ def test_ensure_tool_definitions_caches_same_list_object() -> None:
 def test_ensure_tool_definitions_rebuilds_on_catalog_version_change() -> None:
     catalog = Catalog()
     state = _KernelState(messages=[SystemMessage(content="sys")])
-    spec = _spec(catalog)
+    resources = _resources(catalog)
 
-    first = ensure_tool_definitions(spec, state)
+    first = ensure_tool_definitions(resources, state)
     catalog.version = 2
-    second = ensure_tool_definitions(spec, state)
+    second = ensure_tool_definitions(resources, state)
 
     assert first is not second
     assert second == [{"type": "function", "function": {"name": "tool_v2"}}]

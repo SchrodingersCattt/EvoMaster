@@ -122,15 +122,15 @@ class TestDevRunner:
         catalog = MagicMock()
         observed: dict[str, Any] = {}
 
-        def fake_run_stream(spec, task, history=None, cancel_token=None):
-            observed["spec"] = spec
+        def fake_run_stream(kernel_runtime, task, history=None, cancel_token=None):
+            observed["kernel_runtime"] = kernel_runtime
             observed["task"] = task
             observed["history"] = history
             observed["cancel_token"] = cancel_token
             return object()
 
         runtime = MagicMock()
-        runtime.spec = MagicMock(tool_catalog=catalog)
+        runtime.kernel_runtime = MagicMock(resources=MagicMock(tool_catalog=catalog))
         runtime.kernel = MagicMock()
         runtime.kernel.run_stream = fake_run_stream
 
@@ -178,7 +178,7 @@ class TestDevRunner:
             finish_detail=detail,
         )
         runtime = MagicMock()
-        runtime.spec = MagicMock(tool_catalog=None)
+        runtime.kernel_runtime = MagicMock(resources=MagicMock(tool_catalog=None))
         runtime.kernel = MagicMock()
         runtime.kernel.run_stream.return_value = object()
         observer = DevEventObserver()

@@ -57,23 +57,49 @@ _RESPONSE_USAGE_KEYS = (
     'total_usage',
     'usage_vendor',
 )
+_MODEL_IDENTITY_KEYS = (
+    'model',
+    'model_profile',
+    'model_route',
+)
+
+
+def _copy_nonempty_keys(
+    out: dict[str, Any],
+    payload: dict[str, Any],
+    keys: tuple[str, ...],
+) -> None:
+    for key in keys:
+        value = payload.get(key)
+        if value is not None and value != {} and value != "":
+            out[key] = value
 
 
 def _response_public_content(payload: dict[str, Any]) -> object | None:
     content = payload.get('content')
-    if not (payload.get('turn_usage') or payload.get('total_usage')):
+    has_usage = bool(payload.get('turn_usage') or payload.get('total_usage'))
+    has_model_identity = any(payload.get(key) for key in _MODEL_IDENTITY_KEYS)
+    if not has_usage and not has_model_identity:
         return content
 
     out: dict[str, Any] = {'content': content or ''}
-    for key in _RESPONSE_USAGE_KEYS:
-        value = payload.get(key)
-        if value is not None and value != {}:
-            out[key] = value
+    _copy_nonempty_keys(out, payload, _RESPONSE_USAGE_KEYS)
+    _copy_nonempty_keys(out, payload, _MODEL_IDENTITY_KEYS)
+    return out
+
+
+def _thought_public_content(payload: dict[str, Any]) -> object | None:
+    content = payload.get('content')
+    if not any(payload.get(key) for key in _MODEL_IDENTITY_KEYS):
+        return content
+    out: dict[str, Any] = {'content': content or ''}
+    _copy_nonempty_keys(out, payload, _MODEL_IDENTITY_KEYS)
     return out
 
 
 def normalize_response_sse_payload(payload: dict[str, Any]) -> dict[str, Any]:
-    if payload.get('type') != 'response':
+    event_type = payload.get('type')
+    if event_type not in {'response', 'thought'}:
         return payload
 
     content = payload.get('content')
@@ -82,7 +108,12 @@ def normalize_response_sse_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
     normalized = dict(payload)
     normalized['content'] = str(content.get('content') or '')
-    for key in _RESPONSE_USAGE_KEYS:
+    keys = (
+        (*_RESPONSE_USAGE_KEYS, *_MODEL_IDENTITY_KEYS)
+        if event_type == 'response'
+        else _MODEL_IDENTITY_KEYS
+    )
+    for key in keys:
         if key in content and content.get(key) is not None:
             normalized[key] = content[key]
     return normalized
@@ -133,6 +164,9 @@ def _public_content_for_event(
     """Adapt internal event payloads to the frontend SSE contract."""
     if event_type == 'response':
         return _response_public_content(payload)
+
+    if event_type == 'thought':
+        return _thought_public_content(payload)
 
     if event_type == 'tool_call':
         call_id = payload.get('call_id')
@@ -227,6 +261,7 @@ def _public_content_for_event(
             content['usage'] = payload['usage']
         if payload.get('usage_vendor_by_turn'):
             content['usage_vendor_by_turn'] = payload['usage_vendor_by_turn']
+        _copy_nonempty_keys(content, payload, _MODEL_IDENTITY_KEYS)
         return content
 
     if event_type == 'assistant_state':
@@ -238,6 +273,7 @@ def _public_content_for_event(
                 content['turn_index'] = payload['turn_index']
             content['turn_usage'] = payload['turn_usage']
             content['total_usage'] = payload.get('total_usage', {})
+        _copy_nonempty_keys(content, payload, _MODEL_IDENTITY_KEYS)
         return content
 
     if event_type == 'skill_hit':

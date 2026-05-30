@@ -9,7 +9,6 @@ from unittest.mock import patch
 import pytest
 
 from matmaster.config.exp import ExpConfig
-from matmaster.context.system_prompt import SystemPromptBuilder
 from matmaster.core.agent import AgentKernel
 from matmaster.core.capability_policy import DefaultCapabilityPolicy
 from matmaster.core.exp import Exp
@@ -41,10 +40,10 @@ from matmaster.types.messages import (
     UserMessage,
 )
 from matmaster.types.run_metadata import RunIdentity, RunMetadata
-from matmaster.types.runtime import AgentRuntimeSpec
 from matmaster.types.topology import ToolPlane
 from tests.conftest import MockAsyncTool
 
+from .agent_kernel_test_helpers import make_kernel_runtime
 from .conftest import MockLLMProvider
 
 
@@ -257,9 +256,12 @@ class TestExpWiring:
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
 
-        assert runtime.spec.run_identity.task_id == "task-1"
-        assert runtime.spec.run_identity.session_id == "session-1"
-        assert runtime.spec.tool_runner._hook_executor is runtime.spec.hook_executor
+        assert runtime.kernel_runtime.spec.run_identity.task_id == "task-1"
+        assert runtime.kernel_runtime.spec.run_identity.session_id == "session-1"
+        assert (
+            runtime.kernel_runtime.resources.tool_runner._hook_executor
+            is runtime.kernel_runtime.resources.hook_executor
+        )
 
     @pytest.mark.asyncio
     async def test_orchestrator_emits_subagent_start_and_stop(self) -> None:
@@ -538,16 +540,15 @@ class TestAgentKernelHookWiring:
         executor.on(HookEvent.RUN_START, on_start)
         executor.on(HookEvent.RUN_END, on_end)
 
-        spec = AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-            llm_provider=provider,
+        kernel_runtime = make_kernel_runtime(
+            provider=provider,
             hook_executor=executor,
             run_identity=RunIdentity(task_id="task-1", session_id="session-1"),
             system_prompt="You are a test agent",
         )
 
         kernel = AgentKernel()
-        events = [event async for event in kernel.run_stream(spec, "original")]
+        events = [event async for event in kernel.run_stream(kernel_runtime, "original")]
 
         assert isinstance(events[-1], RunResultEvent)
         assert seen == [
@@ -566,16 +567,15 @@ class TestAgentKernelHookWiring:
 
         executor.on(HookEvent.RUN_END, on_end)
 
-        spec = AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-            llm_provider=provider,
+        kernel_runtime = make_kernel_runtime(
+            provider=provider,
             hook_executor=executor,
             run_identity=RunIdentity(task_id="task-1", session_id="session-1"),
             system_prompt="You are a test agent",
         )
 
         kernel = AgentKernel()
-        stream = kernel.run_stream(spec, "original")
+        stream = kernel.run_stream(kernel_runtime, "original")
 
         await anext(stream)
         await stream.aclose()
@@ -597,16 +597,15 @@ class TestAgentKernelHookWiring:
         executor.rewrite(HookEvent.USER_PROMPT_SUBMIT, rewrite)
         executor.on(HookEvent.USER_PROMPT_SUBMIT, observe)
 
-        spec = AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-            llm_provider=provider,
+        kernel_runtime = make_kernel_runtime(
+            provider=provider,
             hook_executor=executor,
             run_identity=RunIdentity(task_id="task-1", session_id="session-1"),
             system_prompt="You are a test agent",
         )
 
         kernel = AgentKernel()
-        [event async for event in kernel.run_stream(spec, "original")]
+        [event async for event in kernel.run_stream(kernel_runtime, "original")]
 
         assert provider.seen_messages[0][-1]["content"] == "original rewritten"
         assert seen_prompts == ["original rewritten"]
@@ -623,16 +622,15 @@ class TestAgentKernelHookWiring:
 
         executor.on(HookEvent.CONTEXT_COMPACTION, observe)
 
-        spec = AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-            llm_provider=provider,
+        kernel_runtime = make_kernel_runtime(
+            provider=provider,
             hook_executor=executor,
             compactor=compactor,
             system_prompt="You are a test agent",
         )
 
         kernel = AgentKernel()
-        [event async for event in kernel.run_stream(spec, "original")]
+        [event async for event in kernel.run_stream(kernel_runtime, "original")]
 
         assert seen == [
             CompactionContext(
@@ -655,9 +653,8 @@ class TestAgentKernelHookWiring:
 
         executor.on(HookEvent.CONTEXT_COMPACTION, observe)
 
-        spec = AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-            llm_provider=provider,
+        kernel_runtime = make_kernel_runtime(
+            provider=provider,
             hook_executor=executor,
             compactor=compactor,
             system_prompt="You are a test agent",
@@ -667,7 +664,7 @@ class TestAgentKernelHookWiring:
         [
             event
             async for event in kernel.run_stream(
-                spec,
+                kernel_runtime,
                 "original",
                 history=[
                     UserMessage(content="previous user"),

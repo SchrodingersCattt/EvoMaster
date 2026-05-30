@@ -174,7 +174,7 @@ class DevRunner:
             async with exp.runtime_scope(ctx, cancel_token) as runtime:
                 return await drain_run_stream(
                     runtime.kernel.run_stream(
-                        runtime.spec,
+                        runtime.kernel_runtime,
                         task,
                         history=self.history,
                         cancel_token=cancel_token,

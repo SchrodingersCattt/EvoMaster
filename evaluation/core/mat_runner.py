@@ -189,7 +189,7 @@ def _run_mat_task_once(
         try:
             runtime = await exp.build_runtime(agent_run_ctx)
             return await drain_run_stream(
-                runtime.kernel.run_stream(runtime.spec, prompt)
+                runtime.kernel.run_stream(runtime.kernel_runtime, prompt)
             )
         finally:
             await exp._run_cleanup_callbacks()

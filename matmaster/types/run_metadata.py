@@ -6,7 +6,7 @@ from pydantic import BaseModel, ConfigDict
 
 
 class RunIdentity(BaseModel):
-    """Runtime identity shared by ExecutionEnvironment and AgentRuntimeSpec."""
+    """Runtime identity shared by ExecutionEnvironment and AgentKernelSpec."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 

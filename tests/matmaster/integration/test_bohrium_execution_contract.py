@@ -479,7 +479,7 @@ def test_execution_binding_before_build_runtime(
     mock_build_provider: MagicMock,
     tmp_path: Path,
 ) -> None:
-    """When Bohrium returns an execution binding, pg_ctx passed to Exp.build_runtime is updated."""
+    """When Bohrium returns an execution binding, agent_run_ctx passed to Exp.build_runtime is updated."""
     AgentRunService = pytest.importorskip(
         "src.services.agent_run_service",
         reason="src not available (isolation test)",

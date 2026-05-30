@@ -47,6 +47,10 @@ class ChatEventsTable(BaseTable):
                 ev['session_directory'] = content.get('session_directory')
             if content.get('session_directory_source'):
                 ev['session_directory_source'] = content.get('session_directory_source')
+            if content.get('requested_llm'):
+                ev['requested_llm'] = content.get('requested_llm')
+            if content.get('requested_model'):
+                ev['requested_model'] = content.get('requested_model')
 
         return ev
 
@@ -188,8 +192,7 @@ class ChatEventsTable(BaseTable):
                     sql += f' LIMIT {int(limit)}'
                 cursor.execute(sql, params)
                 return [
-                    self._row_to_context_event(row)
-                    for row in list(cursor.fetchall())
+                    self._row_to_context_event(row) for row in list(cursor.fetchall())
                 ]
 
     def query_user_turn_context_by_invocation(
@@ -397,6 +400,10 @@ class ChatEventsTable(BaseTable):
                             ev['session_directory_source'] = content.get(
                                 'session_directory_source'
                             )
+                        if content.get('requested_llm'):
+                            ev['requested_llm'] = content.get('requested_llm')
+                        if content.get('requested_model'):
+                            ev['requested_model'] = content.get('requested_model')
                     events.append(ev)
                 return events
 
@@ -458,6 +465,8 @@ class ChatEventsTable(BaseTable):
                             'session_directory_source'
                         )
                         or 'none',
+                        'requested_llm': content.get('requested_llm'),
+                        'requested_model': content.get('requested_model'),
                         **base,
                     }
                 return {
@@ -468,6 +477,8 @@ class ChatEventsTable(BaseTable):
                     'mode': 'direct',
                     'session_directory': None,
                     'session_directory_source': 'none',
+                    'requested_llm': None,
+                    'requested_model': None,
                     **base,
                 }
 

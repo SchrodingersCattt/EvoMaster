@@ -176,6 +176,23 @@ class TestPublicContentForEvent:
 
         assert _public_content_for_event('response', payload) == 'hello'
 
+    def test_thought_with_model_returns_structured_content(self) -> None:
+        payload = {
+            'type': 'thought',
+            'source': 'Agent',
+            'content': 'reasoning',
+            'model': 'claude-opus-4-6',
+            'model_profile': 'opus',
+            'model_route': 'bedrock-claude-opus',
+        }
+
+        assert _public_content_for_event('thought', payload) == {
+            'content': 'reasoning',
+            'model': 'claude-opus-4-6',
+            'model_profile': 'opus',
+            'model_route': 'bedrock-claude-opus',
+        }
+
     def test_response_with_usage_returns_structured_content(self) -> None:
         payload = {
             'type': 'response',
@@ -197,6 +214,23 @@ class TestPublicContentForEvent:
             'usage_vendor': {'inputTokens': 10, 'outputTokens': 4},
         }
 
+    def test_response_with_model_returns_structured_content(self) -> None:
+        payload = {
+            'type': 'response',
+            'source': 'Agent',
+            'content': 'answer',
+            'model': 'claude-opus-4-6',
+            'model_profile': 'opus',
+            'model_route': 'bedrock-claude-opus',
+        }
+
+        assert _public_content_for_event('response', payload) == {
+            'content': 'answer',
+            'model': 'claude-opus-4-6',
+            'model_profile': 'opus',
+            'model_route': 'bedrock-claude-opus',
+        }
+
     def test_run_result_public_content_includes_usage(self) -> None:
         payload = {
             'type': 'run_result',
@@ -211,6 +245,45 @@ class TestPublicContentForEvent:
         assert _public_content_for_event('run_result', payload)['usage'] == {
             'prompt_tokens': 20,
             'completion_tokens': 6,
+        }
+
+    def test_run_result_public_content_includes_model(self) -> None:
+        payload = {
+            'type': 'run_result',
+            'source': 'Agent',
+            'status': 'completed',
+            'reason': 'natural',
+            'final_content': 'done',
+            'model': 'claude-opus-4-6',
+            'model_profile': 'opus',
+            'model_route': 'bedrock-claude-opus',
+        }
+
+        assert _public_content_for_event('run_result', payload) == {
+            'content': 'done',
+            'status': 'completed',
+            'reason': 'natural',
+            'model': 'claude-opus-4-6',
+            'model_profile': 'opus',
+            'model_route': 'bedrock-claude-opus',
+        }
+
+    def test_assistant_state_public_content_includes_model(self) -> None:
+        state = {'role': 'assistant', 'content': None, 'tool_calls': []}
+        payload = {
+            'type': 'assistant_state',
+            'source': 'Agent',
+            'state': state,
+            'model': 'claude-opus-4-6',
+            'model_profile': 'opus',
+            'model_route': 'bedrock-claude-opus',
+        }
+
+        assert _public_content_for_event('assistant_state', payload) == {
+            'state': state,
+            'model': 'claude-opus-4-6',
+            'model_profile': 'opus',
+            'model_route': 'bedrock-claude-opus',
         }
 
     def test_failed_run_result_preserves_usage_and_finish_detail(self) -> None:
@@ -278,6 +351,28 @@ class TestPublicContentForEvent:
         assert normalized['content'] == 'answer'
         assert normalized['turn_index'] == 3
         assert normalized['turn_usage'] == {'total_tokens': 12}
+
+    def test_structured_thought_content_is_unpacked_for_sse(self) -> None:
+        payload = {
+            'source': 'MatMaster',
+            'type': 'thought',
+            'content': {
+                'content': 'thinking',
+                'model': 'claude-opus-4-6',
+                'model_profile': 'opus',
+                'model_route': 'bedrock-claude-opus',
+            },
+            'session_id': 'sess',
+            'task_id': 'task',
+            'spawn_id': None,
+        }
+
+        normalized = normalize_response_sse_payload(payload)
+
+        assert normalized['content'] == 'thinking'
+        assert normalized['model'] == 'claude-opus-4-6'
+        assert normalized['model_profile'] == 'opus'
+        assert normalized['model_route'] == 'bedrock-claude-opus'
 
     def test_response_figures_payload_maps_to_public_content(self) -> None:
         payload = {
