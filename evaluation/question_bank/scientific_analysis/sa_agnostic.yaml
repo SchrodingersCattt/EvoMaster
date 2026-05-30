@@ -8362,6 +8362,217 @@ questions:
     axis: efficiency
     verify: token_budget
     criterion: Completed within token budget
+- id: SA_close_packed_layers_001_20260531
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Analyze non-orthogonal fcc(111) and hcp(0001) close-packed slabs, verify
+    layer counts and stacking sequences using fractional-coordinate layer clustering
+    rather than naive Cartesian z sorting.
+  human_prompt_seed: '工作区中有两个非正交晶胞的密排面 slab 文件：
+
+    - `fcc111_5layer_nonorthogonal.vasp`
+    - `hcp0001_5layer_nonorthogonal.vasp`
+
+    请分析二者沿 slab 法向的原子层数与堆垛序列。注意：晶胞是非正交的，不能只靠 Cartesian z
+    坐标直接分层；请使用 fractional coordinates / Direct 坐标中沿 slab 法向的分量，并用合理容差聚类同一层。
+
+    输出 `layer_analysis.json`，格式：
+    `{"fcc_layer_count": ..., "fcc_stacking": "...", "hcp_layer_count": ..., "hcp_stacking": "...", "method": "..."}`
+    '
+  tags:
+  - struct_inspect
+  data_files:
+  - key: fcc_slab
+    path: data/SA_close_packed_layers_001_20260531/fcc111_5layer_nonorthogonal.vasp
+    oss_url: ''
+    description: Minimal non-orthogonal fcc(111) five-layer slab with ABCAB stacking.
+  - key: hcp_slab
+    path: data/SA_close_packed_layers_001_20260531/hcp0001_5layer_nonorthogonal.vasp
+    oss_url: ''
+    description: Minimal non-orthogonal hcp(0001) five-layer slab with ABABA stacking.
+  - key: readme
+    path: data/SA_close_packed_layers_001_20260531/README.md
+    oss_url: ''
+    description: Fixture notes and expected analysis convention.
+  reference_answers:
+  - key: output_artifact
+    value: layer_analysis.json
+  - key: fcc_layer_count
+    value:
+      filename: layer_analysis.json
+      pattern: '"fcc_layer_count"\s*:\s*5'
+      flags: i
+  - key: hcp_layer_count
+    value:
+      filename: layer_analysis.json
+      pattern: '"hcp_layer_count"\s*:\s*5'
+      flags: i
+  - key: fcc_stacking
+    value:
+      filename: layer_analysis.json
+      pattern: '"fcc_stacking"\s*:\s*"ABCAB"|ABCAB'
+      flags: i
+  - key: hcp_stacking
+    value:
+      filename: layer_analysis.json
+      pattern: '"hcp_stacking"\s*:\s*"ABABA"|ABABA'
+      flags: i
+  - key: method_fractional
+    value:
+      filename: layer_analysis.json
+      pattern: (?i)(fractional|direct|分数坐标|法向分量)
+      flags: i
+  - key: turn_budget
+    value:
+      max: 12
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `layer_analysis.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: fcc_layer_count
+    criterion: Agent identifies exactly 5 close-packed layers in the fcc(111) slab.
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: hcp_layer_count
+    criterion: Agent identifies exactly 5 close-packed layers in the hcp(0001) slab.
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: fcc_stacking
+    criterion: Agent reports the fcc(111) stacking sequence as ABCAB.
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: hcp_stacking
+    criterion: Agent reports the hcp(0001) stacking sequence as ABABA.
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: method_fractional
+    criterion: Agent states that the layer analysis uses fractional/Direct coordinates
+      or the slab-normal fractional component with tolerance clustering, not naive
+      Cartesian z sorting.
+    axis: grounding
+    verify: text_file_regex
+    weight: 2.0
+  - id: explains_nonorthogonal_trap
+    criterion: The reasoning explains why non-orthogonal slab cells can make Cartesian-coordinate
+      layer heuristics unreliable, and ties the reported layer counts to the provided
+      structure files.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
+- id: SA_tio2_h2o_ads_mode_001_20260531
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Determine whether a relaxed H2O/TiO2(101)-like adsorption structure is molecular
+    or dissociative by checking final-structure bond lengths and surface hydroxyl formation,
+    avoiding conclusions based only on intermediate observations or energy decrease.
+  human_prompt_seed: '工作区中有一个弛豫后的 H2O/TiO2(101) 吸附结构 `H2O_on_TiO2_101_relaxed.xyz`。
+    XYZ 注释行说明最后三个原子是原始水分子：Ow、H1、H2。
+
+    请判断最终结构属于分子吸附还是解离吸附。必须基于最终结构中的几何判据（例如 Ow-H
+    键长、H 是否转移到表面 O、Ti-Ow 距离、是否形成表面羟基），不要只根据能量下降或中间过程描述下结论。
+
+    输出 `adsorption_mode.json`，格式：
+    `{"mode": "molecular|dissociative", "ow_h_distances_A": [...], "h_transfer_detected": true|false,
+    "surface_hydroxyl_detected": true|false, "ti_ow_distance_A": ..., "reasoning": "..."}`
+    '
+  tags:
+  - struct_surface
+  - struct_inspect
+  data_files:
+  - key: relaxed_structure
+    path: data/SA_tio2_h2o_ads_mode_001_20260531/H2O_on_TiO2_101_relaxed.xyz
+    oss_url: ''
+    description: Toy relaxed H2O/TiO2(101)-like structure. The final state is dissociative;
+      one original H is transferred to a surface O while Ow remains bound near Ti.
+  - key: readme
+    path: data/SA_tio2_h2o_ads_mode_001_20260531/README.md
+    oss_url: ''
+    description: Atom-index convention for the toy adsorption fixture.
+  reference_answers:
+  - key: output_artifact
+    value: adsorption_mode.json
+  - key: mode_dissociative
+    value:
+      filename: adsorption_mode.json
+      pattern: '"mode"\s*:\s*"dissociative"|解离'
+      flags: i
+  - key: transfer_true
+    value:
+      filename: adsorption_mode.json
+      pattern: '"h_transfer_detected"\s*:\s*true'
+      flags: i
+  - key: hydroxyl_true
+    value:
+      filename: adsorption_mode.json
+      pattern: '"surface_hydroxyl_detected"\s*:\s*true'
+      flags: i
+  - key: geometry_terms
+    value:
+      filename: adsorption_mode.json
+      pattern: (?i)(Ow|O_w|ow_h|O-H|bond|distance|Ti-O|hydroxyl|羟基|键长)
+      flags: i
+  - key: turn_budget
+    value:
+      max: 12
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `adsorption_mode.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: mode_dissociative
+    criterion: Agent correctly classifies the final adsorption state as dissociative,
+      not molecular/non-dissociative.
+    axis: correctness
+    verify: text_file_regex
+    weight: 3.0
+  - id: transfer_true
+    criterion: Agent reports that one original water H has transferred away from Ow.
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: hydroxyl_true
+    criterion: Agent reports formation of a surface hydroxyl group from the transferred
+      H and a surface O.
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: geometry_terms
+    criterion: The JSON reasoning includes geometry-based evidence such as Ow-H distances,
+      Ti-Ow distance, O-H bond lengths, or hydroxyl formation.
+    axis: grounding
+    verify: text_file_regex
+    weight: 2.0
+  - id: no_energy_only_conclusion
+    criterion: The answer bases the adsorption-mode conclusion on final-structure geometry,
+      not only on energy lowering, optimization progress, or intermediate observations.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
 - id: SA_ising_001_20260124
   capability: scientific_analysis
   domain: agnostic
