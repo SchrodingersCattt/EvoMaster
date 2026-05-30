@@ -1108,3 +1108,107 @@ questions:
     axis: efficiency
     verify: token_budget
     criterion: '[Must] Total token usage within 50000'
+- id: SC_vasp_004_20250618
+  capability: structure_construction
+  domain: semiconductor
+  intent: Apply a specified biaxial tensile strain to a 2D material supercell by scaling the in-plane
+    lattice vectors while keeping the out-of-plane dimension fixed, and save the strained structure.
+  human_prompt_seed: Using the provided h-BN structure (hbn_supercell.vasp), write a Python script that
+    applies a given biaxial tensile strain (e.g., 5%) by scaling both in-plane lattice vectors (a and
+    b) by (1 + strain/100) while keeping the out-of-plane c vector unchanged. The atomic fractional coordinates
+    should remain the same. Apply 5% strain and save the resulting structure as a VASP POSCAR named poscar_hbn_strained_5pct.vasp.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: hbn_supercell
+    path: hbn_supercell.vasp
+    oss_url: ''
+    description: h-BN structure to be used as base for strain application (agent should build supercell
+      first)
+  reference_answers:
+  - key: artifact_poscar
+    value: poscar_hbn_strained_5pct.vasp
+  - key: artifact_script
+    value: apply_strain.py
+  - key: strain_scaling_a
+    value:
+      flags: []
+      pattern: 1\.05
+      filename: poscar_hbn_strained_5pct.vasp
+      description: In-plane lattice scaled by 1.05 for 5% strain
+  - key: c_vector_unchanged
+    value:
+      flags: []
+      pattern: 0\.0\s+0\.0\s+\d+
+      filename: poscar_hbn_strained_5pct.vasp
+      description: c-vector has zero in-plane components (out-of-plane only)
+  - key: atom_count_same
+    value:
+      flags:
+      - multiline
+      pattern: ^\s*\d+\s+\d+\s*$
+      filename: poscar_hbn_strained_5pct.vasp
+      description: Total atom count matches the input supercell
+  - key: grounding_source
+    value:
+      filename: hbn_supercell.vasp
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] POSCAR file poscar_hbn_strained_5pct.vasp exists'
+  - id: artifact_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Python script apply_strain.py exists'
+  - id: strain_scaling_a
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] In-plane lattice vector(s) are scaled by approximately 1.05 (5% tensile strain)'
+  - id: c_vector_unchanged
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Out-of-plane (c) lattice vector is unchanged from the input structure'
+  - id: atom_count_same
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Total atom count is preserved (strain does not add or remove atoms)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The strained structure is derived from the h-BN supercell as described in the paper''s
+      strain methodology'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Complete within 20 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retry turns used'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Complete within 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Total token usage within 50000'

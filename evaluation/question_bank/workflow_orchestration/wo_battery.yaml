@@ -229,3 +229,1489 @@ questions:
     criterion: Wall-clock run duration does not exceed benchmark ceiling.
     axis: efficiency
     verify: duration_budget
+- id: WF_phonopy_003_20250615
+  capability: workflow_orchestration
+  domain: battery
+  intent: Set up a frozen-phonon calculation workflow for orthorhombic LiMnO2 using PHONOPY and VASP to
+    compute the harmonic phonon density of states and vibrational entropy at 300 K.
+  human_prompt_seed: Write a Python script using PHONOPY to set up a frozen-phonon calculation for orthorhombic
+    LiMnO2. Load the structure from limno2_orthorhombic.cif, generate a 2x2x2 supercell with displacements,
+    and create the PHONOPY configuration file (phonopy.yaml) and displaced POSCAR files in a directory
+    called phonopy_displacements/. Output the number of displacements generated to stdout.
+  tags: []
+  data_files:
+  - key: structure
+    path: limno2_orthorhombic.cif
+    oss_url: ''
+    description: Orthorhombic LiMnO2 (Pmmn) structure from Materials Project.
+  reference_answers:
+  - key: script_exists
+    value: setup_phonon.py
+  - key: phonopy_dir_exists
+    value: phonopy_displacements
+  - key: phonopy_yaml_exists
+    value: phonopy.yaml
+  - key: num_displacements
+    value:
+      flags:
+      - regex
+      pattern: generate_displacements|set_displacements
+      filename: setup_phonon.py
+  - key: supercell_matrix
+    value:
+      flags:
+      - any_order
+      tokens:
+      - '2'
+      - '2'
+      - '2'
+      filename: setup_phonon.py
+  - key: grounding_source
+    value:
+      filename: limno2_orthorhombic.cif
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 1
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: script_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Python script setup_phonon.py exists'
+  - id: phonopy_dir_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Directory phonopy_displacements/ exists'
+  - id: phonopy_yaml_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] PHONOPY configuration file phonopy.yaml exists'
+  - id: num_displacements
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+    criterion: '[Must] Script uses PHONOPY''s generate_displacements or set_displacements method'
+  - id: supercell_matrix
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Suggested] Script creates a 2x2x2 supercell for the phonon calculation'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Phonon setup is grounded in the provided LiMnO2 structure'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completes within 30 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retry requests needed'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completes within 600 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Uses no more than 50000 tokens total'
+- id: WF_mlip_005_20260110
+  capability: workflow_orchestration
+  domain: battery
+  intent: 'Evaluate a Mg-ion migration barrier in V2O3(SO4)2 (mp-28207) using an ApproxNEB workflow with
+    CHGNet: interpolate between two interstitial sites, relax host atoms at fixed Mg positions, and extract
+    the KRA barrier.'
+  human_prompt_seed: Using the host structure in v2o3so42_mp28207.cif, implement an ApproxNEB-style evaluation
+    of an ion migration pathway. Insert a Mg ion at two symmetry-equivalent interstitial sites (identify
+    them using Voronoi tessellation or a site-finding algorithm). Generate 5 intermediate images by linear
+    interpolation between the two end-point structures. For each image, fix the Mg ion position and relax
+    only the host atoms using CHGNet with a force tolerance of 0.05 eV/Å. Compute the energy at each image,
+    reference energies so the initial state is 0 eV, and report the kinetically resolved activation (KRA)
+    migration barrier (highest energy along the path) to migration_barrier.txt. Also save all image structures
+    to neb_images/ as individual CIF files.
+  tags:
+  - code_mlip
+  data_files:
+  - key: host_structure
+    path: v2o3so42_mp28207.cif
+    oss_url: ''
+    description: Bulk V2O3(SO4)2 structure from Materials Project (mp-28207), used in the paper's migration
+      barrier example.
+  reference_answers:
+  - key: artifact_barrier
+    value:
+      filename: migration_barrier.txt
+  - key: artifact_images
+    value:
+      filename: neb_images/image_0.cif
+  - key: kra_barrier_value
+    value:
+      checks:
+      - key: kra_barrier_eV
+        max: 2.0
+        min: 0.1
+        allow_missing_key: false
+      filename: migration_barrier.txt
+  - key: num_images
+    value:
+      checks:
+      - key: num_neb_images
+        expected: 7
+        tolerance: 0
+        allow_missing_key: false
+      filename: migration_barrier.txt
+  - key: grounding_source
+    value:
+      filename: v2o3so42_mp28207.cif
+  - key: duration_budget
+    value:
+      max: 900
+  - key: no_retries
+    value:
+      max: 0
+  - key: token_budget_total
+    value:
+      max: 100000
+  - key: turn_budget
+    value:
+      max: 40
+  scoring_checklist:
+  - id: artifact_barrier
+    axis: correctness
+    verify: artifact_exists
+    weight: 3.0
+    criterion: '[Must] The file migration_barrier.txt exists and contains the KRA barrier value.'
+  - id: artifact_images
+    axis: correctness
+    verify: artifact_exists
+    weight: 3.0
+    criterion: '[Must] At least 7 NEB image CIF files exist in neb_images/ directory.'
+  - id: kra_barrier_value
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 4.0
+    criterion: '[Suggested] The KRA migration barrier for Mg in V2O3(SO4)2 computed with CHGNet falls
+      within 0.1–2.0 eV.'
+  - id: num_images
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+    criterion: '[Must] The number of NEB images is exactly 7 (2 endpoints + 5 intermediates).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+    criterion: '[Must] The solution uses the provided V2O3(SO4)2 host structure (mp-28207) as input.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Completed within 40 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] No retry attempts needed.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Completed within 900 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Total token usage within 100000.'
+- id: WF_chagnet_001_20250815
+  capability: workflow_orchestration
+  domain: battery
+  intent: Set up and run a molecular dynamics simulation of Na4TiP2O9 using the CHGNet machine-learned
+    potential to compute the Na-ion self-diffusion coefficient from mean squared displacement analysis.
+  human_prompt_seed: Using ASE and the CHGNet machine-learned potential, run an NVT molecular dynamics
+    simulation of the Na4TiP2O9 structure in ntp_structure.vasp at 600 K for 1000 steps with a 1 fs timestep.
+    Compute the Na-ion mean squared displacement (MSD) and extract the self-diffusion coefficient. Write
+    the MSD data to msd.dat and the diffusion coefficient (in cm²/s) to diffusion_coefficient.json.
+  tags: []
+  data_files:
+  - key: ntp_structure
+    path: na4tip2o9_orthorhombic.vasp
+    oss_url: ''
+    description: POSCAR-format structure for orthorhombic Na4TiP2O9 (HT-NTP) in Bmem (space group 67)
+      phase.
+  reference_answers:
+  - key: msd_exists
+    value: msd.dat
+  - key: diffusion_coefficient_exists
+    value: diffusion_coefficient.json
+  - key: diffusion_coefficient_content
+    value:
+      tokens:
+      - diffusion_coefficient
+      - units
+      - temperature
+      filename: diffusion_coefficient.json
+  - key: grounding_source
+    value:
+      filename: na4tip2o9_orthorhombic.vasp
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: msd_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] An msd.dat file exists containing mean squared displacement data.'
+  - id: diffusion_coefficient_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] A diffusion_coefficient.json file exists.'
+  - id: diffusion_coefficient_content
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] diffusion_coefficient.json contains keys: diffusion_coefficient, units, and temperature.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The agent uses the provided ntp_structure.vasp as the starting structure.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Variable] Agent completes the task within the turn budget.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Variable] Agent does not retry failed tool calls unnecessarily.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Variable] Agent completes the task within the duration budget.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Variable] Agent completes the task within the total token budget.'
+- id: WF_cacathode_003_20250714
+  capability: workflow_orchestration
+  domain: battery
+  intent: 'Implement the empty intercalation host screening filter from the Kim et al. (2024) pipeline:
+    identify candidate Ca cathode hosts from a Materials Project dataset by applying criteria on energy
+    above hull, redox-active metals, anion types, and absence of pre-existing intercalating ions.'
+  human_prompt_seed: 'Implement the empty intercalation host screening filter described in Kim et al.
+    (2024). Read the Materials Project entries from mp_entries_subset.json and filter them using the five
+    criteria: (1) energy above hull < 0.2 eV/atom, (2) contains at least one redox-active metal from the
+    paper''s list, (3) contains O or S anions, (4) no radioactive elements, (5) no pre-existing intercalating
+    ions (H, Li, Na, Mg, K, Ca, Cu, Rb, Ag, Cs). Save the filtered candidates to filtered_hosts.json with
+    their mp_id, formula, and energy_above_hull.'
+  tags:
+  - meta_database
+  data_files:
+  - key: mp_entries
+    path: mp_entries_subset.json
+    oss_url: ''
+    description: JSON file containing a subset of ~500 Materials Project entries with composition, energy_above_hull
+      (eV/atom), elements, and structure information for screening.
+  reference_answers:
+  - key: grounding_source
+    value:
+      filename: mp_entries_subset.json
+      description: Seed data file containing Materials Project entries for screening
+  - key: artifact_filtered_hosts
+    value:
+      filename: filtered_hosts.json
+  - key: numeric_host_count
+    value:
+      checks:
+      - key: n_hosts
+        max: 200
+        min: 10
+        allow_missing_key: false
+      filename: filtered_hosts.json
+  - key: text_has_eah
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - energy_above_hull
+      filename: filtered_hosts.json
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 0.15
+    criterion: '[Must] Output is grounded in the mp_entries_subset.json seed file containing MP entries'
+  - id: artifact_filtered_hosts
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.2
+    criterion: '[Must] File filtered_hosts.json exists with screened candidate hosts'
+  - id: numeric_host_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.2
+    criterion: '[Suggested] Number of filtered hosts is between 10 and 200, reflecting reasonable filtering
+      from ~500 input entries'
+  - id: text_has_eah
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.15
+    criterion: '[Must] Output includes energy_above_hull for each filtered host as required by criterion
+      (1)'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within turn budget'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not retry failed tool calls'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within duration budget'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within total token budget'
+- id: WF_vasp_003_20260124
+  capability: workflow_orchestration
+  domain: battery
+  intent: Generate VASP input files for an ab initio molecular dynamics (AIMD) simulation in the NVT ensemble
+    with a Nosé–Hoover thermostat, following the simulation protocol from a study on Li-ion diffusion
+    in over-stoichiometric rocksalt oxides.
+  human_prompt_seed: Generate VASP input files (POSCAR, INCAR, KPOINTS) for an ab initio molecular dynamics
+    (AIMD) simulation of the provided lithium-oxide structure. The simulation must use the NVT ensemble
+    with a Nosé–Hoover thermostat, a time step of 1 fs, and a total duration of 100 ps. Use a Gamma-point-only
+    k-point mesh for the MD run. Write all output files to the current working directory.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: li2o_structure
+    path: li2o_cif.cif
+    oss_url: ''
+    description: Li2O crystal structure (antifluorite) from the Materials Project, used as a lithium-oxide
+      prototype for AIMD setup.
+  reference_answers:
+  - key: incar_ibrion
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - IBRION = 0
+      filename: INCAR
+  - key: incar_nose
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - SMASS = -1
+      - TEBEG
+      filename: INCAR
+  - key: incar_potim
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - POTIM = 0.001
+      filename: INCAR
+  - key: incar_nsw
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - NSW = 100000
+      filename: INCAR
+  - key: incar_isif
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - ISIF = 2
+      filename: INCAR
+  - key: incar_encut
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - ENCUT = 520
+      filename: INCAR
+  - key: poscar_exists
+    value: POSCAR
+  - key: kpoints_gamma
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - Gamma
+      filename: KPOINTS
+  - key: grounding_source
+    value:
+      filename: li2o_cif.cif
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 40000
+  scoring_checklist:
+  - id: incar_ibrion
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] INCAR contains IBRION = 0 (molecular dynamics mode).'
+  - id: incar_nose
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 15.0
+    criterion: '[Must] INCAR contains SMASS = -1 (Nosé–Hoover thermostat) and TEBEG (starting temperature).'
+  - id: incar_potim
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 15.0
+    criterion: '[Must] INCAR contains POTIM = 0.001 (time step of 1 fs in ps).'
+  - id: incar_nsw
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 15.0
+    criterion: '[Must] INCAR contains NSW = 100000 (100 ps total duration at 1 fs/step).'
+  - id: incar_isif
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] INCAR contains ISIF = 2 (NVT ensemble: ions relax, cell shape/volume fixed).'
+  - id: incar_encut
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] INCAR contains ENCUT = 520 (plane-wave cutoff from the paper''s DFT protocol).'
+  - id: poscar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 5.0
+    criterion: '[Must] POSCAR file exists and contains a valid VASP structure.'
+  - id: kpoints_gamma
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 5.0
+    criterion: '[Suggested] KPOINTS file uses a Gamma-point-only mesh (appropriate for MD supercells).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 5.0
+    criterion: '[Must] The POSCAR structure is derived from the provided li2o_cif.cif seed file.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 15 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not retry any tool call.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses fewer than 40000 tokens total.'
+- id: WF_chgnet_001_20250618
+  capability: workflow_orchestration
+  domain: battery
+  intent: Relax a LiFePO4 crystal structure using the CHGNet machine-learning interatomic potential via
+    the ASE FIRE optimizer until forces converge below 0.1 eV/Å, and report the final energy and structural
+    properties.
+  human_prompt_seed: Relax the provided LiFePO4 structure (lifepo4_mp15668.cif) using CHGNet and the FIRE
+    optimizer until the maximum force on any atom is below 0.1 eV/Å. Save the relaxed structure as relaxed_structure.cif
+    and write a JSON report to relaxation_report.json containing the final energy (eV), maximum force
+    (eV/Å), and final cell volume (Å³).
+  tags:
+  - code_mlip
+  data_files:
+  - key: lifepo4_structure
+    path: lifepo4_mp15668.cif
+    oss_url: ''
+    description: Olilvine LiFePO4 crystal structure from Materials Project (space group Pnma)
+  reference_answers:
+  - key: relaxed_structure_exists
+    value: relaxed_structure.cif
+  - key: relaxation_report_exists
+    value: relaxation_report.json
+  - key: max_force_range
+    value:
+      checks:
+      - key: max_force
+        max: 0.1
+        min: 0.0
+        allow_missing_key: false
+      filename: relaxation_report.json
+  - key: energy_numeric
+    value:
+      checks:
+      - key: energy
+        max: 0.0
+        min: -200.0
+        allow_missing_key: false
+      filename: relaxation_report.json
+  - key: grounding_source
+    value:
+      filename: lifepo4_mp15668.cif
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: relaxed_structure_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file relaxed_structure.cif exists and contains valid CIF format data.'
+  - id: relaxation_report_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file relaxation_report.json exists and contains valid JSON.'
+  - id: max_force_range
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+    criterion: '[Must] Maximum force in relaxation_report.json is below 0.1 eV/Å (convergence criterion
+      from paper).'
+  - id: energy_numeric
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Final energy in relaxation_report.json is a negative value in a physically
+      reasonable range for LiFePO4.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Agent used the provided lifepo4_mp15668.cif as the input structure for relaxation.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completed within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retries needed.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completed within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Total token usage within 50,000 tokens.'
+- id: WF_ce_003_20260508
+  capability: workflow_orchestration
+  domain: battery
+  intent: Generate a cluster expansion input configuration for the Li-Cr-Mn-O rocksalt system with pair
+    interactions up to 7.1 Å, triplet interactions up to 4.0 Å, and quadruplet interactions up to 4.0
+    Å, as used in the paper's Monte Carlo sampling of cation disorder.
+  human_prompt_seed: Given the primitive rocksalt lattice description in rocksalt_primitive.json, generate
+    a cluster expansion configuration file for the Li-Cr-Mn-O system with pair interaction cutoff at 7.1
+    Å, triplet cutoff at 4.0 Å, and quadruplet cutoff at 4.0 Å. Save the configuration as `ce_input.json`.
+    The file should specify the parent lattice, cluster cutoffs by order, and the fitting parameters (L1-regularized
+    least-squares with cross-validation).
+  tags: []
+  data_files:
+  - key: rocksalt_primitive
+    path: rocksalt_primitive.json
+    oss_url: ''
+    description: JSON file describing the primitive rocksalt lattice structure used as the parent lattice
+      for cluster expansion of the LiCrO2-Li2MnO3 system
+  reference_answers:
+  - key: grounding_source
+    value:
+      filename: rocksalt_primitive.json
+  - key: artifact_output
+    value: ce_input.json
+  - key: pair_cutoff
+    value:
+      checks:
+      - key: cutoffs.pair
+        expected: 7.1
+        tolerance: 0.1
+      filename: ce_input.json
+  - key: triplet_cutoff
+    value:
+      checks:
+      - key: cutoffs.triplet
+        expected: 4.0
+        tolerance: 0.1
+      filename: ce_input.json
+  - key: quadruplet_cutoff
+    value:
+      checks:
+      - key: cutoffs.quadruplet
+        expected: 4.0
+        tolerance: 0.1
+      filename: ce_input.json
+  - key: contains_rocksalt
+    value:
+      flags:
+        case_insensitive: true
+      tokens:
+      - rocksalt
+      - parent_lattice
+      filename: ce_input.json
+  - key: contains_l1_regularization
+    value:
+      flags:
+        match_any: true
+        case_insensitive: true
+      tokens:
+      - L1
+      - regularization
+      - lasso
+      filename: ce_input.json
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 0.05
+    criterion: '[Must] Agent answer is grounded in the provided rocksalt lattice data'
+  - id: artifact_output
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.1
+    criterion: '[Must] Output file ce_input.json exists'
+  - id: pair_cutoff
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.15
+    criterion: '[Must] Pair interaction cutoff is 7.1 Å (within ±0.1 Å)'
+  - id: triplet_cutoff
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.1
+    criterion: '[Must] Triplet interaction cutoff is 4.0 Å (within ±0.1 Å)'
+  - id: quadruplet_cutoff
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.1
+    criterion: '[Must] Quadruplet interaction cutoff is 4.0 Å (within ±0.1 Å)'
+  - id: contains_rocksalt
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.1
+    criterion: '[Suggested] Configuration references the rocksalt parent lattice'
+  - id: contains_l1_regularization
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.05
+    criterion: '[Variable] Configuration mentions L1 regularization or lasso fitting method'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within turn budget'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry failed tool calls'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within duration budget'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent completes within total token budget'
+- id: WF_chgnet_003_20250618
+  capability: workflow_orchestration
+  domain: battery
+  intent: Perform a full structure relaxation of a Zn-intercalated MnO2 crystal using the CHGNet MLIP
+    calculator and FIRE optimizer, converging forces to 0.1 eV/Angstrom, and output the relaxed structure
+    with a summary of relaxation metrics.
+  human_prompt_seed: Given the unrelaxed crystal structure file zn_mno2.cif in the working directory,
+    perform a full structure relaxation using the CHGNet machine-learning interatomic potential with the
+    FIRE optimizer. Relax atomic positions, cell shape, and cell volume simultaneously until interatomic
+    forces converge to 0.1 eV/Angstrom. Save the relaxed structure to relaxed_zn_mno2.cif and write a
+    JSON file relaxation_summary.json containing the final energy (eV/atom), maximum force (eV/Angstrom),
+    and total number of optimization steps.
+  tags:
+  - code_mlip
+  data_files:
+  - key: znmno2_structure
+    path: zn_mno2_unrelaxed.cif
+    oss_url: ''
+    description: A Zn-intercalated MnO2 structure (e.g., Zn0.5MnO2) requiring relaxation with CHGNet MLIP.
+  reference_answers:
+  - key: relaxed_structure_exists
+    value: relaxed_zn_mno2.cif
+  - key: summary_exists
+    value: relaxation_summary.json
+  - key: summary_energy
+    value:
+      checks:
+      - key: energy_per_atom
+        max: 10
+        min: -10
+        allow_missing_key: false
+      filename: relaxation_summary.json
+  - key: summary_max_force
+    value:
+      checks:
+      - key: max_force
+        expected: 0.1
+        tolerance: 0.05
+        allow_missing_key: false
+      filename: relaxation_summary.json
+  - key: summary_steps
+    value:
+      checks:
+      - key: n_steps
+        max: 500
+        min: 1
+        allow_missing_key: false
+      filename: relaxation_summary.json
+  - key: structure_valid
+    value:
+      pattern: Mn
+      filename: relaxed_zn_mno2.cif
+  - key: grounding_source
+    value:
+      filename: relaxation_summary.json
+  - key: duration_budget
+    value:
+      max: 300
+  - key: no_retries
+    value:
+      max: 0
+  - key: token_budget_total
+    value:
+      max: 50000
+  - key: turn_budget
+    value:
+      max: 20
+  scoring_checklist:
+  - id: relaxed_structure_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] File relaxed_zn_mno2.cif exists in the working directory'
+  - id: summary_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] File relaxation_summary.json exists in the working directory'
+  - id: summary_energy
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 5.0
+    criterion: '[Suggested] relaxation_summary.json contains energy_per_atom in a physically reasonable
+      range (-10 to 10 eV/atom)'
+  - id: summary_max_force
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Suggested] relaxation_summary.json reports max_force <= 0.15 eV/Angstrom (target was
+      0.1 eV/Angstrom)'
+  - id: summary_steps
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 5.0
+    criterion: '[Suggested] relaxation_summary.json reports n_steps between 1 and 500'
+  - id: structure_valid
+    axis: correctness
+    verify: text_file_regex
+    weight: 5.0
+    criterion: '[Must] relaxed_zn_mno2.cif contains Mn atoms (valid crystal structure)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] The relaxation uses CHGNet as the MLIP calculator and FIRE optimizer with 0.1 eV/Angstrom
+      force convergence as described in the source paper Section 2.7'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes the task within 20 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry any tool calls'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes the task within 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses no more than 50000 tokens total'
+- id: WF_sgcmc_003_20260109
+  capability: workflow_orchestration
+  domain: battery
+  intent: Configure a charge-balanced semigrand-canonical Monte Carlo (SGCMC) simulation for the Li1.3-xMn0.4Nb0.3O1.6F0.4
+    system using the table-exchange method, with the three elemental TE perturbation classes, 20% canonical
+    swap mixing, and simulated annealing protocol described in the paper.
+  human_prompt_seed: 'Write a Python script `sgcmc_simulation.py` that configures and runs a charge-balanced
+    SGCMC simulation for the LMNOF disordered rocksalt cathode using the smol package. The simulation
+    must: (1) use the table-exchange method with the three elementary TE classes (Li+ + Mn2+ ↔ Mn3+ +
+    Vac, Li+ + Mn3+ ↔ Mn4+ + Vac, Li+ + O2- ↔ O- + Vac), (2) mix 20% canonical swaps with TE steps, (3)
+    apply simulated annealing from 5000 K to 100 K, then equilibrate at 300 K for 500,000 MC steps, and
+    (4) sample for another 500,000 steps at 300 K. Save the configuration and output as `sgcmc_config.json`
+    containing the simulation parameters.'
+  tags: []
+  data_files:
+  - key: ce_model
+    path: ce_model.pkl
+    oss_url: ''
+    description: Pre-fitted cluster expansion model (ECIs) for the LMNOF system. The agent should assume
+      this file exists and contains a fitted smol ClusterExpansion object.
+  reference_answers:
+  - key: artifact_script
+    value:
+      filename: sgcmc_simulation.py
+  - key: artifact_config
+    value:
+      filename: sgcmc_config.json
+  - key: te_class_count
+    value:
+      checks:
+      - key: n_te_classes
+        expected: 3
+        tolerance: 0
+      filename: sgcmc_simulation.py
+  - key: canonical_swap_pct
+    value:
+      checks:
+      - key: w_canonical_pct
+        expected: 20
+        tolerance: 0
+      filename: sgcmc_simulation.py
+  - key: anneal_temp_high
+    value:
+      checks:
+      - key: T_anneal_high_K
+        expected: 5000
+        tolerance: 0
+      filename: sgcmc_simulation.py
+  - key: anneal_temp_low
+    value:
+      checks:
+      - key: T_anneal_low_K
+        expected: 100
+        tolerance: 0
+      filename: sgcmc_simulation.py
+  - key: sample_temp
+    value:
+      checks:
+      - key: T_sample_K
+        expected: 300
+        tolerance: 0
+      filename: sgcmc_simulation.py
+  - key: equil_steps
+    value:
+      checks:
+      - key: n_equil_steps
+        expected: 500000
+        tolerance: 0
+      filename: sgcmc_simulation.py
+  - key: sample_steps
+    value:
+      checks:
+      - key: n_sample_steps
+        expected: 500000
+        tolerance: 0
+      filename: sgcmc_simulation.py
+  - key: grounding_source
+    value:
+      filename: sgcmc_simulation.py
+  - key: turn_budget
+    value:
+      max: 40
+  - key: no_retries
+    value:
+      max: 1
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] The file sgcmc_simulation.py exists and contains valid Python code.'
+  - id: artifact_config
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] The file sgcmc_config.json exists and is valid JSON.'
+  - id: te_class_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 15.0
+    criterion: '[Must] The script defines exactly 3 elementary table-exchange classes.'
+  - id: canonical_swap_pct
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] Canonical swaps are mixed at 20% with TE steps.'
+  - id: anneal_temp_high
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] Simulated annealing starts at 5000 K.'
+  - id: anneal_temp_low
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] Simulated annealing ends at 100 K.'
+  - id: sample_temp
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] Production sampling is at 300 K.'
+  - id: equil_steps
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] Equilibration runs for 500,000 MC steps.'
+  - id: sample_steps
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] Production sampling runs for 500,000 MC steps.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 5.0
+    criterion: '[Must] The SGCMC configuration is grounded in the source paper''s methodology.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] The agent completes the task within 40 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] The agent does not retry any tool call more than once.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] The agent completes the task within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] The agent uses fewer than 80000 tokens total.'
+- id: WF_cluster_expansion_001_20250618
+  capability: workflow_orchestration
+  domain: battery
+  intent: Set up a cluster expansion model for a multi-component DRX cathode system and define the parameters
+    for a Monte Carlo simulation at 1273 K, following the methodology described in the source paper.
+  human_prompt_seed: Using the DFT training set in dft_training_set.csv and the base rocksalt primitive
+    cell in rocksalt_primitive.vasp, set up a cluster expansion for the Li-Mn-Co-Cr-Ti-Nb-O-F chemical
+    space. Include pair interactions up to 7.1 Å, triplet interactions up to 4.0 Å, and quadruplet interactions
+    up to 4.0 Å. Fit the cluster expansion using L1-regularized least-squares regression with cross-validation
+    to select regularization parameters. Then configure a Monte Carlo simulation at 1273 K for the TM6
+    composition Li1.3Mn0.1Co0.1Mn0.1Cr0.1Ti0.1Nb0.2O1.7F0.3 in a 10×10×10 supercell. Write the fitted
+    cluster expansion parameters to ce_params.json and the MC simulation configuration to mc_config.json.
+  tags: []
+  data_files:
+  - key: dft_training_set
+    path: dft_training_set.csv
+    oss_url: ''
+    description: DFT training set of 6154 structures with energies for the Li-Mn-Co-Cr-Ti-Nb-O-F chemical
+      space, in CSV format with structure identifiers and energy columns
+  - key: base_structure
+    path: rocksalt_primitive.vasp
+    oss_url: ''
+    description: Base rocksalt primitive cell structure for the cluster expansion lattice
+  reference_answers:
+  - key: artifact_ce_params
+    value:
+      filename: ce_params.json
+  - key: artifact_mc_config
+    value:
+      filename: mc_config.json
+  - key: ce_has_eci
+    value:
+      flags: case_insensitive
+      tokens:
+      - eci
+      - cluster
+      - pair
+      - triplet
+      - quadruplet
+      filename: ce_params.json
+  - key: mc_has_temperature
+    value:
+      flags: case_insensitive
+      tokens:
+      - '1273'
+      - temperature
+      filename: mc_config.json
+  - key: mc_supercell_size
+    value:
+      checks:
+      - key: supercell_sites
+        expected: 1000
+        tolerance: 100
+        allow_missing_key: false
+      filename: mc_config.json
+  - key: grounding_source
+    value:
+      filename: dft_training_set.csv
+  - key: turn_budget
+    value:
+      max: 50
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 1200
+  - key: token_budget_total
+    value:
+      max: 200000
+  scoring_checklist:
+  - id: artifact_ce_params
+    axis: correctness
+    verify: artifact_exists
+    weight: 2.0
+    criterion: '[Must] ce_params.json file exists in the output directory'
+  - id: artifact_mc_config
+    axis: correctness
+    verify: artifact_exists
+    weight: 2.0
+    criterion: '[Must] mc_config.json file exists in the output directory'
+  - id: ce_has_eci
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+    criterion: '[Must] CE parameters file contains ECI definitions with pair, triplet, and quadruplet
+      clusters'
+  - id: mc_has_temperature
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+    criterion: '[Must] MC configuration specifies temperature of 1273 K'
+  - id: mc_supercell_size
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] MC supercell contains approximately 1000 formula units (10×10×10 supercell
+      of rocksalt primitive ≈ 1000 sites, tolerance ±100)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+    criterion: '[Must] The cluster expansion and MC setup are grounded in the provided DFT training data
+      and base structure'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 50 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent completes without exceeding 3 retries on any single tool call'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 1200 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 200000 total tokens'
+- id: WF_pymatgen_001_20250618
+  capability: workflow_orchestration
+  domain: battery
+  intent: Build a Python workflow using pymatgen to construct a convex hull (phase diagram) for the Li–In–Sn–O
+    chemical system from Materials Project data and compute the energy-above-hull for a user-provided
+    target composition and energy.
+  human_prompt_seed: Write a Python script that uses pymatgen to (1) query the Materials Project for all
+    entries in the Li–In–Sn–O chemical system, (2) construct a convex hull (PhaseDiagram), and (3) compute
+    the energy above hull (in eV/atom) for the target composition and energy specified in target_composition.json.
+    Save the script as convex_hull_analysis.py and the results (including a list of competing phases on
+    the hull and the target's energy above hull) as hull_results.json in the current working directory.
+  tags:
+  - meta_database
+  data_files:
+  - key: target_composition
+    path: target_composition.json
+    oss_url: ''
+    description: JSON file specifying the target LISO composition (e.g., Li17In9SnO24) and its DFT-computed
+      total energy per atom, for energy-above-hull evaluation.
+  reference_answers:
+  - key: artifact_script
+    value:
+      type: artifact_exists
+      filename: convex_hull_analysis.py
+  - key: artifact_results
+    value:
+      type: artifact_exists
+      filename: hull_results.json
+  - key: text_script_imports
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - from pymatgen
+      - PhaseDiagram
+      - ComputedEntry
+      filename: convex_hull_analysis.py
+  - key: text_script_api
+    value:
+      flags:
+      - case_insensitive
+      - allow_partial
+      tokens:
+      - get_e_above_hull
+      - ChemicalSystem
+      - Li-In-Sn-O
+      filename: convex_hull_analysis.py
+  - key: text_results_structure
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - energy_above_hull
+      - competing_phases
+      - hull_entries
+      filename: hull_results.json
+  - key: grounding_source
+    value:
+      filename: target_composition.json
+      description: Seed data file with target composition and DFT energy
+  - key: turn_budget
+    value:
+      max: 25
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] convex_hull_analysis.py script exists in the output directory.'
+  - id: artifact_results
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] hull_results.json file exists in the output directory.'
+  - id: text_script_imports
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script imports pymatgen PhaseDiagram and ComputedEntry (or equivalent classes).'
+  - id: text_script_api
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script calls get_e_above_hull (or equivalent) and references the Li-In-Sn-O chemical
+      system.'
+  - id: text_results_structure
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Results JSON contains energy_above_hull, competing_phases, and hull_entries fields.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Agent correctly reads the target_composition.json file and uses its composition
+      and energy values.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes the task within 25 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry any tool calls.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes the task within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 80000 total tokens.'
+- id: WF_chgnet_002_20250618
+  capability: workflow_orchestration
+  domain: battery
+  intent: Run an NVT molecular dynamics simulation on a LiMnO2 supercell using CHGNet at 1100 K with a
+    2 fs timestep, and compute the average potential energy and mean magnetic moment per Mn atom.
+  human_prompt_seed: Construct a 2×2×2 supercell from the provided LiMnO2 structure (limno2_supercell.cif),
+    then run a 10 ps NVT molecular dynamics simulation at 1100 K with a 2 fs timestep using CHGNet. Save
+    the trajectory as md_trajectory.extxyz and write a summary to md_summary.json containing the average
+    potential energy (eV) and the mean magnetic moment per Mn atom (μB).
+  tags:
+  - code_mlip
+  data_files:
+  - key: limno2_supercell
+    path: limno2_supercell.cif
+    oss_url: ''
+    description: Orthorhombic LiMnO2 structure from Materials Project (o-LMO). Agent should construct
+      a 2×2×2 supercell.
+  reference_answers:
+  - key: trajectory_exists
+    value: md_trajectory.extxyz
+  - key: summary_exists
+    value: md_summary.json
+  - key: avg_energy_range
+    value:
+      checks:
+      - key: avg_potential_energy
+        max: 0.0
+        min: -800.0
+        allow_missing_key: false
+      filename: md_summary.json
+  - key: avg_magmom_range
+    value:
+      checks:
+      - key: avg_magmom_per_mn
+        max: 4.5
+        min: 2.5
+        allow_missing_key: false
+      filename: md_summary.json
+  - key: timestep_correct
+    value:
+      flags:
+      - IGNORECASE
+      pattern: 2.*fs|timestep.*2|dt.*2
+      filename: md_trajectory.extxyz
+  - key: grounding_source
+    value:
+      filename: limno2_supercell.cif
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: trajectory_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file md_trajectory.extxyz exists and contains trajectory frames.'
+  - id: summary_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file md_summary.json exists and contains valid JSON.'
+  - id: avg_energy_range
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Average potential energy in md_summary.json is a negative value in a physically
+      reasonable range for a LiMnO2 supercell.'
+  - id: avg_magmom_range
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Mean magnetic moment per Mn atom in md_summary.json is between 2.5 and 4.5
+      μB (consistent with Mn³⁺/Mn⁴⁺ mixed valence at 1100 K).'
+  - id: timestep_correct
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] MD simulation used a 2 fs timestep as specified in the paper''s Methods.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Agent used the provided limno2_supercell.cif as the basis structure and constructed
+      a supercell.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completed within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retries needed.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completed within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Total token usage within 50,000 tokens.'
+- id: WF_interface_003_20250508
+  capability: workflow_orchestration
+  domain: battery
+  intent: Construct an interface between spinel variants α₁ and α₄ along the (110) plane and compute the
+    interfacial energy using the CHGNet machine learning interatomic potential, reproducing the lowest-energy
+    interface found in the paper.
+  human_prompt_seed: Construct an interface between spinel variants α₁ and α₄ along the (110) crystallographic
+    plane starting from the provided limn2o4_spinel.cif structure. Build the interface cell with two interfaces
+    separated by at least 10 Å. Compute the interfacial energy (γ) at the fully delithiated Mn₂O₄ composition
+    using CHGNet. Save the interface structure as interface_alpha1_alpha4_110.vasp and write the computed
+    interfacial energy in J/m² to interfacial_energy.txt.
+  tags:
+  - code_mlip
+  data_files:
+  - key: spinel_base
+    path: limn2o4_spinel.cif
+    oss_url: ''
+    description: LiMn2O4 spinel crystal structure (Fd-3m) from Materials Project, used as the base structure
+      from which the agent constructs α₁ and α₄ variants before building the interface.
+  reference_answers:
+  - key: artifact_interface_structure
+    value: interface_alpha1_alpha4_110.vasp
+  - key: artifact_energy_file
+    value: interfacial_energy.txt
+  - key: energy_value
+    value:
+      checks:
+      - key: interfacial_energy_J_m2
+        max: 0.3
+        min: 0.1
+        allow_missing_key: false
+      filename: interfacial_energy.txt
+  - key: grounding_source
+    value:
+      filename: limn2o4_spinel.cif
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 900
+  - key: token_budget_total
+    value:
+      max: 100000
+  scoring_checklist:
+  - id: artifact_interface_structure
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Interface structure file interface_alpha1_alpha4_110.vasp exists.'
+  - id: artifact_energy_file
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Interfacial energy output file interfacial_energy.txt exists.'
+  - id: energy_value
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Interfacial energy γ is in the range 0.1–0.3 J/m², consistent with the paper''s
+      reported value of 0.18 J/m² for the α₁-α₄ (110) interface.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The agent used the provided spinel variant structure files to construct the interface.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completed within turn budget.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent did not exceed retry budget.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completed within duration budget.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent completed within token budget.'

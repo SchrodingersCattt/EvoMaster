@@ -835,3 +835,89 @@ questions:
     axis: efficiency
     verify: token_budget
     criterion: '[Must] Total token usage is within 50000 tokens.'
+- id: SR_pymatgen_001_20250618
+  capability: structure_retrieval
+  domain: agnostic
+  intent: Retrieve all binary oxide entries from the Materials Project and compute the median and 90th
+    percentile of their metastability (energy above hull), reproducing the chemistry-grouped analysis
+    from Sun et al. (2016) Figure 1.
+  human_prompt_seed: Using pymatgen and the Materials Project API, retrieve all binary oxide entries and
+    compute the median and 90th percentile of their energy above the convex hull (in meV/atom). Write
+    the statistics to metastability_stats.json.
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: metastability_stats_json_exists
+    value: metastability_stats.json
+  - key: median_e_above_hull
+    value:
+      checks:
+      - key: median_meV_per_atom
+        max: 40.0
+        min: 5.0
+        allow_missing_key: false
+      filename: metastability_stats.json
+  - key: p90_e_above_hull
+    value:
+      checks:
+      - key: p90_meV_per_atom
+        max: 150.0
+        min: 50.0
+        allow_missing_key: false
+      filename: metastability_stats.json
+  - key: grounding_source
+    value:
+      filename: metastability_stats.json
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: metastability_stats_json_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file metastability_stats.json exists'
+  - id: median_e_above_hull
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+    criterion: '[Suggested] Median energy above hull for binary oxides is between 5 and 40 meV/atom (consistent
+      with the paper''s overall median of 15 meV/atom and oxides having moderate metastability)'
+  - id: p90_e_above_hull
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+    criterion: '[Suggested] 90th percentile energy above hull for binary oxides is between 50 and 150
+      meV/atom (consistent with the paper''s overall 90th percentile of 67 meV/atom and binary oxide 90th
+      percentile of ~94 meV/atom from Fig. 3A)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The statistics are computed from Materials Project binary oxide data following
+      the convex hull methodology from the source paper'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completed within 15 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retries needed'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completed within 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Total tokens within 50000'

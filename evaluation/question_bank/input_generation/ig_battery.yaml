@@ -440,3 +440,4045 @@ questions:
     verify: token_budget
     weight: 0.0
     criterion: '[Must] Agent uses no more than 50000 tokens total.'
+- id: IG_vasp_001_20250623
+  capability: input_generation
+  domain: battery
+  intent: Generate a VASP INCAR file for surface energy calculations of Li₃InCl₆ solid electrolyte using
+    the computational parameters described in the paper (PBE+vdW-DF, 520 eV cutoff, specific convergence
+    criteria).
+  human_prompt_seed: Generate a VASP INCAR file for DFT surface energy calculations of a Li₃InCl₆ (001)
+    slab. The INCAR must contain all necessary parameters for a spin-polarized geometry optimization using
+    PBE+optB86b-vdW with 520 eV plane-wave cutoff, electronic convergence of 1e-7 eV, and ionic convergence
+    of 0.01 eV/Å. Save the output as INCAR in the current working directory.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: bulk_structure
+    path: li3incl6_bulk_poscar
+    oss_url: ''
+    description: Bulk Li₃InCl₆ crystal structure in monoclinic C2/m phase from Materials Project
+  - key: slab_structure
+    path: li3incl6_001_slab_poscar
+    oss_url: ''
+    description: (001) surface slab model of Li₃InCl₆ generated from the bulk structure
+  reference_answers:
+  - key: artifact_incar
+    value:
+      filename: INCAR
+  - key: text_incar_content
+    value:
+      flags: case_insensitive
+      tokens:
+      - ENCUT = 520
+      - PREC = Accurate
+      - ISPIN = 2
+      - GGA = PE
+      - IVDW = 12
+      - EDIFF = 1E-7
+      - EDIFFG = -0.01
+      - IBRION = 2
+      - NSW = 200
+      - ISIF = 2
+      - LREAL = Auto
+      - ALGO = Normal
+      - ISMEAR = 0
+      - SIGMA = 0.05
+      filename: INCAR
+  - key: numeric_incar_cutoff
+    value:
+      checks:
+      - key: ENCUT
+        expected: 520
+        tolerance: 0
+      filename: INCAR
+  - key: numeric_incar_ediff
+    value:
+      checks:
+      - key: EDIFF
+        expected: 1.0e-07
+        tolerance: 0
+      filename: INCAR
+  - key: numeric_incar_ediffg
+    value:
+      checks:
+      - key: EDIFFG
+        max: -0.01
+        min: -0.01
+      filename: INCAR
+  - key: numeric_incar_ivdw
+    value:
+      checks:
+      - key: IVDW
+        expected: 12
+        tolerance: 0
+        allow_missing_key: false
+      filename: INCAR
+  - key: grounding_source
+    value:
+      filename: li3incl6_bulk_poscar
+  - key: turn_budget
+    value:
+      max: 25
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_incar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] INCAR file exists in the output directory'
+  - id: text_incar_content
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains all required VASP tags: ENCUT=520, PREC=Accurate, ISPIN=2, GGA=PE,
+      IVDW=12, EDIFF=1E-7, EDIFFG=-0.01, IBRION=2'
+  - id: numeric_incar_cutoff
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] Plane-wave cutoff energy ENCUT is exactly 520 eV as specified in the paper'
+  - id: numeric_incar_ediff
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] Electronic convergence criterion EDIFF is exactly 1e-7 eV as specified in the paper'
+  - id: numeric_incar_ediffg
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] Ionic convergence criterion EDIFFG is -0.01 eV/Å as specified in the paper'
+  - id: numeric_incar_ivdw
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] van der Waals functional IVDW=12 (optB86b-vdW) is set for layered halide interactions'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Task is grounded in the Li₃InCl₆ solid electrolyte from the seed structure file'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 1.0
+    criterion: '[Must] Agent completes within 25 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 1.0
+    criterion: '[Must] Agent does not retry any tool calls'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 1.0
+    criterion: '[Must] Agent completes within 600 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 1.0
+    criterion: '[Must] Agent uses fewer than 50000 tokens total'
+- id: IG_vasp_002_20250615
+  capability: input_generation
+  domain: battery
+  intent: Generate a VASP KPOINTS file for the LLZ:Ta garnet electrolyte structure, computing the appropriate
+    Monkhorst-Pack grid density from the paper's specification of at least 500/n_atoms k-points.
+  human_prompt_seed: Generate a VASP KPOINTS file for the structure in llzta_electrolyte.cif. The paper
+    specifies a k-point grid density of at least 500 divided by the number of atoms in the unit cell.
+    Compute the number of atoms, determine an appropriate Monkhorst-Pack grid that meets this requirement,
+    and write the KPOINTS file. Use a Gamma-centered grid if the structure is non-centrosymmetric, otherwise
+    Monkhorst-Pack.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: llzta_structure
+    path: llzta_electrolyte.cif
+    oss_url: ''
+    description: Li6.6La3Zr1.6Ta0.4O12 (LLZ:Ta) garnet solid electrolyte structure from Materials Project
+  reference_answers:
+  - key: artifact_kpoints
+    value:
+      filename: KPOINTS
+  - key: text_contains_grid
+    value:
+      flags: []
+      tokens:
+      - '0'
+      - Auto
+      filename: KPOINTS
+  - key: numeric_grid_density
+    value:
+      checks:
+      - key: k_grid_product
+        min: 8
+        allow_missing_key: true
+      filename: KPOINTS
+  - key: grounding_source
+    value:
+      filename: llzta_electrolyte.cif
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_kpoints
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] KPOINTS file exists in the working directory'
+  - id: text_contains_grid
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] KPOINTS file is in valid VASP format (line 2 is ''0'' for auto-generation)'
+  - id: numeric_grid_density
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Variable] k-point grid product (Nx*Ny*Nz) is at least 8, consistent with the 500/n_atoms
+      rule for large cells'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 0.5
+    criterion: '[Must] Agent reads the provided structure file and computes atom count to determine grid'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within turn budget'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not retry failed actions'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within duration budget'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within total token budget'
+- id: IG_vasp_002_20260528
+  capability: input_generation
+  domain: battery
+  intent: Generate a VASP INCAR input file for a GGA+U calculation on LiFePO₄ olivine with U=4.5 eV applied
+    to Fe d-orbitals, configured for polaron migration barrier studies as a comparison to the HSE06 results
+    in the paper.
+  human_prompt_seed: 'Generate a VASP INCAR file for a GGA+U DFT calculation on LiFePO₄ olivine for polaron
+    migration studies. Use the provided CIF file (lifepo4_unitcell.cif) as the structure. The INCAR should
+    use: GGA (PBE) exchange-correlation with a Hubbard U correction of 4.5 eV on Fe d-orbitals (LDAUTYPE=2,
+    LDAU= True, LDAUL=2 for Fe, LDAUU=4.5, LDAUJ=0), a 500 eV plane-wave cutoff, Γ-centered k-point grid,
+    and spin-polarized (antiferromagnetic) settings. Save the output as INCAR in the working directory.'
+  tags:
+  - eng_vasp
+  data_files:
+  - key: structure
+    path: lifepo4_unitcell.cif
+    oss_url: ''
+    description: LiFePO₄ olivine structure (Pnma space group) from Materials Project.
+  reference_answers:
+  - key: artifact_incar
+    value: INCAR
+  - key: text_contains_encut
+    value:
+      flags: []
+      tokens:
+      - ENCUT
+      - '500'
+      filename: INCAR
+  - key: text_contains_gga
+    value:
+      flags: []
+      tokens:
+      - GGA
+      - PE
+      filename: INCAR
+  - key: text_contains_ldau
+    value:
+      flags: []
+      tokens:
+      - LDAU
+      - 'TRUE'
+      filename: INCAR
+  - key: text_contains_ldau_values
+    value:
+      flags: []
+      tokens:
+      - LDAUU
+      - '4.5'
+      filename: INCAR
+  - key: text_contains_ldaul
+    value:
+      flags: []
+      tokens:
+      - LDAUL
+      - '2'
+      filename: INCAR
+  - key: text_contains_ispin
+    value:
+      flags: []
+      tokens:
+      - ISPIN
+      - '2'
+      filename: INCAR
+  - key: grounding_source
+    value:
+      filename: lifepo4_unitcell.cif
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: artifact_incar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] INCAR file is generated in the working directory.'
+  - id: text_contains_encut
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains ENCUT = 500 (plane-wave cutoff).'
+  - id: text_contains_gga
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains GGA = PE for PBE exchange-correlation.'
+  - id: text_contains_ldau
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains LDAU = TRUE to enable Hubbard U correction.'
+  - id: text_contains_ldau_values
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains LDAUU with value 4.5 (U for Fe in eV).'
+  - id: text_contains_ldaul
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains LDAUL = 2 (d-orbital angular momentum for Fe).'
+  - id: text_contains_ispin
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains ISPIN = 2 for spin-polarized calculation.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The INCAR is grounded in the source paper''s GGA+U methodology for LiFePO₄ polaron
+      calculations.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within turn budget.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry failed tool calls.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within duration budget.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent completes within total token budget.'
+- id: IG_qe_001_20250508
+  capability: input_generation
+  domain: battery
+  intent: Generate a Quantum ESPRESSO input file for a self-consistent field (SCF) calculation using PBEsol+U+V
+    as a prerequisite for DFPT-based Hubbard parameter (U and V) calculation on orthorhombic LiMnO2, following
+    the parameters in the paper's Supplementary Information.
+  human_prompt_seed: Generate a Quantum ESPRESSO input file (pw.x) for a self-consistent field (SCF) calculation
+    of the provided orthorhombic LiMnO2 structure using PBEsol+U+V. Use a plane-wave cutoff of 70 Ry and
+    energy convergence of 1e-9 Ry. Apply initial Hubbard U=6.0 eV on Mn-3d and V=0.6 eV on Mn-3d/O-2p.
+    Write the input to a file named scf_pbesol_uv.in.
+  tags:
+  - eng_qe
+  data_files:
+  - key: structure
+    path: limno2_orthorhombic.cif
+    oss_url: ''
+    description: Orthorhombic LiMnO2 (Pmmn) crystal structure from Materials Project
+  reference_answers:
+  - key: artifact_qe_input
+    value: scf_pbesol_uv.in
+  - key: grounding_source
+    value:
+      filename: limno2_orthorhombic.cif
+  - key: text_qe_functional
+    value:
+      flags:
+      - all_present
+      tokens:
+      - input_dft = 'pbesol'
+      filename: scf_pbesol_uv.in
+  - key: text_qe_cutoff
+    value:
+      flags:
+      - all_present
+      tokens:
+      - ecutwfc = 70
+      filename: scf_pbesol_uv.in
+  - key: text_qe_conv
+    value:
+      flags:
+      - all_present
+      tokens:
+      - conv_thr = 1.0d-9
+      filename: scf_pbesol_uv.in
+  - key: text_qe_hubbard
+    value:
+      flags:
+      - all_present
+      tokens:
+      - lda_plus_u
+      - hubbard_u
+      - hubbard_v
+      filename: scf_pbesol_uv.in
+  - key: text_qe_calc
+    value:
+      flags:
+      - all_present
+      tokens:
+      - calculation = 'scf'
+      filename: scf_pbesol_uv.in
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_qe_input
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] A QE input file named scf_pbesol_uv.in exists in the working directory.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] The answer is grounded in the provided LiMnO2 structure file and the referenced
+      DFT parameters.'
+  - id: text_qe_functional
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] Input contains input_dft=''pbesol'' for PBEsol functional.'
+  - id: text_qe_cutoff
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] Input contains ecutwfc = 70 (Ry plane-wave cutoff, equivalent to 952 eV from Table
+      S1).'
+  - id: text_qe_conv
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] Input contains conv_thr = 1.0d-9 (Ry energy convergence from Table S1).'
+  - id: text_qe_hubbard
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 15.0
+    criterion: '[Must] Input contains Hubbard U and V parameters (lda_plus_u, hubbard_u for Mn-3d, hubbard_v
+      for Mn-3d/O-2p).'
+  - id: text_qe_calc
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] Input contains calculation=''scf'' for self-consistent field calculation.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not request retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 50000 tokens total.'
+- id: IG_vasp_003_20260508
+  capability: input_generation
+  domain: battery
+  intent: Generate a VASP INCAR file for a GGA+U spin-polarized DFT calculation of LiFePO4 with U_eff=4.3
+    eV applied to Fe d-orbitals, 500 eV plane-wave cutoff, and full structural relaxation.
+  human_prompt_seed: Generate a VASP INCAR file for a GGA+U spin-polarized calculation with full structural
+    relaxation of LiFePO4. Use the provided POSCAR file. The INCAR should apply a Hubbard U correction
+    of 4.3 eV to Fe d-orbitals, use a 500 eV plane-wave energy cutoff, and be configured for energy convergence
+    within 3 meV per formula unit. Write the output to INCAR in the current working directory.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: poscar
+    path: LiFePO4_POSCAR
+    oss_url: ''
+    description: LiFePO4 olivine structure (Pnma) from Materials Project
+  reference_answers:
+  - key: artifact_incar
+    value: INCAR
+  - key: incar_contains_gga
+    value:
+      tokens:
+      - GGA = PE
+      filename: INCAR
+  - key: incar_contains_encut
+    value:
+      tokens:
+      - ENCUT = 500
+      filename: INCAR
+  - key: incar_contains_ispin
+    value:
+      tokens:
+      - ISPIN = 2
+      filename: INCAR
+  - key: incar_contains_lmaxmix
+    value:
+      tokens:
+      - LMAXMIX = 4
+      filename: INCAR
+  - key: incar_contains_lu
+    value:
+      tokens:
+      - LDAU = .TRUE.
+      filename: INCAR
+  - key: incar_contains_utype
+    value:
+      tokens:
+      - LDAUTYPE = 2
+      filename: INCAR
+  - key: incar_contains_u_fe
+    value:
+      tokens:
+      - LDAUU = 4.3
+      filename: INCAR
+  - key: incar_contains_j_fe
+    value:
+      tokens:
+      - LDAUJ = 0
+      filename: INCAR
+  - key: incar_contains_lu_elements
+    value:
+      tokens:
+      - LDAUL = 2
+      filename: INCAR
+  - key: incar_relaxation
+    value:
+      tokens:
+      - ISIF = 3
+      filename: INCAR
+  - key: grounding_source
+    value:
+      filename: LiFePO4_POSCAR
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 60000
+  scoring_checklist:
+  - id: artifact_incar
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] INCAR file exists in the output directory'
+  - id: incar_contains_gga
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 8.0
+    criterion: '[Must] INCAR specifies GGA = PE (Perdew-Burke-Ernzerhof functional)'
+  - id: incar_contains_encut
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 8.0
+    criterion: '[Must] INCAR specifies ENCUT = 500 (500 eV plane-wave cutoff)'
+  - id: incar_contains_ispin
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 8.0
+    criterion: '[Must] INCAR specifies ISPIN = 2 (spin-polarized calculation)'
+  - id: incar_contains_lmaxmix
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 5.0
+    criterion: '[Must] INCAR specifies LMAXMIX = 4 (needed for d-orbital U correction)'
+  - id: incar_contains_lu
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] INCAR specifies LDAU = .TRUE. (Hubbard U enabled)'
+  - id: incar_contains_utype
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 5.0
+    criterion: '[Must] INCAR specifies LDAUTYPE = 2 (Dudarev approach)'
+  - id: incar_contains_u_fe
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] INCAR specifies LDAUU with 4.3 eV for Fe'
+  - id: incar_contains_j_fe
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 5.0
+    criterion: '[Must] INCAR specifies LDAUJ with 0 eV for Fe'
+  - id: incar_contains_lu_elements
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 8.0
+    criterion: '[Must] INCAR specifies LDAUL = 2 for Fe (d-orbital correction)'
+  - id: incar_relaxation
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 5.0
+    criterion: '[Must] INCAR specifies ISIF = 3 (full relaxation of positions and cell)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 5.0
+    criterion: '[Must] The answer is grounded in the provided structure file'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 30 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry failed tool calls excessively'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 60000 total tokens'
+- id: IG_vasp_001_20260124
+  capability: input_generation
+  domain: battery
+  intent: Generate a complete set of VASP input files (POSCAR, INCAR, KPOINTS) for a metal-oxide structure
+    using DFT parameters from a published study on over-stoichiometric rocksalt-type solid electrolytes.
+  human_prompt_seed: 'Generate VASP input files (POSCAR, INCAR, KPOINTS) for the provided metal-oxide
+    structure file. Use the following DFT parameters from the reference study: plane-wave cutoff 520 eV,
+    PBE exchange-correlation functional, k-point density of 25 k-points per Å⁻¹, electronic convergence
+    1×10⁻⁶ eV, and ionic convergence 0.02 eV/Å. Write all output files to the current working directory.'
+  tags:
+  - eng_vasp
+  data_files:
+  - key: in2o3_structure
+    path: in2o3_cif.cif
+    oss_url: ''
+    description: In2O3 crystal structure from the Materials Project, used as a representative metal oxide
+      for DFT parameter setup.
+  reference_answers:
+  - key: incar_encut
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - ENCUT = 520
+      filename: INCAR
+  - key: incar_gga
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - GGA = PE
+      filename: INCAR
+  - key: incar_ediff
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - EDIFF = 1E-6
+      filename: INCAR
+  - key: incar_ediffg
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - EDIFFG = -0.02
+      filename: INCAR
+  - key: poscar_exists
+    value: POSCAR
+  - key: kpoints_grid
+    value:
+      checks:
+      - key: total_kpoints
+        max: 500
+        min: 30
+        allow_missing_key: true
+      filename: KPOINTS
+  - key: grounding_source
+    value:
+      filename: in2o3_cif.cif
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 40000
+  scoring_checklist:
+  - id: incar_encut
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 15.0
+    criterion: '[Must] INCAR contains ENCUT = 520 (plane-wave kinetic energy cutoff in eV).'
+  - id: incar_gga
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 15.0
+    criterion: '[Must] INCAR contains GGA = PE (PBE exchange-correlation functional).'
+  - id: incar_ediff
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] INCAR contains EDIFF = 1E-6 (electronic convergence criterion).'
+  - id: incar_ediffg
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] INCAR contains EDIFFG = -0.02 (ionic convergence criterion in eV/Å).'
+  - id: poscar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 15.0
+    criterion: '[Must] POSCAR file exists and contains a valid VASP structure.'
+  - id: kpoints_grid
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Suggested] KPOINTS file uses a Monkhorst-Pack grid with total k-point count between 30
+      and 500 (consistent with ~25 k-points/Å⁻¹ density for typical oxide cells).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] The POSCAR structure is derived from the provided in2o3_cif.cif seed file.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 15 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not retry any tool call.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses fewer than 40000 tokens total.'
+- id: IG_vasp_002_20260108
+  capability: input_generation
+  domain: battery
+  intent: Generate a complete set of VASP input files (INCAR, KPOINTS, POTCAR) for a full k-point relaxation
+    of Li-intercalated λ-MnO2 (spinel-type LiMn2O4) using the SCAN meta-GGA functional, with a converged
+    k-point mesh, AFM magnetic ordering on the Mn sublattice, and the same convergence criteria as the
+    prerelaxation step.
+  human_prompt_seed: Generate VASP input files (INCAR, KPOINTS, POTCAR) for a full k-point relaxation
+    of the LiMn2O4 spinel structure in poscar_limn2o4.cif. Use the SCAN meta-GGA functional with PAW pseudopotentials,
+    spin-polarized AFM initialization on Mn sites, a converged k-point mesh (reciprocal space discretization
+    ≥ 25 Å⁻¹), electronic convergence of 2×10⁻⁷ eV/atom, and ionic force convergence of 0.02 eV/Å. Write
+    all input files to the current working directory.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: limn2o4_structure
+    path: poscar_limn2o4.cif
+    oss_url: ''
+    description: λ-MnO2 spinel-type structure (LiMn2O4) from Materials Project, space group Fd-3m (#227),
+      containing tetrahedral Li sites and octahedral Mn sites.
+  reference_answers:
+  - key: incar_exists
+    value: INCAR
+  - key: incar_settings
+    value:
+      flags:
+      - ISYM = 0
+      tokens:
+      - METAGGA = SCAN
+      - EDIFF = 2E-7
+      - EDIFFG = -0.02
+      - ISPIN = 2
+      - PREC = Accurate
+      - ENCUT
+      filename: INCAR
+  - key: kpoints_exists
+    value: KPOINTS
+  - key: kpoints_converged
+    value:
+      flags: []
+      pattern: (Monkhorst|Gamma|Automatic)
+      filename: KPOINTS
+  - key: kpoints_density
+    value:
+      checks:
+      - key: min_kpoint_length
+        expected: 1
+        tolerance: 0
+        allow_missing_key: true
+      filename: KPOINTS
+  - key: potcar_exists
+    value: POTCAR
+  - key: potcar_elements
+    value:
+      flags: []
+      tokens:
+      - Mn
+      - Li
+      - O
+      filename: POTCAR
+  - key: magnetic_initialization
+    value:
+      flags: []
+      tokens:
+      - MAGMOM
+      filename: INCAR
+  - key: grounding_source
+    value:
+      filename: poscar_limn2o4.cif
+      description: LiMn2O4 spinel structure from Materials Project mp-18829
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: incar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] INCAR file exists in the working directory.'
+  - id: incar_settings
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+    criterion: '[Must] INCAR contains METAGGA=SCAN, EDIFF=2E-7, EDIFFG=-0.02, ISPIN=2, and PREC=Accurate.'
+  - id: kpoints_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] KPOINTS file exists with a Monkhorst-Pack or Gamma-centered mesh.'
+  - id: kpoints_converged
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] KPOINTS specifies an automatic k-point mesh (not Γ-point only, since this is the
+      full relaxation step).'
+  - id: kpoints_density
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] K-point density corresponds to reciprocal space discretization ≥ 25 Å⁻¹ (e.g.,
+      for a ~8 Å cell, at least 3×3×3 or finer).'
+  - id: potcar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] POTCAR file exists.'
+  - id: potcar_elements
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] POTCAR contains pseudopotentials for Mn, Li, and O.'
+  - id: magnetic_initialization
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR includes MAGMOM tag for initializing AFM ordering on Mn sites.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Answer is grounded in the LiMn2O4 structure from the Materials Project.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not request retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 80000 total tokens.'
+- id: IG_vasp_002_20250617
+  capability: input_generation
+  domain: battery
+  intent: Generate VASP input files for an ab initio molecular dynamics (AIMD) simulation of Na10SnP2S12
+    to compute Na-ion diffusivity, using an NVT ensemble with Nose-Hoover thermostat, 2 fs timestep, and
+    a single k-point to reduce computational cost.
+  human_prompt_seed: Generate VASP input files (POSCAR, INCAR, KPOINTS, POTCAR) for an AIMD simulation
+    of Na10SnP2S12 to compute Na-ion diffusivity. Use the provided relaxed CIF as the starting structure.
+    Configure an NVT ensemble with Nose-Hoover thermostat (SMASS = -3), 2 fs timestep (POTIM = 2.0), and
+    a single k-point. Set NSW = 350000 for a 700 ps simulation. Write all four files to the current directory.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: na10snp2s12_relaxed.cif
+    path: na10snp2s12_relaxed.cif
+    oss_url: ''
+    description: DFT-relaxed CIF structure of Na10SnP2S12 (tetragonal, 50 atoms / 2 formula units), used
+      as starting point for AIMD
+  reference_answers:
+  - key: artifact_poscar
+    value:
+      filename: POSCAR
+  - key: artifact_incar
+    value:
+      filename: INCAR
+  - key: artifact_kpoints
+    value:
+      filename: KPOINTS
+  - key: artifact_potcar
+    value:
+      filename: POTCAR
+  - key: incar_nvt
+    value:
+      tokens:
+      - TEBEG = 600
+      - SMASS = -3
+      filename: INCAR
+  - key: incar_timestep
+    value:
+      checks:
+      - key: POTIM
+        expected: 2.0
+        tolerance: 0
+      filename: INCAR
+  - key: incar_nsw
+    value:
+      checks:
+      - key: NSW
+        max: 400000
+        min: 250000
+      filename: INCAR
+  - key: incar_ibrion_md
+    value:
+      checks:
+      - key: IBRION
+        expected: 0
+        tolerance: 0
+      filename: INCAR
+  - key: kpoints_single
+    value:
+      tokens:
+      - '1'
+      - '1'
+      - '1'
+      filename: KPOINTS
+  - key: potcar_elements
+    value:
+      tokens:
+      - Na
+      - Sn
+      - P
+      - S
+      filename: POTCAR
+  - key: grounding_source
+    value:
+      filename: na10snp2s12_relaxed.cif
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 60000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] POSCAR file exists with the relaxed Na10SnP2S12 structure'
+  - id: artifact_incar
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] INCAR file exists with AIMD-appropriate parameters'
+  - id: artifact_kpoints
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] KPOINTS file exists'
+  - id: artifact_potcar
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] POTCAR file exists with PAW pseudopotentials'
+  - id: incar_nvt
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] INCAR sets NVT ensemble (SMASS = -3 for Nose-Hoover) and starting temperature TEBEG
+      = 600'
+  - id: incar_timestep
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] INCAR specifies POTIM = 2.0 (2 fs timestep)'
+  - id: incar_nsw
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 5.0
+    criterion: '[Suggested] INCAR sets NSW between 250000-400000 steps (500-800 ps simulation)'
+  - id: incar_ibrion_md
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] INCAR sets IBRION = 0 for molecular dynamics'
+  - id: kpoints_single
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] KPOINTS uses a single k-point (1 1 1) to reduce computational cost'
+  - id: potcar_elements
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] POTCAR contains pseudopotentials for Na, Sn, P, S'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] Files are consistent with the provided relaxed CIF seed'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 1.0
+    criterion: '[Must] Completes within 30 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 1.0
+    criterion: '[Must] No file-read retries needed'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 1.0
+    criterion: '[Must] Completes within 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 1.0
+    criterion: '[Must] Total tokens under 60000'
+- id: IG_vasp_002_20250115
+  capability: input_generation
+  domain: battery
+  intent: Generate a VASP INCAR file for DFT calculations on the Li-Mn-Ti-O disordered rocksalt oxide
+    system using the SCAN meta-GGA exchange-correlation functional with the convergence parameters specified
+    in the paper.
+  human_prompt_seed: Generate a VASP INCAR file for DFT calculations on a Li-Mn-Ti-O disordered rocksalt
+    oxide. Use the SCAN meta-GGA functional. Set plane-wave energy cutoff to 520 eV, k-point density to
+    25 k-points per Å, electronic convergence to 10⁻⁶ eV, and ionic force convergence to 0.02 eV/Å. Save
+    as INCAR.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: poscar
+    path: POSCAR
+    oss_url: ''
+    description: POSCAR file for the Li-Mn-Ti-O disordered rocksalt supercell. The agent should generate
+      a representative supercell structure.
+  - key: potcar_info
+    path: potcar_info.txt
+    oss_url: ''
+    description: Information about pseudopotential choices for Li, Mn, Ti, O in VASP.
+  reference_answers:
+  - key: artifact_incar
+    value:
+      filename: INCAR
+  - key: contains_scan
+    value:
+      tokens:
+      - SCAN
+      - METAGGA = SCAN
+      filename: INCAR
+  - key: contains_encut
+    value:
+      tokens:
+      - ENCUT
+      - '520'
+      filename: INCAR
+  - key: contains_ediff
+    value:
+      tokens:
+      - EDIFF
+      - 1E-6
+      - 1E-06
+      filename: INCAR
+  - key: contains_ediffg
+    value:
+      tokens:
+      - EDIFFG
+      - '-0.02'
+      filename: INCAR
+  - key: contains_kspacing
+    value:
+      tokens:
+      - KSPACING
+      - '0.25'
+      - '0.251'
+      filename: INCAR
+  - key: contains_paw
+    value:
+      tokens:
+      - PREC
+      - Accurate
+      - PREC = Accurate
+      filename: INCAR
+  - key: grounding_source
+    value:
+      filename: INCAR
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 30000
+  scoring_checklist:
+  - id: artifact_incar
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] Output file INCAR exists.'
+  - id: contains_scan
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] INCAR specifies SCAN meta-GGA functional (METAGGA = SCAN).'
+  - id: contains_encut
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] INCAR specifies ENCUT = 520 (eV).'
+  - id: contains_ediff
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] INCAR specifies EDIFF = 1E-6 (electronic convergence).'
+  - id: contains_ediffg
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] INCAR specifies EDIFFG = -0.02 (ionic force convergence in eV/Å).'
+  - id: contains_kspacing
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 5.0
+    criterion: '[Suggested] INCAR specifies KSPACING ≈ 0.25 (corresponding to 25 k-points/Å, since KSPACING
+      = 2π/25 ≈ 0.251 Å⁻¹) or uses equivalent KPOINTS file generation.'
+  - id: contains_paw
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 5.0
+    criterion: '[Suggested] INCAR uses PAW method with appropriate precision setting.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] The INCAR parameters match those specified in the paper''s Appendix for the Li-Mn-Ti-O
+      system.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 20 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry failed operations.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 30000 total tokens.'
+- id: IG_vasp_001_20260528
+  capability: input_generation
+  domain: battery
+  intent: Generate a VASP INCAR input file for LiCoO2 DFT calculations using the LDA functional and specific
+    computational parameters from Van der Ven et al. (1998).
+  human_prompt_seed: 'Generate a VASP INCAR file for a LiCoO2 total-energy calculation in the O3 host
+    structure (poscar_lico2.vasp is provided). Use the computational parameters described in Van der Ven
+    et al. (1998) Phys. Rev. B 58, 2998: LDA exchange-correlation (Ceperley-Alder/Perdew-Zunger), 600
+    eV plane-wave cutoff, conjugate-gradient ionic relaxation, and nonmagnetic treatment. Output the INCAR
+    file to the working directory.'
+  tags:
+  - eng_vasp
+  data_files:
+  - key: poscar_lico2
+    path: poscar_lico2.vasp
+    oss_url: ''
+    description: LiCoO2 structure in the O3 host (R-3m space group) from Materials Project
+  reference_answers:
+  - key: incar_exists
+    value:
+      filename: INCAR
+  - key: incar_tags
+    value:
+      flags:
+      - IGNORECASE
+      tokens:
+      - ENCUT = 600
+      - IBRION = 2
+      - ISIF = 3
+      - ISPIN = 1
+      - PREC = Accurate
+      filename: INCAR
+  - key: incar_encut_range
+    value:
+      checks:
+      - key: ENCUT
+        expected: 600
+        tolerance: 0
+      filename: INCAR
+  - key: incar_ismear
+    value:
+      checks:
+      - key: ISMEAR
+        allowed_values:
+        - 1
+        - 2
+      filename: INCAR
+  - key: incar_nonmagnetic
+    value:
+      checks:
+      - key: ISPIN
+        expected: 1
+        tolerance: 0
+      filename: INCAR
+  - key: incar_ibrion
+    value:
+      checks:
+      - key: IBRION
+        expected: 2
+        tolerance: 0
+      filename: INCAR
+  - key: grounding_source
+    value:
+      filename: poscar_lico2.vasp
+  - key: max_turns
+    value:
+      max: 30
+  - key: no_retry
+    value:
+      max: 0
+  - key: max_duration_s
+    value:
+      max: 600
+  - key: max_tokens
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: incar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] INCAR file exists in the working directory'
+  - id: incar_tags
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 25.0
+    criterion: '[Must] INCAR contains key VASP tags: ENCUT=600, IBRION=2, ISIF=3, ISPIN=1, PREC=Accurate'
+  - id: incar_encut_range
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 15.0
+    criterion: '[Must] ENCUT is exactly 600 eV as specified in the paper'
+  - id: incar_ismear
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Suggested] ISMEAR is set to Methfessel-Paxton (1 or 2) for metallic/partial-occupancy
+      relaxation'
+  - id: incar_nonmagnetic
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] ISPIN=1 for nonmagnetic calculation as stated in the paper'
+  - id: incar_ibrion
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] IBRION=2 for conjugate-gradient ionic relaxation'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] Answer is grounded in the provided LiCoO2 structure file'
+  - id: max_turns
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Completed within turn budget'
+  - id: no_retry
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] No retries used'
+  - id: max_duration_s
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Completed within duration budget'
+  - id: max_tokens
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Completed within token budget'
+- id: IG_ce_001_20250115
+  capability: input_generation
+  domain: battery
+  intent: Generate a cluster expansion (CE) configuration file for the Li-Mn-Ti-O disordered rocksalt
+    system using the smol package, with pair interactions up to 7.1 Å, triplets up to 4.0 Å, quadruplets
+    up to 3.0 Å, and ℓ₀ℓ₂-norm regularization with hierarchy constraints.
+  human_prompt_seed: Generate a cluster expansion input configuration for a Li-Mn-Ti-O disordered rocksalt
+    cathode system using smol. Use a rocksalt primitive cell (a=3 Å, Fm-3m). Set pair cutoff to 7.1 Å,
+    triplet cutoff to 4.0 Å, and quadruplet cutoff to 3.0 Å. Configure ℓ₀ℓ₂-norm regularization with hierarchy
+    constraints. Save the configuration to ce_config.json.
+  tags: []
+  data_files:
+  - key: rocksalt_structure
+    path: rocksalt_li_mn_ti_o.json
+    oss_url: ''
+    description: Rocksalt structure for Li-Mn-Ti-O system. The agent should construct a rocksalt primitive
+      cell (a=3 Å) with Fm-3m symmetry using pymatgen, with cation sites (4a) occupiable by Li/Mn/Ti/vacancy
+      and anion sites (4b) by O.
+  reference_answers:
+  - key: artifact_ce_config
+    value:
+      filename: ce_config.json
+  - key: contains_pair_cutoff
+    value:
+      tokens:
+      - '7.1'
+      filename: ce_config.json
+  - key: contains_triplet_cutoff
+    value:
+      tokens:
+      - '4.0'
+      filename: ce_config.json
+  - key: contains_quadruplet_cutoff
+    value:
+      tokens:
+      - '3.0'
+      filename: ce_config.json
+  - key: contains_l0l2
+    value:
+      tokens:
+      - l0l2
+      - l0_l2
+      - l0l2_regularization
+      - mixed_integer
+      - MIQP
+      - hierarchy
+      filename: ce_config.json
+  - key: contains_rocksalt
+    value:
+      tokens:
+      - rocksalt
+      - Fm-3m
+      - '225'
+      - Fm-3m
+      filename: ce_config.json
+  - key: grounding_source
+    value:
+      filename: ce_config.json
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_ce_config
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] Output file ce_config.json exists.'
+  - id: contains_pair_cutoff
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] Configuration specifies pair interaction cutoff of 7.1 Å.'
+  - id: contains_triplet_cutoff
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] Configuration specifies triplet interaction cutoff of 4.0 Å.'
+  - id: contains_quadruplet_cutoff
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] Configuration specifies quadruplet interaction cutoff of 3.0 Å.'
+  - id: contains_l0l2
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] Configuration includes ℓ₀ℓ₂-norm regularization or MIQP/hierarchy constraint setup.'
+  - id: contains_rocksalt
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 5.0
+    criterion: '[Must] Configuration references rocksalt structure or Fm-3m space group.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] The generated configuration is grounded in the source paper''s CE setup for Li-Mn-Ti-O
+      system.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry failed operations.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 50000 total tokens.'
+- id: IG_chgnet_002_20250626
+  capability: input_generation
+  domain: battery
+  intent: Generate an ASE-based molecular dynamics simulation script using the CHGNet machine-learning
+    interatomic potential to simulate the phase transformation of Li₀.₆Mn₀.₈Ti₀.₁O₁.₉F₀.₁ at T=1273 K
+    under NVT ensemble.
+  human_prompt_seed: Write a Python script named `run_chgnet_md.py` that performs an NVT molecular dynamics
+    simulation of Li₀.₆Mn₀.₈Ti₀.₁O₁.₉F₀.₁ using the CHGNet machine-learning interatomic potential via
+    ASE. The simulation should use the initial structure from `lmtof_delithiated_initial.vasp`, run at
+    T=1273 K with a 2 fs time step for a total of 2 ns (1,000,000 steps), and use a Nosé-Hoover thermostat.
+    Before starting the MD, relax the structure with CHGNet using a force convergence criterion of 0.1
+    eV/Å. Save the trajectory to `md_trajectory.traj` and write final energies to `md_energies.json`.
+  tags:
+  - code_mlip
+  data_files:
+  - key: initial_structure
+    path: lmtof_delithiated_initial.vasp
+    oss_url: ''
+    description: Initial rocksalt structure for Li₀.₆Mn₀.₈Ti₀.₁O₁.₉F₀.₁ (derived from mp-13 Li₂O rocksalt
+      prototype, modified with correct composition).
+  reference_answers:
+  - key: artifact_script
+    value: run_chgnet_md.py
+  - key: script_contains_chgnet
+    value:
+      tokens:
+      - CHGNet
+      - chgnet
+      filename: run_chgnet_md.py
+  - key: script_contains_nvt
+    value:
+      tokens:
+      - NVT
+      - NoseHoover
+      - nose_hoover
+      filename: run_chgnet_md.py
+  - key: script_contains_temperature
+    value:
+      tokens:
+      - '1273'
+      filename: run_chgnet_md.py
+  - key: script_contains_timestep
+    value:
+      tokens:
+      - '0.002'
+      - 2 * unit.fs
+      - 2e-3
+      filename: run_chgnet_md.py
+  - key: script_contains_force_tol
+    value:
+      tokens:
+      - '0.1'
+      filename: run_chgnet_md.py
+  - key: script_contains_trajectory_output
+    value:
+      tokens:
+      - md_trajectory.traj
+      filename: run_chgnet_md.py
+  - key: script_contains_energy_output
+    value:
+      tokens:
+      - md_energies.json
+      filename: run_chgnet_md.py
+  - key: grounding_source
+    value:
+      filename: run_chgnet_md.py
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 1
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.15
+    criterion: '[Must] Python script run_chgnet_md.py exists.'
+  - id: script_contains_chgnet
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.15
+    criterion: '[Must] Script imports and uses CHGNet calculator.'
+  - id: script_contains_nvt
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.15
+    criterion: '[Must] Script uses NVT ensemble (Nose-Hoover thermostat or equivalent).'
+  - id: script_contains_temperature
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.1
+    criterion: '[Must] Script sets temperature to 1273 K.'
+  - id: script_contains_timestep
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.05
+    criterion: '[Must] Script uses a timestep of 2 fs (0.002 ps).'
+  - id: script_contains_force_tol
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.05
+    criterion: '[Suggested] Script includes force convergence criterion of 0.1 eV/A for pre-MD relaxation.'
+  - id: script_contains_trajectory_output
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.1
+    criterion: '[Must] Script outputs trajectory to md_trajectory.traj.'
+  - id: script_contains_energy_output
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.1
+    criterion: '[Must] Script outputs energies to md_energies.json.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 0.1
+    criterion: '[Must] The MD setup is grounded in the simulation parameters described in the source paper.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completed within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retries needed.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completed within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Total tokens used within 80000.'
+- id: IG_vasp_001_20250715
+  capability: input_generation
+  domain: battery
+  intent: 'Generate VASP INCAR, KPOINTS, and POTCAR files for a DFT calculation on a rocksalt cathode
+    using GGA+U settings: PBE functional, 520 eV cutoff, U=3.9 eV on Mn, convergence criteria 1E-6 eV
+    and 0.02 eV/Å.'
+  human_prompt_seed: 'Generate VASP INCAR, KPOINTS, and POTCAR files for a DFT calculation on the provided
+    rocksalt structure file mno_rocksalt.cif. Use these settings: PBE GGA functional, plane-wave energy
+    cutoff 520 eV, k-point density of 25 k-points per reciprocal angstrom, GGA+U with U=3.9 eV applied
+    to Mn d-orbitals (no U on other elements), energy convergence criterion 1E-6 eV, and force convergence
+    criterion 0.02 eV/A. Save the three output files as INCAR, KPOINTS, and POTCAR in the working directory.'
+  tags:
+  - eng_vasp
+  data_files:
+  - key: rocksalt_structure
+    path: mno_rocksalt.cif
+    oss_url: ''
+    description: MnO rocksalt structure (Fm-3m) from Materials Project, used as prototype for VASP input
+      generation with Mn d-orbital U correction.
+  reference_answers:
+  - key: incar_exists
+    value: INCAR
+  - key: kpoints_exists
+    value: KPOINTS
+  - key: potcar_exists
+    value: POTCAR
+  - key: encut_520
+    value:
+      flags: []
+      tokens:
+      - ENCUT
+      - '520'
+      filename: INCAR
+  - key: gga_pe
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - GGA
+      - PE
+      filename: INCAR
+  - key: ldau_true
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - LDAU
+      - 'TRUE'
+      filename: INCAR
+  - key: ldauu_mn_39
+    value:
+      flags: []
+      tokens:
+      - LDAUU
+      - '3.9'
+      filename: INCAR
+  - key: ediff_1e6
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - EDIFF
+      - 1E-6
+      filename: INCAR
+  - key: ediffg_002
+    value:
+      flags: []
+      tokens:
+      - EDIFFG
+      - '-0.02'
+      filename: INCAR
+  - key: kpoints_auto
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - Auto
+      filename: KPOINTS
+  - key: grounding_source
+    value:
+      filename: INCAR
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 100000
+  scoring_checklist:
+  - id: incar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.08
+    criterion: '[Must] Output file INCAR exists.'
+  - id: kpoints_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.07
+    criterion: '[Must] Output file KPOINTS exists.'
+  - id: potcar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.05
+    criterion: '[Must] Output file POTCAR exists.'
+  - id: encut_520
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.1
+    criterion: '[Must] INCAR contains ENCUT = 520.'
+  - id: gga_pe
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.08
+    criterion: '[Must] INCAR specifies GGA = PE (PBE functional).'
+  - id: ldau_true
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.08
+    criterion: '[Must] INCAR enables GGA+U (LDAU = True).'
+  - id: ldauu_mn_39
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.1
+    criterion: '[Must] INCAR includes LDAUU with value 3.9 for Mn.'
+  - id: ediff_1e6
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.07
+    criterion: '[Must] INCAR sets EDIFF = 1E-6 for electronic convergence.'
+  - id: ediffg_002
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.07
+    criterion: '[Must] INCAR sets EDIFFG = -0.02 for ionic force convergence.'
+  - id: kpoints_auto
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.05
+    criterion: '[Suggested] KPOINTS uses automatic generation (e.g., Gamma or Monkhorst-Pack) with appropriate
+      density.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 0.1
+    criterion: '[Must] The VASP inputs are grounded in the paper''s computational methods section.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: Completed within 30 turns.
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: No tool-call retries.
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: Completed within 600 seconds.
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: Total tokens within 100,000.
+- id: IG_vasp_003_20250625
+  capability: input_generation
+  domain: battery
+  intent: Generate a VASP INCAR file for an ab initio molecular dynamics (AIMD) simulation in the NVT
+    ensemble with a Nose-Hoover thermostat for P2 Na_xCoO2, using the parameters from the referenced paper.
+  human_prompt_seed: Generate a VASP INCAR file for an AIMD simulation of P2 Na_xCoO2 at 720 K in the
+    NVT ensemble with a Nose-Hoover thermostat. Use the provided poscar_aimd.vasp as the structure. The
+    INCAR should be placed in the working directory.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: poscar_aimd
+    path: poscar_aimd.vasp
+    oss_url: ''
+    description: P2 Na_xCoO2 supercell POSCAR for AIMD simulation (x=0.69, 4×4×1 supercell).
+  reference_answers:
+  - key: artifact_incar
+    value:
+      filename: INCAR
+      description: Generated VASP INCAR file for AIMD simulation.
+  - key: text_incar_keywords
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - ENCUT
+      - TEBEG
+      - TEEND
+      - IBRION
+      - SMASS
+      - NSW
+      - POTIM
+      filename: INCAR
+  - key: numeric_incar_encut
+    value:
+      checks:
+      - key: ENCUT
+        expected: 400
+        tolerance: 0
+      filename: INCAR
+  - key: numeric_incar_ispin
+    value:
+      checks:
+      - key: ISPIN
+        expected: 1
+        tolerance: 0
+        allow_missing_key: true
+      filename: INCAR
+  - key: numeric_incar_tebeg
+    value:
+      checks:
+      - key: TEBEG
+        expected: 720
+        tolerance: 0
+      filename: INCAR
+  - key: numeric_incar_potim
+    value:
+      checks:
+      - key: POTIM
+        max: 2.5
+        min: 1.5
+      filename: INCAR
+  - key: numeric_incar_smass
+    value:
+      checks:
+      - key: SMASS
+        max: 0
+        min: -3
+        allow_missing_key: true
+      filename: INCAR
+  - key: grounding_source
+    value:
+      filename: poscar_aimd.vasp
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 1
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 30000
+  scoring_checklist:
+  - id: artifact_incar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] INCAR file exists in the output directory.'
+  - id: text_incar_keywords
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains required AIMD tags: ENCUT, TEBEG, TEEND, IBRION, SMASS, NSW, POTIM.'
+  - id: numeric_incar_encut
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] ENCUT is set to 400 eV (non-spin-polarized AIMD cutoff per paper).'
+  - id: numeric_incar_ispin
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] ISPIN is 1 (non-spin-polarized) for AIMD as per paper, or absent.'
+  - id: numeric_incar_tebeg
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] TEBEG is set to 720 K as specified in the prompt.'
+  - id: numeric_incar_potim
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] POTIM is set to 2 fs (timestep per paper).'
+  - id: numeric_incar_smass
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] SMASS is set to a Nose-Hoover value (0 or -3) for NVT ensemble.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The answer is grounded in the provided P2 NaCoO2 structure.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completes within turn budget.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retries needed.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completes within duration budget.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Stays within total token budget.'
+- id: IG_lzcl_001_20250618
+  capability: input_generation
+  domain: battery
+  intent: Generate an ASE Python script to run molecular dynamics simulations of Li2ZrCl6 using the CHGNet
+    machine learning interatomic potential, computing Li diffusivity via mean-squared displacement analysis.
+  human_prompt_seed: Write an ASE Python script (run_md.py) that loads the Li2ZrCl6 supercell from lzcl_supercell.cif,
+    attaches the CHGNet calculator, and runs an NVT molecular dynamics simulation at 600 K for 1000 steps
+    with a 2 fs timestep. The script should compute and output the mean-squared displacement (MSD) of
+    Li ions and estimate the Li diffusivity D using the Einstein relation. Save the trajectory to md_trajectory.traj
+    and the diffusivity result to diffusivity_result.json.
+  tags: []
+  data_files:
+  - key: lzcl_structure
+    path: lzcl_supercell.cif
+    oss_url: ''
+    description: Li2ZrCl6 supercell structure file (approx 3x3x2 supercell of alpha-LZC primitive cell,
+      ~200 atoms) for MD simulation
+  reference_answers:
+  - key: artifact_script
+    value: run_md.py
+  - key: artifact_trajectory
+    value: md_trajectory.traj
+  - key: artifact_result
+    value: diffusivity_result.json
+  - key: script_contains_chgnet
+    value:
+      flags: []
+      tokens:
+      - CHGNet
+      - chgnet
+      filename: run_md.py
+  - key: script_contains_ase
+    value:
+      flags: []
+      tokens:
+      - ase
+      - MD
+      - VelocityVerlet
+      - NVT
+      filename: run_md.py
+  - key: script_contains_msd
+    value:
+      flags: []
+      tokens:
+      - mean_squared_displacement
+      - MSD
+      - msd
+      filename: run_md.py
+  - key: script_contains_diffusivity
+    value:
+      flags: []
+      tokens:
+      - diffusivity
+      - diffusion
+      - Einstein
+      filename: run_md.py
+  - key: grounding_source
+    value:
+      filename: lzcl_supercell.cif
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 60000
+  scoring_checklist:
+  - id: artifact_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] Output file run_md.py exists and is a valid Python script'
+  - id: artifact_trajectory
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] Script writes trajectory to md_trajectory.traj'
+  - id: artifact_result
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] Script writes diffusivity result to diffusivity_result.json'
+  - id: script_contains_chgnet
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 15.0
+    criterion: '[Must] Script imports and uses CHGNet calculator (chgnet package)'
+  - id: script_contains_ase
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 15.0
+    criterion: '[Must] Script uses ASE for MD (VelocityVerlet or similar integrator with NVT thermostat)'
+  - id: script_contains_msd
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] Script computes mean-squared displacement (MSD) of Li ions'
+  - id: script_contains_diffusivity
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] Script estimates diffusivity using Einstein relation D = MSD/(6Nt)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 5.0
+    criterion: '[Must] Answer is grounded in the provided Li2ZrCl6 structure file and paper methodology'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completed within 20 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent did not retry any tool call'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completed within 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent used fewer than 60000 tokens total'
+- id: IG_vasp_001_20250624
+  capability: input_generation
+  domain: battery
+  intent: Generate a complete set of VASP input files (INCAR, POTCAR, KPOINTS) for PBE+U structural relaxation
+    of a disordered rocksalt Li-Mn-V-O-F cathode, with Hubbard U corrections of 3.9 eV for Mn and 3.1
+    eV for V.
+  human_prompt_seed: Given the rocksalt structure file stmvf20_rocksalt.vasp, generate a complete set
+    of VASP input files (INCAR, POTCAR, KPOINTS) for a PBE+U structural relaxation. Use Hubbard U corrections
+    of 3.9 eV for Mn and 3.1 eV for V. Set energy convergence to 1E-6 eV and force convergence to 0.02
+    eV/Å. Use a reciprocal space discretization of 25 Å⁻¹ for k-point generation. Use PBE PAW potentials.
+    Save all three files to the current directory.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: structure
+    path: stmvf20_rocksalt.vasp
+    oss_url: ''
+    description: Disordered rocksalt POSCAR for Li1.171Mn0.343V0.486O1.8F0.2 (ST-LMVF20 composition),
+      Fm-3m symmetry, a≈4.175 Å
+  reference_answers:
+  - key: incar_exists
+    value: INCAR
+  - key: kpoints_exists
+    value: KPOINTS
+  - key: potcar_exists
+    value: POTCAR
+  - key: incar_pbe_u_settings
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - GGA = PE
+      - LDAU = .TRUE.
+      - LDAUTYPE = 2
+      - LDAUL
+      - LDAUU
+      - LDAUJ
+      - EDIFF = 1E-6
+      - EDIFFG = -0.02
+      - ISPIN = 2
+      - MAGMOM
+      - ISMEAR
+      filename: INCAR
+  - key: incar_u_values
+    value:
+      flags: []
+      pattern: LDAUU\s*=\s*.*3\.9.*3\.1
+      filename: INCAR
+  - key: kpoints_density
+    value:
+      flags: []
+      pattern: '25'
+      filename: KPOINTS
+  - key: grounding_source
+    value:
+      filename: INCAR
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: incar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] INCAR file exists'
+  - id: kpoints_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] KPOINTS file exists'
+  - id: potcar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] POTCAR file exists'
+  - id: incar_pbe_u_settings
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains PBE functional, LDAU settings, EDIFF=1E-6, EDIFFG=-0.02, ISPIN=2,
+      MAGMOM, and ISMEAR'
+  - id: incar_u_values
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] INCAR specifies LDAUU values including 3.9 (Mn) and 3.1 (V)'
+  - id: kpoints_density
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.5
+    criterion: '[Suggested] KPOINTS file uses reciprocal space discretization of 25 Å⁻¹ (KSPACING = 0.04
+      or equivalent)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] VASP inputs are configured for PBE+U relaxation of the provided disordered rocksalt
+      cathode structure'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: Completes within turn budget
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: No unnecessary retries
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: Completes within duration budget
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: Completes within token budget
+- id: IG_vasp_002_20250624
+  capability: input_generation
+  domain: battery
+  intent: Generate VASP input files for a hybrid HSE functional single-point energy calculation on a delithiated
+    rocksalt cathode structure, with a non-default exact-exchange fraction of 0.30 and reduced k-point
+    density for computational efficiency.
+  human_prompt_seed: Given the delithiated structure file delithiated_stmvf20.vasp, generate VASP input
+    files (INCAR, POTCAR, KPOINTS) for a hybrid HSE functional energy calculation. Use an exact-exchange
+    fraction of 0.30 (not the default 0.25). Set the reciprocal space discretization to 10 Å⁻¹ for k-point
+    generation to reduce computational cost. Use PBE PAW potentials. Save all three files to the current
+    directory.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: structure
+    path: delithiated_stmvf20.vasp
+    oss_url: ''
+    description: Partially delithiated disordered rocksalt POSCAR for Li-Mn-V-O-F cathode at an intermediate
+      state of charge
+  reference_answers:
+  - key: incar_exists
+    value: INCAR
+  - key: kpoints_exists
+    value: KPOINTS
+  - key: potcar_exists
+    value: POTCAR
+  - key: incar_hse_settings
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - LHFCALC = .TRUE.
+      - HFSCREEN = 0.2
+      - AEXAC
+      - ALGO
+      - ISPIN = 2
+      - GGA = PE
+      filename: INCAR
+  - key: incar_exact_exchange
+    value:
+      flags: []
+      pattern: AEXAC\s*=\s*0\.30
+      filename: INCAR
+  - key: kpoints_coarse
+    value:
+      flags: []
+      pattern: '10'
+      filename: KPOINTS
+  - key: grounding_source
+    value:
+      filename: INCAR
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: incar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] INCAR file exists'
+  - id: kpoints_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] KPOINTS file exists'
+  - id: potcar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] POTCAR file exists'
+  - id: incar_hse_settings
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains HSE settings: LHFCALC=.TRUE., HFSCREEN=0.2, ALGO, ISPIN=2, GGA=PE'
+  - id: incar_exact_exchange
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] INCAR specifies AEXAC = 0.30 (non-default exact-exchange fraction)'
+  - id: kpoints_coarse
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.5
+    criterion: '[Suggested] KPOINTS file uses reciprocal space discretization of 10 Å⁻¹ (KSPACING ≈ 0.10
+      or equivalent)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] VASP inputs are configured for HSE energy calculation of the provided delithiated
+      cathode structure'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: Completes within turn budget
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: No unnecessary retries
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: Completes within duration budget
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: Completes within token budget
+- id: IG_vasp_001_20250615
+  capability: input_generation
+  domain: battery
+  intent: Generate a VASP INCAR input file for a DFT SCF calculation of a cation-disordered rocksalt (DRX)
+    lithium-excess cathode material, using the computational parameters specified in Ji et al. (2019).
+  human_prompt_seed: Generate a VASP INCAR file for an SCF calculation of the cation-disordered rocksalt
+    cathode Li1.2Mn0.4Ti0.4O2. Use the POSCAR file provided in the working directory. Write the INCAR
+    file to the current directory.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: poscar
+    path: lmto_poscar.vasp
+    oss_url: ''
+    description: POSCAR file for Li1.2Mn0.4Ti0.4O2 (LMTO) in the rocksalt Fm-3m structure. Use pymatgen
+      to construct if MP entry is unavailable.
+  reference_answers:
+  - key: incarn_exists
+    value: INCAR
+  - key: incarn_contains
+    value:
+      tokens:
+      - ENCUT = 520
+      - ISMEAR
+      - EDIFF = 1E-06
+      - EDIFFG
+      - LREAL = Auto
+      - PREC = Accurate
+      filename: INCAR
+  - key: incarn_cutoff
+    value:
+      checks:
+      - key: ENCUT
+        expected: 520
+        tolerance: 0
+      filename: INCAR
+  - key: grounding_source
+    value:
+      filename: lmto_poscar.vasp
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: incarn_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] INCAR file exists in the working directory.'
+  - id: incarn_contains
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+    criterion: '[Must] INCAR contains essential VASP tags: ENCUT = 520, ISMEAR, EDIFF, EDIFFG, LREAL,
+      PREC.'
+  - id: incarn_cutoff
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+    criterion: '[Must] ENCUT is set to exactly 520 eV as specified in the paper.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The generated INCAR is appropriate for the provided POSCAR structure (DRX rocksalt).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: Agent completed within turn budget.
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: Agent did not require any retries.
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: Agent completed within duration budget.
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: Agent completed within total token budget.
+- id: IG_vasp_001_20250612
+  capability: input_generation
+  domain: battery
+  intent: Generate a VASP INCAR file configured for GGA+U calculations of small polaron migration in olivine
+    LiFePO₄, using the effective U parameter (U_eff = 4.3 eV) on Fe d-orbitals as reported in the paper.
+  human_prompt_seed: Using the structure in lifepo4_supercell.vasp as a reference, generate a VASP INCAR
+    file (save as INCAR) for a GGA+U calculation of small polaron migration in LiFePO₄. Use U_eff = 4.3
+    eV on Fe d-orbitals, the PAW method, and plane-wave basis settings appropriate for convergence within
+    3 meV per formula unit. Also generate a KPOINTS file with a mesh suitable for a 1×2×2 olivine supercell.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: lifepo4_supercell
+    path: lifepo4_supercell.vasp
+    oss_url: ''
+    description: LiFePO₄ olivine structure in POSCAR format for VASP input generation
+  reference_answers:
+  - key: artifact_incar
+    value: INCAR
+  - key: artifact_kpoints
+    value: KPOINTS
+  - key: incar_gga_tag
+    value:
+      flags:
+        PE: 91
+      tokens:
+      - GGA
+      filename: INCAR
+  - key: incar_ldau_tags
+    value:
+      tokens:
+      - LDAU = .TRUE.
+      - LDAUTYPE = 2
+      - LDAUU
+      - LDAUJ
+      - LDAUL
+      filename: INCAR
+  - key: incar_lmaxmix
+    value:
+      tokens:
+      - LMAXMIX = 4
+      filename: INCAR
+  - key: incar_encut
+    value:
+      checks:
+      - key: ENCUT
+        max: 700
+        min: 400
+        allow_missing_key: true
+      filename: INCAR
+  - key: grounding_source
+    value:
+      filename: lifepo4_supercell.vasp
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_incar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The file INCAR exists.'
+  - id: artifact_kpoints
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The file KPOINTS exists.'
+  - id: incar_gga_tag
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR specifies GGA = PE (Perdew-Burke-Ernzerhof) or equivalent GGA functional.'
+  - id: incar_ldau_tags
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR enables DFT+U with LDAU = .TRUE., LDAUTYPE = 2 (Dudarev), and specifies LDAUU,
+      LDAUJ, LDAUL for Fe d-orbitals.'
+  - id: incar_lmaxmix
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Suggested] INCAR sets LMAXMIX = 4 for d-orbital U corrections.'
+  - id: incar_encut
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Variable] INCAR sets an energy cutoff (ENCUT) between 400–700 eV, appropriate for convergence
+      within 3 meV/f.u.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The answer is grounded in the provided LiFePO₄ structure and GGA+U methodology
+      from the paper.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 20 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry failed tool calls.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 80000 tokens total.'
+- id: IG_chgnet_mlmd_002_20260528
+  capability: input_generation
+  domain: battery
+  intent: Set up a CHGNet machine-learning-potential molecular dynamics simulation (NVT ensemble, 1100
+    K, 2 fs timestep) for Li0.25Mn2O4 in a supercell containing spinel domain interfaces, to compute Li
+    mean-squared displacement over time.
+  human_prompt_seed: 'Set up a CHGNet molecular dynamics simulation for Li transport through a spinel
+    domain interface. Starting from the provided LiMn2O4 interface supercell structure, create a Li0.25Mn2O4
+    composition by removing Li atoms. Configure an NVT ensemble MD simulation using CHGNet as the interatomic
+    potential at T = 1100 K with a 2 fs timestep. Fix the positions of Mn atoms to study their effect
+    on Li transport. Write a Python script (run_mlmd.py) that uses ASE + CHGNet to run the simulation
+    and compute the mean-squared displacement (MSD) of Li atoms in the z-direction (perpendicular to the
+    interface) as a function of time. Output the MSD time series as msd_z_timeseries.csv with columns:
+    time_ps, msd_z_angstrom2.'
+  tags:
+  - code_mlip
+  data_files:
+  - key: interface_structure
+    path: limn2o4_interface_supercell.vasp
+    oss_url: ''
+    description: LiMn2O4 spinel-based interface supercell. The agent should delithiate to Li0.25Mn2O4
+      composition and insert the spinel variant interface as described in the paper.
+  reference_answers:
+  - key: artifact_script
+    value:
+      filename: run_mlmd.py
+  - key: artifact_msd
+    value:
+      filename: msd_z_timeseries.csv
+  - key: text_contains
+    value:
+      flags: case_insensitive
+      tokens:
+      - CHGNet
+      - NVT
+      - '1100'
+      - 2 fs
+      - MSD
+      - fixed
+      filename: run_mlmd.py
+  - key: numeric_timestep
+    value:
+      checks:
+      - key: timestep_fs
+        expected: 2
+        tolerance: 0
+        allow_missing_key: false
+      filename: run_mlmd.py
+  - key: numeric_temperature
+    value:
+      checks:
+      - key: temperature_K
+        expected: 1100
+        tolerance: 0
+        allow_missing_key: false
+      filename: run_mlmd.py
+  - key: grounding_source
+    value:
+      filename: run_mlmd.py
+  - key: turn_budget
+    value:
+      max: 50
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file run_mlmd.py exists and is a valid Python script.'
+  - id: artifact_msd
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file msd_z_timeseries.csv exists and contains CSV data with at least columns
+      time_ps and msd_z_angstrom2.'
+  - id: text_contains
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The MD script references CHGNet potential, NVT ensemble, 1100 K temperature, 2
+      fs timestep, MSD calculation, and fixed Mn atoms.'
+  - id: numeric_timestep
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] The simulation timestep is set to 2 fs as specified in the paper.'
+  - id: numeric_temperature
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] The simulation temperature is set to 1100 K as specified in the paper.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The MD script correctly implements the CHGNet NVT simulation protocol described
+      in the paper''s Methods section.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes the task within 50 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry any tool call more than 3 times.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes the task within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses no more than 80,000 tokens total.'
+- id: IG_cacathode_005_20250714
+  capability: input_generation
+  domain: battery
+  intent: Compute the AGNI (Adaptive, Generalizable, and Neighborhood-Informed) fingerprint for Ca2+ ions
+    in a given crystal structure using the formula from Kim et al. (2024) with specified Gaussian width
+    parameters and cosine damping.
+  human_prompt_seed: 'Compute the AGNI (Adaptive, Generalizable, and Neighborhood-Informed) fingerprint
+    for Ca sites in the W2O3(PO4)2 crystal structure from w2o3po4_cif.cif. Use the formula from the paper:
+    V_i^k(eta) = sum over neighbors j of (r_ij^k / r_ij) * exp(-(r_ij/eta)^2) * 0.5*(cos(pi*r_ij/R_c)+1),
+    with cutoff Rc=8 Å and neighbor radius 6.5 Å. Evaluate at eta values 0.80, 2.89, 6.80, and 16.0 Å
+    along the x, y, z directions. Save the fingerprint values to agni_fingerprints.json.'
+  tags: []
+  data_files:
+  - key: crystal_structure
+    path: w2o3po4_cif.cif
+    oss_url: ''
+    description: CIF file for orthorhombic W2O3(PO4)2 (mp-19522) from the Materials Project, the host
+      structure for Ca-ion intercalation studied in the paper.
+  reference_answers:
+  - key: grounding_source
+    value:
+      filename: w2o3po4_cif.cif
+      description: Seed data file containing W2O3(PO4)2 CIF structure from mp-19522
+  - key: artifact_agni_json
+    value:
+      filename: agni_fingerprints.json
+  - key: text_has_formula_params
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - eta
+      - Rc
+      - cutoff
+      filename: agni_fingerprints.json
+  - key: numeric_eta_values
+    value:
+      checks:
+      - key: n_eta_values
+        expected: 4
+        tolerance: 0
+        allow_missing_key: false
+      filename: agni_fingerprints.json
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 0.15
+    criterion: '[Must] Output is grounded in the w2o3po4_cif.cif seed file from mp-19522'
+  - id: artifact_agni_json
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.2
+    criterion: '[Must] File agni_fingerprints.json exists with computed AGNI fingerprint values'
+  - id: text_has_formula_params
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.15
+    criterion: '[Must] Output includes the AGNI formula parameters (eta values, Rc cutoff) used in computation'
+  - id: numeric_eta_values
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.2
+    criterion: '[Must] Fingerprint is computed at exactly 4 eta values (0.80, 2.89, 6.80, 16.0 Å) as specified
+      in the paper''s ML feature set'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within turn budget'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not retry failed tool calls'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within duration budget'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within total token budget'
+- id: IG_spol_002_20260109
+  capability: input_generation
+  domain: battery
+  intent: Generate a cluster expansion (CE) configuration for the Li-Mn-Nb-O-F disordered rocksalt system
+    using the smol package, with pair interactions up to 7 Å, triplet up to 4 Å, and quadruplet up to
+    4 Å, based on a rocksalt primitive cell with lattice parameter a = 3 Å.
+  human_prompt_seed: Using the provided rocksalt primitive cell (rocksalt_primitive.vasp, scale lattice
+    to a = 3 Å), set up a cluster expansion for the Li-Mn-Nb-O-F disordered rocksalt system using the
+    smol package. Include pair interactions up to 7 Å, triplet interactions up to 4 Å, and quadruplet
+    interactions up to 4 Å. The species on the cation sublattice are Li, Mn, Nb, and Vacancy; on the anion
+    sublattice are O and F. Save the cluster expansion setup script as `ce_setup.py` and a JSON summary
+    of the cluster space (including total number of orbits/correlation functions) as `ce_summary.json`.
+  tags: []
+  data_files:
+  - key: rocksalt_primitive
+    path: rocksalt_primitive.vasp
+    oss_url: ''
+    description: Rocksalt primitive cell (NaCl-type, space group Fm-3m) as the base lattice for cluster
+      expansion. The lattice parameter should be scaled to a = 3 Å.
+  reference_answers:
+  - key: artifact_script
+    value:
+      filename: ce_setup.py
+  - key: artifact_summary
+    value:
+      filename: ce_summary.json
+  - key: num_ecis
+    value:
+      checks:
+      - key: n_total_ecis
+        max: 900
+        min: 800
+      filename: ce_summary.json
+  - key: pair_cutoff
+    value:
+      checks:
+      - key: pair_cutoff_ang
+        expected: 7.0
+        tolerance: 0.1
+      filename: ce_setup.py
+  - key: triplet_cutoff
+    value:
+      checks:
+      - key: triplet_cutoff_ang
+        expected: 4.0
+        tolerance: 0.1
+      filename: ce_setup.py
+  - key: quadruplet_cutoff
+    value:
+      checks:
+      - key: quadruplet_cutoff_ang
+        expected: 4.0
+        tolerance: 0.1
+      filename: ce_setup.py
+  - key: grounding_source
+    value:
+      filename: ce_setup.py
+  - key: turn_budget
+    value:
+      max: 40
+  - key: no_retries
+    value:
+      max: 1
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] The file ce_setup.py exists and contains valid Python code using smol.'
+  - id: artifact_summary
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] The file ce_summary.json exists and is valid JSON.'
+  - id: num_ecis
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 15.0
+    criterion: '[Suggested] The total number of predefined ECIs (correlation functions) is approximately
+      858, within 800–900.'
+  - id: pair_cutoff
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] The pair interaction cutoff is set to 7 Å.'
+  - id: triplet_cutoff
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] The triplet interaction cutoff is set to 4 Å.'
+  - id: quadruplet_cutoff
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] The quadruplet interaction cutoff is set to 4 Å.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 5.0
+    criterion: '[Must] The CE setup is grounded in the source paper''s methodology for LMNOF.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] The agent completes the task within 40 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] The agent does not retry any tool call more than once.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] The agent completes the task within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] The agent uses fewer than 80000 tokens total.'
+- id: IG_vasp_001_20250617
+  capability: input_generation
+  domain: battery
+  intent: Generate a complete set of VASP input files (POSCAR, INCAR, KPOINTS, POTCAR) for a DFT ground-state
+    energy calculation of the superionic conductor Na10SnP2S12 in the tetragonal LGPS structure type,
+    using PBE functional and PAW pseudopotentials with a 4×4×4 Monkhorst-Pack k-point grid.
+  human_prompt_seed: Generate VASP input files (POSCAR, INCAR, KPOINTS, POTCAR) for a DFT ground-state
+    calculation of Na10SnP2S12 using the provided CIF file. Use PBE functional, PAW pseudopotentials,
+    and a 4×4×4 Monkhorst-Pack k-point grid. Write all four files to the current working directory.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: na10snp2s12.cif
+    path: na10snp2s12.cif
+    oss_url: ''
+    description: CIF file for Na10SnP2S12 (or LGPS-type Na10SnP2S12 structure) in tetragonal symmetry,
+      space group P-4m2 or P4_2/nmc
+  reference_answers:
+  - key: artifact_poscar
+    value:
+      filename: POSCAR
+  - key: artifact_incar
+    value:
+      filename: INCAR
+  - key: artifact_kpoints
+    value:
+      filename: KPOINTS
+  - key: artifact_potcar
+    value:
+      filename: POTCAR
+  - key: incar_gga_pe
+    value:
+      tokens:
+      - GGA = PE
+      filename: INCAR
+  - key: incar_encut
+    value:
+      checks:
+      - key: ENCUT
+        max: 600
+        min: 300
+        allow_missing_key: false
+      filename: INCAR
+  - key: kpoints_grid
+    value:
+      tokens:
+      - '4'
+      - '4'
+      - '4'
+      filename: KPOINTS
+  - key: kpoints_monkhorst
+    value:
+      tokens:
+      - Monkhorst
+      filename: KPOINTS
+  - key: potcar_elements
+    value:
+      tokens:
+      - Na
+      - Sn
+      - P
+      - S
+      filename: POTCAR
+  - key: grounding_source
+    value:
+      filename: na10snp2s12.cif
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 60000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] POSCAR file exists and contains a valid crystal structure for Na10SnP2S12'
+  - id: artifact_incar
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] INCAR file exists with valid VASP input parameters'
+  - id: artifact_kpoints
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] KPOINTS file exists specifying a k-point mesh'
+  - id: artifact_potcar
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] POTCAR file exists with pseudopotentials for Na, Sn, P, S'
+  - id: incar_gga_pe
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] INCAR specifies GGA = PE (PBE functional)'
+  - id: incar_encut
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 5.0
+    criterion: '[Suggested] INCAR contains ENCUT between 300-600 eV'
+  - id: kpoints_grid
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] KPOINTS specifies a 4×4×4 grid as required for NMPS structures'
+  - id: kpoints_monkhorst
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 5.0
+    criterion: '[Must] KPOINTS uses Monkhorst-Pack scheme'
+  - id: potcar_elements
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] POTCAR contains PAW_PBE pseudopotentials for Na, Sn, P, and S'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] Generated files are consistent with the provided CIF seed structure'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 1.0
+    criterion: '[Must] Completes within 30 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 1.0
+    criterion: '[Must] No file-read retries needed'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 1.0
+    criterion: '[Must] Completes within 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 1.0
+    criterion: '[Must] Total tokens under 60000'
+- id: IG_vasp_001_20250508
+  capability: input_generation
+  domain: battery
+  intent: Generate a VASP INCAR file for a PBEsol+U structural relaxation of orthorhombic LiMnO2 with
+    Hubbard U=3.9 eV applied to Mn-3d states, using the calculation parameters specified in the paper's
+    Supplementary Information Table S1.
+  human_prompt_seed: Generate a VASP INCAR file for a PBEsol+U structural relaxation of the provided orthorhombic
+    LiMnO2 structure. The Hubbard U=3.9 eV should be applied to Mn-3d states. Use the standard VASP calculation
+    parameters for this type of calculation. Write the INCAR file to the working directory.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: structure
+    path: limno2_orthorhombic.cif
+    oss_url: ''
+    description: Orthorhombic LiMnO2 (Pmmn) crystal structure from Materials Project
+  reference_answers:
+  - key: artifact_incar
+    value: VASP_INCAR
+  - key: grounding_source
+    value:
+      filename: limno2_orthorhombic.cif
+  - key: text_incar_gga
+    value:
+      flags:
+      - all_present
+      tokens:
+      - GGA = PS
+      filename: VASP_INCAR
+  - key: text_incar_ldau
+    value:
+      flags:
+      - all_present
+      tokens:
+      - LDAU = .TRUE.
+      - LDAUTYPE = 2
+      - LDAUU = 3.9 0 0
+      - LDAUL = 2 -1 -1
+      - LDAUJ = 0 0 0
+      filename: VASP_INCAR
+  - key: text_incar_encut
+    value:
+      flags:
+      - all_present
+      tokens:
+      - ENCUT = 520
+      filename: VASP_INCAR
+  - key: text_incar_ediff
+    value:
+      flags:
+      - all_present
+      tokens:
+      - EDIFF = 1E-6
+      filename: VASP_INCAR
+  - key: text_incar_ediffg
+    value:
+      flags:
+      - all_present
+      tokens:
+      - EDIFFG = -0.01
+      filename: VASP_INCAR
+  - key: text_incar_algo
+    value:
+      flags:
+      - all_present
+      tokens:
+      - ISMEAR = 0
+      - SIGMA = 0.05
+      filename: VASP_INCAR
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_incar
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] A VASP INCAR file named VASP_INCAR exists in the working directory.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] The answer is grounded in the provided structure file and the referenced DFT parameters.'
+  - id: text_incar_gga
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] INCAR contains GGA=PS for PBEsol functional.'
+  - id: text_incar_ldau
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 15.0
+    criterion: '[Must] INCAR contains Hubbard U parameters: LDAU=.TRUE., LDAUTYPE=2, LDAUU=3.9 for Mn
+      (d-orbital, l=2), LDAUL=2 for Mn.'
+  - id: text_incar_encut
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] INCAR contains ENCUT=520 (eV plane-wave cutoff).'
+  - id: text_incar_ediff
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 5.0
+    criterion: '[Must] INCAR contains EDIFF=1E-6 (energy convergence).'
+  - id: text_incar_ediffg
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 5.0
+    criterion: '[Must] INCAR contains EDIFFG=-0.01 (force convergence in eV/Å).'
+  - id: text_incar_algo
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 5.0
+    criterion: '[Variable] INCAR contains appropriate smearing settings for an insulator (ISMEAR=0, SIGMA=0.05).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not request retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 50000 tokens total.'
+- id: IG_qe_001_20250615
+  capability: input_generation
+  domain: battery
+  intent: Generate Quantum ESPRESSO input files for self-consistent Hubbard U calculation on Mn-3d states
+    in orthorhombic LiMnO2 using the DFPT-based HP module.
+  human_prompt_seed: Generate Quantum ESPRESSO input files for a self-consistent Hubbard U calculation
+    on Mn-3d states in orthorhombic LiMnO2. Use the provided limno2_orthorhombic.cif to create the scf
+    input file (limno2_scf.in) and the HP calculation input file (limno2_hp.in). Use PBEsol functional
+    and apply Hubbard U on Mn-3d orbitals. Write all output files to the current working directory.
+  tags:
+  - eng_qe
+  data_files:
+  - key: structure
+    path: limno2_orthorhombic.cif
+    oss_url: ''
+    description: Orthorhombic LiMnO2 (Pmmn) structure from Materials Project.
+  reference_answers:
+  - key: scf_input_exists
+    value: limno2_scf.in
+  - key: hp_input_exists
+    value: limno2_hp.in
+  - key: scf_functional
+    value:
+      flags:
+      - any_order
+      tokens:
+      - input_dft = 'pbesol'
+      filename: limno2_scf.in
+  - key: scf_mn_species
+    value:
+      flags:
+      - regex
+      pattern: Mn
+      filename: limno2_scf.in
+  - key: hp_input_hubbard
+    value:
+      flags:
+      - regex
+      - case_insensitive
+      pattern: hubbard
+      filename: limno2_hp.in
+  - key: grounding_source
+    value:
+      filename: limno2_orthorhombic.cif
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 1
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: scf_input_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] SCF input file limno2_scf.in exists'
+  - id: hp_input_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] HP calculation input file limno2_hp.in exists'
+  - id: scf_functional
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] SCF input specifies PBEsol functional (input_dft = ''pbesol'')'
+  - id: scf_mn_species
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] SCF input includes Mn atomic species with appropriate pseudopotential'
+  - id: hp_input_hubbard
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+    criterion: '[Must] HP input file contains Hubbard parameter calculation settings (hubbard keyword)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Input files are grounded in the provided LiMnO2 structure'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completes within 30 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retry requests needed'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completes within 600 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Uses no more than 50000 tokens total'
+- id: IG_vasp_001_20250815
+  capability: input_generation
+  domain: battery
+  intent: Generate a VASP INCAR file for structural relaxation of a Na4TiP2O9 (NTP) solid-state electrolyte
+    in the orthorhombic Bmem phase, using MPRelaxSet-derived settings with tightened force convergence.
+  human_prompt_seed: Generate a VASP INCAR file for relaxing the orthorhombic Na4TiP2O9 structure provided
+    in na4tip2o9_orthorhombic.vasp. Use MPRelaxSet-derived settings with a tightened force convergence
+    criterion of 1e-2 eV/Angstrom. Write the INCAR to the current working directory.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: structure
+    path: na4tip2o9_orthorhombic.vasp
+    oss_url: ''
+    description: POSCAR/vasp-format structure file for orthorhombic Na4TiP2O9 (NTP) in Bmem (space group
+      67) high-temperature phase.
+  reference_answers:
+  - key: incar_exists
+    value: INCAR
+  - key: incar_content
+    value:
+      flags:
+      - '-1.0E-02'
+      - '-0.01'
+      tokens:
+      - ISIF
+      - IBRION
+      - NSW
+      - EDIFF
+      - EDIFFG
+      - ISMEAR
+      - SIGMA
+      - ENCUT
+      - LREAL
+      - ALGO
+      filename: INCAR
+  - key: force_convergence
+    value:
+      checks:
+      - key: EDIFFG
+        expected: -0.01
+        tolerance: 0.001
+      filename: INCAR
+  - key: grounding_source
+    value:
+      filename: na4tip2o9_orthorhombic.vasp
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: incar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] An INCAR file exists in the working directory.'
+  - id: incar_content
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains essential VASP relaxation tags (ISIF, IBRION, NSW, EDIFF, EDIFFG,
+      ISMEAR, SIGMA, ENCUT, LREAL, ALGO).'
+  - id: force_convergence
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] EDIFFG is set to -0.01 (force convergence of 1e-2 eV/Angstrom, negative sign indicates
+      force-based stopping).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The agent uses the provided structure file na4tip2o9_orthorhombic.vasp as input.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Variable] Agent completes the task within the turn budget.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Variable] Agent does not retry failed tool calls unnecessarily.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Variable] Agent completes the task within the duration budget.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Variable] Agent completes the task within the total token budget.'
+- id: IG_vasp_001_20260108
+  capability: input_generation
+  domain: battery
+  intent: Generate a VASP INCAR file for Γ-point-only prerelaxation of a MnO2 polymorph structure using
+    the SCAN meta-GGA functional, with PAW pseudopotentials, spin-polarized AFM initialization, and convergence
+    criteria of 2×10⁻⁷ eV/atom for electronic steps and 0.02 eV/Å for ionic forces.
+  human_prompt_seed: Generate a VASP INCAR file for Γ-point-only prerelaxation of the MnO2 structure in
+    poscar_mno2_beta.cif. Use the SCAN meta-GGA functional with PAW pseudopotentials, spin-polarized AFM
+    initialization, reciprocal space discretization of at least 25 Å⁻¹, electronic convergence of 2×10⁻⁷
+    eV/atom, and ionic force convergence of 0.02 eV/Å. Write the INCAR to the current working directory.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: mno2_structure
+    path: poscar_mno2_beta.cif
+    oss_url: ''
+    description: β-MnO2 (pyrolusite) crystal structure from Materials Project, space group P4_2/mnm (#136),
+      rutile-type with [1×1] tunnels.
+  reference_answers:
+  - key: incar_exists
+    value: INCAR
+  - key: incar_settings
+    value:
+      flags:
+      - ISYM = 0
+      tokens:
+      - METAGGA = SCAN
+      - EDIFF = 2E-7
+      - EDIFFG = -0.02
+      - ISPIN = 2
+      - PREC = Accurate
+      - ENCUT
+      filename: INCAR
+  - key: kpoints_exists
+    value: KPOINTS
+  - key: kpoints_gamma
+    value:
+      flags: []
+      tokens:
+      - Gamma
+      - 0 0 0
+      - 1 1 1
+      filename: KPOINTS
+  - key: grounding_source
+    value:
+      filename: poscar_mno2_beta.cif
+      description: β-MnO2 structure from Materials Project mp-13
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: incar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] INCAR file exists in the working directory.'
+  - id: incar_settings
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+    criterion: '[Must] INCAR contains METAGGA=SCAN, EDIFF=2E-7, EDIFFG=-0.02, ISPIN=2, and PREC=Accurate
+      settings.'
+  - id: kpoints_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] KPOINTS file exists for Γ-point-only sampling.'
+  - id: kpoints_gamma
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] KPOINTS specifies a single Γ-point mesh (1×1×1 or Gamma-centered 0 0 0).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Answer is grounded in the β-MnO2 structure file from Materials Project.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not request retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 80000 total tokens.'
+- id: IG_vasp_001_20250625
+  capability: input_generation
+  domain: battery
+  intent: Generate a VASP INCAR file for a nudged elastic band (NEB) calculation of Na migration in P2
+    Na_xCoO2 using the computational parameters from the referenced paper.
+  human_prompt_seed: Generate a VASP INCAR file for a nudged elastic band (NEB) calculation of Na-ion
+    migration in P2 NaCoO2. The INCAR should be configured for a supercell system with 7 interpolated
+    images between initial and final states. Place the INCAR in the working directory.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: p2_nacoo2_poscar
+    path: p2_nacoo2_poscar.vasp
+    oss_url: ''
+    description: P2 NaCoO2 structure POSCAR as reference for the NEB system.
+  reference_answers:
+  - key: artifact_incar
+    value:
+      filename: INCAR
+      description: Generated VASP INCAR file for NEB calculation.
+  - key: text_incar_keywords
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - ISPIN
+      - ENCUT
+      - IBRION
+      - NSW
+      - IMAGES
+      filename: INCAR
+  - key: numeric_incar_encut
+    value:
+      checks:
+      - key: ENCUT
+        expected: 520
+        tolerance: 0
+      filename: INCAR
+  - key: numeric_incar_ispin
+    value:
+      checks:
+      - key: ISPIN
+        expected: 2
+        tolerance: 0
+      filename: INCAR
+  - key: numeric_incar_images
+    value:
+      checks:
+      - key: IMAGES
+        expected: 7
+        tolerance: 0
+      filename: INCAR
+  - key: numeric_incar_ibrion
+    value:
+      checks:
+      - key: IBRION
+        expected: 3
+        tolerance: 0
+      filename: INCAR
+  - key: grounding_source
+    value:
+      filename: p2_nacoo2_poscar.vasp
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 1
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 30000
+  scoring_checklist:
+  - id: artifact_incar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] INCAR file exists in the output directory.'
+  - id: text_incar_keywords
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains required NEB tags: ISPIN, ENCUT, IBRION, NSW, IMAGES.'
+  - id: numeric_incar_encut
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] ENCUT is set to 520 eV as specified in the paper.'
+  - id: numeric_incar_ispin
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] ISPIN is set to 2 (spin-polarized) for NEB as per paper.'
+  - id: numeric_incar_images
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] IMAGES is set to 7 for the NEB path.'
+  - id: numeric_incar_ibrion
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Must] IBRION is set to 3 (quick-min NEB algorithm) or equivalent NEB-capable value.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The answer is grounded in the provided P2 NaCoO2 structure.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completes within turn budget.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retries needed.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completes within duration budget.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Stays within total token budget.'
+- id: IG_vasp_002_20260125
+  capability: input_generation
+  domain: battery
+  intent: Generate VASP INCAR files for a nudged elastic band (NEB) calculation of Cr migration from octahedral
+    to tetrahedral site in a disordered rocksalt cathode, using parameters from Huang et al. 2021.
+  human_prompt_seed: 'Generate VASP INCAR files for a nudged elastic band (NEB) calculation to compute
+    the Cr migration barrier from octahedral to tetrahedral site in a disordered rocksalt cathode. Use
+    the provided initial (cr_oct_initial_poscar) and final (cr_tet_final_poscar) structures. Create 5
+    intermediate images. Write one INCAR file to each of the directories 00/, 01/, 02/, 03/, 04/, 05/,
+    06/ (endpoints + 5 images). Use the parameters from Huang et al. 2021: GGA functional without Hubbard
+    U, convergence thresholds of 10^-6 eV for electronic steps and 0.02 eV/Å for ionic steps.'
+  tags:
+  - eng_vasp
+  data_files:
+  - key: initial_structure
+    path: cr_oct_initial_poscar
+    oss_url: ''
+    description: Initial POSCAR with Cr in octahedral site. Use mp-1198821 as template DRX structure.
+  - key: final_structure
+    path: cr_tet_final_poscar
+    oss_url: ''
+    description: Final POSCAR with Cr in tetrahedral site. Derived from same template.
+  reference_answers:
+  - key: artifact_incar_dirs
+    value: 00/INCAR
+  - key: text_incar
+    value:
+      tokens:
+      - ENCUT = 520
+      - PREC = Accurate
+      - ISMEAR = 0
+      - SIGMA = 0.05
+      - EDIFF = 1E-6
+      - EDIFFG = -0.02
+      - IBRION = 3
+      - POTIM = 0
+      - IMAGES = 5
+      filename: 00/INCAR
+  - key: numeric_incar
+    value:
+      checks:
+      - key: ENCUT
+        expected: 520
+        tolerance: 0
+      - key: EDIFF
+        expected: 1.0e-06
+        tolerance: 0
+      - key: LDAU
+        expected: 0
+        tolerance: 0
+      - key: IMAGES
+        expected: 5
+        tolerance: 0
+      filename: 01/INCAR
+  - key: artifact_all_dirs
+    value: 06/INCAR
+  - key: grounding_source
+    value:
+      filename: cr_oct_initial_poscar
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_incar_dirs
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] INCAR files exist in directories 00/ through 06/'
+  - id: text_incar
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 15.0
+    criterion: '[Must] INCAR contains NEB-specific tags: IBRION=3, POTIM=0, IMAGES=5, plus standard convergence
+      tags'
+  - id: numeric_incar
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 20.0
+    criterion: '[Must] ENCUT=520, EDIFF=1E-6, LDAU disabled (no U correction), IMAGES=5'
+  - id: artifact_all_dirs
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] All 7 directories (00-06) contain INCAR files'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] NEB setup uses the provided endpoint structures and follows Huang et al. 2021 parameters'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: Completed within 20 turns
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: No retry turns used
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: Completed within 600 seconds
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: Total tokens within 80,000
+- id: IG_vasp_001_20250115
+  capability: input_generation
+  domain: battery
+  intent: 'Generate VASP input files (INCAR, KPOINTS, POTCAR) for calculating Li migration activation
+    barriers in a LiCoO₂ supercell, using the computational parameters specified in the paper: SGGA functional,
+    PAW method, 400 eV plane-wave cutoff, and appropriate k-point sampling.'
+  human_prompt_seed: 'Generate the VASP input files (INCAR, KPOINTS, and POTCAR) needed to compute the
+    Li migration activation barrier in the provided LiCoO₂ supercell (licoo2_divacancy_supercell.vasp).
+    Use the DFT settings from the paper: SGGA functional, PAW pseudopotentials, 400 eV energy cutoff.
+    Choose an appropriate k-point grid for a ~2×2×1 supercell of a layered oxide. Save the files as INCAR,
+    KPOINTS, and POTCAR in the working directory.'
+  tags:
+  - eng_vasp
+  data_files:
+  - key: licoo2_supercell
+    path: licoo2_divacancy_supercell.vasp
+    oss_url: ''
+    description: LiCoO₂ supercell with two adjacent Li vacancies (2×2×1 supercell, 12 formula units minus
+      2 Li). In practice the agent would construct this, but for isolation we reference the MP structure.
+  reference_answers:
+  - key: artifact_incar
+    value: INCAR
+  - key: artifact_kpoints
+    value: KPOINTS
+  - key: artifact_potcar
+    value: POTCAR
+  - key: incar_encut
+    value:
+      checks:
+      - key: ENCUT
+        expected: 400
+        tolerance: 0
+      filename: INCAR
+  - key: incar_gga
+    value:
+      checks:
+      - key: GGA
+        allowed_values:
+        - PE
+        - PE 54
+        allow_missing_key: false
+      filename: INCAR
+  - key: incar_ispin
+    value:
+      checks:
+      - key: ISPIN
+        expected: 2
+        tolerance: 0
+      filename: INCAR
+  - key: kpoints_grid
+    value:
+      flags:
+      - re.MULTILINE
+      pattern: 3\s+3\s+[35]
+      filename: KPOINTS
+  - key: grounding_source
+    value:
+      filename: licoo2_divacancy_supercell.vasp
+  - key: turn_budget
+    value:
+      max: 25
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_incar
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] INCAR file exists in the working directory.'
+  - id: artifact_kpoints
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] KPOINTS file exists in the working directory.'
+  - id: artifact_potcar
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] POTCAR file exists in the working directory.'
+  - id: incar_encut
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 20.0
+    criterion: '[Must] ENCUT = 400 eV as specified in the paper.'
+  - id: incar_gga
+    axis: correctness
+    verify: text_file_regex
+    weight: 15.0
+    criterion: '[Must] GGA functional is set to PE (PBE) for SGGA as specified.'
+  - id: incar_ispin
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] ISPIN = 2 for spin-polarized calculation as specified.'
+  - id: kpoints_grid
+    axis: correctness
+    verify: text_file_regex
+    weight: 10.0
+    criterion: '[Suggested] KPOINTS grid is 3×3×5 or 3×3×3 as appropriate for the supercell size per the
+      paper.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 15.0
+    criterion: '[Must] VASP inputs are configured for the provided LiCoO₂ supercell structure.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Variable] Agent completes within 25 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Variable] Agent does not exceed retry budget.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Variable] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Variable] Agent stays within 50000 total token budget.'
+- id: IG_vasp_003_20260125
+  capability: input_generation
+  domain: battery
+  intent: Generate a VASP INCAR file for a GGA+U DFT calculation of a Li-rich disordered rocksalt cathode
+    material (Li1.2Mn0.2Ti0.4Cr0.2O2) using the computational parameters specified in Huang et al. 2021.
+  human_prompt_seed: 'Generate a VASP INCAR file for a GGA+U static energy calculation of the Li-rich
+    disordered rocksalt cathode Li1.2Mn0.2Ti0.4Cr0.2O2. Use the POSCAR provided as lmtc02o_poscar. Write
+    the INCAR file to the working directory. Apply the computational parameters from Huang et al. 2021
+    (Nature Energy): 520 eV plane-wave cutoff, PBE functional, Hubbard U corrections of 3.9 eV for Mn
+    and 3.5 eV for Cr (no U on Ti), convergence thresholds of 10^-6 eV for electronic steps and 0.02 eV/Å
+    for ionic steps.'
+  tags:
+  - eng_vasp
+  data_files:
+  - key: structure
+    path: lmtc02o_poscar
+    oss_url: ''
+    description: POSCAR for Li1.2Mn0.2Ti0.4Cr0.2O2 disordered rocksalt structure (Fm-3m). Use mp-1198821
+      as a representative DRX structure and modify composition.
+  reference_answers:
+  - key: artifact_incar
+    value: INCAR
+  - key: text_incar
+    value:
+      tokens:
+      - ENCUT = 520
+      - PREC = Accurate
+      - ISMEAR = 0
+      - SIGMA = 0.05
+      - EDIFF = 1E-6
+      - EDIFFG = -0.02
+      - IBRION = 2
+      - NSW = 0
+      - LREAL = Auto
+      - ISIF = 2
+      - LDAU = .TRUE.
+      - LDAUTYPE = 2
+      - LDAUL
+      - LDAUU
+      - LDAUJ
+      filename: INCAR
+  - key: numeric_incar
+    value:
+      checks:
+      - key: ENCUT
+        expected: 520
+        tolerance: 0
+      - key: EDIFF
+        expected: 1.0e-06
+        tolerance: 0
+      - key: U_Mn
+        expected: 3.9
+        tolerance: 0
+      - key: U_Cr
+        expected: 3.5
+        tolerance: 0
+      - key: U_Ti
+        expected: 0
+        tolerance: 0
+        allow_missing_key: true
+      filename: INCAR
+  - key: grounding_source
+    value:
+      filename: lmtc02o_poscar
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_incar
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] INCAR file exists in the working directory'
+  - id: text_incar
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 15.0
+    criterion: '[Must] INCAR contains required VASP tags: ENCUT, PREC, ISMEAR, SIGMA, EDIFF, EDIFFG, IBRION,
+      NSW, LREAL, ISIF, LDAU, LDAUTYPE, LDAUL, LDAUU, LDAUJ'
+  - id: numeric_incar
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 20.0
+    criterion: '[Must] ENCUT=520 eV, EDIFF=1E-6, U_Mn=3.9 eV, U_Cr=3.5 eV, U_Ti=0 (or absent)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] Agent used the provided structure file as input'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: Completed within 15 turns
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: No retry turns used
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: Completed within 300 seconds
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: Total tokens within 50,000
+- id: IG_vasp_004_20260508
+  capability: input_generation
+  domain: battery
+  intent: Generate a complete VASP input deck (INCAR, KPOINTS, POTCAR) for a DFT calculation of the Li10GeP2S12
+    (LGPS) solid electrolyte structure using PAW-GGA with the parameters specified in the paper.
+  human_prompt_seed: Generate a complete VASP input deck (INCAR, KPOINTS, POTCAR file list) for a static
+    DFT energy calculation of the LGPS structure in lgps_poscar.vasp. Use PAW-GGA with 520 eV plane-wave
+    cutoff and a k-point density of at least 500/n_atoms. Write the INCAR and KPOINTS files to the working
+    directory.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: lgpos_structure
+    path: lgps_poscar.vasp
+    oss_url: ''
+    description: Crystal structure of Li10GeP2S12 (LGPS) superionic conductor from Materials Project.
+  reference_answers:
+  - key: artifact_incar
+    value: INCAR
+  - key: artifact_kpoints
+    value: KPOINTS
+  - key: grounding_source
+    value:
+      filename: INCAR
+  - key: encut_check
+    value:
+      tokens:
+      - ENCUT = 520
+      - ENCUT=520
+      filename: INCAR
+  - key: algo_check
+    value:
+      tokens:
+      - GGA
+      - PAW
+      filename: INCAR
+  - key: kpoint_density
+    value:
+      checks:
+      - key: kpoint_grid_product
+        max: 5000
+        min: 100
+        allow_missing_key: false
+      filename: KPOINTS
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_incar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] INCAR file exists with valid VASP parameters.'
+  - id: artifact_kpoints
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] KPOINTS file exists with a valid k-point grid.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The input deck parameters match the DFT methodology described in the paper (PAW-GGA,
+      520 eV cutoff, k-point density ≥500/n_atoms).'
+  - id: encut_check
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] ENCUT is set to 520 eV in INCAR.'
+  - id: algo_check
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] GGA functional and PAW method are specified in INCAR.'
+  - id: kpoint_density
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.8
+    criterion: '[Suggested] KPOINTS grid density satisfies the ≥500/n_atoms requirement for the LGPS structure.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 1.0
+    criterion: '[Must] Complete within 20 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 1.0
+    criterion: '[Must] No file overwrites or retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 1.0
+    criterion: '[Must] Complete within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 1.0
+    criterion: '[Must] Use fewer than 50000 tokens total.'

@@ -371,3 +371,251 @@ questions:
     axis: efficiency
     verify: token_budget
     criterion: '[Must] Total token usage within 50000'
+- id: WF_phonon_003_20250608
+  capability: workflow_orchestration
+  domain: semiconductor
+  intent: Generate a Phonopy workflow script to compute the phonon dispersion relation for hexagonal H-MgZn₂
+    using the finite displacement method, as described in the paper's methods section. The script should
+    set up the supercell, generate displaced structures, and define the high-symmetry k-point path for
+    the hexagonal Brillouin zone.
+  human_prompt_seed: Create a Phonopy workflow script (run_phonopy.py) to compute the phonon dispersion
+    for H-MgZn₂ using the structure in h_mgzn2_poscar.vasp. The script should use the finite displacement
+    method, set up an appropriate supercell, and plot the phonon band structure along the high-symmetry
+    path for the hexagonal Brillouin zone (Γ-M-K-Γ-A-L-H-Γ). The script should be executable with `python
+    run_phonopy.py`.
+  tags: []
+  data_files:
+  - key: h_mgzn2_poscar
+    path: h_mgzn2_poscar.vasp
+    oss_url: ''
+    description: POSCAR file for hexagonal H-MgZn₂ (C14 Laves phase, space group P6₃/mmc) with lattice
+      parameters a=b=5.223 Å, c=8.566 Å, containing 12 atoms (4 Mg + 8 Zn) in the conventional cell.
+  reference_answers:
+  - key: script_exists
+    value: run_phonopy.py
+  - key: script_imports
+    value:
+      flags:
+        min_tokens: 2
+        all_tokens_required: false
+      tokens:
+      - import phonopy
+      - from phonopy import Phonopy
+      - import numpy
+      filename: run_phonopy.py
+  - key: supercell_setup
+    value:
+      flags:
+        min_tokens: 1
+        all_tokens_required: false
+      tokens:
+      - dimensions
+      - dim=
+      - supercell_matrix
+      filename: run_phonopy.py
+  - key: band_path
+    value:
+      flags:
+        min_tokens: 4
+        all_tokens_required: false
+      tokens:
+      - Gamma
+      - M
+      - K
+      - A
+      - L
+      - H
+      filename: run_phonopy.py
+  - key: finite_displacement
+    value:
+      flags:
+        min_tokens: 1
+        all_tokens_required: false
+      tokens:
+      - displacement_distance
+      - distance
+      - '0.01'
+      filename: run_phonopy.py
+  - key: grounding_source
+    value:
+      filename: h_mgzn2_poscar.vasp
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: script_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 5.0
+    criterion: '[Must] Output file run_phonopy.py exists'
+  - id: script_imports
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 15.0
+    criterion: '[Must] Script imports phonopy library and numpy (at least 2 of the listed import tokens)'
+  - id: supercell_setup
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 15.0
+    criterion: '[Must] Script specifies a supercell dimension or matrix (e.g., dim=''2 2 2'' or supercell_matrix)'
+  - id: band_path
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 20.0
+    criterion: '[Suggested] Script defines a band path containing at least 4 of the hexagonal high-symmetry
+      points: Γ (Gamma), M, K, A, L, H'
+  - id: finite_displacement
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 15.0
+    criterion: '[Suggested] Script sets a finite displacement distance (typically 0.01 Å as used by Phonopy
+      default)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] Script reads structure from h_mgzn2_poscar.vasp as the input structure'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 30 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent uses at most 3 retries'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 600 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses at most 50000 tokens total'
+- id: WF_screening_004_20250524
+  capability: workflow_orchestration
+  domain: semiconductor
+  intent: Implement a high-throughput screening workflow that filters 2D materials by band gap (0.1 <
+    Eg < 3 eV) and conductivity effective mass (m* < 1 m_e), reproducing the down-selection criteria from
+    Set A to Set B described in the paper.
+  human_prompt_seed: 'Write a Python script that reads set_a_materials.csv and filters compounds to produce
+    Set B using the criteria: (1) band gap between 0.1 and 3.0 eV, AND (2) either electron or hole average
+    effective mass < 1.0 m_e. Save the filtered results to set_b_materials.csv. The script should be named
+    screen_set_a_to_b.py.'
+  tags: []
+  data_files:
+  - key: set_a_data
+    path: set_a_materials.csv
+    oss_url: ''
+    description: 'CSV file containing Set A materials (166 non-metallic compounds from the MC2D database).
+      Columns: formula, gap_eV, electron_mass_x, electron_mass_y, electron_mass_ave, hole_mass_x, hole_mass_y,
+      hole_mass_ave. The agent should populate this with a representative subset of compounds from Table
+      II of the paper, including at least: WS2 (gap=1.848, m_e=0.329, m_h=0.640), MoS2 (gap=1.631, m_e=0.486,
+      m_h=1.980), GeSe (gap=1.054, m_e=0.193, m_h=0.170), SnTe (gap=0.683, m_e=0.226, m_h=0.084), Sb (gap=1.232,
+      m_e=0.230, m_h=0.347).'
+  reference_answers:
+  - key: artifact_screen_script
+    value:
+      filename: screen_set_a_to_b.py
+  - key: artifact_set_b_csv
+    value:
+      filename: set_b_materials.csv
+  - key: text_contains_ws2
+    value:
+      flags: ''
+      tokens:
+      - WS2
+      filename: set_b_materials.csv
+  - key: text_contains_geSe
+    value:
+      flags: ''
+      tokens:
+      - GeSe
+      filename: set_b_materials.csv
+  - key: text_numeric_count
+    value:
+      checks:
+      - key: n_compounds
+        max: 10
+        min: 3
+        allow_missing_key: true
+      filename: set_b_materials.csv
+  - key: grounding_source
+    value:
+      filename: set_a_materials.csv
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_screen_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The script screen_set_a_to_b.py exists and is executable.'
+  - id: artifact_set_b_csv
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The output file set_b_materials.csv exists.'
+  - id: text_contains_ws2
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] WS2 is included in Set B (gap=1.848 eV, both masses < 1 m_e).'
+  - id: text_contains_geSe
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] GeSe is included in Set B (gap=1.054 eV, both masses < 1 m_e).'
+  - id: text_numeric_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] The number of compounds in Set B should be between 3 and 10 (given the input
+      subset, all 5 compounds should pass: WS2, MoS2, GeSe, SnTe, Sb).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The filtering is grounded in the provided Set A data file.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 1.0
+    criterion: '[Must] Agent completes within 15 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 1.0
+    criterion: '[Must] Agent does not retry any tool call.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 1.0
+    criterion: '[Must] Agent completes within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 1.0
+    criterion: '[Must] Agent uses fewer than 50000 tokens total.'

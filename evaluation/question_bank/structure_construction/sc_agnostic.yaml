@@ -2428,3 +2428,1528 @@ questions:
     verify: token_budget
     weight: 0.0
     criterion: '[Must] Agent total token usage within 50000.'
+- id: SC_pymatgen_005_20260121
+  capability: structure_construction
+  domain: agnostic
+  intent: Construct a TiO2(001)/FeS2(100) heterojunction interface model by creating supercells of both
+    surface slabs and stacking them with appropriate lattice matching and vacuum separation.
+  human_prompt_seed: Construct a TiO2(001)/FeS2(100) heterojunction interface by combining a (2×2) supercell
+    of the FeS2(100) slab with a (3×3) supercell of the TiO2(001) slab. Align them along the interface
+    plane with a 20 Å vacuum region. Save as POSCAR_heterojunction.
+  tags: []
+  data_files:
+  - key: poscar_fes2
+    path: POSCAR_FeS2_100_slab
+    oss_url: ''
+    description: Pyrite FeS2(100) surface slab from Materials Project (mp-2286).
+  - key: poscar_tio2
+    path: POSCAR_TiO2_001_slab
+    oss_url: ''
+    description: Anatase TiO2(001) surface slab from Materials Project (mp-390).
+  reference_answers:
+  - key: artifact_poscar
+    value: POSCAR_heterojunction
+  - key: text_poscar_elements
+    value:
+      flags:
+      - i
+      tokens:
+      - Fe
+      - S
+      - Ti
+      - O
+      filename: POSCAR_heterojunction
+  - key: numeric_vacuum_thickness
+    value:
+      checks:
+      - key: vacuum_c
+        max: 25
+        min: 15
+        expected: 20
+      filename: POSCAR_heterojunction
+  - key: grounding_source
+    value:
+      filename: POSCAR_FeS2_100_slab
+  - key: duration_budget
+    value:
+      max: 600
+  - key: no_retries
+    value:
+      max: 1
+  - key: token_budget_total
+    value:
+      max: 80000
+  - key: turn_budget
+    value:
+      max: 30
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] POSCAR_heterojunction file exists.'
+  - id: text_poscar_elements
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The POSCAR contains all four element symbols: Fe, S, Ti, O.'
+  - id: numeric_vacuum_thickness
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] The structure has approximately 20 Å of vacuum in the c-direction (acceptable
+      range 15-25 Å).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The heterojunction construction is grounded in the provided surface slab structures.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry any tool call.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 80000 total tokens.'
+- id: SC_vasp_001_20250619
+  capability: structure_construction
+  domain: agnostic
+  intent: Construct the cubic Na₃PSe₄ crystal structure with space group I-43m (No. 217) and lattice parameter
+    a = 7.31359 Å, then save it as a POSCAR file.
+  human_prompt_seed: Construct the cubic Na₃PSe₄ crystal structure (space group I-43m, No. 217, a = 7.31359
+    Å) and save it as a POSCAR file named `POSCAR_Na3PSe4_cubic`. The structure has Na at 12d (0.5, 0.25,
+    0), P at 4a (0, 0, 0), and Se at 12b (0, 0.25, 0.5) Wyckoff positions.
+  tags:
+  - eng_vasp
+  data_files: []
+  reference_answers:
+  - key: artifact_poscar
+    value: POSCAR_Na3PSe4_cubic
+  - key: numeric_lattice
+    value:
+      checks:
+      - key: a
+        expected: 7.31359
+        tolerance: 0.001
+      - key: b
+        expected: 7.31359
+        tolerance: 0.001
+      - key: c
+        expected: 7.31359
+        tolerance: 0.001
+      filename: POSCAR_Na3PSe4_cubic
+  - key: numeric_formula
+    value:
+      checks:
+      - key: Na_count
+        expected: 12
+        tolerance: 0
+      - key: P_count
+        expected: 4
+        tolerance: 0
+      - key: Se_count
+        expected: 16
+        tolerance: 0
+      filename: POSCAR_Na3PSe4_cubic
+  - key: grounding_source
+    value:
+      filename: POSCAR_Na3PSe4_cubic
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 1
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file POSCAR_Na3PSe4_cubic exists'
+  - id: numeric_lattice
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] Lattice parameters a=b=c≈7.314 Å (cubic)'
+  - id: numeric_formula
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] Stoichiometry matches Na₁₂P₄Se₁₆ (= Na₃PSe₄ × 4)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    criterion: '[Must] Structure is grounded in the source paper (cubic Na₃PSe₄, I-43m)'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Uses ≤ 20 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retry requests'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completes within 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Uses ≤ 15000 tokens total'
+- id: SC_vasp_001_20260508
+  capability: structure_construction
+  domain: agnostic
+  intent: Construct a 64-atom GaAs supercell with one Ga atom substituted by Mn to model a Mn_Ga impurity
+    for DFT defect calculations.
+  human_prompt_seed: Construct a 64-atom GaAs supercell with one Ga atom substituted by Mn to model a
+    Mn_Ga substitutional defect. Save the resulting POSCAR as poscar_mn_gaas_sc64.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: gaas_bulk
+    path: gaas_bulk.cif
+    oss_url: ''
+    description: Bulk GaAs zincblende structure (space group F-43m) from Materials Project.
+  reference_answers:
+  - key: artifact_poscar
+    value: poscar_mn_gaas_sc64
+  - key: contains_elements
+    value:
+      flags: []
+      tokens:
+      - Mn
+      - Ga
+      - As
+      filename: poscar_mn_gaas_sc64
+  - key: grounding_source
+    value:
+      filename: gaas_bulk.cif
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 1
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 25.0
+    criterion: '[Must] POSCAR file poscar_mn_gaas_sc64 exists'
+  - id: contains_elements
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 25.0
+    criterion: '[Must] POSCAR contains Mn, Ga, and As element symbols indicating correct composition'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 25.0
+    criterion: '[Must] The constructed structure represents a Mn substitutional defect in GaAs derived
+      from the provided bulk source, as described in the paper'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: Completed within turn budget
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: No retry requests used
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: Completed within duration budget
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: Completed within token budget
+- id: SC_bfo_001_20250115
+  capability: structure_construction
+  domain: agnostic
+  intent: Generate a 3D molecular structure (XYZ format) for the bismuth nitrate complex [Bi(NO₃)₃] with
+    Bi³⁺ coordination number of 6, as used in the BiFeO₃ precursor CRN analysis.
+  human_prompt_seed: Generate a 3D molecular structure for the bismuth nitrate complex [Bi(NO₃)₃] with
+    Bi coordination number of 6. Save the structure as an XYZ file named `bi_nitrate_complex.xyz` in the
+    current working directory. The structure should contain one Bi atom, three N atoms, and nine O atoms
+    arranged as three nitrate ligands coordinated to the central Bi ion.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_xyz
+    value:
+      filename: bi_nitrate_complex.xyz
+  - key: atom_count_bi
+    value:
+      flags:
+      - MULTILINE
+      pattern: ^1\s+Bi\s
+      filename: bi_nitrate_complex.xyz
+  - key: atom_count_n
+    value:
+      flags:
+      - MULTILINE
+      pattern: ^3\s+N\s
+      filename: bi_nitrate_complex.xyz
+  - key: atom_count_o
+    value:
+      flags:
+      - MULTILINE
+      pattern: ^9\s+O\s
+      filename: bi_nitrate_complex.xyz
+  - key: total_atoms
+    value:
+      flags:
+      - MULTILINE
+      pattern: ^13$
+      filename: bi_nitrate_complex.xyz
+  - key: grounding_source
+    value:
+      filename: bi_nitrate_complex.xyz
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_xyz
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The file bi_nitrate_complex.xyz exists in the working directory.'
+  - id: atom_count_bi
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] The XYZ file contains exactly 1 Bi atom.'
+  - id: atom_count_n
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] The XYZ file contains exactly 3 N atoms.'
+  - id: atom_count_o
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] The XYZ file contains exactly 9 O atoms.'
+  - id: total_atoms
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] The XYZ file has exactly 13 atoms (1 Bi + 3 N + 9 O) in the atom count line.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The generated structure is grounded in the BiFeO3 precursor chemistry described
+      in the source paper.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: turn_budget
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: no_retries
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: duration_budget
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: token_budget_total
+- id: SC_llzo_001_20260113
+  capability: structure_construction
+  domain: agnostic
+  intent: Construct the cubic Li7La3Zr2O12 (LLZO) garnet crystal structure (space group Ia-3d, No. 230)
+    with an 8-formula-unit conventional supercell, applying the Li site occupancy factors (SOFs) of 0.417
+    for Li(1) on the 24d tetrahedral site and 0.479 for Li(2) on the 96h octahedral site as described
+    in the paper.
+  human_prompt_seed: Construct the cubic Li7La3Zr2O12 (LLZO) garnet structure with space group Ia-3d (No.
+    230) using an 8-formula-unit conventional supercell. Apply site occupancy factors of 0.417 for Li(1)
+    on the 24d tetrahedral site and 0.479 for Li(2) on the 96h octahedral site. Save the structure to
+    a file named llzo_cubic.cif in the current working directory.
+  tags:
+  - eng_vasp
+  data_files: []
+  reference_answers:
+  - key: artifact_cif
+    value:
+      filename: llzo_cubic.cif
+  - key: numeric_structure
+    value:
+      checks:
+      - key: num_sites
+        max: 260
+        min: 190
+      - key: space_group_number
+        expected: 230
+        tolerance: 0
+      filename: llzo_cubic.cif
+  - key: grounding_source
+    value:
+      filename: llzo_cubic.cif
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_cif
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The output file llzo_cubic.cif exists and is a valid CIF-format crystal structure
+      file.'
+  - id: numeric_structure
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] The structure has approximately 200 atomic sites (8 f.u. × 25 atoms) and space
+      group number 230 (Ia-3d).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The constructed structure corresponds to cubic LLZO (Li7La3Zr2O12) with space group
+      Ia-3d and Li SOFs of ~0.417 and ~0.479 as specified in the source paper.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Variable] Agent completes the task within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Variable] Agent does not retry any tool calls.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Variable] Agent completes the task within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Variable] Agent uses fewer than 80000 tokens total.'
+- id: SC_pymatgen_001_20260113
+  capability: structure_construction
+  domain: agnostic
+  intent: Construct an off-stoichiometric Li2Zn0.5PS4 (x=0.5) structure from the stoichiometric LiZnPS4
+    parent by substituting half of the Zn atoms with Li and adding Li interstitials in the P-layer tetrahedral
+    sites, using pymatgen.
+  human_prompt_seed: Construct an off-stoichiometric Li2Zn0.5PS4 (x=0.5) structure from the stoichiometric
+    LiZnPS4 parent by substituting half of the Zn atoms with Li and adding Li interstitials in the P-layer
+    tetrahedral sites, using pymatgen. Use the provided POSCAR (poscar_liznps4_parent.vasp) as the starting
+    structure. Save the resulting structure as poscar_li2zn05ps4.vasp in the current working directory.
+  tags: []
+  data_files:
+  - key: poscar_parent
+    path: poscar_liznps4_parent.vasp
+    oss_url: ''
+    description: POSCAR of the stoichiometric LiZnPS4 parent structure in the I-4 space group.
+  reference_answers:
+  - key: artifact_poscar
+    value: poscar_li2zn05ps4.vasp
+  - key: text_composition
+    value:
+      flags: []
+      tokens:
+      - Li
+      - Zn
+      - P
+      - S
+      filename: poscar_li2zn05ps4.vasp
+  - key: text_formula
+    value:
+      pattern: Li\s*\d+\s*Zn\s*\d+\s*P\s*\d+\s*S\s*\d+
+      filename: poscar_li2zn05ps4.vasp
+  - key: grounding_source
+    value:
+      filename: poscar_liznps4_parent.vasp
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 32000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] A POSCAR file named poscar_li2zn05ps4.vasp is generated in the working directory.'
+  - id: text_composition
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The POSCAR contains Li, Zn, P, and S species.'
+  - id: text_formula
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.8
+    criterion: '[Suggested] The POSCAR atom counts reflect the Li2Zn0.5PS4 stoichiometry (Li:Zn:P:S ratio
+      approximately 4:1:2:8 in the conventional cell, or scaled appropriately for the supercell used).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The constructed structure is derived from the provided parent POSCAR.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 20 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent completes with ≤ 3 retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses ≤ 32000 tokens total.'
+- id: SC_slab_001_20250618
+  capability: structure_construction
+  domain: agnostic
+  intent: Construct a surface slab model of FeS2 pyrite (100) facet with appropriate vacuum spacing and
+    symmetric termination, following the computational setup described in the paper.
+  human_prompt_seed: Using the bulk structure in pyrite_bulk.cif, construct a surface slab model of the
+    FeS2 pyrite (100) facet with at least 15 Å vacuum spacing and a symmetric (non-polar) termination.
+    The slab should be suitable for a VASP surface calculation. Save the resulting structure as pyrite_100_slab.vasp
+    in POSCAR format.
+  tags: []
+  data_files:
+  - key: pyrite_bulk_cif
+    path: pyrite_bulk.cif
+    oss_url: ''
+    description: FeS2 pyrite bulk crystal structure from Materials Project (space group Pa-3, mp-22684).
+  reference_answers:
+  - key: artifact_slab
+    value:
+      filename: pyrite_100_slab.vasp
+      description: POSCAR file for the (100) slab must exist
+  - key: text_slab_contains_fe
+    value:
+      flags: []
+      tokens:
+      - Fe
+      - S
+      filename: pyrite_100_slab.vasp
+  - key: numeric_vacuum_thickness
+    value:
+      checks:
+      - key: vacuum_thickness
+        max: 30.0
+        min: 14.0
+        allow_missing_key: true
+      filename: pyrite_100_slab.vasp
+  - key: numeric_slab_layers
+    value:
+      checks:
+      - key: num_atoms
+        max: 60
+        min: 12
+        allow_missing_key: true
+      filename: pyrite_100_slab.vasp
+  - key: grounding_source
+    value:
+      filename: pyrite_bulk.cif
+      description: Task is grounded in the pyrite bulk structure from Materials Project and the paper's
+        surface slab construction methodology
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_slab
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] POSCAR file pyrite_100_slab.vasp exists'
+  - id: text_slab_contains_fe
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] POSCAR contains Fe and S element symbols'
+  - id: numeric_vacuum_thickness
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Vacuum thickness is at least 14 Å (paper uses ≥15 Å)'
+  - id: numeric_slab_layers
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] Slab contains a reasonable number of atoms (12-60) for a (100) surface model'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Answer is grounded in the pyrite bulk structure and the paper''s slab construction
+      methodology'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Completed within 20 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] No retries needed'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Completed within 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Total tokens within 50000'
+- id: SC_fcc_alloy_001_20250618
+  capability: structure_construction
+  domain: agnostic
+  intent: Construct the Ga2Zr-type (W8 / Phase 13) orthorhombic crystal structure as described in Wolverton
+    et al. (1993), with space group Cmmm, 12 atoms per conventional unit cell, and the correct Wyckoff
+    site decorations for the Pd5Ti alloy variant.
+  human_prompt_seed: 'Construct the Pd5Ti W8 (Ga2Zr-type) orthorhombic crystal structure. Use the reference
+    CIF as a template. The conventional unit cell has 12 atoms in space group Cmmm with four symmetrically
+    distinct Wyckoff positions: decorate the 2a sites (open circles) as Pd, the 4g sites (filled circles)
+    as Pd, the 4i sites (open squares) as Pd, and the 2b sites (filled squares) as Ti. Save the final
+    structure as pd5ti_w8.cif in the working directory.'
+  tags: []
+  data_files:
+  - key: ga2zr_reference
+    path: ga2zr_mp1540.cif
+    oss_url: ''
+    description: Reference CIF for Ga2Zr prototype from Materials Project (space group Cmmm, oC12, 12
+      atoms). The agent should use this as a structural template and modify site decorations for the Pd5Ti
+      W8 variant.
+  reference_answers:
+  - key: artifact_cif
+    value:
+      filename: pd5ti_w8.cif
+  - key: space_group
+    value:
+      pattern: _space_group_name_H-M\s+'C m m m'
+      filename: pd5ti_w8.cif
+  - key: num_sites
+    value:
+      pattern: _cell_formula_units_Z\s+12
+      filename: pd5ti_w8.cif
+  - key: composition
+    value:
+      pattern: Pd.*10.*Ti.*2|Pd5Ti1
+      filename: pd5ti_w8.cif
+  - key: grounding_source
+    value:
+      note: Task grounded in the Ga2Zr prototype CIF and Wolverton et al. 1993 Section VI.C / Fig. 4 description
+        of W8 structure.
+      filename: ga2zr_mp1540.cif
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: artifact_cif
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file pd5ti_w8.cif exists in the working directory.'
+  - id: space_group
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] The CIF reports space group C m m m (No. 65).'
+  - id: num_sites
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] The conventional unit cell contains 12 atoms (Z=12).'
+  - id: composition
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] The site decorations yield a Pd5Ti (Pd10Ti2 per conventional cell) composition.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The answer is grounded in the Ga2Zr prototype and the W8 description from Wolverton
+      et al. 1993.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within turn budget.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry failed tool calls excessively.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within duration budget.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent stays within total token budget.'
+- id: SC_fcc_002_20260508
+  capability: structure_construction
+  domain: agnostic
+  intent: Construct the CdPt2Zn (structure 4c) ternary fcc-derived superstructure with P4/mmm space group,
+    where Cd and Zn each occupy their own (001) plane alternating with pure Pt (001) planes.
+  human_prompt_seed: Construct the CdPt2Zn ternary alloy structure (prototype for structure 4c in Ceder
+    et al. 1994) on an fcc-derived tetragonal lattice. The structure has space group P4/mmm with 4 atoms
+    in the primitive unit cell. In this structure, Cd and Zn each occupy their own distinct (001) plane,
+    alternating with pure Pt (001) planes along the c-axis. Write the resulting crystal structure to a
+    file named cdpt2zn_4c.cif.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_cif
+    value: cdpt2zn_4c.cif
+  - key: space_group_check
+    value:
+      flags:
+      - re.IGNORECASE
+      tokens:
+      - P4/mmm
+      filename: cdpt2zn_4c.cif
+  - key: stoichiometry_check
+    value:
+      flags: []
+      tokens:
+      - Cd
+      - Pt
+      - Zn
+      filename: cdpt2zn_4c.cif
+  - key: atom_count_check
+    value:
+      flags:
+      - re.IGNORECASE
+      pattern: _atom_site_
+      filename: cdpt2zn_4c.cif
+  - key: grounding_source
+    value:
+      filename: cdpt2zn_4c.cif
+  - key: turn_budget
+    value:
+      max: 50
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 100000
+  scoring_checklist:
+  - id: artifact_cif
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The output file cdpt2zn_4c.cif exists and is a valid CIF file.'
+  - id: space_group_check
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The CIF file specifies space group P4/mmm (Hermann-Mauguin notation).'
+  - id: stoichiometry_check
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The CIF file contains atoms of all three species: Cd, Pt, and Zn.'
+  - id: atom_count_check
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.5
+    criterion: '[Suggested] The CIF file contains _atom_site_ entries (at least 4 atomic positions).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The constructed structure is grounded in the source paper (structure 4c, CdPt2Zn
+      prototype, P4/mmm, tP4).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 1.0
+    criterion: '[Must] Agent completes within 50 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 1.0
+    criterion: '[Must] Agent does not retry any failed tool calls.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 1.0
+    criterion: '[Must] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 1.0
+    criterion: '[Must] Agent uses fewer than 100000 total tokens.'
+- id: SC_vasp_002_20260618
+  capability: structure_construction
+  domain: agnostic
+  intent: Construct the antiferromagnetic NiO rock-salt crystal structure (Fm-3m) using pymatgen, create
+    a supercell that accommodates the Type-II AFM ordering, and generate a complete set of VASP input
+    files (POSCAR, INCAR, KPOINTS, POTCAR) for a GGA+U SCF calculation with U=6.4 eV.
+  human_prompt_seed: 'Using the NiO CIF file (nio_mp.cif) provided, construct a supercell that accommodates
+    the Type-II antiferromagnetic ordering (alternating [111] ferromagnetic planes). Set the magnetic
+    moments: +1.7 μB on one Ni sublattice, -1.7 μB on the other. Generate a complete set of VASP input
+    files (POSCAR with magmoms, INCAR, KPOINTS, POTCAR) for a spin-polarized GGA+U SCF calculation using
+    the Dudarev approach with U=6.4 eV on Ni 3d orbitals. Use a 550 eV plane-wave cutoff and k-point mesh
+    dense enough for 3 meV/f.u. convergence. Write all files to the current working directory.'
+  tags:
+  - eng_vasp
+  data_files:
+  - key: nio_mp_structure
+    path: nio_mp.cif
+    oss_url: ''
+    description: NiO rock-salt structure from Materials Project (space group Fm-3m).
+  reference_answers:
+  - key: artifact_poscar
+    value:
+      filename: POSCAR
+  - key: artifact_incar
+    value:
+      filename: INCAR
+  - key: artifact_kpoints
+    value:
+      filename: KPOINTS
+  - key: artifact_potcar
+    value:
+      filename: POTCAR
+  - key: poscar_has_magmoms
+    value:
+      flags:
+        ignore_case: true
+        require_all: false
+      tokens:
+      - Direct
+      - Selective dynamics
+      filename: POSCAR
+  - key: contains_afm_tags
+    value:
+      flags:
+        ignore_case: true
+        require_all: true
+      tokens:
+      - ISPIN
+      - '2'
+      - LDAU
+      - .TRUE.
+      - LDAUTYPE
+      - '2'
+      - LDAUU
+      - MAGMOM
+      filename: INCAR
+  - key: numeric_u_value
+    value:
+      checks:
+      - key: LDAUU
+        expected: 6.4
+        tolerance: 0.05
+      filename: INCAR
+  - key: numeric_encut
+    value:
+      checks:
+      - key: ENCUT
+        expected: 550
+        tolerance: 0
+      filename: INCAR
+  - key: supercell_size
+    value:
+      pattern: \b(16|32|48)\b
+      filename: POSCAR
+  - key: grounding_source
+    value:
+      filename: POSCAR
+  - key: turn_budget
+    value:
+      max: 25
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] File POSCAR exists in the working directory.'
+  - id: artifact_incar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] File INCAR exists in the working directory.'
+  - id: artifact_kpoints
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] File KPOINTS exists in the working directory.'
+  - id: artifact_potcar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] File POTCAR exists in the working directory.'
+  - id: poscar_has_magmoms
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Suggested] POSCAR contains magnetic moment information (Selective dynamics or magmom
+      tags).'
+  - id: contains_afm_tags
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains required GGA+U and spin-polarization tags: ISPIN=2, LDAU=.TRUE.,
+      LDAUTYPE=2, LDAUU, MAGMOM.'
+  - id: numeric_u_value
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] LDAUU value for Ni is 6.4 ± 0.05 eV per Wang et al. Table II.'
+  - id: numeric_encut
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] ENCUT is exactly 550 eV per the paper''s methodology.'
+  - id: supercell_size
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.5
+    criterion: '[Variable] POSCAR supercell contains a reasonable number of atoms (16, 32, or 48) for
+      AFM ordering.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The generated files are grounded in Wang et al. (2006): NiO rock-salt Fm-3m, AFM
+      ordering, GGA+U with U=6.4 eV.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 1.0
+    criterion: '[Must] Agent completes the task within 25 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 1.0
+    criterion: '[Must] Agent does not retry any tool call.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 1.0
+    criterion: '[Must] Agent completes the task within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 1.0
+    criterion: '[Must] Agent uses fewer than 80000 total tokens.'
+- id: SC_fcc_001_20260508
+  capability: structure_construction
+  domain: agnostic
+  intent: Construct the Cu2NiZn (structure 4a) ternary fcc-derived superstructure with P4/mmm space group
+    and 4 atoms in the primitive unit cell, following the ordering pattern described in Ceder et al. 1994
+    where minority atoms (Ni, Zn) are ordered in one of the (001) planes.
+  human_prompt_seed: Construct the Cu2NiZn ternary alloy structure (prototype for structure 4a in Ceder
+    et al. 1994) on an fcc-derived tetragonal lattice. The structure has space group P4/mmm with 4 atoms
+    in the primitive unit cell. In this structure, the minority species (Ni and Zn) are ordered in one
+    of the (001) planes, while Cu occupies the remaining sites. Write the resulting crystal structure
+    to a file named cu2nizn_4a.cif.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_cif
+    value: cu2nizn_4a.cif
+  - key: space_group_check
+    value:
+      flags:
+      - re.IGNORECASE
+      tokens:
+      - P4/mmm
+      filename: cu2nizn_4a.cif
+  - key: stoichiometry_check
+    value:
+      flags: []
+      tokens:
+      - Cu
+      - Ni
+      - Zn
+      filename: cu2nizn_4a.cif
+  - key: atom_count_check
+    value:
+      flags:
+      - re.IGNORECASE
+      pattern: _atom_site_
+      filename: cu2nizn_4a.cif
+  - key: grounding_source
+    value:
+      filename: cu2nizn_4a.cif
+  - key: turn_budget
+    value:
+      max: 50
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 100000
+  scoring_checklist:
+  - id: artifact_cif
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The output file cu2nizn_4a.cif exists and is a valid CIF file.'
+  - id: space_group_check
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The CIF file specifies space group P4/mmm (Hermann-Mauguin notation).'
+  - id: stoichiometry_check
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The CIF file contains atoms of all three species: Cu, Ni, and Zn.'
+  - id: atom_count_check
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.5
+    criterion: '[Suggested] The CIF file contains _atom_site_ entries (at least 4 atomic positions).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The constructed structure is grounded in the source paper (structure 4a, Cu2NiZn
+      prototype, P4/mmm, tP4).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 1.0
+    criterion: '[Must] Agent completes within 50 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 1.0
+    criterion: '[Must] Agent does not retry any failed tool calls.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 1.0
+    criterion: '[Must] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 1.0
+    criterion: '[Must] Agent uses fewer than 100000 total tokens.'
+- id: SC_cluster_hierarchy_001_20260528
+  capability: structure_construction
+  domain: agnostic
+  intent: Given a cluster basis specification with parent-child relationships, construct the hierarchy
+    constraint matrix for L0L1-norm cluster expansion that enforces higher-order clusters can only be
+    active if their constituent lower-order sub-clusters are also active.
+  human_prompt_seed: 'Given the file cluster_hierarchy.json which defines cluster types and sub-cluster
+    relationships, construct the hierarchy constraint matrix H_matrix implementing Eq. (18): z_0,a ≤ z_0,b
+    for all pairs (a,b) where cluster a is exactly one order higher than cluster b. Write the constraint
+    pairs and matrix to hierarchy_constraints.json and H_matrix.npy.'
+  tags: []
+  data_files:
+  - key: cluster_basis
+    path: cluster_hierarchy.json
+    oss_url: ''
+    description: JSON file defining cluster basis with indices, types (point/pair/triplet/quadruplet),
+      and a list of sub-cluster indices for each cluster.
+  reference_answers:
+  - key: hierarchy_output_exists
+    value:
+      filename: hierarchy_constraints.json
+  - key: matrix_output_exists
+    value:
+      filename: H_matrix.npy
+  - key: constraint_pairs_valid
+    value:
+      checks:
+      - key: num_pairs
+        max: 500
+        min: 5
+        allow_missing_key: false
+      filename: hierarchy_constraints.json
+  - key: higher_order_indices_valid
+    value:
+      checks:
+      - key: all_higher_order_gt_lower
+        expected: 1
+        tolerance: 0
+        allow_missing_key: false
+      filename: hierarchy_constraints.json
+  - key: matrix_shape_consistent
+    value:
+      checks:
+      - key: n_rows
+        max: 500
+        min: 5
+        allow_missing_key: false
+      - key: n_cols
+        max: 500
+        min: 5
+        allow_missing_key: false
+      filename: H_matrix.npy
+  - key: grounding_source
+    value:
+      filename: cluster_hierarchy.json
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 30000
+  scoring_checklist:
+  - id: hierarchy_output_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] Output file hierarchy_constraints.json exists and is valid JSON.'
+  - id: matrix_output_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] Output file H_matrix.npy exists and is loadable.'
+  - id: constraint_pairs_valid
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 8.0
+    criterion: '[Suggested] Number of hierarchy constraint pairs is within expected range based on cluster
+      basis size.'
+  - id: higher_order_indices_valid
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] For every constraint pair (a,b), cluster index a (higher order) is strictly greater
+      than cluster index b (lower order), reflecting the ''one order higher'' relationship.'
+  - id: matrix_shape_consistent
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 8.0
+    criterion: '[Must] H_matrix shape is (n_constraints, n_clusters) matching the number of hierarchy
+      pairs.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 5.0
+    criterion: '[Must] Hierarchy constraints are derived from the provided cluster basis, not fabricated.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within turn budget.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry failed tool calls.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within duration budget.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent stays within total token budget.'
+- id: SC_pymatgen_001_20260118
+  capability: structure_construction
+  domain: agnostic
+  intent: Enumerate all non-equivalent terminations of the Anatase TiO₂(100) surface using pymatgen, identifying
+    terminations that are identical under glide plane symmetry as described in the paper.
+  human_prompt_seed: Using the provided tio2_anatase.cif bulk structure, enumerate all unique terminations
+    of the Anatase TiO₂(100) surface using pymatgen. Generate slabs for each termination with 10 Å vacuum,
+    identify which terminations are equivalent under glide plane symmetry, and save only the non-equivalent
+    slab structures. Write each unique termination to a separate file named tio2_100_term_N.vasp (N=1,2,...)
+    in the current working directory, and write a summary file terminations.txt listing which terminations
+    were found to be equivalent.
+  tags:
+  - struct_surface
+  data_files:
+  - key: tio2_bulk
+    path: tio2_anatase.cif
+    oss_url: ''
+    description: Anatase TiO₂ bulk structure from Materials Project
+  reference_answers:
+  - key: termination_files_exist
+    value: tio2_100_term_1.vasp
+  - key: termination_files_contain_ti
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - Ti
+      filename: tio2_100_term_1.vasp
+  - key: termination_files_contain_o
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - O
+      filename: tio2_100_term_1.vasp
+  - key: summary_file_exists
+    value: terminations.txt
+  - key: summary_mentions_glide
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - glide
+      filename: terminations.txt
+  - key: grounding_source
+    value:
+      filename: terminations.txt
+  - key: turn_budget
+    value:
+      max: 25
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: termination_files_exist
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] At least one termination file tio2_100_term_1.vasp exists'
+  - id: termination_files_contain_ti
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Termination file contains Ti element'
+  - id: termination_files_contain_o
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Termination file contains O element'
+  - id: summary_file_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Summary file terminations.txt exists'
+  - id: summary_mentions_glide
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Suggested] Summary file mentions glide plane equivalence detection'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The termination enumeration follows the methodology described in the source paper
+      for Anatase TiO₂(100)'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes task within 25 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not retry any tool calls'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes task within 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses fewer than 80000 tokens total'
+- id: SC_ce_001_20260124
+  capability: structure_construction
+  domain: agnostic
+  intent: Construct the lower convex hull of formation energies from a set of DFT-computed configurations
+    and identify which configurations are ground states (on the hull) vs. thermodynamically unstable (above
+    the hull).
+  human_prompt_seed: Given the file formation_energies.csv containing composition, formation energy, and
+    configuration ID for a set of LixFe(1-x)O structures, construct the lower convex hull and classify
+    each configuration as a ground state (on hull) or unstable (above hull). Write the results to ground_states.json.
+  tags: []
+  data_files:
+  - key: formation_energies
+    path: formation_energies.csv
+    oss_url: ''
+    description: CSV file containing composition (x in LixM(1-x)O), formation energy in eV/f.u., and configuration
+      ID for DFT-computed structures.
+  reference_answers:
+  - key: artifact_ground_states_json
+    value: ground_states.json
+  - key: text_contains_ground_state_ids
+    value:
+      flags: ''
+      tokens:
+      - ground_states
+      - unstable
+      filename: ground_states.json
+  - key: numeric_hull_vertices
+    value:
+      checks:
+      - key: num_ground_states
+        max: 20
+        min: 3
+        expected: 5
+        tolerance: 2
+        allow_missing_key: false
+      filename: ground_states.json
+  - key: grounding_source
+    value:
+      filename: formation_energies.csv
+  - key: turn_budget
+    value:
+      max: 40
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_ground_states_json
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.3
+    criterion: '[Must] Output file ground_states.json exists'
+  - id: text_contains_ground_state_ids
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.2
+    criterion: '[Must] JSON contains both ''ground_states'' and ''unstable'' classification keys'
+  - id: numeric_hull_vertices
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.2
+    criterion: '[Suggested] Number of ground-state configurations is reasonable (3-20 range for this system)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 0.1
+    criterion: '[Must] Solution is grounded in the provided formation_energies.csv data file'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.05
+    criterion: '[Must] Completed within 40 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.05
+    criterion: '[Must] No more than 3 retries used'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.05
+    criterion: '[Must] Completed within 600 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.05
+    criterion: '[Must] Total token usage under 80000'
+- id: SC_alloy_001_20260113
+  capability: structure_construction
+  domain: agnostic
+  intent: Construct a 216-atom FCC CrCoNi supercell with equal atomic composition using the specified
+    lattice constant of 2.49 Å.
+  human_prompt_seed: Construct an FCC supercell of the CrCoNi medium-entropy alloy with a primitive lattice
+    constant of 2.49 Å. The supercell should contain exactly 216 atoms (a 6×6×6 expansion of the primitive
+    FCC cell). Distribute Cr, Co, and Ni atoms equally (72 each) on the FCC lattice sites in a random
+    configuration. Save the resulting structure as crconi_216atom.vasp in POSCAR format.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: grounding_source
+    value:
+      filename: crconi_216atom.vasp
+  - key: numeric_natoms
+    value:
+      checks:
+      - key: natoms
+        expected: 216
+        tolerance: 0
+      filename: crconi_216atom.vasp
+  - key: numeric_lattice_a
+    value:
+      checks:
+      - key: lattice_a
+        expected: 2.49
+        tolerance: 0.01
+      filename: crconi_216atom.vasp
+  - key: text_species
+    value:
+      tokens:
+      - Cr
+      - Co
+      - Ni
+      filename: crconi_216atom.vasp
+  - key: numeric_composition
+    value:
+      checks:
+      - key: n_cr
+        expected: 72
+        tolerance: 2
+      - key: n_co
+        expected: 72
+        tolerance: 2
+      - key: n_ni
+        expected: 72
+        tolerance: 2
+      filename: crconi_216atom.vasp
+  - key: artifact_structure
+    value:
+      filename: crconi_216atom.vasp
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_structure
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] POSCAR file crconi_216atom.vasp exists'
+  - id: numeric_natoms
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] Structure contains exactly 216 atoms'
+  - id: numeric_lattice_a
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] Lattice constant is approximately 2.49 Å (within 0.01 Å)'
+  - id: text_species
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Structure contains Cr, Co, and Ni species'
+  - id: numeric_composition
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.8
+    criterion: '[Suggested] Equiatomic composition: approximately 72 atoms each of Cr, Co, Ni (tolerance
+      ±2)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Answer is grounded in the CrCoNi alloy specification from the source paper (2.49
+      Å lattice constant, FCC, equiatomic)'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 1.0
+    criterion: '[Must] Agent stays within turn budget'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 1.0
+    criterion: '[Must] Agent does not use retry mechanism'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 1.0
+    criterion: '[Must] Agent completes within duration budget'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 1.0
+    criterion: '[Must] Agent stays within total token budget'

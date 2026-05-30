@@ -191,3 +191,867 @@ questions:
     criterion: Token usage within budget.
     axis: efficiency
     verify: token_budget
+- id: DD_substitution_002_20250711
+  capability: data_diagnosis
+  domain: agnostic
+  intent: 'Analyze cross-validation results from the ionic substitution model: compute true positive and
+    false positive rates at different probability thresholds, find the optimal threshold for 95% recall,
+    and calculate the candidate reduction efficiency compared to brute-force search.'
+  human_prompt_seed: 'Analyze the cross-validation results in cv_results.json and threshold_curve.csv.
+    Compute: (1) the candidate reduction ratio (model candidates / brute-force candidates) at 95% recall,
+    (2) the TP_rate and FP_rate at log probability threshold σ = -5, and (3) the approximate threshold
+    needed for 95% TP_rate by interpolating the curve. Save results to cv_analysis.json.'
+  tags: []
+  data_files:
+  - key: cv_results
+    path: cv_results.json
+    oss_url: ''
+    description: 'JSON file containing cross-validation data: TP_rate and FP_rate at different log probability
+      thresholds, total compounds tested (2967 quaternary ICSD compounds), brute-force candidate count
+      (884037), and model candidate count at 95% recall (53251).'
+  - key: threshold_curve
+    path: threshold_curve.csv
+    oss_url: ''
+    description: 'CSV with columns: log_threshold, TP_rate, FP_rate. Data points from Figure 2 of the
+      paper.'
+  reference_answers:
+  - key: artifact_cv_analysis
+    value:
+      filename: cv_analysis.json
+  - key: grounding_source
+    value:
+      filename: cv_results.json
+  - key: reduction_ratio
+    value:
+      checks:
+      - key: candidate_reduction_ratio
+        expected: 0.06
+        tolerance: 0.01
+      filename: cv_analysis.json
+  - key: tp_rate_at_neg5
+    value:
+      checks:
+      - key: TP_rate_at_threshold_-5
+        expected: 0.9
+        tolerance: 0.01
+      filename: cv_analysis.json
+  - key: fp_rate_at_neg5
+    value:
+      checks:
+      - key: FP_rate_at_threshold_-5
+        expected: 0.2
+        tolerance: 0.02
+      filename: cv_analysis.json
+  - key: brute_force_count
+    value:
+      checks:
+      - key: brute_force_candidates
+        expected: 884037
+        tolerance: 0
+      filename: cv_analysis.json
+  - key: model_candidates_95
+    value:
+      checks:
+      - key: model_candidates_at_95_recall
+        expected: 53251
+        tolerance: 0
+      filename: cv_analysis.json
+  - key: turn_budget
+    value:
+      max: 25
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 480
+  - key: token_budget_total
+    value:
+      max: 60000
+  scoring_checklist:
+  - id: artifact_cv_analysis
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file cv_analysis.json exists and is valid JSON.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The analysis uses the provided cv_results.json and references the Hautier et al.
+      2011 cross-validation study.'
+  - id: reduction_ratio
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] Candidate reduction ratio ≈ 0.06 (53251/884037), as stated in Section 3.1 of the
+      paper.'
+  - id: tp_rate_at_neg5
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] TP_rate at σ = -5 is 0.9 (90%), matching the cross-validation data in Figure 2.'
+  - id: fp_rate_at_neg5
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] FP_rate at σ = -5 is 0.2 (20%), matching the cross-validation data in Figure 2.'
+  - id: brute_force_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] Brute-force candidate count is exactly 884037, as stated in Section 3.1.'
+  - id: model_candidates_95
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] Model candidates at 95% recall is exactly 53251, as stated in Section 3.1.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 25 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not request any retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 480 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses no more than 60000 total tokens.'
+- id: DD_ml_001_20260125
+  capability: data_diagnosis
+  domain: agnostic
+  intent: Implement Bayesian charge state assignment for Mn ions based on d-orbital magnetic moments,
+    using the optimized cutoffs from the paper to classify Mn as Mn2+, Mn3+, or Mn4+.
+  human_prompt_seed: 'Given a CSV file of Mn d-orbital magnetic moments from DFT calculations, write a
+    Python script that assigns each Mn ion a charge state (Mn2+, Mn3+, or Mn4+) using the Bayesian-optimized
+    cutoffs from Yang et al. (2022): Mn³⁺ upper cutoff = 4.082 μB, Mn⁴⁺ upper cutoff = 3.228 μB, Mn²⁺
+    upper cutoff = 4.973 μB. Save the charge-assigned results to charge_assignments.csv in the current
+    working directory.'
+  tags: []
+  data_files:
+  - key: moments_data
+    path: mn_magnetic_moments.csv
+    oss_url: ''
+    description: Sample CSV file containing Mn d-orbital magnetic moments from DFT-SCAN calculations.
+      Each row has a structure ID and one or more Mn magnetic moment values in Bohr magnetons.
+  reference_answers:
+  - key: artifact_csv
+    value: charge_assignments.csv
+  - key: has_charge_column
+    value:
+      flags:
+        case_insensitive: true
+      tokens:
+      - Mn2+
+      - Mn3+
+      - Mn4+
+      - charge
+      filename: charge_assignments.csv
+  - key: cutoff_3228
+    value:
+      flags:
+        regex: true
+        case_insensitive: true
+      pattern: 3\.228|cutoff.*Mn4
+      filename: charge_assignments.csv
+  - key: cutoff_4082
+    value:
+      flags:
+        regex: true
+        case_insensitive: true
+      pattern: 4\.082|cutoff.*Mn3
+      filename: charge_assignments.csv
+  - key: grounding_source
+    value:
+      filename: mn_magnetic_moments.csv
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 30000
+  scoring_checklist:
+  - id: artifact_csv
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] charge_assignments.csv file exists in the working directory.'
+  - id: has_charge_column
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The output CSV contains charge state assignments (Mn2+, Mn3+, or Mn4+) for each
+      Mn ion.'
+  - id: cutoff_3228
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] The script or output references the Mn⁴⁺ cutoff of 3.228 μB.'
+  - id: cutoff_4082
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] The script or output references the Mn³⁺ cutoff of 4.082 μB.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The answer is grounded in the source paper''s Bayesian charge assignment methodology.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 15 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not retry any tool calls.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses fewer than 30000 total tokens.'
+- id: DD_metrics_003_20250623
+  capability: data_diagnosis
+  domain: agnostic
+  intent: Compute classification metrics (F1 score, precision, recall, true positive rate, true negative
+    rate, accuracy, and Discovery Acceleration Factor) from arrays of true and predicted hull distances,
+    using a 0 eV/atom stability threshold — replicating the core evaluation methodology of the Matbench
+    Discovery benchmark.
+  human_prompt_seed: 'Given the CSV file with true and predicted hull distances, classify each material
+    as stable (hull_distance ≤ 0 eV/atom) or unstable. Compute the following metrics: F1 score, precision,
+    recall (TPR), true negative rate (TNR), accuracy, and Discovery Acceleration Factor (DAF = precision
+    / prevalence, where prevalence = fraction of stable materials in the test set). Write all metrics
+    to metrics.json.'
+  tags: []
+  data_files:
+  - key: predictions
+    path: hull_predictions.csv
+    oss_url: ''
+    description: 'A CSV file with columns: material_id, true_hull_distance_eV, predicted_hull_distance_eV.
+      Contains ~50 sample materials with both DFT-computed and ML-predicted hull distances, generated
+      as a local benchmark artifact.'
+  reference_answers:
+  - key: f1_score
+    value:
+      checks:
+      - key: f1_score
+        max: 1.0
+        min: 0.0
+        allow_missing_key: false
+      filename: metrics.json
+  - key: precision
+    value:
+      checks:
+      - key: precision
+        max: 1.0
+        min: 0.0
+        allow_missing_key: false
+      filename: metrics.json
+  - key: recall
+    value:
+      checks:
+      - key: recall
+        max: 1.0
+        min: 0.0
+        allow_missing_key: false
+      filename: metrics.json
+  - key: daf
+    value:
+      checks:
+      - key: daf
+        max: 10.0
+        min: 0.5
+        allow_missing_key: false
+      filename: metrics.json
+  - key: artifact_metrics_json
+    value: metrics.json
+  - key: grounding_source
+    value:
+      filename: hull_predictions.csv
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: f1_score
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 20.0
+    criterion: '[Must] metrics.json contains an f1_score between 0 and 1, computed correctly from the
+      confusion matrix.'
+  - id: precision
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 15.0
+    criterion: '[Must] metrics.json contains a precision value between 0 and 1.'
+  - id: recall
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 15.0
+    criterion: '[Must] metrics.json contains a recall (TPR) value between 0 and 1.'
+  - id: daf
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 15.0
+    criterion: '[Suggested] metrics.json contains a DAF value consistent with precision / prevalence for
+      the given data.'
+  - id: artifact_metrics_json
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] The output file metrics.json exists.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] The metrics are computed from the provided hull_predictions.csv file.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 20 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry any tool calls.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 50000 tokens total.'
+- id: DD_phase_001_20250618
+  capability: data_diagnosis
+  domain: agnostic
+  intent: Compute the finite-size thermodynamic driving force ΔΦ between FeS2 marcasite and pyrite as
+    a function of particle size and pH, reproducing the size-pH phase diagram from the paper using the
+    bulk energy difference and pH-dependent surface energies.
+  human_prompt_seed: Using the thermodynamic data in fes2_surface_energies.json, compute the finite-size
+    free energy difference ΔΦ = Φ_marcasite - Φ_pyrite as a function of particle radius (1-20 nm) and
+    pH (0-7). The thermodynamic potential is Φ = (4/3)πr³g_b + 4πr²γ̄ where g_b is the bulk energy density
+    and γ̄ is the pH-dependent surface energy. Write a Python script phase_diagram.py that computes and
+    plots this, and save the numerical results as phase_diagram_results.json.
+  tags: []
+  data_files:
+  - key: surface_energy_data
+    path: fes2_surface_energies.json
+    oss_url: ''
+    description: JSON file containing pH-dependent particle-averaged surface energies for pyrite and marcasite
+      (from Figure 1b data in the paper), plus bulk energy difference between phases.
+  reference_answers:
+  - key: artifact_script
+    value:
+      filename: phase_diagram.py
+      description: Python script for phase diagram computation must exist
+  - key: artifact_results
+    value:
+      filename: phase_diagram_results.json
+      description: Results JSON file must exist
+  - key: numeric_delta_phi_pH0_small
+    value:
+      checks:
+      - key: delta_phi_pH0_r_2nm
+        max: 10
+        min: -5
+        allow_missing_key: true
+      filename: phase_diagram_results.json
+  - key: numeric_delta_phi_pH4_transition
+    value:
+      checks:
+      - key: delta_phi_pH4_critical
+        max: 5
+        min: -10
+        allow_missing_key: true
+      filename: phase_diagram_results.json
+  - key: text_marcasite_stable_acidic
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - marcasite
+      filename: phase_diagram_results.json
+  - key: text_pyrite_stable_basic
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - pyrite
+      filename: phase_diagram_results.json
+  - key: grounding_source
+    value:
+      filename: fes2_surface_energies.json
+      description: Task is grounded in the thermodynamic model and surface energy data from the paper
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Python script phase_diagram.py exists'
+  - id: artifact_results
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Results file phase_diagram_results.json exists'
+  - id: numeric_delta_phi_pH0_small
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] At pH=0 and small particle sizes, marcasite is lower energy (ΔΦ slightly negative
+      or near zero)'
+  - id: numeric_delta_phi_pH4_transition
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Near pH=4 the driving force crosses zero, consistent with experimental marcasite
+      onset'
+  - id: text_marcasite_stable_acidic
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Results identify marcasite as stable at low pH/small size'
+  - id: text_pyrite_stable_basic
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Results identify pyrite as stable at high pH/large size'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Answer is grounded in the paper''s thermodynamic model and data'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Completed within 30 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] No retries needed'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Completed within 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Total tokens within 50000'
+- id: DD_matbench_004_20250618
+  capability: data_diagnosis
+  domain: agnostic
+  intent: Diagnose and analyze computational efficiency gains from the PathFinder and ApproxNEB methods
+    across six benchmark materials by computing speedup factors, identifying which migration path geometries
+    (linear vs curved MEP) benefit most, and producing summary statistics and visualizations.
+  human_prompt_seed: Analyze the computational efficiency data from the PathFinder and ApproxNEB benchmark
+    study. Compute the speedup factors for each material (PathFinder-initialized NEB vs linear NEB, and
+    ApproxNEB vs linear NEB), identify which materials benefit most from the new methods, and generate
+    summary tables and plots.
+  tags: []
+  data_files:
+  - key: cpu_time_neb_init
+    path: cpu_hours_neb_initialization.csv
+    oss_url: ''
+    description: 'CSV file with CPU hours for NEB calculations initialized with PathFinder vs linear interpolation,
+      from Fig. 5. Materials: LiTiS2 (spinel), ZnMn2O4 (post-spinel), ZnMn2O4 (spinel), LiFePO4 (olivine),
+      MgV2O5 (delta), CaMoO3 (layered).'
+  - key: cpu_time_approxneb
+    path: cpu_hours_approxneb.csv
+    oss_url: ''
+    description: CSV file with CPU hours for ApproxNEB vs linearly-initialized NEB, from Fig. 7. Same
+      six materials.
+  reference_answers:
+  - key: analysis_script_exists
+    value:
+      filename: efficiency_analysis.py
+  - key: speedup_table_exists
+    value:
+      filename: speedup_summary.csv
+  - key: efficiency_plot_exists
+    value:
+      filename: efficiency_comparison.png
+  - key: max_approxneb_speedup
+    value:
+      checks:
+      - key: max_approxneb_speedup
+        expected: 3
+        tolerance: 0.5
+        allow_missing_key: false
+      filename: speedup_summary.csv
+  - key: curved_mep_benefit
+    value:
+      flags:
+      - IGNORECASE
+      pattern: curved|CaMoO3|MgV2O5|LiFePO4
+      filename: efficiency_summary.txt
+  - key: grounding_source
+    value:
+      filename: cpu_hours_neb_initialization.csv
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 1200
+  - key: token_budget_total
+    value:
+      max: 40000
+  scoring_checklist:
+  - id: analysis_script_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The agent produces a Python script named efficiency_analysis.py.'
+  - id: speedup_table_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The agent produces a CSV summary table of speedup factors (speedup_summary.csv).'
+  - id: efficiency_plot_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The agent produces an efficiency comparison plot (efficiency_comparison.png).'
+  - id: max_approxneb_speedup
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] The maximum ApproxNEB speedup factor is approximately 3x (CaMoO3: 3800/1280
+      ≈ 2.97x), consistent with the paper''s claim of ''up to a factor of 5'' for curved MEPs.'
+  - id: curved_mep_benefit
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] The summary correctly identifies that curved MEP materials (CaMoO3, MgV2O5, LiFePO4)
+      benefit most from the new methods.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The answer is grounded in the provided CPU time data files from the source paper.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] The agent completes the task within 20 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] The agent does not request task retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] The agent completes the task within 1200 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] The agent uses no more than 40000 tokens total.'
+- id: DD_sparse_005_20260109
+  capability: data_diagnosis
+  domain: agnostic
+  intent: Implement l0l2-norm regularized sparse regression for fitting effective cluster interactions
+    (ECIs) in a charge-decorated cluster expansion, using the mixed-integer quadratic programming formulation
+    described in the paper with hierarchy constraints.
+  human_prompt_seed: Given DFT training data (dft_training_data.csv) with 463 structures and 858 correlation
+    functions, and a cluster space description (cluster_space.json) with hierarchy constraints, write
+    a Python script `fit_eci_sparse.py` that implements l0l2-norm regularized sparse regression using
+    the mixed-integer quadratic programming formulation from the paper. Use M=100 as the optimization
+    boundary constraint. Save the fitted ECIs to `eci_fitted.json` and a summary of the fit (number of
+    nonzero ECIs, training RMSE) to `fit_summary.json`.
+  tags: []
+  data_files:
+  - key: training_data
+    path: dft_training_data.csv
+    oss_url: ''
+    description: 'DFT training data CSV with columns: structure_id, energy_eV (DFT energy), and correlation
+      function values (columns corr_0 through corr_857 for 858 predefined ECIs).'
+  - key: cluster_space
+    path: cluster_space.json
+    oss_url: ''
+    description: JSON describing the cluster space with 858 orbits including hierarchy information (which
+      clusters are sub-clusters of others).
+  reference_answers:
+  - key: artifact_script
+    value:
+      filename: fit_eci_sparse.py
+  - key: artifact_eci
+    value:
+      filename: eci_fitted.json
+  - key: artifact_summary
+    value:
+      filename: fit_summary.json
+  - key: n_nonzero_eci
+    value:
+      checks:
+      - key: n_nonzero
+        max: 250
+        min: 100
+      filename: fit_summary.json
+  - key: n_training_structures
+    value:
+      checks:
+      - key: n_structures
+        expected: 463
+        tolerance: 0
+      filename: fit_eci_sparse.py
+  - key: n_predefined_eci
+    value:
+      checks:
+      - key: n_eci_predefined
+        expected: 858
+        tolerance: 0
+      filename: fit_eci_sparse.py
+  - key: M_parameter
+    value:
+      checks:
+      - key: M_bound
+        expected: 100
+        tolerance: 0
+      filename: fit_eci_sparse.py
+  - key: hierarchy_constraint
+    value:
+      checks:
+      - key: has_hierarchy
+        expected: 1
+        tolerance: 0
+      filename: fit_eci_sparse.py
+  - key: grounding_source
+    value:
+      filename: fit_eci_sparse.py
+  - key: turn_budget
+    value:
+      max: 40
+  - key: no_retries
+    value:
+      max: 1
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] The file fit_eci_sparse.py exists and contains valid Python code.'
+  - id: artifact_eci
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] The file eci_fitted.json exists and contains ECI values.'
+  - id: artifact_summary
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] The file fit_summary.json exists and is valid JSON.'
+  - id: n_nonzero_eci
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 15.0
+    criterion: '[Suggested] The number of nonzero ECIs after sparse regression is between 100 and 250
+      (paper reports 169).'
+  - id: n_training_structures
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] The script uses 463 training structures.'
+  - id: n_predefined_eci
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] The script handles 858 predefined ECIs.'
+  - id: M_parameter
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] The optimization boundary M is set to 100.'
+  - id: hierarchy_constraint
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 15.0
+    criterion: '[Must] The MIQP includes hierarchy constraints (z_0,b ≤ z_0,a for a ⊂ b).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 5.0
+    criterion: '[Must] The sparse regression implementation is grounded in the source paper''s methodology.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] The agent completes the task within 40 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] The agent does not retry any tool call more than once.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] The agent completes the task within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] The agent uses fewer than 80000 tokens total.'
+- id: DD_python_001_20250618
+  capability: data_diagnosis
+  domain: agnostic
+  intent: Extract the pair effective cluster interaction (ECI) values from the Li_xFePO4 cluster expansion
+    model (Fig. 2 of the paper), compute the sum of ECIs for each interaction type (Li-Li, e-e, Li-e),
+    and identify the dominant nearest-neighbor interaction.
+  human_prompt_seed: Create a Python script that encodes the pair ECI data from the Li_xFePO4 cluster
+    expansion (Fig. 2 of Zhou et al. 2006). Store the data as three dictionaries mapping pair distance
+    (Å) to ECI (meV) for Li-Li, e-e, and Li-e interactions. Compute the sum of known ECIs for each type
+    and write the results to eci_summary.json with keys 'li_li_sum', 'ee_sum', 'li_e_sum' (in meV). Also
+    print which interaction type has the strongest magnitude nearest-neighbor ECI.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_json
+    value:
+      filename: eci_summary.json
+  - key: numeric_li_li_sum
+    value:
+      checks:
+      - key: li_li_sum
+        expected: 59.0
+        tolerance: 0.1
+      filename: eci_summary.json
+  - key: numeric_ee_sum
+    value:
+      checks:
+      - key: ee_sum
+        expected: -11.0
+        tolerance: 0.1
+      filename: eci_summary.json
+  - key: numeric_li_e_sum
+    value:
+      checks:
+      - key: li_e_sum
+        expected: -77.0
+        tolerance: 0.1
+      filename: eci_summary.json
+  - key: text_stdout_dominant
+    value:
+      flags: []
+      tokens:
+      - Li-e
+      filename: stdout
+  - key: grounding_source
+    value:
+      filename: eci_summary.json
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_json
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] eci_summary.json file exists in the working directory.'
+  - id: numeric_li_li_sum
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] li_li_sum equals 59.0 meV (sum of 35+12+8+4+2+0-5+3).'
+  - id: numeric_ee_sum
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] ee_sum equals -6.0 meV (sum of 12+9+10-10-5-10-12, excluding missing value at 3.0
+      Å).'
+  - id: numeric_li_e_sum
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] li_e_sum equals -77.0 meV (sum of -35-22-5-15, only 4 known values).'
+  - id: text_stdout_dominant
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.3
+    criterion: '[Variable] stdout identifies Li-e or Li-Li as having the strongest magnitude NN ECI (both
+      have |35.0| meV at 3.0 Å NN distance).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The answer is grounded in the paper''s Fig. 2 ECI data for the Li_xFePO4 cluster
+      expansion.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Completed within 15 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] No retries were needed.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Completed within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Total token usage within 80000.'

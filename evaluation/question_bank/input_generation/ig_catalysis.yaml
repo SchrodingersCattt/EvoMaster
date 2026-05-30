@@ -1,0 +1,113 @@
+version: v5
+capability: input_generation
+domain: catalysis
+questions:
+- id: IG_vasp_001_20260611
+  capability: input_generation
+  domain: catalysis
+  intent: Generate a VASP INCAR file for a self-consistent field (SCF) calculation on a W(110) surface
+    slab using the PBE functional, PAW potentials, 450 eV energy cutoff, and DFT-D3 van der Waals correction,
+    matching the computational setup described in the W/WO₂ HER catalyst paper.
+  human_prompt_seed: Generate a VASP INCAR file for an SCF calculation on a W(110) surface slab. Use PBE
+    functional, PAW potentials, 450 eV energy cutoff, DFT-D3 vdW correction, and convergence criteria
+    of 1E-6 eV for energy and 0.01 eV/Å for forces. Save the INCAR file in the current working directory.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: poscar
+    path: POSCAR_W_110_slab.vasp
+    oss_url: ''
+    description: W(110) surface slab structure (body-centered cubic W, mp-13). The agent may fetch the
+      bulk W structure from mp-13 and cleave the (110) surface with appropriate vacuum.
+  reference_answers:
+  - key: incar_exists
+    value: INCAR
+  - key: incar_content
+    value:
+      flags:
+      - must_contain_all
+      tokens:
+      - PREC = Accurate
+      - ENCUT = 450
+      - ISMEAR
+      - SIGMA
+      - EDIFF = 1E-6
+      - EDIFFG = -0.01
+      - IBRION
+      - NSW = 0
+      - ISIF = 2
+      - LREAL = Auto
+      - IVDW = 11
+      - GGA = PE
+      filename: INCAR
+  - key: incar_numeric
+    value:
+      checks:
+      - key: ENCUT
+        expected: 450
+        tolerance: 0
+      - key: EDIFF
+        expected: 1.0e-06
+        tolerance: 0
+      - key: EDIFFG
+        expected: -0.01
+        tolerance: 0
+      - key: IVDW
+        expected: 11
+        tolerance: 0
+        allow_missing_key: true
+      filename: INCAR
+  - key: grounding_source
+    value:
+      filename: POSCAR_W_110_slab.vasp
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: incar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] INCAR file exists in the working directory.'
+  - id: incar_content
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 3.0
+    criterion: '[Must] INCAR contains required keywords: PREC=Accurate, ENCUT=450, EDIFF=1E-6, EDIFFG=-0.01,
+      NSW=0, GGA=PE, and IVDW=11 (or equivalent DFT-D3 tag).'
+  - id: incar_numeric
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+    criterion: '[Must] ENCUT=450 eV, EDIFF=1E-6 eV, EDIFFG=-0.01 eV/Å are set correctly.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+    criterion: '[Must] The generated INCAR is consistent with the DFT setup described in the source paper
+      for W(110) surface calculations.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry failed tool calls more than 3 times.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 50000 tokens total.'

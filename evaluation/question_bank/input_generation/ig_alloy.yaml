@@ -137,3 +137,117 @@ questions:
     verify: token_budget
     weight: 0.0
     criterion: '[Variable] Token budget: 50000'
+- id: IG_vasp_001_20250608
+  capability: input_generation
+  domain: alloy
+  intent: Generate VASP INCAR and KPOINTS input files for structural relaxation of Mg-Zn alloy β₁' phases,
+    using the computational parameters specified in the paper (PBE functional, PAW pseudopotentials, 400
+    eV cutoff, 4×4×1 k-point grid, BFGS relaxation with force convergence 0.015 eV/Å).
+  human_prompt_seed: Generate VASP INCAR and KPOINTS files for structural relaxation of Mg-Zn alloy phases.
+    Use the parameters in computational_parameters.json. Output the INCAR file as INCAR_relax and the
+    KPOINTS file as KPOINTS_gamma in the current working directory.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: vasp_params
+    path: computational_parameters.json
+    oss_url: ''
+    description: 'JSON file containing the VASP computational parameters extracted from the paper''s methods
+      section: functional, cutoff energy, k-point grid, relaxation algorithm, force convergence threshold,
+      and electron configurations for Mg and Zn.'
+  reference_answers:
+  - key: incar_exists
+    value: INCAR_relax
+  - key: kpoints_exists
+    value: KPOINTS_gamma
+  - key: incar_content
+    value:
+      flags:
+        all_tokens_required: true
+      tokens:
+      - PREC = Accurate
+      - ENCUT = 400
+      - IBRION = 2
+      - ISIF = 3
+      - EDIFFG = -0.015
+      - EDIFF = 1E-6
+      - ISMEAR = 0
+      - SIGMA = 0.05
+      - IALGO = 38
+      - LREAL = Auto
+      - ADDGRID = .TRUE.
+      filename: INCAR_relax
+  - key: kpoints_content
+    value:
+      flags:
+        all_tokens_required: true
+      tokens:
+      - Automatic mesh
+      - '0'
+      - Gamma
+      - 4 4 1
+      - 0 0 0
+      filename: KPOINTS_gamma
+  - key: grounding_source
+    value:
+      filename: computational_parameters.json
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: incar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] INCAR_relax file exists in the working directory'
+  - id: kpoints_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] KPOINTS_gamma file exists in the working directory'
+  - id: incar_content
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 40.0
+    criterion: '[Must] INCAR contains required VASP tags: PREC=Accurate, ENCUT=400, IBRION=2 (BFGS/CG),
+      ISIF=3 (relax ions+cell), EDIFFG=-0.015 (force convergence), ISMEAR=0 (Gaussian), SIGMA=0.05'
+  - id: kpoints_content
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 20.0
+    criterion: '[Must] KPOINTS specifies Gamma-centered 4×4×1 Monkhorst-Pack grid with Gamma scheme'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] Generated input files are consistent with the computational parameters provided
+      in computational_parameters.json'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 30 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent uses at most 3 retries'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 600 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses at most 50000 tokens total'

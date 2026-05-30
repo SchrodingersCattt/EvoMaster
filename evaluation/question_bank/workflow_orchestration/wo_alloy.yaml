@@ -528,3 +528,154 @@ questions:
     criterion: Token usage within budget.
     axis: efficiency
     verify: token_budget
+- id: WF_vasp_005_20260508
+  capability: workflow_orchestration
+  domain: alloy
+  intent: Set up a two-stage VASP geometry optimization workflow (PREC=Low then PREC=Normal) for a 128-atom
+    NbTa BCC solid solution alloy, with all input files organized in separate stage directories.
+  human_prompt_seed: 'Set up a two-stage VASP geometry optimization workflow for the provided 128-atom
+    NbTa alloy structure. Stage 1: run geometry optimization with PREC=Low. Stage 2: use the CONTCAR from
+    stage 1 as input, run geometry optimization with PREC=Normal. Both stages use GGA-PBE, ENCUT=350,
+    ISMEAR=1, SIGMA=0.2, EDIFF=1E-4, EDIFFG=-0.01, 2x2x2 k-mesh. Generate all required input files (INCAR,
+    POSCAR, POTCAR, KPOINTS) for both stages in separate directories `stage1_low` and `stage2_normal`.'
+  tags:
+  - eng_vasp
+  data_files:
+  - key: poscar_initial
+    path: POSCAR_NbTa_initial
+    oss_url: ''
+    description: Initial POSCAR for a 128-atom NbTa BCC solid solution alloy (randomized atomic positions
+      before optimization).
+  - key: potcar
+    path: POTCAR
+    oss_url: ''
+    description: VASP pseudopotential files for Nb and Ta (POTCAR).
+  - key: kpoints
+    path: KPOINTS
+    oss_url: ''
+    description: KPOINTS file specifying 2x2x2 Monkhorst-Pack mesh.
+  reference_answers:
+  - key: artifact_stage1_incar
+    value: stage1_low/INCAR
+  - key: artifact_stage2_incar
+    value: stage2_normal/INCAR
+  - key: artifact_stage1_poscar
+    value: stage1_low/POSCAR
+  - key: artifact_stage2_poscar
+    value: stage2_normal/POSCAR
+  - key: artifact_stage1_kpoints
+    value: stage1_low/KPOINTS
+  - key: artifact_stage2_kpoints
+    value: stage2_normal/KPOINTS
+  - key: stage1_prec_low
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - PREC = Low
+      filename: stage1_low/INCAR
+  - key: stage2_prec_normal
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - PREC = Normal
+      filename: stage2_normal/INCAR
+  - key: common_params
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - GGA = PE
+      - ENCUT = 350
+      - ISMEAR = 1
+      - SIGMA = 0.2
+      - EDIFF = 1E-4
+      - EDIFFG = -0.01
+      filename: stage1_low/INCAR
+  - key: grounding_source
+    value:
+      filename: stage1_low/INCAR
+  - key: turn_budget
+    value:
+      max: 25
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_stage1_incar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] stage1_low/INCAR exists'
+  - id: artifact_stage2_incar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] stage2_normal/INCAR exists'
+  - id: artifact_stage1_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] stage1_low/POSCAR exists'
+  - id: artifact_stage2_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] stage2_normal/POSCAR exists'
+  - id: artifact_stage1_kpoints
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] stage1_low/KPOINTS exists'
+  - id: artifact_stage2_kpoints
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] stage2_normal/KPOINTS exists'
+  - id: stage1_prec_low
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Stage 1 INCAR has PREC = Low'
+  - id: stage2_prec_normal
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Stage 2 INCAR has PREC = Normal'
+  - id: common_params
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains all common parameters: GGA=PE, ENCUT=350, ISMEAR=1, SIGMA=0.2, EDIFF=1E-4,
+      EDIFFG=-0.01'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Workflow setup is grounded in the source paper''s two-stage optimization methodology'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Variable] Turn budget: 25'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Variable] No retries allowed'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Variable] Duration budget: 600 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Variable] Token budget: 80000'

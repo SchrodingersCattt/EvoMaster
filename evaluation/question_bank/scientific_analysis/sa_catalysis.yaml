@@ -267,3 +267,106 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
+- id: SA_vasp_001_20260611
+  capability: scientific_analysis
+  domain: catalysis
+  intent: Write a Python script to compute the hydrogen adsorption free energy (ΔG_H) on a W(110) surface
+    from DFT total energies using the computational hydrogen electrode model, following the methodology
+    described in the W/WO₂ HER catalyst paper.
+  human_prompt_seed: Write a Python script named compute_dG_H.py that computes the hydrogen adsorption
+    free energy (ΔG_H) on W(110) from DFT total energies. The script should read E_slab (clean slab),
+    E_slab+H (slab with adsorbed H), and E_H2 (gas-phase H₂ molecule) from input files or command-line
+    arguments, then compute ΔG_H = ΔE_H + ΔE_ZPE - TΔS using the computational hydrogen electrode model
+    at T=298.15 K. Save the script in the current working directory.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: poscar_clean
+    path: POSCAR_W_110_clean.vasp
+    oss_url: ''
+    description: Clean W(110) surface slab (fetched from mp-13, cleaved along (110) with vacuum).
+  - key: poscar_h_ads
+    path: POSCAR_W_110_H_ads.vasp
+    oss_url: ''
+    description: W(110) surface slab with one H atom adsorbed (derived from mp-13 bulk W).
+  reference_answers:
+  - key: script_exists
+    value: compute_dG_H.py
+  - key: script_content
+    value:
+      flags:
+      - must_contain_any_of
+      tokens:
+      - ΔG_H
+      - delta_G_H
+      - dG_H
+      - free_energy
+      - E_H2
+      - E_slab
+      - T =
+      - '298.15'
+      - ZPE
+      - entropy
+      filename: compute_dG_H.py
+  - key: script_numeric
+    value:
+      checks:
+      - key: temperature_K
+        expected: 298.15
+        tolerance: 0.01
+        allow_missing_key: false
+      filename: compute_dG_H.py
+  - key: grounding_source
+    value:
+      filename: POSCAR_W_110_clean.vasp
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: script_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] compute_dG_H.py script exists.'
+  - id: script_content
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 3.0
+    criterion: '[Must] Script implements the ΔG_H formula using slab energies, H₂ energy, ZPE correction,
+      and entropy term. Must reference T=298.15 K and include ZPE/entropy contributions.'
+  - id: script_numeric
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+    criterion: '[Must] Temperature is set to 298.15 K as specified in the paper.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+    criterion: '[Must] The script follows the ΔG_H computation methodology from the source paper (Eq.
+      3): ΔG_H = ΔE_H + ΔE_ZPE - TΔS with T=298.15 K.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry failed tool calls more than 3 times.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 50000 tokens total.'
