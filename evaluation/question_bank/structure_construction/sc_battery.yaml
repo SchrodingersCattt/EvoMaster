@@ -341,3 +341,573 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
+- id: SC_agnostic_001_20250618
+  capability: structure_construction
+  domain: battery
+  intent: Construct the primitive rock salt unit cell (space group Fm-3m) used as the basis lattice for
+    coupled cluster expansion of the LiMO2-LiF pseudobinary system, with the lattice parameter specified
+    in the paper.
+  human_prompt_seed: Construct the primitive rock salt unit cell used for cluster expansion in Richards
+    et al. 2018. The lattice is space group Fm-3m with a primitive cell lattice parameter of 3 Å. The
+    cation sublattice is occupied by Li/M (lithium + transition metal) atoms and the anion sublattice
+    by O/F (oxygen + fluorine) atoms. Write the resulting structure to rocksalt_primitive_3a.cif.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_cif
+    value:
+      filename: rocksalt_primitive_3a.cif
+  - key: space_group
+    value:
+      flags: case_insensitive
+      tokens:
+      - Fm-3m
+      filename: rocksalt_primitive_3a.cif
+  - key: lattice_parameter
+    value:
+      checks:
+      - key: cell_length_a
+        max: 3.01
+        min: 2.99
+        allow_missing_key: false
+      filename: rocksalt_primitive_3a.cif
+  - key: atom_count
+    value:
+      checks:
+      - key: total_atoms
+        expected: 2
+        tolerance: 0
+      filename: rocksalt_primitive_3a.cif
+  - key: has_cation_site
+    value:
+      flags: case_insensitive
+      tokens:
+      - Li
+      filename: rocksalt_primitive_3a.cif
+  - key: has_anion_site
+    value:
+      flags: case_insensitive
+      tokens:
+      - O
+      filename: rocksalt_primitive_3a.cif
+  - key: grounding_source
+    value:
+      filename: rocksalt_primitive_3a.cif
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 40000
+  scoring_checklist:
+  - id: artifact_cif
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] CIF file rocksalt_primitive_3a.cif exists'
+  - id: space_group
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 20.0
+    criterion: '[Must] CIF specifies space group Fm-3m (or equivalent Hermann-Mauguin symbol)'
+  - id: lattice_parameter
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 25.0
+    criterion: '[Must] Lattice parameter a = 3.0 Å (tolerance ±0.01 Å)'
+  - id: atom_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 15.0
+    criterion: '[Must] Primitive cell contains exactly 2 atoms (1 cation + 1 anion)'
+  - id: has_cation_site
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] Structure includes Li as a cation species (representing the Li/M sublattice)'
+  - id: has_anion_site
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] Structure includes O as an anion species (representing the O/F sublattice)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] Output is grounded in the paper''s specification of the rock salt primitive cell'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Completes within 20 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] No tool-call retries needed'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Completes within 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Total token usage under 40,000'
+- id: SC_chgnet_001_20250626
+  capability: structure_construction
+  domain: battery
+  intent: Construct a disordered rocksalt supercell for Li₁.₁Mn₀.₈Ti₀.₁O₁.₉F₀.₁ and identify all tetrahedral
+    interstitial sites, classifying each as a 0-TM channel (no transition-metal neighbors) or n-TM channel
+    based on the number of nearest-neighbor TM cations.
+  human_prompt_seed: Construct a 2×2×2 supercell of the rocksalt structure (space group Fm-3m, a=4.2 Å)
+    with composition Li₁.₁Mn₀.₈Ti₀.₁O₁.₉F₀.₁. Randomly distribute Li, Mn, and Ti on the octahedral cation
+    sites and O and F on the anion sites. Then identify all tetrahedral interstitial sites in the supercell
+    and classify each one as a 0-TM, 1-TM, 2-TM, 3-TM, or 4-TM channel based on how many of its four nearest-neighbor
+    cation sites are occupied by transition metals (Mn or Ti). Save the structure as a POSCAR file named
+    `lmtof_rocksalt_2x2x2.vasp` and write the channel classification results to a JSON file named `tm_channel_analysis.json`.
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: artifact_poscar
+    value: lmtof_rocksalt_2x2x2.vasp
+  - key: artifact_json
+    value: tm_channel_analysis.json
+  - key: composition_check
+    value:
+      tokens:
+      - Li
+      - Mn
+      - Ti
+      - O
+      - F
+      filename: lmtof_rocksalt_2x2x2.vasp
+  - key: channel_classification_keys
+    value:
+      tokens:
+      - 0-TM
+      - total_tet_sites
+      filename: tm_channel_analysis.json
+  - key: grounding_source
+    value:
+      filename: lmtof_rocksalt_2x2x2.vasp
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 1
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.25
+    criterion: '[Must] POSCAR file lmtof_rocksalt_2x2x2.vasp exists and contains a valid VASP structure
+      format.'
+  - id: artifact_json
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.25
+    criterion: '[Must] JSON file tm_channel_analysis.json exists with valid JSON content.'
+  - id: composition_check
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.15
+    criterion: '[Must] POSCAR contains all five element species: Li, Mn, Ti, O, F.'
+  - id: channel_classification_keys
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.15
+    criterion: '[Must] JSON file contains 0-TM channel count and total tetrahedral site count keys.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 0.1
+    criterion: '[Must] The constructed structure is grounded in the DRX rocksalt framework described in
+      the source paper.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completed within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retries needed.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completed within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Total tokens used within 80000.'
+- id: SC_drx_001_20250715
+  capability: structure_construction
+  domain: battery
+  intent: Construct a 2×2×2 disordered rocksalt supercell with mixed cation (Li, Mn, Ti) and anion (O,
+    F) sublattices for the composition Li₁.₂₅Mn₀.₄₅Ti₀.₃O₁.₈F₀.₂.
+  human_prompt_seed: 'Construct a 2×2×2 supercell of the disordered rocksalt cathode Li₁.₂₅Mn₀.₄₅Ti₀.₃O₁.₈F₀.₂
+    (space group Fm-3m, conventional lattice parameter a = 4.156 Å) using pymatgen. The conventional rocksalt
+    cell has 4 cation sites (Wyckoff 4a) and 4 anion sites (Wyckoff 4b). Scale the composition to the
+    64-atom supercell (32 cations + 32 anions): 20 Li, 7 Mn, 5 Ti on cation sites and 29 O, 3 F on anion
+    sites. Randomly assign species to sites and save the structure as a POSCAR file named drx_supercell.vasp.'
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: vasp_exists
+    value: drx_supercell.vasp
+  - key: total_atoms_64
+    value:
+      checks:
+      - key: natoms
+        expected: 64
+        tolerance: 0
+      filename: drx_supercell.vasp
+  - key: li_count
+    value:
+      checks:
+      - key: Li
+        max: 21
+        min: 19
+        allow_missing_key: true
+      filename: drx_supercell.vasp
+  - key: mn_count
+    value:
+      checks:
+      - key: Mn
+        max: 8
+        min: 6
+        allow_missing_key: true
+      filename: drx_supercell.vasp
+  - key: ti_count
+    value:
+      checks:
+      - key: Ti
+        max: 6
+        min: 4
+        allow_missing_key: true
+      filename: drx_supercell.vasp
+  - key: o_count
+    value:
+      checks:
+      - key: O
+        max: 30
+        min: 28
+        allow_missing_key: true
+      filename: drx_supercell.vasp
+  - key: f_count
+    value:
+      checks:
+      - key: F
+        max: 4
+        min: 2
+        allow_missing_key: true
+      filename: drx_supercell.vasp
+  - key: lattice_param
+    value:
+      checks:
+      - key: a_supercell
+        max: 8.4
+        min: 8.25
+        allow_missing_key: true
+      filename: drx_supercell.vasp
+  - key: grounding_source
+    value:
+      filename: drx_supercell.vasp
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 100000
+  scoring_checklist:
+  - id: vasp_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.1
+    criterion: '[Must] Output file drx_supercell.vasp exists.'
+  - id: total_atoms_64
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.1
+    criterion: '[Must] Supercell contains exactly 64 atoms.'
+  - id: li_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.08
+    criterion: '[Suggested] Li count is 20 ± 1 (19-21).'
+  - id: mn_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.07
+    criterion: '[Suggested] Mn count is 7 ± 1 (6-8).'
+  - id: ti_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.07
+    criterion: '[Suggested] Ti count is 5 ± 1 (4-6).'
+  - id: o_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.07
+    criterion: '[Suggested] O count is 29 ± 1 (28-30).'
+  - id: f_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.06
+    criterion: '[Suggested] F count is 3 ± 1 (2-4).'
+  - id: lattice_param
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.1
+    criterion: '[Variable] Supercell lattice parameter a is 8.25-8.40 Å (2×4.156 Å = 8.312 Å ± tolerance).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 0.1
+    criterion: '[Must] The structure is grounded in the paper''s DRX cathode composition and rocksalt
+      Fm-3m space group.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: Completed within 30 turns.
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: No tool-call retries.
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: Completed within 600 seconds.
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: Total tokens within 100,000.
+- id: SC_drx_001_20260125
+  capability: structure_construction
+  domain: battery
+  intent: Construct a 2x2x2 supercell of the disordered rocksalt cathode Li1.2Mn0.2Ti0.4Cr0.2O2 (LMTC02O)
+    with random cation distribution on the fcc sublattice, matching the lattice constant 4.1420 Å reported
+    in Huang et al. 2021.
+  human_prompt_seed: Construct a 2×2×2 supercell of the disordered rocksalt cathode Li1.2Mn0.2Ti0.4Cr0.2O2
+    (LMTC02O) with lattice constant 4.1420 Å and space group Fm-3m. The cations (Li, Mn, Ti, Cr) should
+    be randomly distributed on the 4a Wyckoff sites of the rocksalt lattice, and oxygen on the 4b sites.
+    Save the structure as a POSCAR file named lmtc02o_2x2x2_poscar. Use pymatgen to generate the structure.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_poscar
+    value: lmtc02o_2x2x2_poscar
+  - key: text_poscar
+    value:
+      tokens:
+      - Direct
+      - Li
+      - Mn
+      - Ti
+      - Cr
+      - O
+      filename: lmtc02o_2x2x2_poscar
+  - key: numeric_poscar
+    value:
+      checks:
+      - key: a_lattice
+        max: 8.29
+        min: 8.28
+      - key: num_Li
+        expected: 48
+        tolerance: 0
+      - key: num_Mn
+        expected: 16
+        tolerance: 0
+      - key: num_Ti
+        expected: 32
+        tolerance: 0
+      - key: num_Cr
+        expected: 16
+        tolerance: 0
+      - key: num_O
+        expected: 128
+        tolerance: 0
+      filename: lmtc02o_2x2x2_poscar
+  - key: grounding_source
+    value:
+      filename: lmtc02o_2x2x2_poscar
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] lmtc02o_2x2x2_poscar file exists'
+  - id: text_poscar
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] POSCAR is in Direct coordinate format and contains Li, Mn, Ti, Cr, O species'
+  - id: numeric_poscar
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 25.0
+    criterion: '[Must] Lattice constant ~8.284 Å (2×4.142), atom counts: Li=48, Mn=16, Ti=32, Cr=16, O=128
+      (ratio 1.2:0.2:0.4:0.2:2.0 scaled to 2x2x2=64 metal + 128 O sites)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] Structure reflects Li1.2Mn0.2Ti0.4Cr0.2O2 composition and 4.1420 Å lattice constant
+      from the paper'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: Completed within 15 turns
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: No retry turns used
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: Completed within 300 seconds
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: Total tokens within 50,000
+- id: SC_matgen_001_20250610
+  capability: structure_construction
+  domain: battery
+  intent: Construct the O3-type R-3m LiCoO2 parent crystal structure using pymatgen and output it as a
+    POSCAR file. This structure serves as the starting point for Na-vacancy-ordered supercells in high-throughput
+    DFT studies of layered oxide battery cathodes.
+  human_prompt_seed: Construct the O3-type layered LiCoO2 crystal structure in the R-3m space group (No.
+    166) using pymatgen. Use lattice parameters a = 2.82 Å, c = 14.05 Å. Place Li at 3a (0,0,0), Co at
+    3b (0,0,0.5), and O at 6c (0,0,0.25). Write the structure to a file named `li_coo2_poscar` in the
+    working directory.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_poscar
+    value:
+      filename: li_coo2_poscar
+  - key: grounding_source
+    value:
+      filename: li_coo2_poscar
+  - key: spacegroup_check
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - R-3m
+      - '166'
+      filename: li_coo2_poscar
+  - key: formula_check
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - Li
+      - Co
+      - O
+      filename: li_coo2_poscar
+  - key: atom_count
+    value:
+      checks:
+      - key: num_Li_atoms
+        expected: 3
+        tolerance: 0
+      - key: num_Co_atoms
+        expected: 3
+        tolerance: 0
+      - key: num_O_atoms
+        expected: 6
+        tolerance: 0
+      filename: li_coo2_poscar
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file `li_coo2_poscar` exists in the working directory.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The constructed structure is a valid LiCoO2 O3-type layered oxide in R-3m space
+      group, consistent with the source paper''s methodology.'
+  - id: spacegroup_check
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The structure belongs to space group R-3m (No. 166).'
+  - id: formula_check
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The structure contains Li, Co, and O elements in the correct stoichiometry.'
+  - id: atom_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] The POSCAR contains 3 Li, 3 Co, and 6 O atoms (the primitive R-3m cell).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: Agent completed within turn budget.
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: Agent did not request retries.
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: Agent completed within duration budget.
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: Agent completed within token budget.

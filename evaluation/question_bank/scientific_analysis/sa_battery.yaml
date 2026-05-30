@@ -330,3 +330,569 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
+- id: SA_barrier_001_20250115
+  capability: scientific_analysis
+  domain: battery
+  intent: Extract and tabulate the Li migration activation barriers in LiCoO₂ as a function of Li slab
+    distance from the paper's Figure 2 data, and compute the activation barrier at the equilibrium slab
+    distance (2.64 Å).
+  human_prompt_seed: 'From the paper ''Factors that affect Li mobility in layered lithium transition metal
+    oxides'' by Kang and Ceder, extract the activation barrier data for Li migration in LiCoO₂ as a function
+    of Li slab distance (Figure 2). Create a CSV file named licoo2_barrier_vs_slab.csv with columns: slab_distance_angstrom
+    and activation_barrier_meV. Also compute and report the interpolated activation barrier at the equilibrium
+    slab distance of 2.64 Å.'
+  tags:
+  - eng_vasp
+  data_files: []
+  reference_answers:
+  - key: artifact_csv
+    value: licoo2_barrier_vs_slab.csv
+  - key: csv_row_count
+    value:
+      checks:
+      - key: data_rows
+        expected: 7
+        tolerance: 0
+      filename: licoo2_barrier_vs_slab.csv
+  - key: barrier_at_2_55
+    value:
+      checks:
+      - key: barrier_at_2.55A
+        expected: 430
+        tolerance: 5
+      filename: licoo2_barrier_vs_slab.csv
+  - key: barrier_at_2_65
+    value:
+      checks:
+      - key: barrier_at_2.65A
+        expected: 285
+        tolerance: 5
+      filename: licoo2_barrier_vs_slab.csv
+  - key: barrier_at_2_82
+    value:
+      checks:
+      - key: barrier_at_2.82A
+        expected: 65
+        tolerance: 5
+      filename: licoo2_barrier_vs_slab.csv
+  - key: barrier_equilibrium
+    value:
+      flags:
+      - re.IGNORECASE
+      - re.MULTILINE
+      pattern: 2\.64.*(?:285|290|295|300)
+      filename: licoo2_barrier_vs_slab.csv
+  - key: grounding_source
+    value:
+      filename: licoo2_barrier_vs_slab.csv
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_csv
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] Output file licoo2_barrier_vs_slab.csv exists.'
+  - id: csv_row_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 15.0
+    criterion: '[Must] CSV contains exactly 7 data rows (matching the 7 data points in Figure 2).'
+  - id: barrier_at_2_55
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 15.0
+    criterion: '[Must] Activation barrier at 2.55 Å slab distance is 430 meV (±5 meV).'
+  - id: barrier_at_2_65
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 15.0
+    criterion: '[Must] Activation barrier at 2.65 Å slab distance is 285 meV (±5 meV).'
+  - id: barrier_at_2_82
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] Activation barrier at 2.82 Å slab distance is 65 meV (±5 meV).'
+  - id: barrier_equilibrium
+    axis: correctness
+    verify: text_file_regex
+    weight: 10.0
+    criterion: '[Suggested] Activation barrier at equilibrium slab distance (2.64 Å) is interpolated and
+      reported as approximately 285-300 meV.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 15.0
+    criterion: '[Must] The extracted data is grounded in Figure 2 of the Kang & Ceder (2006) paper on
+      Li migration barriers in LiCoO₂.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Variable] Agent completes within 20 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Variable] Agent does not exceed retry budget.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Variable] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Variable] Agent stays within 50000 total token budget.'
+- id: SA_battery_003_20250618
+  capability: scientific_analysis
+  domain: battery
+  intent: Calculate the theoretical Mn2+/Mn4+ redox capacity of Li2Mn2/3Nb1/3O2F from its chemical formula,
+    using the standard gravimetric capacity formula for battery cathode materials.
+  human_prompt_seed: 'Calculate the theoretical Mn2+/Mn4+ double redox capacity (in mAh/g) of the cathode
+    material Li2Mn2/3Nb1/3O2F. The Mn2+/Mn4+ couple involves 2 electrons per Mn ion. Use atomic masses:
+    Li=6.94, Mn=54.94, Nb=92.91, O=16.00, F=19.00 g/mol. Save your calculation steps and result to a file
+    named capacity_calculation.txt.'
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: calc_file_exists
+    value: capacity_calculation.txt
+  - key: capacity_numeric
+    value:
+      checks:
+      - key: theoretical_capacity_mah_g
+        max: 280
+        min: 260
+        expected: 270
+        tolerance: 5
+        allow_missing_key: false
+      filename: capacity_calculation.txt
+  - key: calc_contains_molar_mass
+    value:
+      flags: case_insensitive
+      tokens:
+      - molar mass
+      - molar_mass
+      - g/mol
+      filename: capacity_calculation.txt
+  - key: grounding_source
+    value:
+      filename: capacity_calculation.txt
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: calc_file_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Calculation file ''capacity_calculation.txt'' exists'
+  - id: capacity_numeric
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Theoretical Mn2+/Mn4+ redox capacity is approximately 270 mAh/g (accepted
+      range 260-280 mAh/g)'
+  - id: calc_contains_molar_mass
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Calculation shows molar mass computation for Li2Mn2/3Nb1/3O2F'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The calculation is grounded in the source paper''s composition and reported capacity
+      value'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: Agent completes within turn budget
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: Agent does not retry failed tool calls
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: Agent completes within duration budget
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: Agent stays within total token budget
+- id: SA_capacity_001_20250624
+  capability: scientific_analysis
+  domain: battery
+  intent: Compute the theoretical gravimetric capacity (mAh/g) of a disordered rocksalt cathode composition
+    assuming full Mn²⁺/⁴⁺ and V⁴⁺/⁵⁺ redox activity, and identify whether Li content or transition metal
+    content is the limiting factor.
+  human_prompt_seed: 'Compute the theoretical gravimetric capacity in mAh/g for the composition Li1.171Mn0.343V0.486O1.8F0.2,
+    assuming the Mn²⁺/⁴⁺ couple (2 electrons per Mn) and V⁴⁺/⁵⁺ couple (1 electron per V) are fully accessible.
+    Calculate both the transition-metal-based capacity and the Li-based capacity, and identify which is
+    the limiting factor. Save the results as a JSON file named capacity_analysis.json with keys: tm_capacity_mAh_g,
+    li_capacity_mAh_g, limiting_factor, and composition.'
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: json_exists
+    value: capacity_analysis.json
+  - key: json_has_keys
+    value:
+      flags: []
+      tokens:
+      - tm_capacity_mAh_g
+      - li_capacity_mAh_g
+      - limiting_factor
+      - composition
+      filename: capacity_analysis.json
+  - key: tm_capacity_range
+    value:
+      checks:
+      - key: tm_capacity_mAh_g
+        max: 400
+        min: 350
+        allow_missing_key: false
+      filename: capacity_analysis.json
+  - key: li_capacity_range
+    value:
+      checks:
+      - key: li_capacity_mAh_g
+        max: 400
+        min: 350
+        allow_missing_key: false
+      filename: capacity_analysis.json
+  - key: grounding_source
+    value:
+      filename: capacity_analysis.json
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: json_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file capacity_analysis.json exists'
+  - id: json_has_keys
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] JSON contains required keys: tm_capacity_mAh_g, li_capacity_mAh_g, limiting_factor,
+      composition'
+  - id: tm_capacity_range
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Transition metal capacity is in range 350-400 mAh/g (consistent with paper''s
+      ~375 mAh/g for ST-LMVF20)'
+  - id: li_capacity_range
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Li-based capacity is in range 350-400 mAh/g (consistent with paper''s ~375
+      mAh/g for ST-LMVF20)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Capacity calculation is grounded in the Li1.171Mn0.343V0.486O1.8F0.2 cathode composition
+      with Mn2+/4+ and V4+/5+ redox'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: Completes within turn budget
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: No unnecessary retries
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: Completes within duration budget
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: Completes within token budget
+- id: SA_drx_001_20250715
+  capability: scientific_analysis
+  domain: battery
+  intent: Screen main group elements as potential dopants for disordered rocksalt cathodes by computing
+    formation enthalpy per fluorine atom from the Materials Project and comparing ionic radii to Li⁺.
+  human_prompt_seed: 'Screen the main group elements Be, Mg, Ca, Sc, Y, B, Al, Ga as potential dopants
+    for disordered rocksalt (DRX) cathodes. For each element, compute the formation enthalpy per F atom
+    of its binary fluoride from the Materials Project database (divide formation enthalpy per atom by
+    the number of F atoms in the formula unit), and compute the percentage ionic radius difference with
+    Li⁺ using Shannon radii for octahedral coordination (Li⁺ = 0.76 Å). Write the results to a CSV file
+    named dopant_screening.csv with columns: element, formation_enthalpy_per_f_ev, ionic_radius_angstrom,
+    radius_diff_pct.'
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: csv_exists
+    value: dopant_screening.csv
+  - key: has_headers
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - element
+      - formation_enthalpy_per_f_ev
+      - ionic_radius_angstrom
+      - radius_diff_pct
+      filename: dopant_screening.csv
+  - key: has_mg_sc_candidates
+    value:
+      flags: []
+      tokens:
+      - Mg
+      - Sc
+      filename: dopant_screening.csv
+  - key: has_all_elements
+    value:
+      flags: []
+      tokens:
+      - Be
+      - Mg
+      - Ca
+      - Sc
+      - Y
+      - B
+      - Al
+      - Ga
+      filename: dopant_screening.csv
+  - key: mg_low_radius_diff
+    value:
+      flags: []
+      tokens:
+      - Mg
+      filename: dopant_screening.csv
+  - key: sc_low_radius_diff
+    value:
+      flags: []
+      tokens:
+      - Sc
+      filename: dopant_screening.csv
+  - key: grounding_source
+    value:
+      filename: dopant_screening.csv
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 100000
+  scoring_checklist:
+  - id: csv_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.15
+    criterion: '[Must] Output file dopant_screening.csv exists.'
+  - id: has_headers
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.1
+    criterion: '[Must] CSV has required columns: element, formation_enthalpy_per_f_ev, ionic_radius_angstrom,
+      radius_diff_pct.'
+  - id: has_mg_sc_candidates
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.15
+    criterion: '[Must] CSV identifies Mg and Sc as the two elements with ionic radius difference ≤ 15%
+      from Li⁺.'
+  - id: has_all_elements
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.1
+    criterion: '[Suggested] CSV includes all 8 screened elements: Be, Mg, Ca, Sc, Y, B, Al, Ga.'
+  - id: mg_low_radius_diff
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.1
+    criterion: '[Suggested] Mg radius_diff_pct is between 0 and 5 percent.'
+  - id: sc_low_radius_diff
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.1
+    criterion: '[Suggested] Sc radius_diff_pct is between 0 and 5 percent.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 0.1
+    criterion: '[Must] The output is grounded in the source paper''s element screening methodology and
+      Hume-Rothery criterion.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: Completed within 30 turns.
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: No tool-call retries.
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: Completed within 600 seconds.
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: Total tokens within 100,000.
+- id: SA_energy_003_20250618
+  capability: scientific_analysis
+  domain: battery
+  intent: Extract the relative energy vs Li concentration data for layered, spinel, and one-quarter Mn-tetrahedral
+    Li_xMnO2 structures from the paper, create a plot, and save the data as CSV.
+  human_prompt_seed: 'Extract the relative energy vs Li concentration data for the three Mn oxide structures
+    (layered, one-quarter Mn-tetrahedral, and spinel) from the table embedded in the paper. Create a Python
+    script that reproduces the energy-vs-concentration plot and saves it as `energy_vs_li_conc.png`. Also
+    save the extracted data as a CSV file named `mn_oxide_energies.csv` with columns: li_conc, layered,
+    mn_tet_quarter, spinel.'
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_csv
+    value:
+      filename: mn_oxide_energies.csv
+  - key: artifact_plot
+    value:
+      filename: energy_vs_li_conc.png
+  - key: csv_header
+    value:
+      flags:
+      - -i
+      tokens:
+      - li_conc
+      - layered
+      - mn_tet_quarter
+      - spinel
+      filename: mn_oxide_energies.csv
+  - key: csv_data_row1
+    value:
+      flags: []
+      pattern: 0\.0.*0\.0.*0\.5.*0\.0
+      filename: mn_oxide_energies.csv
+  - key: csv_data_row2
+    value:
+      flags: []
+      pattern: 0\.2.*-0\.1.*0\.15.*-0\.2
+      filename: mn_oxide_energies.csv
+  - key: csv_data_row3
+    value:
+      flags: []
+      pattern: 0\.5.*-0\.1.*-0\.2.*-0\.3
+      filename: mn_oxide_energies.csv
+  - key: csv_data_row4
+    value:
+      flags: []
+      pattern: 1\.0.*0\.0.*0\.0.*0\.0
+      filename: mn_oxide_energies.csv
+  - key: grounding_source
+    value:
+      filename: mn_oxide_energies.csv
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_csv
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file mn_oxide_energies.csv exists.'
+  - id: artifact_plot
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file energy_vs_li_conc.png exists.'
+  - id: csv_header
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] CSV has correct header columns: li_conc, layered, mn_tet_quarter, spinel.'
+  - id: csv_data_row1
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] CSV row for Li=0.0 matches paper data: layered=0.0, mn_tet_quarter=0.5, spinel=0.0.'
+  - id: csv_data_row2
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] CSV row for Li=0.2 matches paper data: layered=-0.1, mn_tet_quarter=0.15, spinel=-0.2.'
+  - id: csv_data_row3
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] CSV row for Li=0.5 matches paper data: layered=-0.1, mn_tet_quarter=-0.2, spinel=-0.3.'
+  - id: csv_data_row4
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] CSV row for Li=1.0 matches paper data: layered=0.0, mn_tet_quarter=0.0, spinel=0.0.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The extracted data and plot are grounded in the Figure 3 energy-vs-Li-concentration
+      data from the source paper.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: Completes within 15 turns.
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: No retries needed.
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: Completes within 300 seconds.
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: Total tokens consumed ≤ 50000.

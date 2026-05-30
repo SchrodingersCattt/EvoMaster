@@ -1,0 +1,160 @@
+version: v5
+capability: data_diagnosis
+domain: battery
+questions:
+- id: DD_screening_001_20250618
+  capability: data_diagnosis
+  domain: battery
+  intent: Evaluate NASICON compounds against the DFT-screening stability criteria (E_hull, chemical stability,
+    electrochemical stability, alkaline stability) from the paper's hierarchical screening methodology
+    and determine which compounds pass or fail.
+  human_prompt_seed: 'Evaluate whether each of the following NASICON compounds passes the DFT-screening
+    stability criteria from the hierarchical screening methodology. For each compound, check all seven
+    criteria: (1) E_hull < 25 meV/atom, (2) DeltaE_rex vs H2O > -0.15 eV/atom, (3) DeltaE_rex vs LiOH
+    > -0.15 eV/atom, (4) V_ox > 4.0 V vs Li/Li+, (5) V_red < 2.6 V vs Li/Li+, (6) max Pourbaix potential
+    < 1.1 eV/non-Li/O/H, (7) Passivation Index > 0.8. Report PASS or FAIL for each compound and list which
+    specific criteria it fails (if any).
+
+
+    Compound A: Li3Sc2(PO4)3 - E_hull=14 meV/atom, DeltaE_rex(H2O)=0.0 eV/atom, DeltaE_rex(LiOH)=0.0 eV/atom,
+    V_ox=5.0 V, V_red=2.4 V, max_Pourbaix=0.497 eV/non-Li/O/H, PI=1.0
+
+
+    Compound B: Li3MgHf(PO4)3 - E_hull=26 meV/atom, DeltaE_rex(H2O)=0.0 eV/atom, DeltaE_rex(LiOH)=-0.10
+    eV/atom, V_ox=4.5 V, V_red=2.3 V, max_Pourbaix=0.595 eV/non-Li/O/H, PI=0.9
+
+
+    Compound C: Li3Y2(PO4)3 - E_hull=66 meV/atom, DeltaE_rex(H2O)=0.0 eV/atom, DeltaE_rex(LiOH)=-0.08
+    eV/atom, V_ox=4.8 V, V_red=2.5 V, max_Pourbaix=0.75 eV/non-Li/O/H, PI=1.0
+
+
+    Save the results as screening_results.json with keys: compound_a, compound_b, compound_c, each containing
+    {"pass": bool, "failed_criteria": [list of criterion names]}.'
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_results
+    value:
+      filename: screening_results.json
+  - key: compound_a_pass
+    value:
+      flags:
+      - multiline
+      - case_insensitive
+      pattern: '"compound_a".*"pass"\s*:\s*true'
+      filename: screening_results.json
+  - key: compound_a_no_failures
+    value:
+      flags:
+      - multiline
+      pattern: '"compound_a".*"failed_criteria"\s*:\s*\[\s*\]'
+      filename: screening_results.json
+  - key: compound_b_fail
+    value:
+      flags:
+      - multiline
+      - case_insensitive
+      pattern: '"compound_b".*"pass"\s*:\s*false'
+      filename: screening_results.json
+  - key: compound_b_ehull_fail
+    value:
+      flags:
+      - multiline
+      - case_insensitive
+      pattern: '"compound_b".*"E_hull"'
+      filename: screening_results.json
+  - key: compound_c_fail
+    value:
+      flags:
+      - multiline
+      - case_insensitive
+      pattern: '"compound_c".*"pass"\s*:\s*false'
+      filename: screening_results.json
+  - key: compound_c_ehull_fail
+    value:
+      flags:
+      - multiline
+      - case_insensitive
+      pattern: '"compound_c".*"E_hull"'
+      filename: screening_results.json
+  - key: grounding_source
+    value:
+      filename: screening_results.json
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_results
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The output file screening_results.json exists and is valid JSON.'
+  - id: compound_a_pass
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Compound A (Li3Sc2(PO4)3) is evaluated as PASS — it meets all seven DFT-screening
+      criteria.'
+  - id: compound_a_no_failures
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Compound A has an empty failed_criteria list (no failures).'
+  - id: compound_b_fail
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Compound B (Li3MgHf(PO4)3) is evaluated as FAIL — its E_hull of 26 meV/atom exceeds
+      the 25 meV/atom cutoff.'
+  - id: compound_b_ehull_fail
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Compound B''s failed_criteria list includes E_hull as a failure reason.'
+  - id: compound_c_fail
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Compound C (Li3Y2(PO4)3) is evaluated as FAIL — its E_hull of 66 meV/atom exceeds
+      the 25 meV/atom cutoff.'
+  - id: compound_c_ehull_fail
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Compound C''s failed_criteria list includes E_hull as a failure reason.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The screening evaluation correctly applies the DFT-screening criteria from Table
+      III of the source paper (E_hull < 25 meV/atom, DeltaE_rex > -0.15 eV/atom, V_ox > 4.0 V, V_red <
+      2.6 V, max_Pourbaix < 1.1 eV/non-Li/O/H, PI > 0.8).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 1.0
+    criterion: '[Must] Agent completes the task within 15 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 1.0
+    criterion: '[Must] Agent does not retry any tool call.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 1.0
+    criterion: '[Must] Agent completes the task within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 1.0
+    criterion: '[Must] Agent uses fewer than 50000 tokens total.'

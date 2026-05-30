@@ -172,3 +172,511 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
+- id: SR_licoo2_001_20250618
+  capability: structure_retrieval
+  domain: battery
+  intent: Retrieve the LiCoO2 crystal structure from the Materials Project and verify its lattice parameters
+    against published first-principles values.
+  human_prompt_seed: Retrieve the LiCoO2 structure from Materials Project (mp-24659) using pymatgen. Verify
+    the lattice parameters and space group match the literature values (a ≈ 2.83 Å, c ≈ 14.21 Å, space
+    group R-3m). Save the structure as a CIF file named licoo2_bulk.cif and write a summary file licoo2_structure_summary.txt
+    containing the lattice constants, space group, and formation energy per atom.
+  tags:
+  - eng_vasp
+  data_files: []
+  reference_answers:
+  - key: artifact_cif
+    value:
+      filename: licoo2_bulk.cif
+  - key: artifact_summary
+    value:
+      filename: licoo2_structure_summary.txt
+  - key: numeric_lattice_a
+    value:
+      checks:
+      - key: a_lattice
+        max: 2.85
+        min: 2.8
+        expected: 2.826
+        tolerance: 0.03
+      filename: licoo2_structure_summary.txt
+  - key: numeric_lattice_c
+    value:
+      checks:
+      - key: c_lattice
+        max: 14.27
+        min: 14.15
+        expected: 14.207
+        tolerance: 0.06
+      filename: licoo2_structure_summary.txt
+  - key: text_spacegroup
+    value:
+      flags:
+        allow_any: true
+      tokens:
+      - R-3m
+      - R\overline{3}m
+      filename: licoo2_structure_summary.txt
+  - key: grounding_source
+    value:
+      filename: licoo2_bulk.cif
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_cif
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file licoo2_bulk.cif exists and is a valid CIF file.'
+  - id: artifact_summary
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file licoo2_structure_summary.txt exists.'
+  - id: numeric_lattice_a
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Lattice parameter a is within 2.80-2.85 Å, consistent with literature value
+      2.826 Å.'
+  - id: numeric_lattice_c
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Lattice parameter c is within 14.15-14.27 Å, consistent with literature value
+      14.207 Å.'
+  - id: text_spacegroup
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Summary file identifies the space group as R-3m (or equivalent notation).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The retrieved structure is grounded in the source paper''s LiCoO2 bulk structure.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: turn_budget
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: no_retries
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: duration_budget
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: token_budget_total
+- id: SR_mno2_001_20250618
+  capability: structure_retrieval
+  domain: battery
+  intent: Retrieve the four MnO2 polymorph crystal structures (alpha, beta, gamma, delta) from the Materials
+    Project database using their MP IDs and save them as CIF files.
+  human_prompt_seed: 'Retrieve the four MnO2 polymorph structures from the Materials Project database
+    using these MP IDs: alpha-MnO2 (mp-1080238), beta-MnO2 (mp-29159), gamma-MnO2 (mp-626068), and delta-MnO2
+    (mp-1002573). Save each structure as a separate CIF file named alpha_mno2.cif, beta_mno2.cif, gamma_mno2.cif,
+    and delta_mno2.cif in the working directory.'
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: alpha_mno2_exists
+    value: alpha_mno2.cif
+  - key: beta_mno2_exists
+    value: beta_mno2.cif
+  - key: gamma_mno2_exists
+    value: gamma_mno2.cif
+  - key: delta_mno2_exists
+    value: delta_mno2.cif
+  - key: alpha_mno2_mp_id
+    value:
+      pattern: mp-1080238
+      filename: alpha_mno2.cif
+  - key: beta_mno2_mp_id
+    value:
+      pattern: mp-29159
+      filename: beta_mno2.cif
+  - key: gamma_mno2_mp_id
+    value:
+      pattern: mp-626068
+      filename: gamma_mno2.cif
+  - key: delta_mno2_mp_id
+    value:
+      pattern: mp-1002573
+      filename: delta_mno2.cif
+  - key: alpha_mno2_composition
+    value:
+      checks:
+      - key: num_Mn
+        max: 30
+        min: 1
+        allow_missing_key: false
+      - key: num_O
+        max: 60
+        min: 2
+        allow_missing_key: false
+      filename: alpha_mno2.cif
+  - key: grounding_source
+    value:
+      filename: alpha_mno2.cif
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: alpha_mno2_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] File alpha_mno2.cif exists in the working directory'
+  - id: beta_mno2_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] File beta_mno2.cif exists in the working directory'
+  - id: gamma_mno2_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] File gamma_mno2.cif exists in the working directory'
+  - id: delta_mno2_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] File delta_mno2.cif exists in the working directory'
+  - id: alpha_mno2_mp_id
+    axis: correctness
+    verify: text_file_regex
+    weight: 10.0
+    criterion: '[Must] alpha_mno2.cif contains the MP identifier mp-1080238'
+  - id: beta_mno2_mp_id
+    axis: correctness
+    verify: text_file_regex
+    weight: 10.0
+    criterion: '[Must] beta_mno2.cif contains the MP identifier mp-29159'
+  - id: gamma_mno2_mp_id
+    axis: correctness
+    verify: text_file_regex
+    weight: 10.0
+    criterion: '[Must] gamma_mno2.cif contains the MP identifier mp-626068'
+  - id: delta_mno2_mp_id
+    axis: correctness
+    verify: text_file_regex
+    weight: 10.0
+    criterion: '[Must] delta_mno2.cif contains the MP identifier mp-1002573'
+  - id: alpha_mno2_composition
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 5.0
+    criterion: '[Suggested] alpha_mno2.cif contains Mn and O atoms in approximately 1:2 ratio'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] The retrieved structures correspond to MnO2 polymorphs from the Materials Project
+      as specified in the source paper'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes the task within 15 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry any tool calls'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes the task within 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses no more than 50000 tokens total'
+- id: SR_mno2_001_20260108
+  capability: structure_retrieval
+  domain: battery
+  intent: Retrieve the β-MnO2 (pyrolusite) structure from the Materials Project, determine its space group
+    and symmetry number, identify the tunnel type ([1×1] tunnels), and export the structure in CIF format
+    with symmetry analysis.
+  human_prompt_seed: Retrieve the β-MnO2 (pyrolusite) crystal structure from the Materials Project database,
+    analyze its space group and crystallographic symmetry, identify the characteristic tunnel structure
+    type, and write a summary report to mno2_beta_analysis.json in the current working directory.
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: analysis_exists
+    value: mno2_beta_analysis.json
+  - key: space_group
+    value:
+      flags: []
+      pattern: '"space_group_number":\s*136'
+      filename: mno2_beta_analysis.json
+  - key: space_group_symbol
+    value:
+      flags: []
+      pattern: '"space_group_symbol":\s*"P4_2/mnm"'
+      filename: mno2_beta_analysis.json
+  - key: tunnel_type
+    value:
+      flags: []
+      pattern: '"tunnel_type":\s*"1x1"'
+      filename: mno2_beta_analysis.json
+  - key: crystal_system
+    value:
+      flags: []
+      pattern: '"crystal_system":\s*"tetragonal"'
+      filename: mno2_beta_analysis.json
+  - key: cif_exists
+    value: mno2_beta.cif
+  - key: grounding_source
+    value:
+      filename: mno2_beta_analysis.json
+      description: Analysis grounded in β-MnO2 (pyrolusite, rutile-type) from Materials Project
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 40000
+  scoring_checklist:
+  - id: analysis_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Analysis JSON file exists.'
+  - id: space_group
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+    criterion: '[Must] Space group number is correctly identified as 136 (P4_2/mnm, rutile-type).'
+  - id: space_group_symbol
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Space group symbol matches P4_2/mnm.'
+  - id: tunnel_type
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Tunnel type is identified as [1×1] (characteristic of pyrolusite/rutile).'
+  - id: crystal_system
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Crystal system is tetragonal.'
+  - id: cif_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] CIF file of the β-MnO2 structure is exported.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Answer is grounded in the β-MnO2 structure from the Materials Project as used in
+      the paper.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 20 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not request retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 40000 total tokens.'
+- id: SR_nasicon_001_20250618
+  capability: structure_retrieval
+  domain: battery
+  intent: Retrieve the LiTi2(PO4)3 crystal structure from the Materials Project (mp-18640) and verify
+    its space group, lattice parameters, and Wyckoff sites match the trigonal R-3c NASICON structure used
+    in the paper.
+  human_prompt_seed: Retrieve the LiTi2(PO4)3 structure from the Materials Project using ID mp-18640.
+    Write the structure to a file named `li_ti2_po4_3.cif` and report its space group, lattice parameters
+    (a, b, c, alpha, beta, gamma), and the Wyckoff sites occupied by Ti and P atoms.
+  tags:
+  - eng_vasp
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: artifact_cif
+    value:
+      filename: li_ti2_po4_3.cif
+  - key: space_group
+    value:
+      flags:
+      - re.IGNORECASE
+      pattern: R-3c|R\\bar{3}c|167
+      filename: li_ti2_po4_3.cif
+  - key: grounding_source
+    value:
+      filename: li_ti2_po4_3.cif
+      description: Structure retrieved from Materials Project mp-18640 as used in the paper.
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: artifact_cif
+    axis: correctness
+    verify: artifact_exists
+    weight: 30.0
+    criterion: '[Must] The output file li_ti2_po4_3.cif exists and is a valid CIF file.'
+  - id: space_group
+    axis: correctness
+    verify: text_file_regex
+    weight: 30.0
+    criterion: '[Must] The structure has space group R-3c (No. 167).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] The answer is grounded in the source paper''s use of mp-18640 for LiTi2(PO4)3.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Complete within 15 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] No tool-call retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Complete within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Use fewer than 80000 tokens total.'
+- id: SR_pymatgen_001_20260508
+  capability: structure_retrieval
+  domain: battery
+  intent: Retrieve the crystal structure of Li3PS4 from the Materials Project and compute its electrochemical
+    stability window versus lithium metal using a grand potential phase diagram analysis.
+  human_prompt_seed: Retrieve the crystal structure of Li3PS4 (beta phase) from the Materials Project
+    database and compute its electrochemical stability window (lower and upper voltage limits vs Li/Li+)
+    using a grand potential phase diagram with pymatgen. Write the stability window results to stability_window.json.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_stability_json
+    value: stability_window.json
+  - key: grounding_source
+    value:
+      filename: stability_window.json
+  - key: lower_voltage_range
+    value:
+      checks:
+      - key: lower_voltage_V
+        max: 2.5
+        min: 0.0
+        allow_missing_key: false
+      filename: stability_window.json
+  - key: upper_voltage_range
+    value:
+      checks:
+      - key: upper_voltage_V
+        max: 3.5
+        min: 1.5
+        allow_missing_key: false
+      filename: stability_window.json
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_stability_json
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file stability_window.json exists and is valid JSON.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The stability window computation is grounded in the Li3PS4 crystal structure from
+      Materials Project.'
+  - id: lower_voltage_range
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] The lower stability voltage (cathodic limit) is between 0.0 and 2.5 V vs Li/Li+.'
+  - id: upper_voltage_range
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] The upper stability voltage (anodic limit) is between 1.5 and 3.5 V vs Li/Li+.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 1.0
+    criterion: '[Must] Complete within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 1.0
+    criterion: '[Must] No file overwrites or retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 1.0
+    criterion: '[Must] Complete within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 1.0
+    criterion: '[Must] Use fewer than 80000 tokens total.'
