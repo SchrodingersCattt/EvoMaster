@@ -182,7 +182,7 @@ questions:
     group R-3m). Save the structure as a CIF file named licoo2_bulk.cif and write a summary file licoo2_structure_summary.txt
     containing the lattice constants, space group, and formation energy per atom.
   tags:
-  - eng_vasp
+  - meta_database
   data_files: []
   reference_answers:
   - key: artifact_cif
@@ -428,6 +428,7 @@ questions:
     type, and write a summary report to mno2_beta_analysis.json in the current working directory.
   tags:
   - meta_database
+  - struct_inspect
   data_files: []
   reference_answers:
   - key: analysis_exists
@@ -532,8 +533,8 @@ questions:
     Write the structure to a file named `li_ti2_po4_3.cif` and report its space group, lattice parameters
     (a, b, c, alpha, beta, gamma), and the Wyckoff sites occupied by Ti and P atoms.
   tags:
-  - eng_vasp
   - meta_database
+  - struct_inspect
   data_files: []
   reference_answers:
   - key: artifact_cif
@@ -602,7 +603,9 @@ questions:
   human_prompt_seed: Retrieve the crystal structure of Li3PS4 (beta phase) from the Materials Project
     database and compute its electrochemical stability window (lower and upper voltage limits vs Li/Li+)
     using a grand potential phase diagram with pymatgen. Write the stability window results to stability_window.json.
-  tags: []
+  tags:
+  - meta_database
+  - analysis_data
   data_files: []
   reference_answers:
   - key: artifact_stability_json

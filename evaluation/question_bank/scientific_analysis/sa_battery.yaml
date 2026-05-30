@@ -342,7 +342,8 @@ questions:
     and activation_barrier_meV. Also compute and report the interpolated activation barrier at the equilibrium
     slab distance of 2.64 Å.'
   tags:
-  - eng_vasp
+  - analysis_data
+  - meta_grounding
   data_files: []
   reference_answers:
   - key: artifact_csv
@@ -460,7 +461,8 @@ questions:
     material Li2Mn2/3Nb1/3O2F. The Mn2+/Mn4+ couple involves 2 electrons per Mn ion. Use atomic masses:
     Li=6.94, Mn=54.94, Nb=92.91, O=16.00, F=19.00 g/mol. Save your calculation steps and result to a file
     named capacity_calculation.txt.'
-  tags: []
+  tags:
+  - char_electrochem
   data_files: []
   reference_answers:
   - key: calc_file_exists
@@ -552,7 +554,8 @@ questions:
     Calculate both the transition-metal-based capacity and the Li-based capacity, and identify which is
     the limiting factor. Save the results as a JSON file named capacity_analysis.json with keys: tm_capacity_mAh_g,
     li_capacity_mAh_g, limiting_factor, and composition.'
-  tags: []
+  tags:
+  - char_electrochem
   data_files: []
   reference_answers:
   - key: json_exists
@@ -654,6 +657,7 @@ questions:
     radius_diff_pct.'
   tags:
   - meta_database
+  - analysis_data
   data_files: []
   reference_answers:
   - key: csv_exists
@@ -780,7 +784,8 @@ questions:
     script that reproduces the energy-vs-concentration plot and saves it as `energy_vs_li_conc.png`. Also
     save the extracted data as a CSV file named `mn_oxide_energies.csv` with columns: li_conc, layered,
     mn_tet_quarter, spinel.'
-  tags: []
+  tags:
+  - analysis_data
   data_files: []
   reference_answers:
   - key: artifact_csv

@@ -30,7 +30,9 @@ questions:
 
     Save the results as screening_results.json with keys: compound_a, compound_b, compound_c, each containing
     {"pass": bool, "failed_criteria": [list of criterion names]}.'
-  tags: []
+  tags:
+  - analysis_data
+  - char_electrochem
   data_files: []
   reference_answers:
   - key: artifact_results

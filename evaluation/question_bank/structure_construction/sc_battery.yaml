@@ -351,7 +351,8 @@ questions:
     et al. 2018. The lattice is space group Fm-3m with a primitive cell lattice parameter of 3 Å. The
     cation sublattice is occupied by Li/M (lithium + transition metal) atoms and the anion sublattice
     by O/F (oxygen + fluorine) atoms. Write the resulting structure to rocksalt_primitive_3a.cif.
-  tags: []
+  tags:
+  - struct_build
   data_files: []
   reference_answers:
   - key: artifact_cif
@@ -474,7 +475,8 @@ questions:
     cation sites are occupied by transition metals (Mn or Ti). Save the structure as a POSCAR file named
     `lmtof_rocksalt_2x2x2.vasp` and write the channel classification results to a JSON file named `tm_channel_analysis.json`.
   tags:
-  - code_mlip
+  - struct_transform
+  - struct_inspect
   data_files: []
   reference_answers:
   - key: artifact_poscar
@@ -565,7 +567,8 @@ questions:
     cell has 4 cation sites (Wyckoff 4a) and 4 anion sites (Wyckoff 4b). Scale the composition to the
     64-atom supercell (32 cations + 32 anions): 20 Li, 7 Mn, 5 Ti on cation sites and 29 O, 3 F on anion
     sites. Randomly assign species to sites and save the structure as a POSCAR file named drx_supercell.vasp.'
-  tags: []
+  tags:
+  - struct_transform
   data_files: []
   reference_answers:
   - key: vasp_exists
@@ -713,7 +716,8 @@ questions:
     (LMTC02O) with lattice constant 4.1420 Å and space group Fm-3m. The cations (Li, Mn, Ti, Cr) should
     be randomly distributed on the 4a Wyckoff sites of the rocksalt lattice, and oxygen on the 4b sites.
     Save the structure as a POSCAR file named lmtc02o_2x2x2_poscar. Use pymatgen to generate the structure.
-  tags: []
+  tags:
+  - struct_transform
   data_files: []
   reference_answers:
   - key: artifact_poscar
@@ -818,7 +822,8 @@ questions:
     166) using pymatgen. Use lattice parameters a = 2.82 Å, c = 14.05 Å. Place Li at 3a (0,0,0), Co at
     3b (0,0,0.5), and O at 6c (0,0,0.25). Write the structure to a file named `li_coo2_poscar` in the
     working directory.
-  tags: []
+  tags:
+  - struct_build
   data_files: []
   reference_answers:
   - key: artifact_poscar

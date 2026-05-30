@@ -30,8 +30,12 @@ class QuestionTag(StrEnum):
     struct_build = 'struct_build'
     struct_transform = 'struct_transform'
     struct_molcrys = 'struct_molcrys'
-    # MD 后处理分析
+    # 结构解析（不修改结构）：对应 inspect-atomic-structure skill
+    struct_inspect = 'struct_inspect'
+    # MD 后处理分析：对应 md-analysis skill
     analysis_post_md = 'analysis_post_md'
+    # 产物/数据分析（筛选表、相图、文献提数、可视化）：对应 data-analysis skill
+    analysis_data = 'analysis_data'
     # 表征
     char_diffraction = 'char_diffraction'
     char_optical_spectrum = 'char_optical_spectrum'

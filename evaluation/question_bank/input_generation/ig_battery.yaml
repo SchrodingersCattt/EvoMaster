@@ -12,7 +12,8 @@ questions:
     2004 paper (a=4.8450 Å, b=2.8097 Å, c=4.9541 Å) with Co and O atomic positions as specified. Include
     transition probability matrices for simulating O2-type and O6-type stacking faults. Output the file
     as diffrax_t2_stacking_faults.inp.
-  tags: []
+  tags:
+  - char_diffraction
   data_files: []
   reference_answers:
   - key: artifact_inp_exists
@@ -120,7 +121,8 @@ questions:
     from Table 1: a=2.8081 Å, c=4.9512 Å; slab 1 with Co at (0,0,1/2), O(1) at (2/3,1/3,0.3), O(2) at
     (1/3,2/3,0.7); slab 2 with Co at (2/3,1/3,1/2), O(1) at (0,0,0.3), O(2) at (1/3,2/3,0.7). Output the
     file as diffrax_t2_basic.inp.'
-  tags: []
+  tags:
+  - char_diffraction
   data_files: []
   reference_answers:
   - key: artifact_inp_basic_exists
@@ -224,7 +226,8 @@ questions:
     in Wang et al. (2024) for the LiIn(IO₃)₄ aqueous synthesis system. The half-reaction is H₅IO₆ + H⁺
     + 2e⁻ → HIO₃ + 3H₂O. Write a Python script that computes E(pH) for pH values from 0 to 14 in steps
     of 0.1, and save the results to nernst_redox_potential.csv with columns 'pH' and 'E_V'.
-  tags: []
+  tags:
+  - char_electrochem
   data_files: []
   reference_answers:
   - key: row_count
@@ -344,7 +347,8 @@ questions:
     in eV/atom. Save the function and a test script to pourbaix_potential.py. The test script should compute
     Φ̄ for LiFePO₄ (G ≈ −18.0 eV/formula, approximate) at pH=9.27, E=−0.56 V, and for H₂O (G = 0 by convention,
     Q=0) at pH=7, E=0 V.'
-  tags: []
+  tags:
+  - char_electrochem
   data_files: []
   reference_answers:
   - key: artifact_python_file
