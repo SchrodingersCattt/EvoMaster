@@ -74,54 +74,54 @@ logger.setLevel(logging.INFO)
 
 # Multi-turn dialog: max events from DB to avoid context overflow
 _DIALOG_HISTORY_MAX_EVENTS = int(
-    os.environ.get('CHAT_DIALOG_HISTORY_MAX_EVENTS', '500')
+    os.environ.get("CHAT_DIALOG_HISTORY_MAX_EVENTS", "500")
 )
 
 _project_root = Path(__file__).resolve().parent.parent.parent
-RUN_ID_WEB = 'mat_master_web'
+RUN_ID_WEB = "mat_master_web"
 
-_MATMASTER_CONFIG_DIR = _project_root / 'config'
+_MATMASTER_CONFIG_DIR = _project_root / "config"
 
 
 @lru_cache(maxsize=1)
 def _get_agent_default_llm() -> str | None:
     """Cached read of ``agents.general.llm`` from ``config/config.yaml``."""
-    return load_agents_general_llm(_MATMASTER_CONFIG_DIR / 'config.yaml')
+    return load_agents_general_llm(_MATMASTER_CONFIG_DIR / "config.yaml")
 
 
 _INVALID_FINISH_MESSAGES: dict[str, str] = {
-    'output_length_exceeded': (
-        '模型输出被 provider 的输出 token 上限截断，'
-        '未形成可提交的最终回答，请稍后重试。'
+    "output_length_exceeded": (
+        "模型输出被 provider 的输出 token 上限截断，"
+        "未形成可提交的最终回答，请稍后重试。"
     ),
-    'content_filtered': '模型输出被 provider 内容策略截断或拦截，未形成可提交的最终回答。',
-    'reasoning_only': '模型只返回了思考内容，没有生成可见最终回答。请重试。',
-    'empty_response': '模型本轮没有返回可见最终回答。请重试。',
-    'missing_llm_response': '模型流结束但没有返回可验证的响应对象。请重试。',
-    'missing_tool_call_payload': (
-        '模型声明要调用工具，但 provider 流式响应未返回有效工具调用参数。'
-        '系统已重试仍未恢复，请重试或切换模型。'
+    "content_filtered": "模型输出被 provider 内容策略截断或拦截，未形成可提交的最终回答。",
+    "reasoning_only": "模型只返回了思考内容，没有生成可见最终回答。请重试。",
+    "empty_response": "模型本轮没有返回可见最终回答。请重试。",
+    "missing_llm_response": "模型流结束但没有返回可验证的响应对象。请重试。",
+    "missing_tool_call_payload": (
+        "模型声明要调用工具，但 provider 流式响应未返回有效工具调用参数。"
+        "系统已重试仍未恢复，请重试或切换模型。"
     ),
 }
-_INVALID_FINISH_DEFAULT = '模型没有返回有效最终回答。请重试。'
+_INVALID_FINISH_DEFAULT = "模型没有返回有效最终回答。请重试。"
 
 
 def _invalid_finish_error_message(finish_detail: Any) -> str:
-    kind = getattr(finish_detail, 'kind', None)
+    kind = getattr(finish_detail, "kind", None)
     if kind is None and isinstance(finish_detail, dict):
-        kind = finish_detail.get('kind')
+        kind = finish_detail.get("kind")
     return _INVALID_FINISH_MESSAGES.get(kind, _INVALID_FINISH_DEFAULT)
 
 
 async def _emit_error_and_close_fanout(
-    fanout: RunEventFanout, message: str, source: str = 'System'
+    fanout: RunEventFanout, message: str, source: str = "System"
 ) -> None:
     """Dispatch ErrorEvent + StreamClosedEvent(treat_as_failure) pair via fanout."""
     await fanout.dispatch(ErrorEvent(source=source, message=message))
     await fanout.dispatch(
         StreamClosedEvent(
             source=source,
-            end_reason='error',
+            end_reason="error",
             task_completed=False,
             treat_as_failure=True,
         )
@@ -249,10 +249,10 @@ class AgentRunService:
             return int((time.monotonic() - run_started_at) * 1000)
 
         prompt_preview = (
-            (user_prompt[:80] + '...') if len(user_prompt) > 80 else user_prompt
+            (user_prompt[:80] + "...") if len(user_prompt) > 80 else user_prompt
         )
         logger.info(
-            'run_agent start: session_id=%s task_id=%s mode=%s prompt_len=%s preview=%s',
+            "run_agent start: session_id=%s task_id=%s mode=%s prompt_len=%s preview=%s",
             session_id,
             task_id,
             mode,
@@ -268,9 +268,9 @@ class AgentRunService:
         try:
             # -- Stage 1: Playground --
             self.init_playground_sync()
-            task_id = task_id or ('ws_' + uuid.uuid4().hex[:16])
+            task_id = task_id or ("ws_" + uuid.uuid4().hex[:16])
             playground = self._pg_manager.get_or_create(session_id)
-            run_dir = str(_project_root / 'runs' / RUN_ID_WEB)
+            run_dir = str(_project_root / "runs" / RUN_ID_WEB)
             # Physical substrate from Playground; the per-run AgentRunRequest
             # (turn input, llm, ports, ...) is assembled once near Stage 6.
             environment = playground.prepare(
@@ -281,10 +281,10 @@ class AgentRunService:
                 events_table = get_chat_events_table()
             except Exception:
                 logger.exception(
-                    'run_agent pre-handler setup failed: session_id=%s',
+                    "run_agent pre-handler setup failed: session_id=%s",
                     session_id,
                 )
-                return ((False, 'pre_router_setup_failed'), 0)
+                return ((False, "pre_router_setup_failed"), 0)
 
             # -- Stage 2: RunEventFanout bootstrap --
             # SSE handler first for lower frontend latency,
@@ -305,7 +305,7 @@ class AgentRunService:
                 ),
             )
 
-            exp_name = mode or 'direct'
+            exp_name = mode or "direct"
             from matmaster.config.loader import load_exp_config
 
             exp_config = load_exp_config(exp_name)
@@ -342,7 +342,7 @@ class AgentRunService:
             from matmaster.core.exp import Exp
             from matmaster.providers.llm_factory import build_provider
 
-            llm_config = load_llm_config(_project_root / 'config' / 'llm_config.yaml')
+            llm_config = load_llm_config(_project_root / "config" / "llm_config.yaml")
 
             agent_default_llm = _get_agent_default_llm()
             top_level_images = tuple(images or ())
@@ -408,7 +408,7 @@ class AgentRunService:
                     )
                 except Exception:
                     logger.warning(
-                        'response_figures dispatch failed reason=%s',
+                        "response_figures dispatch failed reason=%s",
                         reason,
                         exc_info=True,
                     )
@@ -418,8 +418,7 @@ class AgentRunService:
                     figure_accumulator.mark_snapshot_emitted()
                 else:
                     logger.warning(
-                        'response_figures dispatch reported handler failure '
-                        'reason=%s',
+                        "response_figures dispatch reported handler failure reason=%s",
                         reason,
                     )
 
@@ -447,12 +446,12 @@ class AgentRunService:
                         await _record_tool_result_figures_and_dispatch_if_dirty(
                             event,
                             include_spawned=True,
-                            reason='child_tool_result',
+                            reason="child_tool_result",
                         )
                 except Exception:
                     logger.warning(
-                        'child event sink failed for event type=%s',
-                        getattr(event, 'type', '?'),
+                        "child event sink failed for event type=%s",
+                        getattr(event, "type", "?"),
                         exc_info=True,
                     )
 
@@ -609,12 +608,9 @@ class AgentRunService:
                     current = self._active_skills.get(session_id, frozenset())
                     self._active_skills[session_id] = frozenset((*current, skill_name))
 
-            # -- Assemble the per-run request once, then compose the context.
-            # This replaces the former ~9 with_updates / model_copy injections
-            # the service did on a "frozen" PlaygroundContext: the physical
-            # environment and the runtime request are now separate, honestly
-            # owned objects.
-            pg_ctx = AgentRunContext(
+            # -- Compose the Exp input from the prepared environment and
+            # service-owned runtime request.
+            agent_run_ctx = AgentRunContext(
                 environment=environment,
                 request=AgentRunRequest(
                     llm_provider=llm_provider,
@@ -636,7 +632,7 @@ class AgentRunService:
             run_result_event = None
             async with aclosing(
                 exp.run_stream(
-                    pg_ctx,
+                    agent_run_ctx,
                     user_prompt,
                     history=history,
                     cancel_token=cancel_token,
@@ -644,17 +640,16 @@ class AgentRunService:
                 )
             ) as stream:
                 async for event in stream:
-                    # Source normalization (ESIN-06)
-                    if hasattr(event, 'source'):
+                    if hasattr(event, "source"):
                         normalized = _normalize_public_source(event.source)
                         if event.source != normalized:
-                            event = event.model_copy(update={'source': normalized})
+                            event = event.model_copy(update={"source": normalized})
 
                     if isinstance(event, SkillHitEvent):
                         _remember_skill_hit(event.skill_name)
 
                     if isinstance(event, RunResultEvent) and event.spawn_id is None:
-                        await _dispatch_response_figures_if_dirty('final_flush')
+                        await _dispatch_response_figures_if_dirty("final_flush")
 
                     await fanout.dispatch(event)
 
@@ -662,7 +657,7 @@ class AgentRunService:
                         await _record_tool_result_figures_and_dispatch_if_dirty(
                             event,
                             include_spawned=False,
-                            reason='tool_result',
+                            reason="tool_result",
                         )
 
                     # Detect terminal event
@@ -672,27 +667,27 @@ class AgentRunService:
             # -- Post-processing --
             if run_result_event is None:
                 await _emit_error_and_close_fanout(
-                    fanout, 'Generator terminated without result'
+                    fanout, "Generator terminated without result"
                 )
-                return ((False, 'no_result'), _elapsed_ms())
+                return ((False, "no_result"), _elapsed_ms())
 
-            if run_result_event.reason == 'cancelled':
+            if run_result_event.reason == "cancelled":
                 await fanout.dispatch(
-                    CancelledEvent(source='System', reason='Task cancelled by user.')
+                    CancelledEvent(source="System", reason="Task cancelled by user.")
                 )
                 await fanout.dispatch(
                     StreamClosedEvent(
-                        source='System',
-                        end_reason='cancelled',
+                        source="System",
+                        end_reason="cancelled",
                         task_completed=False,
                     )
                 )
-                return ((False, 'cancelled'), _elapsed_ms())
+                return ((False, "cancelled"), _elapsed_ms())
             else:
-                if run_result_event.reason == 'invalid_finish':
+                if run_result_event.reason == "invalid_finish":
                     await fanout.dispatch(
                         ErrorEvent(
-                            source='System',
+                            source="System",
                             message=_invalid_finish_error_message(
                                 run_result_event.finish_detail
                             ),
@@ -700,24 +695,24 @@ class AgentRunService:
                     )
                 await fanout.dispatch(
                     StreamClosedEvent(
-                        source='System',
-                        task_completed=run_result_event.reason == 'natural',
+                        source="System",
+                        task_completed=run_result_event.reason == "natural",
                         end_reason=run_result_event.reason,
-                        treat_as_failure=run_result_event.status == 'failed' or None,
+                        treat_as_failure=run_result_event.status == "failed" or None,
                     )
                 )
-                if run_result_event.status == 'completed':
+                if run_result_event.status == "completed":
                     user_id = self._sessions_service.get_session_user_id(session_id)
                     if user_id:
                         await use_quota(user_id, model_key=model_override)
                     return (True, _elapsed_ms())
                 fail_reason = (
-                    run_result_event.reason or run_result_event.status or 'failed'
+                    run_result_event.reason or run_result_event.status or "failed"
                 )
                 return ((False, fail_reason), _elapsed_ms())
 
         except Exception as exc:
-            logger.exception('run_agent error: session_id=%s', session_id)
+            logger.exception("run_agent error: session_id=%s", session_id)
             if fanout is not None:
                 try:
                     await _emit_error_and_close_fanout(fanout, str(exc))
@@ -727,7 +722,7 @@ class AgentRunService:
         finally:
             elapsed = time.monotonic() - run_started_at
             logger.info(
-                'run_agent done: session_id=%s elapsed=%.1fs',
+                "run_agent done: session_id=%s elapsed=%.1fs",
                 session_id,
                 elapsed,
             )
@@ -741,7 +736,7 @@ class AgentRunService:
                         ssh_attached=ssh_attached,
                     )
                 except Exception:
-                    logger.warning('Bohrium cleanup error', exc_info=True)
+                    logger.warning("Bohrium cleanup error", exc_info=True)
             # 2. Exp cleanup is owned by Exp.run_stream() via its finally block.
             #    aclosing() guarantees the generator's finally runs before we
             #    reach this point, so the callback list is already cleared.
@@ -752,7 +747,7 @@ class AgentRunService:
                     await asyncio.wait_for(fanout.drain_and_close(), timeout=10)
                 except Exception:
                     logger.warning(
-                        'fanout.drain_and_close() failed during cleanup',
+                        "fanout.drain_and_close() failed during cleanup",
                         exc_info=True,
                     )
             get_redis_dao().delete_stop_requested(session_id, task_id)

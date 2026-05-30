@@ -126,7 +126,7 @@ def test_successful_setup_returns_execution_binding_and_stores_runtime(
     cfg = mock_ssh_cls.call_args[0][0]
     assert cfg.host == '10.0.0.1'
     assert cfg.password == 'secret'
-    assert cfg.working_dir == '/share'
+    assert cfg.workspace_path == '/share'
 
     mock_ssh.open.assert_called_once()
 
@@ -632,7 +632,6 @@ def test_setup_uses_remote_workdir_for_ssh_and_execution_context(
         )
 
     cfg = mock_ssh_cls.call_args.args[0]
-    assert cfg.working_dir == "/share/case"
     assert cfg.workspace_path == "/share/case"
     assert result.execution_workdir == "/share/case"
     assert result.runtime_snapshot is not None

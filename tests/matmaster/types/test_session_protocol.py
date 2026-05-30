@@ -6,6 +6,7 @@ import json
 from typing import get_type_hints
 
 import pytest
+from pydantic import ValidationError
 
 from matmaster.sessions.local import LocalSession
 from matmaster.sessions.tmux import PS1_BEGIN, PS1_END, PS1_PATTERN, BashMetadata
@@ -68,17 +69,20 @@ class TestSessionConfig:
     """SessionConfig frozen Pydantic model."""
 
     def test_session_config_defaults(self) -> None:
-        """Test 2: SessionConfig has timeout/workspace_path/working_dir fields."""
+        """Test 2: SessionConfig has timeout/workspace_path fields."""
         cfg = SessionConfig()
         assert cfg.timeout == 300
         assert cfg.workspace_path == "/share"
-        assert cfg.working_dir == "/share"
 
     def test_session_config_frozen(self) -> None:
         """Test 2 (continued): SessionConfig is frozen."""
         cfg = SessionConfig()
         with pytest.raises((TypeError, ValueError)):  # ValidationError for frozen model
             cfg.timeout = 999
+
+    def test_session_config_rejects_removed_working_dir(self) -> None:
+        with pytest.raises(ValidationError):
+            SessionConfig(working_dir="/workspace")
 
 
 class TestLocalSessionConfig:

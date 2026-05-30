@@ -59,7 +59,7 @@ class AgentRuntimeSpec(BaseModel):
         extra="forbid",
     )
 
-    # None is allowed during the assemble phase (ctx.llm_provider may be None);
+    # None is allowed during assemble() (ctx.request.llm_provider may be None);
     # build_runtime guarantees a real provider before kernel execution.
     llm_provider: LLMProvider | None = None
 
@@ -90,8 +90,8 @@ class AgentRuntimeSpec(BaseModel):
     tool_runner: Any | None = None
     tool_catalog: Any | None = None
     runtime_topology: Any | None = None
-    capability_policy: Any | None = None  # Phase 33 defines CapabilityPolicy Protocol
-    structural_validation: Any | None = None  # Phase 33 defines StructuralValidation
+    capability_policy: Any | None = None
+    structural_validation: Any | None = None
 
     @model_validator(mode="after")
     def _check_v2_field_types(self) -> AgentRuntimeSpec:

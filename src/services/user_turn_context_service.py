@@ -1,6 +1,5 @@
 """Durable user-turn context write boundary and AGENT.md helper.
 
-Phase 1 renderer helpers were removed in the Phase 2C runtime cutover.
 Rendering now belongs to matmaster.context.assembly.ContextAssembler; this
 module keeps only shared constants, AGENT.md loading, and durable event write
 deduplication.

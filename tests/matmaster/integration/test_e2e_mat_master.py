@@ -224,10 +224,10 @@ class TestMatMasterE2EPipeline:
     async def test_mat_master_e2e_pipeline(self, tmp_path: Path) -> None:
         """E2E: Playground.prepare() -> Exp.build_runtime() -> Kernel.run_stream() with mock LLM."""
         mock_llm = MockLLMProvider()
-        pg_ctx = _make_run_ctx(tmp_path, llm_provider=mock_llm)
+        agent_run_ctx = _make_run_ctx(tmp_path, llm_provider=mock_llm)
 
         exp = Exp(self._EXP_CONFIG)
-        runtime = await exp.build_runtime(pg_ctx)
+        runtime = await exp.build_runtime(agent_run_ctx)
 
         kernel = AgentKernel()
         events = []
@@ -240,11 +240,11 @@ class TestMatMasterE2EPipeline:
     async def test_mat_master_e2e_with_tool_call(self, tmp_path: Path) -> None:
         """E2E: Pipeline with a tool call and tool result via generator."""
         mock_llm = MockLLMProviderWithToolCall()
-        pg_ctx = _make_run_ctx(tmp_path, llm_provider=mock_llm)
+        agent_run_ctx = _make_run_ctx(tmp_path, llm_provider=mock_llm)
         echo_tool = EchoTool()
 
         exp = Exp(self._EXP_CONFIG)
-        runtime = await exp.build_runtime(pg_ctx)
+        runtime = await exp.build_runtime(agent_run_ctx)
         # Register echo tool via catalog overlay for version-bumped injection
         runtime.spec.tool_catalog.register_overlay(echo_tool, source='test')
 

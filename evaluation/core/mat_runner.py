@@ -163,8 +163,8 @@ def _run_mat_task_once(
     session = LocalSession(workspace_path=workspace)
     session.open()
 
-    # 4. Build the run context (Phase 3 split: environment + request)
-    pg_ctx = AgentRunContext(
+    # 4. Build the run context (environment + request)
+    agent_run_ctx = AgentRunContext(
         environment=ExecutionEnvironment(
             workdir=workspace,
             session_type="local",
@@ -187,7 +187,7 @@ def _run_mat_task_once(
         from matmaster.core.stream_drain import drain_run_stream
 
         try:
-            runtime = await exp.build_runtime(pg_ctx)
+            runtime = await exp.build_runtime(agent_run_ctx)
             return await drain_run_stream(
                 runtime.kernel.run_stream(runtime.spec, prompt)
             )

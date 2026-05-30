@@ -1,10 +1,4 @@
-"""SSE event filter + normalization extracted from stream_service.
-
-Phase 0 refactor (DESIGN.md §14 Phase 0a): move ``_should_emit_event_to_sse``
-and friends out of ``stream_service.py`` so the file stays under the
-800-line target. Phase 1 (EVT-02) will extend
-``_should_emit_event_to_sse`` here to also hide ``user_turn_context``
-events, mirroring the live ``SSEHandler._should_skip()`` policy.
+"""SSE event filter + normalization helpers.
 
 The helpers were named with a leading underscore in the original
 module; we keep the public API underscored too to avoid disturbing

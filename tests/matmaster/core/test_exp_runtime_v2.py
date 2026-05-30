@@ -1,7 +1,4 @@
-"""Tests for Exp.build_runtime() FullToolRunner injection and Exp.run_stream().
-
-Phase 34 Plan 1 Task 2: ESIN-01, ESIN-04, ESIN-05.
-"""
+"""Tests for Exp.build_runtime() FullToolRunner injection and Exp.run_stream()."""
 
 from __future__ import annotations
 
@@ -757,7 +754,7 @@ class TestSkillOverlayCatalog:
 
 
 class TestBuildRuntimeCompactorEventSink:
-    """Compactor creation uses event_sink=None (bus parameter removed in Phase 36)."""
+    """Compactor creation uses event_sink=None."""
 
     @pytest.mark.asyncio
     async def test_compactor_uses_event_sink(self) -> None:

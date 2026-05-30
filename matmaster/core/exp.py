@@ -4,11 +4,11 @@ Exp is a concrete class that transforms an ExpConfig + AgentRunContext
 into an AgentRuntimeSpec (assemble), builds runtime resources (build_runtime),
 and executes the agent loop (run_stream).
 
-The ``AgentRunContext`` it consumes is the Phase 3 split contract: physical
-facts under ``ctx.environment`` (ExecutionEnvironment) and per-run runtime
-ingredients under ``ctx.request`` (AgentRunRequest).
+The ``AgentRunContext`` it consumes keeps physical facts under
+``ctx.environment`` (ExecutionEnvironment) and per-run runtime ingredients
+under ``ctx.request`` (AgentRunRequest).
 
-Three-phase lifecycle:
+Lifecycle:
 1. assemble(ctx) -- pure data transform: config + ctx -> AgentRuntimeSpec
 2. build_runtime(ctx) -- resource creation: tools, prompt, kernel -> AgentRuntime
 3. run_stream(ctx, task, ...) -- thin driver over runtime_scope()
@@ -253,7 +253,7 @@ class Exp:
 
         return child_run_factory
 
-    # ── Phase 1: assemble ────────────────────────────────
+    # ── Assemble ─────────────────────────────────────────
 
     async def assemble(self, ctx: AgentRunContext) -> AgentRuntimeSpec:
         """Data transform: config + ctx -> AgentRuntimeSpec."""
@@ -301,7 +301,7 @@ class Exp:
             planes.add(ToolPlane.EXTERNAL_SERVICE)
         return frozenset(planes)
 
-    # ── Phase 2: build_runtime ───────────────────────────
+    # ── Runtime construction ─────────────────────────────
 
     async def build_runtime(
         self,
@@ -498,7 +498,7 @@ class Exp:
             cleanup=self._run_cleanup_callbacks,
         )
 
-    # ── Phase 3: runtime scope + run_stream ────────────────
+    # ── Runtime scope + run_stream ───────────────────────
 
     @asynccontextmanager
     async def runtime_scope(

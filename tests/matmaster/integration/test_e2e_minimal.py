@@ -58,11 +58,11 @@ class TestMinimalE2EPipeline:
         Verify pipeline completes with natural finish via run_stream().
         """
         mock_llm = MinimalMockLLMProvider()
-        pg_ctx = _make_minimal_ctx(tmp_path, llm_provider=mock_llm)
+        agent_run_ctx = _make_minimal_ctx(tmp_path, llm_provider=mock_llm)
 
         config = ExpConfig(name="direct")
         exp = Exp(config)
-        runtime = await exp.build_runtime(pg_ctx)
+        runtime = await exp.build_runtime(agent_run_ctx)
 
         # Collect events from kernel.run_stream() generator
         kernel = AgentKernel()

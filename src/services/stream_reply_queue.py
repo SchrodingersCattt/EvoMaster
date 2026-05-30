@@ -1,10 +1,4 @@
-"""RedisReplyQueue extracted from stream_service.
-
-Phase 0 refactor (DESIGN.md §14 Phase 0a, spec-additional split): the
-RedisReplyQueue is logically independent of the SSE replay/streaming
-pipeline. Moving it out keeps stream_service.py under the 800-line
-target with buffer for Phase 1 SSE filter extensions.
-"""
+"""RedisReplyQueue for interaction replies across API and worker processes."""
 
 from __future__ import annotations
 

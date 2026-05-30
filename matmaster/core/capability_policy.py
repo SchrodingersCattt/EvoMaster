@@ -2,8 +2,6 @@
 
 Layer C of the three-layer constraint model. Evaluates tool calls for
 safety violations (dangerous bash commands, env credential leaks, etc.).
-
-Bash/Python safety patterns migrated from bash_tool.py (Phase 35-01).
 """
 
 from __future__ import annotations

@@ -18,9 +18,9 @@ class RunIdentity(BaseModel):
 class RunMetadata(BaseModel):
     """Passive run identity / directory facts carried by ExecutionEnvironment.
 
-    Phase 3 slimmed this back to its true passive identity: ``run_dir`` /
-    ``task_id`` / ``source``. The former runtime-assembly fields (turn input,
-    user instructions, active skills, bohrium rebuild events) moved to
+    This type only carries passive identity: ``run_dir`` / ``task_id`` /
+    ``source``. Runtime-assembly fields (turn input, user instructions,
+    active skills, bohrium rebuild events) belong to
     :class:`~matmaster.core.run_context.AgentRunRequest`, next to the service
     layer that resolves them.
     """

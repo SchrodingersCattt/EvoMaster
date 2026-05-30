@@ -11,7 +11,7 @@ Non-responsibilities (belong to Exp / Service layers):
   - MCP manager, Skill registry, Tool registry, LLM provider
   - Runtime-assembly inputs (turn input, user instructions, interaction
     bridge, runtime ports) -- those live on ``AgentRunRequest``
-  - Workspace archival upload (Service layer, Phase 5)
+  - Workspace archival upload (Service layer)
   - Run orchestration and quota management
 """
 
@@ -207,7 +207,6 @@ class Playground:
             effective_config = {
                 **self._session_config,
                 "workspace_path": str(workspace_path),
-                "working_dir": str(workspace_path),
             }
             self._session_config = effective_config
             self.session = self._create_session_from_config()
@@ -277,7 +276,7 @@ class Playground:
         username: str = 'root',
         password: str | None = None,
         key_file: str | None = None,
-        working_dir: str = '/personal/workspace',
+        workspace_path: str = '/personal/workspace',
         session_id: str | None = None,
         **kwargs: Any,
     ) -> Any:
@@ -288,8 +287,8 @@ class Playground:
         external container allocator (e.g. Bohrium).
 
         Args:
-            session_id: When provided, the remote working directory becomes
-                ``{working_dir}/{session_id}`` to isolate concurrent sessions.
+            session_id: When provided, the remote workspace path becomes
+                ``{workspace_path}/{session_id}`` to isolate concurrent sessions.
 
         Returns:
             The opened SSHSession instance.
@@ -297,20 +296,19 @@ class Playground:
         from matmaster.sessions.ssh import SSHSession
 
         if session_id:
-            working_dir = f"{working_dir.rstrip('/')}/{session_id}"
+            workspace_path = f"{workspace_path.rstrip('/')}/{session_id}"
         cfg = SSHSessionConfig(
             host=host,
             port=port,
             username=username,
             password=password,
             key_file=key_file,
-            working_dir=working_dir,
-            workspace_path=working_dir,
+            workspace_path=workspace_path,
             **kwargs,
         )
         session = SSHSession(config=cfg)
         self.attach_session(session)
-        self.logger.info('SSH workspace: %s', working_dir)
+        self.logger.info('SSH workspace: %s', workspace_path)
         return session
 
     def detach_session(self) -> None:

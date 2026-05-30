@@ -57,8 +57,7 @@ class SessionCapabilities(BaseModel):
     """Describes what a session implementation can do.
 
     Used by ToolRunner/ToolScheduler to decide whether a tool can execute
-    in the current session. Phase 34 will wire this into real Session
-    implementations.
+    in the current session.
     """
 
     model_config = ConfigDict(frozen=True)

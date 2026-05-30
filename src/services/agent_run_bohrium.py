@@ -683,7 +683,7 @@ def _setup_bohrium_for_run(
                 'Bohrium 节点已就绪',
                 ip=node_ip,
             )
-            ssh_working_dir = (remote_workdir or remote_workspace_root).rstrip(
+            ssh_workspace_path = (remote_workdir or remote_workspace_root).rstrip(
                 '/'
             ) or '/'
             original_session = pg.session
@@ -691,8 +691,7 @@ def _setup_bohrium_for_run(
             ssh_config = SSHSessionConfig(
                 host=node_ip,
                 password=node_pwd,
-                working_dir=ssh_working_dir,
-                workspace_path=ssh_working_dir,
+                workspace_path=ssh_workspace_path,
             )
             ssh_session = SSHSession(ssh_config)
             swapped = False
@@ -714,7 +713,7 @@ def _setup_bohrium_for_run(
                 logger.info(
                     'run_agent: SSH session attached to Bohrium node ip=%s workspace=%s',
                     node_ip,
-                    ssh_working_dir,
+                    ssh_workspace_path,
                 )
                 _run_clear_remote_proxy(pg, 'post_ssh')
                 _emit_node_status(
@@ -752,7 +751,7 @@ def _setup_bohrium_for_run(
                 ),
                 execution=BohriumExecutionContext(
                     session_type="ssh",
-                    execution_workdir=ssh_working_dir,
+                    execution_workdir=ssh_workspace_path,
                     remote_workspace_root=remote_workspace_root,
                     remote_project_root=remote_project_root,
                     node_id=node_id,
@@ -766,7 +765,7 @@ def _setup_bohrium_for_run(
                 True,
                 None,
                 ssh_session,
-                ssh_working_dir,
+                ssh_workspace_path,
                 'ssh',
                 runtime.snapshot(),
             )

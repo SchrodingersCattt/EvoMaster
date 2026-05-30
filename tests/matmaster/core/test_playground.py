@@ -80,6 +80,19 @@ class TestPrepare:
         assert ctx.execution_workdir == str(ctx.workdir)
         pg.cleanup()
 
+    def test_prepare_updates_session_config_workspace_path_only(
+        self, tmp_path: Path
+    ) -> None:
+        pg = _make_playground(tmp_path)
+        run_dir = tmp_path / "runs" / "run-config"
+        run_dir.mkdir(parents=True)
+
+        ctx = pg.prepare(_metadata(run_dir, "t1"))
+
+        assert pg._session_config["workspace_path"] == str(ctx.workdir)
+        assert "working_dir" not in pg._session_config
+        pg.cleanup()
+
     def test_workspace_created_under_run_dir_with_task_id(self, tmp_path: Path) -> None:
         pg = _make_playground(tmp_path)
         run_dir = tmp_path / "runs" / "run-002"

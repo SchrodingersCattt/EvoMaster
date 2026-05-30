@@ -182,7 +182,7 @@ class TestExpBuildRuntime:
         assert runtime.spec.llm_provider is ctx.request.llm_provider
 
     async def test_build_runtime_has_no_bus_parameter(self) -> None:
-        """build_runtime() no longer accepts bus parameter (Phase 36 de-bus)."""
+        """build_runtime() does not accept a bus parameter."""
         exp = Exp(ExpConfig(name='test'))
         _make_ctx(with_llm=True)
 

@@ -28,7 +28,7 @@ env:
 session:
   type: "local"
   local:
-    working_dir: "./workspace"
+    workspace_path: "./workspace"
     timeout: 60
     gpu_devices: null
     cpu_devices: null
@@ -37,7 +37,7 @@ session:
     image: "evomaster/base:latest"
     container_name: null
     use_existing_container: null
-    working_dir: "/workspace"
+    workspace_path: "/workspace"
     memory_limit: "64g"
     cpu_limit: 16.0
     gpu_devices: "0"

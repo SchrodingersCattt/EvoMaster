@@ -676,10 +676,10 @@ class ChatStreamService:
                 ctx.turn_input.to_payload() if ctx.turn_input is not None else None
             )
             # Backward-compat wire channel (2026-05-29 cleanup, audit N2):
-            # workers enqueued before the TurnInput cutover consume the legacy
+            # older workers may consume the legacy
             # 'current_input_context' payload, whose history boundary lives under
             # the 'pre_query_scope_event_id' key. Keep emitting it until all
-            # in-flight pre-cutover Redis jobs have drained, then drop this block
+            # in-flight Redis jobs using the legacy payload have drained, then drop this block
             # (see .planning/context-refactor/CLEANUP-AUDIT.md N2). Plain string
             # (not concatenated) so the key stays greppable for that removal.
             legacy_current_input_payload = None

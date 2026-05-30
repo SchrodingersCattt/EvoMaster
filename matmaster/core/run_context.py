@@ -1,7 +1,6 @@
 """Agent run boundary context -- the environment + request composition.
 
-Phase 3 splits the old god-object ``PlaygroundContext`` into two honestly
-owned halves and a thin composition:
+The runtime boundary is modeled as two owned halves and a thin composition:
 
   * :class:`~matmaster.core.playground.ExecutionEnvironment` -- the physical
     execution substrate produced by ``Playground.prepare()``.
@@ -12,10 +11,8 @@ owned halves and a thin composition:
     Exp consumes. Exp reads ``ctx.environment.<physical>`` and
     ``ctx.request.<runtime>``; its method arity stays single-argument.
 
-The split makes the physical / runtime boundary a *type* boundary: the
-service no longer mutates a "frozen" Playground output a dozen times to inject
-runtime fields -- it assembles one ``AgentRunRequest`` and composes it with the
-environment exactly once.
+The physical / runtime boundary is a *type* boundary: the service assembles
+one ``AgentRunRequest`` and composes it with the environment exactly once.
 """
 
 from __future__ import annotations

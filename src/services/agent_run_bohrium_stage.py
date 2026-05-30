@@ -1,9 +1,4 @@
-"""Bohrium stage helpers extracted from agent_run_service.run_agent.
-
-Phase 0 refactor (DESIGN.md §14 Phase 0a): move workspace upload
-closure + figure upload config builder + Bohrium setup / context
-threading out of ``run_agent`` so the orchestrator stays under the
-800-line target.
+"""Bohrium stage helpers for agent_run_service.run_agent.
 
 The actual Bohrium credential + SSH attach logic lives in
 ``src/services/agent_run_bohrium.py:BohriumSetupService``; this file

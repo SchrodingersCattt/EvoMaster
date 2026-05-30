@@ -457,7 +457,7 @@ class TestRunItemsAssistantState:
     async def test_run_stream_uses_preassembled_task_content_without_legacy_wrap(
         self,
     ) -> None:
-        """Phase 2C: kernel passes service-assembled task content through."""
+        """Kernel passes service-assembled task content through."""
         from matmaster.core.agent import AgentKernel
 
         provider = RecordingContentProvider()
@@ -605,7 +605,7 @@ class TestRunItemsSkillHit:
         ), "Should not yield SkillHitEvent for regular tools"
 
 
-# ── Gap Closure tests (Phase 34 Plan 4) ────────────────────
+# ── Tool runner activation coverage ───────────────────────
 
 
 class TestGap1FullToolRunnerActivation:

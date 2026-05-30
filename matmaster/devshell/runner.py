@@ -51,7 +51,7 @@ class DevRunner:
         self._resolved_route = resolved_route
         self._stream_hook = stream_hook or DevStreamHook()
 
-        # Build the physical environment + the per-run request (Phase 3 split).
+        # Build the physical environment + the per-run request.
         session = self._create_session(config, workdir)
         cache_area = workdir / ".cache"
         cache_area.mkdir(parents=True, exist_ok=True)

@@ -161,6 +161,7 @@ git push -u gitlab <name>-main
 
 - **工作区边界**：在本仓库内协作时，对代码的修改**仅限** `matmaster-evo` 仓库本身；**不得**擅自编辑同级其它仓库（例如 `../matmaster-tools-server`）。若功能依赖其它服务，在本仓库实现调用与配置，并用说明文档或对方仓库的 PR 完成对接。持久化约束见 `.cursor/rules/workspace-boundary.mdc`（Cursor 规则，`alwaysApply`）。
 - **配置目录**：产品主配置与 MCP JSON 位于 `config/`。`ConfigManager` / `get_config_manager()` 未指定 `config_dir` 时默认加载该目录下的 `config.yaml`。
+- **Session 路径配置**：`SessionConfig` 只使用 `workspace_path` 表示 session 的工作区根目录；不要再新增或传递 `working_dir` 作为配置别名。SSH session 的实际命令执行目录也来自 `workspace_path`。工具执行结果中返回的 `working_dir` 字段属于结果元数据，不是配置字段。
 - **维护本文件**：在对话或开发过程中，若产生新的、值得固化的约定或逻辑（如架构决策、命名/用法约定、废弃说明等），应适时补充到 AGENTS.md，便于后续遵守。
 - **多实例与 Redis**：API 与 Worker 均可多实例部署。跨实例的协调一律使用 Redis（或其它共享存储）；事件顺序、用户回复、run 归属与存活判断等均依赖 Redis，不依赖进程内状态或「请求与执行同进程」的假设。
 - **服务重启**：新增或修改功能时需考虑服务重启场景。进程内内存（如 `SESSIONS`）在重启后会清空；若逻辑依赖跨请求的状态（如会话级鉴权、当前 run 所用资源），应区分「需持久化」与「仅当次 run 有效」：前者落库或共享存储，后者可保留在内存，并确保重启后新请求能从 DB/共享存储恢复必要信息继续工作。

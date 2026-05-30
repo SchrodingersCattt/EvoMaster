@@ -1,12 +1,9 @@
 """Tests for WorkspaceArchivalConfig and Playground.prepare().
 
-The old frozen god-object ``PlaygroundContext`` was split into honest boundary
-types (``ExecutionEnvironment`` / ``AgentRunRequest`` / ``AgentRunContext``).
-The contract coverage for those new types now lives in
-``tests/matmaster/core/test_run_context.py`` and
-``tests/matmaster/types/test_runtime_ports.py``. What remains here is the still
-valid behavior that survived the split: ``WorkspaceArchivalConfig`` (unchanged)
-and ``Playground.prepare()`` (now returning an ``ExecutionEnvironment``).
+Contract coverage for ``ExecutionEnvironment`` / ``AgentRunRequest`` /
+``AgentRunContext`` lives in ``tests/matmaster/core/test_run_context.py`` and
+``tests/matmaster/types/test_runtime_ports.py``. This module keeps focused
+coverage for ``WorkspaceArchivalConfig`` and ``Playground.prepare()``.
 """
 
 from __future__ import annotations

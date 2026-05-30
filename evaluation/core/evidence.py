@@ -606,7 +606,7 @@ class EvidenceExtractor:
         """Extract model name from the first step's assistant_message meta."""
         for entry in raw:
             traj = entry.get('trajectory', {})
-            # Check top-level meta first (if populated by Phase 0 fix)
+            # Check top-level meta first when the trajectory stores it there.
             meta = traj.get('meta', {})
             if isinstance(meta, dict) and meta.get('model_name'):
                 return str(meta['model_name'])

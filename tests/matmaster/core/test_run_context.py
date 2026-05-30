@@ -1,7 +1,6 @@
-"""Tests for the Phase 3 split contract objects.
+"""Tests for the agent run boundary contract objects.
 
-Phase 3 re-cuts the old god-object ``PlaygroundContext`` into three honest
-boundary types:
+The runtime boundary is represented by three contract types:
 
   * ``ExecutionEnvironment`` -- the physical execution substrate produced by
     ``Playground.prepare()`` (workspace, session, cache, archival, bohrium
