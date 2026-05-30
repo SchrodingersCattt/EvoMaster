@@ -721,3 +721,117 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
+- id: SR_mp_003_20250618
+  capability: structure_retrieval
+  domain: agnostic
+  intent: Retrieve conventional unit cell structures for 20 single elements from the Materials Project
+    database and extract their crystallographic information.
+  human_prompt_seed: 'Retrieve the conventional unit cell structures for the following 20 elements from
+    the Materials Project database: Al, Ag, Au, Co, Cu, Kr, Li, Mg, Mo, Nb, Ni, Os, Pb, Pd, Pt, Re, Sr,
+    Ti, Zr, Zn. For each element, determine its ground-state crystal structure (bcc, fcc, hcp, diamond
+    cubic, orthorhombic, or rhombohombic) and save the results as element_structures.json with keys: element,
+    mp_id, crystal_system, space_group_number, and conventional_cell_volume (in Å³).'
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: artifact_json
+    value: element_structures.json
+  - key: has_20_elements
+    value:
+      tokens:
+      - Al
+      - Ag
+      - Au
+      - Co
+      - Cu
+      - Kr
+      - Li
+      - Mg
+      - Mo
+      - Nb
+      - Ni
+      - Os
+      - Pb
+      - Pd
+      - Pt
+      - Re
+      - Sr
+      - Ti
+      - Zr
+      - Zn
+      filename: element_structures.json
+  - key: has_required_fields
+    value:
+      tokens:
+      - mp_id
+      - crystal_system
+      - space_group_number
+      - conventional_cell_volume
+      filename: element_structures.json
+  - key: crystal_systems_valid
+    value:
+      tokens:
+      - cubic
+      - hexagonal
+      - orthorhombic
+      - rhombohedral
+      filename: element_structures.json
+  - key: grounding_source
+    value:
+      filename: element_structures.json
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 180
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_json
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] Output file element_structures.json exists and is valid JSON.'
+  - id: has_20_elements
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] JSON contains entries for all 20 elements.'
+  - id: has_required_fields
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] Each entry contains required fields: mp_id, crystal_system, space_group_number,
+      conventional_cell_volume.'
+  - id: crystal_systems_valid
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 5.0
+    criterion: '[Suggested] Crystal systems are valid (cubic, hexagonal, orthorhombic, rhombohedral, etc.).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 5.0
+    criterion: '[Must] Structures are retrieved from the Materials Project database.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 20 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent uses at most 3 retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 180 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Total token usage is within 50000 tokens.'

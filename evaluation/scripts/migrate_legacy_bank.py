@@ -1,12 +1,13 @@
 #!/usr/bin/env python
-"""Migrate the legacy ``battery.zip`` question pool into MATTER v5 candidates.
+"""Migrate a legacy question-pool zip into MATTER v5 candidates.
 
-The ``battery.zip`` archive is a pre-migration snapshot of the eval question
-bank: one YAML per question, organised under ``<capability>/`` folders, but
-using the *old* taxonomy where ``domain`` holds a **software/method name**
-(``vasp`` / ``pymatgen`` / ``chgnet`` / ``icet`` ...) instead of one of the six
-v5 business lines. The verifier dialect and scoring model are otherwise the
-same lineage as the current bank.
+Legacy archives (``battery.zip`` / ``2D_materials.zip`` / ``qa_mm_v1.zip`` ...)
+are pre-migration snapshots of the eval question bank: one YAML per question,
+organised under ``<capability>/`` folders, but using the *old* taxonomy where
+``domain`` holds a **software/method name** (``vasp`` / ``pymatgen`` /
+``chgnet`` / ``gpumd`` ...) instead of one of the six v5 business lines. The
+verifier dialect and scoring model are otherwise the same lineage as the
+current bank.
 
 This script does a best-effort, *review-oriented* conversion. It NEVER writes
 into ``evaluation/question_bank/`` directly; instead it emits candidate bank
@@ -14,8 +15,11 @@ files into a staging directory plus a human review report, so a person can
 re-bucket the ``domain`` calls and merge selectively.
 
 What it does per question:
-  * ``domain``: software-name -> business line via a battery keyword heuristic
-    (matched terms recorded). Falls back to ``agnostic`` when no battery signal.
+  * ``domain``: software-name -> business line via a keyword heuristic over the
+    six v5 business lines (battery / semiconductor / catalysis / alloy /
+    polymer), recording matched terms. Falls back to ``agnostic`` when no
+    business-line signal is found. **These calls are heuristic and must be
+    reviewed** (see ``review.csv``: ``assigned_domain`` + ``matched_domain_terms``).
   * ``tags``: normalised to the controlled :class:`QuestionTag` vocabulary
     (software -> ``eng_*`` / ``code_mlip``; unknown topical tags dropped).
   * ``verify``: legacy ``token_budget_total`` -> ``token_budget``.
@@ -26,9 +30,9 @@ What it does per question:
 
 Run with the project venv (needs pydantic):
 
-    .venv/bin/python evaluation/scripts/migrate_legacy_battery_bank.py \
-        --src-zip ~/Downloads/battery.zip \
-        --out evaluation/migration_candidates/battery
+    .venv/bin/python evaluation/scripts/migrate_legacy_bank.py \
+        --src-zip ~/Downloads/2D_materials.zip
+    # -> evaluation/migration_candidates/2D_materials/{*.yaml,review.csv,REVIEW.md}
 """
 
 from __future__ import annotations
@@ -39,7 +43,6 @@ import csv
 import difflib
 import io
 import json
-import os
 import sys
 import zipfile
 from pathlib import Path
@@ -74,6 +77,7 @@ CAPABILITY_TO_TWO_LETTER = {
 def bank_yaml_basename(*, capability: str, domain: str) -> str:
     prefix = CAPABILITY_TO_TWO_LETTER[capability]
     return f"{prefix}_{domain}.yaml"
+
 
 # Legacy free-form / software tag -> canonical controlled tag. Anything not
 # listed here and not already a valid tag is DROPPED (and reported).
@@ -115,8 +119,10 @@ TAG_REMAP: dict[str, str] = {
     "struct_build": "struct_build",
     "struct_transform": "struct_transform",
     "struct_molcrys": "struct_molcrys",
-    # md post-processing / characterisation
+    "struct_inspect": "struct_inspect",
+    # md post-processing / characterisation / analysis
     "analysis_post_md": "analysis_post_md",
+    "analysis_data": "analysis_data",
     "diffraction": "char_diffraction",
     "xrd": "char_diffraction",
     "char_diffraction": "char_diffraction",
@@ -130,50 +136,98 @@ TAG_REMAP: dict[str, str] = {
     "meta_grounding": "meta_grounding",
 }
 
-# Strong battery-domain signal terms (lower-cased substring match against
-# id + intent + prompt + raw tags). Kept deliberately specific to avoid
-# misclassifying generic structure/analysis tasks as battery.
-BATTERY_TERMS = [
-    "cathode",
-    "anode",
-    "electrolyte",
-    "intercalat",
-    "deintercalat",
-    "battery",
-    "li-ion",
-    "na-ion",
-    "li ion",
-    "na ion",
-    "lithium",
-    "sodium-ion",
-    "coulombic",
-    "charge/discharge",
-    "charge-discharge",
-    "half-cell",
-    "full-cell",
-    "electrode",
-    "voltage",
-    "capacity",
-    "solid electrolyte",
-    "solid-electrolyte",
-    "drx",
-    "licoo2",
-    "lifepo4",
-    "lipf6",
-    "nasicon",
-    "olivine",
-    "spinel",
-    "rocksalt",
-    "nernst",
-    "dendrite",
-    "sei ",
-    "migration barrier",
-    "ionic conductivity",
-    "nmc",
-    "lmo",
-    "mno2",
-    "lzcl",
-]
+# v5 business-line keyword heuristics (substring match against
+# id + intent + prompt + raw tags, lower-cased). Order matters: ties are broken
+# by first-defined business line. ``agnostic`` is the fallback when nothing hits.
+DOMAIN_TERMS: dict[str, list[str]] = {
+    "battery": [
+        "cathode",
+        "anode",
+        "electrolyte",
+        "intercalat",
+        "deintercalat",
+        "battery",
+        "li-ion",
+        "na-ion",
+        "lithium",
+        "sodium-ion",
+        "coulombic",
+        "half-cell",
+        "full-cell",
+        "electrode",
+        "voltage",
+        "capacity",
+        "solid electrolyte",
+        "solid-electrolyte",
+        "drx",
+        "licoo2",
+        "lifepo4",
+        "lipf6",
+        "nasicon",
+        "olivine",
+        "spinel",
+        "rocksalt",
+        "nernst",
+        "dendrite",
+        "migration barrier",
+        "ionic conductivity",
+        "mno2",
+    ],
+    "semiconductor": [
+        "gaas",
+        "gan",
+        "semiconductor",
+        "band gap",
+        "bandgap",
+        "band structure",
+        "defect",
+        "gnr",
+        "graphene",
+        "nanoribbon",
+        "hbn",
+        "h-bn",
+        "boron nitride",
+        "2d material",
+        "monolayer",
+        "mos2",
+        "wse2",
+        "transistor",
+        "carrier concentration",
+        "doping",
+        "vacancy",
+        "photovolt",
+        "optoelectron",
+    ],
+    "catalysis": [
+        "cataly",
+        "adsorp",
+        " oer",
+        " orr",
+        "co2rr",
+        " her ",
+        "surface reaction",
+        "active site",
+        "overpotential",
+        "reaction pathway",
+    ],
+    "alloy": [
+        "alloy",
+        "hea ",
+        "high-entropy",
+        "high entropy",
+        "intermetallic",
+        "solid solution",
+        "precipitat",
+    ],
+    "polymer": [
+        "polymer",
+        "monomer",
+        "oligomer",
+        "polyethylene",
+        "polymeric",
+        "chain conformation",
+    ],
+}
 
 # Default budget references injected when a legacy question has the efficiency
 # checklist item but forgot the matching reference entry (schema requires a ref
@@ -229,11 +283,22 @@ def normalise_tags(raw: Any, capability: str, domain: str) -> tuple[list[str], l
 
 
 def detect_domain(text: str) -> tuple[str, list[str]]:
+    """Heuristically map free text to one of the six v5 business lines.
+
+    Returns ``(domain, matched_terms)``. Picks the business line with the most
+    matched terms; ties are broken by ``DOMAIN_TERMS`` definition order. Falls
+    back to ``agnostic`` with no matches.
+    """
     low = text.lower()
-    hits = sorted({term.strip() for term in BATTERY_TERMS if term in low})
-    if hits:
-        return "battery", hits
-    return "agnostic", []
+    scores: dict[str, list[str]] = {}
+    for dom, terms in DOMAIN_TERMS.items():
+        hits = sorted({t.strip() for t in terms if t in low})
+        if hits:
+            scores[dom] = hits
+    if not scores:
+        return "agnostic", []
+    best = max(scores, key=lambda d: len(scores[d]))
+    return best, scores[best]
 
 
 def clean_reference_answers(refs: Any) -> list[dict]:
@@ -289,7 +354,7 @@ def clean_checklist(checklist: Any) -> list[dict]:
     return out
 
 
-def convert_question(raw: dict, src_file: str) -> dict:
+def convert_question(raw: dict, src_file: str) -> tuple[dict, dict]:
     capability = raw.get("capability")
     text = " ".join(
         str(raw.get(k) or "")
@@ -328,7 +393,7 @@ def convert_question(raw: dict, src_file: str) -> dict:
         "src_file": src_file,
         "legacy_domain": raw.get("domain"),
         "assigned_domain": domain,
-        "battery_terms": hits,
+        "domain_terms": hits,
         "dropped_tags": dropped_tags,
         "kept_tags": kept_tags,
         "injected_budget_refs": injected_budgets,
@@ -371,13 +436,19 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument(
         "--src-zip",
-        default=os.path.expanduser("~/Downloads/battery.zip"),
-        help="Path to legacy battery.zip",
+        required=True,
+        help="Path to a legacy question-pool zip (e.g. ~/Downloads/2D_materials.zip)",
+    )
+    ap.add_argument(
+        "--pack-name",
+        default=None,
+        help="Logical pack name (defaults to the zip filename stem); used for "
+        "the report title and the default output dir",
     )
     ap.add_argument(
         "--out",
-        default=str(REPO_ROOT / "evaluation/migration_candidates/battery"),
-        help="Output staging directory for candidate banks + review report",
+        default=None,
+        help="Output staging dir (defaults to evaluation/migration_candidates/<pack-name>)",
     )
     ap.add_argument(
         "--bank-dir",
@@ -392,16 +463,18 @@ def main() -> int:
     )
     args = ap.parse_args()
 
-    out_dir = Path(args.out)
+    src_zip = Path(args.src_zip).expanduser()
+    pack_name = args.pack_name or src_zip.stem
+    out_dir = Path(args.out) if args.out else REPO_ROOT / "evaluation/migration_candidates" / pack_name
     out_dir.mkdir(parents=True, exist_ok=True)
 
     cur_ids, cur_seeds = collect_current_bank(Path(args.bank_dir))
 
     # read every YAML from the zip
     raw_questions: list[tuple[dict, str]] = []
-    with zipfile.ZipFile(args.src_zip) as zf:
+    with zipfile.ZipFile(src_zip) as zf:
         for name in zf.namelist():
-            if not name.endswith(".yaml"):
+            if not name.endswith((".yaml", ".yml")):
                 continue
             doc = yaml.safe_load(zf.read(name))
             if isinstance(doc, dict) and "questions" in doc:
@@ -457,7 +530,7 @@ def main() -> int:
                 "capability": converted["capability"],
                 "legacy_domain": meta["legacy_domain"],
                 "assigned_domain": meta["assigned_domain"],
-                "battery_terms": ";".join(meta["battery_terms"]),
+                "matched_domain_terms": ";".join(meta["domain_terms"]),
                 "kept_tags": ";".join(meta["kept_tags"]),
                 "dropped_tags": ";".join(meta["dropped_tags"]),
                 "injected_budget_refs": ";".join(meta["injected_budget_refs"]),
@@ -504,8 +577,8 @@ def main() -> int:
         (r["capability"], r["assigned_domain"]) for r in review_rows if r["status"] == "ok"
     )
     md = io.StringIO()
-    md.write("# Legacy battery.zip -> MATTER v5 migration candidates\n\n")
-    md.write(f"- source archive: `{args.src_zip}`\n")
+    md.write(f"# Legacy {pack_name} -> MATTER v5 migration candidates\n\n")
+    md.write(f"- source archive: `{src_zip}`\n")
     md.write(f"- total legacy questions read: **{len(raw_questions)}**\n")
     md.write(f"- converted OK (validated against QuestionItem): **{stats['ok']}**\n")
     md.write(f"- skipped (dup id): **{stats['skip']}**\n")
@@ -526,10 +599,10 @@ def main() -> int:
         md.write(f"- `{f}`\n")
     md.write("\n## How to review\n\n")
     md.write(
-        "1. Open `review.csv`: check `assigned_domain` (battery via matched "
-        "`battery_terms`, else agnostic) and re-bucket as needed.\n"
+        "1. Open `review.csv`: the `assigned_domain` is a **keyword heuristic** "
+        "(see `matched_domain_terms`); re-bucket any mislabelled rows by hand.\n"
         "2. Inspect `dropped_tags` for any signal worth re-adding to the "
-        "controlled vocabulary.\n"
+        "controlled vocabulary (prefer skill-aligned tags).\n"
         "3. Resolve `invalid` rows (see `reason`).\n"
         "4. Re-check `near_duplicate_flag` rows against existing questions.\n"
         "5. For rows with `data_file_refs` > 0, provide the actual input files "
@@ -546,6 +619,7 @@ def main() -> int:
     with open(out_dir / "summary.json", "w", encoding="utf-8") as fh:
         json.dump(
             {
+                "pack": pack_name,
                 "stats": dict(stats),
                 "by_capability_domain": {f"{c}/{d}": n for (c, d), n in cap_dom.items()},
                 "written_files": written_files,

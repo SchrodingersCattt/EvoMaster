@@ -243,3 +243,131 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
+- id: WF_vasp_003_20250618
+  capability: workflow_orchestration
+  domain: semiconductor
+  intent: Write a Python script that computes the defect formation energy for a charged substitutional
+    defect in a 2D material under strain, implementing Eq. (2) from the paper's Methods section.
+  human_prompt_seed: 'Write a Python function compute_defect_formation_energy that implements the defect
+    formation energy equation (Eq. 2) from the paper. The function should accept: E_def (total energy
+    of defective supercell), E_pristine (total energy of pristine supercell), mu_dict (dict of chemical
+    potentials {element_symbol: value_in_eV}), n_dict (dict of atom counts added/removed {element_symbol:
+    count, positive for removed, negative for added}), charge_state (integer q), E_vbm (valence band maximum
+    energy in eV), mu_e (electron chemical potential in eV), and E_corr (electrostatic correction in eV).
+    Return the formation energy in eV. Save as defect_energy.py in the current directory.'
+  tags:
+  - eng_vasp
+  data_files: []
+  reference_answers:
+  - key: artifact_script
+    value: defect_energy.py
+  - key: function_exists
+    value:
+      flags: []
+      pattern: def\s+compute_defect_formation_energy
+      filename: defect_energy.py
+  - key: has_all_params
+    value:
+      tokens:
+      - E_def
+      - E_pristine
+      - mu_dict
+      - n_dict
+      - charge_state
+      - E_vbm
+      - mu_e
+      - E_corr
+      filename: defect_energy.py
+  - key: formula_correct
+    value:
+      flags: []
+      pattern: E_def\s*-\s*E_pristine
+      filename: defect_energy.py
+  - key: charge_term
+    value:
+      flags: []
+      pattern: charge_state\s*\*\s*\(\s*E_vbm\s*\+\s*mu_e\s*\)
+      filename: defect_energy.py
+  - key: correction_term
+    value:
+      flags: []
+      pattern: E_corr
+      filename: defect_energy.py
+  - key: chemical_potential_term
+    value:
+      flags: []
+      pattern: mu_dict|chemical_potential|mu_
+      filename: defect_energy.py
+  - key: grounding_source
+    value:
+      filename: defect_energy.py
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Python file defect_energy.py exists'
+  - id: function_exists
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Function compute_defect_formation_energy is defined'
+  - id: has_all_params
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Function accepts all 8 required parameters (E_def, E_pristine, mu_dict, n_dict,
+      charge_state, E_vbm, mu_e, E_corr)'
+  - id: formula_correct
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Implementation includes E_def - E_pristine (the energy difference term)'
+  - id: charge_term
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Charge term q*(E_vbm + mu_e) is implemented'
+  - id: correction_term
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Electrostatic correction E_corr is included'
+  - id: chemical_potential_term
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Chemical potential term ±Σ n_i μ_i is implemented'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The script implements Eq. (2) from the source paper on defect formation energy'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Complete within 20 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retry turns used'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Complete within 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Total token usage within 50000'

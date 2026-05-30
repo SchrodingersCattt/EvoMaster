@@ -1,0 +1,138 @@
+version: v5
+capability: input_generation
+domain: semiconductor
+questions:
+- id: IG_gnr_004_20250618
+  capability: input_generation
+  domain: semiconductor
+  intent: Generate a SIESTA-style DFT input deck for a self-consistent field calculation on an armchair
+    graphene nanoribbon (AGNR) using the computational parameters from Son et al. (2006).
+  human_prompt_seed: 'Generate a SIESTA-style input file (`siesta.fdf`) for a spin-polarized LSDA DFT
+    calculation of an armchair graphene nanoribbon (AGNR). Use the following parameters from the paper:
+    energy cutoff of 400 Ry, double-zeta plus polarization (DZP) basis set, force convergence threshold
+    of 16 pN, and 32 k-points along the 1D Brillouin zone. The system is a 1D periodic nanoribbon with
+    vacuum in the other two directions. Save the file as `siesta.fdf` in the current working directory.'
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_fdf
+    value: siesta.fdf
+  - key: has_energy_cutoff
+    value:
+      flags: []
+      tokens:
+      - '400'
+      - Ry
+      filename: siesta.fdf
+  - key: has_basis_type
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - DZP
+      filename: siesta.fdf
+  - key: has_force_tol
+    value:
+      flags: []
+      tokens:
+      - '16'
+      - pN
+      filename: siesta.fdf
+  - key: has_kpoints
+    value:
+      flags: []
+      tokens:
+      - '32'
+      filename: siesta.fdf
+  - key: has_lsda
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - LSDA
+      - SpinPolarization
+      - spin
+      filename: siesta.fdf
+  - key: has_1d_periodic
+    value:
+      flags: []
+      tokens:
+      - '1'
+      - Periodic
+      filename: siesta.fdf
+  - key: grounding_source
+    value:
+      filename: siesta.fdf
+  - key: turn_budget
+    value:
+      max: 25
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_fdf
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file siesta.fdf exists and is non-empty.'
+  - id: has_energy_cutoff
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Input specifies energy cutoff of 400 Ry (MeshCutoff 400. Ry).'
+  - id: has_basis_type
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Input specifies DZP (double-zeta plus polarization) basis set.'
+  - id: has_force_tol
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] Input specifies force convergence tolerance of 16 pN (MaxForceTol 0.016 eV/Ang
+      or equivalent).'
+  - id: has_kpoints
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Input specifies 32 k-points along the 1D Brillouin zone for the AGNR.'
+  - id: has_lsda
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Input specifies LSDA (local spin density approximation) functional with spin polarization
+      enabled.'
+  - id: has_1d_periodic
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] Input specifies 1D periodicity (PeriodicDirections 1 or equivalent) appropriate
+      for a nanoribbon.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The input deck parameters match those described in Son et al. (2006): 400 Ry cutoff,
+      DZP basis, LSDA, 16 pN force tolerance, 32 k-points for AGNR.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completes within 25 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retry requests needed.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completes within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Uses no more than 50000 tokens total.'

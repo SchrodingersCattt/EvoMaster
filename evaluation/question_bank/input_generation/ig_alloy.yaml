@@ -1,0 +1,139 @@
+version: v5
+capability: input_generation
+domain: alloy
+questions:
+- id: IG_vasp_001_20260508
+  capability: input_generation
+  domain: alloy
+  intent: Generate a VASP INCAR file for geometry optimization of a 128-atom BCC solid solution alloy
+    using the computational parameters described in the paper (GGA-PBE functional, 350 eV plane-wave cutoff,
+    Methfessel-Paxton smearing, convergence criteria).
+  human_prompt_seed: Generate a VASP INCAR file for a two-stage geometry optimization of a 128-atom BCC
+    solid solution alloy. Use GGA-PBE functional, 350 eV plane-wave cutoff, 2×2×2 k-point mesh, Methfessel-Paxton
+    smearing with 0.2 eV broadening. The first stage uses PREC=Low and the second stage uses PREC=Normal.
+    Set convergence criteria to 10⁻⁴ eV for energy and 10⁻² eV/Å for forces. Save the INCAR file as `INCAR`
+    in the current working directory.
+  tags:
+  - eng_vasp
+  data_files: []
+  reference_answers:
+  - key: artifact_incar
+    value: INCAR
+  - key: contains_gga_pe
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - GGA = PE
+      filename: INCAR
+  - key: contains_encut
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - ENCUT = 350
+      filename: INCAR
+  - key: contains_ismear_sigma
+    value:
+      flags: []
+      tokens:
+      - ISMEAR = 1
+      - SIGMA = 0.2
+      filename: INCAR
+  - key: contains_ediff
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - EDIFF = 1E-4
+      filename: INCAR
+  - key: contains_ediffg
+    value:
+      flags: []
+      tokens:
+      - EDIFFG = -0.01
+      filename: INCAR
+  - key: numeric_prec
+    value:
+      checks:
+      - key: PREC
+        allowed_values:
+        - Normal
+        - Low
+        allow_missing_key: false
+      filename: INCAR
+  - key: grounding_source
+    value:
+      filename: INCAR
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_incar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] INCAR file exists in the working directory'
+  - id: contains_gga_pe
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains GGA = PE for PBE functional'
+  - id: contains_encut
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains ENCUT = 350 for plane-wave cutoff'
+  - id: contains_ismear_sigma
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains ISMEAR = 1 and SIGMA = 0.2 for Methfessel-Paxton smearing'
+  - id: contains_ediff
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains EDIFF = 1E-4 for energy convergence'
+  - id: contains_ediffg
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains EDIFFG = -0.01 for force convergence'
+  - id: numeric_prec
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] INCAR contains PREC set to Normal or Low'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] INCAR is grounded in the source paper''s VASP methodology'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Variable] Turn budget: 15'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Variable] No retries allowed'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Variable] Duration budget: 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Variable] Token budget: 50000'

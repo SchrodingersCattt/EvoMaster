@@ -1862,3 +1862,203 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
+- id: SC_vasp_003_20260611
+  capability: structure_construction
+  domain: agnostic
+  intent: Construct a W/WO₂ heterostructure interface by placing a W(110) slab on top of a WO₂(01-1) substrate
+    using pymatgen, following the paper's description of lattice-matched supercells (~3% mismatch, W slab
+    10.8 Å on WO₂ substrate 11.2 Å) and 15 Å vacuum.
+  human_prompt_seed: Construct a W/WO₂ heterostructure interface by combining a W(110) slab and a WO₂(01-1)
+    slab using pymatgen. The W slab should have in-plane dimensions of approximately 10.8 Å and the WO₂
+    substrate approximately 11.2 Å (≈3% mismatch). Add 15 Å vacuum along the z-direction. Save the resulting
+    POSCAR file as POSCAR_W_WO2_interface.vasp in the current working directory.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: poscar_exists
+    value: POSCAR_W_WO2_interface.vasp
+  - key: poscar_content
+    value:
+      flags:
+      - must_contain_all
+      tokens:
+      - W
+      - O
+      filename: POSCAR_W_WO2_interface.vasp
+  - key: poscar_numeric
+    value:
+      checks:
+      - key: cell_a
+        max: 12.0
+        min: 10.0
+        allow_missing_key: false
+      - key: cell_b
+        max: 12.0
+        min: 5.0
+        allow_missing_key: false
+      - key: num_sites
+        max: 100
+        min: 10
+        allow_missing_key: false
+      filename: POSCAR_W_WO2_interface.vasp
+  - key: grounding_source
+    value:
+      filename: POSCAR_W_WO2_interface.vasp
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: poscar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] POSCAR_W_WO2_interface.vasp file exists.'
+  - id: poscar_content
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+    criterion: '[Must] POSCAR contains both tungsten (W) and oxygen (O) elements, representing the W/WO₂
+      heterostructure.'
+  - id: poscar_numeric
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+    criterion: '[Suggested] In-plane lattice parameter ''a'' is approximately 10.8-11.2 Å (matching the
+      W slab and WO₂ substrate dimensions described in the paper). Number of atomic sites is reasonable
+      for a heterostructure interface (10-100 atoms).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+    criterion: '[Must] The heterostructure is constructed following the paper''s methodology: W(110) slab
+      (3×4 supercell, ~10.8 Å) placed on WO₂(01-1) substrate (2×2 supercell, ~11.2 Å), ~3% lattice mismatch,
+      15 Å vacuum.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry failed tool calls more than 3 times.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 50000 tokens total.'
+- id: SC_pymatgen_001_20250618
+  capability: structure_construction
+  domain: agnostic
+  intent: Construct an ideal cubic ABO₃ perovskite crystal structure (space group 221, Pm-3m) from given
+    A and B site elements using pymatgen's symmetry-based structure generation.
+  human_prompt_seed: Construct the ideal cubic BaTiO3 perovskite crystal structure (space group 221, Pm-3m)
+    where Ba occupies the A-site, Ti occupies the B-site, and O occupies the oxygen sites. The structure
+    should have a lattice parameter of approximately 4.0 Å. Save the resulting structure as a POSCAR file
+    named batio3_cubic.vasp in the current working directory.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_poscar
+    value: batio3_cubic.vasp
+  - key: check_sg
+    value:
+      flags:
+      - regex
+      pattern: Pm-3m|221|P m -3 m
+      filename: batio3_cubic.vasp
+  - key: check_composition
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - Ba
+      - Ti
+      - O
+      filename: batio3_cubic.vasp
+  - key: check_atom_counts
+    value:
+      flags:
+      - regex
+      pattern: \b1\s+1\s+3\b|\b5\b
+      filename: batio3_cubic.vasp
+  - key: check_lattice
+    value:
+      flags:
+      - regex
+      pattern: 4\.0
+      filename: batio3_cubic.vasp
+  - key: grounding_source
+    value:
+      filename: batio3_cubic.vasp
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] POSCAR file batio3_cubic.vasp is created.'
+  - id: check_sg
+    axis: correctness
+    verify: text_file_regex
+    weight: 10.0
+    criterion: '[Must] Structure corresponds to space group 221 (Pm-3m) or cubic symmetry.'
+  - id: check_composition
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] Structure contains Ba, Ti, and O elements.'
+  - id: check_atom_counts
+    axis: correctness
+    verify: text_file_regex
+    weight: 10.0
+    criterion: '[Must] Structure has correct stoichiometry: 1 Ba, 1 Ti, 3 O (5 atoms total for primitive
+      cell).'
+  - id: check_lattice
+    axis: correctness
+    verify: text_file_regex
+    weight: 5.0
+    criterion: '[Suggested] Lattice parameter is approximately 4.0 Å (within 3.8-4.2 Å).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 5.0
+    criterion: '[Must] Structure follows the ideal cubic ABO3 perovskite description from the paper.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Variable] Agent stays within turn budget.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Variable] Agent completes without retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Variable] Agent stays within duration budget.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Variable] Agent stays within total token budget.'

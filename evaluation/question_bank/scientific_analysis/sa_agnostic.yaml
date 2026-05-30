@@ -2050,3 +2050,378 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
+- id: SA_dielectric_003_20250612
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Retrieve the total dielectric tensor for the highly anisotropic candidate CsZrCuSe3 (mp-7152)
+    from the Materials Project, compute its eigenvalues, and calculate the anisotropic ratio (λ_max/λ_min),
+    reproducing the anisotropy screening metric from the paper.
+  human_prompt_seed: Retrieve material mp-7152 (CsZrCuSe3) from the Materials Project. Extract its total
+    dielectric tensor. Compute the eigenvalues of the tensor and calculate the anisotropic ratio αr =
+    λ_max / λ_min. Save the tensor, eigenvalues, and anisotropic ratio to anisotropy_result.json.
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: artifact_anisotropy_json
+    value:
+      filename: anisotropy_result.json
+  - key: contains_anisotropy_ratio
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - anisotropic_ratio
+      filename: anisotropy_result.json
+  - key: contains_eigenvalues
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - eigenvalue
+      filename: anisotropy_result.json
+  - key: contains_tensor
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - dielectric_tensor
+      - total_tensor
+      filename: anisotropy_result.json
+  - key: numeric_anisotropy
+    value:
+      checks:
+      - key: anisotropic_ratio
+        max: 150.0
+        min: 100.0
+        expected: 128.89
+        tolerance: 15.0
+        allow_missing_key: false
+      filename: anisotropy_result.json
+  - key: numeric_eigenvalue_range
+    value:
+      checks:
+      - key: lambda_max
+        max: 1500.0
+        min: 500.0
+        expected: 1152.884
+        tolerance: 200.0
+        allow_missing_key: false
+      filename: anisotropy_result.json
+  - key: grounding_source
+    value:
+      filename: anisotropy_result.json
+  - key: turn_budget
+    value:
+      max: 25
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 100000
+  scoring_checklist:
+  - id: artifact_anisotropy_json
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file anisotropy_result.json exists and is valid JSON.'
+  - id: contains_anisotropy_ratio
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The output file contains the anisotropic ratio.'
+  - id: contains_eigenvalues
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] The output file contains eigenvalue information.'
+  - id: contains_tensor
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] The total dielectric tensor is present in the output.'
+  - id: numeric_anisotropy
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] The anisotropic ratio falls within [100, 150], consistent with the paper-reported
+      value of 128.890 for CsZrCuSe3.'
+  - id: numeric_eigenvalue_range
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Variable] The maximum eigenvalue is in the range [500, 1500], consistent with the paper''s
+      reported 1152.884.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The answer is grounded in the source paper''s anisotropy analysis of mp-7152.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Completion within 25 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] No more than 3 retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Completion within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Total token usage within 100000.'
+- id: SA_agnostic_003_20260625
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Calculate Bartel's tolerance factor (τ) for CsGe₀.₅₆₂₅Sn₀.₄₃₇₅Br₃ using ionic radii and the
+    formula from the paper, to assess perovskite formability (the paper reports τ = 4.00 for this compound).
+  human_prompt_seed: 'Calculate Bartel''s tolerance factor τ for CsGe₀.₅₆₂₅Sn₀.₄₃₇₅Br₃. Use Shannon ionic
+    radii (6-coordination, in Å): Cs⁺ = 1.81, Ge²⁺ = 0.73, Sn²⁺ = 1.18, Br⁻ = 1.96. n_A = 1 (Cs oxidation
+    state). r_B is the composition-weighted average. Use the formula: τ = r_X/r_B - n_A*(n_A - (r_A/r_B)/ln(r_A/r_B)).
+    Write the result to tolerance_factor.json with keys: formula, r_A, r_B, r_X, n_A, tau, is_perovskite_formable
+    (true if τ < 4.18).'
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: tau_json_exists
+    value: tolerance_factor.json
+  - key: tau_json_keys
+    value:
+      tokens:
+      - formula
+      - r_A
+      - r_B
+      - r_X
+      - n_A
+      - tau
+      - is_perovskite_formable
+      filename: tolerance_factor.json
+  - key: tau_numeric
+    value:
+      checks:
+      - key: r_A
+        expected: 1.81
+        tolerance: 0.01
+      - key: r_X
+        expected: 1.96
+        tolerance: 0.01
+      - key: r_B
+        max: 1.2
+        min: 0.9
+        allow_missing_key: false
+      - key: tau
+        max: 5.0
+        min: 3.0
+        allow_missing_key: false
+      filename: tolerance_factor.json
+  - key: tau_formable
+    value:
+      pattern: '"is_perovskite_formable"\s*:\s*(true|false)'
+      filename: tolerance_factor.json
+  - key: grounding_source
+    value:
+      filename: tolerance_factor.json
+  - key: turn_budget
+    value:
+      max: 10
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 180
+  - key: token_budget_total
+    value:
+      max: 30000
+  scoring_checklist:
+  - id: tau_json_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] tolerance_factor.json file exists in the working directory.'
+  - id: tau_json_keys
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] JSON contains required keys: formula, r_A, r_B, r_X, n_A, tau, is_perovskite_formable.'
+  - id: tau_numeric
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] r_A=1.81 Å, r_X=1.96 Å, r_B≈0.73*0.5625+1.18*0.4375≈0.927 Å. τ should be in
+      range 3.0–5.0 (paper reports 4.00).'
+  - id: tau_formable
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] is_perovskite_formable correctly reflects whether τ < 4.18.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Answer is grounded in Bartel''s tolerance factor formula from the paper.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 10 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not retry any tool call.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 180 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses fewer than 30000 tokens total.'
+- id: SA_dielectric_001_20250612
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Retrieve the electronic and ionic dielectric tensors for Cs2Ti(WO4)3 (mp-1226157) from the Materials
+    Project, compute the total dielectric tensor by element-wise addition, and calculate the polycrystalline
+    scalar dielectric constant and anisotropic ratio from the total tensor eigenvalues.
+  human_prompt_seed: Retrieve the crystal structure mp-1226157 from the Materials Project. Extract its
+    electronic (ε∞) and ionic (ε0) dielectric tensors. Compute the total dielectric tensor ε = ε∞ + ε0
+    by element-wise addition. From the total tensor, calculate the polycrystalline scalar dielectric constant
+    (average of eigenvalues) and the anisotropic ratio (max eigenvalue / min eigenvalue). Save all results
+    to dielectric_analysis.json.
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: artifact_dielectric_json
+    value:
+      filename: dielectric_analysis.json
+  - key: contains_total_scalar
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - total_dielectric_constant
+      - '180.89'
+      filename: dielectric_analysis.json
+  - key: tensor_addition_correct
+    value:
+      flags:
+      - regex
+      pattern: '"total_dielectric_tensor":\s*\[\['
+      filename: dielectric_analysis.json
+  - key: contains_anisotropy_ratio
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - anisotropic_ratio
+      filename: dielectric_analysis.json
+  - key: numeric_total_dielectric
+    value:
+      checks:
+      - key: total_dielectric_constant
+        max: 186.0
+        min: 175.0
+        expected: 180.89
+        tolerance: 5.0
+        allow_missing_key: false
+      filename: dielectric_analysis.json
+  - key: numeric_anisotropy
+    value:
+      checks:
+      - key: anisotropic_ratio
+        max: 10.0
+        min: 1.0
+        expected: 1.5
+        tolerance: 8.0
+        allow_missing_key: false
+      filename: dielectric_analysis.json
+  - key: grounding_source
+    value:
+      filename: dielectric_analysis.json
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 100000
+  scoring_checklist:
+  - id: artifact_dielectric_json
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file dielectric_analysis.json exists and is valid JSON.'
+  - id: contains_total_scalar
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The output file contains the total dielectric constant near the paper-reported
+      value of 180.89.'
+  - id: tensor_addition_correct
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] The total dielectric tensor is present in the output (indicating element-wise addition
+      was performed).'
+  - id: contains_anisotropy_ratio
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] The anisotropic ratio is included in the output.'
+  - id: numeric_total_dielectric
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] The computed total dielectric constant falls within [175.0, 186.0], centered
+      on the paper value 180.89.'
+  - id: numeric_anisotropy
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Variable] The anisotropic ratio is a positive number (expected near 1.5 for this near-isotropic
+      material).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The answer is grounded in the source paper''s reported dielectric data for mp-1226157.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Completion within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] No more than 3 retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Completion within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Total token usage within 100000.'

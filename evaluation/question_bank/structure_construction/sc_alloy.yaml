@@ -1,0 +1,224 @@
+version: v5
+capability: structure_construction
+domain: alloy
+questions:
+- id: SC_l10feni_001_20250618
+  capability: structure_construction
+  domain: alloy
+  intent: Construct the L1₀-ordered FeNi (tetrataenite) crystal structure in its simple tetragonal unit
+    cell using the lattice parameter a = 3.57 Å from the parent fcc lattice, with c/a = 1. Fe occupies
+    the 1a Wyckoff site and Ni occupies the 1d site.
+  human_prompt_seed: Construct the L1₀-ordered FeNi (tetrataenite) crystal structure in its simple tetragonal
+    representation. The parent fcc lattice parameter is a = 3.57 Å and c/a = 1. Save the structure as
+    a POSCAR file named `l10_feni.vasp` in the current directory.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_poscar
+    value: l10_feni.vasp
+  - key: numeric_lattice_a
+    value:
+      checks:
+      - key: a
+        max: 2.53
+        min: 2.52
+        expected: 2.5244
+        tolerance: 0.01
+      filename: l10_feni.vasp
+  - key: numeric_lattice_c
+    value:
+      checks:
+      - key: c
+        max: 3.58
+        min: 3.56
+        expected: 3.57
+        tolerance: 0.01
+      filename: l10_feni.vasp
+  - key: text_composition
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - Fe
+      - Ni
+      filename: l10_feni.vasp
+  - key: text_sites_count
+    value:
+      flags: []
+      tokens:
+      - 1   1
+      filename: l10_feni.vasp
+  - key: grounding_source
+    value:
+      filename: l10_feni.vasp
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] POSCAR file `l10_feni.vasp` exists in the working directory.'
+  - id: numeric_lattice_a
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Lattice parameter a (first lattice vector length) is approximately 2.524 Å
+      (= 3.57/√2), within tolerance.'
+  - id: numeric_lattice_c
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Lattice parameter c (third lattice vector length) is approximately 3.57 Å,
+      within tolerance.'
+  - id: text_composition
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] POSCAR contains both Fe and Ni element symbols.'
+  - id: text_sites_count
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] POSCAR specifies exactly 1 Fe atom and 1 Ni atom (two-atom basis).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The generated structure is grounded in the source paper''s L1₀ FeNi description.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completed within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent did not retry any tool calls.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completed within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent used fewer than 80000 total tokens.'
+- id: SC_ase_002_20250601
+  capability: structure_construction
+  domain: alloy
+  intent: Construct a polycrystalline BCC MoTaVW high-entropy alloy structure with 12 grains using the
+    Voronoi tessellation algorithm, as described in the UNEP-v1 paper's plasticity simulations.
+  human_prompt_seed: Construct a polycrystalline BCC MoTaVW high-entropy alloy structure with 12 grains
+    using the Voronoi algorithm. Use equimolar composition (25% each of Mo, Ta, V, W), a BCC lattice with
+    lattice parameter 3.2 Å, and a cubic simulation box of approximately 50 Å per side. Randomly assign
+    atom types to lattice sites. Save the structure as motavw_polycrystal.xyz in the current directory.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_xyz
+    value:
+      filename: motavw_polycrystal.xyz
+  - key: element_count
+    value:
+      checks:
+      - key: Mo
+        max: 0.3
+        min: 0.2
+        allow_missing_key: true
+      - key: Ta
+        max: 0.3
+        min: 0.2
+        allow_missing_key: true
+      - key: V
+        max: 0.3
+        min: 0.2
+        allow_missing_key: true
+      - key: W
+        max: 0.3
+        min: 0.2
+        allow_missing_key: true
+      filename: motavw_polycrystal.xyz
+  - key: crystal_structure
+    value:
+      pattern: BCC|bcc|body-centered
+      filename: motavw_polycrystal.xyz
+  - key: grain_count
+    value:
+      checks:
+      - key: n_grains
+        expected: 12
+        tolerance: 0
+        allow_missing_key: true
+      filename: motavw_polycrystal.xyz
+  - key: grounding_source
+    value:
+      filename: motavw_polycrystal.xyz
+  - key: turn_budget
+    value:
+      max: 25
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_xyz
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file motavw_polycrystal.xyz exists.'
+  - id: element_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Each element (Mo, Ta, V, W) comprises approximately 20-30% of atoms (equimolar
+      target).'
+  - id: crystal_structure
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] The structure uses a BCC lattice.'
+  - id: grain_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] The polycrystal has 12 grains.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The structure construction is grounded in the UNEP-v1 paper''s polycrystalline
+      MoTaVW model.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 1.0
+    criterion: '[Must] Completed within 25 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 1.0
+    criterion: '[Must] No retries were needed.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 1.0
+    criterion: '[Must] Completed within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 1.0
+    criterion: '[Must] Total token usage within 50000.'

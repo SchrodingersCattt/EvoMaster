@@ -1,0 +1,399 @@
+version: v5
+capability: input_generation
+domain: agnostic
+questions:
+- id: IG_vasp_003_20250601
+  capability: input_generation
+  domain: agnostic
+  intent: Generate a VASP INCAR file for DFT reference data generation with the specific settings used
+    to train the UNEP-v1 potential.
+  human_prompt_seed: 'Generate a VASP INCAR file for DFT single-point energy and force calculations using
+    the settings from the UNEP-v1 training data generation: PBE functional, 600 eV plane-wave energy cutoff,
+    PREC=Accurate, Gaussian smearing with SIGMA=0.02 eV, electronic convergence threshold EDIFF=1E-6,
+    blocked Davidson algorithm (ALGO=Normal), and ISMEAR=0. Save as INCAR in the current directory.'
+  tags:
+  - eng_vasp
+  data_files: []
+  reference_answers:
+  - key: artifact_incar
+    value:
+      filename: INCAR
+  - key: encut
+    value:
+      checks:
+      - key: ENCUT
+        expected: 600
+        tolerance: 0
+      filename: INCAR
+  - key: prec
+    value:
+      flags:
+      - re.IGNORECASE
+      pattern: PREC\s*=\s*Accurate
+      filename: INCAR
+  - key: ediff
+    value:
+      checks:
+      - key: EDIFF
+        expected: 1.0e-06
+        tolerance: 0
+      filename: INCAR
+  - key: sigma
+    value:
+      checks:
+      - key: SIGMA
+        expected: 0.02
+        tolerance: 0
+      filename: INCAR
+  - key: ismear
+    value:
+      checks:
+      - key: ISMEAR
+        expected: 0
+        tolerance: 0
+      filename: INCAR
+  - key: functional
+    value:
+      flags:
+      - re.IGNORECASE
+      pattern: GGA\s*=\s*PE|PE
+      filename: INCAR
+  - key: grounding_source
+    value:
+      filename: INCAR
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 200
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_incar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file INCAR exists in the working directory.'
+  - id: encut
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] ENCUT is set to 600 eV.'
+  - id: prec
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] PREC is set to Accurate.'
+  - id: ediff
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] EDIFF is set to 1E-6.'
+  - id: sigma
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] SIGMA (smearing width) is set to 0.02 eV.'
+  - id: ismear
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] ISMEAR=0 (Gaussian smearing).'
+  - id: functional
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] GGA functional is set to PE (PBE).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The INCAR parameters are grounded in the UNEP-v1 paper''s DFT calculation settings.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 1.0
+    criterion: '[Must] Completed within 15 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 1.0
+    criterion: '[Must] No retries were needed.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 1.0
+    criterion: '[Must] Completed within 200 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 1.0
+    criterion: '[Must] Total token usage within 50000.'
+- id: IG_gpumd_001_20250601
+  capability: input_generation
+  domain: agnostic
+  intent: Generate a GPUMD nep.in input file for training a NEP4 neuroevolution potential with the hyperparameters
+    described in the UNEP-v1 paper.
+  human_prompt_seed: 'Generate a GPUMD nep.in training input file for a NEP4 model covering Ag and W elements.
+    Use the hyperparameters from the UNEP-v1 paper: radial cutoff 6 Å, angular cutoff 5 Å, 5 radial functions
+    with 9 basis functions, 80 hidden neurons, batch size 10000, and 1000000 training generations. Save
+    the file as nep.in in the current directory.'
+  tags:
+  - eng_gpumd
+  data_files: []
+  reference_answers:
+  - key: artifact_nep_in
+    value:
+      filename: nep.in
+  - key: radial_cutoff
+    value:
+      checks:
+      - key: cutoff_radial
+        max: 6.5
+        min: 5.5
+        expected: 6.0
+        tolerance: 0
+      filename: nep.in
+  - key: angular_cutoff
+    value:
+      checks:
+      - key: cutoff_angular
+        max: 5.5
+        min: 4.5
+        expected: 5.0
+        tolerance: 0
+      filename: nep.in
+  - key: n_neurons
+    value:
+      checks:
+      - key: n_neuron
+        expected: 80
+        tolerance: 0
+      filename: nep.in
+  - key: batch_size
+    value:
+      checks:
+      - key: batch
+        expected: 10000
+        tolerance: 0
+      filename: nep.in
+  - key: n_generation
+    value:
+      checks:
+      - key: generation
+        expected: 1000000
+        tolerance: 0
+      filename: nep.in
+  - key: grounding_source
+    value:
+      filename: nep.in
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_nep_in
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file nep.in exists in the working directory.'
+  - id: radial_cutoff
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] Radial descriptor cutoff is set to 6 Å.'
+  - id: angular_cutoff
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] Angular descriptor cutoff is set to 5 Å.'
+  - id: n_neurons
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] Hidden layer has 80 neurons.'
+  - id: batch_size
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] Batch size is 10000 structures.'
+  - id: n_generation
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] Training runs for 1000000 generations.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The input file is grounded in the UNEP-v1 paper''s NEP training hyperparameters.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 1.0
+    criterion: '[Must] Completed within 20 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 1.0
+    criterion: '[Must] No retries were needed.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 1.0
+    criterion: '[Must] Completed within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 1.0
+    criterion: '[Must] Total token usage within 50000.'
+- id: IG_castep_002_20250618
+  capability: input_generation
+  domain: agnostic
+  intent: Generate a CASTEP .cell input file for computing the elastic constants of L1₀ FeNi using GGA-PBE,
+    a 600 eV plane-wave cutoff, a 12×12×12 k-point mesh, and force tolerance 0.03 eV/Å, as specified in
+    the paper's computational details.
+  human_prompt_seed: Generate a CASTEP .cell input file for computing the elastic constants of L1₀ FeNi.
+    Use the GGA-PBE functional, a 600 eV plane-wave cutoff, a 12×12×12 Monkhorst-Pack k-point grid, electronic
+    SCF tolerance of 1e-6 eV, and a force tolerance of 0.03 eV/Å. Save the file as `l10_feni_elastic.cell`
+    in the current directory.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_cell
+    value: l10_feni_elastic.cell
+  - key: text_functional
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - XC_FUNCTIONAL
+      - PBE
+      filename: l10_feni_elastic.cell
+  - key: text_cutoff
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - CUT_OFF_ENERGY
+      - '600'
+      filename: l10_feni_elastic.cell
+  - key: text_kpoints
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - KPOINTS_MP_GRID
+      - '12'
+      - '12'
+      - '12'
+      filename: l10_feni_elastic.cell
+  - key: text_scf_tol
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - elec_energy_tol
+      - 1e-6
+      filename: l10_feni_elastic.cell
+  - key: text_force_tol
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - GEOM_FORCE_TOL
+      - '0.03'
+      filename: l10_feni_elastic.cell
+  - key: text_task
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - TASK
+      - elastic
+      filename: l10_feni_elastic.cell
+  - key: grounding_source
+    value:
+      filename: l10_feni_elastic.cell
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_cell
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] CASTEP .cell file `l10_feni_elastic.cell` exists.'
+  - id: text_functional
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Input specifies GGA-PBE exchange-correlation functional.'
+  - id: text_cutoff
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Plane-wave cutoff energy is set to 600 eV.'
+  - id: text_kpoints
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] k-point mesh is 12×12×12 Monkhorst-Pack grid.'
+  - id: text_scf_tol
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Electronic SCF tolerance is 1e-6 eV.'
+  - id: text_force_tol
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Force tolerance is 0.03 eV/Å.'
+  - id: text_task
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Task is set to elastic (for elastic constants calculation).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The input file is grounded in the source paper''s CASTEP computational details.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completed within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent did not retry any tool calls.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completed within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent used fewer than 80000 total tokens.'

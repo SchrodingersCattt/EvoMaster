@@ -334,3 +334,471 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
+- id: SC_hbn_001_20250618
+  capability: structure_construction
+  domain: semiconductor
+  intent: Construct a single-layer graphene structure in a hexagonal unit cell using the LDA lattice parameter
+    a = 2.445 A with sufficient vacuum spacing along the c-axis.
+  human_prompt_seed: Construct a single-layer graphene structure in a hexagonal unit cell using Python/pymatgen.
+    Use the lattice parameter a = 2.445 A and include at least 12 A of vacuum along the c-axis. The unit
+    cell should contain exactly two carbon atoms at the standard graphene sublattice positions. Write
+    the structure to a file named graphene.poscar in POSCAR format.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: poscar_exists
+    value: graphene.poscar
+  - key: poscar_has_carbon
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - C
+      filename: graphene.poscar
+  - key: poscar_has_two_atoms
+    value:
+      flags:
+      - regex
+      pattern: \b2\b
+      filename: graphene.poscar
+  - key: poscar_lattice_a
+    value:
+      flags:
+      - regex
+      pattern: 2\.44[0-9]
+      filename: graphene.poscar
+  - key: poscar_has_vacuum
+    value:
+      flags:
+      - regex
+      pattern: 1[2-9]\.|20\.
+      filename: graphene.poscar
+  - key: grounding_source
+    value:
+      filename: graphene.poscar
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 1
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: poscar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 5.0
+    criterion: '[Must] graphene.poscar file exists in the working directory'
+  - id: poscar_has_carbon
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] POSCAR specifies carbon (C) as an element'
+  - id: poscar_has_two_atoms
+    axis: correctness
+    verify: text_file_regex
+    weight: 10.0
+    criterion: '[Must] POSCAR indicates 2 atoms in the unit cell (graphene primitive cell)'
+  - id: poscar_lattice_a
+    axis: correctness
+    verify: text_file_regex
+    weight: 10.0
+    criterion: '[Must] POSCAR lattice parameter a is approximately 2.445 A (matches 2.44x pattern from
+      LDA value)'
+  - id: poscar_has_vacuum
+    axis: correctness
+    verify: text_file_regex
+    weight: 5.0
+    criterion: '[Suggested] POSCAR c-axis lattice parameter >= 12 A (vacuum spacing for 2D slab)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 5.0
+    criterion: '[Must] The constructed structure uses the LDA lattice parameter a = 2.445 A from Giovannetti
+      et al. 2007'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes the task within 15 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry the task'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes the task within 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 50000 tokens total'
+- id: SC_vasp_003_20250618
+  capability: structure_construction
+  domain: semiconductor
+  intent: Construct a VASP POSCAR file for a slab supercell consisting of a 6-layer Cu(111) substrate
+    with a single graphene monolayer adsorbed on top and ~12 Å of vacuum, using the lattice-matching geometry
+    described in Giovannetti et al. (2008).
+  human_prompt_seed: 'Construct a VASP POSCAR file for a graphene/Cu(111) slab supercell matching the
+    geometry in Giovannetti et al., Phys. Rev. Lett. 101, 026803 (2008), Fig. 1(a). Use the small primitive
+    cell: the in-plane lattice constant is 2.445 Å (graphene-optimized). The Cu(111) surface is adapted
+    to match this lattice, giving an fcc(111) interlayer spacing of 1.997 Å. Build 6 Cu layers in ABC
+    stacking, place a graphene monolayer (2 C atoms per primitive cell) at the equilibrium separation
+    of 3.26 Å above the topmost Cu layer, with one C atom on top of a surface Cu atom (A site) and the
+    second C on an fcc hollow site (C site). Add approximately 12 Å of vacuum above the graphene. Save
+    as POSCAR in the working directory.'
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_poscar
+    value:
+      filename: POSCAR
+  - key: poscar_atom_counts
+    value:
+      flags: []
+      pattern: ^\s*6\s+2\s*$
+      filename: POSCAR
+  - key: poscar_lattice_a
+    value:
+      flags: []
+      pattern: ^\s*2\.445
+      filename: POSCAR
+  - key: poscar_species
+    value:
+      flags: []
+      tokens:
+      - Cu
+      - C
+      filename: POSCAR
+  - key: grounding_source
+    value:
+      filename: POSCAR
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] POSCAR file exists in the working directory'
+  - id: poscar_atom_counts
+    axis: correctness
+    verify: text_file_regex
+    weight: 3.0
+    criterion: '[Must] POSCAR declares 6 Cu atoms and 2 C atoms (total 8 atoms in the primitive cell)'
+  - id: poscar_lattice_a
+    axis: correctness
+    verify: text_file_regex
+    weight: 3.0
+    criterion: '[Must] First lattice vector starts with 2.445 Å (graphene-optimized in-plane lattice constant)'
+  - id: poscar_species
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] POSCAR contains both Cu and C atomic species'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The constructed structure is grounded in the geometry described in Giovannetti
+      et al. (2008), Fig. 1 and Table I'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within the turn budget'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not retry any tool call'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within the duration budget'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent stays within the total token budget'
+- id: SC_gnr_002_20250618
+  capability: structure_construction
+  domain: semiconductor
+  intent: Construct the atomic structure of a hydrogen-passivated zigzag graphene nanoribbon (12-ZGNR)
+    with 12 zigzag chains across the width, as described in Son et al. (2006).
+  human_prompt_seed: Construct a hydrogen-passivated zigzag graphene nanoribbon (12-ZGNR) with 12 zigzag
+    chains across the width. Use a C-C bond length of 1.42 Å in the bulk. Save the structure as a POSCAR
+    file named `12_zgnr.POSCAR` in the current working directory.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_poscar
+    value: 12_zgnr.POSCAR
+  - key: has_carbon_and_hydrogen
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - C
+      - H
+      filename: 12_zgnr.POSCAR
+  - key: atom_count_range
+    value:
+      checks:
+      - key: total_atoms
+        max: 100
+        min: 40
+        allow_missing_key: false
+      filename: 12_zgnr.POSCAR
+  - key: grounding_source
+    value:
+      filename: 12_zgnr.POSCAR
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file 12_zgnr.POSCAR exists and is a valid POSCAR format.'
+  - id: has_carbon_and_hydrogen
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] POSCAR contains both Carbon (C) and Hydrogen (H) element symbols, confirming hydrogen
+      passivation.'
+  - id: atom_count_range
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] Total atom count is between 40 and 100, consistent with a 12-ZGNR unit cell
+      (expecting ~52 atoms for a minimal cell).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The constructed structure corresponds to a 12-ZGNR with zigzag edges and hydrogen
+      passivation as described in Son et al. (2006).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retry requests needed.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Uses no more than 80000 tokens total.'
+- id: SC_gnr_001_20250618
+  capability: structure_construction
+  domain: semiconductor
+  intent: Construct the atomic structure of a hydrogen-passivated armchair graphene nanoribbon (12-AGNR)
+    with 12 dimer lines across the width, as described in Son et al. (2006).
+  human_prompt_seed: Construct a hydrogen-passivated armchair graphene nanoribbon (12-AGNR) with 12 dimer
+    lines. The bulk C-C bond length is 1.424 Å, and edge C-C bonds should be shortened by approximately
+    3.4%. Save the structure as a POSCAR file named `12_agnr.POSCAR` in the current working directory.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_poscar
+    value: 12_agnr.POSCAR
+  - key: has_carbon_and_hydrogen
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - C
+      - H
+      filename: 12_agnr.POSCAR
+  - key: atom_count_range
+    value:
+      checks:
+      - key: total_atoms
+        max: 120
+        min: 60
+        allow_missing_key: false
+      filename: 12_agnr.POSCAR
+  - key: grounding_source
+    value:
+      filename: 12_agnr.POSCAR
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file 12_agnr.POSCAR exists and is a valid POSCAR format.'
+  - id: has_carbon_and_hydrogen
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] POSCAR contains both Carbon (C) and Hydrogen (H) element symbols, confirming hydrogen
+      passivation.'
+  - id: atom_count_range
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] Total atom count is between 60 and 120, consistent with a 12-AGNR unit cell
+      (expecting ~96 atoms for a reasonable supercell).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The constructed structure corresponds to a 12-AGNR with armchair edges and hydrogen
+      passivation as described in Son et al. (2006).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retry requests needed.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Uses no more than 80000 tokens total.'
+- id: SC_ws2_003_20250524
+  capability: structure_construction
+  domain: semiconductor
+  intent: Use pymatgen to fetch the WS2 structure from Materials Project, generate a properly terminated
+    monolayer slab with adequate vacuum spacing, and export it in POSCAR format for use in plane-wave
+    DFT calculations.
+  human_prompt_seed: Use pymatgen to download the WS2 structure from Materials Project (mp-2247), convert
+    it to a monolayer slab with at least 15 Å of vacuum in the z-direction, center the slab, and export
+    the result as ws2_slab.vasp. The slab should preserve the hexagonal symmetry of the monolayer.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_ws2_slab_vasp
+    value:
+      filename: ws2_slab.vasp
+  - key: text_contains_ws2_formula
+    value:
+      flags: ''
+      tokens:
+      - W
+      - S
+      filename: ws2_slab.vasp
+  - key: text_numeric_vacuum
+    value:
+      checks:
+      - key: c_lattice_vector
+        max: 30.0
+        min: 18.0
+        allow_missing_key: false
+      filename: ws2_slab.vasp
+  - key: text_numeric_layer_thickness
+    value:
+      checks:
+      - key: slab_thickness
+        max: 4.0
+        min: 3.0
+        allow_missing_key: true
+      filename: ws2_slab.vasp
+  - key: grounding_source
+    value:
+      filename: ws2_slab.vasp
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_ws2_slab_vasp
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The file ws2_slab.vasp exists and is a valid POSCAR format file.'
+  - id: text_contains_ws2_formula
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The POSCAR contains both W and S element symbols.'
+  - id: text_numeric_vacuum
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] The c lattice vector (z-direction) is between 18-30 Å, indicating at least
+      15 Å vacuum added to the ~3 Å thick monolayer.'
+  - id: text_numeric_layer_thickness
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Variable] The WS2 monolayer thickness (S-W-S distance) should be approximately 3.1-3.2
+      Å.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The slab structure is derived from the Materials Project WS2 entry (mp-2247).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 1.0
+    criterion: '[Must] Agent completes within 15 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 1.0
+    criterion: '[Must] Agent does not retry any tool call.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 1.0
+    criterion: '[Must] Agent completes within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 1.0
+    criterion: '[Must] Agent uses fewer than 50000 tokens total.'

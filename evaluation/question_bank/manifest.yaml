@@ -105,7 +105,7 @@ banks:
 - path: scientific_analysis/sa_agnostic.yaml
   capability: scientific_analysis
   domain: agnostic
-  questions: 21
+  questions: 24
 - path: scientific_analysis/sa_battery.yaml
   capability: scientific_analysis
   domain: battery
@@ -121,23 +121,23 @@ banks:
 - path: scientific_analysis/sa_semiconductor.yaml
   capability: scientific_analysis
   domain: semiconductor
-  questions: 2
+  questions: 8
 - path: structure_construction/sc_agnostic.yaml
   capability: structure_construction
   domain: agnostic
-  questions: 17
+  questions: 19
 - path: structure_construction/sc_catalysis.yaml
   capability: structure_construction
   domain: catalysis
-  questions: 6
+  questions: 8
 - path: structure_construction/sc_semiconductor.yaml
   capability: structure_construction
   domain: semiconductor
-  questions: 3
+  questions: 8
 - path: structure_retrieval/rt_agnostic.yaml
   capability: structure_retrieval
   domain: agnostic
-  questions: 9
+  questions: 10
 - path: structure_retrieval/rt_battery.yaml
   capability: structure_retrieval
   domain: battery
@@ -165,7 +165,7 @@ banks:
 - path: workflow_orchestration/wo_semiconductor.yaml
   capability: workflow_orchestration
   domain: semiconductor
-  questions: 3
+  questions: 4
 - path: platform/ig_agnostic.yaml
   capability: input_generation
   domain: agnostic
@@ -206,3 +206,19 @@ banks:
   capability: structure_construction
   domain: polymer
   questions: 1
+- path: input_generation/ig_agnostic.yaml
+  capability: input_generation
+  domain: agnostic
+  questions: 3
+- path: input_generation/ig_alloy.yaml
+  capability: input_generation
+  domain: alloy
+  questions: 1
+- path: input_generation/ig_semiconductor.yaml
+  capability: input_generation
+  domain: semiconductor
+  questions: 1
+- path: structure_construction/sc_alloy.yaml
+  capability: structure_construction
+  domain: alloy
+  questions: 2
