@@ -604,3 +604,1046 @@ questions:
     axis: efficiency
     verify: token_budget
     criterion: '[Must] Agent completed within token budget.'
+- id: IG_siesta_001_20250618
+  capability: input_generation
+  domain: agnostic
+  intent: Generate a SIESTA .fdf input file for a spin-polarized DFT geometry optimization of FCC NiO
+    in its antiferromagnetic (AFM-II) ordering, using GGA-PBE, 400 Ry mesh cutoff, a 13x13x13 k-point
+    grid, double-zeta polarized LCAO basis, and fully relativistic psml pseudopotentials.
+  human_prompt_seed: Generate a SIESTA .fdf input file for a spin-polarized DFT geometry optimization
+    of antiferromagnetic NiO. Retrieve the FCC NiO primitive cell (Fm-3m) from the structure database
+    and use it to build the AFM-II supercell with propagation vector Q=(0.5,0.5,0.5). Apply GGA-PBE, 400
+    Ry mesh cutoff, 13x13x13 k-point grid, double-zeta polarized basis, and fully relativistic psml pseudopotentials.
+    Converge forces to 0.01 eV/Ang. Write the output to nio_siesta.fdf.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_fdf
+    value: nio_siesta.fdf
+  - key: contains_meshcutoff
+    value:
+      tokens:
+      - MeshCutoff
+      - '400'
+      - Ry
+      filename: nio_siesta.fdf
+  - key: contains_kgrid
+    value:
+      tokens:
+      - kgrid_Monkhorst_Pack
+      - '13'
+      - '13'
+      - '13'
+      filename: nio_siesta.fdf
+  - key: contains_basis
+    value:
+      tokens:
+      - PAO.BasisSize
+      - DZP
+      filename: nio_siesta.fdf
+  - key: contains_xc
+    value:
+      tokens:
+      - XC.functional
+      - GGA
+      - XC.authors
+      - PBE
+      filename: nio_siesta.fdf
+  - key: contains_spin
+    value:
+      tokens:
+      - Spin
+      - polarized
+      filename: nio_siesta.fdf
+  - key: contains_force_tol
+    value:
+      tokens:
+      - MD.MaxForceTol
+      - '0.01'
+      filename: nio_siesta.fdf
+  - key: contains_pseudopotential_format
+    value:
+      tokens:
+      - psml
+      filename: nio_siesta.fdf
+  - key: grounding_source
+    value:
+      filename: nio_siesta.fdf
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 60000
+  scoring_checklist:
+  - id: artifact_fdf
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] Output file nio_siesta.fdf exists.'
+  - id: contains_meshcutoff
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] MeshCutoff is set to 400 Ry.'
+  - id: contains_kgrid
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] Monkhorst-Pack k-grid is 13x13x13.'
+  - id: contains_basis
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 8.0
+    criterion: '[Must] Basis size is DZP (double-zeta polarized).'
+  - id: contains_xc
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] Exchange-correlation functional is GGA-PBE.'
+  - id: contains_spin
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 8.0
+    criterion: '[Must] Spin polarization is enabled.'
+  - id: contains_force_tol
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 5.0
+    criterion: '[Must] Maximum force tolerance is 0.01 eV/Ang.'
+  - id: contains_pseudopotential_format
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 5.0
+    criterion: '[Must] Pseudopotential format is psml.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 5.0
+    criterion: '[Must] Answer is grounded in the seed data file.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Turn budget not exceeded (max 30).'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] No retries used.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Duration budget not exceeded (max 300s).'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Total token budget not exceeded (max 60000).'
+- id: IG_vasp_001_20260625
+  capability: input_generation
+  domain: agnostic
+  intent: Generate a VASP INCAR file for PBEsol geometry optimization of a CsPbI₃ perovskite structure,
+    using the exact convergence criteria and parameters described in the paper's DFT methods section.
+  human_prompt_seed: Generate a VASP INCAR file for PBEsol geometry optimization of the primitive CsPbI₃
+    perovskite structure, which you first retrieve from the structure database (e.g. Materials Project).
+    The INCAR must use the PBEsol functional, a 500 eV plane-wave cutoff, Γ-centered k-point sampling,
+    and convergence criteria of 1e-5 eV for energy and 0.01 eV/Ang for forces. Save the INCAR to the current
+    working directory.
+  tags:
+  - eng_vasp
+  data_files: []
+  reference_answers:
+  - key: incar_exists
+    value: INCAR
+  - key: incar_contains
+    value:
+      tokens:
+      - PREC = Accurate
+      - ENCUT = 500
+      - EDIFF = 1E-5
+      - EDIFFG = -0.01
+      - ISMEAR = 0
+      - ISPIN = 2
+      - LREAL = Auto
+      filename: INCAR
+  - key: incar_pbesol
+    value:
+      tokens:
+      - GGA = PS
+      filename: INCAR
+  - key: incar_kpoints
+    value:
+      tokens:
+      - Gamma
+      filename: KPOINTS
+  - key: grounding_source
+    value:
+      filename: INCAR
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: incar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] INCAR file exists in the working directory.'
+  - id: incar_contains
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains required tags: PREC=Accurate, ENCUT=500, EDIFF=1E-5, EDIFFG=-0.01,
+      ISMEAR=0, ISPIN=2, LREAL=Auto.'
+  - id: incar_pbesol
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR uses PBEsol functional via GGA = PS.'
+  - id: incar_kpoints
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] KPOINTS file uses Gamma-centered mesh.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Answer is grounded in the provided CsPbI₃ structure file.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 15 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not retry any tool call.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses fewer than 50000 tokens total.'
+- id: IG_vasp_002_20260121
+  capability: input_generation
+  domain: agnostic
+  intent: Generate a VASP INCAR file for bulk anatase TiO2 structural optimization using the PBE functional
+    with Hubbard U correction on Ti-3d orbitals.
+  human_prompt_seed: Generate a VASP INCAR file for structural optimization of bulk anatase TiO2 (tetragonal
+    I41/amd), which you first retrieve from the structure database. Use the PBE functional with DFT+U
+    correction (U=7.3 eV on Ti-3d). Save the INCAR to the working directory.
+  tags:
+  - eng_vasp
+  data_files: []
+  reference_answers:
+  - key: artifact_incar
+    value: INCAR
+  - key: text_incar_tags
+    value:
+      flags:
+      - i
+      tokens:
+      - ISIF = 3
+      - EDIFF = 1E-06
+      - EDIFFG = -0.001
+      - ENCUT = 600
+      - ISPIN = 2
+      - GGA = PE
+      - IBRION = 2
+      - NSW = 200
+      filename: INCAR
+  - key: numeric_incar_encut
+    value:
+      checks:
+      - key: ENCUT
+        expected: 600
+        tolerance: 0
+      filename: INCAR
+  - key: numeric_incar_ediffg
+    value:
+      checks:
+      - key: EDIFFG
+        expected: -0.001
+        tolerance: 0
+      filename: INCAR
+  - key: text_incar_dftu
+    value:
+      flags:
+      - i
+      tokens:
+      - LDAU = .TRUE.
+      - LDAUTYPE = 2
+      - LDAUL = 2 -1
+      - LDAUU = 7.3 0.0
+      - LDAUJ = 0.0 0.0
+      filename: INCAR
+  - key: text_incar_vdw
+    value:
+      flags:
+      - i
+      tokens:
+      - IVDW = 12
+      filename: INCAR
+  - key: grounding_source
+    value:
+      filename: INCAR
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 1
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_incar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] INCAR file exists in the working directory.'
+  - id: text_incar_tags
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains required VASP tags: ISIF=3, EDIFF=1E-06, EDIFFG=-0.001, ENCUT=600,
+      ISPIN=2, GGA=PE, IBRION=2.'
+  - id: numeric_incar_encut
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] ENCUT is exactly 600 eV as specified in the paper.'
+  - id: numeric_incar_ediffg
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] EDIFFG is -0.001 (10⁻³ eV/Å force convergence).'
+  - id: text_incar_dftu
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains DFT+U settings with LDAU=.TRUE., LDAUTYPE=2, LDAUL=2 -1 (Ti d-orbital,
+      O no U), LDAUU=7.3 0.0.'
+  - id: text_incar_vdw
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Suggested] INCAR includes van der Waals correction via IVDW=12 (DFT-D3).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The generated INCAR is grounded in the provided POSCAR_TiO2_bulk structure file.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry any tool call.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 80000 total tokens.'
+- id: IG_vasp_001_20260121
+  capability: input_generation
+  domain: agnostic
+  intent: Generate a VASP INCAR file for bulk pyrite FeS2 structural optimization using the PBE functional
+    with Hubbard U correction on Fe-3d orbitals.
+  human_prompt_seed: Generate a VASP INCAR file for structural optimization of bulk pyrite FeS2 (cubic
+    Pa-3), which you first retrieve from the structure database. Use the PBE functional with DFT+U correction
+    (U=2.0 eV on Fe-3d). Save the INCAR to the working directory.
+  tags:
+  - eng_vasp
+  data_files: []
+  reference_answers:
+  - key: artifact_incar
+    value: INCAR
+  - key: text_incar_tags
+    value:
+      flags:
+      - i
+      tokens:
+      - ISIF = 3
+      - EDIFF = 1E-06
+      - EDIFFG = -0.001
+      - ENCUT = 600
+      - ISPIN = 2
+      - GGA = PE
+      - LREAL = .FALSE.
+      - IBRION = 2
+      - NSW = 200
+      filename: INCAR
+  - key: numeric_incar_encut
+    value:
+      checks:
+      - key: ENCUT
+        expected: 600
+        tolerance: 0
+      filename: INCAR
+  - key: numeric_incar_ediffg
+    value:
+      checks:
+      - key: EDIFFG
+        expected: -0.001
+        tolerance: 0
+      filename: INCAR
+  - key: text_incar_dftu
+    value:
+      flags:
+      - i
+      tokens:
+      - LDAU = .TRUE.
+      - LDAUTYPE = 2
+      - LDAUL = 2 -1
+      - LDAUU = 2.0 0.0
+      - LDAUJ = 0.0 0.0
+      filename: INCAR
+  - key: text_incar_vdw
+    value:
+      flags:
+      - i
+      tokens:
+      - IVDW = 12
+      filename: INCAR
+  - key: grounding_source
+    value:
+      filename: INCAR
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 1
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_incar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] INCAR file exists in the working directory.'
+  - id: text_incar_tags
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains required VASP tags: ISIF=3, EDIFF=1E-06, EDIFFG=-0.001, ENCUT=600,
+      ISPIN=2, GGA=PE, IBRION=2.'
+  - id: numeric_incar_encut
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] ENCUT is exactly 600 eV as specified in the paper.'
+  - id: numeric_incar_ediffg
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] EDIFFG is -0.001 (10⁻³ eV/Å force convergence).'
+  - id: text_incar_dftu
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains DFT+U settings with LDAU=.TRUE., LDAUTYPE=2, LDAUL=2 -1 (Fe d-orbital,
+      S no U), LDAUU=2.0 0.0.'
+  - id: text_incar_vdw
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Suggested] INCAR includes van der Waals correction via IVDW=12 (DFT-D3).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The generated INCAR is grounded in the provided POSCAR_FeS2_bulk structure file.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry any tool call.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 80000 total tokens.'
+- id: IG_lammps_001_20250618
+  capability: input_generation
+  domain: agnostic
+  intent: Generate a LAMMPS input script for a two-phase coexistence (TPC) molecular dynamics simulation
+    to predict the melting temperature of a single-element material using an NPH ensemble at standard
+    pressure.
+  human_prompt_seed: Generate a LAMMPS input script for a two-phase coexistence MD simulation to predict
+    the melting temperature of Ni at standard pressure. Retrieve the FCC Ni conventional unit cell (Materials
+    Project mp-134) from the structure database and use it to build a 14x14x28 supercell. Initialize the
+    lower half as liquid (heated to ~1.25×Tm_guess) and the upper half as solid. Run with an NPH ensemble
+    at 1.0312 bar, 1 fs timestep, 120 ps equilibration, and NPT pre-equilibration with 100 fs temperature
+    damping and 1000 fs pressure damping for 10 ps. Save the script as tpc_md_ni.in.
+  tags:
+  - eng_lammps
+  data_files: []
+  reference_answers:
+  - key: artifact_tpc_script
+    value: tpc_md_ni.in
+  - key: contains_nph
+    value:
+      tokens:
+      - fix.*nph
+      - nph
+      filename: tpc_md_ni.in
+  - key: contains_npt_pre
+    value:
+      tokens:
+      - fix.*npt
+      - npt
+      filename: tpc_md_ni.in
+  - key: timestep_1fs
+    value:
+      checks:
+      - key: timestep
+        expected: 1.0
+        tolerance: 0
+      filename: tpc_md_ni.in
+  - key: pressure_1atm
+    value:
+      checks:
+      - key: pressure
+        expected: 1.0312
+        tolerance: 0.01
+        allow_missing_key: true
+      filename: tpc_md_ni.in
+  - key: supercell_14x14x28
+    value:
+      tokens:
+      - '14'
+      - '28'
+      filename: tpc_md_ni.in
+  - key: equilibration_120ps
+    value:
+      checks:
+      - key: equilibration_steps
+        max: 150000
+        min: 100000
+        allow_missing_key: true
+      filename: tpc_md_ni.in
+  - key: grounding_source
+    value:
+      filename: tpc_md_ni.in
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_tpc_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] Output file tpc_md_ni.in exists and is a valid LAMMPS input script.'
+  - id: contains_nph
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] Script uses an NPH ensemble (fix nph) for the production TPC run.'
+  - id: contains_npt_pre
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 5.0
+    criterion: '[Must] Script includes an NPT pre-equilibration step.'
+  - id: timestep_1fs
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] Timestep is set to 1.0 fs.'
+  - id: pressure_1atm
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 5.0
+    criterion: '[Suggested] External pressure is set to ~1.0312 bar (standard atmosphere).'
+  - id: supercell_14x14x28
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] Supercell dimensions include 14x14x28 replication.'
+  - id: equilibration_120ps
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 5.0
+    criterion: '[Suggested] Production NPH equilibration run is ~120 ps (120000 steps at 1 fs).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 5.0
+    criterion: '[Must] The script references the provided structure file.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent uses at most 3 retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Total token usage is within 80000 tokens.'
+- id: IG_lammps_004_20250618
+  capability: input_generation
+  domain: agnostic
+  intent: Generate a LAMMPS input script for a two-phase coexistence MD simulation at elevated external
+    pressure (10 GPa) to study pressure-dependent melting behavior.
+  human_prompt_seed: Generate a LAMMPS input script for a two-phase coexistence MD simulation of Ni at
+    10 GPa external pressure. Retrieve the FCC Ni conventional unit cell from the structure database and
+    use it to build a 14x14x28 supercell. Set up NPH ensemble with external pressure of 10 GPa, 1 fs timestep,
+    and 120 ps production run. Save the script as tpc_md_ni_10gpa.in.
+  tags:
+  - eng_lammps
+  data_files: []
+  reference_answers:
+  - key: artifact_script
+    value: tpc_md_ni_10gpa.in
+  - key: contains_nph
+    value:
+      tokens:
+      - fix
+      - nph
+      filename: tpc_md_ni_10gpa.in
+  - key: pressure_10gpa
+    value:
+      checks:
+      - key: pressure_bar
+        expected: 100000
+        tolerance: 1000
+        allow_missing_key: true
+      filename: tpc_md_ni_10gpa.in
+  - key: timestep_1fs
+    value:
+      checks:
+      - key: timestep
+        expected: 1.0
+        tolerance: 0
+      filename: tpc_md_ni_10gpa.in
+  - key: supercell_14x14x28
+    value:
+      tokens:
+      - '14'
+      - '28'
+      filename: tpc_md_ni_10gpa.in
+  - key: grounding_source
+    value:
+      filename: tpc_md_ni_10gpa.in
+  - key: turn_budget
+    value:
+      max: 25
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 250
+  - key: token_budget_total
+    value:
+      max: 70000
+  scoring_checklist:
+  - id: artifact_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] Output file tpc_md_ni_10gpa.in exists and is a valid LAMMPS input script.'
+  - id: contains_nph
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] Script uses an NPH ensemble (fix nph) for the production run.'
+  - id: pressure_10gpa
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] External pressure is set to ~10 GPa (100000 bar).'
+  - id: timestep_1fs
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 5.0
+    criterion: '[Must] Timestep is set to 1.0 fs.'
+  - id: supercell_14x14x28
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 5.0
+    criterion: '[Must] Supercell dimensions include 14x14x28 replication.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 5.0
+    criterion: '[Must] The script references the provided structure file.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 25 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent uses at most 3 retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 250 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Total token usage is within 70000 tokens.'
+- id: IG_vasp_001_20260109
+  capability: input_generation
+  domain: agnostic
+  intent: Generate VASP input files (INCAR, POSCAR, KPOINTS) for geometry relaxation of GeTe trigonal
+    crystal with atomic positions and cell shape optimization at fixed volume, using PBE functional.
+  human_prompt_seed: Generate VASP input files (INCAR, POSCAR, KPOINTS) for geometry relaxation of GeTe
+    (trigonal R-3m, Materials Project mp-1189580), which you first retrieve from the structure database.
+    Optimize atomic positions and cell shape while keeping the cell volume fixed. Use PBE functional and
+    precise-level settings. No spin polarization.
+  tags:
+  - eng_vasp
+  data_files: []
+  reference_answers:
+  - key: artifact_incar
+    value: INCAR
+  - key: artifact_poscar
+    value: POSCAR
+  - key: artifact_kpoints
+    value: KPOINTS
+  - key: text_incar_relax
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - IBRION
+      - ISIF
+      - EDIFF
+      - EDIFFG
+      filename: INCAR
+  - key: text_incar_isif
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - ISIF = 4
+      filename: INCAR
+  - key: text_incar_pbe
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - GGA = PE
+      filename: INCAR
+  - key: text_incar_no_spin
+    value:
+      flags:
+      - case_insensitive
+      - negate
+      tokens:
+      - ISPIN
+      filename: INCAR
+  - key: text_poscar_gete
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - Ge
+      - Te
+      filename: POSCAR
+  - key: numeric_ediff
+    value:
+      checks:
+      - key: EDIFF
+        max: 1.0e-05
+        min: 1.0e-07
+        allow_missing_key: true
+      filename: INCAR
+  - key: numeric_ediffg
+    value:
+      checks:
+      - key: EDIFFG
+        max: -0.001
+        min: -0.01
+        allow_missing_key: true
+      filename: INCAR
+  - key: grounding_source
+    value:
+      filename: INCAR
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_incar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file INCAR exists'
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file POSCAR exists'
+  - id: artifact_kpoints
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file KPOINTS exists'
+  - id: text_incar_relax
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains IBRION, ISIF, EDIFF, EDIFFG tags'
+  - id: text_incar_isif
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] ISIF=4 for positions+shape relaxation at fixed volume'
+  - id: text_incar_pbe
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] GGA=PE for PBE functional'
+  - id: text_incar_no_spin
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] No ISPIN tag (no spin polarization)'
+  - id: text_poscar_gete
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] POSCAR contains Ge and Te element labels'
+  - id: numeric_ediff
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] EDIFF is tight (1e-7 to 1e-5) for precise protocol'
+  - id: numeric_ediffg
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] EDIFFG is negative (force convergence) with magnitude 0.001-0.01 eV/A'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] POSCAR is based on the provided GeTe structure (mp-1189580)'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completed within 30 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retry requests used'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completed within 600 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Total token usage under 50000'
+- id: IG_qe_001_20260109
+  capability: input_generation
+  domain: agnostic
+  intent: Generate a Quantum ESPRESSO pw.x input file for geometry relaxation of silicon crystal using
+    PBE functional with precise-level convergence parameters, relaxing atomic positions only.
+  human_prompt_seed: Generate a Quantum ESPRESSO pw.x input file (si_relax.in) for geometry relaxation
+    of silicon (diamond-cubic, Materials Project mp-149), which you first retrieve from the structure
+    database. Use PBE functional and precise-level convergence settings. Relax atomic positions only,
+    keeping the cell shape and volume fixed.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_si_relax_in
+    value: si_relax.in
+  - key: text_contains_control
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - '&CONTROL'
+      - calculation = 'relax'
+      filename: si_relax.in
+  - key: text_contains_system
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - '&SYSTEM'
+      - ecutwfc
+      - ecutrho
+      filename: si_relax.in
+  - key: text_contains_electrons
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - '&ELECTRONS'
+      - conv_thr
+      filename: si_relax.in
+  - key: text_contains_ions
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - '&IONS'
+      filename: si_relax.in
+  - key: text_no_cell_dof
+    value:
+      flags:
+      - case_insensitive
+      - negate
+      tokens:
+      - cell_dof
+      filename: si_relax.in
+  - key: numeric_ecutwfc
+    value:
+      checks:
+      - key: ecutwfc
+        max: 80
+        min: 40
+        allow_missing_key: true
+      filename: si_relax.in
+  - key: numeric_conv_thr
+    value:
+      checks:
+      - key: conv_thr
+        expected: 1.0e-09
+        tolerance: 0
+        allow_missing_key: true
+      filename: si_relax.in
+  - key: grounding_source
+    value:
+      filename: si_relax.in
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_si_relax_in
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file si_relax.in exists'
+  - id: text_contains_control
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Input file contains &CONTROL section with calculation=''relax'''
+  - id: text_contains_system
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Input file contains &SYSTEM section with ecutwfc and ecutrho'
+  - id: text_contains_electrons
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Input file contains &ELECTRONS section with conv_thr'
+  - id: text_contains_ions
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Input file contains &IONS section for ionic relaxation'
+  - id: text_no_cell_dof
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Cell degrees of freedom are not set to relax (positions-only relaxation)'
+  - id: numeric_ecutwfc
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] Plane-wave cutoff ecutwfc is in reasonable range (40-80 Ry) for Si with PBE'
+  - id: numeric_conv_thr
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] SCF convergence threshold conv_thr is ~1e-9 or tighter for precise protocol'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Input file is based on the provided Si structure (mp-149)'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completed within 30 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retry requests used'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completed within 600 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Total token usage under 50000'

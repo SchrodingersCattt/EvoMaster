@@ -3841,3 +3841,172 @@ questions:
     criterion: Token usage within budget.
     axis: efficiency
     verify: token_budget
+- id: WF_qe_001_20260109
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Write a Python script that computes the equation of state for silicon by generating scaled structures
+    at different volumes, creating QE input files for positions-only relaxation at each volume, and saving
+    inputs to a directory.
+  human_prompt_seed: Write a Python script (compute_eos.py) that computes the equation of state for silicon
+    (diamond-cubic, Materials Project mp-149); the script should first retrieve the silicon structure
+    from the structure database. Generate 7 scaled structures by scaling the cell volume from -6% to +6%
+    in 2% steps around the equilibrium volume. For each scaled structure, create a QE pw.x input file
+    for positions-only relaxation (cell fixed) and save it to a directory 'eos_inputs/' with a descriptive
+    filename. Also produce a summary JSON file (eos_summary.json) listing each scale factor, volume, and
+    corresponding input filename.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_compute_eos
+    value: compute_eos.py
+  - key: artifact_eos_summary
+    value: eos_summary.json
+  - key: artifact_eos_inputs_dir
+    value: eos_inputs/
+  - key: text_script_imports
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - pymatgen
+      - Structure
+      - json
+      filename: compute_eos.py
+  - key: text_script_scale
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - scale
+      - volume
+      filename: compute_eos.py
+  - key: text_script_qe_input
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - '&CONTROL'
+      - calculation
+      - relax
+      filename: compute_eos.py
+  - key: text_script_7_points
+    value:
+      flags: []
+      tokens:
+      - '7'
+      filename: compute_eos.py
+  - key: numeric_scale_range
+    value:
+      checks:
+      - key: min_scale
+        max: 0.941
+        min: 0.94
+        allow_missing_key: true
+      - key: max_scale
+        max: 1.061
+        min: 1.06
+        allow_missing_key: true
+      filename: compute_eos.py
+  - key: text_summary_json
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - volume
+      - scale_factor
+      - input_file
+      filename: eos_summary.json
+  - key: numeric_7_inputs
+    value:
+      checks:
+      - key: n_entries
+        expected: 7
+        tolerance: 0
+        allow_missing_key: true
+      filename: eos_summary.json
+  - key: grounding_source
+    value:
+      filename: compute_eos.py
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_compute_eos
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file compute_eos.py exists'
+  - id: artifact_eos_summary
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file eos_summary.json exists'
+  - id: artifact_eos_inputs_dir
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Directory eos_inputs/ is created in the script'
+  - id: text_script_imports
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script imports pymatgen Structure and json modules'
+  - id: text_script_scale
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script implements volume scaling logic'
+  - id: text_script_qe_input
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script generates QE pw.x input with calculation=relax'
+  - id: text_script_7_points
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script generates 7 volume points'
+  - id: numeric_scale_range
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] Scale factors span approximately 0.94 to 1.06 (±6%)'
+  - id: text_summary_json
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Summary JSON contains volume, scale_factor, and input_file fields'
+  - id: numeric_7_inputs
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] Summary JSON lists exactly 7 entries'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Script reads and uses the provided Si structure (mp-149)'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completed within 30 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retry requests used'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completed within 600 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Total token usage under 80000'

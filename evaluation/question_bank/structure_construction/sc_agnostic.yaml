@@ -2062,3 +2062,369 @@ questions:
     axis: efficiency
     verify: token_budget
     criterion: '[Variable] Agent stays within total token budget.'
+- id: SC_pymatgen_003_20260121
+  capability: structure_construction
+  domain: agnostic
+  intent: Construct a pyrite FeS2(100) surface slab model from the bulk crystal structure using pymatgen,
+    with sufficient vacuum layer to prevent periodic image interactions.
+  human_prompt_seed: Construct a surface slab model of pyrite FeS2 with (100) orientation. Retrieve the
+    bulk pyrite FeS2 structure (cubic Pa-3) from the structure database, then build a slab with thickness
+    of at least 4 atomic layers and add 20 Å of vacuum in the c-direction to avoid spurious interactions.
+    Save the resulting structure as POSCAR_FeS2_100_slab.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_poscar
+    value: POSCAR_FeS2_100_slab
+  - key: numeric_vacuum_thickness
+    value:
+      checks:
+      - key: vacuum_c
+        max: 22
+        min: 18
+        expected: 20
+      filename: POSCAR_FeS2_100_slab
+  - key: text_poscar_fes2
+    value:
+      flags:
+      - i
+      tokens:
+      - Fe
+      - S
+      filename: POSCAR_FeS2_100_slab
+  - key: grounding_source
+    value:
+      filename: POSCAR_FeS2_100_slab
+  - key: duration_budget
+    value:
+      max: 600
+  - key: no_retries
+    value:
+      max: 1
+  - key: token_budget_total
+    value:
+      max: 80000
+  - key: turn_budget
+    value:
+      max: 30
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] POSCAR_FeS2_100_slab file exists.'
+  - id: numeric_vacuum_thickness
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] The slab has approximately 20 Å of vacuum in the c-direction (acceptable range
+      18-22 Å).'
+  - id: text_poscar_fes2
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The POSCAR contains Fe and S element symbols.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The slab construction is grounded in the provided bulk POSCAR_FeS2_bulk structure.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry any tool call.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 80000 total tokens.'
+- id: SC_pymatgen_002_20250618
+  capability: structure_construction
+  domain: agnostic
+  intent: Given the orthorhombic FeP primitive cell and a propagation vector k_min=(0, 0, 0.21), construct
+    the smallest commensurate supercell that can represent the helimagnetic spin spiral, using a rational
+    approximation of the propagation vector components.
+  human_prompt_seed: Retrieve the orthorhombic FeP primitive cell (Pnma, Materials Project mp-2526) from
+    the structure database, then construct the smallest commensurate supercell that can accommodate the
+    helimagnetic spin spiral with propagation vector k_min=(0.00, 0.03, 0.21). Approximate the vector
+    components as simple fractions, determine the supercell matrix, and output the resulting supercell
+    structure as fep_supercell.cif.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_cif
+    value: fep_supercell.cif
+  - key: supercell_matrix
+    value:
+      checks:
+      - key: num_sites
+        max: 24
+        min: 16
+        expected: 20
+      filename: fep_supercell.cif
+  - key: contains_approx_vector
+    value:
+      tokens:
+      - commensurate
+      filename: fep_supercell.cif
+  - key: grounding_source
+    value:
+      filename: fep_supercell.cif
+  - key: turn_budget
+    value:
+      max: 25
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 240
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_cif
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] Output file fep_supercell.cif exists.'
+  - id: supercell_matrix
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 15.0
+    criterion: '[Suggested] Supercell contains approximately 20 atoms (1×1×5 expansion of 4-atom primitive
+      cell).'
+  - id: contains_approx_vector
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 5.0
+    criterion: '[Variable] CIF contains comment or note indicating the commensurate approximation used.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 5.0
+    criterion: '[Must] Answer is grounded in the seed data file.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Turn budget not exceeded (max 25).'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] No retries used.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Duration budget not exceeded (max 240s).'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Total token budget not exceeded (max 50000).'
+- id: SC_pymatgen_004_20260121
+  capability: structure_construction
+  domain: agnostic
+  intent: Construct an anatase TiO2(001) surface slab model from the bulk crystal structure using pymatgen,
+    with sufficient vacuum layer to prevent periodic image interactions.
+  human_prompt_seed: Construct a surface slab model of anatase TiO2 with (001) orientation. Retrieve the
+    bulk anatase TiO2 structure (tetragonal I41/amd) from the structure database, then build a slab with
+    thickness of at least 4 atomic layers and add 20 Å of vacuum in the c-direction to avoid spurious
+    interactions. Save the resulting structure as POSCAR_TiO2_001_slab.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_poscar
+    value: POSCAR_TiO2_001_slab
+  - key: numeric_vacuum_thickness
+    value:
+      checks:
+      - key: vacuum_c
+        max: 22
+        min: 18
+        expected: 20
+      filename: POSCAR_TiO2_001_slab
+  - key: text_poscar_tio2
+    value:
+      flags:
+      - i
+      tokens:
+      - Ti
+      - O
+      filename: POSCAR_TiO2_001_slab
+  - key: grounding_source
+    value:
+      filename: POSCAR_TiO2_001_slab
+  - key: duration_budget
+    value:
+      max: 600
+  - key: no_retries
+    value:
+      max: 1
+  - key: token_budget_total
+    value:
+      max: 80000
+  - key: turn_budget
+    value:
+      max: 30
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] POSCAR_TiO2_001_slab file exists.'
+  - id: numeric_vacuum_thickness
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] The slab has approximately 20 Å of vacuum in the c-direction (acceptable range
+      18-22 Å).'
+  - id: text_poscar_tio2
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The POSCAR contains Ti and O element symbols.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The slab construction is grounded in the provided bulk POSCAR_TiO2_bulk structure.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry any tool call.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 80000 total tokens.'
+- id: SC_surface_001_20260508
+  capability: structure_construction
+  domain: agnostic
+  intent: Construct a stoichiometric Cs₂Te (100) surface slab from a bulk crystal structure using ASE's
+    surface function, handling different terminations by segregating atomic layers along the surface normal
+    and discarding duplicates.
+  human_prompt_seed: Retrieve the bulk Cs₂Te crystal (orthorhombic Pnma) from the structure database,
+    then construct a stoichiometric (100) surface slab using the ASE library. First, determine the conventional
+    unit cell using spglib. Then use ase.build.surface() to create a slab with at least 20 Å thickness.
+    Segregate the slab into atomic layers along the surface normal (z-direction), identify unique terminations
+    by comparing atomic distances, and produce a symmetric slab with identical top and bottom terminations.
+    Add vacuum of at least 20 Å in the non-periodic direction. Save the resulting slab as cs2te_100_slab.xyz.
+  tags:
+  - struct_surface
+  data_files: []
+  reference_answers:
+  - key: artifact_slab_xyz
+    value:
+      filename: cs2te_100_slab.xyz
+  - key: text_has_cs_te
+    value:
+      tokens:
+      - Cs
+      - Te
+      filename: cs2te_100_slab.xyz
+  - key: numeric_n_atoms
+    value:
+      checks:
+      - key: num_atoms
+        max: 200
+        min: 10
+        allow_missing_key: true
+      filename: cs2te_100_slab.xyz
+  - key: numeric_vacuum
+    value:
+      checks:
+      - key: vacuum_thickness_A
+        max: 50
+        min: 15
+        allow_missing_key: true
+      filename: cs2te_100_slab.xyz
+  - key: text_has_ase_usage
+    value:
+      tokens:
+      - ase
+      - surface
+      - make_surface
+      filename: construct_slab.py
+  - key: grounding_source
+    value:
+      filename: cs2te_100_slab.xyz
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_slab_xyz
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file cs2te_100_slab.xyz exists and contains valid XYZ structure data.'
+  - id: text_has_cs_te
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Slab contains both Cs and Te atom species.'
+  - id: numeric_n_atoms
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] Slab contains a reasonable number of atoms (10–200) for a ~20 Å thick slab.'
+  - id: numeric_vacuum
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] Vacuum thickness in the non-periodic direction is at least 15 Å.'
+  - id: text_has_ase_usage
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script uses ASE''s surface/slab construction functionality.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Answer is grounded in the provided Cs₂Te bulk CIF file.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completed within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent did not exceed retry budget.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completed within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent total token usage within 50000.'

@@ -136,3 +136,122 @@ questions:
     axis: efficiency
     verify: token_budget
     criterion: '[Must] Uses no more than 50000 tokens total.'
+- id: IG_vasp_001_20250618
+  capability: input_generation
+  domain: semiconductor
+  intent: 'Generate VASP INCAR files for a two-step band gap calculation workflow: PBE structural relaxation
+    followed by one-shot HSE06 band gap evaluation, following the AMP² methodology described in Kim et
+    al. (Scientific Data, 2020).'
+  human_prompt_seed: 'Retrieve the bulk silicon structure (diamond cubic) from the structure database,
+    then generate two VASP INCAR files: INCAR_relax for PBE structural relaxation and INCAR_hse for one-shot
+    HSE06 band gap calculation. Follow the AMP² computational settings described in Kim et al. (Scientific
+    Data, 2020): PBE functional for relaxation, HSE06 (HFSCREEN=0.2, AEXAC=0.25) for the one-shot calculation.
+    Place both files in the current directory.'
+  tags:
+  - eng_vasp
+  data_files: []
+  reference_answers:
+  - key: relax_incar_tags
+    value:
+      flags:
+        case_insensitive: true
+      tokens:
+      - ISTART = 0
+      - ICHARG = 2
+      - GGA = PE
+      - ENCUT = 520
+      - PREC = Accurate
+      - ISMEAR = 0
+      - SIGMA = 0.05
+      - IBRION = 2
+      - ISIF = 3
+      - EDIFF = 1E-6
+      - EDIFFG = -0.01
+      - LREAL = Auto
+      filename: INCAR_relax
+  - key: hse_incar_tags
+    value:
+      flags:
+        case_insensitive: true
+      tokens:
+      - ISTART = 1
+      - ICHARG = 11
+      - LHFCALC = .TRUE.
+      - HFSCREEN = 0.2
+      - AEXAC = 0.25
+      - ALGO = All
+      - NELM = 1
+      - ENCUT = 520
+      - PREC = Accurate
+      - ISMEAR = 0
+      - SIGMA = 0.05
+      - LREAL = Auto
+      filename: INCAR_hse
+  - key: relax_exists
+    value: INCAR_relax
+  - key: hse_exists
+    value: INCAR_hse
+  - key: grounding_source
+    value:
+      filename: INCAR_relax
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: relax_incar_tags
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 15.0
+    criterion: '[Must] INCAR_relax contains all required PBE relaxation tags: ISTART=0, ICHARG=2, GGA=PE,
+      ENCUT=520, PREC=Accurate, ISMEAR=0, SIGMA=0.05, IBRION=2, ISIF=3, EDIFF=1E-6, EDIFFG=-0.01, LREAL=Auto.'
+  - id: hse_incar_tags
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 15.0
+    criterion: '[Must] INCAR_hse contains all required HSE06 one-shot tags: ISTART=1, ICHARG=11, LHFCALC=.TRUE.,
+      HFSCREEN=0.2, AEXAC=0.25, ALGO=All, NELM=1, ENCUT=520, PREC=Accurate, ISMEAR=0, SIGMA=0.05, LREAL=Auto.'
+  - id: relax_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 5.0
+    criterion: '[Must] File INCAR_relax exists in the output directory.'
+  - id: hse_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 5.0
+    criterion: '[Must] File INCAR_hse exists in the output directory.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] The answer is grounded in the provided structure file si_structure.vasp and the
+      AMP² methodology from Kim et al. (2020).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not retry any tool call.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses fewer than 50000 tokens total.'

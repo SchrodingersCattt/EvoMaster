@@ -802,3 +802,309 @@ questions:
     verify: token_budget
     weight: 1.0
     criterion: '[Must] Agent uses fewer than 50000 tokens total.'
+- id: SC_gaas_001_20250618
+  capability: structure_construction
+  domain: semiconductor
+  intent: Construct a 32-atom GaAs zinc blende supercell from the Materials Project structure and introduce
+    a single Ga vacancy defect, exporting the result as a POSCAR file.
+  human_prompt_seed: Retrieve the bulk GaAs structure (zinc blende, F-43m, Materials Project mp-2534)
+    from the structure database, then construct a 32-atom GaAs supercell with one Ga vacancy. Save the
+    defect structure as gaas_vga_defect.vasp in POSCAR format in the working directory.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_vasp
+    value: gaas_vga_defect.vasp
+  - key: numeric_atom_count
+    value:
+      checks:
+      - key: total_atoms
+        expected: 31
+        tolerance: 0
+      filename: gaas_vga_defect.vasp
+  - key: numeric_composition
+    value:
+      checks:
+      - key: ga_count
+        expected: 15
+        tolerance: 0
+      - key: as_count
+        expected: 16
+        tolerance: 0
+      filename: gaas_vga_defect.vasp
+  - key: grounding_source
+    value:
+      filename: gaas_vga_defect.vasp
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 1
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_vasp
+    axis: correctness
+    verify: artifact_exists
+    weight: 3.0
+    criterion: '[Must] Output file gaas_vga_defect.vasp exists and is a valid POSCAR-format structure
+      file.'
+  - id: numeric_atom_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 3.0
+    criterion: '[Must] The defect supercell contains exactly 31 atoms (32-atom supercell minus 1 Ga vacancy).'
+  - id: numeric_composition
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+    criterion: '[Must] The supercell has 15 Ga atoms and 16 As atoms (one Ga removed from 16 Ga + 16 As
+      stoichiometric supercell).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The constructed supercell is derived from the provided gaas_bulk.cif (mp-2534).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Variable] Agent completed within 20 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Variable] Agent did not retry the task.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Variable] Agent completed within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Variable] Agent used fewer than 50000 tokens total.'
+- id: SC_bilayer_003_20260125
+  capability: structure_construction
+  domain: semiconductor
+  intent: Construct a bilayer structure from a monolayer by applying symmetry-based stacking operations
+    (sliding and rotation) as described in the BMDS paper workflow, using pymatgen.
+  human_prompt_seed: Retrieve the MoS2 monolayer structure (Materials Project mp-1075496) from the structure
+    database, then construct a bilayer by stacking two copies with an initial interlayer separation of
+    3.3 Angstroms and applying AB stacking (60 degree rotation or equivalent shift). Write the resulting
+    bilayer structure to mos2_bilayer.cif.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_cif
+    value:
+      filename: mos2_bilayer.cif
+  - key: text_cif_content
+    value:
+      tokens:
+      - Mo
+      - S
+      - _cell_length_c
+      filename: mos2_bilayer.cif
+  - key: numeric_interlayer
+    value:
+      checks:
+      - key: cell_length_c
+        max: 50.0
+        min: 20.0
+        allow_missing_key: false
+      filename: mos2_bilayer.cif
+  - key: numeric_layer_count
+    value:
+      checks:
+      - key: num_atoms
+        max: 12
+        min: 4
+        expected: 6
+        tolerance: 0
+        allow_missing_key: false
+      filename: mos2_bilayer.cif
+  - key: grounding_source
+    value:
+      filename: mos2_bilayer.cif
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_cif
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] mos2_bilayer.cif file exists in the output directory.'
+  - id: text_cif_content
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] CIF file contains Mo and S species and valid cell parameters.'
+  - id: numeric_interlayer
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] The c lattice parameter indicates a bilayer with vacuum (20-50 A total cell
+      height).'
+  - id: numeric_layer_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+    criterion: '[Must] The bilayer contains approximately 6 atoms (2 Mo + 4 S for MoS2 bilayer).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The answer is grounded in the provided monolayer CIF file.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completed within 15 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retries were needed.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completed within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Total token usage within 80000.'
+- id: SC_vasp_002_20250618
+  capability: structure_construction
+  domain: semiconductor
+  intent: Construct a 160-atom rectangular h-BN supercell (8×5 primitive cells) with a single carbon atom
+    substituting a boron site (C_B defect), starting from the primitive h-BN structure.
+  human_prompt_seed: Retrieve the hexagonal boron nitride (h-BN) primitive structure from the structure
+    database, then construct a rectangular 8×5 supercell containing 160 atoms, then substitute exactly
+    one boron atom with a carbon atom to create a C_B defect. Save the resulting structure as a VASP POSCAR
+    file named poscar_hbn_cb.vasp in the current directory.
+  tags:
+  - eng_vasp
+  data_files: []
+  reference_answers:
+  - key: artifact_poscar
+    value: poscar_hbn_cb.vasp
+  - key: atom_count_160
+    value:
+      checks:
+      - key: total_atoms
+        expected: 160
+        tolerance: 0
+      filename: poscar_hbn_cb.vasp
+  - key: contains_C
+    value:
+      tokens:
+      - C
+      filename: poscar_hbn_cb.vasp
+  - key: contains_B
+    value:
+      tokens:
+      - B
+      filename: poscar_hbn_cb.vasp
+  - key: contains_N
+    value:
+      tokens:
+      - N
+      filename: poscar_hbn_cb.vasp
+  - key: one_C_atom
+    value:
+      flags:
+      - multiline
+      pattern: ^\s*1\s*$
+      filename: poscar_hbn_cb.vasp
+      description: Exactly one C atom in the element count line
+  - key: rectangular_supercell
+    value:
+      flags: []
+      pattern: Cartesian|Direct|cartesian|direct
+      filename: poscar_hbn_cb.vasp
+      description: POSCAR has coordinate system specified
+  - key: grounding_source
+    value:
+      filename: poscar_hbn_cb.vasp
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] POSCAR file poscar_hbn_cb.vasp exists'
+  - id: atom_count_160
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] Total atom count is 160 (8×5 primitive h-BN cells with 4 atoms each minus 1 B +
+      1 C = 160)'
+  - id: contains_C
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Structure contains carbon (C) as the substitutional impurity'
+  - id: contains_B
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Structure still contains boron (B) atoms (159 original - 1 substituted = remaining
+      B)'
+  - id: contains_N
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Structure contains nitrogen (N) atoms'
+  - id: one_C_atom
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Exactly one C atom is present (single C_B defect in isolated defect limit)'
+  - id: rectangular_supercell
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.5
+    criterion: '[Suggested] POSCAR uses standard VASP format with coordinate system specified'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The structure is grounded in the h-BN primitive cell from the source paper context'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Complete within 20 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retry turns used'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Complete within 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Total token usage within 50000'

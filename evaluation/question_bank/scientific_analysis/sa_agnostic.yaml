@@ -2593,3 +2593,275 @@ questions:
     axis: efficiency
     verify: token_budget
     criterion: '[Must] Agent completed within token budget.'
+- id: SA_python_007_20260121
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Calculate the work function of the FeS2(100) surface by constructing a surface slab and determining
+    the difference between the vacuum level and Fermi level from the electrostatic potential profile.
+  human_prompt_seed: Calculate the work function of the FeS2(100) surface from first principles. Retrieve
+    the bulk pyrite FeS2 structure from the structure database, then construct a (100) surface slab with
+    20 Å vacuum, then compute the work function as Φ = E_vac - E_F using the electrostatic potential in
+    the vacuum region. Save results to work_function_FeS2_100.txt.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_results
+    value: work_function_FeS2_100.txt
+  - key: numeric_work_function
+    value:
+      checks:
+      - key: work_function_eV
+        max: 5.5
+        min: 4.5
+        expected: 5.03
+      filename: work_function_FeS2_100.txt
+  - key: text_results_method
+    value:
+      flags:
+      - i
+      tokens:
+      - vacuum
+      - Fermi
+      filename: work_function_FeS2_100.txt
+  - key: grounding_source
+    value:
+      filename: work_function_FeS2_100.txt
+  - key: duration_budget
+    value:
+      max: 600
+  - key: no_retries
+    value:
+      max: 1
+  - key: token_budget_total
+    value:
+      max: 80000
+  - key: turn_budget
+    value:
+      max: 30
+  scoring_checklist:
+  - id: artifact_results
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] work_function_FeS2_100.txt file exists.'
+  - id: numeric_work_function
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Work function is approximately 5.03 eV (acceptable range 4.5-5.5 eV).'
+  - id: text_results_method
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] Results mention the vacuum level and Fermi level method.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The analysis is grounded in the provided bulk POSCAR_FeS2_bulk structure.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry any tool call.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 80000 total tokens.'
+- id: SA_gpumd_004_20250601
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Calculate the elastic constants (C11, C12, C44) of FCC nickel using the UNEP-v1 neuroevolution
+    potential and compare with DFT/experimental reference values.
+  human_prompt_seed: 'Calculate the elastic constants (C11, C12, C44) of FCC nickel using ASE with the
+    caloriNEP calculator and the UNEP-v1 NEP model. Start from the FCC Ni structure (Materials Project
+    mp-23) retrieved from the structure database. Use a strain-based approach: apply small strains (±0.01)
+    to the lattice and compute the resulting stress tensor to extract the elastic constants. Report the
+    three independent elastic constants in GPa and write them to elastic_constants.txt.'
+  tags:
+  - eng_gpumd
+  data_files: []
+  reference_answers:
+  - key: artifact_output
+    value:
+      filename: elastic_constants.txt
+  - key: c11_range
+    value:
+      checks:
+      - key: C11
+        max: 270
+        min: 220
+        allow_missing_key: false
+      filename: elastic_constants.txt
+  - key: c12_range
+    value:
+      checks:
+      - key: C12
+        max: 170
+        min: 130
+        allow_missing_key: false
+      filename: elastic_constants.txt
+  - key: c44_range
+    value:
+      checks:
+      - key: C44
+        max: 140
+        min: 110
+        allow_missing_key: false
+      filename: elastic_constants.txt
+  - key: grounding_source
+    value:
+      filename: elastic_constants.txt
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_output
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file elastic_constants.txt exists.'
+  - id: c11_range
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] C11 is in the range 220-270 GPa (DFT reference ~247 GPa for Ni).'
+  - id: c12_range
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] C12 is in the range 130-170 GPa (DFT reference ~150 GPa for Ni).'
+  - id: c44_range
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] C44 is in the range 110-140 GPa (DFT reference ~124 GPa for Ni).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The elastic constant calculation is grounded in the UNEP-v1 paper''s evaluation
+      of basic physical properties.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 1.0
+    criterion: '[Must] Completed within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 1.0
+    criterion: '[Must] No retries were needed.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 1.0
+    criterion: '[Must] Completed within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 1.0
+    criterion: '[Must] Total token usage within 80000.'
+- id: SA_cohen_005_20250618
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Implement Cohen's empirical formula B = (Nc/4)(1972 - 220*I) * d^(-3.5) for bulk modulus prediction
+    using crystal structural parameters.
+  human_prompt_seed: 'Retrieve the CN2 structure (I-42d) from the structure database, then implement Cohen''s
+    empirical formula B = (Nc/4)(1972 - 220*I)*d^(-3.5) for bulk modulus prediction. Compute the average
+    coordination number Nc, estimate the ionicity parameter I, and determine the average bond length d
+    from the structure. Save results to cohen_result.json with keys: formula, Nc, I, d_angstrom, predicted_B_GPa.'
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: result_exists
+    value: cohen_result.json
+  - key: result_fields
+    value:
+      flags: ''
+      tokens:
+      - Nc
+      - d_angstrom
+      - predicted_B_GPa
+      filename: cohen_result.json
+  - key: bond_length_range
+    value:
+      checks:
+      - key: d_angstrom
+        max: 2.5
+        min: 1.0
+        allow_missing_key: false
+      - key: predicted_B_GPa
+        max: 800
+        min: 100
+        allow_missing_key: false
+      filename: cohen_result.json
+  - key: grounding_source
+    value:
+      filename: cohen_result.json
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: result_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file cohen_result.json exists.'
+  - id: result_fields
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Result file contains Nc, d_angstrom, and predicted_B_GPa fields.'
+  - id: bond_length_range
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+    criterion: '[Suggested] Average bond length d is between 1.0-2.5 Å and predicted bulk modulus is between
+      100-800 GPa (reasonable for covalent crystals).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The implementation uses Cohen''s formula as specified in the source paper.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Turn budget not exceeded.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retries used.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Duration budget not exceeded.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Token budget not exceeded.'

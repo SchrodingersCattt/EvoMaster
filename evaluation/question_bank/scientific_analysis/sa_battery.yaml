@@ -901,3 +901,126 @@ questions:
     verify: token_budget
     weight: 0.0
     criterion: Total tokens consumed ≤ 50000.
+- id: SA_madelung_001_20250618
+  capability: scientific_analysis
+  domain: battery
+  intent: Compute the Madelung field at the transition metal (Fe) and alkali (Li) sites of a LiFePO4 crystal
+    structure using Ewald summation with formal ionic charges, then estimate the cell voltage using the
+    paper's linear proportionality relation.
+  human_prompt_seed: Retrieve the LiFePO4 olivine structure from the structure database, then compute
+    the Madelung potential (in eV/|e| or equivalent units) at the Fe site and the Li site using Ewald
+    summation with formal ionic charges (Li+1, Fe+2, P+5, O-2). Then estimate the cell voltage versus
+    Li/Li+ using the relation V_cell ∝ |M_Fe + M_Li|. Write a Python script that performs the calculation
+    and outputs the results. Save the script as madelung_calc.py and the results as madelung_results.txt.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_script
+    value: madelung_calc.py
+  - key: artifact_results
+    value: madelung_results.txt
+  - key: madelung_fe_negative
+    value:
+      flags: []
+      pattern: M_Fe.*-\d+\.\d+
+      filename: madelung_results.txt
+  - key: madelung_li_negative
+    value:
+      flags: []
+      pattern: M_Li.*-\d+\.\d+
+      filename: madelung_results.txt
+  - key: voltage_range
+    value:
+      checks:
+      - key: V_cell_estimated
+        max: 4.5
+        min: 2.5
+        allow_missing_key: false
+      filename: madelung_results.txt
+  - key: uses_ewald
+    value:
+      flags: []
+      tokens:
+      - ewald
+      - Ewald
+      - reciprocal
+      - real_space
+      filename: madelung_calc.py
+  - key: uses_formal_charges
+    value:
+      flags: []
+      pattern: (Li.*\+1|Li.*1\.0).*Fe.*\+2|Fe.*2\.0
+      filename: madelung_calc.py
+  - key: grounding_source
+    value:
+      filename: madelung_calc.py
+  - key: turn_budget
+    value:
+      max: 40
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Python script madelung_calc.py must exist'
+  - id: artifact_results
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Results file madelung_results.txt must exist'
+  - id: madelung_fe_negative
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Madelung potential at Fe site must be reported as a negative value (attractive)'
+  - id: madelung_li_negative
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Madelung potential at Li site must be reported as a negative value (attractive)'
+  - id: voltage_range
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.8
+    criterion: '[Suggested] Estimated cell voltage should fall between 2.5 and 4.5 V (physically reasonable
+      for LiFePO4)'
+  - id: uses_ewald
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script must implement Ewald summation (real-space + reciprocal-space contributions)'
+  - id: uses_formal_charges
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Script must use formal ionic charges (Li+1, Fe+2, P+5, O-2)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Answer is grounded in the provided LiFePO4 CIF structure'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completes within 40 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retries needed'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completes within 600 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Uses no more than 80000 tokens total'

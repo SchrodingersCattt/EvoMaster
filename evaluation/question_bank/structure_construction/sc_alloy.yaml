@@ -222,3 +222,104 @@ questions:
     verify: token_budget
     weight: 1.0
     criterion: '[Must] Total token usage within 50000.'
+- id: SC_vasp_002_20260508
+  capability: structure_construction
+  domain: alloy
+  intent: Construct a 128-atom randomized BCC supercell for a Nb50Ta50 binary alloy by shuffling atoms
+    on ideal BCC lattice sites with a fixed random seed.
+  human_prompt_seed: Construct a 128-atom BCC supercell for a Nb50Ta50 binary alloy. Start from the primitive
+    Nb BCC structure (Im-3m, W prototype) retrieved from the structure database, expand it to a 128-atom
+    supercell, then randomly assign 64 sites to Nb and 64 sites to Ta using numpy.random.shuffle with
+    random seed 42. Save the resulting structure as a POSCAR file named `POSCAR_NbTa_64_64` in the current
+    working directory.
+  tags:
+  - eng_vasp
+  data_files: []
+  reference_answers:
+  - key: artifact_poscar
+    value: POSCAR_NbTa_64_64
+  - key: contains_128_atoms
+    value:
+      flags:
+      - multiline
+      pattern: ^\s*128\s*$
+      filename: POSCAR_NbTa_64_64
+  - key: contains_two_elements
+    value:
+      flags: []
+      tokens:
+      - Nb
+      - Ta
+      filename: POSCAR_NbTa_64_64
+  - key: numeric_atom_counts
+    value:
+      checks:
+      - key: Nb_count
+        expected: 64
+        tolerance: 0
+        allow_missing_key: false
+      - key: Ta_count
+        expected: 64
+        tolerance: 0
+        allow_missing_key: false
+      filename: POSCAR_NbTa_64_64
+  - key: grounding_source
+    value:
+      filename: POSCAR_NbTa_64_64
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 60000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] POSCAR file exists in the working directory'
+  - id: contains_128_atoms
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] POSCAR specifies exactly 128 total atoms'
+  - id: contains_two_elements
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] POSCAR contains both Nb and Ta element symbols'
+  - id: numeric_atom_counts
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] POSCAR has 64 Nb atoms and 64 Ta atoms'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] POSCAR is grounded in the source paper''s alloy construction methodology'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Variable] Turn budget: 20'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Variable] No retries allowed'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Variable] Duration budget: 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Variable] Token budget: 60000'
