@@ -88,7 +88,7 @@ async def test_run_agent_injects_child_event_forward_sink_into_runtime_ports():
     run_result = RunResultEvent(source='agent', status='completed', reason='natural')
 
     async with _patched_service([run_result]) as (svc, _sse, _persist):
-        ok, _elapsed = await svc.run_agent(
+        ok, _elapsed, _usage = await svc.run_agent(
             session_id='sess-1',
             user_prompt='hello',
             send_cb=AsyncMock(),
@@ -110,7 +110,7 @@ async def test_run_agent_passes_session_id_to_playground_prepare():
     run_result = RunResultEvent(source='agent', status='completed', reason='natural')
 
     async with _patched_service([run_result]) as (svc, _sse, _persist):
-        ok, _elapsed = await svc.run_agent(
+        ok, _elapsed, _usage = await svc.run_agent(
             session_id='sess-explicit',
             user_prompt='hello',
             send_cb=AsyncMock(),
@@ -174,7 +174,7 @@ async def test_run_agent_injects_turn_input_into_pg_ctx_metadata():
     )
 
     async with _patched_service([run_result]) as (svc, _sse, _persist):
-        ok, _elapsed = await svc.run_agent(
+        ok, _elapsed, _usage = await svc.run_agent(
             session_id="sess-1",
             user_prompt="current prompt",
             send_cb=AsyncMock(),
@@ -276,7 +276,7 @@ async def test_run_agent_uses_model_history_restore_service_and_injects_spawn_aw
             checkpoint_inst.build_checkpoint_sink.return_value = checkpoint_sink
             checkpoint_cls.return_value = checkpoint_inst
 
-            ok, _elapsed = await svc.run_agent(
+            ok, _elapsed, _usage = await svc.run_agent(
                 session_id='sess-1',
                 user_prompt='hello',
                 send_cb=AsyncMock(),
@@ -331,7 +331,7 @@ def test_run_agent_injects_bohrium_rebuild_events_into_pg_ctx_metadata():
         async with _patched_service([run_result]) as (svc, _sse, _persist):
             svc._test_events_table.get_bohrium_events.return_value = rebuild_events
 
-            ok, _elapsed = await svc.run_agent(
+            ok, _elapsed, _usage = await svc.run_agent(
                 session_id='sess-1',
                 user_prompt='hello',
                 send_cb=AsyncMock(),
@@ -454,7 +454,7 @@ async def test_run_agent_writes_user_turn_context_and_passes_same_runtime_task()
         svc._test_events_table.get_recent_context_anchor_events.return_value = []
         svc._test_events_table.query_user_turn_context_by_invocation.return_value = None
 
-        ok, _elapsed = await svc.run_agent(
+        ok, _elapsed, _usage = await svc.run_agent(
             session_id="sess-1",
             user_prompt="first question",
             send_cb=AsyncMock(),
@@ -528,7 +528,7 @@ async def test_run_agent_user_turn_context_records_full_provider_facing_with_att
             "src.services.agent_run_service.get_image_input_service",
             return_value=image_service,
         ):
-            ok, _elapsed = await svc.run_agent(
+            ok, _elapsed, _usage = await svc.run_agent(
                 session_id="sess-1",
                 user_prompt="Compare FeO vs Fe2O3 from these files",
                 images=["https://oss.example.com/input/struct1.png"],
@@ -581,7 +581,7 @@ async def test_run_agent_writes_continuation_when_instruction_hash_matches():
         ]
         svc._test_events_table.query_user_turn_context_by_invocation.return_value = None
 
-        ok, _elapsed = await svc.run_agent(
+        ok, _elapsed, _usage = await svc.run_agent(
             session_id="sess-1",
             user_prompt="follow up",
             send_cb=AsyncMock(),
@@ -614,7 +614,7 @@ async def test_run_agent_aborts_when_user_turn_context_write_fails():
         svc._test_events_table.query_user_turn_context_by_invocation.return_value = None
         svc._test_events_table.add_event.return_value = False
 
-        ok, _elapsed = await svc.run_agent(
+        ok, _elapsed, _usage = await svc.run_agent(
             session_id="sess-1",
             user_prompt="first question",
             send_cb=AsyncMock(),
@@ -638,7 +638,7 @@ async def test_run_agent_aborts_when_invocation_id_missing():
         svc._test_events_table.get_recent_context_anchor_events.return_value = []
         svc._test_events_table.query_user_turn_context_by_invocation.return_value = None
 
-        ok, _elapsed = await svc.run_agent(
+        ok, _elapsed, _usage = await svc.run_agent(
             session_id="sess-1",
             user_prompt="first question",
             send_cb=AsyncMock(),
@@ -690,7 +690,7 @@ async def test_run_agent_idempotent_skip_when_user_turn_context_already_exists()
             "content": existing_payload,
         }
 
-        ok, _elapsed = await svc.run_agent(
+        ok, _elapsed, _usage = await svc.run_agent(
             session_id="sess-1",
             user_prompt="first question",
             send_cb=AsyncMock(),

@@ -34,6 +34,70 @@ def format_llm_model_for_notify(llm: str | None, model: str | None) -> str:
     return '默认'
 
 
+def _fmt_tokens(n: int) -> str:
+    """千分位格式化 token 数，便于阅读。"""
+    try:
+        return f'{int(n):,}'
+    except (TypeError, ValueError):
+        return str(n)
+
+
+def format_usage_rows(usage_summary: dict | None) -> list[tuple[str, str]]:
+    """把 run 的 token 消耗摘要格式化为飞书卡片行（标签, 值）。
+
+    入参为 ``agent_run_service`` 构建的 usage 摘要 dict（或 ``None``）；无有效
+    usage 时返回空列表，调用方据此决定是否追加行。展示的是 root kernel accepted
+    LLM turns 的累计用量，不等于账单成本。
+    """
+    if not usage_summary:
+        return []
+
+    prompt = int(usage_summary.get('prompt_tokens') or 0)
+    completion = int(usage_summary.get('completion_tokens') or 0)
+    total = int(usage_summary.get('total_tokens') or 0) or (prompt + completion)
+    cache_read = int(usage_summary.get('cache_read_tokens') or 0)
+    cache_write = int(usage_summary.get('cache_write_tokens') or 0)
+    reasoning = int(usage_summary.get('reasoning_tokens') or 0)
+    num_turns = int(usage_summary.get('num_turns') or 0)
+
+    if total == 0 and prompt == 0 and completion == 0:
+        return []
+
+    detail_parts = [
+        f'输入 {_fmt_tokens(prompt)}',
+        f'输出 {_fmt_tokens(completion)}',
+    ]
+    if cache_read:
+        detail_parts.append(f'缓存命中 {_fmt_tokens(cache_read)}')
+    if cache_write:
+        detail_parts.append(f'缓存写入 {_fmt_tokens(cache_write)}')
+    if reasoning:
+        detail_parts.append(f'推理 {_fmt_tokens(reasoning)}')
+
+    rows: list[tuple[str, str]] = [
+        ('Token 消耗', f'{_fmt_tokens(total)}（{" / ".join(detail_parts)}）'),
+    ]
+    if num_turns:
+        rows.append(('LLM 轮数', str(num_turns)))
+
+    last_turn = usage_summary.get('last_turn_usage') or {}
+    if isinstance(last_turn, dict) and last_turn:
+        lt_prompt = int(last_turn.get('prompt_tokens') or 0)
+        lt_completion = int(last_turn.get('completion_tokens') or 0)
+        lt_total = int(last_turn.get('total_tokens') or 0) or (
+            lt_prompt + lt_completion
+        )
+        if lt_total:
+            rows.append(
+                (
+                    '末轮 Token',
+                    f'{_fmt_tokens(lt_total)}'
+                    f'（输入 {_fmt_tokens(lt_prompt)} / 输出 {_fmt_tokens(lt_completion)}）',
+                )
+            )
+    return rows
+
+
 def _env_prefix() -> str:
     """消息前缀，含环境时如 [MatMaster-uat]，未配置时为 [MatMaster]。"""
     if not (SERVICE_ENV or '').strip():

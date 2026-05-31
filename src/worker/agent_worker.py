@@ -29,6 +29,7 @@ from src.utils.feishu_notifier import (
     CARD_TEMPLATE_ORANGE,
     CARD_TEMPLATE_RED,
     format_llm_model_for_notify,
+    format_usage_rows,
     notify_post_async,
 )
 from src.utils.logger import LogContext, LoggingConfig, setup_logging
@@ -304,6 +305,7 @@ def _run_worker_loop() -> None:
             run_success = True
             fail_reason: str | None = None
             elapsed_ms: int | None = None
+            usage_summary: dict | None = None
             try:
                 result = asyncio.run(
                     agent_run_service.run_agent(
@@ -331,6 +333,13 @@ def _run_worker_loop() -> None:
                 elapsed_ms = (
                     result[1]
                     if isinstance(result, tuple) and len(result) >= 2
+                    else None
+                )
+                usage_summary = (
+                    result[2]
+                    if isinstance(result, tuple)
+                    and len(result) >= 3
+                    and isinstance(result[2], dict)
                     else None
                 )
                 if (
@@ -446,6 +455,19 @@ def _run_worker_loop() -> None:
                         if len(fail_reason_str) > 500:
                             reason = reason + '…'
                         rows.insert(7, ('失败原因', reason))  # 插在「结果」之后
+                    # token 消耗明细插在「运行时间」之后、「执行中/排队数」之前
+                    usage_rows = format_usage_rows(usage_summary)
+                    if usage_rows:
+                        try:
+                            anchor = next(
+                                i
+                                for i, (label, _) in enumerate(rows)
+                                if label == '运行时间'
+                            )
+                            insert_at = anchor + 1
+                        except StopIteration:
+                            insert_at = len(rows)
+                        rows[insert_at:insert_at] = usage_rows
                     if fail_reason == 'cancelled':
                         title = '用户取消运行'
                         template = CARD_TEMPLATE_ORANGE
