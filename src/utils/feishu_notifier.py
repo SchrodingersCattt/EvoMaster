@@ -117,6 +117,25 @@ _SEND_MAX_RETRIES = 3
 _SEND_RETRY_DELAYS = (1, 2, 3)
 
 
+def _retry_or_give_up(attempt: int, kind: str, err: Exception) -> None:
+    """重试退避：未到上限则按 _SEND_RETRY_DELAYS sleep，否则打最终告警。"""
+    if attempt < _SEND_MAX_RETRIES - 1:
+        delay = _SEND_RETRY_DELAYS[attempt]
+        logger.info(
+            'Feishu notify %s (attempt %s/%s), retry in %ss: %s',
+            kind,
+            attempt + 1,
+            _SEND_MAX_RETRIES,
+            delay,
+            err,
+        )
+        time.sleep(delay)
+    else:
+        logger.warning(
+            'Feishu notify failed after %s attempts: %s', _SEND_MAX_RETRIES, err
+        )
+
+
 def _send(body: dict) -> None:
     """发送飞书 webhook 请求。对 5xx/网络错误做有限次重试，失败仅打 log。"""
     req = Request(
@@ -141,35 +160,9 @@ def _send(body: dict) -> None:
             if e.code is None or e.code < 500 or e.code > 599:
                 logger.warning('Feishu notify failed: %s', e)
                 return
-            if attempt < _SEND_MAX_RETRIES - 1:
-                delay = _SEND_RETRY_DELAYS[attempt]
-                logger.info(
-                    'Feishu notify 5xx (attempt %s/%s), retry in %ss: %s',
-                    attempt + 1,
-                    _SEND_MAX_RETRIES,
-                    delay,
-                    e,
-                )
-                time.sleep(delay)
-            else:
-                logger.warning(
-                    'Feishu notify failed after %s attempts: %s', _SEND_MAX_RETRIES, e
-                )
+            _retry_or_give_up(attempt, '5xx', e)
         except (URLError, OSError) as e:
-            if attempt < _SEND_MAX_RETRIES - 1:
-                delay = _SEND_RETRY_DELAYS[attempt]
-                logger.info(
-                    'Feishu notify network error (attempt %s/%s), retry in %ss: %s',
-                    attempt + 1,
-                    _SEND_MAX_RETRIES,
-                    delay,
-                    e,
-                )
-                time.sleep(delay)
-            else:
-                logger.warning(
-                    'Feishu notify failed after %s attempts: %s', _SEND_MAX_RETRIES, e
-                )
+            _retry_or_give_up(attempt, 'network error', e)
 
 
 def notify(text: str) -> None:

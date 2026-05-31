@@ -135,6 +135,56 @@ def _build_completion_card(
     return title, rows, template
 
 
+def _send_completion_email(
+    *,
+    session_user_id: str | None,
+    user_info: dict,
+    payload: dict,
+    session_url: str,
+    user_question: str,
+    duration_str: str,
+    run_success: bool,
+    fail_reason: str | None,
+    fail_reason_str: str,
+) -> None:
+    """会话完成/失败时给用户发完成邮件（含会话链接）。无 user_id 或邮箱时跳过。"""
+    email = user_info.get('email')
+    if not (session_user_id and email and email != '-'):
+        return
+    submitted_at_raw = payload.get('submitted_at') or ''
+    try:
+        if submitted_at_raw:
+            dt = datetime.fromisoformat(submitted_at_raw.replace('Z', '+00:00'))
+            submitted_at_str = dt.strftime('%Y-%m-%d %H:%M:%S UTC')
+        else:
+            submitted_at_str = ''
+    except (ValueError, TypeError):
+        submitted_at_str = submitted_at_raw or ''
+    result_status = (
+        '成功'
+        if run_success
+        else ('已取消' if fail_reason == 'cancelled' else '失败')
+    )
+    fail_reason_for_email = (
+        fail_reason_str
+        if not run_success and fail_reason_str != 'cancelled'
+        else ''
+    )
+    if len(fail_reason_for_email) > 500:
+        fail_reason_for_email = fail_reason_for_email[:500] + '…'
+    send_session_complete_email_async(
+        session_url,
+        session_user_id,
+        email,
+        user_question=user_question or '',
+        submitted_at=submitted_at_str,
+        duration=duration_str,
+        result_status=result_status,
+        fail_reason=fail_reason_for_email,
+        completed_at=datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S UTC'),
+    )
+
+
 class RedisCancellationBridge:
     """Daemon thread that polls Redis stop flag and cancels a controller."""
 
@@ -510,47 +560,17 @@ def _run_worker_loop() -> None:
                         title,
                     )
                     # 会话完成/失败时给用户发邮件（模板：会话已执行完成+链接），与飞书通知并行
-                    if (
-                        session_user_id
-                        and user_info.get('email')
-                        and user_info.get('email') != '-'
-                    ):
-                        submitted_at_raw = payload.get('submitted_at') or ''
-                        try:
-                            if submitted_at_raw:
-                                dt = datetime.fromisoformat(
-                                    submitted_at_raw.replace('Z', '+00:00')
-                                )
-                                submitted_at_str = dt.strftime('%Y-%m-%d %H:%M:%S UTC')
-                            else:
-                                submitted_at_str = ''
-                        except (ValueError, TypeError):
-                            submitted_at_str = submitted_at_raw or ''
-                        result_status = (
-                            '成功'
-                            if run_success
-                            else ('已取消' if fail_reason == 'cancelled' else '失败')
-                        )
-                        fail_reason_for_email = (
-                            fail_reason_str
-                            if not run_success and fail_reason_str != 'cancelled'
-                            else ''
-                        )
-                        if len(fail_reason_for_email) > 500:
-                            fail_reason_for_email = fail_reason_for_email[:500] + '…'
-                        send_session_complete_email_async(
-                            session_url,
-                            session_user_id,
-                            user_info['email'],
-                            user_question=user_question or '',
-                            submitted_at=submitted_at_str,
-                            duration=duration_str,
-                            result_status=result_status,
-                            fail_reason=fail_reason_for_email,
-                            completed_at=datetime.now(timezone.utc).strftime(
-                                '%Y-%m-%d %H:%M:%S UTC'
-                            ),
-                        )
+                    _send_completion_email(
+                        session_user_id=session_user_id,
+                        user_info=user_info,
+                        payload=payload,
+                        session_url=session_url,
+                        user_question=user_question,
+                        duration_str=duration_str,
+                        run_success=run_success,
+                        fail_reason=fail_reason,
+                        fail_reason_str=fail_reason_str,
+                    )
                 except Exception:
                     logger.exception(
                         'Agent worker: completion notify block failed session_id=%s task_id=%s',
