@@ -27,6 +27,9 @@ def main():
     parser.add_argument(
         "--enmax", type=float, default=0.0, help="Max ENMAX from POTCAR (eV)"
     )
+    parser.add_argument(
+        "--elements", type=str, default="", help="Comma-separated element list"
+    )
     args = parser.parse_args()
 
     incar_path = Path(args.input_file)
@@ -34,12 +37,13 @@ def main():
         print(f"File not found: {incar_path}", file=sys.stderr)
         sys.exit(1)
 
+    elements = [e.strip() for e in args.elements.split(",") if e.strip()]
     text = incar_path.read_text(encoding="utf-8", errors="replace")
     tags = parse_incar(text)
     errors, warnings = validate_incar(
         tags,
         task_type=args.task_type,
-        system_info={"is_metal": args.is_metal, "enmax": args.enmax},
+        system_info={"is_metal": args.is_metal, "enmax": args.enmax, "elements": elements},
     )
 
     if errors:

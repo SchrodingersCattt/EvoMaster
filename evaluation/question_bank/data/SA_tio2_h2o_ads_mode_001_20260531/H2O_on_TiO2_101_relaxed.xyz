@@ -1,0 +1,14 @@
+12
+Toy relaxed H2O on anatase TiO2(101)-like slab. Last three atoms are original adsorbate atoms: Ow (atom 10), H1 (atom 11), H2 (atom 12). H2 has transferred to surface oxygen atom 5.
+Ti 0.000 0.000 0.000
+Ti 3.000 0.000 0.000
+Ti 0.000 3.000 0.000
+Ti 3.000 3.000 0.000
+O  0.000 1.500 0.000
+O  1.500 0.000 0.000
+O  3.000 1.500 0.000
+O  1.500 3.000 0.000
+O  3.000 3.000 0.000
+O  1.500 1.500 2.05
+H  1.500 2.260 2.65
+H  0.000 1.500 0.98

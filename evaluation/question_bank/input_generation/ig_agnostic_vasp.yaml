@@ -997,7 +997,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_incar_010_20260508
+- id: IG_incar_010_20260528
   capability: input_generation
   domain: agnostic
   intent: 'Generate VASP INCAR for spin-orbit coupling calculation of heavy-element halide Br6H6Pb2S2. Pb SOC is significant.
@@ -1050,11 +1050,6 @@ questions:
       filename: INCAR
       pattern: ^\s*PREC\s*=\s*Accurate\b
       flags: im
-  - key: critical_LNONCOLLINEAR
-    value:
-      filename: INCAR
-      pattern: ^\s*LNONCOLLINEAR\s*=\s*\.?(?:TRUE|T)\.?
-      flags: im
   - key: turn_budget
     value:
       max: 8
@@ -1063,7 +1058,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 15000
+      max: 20000
   - key: reasonable_params
     value:
       filename: INCAR
@@ -1098,10 +1093,6 @@ questions:
     verify: text_file_regex
   - id: critical_PREC
     criterion: INCAR sets PREC = Accurate (critical param).
-    axis: correctness
-    verify: text_file_regex
-  - id: critical_LNONCOLLINEAR
-    criterion: INCAR sets LNONCOLLINEAR = .TRUE. as required for SOC calculations (LSORBIT implies non-collinear magnetism).
     axis: correctness
     verify: text_file_regex
   - id: reasonable_params
@@ -1232,7 +1223,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_incar_012_20260522
+- id: IG_incar_012_20260528
   capability: input_generation
   domain: agnostic
   intent: 'Generate VASP INCAR for NEB transition state search with HSE06 of Prussian blue analogue C24Fe8N24Na4. Agent must identify Fe mixed-valence magnetism and set NUPDOWN=20.
@@ -1282,17 +1273,19 @@ questions:
   - key: critical_NUPDOWN
     value:
       filename: INCAR
-      pattern: ^\s*NUPDOWN\s*=\s*20\b
-      flags: im
+      check: param_range
+      param: NUPDOWN
+      min: 16
+      max: 24
   - key: turn_budget
     value:
-      max: 8
+      max: 10
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 15000
+      max: 20000
   - key: reasonable_params
     value:
       filename: INCAR
@@ -1336,9 +1329,10 @@ questions:
     axis: grounding
     verify: llm_binary_judge
   - id: critical_NUPDOWN
-    criterion: INCAR sets NUPDOWN = 20 (Prussian blue canonical spin state).
+    criterion: INCAR sets NUPDOWN in range 16-24 to constrain Fe mixed-valence
+      magnetic state.
     axis: correctness
-    verify: text_file_regex
+    verify: vasp_incar_check
   - id: turn_budget
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency

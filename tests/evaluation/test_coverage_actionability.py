@@ -82,7 +82,7 @@ def test_uncovered_critical_defaults_to_actionable_rules() -> None:
             _rule(
                 source_name="orca",
                 rule_type="config_default",
-                text="machine | `c32_m128_cpu`",
+                text="machine | `c64_m256_cpu`",
             ),
         ],
         config={},

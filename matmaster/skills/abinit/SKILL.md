@@ -13,7 +13,7 @@ ABINIT is an open-source suite for first-principles calculations using DFT, DFPT
 | Item | Default Value |
 |------|---------------|
 | image | `registry.dp.tech/dptech/dp/native/prod-19853/abinit:v9.10.3_pp` |
-| machine | `c32_m128_cpu` (32 cores, 128 GB RAM) |
+| machine | `c64_m256_cpu` (32 physical cores, 256 GB RAM) |
 | cmd | `OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 OMPI_MCA_rmaps_base_oversubscribe=1 OMP_NUM_THREADS=1 mpirun -np 32 abinit {input_file} > log 2>&1` |
 
 > **Container runs as root**: `OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1` are mandatory, otherwise mpirun refuses to start.

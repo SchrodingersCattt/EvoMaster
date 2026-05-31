@@ -76,3 +76,122 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
+- id: DD_pymatgen_002_20250618
+  capability: data_diagnosis
+  domain: semiconductor
+  intent: 'Implement the AMP² material screening logic to filter candidate compounds for high-throughput
+    HSE band gap calculations, following the criteria described in Kim et al. (Scientific Data, 2020):
+    unary/binary always included, ternary+ included if Eg_GGA < 3 eV or metallic with D_F/D_VB < 0.8.'
+  human_prompt_seed: 'Given the file candidate_materials.json containing materials with fields: icsd_id,
+    formula, n_elements, band_gap_gga_eV, and df_dvb (DOS at Fermi / DOS at valence band maximum), write
+    a Python script screen_materials.py that classifies each material as ''include'' or ''exclude'' following
+    the AMP² screening criteria: (1) unary and binary compounds (n_elements <= 2) are always included,
+    (2) ternary and higher compounds (n_elements >= 3) with band_gap_gga_eV > 0 are included only if band_gap_gga_eV
+    < 3.0, (3) metallic compounds (band_gap_gga_eV = 0) with n_elements >= 3 are included only if df_dvb
+    < 0.8. Output the classification results to screening_results.json with format: [{"icsd_id": int,
+    "formula": str, "classification": str}].'
+  tags:
+  - meta_database
+  data_files:
+  - key: candidate_materials
+    path: candidate_materials.json
+    oss_url: ''
+    description: 'JSON file containing candidate materials with fields: icsd_id (int), formula (str),
+      n_elements (int), band_gap_gga_eV (float, 0 for metals), df_dvb (float, DOS at Fermi level normalized
+      by valence band DOS). Contains 15 test compounds spanning unary through quinary, with varying band
+      gaps and DOS values.'
+  reference_answers:
+  - key: screening_script_exists
+    value: screen_materials.py
+  - key: screening_output_exists
+    value: screening_results.json
+  - key: classification_count
+    value:
+      checks:
+      - key: total_entries
+        expected: 15
+        tolerance: 0
+      filename: screening_results.json
+  - key: include_count
+    value:
+      checks:
+      - key: include_count
+        expected: 6
+        tolerance: 0
+      filename: screening_results.json
+  - key: exclude_count
+    value:
+      checks:
+      - key: exclude_count
+        expected: 9
+        tolerance: 0
+      filename: screening_results.json
+  - key: grounding_source
+    value:
+      filename: candidate_materials.json
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: screening_script_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 5.0
+    criterion: '[Must] Python script screen_materials.py exists in the output directory.'
+  - id: screening_output_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 5.0
+    criterion: '[Must] Output file screening_results.json exists and is valid JSON.'
+  - id: classification_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] screening_results.json contains exactly 15 entries, one per input material.'
+  - id: include_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 15.0
+    criterion: '[Must] Exactly 6 materials are classified as ''include'' following the AMP² screening
+      criteria.'
+  - id: exclude_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 15.0
+    criterion: '[Must] Exactly 9 materials are classified as ''exclude'' following the AMP² screening
+      criteria.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] The answer is grounded in the provided candidate_materials.json and the AMP² screening
+      methodology from Kim et al. (2020).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not retry any tool call.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses fewer than 50000 tokens total.'

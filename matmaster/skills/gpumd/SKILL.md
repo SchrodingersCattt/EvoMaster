@@ -10,50 +10,60 @@ GPUMD is a GPU-native MD package with two executables:
 - `gpumd`: run simulations via `run.in`
 - `nep`: train/infer NEP models via `nep.in`
 
-## Minimum Workflow
+## Capability Gate
 
-1. Read the task; identify which simulation type is needed
-2. Load this skill; consult `references/run_in_keywords.md` or `references/nep_in_keywords.md`
-3. Write `run.in` (or `nep.in`) following the two-stage pattern below
-4. Stage all input files (`run.in`, `model.xyz`, potential files) in `input_dir/`
-5. Submit to Bohrium
+**STOP** if any of:
+- Task requires LAMMPS, VASP, CP2K, or any non-GPUMD engine syntax
+- Task is plotting/analyzing pre-computed data with no MD run needed (→ `data-analysis` skill)
+- Task requires a potential type GPUMD doesn't support (only NEP and Tersoff-mini)
 
 ## Hard Guards
 
-1. **`potential` must come first.** Every `run.in` must start with `potential` line(s) before any `ensemble`, `run`, or `compute_*`.
-2. **Two-stage pattern: equilibrate then produce.** Equilibration (NVT/NPT) → production (NVE for transport, or target ensemble). Separate with distinct `run` blocks.
-3. **`compute_*` before its `run`.** Any `compute_hac`, `compute_hnemd`, `compute_shc`, `compute_msd`, `compute_sdc`, `compute_viscosity`, `compute_dos` must appear before the `run` command in the same block.
-4. **`dump_*` before its `run`.** Same rule for `dump_thermo`, `dump_position`, `dump_force`, `dump_dipole`, `dump_polarizability`, `dump_observer`.
-5. **NVE for equilibrium transport properties.** EMD (`compute_hac`), MSD (`compute_msd`), DOS (`compute_dos`), SHC (`compute_shc`), viscosity (`compute_viscosity`) require `ensemble nve` in the production stage. Exception: HNEMD (`compute_hnemd`) uses NVT; NEMD source-sink (`heat_nhc`/`heat_lan`/`heat_bdp`) uses its own thermostatted ensemble.
-6. **NEP: `type` line must list actual species.** `type N El1 El2 ...` where N = number of species, matching `train.xyz` data.
-7. **`model.xyz` must use extended XYZ format.** Header line 2 must contain `lattice="..."` (9 floats, row-major) and `pbc="T T T"`. See `references/model_xyz_format.md`.
-8. **Group columns required for group-based keywords.** If using `source`/`sink` in NEMD ensembles, `compute_temperature group_method`, or group-filtered `compute_*`/`dump_*`, the `model.xyz` must define group columns in Properties.
-9. **`compute_*` and `dump_*` reset after each `run`.** If a second `run` block needs the same compute/dump, re-specify them before that `run`.
+### Command Ordering
+
+| Rule | Consequence if violated |
+|------|------------------------|
+| `potential` must be the first non-comment command | GPUMD segfaults or refuses to start |
+| `compute_*` / `dump_*` before its `run` in the same block | Silently produces no output |
+| `compute_*` / `dump_*` reset after each `run` — re-specify for subsequent blocks | Silently produces no output in later blocks |
+
+### Ensemble Selection
+
+| Compute / Task | Required Ensemble | Why |
+|---------------|-------------------|-----|
+| `compute_hac`, `compute_msd`, `compute_sdc`, `compute_viscosity`, `compute_dos` | `nve` | Thermostat corrupts correlation functions |
+| `compute_shc` (standalone) | `nve` | Same |
+| `compute_hnemd` + `compute_shc` | `nvt_nhc` | Thermostat absorbs driving-force heat |
+| NEMD source/sink | `heat_nhc` / `heat_lan` / `heat_bdp` | Built-in thermostat on source/sink groups |
+| Phonon (`compute_phonon`) | N/A (no `run`) | Exits after force-constant calculation |
+| Thermal expansion / NPT properties | `npt_scr` or `npt_ber` | Need pressure coupling for volume sampling |
+
+### Other Guards
+
+- **Two-stage pattern**: equilibrate (NVT/NPT) → produce (target ensemble). Separate with distinct `run` blocks.
+- **NEP `type` line must list actual species**: `type N El1 El2 ...` matching `train.xyz`.
+- **`model.xyz` extended XYZ format**: header line 2 must have `lattice="..."` (9 floats) and `pbc="T T T"`. See `references/model_xyz_format.md`.
+- **Group columns required** for NEMD `source`/`sink`, `compute_temperature group_method`, or group-filtered keywords. Define in `model.xyz` Properties.
+
+## Workflow
+
+1. Read the task; identify simulation type
+2. Consult `references/run_in_keywords.md` (for `run.in`) or `references/nep_in_keywords.md` (for `nep.in`)
+3. Write input file following two-stage pattern; for worked examples → `references/input_examples.md`
+4. Stage all input files (`run.in`, `model.xyz`, potential files) in `input_dir/`
+5. Submit to Bohrium (defaults below)
 
 ## Default Potential
 
 When no task-specific NEP potential is provided:
 
-**Quick demos (preferred)** — use a small element-specific potential from the GPUMD examples (~50 KB, downloads instantly):
+| Potential | Coverage | Size | URL |
+|-----------|----------|------|-----|
+| Si_Fan_2019.txt | Si (Tersoff) | ~90 B | `https://raw.githubusercontent.com/brucefan1983/GPUMD/master/potentials/tersoff/Si_Fan_2019.txt` |
+| C_2024_NEP4.txt | Carbon | ~50 KB | `https://raw.githubusercontent.com/brucefan1983/GPUMD/master/potentials/nep/C_2024_NEP4.txt` |
+| NEP89 (universal) | 89 elements | ~15 MB | `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/gpumd/potentials/nep89_20250409.txt` |
 
-```bash
-# PbTe example potential
-curl -fsSL -o nep.txt https://raw.githubusercontent.com/brucefan1983/GPUMD/master/examples/nep_prediction/nep.txt
-```
-
-Other small potentials in the repo:
-- `potentials/nep/C_2024_NEP4.txt` — Carbon
-- `potentials/nep/Si_2022_NEP3_5body.txt` — Silicon
-
-**Universal NEP89** (~15 MB, covers 89 elements):
-
-```bash
-curl -fsSL -o nep.txt https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/gpumd/potentials/nep89_20250409.txt
-```
-
-This is hosted on internal OSS and downloads fast from Bohrium nodes.
-
-Browse all available potentials: https://gpumd.cn/database.html
+Browse all: https://gpumd.cn/database.html
 
 ## Bohrium Submission Defaults
 
@@ -64,30 +74,20 @@ Browse all available potentials: https://gpumd.cn/database.html
 | cmd (gpumd) | `gpumd > log 2>&1` |
 | cmd (nep) | `nep > log 2>&1` |
 
-## `nep.in` Default Tags (Quick Baseline)
-
-Use this baseline when the task does not override settings.
-`type` is mandatory and species names must match the actual dataset.
+## `nep.in` Defaults
 
 ```text
-type          2 Te Pb # this is a mandatory keyword
-version       4       # default
-cutoff        8 4     # default
-n_max         6 6     # default
-basis_size    6 6     # default
-l_max         4 2 0   # default
-neuron        30      # default
-lambda_e      1.0     # default
-lambda_f      1.0     # default
-lambda_v      0.1     # default
-batch         1000    # default
-population    50      # default
-generation    100000  # default
+type          2 Te Pb   # MANDATORY — must match train.xyz species
+version       4
+cutoff        8 4
+n_max         6 6
+basis_size    6 6
+l_max         4 2 0
+neuron        30
+lambda_e      1.0
+lambda_f      1.0
+lambda_v      0.1
+batch         1000
+population    50
+generation    100000
 ```
-
-## References (read on demand)
-
-- `references/run_in_keywords.md` — complete keyword reference for `run.in`
-- `references/nep_in_keywords.md` — NEP training parameter reference for `nep.in`
-- `references/input_examples.md` — worked examples for common simulation types
-- `references/model_xyz_format.md` — model.xyz extended XYZ format, group definitions

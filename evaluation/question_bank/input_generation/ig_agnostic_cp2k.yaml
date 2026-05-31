@@ -347,3 +347,56 @@ questions:
     criterion: Wall-clock run duration does not exceed ceiling.
     axis: efficiency
     verify: duration_budget
+- id: IG_cp2k_nio_kpoint_001_20260527
+  capability: input_generation
+  domain: agnostic
+  intent: Test whether agent recognizes that CP2K Gamma-only PW mode is unsuitable
+    for small-cell bulk calculations requiring k-point sampling, and either uses
+    CP2K KPOINTS section or recommends switching to a k-point-capable code.
+  human_prompt_seed: '为 NiO 岩盐结构（conventional cell, 8 atoms, Fm-3m）准备 CP2K
+    DFT+U SCF 输入文件，用于计算其电子结构（band gap, magnetic moment）。要求精度足以
+    区分 AFM-II 磁序与 FM 磁序的能量差（~几十 meV/atom）。输出 `nio_scf.inp`。
+
+    '
+  tags:
+  - eng_cp2k
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 15
+  - key: token_budget_total
+    value:
+      max: 20000
+  scoring_checklist:
+  - id: kpoint_sampling
+    criterion: Agent either (a) uses CP2K KPOINTS section with a mesh of at least
+      4x4x4 for the conventional cell, OR (b) explicitly states that Gamma-only
+      PW for an 8-atom NiO cell is insufficient for the required meV/atom accuracy
+      and recommends using a supercell large enough (>=4x4x4=512 atoms) or switching
+      to a k-point-capable code (VASP/ABACUS/QE). Simply using Gamma-only with the
+      8-atom cell is WRONG for this precision requirement.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: dft_plus_u
+    criterion: Agent includes DFT+U (Hubbard U) for Ni d-orbitals. Typical U value
+      for NiO is 4-6 eV (Dudarev formalism). Without DFT+U, NiO band gap and
+      magnetic properties are severely underestimated by GGA.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: antiferromagnetic_init
+    criterion: Agent sets up AFM-II magnetic initialization for NiO (alternating
+      spin-up/down on Ni atoms along [111] direction), since NiO is a classic
+      AFM-II insulator and the task requires comparing AFM vs FM.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget

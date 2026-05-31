@@ -33,6 +33,7 @@ def check_abacus_input(
       has lattice vectors matching a reference file
     - input_resolves_kpt_contains: verify the KPT resolved from INPUT
       contains a required token (e.g. '4 4 4')
+    - param_exists: verify a param is present (any value)
     - param_enabled: verify a boolean param is set to true/1
     - param_value_in: verify a param's value is in an allowed list
     - kpoint_density: verify INPUT has kspacing in range OR KPT file has
@@ -51,6 +52,8 @@ def check_abacus_input(
         return _check_stru_lattice(root, fpath, content, expected, workspace_resolve)
     elif check == "input_resolves_kpt_contains":
         return _check_kpt_contains(fpath, content, expected)
+    elif check == "param_exists":
+        return _check_param_exists(fpath, content, expected)
     elif check == "param_enabled":
         return _check_param_enabled(fpath, content, expected)
     elif check == "param_value_in":
@@ -65,6 +68,25 @@ def check_abacus_input(
         return False, f"unknown abacus_input_check check type: {check!r}"
 
 
+def _check_param_exists(
+    fpath: Path,
+    content: str,
+    expected: str | None,
+) -> tuple[bool, str]:
+    """Verify that a parameter is present in INPUT (any value)."""
+    param = str(expected or "").strip().lower()
+    if not param:
+        return (
+            False,
+            "abacus_input_check param_exists: 'expected' must be the param name",
+        )
+    pattern = re.compile(rf"(?im)^\s*{re.escape(param)}\s+(\S+)")
+    match = pattern.search(content)
+    if not match:
+        return False, f"{fpath.name}: param '{param}' not found"
+    return True, f"{fpath.name}: {param}={match.group(1)} (present)"
+
+
 _TRUTHY = {"true", "1", ".true.", "t", "yes"}
 
 
@@ -74,16 +96,12 @@ def _check_param_enabled(
     expected: str | None,
 ) -> tuple[bool, str]:
     """Verify that a boolean parameter in INPUT is enabled (true/1/.true./T)."""
+    exists, msg = _check_param_exists(fpath, content, expected)
+    if not exists:
+        return False, msg
     param = str(expected or "").strip().lower()
-    if not param:
-        return (
-            False,
-            "abacus_input_check param_enabled: 'expected' must be the param name",
-        )
     pattern = re.compile(rf"(?im)^\s*{re.escape(param)}\s+(\S+)")
     match = pattern.search(content)
-    if not match:
-        return False, f"{fpath.name}: param '{param}' not found"
     val = match.group(1).strip().lower()
     if val in _TRUTHY:
         return True, f"{fpath.name}: {param}={match.group(1)} (enabled)"
@@ -287,12 +305,8 @@ def _check_kpoint_density(
         vals = re.findall(r"[-+]?\d+\.?\d*(?:[eE][-+]?\d+)?", kspacing_match.group(1))
         numerics = [float(v) for v in vals]
         if all(lo <= v <= hi for v in numerics):
-            return True, (
-                f"{fpath.name}: kspacing={numerics} within [{lo}, {hi}]"
-            )
-        return False, (
-            f"{fpath.name}: kspacing={numerics} outside [{lo}, {hi}]"
-        )
+            return True, (f"{fpath.name}: kspacing={numerics} within [{lo}, {hi}]")
+        return False, (f"{fpath.name}: kspacing={numerics} outside [{lo}, {hi}]")
 
     gamma_only_match = re.search(
         r"(?im)^\s*gamma_only\s+(1|true|\.true\.)\s*$", content
@@ -345,7 +359,11 @@ def _check_kpoint_density(
             f"{kpt_path.name}: could not parse k-point mesh "
             f"(expected Gamma/MP line followed by N1 N2 N3, or Line mode)"
         )
-    k1, k2, k3 = int(mesh_match.group(1)), int(mesh_match.group(2)), int(mesh_match.group(3))
+    k1, k2, k3 = (
+        int(mesh_match.group(1)),
+        int(mesh_match.group(2)),
+        int(mesh_match.group(3)),
+    )
     if k1 >= min_k and k2 >= min_k and k3 >= min_k:
         return True, (
             f"{kpt_path.name}: k-mesh {k1}×{k2}×{k3} "

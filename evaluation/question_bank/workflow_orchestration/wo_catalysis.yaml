@@ -323,3 +323,153 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
+- id: WF_vasp_004_20250618
+  capability: workflow_orchestration
+  domain: catalysis
+  intent: Set up a climbing-image nudged elastic band (CI-NEB) calculation in VASP to find the transition
+    state and activation energy for the *COOH formation step on the Fe-poN4 active site, given initial
+    and final state POSCAR files.
+  human_prompt_seed: 'Given two POSCAR files — poscar_initial_state (reactants: CO2 and H* separately
+    adsorbed on Fe-poN4) and poscar_final_state (product: *COOH adsorbed on Fe-poN4) — set up a CI-NEB
+    calculation in VASP with 5 images. Generate the necessary INCAR, KPOINTS, and POTCAR files, and create
+    the 00-04 subdirectories with interpolated POSCAR files for each image. Use IBRION=3, POTIM=0, ICHAIN=0,
+    LCLIMB=.TRUE., IMAGES=5, and the same DFT parameters as the parent calculation (PBE, 450 eV cutoff,
+    DFT-D3).'
+  tags:
+  - eng_vasp
+  data_files:
+  - key: poscar_initial
+    path: poscar_initial_state
+    oss_url: ''
+    description: POSCAR for the initial state (CO2 + H* adsorbed separately on Fe-poN4 surface) from the
+      paper's Figshare deposition.
+  - key: poscar_final
+    path: poscar_final_state
+    oss_url: ''
+    description: POSCAR for the final state (*COOH adsorbed on Fe-poN4 surface) from the paper's Figshare
+      deposition.
+  reference_answers:
+  - key: artifact_incar_neb
+    value: INCAR
+  - key: artifact_kpoints_neb
+    value: KPOINTS
+  - key: text_incar_ibrion
+    value:
+      checks:
+      - key: IBRION
+        expected: 3
+        tolerance: 0
+      filename: INCAR
+  - key: text_incar_pitim
+    value:
+      checks:
+      - key: POTIM
+        expected: 0
+        tolerance: 0
+      filename: INCAR
+  - key: text_incar_ichain
+    value:
+      checks:
+      - key: ICHAIN
+        expected: 0
+        tolerance: 0
+        allow_missing_key: true
+      filename: INCAR
+  - key: text_incar_lclimb
+    value:
+      flags: {}
+      tokens:
+      - 'TRUE'
+      filename: INCAR
+  - key: text_incar_images
+    value:
+      checks:
+      - key: IMAGES
+        expected: 5
+        tolerance: 0
+      filename: INCAR
+  - key: artifact_img_dirs
+    value: '00'
+  - key: artifact_img_dirs_04
+    value: '04'
+  - key: grounding_source
+    value:
+      filename: poscar_initial_state
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_incar_neb
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] INCAR file exists in the NEB calculation directory.'
+  - id: artifact_kpoints_neb
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] KPOINTS file exists with 3x3x1 grid.'
+  - id: text_incar_ibrion
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] IBRION = 3 for NEB molecular dynamics.'
+  - id: text_incar_pitim
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] POTIM = 0 for NEB optimization.'
+  - id: text_incar_lclimb
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] LCLIMB = .TRUE. for climbing-image NEB.'
+  - id: text_incar_images
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] IMAGES = 5 for 5 intermediate images.'
+  - id: artifact_img_dirs
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.5
+    criterion: '[Must] Subdirectory 00 exists (initial state).'
+  - id: artifact_img_dirs_04
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.5
+    criterion: '[Must] Subdirectory 04 exists (image 4, before final).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The answer is grounded in the source paper''s CI-NEB methodology.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not retry any tool calls.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses no more than 50000 tokens total.'

@@ -160,3 +160,207 @@ questions:
     axis: efficiency
     verify: token_budget
     weight: 0.3
+- id: BP_alpha2f_001_20250618
+  capability: batch_processing
+  domain: agnostic
+  intent: Apply the Savitzky-Golay smoothing and energy interpolation procedure to raw α²F(ω) data, matching
+    the binning protocol used in the BETE-NET paper for preparing training data.
+  human_prompt_seed: 'Process the raw α²F(ω) data in raw_alpha2f_data.json using the BETE-NET smoothing
+    protocol: apply a Savitzky-Golay filter (window=101, polyorder=3) and interpolate onto 51 uniformly
+    spaced energy points from 0.25 to 100.25 meV. Write the processed data to `smoothed_alpha2f.json`
+    with the same material keys.'
+  tags: []
+  data_files:
+  - key: raw_alpha2f
+    path: raw_alpha2f_data.json
+    oss_url: ''
+    description: JSON file containing raw DFT-computed α²F(ω) data at 0.1 meV resolution for 3 representative
+      materials, mimicking the QE output format described in the paper.
+  reference_answers:
+  - key: artifact_smoothed
+    value: smoothed_alpha2f.json
+  - key: correct_npoints
+    value:
+      flags: []
+      pattern: '51'
+      filename: smoothed_alpha2f.json
+  - key: energy_range
+    value:
+      flags: []
+      pattern: 0\.25.*100\.25|100\.25.*0\.25
+      filename: smoothed_alpha2f.json
+  - key: valid_json
+    value:
+      tokens:
+      - '{'
+      - '}'
+      filename: smoothed_alpha2f.json
+  - key: grounding_source
+    value:
+      filename: smoothed_alpha2f.json
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_smoothed
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file smoothed_alpha2f.json exists in the working directory.'
+  - id: correct_npoints
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Each material''s α²F(ω) is interpolated to exactly 51 energy points as specified
+      in the paper.'
+  - id: energy_range
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Energy range spans 0.25 to 100.25 meV as specified in the paper.'
+  - id: valid_json
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Output is valid JSON format.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The smoothing procedure follows the BETE-NET paper''s data preparation protocol
+      (Savitzky-Golay filter with window=101, polyorder=3).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 15 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not request human retry.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses no more than 50000 tokens total.'
+- id: BP_cleaning_004_20250618
+  capability: batch_processing
+  domain: agnostic
+  intent: Implement the data cleaning pipeline described in the paper to filter crystal structures from
+    the Materials Project database based on composition, stability, and structural criteria.
+  human_prompt_seed: 'Given the crystal dataset (mp_crystals_sample.csv), implement the data cleaning
+    pipeline from the paper. Filter out structures that: (1) contain radioactive elements, (2) have more
+    than 20 atoms in the primitive cell, (3) have energy-above-hull > 1.0 eV/atom, (4) have non-positive-definite
+    stiffness matrix or bulk modulus < 30 GPa. Save the cleaned dataset to cleaned_crystals.csv and a
+    summary to cleaning_report.json with keys: total_input, total_retained, filtered_radioactive, filtered_large_cell,
+    filtered_unstable, filtered_low_modulus.'
+  tags:
+  - meta_database
+  data_files:
+  - key: crystal_dataset
+    path: mp_crystals_sample.csv
+    oss_url: ''
+    description: 'Sample CSV with columns: mp_id, formula, elements, n_sites, energy_above_hull_eV, has_radioactive,
+      bulk_modulus_GPa, stiffness_matrix_positive_definite. Contains ~50 sample entries mimicking the
+      MP database extraction.'
+  reference_answers:
+  - key: cleaned_exists
+    value: cleaned_crystals.csv
+  - key: report_exists
+    value: cleaning_report.json
+  - key: report_values
+    value:
+      checks:
+      - key: total_input
+        expected: 50
+        tolerance: 0
+        allow_missing_key: false
+      - key: total_retained
+        max: 50
+        min: 10
+        allow_missing_key: false
+      - key: filtered_radioactive
+        max: 50
+        min: 0
+        allow_missing_key: true
+      - key: filtered_large_cell
+        max: 50
+        min: 0
+        allow_missing_key: true
+      - key: filtered_unstable
+        max: 50
+        min: 0
+        allow_missing_key: true
+      - key: filtered_low_modulus
+        max: 50
+        min: 0
+        allow_missing_key: true
+      filename: cleaning_report.json
+  - key: grounding_source
+    value:
+      filename: mp_crystals_sample.csv
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: cleaned_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Cleaned dataset cleaned_crystals.csv exists.'
+  - id: report_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Cleaning report cleaning_report.json exists.'
+  - id: report_values
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+    criterion: '[Suggested] total_retained is less than or equal to total_input (50), and all filtered
+      counts are non-negative and sum to (total_input - total_retained).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The filtering criteria match the four rules specified in the source paper''s data
+      cleaning methodology.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Turn budget not exceeded.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retries used.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Duration budget not exceeded.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Token budget not exceeded.'

@@ -6,7 +6,6 @@ from typing import Any
 
 from evaluation.validators.abacus_input import check_abacus_input
 from evaluation.validators.answer_text import check_answer_json_numeric
-from evaluation.validators.kpt_line import check_kpt_line
 from evaluation.validators.budget import check_duration_budget as _check_duration_budget
 from evaluation.validators.budget import check_token_budget as _check_token_budget
 from evaluation.validators.budget import check_turn_budget as _check_turn_budget
@@ -14,13 +13,17 @@ from evaluation.validators.json_file import (
     check_json_file_artifacts as _check_json_file_artifacts,
 )
 from evaluation.validators.json_file import (
+    check_json_file_key_values as _check_json_file_key_values,
+)
+from evaluation.validators.json_file import (
     check_json_file_numeric_range as _check_json_file_numeric_range,
 )
 from evaluation.validators.json_file import (
     check_json_file_schema as _check_json_file_schema,
 )
-from evaluation.validators.stru_file import check_stru_file
+from evaluation.validators.kpt_line import check_kpt_line
 from evaluation.validators.md_submit import check_md_submit_structure_min_distance
+from evaluation.validators.stru_file import check_stru_file
 from evaluation.validators.structure_density import check_density
 from evaluation.validators.structure_general import (
     check_atom_count,
@@ -51,7 +54,6 @@ from evaluation.validators.text_file import (
     check_text_file_numeric_range,
     check_text_file_regex,
 )
-from evaluation.validators.vasp_incar import check_vasp_incar
 
 from .evidence import EvidenceBundle, TokenUsage
 from .schemas import ReferenceAnswer, TokenUsageRecord
@@ -148,6 +150,19 @@ def check_json_file_numeric_range(
     else:
         return False, "json_file_numeric_range: need 'expected' or 'min'/'max' in ref"
     return _check_json_file_numeric_range(evidence.workspace_dir, **kwargs)
+
+
+def check_json_file_key_values(
+    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+) -> tuple[bool, str]:
+    if evidence is None or not evidence.workspace_dir:
+        return False, "no workspace root"
+    cfg = ref.value if isinstance(ref.value, dict) else {}
+    return _check_json_file_key_values(
+        evidence.workspace_dir,
+        filename=cfg.get("filename", ""),
+        checks=cfg.get("checks", []),
+    )
 
 
 def check_json_file_artifacts(
@@ -864,20 +879,7 @@ def check_text_file_kpt_path_from_evidence(
 def check_answer_json_numeric_from_ref(
     *, answer: str, ref: ReferenceAnswer
 ) -> tuple[bool, str]:
-    """Wire ``answer_json_numeric`` from a ``ReferenceAnswer`` config.
-
-    Reference answer schema (``ref.value`` is a dict)::
-
-        value:
-          json_path: rtp.303K.V   # dot-separated dict keys in the answer JSON
-          target: 999.81          # numeric target (or use ref-level ``value``+``tolerance``)
-          tolerance: 20.0         # absolute tolerance
-
-    For backward compatibility, when ``ref.value`` is plain numeric, ``target``
-    falls back to that value and ``tolerance`` to ``ref.tolerance`` — but
-    ``json_path`` must always be supplied via the dict form (otherwise we
-    cannot know which field to read).
-    """
+    """Wire ``answer_json_numeric`` from a ``ReferenceAnswer`` config."""
     cfg = _cfg(ref)
     json_path = str(cfg.get("json_path", "")).strip()
     if not json_path:
@@ -911,106 +913,79 @@ def check_answer_json_numeric_from_ref(
     )
 
 
-def check_stru_file_from_evidence(
-    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
-) -> tuple[bool, str]:
-    """Wire ``stru_file_check`` verifier from evidence + reference answer."""
-    ws, err = _get_workspace(evidence)
-    if err:
-        return False, err
-    cfg = _cfg(ref)
-    filename = str(cfg.get("filename", ""))
-    check_type = str(cfg.get("check", ""))
-    expected = cfg.get("expected")
-    if not filename or not check_type:
-        return False, "stru_file_check: need 'filename' and 'check' in ref"
-    kwargs: dict[str, object] = {}
-    if "min_sites" in cfg:
-        kwargs["min_sites"] = int(cfg["min_sites"])
-    return check_stru_file(
-        ws,
-        filename=filename,
-        check=check_type,
-        expected=expected,
-        workspace_resolve=_workspace_resolve_from_ref(ref),
-        **kwargs,
-    )
+def _make_domain_check_handler(
+    verifier_name: str,
+    validator_fn: Any,
+    *,
+    cfg_keys: tuple[str, ...] = (),
+    cfg_transforms: dict[str, Any] | None = None,
+) -> Any:
+    """Factory: generate a wiring function for domain-specific file validators.
+
+    All domain validators share the same skeleton:
+    1. Extract workspace from evidence
+    2. Require 'filename' + 'check' from ref config
+    3. Pass optional cfg keys + workspace_resolve to the validator
+
+    Args:
+        verifier_name: name used in error messages (e.g. "abacus_input_check")
+        validator_fn: the actual validator callable
+        cfg_keys: extra keys to pass through from cfg (e.g. ("expected", "allowed"))
+        cfg_transforms: {key: callable} for keys needing transformation before passing
+    """
+    transforms = cfg_transforms or {}
+
+    def _handler(
+        *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
+    ) -> tuple[bool, str]:
+        ws, err = _get_workspace(evidence)
+        if err:
+            return False, err
+        cfg = _cfg(ref)
+        filename = str(cfg.get("filename", ""))
+        check_type = str(cfg.get("check", ""))
+        if not filename or not check_type:
+            return False, f"{verifier_name}: need 'filename' and 'check' in ref"
+        kwargs: dict[str, object] = {}
+        for key in cfg_keys:
+            if key in cfg:
+                val = cfg[key]
+                if key in transforms:
+                    val = transforms[key](val)
+                kwargs[key] = val
+        return validator_fn(
+            ws,
+            filename=filename,
+            check=check_type,
+            workspace_resolve=_workspace_resolve_from_ref(ref),
+            **kwargs,
+        )
+
+    _handler.__doc__ = f"Wire ``{verifier_name}`` verifier from evidence + ref."
+    _handler.__name__ = f"check_{verifier_name}_from_evidence"
+    return _handler
 
 
-def check_abacus_input_from_evidence(
-    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
-) -> tuple[bool, str]:
-    """Wire ``abacus_input_check`` verifier from evidence + reference answer."""
-    ws, err = _get_workspace(evidence)
-    if err:
-        return False, err
-    cfg = _cfg(ref)
-    filename = str(cfg.get("filename", ""))
-    check_type = str(cfg.get("check", ""))
-    expected = cfg.get("expected")
-    allowed = cfg.get("allowed")
-    if not filename or not check_type:
-        return False, "abacus_input_check: need 'filename' and 'check' in ref"
-    kwargs: dict[str, object] = {}
-    if "kspacing_range" in cfg:
-        r = cfg["kspacing_range"]
-        kwargs["kspacing_range"] = (float(r[0]), float(r[1]))
-    if "min_kpoints" in cfg:
-        kwargs["min_kpoints"] = int(cfg["min_kpoints"])
-    return check_abacus_input(
-        ws,
-        filename=filename,
-        check=check_type,
-        expected=expected,
-        allowed=allowed,
-        workspace_resolve=_workspace_resolve_from_ref(ref),
-        **kwargs,
-    )
+def _kspacing_range_transform(r: Any) -> tuple[float, float]:
+    return (float(r[0]), float(r[1]))
 
 
-def check_kpt_line_from_evidence(
-    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
-) -> tuple[bool, str]:
-    """Wire ``kpt_line_check`` verifier from evidence + reference answer."""
-    ws, err = _get_workspace(evidence)
-    if err:
-        return False, err
-    cfg = _cfg(ref)
-    filename = str(cfg.get("filename", ""))
-    check_type = str(cfg.get("check", ""))
-    expected = cfg.get("expected")
-    if not filename or not check_type:
-        return False, "kpt_line_check: need 'filename' and 'check' in ref"
-    return check_kpt_line(
-        ws,
-        filename=filename,
-        check=check_type,
-        expected=expected,
-        workspace_resolve=_workspace_resolve_from_ref(ref),
-    )
+check_stru_file_from_evidence = _make_domain_check_handler(
+    "stru_file_check",
+    check_stru_file,
+    cfg_keys=("expected", "min_sites"),
+    cfg_transforms={"min_sites": int},
+)
 
+check_abacus_input_from_evidence = _make_domain_check_handler(
+    "abacus_input_check",
+    check_abacus_input,
+    cfg_keys=("expected", "allowed", "kspacing_range", "min_kpoints"),
+    cfg_transforms={"kspacing_range": _kspacing_range_transform, "min_kpoints": int},
+)
 
-def check_vasp_incar_from_evidence(
-    *, evidence: EvidenceBundle | None, ref: ReferenceAnswer
-) -> tuple[bool, str]:
-    """Wire ``vasp_incar_check`` verifier from evidence + reference answer."""
-    ws, err = _get_workspace(evidence)
-    if err:
-        return False, err
-    cfg = _cfg(ref)
-    filename = str(cfg.get("filename", ""))
-    check_type = str(cfg.get("check", ""))
-    if not filename or not check_type:
-        return False, "vasp_incar_check: need 'filename' and 'check' in ref"
-    return check_vasp_incar(
-        ws,
-        filename=filename,
-        check=check_type,
-        param=cfg.get("param"),
-        expected=cfg.get("expected"),
-        min=cfg.get("min"),
-        max=cfg.get("max"),
-        atom_count=cfg.get("atom_count"),
-        species_index=cfg.get("species_index"),
-        workspace_resolve=_workspace_resolve_from_ref(ref),
-    )
+check_kpt_line_from_evidence = _make_domain_check_handler(
+    "kpt_line_check",
+    check_kpt_line,
+    cfg_keys=("expected",),
+)

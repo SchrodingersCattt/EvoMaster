@@ -1603,100 +1603,6 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_mlip_dpa_010_20260519
-  capability: workflow_orchestration
-  domain: agnostic
-  intent: Fine-tune a DPA3 potential for a fixed step budget and summarize key hyperparameters
-    and outcomes.
-  human_prompt_seed: "执行 DPA3 微调流程评估（Mock版）：\n1. 先 query/检索并整理训练所需输入文件（数据集、模型配置、训练参数）；\n2.\
-    \ 明确目标训练步数与学习率策略；\n3. 不做真实训练，使用以下 mock 结果：\n   - train_steps = 3000\n   - lr_type = cosine\n\
-    \   - start_lr = 1.0e-2\n   - stop_lr = 1.0e-5\n   - valid_ratio = 0.2\n   - best_valid_loss\
-    \ = 0.021\n   - status = converged_for_mock\n4. 基于 mock 值做后处理并判断是否可进入下游验证。\n\n请输出：\n1)\
-    \ `dpa3_finetune_config.json`：记录 `input_files`、训练步数、学习率策略、loss 关键参数、验证划分；\n2) `dpa3_finetune_report.md`：概述\
-    \ query 输入梳理、mock 后处理过程、结果与改进建议。\n\n最终回答请给出：本次微调是否满足继续下游验证的最低条件。\n"
-  tags:
-  - code_mlip
-  data_files: []
-  reference_answers:
-  - key: finetune_config
-    value: dpa3_finetune_config.json
-  - key: finetune_report
-    value: dpa3_finetune_report.md
-  - key: config_required_tokens
-    value:
-      filename: dpa3_finetune_config.json
-      must_cover:
-      - train_steps
-      - lr_type
-      - start_lr
-      - stop_lr
-      - valid_ratio
-  - key: report_required_tokens
-    value:
-      filename: dpa3_finetune_report.md
-      must_cover:
-      - DPA3
-      - 训练
-      - 结果
-      - 建议
-      - 不确定性
-  - key: best_valid_loss_mock
-    value: 0.021
-    tolerance: 0.01
-  - key: turn_budget
-    value:
-      max: 12
-  - key: duration_budget
-    value:
-      max: 7200000
-  - key: token_budget_total
-    value:
-      max: 9000
-  scoring_checklist:
-  - id: finetune_config
-    criterion: Agent writes `dpa3_finetune_config.json` to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: finetune_report
-    criterion: Agent writes `dpa3_finetune_report.md` to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: config_required_tokens
-    criterion: Config JSON includes required training-control fields.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: report_required_tokens
-    criterion: Report summarizes training outcome with uncertainty notes.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: best_valid_loss_mock
-    criterion: Final answer includes a mock best validation loss near 0.021.
-    axis: correctness
-    verify: numerical_range
-  - id: grounding_source
-    criterion: Final answer uses the mock finetune values explicitly provided in the user
-      prompt (best_valid_loss=0.021, status=converged_for_mock, train_steps=3000, lr cosine
-      1e-2→1e-5). Using these prompt-provided values is NOT fabrication. Only fail if the
-      agent invents numbers not given in the prompt.
-    axis: grounding
-    verify: llm_binary_judge
-  - id: no_retries
-    criterion: No repeated identical training submissions with the same parameters.
-    axis: efficiency
-    verify: no_retries
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous
-      benchmark ceiling (tunable per deployment).
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
 - id: WO_mlip_dpa_003_20260411v2
   capability: workflow_orchestration
   domain: agnostic
@@ -2292,7 +2198,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: WO_gromacs_em_npt_001_20260507
+- id: WO_gromacs_em_npt_001_20260526
   capability: workflow_orchestration
   domain: agnostic
   intent: Submit GROMACS energy minimization and NPT equilibration on Bohrium,
@@ -2315,23 +2221,23 @@ questions:
   - eng_gromacs
   data_files:
   - key: conf_gro
-    path: EC_gromacs_em_npt/conf.gro
+    path: data/EC_gromacs_em_npt/conf.gro
     description: Initial SPC water box coordinates (216 waters)
   - key: topol_top
-    path: EC_gromacs_em_npt/topol.top
+    path: data/EC_gromacs_em_npt/topol.top
     description: GROMACS topology file
   - key: em_mdp
-    path: EC_gromacs_em_npt/em.mdp
+    path: data/EC_gromacs_em_npt/em.mdp
     description: Energy minimization parameters
   - key: npt_mdp
-    path: EC_gromacs_em_npt/npt.mdp
+    path: data/EC_gromacs_em_npt/npt.mdp
     description: NPT equilibration parameters
   reference_answers:
   - key: npt_output
     value: npt_final.gro
   - key: turn_budget
     value:
-      max: 25
+      max: 35
   - key: duration_budget
     value:
       max: 7200000
@@ -2373,7 +2279,7 @@ questions:
     criterion: Total token usage within budget.
     axis: efficiency
     verify: token_budget
-- id: WO_gromacs_solvate_001_20260507
+- id: WO_gromacs_solvate_001_20260527
   capability: workflow_orchestration
   domain: agnostic
   intent: Build a solvated, ion-neutralized GROMACS system from a PDB file and run
@@ -2392,7 +2298,7 @@ questions:
   - eng_gromacs
   data_files:
   - key: ala_dipeptide_pdb
-    path: WO_gromacs_solvate_001/ala_dipeptide.pdb
+    path: data/WO_gromacs_solvate_001/ala_dipeptide.pdb
     description: Alanine dipeptide (ACE-ALA-NME) PDB structure
   reference_answers:
   - key: em_output
@@ -2400,13 +2306,13 @@ questions:
   - key: single_submission
     value:
       filename: run.sh
-      tokens: [gmx_mpi pdb2gmx, gmx_mpi solvate, genion, gmx_mpi mdrun]
+      tokens: [pdb2gmx, solvate, genion, mdrun]
       case_sensitive: false
-  - key: gmx_mpi_used
+  - key: gmx_binary_used
     value:
       filename: run.sh
-      tokens: [gmx_mpi]
-      case_sensitive: true
+      pattern: "\\b(gmx|gmx_mpi)\\s+(pdb2gmx|grompp|mdrun)"
+      flags: i
   - key: maxwarn_used
     value:
       filename: run.sh
@@ -2418,7 +2324,7 @@ questions:
   - key: genion_pipe
     value:
       filename: run.sh
-      pattern: "echo.*\\|.*gmx_mpi\\s+genion|printf.*\\|.*gmx_mpi\\s+genion"
+      pattern: "echo.*\\|.*(gmx|gmx_mpi)\\s+genion|printf.*\\|.*(gmx|gmx_mpi)\\s+genion"
       flags: i
   - key: turn_budget
     value:
@@ -2435,17 +2341,17 @@ questions:
       run.sh script submitted once to Bohrium.
     axis: correctness
     verify: text_file_contains_all
-  - id: gmx_mpi_used
-    criterion: The run.sh script uses `gmx_mpi` for GROMACS commands.
+  - id: gmx_binary_used
+    criterion: The run.sh script uses `gmx` or `gmx_mpi` for GROMACS commands.
     axis: correctness
-    verify: text_file_contains_all
+    verify: text_file_regex
   - id: no_local_gmx
     criterion: Agent does NOT attempt to run any gmx/gmx_mpi command locally (outside
       of the Bohrium submission).
     axis: correctness
     verify: llm_binary_judge
   - id: genion_pipe
-    criterion: The genion command uses echo/pipe (e.g. `echo "SOL" | gmx_mpi genion ...`)
+    criterion: The genion command uses echo/pipe (e.g. `echo "SOL" | gmx genion ...`)
       to provide interactive group selection.
     axis: correctness
     verify: text_file_regex
@@ -3424,15 +3330,16 @@ questions:
     criterion: Wall-clock time within budget.
     axis: efficiency
     verify: duration_budget
-- id: WO_mech_012_20260525
+- id: WO_mech_012_20260526
   capability: workflow_orchestration
   domain: agnostic
-  intent: Compute equation of state for Ti3AlC using DPA MLIP. Agent must use correct
-    modern ASE import for cell filter (ase.filters, not deprecated ase.constraints).
-  human_prompt_seed: '使用 DPA 机器学习势计算 Ti3AlC 的状态方程（Birch-Murnaghan 拟合）。
+  intent: Compute equation of state for hexagonal MAX phase Ti3AlC using DPA MLIP.
+    Agent must use correct modern ASE import for cell filter (ase.filters, not deprecated
+    ase.constraints).
+  human_prompt_seed: '使用 DPA 机器学习势计算六方 MAX 相 Ti3AlC（空间群 P6₃/mmc）的状态方程（Birch-Murnaghan 拟合）。
 
     请编写脚本完成以下步骤：
-    1. 构建 Ti3AlC 结构
+    1. 构建 Ti3AlC 六方 MAX 相结构
     2. 在平衡体积附近做体积扫描（至少 5 个点）
     3. 对每个体积做结构优化（允许原子弛豫，固定体积）
     4. 拟合 Birch-Murnaghan 状态方程
@@ -3611,3 +3518,3036 @@ questions:
     criterion: Wall-clock time within budget.
     axis: efficiency
     verify: duration_budget
+- id: WO_glassy_carbon_001_20260525
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Construct a glassy carbon structure via melt-quench MD using an MLIP.
+    Agent must choose adequate parameters — density ≥1.8 g/cm³, slow quench
+    (≥80 ps total cooling), and ≥200 atoms — to produce a physically reasonable
+    amorphous carbon network.
+  human_prompt_seed: "使用 DPA 机器学习力场通过 melt-quench 方法构建玻璃碳(glassy carbon)结构。\n\
+    报告最终结构的密度、sp³ 比例和径向分布函数第一峰位置。\n输出结构文件 `glassy_carbon.xyz`\
+    \ 和分析结果 `gc_analysis.json`。\n"
+  tags:
+  - code_mlip
+  source_session: 4bde5fa1c16443e082053fe7319902a9
+  data_files: []
+  reference_answers:
+  - key: structure_artifact
+    value: glassy_carbon.xyz
+  - key: analysis_artifact
+    value: gc_analysis.json
+  - key: turn_budget
+    value:
+      max: 40
+  - key: duration_budget
+    value:
+      max: 14400000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: structure_artifact
+    criterion: Agent writes `glassy_carbon.xyz` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: analysis_artifact
+    criterion: Agent writes `gc_analysis.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: adequate_density
+    criterion: The target/initial density for the melt-quench box is at least
+      1.8 g/cm³. Glassy carbon has experimental density 1.4-2.1 g/cm³, but MD
+      melt-quench requires starting at higher density (≥1.8) to form the
+      cross-linked sp2/sp3 network. A density of 1.5 or below will produce
+      a disconnected or gas-like structure.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: adequate_quench_rate
+    criterion: The total cooling time from melt temperature to room temperature
+      is at least 80 ps. Faster quench (e.g., 30 ps total) does not allow
+      sufficient structural relaxation to form the characteristic mixed sp2/sp3
+      amorphous network. Multi-step cooling with annealing stages is preferred.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.5
+  - id: adequate_system_size
+    criterion: The simulation uses at least 200 carbon atoms. Fewer than 128
+      atoms gives poor statistics for amorphous structure characterization
+      (RDF, ring statistics, sp3 fraction).
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: melt_temperature_reasonable
+    criterion: The melting/liquid phase temperature is at least 5000 K (carbon
+      melts above 4000 K). Lower temperatures will not fully disorder the
+      initial structure.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: reports_sp3_fraction
+    criterion: The analysis reports sp3 fraction (or sp2/sp3 ratio) based on
+      coordination number analysis (CN=4 → sp3, CN=3 → sp2).
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
+- id: WO_polymer_melt_001_20260525
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Build and equilibrate a long-chain polymer melt using the Kremer-Grest
+    bead-spring model in LAMMPS. Agent must choose a simulation box large
+    enough relative to chain end-to-end distance (L > 2×Re) to avoid
+    finite-size artifacts from chains interacting with their periodic images.
+  human_prompt_seed: "使用 LAMMPS Kremer-Grest 珠弹簧模型构建长链线性聚合物熔体\
+    （链长 N=200，密度 ρ=0.85σ⁻³），完成平衡化。\n报告末端距 Re 和回转半径 Rg。\n\
+    输出平衡后结构 `polymer_melt.data`。\n"
+  tags:
+  - eng_lammps
+  source_session: 03fa120fa6ae4cdda38f49641565c4fa
+  data_files: []
+  reference_answers:
+  - key: output_artifact
+    value: polymer_melt.data
+  - key: turn_budget
+    value:
+      max: 40
+  - key: duration_budget
+    value:
+      max: 14400000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `polymer_melt.data` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: box_size_vs_re
+    criterion: The simulation box linear dimension L must satisfy L > 2×Re
+      where Re is the chain end-to-end distance (Re ≈ N^0.5 × b ≈ 14σ for
+      N=200 Kremer-Grest). A box with L < 2×Re (~28σ) means chains interact
+      with their own periodic images, producing unphysical correlations.
+      Agent should use enough chains to fill a box of L ≥ 30σ (typically
+      ≥200 chains for N=200 at ρ=0.85).
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: slow_pushoff_or_equivalent
+    criterion: Agent uses a soft-potential push-off stage (pair_style soft)
+      or equivalent method to remove initial overlaps before switching to
+      the FENE+LJ potential. Direct FENE without push-off causes bond
+      breakage.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.5
+  - id: fene_potential_correct
+    criterion: The production potential uses FENE bonds (bond_style fene)
+      with standard Kremer-Grest parameters (K=30, R0=1.5, epsilon=1,
+      sigma=1) and LJ pair interactions (pair_style lj/cut with
+      cutoff ~2.5σ or WCA at 2^(1/6)σ).
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: equilibration_verified
+    criterion: Agent verifies equilibration by checking at least one of
+      mean-square internal distances R2(n) ~ n scaling, Rg convergence
+      over time, or MSD exceeding Rg2 (chains diffused their own size).
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: reports_re_rg
+    criterion: Agent reports numerical values for end-to-end distance Re
+      and radius of gyration Rg. For N=200 Kremer-Grest at ρ=0.85,
+      expected Re ≈ 12-16σ and Rg ≈ 5-7σ.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: correct_lammps_binary
+    criterion: '[Platform] Agent uses the correct LAMMPS binary name and
+      invocation for the chosen Bohrium image. For lammps-agent image, the
+      binary is `lmp`; for lammps:29Sep2021, it is `lmp_mpi` with mpirun.
+      Agent must not blindly guess binary names — should either follow
+      skill docs or probe the image first.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
+- id: WO_gromacs_cnt_001_20260526
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: Run a GROMACS MD simulation of a periodic (10,10) armchair single-wall
+    carbon nanotube. Agent must handle periodic molecular systems correctly —
+    complete bond topology across periodic boundaries, periodic_molecules=yes
+    in mdp, and proper dihedral parameters.
+  human_prompt_seed: "使用 GROMACS 对一根周期性 (10,10) 扶手椅型单壁碳纳米管进行 NVT 分子动力学模拟（300K，10ps）。\n\
+    从结构构建、力场准备、拓扑生成到 MD 运行，完成全流程。\n输出最终结构 `cnt_nvt.gro`。\n"
+  tags:
+  - eng_gromacs
+  source_session: a48482e4b58d484eb8cf8ebe4bceff93
+  data_files: []
+  reference_answers:
+  - key: output_artifact
+    value: cnt_nvt.gro
+  - key: topology_bonds_complete
+    value:
+      filename: '*.top'
+      check: bond_completeness
+      expected: '1.5'
+      allowed: ['0.05']
+  - key: topology_dihedrals_present
+    value:
+      filename: '*.top'
+      check: has_section
+      expected: dihedrals
+  - key: turn_budget
+    value:
+      max: 40
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes a final NVT structure file to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: periodic_molecules_yes
+    criterion: The mdp file(s) contain `periodic_molecules = yes` (or
+      `periodic-molecules = yes`). Without this, GROMACS will break bonds
+      that cross the periodic boundary of the nanotube along its axis.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: topology_bonds_complete
+    criterion: The generated topology (.top or .itp) contains the correct
+      number of bonds for a sp2 carbon nanotube (1.5 × atom_count ±5%).
+    axis: correctness
+    verify: gromacs_top_check
+    weight: 2.5
+  - id: topology_dihedrals_present
+    criterion: The generated topology (.top or .itp) contains a non-empty
+      [ dihedrals ] section.
+    axis: correctness
+    verify: gromacs_top_check
+    weight: 2.0
+  - id: cnt_structure_correct
+    criterion: The CNT structure has the tube axis along one periodic
+      dimension, with vacuum in the other two directions (≥1 nm gap).
+      Atom count is a multiple of 40 for (10,10) armchair CNT.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
+- id: WO_electrolyte_diffusion_001_20260528
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: End-to-end LAMMPS MD simulation of a simple electrolyte to compute Li+
+    diffusion coefficient at two temperatures, verifying that the result obeys
+    physically expected trends (D decreases with T) and is in reasonable range.
+  human_prompt_seed: '用 LAMMPS 模拟 LiCl 水溶液（1M浓度，SPC/E水模型 + 简单LJ离子），
+    分别在 300K 和 360K 下做 NVT production MD，每个温度至少 500ps。从MSD计算
+    Li⁺ 的扩散系数 D(Li⁺)。
+
+    报告两个温度的 D(Li⁺) 值（单位 cm²/s），并评估结果的合理性。
+
+    '
+  tags:
+  - eng_lammps
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 40
+  - key: duration_budget
+    value:
+      max: 1800000
+  - key: token_budget_total
+    value:
+      max: 25000
+  scoring_checklist:
+  - id: d_ratio_physical
+    criterion: '[Must] D(360K)/D(300K) > 1.0 (diffusion MUST increase with temperature
+      — Arrhenius behavior). If ratio < 1.0 the simulation is too short or has
+      errors. Agent must not report anti-Arrhenius results without flagging them
+      as unphysical.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: d_300k_reasonable
+    criterion: D(Li+) at 300K is in the range 0.5-3.0 x 10^-5 cm2/s for dilute
+      aqueous Li+ (experimental ~1.0 x 10^-5 cm2/s). SPC/E typically gives
+      slightly higher D than experiment. Values outside 0.1-10 x 10^-5 indicate
+      simulation too short or force field error.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: sufficient_production_time
+    criterion: Agent runs at least 500 ps of NVT production at each temperature
+      (as requested). If agent runs less than 500 ps, the MSD may not reach the
+      diffusive regime, especially at 300K. Agent should submit to Bohrium GPU
+      node rather than running locally on CPU if local execution is too slow.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: msd_diffusive_regime
+    criterion: Agent verifies that MSD is in the linear (diffusive) regime before
+      extracting D from slope. This means checking that MSD vs time is linear
+      (not ballistic/caged) in the fitting window, or using Einstein relation
+      with appropriate time window excluding short-time ballistic motion.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: first_submit_success
+    criterion: The LAMMPS simulation job completes successfully on the first
+      Bohrium submission without script errors requiring resubmission.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+- id: WF_qe_001_20260109
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Write a Python script that computes the equation of state for silicon by generating scaled structures
+    at different volumes, creating QE input files for positions-only relaxation at each volume, and saving
+    inputs to a directory.
+  human_prompt_seed: Write a Python script (compute_eos.py) that computes the equation of state for silicon
+    (diamond-cubic, Materials Project mp-149); the script should first retrieve the silicon structure
+    from the structure database. Generate 7 scaled structures by scaling the cell volume from -6% to +6%
+    in 2% steps around the equilibrium volume. For each scaled structure, create a QE pw.x input file
+    for positions-only relaxation (cell fixed) and save it to a directory 'eos_inputs/' with a descriptive
+    filename. Also produce a summary JSON file (eos_summary.json) listing each scale factor, volume, and
+    corresponding input filename.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_compute_eos
+    value: compute_eos.py
+  - key: artifact_eos_summary
+    value: eos_summary.json
+  - key: artifact_eos_inputs_dir
+    value: eos_inputs/
+  - key: text_script_imports
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - pymatgen
+      - Structure
+      - json
+      filename: compute_eos.py
+  - key: text_script_scale
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - scale
+      - volume
+      filename: compute_eos.py
+  - key: text_script_qe_input
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - '&CONTROL'
+      - calculation
+      - relax
+      filename: compute_eos.py
+  - key: text_script_7_points
+    value:
+      flags: []
+      tokens:
+      - '7'
+      filename: compute_eos.py
+  - key: numeric_scale_range
+    value:
+      checks:
+      - key: min_scale
+        max: 0.941
+        min: 0.94
+        allow_missing_key: true
+      - key: max_scale
+        max: 1.061
+        min: 1.06
+        allow_missing_key: true
+      filename: compute_eos.py
+  - key: text_summary_json
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - volume
+      - scale_factor
+      - input_file
+      filename: eos_summary.json
+  - key: numeric_7_inputs
+    value:
+      checks:
+      - key: n_entries
+        expected: 7
+        tolerance: 0
+        allow_missing_key: true
+      filename: eos_summary.json
+  - key: grounding_source
+    value:
+      filename: compute_eos.py
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_compute_eos
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file compute_eos.py exists'
+  - id: artifact_eos_summary
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file eos_summary.json exists'
+  - id: artifact_eos_inputs_dir
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Directory eos_inputs/ is created in the script'
+  - id: text_script_imports
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script imports pymatgen Structure and json modules'
+  - id: text_script_scale
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script implements volume scaling logic'
+  - id: text_script_qe_input
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script generates QE pw.x input with calculation=relax'
+  - id: text_script_7_points
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script generates 7 volume points'
+  - id: numeric_scale_range
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] Scale factors span approximately 0.94 to 1.06 (±6%)'
+  - id: text_summary_json
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Summary JSON contains volume, scale_factor, and input_file fields'
+  - id: numeric_7_inputs
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] Summary JSON lists exactly 7 entries'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Script reads and uses the provided Si structure (mp-149)'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completed within 30 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retry requests used'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completed within 600 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Total token usage under 80000'
+- id: WF_phonopy_001_20250612
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: 'Set up a PHONOPY finite-displacement phonon calculation for a given relaxed structure: generate
+    the supercell, displaced structures, and a phonopy.yaml configuration file, then run a reference force-calculation
+    workflow to produce the phonon density of states.'
+  human_prompt_seed: Using the relaxed structure in relaxed_poscar.vasp, set up a PHONOPY finite-displacement
+    phonon calculation. Generate a phonopy.yaml configuration, create the displaced supercells, and write
+    a workflow script that computes forces on all displaced structures and produces the phonon density
+    of states (phonon_dos.dat). Use a 2×2×2 supercell and a 20×20×20 q-point mesh for DOS interpolation.
+  tags: []
+  data_files:
+  - key: relaxed_structure
+    path: relaxed_poscar.vasp
+    oss_url: ''
+    description: Relaxed silicon cubic structure (mp-149) used as the starting point for phonon calculation.
+  reference_answers:
+  - key: artifact_phonopy_yaml
+    value:
+      filename: phonopy.yaml
+  - key: artifact_dos
+    value:
+      filename: phonon_dos.dat
+  - key: artifact_workflow
+    value:
+      filename: run_phonon_wf.py
+  - key: grounding_source
+    value:
+      filename: relaxed_poscar.vasp
+  - key: contains_phonopy
+    value:
+      flags: []
+      tokens:
+      - phonopy
+      - Phonopy
+      filename: run_phonon_wf.py
+  - key: contains_fdm
+    value:
+      flags:
+      - re.IGNORECASE
+      tokens:
+      - finite_displacement
+      - finite-displacement
+      - DisplacementCalculator
+      filename: run_phonon_wf.py
+  - key: supercell_matrix
+    value:
+      checks:
+      - key: supercell_matrix
+        max: 3
+        min: 2
+        allow_missing_key: true
+      filename: phonopy.yaml
+  - key: dos_mesh
+    value:
+      checks:
+      - key: mesh
+        expected: 20
+        tolerance: 2
+        allow_missing_key: true
+      filename: run_phonon_wf.py
+  - key: turn_budget
+    value:
+      max: 25
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_phonopy_yaml
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The phonopy.yaml configuration file exists.'
+  - id: artifact_dos
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The phonon density of states file phonon_dos.dat exists.'
+  - id: artifact_workflow
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The workflow script run_phonon_wf.py exists.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The workflow reads relaxed_poscar.vasp as the input structure.'
+  - id: contains_phonopy
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The script uses the PHONOPY library.'
+  - id: contains_fdm
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The script implements the finite displacement method for force-constant calculation.'
+  - id: supercell_matrix
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] The supercell matrix dimension is 2 or 3 in each direction.'
+  - id: dos_mesh
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] The DOS interpolation mesh is approximately 20×20×20 as specified in the paper.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes the task within 25 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry any tool calls.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes the task within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 80000 tokens total.'
+- id: WF_screening_001_20250618
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: 'Implement the two-step high-throughput screening workflow from the BETE-NET paper: first filter
+    candidates using a no-cost crystal-structure-only (CSO) model, then refine using a coarse-PhDOS (CPD)
+    model, applying the precision-recall criteria described in the paper.'
+  human_prompt_seed: 'Implement the two-step screening workflow from the BETE-NET paper. Step 1: Filter
+    candidates in mp_candidates.json by CSO-predicted Tc ≥ 5.8 K. Step 2: For passing candidates, apply
+    the CPD filter using cpd_tc_predictions.json with Tc > 2.9 K. Write the final ranked candidate list
+    to `screened_candidates.csv` with columns: material_id, cso_tc_K, cpd_tc_K, passed_cso, passed_cpd.'
+  tags: []
+  data_files:
+  - key: candidate_structures
+    path: mp_candidates.json
+    oss_url: ''
+    description: JSON file with Materials Project candidate structures and their CSO-predicted Tc values
+      (simulated from the paper's screening of 11206 materials).
+  - key: cpd_predictions
+    path: cpd_tc_predictions.json
+    oss_url: ''
+    description: JSON file with CPD model predicted Tc values for candidates that passed the CSO filter.
+  reference_answers:
+  - key: artifact_screened
+    value: screened_candidates.csv
+  - key: has_correct_columns
+    value:
+      tokens:
+      - material_id
+      - cso_tc_K
+      - cpd_tc_K
+      - passed_cso
+      - passed_cpd
+      filename: screened_candidates.csv
+  - key: cso_filter_applied
+    value:
+      flags: []
+      pattern: passed_cso
+      filename: screened_candidates.csv
+  - key: cpd_filter_applied
+    value:
+      flags: []
+      pattern: passed_cpd
+      filename: screened_candidates.csv
+  - key: grounding_source
+    value:
+      filename: screened_candidates.csv
+  - key: turn_budget
+    value:
+      max: 25
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_screened
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file screened_candidates.csv exists in the working directory.'
+  - id: has_correct_columns
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] CSV contains all required columns: material_id, cso_tc_K, cpd_tc_K, passed_cso,
+      passed_cpd.'
+  - id: cso_filter_applied
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] CSO filter correctly applied with threshold Tc ≥ 5.8 K as specified in the paper.'
+  - id: cpd_filter_applied
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] CPD filter correctly applied with threshold Tc > 2.9 K as specified in the paper.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The workflow follows the two-step screening strategy from the BETE-NET paper (CSO
+      first, then CPD).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 25 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not request human retry.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses no more than 80000 tokens total.'
+- id: WF_scan_004_20260508
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Generate a series of Cs₂O layered structures with systematically varied c-lattice parameters
+    for a c-axis relaxation scan, following the methodology in Yang et al. 2019 Section III.D where Cs₂O
+    (R-3m) c-lattice parameter was varied around the experimental value of 18.99 Å.
+  human_prompt_seed: Given a Cs₂O CIF file with space group R-3m (a = b = 4.256 Å, c = 18.99 Å), generate
+    9 structures with c-lattice parameters ranging from 16.0 Å to 22.0 Å in 0.75 Å steps, keeping a and
+    b fixed. For each structure, fix the cell volume and allow internal ionic positions to relax. Save
+    each structure as cs2o_c_<c_value>.vasp (e.g., cs2o_c_16.00.vasp). Also create a run_scan.sh script
+    that would submit these structures for sequential VASP relaxation with fixed-cell ionic relaxation
+    (IBRION=2, ISIF=2).
+  tags: []
+  data_files:
+  - key: structure_base
+    path: cs2o_base.cif
+    oss_url: ''
+    description: Cs₂O R-3m layered structure base (approximate MP entry)
+  reference_answers:
+  - key: artifact_c_16
+    value: cs2o_c_16.00.vasp
+  - key: artifact_c_17
+    value: cs2o_c_16.75.vasp
+  - key: artifact_c_18a
+    value: cs2o_c_17.50.vasp
+  - key: artifact_c_18b
+    value: cs2o_c_18.25.vasp
+  - key: artifact_c_19
+    value: cs2o_c_19.00.vasp
+  - key: artifact_c_20a
+    value: cs2o_c_19.75.vasp
+  - key: artifact_c_20b
+    value: cs2o_c_20.50.vasp
+  - key: artifact_c_21
+    value: cs2o_c_21.25.vasp
+  - key: artifact_c_22
+    value: cs2o_c_22.00.vasp
+  - key: artifact_script
+    value: run_scan.sh
+  - key: grounding_source
+    value:
+      filename: cs2o_base.cif
+  - key: text_structures_count
+    value:
+      tokens:
+      - Cs
+      - O
+      filename: cs2o_c_19.00.vasp
+  - key: text_script_content
+    value:
+      tokens:
+      - IBRION = 2
+      - ISIF = 2
+      filename: run_scan.sh
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 32000
+  scoring_checklist:
+  - id: artifact_c_16
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.15
+    criterion: '[Must] cs2o_c_16.00.vasp exists.'
+  - id: artifact_c_17
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.15
+    criterion: '[Must] cs2o_c_16.75.vasp exists.'
+  - id: artifact_c_18a
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.1
+    criterion: '[Must] cs2o_c_17.50.vasp exists.'
+  - id: artifact_c_18b
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.1
+    criterion: '[Must] cs2o_c_18.25.vasp exists.'
+  - id: artifact_c_19
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.1
+    criterion: '[Must] cs2o_c_19.00.vasp exists (experimental c value).'
+  - id: artifact_c_20a
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.05
+    criterion: '[Must] cs2o_c_19.75.vasp exists.'
+  - id: artifact_c_20b
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.05
+    criterion: '[Must] cs2o_c_20.50.vasp exists.'
+  - id: artifact_c_21
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.05
+    criterion: '[Must] cs2o_c_21.25.vasp exists.'
+  - id: artifact_c_22
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.05
+    criterion: '[Must] cs2o_c_22.00.vasp exists.'
+  - id: artifact_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] run_scan.sh exists.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Structures are derived from the provided Cs₂O base CIF.'
+  - id: text_structures_count
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] Generated structures contain both Cs and O species.'
+  - id: text_script_content
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] run_scan.sh references IBRION=2 and ISIF=2 for fixed-cell ionic relaxation.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: Completes within 20 turns.
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: No retry requests issued.
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: Completes within 300 seconds.
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: Uses fewer than 32000 tokens total.
+- id: WF_agnostic_004_20250618
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: 'Build a cross-validation workflow for effective cluster interaction (ECI) fitting that reproduces
+    the predictor test methodology from Ceder et al. 1995: split low-energy structures into training (88)
+    and test (87) sets, fit ECI on training data using least-squares, and compute RMS prediction error
+    on the test set.'
+  human_prompt_seed: 'Using synthetic_ce_structures.csv and eci_fit_config.json, implement the predictor
+    test workflow from Ceder et al. 1995: (1) split structures into training (88) and test (87) sets using
+    the provided random seed, (2) fit ECI (V1-V8) on training structures via least-squares, (3) predict
+    energies for test structures using the fitted ECI and their correlation functions, (4) compute RMS
+    error on the test set. Save fitted ECI values and RMS error to predictor_test_results.json.'
+  tags: []
+  data_files:
+  - key: synthetic_structure_data
+    path: synthetic_ce_structures.csv
+    oss_url: ''
+    description: 'CSV with 175 rows representing low-energy fcc configurations. Columns: structure_id,
+      exact_energy, corr_func_1 through corr_func_8 (cluster correlation functions for 8 pair shells).
+      Synthetic data mirroring the statistical properties described in Ceder et al. 1995 Section III.'
+  - key: fit_config
+    path: eci_fit_config.json
+    oss_url: ''
+    description: 'JSON config specifying: n_train=88, n_test=87, Hamiltonian type (pair interactions shells
+      1-8), random seed for reproducibility.'
+  reference_answers:
+  - key: artifact_results
+    value: predictor_test_results.json
+  - key: n_eci_fitted
+    value:
+      checks:
+      - key: n_eci_fitted
+        expected: 8
+        tolerance: 0
+        allow_missing_key: false
+      filename: predictor_test_results.json
+  - key: n_train
+    value:
+      checks:
+      - key: n_train
+        expected: 88
+        tolerance: 0
+        allow_missing_key: false
+      filename: predictor_test_results.json
+  - key: n_test
+    value:
+      checks:
+      - key: n_test
+        expected: 87
+        tolerance: 0
+        allow_missing_key: false
+      filename: predictor_test_results.json
+  - key: rms_test_error
+    value:
+      checks:
+      - key: rms_test_error
+        max: 0.08
+        min: 0.03
+        allow_missing_key: false
+      filename: predictor_test_results.json
+  - key: grounding_source
+    value:
+      filename: synthetic_ce_structures.csv
+  - key: turn_budget
+    value:
+      max: 25
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_results
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file predictor_test_results.json exists.'
+  - id: n_eci_fitted
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+    criterion: '[Must] Exactly 8 ECI values (V1-V8) are fitted, matching the intermediate-range Hamiltonian
+      from the paper.'
+  - id: n_train
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+    criterion: '[Must] Training set contains exactly 88 structures as specified in the paper''s predictor
+      test.'
+  - id: n_test
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+    criterion: '[Must] Test set contains exactly 87 structures as specified in the paper''s predictor
+      test.'
+  - id: rms_test_error
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+    criterion: '[Suggested] RMS test error is in range 0.03-0.08. The paper reports 0.0481 for the real
+      data; synthetic data should yield a comparable magnitude.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Workflow implements the predictor test methodology from the provided source data.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completed within 25 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retries needed.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completed within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Total tokens within 80000.'
+- id: WF_arrows_001_20250508
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: 'Implement the ARROWS³ algorithm''s updated ranking (ΔG'') calculation: given initial reaction
+    energies for precursor sets and a database of identified pairwise reaction energies, compute the remaining
+    thermodynamic driving force for each untested precursor set and return the re-ranked order.'
+  human_prompt_seed: Read `arrows_input.json` which contains initial reaction energies (ΔG) for five precursor
+    sets and a pairwise reaction database. For each precursor set, identify which pairwise reactions apply
+    based on precursor composition overlap, then compute the updated remaining driving force ΔG' = ΔG_initial
+    − ΣΔG_interm. Save the results sorted by ΔG' ascending (most negative = highest priority) to `updated_ranking.json`.
+  tags: []
+  data_files:
+  - key: arrows_input
+    path: arrows_input.json
+    oss_url: ''
+    description: JSON input containing 5 precursor sets with their initial ΔG values (meV/atom) and a
+      pairwise reaction database mapping reactant pairs to intermediate formation energies. Based on the
+      ARROWS³ update rule from the Methods section.
+  reference_answers:
+  - key: ranking_exists
+    value:
+      filename: updated_ranking.json
+  - key: grounding_source
+    value:
+      filename: arrows_input.json
+  - key: delta_g_prime_values
+    value:
+      checks:
+      - key: results.0.delta_g_prime
+        expected: -300
+        tolerance: 0
+      - key: results.1.delta_g_prime
+        expected: -120
+        tolerance: 0
+      - key: results.2.delta_g_prime
+        expected: -120
+        tolerance: 0
+      - key: results.3.delta_g_prime
+        expected: -50
+        tolerance: 0
+      - key: results.4.delta_g_prime
+        expected: -30
+        tolerance: 0
+      filename: updated_ranking.json
+  - key: sorted_check
+    value:
+      checks:
+      - key: results.0.delta_g_prime
+        max: -299
+        allow_missing_key: false
+      - key: results.4.delta_g_prime
+        min: -31
+        allow_missing_key: false
+      filename: updated_ranking.json
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: ranking_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file updated_ranking.json exists and is valid JSON'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The ΔG'' computation follows the ARROWS³ update rule (ΔG'' = ΔG_initial − ΔG_interm)
+      described in the source paper'
+  - id: delta_g_prime_values
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 3.0
+    criterion: '[Must] All five ΔG'' values are correctly computed as ΔG_initial minus the sum of applicable
+      pairwise reaction energies'
+  - id: sorted_check
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] Results are sorted by ΔG'' ascending (most negative first, least negative last)'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 20 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not request clarification retries'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Total token usage within 50000'
+- id: WF_mpmorph_001_20250617
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Set up an amorphous structure generation workflow for BaTiO3 following the MPMorph protocol
+    with packmol random packing and NVT molecular dynamics equilibration loop.
+  human_prompt_seed: Set up an amorphous structure generation workflow for BaTiO3 following the MPMorph
+    protocol described in Karan et al. (2025). Starting from the provided BaTiO3 crystal structure (batio3_structure.cif),
+    generate a packmol input file for creating a random packed configuration, and write a Python workflow
+    script that implements the volume-rescaling loop (testing 0.8x to 1.2x initial volume) followed by
+    NVT molecular dynamics equilibration at 1500 K. Save the packmol input as packmol_batio3.inp and the
+    workflow script as mpmorph_workflow.py.
+  tags: []
+  data_files:
+  - key: batio3_structure
+    path: batio3_structure.cif
+    oss_url: ''
+    description: BaTiO3 cubic perovskite crystal structure from Materials Project
+  reference_answers:
+  - key: grounding_source
+    value:
+      filename: mpmorph_workflow.py
+  - key: artifact_packmol_inp
+    value: packmol_batio3.inp
+  - key: artifact_workflow_py
+    value: mpmorph_workflow.py
+  - key: packmol_has_addatom
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - addatom
+      - inside
+      - cube
+      filename: packmol_batio3.inp
+  - key: workflow_has_volume_scaling
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - '0.8'
+      - '1.2'
+      - volume
+      - NVT
+      filename: mpmorph_workflow.py
+  - key: workflow_has_md_setup
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - MD
+      - temperature
+      - '1500'
+      filename: mpmorph_workflow.py
+  - key: turn_budget
+    value:
+      max: 40
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 900
+  - key: token_budget_total
+    value:
+      max: 75000
+  scoring_checklist:
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 0.15
+    criterion: '[Must] The workflow is grounded in the MPMorph amorphous structure generation protocol
+      from the source paper (Karan et al., 2025, Section 4.1)'
+  - id: artifact_packmol_inp
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.1
+    criterion: '[Must] File packmol_batio3.inp exists'
+  - id: artifact_workflow_py
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.1
+    criterion: '[Must] File mpmorph_workflow.py exists'
+  - id: packmol_has_addatom
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.15
+    criterion: '[Must] Packmol input contains addatom, inside, and cube directives for random structure
+      generation'
+  - id: workflow_has_volume_scaling
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.15
+    criterion: '[Must] Workflow script implements volume rescaling from 0.8x to 1.2x of initial volume'
+  - id: workflow_has_md_setup
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.1
+    criterion: '[Suggested] Workflow script includes NVT MD setup at 1500 K temperature'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: Completed within turn budget
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: No retries used
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: Completed within duration budget
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: Completed within token budget
+- id: WF_chgnet_002_20260528
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Write a Python script that orchestrates a phonon dispersion calculation for Cs4F4 (mp-1784)
+    using CHGNet and phonopy via the finite displacement method.
+  human_prompt_seed: 'Write a Python script that computes the phonon dispersion relation for Cs4F4 (mp-1784)
+    using CHGNet as the force calculator and phonopy for the finite displacement method. The script should:
+    (1) load the structure from cs4f4_structure.cif, (2) create a supercell and generate displaced structures
+    using phonopy, (3) compute forces with CHGNet for each displacement, (4) build the force constants
+    and compute the phonon band structure along high-symmetry paths, and (5) save the phonon frequencies
+    and band structure data. Save the script as compute_phonons.py and output files as phonon_bands.json
+    and phonon_dos.json.'
+  tags:
+  - code_mlip
+  data_files:
+  - key: structure
+    path: cs4f4_structure.cif
+    oss_url: ''
+    description: Cs4F4 crystal structure (mp-1784) for phonon calculation
+  reference_answers:
+  - key: artifact_script
+    value: compute_phonons.py
+  - key: artifact_bands
+    value: phonon_bands.json
+  - key: artifact_dos
+    value: phonon_dos.json
+  - key: grounding_source
+    value:
+      filename: cs4f4_structure.cif
+  - key: text_contains_phonopy
+    value:
+      tokens:
+      - phonopy
+      - Phonopy
+      - displacement
+      - force_constants
+      filename: compute_phonons.py
+  - key: text_contains_chgnet
+    value:
+      tokens:
+      - CHGNet
+      - chgnet
+      - calculator
+      filename: compute_phonons.py
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 100000
+  scoring_checklist:
+  - id: artifact_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file compute_phonons.py exists'
+  - id: artifact_bands
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file phonon_bands.json exists'
+  - id: artifact_dos
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file phonon_dos.json exists'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The script reads and uses the provided cs4f4_structure.cif file'
+  - id: text_contains_phonopy
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script uses phonopy with finite displacement method'
+  - id: text_contains_chgnet
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script uses CHGNet as the force calculator'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 20 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not use retry mechanism'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 600 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 100000 tokens total'
+- id: WF_mlip_002_20260110
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Run a harmonic phonon dispersion calculation for CsF (mp-1784) using phonopy with CHGNet forces,
+    and extract the maximum phonon frequency.
+  human_prompt_seed: Using the bulk CsF structure in csf_bulk_mp1784.cif, set up and run a harmonic phonon
+    calculation with phonopy via the finite displacement method. Generate a 2×2×2 supercell, compute forces
+    for all displaced structures using CHGNet as the force calculator, and produce the phonon band structure
+    along the high-symmetry path Γ–X–K–Γ–L–W–X. Save the phonon band data to phonon_bands.yaml and the
+    maximum phonon frequency (in THz) to max_frequency.txt.
+  tags:
+  - code_mlip
+  data_files:
+  - key: bulk_structure
+    path: csf_bulk_mp1784.cif
+    oss_url: ''
+    description: Bulk CsF crystal structure from Materials Project (mp-1784, rocksalt, Fm-3m).
+  reference_answers:
+  - key: artifact_bands
+    value:
+      filename: phonon_bands.yaml
+  - key: artifact_maxfreq
+    value:
+      filename: max_frequency.txt
+  - key: max_frequency_thz
+    value:
+      checks:
+      - key: max_frequency_THz
+        max: 6.0
+        min: 2.0
+        allow_missing_key: false
+      filename: max_frequency.txt
+  - key: grounding_source
+    value:
+      filename: csf_bulk_mp1784.cif
+  - key: duration_budget
+    value:
+      max: 600
+  - key: no_retries
+    value:
+      max: 0
+  - key: token_budget_total
+    value:
+      max: 80000
+  - key: turn_budget
+    value:
+      max: 30
+  scoring_checklist:
+  - id: artifact_bands
+    axis: correctness
+    verify: artifact_exists
+    weight: 3.0
+    criterion: '[Must] The file phonon_bands.yaml exists and contains phonon band structure data.'
+  - id: artifact_maxfreq
+    axis: correctness
+    verify: artifact_exists
+    weight: 3.0
+    criterion: '[Must] The file max_frequency.txt exists and contains a numeric frequency value.'
+  - id: max_frequency_thz
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 4.0
+    criterion: '[Suggested] The maximum phonon frequency for CsF computed with CHGNet falls within 2.0–6.0
+      THz.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+    criterion: '[Must] The solution uses the provided CsF bulk structure (mp-1784) as input.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Completed within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] No retry attempts needed.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Completed within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Total token usage within 80000.'
+- id: WF_chgnet_002_20250623
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Relax an initial (unrelaxed) crystal structure using the CHGNet universal interatomic potential
+    via ASE, then compute the final relaxed energy per atom — simulating the IS2RE (Initial Structure
+    to Relaxed Energy) workflow central to the Matbench Discovery benchmark.
+  human_prompt_seed: 'Relax the provided initial crystal structure using the CHGNet universal interatomic
+    potential through ASE. Perform a geometry optimization (FIRE or BFGS) until forces are below 0.05
+    eV/Å. Output the final relaxed energy per atom (eV/atom) and the relaxed structure to relaxed_energy.json
+    with keys: final_energy_eV_per_atom (float), num_atoms (int), and save the relaxed structure to relaxed_structure.cif.'
+  tags: []
+  data_files:
+  - key: initial_structure
+    path: initial_structure.cif
+    oss_url: ''
+    description: An unrelaxed crystal structure from Materials Project (e.g., mp-1143, SiO2) to be relaxed
+      with CHGNet.
+  reference_answers:
+  - key: relaxed_energy_computed
+    value:
+      checks:
+      - key: final_energy_eV_per_atom
+        max: 5.0
+        min: -10.0
+        allow_missing_key: false
+      filename: relaxed_energy.json
+  - key: num_atoms_correct
+    value:
+      checks:
+      - key: num_atoms
+        expected: 3
+        tolerance: 0
+        allow_missing_key: false
+      filename: relaxed_energy.json
+  - key: artifact_relaxed_energy_json
+    value: relaxed_energy.json
+  - key: artifact_relaxed_structure_cif
+    value: relaxed_structure.cif
+  - key: grounding_source
+    value:
+      filename: initial_structure.cif
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: relaxed_energy_computed
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 25.0
+    criterion: '[Must] relaxed_energy.json exists and contains a final_energy_eV_per_atom within a physically
+      reasonable range for the material.'
+  - id: num_atoms_correct
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 15.0
+    criterion: '[Must] The num_atoms field matches the number of atoms in the input structure (conservation
+      of atoms during relaxation).'
+  - id: artifact_relaxed_energy_json
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] The output file relaxed_energy.json exists.'
+  - id: artifact_relaxed_structure_cif
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] The output file relaxed_structure.cif exists and is a valid CIF file.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] The answer is grounded in the provided initial structure file.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry any tool calls.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 80000 tokens total.'
+- id: WF_cvm_002_20250618
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: 'Implement the symmetry-based cluster grouping algorithm from Tepesch et al. (1998) Section
+    2.3: given a set of maximal-cluster probability vectors from an MC simulation cell, group them into
+    symmetry-equivalent sets using angular-distance comparison with a tolerance threshold.'
+  human_prompt_seed: Implement the cluster grouping algorithm described in Tepesch et al. (1998) Section
+    2.3. Read the probability vectors from `mc_probability_vectors.json`. For each pair of clusters, compute
+    the angular distance between their probability vectors. Group clusters whose angular separation is
+    below the tolerance angle δ_t given in the input file. Write the grouping results to `cluster_groups.json`
+    as a list of groups, where each group contains the site_ids of equivalent clusters and the mean probability
+    vector for that group.
+  tags: []
+  data_files:
+  - key: probability_vectors
+    path: mc_probability_vectors.json
+    oss_url: ''
+    description: Seed data containing probability vectors for maximal clusters from an MC simulation of
+      an FCC alloy in the L1_0 ordered phase. Each entry has a site_id and a probability dictionary (e.g.
+      {rho_A, rho_B} for point clusters). Includes a tolerance_angle_deg field set to 45 degrees (π/4
+      radians, matching the paper's δ_t = π/4).
+  reference_answers:
+  - key: artifact_cluster_groups
+    value: cluster_groups.json
+  - key: contains_two_groups
+    value:
+      flags: []
+      pattern: '"groups"\s*:\s*\['
+      filename: cluster_groups.json
+  - key: num_groups_is_2
+    value:
+      flags: []
+      pattern: '"num_groups"\s*:\s*2'
+      filename: cluster_groups.json
+  - key: group_contains_site_0
+    value:
+      flags: []
+      tokens:
+      - '0'
+      filename: cluster_groups.json
+  - key: group_contains_site_2
+    value:
+      flags: []
+      tokens:
+      - '2'
+      filename: cluster_groups.json
+  - key: group_contains_site_4
+    value:
+      flags: []
+      tokens:
+      - '4'
+      filename: cluster_groups.json
+  - key: group_contains_site_1
+    value:
+      flags: []
+      tokens:
+      - '1'
+      filename: cluster_groups.json
+  - key: group_contains_site_3
+    value:
+      flags: []
+      tokens:
+      - '3'
+      filename: cluster_groups.json
+  - key: group_contains_site_5
+    value:
+      flags: []
+      tokens:
+      - '5'
+      filename: cluster_groups.json
+  - key: uses_angular_distance
+    value:
+      flags:
+      - re.IGNORECASE
+      tokens:
+      - angle
+      - angular
+      - arccos
+      - dot
+      - cosine
+      filename: cluster_groups.json
+  - key: grounding_source
+    value:
+      filename: cluster_groups.json
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_cluster_groups
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The file cluster_groups.json exists in the output directory.'
+  - id: contains_two_groups
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] The output contains a groups array with exactly 2 groups (A-rich and B-rich sites
+      in L1_0 phase).'
+  - id: num_groups_is_2
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] The output explicitly states num_groups = 2.'
+  - id: group_contains_site_0
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] Site 0 is included in one of the groups.'
+  - id: group_contains_site_2
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] Site 2 is included in one of the groups.'
+  - id: group_contains_site_4
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] Site 4 is included in one of the groups.'
+  - id: group_contains_site_1
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] Site 1 is included in one of the groups.'
+  - id: group_contains_site_3
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] Site 3 is included in one of the groups.'
+  - id: group_contains_site_5
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] Site 5 is included in one of the groups.'
+  - id: uses_angular_distance
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Suggested] The implementation uses angular distance (arccos of dot product) for comparison.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The output is grounded in the source paper''s cluster grouping method (Tepesch
+      et al. 1998, Section 2.3).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completed within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retry requests were made.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completed within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Total token usage within 50000.'
+- id: WF_chgnet_004_20260528
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: 'Write a Python script that fine-tunes a pre-trained CHGNet model using the specified hyperparameters:
+    energy/force/stress loss fractions 0.1-100-0.1, Adam optimizer with learning rate 1e-3 cosine-decaying
+    to 1e-5 over 100 epochs.'
+  human_prompt_seed: 'Write a Python script that fine-tunes a pre-trained CHGNet model on the provided
+    training data (train_structures.json) with validation data (val_structures.json). Use the following
+    hyperparameters: energy/force/stress loss weights of 0.1/100/0.1, MSE loss, Adam optimizer with initial
+    learning rate 1e-3 cosine-decaying to 1e-5 over 100 epochs. Use a 9:1 train-validation split from
+    the training data for gradient updates. Save the best model checkpoint based on validation force MAE.
+    Save the script as finetune_chgnet.py and training logs as training_log.json.'
+  tags:
+  - code_mlip
+  data_files:
+  - key: train_structures
+    path: train_structures.json
+    oss_url: ''
+    description: JSON file containing 10 training structures with atomic positions, energies, forces,
+      and stress tensors from DFT ab-initio MD of Li2B3PO8 (mp-1020015)
+  - key: val_structures
+    path: val_structures.json
+    oss_url: ''
+    description: JSON file containing validation structures for checkpointing during fine-tuning
+  reference_answers:
+  - key: artifact_script
+    value: finetune_chgnet.py
+  - key: artifact_log
+    value: training_log.json
+  - key: grounding_source
+    value:
+      filename: train_structures.json
+  - key: text_contains_hyperparams
+    value:
+      tokens:
+      - '0.1'
+      - '100'
+      - '0.1'
+      - loss
+      - Adam
+      - adam
+      - 1e-3
+      - 1e-5
+      - cosine
+      - '100'
+      - epoch
+      filename: finetune_chgnet.py
+  - key: text_contains_mse
+    value:
+      tokens:
+      - MSE
+      - mse
+      - mean_squared_error
+      filename: finetune_chgnet.py
+  - key: text_contains_checkpoint
+    value:
+      tokens:
+      - checkpoint
+      - best
+      - validation
+      - force_MAE
+      - val
+      filename: finetune_chgnet.py
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 100000
+  scoring_checklist:
+  - id: artifact_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file finetune_chgnet.py exists'
+  - id: artifact_log
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file training_log.json exists'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The script reads and uses the provided train_structures.json and val_structures.json
+      files'
+  - id: text_contains_hyperparams
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script uses energy/force/stress loss weights 0.1/100/0.1, Adam optimizer, lr 1e-3
+      cosine decay to 1e-5 over 100 epochs'
+  - id: text_contains_mse
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script uses MSE loss criterion'
+  - id: text_contains_checkpoint
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script saves best model checkpoint based on validation force MAE'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 20 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not use retry mechanism'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 600 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 100000 tokens total'
+- id: WF_ce_crossval_001_20260528
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Implement a 10-fold cross-validation workflow for L0L1-norm cluster expansion model selection,
+    sweeping over regularization parameters μ0 and μ1, solving the MIQP for each fold and parameter combination,
+    and computing the sparseness-CV score Pareto front.
+  human_prompt_seed: Given correlation_matrix.npy, dft_energies.npy, and regularization_grid.json, implement
+    a 10-fold cross-validation workflow for L0L1-norm CE model selection. For each (μ0, μ1) pair, solve
+    the MIQP on 9 folds, compute the out-of-sample RMSE on the held-out fold, record average sparseness
+    (L0 norm of ECIs) and cv score. Output the (sparseness, cv_score) Pareto front to cv_results.json.
+  tags: []
+  data_files:
+  - key: correlation_matrix
+    path: correlation_matrix.npy
+    oss_url: ''
+    description: Cluster correlation matrix Π_s with shape (n_configs, n_clusters).
+  - key: dft_energies
+    path: dft_energies.npy
+    oss_url: ''
+    description: DFT reference energies E_DFT,S in eV/f.u.
+  - key: mu_grid
+    path: regularization_grid.json
+    oss_url: ''
+    description: JSON file specifying μ0 values [3e-5, 1e-4, 3e-4, 1e-3, 3e-3, 1e-2] eV/f.u. and μ1 values
+      (20 logarithmically spaced from 0.01 to 4 eV/f.u.).
+  reference_answers:
+  - key: cv_results_exist
+    value:
+      filename: cv_results.json
+  - key: num_parameter_combinations
+    value:
+      checks:
+      - key: total_combos
+        expected: 120
+        tolerance: 0
+        allow_missing_key: false
+      filename: cv_results.json
+  - key: cv_score_range
+    value:
+      checks:
+      - key: min_cv_score
+        max: 0.1
+        min: 0.005
+        allow_missing_key: false
+      filename: cv_results.json
+  - key: sparseness_range
+    value:
+      checks:
+      - key: min_sparseness
+        max: 500
+        min: 1
+        allow_missing_key: false
+      filename: cv_results.json
+  - key: pareto_front_present
+    value:
+      checks:
+      - key: pareto_front_length
+        max: 120
+        min: 2
+        allow_missing_key: false
+      filename: cv_results.json
+  - key: fold_consistency
+    value:
+      checks:
+      - key: n_folds_used
+        expected: 10
+        tolerance: 0
+        allow_missing_key: false
+      filename: cv_results.json
+  - key: grounding_source
+    value:
+      filename: correlation_matrix.npy
+  - key: turn_budget
+    value:
+      max: 40
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 1800
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: cv_results_exist
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] Output file cv_results.json exists and is valid JSON.'
+  - id: num_parameter_combinations
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] Cross-validation covers all 6×20=120 (μ0, μ1) parameter combinations as specified
+      in the paper.'
+  - id: cv_score_range
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 8.0
+    criterion: '[Suggested] Minimum CV score falls within realistic range for CE models (0.005-0.1 eV/f.u.).'
+  - id: sparseness_range
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 8.0
+    criterion: '[Suggested] Sparseness values are within realistic range (1-500 non-zero ECIs).'
+  - id: pareto_front_present
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] Pareto front of (sparseness, cv_score) pairs is computed and included, with at
+      least 2 points.'
+  - id: fold_consistency
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 8.0
+    criterion: '[Must] 10-fold cross-validation is used as specified in the paper.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 5.0
+    criterion: '[Must] CV workflow uses the provided correlation matrix and DFT energies, not fabricated
+      data.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within turn budget.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry failed tool calls.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within duration budget.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent stays within total token budget.'
+- id: WF_ce_003_20250618
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Implement the complete cluster tree optimization algorithm and apply it to a frustrated 2D binary
+    Ising model, iterating the basic polytope method with spawning operations until the lower bound converges
+    to the upper bound.
+  human_prompt_seed: Using the cluster tree optimization algorithm, find and prove the ground state of
+    the frustrated Ising system defined in interaction_parameters.json. Write run_cluster_tree.py and
+    output results to cluster_tree_result.json.
+  tags: []
+  data_files:
+  - key: ising_config
+    path: interaction_parameters.json
+    oss_url: ''
+    description: JSON config with interaction parameters V0=-6, V1=2, V2=1, V3=1 for a frustrated 2D binary
+      Ising model on triangular lattice with interactions up to 3rd nearest neighbor, mapped to equivalent
+      square lattice.
+  reference_answers:
+  - key: artifact_output
+    value:
+      filename: cluster_tree_result.json
+  - key: artifact_script
+    value:
+      filename: run_cluster_tree.py
+  - key: grounding_source
+    value:
+      filename: interaction_parameters.json
+  - key: converged_energy
+    value:
+      checks:
+      - key: ground_state_energy
+        expected: -1.143
+        tolerance: 0.005
+      filename: cluster_tree_result.json
+  - key: num_iterations
+    value:
+      checks:
+      - key: num_iterations
+        expected: 4
+        tolerance: 1
+      filename: cluster_tree_result.json
+  - key: convergence_status
+    value:
+      checks:
+      - key: converged
+        expected: 1
+        tolerance: 0
+      filename: cluster_tree_result.json
+  - key: final_frequencies
+    value:
+      checks:
+      - key: num_nonzero_final_blocks
+        expected: 7
+        tolerance: 0
+      filename: cluster_tree_result.json
+  - key: turn_budget
+    value:
+      max: 40
+  - key: duration_budget
+    value:
+      max: 900
+  - key: token_budget_total
+    value:
+      max: 300000
+  scoring_checklist:
+  - id: artifact_output
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file cluster_tree_result.json exists and is valid JSON'
+  - id: artifact_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Python script run_cluster_tree.py exists'
+  - id: converged_energy
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 4.0
+    criterion: '[Suggested] Converged ground state energy is -1.143 ± 0.005 (paper reports exact match
+      after 4 iterations)'
+  - id: num_iterations
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+    criterion: '[Suggested] Algorithm converges in 4 iterations (±1 tolerance)'
+  - id: convergence_status
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 3.0
+    criterion: '[Must] Algorithm reports convergence (lower bound matches upper bound)'
+  - id: final_frequencies
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+    criterion: '[Suggested] Final solution has 7 non-zero block frequencies (matching paper''s final state)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Solution uses the provided interaction_parameters.json as input'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: Complete within 40 turns
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: No unnecessary retries or re-runs
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: Complete within 900 seconds wall time
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: Total token usage within 300000
+- id: WF_matgl_002_20250624
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Write a Python script that sets up the MatGL training pipeline for a TensorNet property prediction
+    model on the Matbench formation energy dataset, including MGLDataset construction, data splitting,
+    and PyTorch Lightning module setup.
+  human_prompt_seed: 'Write a Python script named `train_tensornet.py` that sets up the complete MatGL
+    training pipeline for a TensorNet formation energy property prediction model. The script should: (1)
+    define MGLDataset construction with cutoff=5.0, (2) split data into training/validation/test sets
+    with ratio 0.9/0.05/0.05, (3) create MGLDataLoader with batch_size=32, (4) initialize a TensorNet
+    model with the hyperparameters from Table S5 (units=64, nblocks=2, cutoff=5.0, equivariance_invariance_group=''O(3)'',
+    is_intensive=True), and (5) set up the ModelLightningModule with AdamW optimizer (lr=1e-3, weight_decay=1e-5)
+    and cosine annealing scheduler. Save the training setup configuration to `tensornet_train_config.yaml`.'
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: artifact_train_script
+    value:
+      filename: train_tensornet.py
+  - key: artifact_train_config
+    value:
+      filename: tensornet_train_config.yaml
+  - key: contains_mgldataset
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - MGLDataset
+      filename: train_tensornet.py
+  - key: contains_mgldataloader
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - MGLDataLoader
+      filename: train_tensornet.py
+  - key: contains_tensornet
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - TensorNet
+      filename: train_tensornet.py
+  - key: contains_model_lightning
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - ModelLightningModule
+      filename: train_tensornet.py
+  - key: contains_split_ratio
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - '0.9'
+      - '0.05'
+      filename: train_tensornet.py
+  - key: contains_batch_size
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - '32'
+      filename: train_tensornet.py
+  - key: contains_cutoff
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - '5.0'
+      filename: train_tensornet.py
+  - key: contains_adamw
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - AdamW
+      filename: train_tensornet.py
+  - key: contains_lr
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - 1e-3
+      - '0.001'
+      - 10**-3
+      - 1e-03
+      filename: train_tensornet.py
+  - key: contains_cosine
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - CosineAnnealing
+      - cosine
+      filename: train_tensornet.py
+  - key: contains_units_64
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - '64'
+      filename: train_tensornet.py
+  - key: contains_nblocks_2
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - nblocks
+      - num_blocks
+      filename: train_tensornet.py
+  - key: contains_o3
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - O(3)
+      - O3
+      - o3
+      filename: train_tensornet.py
+  - key: contains_intensive
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - intensive
+      - 'True'
+      filename: train_tensornet.py
+  - key: grounding_source
+    value:
+      filename: train_tensornet.py
+  - key: turn_budget
+    value:
+      max: 40
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 900
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_train_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file train_tensornet.py exists'
+  - id: artifact_train_config
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.5
+    criterion: '[Must] Output file tensornet_train_config.yaml exists'
+  - id: contains_mgldataset
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script uses MGLDataset for data pipeline construction'
+  - id: contains_mgldataloader
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script uses MGLDataLoader for batching'
+  - id: contains_tensornet
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script initializes TensorNet model architecture'
+  - id: contains_model_lightning
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script uses ModelLightningModule for property model training (not PotentialLightningModule)'
+  - id: contains_split_ratio
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] Script splits data with 0.9/0.05/0.05 ratio as specified in Table 3 caption'
+  - id: contains_batch_size
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.3
+    criterion: '[Suggested] Script uses batch_size=32 as per Table S2'
+  - id: contains_cutoff
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] Script sets cutoff=5.0 Å as per Table S5'
+  - id: contains_adamw
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] Script uses AdamW optimizer as specified in Methods'
+  - id: contains_lr
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] Script sets learning rate to 1e-3 as specified in Methods'
+  - id: contains_cosine
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] Script uses cosine annealing scheduler as specified in Methods'
+  - id: contains_units_64
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] Script sets units=64 as per Table S5'
+  - id: contains_nblocks_2
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] Script sets nblocks=2 for TensorNet as per Table S5'
+  - id: contains_o3
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] Script sets equivariance_invariance_group=''O(3)'' as per Table S5'
+  - id: contains_intensive
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] Script sets is_intensive=True for property prediction as per Table S5'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The script is grounded in the MatGL paper''s training pipeline and TensorNet hyperparameters'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completed within 40 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retries needed'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completed within 900 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Total token usage within 80000'
+- id: WF_maps_001_20250618
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Implement the iterative cluster expansion refinement loop that alternates between selecting
+    optimal ECI via cross-validation minimization and selecting the next structure to compute via variance-reduction
+    maximization, following the MAPS algorithm described in the paper.
+  human_prompt_seed: 'Given initial_structures.csv (existing structures with energies and correlations),
+    candidate_clusters.json (ordered list of candidate clusters to consider adding), and candidate_pool.csv
+    (uncomputed candidate structures with correlations and costs), write a Python script ce_refinement.py
+    that implements one iteration of the cluster expansion refinement loop: (1) For each physically meaningful
+    subset of candidate clusters (respecting the diameter hierarchy rules), fit a cluster expansion and
+    compute the CV score; (2) Select the cluster subset with the lowest CV score; (3) Using the selected
+    cluster expansion, compute the variance-reduction gain for each candidate structure in the pool; (4)
+    Select the structure with maximum gain. Output the selected cluster set and the recommended next structure
+    to refinement_output.json.'
+  tags: []
+  data_files:
+  - key: initial_structures
+    path: initial_structures.csv
+    oss_url: ''
+    description: 'CSV file with columns: structure_id, energy_meV_per_atom, followed by correlation values
+      for a minimal set of clusters (empty, point, nearest-neighbor pairs).'
+  - key: candidate_clusters
+    path: candidate_clusters.json
+    oss_url: ''
+    description: JSON file listing candidate clusters in physically meaningful order (pairs by increasing
+      length, then triplets by increasing diameter, etc.), each with a cluster_id and diameter.
+  - key: candidate_structures_pool
+    path: candidate_pool.csv
+    oss_url: ''
+    description: 'CSV file with columns: structure_id, cost, followed by correlation values for all candidate
+      clusters. Contains structures not yet computed.'
+  reference_answers:
+  - key: artifact_script
+    value:
+      filename: ce_refinement.py
+  - key: artifact_output
+    value:
+      filename: refinement_output.json
+  - key: output_has_clusters
+    value:
+      flags: {}
+      pattern: '"selected_clusters"\s*:'
+      filename: refinement_output.json
+  - key: output_has_structure
+    value:
+      flags: {}
+      pattern: '"next_structure_id"\s*:'
+      filename: refinement_output.json
+  - key: grounding_source
+    value:
+      filename: initial_structures.csv
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] ce_refinement.py script exists in the working directory.'
+  - id: artifact_output
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] refinement_output.json file exists with valid JSON.'
+  - id: output_has_clusters
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+    criterion: '[Must] Output contains a selected_clusters field listing the optimal cluster subset.'
+  - id: output_has_structure
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+    criterion: '[Must] Output contains a next_structure_id field identifying the recommended structure.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The refinement correctly uses the provided initial structures, candidate clusters,
+      and candidate pool.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: Completes within 30 turns.
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: No retry requests needed.
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: Completes within 600 seconds.
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: Total token usage within 80000.
+- id: WF_vasp_001_20250618
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Implement the PathFinder string method algorithm that computes minimum-energy-path intermediate
+    image positions from initial/final structures and a DFT charge density file, using charge-density
+    gradient forces and spring coupling.
+  human_prompt_seed: Implement the PathFinder string method algorithm described in Rong et al. (JCP 2016)
+    for computing cation migration paths. Read the initial and final structure files and the charge density
+    file, then compute the relaxed intermediate image positions using the charge-density gradient force
+    and spring coupling (k_PF = 0.17). Use 21 images, converge when average displacement falls below 5×10⁻⁶
+    Å. Save the relaxed image coordinates to pathfinder_images.xyz in the working directory.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: initial_state
+    path: poscar_initial
+    oss_url: ''
+    description: POSCAR of the initial state structure (LiFePO4 with Li vacancy at starting site).
+  - key: final_state
+    path: poscar_final
+    oss_url: ''
+    description: POSCAR of the final state structure (LiFePO4 with Li vacancy at adjacent site along b-axis).
+  - key: charge_density
+    path: chgcAR_host
+    oss_url: ''
+    description: CHGCAR file containing the DFT-derived electronic charge density of the host structure
+      with vacancies at both initial and final Li sites.
+  reference_answers:
+  - key: pathfinder_script_exists
+    value:
+      filename: pathfinder.py
+  - key: output_xyz_exists
+    value:
+      filename: pathfinder_images.xyz
+  - key: image_count
+    value:
+      flags:
+      - MULTILINE
+      pattern: ^\s*21\s*$
+      filename: pathfinder_images.xyz
+  - key: spring_constant
+    value:
+      flags: []
+      pattern: k_?PF\s*=\s*0\.17
+      filename: pathfinder.py
+  - key: convergence_threshold
+    value:
+      flags: []
+      pattern: 5\s*\*?\s*10\s*\*\*?\s*-6|5e-6|5\.0e-6
+      filename: pathfinder.py
+  - key: charge_density_input
+    value:
+      flags:
+      - IGNORECASE
+      pattern: CHGCAR|chgc?ar
+      filename: pathfinder.py
+  - key: grounding_source
+    value:
+      filename: poscar_initial
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 1800
+  - key: token_budget_total
+    value:
+      max: 60000
+  scoring_checklist:
+  - id: pathfinder_script_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The agent produces a Python script named pathfinder.py that implements the PathFinder
+      string method algorithm.'
+  - id: output_xyz_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The agent produces pathfinder_images.xyz containing the relaxed intermediate image
+      coordinates.'
+  - id: image_count
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] The output XYZ file contains exactly 21 images as specified in the paper''s PathFinder
+      implementation.'
+  - id: spring_constant
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] The script uses the non-dimensional spring constant k_PF = 0.17 as specified in
+      the paper.'
+  - id: convergence_threshold
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] The script converges when average displacement falls below 5×10⁻⁶ Å as specified
+      in the paper.'
+  - id: charge_density_input
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] The script reads a CHGCAR file as the charge density input for computing the gradient
+      force.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The answer is grounded in the provided structure and charge density files from
+      the source paper.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] The agent completes the task within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] The agent does not request task retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] The agent completes the task within 1800 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] The agent uses no more than 60000 tokens total.'
+- id: WF_matgl_001_20250624
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Write a Python script that uses MatGL's Relaxer class with the pre-trained M3GNet universal
+    potential to perform variable-cell geometry relaxation of a crystal structure downloaded from the
+    Materials Project.
+  human_prompt_seed: Write a Python script named `relax_si.py` that performs variable-cell geometry relaxation
+    of the silicon crystal structure in `si_structure.cif` using MatGL's pre-trained M3GNet universal
+    potential via the Relaxer class. Use the FIRE optimizer and a force convergence threshold of 0.05
+    eV/Å as specified in the MatGL paper. Save the relaxed structure to `si_relaxed.cif` and print the
+    final energy (eV), volume (Å³), and maximum force component (eV/Å).
+  tags:
+  - code_mlip
+  data_files:
+  - key: structure_mp13
+    path: si_structure.cif
+    oss_url: ''
+    description: Silicon diamond structure (mp-149) from Materials Project, used as input for geometry
+      relaxation.
+  reference_answers:
+  - key: artifact_relax_script
+    value:
+      filename: relax_si.py
+  - key: contains_matgl_import
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - import matgl
+      - matgl.ext.ase
+      - Relaxer
+      filename: relax_si.py
+  - key: contains_pes_calculator
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - PESCalculator
+      - M3GNet
+      filename: relax_si.py
+  - key: contains_relaxer
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - Relaxer
+      filename: relax_si.py
+  - key: contains_fire_optimizer
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - FIRE
+      filename: relax_si.py
+  - key: contains_force_threshold
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - '0.05'
+      filename: relax_si.py
+  - key: contains_variable_cell
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - variable_cell
+      - filter
+      filename: relax_si.py
+  - key: contains_cif_read
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - si_structure.cif
+      filename: relax_si.py
+  - key: contains_cif_write
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - si_relaxed.cif
+      filename: relax_si.py
+  - key: grounding_source
+    value:
+      filename: relax_si.py
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_relax_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file relax_si.py exists'
+  - id: contains_matgl_import
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script imports matgl and uses matgl.ext.ase or Relaxer'
+  - id: contains_pes_calculator
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script uses PESCalculator with M3GNet potential'
+  - id: contains_relaxer
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script uses the Relaxer class for geometry optimization'
+  - id: contains_fire_optimizer
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] Script specifies FIRE optimizer as the default per the MatGL paper'
+  - id: contains_force_threshold
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script sets force convergence threshold to 0.05 eV/Å as specified in the Methods
+      section'
+  - id: contains_variable_cell
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Script performs variable-cell relaxation (not fixed-cell)'
+  - id: contains_cif_read
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] Script reads the input structure from si_structure.cif'
+  - id: contains_cif_write
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] Script writes the relaxed structure to si_relaxed.cif'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The script is grounded in the MatGL paper''s Relaxer and matgl relax documentation'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completed within 30 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retries needed'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completed within 600 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Total token usage within 50000'
+- id: WF_sgl_001_20260125
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Set up a sparse group lasso (SGL) regression workflow for fitting cluster expansion effective
+    cluster interactions (ECIs) with the hyperparameters λ=0.5 and α=0.056, including cross-validation
+    evaluation as described in the paper.
+  human_prompt_seed: Write a Python script that performs sparse group lasso regression on the cluster
+    expansion training data in ce_training_data.csv. Use λ=0.5 (mixing parameter) and α=0.056 (penalty
+    parameter) as hyperparameters. Perform 5-fold cross-validation with 80/20 train/test split and report
+    the average RMSE. Save the script as sgl_ce_fit.py and the results (including RMSE per fold and average
+    RMSE) to sgl_results.json in the current working directory.
+  tags: []
+  data_files:
+  - key: training_data
+    path: ce_training_data.csv
+    oss_url: ''
+    description: Sample cluster expansion training data with correlation vectors (features) and DFT energies
+      (target) for Li-Mn-O-F structures.
+  reference_answers:
+  - key: artifact_script
+    value: sgl_ce_fit.py
+  - key: artifact_results
+    value: sgl_results.json
+  - key: lambda_05
+    value:
+      flags:
+        case_insensitive: true
+      tokens:
+      - '0.5'
+      - l1_ratio
+      filename: sgl_ce_fit.py
+  - key: alpha_056
+    value:
+      flags:
+        regex: true
+      pattern: 0\.056|alpha.*0\.056
+      filename: sgl_ce_fit.py
+  - key: has_rmse
+    value:
+      flags:
+        case_insensitive: true
+      tokens:
+      - rmse
+      - RMSE
+      - root_mean_squared
+      filename: sgl_results.json
+  - key: has_cv_folds
+    value:
+      flags:
+        case_insensitive: true
+      tokens:
+      - fold
+      - cv
+      - cross
+      filename: sgl_results.json
+  - key: grounding_source
+    value:
+      filename: ce_training_data.csv
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 40000
+  scoring_checklist:
+  - id: artifact_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] sgl_ce_fit.py script file exists in the working directory.'
+  - id: artifact_results
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] sgl_results.json results file exists in the working directory.'
+  - id: lambda_05
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The script uses λ=0.5 (l1_ratio=0.5 in ElasticNet/SGL) for even mixing of L1 and
+      group L2 penalties.'
+  - id: alpha_056
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] The script uses α=0.056 as the penalty parameter.'
+  - id: has_rmse
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The results JSON contains RMSE values for cross-validation.'
+  - id: has_cv_folds
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The results include per-fold cross-validation scores.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The answer is grounded in the source paper''s SGL methodology for cluster expansion.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 20 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not retry any tool calls.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses fewer than 40000 total tokens.'
+- id: WF_vasp_001_20260118
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: 'Set up a VASP surface energy calculation workflow for Pt(111) using the basis-transformed bulk
+    method described in the paper: generate both a surface-oriented bulk unit cell and a surface slab,
+    then write the INCAR, KPOINTS, and POTCAR files for each.'
+  human_prompt_seed: Set up a VASP surface energy calculation for Pt(111) using the basis-transformed
+    bulk method. Starting from the provided pt_bulk.cif, first generate a surface-oriented bulk unit cell
+    with the (111) plane as the basal plane, then generate a 7-layer Pt(111) slab with 10 Å vacuum. Write
+    VASP input files (INCAR, KPOINTS, POTCAR, POSCAR) for BOTH the surface-oriented bulk calculation (Gamma-centered
+    7×7×7 k-mesh) and the slab calculation (Gamma-centered 7×7×1 k-mesh). Use PBE functional with PAW
+    pseudopotentials and Methfessel-Paxton smearing. Place bulk inputs in bulk_calc/ and slab inputs in
+    slab_calc/.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: pt_bulk_structure
+    path: pt_bulk.cif
+    oss_url: ''
+    description: Bulk platinum FCC structure from Materials Project
+  - key: pt_slab_structure
+    path: pt_111_slab.vasp
+    oss_url: ''
+    description: Pt(111) surface slab structure (agent must generate from bulk)
+  reference_answers:
+  - key: bulk_incar_exists
+    value: bulk_calc/INCAR
+  - key: bulk_kpoints_exists
+    value: bulk_calc/KPOINTS
+  - key: bulk_poscar_exists
+    value: bulk_calc/POSCAR
+  - key: bulk_potcar_exists
+    value: bulk_calc/POTCAR
+  - key: slab_incar_exists
+    value: slab_calc/INCAR
+  - key: slab_kpoints_exists
+    value: slab_calc/KPOINTS
+  - key: slab_poscar_exists
+    value: slab_calc/POSCAR
+  - key: slab_potcar_exists
+    value: slab_calc/POTCAR
+  - key: bulk_kpoint_mesh
+    value:
+      flags: []
+      tokens:
+      - '7'
+      - '7'
+      - '7'
+      filename: bulk_calc/KPOINTS
+  - key: slab_kpoint_mesh
+    value:
+      flags: []
+      tokens:
+      - '7'
+      - '7'
+      - '1'
+      filename: slab_calc/KPOINTS
+  - key: bulk_gamma_centered
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - Gamma
+      filename: bulk_calc/KPOINTS
+  - key: slab_gamma_centered
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - Gamma
+      filename: slab_calc/KPOINTS
+  - key: smearing_method
+    value:
+      flags: []
+      tokens:
+      - ISMEAR
+      filename: bulk_calc/INCAR
+  - key: functional_pbe
+    value:
+      flags: []
+      tokens:
+      - GGA
+      filename: bulk_calc/INCAR
+  - key: grounding_source
+    value:
+      filename: bulk_calc/INCAR
+  - key: turn_budget
+    value:
+      max: 25
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: bulk_incar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] bulk_calc/INCAR exists'
+  - id: bulk_kpoints_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] bulk_calc/KPOINTS exists'
+  - id: bulk_poscar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] bulk_calc/POSCAR exists'
+  - id: bulk_potcar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] bulk_calc/POTCAR exists'
+  - id: slab_incar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] slab_calc/INCAR exists'
+  - id: slab_kpoints_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] slab_calc/KPOINTS exists'
+  - id: slab_poscar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] slab_calc/POSCAR exists'
+  - id: slab_potcar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] slab_calc/POTCAR exists'
+  - id: bulk_kpoint_mesh
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Bulk KPOINTS specifies 7×7×7 mesh'
+  - id: slab_kpoint_mesh
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Slab KPOINTS specifies 7×7×1 mesh'
+  - id: bulk_gamma_centered
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Bulk KPOINTS uses Gamma-centering'
+  - id: slab_gamma_centered
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Slab KPOINTS uses Gamma-centering'
+  - id: smearing_method
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR specifies Methfessel-Paxton smearing (ISMEAR > 0)'
+  - id: functional_pbe
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR uses PBE/GGA functional (GGA = PE)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The VASP input files follow the basis-transformed bulk method for Pt(111) surface
+      energy calculation as described in the source paper'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes task within 25 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not retry any tool calls'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes task within 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses fewer than 80000 tokens total'

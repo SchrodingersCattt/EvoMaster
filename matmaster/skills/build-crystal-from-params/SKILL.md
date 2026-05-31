@@ -1,25 +1,31 @@
 ---
 name: build-crystal-from-params
-description: "Build simple inorganic crystals from explicit prototype, lattice, or space-group/Wyckoff parameters with guards against silent coordinate/setting/cell/stoichiometry errors. Not for isolated molecules, polymers, molecular crystals, or polyatomic ionic crystals; route to retrieve-structure instead."
+description: "Build simple inorganic crystals from prototype name, lattice parameters, or space-group/Wyckoff data. Covers well-known binaries (NaCl, NiO, Si, ZnS, etc.) with standard lattice constants. Not for molecular crystals or complex polyatomic compounds with ambiguous structures."
 skill_type: operator
 ---
 
 # Build Crystal From Params
 
-Use this skill only when the user gives explicit parameters for a simple
-inorganic crystal and wants a saved structure file. This skill is mainly a
-guardrail against crystal-building mistakes that silently produce plausible but
-wrong structures.
+Use this skill when the task requires building a simple inorganic crystal
+structure file. This includes cases where the user gives explicit parameters
+AND well-known binary compounds whose prototype and lattice constants are
+standard literature values. This skill is mainly a guardrail against
+crystal-building mistakes that silently produce plausible but wrong structures.
 
 ## Decision Tree
 
 1. Element/formula plus prototype and lattice constants: use ASE `bulk` or a
    documented prototype builder.
-2. Space group plus Wyckoff coordinates: use
+2. Simple binary with well-known prototype (rocksalt, fluorite, zincblende,
+   diamond, wurtzite, etc.) but lattice constant not given explicitly: use
+   standard literature values (e.g. NiO rocksalt a=4.17, Si diamond a=5.43,
+   NaCl rocksalt a=5.64, ZnO wurtzite a=3.25 c=5.21).
+3. Space group plus Wyckoff coordinates: use
    `pymatgen.Structure.from_spacegroup`.
-3. Known material, molecular crystal, polyatomic ionic crystal, DOI/SI/database
-   source, or incomplete/implicit coordinates: route to `retrieve-structure`
-   first instead of constructing from guessed parameters.
+4. Molecular crystal, polyatomic ionic crystal (CaCO3, K2SO4, etc.),
+   DOI/SI/database source, or incomplete Wyckoff coordinates: this skill
+   cannot safely construct these — stop and report that a database lookup
+   or literature retrieval is needed.
 
 ## Local API
 
@@ -64,12 +70,15 @@ structure.to(filename="structure.cif")
   `Atoms(scaled_positions=...)` when starting from fractional coordinates.
 - Do not guess missing lattice constants, space-group settings, origin choice,
   or Wyckoff coordinates. Ask the user, retrieve a known structure, or cite the
-  data source used.
+  data source used. **Exception**: for simple elemental/binary compounds with a
+  single well-known polymorph (Si, Cu, NaCl, NiO, ZnO, etc.), standard textbook
+  lattice constants are acceptable without explicit user input.
 - **Ternary or higher compounds (3+ elements) almost always require Wyckoff
   construction or database retrieval.** Do NOT assume a simple prototype
   (perovskite, anti-perovskite, etc.) without verifying — many ternary phases
   (MAX phases, Heusler alloys, spinels) have specific space groups that differ
-  from naive guesses. When in doubt, use `retrieve-structure`.
+  from naive guesses. When in doubt, retrieve from a database rather than
+  constructing from guessed parameters.
 - For space groups with multiple settings or origin choices, record the exact
   setting/origin used. Convert literature coordinates before calling
   `from_spacegroup` when the source uses a different origin choice.

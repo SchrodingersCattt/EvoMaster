@@ -278,6 +278,143 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+- id: IG_abacus_aux_consistency_001_20260531
+  capability: input_generation
+  domain: agnostic
+  intent: Generate an ABACUS LCAO input package for a Ti-Mo-Al-V alloy SQS seed while keeping STRU auxiliary-file references consistent with the available inventory.
+  human_prompt_seed: '请根据附件里的 Ti-Mo-Al-V SQS 位点表和 ABACUS 可用文件清单，准备一个 `timoyalv_abacus_scf/`
+    输入目录，用于后续 ABACUS LCAO SCF 计算。至少写出 `INPUT`、`STRU`、`KPT` 和 `input_prep_manifest.json`；
+    这次只准备输入，不提交计算。'
+  tags:
+  - eng_abacus
+  data_files:
+  - key: sqs_sites
+    path: data/IG_abacus_aux_consistency_001_20260531/timoyalv_sqs_sites.csv
+    oss_url: ''
+    description: Ti-Mo-Al-V SQS seed with element labels and fractional coordinates.
+  - key: aux_inventory
+    path: data/IG_abacus_aux_consistency_001_20260531/abacus_aux_inventory.txt
+    oss_url: ''
+    description: ABACUS pseudopotential and numerical-orbital files visible in the target image.
+  reference_answers:
+  - key: input_artifact
+    value: timoyalv_abacus_scf/INPUT
+  - key: stru_artifact
+    value: timoyalv_abacus_scf/STRU
+  - key: kpt_artifact
+    value: timoyalv_abacus_scf/KPT
+  - key: manifest_artifact
+    value: timoyalv_abacus_scf/input_prep_manifest.json
+  - key: input_core
+    value:
+      filename: timoyalv_abacus_scf/INPUT
+      tokens:
+      - calculation scf
+      - basis_type lcao
+      flags: i
+  - key: stru_aux_names
+    value:
+      filename: timoyalv_abacus_scf/STRU
+      tokens:
+      - Ti_ONCV_PBE-1.0.upf
+      - Mo_ONCV_PBE-1.0.upf
+      - Al_ONCV_PBE-1.0.upf
+      - V_ONCV_PBE-1.0.upf
+      - Ti_gga_8au_100Ry_4s2p2d1f.orb
+      - Mo_gga_9au_100Ry_5s4p3d2f.orb
+      - Al_gga_8au_100Ry_4s4p1d.orb
+      - V_gga_8au_100Ry_4s2p2d1f.orb
+      flags: i
+  - key: no_al_orbital_alias
+    value:
+      filename: timoyalv_abacus_scf/STRU
+      pattern: Al_gga_8au_100Ry_4s2p1d\.orb
+      flags: i
+  - key: manifest_schema
+    value:
+      filename: timoyalv_abacus_scf/input_prep_manifest.json
+      required_keys:
+      - software
+      - task
+      - input_dir
+      - generated_files
+      - auxiliary_files
+      - assumptions
+      - submit_ready
+  - key: manifest_auxiliary_names
+    value:
+      filename: timoyalv_abacus_scf/input_prep_manifest.json
+      tokens:
+      - Al_gga_8au_100Ry_4s4p1d.orb
+      - input_dir
+      - submit_ready
+      flags: i
+  - key: output_grounding
+    value: The final answer states that the ABACUS input directory was prepared from the SQS seed and available auxiliary-file inventory, and does not claim the calculation was submitted.
+  - key: turn_budget
+    value:
+      max: 14
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 16000
+  scoring_checklist:
+  - id: input_artifact
+    criterion: '`timoyalv_abacus_scf/INPUT` exists.'
+    axis: correctness
+    verify: artifact_exists
+  - id: stru_artifact
+    criterion: '`timoyalv_abacus_scf/STRU` exists.'
+    axis: correctness
+    verify: artifact_exists
+  - id: kpt_artifact
+    criterion: '`timoyalv_abacus_scf/KPT` exists.'
+    axis: correctness
+    verify: artifact_exists
+  - id: manifest_artifact
+    criterion: '`timoyalv_abacus_scf/input_prep_manifest.json` exists.'
+    axis: correctness
+    verify: artifact_exists
+  - id: input_core
+    criterion: INPUT is an ABACUS LCAO SCF input.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: stru_aux_names
+    criterion: STRU references the pseudopotential and orbital filenames exactly as listed in the available auxiliary inventory.
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.5
+  - id: no_al_orbital_alias
+    criterion: STRU does not reference a non-inventory Al orbital filename such as `Al_gga_8au_100Ry_4s2p1d.orb`.
+    axis: correctness
+    verify: text_file_regex_absent
+    weight: 1.5
+  - id: manifest_schema
+    criterion: Manifest includes software, task, input_dir, generated_files, auxiliary_files, assumptions, and submit_ready.
+    axis: correctness
+    verify: json_file_schema
+  - id: manifest_auxiliary_names
+    criterion: Manifest records the actual auxiliary-file names used for the package.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: output_grounding
+    criterion: Final answer states that the ABACUS input directory was prepared from the SQS seed and available auxiliary-file inventory, and does not claim the calculation was submitted.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
 - id: IG_abacus_010_20260513
   capability: input_generation
   domain: agnostic
@@ -3988,7 +4125,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_031_20260521
+- id: IG_abacus_031_20260527
   capability: input_generation
   domain: agnostic
   intent: LCAO gamma-only SCF outputting density matrix (official 09_density_matrix).
@@ -6570,7 +6707,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: IG_abacus_052_20260521
+- id: IG_abacus_052_20260528
   capability: input_generation
   domain: agnostic
   intent: Prepare LCAO SCF inputs with electrostatic potential output per official 30_elec_pot—out_pot 2 for CUBE export.
@@ -6616,17 +6753,15 @@ questions:
       tokens:
       - K_POINTS
       flags: i
-  - key: variable_epot_semantics
-    value: Electrostatic potential per 30_elec_pot—out_pot 2 outputs real-space potential (CUBE).
   - key: turn_budget
     value:
-      max: 12
+      max: 14
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 16000
+      max: 25000
   scoring_checklist:
   - id: epot_input
     criterion: run_lcao_si_epot/INPUT exists.
@@ -6651,11 +6786,6 @@ questions:
     axis: correctness
     verify: text_file_contains_all
     weight: 0.8
-  - id: variable_epot_semantics
-    criterion: '[Variable] Electrostatic potential setup matches 30_elec_pot README.'
-    axis: grounding
-    verify: llm_binary_judge
-    weight: 0.5
   - id: turn_budget
     criterion: Agent completes within turn budget.
     axis: efficiency
@@ -7173,7 +7303,7 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_abacus_060_20260522
+- id: IG_abacus_060_20260528
   capability: input_generation
   domain: agnostic
   intent: Generate ABACUS INPUT for cell-relax of a large magnetic iron phosphate
@@ -7220,6 +7350,11 @@ questions:
       filename: nfpp_relax/INPUT
       flags: im
       pattern: (?im)^\s*smearing_sigma\s+0\.0[0-9][5-9]\d*|smearing_sigma\s+0\.0[1-9]\d*
+  - key: has_mixing_beta_mag
+    value:
+      filename: nfpp_relax/INPUT
+      check: param_exists
+      expected: mixing_beta_mag
   - key: turn_budget
     value:
       max: 22
@@ -7258,10 +7393,10 @@ questions:
     axis: correctness
     verify: text_file_regex
   - id: has_mixing_beta_mag
-    criterion: INPUT includes mixing_beta_mag for separate magnetic moment mixing,
-      which stabilizes SCF convergence in spin-polarized systems.
+    criterion: '[Must] INPUT includes mixing_beta_mag for separate magnetic moment
+      mixing, stabilizing SCF convergence in spin-polarized DFT+U systems.'
     axis: correctness
-    verify: llm_binary_judge
+    verify: abacus_input_check
   - id: physical_params_reasonable
     criterion: Overall INPUT parameters are physically reasonable for a 48-atom magnetic
       iron phosphate cell-relax (scf_nmax >= 200, force threshold reasonable, Hubbard
@@ -7503,6 +7638,169 @@ questions:
     verify: turn_budget
   - id: duration_budget
     criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: IG_abacus_nio_kmesh_001_20260527
+  capability: input_generation
+  domain: agnostic
+  intent: Test whether agent sets adequate k-point mesh for NiO bulk (small unit cell,
+    AFM insulator) in ABACUS, and correctly configures DFT+U and spin initialization.
+  human_prompt_seed: '为 NiO 岩盐结构（conventional cell, 8 atoms）准备 ABACUS LCAO
+    DFT+U SCF 输入，计算 AFM-II 基态能量和 band gap。输出到 `run_nio_afm/` 目录。
+
+    '
+  tags:
+  - eng_abacus
+  data_files: []
+  reference_answers:
+  - key: input_artifact
+    value: run_nio_afm/INPUT
+  - key: kpt_artifact
+    value: run_nio_afm/KPT
+  - key: stru_artifact
+    value: run_nio_afm/STRU
+  - key: must_kpt_mesh
+    value:
+      filename: run_nio_afm/KPT
+      pattern: (?m)^\s*[4-9]\s+[4-9]\s+[4-9]\s+
+  - key: turn_budget
+    value:
+      max: 15
+  - key: token_budget_total
+    value:
+      max: 35000
+  scoring_checklist:
+  - id: input_artifact
+    criterion: run_nio_afm/INPUT exists.
+    axis: correctness
+    verify: artifact_exists
+  - id: kpt_artifact
+    criterion: run_nio_afm/KPT exists.
+    axis: correctness
+    verify: artifact_exists
+  - id: stru_artifact
+    criterion: run_nio_afm/STRU exists.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_kpt_mesh
+    criterion: '[Must] KPT file specifies a k-mesh of at least 4x4x4 for the 8-atom
+      NiO conventional cell. Gamma-only (1x1x1) is completely insufficient for
+      this small cell and will give unconverged energies. A typical choice is
+      4x4x4 to 8x8x8 for NiO conv cell (a~4.17 A).'
+    axis: correctness
+    verify: text_file_regex
+    weight: 3.0
+  - id: has_dft_plus_u
+    criterion: '[Must] INPUT contains dft_plus_u or orbital_corr setting to enable
+      Hubbard U correction for Ni-3d orbitals. NiO without DFT+U gives metallic
+      ground state (wrong).'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: has_nspin2
+    criterion: '[Must] INPUT sets nspin=2 for spin-polarized calculation.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: afm_init_magmom
+    criterion: '[Must] STRU sets alternating positive/negative initial magnetic
+      moments on Ni atoms for AFM-II ordering (e.g., +2/-2 or +5/-5 for initial
+      guess). All Ni atoms having the same sign would be FM, not AFM.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+- id: IG_abacus_pw_ecutwfc_source_001_20260531
+  capability: input_generation
+  domain: agnostic
+  intent: Generate ABACUS PW SCF inputs for fcc Al and document the chosen numerical settings.
+  human_prompt_seed: '工作区中有 `Al_fcc.stru`：Al fcc 原胞结构。请准备一个用于 Al fcc 单点 SCF 的 ABACUS plane-wave 输入目录 `run_al_pw/`，至少写出 `run_al_pw/INPUT`、`run_al_pw/STRU` 和 `run_al_pw/KPT`。'
+  tags:
+  - eng_abacus
+  data_files:
+  - key: al_stru
+    path: data/IG_abacus_pw_ecutwfc_source_001_20260531/Al_fcc.stru
+    oss_url: ''
+    description: Minimal ABACUS STRU for fcc Al with an ONCV PBE pseudopotential name.
+  reference_answers:
+  - key: input_artifact
+    value: run_al_pw/INPUT
+  - key: stru_artifact
+    value: run_al_pw/STRU
+  - key: kpt_artifact
+    value: run_al_pw/KPT
+  - key: input_core
+    value:
+      filename: run_al_pw/INPUT
+      tokens:
+      - calculation scf
+      - basis_type pw
+      flags: i
+  - key: input_ecutwfc_70
+    value:
+      filename: run_al_pw/INPUT
+      pattern: (?im)^\s*ecutwfc\s+70(?:\.0+)?\s*$
+  - key: input_no_wrong_cutoff
+    value:
+      filename: run_al_pw/INPUT
+      pattern: (?im)^\s*ecutwfc\s+(60|100)(?:\.0+)?\s*$
+  - key: turn_budget
+    value:
+      max: 12
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 14000
+  scoring_checklist:
+  - id: input_artifact
+    criterion: '`run_al_pw/INPUT` exists.'
+    axis: correctness
+    verify: artifact_exists
+  - id: stru_artifact
+    criterion: '`run_al_pw/STRU` exists and is based on the provided Al_fcc.stru.'
+    axis: correctness
+    verify: artifact_exists
+  - id: kpt_artifact
+    criterion: '`run_al_pw/KPT` exists.'
+    axis: correctness
+    verify: artifact_exists
+  - id: input_core
+    criterion: '[Must] INPUT is an ABACUS SCF plane-wave input with `calculation scf` and `basis_type pw`.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.2
+  - id: input_ecutwfc_70
+    criterion: '[Must] INPUT sets `ecutwfc 70`, following the Al pseudopotential metadata for the first SCF input rather than relying only on the generic default.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.5
+  - id: input_no_wrong_cutoff
+    criterion: '[Must] INPUT does not set `ecutwfc 60` from unsupported recall or `ecutwfc 100` from the nearby LCAO tutorial excerpt.'
+    axis: correctness
+    verify: text_file_regex_absent
+    weight: 1.2
+  - id: grounding_source
+    criterion: '[Must] The final answer or generated input rationale does not present `ecutwfc` as an unsupported universal ABACUS standard; it should either mention a concrete basis for the value or state that cutoff convergence should be checked before production use.'
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total

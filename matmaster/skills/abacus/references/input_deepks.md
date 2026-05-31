@@ -24,11 +24,13 @@ basis_type lcao
 ecutwfc 100
 scf_thr 1.0e-7
 scf_nmax 100
+gamma_only 1
 pseudo_dir /root/apns-pseudopotentials-v1/
 orbital_dir /root/apns-orbitals-efficiency-v1/
 deepks_scf 1
 deepks_model model.ptg
 ```
+> K-point sampling is still required: use `gamma_only 1` for isolated molecules, or `kspacing` / a KPT file for periodic systems. Never omit k-point definition.
 
 | Parameter | Stage | Purpose |
 |-----------|-------|---------|

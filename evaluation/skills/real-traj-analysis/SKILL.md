@@ -96,7 +96,7 @@ Write to `evaluation/traj_analysis/{env}/{YYYY-MM}.json`:
 
 ### 4. Generate Questions
 
-For `actionable` sessions, design eval questions. Rules → `references/question_design.md`
+For `actionable` sessions, design eval questions. **Do not 透题** — reconstruct the real user task; keep failure modes, quality gates, source requirements, and answer-shaped fixture fields out of the prompt, and put evaluation intent in the hidden checklist/judge. Rules + self-check → `references/question_design.md`
 
 ### 5. Settle Release Gate
 
@@ -114,7 +114,7 @@ Used to detect coverage gaps and track usage trends.
 ### 7. Review Cycle
 
 After writing questions:
-1. Check for prompt hints (透题): Does the prompt give away any part of the solution?
+1. Run the realistic-design self-check (透题 / answer-shaped fixtures) → `references/question_design.md`
 2. Check scope correctness: Does the checklist reference platform-specific values? → platform scope
 3. Check for redundancy: Is there already a question testing the same rule/capability?
 4. Validate YAML: `python -c "import yaml; yaml.safe_load(open(f))"`

@@ -207,6 +207,15 @@ def main() -> None:
             result["volume"] = round(float(obj.volume), 4)
         except Exception:
             pass
+        try:
+            from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+
+            sga = SpacegroupAnalyzer(obj, symprec=0.1)
+            result["spacegroup"] = sga.get_space_group_symbol()
+            result["spacegroup_number"] = sga.get_space_group_number()
+        except Exception:
+            result["spacegroup"] = "unknown"
+            result["spacegroup_number"] = None
     elif kind == "molecule":
         result["n_atoms"] = len(obj)
 

@@ -1,0 +1,7 @@
+TEM micrograph export notes
+
+- Original image: sample_A_tilt0.tif, 12288 x 8192 px.
+- The full-resolution image is not included in this benchmark bundle because of size; the particle-measurement export above comes from the accepted mask layer.
+- Scale bar annotation in the original image: 50 nm, measured length 120 px.
+- The user needs number-average size, median size, D90, and a simple histogram in nm.
+- Rows with circularity below 0.75 were already excluded by the imaging operator.

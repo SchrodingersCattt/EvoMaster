@@ -66,7 +66,7 @@ questions:
     axis: correctness
     verify: text_file_contains_all
 
-- id: IG_gpumd_003_20260523
+- id: IG_gpumd_003_20260526
   capability: input_generation
   domain: agnostic
   intent: Generate a GPUMD NEMD `run.in` with correct heat source/sink syntax,
@@ -79,26 +79,28 @@ questions:
     - 需要逐 group 温度统计
     - 先平衡 200ps，再生产 2ns
     - 时间步 1fs
+    请将文件保存为工作区根目录下的 `run.in`。
   tags:
   - eng_gpumd
   data_files: []
   reference_answers:
   - key: run_in_artifact
     value: run.in
-  - key: nemd_core_tokens
+    workspace_resolve: root
+  - key: nemd_core_keywords
     value:
       filename: run.in
-      tokens:
-      - potential
-      - ensemble heat_lan
-      - fix
-      - compute_temperature
-      - run
-      flags: i
-  - key: heat_lan_syntax
+      check: has_keyword
+      expected: [potential, fix, compute_temperature, run]
+  - key: nemd_ensemble_type
     value:
       filename: run.in
-      pattern: ensemble\s+heat_lan\s+\d+\.?\d*\s+\d+\.?\d*\s+\d+\s+source\s+\d+\s+sink\s+\d+
+      check: ensemble_type
+      allowed: [heat_lan, heat_nhc, heat_bdp]
+  - key: heat_source_sink_syntax
+    value:
+      filename: run.in
+      pattern: ensemble\s+heat_(lan|nhc|bdp)\s+\d+\.?\d*\s+\d+\.?\d*\s+\d+\s+source\s+\d+\s+sink\s+\d+
       flags: i
   - key: fix_both_walls
     value:
@@ -108,8 +110,8 @@ questions:
   - key: potential_first
     value:
       filename: run.in
-      pattern: (?s)\A\s*potential\b
-      flags: ''
+      check: first_keyword
+      expected: potential
   - key: turn_budget
     value:
       max: 10
@@ -118,14 +120,19 @@ questions:
     criterion: Agent writes `run.in` to workspace.
     axis: correctness
     verify: artifact_exists
-  - id: nemd_core_tokens
-    criterion: run.in contains all NEMD core keywords (potential, ensemble heat_lan,
-      fix, compute_temperature, run).
+  - id: nemd_core_keywords
+    criterion: run.in contains NEMD core commands (potential, fix, compute_temperature,
+      run).
     axis: correctness
-    verify: text_file_contains_all
-  - id: heat_lan_syntax
-    criterion: '[Must] ensemble heat_lan line has correct GPUMD syntax:
-      `ensemble heat_lan <T> <T> <Tcouple> source <g_src> sink <g_sink>`.
+    verify: gpumd_run_in_check
+  - id: nemd_ensemble_type
+    criterion: run.in uses a valid NEMD source/sink ensemble (heat_lan, heat_nhc,
+      or heat_bdp).
+    axis: correctness
+    verify: gpumd_run_in_check
+  - id: heat_source_sink_syntax
+    criterion: '[Must] NEMD ensemble line has correct GPUMD syntax:
+      `ensemble heat_X <T> <T> <Tcouple> source <g_src> sink <g_sink>`.
       Agent must not use LAMMPS-style syntax (fix langevin, etc).'
     axis: correctness
     verify: text_file_regex
@@ -140,7 +147,7 @@ questions:
     criterion: '[Must] `potential` is the first non-comment command in run.in.
       GPUMD requires potential declaration before any ensemble/run/compute.'
     axis: correctness
-    verify: text_file_regex
+    verify: gpumd_run_in_check
     weight: 1.5
   - id: turn_budget
     criterion: Agent completes within turn budget.
@@ -283,71 +290,101 @@ questions:
     axis: correctness
     verify: text_file_contains_all
 
-- id: IG_gpumd_010_20260429
+- id: IG_gpumd_010_20260526
   capability: input_generation
   domain: agnostic
   intent: Generate a GPUMD observer-mode `run.in` with multi-potential observe output.
-  human_prompt_seed: "请准备一份多势函数观察模式的 `run.in`，要求使用 `dump_observer observe` 输出观测结果。"
+  human_prompt_seed: |
+    请准备一份多势函数观察模式的 `run.in`，要求使用 `dump_observer observe` 输出观测结果。
+    请将文件保存为工作区根目录下的 `run.in`。
   tags:
   - eng_gpumd
   data_files: []
   reference_answers:
   - key: run_in_artifact
     value: run.in
-  - key: observer_observe_tokens
+    workspace_resolve: root
+  - key: observer_multi_potential
     value:
       filename: run.in
-      tokens:
-      - potential
-      - potential
-      - velocity
-      - time_step
-      - ensemble nve
-      - dump_observer observe
-      - run
+      check: min_keyword_count
+      expected: potential
+      allowed: ['2']
+  - key: observer_basic_keywords
+    value:
+      filename: run.in
+      check: has_keyword
+      expected: [velocity, time_step, run]
+  - key: observer_dump_observe
+    value:
+      filename: run.in
+      pattern: dump_observer\s+\d+\s+observe
       flags: i
   scoring_checklist:
   - id: run_in_artifact
     criterion: 生成 `run.in`。
     axis: correctness
     verify: artifact_exists
-  - id: observer_observe_tokens
-    criterion: 输入包含 observe 模式观察者输出关键命令。
+  - id: observer_multi_potential
+    criterion: "`run.in` 包含至少两行 `potential`（多势函数模式）。"
     axis: correctness
-    verify: text_file_contains_all
+    verify: gpumd_run_in_check
+  - id: observer_basic_keywords
+    criterion: "`run.in` 包含 `velocity`、`time_step`、`run` 基本关键字。"
+    axis: correctness
+    verify: gpumd_run_in_check
+  - id: observer_dump_observe
+    criterion: "`run.in` 包含 `dump_observer <interval> observe` 命令。"
+    axis: correctness
+    verify: text_file_regex
 
-- id: IG_gpumd_011_20260429
+- id: IG_gpumd_011_20260526
   capability: input_generation
   domain: agnostic
   intent: Generate a GPUMD observer-average `run.in` with multi-potential averaging output.
-  human_prompt_seed: "请准备一份多势函数平均模式的 `run.in`，要求使用 `dump_observer average` 输出平均观测结果。"
+  human_prompt_seed: |
+    请准备一份多势函数平均模式的 `run.in`，要求使用 `dump_observer average` 输出平均观测结果。
+    请将文件保存为工作区根目录下的 `run.in`。
   tags:
   - eng_gpumd
   data_files: []
   reference_answers:
   - key: run_in_artifact
     value: run.in
-  - key: observer_average_tokens
+    workspace_resolve: root
+  - key: observer_multi_potential
     value:
       filename: run.in
-      tokens:
-      - potential
-      - potential
-      - velocity
-      - time_step
-      - ensemble nve
-      - dump_observer average
-      - run
+      check: min_keyword_count
+      expected: potential
+      allowed: ['2']
+  - key: observer_basic_keywords
+    value:
+      filename: run.in
+      check: has_keyword
+      expected: [velocity, time_step, run]
+  - key: observer_dump_average
+    value:
+      filename: run.in
+      pattern: dump_observer\s+\d+\s+average
       flags: i
   scoring_checklist:
   - id: run_in_artifact
     criterion: 生成 `run.in`。
     axis: correctness
     verify: artifact_exists
-  - id: observer_average_tokens
-    criterion: 输入包含 average 模式观察者输出关键命令。
+  - id: observer_multi_potential
+    criterion: "`run.in` 包含至少两行 `potential`（多势函数模式）。"
     axis: correctness
-    verify: text_file_contains_all
+    verify: gpumd_run_in_check
+  - id: observer_basic_keywords
+    criterion: "`run.in` 包含 `velocity`、`time_step`、`run` 基本关键字。"
+    axis: correctness
+    verify: gpumd_run_in_check
+  - id: observer_dump_average
+    criterion: "`run.in` 包含 `dump_observer <interval> average` 命令。"
+    axis: correctness
+    verify: text_file_regex
 
 - id: IG_gpumd_012_20260429
   capability: input_generation

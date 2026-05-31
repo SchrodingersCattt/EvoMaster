@@ -1,0 +1,1 @@
+Toy relaxed adsorption structure for mode classification. The last three atoms are the original water molecule atoms: Ow atom 10, H1 atom 11, H2 atom 12. H2 is near surface oxygen atom 5 and far from Ow, representing dissociative adsorption.

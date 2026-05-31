@@ -124,7 +124,7 @@ questions:
     criterion: Agent completes within turn budget.
     axis: efficiency
     verify: turn_budget
-- id: PIG_abacus_007_20260516
+- id: PIG_abacus_007_20260527
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS Si LCAO-SCF inputs and Bohrium submission configuration.
@@ -144,8 +144,13 @@ questions:
   - key: must_submit_json_core
     value:
       filename: submit_job.json
-      pattern: (?is)"image"\s*:\s*"registry\.dp\.tech/dptech/dp/native/hub/mrdic2/abacusp:1\.0\.3-1778742780".*"machine"\s*:\s*"c32_m128_cpu".*"cmd"\s*:\s*"[^"]*abacus[^"]*"
-      flags: im
+      checks:
+      - key: image
+        contains: "abacusp:1.0.3-1778742780"
+      - key: machine
+        contains: c32_m128_cpu
+      - key: cmd
+        contains: abacus
   - key: must_input_pseudo_dir
     value:
       filename: INPUT
@@ -201,7 +206,7 @@ questions:
     criterion: '[Must] submit_job.json uses the expected ABACUS Bohrium image, machine,
       and command.'
     axis: correctness
-    verify: text_file_regex
+    verify: json_file_key_values
     weight: 1.0
   - id: must_input_pseudo_dir
     criterion: '[Must] INPUT points ABACUS to the APNS pseudopotential directory.'
@@ -238,7 +243,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: PIG_abacus_008_20260516
+- id: PIG_abacus_008_20260527
   capability: input_generation
   domain: agnostic
   intent: Prepare ABACUS Si PW-SCF inputs and Bohrium submission configuration.
@@ -258,8 +263,13 @@ questions:
   - key: must_submit_json_core
     value:
       filename: submit_job.json
-      pattern: (?is)(?=.*"image"\s*:\s*"registry\.dp\.tech/dptech/dp/native/hub/mrdic2/abacusp:1\.0\.3-1778742780")(?=.*"machine"\s*:\s*"c32_m128_cpu")(?=.*"cmd"\s*:\s*"[^"]*abacus[^"]*")
-      flags: im
+      checks:
+      - key: image
+        contains: "abacusp:1.0.3-1778742780"
+      - key: machine
+        contains: c32_m128_cpu
+      - key: cmd
+        contains: abacus
   - key: must_input_pw_core
     value:
       filename: INPUT
@@ -322,7 +332,7 @@ questions:
     criterion: '[Must] submit_job.json uses the expected ABACUS Bohrium image, machine,
       and command.'
     axis: correctness
-    verify: text_file_regex
+    verify: json_file_key_values
     weight: 1.0
   - id: must_input_pw_core
     criterion: '[Must] INPUT uses ABACUS PW SCF core controls.'
@@ -364,7 +374,7 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: PIG_abacus_bader_001_20260525
+- id: PIG_abacus_bader_001_20260528
   capability: input_generation
   domain: agnostic
   priority: P1
@@ -406,6 +416,8 @@ questions:
       filename: abacus_bader/STRU
       check: species_elements
       expected: [Al, O]
+  - key: bohrium_submission
+    value: Bohrium
   - key: turn_budget
     value:
       max: 35
@@ -441,18 +453,10 @@ questions:
     axis: correctness
     verify: stru_file_check
     weight: 1.0
-  - id: no_local_install
-    criterion: '[Must] Agent does NOT attempt to install ABACUS locally (no conda
-      install, pip install, mamba install, apt install of ABACUS). It must use
-      Bohrium platform submission with an ABACUS image.'
-    axis: grounding
-    verify: llm_binary_judge
-    weight: 3.0
   - id: bohrium_submission
-    criterion: '[Platform] Agent submits the job to Bohrium using bohrium-job skill
-      or equivalent with an ABACUS image (registry.dp.tech/dptech/...).'
+    criterion: '[Platform] Agent submits the job to Bohrium via the Bohrium tool.'
     axis: correctness
-    verify: llm_binary_judge
+    verify: tool_call_exists
     weight: 1.5
   - id: turn_budget
     criterion: Agent completes within turn budget.

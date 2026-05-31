@@ -109,39 +109,35 @@ generation 150000
 - `neuron 40` is slightly larger than default for a binary system.
 - Monitor `loss.out` convergence; increase `generation` if loss hasn't plateaued.
 
-## Example 5: Active Learning with Multi-Potential Observer
+## Example 5: Multi-Potential Observer / Active Learning
+
+Two or more `potential` lines enable observer mode. First potential drives dynamics, rest are observers.
 
 ```
 potential  nep_v1.txt
 potential  nep_v2.txt
 
-velocity   500
+velocity   300
 time_step  1
 
-# NVT with active-learning trigger
-ensemble   nvt_ber 500 500 100
-active     100 0.1
+# NVE production — observe mode (unbiased comparison)
+ensemble   nve
 dump_observer 1000 observe
 dump_thermo 1000
-run        500000
+run        100000
 ```
 
 **Key points:**
-- Two `potential` lines: first drives the MD, second is the observer.
-- `active 100 0.1`: check disagreement every 100 steps, save if max force difference > 0.1 eV/A.
-- `dump_observer 1000 observe`: write per-potential predictions every 1000 steps.
-- `observe` mode outputs individual potentials; use `average` for averaged predictions.
+- `dump_observer <interval> observe`: writes per-potential energies/forces. Output: `observer.out`.
+- `dump_observer <interval> average`: writes averaged predictions (for ensemble averaging).
+- For **active learning**, add `active 100 0.1` and use NVT (`nvt_ber`) instead of NVE — saves configurations when max force disagreement > threshold (eV/Å).
+- Without `active` keyword: no configurations saved, only statistics recorded.
 
 ## Example 6: NEMD Thermal Conductivity (Source-Sink Method)
 
 Non-equilibrium MD with heat source and sink groups.
 
-**Prerequisites**: `model.xyz` must have a `group` column defining at least 3 groups:
-- Group 0: bulk atoms
-- Group 1: heat source slab
-- Group 2: heat sink slab
-
-See `references/model_xyz_format.md` for the extended XYZ format with group columns.
+**Prerequisites**: `model.xyz` must have a `group` column. Example: groups 0/8 = walls (fixed), group 1 = source, group 7 = sink, groups 2-6 = transport region.
 
 ```
 potential  nep.txt
@@ -154,19 +150,22 @@ ensemble   nvt_nhc 300 300 100
 dump_thermo 1000
 run        200000
 
-# Stage 2: NEMD production (heat_nhc, 2 ns)
-ensemble   heat_nhc 300 300 100 source 1 sink 2
+# Stage 2: NEMD production (2 ns)
+fix        0
+fix        8
+ensemble   heat_lan 300 300 100 source 1 sink 7
 compute_temperature group_method 0
 dump_thermo 1000
 run        2000000
 ```
 
 **Key points:**
-- `heat_nhc 300 300 100 source 1 sink 2`: NHC thermostat at 300 K, source=group 1, sink=group 2.
+- `heat_lan <T1> <T2> <Tcouple> source <g_src> sink <g_sink>`: Langevin NEMD source/sink.
+- Alternative ensembles: `heat_nhc` (Nose-Hoover) or `heat_bdp` (BDP) — same parameter syntax.
+- `fix <group_id>`: freezes atoms in that group (wall boundary condition).
+- `compute_temperature group_method 0`: per-group temperature output for temperature profile.
 - Groups must be defined in `model.xyz` with a `group:I:1` column.
-- `compute_temperature group_method 0` outputs per-group temperatures for the temperature profile.
-- Alternative ensembles: `heat_lan` (Langevin) or `heat_bdp` (BDP) with the same syntax.
-- `compute_temperature` and `dump_thermo` must be re-specified — they reset after each `run`.
+- `compute_temperature` and `dump_thermo` reset after each `run` — re-specify for subsequent blocks.
 
 ## Example 7: Phonon Density of States (DOS)
 
@@ -195,3 +194,38 @@ run        200000
 - Frequency resolution = max_omega / num_omega = 50/400 = 0.125 THz.
 - Correlation time window = 5 x 200 x 1 fs = 1 ps.
 - For species-resolved DOS, append `group_method <idx> group_id <id>`.
+
+## Example 8: Phonon Dispersion (Finite Displacement)
+
+Compute phonon dispersion using GPUMD's built-in finite-displacement method.
+
+**Required files:**
+- `model.xyz`: primitive cell (e.g. 2-atom Si diamond)
+- `kpoints.in`: high-symmetry k-path
+- `run.in`: with `replicate` and `compute_phonon`
+
+```
+# kpoints.in — FCC Brillouin zone path: G-X-U|K-G-L-W-X
+100
+0.000 0.000 0.000  # G
+0.500 0.000 0.500  # X
+0.625 0.250 0.625  # U (equivalent to K)
+0.000 0.000 0.000  # G
+0.500 0.500 0.500  # L
+0.500 0.250 0.750  # W
+0.500 0.000 0.500  # X
+```
+
+```
+# run.in
+potential  nep.txt
+replicate  8 8 8
+compute_phonon 0.01
+```
+
+**Key points:**
+- `replicate N1 N2 N3`: builds supercell from primitive cell. Supercell must be large enough that `2 * phonon_cutoff < box_length` in each direction. GPUMD will warn "Replicate in X >= N" if too small.
+- `compute_phonon <delta>`: finite displacement (Å). Typical: 0.01. No `run` command needed — it exits after computing force constants.
+- Output: `omega2.out` — each row is one k-point, columns are ω² eigenvalues (units: THz²). Frequency ν = √(ω²) / (2π) in THz.
+- `kpoints.in` first line: number of points per segment. Subsequent lines: fractional k-coordinates.
+- Number of branches = 3 × atoms_in_primitive_cell (e.g., Si diamond → 6 branches: 3 acoustic + 3 optical).

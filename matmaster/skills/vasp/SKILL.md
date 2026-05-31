@@ -60,15 +60,19 @@ Running the VASP binary locally is not allowed (commercial license).
 - **NUPDOWN / MAGMOM for multi-site or mixed-valence systems**: Do not assume
   spin states — the same element can be high-spin or low-spin depending on
   coordination environment (e.g., octahedral strong-field ligands force
-  low-spin). Look up the material's established magnetic ground state before
-  assigning values.
+  low-spin). For mixed-valence systems, derive NUPDOWN from charge balance +
+  ligand-field analysis → see `references/incar_tags.md` §NUPDOWN for the
+  step-by-step procedure.
 - **SOC decision table**:
 
 | Condition | Action |
 |-----------|--------|
 | System contains Z ≥ 57 elements (lanthanides, actinides, 5d/6p: Hf, Ta, W, Re, Os, Ir, Pt, Au, Hg, Tl, Pb, Bi, Lu, etc.) AND task is band/DOS | Enable SOC: `LSORBIT = .TRUE.`, `ISPIN = 2`, `ISYM = 0`. Use `vasp_ncl`. |
-| System contains Z ≥ 57 elements AND task is relaxation/SCF | Use AskQuestion: "体系含重元素，是否需要开启自旋-轨道耦合(SOC)？" Enable if user confirms. |
+| System contains Z ≥ 57 elements AND task is relaxation/SCF | Use AskQuestion: "体系含重元素，是否需要开启自旋-轨道耦合(SOC)？" Enable if user confirms → set `LSORBIT = .TRUE.`, `ISPIN = 2`, `ISYM = 0`. Use `vasp_ncl`. |
+| User explicitly requests SOC | Set `LSORBIT = .TRUE.`, `ISPIN = 2`, `ISYM = 0`. Use `vasp_ncl`. |
 | No heavy elements (Z < 57) | SOC not needed |
+
+  **Rule**: `LSORBIT = .TRUE.` always requires `ISPIN = 2` — never set LSORBIT without ISPIN=2.
 
 - `LMAXMIX = 4` for d-electron systems; `LMAXMIX = 6` for f-electron systems.
 
@@ -100,7 +104,7 @@ No POTCAR → STOP. Has path → copy POTCAR into input_dir before submit.
    in-plane, 1 in vacuum; band → line-mode; DOS → ≥2× SCF density; molecule → Γ.
 4. **INCAR** — apply Hard Guards above. For full tag reference →
    `references/incar_tags.md`. For worked examples → `references/input_examples.md`.
-5. **Validate** — `scripts/validate_incar.py -f INCAR -t <type> [--enmax <val>]`.
+5. **Validate** — `scripts/validate_incar.py -f INCAR -t <type> [--enmax <val>] [--elements Ca,Ta,Os,O]`.
 6. **Submit** (if requested) — resolve POTCAR first (see above), then Bohrium.
 
 ## Bohrium Submission
@@ -108,7 +112,7 @@ No POTCAR → STOP. Has path → copy POTCAR into input_dir before submit.
 | Item | Default |
 |------|---------|
 | image | `list_images` with keyword `vasp` |
-| machine | `c32_m128_cpu` |
+| machine | `c64_m256_cpu` |
 | cmd | see Environment Probe below |
 
 - Use `vasp_gam` for Gamma-only, `vasp_ncl` for SOC/noncollinear.

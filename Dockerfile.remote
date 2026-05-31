@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libgfortran5 \
     libquadmath0 \
+    file \
     openbabel \
     nodejs \
     npm \

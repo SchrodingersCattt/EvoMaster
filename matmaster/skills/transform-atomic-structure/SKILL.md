@@ -1,6 +1,6 @@
 ---
 name: transform-atomic-structure
-description: "Transform existing non-molecular crystal structures: supercell, strain, doping, vacancy/defect, ordering, or in-place mutation. For molecular crystals use operate-molecular-crystal; for multi-structure assembly use assemble-atomic-structure."
+description: "Transform existing non-molecular crystal structures: supercell, strain, doping, vacancy/defect, ordering, or in-place mutation. Not for molecular crystals (bond-breaking risk) or multi-structure assembly (slab+adsorbate, interface, packing)."
 skill_type: operator
 ---
 
@@ -8,21 +8,37 @@ skill_type: operator
 
 Use this skill for operations that start from one structure and produce a
 modified version of the same object. It handles ordinary inorganic, metallic,
-ionic, and covalent crystals. If inspection shows a molecular crystal, route to
-`operate-molecular-crystal` before any operation that depends on connectivity.
+ionic, and covalent crystals.
+
+## Capability Gate
+
+- **STOP** if the input is a molecular crystal (e.g. MOF with organic linkers,
+  pharmaceutical polymorph, polymer crystal). This skill operates at the atomic
+  level — individual atom removal or substitution would break molecules.
+- **STOP** if the task requires combining multiple structures (slab+adsorbate,
+  interface, amorphous packing). This skill only transforms a single structure
+  in-place.
 
 ## Decision Tree
 
-1. Run `inspect-atomic-structure` on the input.
-2. If `is_molecular_crystal=true`, route to `operate-molecular-crystal`.
-3. If the user requests only cell multiplication, use a supercell matrix.
-4. If the user requests strain/shear, apply a deformation gradient and decide
+1. Inspect the input structure:
+   ```python
+   from pymatgen.core import Structure
+   from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+   struct = Structure.from_file("input.cif")
+   print(f"Formula: {struct.formula}, Atoms: {len(struct)}")
+   sga = SpacegroupAnalyzer(struct, symprec=0.1)
+   print(f"Space group: {sga.get_space_group_symbol()} ({sga.get_space_group_number()})")
+   print(f"Ordered: {struct.is_ordered}")
+   ```
+2. If the user requests only cell multiplication, use a supercell matrix.
+3. If the user requests strain/shear, apply a deformation gradient and decide
    whether atom coordinates should scale with the lattice.
-5. If the user requests dopants, select sites by mode:
+4. If the user requests dopants, select sites by mode:
    - `random`: reproducible random indices with a fixed seed.
    - `ordered`: choose symmetry-related sites or ordered sublattices.
    - `wyckoff`: choose sites from explicit Wyckoff labels.
-6. If dopant valence differs from host, apply charge compensation **before**
+5. If dopant valence differs from host, apply charge compensation **before**
    writing the output:
 
    | Substitution | Compensation | Example |
@@ -33,6 +49,12 @@ ionic, and covalent crystals. If inspection shows a molecular crystal, route to
 
    If the user does not specify a strategy, default to cation/anion vacancy.
    Never output an aliovalent-doped structure without neutralizing the charge.
+   **Priority**: charge neutrality > target concentration. In small supercells
+   the exact requested at.% is often unachievable; round the dopant count to
+   the nearest charge-neutral integer set, even if the resulting concentration
+   deviates from the request.
+
+6. For doping/defect tasks, run acceptance checklist → `references/doping_checklist.md`
 
 ## Local API
 
@@ -82,16 +104,13 @@ struct.to(filename="doped.cif")
 
 For simple same-valence doping or defects, inline `pymatgen` site selection is
 sufficient. For ordered Wyckoff targeting or multiple doping rules, use
-`SpacegroupAnalyzer` plus explicit Wyckoff filtering. Run the full
-doping/defect acceptance checklist below before reporting success.
+`SpacegroupAnalyzer` plus explicit Wyckoff filtering.
 
 ## Hard Guards
 
-- Output filename and extension MUST exactly match the caller's specification
-  (spelling, casing, abbreviation, suffix). Never substitute conventional
-  aliases or systematic equivalents (e.g. do not rename `gamma_alumina.cif`
-  to `gamma_al2o3.cif`, or `srtio3_doped.cif` to `STO_doped.cif`). Evaluators
-  check the exact string before opening the file.
+- Output filename and extension MUST exactly match the caller's specification.
+  Never substitute conventional aliases (e.g. do not rename `gamma_alumina.cif`
+  to `gamma_al2o3.cif`). Evaluators check the exact string.
 - Always preserve the input file and write a new output file.
 - Supercell mode requires an integer 3x3 matrix or three integer repeats.
 - Deformation mode must state whether atomic coordinates are scaled with the
@@ -100,46 +119,11 @@ doping/defect acceptance checklist below before reporting success.
 - Do not silently replace zero atoms. If `fraction * site_count < 1`, require a
   larger supercell or an exact count.
 - Use a fixed seed for stochastic replacements and report it.
-- For molecular crystals, do not remove individual atoms or cut bonds here.
-
-## Doping and Defect Acceptance Checklist
-
-Every doping/defect result must be checked and reported:
-
-1. **Stoichiometry**: actual replacement/removal count equals the requested
-   count or `round(site_count * fraction)`. Output formula must equal input
-   formula minus removed species plus replacement species.
-2. **Charge balance**: if oxidation states are provided or inferable, total
-   charge after substitution must be close to neutral. If not neutral, report
-   the explicit compensation strategy (`anion_adjust`, `cation_vacancy`,
-   `anion_vacancy`, `mixed`, or user-approved uncompensated charge).
-3. **Minimum distance**: no interatomic distance below the accepted threshold
-   (default 0.5 A unless the task sets another value).
-4. **Symmetry trace**: report space group before and after. Random substitutions
-   may lower symmetry; ordered/Wyckoff substitutions should preserve intended
-   symmetry or explain why it changed.
-5. **Wyckoff fidelity**: in Wyckoff mode, every substituted atom must belong to
-   the requested Wyckoff label/group under `SpacegroupAnalyzer`.
-6. **Multi-rule disjointness**: multiple doping rules must not select the same
-   site twice.
-7. **Determinism**: same seed and same input should reproduce the same selected
-   sites and output coordinates.
-8. **Supercell sanity**: if requested concentration is impossible in the current
-   cell, build a supercell first rather than silently rounding to zero.
-
-Defects additionally require mass balance. If a vacancy creates an isolated
-unphysical fragment, stop or route to `operate-molecular-crystal` for
-molecule-cluster removal.
 
 ## Acceptance Checklist
 
 - Input and output filenames are both reported.
-- `inspect-atomic-structure` was run before and after the operation.
+- Structure validated before and after (dimensionality, formula, min distance).
 - Formula, atom count, and lattice change match the requested transformation.
 - For stochastic operations, the seed and selected site summary are reported.
 
-## Cross-Skill Refs
-
-- `operate-molecular-crystal`: PBC-aware molecule operations.
-- `assemble-atomic-structure`: surfaces, interfaces, amorphous packing.
-- `inspect-atomic-structure`: mandatory validation and Wyckoff analysis.

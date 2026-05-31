@@ -1,13 +1,14 @@
 """Skill trigger-rate evaluation runner.
 
 Sends test prompts through the matmaster Exp runtime and checks whether
-the model calls the Skill tool with the expected skill name.
+the model calls the Skill tool with the expected skill name within max_turns.
 
-Early-stop: as soon as the model emits a ToolCallEvent for the "Skill" tool,
-the run is cancelled via CancellationToken, except for configured umbrella
-skills that should route onward to a leaf skill. Non-Skill tool calls are allowed
-to proceed (the model might Read/Bash before deciding which skill to load).
-If max_turns is exhausted without a leaf Skill call, we record "not triggered".
+Early-stop: as soon as the model emits a ToolCallEvent for the **target** Skill,
+the run is cancelled via CancellationToken. Other (non-target) Skill calls are
+recorded but do not stop the run — this supports multi-skill tasks where the
+target skill may not be the first one triggered. Umbrella skills (e.g.
+atomic-structure) are always passed through. If max_turns is exhausted without
+the target Skill call, we record "not triggered".
 """
 
 from __future__ import annotations
@@ -38,7 +39,6 @@ logger = logging.getLogger(__name__)
 _DEFAULT_MAX_TURNS = 3
 _DEFAULT_EXP_NAME = "direct"
 _DEFAULT_REPEATS = 3
-_UMBRELLA_PASSTHROUGH = {"atomic-structure"}
 
 
 # ---------------------------------------------------------------------------
@@ -48,16 +48,20 @@ _UMBRELLA_PASSTHROUGH = {"atomic-structure"}
 
 @dataclass
 class RepeatResult:
-    triggered_skill: str | None = None
+    triggered_skills: list[str] = field(default_factory=list)
     non_skill_tools: list[str] = field(default_factory=list)
-    umbrella_seen: list[str] = field(default_factory=list)
     duration_ms: int = 0
     turns_used: int = 0
     error: str | None = None
 
     @property
+    def triggered_skill(self) -> str | None:
+        """First skill triggered (backward compat)."""
+        return self.triggered_skills[0] if self.triggered_skills else None
+
+    @property
     def hit(self) -> bool:
-        return self.triggered_skill is not None
+        return len(self.triggered_skills) > 0
 
 
 @dataclass
@@ -70,23 +74,23 @@ class CaseResult:
 
     @property
     def trigger_rate(self) -> float:
-        """Fraction of repeats that triggered the target skill."""
+        """Fraction of repeats that triggered the target skill (anywhere in max_turns)."""
         if not self.repeats:
             return 0.0
-        hits = sum(1 for r in self.repeats if r.triggered_skill == self.skill)
+        hits = sum(1 for r in self.repeats if self.skill in r.triggered_skills)
         return hits / len(self.repeats)
 
     @property
     def any_triggered_target(self) -> bool:
-        return any(r.triggered_skill == self.skill for r in self.repeats)
+        return any(self.skill in r.triggered_skills for r in self.repeats)
 
     @property
     def all_triggered_target(self) -> bool:
-        return all(r.triggered_skill == self.skill for r in self.repeats)
+        return all(self.skill in r.triggered_skills for r in self.repeats)
 
     @property
     def none_triggered_target(self) -> bool:
-        return not self.any_triggered_target
+        return not any(self.skill in r.triggered_skills for r in self.repeats)
 
     @property
     def total_duration_ms(self) -> int:
@@ -135,14 +139,18 @@ class SkillReport:
 
 
 class _SkillTriggerDetector:
-    """Monitors stream events and stops after the first leaf Skill call."""
+    """Monitors stream events and stops when the target skill appears."""
 
-    def __init__(self, cancel_ctrl: CancellationController) -> None:
+    def __init__(self, cancel_ctrl: CancellationController, target_skill: str) -> None:
         self._cancel_ctrl = cancel_ctrl
-        self.triggered_skill: str | None = None
+        self._target_skill = target_skill
+        self.triggered_skills: list[str] = []
         self.non_skill_tools: list[str] = []
-        self.umbrella_seen: list[str] = []
         self.turns_seen: int = 0
+
+    @property
+    def target_hit(self) -> bool:
+        return self._target_skill in self.triggered_skills
 
     def on_event(self, event: Any) -> None:
         if not isinstance(event, ToolCallEvent):
@@ -154,11 +162,9 @@ class _SkillTriggerDetector:
             skill = (
                 event.arguments.get("skill") or event.arguments.get("skill_name") or ""
             ).lstrip("/")
-            if skill in _UMBRELLA_PASSTHROUGH:
-                self.umbrella_seen.append(skill)
-                return
-            self.triggered_skill = skill
-            self._cancel_ctrl.cancel()
+            self.triggered_skills.append(skill)
+            if skill == self._target_skill:
+                self._cancel_ctrl.cancel()
         else:
             self.non_skill_tools.append(event.tool_name)
 
@@ -213,7 +219,7 @@ async def _run_single_repeat(
 
         exp = Exp(exp_config)
         cancel_ctrl = CancellationController()
-        detector = _SkillTriggerDetector(cancel_ctrl)
+        detector = _SkillTriggerDetector(cancel_ctrl, target_skill=target_skill)
 
         t0 = time.monotonic()
         try:
@@ -238,9 +244,8 @@ async def _run_single_repeat(
             except Exception:
                 pass
 
-        result.triggered_skill = detector.triggered_skill
+        result.triggered_skills = detector.triggered_skills
         result.non_skill_tools = detector.non_skill_tools
-        result.umbrella_seen = detector.umbrella_seen
         result.turns_used = max(result.turns_used, detector.turns_seen)
 
     except Exception as e:
@@ -434,8 +439,7 @@ def _write_report(reports: list[SkillReport], output_dir: Path) -> None:
                     "total_duration_ms": r.total_duration_ms,
                     "repeats": [
                         {
-                            "triggered_skill": rep.triggered_skill,
-                            "umbrella_seen": rep.umbrella_seen,
+                            "triggered_skills": rep.triggered_skills,
                             "duration_ms": rep.duration_ms,
                             "turns_used": rep.turns_used,
                             "error": rep.error,
@@ -453,8 +457,7 @@ def _write_report(reports: list[SkillReport], output_dir: Path) -> None:
                     "total_duration_ms": r.total_duration_ms,
                     "repeats": [
                         {
-                            "triggered_skill": rep.triggered_skill,
-                            "umbrella_seen": rep.umbrella_seen,
+                            "triggered_skills": rep.triggered_skills,
                             "duration_ms": rep.duration_ms,
                             "turns_used": rep.turns_used,
                             "error": rep.error,

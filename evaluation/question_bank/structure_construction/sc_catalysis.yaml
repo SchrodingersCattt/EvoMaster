@@ -625,3 +625,182 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
+- id: SC_vasp_002_20260611
+  capability: structure_construction
+  domain: catalysis
+  intent: Construct a WO₂(01-1) surface slab from bulk monoclinic WO₂ using pymatgen, applying a 2×2 supercell
+    expansion and adding 15 Å of vacuum along the z-axis, as described in the W/WO₂ HER catalyst paper.
+  human_prompt_seed: Construct a WO₂(01-1) surface slab from bulk monoclinic WO₂ using pymatgen. Apply
+    a 2×2 supercell expansion of the (01-1) surface and add 15 Å vacuum along the z-direction. Save the
+    resulting POSCAR file as POSCAR_WO2_01-1_slab.vasp in the current working directory.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: poscar_exists
+    value: POSCAR_WO2_01-1_slab.vasp
+  - key: poscar_content
+    value:
+      flags:
+      - must_contain_all
+      tokens:
+      - W
+      - O
+      filename: POSCAR_WO2_01-1_slab.vasp
+  - key: poscar_numeric
+    value:
+      checks:
+      - key: cell_a
+        max: 15.5
+        min: 14.0
+        allow_missing_key: true
+      - key: cell_b
+        max: 12.0
+        min: 10.5
+        allow_missing_key: true
+      - key: num_sites
+        max: 80
+        min: 1
+        allow_missing_key: false
+      filename: POSCAR_WO2_01-1_slab.vasp
+  - key: grounding_source
+    value:
+      filename: POSCAR_WO2_01-1_slab.vasp
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: poscar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] POSCAR_WO2_01-1_slab.vasp file exists.'
+  - id: poscar_content
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+    criterion: '[Must] POSCAR contains both tungsten (W) and oxygen (O) as elements.'
+  - id: poscar_numeric
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+    criterion: '[Suggested] The in-plane lattice parameters after 2×2 supercell expansion are approximately
+      a≈14.76 Å (2×7.38) and b≈11.16 Å (2×5.58). Number of atomic sites is reasonable for a 2×2 WO₂(01-1)
+      slab (1-80 atoms).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+    criterion: '[Must] The slab structure is constructed from bulk monoclinic WO₂ following the paper''s
+      methodology: (01-1) cleavage, 2×2 supercell (lattice params 7.38 Å × 5.58 Å), 15 Å vacuum.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry failed tool calls more than 3 times.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 50000 tokens total.'
+- id: SC_vasp_001_20260611
+  capability: structure_construction
+  domain: catalysis
+  intent: Construct a W(110) surface slab from bulk tungsten (mp-13) using pymatgen, applying a 3×4 supercell
+    expansion and adding 15 Å of vacuum along the z-axis, as described in the W/WO₂ HER catalyst paper.
+  human_prompt_seed: Construct a W(110) surface slab from bulk tungsten (mp-13) using pymatgen. Apply
+    a 3×4 supercell expansion of the (110) surface and add 15 Å vacuum along the z-direction. Save the
+    resulting POSCAR file as POSCAR_W_110_slab.vasp in the current working directory.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: poscar_exists
+    value: POSCAR_W_110_slab.vasp
+  - key: poscar_content
+    value:
+      flags:
+      - must_contain_all
+      tokens:
+      - W
+      filename: POSCAR_W_110_slab.vasp
+  - key: poscar_numeric
+    value:
+      checks:
+      - key: cell_z
+        max: 25.0
+        min: 20.0
+        allow_missing_key: false
+      - key: num_sites
+        max: 50
+        min: 1
+        allow_missing_key: false
+      filename: POSCAR_W_110_slab.vasp
+  - key: grounding_source
+    value:
+      filename: POSCAR_W_110_slab.vasp
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: poscar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] POSCAR_W_110_slab.vasp file exists.'
+  - id: poscar_content
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+    criterion: '[Must] POSCAR contains tungsten (W) as the element.'
+  - id: poscar_numeric
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+    criterion: '[Suggested] The slab c-axis length (total cell length along z, including slab + vacuum)
+      is between 20-25 Å, consistent with a ~6-8 Å W(110) slab plus 15 Å vacuum. Number of atomic sites
+      is reasonable for a 3×4 W(110) slab (1-50 atoms).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+    criterion: '[Must] The slab structure is constructed from bulk W (mp-13) following the paper''s methodology:
+      (110) cleavage, 3×4 supercell, 15 Å vacuum.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry failed tool calls more than 3 times.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 50000 tokens total.'

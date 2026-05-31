@@ -1,12 +1,13 @@
 """Bohrium builtin tool orchestration.
 
 Single tool with action-based dispatch for Bohrium HPC operations.
-This tool handles pure communication: submit, poll (single-query), download,
-kill, list_images, list_machines. All software-specific knowledge lives in
-software skills.
+This tool handles pure communication: submit, poll (short-polling loop),
+download, kill, list_images, list_machines. All software-specific knowledge
+lives in software skills.
 
 Design decisions:
-- poll is single-shot and non-blocking
+- poll uses an internal short-polling loop (up to 60s, ~8s interval) so
+  the agent never needs to sleep between polls
 - submit auto-appends "> log 2>&1" if missing
 - kill is asynchronous; callers must poll to confirm terminal state
 - Credentials resolved via runtime bridge (session > env fallback)
@@ -47,7 +48,6 @@ from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.builtin.bohrium_tool.registry import (
     JobRegistry,
     classify_poll_status,
-    next_interval,
 )
 from matmaster.tools.tool_result import ToolResult, normalize_tool_result
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
@@ -194,7 +194,7 @@ class BohriumTool(BuiltinTool):
             },
             "machine": {
                 "type": "string",
-                "description": "Bohrium machine type. Default: c32_m128_cpu. (submit)",
+                "description": "Bohrium machine type. Default: c64_m256_cpu. (submit)",
             },
             "job_name": {
                 "type": "string",
@@ -275,8 +275,11 @@ class BohriumTool(BuiltinTool):
             'cmd runs in the directory where input files are unpacked — do NOT '
             'prepend "cd <path> &&" or any directory change. '
             'cmd MUST end with "> log 2>&1" (auto-appended if missing).\n'
-            '- **poll**: single-shot job status check, returns current status immediately. '
-            'It does not download artifacts.\n'
+            '- **poll**: check job status with built-in waiting (up to ~60s). '
+            'Internally polls the API every few seconds and returns as soon '
+            'as the job finishes or fails. If still running after ~60s, '
+            'returns the latest status. Call poll again to continue waiting. '
+            'Does not download artifacts.\n'
             '- **download**: download artifacts for a finished or failed job into result_dir. '
             'Use only after poll reports Finished or Failed. Requires result_dir; '
             'retrieves logs and artifacts for analysis.\n'
@@ -294,12 +297,16 @@ class BohriumTool(BuiltinTool):
             require_project=require_project,
         )
 
+    # Short-polling constants
+    _POLL_INTERVAL: ClassVar[int] = 5  # seconds between API checks
+    _POLL_MAX_WAIT: ClassVar[int] = 60  # max seconds to block per poll call
+
     async def execute_with_context(
         self,
         arguments: dict[str, Any],
         exec_ctx: Any,
     ) -> str | ToolResult:
-        """Registry-aware execution with async-side throttle checks."""
+        """Registry-aware execution with internal short-polling for poll action."""
         import asyncio
 
         action = arguments.get("action")
@@ -309,39 +316,8 @@ class BohriumTool(BuiltinTool):
             if runner_state is not None and hasattr(runner_state, "get"):
                 registry = runner_state.get("bohrium_job_registry")
 
-        if action == "poll" and registry is not None:
-            job_id = str(arguments.get("job_id", ""))
-            throttled, remaining = registry.should_throttle(job_id)
-            if throttled:
-                rec = registry.get(job_id)
-                payload: dict[str, Any]
-                if rec is not None and rec.last_result:
-                    try:
-                        payload = json.loads(rec.last_result)
-                    except (json.JSONDecodeError, TypeError):
-                        payload = {}
-                else:
-                    payload = {}
-                payload.update(
-                    {
-                        "success": True,
-                        "job_id": job_id,
-                        "status": payload.get(
-                            "status",
-                            rec.status.title() if rec is not None else "Unknown",
-                        ),
-                        "cached": True,
-                        "seconds_until_fresh": remaining,
-                        "message": (
-                            f"Cached status. Poll again in exactly {remaining}s — "
-                            "do NOT sleep longer."
-                        ),
-                    }
-                )
-                return ToolResult(
-                    status="success",
-                    content=json.dumps(payload, ensure_ascii=False),
-                )
+        if action == "poll":
+            return await self._poll_with_short_loop(arguments, registry)
 
         try:
             result = await asyncio.to_thread(self._execute, arguments)
@@ -350,7 +326,7 @@ class BohriumTool(BuiltinTool):
             return f"Error: {exc}"
 
         normalized = normalize_tool_result(result)
-        if registry is not None and action in ("submit", "poll", "download", "kill"):
+        if registry is not None and action in ("submit", "download", "kill"):
             normalized = self._update_registry(
                 registry,
                 action,
@@ -359,6 +335,65 @@ class BohriumTool(BuiltinTool):
             )
 
         return normalized
+
+    async def _poll_with_short_loop(
+        self,
+        arguments: dict[str, Any],
+        registry: JobRegistry | None,
+    ) -> str | ToolResult:
+        """Internal short-polling loop.
+
+        Queries the API every _POLL_INTERVAL seconds, up to _POLL_MAX_WAIT.
+        Returns as soon as the job reaches a non-running state, or after
+        the max wait window expires (returning the latest Running status).
+        """
+        import asyncio
+        import time as _time
+
+        deadline = _time.monotonic() + self._POLL_MAX_WAIT
+        last_result: str | ToolResult = ToolResult(
+            status="error", content="Poll did not execute"
+        )
+
+        while True:
+            try:
+                result = await asyncio.to_thread(self._execute, arguments)
+            except Exception as exc:
+                self.logger.error(
+                    "Tool %s poll failed: %s", self.name, exc, exc_info=True
+                )
+                return f"Error: {exc}"
+
+            normalized = normalize_tool_result(result)
+            if registry is not None:
+                normalized = self._update_registry(
+                    registry, "poll", arguments, normalized
+                )
+            last_result = normalized
+
+            # Check if job left running state
+            try:
+                data = json.loads(normalized.content)
+            except (json.JSONDecodeError, TypeError):
+                return normalized
+            status_str = str(data.get("status", "")).strip().lower()
+            if status_str not in (
+                "running",
+                "submitted",
+                "pending",
+                "prepared",
+                "scheduling",
+                "uploading",
+                "wait",
+            ):
+                return normalized
+
+            # Still running — sleep and retry if within window
+            if _time.monotonic() + self._POLL_INTERVAL >= deadline:
+                break
+            await asyncio.sleep(self._POLL_INTERVAL)
+
+        return last_result
 
     def _update_registry(
         self,
@@ -392,33 +427,11 @@ class BohriumTool(BuiltinTool):
             registry.update_kill(job_id)
             return result
 
-        if action != "poll":
-            return result
+        if action == "poll":
+            reg_status = classify_poll_status(str(data.get("status", "unknown")))
+            registry.update_poll(job_id, status=reg_status, result=result.content)
 
-        reg_status = classify_poll_status(str(data.get("status", "unknown")))
-        registry.update_poll(job_id, status=reg_status, result=result.content)
-
-        if reg_status != "running":
-            return result
-
-        rec = registry.get(job_id)
-        if rec is None:
-            return result
-
-        interval = next_interval(rec.poll_count - 1)
-        data["next_check_seconds"] = interval
-        data["message"] = (
-            f'Job is {data.get("status", "Running")}. '
-            f"Poll again in exactly {interval}s — do NOT sleep longer."
-        )
-        updated = ToolResult(
-            status=result.status,
-            content=json.dumps(data, ensure_ascii=False),
-            payload=result.payload,
-            meta=result.meta,
-        )
-        rec.last_result = updated.content
-        return updated
+        return result
 
     def _log_request_context(
         self,
@@ -478,7 +491,7 @@ class BohriumTool(BuiltinTool):
         if not cmd:
             return ToolResult(status="error", content="Missing required parameter: cmd")
 
-        machine = args.get("machine", "c32_m128_cpu")
+        machine = args.get("machine", "c64_m256_cpu")
         job_name = args.get("job_name", "matmaster-job")
         disk_size = int(args.get("disk_size", 50))
 

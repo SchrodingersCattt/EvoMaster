@@ -23,7 +23,7 @@ which mpirun && mpirun --version 2>&1 | head -3
 ## Submit
 
 ```
-Bohrium(action="submit", image="<vasp_image>", machine="c32_m128_cpu",
+Bohrium(action="submit", image="<vasp_image>", machine="c64_m256_cpu",
         input_dir="<probe_dir>", cmd="bash probe.sh > log 2>&1")
 ```
 
@@ -41,7 +41,7 @@ Poll immediately — no sleep needed, finishes in seconds.
 ## Standard cmd Template (after probe)
 
 ```bash
-source /opt/intel/oneapi/setvars.sh > /dev/null 2>&1 && ulimit -s unlimited && OMP_NUM_THREADS=1 mpirun -np 16 vasp_std > log 2>&1
+source /opt/intel/oneapi/setvars.sh > /dev/null 2>&1 && ulimit -s unlimited && OMP_NUM_THREADS=1 mpirun -np 32 vasp_std > log 2>&1
 ```
 
 Adjust binary (`vasp_gam`/`vasp_ncl`) and `-np` based on task and probe results.

@@ -458,3 +458,224 @@ questions:
     criterion: Token usage within budget.
     axis: efficiency
     verify: token_budget
+- id: WO_seg_energy_isif_001_20260527
+  capability: workflow_orchestration
+  domain: alloy
+  intent: Test whether agent correctly chooses cell-fixed ionic relaxation (ISIF=2)
+    for doped interface models in a segregation energy workflow, rather than full cell
+    relaxation (ISIF=3) which introduces inconsistent strain artifacts between models.
+  human_prompt_seed: '帮我设计一个 VASP 计算方案，计算 Sn 在 BCC-Fe/FCC-Fe (K-S取向) 界面处的偏聚能。
+
+    已有模型：84原子周期性界面超胞（无真空层），x/y方向有~4%晶格失配。
+
+    需要的计算模型：
+
+    1. interface_clean（纯Fe界面）
+
+    2. interface_Sn（Sn替换界面处一个Fe）
+
+    3. bulk_clean（纯BCC-Fe体相参考）
+
+    4. bulk_Sn（Sn替换体相一个Fe）
+
+    请输出每个模型的 INCAR 关键参数（特别是 ISIF、IBRION、NSW、ENCUT、ISPIN），并说明参数选择的理由。
+
+    '
+  tags:
+  - eng_vasp
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 15
+  - key: token_budget_total
+    value:
+      max: 20000
+  scoring_checklist:
+  - id: isif_interface_doped
+    criterion: Agent sets ISIF=2 (ions only) for the doped interface model
+      (interface_Sn), OR explicitly states that cell dimensions must be kept
+      consistent with the clean interface to ensure energy comparability in
+      segregation energy calculations. ISIF=3 for doped models is WRONG because
+      different cell relaxation between clean and doped introduces strain artifacts
+      into the segregation energy difference.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: isif_clean_rationale
+    criterion: Agent explains the two-step strategy for the clean interface (ISIF=3
+      first to get equilibrium cell, then use that fixed cell for all doped models),
+      OR directly sets ISIF=2 for all interface models with a pre-optimized cell.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: consistent_cell_principle
+    criterion: Agent explicitly states the principle that all models in a segregation
+      energy calculation must use the same cell dimensions to ensure energy
+      differences are physically meaningful and not contaminated by strain.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: spin_polarized
+    criterion: Agent sets ISPIN=2 for Fe-based magnetic system.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+- id: WF_vasp_005_20260508
+  capability: workflow_orchestration
+  domain: alloy
+  intent: Set up a two-stage VASP geometry optimization workflow (PREC=Low then PREC=Normal) for a 128-atom
+    NbTa BCC solid solution alloy, with all input files organized in separate stage directories.
+  human_prompt_seed: 'Set up a two-stage VASP geometry optimization workflow for the provided 128-atom
+    NbTa alloy structure. Stage 1: run geometry optimization with PREC=Low. Stage 2: use the CONTCAR from
+    stage 1 as input, run geometry optimization with PREC=Normal. Both stages use GGA-PBE, ENCUT=350,
+    ISMEAR=1, SIGMA=0.2, EDIFF=1E-4, EDIFFG=-0.01, 2x2x2 k-mesh. Generate all required input files (INCAR,
+    POSCAR, POTCAR, KPOINTS) for both stages in separate directories `stage1_low` and `stage2_normal`.'
+  tags:
+  - eng_vasp
+  data_files:
+  - key: poscar_initial
+    path: POSCAR_NbTa_initial
+    oss_url: ''
+    description: Initial POSCAR for a 128-atom NbTa BCC solid solution alloy (randomized atomic positions
+      before optimization).
+  - key: potcar
+    path: POTCAR
+    oss_url: ''
+    description: VASP pseudopotential files for Nb and Ta (POTCAR).
+  - key: kpoints
+    path: KPOINTS
+    oss_url: ''
+    description: KPOINTS file specifying 2x2x2 Monkhorst-Pack mesh.
+  reference_answers:
+  - key: artifact_stage1_incar
+    value: stage1_low/INCAR
+  - key: artifact_stage2_incar
+    value: stage2_normal/INCAR
+  - key: artifact_stage1_poscar
+    value: stage1_low/POSCAR
+  - key: artifact_stage2_poscar
+    value: stage2_normal/POSCAR
+  - key: artifact_stage1_kpoints
+    value: stage1_low/KPOINTS
+  - key: artifact_stage2_kpoints
+    value: stage2_normal/KPOINTS
+  - key: stage1_prec_low
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - PREC = Low
+      filename: stage1_low/INCAR
+  - key: stage2_prec_normal
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - PREC = Normal
+      filename: stage2_normal/INCAR
+  - key: common_params
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - GGA = PE
+      - ENCUT = 350
+      - ISMEAR = 1
+      - SIGMA = 0.2
+      - EDIFF = 1E-4
+      - EDIFFG = -0.01
+      filename: stage1_low/INCAR
+  - key: grounding_source
+    value:
+      filename: stage1_low/INCAR
+  - key: turn_budget
+    value:
+      max: 25
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_stage1_incar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] stage1_low/INCAR exists'
+  - id: artifact_stage2_incar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] stage2_normal/INCAR exists'
+  - id: artifact_stage1_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] stage1_low/POSCAR exists'
+  - id: artifact_stage2_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] stage2_normal/POSCAR exists'
+  - id: artifact_stage1_kpoints
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] stage1_low/KPOINTS exists'
+  - id: artifact_stage2_kpoints
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] stage2_normal/KPOINTS exists'
+  - id: stage1_prec_low
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Stage 1 INCAR has PREC = Low'
+  - id: stage2_prec_normal
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Stage 2 INCAR has PREC = Normal'
+  - id: common_params
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR contains all common parameters: GGA=PE, ENCUT=350, ISMEAR=1, SIGMA=0.2, EDIFF=1E-4,
+      EDIFFG=-0.01'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Workflow setup is grounded in the source paper''s two-stage optimization methodology'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Variable] Turn budget: 25'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Variable] No retries allowed'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Variable] Duration budget: 600 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Variable] Token budget: 80000'
