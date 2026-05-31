@@ -14,7 +14,10 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from matmaster.providers.openai_provider import OpenAIProvider
+from matmaster.providers.openai_provider import (
+    AnthropicPromptCacheOptions,
+    OpenAIProvider,
+)
 from matmaster.types.errors import LLMError
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import LLMResponse, StreamChunk
@@ -255,6 +258,111 @@ class TestChatContent:
         result = await provider.chat([{"role": "user", "content": "Hi"}])
 
         assert result.finish_reason == "stop"
+
+
+class TestAnthropicPromptCacheRequestPayload:
+    """Anthropic prompt cache is applied only at provider request boundary."""
+
+    def _provider(self) -> OpenAIProvider:
+        return OpenAIProvider(
+            model="claude-opus-4-6",
+            api_key="sk-test",
+            prompt_cache_options=AnthropicPromptCacheOptions(
+                system_prompt_breakpoint=True,
+                cache_control={"type": "ephemeral"},
+            ),
+        )
+
+    async def test_chat_applies_system_cache_breakpoint(self) -> None:
+        provider = self._provider()
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create.return_value = _make_mock_completion()
+        provider._client = mock_client
+
+        await provider.chat(
+            [
+                {"role": "system", "content": "system prompt"},
+                {"role": "user", "content": "Hi"},
+            ]
+        )
+
+        call_kwargs = mock_client.chat.completions.create.await_args.kwargs
+        assert call_kwargs["messages"][0] == {
+            "role": "system",
+            "content": [
+                {
+                    "type": "text",
+                    "text": "system prompt",
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ],
+        }
+        assert call_kwargs["messages"][1] == {"role": "user", "content": "Hi"}
+
+    async def test_chat_stream_applies_system_cache_breakpoint(self) -> None:
+        provider = self._provider()
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create.return_value = _async_iter(
+            [_make_stream_chunk(content="ok", finish_reason="stop")]
+        )
+        provider._client = mock_client
+
+        chunks = [
+            chunk
+            async for chunk in provider.chat_stream(
+                [
+                    {"role": "system", "content": "system prompt"},
+                    {"role": "user", "content": "Hi"},
+                ]
+            )
+        ]
+
+        assert chunks[0].content == "ok"
+        call_kwargs = mock_client.chat.completions.create.await_args.kwargs
+        assert call_kwargs["messages"][0]["content"][0]["cache_control"] == {
+            "type": "ephemeral"
+        }
+
+    async def test_prompt_cache_does_not_mutate_original_messages(self) -> None:
+        provider = self._provider()
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create.return_value = _make_mock_completion()
+        provider._client = mock_client
+        messages = [
+            {"role": "system", "content": "system prompt"},
+            {"role": "user", "content": "Hi"},
+        ]
+
+        await provider.chat(messages)
+
+        assert messages == [
+            {"role": "system", "content": "system prompt"},
+            {"role": "user", "content": "Hi"},
+        ]
+
+    async def test_prompt_cache_requires_system_message(self) -> None:
+        provider = self._provider()
+        provider._client = AsyncMock()
+
+        with pytest.raises(LLMError) as exc_info:
+            await provider.chat([{"role": "user", "content": "Hi"}])
+
+        assert exc_info.value.retryable is False
+        assert exc_info.value.error_category == "payload_validation"
+        assert "no system message" in str(exc_info.value)
+
+    async def test_prompt_cache_requires_non_empty_string_system_content(
+        self,
+    ) -> None:
+        provider = self._provider()
+        provider._client = AsyncMock()
+
+        with pytest.raises(LLMError) as exc_info:
+            await provider.chat([{"role": "system", "content": ""}])
+
+        assert exc_info.value.retryable is False
+        assert exc_info.value.error_category == "payload_validation"
+        assert "non-empty string system prompt" in str(exc_info.value)
 
 
 # -- chat_stream() response mapping ---------------------------------------

@@ -9,6 +9,7 @@ Retry strategy is handled by Kernel._call_llm_streaming(), not by the provider.
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -39,6 +40,14 @@ class _StreamToolCallState:
 
     def has_payload(self) -> bool:
         return bool(self.arguments)
+
+
+@dataclass(frozen=True)
+class AnthropicPromptCacheOptions:
+    """Provider-local Anthropic prompt cache controls."""
+
+    system_prompt_breakpoint: bool
+    cache_control: dict[str, str]
 
 
 def _is_complete_json_document(raw: str) -> bool:
@@ -251,6 +260,7 @@ class OpenAIProvider:
         stream_idle_timeout: float | None = None,
         max_retries: int = 3,
         retry_delay: float = 1.0,
+        prompt_cache_options: AnthropicPromptCacheOptions | None = None,
         extra_kwargs: dict[str, Any] | None = None,
     ) -> None:
         self._model = model
@@ -263,6 +273,7 @@ class OpenAIProvider:
         self._stream_idle_timeout = stream_idle_timeout
         self._max_retries = max_retries
         self._retry_delay = retry_delay
+        self._prompt_cache_options = prompt_cache_options
         self._extra_kwargs = extra_kwargs or {}
         self._client: openai.AsyncOpenAI | None = None
         self._enter_count: int = 0
@@ -316,6 +327,40 @@ class OpenAIProvider:
                 "'async with provider:'"
             )
         return self._client
+
+    def _prepare_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Return provider request messages with prompt-cache markers applied."""
+        options = self._prompt_cache_options
+        if options is None or not options.system_prompt_breakpoint:
+            return messages
+
+        from matmaster.types.errors import LLMError
+
+        prepared = copy.deepcopy(messages)
+        for message in prepared:
+            if message.get("role") != "system":
+                continue
+            content = message.get("content")
+            if not isinstance(content, str) or not content.strip():
+                raise LLMError(
+                    "anthropic prompt cache requires a non-empty string system prompt",
+                    retryable=False,
+                    error_category="payload_validation",
+                )
+            message["content"] = [
+                {
+                    "type": "text",
+                    "text": content,
+                    "cache_control": dict(options.cache_control),
+                }
+            ]
+            return prepared
+
+        raise LLMError(
+            "anthropic prompt cache enabled but no system message was found",
+            retryable=False,
+            error_category="payload_validation",
+        )
 
     @property
     def stream_timeout(self) -> float | None:
@@ -415,7 +460,7 @@ class OpenAIProvider:
         client = self._ensure_client()
         kwargs: dict[str, Any] = {
             "model": self._model,
-            "messages": messages,
+            "messages": self._prepare_messages(messages),
             "temperature": self._temperature,
         }
         if self._max_tokens is not None:
@@ -488,7 +533,7 @@ class OpenAIProvider:
         client = self._ensure_client()
         kwargs: dict[str, Any] = {
             "model": self._model,
-            "messages": messages,
+            "messages": self._prepare_messages(messages),
             "temperature": self._temperature,
             "stream": True,
         }
