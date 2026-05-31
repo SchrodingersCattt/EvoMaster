@@ -171,9 +171,6 @@ class LLMProfileConfig(BaseModel):
         elif protocol == "openai_reasoning_effort" and effort:
             out["reasoning_effort"] = effort
 
-        if self.prompt_cache is not None and self.prompt_cache.automatic:
-            extra_body["cache_control"] = self.prompt_cache.cache_control()
-
         if extra_body:
             out["extra_body"] = extra_body
 

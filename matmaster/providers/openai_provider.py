@@ -48,6 +48,8 @@ class AnthropicPromptCacheOptions:
 
     system_prompt_breakpoint: bool
     cache_control: dict[str, str]
+    automatic: bool = False
+    max_breakpoints: int = 4
 
 
 def _is_complete_json_document(raw: str) -> bool:
@@ -343,36 +345,74 @@ class OpenAIProvider:
     def _prepare_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
         """Return provider request messages with prompt-cache markers applied."""
         options = self._prompt_cache_options
-        if options is None or not options.system_prompt_breakpoint:
+        if options is None or (
+            not options.system_prompt_breakpoint and not options.automatic
+        ):
             return messages
 
         from matmaster.types.errors import LLMError
 
         prepared = copy.deepcopy(messages)
-        for message in prepared:
-            if message.get("role") != "system":
-                continue
+        applied = 0
+
+        def add_cache_control(message: dict[str, Any]) -> bool:
             content = message.get("content")
-            if not isinstance(content, str) or not content.strip():
+            if isinstance(content, str):
+                if not content.strip():
+                    return False
+                message["content"] = [
+                    {
+                        "type": "text",
+                        "text": content,
+                        "cache_control": dict(options.cache_control),
+                    }
+                ]
+                return True
+            if not isinstance(content, list):
+                return False
+            for part in reversed(content):
+                if (
+                    isinstance(part, dict)
+                    and part.get("type") == "text"
+                    and isinstance(part.get("text"), str)
+                    and part.get("text", "").strip()
+                ):
+                    part["cache_control"] = dict(options.cache_control)
+                    return True
+            return False
+
+        if options.system_prompt_breakpoint:
+            for message in prepared:
+                if message.get("role") != "system":
+                    continue
+                if not add_cache_control(message):
+                    raise LLMError(
+                        "anthropic prompt cache requires a non-empty string system prompt",
+                        retryable=False,
+                        error_category="payload_validation",
+                    )
+                applied += 1
+                break
+            else:
                 raise LLMError(
-                    "anthropic prompt cache requires a non-empty string system prompt",
+                    "anthropic prompt cache enabled but no system message was found",
                     retryable=False,
                     error_category="payload_validation",
                 )
-            message["content"] = [
-                {
-                    "type": "text",
-                    "text": content,
-                    "cache_control": dict(options.cache_control),
-                }
-            ]
-            return prepared
 
-        raise LLMError(
-            "anthropic prompt cache enabled but no system message was found",
-            retryable=False,
-            error_category="payload_validation",
-        )
+        if options.automatic:
+            available = max(0, options.max_breakpoints - applied)
+            if available:
+                user_indices = [
+                    idx
+                    for idx, message in enumerate(prepared)
+                    if message.get("role") == "user"
+                ][-2:]
+                for idx in reversed(user_indices[-available:]):
+                    if add_cache_control(prepared[idx]):
+                        applied += 1
+
+        return prepared
 
     @property
     def stream_timeout(self) -> float | None:

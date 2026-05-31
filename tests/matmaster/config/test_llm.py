@@ -176,7 +176,7 @@ class TestLLMProfileConfigMethods:
             },
         }
 
-    def test_build_extra_kwargs_anthropic_prompt_cache_merges_extra_body(
+    def test_build_extra_kwargs_anthropic_prompt_cache_does_not_emit_cache_control(
         self,
     ) -> None:
         p = LLMProfileConfig(
@@ -197,11 +197,10 @@ class TestLLMProfileConfigMethods:
             "extra_body": {
                 "thinking": {"type": "adaptive"},
                 "output_config": {"effort": "max"},
-                "cache_control": {"type": "ephemeral"},
             },
         }
 
-    def test_build_extra_kwargs_prompt_cache_without_thinking_effort(
+    def test_build_extra_kwargs_prompt_cache_without_thinking_effort_returns_none(
         self,
     ) -> None:
         p = LLMProfileConfig(
@@ -216,11 +215,7 @@ class TestLLMProfileConfigMethods:
 
         result = p.build_extra_kwargs()
 
-        assert result == {
-            "extra_body": {
-                "cache_control": {"type": "ephemeral", "ttl": "1h"},
-            },
-        }
+        assert result is None
 
     def test_build_extra_kwargs_prompt_cache_disabled_automatic(
         self,

@@ -300,13 +300,15 @@ class TestChatContent:
 class TestAnthropicPromptCacheRequestPayload:
     """Anthropic prompt cache is applied only at provider request boundary."""
 
-    def _provider(self) -> OpenAIProvider:
+    def _provider(self, *, automatic: bool = False, max_breakpoints: int = 4) -> OpenAIProvider:
         return OpenAIProvider(
             model="claude-opus-4-6",
             api_key="sk-test",
             prompt_cache_options=AnthropicPromptCacheOptions(
                 system_prompt_breakpoint=True,
                 cache_control={"type": "ephemeral"},
+                automatic=automatic,
+                max_breakpoints=max_breakpoints,
             ),
         )
 
@@ -335,6 +337,60 @@ class TestAnthropicPromptCacheRequestPayload:
             ],
         }
         assert call_kwargs["messages"][1] == {"role": "user", "content": "Hi"}
+
+    async def test_chat_applies_automatic_user_cache_breakpoints(self) -> None:
+        provider = self._provider(automatic=True)
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create.return_value = _make_mock_completion()
+        provider._client = mock_client
+
+        await provider.chat(
+            [
+                {"role": "system", "content": "system prompt"},
+                {"role": "user", "content": "old"},
+                {"role": "assistant", "content": "old answer"},
+                {"role": "user", "content": "previous"},
+                {"role": "assistant", "content": "previous answer"},
+                {"role": "user", "content": "current"},
+            ]
+        )
+
+        sent = mock_client.chat.completions.create.await_args.kwargs["messages"]
+        assert sent[1] == {"role": "user", "content": "old"}
+        assert sent[3]["content"] == [
+            {
+                "type": "text",
+                "text": "previous",
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
+        assert sent[5]["content"] == [
+            {
+                "type": "text",
+                "text": "current",
+                "cache_control": {"type": "ephemeral"},
+            }
+        ]
+
+    async def test_prompt_cache_respects_max_breakpoints(self) -> None:
+        provider = self._provider(automatic=True, max_breakpoints=2)
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create.return_value = _make_mock_completion()
+        provider._client = mock_client
+
+        await provider.chat(
+            [
+                {"role": "system", "content": "system prompt"},
+                {"role": "user", "content": "previous"},
+                {"role": "assistant", "content": "previous answer"},
+                {"role": "user", "content": "current"},
+            ]
+        )
+
+        sent = mock_client.chat.completions.create.await_args.kwargs["messages"]
+        assert sent[0]["content"][0]["cache_control"] == {"type": "ephemeral"}
+        assert sent[1] == {"role": "user", "content": "previous"}
+        assert sent[3]["content"][0]["cache_control"] == {"type": "ephemeral"}
 
     async def test_chat_stream_applies_system_cache_breakpoint(self) -> None:
         provider = self._provider()

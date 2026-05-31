@@ -65,6 +65,7 @@ def _build_anthropic_prompt_cache_options(
     return AnthropicPromptCacheOptions(
         system_prompt_breakpoint=prompt_cache.system_prompt_breakpoint,
         cache_control=prompt_cache.cache_control(),
+        automatic=prompt_cache.automatic,
     )
 
 
