@@ -121,9 +121,7 @@ def _build_completion_card(
     usage_rows = format_usage_rows(usage_summary)
     if usage_rows:
         try:
-            anchor = next(
-                i for i, (label, _) in enumerate(rows) if label == '运行时间'
-            )
+            anchor = next(i for i, (label, _) in enumerate(rows) if label == '运行时间')
             insert_at = anchor + 1
         except StopIteration:
             insert_at = len(rows)
@@ -161,14 +159,10 @@ def _send_completion_email(
     except (ValueError, TypeError):
         submitted_at_str = submitted_at_raw or ''
     result_status = (
-        '成功'
-        if run_success
-        else ('已取消' if fail_reason == 'cancelled' else '失败')
+        '成功' if run_success else ('已取消' if fail_reason == 'cancelled' else '失败')
     )
     fail_reason_for_email = (
-        fail_reason_str
-        if not run_success and fail_reason_str != 'cancelled'
-        else ''
+        fail_reason_str if not run_success and fail_reason_str != 'cancelled' else ''
     )
     if len(fail_reason_for_email) > 500:
         fail_reason_for_email = fail_reason_for_email[:500] + '…'

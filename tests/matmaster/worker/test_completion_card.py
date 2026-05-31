@@ -166,9 +166,7 @@ def test_email_failure_passes_reason() -> None:
 
 def test_email_cancelled_clears_reason() -> None:
     with patch("src.worker.agent_worker.send_session_complete_email_async") as m:
-        _email(
-            run_success=False, fail_reason="cancelled", fail_reason_str="cancelled"
-        )
+        _email(run_success=False, fail_reason="cancelled", fail_reason_str="cancelled")
         _args, kwargs = m.call_args
         assert kwargs["result_status"] == "已取消"
         assert kwargs["fail_reason"] == ""
