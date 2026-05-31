@@ -68,7 +68,14 @@ def format_usage_rows(usage_summary: dict | None) -> list[tuple[str, str]]:
         f'输出 {_fmt_tokens(completion)}',
     ]
     if cache_read:
-        detail_parts.append(f'缓存命中 {_fmt_tokens(cache_read)}')
+        # 命中率分母用输入（prompt）：缓存命中是输入 token 中复用缓存的部分
+        if prompt > 0:
+            hit_pct = cache_read / prompt * 100
+            detail_parts.append(
+                f'缓存命中 {_fmt_tokens(cache_read)} ({hit_pct:.1f}%)'
+            )
+        else:
+            detail_parts.append(f'缓存命中 {_fmt_tokens(cache_read)}')
     if cache_write:
         detail_parts.append(f'缓存写入 {_fmt_tokens(cache_write)}')
     if reasoning:
