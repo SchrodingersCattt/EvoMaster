@@ -311,17 +311,14 @@ class ChatSessionsService:
         """
         return self.table.reset_all_active_to_idle()
 
-    def get_session_status(self, session_id: str) -> str:
+    def _reconcile_waiting_status(self, session_id: str, raw_status: object) -> str:
+        """归一化会话状态，并校正 waiting。
+
+        DB=waiting 但 Redis 已无 queued 标记时：若存在存活的 run_owner（worker 已接手）
+        则视为 active 不重置；否则重置 DB 为 idle 并返回 idle，避免「还在跑却显示 idle」
+        或「已结束仍卡 waiting」。
         """
-        获取会话运行状态（来自 DB，部署/重启后与 reset_stale_active_sessions 一致）。
-        用于流开头推送 session_status 事件，便于前端在重连后根据 idle 结束“未结束的 stream”状态。
-        waiting=已入队未接手；若 DB 为 waiting 但 Redis 已无 queued 标记，则视为 idle 并重置 DB；
-        若此时已有 run_owner 且存活，说明 worker 已接手，不重置并返回 active，避免「还在跑却显示 idle」。
-        """
-        row = self.table.get_session(session_id)
-        if not row:
-            return "idle"
-        status = str(row.get("status") or "idle").strip() or "idle"
+        status = str(raw_status or "idle").strip() or "idle"
         if (
             status == "waiting"
             and REDIS_URL
@@ -335,6 +332,18 @@ class ChatSessionsService:
             return "idle"
         return status
 
+    def get_session_status(self, session_id: str) -> str:
+        """
+        获取会话运行状态（来自 DB，部署/重启后与 reset_stale_active_sessions 一致）。
+        用于流开头推送 session_status 事件，便于前端在重连后根据 idle 结束“未结束的 stream”状态。
+        waiting=已入队未接手；若 DB 为 waiting 但 Redis 已无 queued 标记，则视为 idle 并重置 DB；
+        若此时已有 run_owner 且存活，说明 worker 已接手，不重置并返回 active，避免「还在跑却显示 idle」。
+        """
+        row = self.table.get_session(session_id)
+        if not row:
+            return "idle"
+        return self._reconcile_waiting_status(session_id, row.get("status"))
+
     def get_session_status_payload(self, session_id: str) -> dict:
         """
         获取会话状态及关联信息，用于 session_status 事件（status、last_task_id 等）。
@@ -346,19 +355,7 @@ class ChatSessionsService:
         status = "idle"
         last_task_id = None
         if row:
-            status = str(row.get("status") or "idle").strip() or "idle"
-            if (
-                status == "waiting"
-                and REDIS_URL
-                and not get_redis_dao().is_session_run_queued(session_id)
-            ):
-                registry = get_worker_registry_service()
-                owner = registry.get_session_run_owner(session_id)
-                if owner and registry.is_worker_alive(owner):
-                    status = "active"
-                else:
-                    self.reset_session_status_to_idle_in_db(session_id)
-                    status = "idle"
+            status = self._reconcile_waiting_status(session_id, row.get("status"))
             lt = row.get("last_task_id")
             if lt is not None and str(lt).strip():
                 last_task_id = str(lt).strip()
