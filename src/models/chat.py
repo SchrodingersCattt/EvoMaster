@@ -305,7 +305,7 @@ class SessionDirectorySetRequest(BaseModel):
 
 
 class SessionTitleData(BaseModel):
-    """GET? / PUT /chat/sessions/{session_id}/title 的 data 字段"""
+    """PUT /chat/sessions/{session_id}/title 的 data 字段"""
 
     id: str = Field(description="会话 ID")
     title: str | None = Field(

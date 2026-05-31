@@ -32,6 +32,22 @@ def _normalize_session_title_cell(raw: object) -> str | None:
     return s or None
 
 
+def session_row_to_item(row: dict) -> dict:
+    """把会话表行映射为对外列表项 DTO。
+
+    扁平列表与按目录分组列表共用：两类查询行都含 session_id、project_id、
+    status、session_title、history_length、first_message 等列。
+    """
+    return {
+        "id": row["session_id"],
+        "project_id": row.get("project_id"),
+        "status": row.get("status", "idle"),
+        "title": _normalize_session_title_cell(row.get("session_title")),
+        "history_length": int(row.get("history_length") or 0),
+        "first_user_message": _parse_first_message_cell(row.get("first_message")),
+    }
+
+
 def _dir_key_expr(alias: str = "s") -> str:
     """SQL 表达式：与业务层 norm_dir 一致，空/NULL → __UNSET__。"""
     return f"COALESCE(NULLIF(TRIM({alias}.session_directory), ''), '__UNSET__')"
@@ -397,25 +413,7 @@ class ChatSessionsTable(BaseTable):
                 params.extend([limit, offset])
                 cursor.execute(sql, tuple(params))
                 results = cursor.fetchall()
-                sessions = []
-                for row in results:
-                    first_user_message = _parse_first_message_cell(
-                        row.get("first_message")
-                    )
-
-                    sessions.append(
-                        {
-                            "id": row["session_id"],
-                            "project_id": row.get("project_id"),
-                            "status": row.get("status", "idle"),
-                            "title": _normalize_session_title_cell(
-                                row.get("session_title")
-                            ),
-                            "history_length": row["history_length"],
-                            "first_user_message": first_user_message,
-                        }
-                    )
-                return sessions
+                return [session_row_to_item(row) for row in results]
 
     def aggregate_session_directory_stats(
         self,

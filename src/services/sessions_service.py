@@ -9,9 +9,8 @@ from functools import lru_cache
 from src.dao.chat_sessions_table import (
     WORKSPACE_PREF_UNSET,
     ChatSessionsTable,
-    _normalize_session_title_cell,
-    _parse_first_message_cell,
     get_chat_sessions_table,
+    session_row_to_item,
 )
 from src.dao.redis_dao import get_redis_dao
 from src.services.tools_server_allowlist import is_user_in_admin_allowlist
@@ -45,17 +44,6 @@ def _decode_session_list_cursor(token: str) -> tuple[datetime, str] | None:
         return cur_dt, i
     except Exception:
         return None
-
-
-def _session_row_to_item(row: dict) -> dict:
-    return {
-        "id": row["session_id"],
-        "project_id": row.get("project_id"),
-        "status": row.get("status", "idle"),
-        "title": _normalize_session_title_cell(row.get("session_title")),
-        "history_length": int(row.get("history_length") or 0),
-        "first_user_message": _parse_first_message_cell(row.get("first_message")),
-    }
 
 
 class RedisStopSubscriber:
@@ -247,7 +235,7 @@ class ChatSessionsService:
                 ),
                 reverse=True,
             )
-            sessions = [_session_row_to_item(r) for r in raw_list]
+            sessions = [session_row_to_item(r) for r in raw_list]
             has_more = session_count > len(sessions)
             next_cursor = None
             if has_more and raw_list:
@@ -298,7 +286,7 @@ class ChatSessionsService:
         has_more = len(rows) > cap
         if has_more:
             rows = rows[:cap]
-        sessions = [_session_row_to_item(r) for r in rows]
+        sessions = [session_row_to_item(r) for r in rows]
         next_cursor = None
         if has_more and rows:
             last = rows[-1]
