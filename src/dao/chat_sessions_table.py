@@ -24,6 +24,30 @@ def _parse_first_message_cell(raw: object) -> str | None:
         return str(raw) if raw else None
 
 
+def _normalize_session_title_cell(raw: object) -> str | None:
+    """session_title 列归一化：去空白，空串视为未设置（None）。"""
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    return s or None
+
+
+def session_row_to_item(row: dict) -> dict:
+    """把会话表行映射为对外列表项 DTO。
+
+    扁平列表与按目录分组列表共用：两类查询行都含 session_id、project_id、
+    status、session_title、history_length、first_message 等列。
+    """
+    return {
+        "id": row["session_id"],
+        "project_id": row.get("project_id"),
+        "status": row.get("status", "idle"),
+        "title": _normalize_session_title_cell(row.get("session_title")),
+        "history_length": int(row.get("history_length") or 0),
+        "first_user_message": _parse_first_message_cell(row.get("first_message")),
+    }
+
+
 def _dir_key_expr(alias: str = "s") -> str:
     """SQL 表达式：与业务层 norm_dir 一致，空/NULL → __UNSET__。"""
     return f"COALESCE(NULLIF(TRIM({alias}.session_directory), ''), '__UNSET__')"
@@ -78,7 +102,8 @@ class ChatSessionsTable(BaseTable):
                 cursor.execute(
                     f"""
                     SELECT session_id, user_id, org_id, project_id, session_directory,
-                           chat_mode, status, is_shared, last_task_id, created_at, updated_at
+                           chat_mode, session_title, status, is_shared, last_task_id,
+                           created_at, updated_at
                     FROM {self.table_name}
                     WHERE session_id = %s
                     """,
@@ -165,26 +190,18 @@ class ChatSessionsTable(BaseTable):
         if not sets:
             return True
         params.extend([session_id, user_id])
-        try:
-            with self.get_connection() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute(
-                        f"""
-                        UPDATE {self.table_name}
-                        SET {', '.join(sets)}, updated_at = NOW()
-                        WHERE session_id = %s AND user_id = %s
-                        """,
-                        tuple(params),
-                    )
-                    conn.commit()
-                    return cursor.rowcount > 0
-        except Error as e:
-            logger.warning(
-                "update_session_workspace_prefs failed session_id=%s: %s",
-                session_id,
-                e,
-            )
-            return False
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    UPDATE {self.table_name}
+                    SET {', '.join(sets)}, updated_at = NOW()
+                    WHERE session_id = %s AND user_id = %s
+                    """,
+                    tuple(params),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
 
     def set_session_directory(
         self,
@@ -199,6 +216,30 @@ class ChatSessionsTable(BaseTable):
             directory=directory,
             chat_mode=WORKSPACE_PREF_UNSET,
         )
+
+    def set_session_title(
+        self,
+        session_id: str,
+        user_id: str,
+        title: str | None,
+    ) -> bool:
+        """更新会话自定义标题。仅所有者可写；title 为 None 或空串则置为 NULL（回退 first_user_message）。"""
+        norm: str | None = None
+        if title is not None:
+            s = str(title).strip()
+            norm = s if s else None
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    UPDATE {self.table_name}
+                    SET session_title = %s, updated_at = NOW()
+                    WHERE session_id = %s AND user_id = %s
+                    """,
+                    (norm, session_id, user_id),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
 
     def set_session_status(self, session_id: str, status: str) -> bool:
         """设置会话状态：idle=空闲/已结束，active=运行中，waiting=已入队等待 worker 接手"""
@@ -337,6 +378,7 @@ class ChatSessionsTable(BaseTable):
                     SELECT s.session_id,
                            s.project_id,
                            s.status,
+                           s.session_title,
                            (SELECT COUNT(*)
                             FROM evo_chat_events e_cnt
                             WHERE e_cnt.session_id = s.session_id) as history_length,
@@ -355,22 +397,7 @@ class ChatSessionsTable(BaseTable):
                 params.extend([limit, offset])
                 cursor.execute(sql, tuple(params))
                 results = cursor.fetchall()
-                sessions = []
-                for row in results:
-                    first_user_message = _parse_first_message_cell(
-                        row.get("first_message")
-                    )
-
-                    sessions.append(
-                        {
-                            "id": row["session_id"],
-                            "project_id": row.get("project_id"),
-                            "status": row.get("status", "idle"),
-                            "history_length": row["history_length"],
-                            "first_user_message": first_user_message,
-                        }
-                    )
-                return sessions
+                return [session_row_to_item(row) for row in results]
 
     def aggregate_session_directory_stats(
         self,
@@ -421,6 +448,7 @@ class ChatSessionsTable(BaseTable):
                            t.project_id,
                            t.status,
                            t.session_directory,
+                           t.session_title,
                            t.updated_at,
                            t.history_length,
                            t.first_message,
@@ -431,6 +459,7 @@ class ChatSessionsTable(BaseTable):
                                s.project_id,
                                s.status,
                                s.session_directory,
+                               s.session_title,
                                s.updated_at,
                                (SELECT COUNT(*)
                                 FROM evo_chat_events e_cnt
@@ -493,6 +522,7 @@ class ChatSessionsTable(BaseTable):
                            s.project_id,
                            s.status,
                            s.session_directory,
+                           s.session_title,
                            s.updated_at,
                            (SELECT COUNT(*)
                             FROM evo_chat_events e_cnt
