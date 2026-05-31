@@ -359,3 +359,106 @@ questions:
     verify: token_budget
     weight: 0.0
     criterion: '[Must] Agent uses at most 50000 tokens total'
+- id: SA_segregation_quality_gate_001_20260531
+  capability: scientific_analysis
+  domain: alloy
+  intent: Review a small Fe grain-boundary segregation screening bundle and produce a defensible Mn/Sn conclusion from ABACUS run records.
+  human_prompt_seed: '我整理了一批 Fe 晶界 Mn/Sn 偏聚筛选的 ABACUS 运行记录，放在 `fe_gb_abacus_runs.json`。里面有每个 workdir 的能量、日志尾部、结构校验信息和一些实验室备注。
+
+    请帮我判断目前这批结果能支持哪些偏聚结论，并写一个机器可读的筛选备忘录 `segregation_screening_memo.json`。建议包含：
+
+    - `segregation_energies_eV`：你认为当前可以写入备忘录的偏聚能；
+    - `conclusions`：对 Mn/Sn 分别给出一句结论；
+    - `notes`：需要提醒用户或后续补做的事项。
+
+    请直接基于这个 JSON 文件完成，不需要实际重跑 ABACUS。'
+  tags:
+  - eng_abacus
+  data_files:
+  - key: segregation_inputs
+    path: data/SA_segregation_quality_gate_001_20260531/fe_gb_abacus_runs.json
+    oss_url: ''
+    description: ABACUS grain-boundary screening records with energies, log excerpts, structure checksums, and lab notes.
+  reference_answers:
+  - key: report_artifact
+    value: segregation_screening_memo.json
+  - key: valid_mn
+    value:
+      filename: segregation_screening_memo.json
+      tokens:
+      - Mn
+      - -0.45
+      flags: i
+  - key: invalid_sn
+    value:
+      filename: segregation_screening_memo.json
+      tokens:
+      - Sn
+      - rerun
+      - relax
+      - checksum
+      flags: i
+  - key: mn_segregation_energy
+    value:
+      filename: segregation_screening_memo.json
+      key: segregation_energies_eV.Mn
+      expected: -0.45
+      tolerance: 0.03
+  - key: no_sn_energy
+    value:
+      filename: segregation_screening_memo.json
+      pattern: '"segregation_energies_eV"\s*:\s*\{(?:(?!"Sn").)*\}'
+      flags: is
+  - key: grounding_quality_gate
+    value:
+      filename: fe_gb_abacus_runs.json
+  - key: turn_budget
+    value:
+      max: 12
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: report_artifact
+    criterion: '[Must] `segregation_screening_memo.json` is written to the workspace.'
+    axis: correctness
+    verify: artifact_exists
+  - id: valid_mn
+    criterion: '[Must] The memo reports the Mn segregation energy as about -0.45 eV from the paired Mn bulk-like and Mn grain-boundary records.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.5
+  - id: invalid_sn
+    criterion: '[Must] The memo refuses to make a definitive Sn segregation conclusion and asks for rerun/relaxation or input repair, citing the SCF/log issue and the copied-STRU checksum evidence.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+  - id: mn_segregation_energy
+    criterion: '[Must] Mn segregation energy is computed as -524.630 - (-524.180) = -0.45 eV, indicating favorable grain-boundary segregation for Mn only.'
+    axis: correctness
+    verify: json_file_numeric_range
+    weight: 1.5
+  - id: no_sn_energy
+    criterion: '[Must] The memo does not include Sn under directly reported segregation energies or state a definitive "Sn does not segregate" conclusion from the current records.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.5
+  - id: grounding_quality_gate
+    criterion: '[Must] The final reasoning uses the run log excerpts, force hints, relaxation context, and structure checksum evidence from the provided bundle rather than blindly subtracting every listed total energy.'
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget

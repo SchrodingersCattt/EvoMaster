@@ -7583,3 +7583,90 @@ questions:
     criterion: Token usage within budget.
     axis: efficiency
     verify: token_budget
+- id: IG_abacus_pw_ecutwfc_source_001_20260531
+  capability: input_generation
+  domain: agnostic
+  intent: Generate ABACUS PW SCF inputs for fcc Al and document the chosen numerical settings.
+  human_prompt_seed: '工作区中有 `Al_fcc.stru`：Al fcc 原胞结构。请准备一个用于 Al fcc 单点 SCF 的 ABACUS plane-wave 输入目录 `run_al_pw/`，至少写出 `run_al_pw/INPUT`、`run_al_pw/STRU` 和 `run_al_pw/KPT`。'
+  tags:
+  - eng_abacus
+  data_files:
+  - key: al_stru
+    path: data/IG_abacus_pw_ecutwfc_source_001_20260531/Al_fcc.stru
+    oss_url: ''
+    description: Minimal ABACUS STRU for fcc Al with an ONCV PBE pseudopotential name.
+  reference_answers:
+  - key: input_artifact
+    value: run_al_pw/INPUT
+  - key: stru_artifact
+    value: run_al_pw/STRU
+  - key: kpt_artifact
+    value: run_al_pw/KPT
+  - key: input_core
+    value:
+      filename: run_al_pw/INPUT
+      tokens:
+      - calculation scf
+      - basis_type pw
+      flags: i
+  - key: input_ecutwfc_70
+    value:
+      filename: run_al_pw/INPUT
+      pattern: (?im)^\s*ecutwfc\s+70(?:\.0+)?\s*$
+  - key: input_no_wrong_cutoff
+    value:
+      filename: run_al_pw/INPUT
+      pattern: (?im)^\s*ecutwfc\s+(60|100)(?:\.0+)?\s*$
+  - key: turn_budget
+    value:
+      max: 12
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 14000
+  scoring_checklist:
+  - id: input_artifact
+    criterion: '`run_al_pw/INPUT` exists.'
+    axis: correctness
+    verify: artifact_exists
+  - id: stru_artifact
+    criterion: '`run_al_pw/STRU` exists and is based on the provided Al_fcc.stru.'
+    axis: correctness
+    verify: artifact_exists
+  - id: kpt_artifact
+    criterion: '`run_al_pw/KPT` exists.'
+    axis: correctness
+    verify: artifact_exists
+  - id: input_core
+    criterion: '[Must] INPUT is an ABACUS SCF plane-wave input with `calculation scf` and `basis_type pw`.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.2
+  - id: input_ecutwfc_70
+    criterion: '[Must] INPUT sets `ecutwfc 70`, following the Al pseudopotential metadata for the first SCF input rather than relying only on the generic default.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.5
+  - id: input_no_wrong_cutoff
+    criterion: '[Must] INPUT does not set `ecutwfc 60` from unsupported recall or `ecutwfc 100` from the nearby LCAO tutorial excerpt.'
+    axis: correctness
+    verify: text_file_regex_absent
+    weight: 1.2
+  - id: grounding_source
+    criterion: '[Must] The final answer or generated input rationale does not present `ecutwfc` as an unsupported universal ABACUS standard; it should either mention a concrete basis for the value or state that cutoff convergence should be checked before production use.'
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget

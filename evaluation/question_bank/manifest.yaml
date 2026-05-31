@@ -77,7 +77,7 @@ banks:
 - path: input_generation/ig_agnostic_abacus.yaml
   capability: input_generation
   domain: agnostic
-  questions: 56
+  questions: 57
 - path: input_generation/ig_agnostic_gpumd.yaml
   capability: input_generation
   domain: agnostic
@@ -117,7 +117,7 @@ banks:
 - path: scientific_analysis/sa_polymer.yaml
   capability: scientific_analysis
   domain: polymer
-  questions: 1
+  questions: 2
 - path: scientific_analysis/sa_semiconductor.yaml
   capability: scientific_analysis
   domain: semiconductor
@@ -229,4 +229,4 @@ banks:
 - path: scientific_analysis/sa_alloy.yaml
   capability: scientific_analysis
   domain: alloy
-  questions: 3
+  questions: 4
