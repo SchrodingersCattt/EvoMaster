@@ -5,6 +5,7 @@ from __future__ import annotations
 from matmaster.integration.event_payloads import (
     _normalize_public_source,
     _public_content_for_event,
+    build_public_sse_payload_from_bus_dump,
     normalize_response_sse_payload,
 )
 
@@ -557,3 +558,164 @@ class TestSourceNormalization:
         """ESIN-06: System/User pass through unchanged."""
         assert _normalize_public_source('System') == 'System'
         assert _normalize_public_source('User') == 'User'
+
+
+class TestRunResultOmitsVendorByTurn:
+    """run_result public content carries aggregated usage only.
+
+    usage_vendor_by_turn is per-turn vendor detail consumed by the in-process
+    drain (eval / devshell); it must not bloat the frontend SSE / persisted
+    payload.
+    """
+
+    def test_run_result_public_content_omits_usage_vendor_by_turn(self) -> None:
+        payload = {
+            'type': 'run_result',
+            'source': 'Agent',
+            'status': 'completed',
+            'reason': 'natural',
+            'final_content': 'done',
+            'num_turns': 2,
+            'usage': {'total_tokens': 20},
+            'usage_vendor_by_turn': [{'total_tokens': 10}, {'total_tokens': 10}],
+        }
+        content = _public_content_for_event('run_result', payload)
+        assert content['usage'] == {'total_tokens': 20}
+        assert 'usage_vendor_by_turn' not in content
+
+
+class TestBuildPublicSsePayloadDedup:
+    """The top-level envelope must not duplicate business fields already nested
+    inside ``content`` for structured events (tool_result, run_result, ...).
+
+    Replay (chat_events_table.get_session_events) only exposes nested content;
+    the live SSE payload must match that contract instead of double-encoding.
+    """
+
+    def _build(self, raw: dict) -> dict:
+        return build_public_sse_payload_from_bus_dump(
+            raw,
+            session_id='s',
+            task_id='t',
+            invocation_id='i',
+            spawn_id=None,
+        )
+
+    def test_tool_result_business_fields_not_duplicated_at_top_level(self) -> None:
+        raw = {
+            'source': 'agent',
+            'type': 'tool_result',
+            'timestamp': '2026-05-31T00:00:00',
+            'call_id': 'c1',
+            'tool_name': 'Bash',
+            'result': 'big output',
+            'status': 'success',
+            'payload': {},
+            'turn_index': 2,
+            'turn_usage': {'total_tokens': 10},
+            'total_usage': {'total_tokens': 20},
+        }
+        out = self._build(raw)
+        # Structured payload lives in content.
+        assert out['content']['result'] == 'big output'
+        assert out['content']['total_usage'] == {'total_tokens': 20}
+        # No business field is duplicated at the top level.
+        for key in (
+            'result',
+            'status',
+            'turn_usage',
+            'total_usage',
+            'call_id',
+            'tool_name',
+            'payload',
+            'turn_index',
+        ):
+            assert key not in out, f'{key} duplicated at top level'
+        # Envelope metadata is preserved.
+        assert out['timestamp'] == '2026-05-31T00:00:00'
+        assert out['session_id'] == 's'
+
+    def test_run_result_business_fields_not_duplicated_at_top_level(self) -> None:
+        raw = {
+            'source': 'agent',
+            'type': 'run_result',
+            'timestamp': '2026-05-31T00:00:00',
+            'status': 'completed',
+            'reason': 'natural',
+            'final_content': 'answer',
+            'num_turns': 4,
+            'usage': {'total_tokens': 100},
+            'usage_vendor_by_turn': [{'total_tokens': 10}],
+            'model': 'm',
+            'model_profile': 'p',
+            'model_route': 'r',
+        }
+        out = self._build(raw)
+        assert out['content']['content'] == 'answer'
+        assert out['content']['usage'] == {'total_tokens': 100}
+        for key in (
+            'final_content',
+            'usage',
+            'usage_vendor_by_turn',
+            'status',
+            'reason',
+            'num_turns',
+            'model',
+            'model_profile',
+            'model_route',
+        ):
+            assert key not in out, f'{key} duplicated at top level'
+        assert out['timestamp'] == '2026-05-31T00:00:00'
+
+    def test_tool_progress_keeps_top_level_identifiers(self) -> None:
+        # tool_progress has no structured-content branch: content is the string,
+        # so call_id / tool_name must stay at the top level for the frontend to
+        # associate the progress line with its tool call.
+        raw = {
+            'source': 'agent',
+            'type': 'tool_progress',
+            'timestamp': 't',
+            'call_id': 'c1',
+            'tool_name': 'Bash',
+            'content': 'line of stdout',
+        }
+        out = self._build(raw)
+        assert out['content'] == 'line of stdout'
+        assert out['call_id'] == 'c1'
+        assert out['tool_name'] == 'Bash'
+
+    def test_streaming_response_keeps_stream_state_at_top_level(self) -> None:
+        raw = {
+            'source': 'agent',
+            'type': 'response',
+            'timestamp': 't',
+            'content': 'hel',
+            'stream_state': 'streaming',
+            'stream_id': 'r1',
+        }
+        out = self._build(raw)
+        assert out['content'] == 'hel'
+        assert out['stream_state'] == 'streaming'
+        assert out['stream_id'] == 'r1'
+
+    def test_response_end_omits_empty_model_identity_fields(self) -> None:
+        raw = {
+            'source': 'agent',
+            'type': 'response',
+            'timestamp': 't',
+            'content': '',
+            'stream_state': 'end',
+            'stream_id': 'turn-6',
+            'model': None,
+            'model_profile': None,
+            'model_route': None,
+        }
+
+        out = self._build(raw)
+
+        assert out['content'] == ''
+        assert out['stream_state'] == 'end'
+        assert out['stream_id'] == 'turn-6'
+        assert 'model' not in out
+        assert 'model_profile' not in out
+        assert 'model_route' not in out

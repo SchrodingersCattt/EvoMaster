@@ -62,6 +62,14 @@ _MODEL_IDENTITY_KEYS = (
     'model_profile',
     'model_route',
 )
+# Envelope metadata lifted to the top level for structured events. stream_state
+# / stream_id only exist on response & thought (which take the full-passthrough
+# branch), so timestamp is the only relevant key for structured payloads.
+_ENVELOPE_TOP_LEVEL_KEYS = ('timestamp',)
+# Fields that must never be lifted to the SSE top level. usage_vendor_by_turn is
+# per-turn vendor detail consumed only by the in-process drain (eval / devshell)
+# via the event object; the public payload carries the aggregated ``usage`` only.
+_TOP_LEVEL_DENYLIST = frozenset({'usage_vendor_by_turn'})
 
 
 def _copy_nonempty_keys(
@@ -119,6 +127,28 @@ def normalize_response_sse_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def _carry_top_level_fields(
+    out: dict[str, Any],
+    raw: dict[str, Any],
+    event_type: str,
+    content: object,
+) -> None:
+    """Lift remaining raw fields to the top level without duplicating content."""
+    if event_type in {'response', 'thought'} or not isinstance(content, dict):
+        for key, value in raw.items():
+            if key in _TOP_LEVEL_DENYLIST:
+                continue
+            if key in _MODEL_IDENTITY_KEYS and value is None:
+                continue
+            if key not in out:
+                out[key] = value
+        return
+    for key in _ENVELOPE_TOP_LEVEL_KEYS:
+        value = raw.get(key)
+        if value is not None and key not in out:
+            out[key] = value
+
+
 def build_public_sse_payload_from_bus_dump(
     raw: dict[str, Any],
     *,
@@ -130,8 +160,10 @@ def build_public_sse_payload_from_bus_dump(
     """从 BusEvent.model_dump 组装对前端的 SSE payload。
 
     顶层键顺序与 ``chat_events_table.get_session_events`` 回放一致：
-    source, type, content, session_id, task_id, invocation_id（若有）, spawn_id，
-    再追加 model_dump 中其余字段（如 timestamp、stream_state）。
+    source, type, content, session_id, task_id, invocation_id（若有）, spawn_id。
+    结构化事件（tool_result / run_result 等）的业务字段只放在 ``content`` 内，
+    顶层仅捎带信封元数据（timestamp）；response / thought 与 content 非 dict
+    的事件（tool_progress 等）保持全量上提，详见 ``_carry_top_level_fields``。
     """
     event_type = str(raw.get('type', ''))
     content = _public_content_for_event(event_type, raw)
@@ -152,9 +184,7 @@ def build_public_sse_payload_from_bus_dump(
         out['invocation_id'] = invocation_id
     out['spawn_id'] = spawn_id
 
-    for key, value in raw.items():
-        if key not in out:
-            out[key] = value
+    _carry_top_level_fields(out, raw, event_type, content)
     return normalize_response_sse_payload(out)
 
 
@@ -259,8 +289,10 @@ def _public_content_for_event(
             content['num_turns'] = payload['num_turns']
         if payload.get('usage'):
             content['usage'] = payload['usage']
-        if payload.get('usage_vendor_by_turn'):
-            content['usage_vendor_by_turn'] = payload['usage_vendor_by_turn']
+        # usage_vendor_by_turn (per-turn vendor detail) is intentionally NOT
+        # projected into the public payload: it is consumed only by the
+        # in-process drain (eval / devshell) via the event object, never by the
+        # frontend, so keeping it here would bloat SSE / persistence.
         _copy_nonempty_keys(content, payload, _MODEL_IDENTITY_KEYS)
         return content
 
