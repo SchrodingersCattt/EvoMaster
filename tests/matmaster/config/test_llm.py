@@ -8,6 +8,7 @@ from matmaster.config.llm import (
     LLMConfig,
     LLMProfileConfig,
     LLMRouteConfig,
+    PromptCacheConfig,
     ResolvedLLMRoute,
 )
 
@@ -42,6 +43,39 @@ class TestLLMProfileConfig:
         )
         assert p.supports_vision is True
         assert p.vision_detail is None
+
+    def test_prompt_cache_defaults_none(self) -> None:
+        p = LLMProfileConfig()
+        assert p.prompt_cache is None
+
+    def test_prompt_cache_field_from_dict(self) -> None:
+        p = LLMProfileConfig(
+            prompt_cache={
+                "provider": "anthropic",
+                "system_prompt_breakpoint": True,
+                "automatic": True,
+                "ttl": "1h",
+            }
+        )
+
+        assert p.prompt_cache == PromptCacheConfig(
+            provider="anthropic",
+            system_prompt_breakpoint=True,
+            automatic=True,
+            ttl="1h",
+        )
+
+
+class TestPromptCacheConfig:
+    """Prompt cache config produces Anthropic cache_control payloads."""
+
+    def test_default_cache_control(self) -> None:
+        cfg = PromptCacheConfig()
+        assert cfg.cache_control() == {"type": "ephemeral"}
+
+    def test_one_hour_cache_control(self) -> None:
+        cfg = PromptCacheConfig(ttl="1h")
+        assert cfg.cache_control() == {"type": "ephemeral", "ttl": "1h"}
 
 
 class TestLLMProfileConfigMethods:
@@ -141,6 +175,66 @@ class TestLLMProfileConfigMethods:
                 "output_config": {"effort": "low"},
             },
         }
+
+    def test_build_extra_kwargs_anthropic_prompt_cache_merges_extra_body(
+        self,
+    ) -> None:
+        p = LLMProfileConfig(
+            model="claude-opus-4-6",
+            reasoning_protocol="anthropic_adaptive_thinking",
+            thinking_effort="max",
+            prompt_cache={
+                "provider": "anthropic",
+                "system_prompt_breakpoint": True,
+                "automatic": True,
+                "ttl": "5m",
+            },
+        )
+
+        result = p.build_extra_kwargs()
+
+        assert result == {
+            "extra_body": {
+                "thinking": {"type": "adaptive"},
+                "output_config": {"effort": "max"},
+                "cache_control": {"type": "ephemeral"},
+            },
+        }
+
+    def test_build_extra_kwargs_prompt_cache_without_thinking_effort(
+        self,
+    ) -> None:
+        p = LLMProfileConfig(
+            model="claude-opus-4-6",
+            prompt_cache={
+                "provider": "anthropic",
+                "system_prompt_breakpoint": True,
+                "automatic": True,
+                "ttl": "1h",
+            },
+        )
+
+        result = p.build_extra_kwargs()
+
+        assert result == {
+            "extra_body": {
+                "cache_control": {"type": "ephemeral", "ttl": "1h"},
+            },
+        }
+
+    def test_build_extra_kwargs_prompt_cache_disabled_automatic(
+        self,
+    ) -> None:
+        p = LLMProfileConfig(
+            model="claude-opus-4-6",
+            prompt_cache={
+                "provider": "anthropic",
+                "system_prompt_breakpoint": True,
+                "automatic": False,
+            },
+        )
+
+        assert p.build_extra_kwargs() is None
 
     def test_build_extra_kwargs_no_effort(self) -> None:
         p = LLMProfileConfig(reasoning_protocol="anthropic_adaptive_thinking")
