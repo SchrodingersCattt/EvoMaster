@@ -527,7 +527,7 @@ class TestMatMasterRunAgentE2E:
                 )
             )
 
-        assert result == ((False, 'pre_router_setup_failed'), 0)
+        assert result == ((False, 'pre_router_setup_failed'), 0, None)
         mock_fanout_cls.assert_not_called()
         mock_bohrium_cls.assert_not_called()
         mock_build_provider.assert_not_called()
@@ -749,7 +749,7 @@ class TestMatMasterRunAgentE2E:
             )
 
         # abort_result is returned directly -- pipeline terminates before SSE dispatch
-        assert result == ((False, reason), 10)
+        assert result == ((False, reason), 10, None)
 
     @patch('matmaster.config.loader.load_llm_config')
     @patch('matmaster.providers.llm_factory.build_provider')
