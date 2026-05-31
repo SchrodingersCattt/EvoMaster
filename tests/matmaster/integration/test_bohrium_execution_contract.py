@@ -377,11 +377,22 @@ def _make_no_attach_bohrium_result() -> MagicMock:
     return r
 
 
-@patch('matmaster.providers.llm_factory.build_provider')
+def _provider_bundle(provider: Any) -> SimpleNamespace:
+    return SimpleNamespace(
+        provider=provider,
+        model="test-model",
+        model_profile="test-profile",
+        model_route="test-route",
+        provider_name="openai",
+        model_family="test-family",
+    )
+
+
+@patch('matmaster.providers.llm_factory.build_provider_bundle')
 @patch('matmaster.config.loader.load_llm_config')
 def test_run_agent_loads_exp_config_without_passing_skill_sync_to_bohrium_setup(
     mock_load_llm: MagicMock,
-    mock_build_provider: MagicMock,
+    mock_build_provider_bundle: MagicMock,
     tmp_path: Path,
 ) -> None:
     """run_agent loads Exp config but does not own skill directory sync."""
@@ -420,7 +431,7 @@ def test_run_agent_loads_exp_config_without_passing_skill_sync_to_bohrium_setup(
         return mock_bohrium_result
 
     mock_llm = MockLLMProvider()
-    mock_build_provider.return_value = mock_llm
+    mock_build_provider_bundle.return_value = _provider_bundle(mock_llm)
     mock_load_llm.return_value = MagicMock()
 
     with (
@@ -472,11 +483,11 @@ def test_run_agent_loads_exp_config_without_passing_skill_sync_to_bohrium_setup(
     assert 'skill_sync_spec' not in captured_setup_kwargs
 
 
-@patch('matmaster.providers.llm_factory.build_provider')
+@patch('matmaster.providers.llm_factory.build_provider_bundle')
 @patch('matmaster.config.loader.load_llm_config')
 def test_execution_binding_before_build_runtime(
     mock_load_llm: MagicMock,
-    mock_build_provider: MagicMock,
+    mock_build_provider_bundle: MagicMock,
     tmp_path: Path,
 ) -> None:
     """When Bohrium returns an execution binding, agent_run_ctx passed to Exp.build_runtime is updated."""
@@ -519,7 +530,7 @@ def test_execution_binding_before_build_runtime(
     )
 
     mock_llm = MagicMock()
-    mock_build_provider.return_value = mock_llm
+    mock_build_provider_bundle.return_value = _provider_bundle(mock_llm)
     mock_load_llm.return_value = MagicMock()
 
     from matmaster.types.events import RunResultEvent

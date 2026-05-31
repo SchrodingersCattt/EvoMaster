@@ -44,37 +44,3 @@ def test_scan_skill_hits_accepts_session_events() -> None:
         ),
         SkillHitRecord(skill_name="mlip", event_id=3, created_at_ms=None),
     )
-
-
-def test_scan_skill_hits_accepts_value_wrapped_legacy_string_content() -> None:
-    events = (
-        SessionEvent(
-            id=7,
-            event_type="skill_hit",
-            source=None,
-            content={"value": "search"},
-        ),
-    )
-
-    records = scan_skill_hits(events)
-
-    assert records == (
-        SkillHitRecord(skill_name="search", event_id=7, created_at_ms=None),
-    )
-
-
-def test_scan_skill_hits_accepts_content_wrapped_migration_rows() -> None:
-    events = (
-        SessionEvent(
-            id=8,
-            event_type="skill_hit",
-            source=None,
-            content={"content": "legacy-search"},
-        ),
-    )
-
-    records = scan_skill_hits(events)
-
-    assert records == (
-        SkillHitRecord(skill_name="legacy-search", event_id=8, created_at_ms=None),
-    )

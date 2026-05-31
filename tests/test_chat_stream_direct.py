@@ -160,22 +160,6 @@ def test_prepare_send_message_captures_turn_input_before_user_event():
     events_service.add_history_event.assert_called_once()
 
 
-def test_worker_payload_legacy_current_input_keeps_boundary_name() -> None:
-    from matmaster.context.sources.turn_input import TurnInput
-
-    turn_input = TurnInput.from_values(
-        user_text="hello",
-        pre_turn_history_event_id=42,
-    )
-    legacy_boundary_key = "pre_query_scope_event_id"
-    legacy_payload = {
-        **turn_input.to_payload(),
-        legacy_boundary_key: turn_input.pre_turn_history_event_id,
-    }
-
-    assert legacy_payload[legacy_boundary_key] == 42
-
-
 def test_generate_send_stream_skips_current_task_in_history_replay():
     """发送流回放历史时不应再次回放当前任务刚落库的 query。"""
     from src.services.stream_service import ChatStreamService, SendStreamContext

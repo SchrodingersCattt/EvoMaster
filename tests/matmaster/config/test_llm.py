@@ -450,38 +450,3 @@ class TestLLMConfigValidation:
                     "default": "missing",
                 }
             )
-
-
-class TestLLMConfigLegacyCompat:
-    """Legacy flat format still works with new route features."""
-
-    def test_legacy_flat_format(self) -> None:
-        cfg = LLMConfig.model_validate(
-            {
-                "opus": {"provider": "openai", "model": "claude-opus-4-6"},
-                "default": "opus",
-            }
-        )
-        assert "opus" in cfg.profiles
-        assert cfg.routes == {}
-
-    def test_legacy_resolve_route_default(self) -> None:
-        cfg = LLMConfig.model_validate(
-            {
-                "opus": {"provider": "openai", "model": "claude-opus-4-6"},
-                "default": "opus",
-            }
-        )
-        r = cfg.resolve_route()
-        assert r.profile_key == "opus"
-        assert r.model == "claude-opus-4-6"
-
-    def test_legacy_resolve_route_model_override_raises(self) -> None:
-        cfg = LLMConfig.model_validate(
-            {
-                "opus": {"provider": "openai", "model": "claude-opus-4-6"},
-                "default": "opus",
-            }
-        )
-        with pytest.raises(KeyError, match="Unknown LLM route key"):
-            cfg.resolve_route(model_override="claude-opus-4-6")

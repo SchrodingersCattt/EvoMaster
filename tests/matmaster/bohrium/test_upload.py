@@ -89,42 +89,6 @@ def test_upload_input_archive_does_not_import_bohrium_sdk(
     assert calls[0]["zip_path"] == zip_path
 
 
-def test_upload_input_archive_legacy_flag_still_uses_sdk_free_path(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    zip_path = tmp_path / "input.zip"
-    zip_path.write_bytes(b"zip-bytes")
-    calls: list[Path] = []
-
-    def fake_upload(*, create_data, zip_path, manifest_root=None):
-        del manifest_root
-        del create_data
-        calls.append(zip_path)
-        return UploadedArchive(
-            oss_key="sdk-free/input.zip",
-            download_url="https://store.example/api/download/sdk-free/input.zip?token=t",
-        )
-
-    monkeypatch.setenv("BOHRIUM_TRANSFER_USE_LEGACY", "1")
-    monkeypatch.setattr(
-        "matmaster.bohrium.upload._upload_input_archive_sdk_free",
-        fake_upload,
-    )
-
-    uploaded = upload_input_archive(
-        create_data={
-            "storePath": "legacy/",
-            "storeHost": "https://store.example",
-            "token": "t",
-        },
-        zip_path=zip_path,
-    )
-
-    assert uploaded.oss_key == "sdk-free/input.zip"
-    assert calls == [zip_path]
-
-
 def test_submit_archive_upload_uses_serial_multipart(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

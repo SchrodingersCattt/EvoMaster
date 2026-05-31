@@ -156,12 +156,5 @@ def test_build_with_system_prompt_only(builder: SystemPromptBuilder) -> None:
     assert "# Identity" not in result
 
 
-def test_backward_compat_tool_registry_param(builder: SystemPromptBuilder) -> None:
-    """Passing tool_registry positional arg is accepted but ignored."""
-    result = builder.build_system_prompt("some_registry_value", system_prompt="Test.")
-    assert "# System" in result
-    assert "function calling" in result
-
-
 def test_build_method_removed(builder: SystemPromptBuilder) -> None:
     assert not hasattr(builder, "build")

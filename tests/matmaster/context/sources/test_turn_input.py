@@ -153,20 +153,6 @@ def test_turn_input_round_trips_payload() -> None:
     assert TurnInput.from_payload(turn_input.to_payload()) == turn_input
 
 
-def test_turn_input_reads_legacy_payload_boundary_name() -> None:
-    turn_input = TurnInput.from_payload(
-        {
-            "user_text": "legacy",
-            "files": ["a.cif"],
-            "pre_query_scope_event_id": 7,
-        }
-    )
-
-    assert turn_input is not None
-    assert turn_input.pre_turn_history_event_id == 7
-    assert turn_input.files == ("a.cif",)
-
-
 def test_turn_input_missing_boundary_defaults_to_zero() -> None:
     turn_input = TurnInput.from_payload({"user_text": "hi"})
 

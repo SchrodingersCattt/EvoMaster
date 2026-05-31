@@ -11,6 +11,7 @@ import json
 import threading
 from collections.abc import AsyncIterator
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -71,6 +72,17 @@ class MockLLMProvider:
             stream_id='s1',
             finish_reason='stop',
         )
+
+
+def _provider_bundle(provider: Any) -> SimpleNamespace:
+    return SimpleNamespace(
+        provider=provider,
+        model="test-model",
+        model_profile="test-profile",
+        model_route="test-route",
+        provider_name="openai",
+        model_family="test-family",
+    )
 
 
 class MockLLMProviderWithToolCall:
@@ -266,9 +278,9 @@ class TestMatMasterRunAgentE2E:
     """QUAL-02: run_agent() with mock LLM provider injected."""
 
     @patch('matmaster.config.loader.load_llm_config')
-    @patch('matmaster.providers.llm_factory.build_provider')
+    @patch('matmaster.providers.llm_factory.build_provider_bundle')
     def test_mat_master_run_agent_e2e(
-        self, mock_build_provider, mock_load_config, tmp_path: Path
+        self, mock_build_provider_bundle, mock_load_config, tmp_path: Path
     ) -> None:
         """E2E: run_agent() with mock LLM provider injected."""
         AgentRunService = pytest.importorskip(
@@ -281,9 +293,8 @@ class TestMatMasterRunAgentE2E:
 
         svc = AgentRunService(sessions_service=mock_sessions_svc)
 
-        # Patch build_provider to return mock LLM
         mock_llm = MockLLMProvider('E2E test response')
-        mock_build_provider.return_value = mock_llm
+        mock_build_provider_bundle.return_value = _provider_bundle(mock_llm)
         mock_load_config.return_value = MagicMock()
 
         # Patch Playground to return test context
@@ -371,9 +382,9 @@ class TestMatMasterRunAgentE2E:
             # The key E2E validation is: kernel ran -> finish -> use_quota called.
 
     @patch('matmaster.config.loader.load_llm_config')
-    @patch('matmaster.providers.llm_factory.build_provider')
+    @patch('matmaster.providers.llm_factory.build_provider_bundle')
     def test_run_agent_excludes_current_task_query_from_history(
-        self, mock_build_provider, mock_load_config, tmp_path: Path
+        self, mock_build_provider_bundle, mock_load_config, tmp_path: Path
     ) -> None:
         """Current task query should not be replayed into history for the LLM."""
         AgentRunService = pytest.importorskip(
@@ -387,7 +398,7 @@ class TestMatMasterRunAgentE2E:
         svc = AgentRunService(sessions_service=mock_sessions_svc)
 
         mock_llm = MockLLMProviderCapturingMessages()
-        mock_build_provider.return_value = mock_llm
+        mock_build_provider_bundle.return_value = _provider_bundle(mock_llm)
         mock_load_config.return_value = MagicMock()
 
         mock_pg = MagicMock()
@@ -487,9 +498,9 @@ class TestMatMasterRunAgentE2E:
         ]
 
     @patch('matmaster.config.loader.load_llm_config')
-    @patch('matmaster.providers.llm_factory.build_provider')
+    @patch('matmaster.providers.llm_factory.build_provider_bundle')
     def test_events_table_failure_returns_cleanly_without_router_lifecycle(
-        self, mock_build_provider, mock_load_config, tmp_path: Path
+        self, mock_build_provider_bundle, mock_load_config, tmp_path: Path
     ) -> None:
         """Regression: events table failure exits before router bootstrap."""
         AgentRunService = pytest.importorskip(
@@ -544,7 +555,7 @@ class TestMatMasterRunAgentE2E:
         assert result == ((False, 'pre_router_setup_failed'), 0)
         mock_fanout_cls.assert_not_called()
         mock_bohrium_cls.assert_not_called()
-        mock_build_provider.assert_not_called()
+        mock_build_provider_bundle.assert_not_called()
         mock_use_quota.assert_not_called()
         assert sse_payloads == []
         mock_redis_fn.return_value.delete_stop_requested.assert_called_once_with(
@@ -554,9 +565,9 @@ class TestMatMasterRunAgentE2E:
         mock_pg.cleanup.assert_called_once()
 
     @patch('matmaster.config.loader.load_llm_config')
-    @patch('matmaster.providers.llm_factory.build_provider')
+    @patch('matmaster.providers.llm_factory.build_provider_bundle')
     def test_bohrium_events_reach_sse_before_setup_returns(
-        self, mock_build_provider, mock_load_config, tmp_path: Path
+        self, mock_build_provider_bundle, mock_load_config, tmp_path: Path
     ) -> None:
         """Bohrium setup events must reach SSE before setup() returns."""
         AgentRunService = pytest.importorskip(
@@ -568,8 +579,8 @@ class TestMatMasterRunAgentE2E:
         mock_sessions_svc.get_session_user_id.return_value = 'user-123'
 
         svc = AgentRunService(sessions_service=mock_sessions_svc)
-        mock_build_provider.return_value = MockLLMProvider(
-            'Bohrium event test response'
+        mock_build_provider_bundle.return_value = _provider_bundle(
+            MockLLMProvider('Bohrium event test response')
         )
         mock_load_config.return_value = MagicMock()
 
@@ -686,9 +697,9 @@ class TestMatMasterRunAgentE2E:
         assert bohrium_payload['content']['message'] == 'node is ready'
 
     @patch('matmaster.config.loader.load_llm_config')
-    @patch('matmaster.providers.llm_factory.build_provider')
+    @patch('matmaster.providers.llm_factory.build_provider_bundle')
     def test_bohrium_abort_emits_top_level_error_and_stream_closed(
-        self, mock_build_provider, mock_load_config, tmp_path: Path
+        self, mock_build_provider_bundle, mock_load_config, tmp_path: Path
     ) -> None:
         """When setup aborts, error/stream_closed must be top-level SSE types (not bohrium_node)."""
         BohriumSetupResult = pytest.importorskip(
@@ -704,7 +715,9 @@ class TestMatMasterRunAgentE2E:
         mock_sessions_svc.get_session_user_id.return_value = 'user-123'
 
         svc = AgentRunService(sessions_service=mock_sessions_svc)
-        mock_build_provider.return_value = MockLLMProvider('unused')
+        mock_build_provider_bundle.return_value = _provider_bundle(
+            MockLLMProvider('unused')
+        )
         mock_load_config.return_value = MagicMock()
 
         mock_pg = MagicMock()
@@ -766,9 +779,9 @@ class TestMatMasterRunAgentE2E:
         assert result == ((False, reason), 10)
 
     @patch('matmaster.config.loader.load_llm_config')
-    @patch('matmaster.providers.llm_factory.build_provider')
+    @patch('matmaster.providers.llm_factory.build_provider_bundle')
     def test_bohrium_access_key_abort_emits_top_level_error_and_stream_closed(
-        self, mock_build_provider, mock_load_config, tmp_path: Path
+        self, mock_build_provider_bundle, mock_load_config, tmp_path: Path
     ) -> None:
         AgentRunService = pytest.importorskip(
             "src.services.agent_run_service",
@@ -788,7 +801,9 @@ class TestMatMasterRunAgentE2E:
         }
 
         svc = AgentRunService(sessions_service=mock_sessions_svc)
-        mock_build_provider.return_value = MockLLMProvider('unused')
+        mock_build_provider_bundle.return_value = _provider_bundle(
+            MockLLMProvider('unused')
+        )
         mock_load_config.return_value = MagicMock()
 
         mock_pg = MagicMock()
@@ -873,9 +888,9 @@ class TestMatMasterRunAgentE2E:
         assert stream_closed_payload['treat_as_failure'] is True
 
     @patch('matmaster.config.loader.load_llm_config')
-    @patch('matmaster.providers.llm_factory.build_provider')
+    @patch('matmaster.providers.llm_factory.build_provider_bundle')
     def test_bohrium_setup_exception_is_sent_to_sse_when_router_starts_early(
-        self, mock_build_provider, mock_load_config, tmp_path: Path
+        self, mock_build_provider_bundle, mock_load_config, tmp_path: Path
     ) -> None:
         """Bohrium-stage exceptions should surface through SSE error payloads."""
         AgentRunService = pytest.importorskip(
@@ -887,8 +902,8 @@ class TestMatMasterRunAgentE2E:
         mock_sessions_svc.get_session_user_id.return_value = 'user-123'
 
         svc = AgentRunService(sessions_service=mock_sessions_svc)
-        mock_build_provider.return_value = MockLLMProvider(
-            'Bohrium exception test response'
+        mock_build_provider_bundle.return_value = _provider_bundle(
+            MockLLMProvider('Bohrium exception test response')
         )
         mock_load_config.return_value = MagicMock()
 

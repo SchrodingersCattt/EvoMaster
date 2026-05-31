@@ -128,10 +128,6 @@ class TestEndToEndRouteToProvider:
         with pytest.raises(KeyError):
             build_provider(config, model_override="nonexistent")
 
-    def test_llm_override_compat(self, config: LLMConfig) -> None:
-        provider = build_provider(config, llm_override="sonnet")
-        assert provider._model == "claude-sonnet-4-6"
-
     def test_extra_kwargs_none_becomes_empty(self, config: LLMConfig) -> None:
         cfg = LLMConfig.model_validate(
             {

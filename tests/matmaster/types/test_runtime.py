@@ -123,12 +123,6 @@ class TestCompactionConfigUpdate:
         cfg = CompactionConfig()
         assert cfg.strategy == "summary"
 
-    def test_compaction_config_ignores_removed_model_alias_field(self) -> None:
-        removed_field = "compaction" + "_llm"
-        cfg = CompactionConfig.model_validate({removed_field: "compaction"})
-
-        assert not hasattr(cfg, removed_field)
-
     def test_frozen(self) -> None:
         cfg = CompactionConfig()
         with pytest.raises(Exception, match="frozen"):

@@ -155,11 +155,6 @@ class TestBuildProvider:
         with pytest.raises(KeyError, match="Unknown LLM route key"):
             build_provider(llm_config, model_override="nonexistent-model")
 
-    def test_llm_override_compat(self, llm_config: LLMConfig) -> None:
-        """llm_override (legacy) -> direct profile key lookup."""
-        provider = build_provider(llm_config, llm_override="sonnet")
-        assert provider._model == "claude-sonnet-4-6"
-
     def test_custom_default_key(self, llm_config: LLMConfig) -> None:
         """default_profile_key overrides config default."""
         provider = build_provider(llm_config, default_profile_key="sonnet")

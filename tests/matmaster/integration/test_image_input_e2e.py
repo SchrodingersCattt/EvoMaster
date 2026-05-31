@@ -119,8 +119,15 @@ async def test_images_flow_from_service_to_kernel_user_message(tmp_path: Path) -
             ),
         ),
         patch(
-            "matmaster.providers.llm_factory.build_provider",
-            return_value=provider,
+            "matmaster.providers.llm_factory.build_provider_bundle",
+            return_value=SimpleNamespace(
+                provider=provider,
+                model="vision-model",
+                model_profile="vision",
+                model_route=None,
+                provider_name="openai",
+                model_family="vision",
+            ),
         ),
         patch(
             "src.services.agent_run_service.get_image_input_service",

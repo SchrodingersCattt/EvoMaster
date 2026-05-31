@@ -70,6 +70,18 @@ _ENVELOPE_TOP_LEVEL_KEYS = ('timestamp',)
 # per-turn vendor detail consumed only by the in-process drain (eval / devshell)
 # via the event object; the public payload carries the aggregated ``usage`` only.
 _TOP_LEVEL_DENYLIST = frozenset({'usage_vendor_by_turn'})
+# Event types whose raw fields are lifted to the SSE top level instead of being
+# confined to ``content``. Two sets, exempt for unrelated reasons:
+#
+# Structural -- ``normalize_response_sse_payload`` collapses response / thought
+# content to a string, so their usage / model / stream fields must live at the
+# top level. Must stay in sync with the set gating that normalizer.
+_STRUCTURAL_PASSTHROUGH_EVENT_TYPES = frozenset({'response', 'thought'})
+# Frontend-compat seam -- the frontend still reads ``final_content`` / ``status``
+# from the top level (scimaster-bohr-chat dispatch/index.ts and
+# ask-question-terminal.ts), so run_result / finish keep full passthrough until
+# that read migrates to ``content``. Drop this set once the migration lands.
+_FRONTEND_COMPAT_PASSTHROUGH_EVENT_TYPES = frozenset({'run_result', 'finish'})
 
 
 def _copy_nonempty_keys(
@@ -107,7 +119,7 @@ def _thought_public_content(payload: dict[str, Any]) -> object | None:
 
 def normalize_response_sse_payload(payload: dict[str, Any]) -> dict[str, Any]:
     event_type = payload.get('type')
-    if event_type not in {'response', 'thought'}:
+    if event_type not in _STRUCTURAL_PASSTHROUGH_EVENT_TYPES:
         return payload
 
     content = payload.get('content')
@@ -136,20 +148,17 @@ def _carry_top_level_fields(
     """Lift remaining raw fields to the top level without duplicating content.
 
     Structured events keep their payload in ``content`` only; the top level
-    carries envelope metadata. Two groups stay in the full-passthrough branch:
-
-    - response / thought: ``normalize_response_sse_payload`` collapses their
-      content to a string, so usage / model / stream fields must be top-level.
-    - run_result / finish: the frontend reads ``final_content`` and ``status``
-      from the top level (scimaster-bohr-chat dispatch/index.ts and
-      ask-question-terminal.ts). Deduping them is deferred until that read is
-      migrated to ``content``.
-
-    A non-dict ``content`` (tool_progress, stream_closed, unknown passthrough)
-    also keeps its structured identifiers at the top level.
+    carries envelope metadata. The full-passthrough branch instead lifts every
+    raw field, covering the two passthrough event-type sets -- see
+    ``_STRUCTURAL_PASSTHROUGH_EVENT_TYPES`` and
+    ``_FRONTEND_COMPAT_PASSTHROUGH_EVENT_TYPES`` for why each is exempt -- plus
+    any event whose ``content`` is non-dict (tool_progress, stream_closed,
+    unknown passthrough), which keeps its structured identifiers at the top
+    level.
     """
     if (
-        event_type in {'response', 'thought', 'run_result', 'finish'}
+        event_type in _STRUCTURAL_PASSTHROUGH_EVENT_TYPES
+        or event_type in _FRONTEND_COMPAT_PASSTHROUGH_EVENT_TYPES
         or not isinstance(content, dict)
     ):
         for key, value in raw.items():
@@ -295,7 +304,7 @@ def _public_content_for_event(
     if event_type == 'response_figures':
         return {'figures': payload.get('figures') or []}
 
-    if event_type in ('run_result', 'finish'):
+    if event_type in _FRONTEND_COMPAT_PASSTHROUGH_EVENT_TYPES:
         content = {
             'content': payload.get('final_content') or '',
             'status': payload.get('status'),
