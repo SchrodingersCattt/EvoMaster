@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 
 from matmaster.config.loader import load_llm_config
 from src.base.base_res import BaseResponse
+from src.dao.redis_dao import get_redis_dao
 from src.models.chat import (
     ChatAskQuestionReplyRequest,
     ChatSendRequest,
@@ -674,8 +675,6 @@ def set_interrupt_hint(
     sid = session_id.strip()
     if not chat_svc.can_access_session(sid, user_id):
         raise ForbiddenErrorResponse(msg="无权限访问该会话")
-    from src.dao.redis_dao import get_redis_dao
-
     get_redis_dao().set_interrupt_hint(sid)
     return BaseResponse(msg="ok")
 
@@ -698,8 +697,6 @@ def delete_interrupt_hint(
     sid = session_id.strip()
     if not chat_svc.can_access_session(sid, user_id):
         raise ForbiddenErrorResponse(msg="无权限访问该会话")
-    from src.dao.redis_dao import get_redis_dao
-
     get_redis_dao().delete_interrupt_hint(sid)
     return BaseResponse(msg="ok")
 
@@ -722,8 +719,6 @@ def confirm_interrupt(
     sid = session_id.strip()
     if not chat_svc.can_access_session(sid, user_id):
         raise ForbiddenErrorResponse(msg="无权限访问该会话")
-    from src.dao.redis_dao import get_redis_dao
-
     get_redis_dao().set_interrupt_confirm(sid)
     return BaseResponse(msg="ok")
 

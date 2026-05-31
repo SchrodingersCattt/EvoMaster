@@ -513,7 +513,15 @@ class ChatStreamService:
         self._deploy_state_service.record_session_version(sid)
         user_content = (req.content or '').strip()
         if user_content and user_id:
-            self._sessions_service.set_session_chat_mode(sid, mode, user_id)
+            # 持久化本轮 mode 偏好属非关键副作用：DB 抖动不应中断发送，best-effort。
+            try:
+                self._sessions_service.set_session_chat_mode(sid, mode, user_id)
+            except Exception as e:
+                logger.warning(
+                    "persist chat_mode failed (best-effort) session_id=%s: %s",
+                    sid,
+                    e,
+                )
         user_msg = {
             'source': 'User',
             'type': 'query',

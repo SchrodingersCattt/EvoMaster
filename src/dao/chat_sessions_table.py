@@ -190,26 +190,18 @@ class ChatSessionsTable(BaseTable):
         if not sets:
             return True
         params.extend([session_id, user_id])
-        try:
-            with self.get_connection() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute(
-                        f"""
-                        UPDATE {self.table_name}
-                        SET {', '.join(sets)}, updated_at = NOW()
-                        WHERE session_id = %s AND user_id = %s
-                        """,
-                        tuple(params),
-                    )
-                    conn.commit()
-                    return cursor.rowcount > 0
-        except Error as e:
-            logger.warning(
-                "update_session_workspace_prefs failed session_id=%s: %s",
-                session_id,
-                e,
-            )
-            return False
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    UPDATE {self.table_name}
+                    SET {', '.join(sets)}, updated_at = NOW()
+                    WHERE session_id = %s AND user_id = %s
+                    """,
+                    tuple(params),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
 
     def set_session_directory(
         self,
@@ -236,26 +228,18 @@ class ChatSessionsTable(BaseTable):
         if title is not None:
             s = str(title).strip()
             norm = s if s else None
-        try:
-            with self.get_connection() as conn:
-                with conn.cursor() as cursor:
-                    cursor.execute(
-                        f"""
-                        UPDATE {self.table_name}
-                        SET session_title = %s, updated_at = NOW()
-                        WHERE session_id = %s AND user_id = %s
-                        """,
-                        (norm, session_id, user_id),
-                    )
-                    conn.commit()
-                    return cursor.rowcount > 0
-        except Error as e:
-            logger.warning(
-                "set_session_title failed session_id=%s: %s",
-                session_id,
-                e,
-            )
-            return False
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    f"""
+                    UPDATE {self.table_name}
+                    SET session_title = %s, updated_at = NOW()
+                    WHERE session_id = %s AND user_id = %s
+                    """,
+                    (norm, session_id, user_id),
+                )
+                conn.commit()
+                return cursor.rowcount > 0
 
     def set_session_status(self, session_id: str, status: str) -> bool:
         """设置会话状态：idle=空闲/已结束，active=运行中，waiting=已入队等待 worker 接手"""
