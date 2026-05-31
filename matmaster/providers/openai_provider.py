@@ -143,6 +143,23 @@ def _should_split_stream_tool_call(
     return False
 
 
+def _dump_usage_detail(value: Any) -> Any:
+    if value is None:
+        return None
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        try:
+            return model_dump(mode="json", exclude_none=True)
+        except TypeError:
+            return model_dump(exclude_none=True)
+    if isinstance(value, dict):
+        return dict(value)
+    cached = getattr(value, "cached_tokens", None)
+    if cached is not None:
+        return {"cached_tokens": cached}
+    return value
+
+
 def _openai_usage_to_vendor_dict(usage: Any) -> dict[str, Any]:
     """Serialize provider-native usage while preserving nested detail fields."""
     if usage is None:
@@ -163,31 +180,26 @@ def _openai_usage_to_vendor_dict(usage: Any) -> dict[str, Any]:
         "total_tokens",
         "input_tokens",
         "output_tokens",
+        "cache_creation_input_tokens",
+        "cache_read_input_tokens",
     ):
         value = getattr(usage, key, None)
         if value is not None:
             out[key] = value
 
-    for detail_key in ("prompt_tokens_details", "completion_tokens_details"):
-        detail = getattr(usage, detail_key, None)
+    for detail_key in (
+        "prompt_tokens_details",
+        "completion_tokens_details",
+        "cache_creation",
+    ):
+        detail = _dump_usage_detail(getattr(usage, detail_key, None))
         if detail is None:
             continue
-        detail_dump = getattr(detail, "model_dump", None)
-        if callable(detail_dump):
-            try:
-                out[detail_key] = detail_dump(mode="json", exclude_none=True)
-            except TypeError:
-                out[detail_key] = detail_dump(exclude_none=True)
-        elif isinstance(detail, dict):
-            out[detail_key] = dict(detail)
-        else:
-            cached = getattr(detail, "cached_tokens", None)
-            if cached is not None:
-                out[detail_key] = {"cached_tokens": cached}
+        if detail_key in ("prompt_tokens_details", "completion_tokens_details"):
+            out[detail_key] = detail
+            continue
+        out[detail_key] = detail
 
-    cache_read = getattr(usage, "cache_read_input_tokens", None)
-    if isinstance(cache_read, int) and cache_read > 0:
-        out["cache_read_input_tokens"] = cache_read
     return out
 
 

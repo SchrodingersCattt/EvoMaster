@@ -248,6 +248,43 @@ class TestChatContent:
             "total_tokens": 15,
         }
 
+    async def test_chat_usage_vendor_preserves_anthropic_cache_fields(self) -> None:
+        class Usage:
+            prompt_tokens = 10
+            completion_tokens = 5
+            total_tokens = 15
+            input_tokens = 10
+            output_tokens = 5
+            cache_creation_input_tokens = 123
+            cache_read_input_tokens = 45
+            cache_creation = {"ephemeral_5m_input_tokens": 123}
+
+        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create.return_value = _make_mock_completion(
+            usage=Usage(),
+        )
+        provider._client = mock_client
+
+        result = await provider.chat([{"role": "user", "content": "Hi"}])
+
+        assert result.usage == {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+            "cache_read_tokens": 45,
+        }
+        assert result.usage_vendor == {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_creation_input_tokens": 123,
+            "cache_read_input_tokens": 45,
+            "cache_creation": {"ephemeral_5m_input_tokens": 123},
+        }
+
     async def test_chat_finish_reason(self) -> None:
         provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
