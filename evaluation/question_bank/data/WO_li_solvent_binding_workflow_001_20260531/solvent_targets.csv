@@ -1,0 +1,5 @@
+name,smiles,role
+EC,C1COC(=O)O1,baseline cyclic carbonate
+DMC,COC(=O)OC,linear carbonate
+EMC,CCOC(=O)OC,linear carbonate
+FEC,C1OC(=O)OC1F,fluorinated cyclic carbonate

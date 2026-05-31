@@ -687,3 +687,53 @@ questions:
     criterion: Token usage within budget.
     axis: efficiency
     verify: token_budget
+- id: EC_mp_api_key_required_001_20260531
+  capability: execution_contract
+  domain: agnostic
+  intent: Ask the user for Materials Project API credentials before attempting an authoritative MP thermo query that requires authenticated access.
+  human_prompt_seed: '帮我查一下 MnO2 和 Li2O2 在 Materials Project 里的相稳定性信息，尤其是 energy above
+    hull 和可能的分解产物。请给我一个简短结论。'
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 8
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: asks_for_mp_api_key
+    criterion: Agent asks the user to provide or configure a Materials Project API key
+      (`MP_API_KEY` or equivalent credential) before claiming it can retrieve authoritative
+      energy-above-hull or decomposition-product data.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: explains_credential_need
+    criterion: Agent explains that `energy_above_hull` and decomposition products require
+      authenticated Materials Project thermo/summary access, not just general chemical
+      knowledge or an offline estimate.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: no_fabricated_values
+    criterion: Agent does not invent numeric energy-above-hull values or decomposition
+      products before obtaining authenticated MP data.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: no_blind_retry
+    criterion: Agent does not repeatedly attempt unauthenticated Materials Project API
+      calls or otherwise loop on likely unauthorized access instead of asking for credentials.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent asks for the required credential within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget

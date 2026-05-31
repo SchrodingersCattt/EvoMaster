@@ -8362,6 +8362,133 @@ questions:
     axis: efficiency
     verify: token_budget
     criterion: Completed within token budget
+- id: SA_tem_particle_size_001_20260531
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Convert TEM particle-size measurements from pixels to nanometers and summarize particle-size statistics.
+  human_prompt_seed: '我把一张 TEM 图的测量导出和图像说明放在附件里了。请按说明里的标尺把粒径换算成 nm，输出
+    `particle_size_summary.json` 和一个简单的 `particle_size_histogram.csv`，并在最终回复里概括平均粒径、中位数和 D90。'
+  tags:
+  - char_microscopy
+  data_files:
+  - key: measurement_export
+    path: data/SA_tem_particle_size_001_20260531/tem_measurement_export.csv
+    oss_url: ''
+    description: Particle diameter export in pixels from a TEM mask layer.
+  - key: image_notes
+    path: data/SA_tem_particle_size_001_20260531/tem_image_notes.txt
+    oss_url: ''
+    description: TEM image notes with original image size and scale-bar conversion.
+  reference_answers:
+  - key: summary_json
+    value: particle_size_summary.json
+  - key: histogram_csv
+    value: particle_size_histogram.csv
+  - key: summary_schema
+    value:
+      filename: particle_size_summary.json
+      required_keys:
+      - n_particles
+      - scale_nm_per_px
+      - mean_nm
+      - median_nm
+      - d90_nm
+  - key: n_particles
+    value:
+      filename: particle_size_summary.json
+      checks:
+      - key: n_particles
+        min: 20
+        max: 20
+  - key: scale_nm_per_px
+    value:
+      filename: particle_size_summary.json
+      checks:
+      - key: scale_nm_per_px
+        min: 0.41
+        max: 0.42
+  - key: mean_nm
+    value:
+      filename: particle_size_summary.json
+      checks:
+      - key: mean_nm
+        min: 18.0
+        max: 19.5
+  - key: median_nm
+    value:
+      filename: particle_size_summary.json
+      checks:
+      - key: median_nm
+        min: 18.0
+        max: 19.2
+  - key: d90_nm
+    value:
+      filename: particle_size_summary.json
+      checks:
+      - key: d90_nm
+        min: 23.5
+        max: 25.0
+  - key: grounding_source
+    value: The final answer uses the 50 nm / 120 px scale bar and reports statistics from the 20 exported particle rows, rather than treating pixel diameters as nanometers.
+  - key: turn_budget
+    value:
+      max: 10
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 10000
+  scoring_checklist:
+  - id: summary_json
+    criterion: Agent writes `particle_size_summary.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: histogram_csv
+    criterion: Agent writes `particle_size_histogram.csv` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: summary_schema
+    criterion: Summary JSON includes particle count, pixel-to-nm scale, mean, median, and D90.
+    axis: correctness
+    verify: json_file_schema
+  - id: n_particles
+    criterion: Summary uses all 20 exported particles after operator filtering.
+    axis: correctness
+    verify: text_file_numeric_range
+  - id: scale_nm_per_px
+    criterion: Scale conversion uses 50 nm / 120 px, about 0.4167 nm per pixel.
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.5
+  - id: mean_nm
+    criterion: Mean particle diameter in nm is computed from the scaled diameters.
+    axis: correctness
+    verify: text_file_numeric_range
+  - id: median_nm
+    criterion: Median particle diameter in nm is computed from the scaled diameters.
+    axis: correctness
+    verify: text_file_numeric_range
+  - id: d90_nm
+    criterion: D90 particle diameter in nm is computed from the scaled diameters.
+    axis: correctness
+    verify: text_file_numeric_range
+  - id: grounding_source
+    criterion: Final answer uses the 50 nm / 120 px scale bar and reports statistics from the 20 exported particle rows, rather than treating pixel diameters as nanometers.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
 - id: SA_close_packed_layers_001_20260531
   capability: scientific_analysis
   domain: agnostic

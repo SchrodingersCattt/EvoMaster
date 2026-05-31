@@ -1,0 +1,17 @@
+ABACUS auxiliary files visible in the target image
+
+pseudopotentials/
+  Ti_ONCV_PBE-1.0.upf
+  Mo_ONCV_PBE-1.0.upf
+  Al_ONCV_PBE-1.0.upf
+  V_ONCV_PBE-1.0.upf
+
+orbitals/
+  Ti_gga_8au_100Ry_4s2p2d1f.orb
+  Mo_gga_9au_100Ry_5s4p3d2f.orb
+  Al_gga_8au_100Ry_4s4p1d.orb
+  V_gga_8au_100Ry_4s2p2d1f.orb
+
+Notes:
+- The SQS seed uses fractional coordinates in a cubic 2x2x2 bcc-like cell.
+- Nominal composition target is Ti-rich with Mo, Al, and V solutes.

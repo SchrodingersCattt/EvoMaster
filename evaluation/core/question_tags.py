@@ -38,6 +38,7 @@ class QuestionTag(StrEnum):
     analysis_data = 'analysis_data'
     # 表征
     char_diffraction = 'char_diffraction'
+    char_microscopy = 'char_microscopy'
     char_optical_spectrum = 'char_optical_spectrum'
     char_time_resolved = 'char_time_resolved'
     char_electrochem = 'char_electrochem'

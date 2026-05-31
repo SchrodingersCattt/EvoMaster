@@ -278,6 +278,143 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+- id: IG_abacus_aux_consistency_001_20260531
+  capability: input_generation
+  domain: agnostic
+  intent: Generate an ABACUS LCAO input package for a Ti-Mo-Al-V alloy SQS seed while keeping STRU auxiliary-file references consistent with the available inventory.
+  human_prompt_seed: '请根据附件里的 Ti-Mo-Al-V SQS 位点表和 ABACUS 可用文件清单，准备一个 `timoyalv_abacus_scf/`
+    输入目录，用于后续 ABACUS LCAO SCF 计算。至少写出 `INPUT`、`STRU`、`KPT` 和 `input_prep_manifest.json`；
+    这次只准备输入，不提交计算。'
+  tags:
+  - eng_abacus
+  data_files:
+  - key: sqs_sites
+    path: data/IG_abacus_aux_consistency_001_20260531/timoyalv_sqs_sites.csv
+    oss_url: ''
+    description: Ti-Mo-Al-V SQS seed with element labels and fractional coordinates.
+  - key: aux_inventory
+    path: data/IG_abacus_aux_consistency_001_20260531/abacus_aux_inventory.txt
+    oss_url: ''
+    description: ABACUS pseudopotential and numerical-orbital files visible in the target image.
+  reference_answers:
+  - key: input_artifact
+    value: timoyalv_abacus_scf/INPUT
+  - key: stru_artifact
+    value: timoyalv_abacus_scf/STRU
+  - key: kpt_artifact
+    value: timoyalv_abacus_scf/KPT
+  - key: manifest_artifact
+    value: timoyalv_abacus_scf/input_prep_manifest.json
+  - key: input_core
+    value:
+      filename: timoyalv_abacus_scf/INPUT
+      tokens:
+      - calculation scf
+      - basis_type lcao
+      flags: i
+  - key: stru_aux_names
+    value:
+      filename: timoyalv_abacus_scf/STRU
+      tokens:
+      - Ti_ONCV_PBE-1.0.upf
+      - Mo_ONCV_PBE-1.0.upf
+      - Al_ONCV_PBE-1.0.upf
+      - V_ONCV_PBE-1.0.upf
+      - Ti_gga_8au_100Ry_4s2p2d1f.orb
+      - Mo_gga_9au_100Ry_5s4p3d2f.orb
+      - Al_gga_8au_100Ry_4s4p1d.orb
+      - V_gga_8au_100Ry_4s2p2d1f.orb
+      flags: i
+  - key: no_al_orbital_alias
+    value:
+      filename: timoyalv_abacus_scf/STRU
+      pattern: Al_gga_8au_100Ry_4s2p1d\.orb
+      flags: i
+  - key: manifest_schema
+    value:
+      filename: timoyalv_abacus_scf/input_prep_manifest.json
+      required_keys:
+      - software
+      - task
+      - input_dir
+      - generated_files
+      - auxiliary_files
+      - assumptions
+      - submit_ready
+  - key: manifest_auxiliary_names
+    value:
+      filename: timoyalv_abacus_scf/input_prep_manifest.json
+      tokens:
+      - Al_gga_8au_100Ry_4s4p1d.orb
+      - input_dir
+      - submit_ready
+      flags: i
+  - key: output_grounding
+    value: The final answer states that the ABACUS input directory was prepared from the SQS seed and available auxiliary-file inventory, and does not claim the calculation was submitted.
+  - key: turn_budget
+    value:
+      max: 14
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 16000
+  scoring_checklist:
+  - id: input_artifact
+    criterion: '`timoyalv_abacus_scf/INPUT` exists.'
+    axis: correctness
+    verify: artifact_exists
+  - id: stru_artifact
+    criterion: '`timoyalv_abacus_scf/STRU` exists.'
+    axis: correctness
+    verify: artifact_exists
+  - id: kpt_artifact
+    criterion: '`timoyalv_abacus_scf/KPT` exists.'
+    axis: correctness
+    verify: artifact_exists
+  - id: manifest_artifact
+    criterion: '`timoyalv_abacus_scf/input_prep_manifest.json` exists.'
+    axis: correctness
+    verify: artifact_exists
+  - id: input_core
+    criterion: INPUT is an ABACUS LCAO SCF input.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: stru_aux_names
+    criterion: STRU references the pseudopotential and orbital filenames exactly as listed in the available auxiliary inventory.
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.5
+  - id: no_al_orbital_alias
+    criterion: STRU does not reference a non-inventory Al orbital filename such as `Al_gga_8au_100Ry_4s2p1d.orb`.
+    axis: correctness
+    verify: text_file_regex_absent
+    weight: 1.5
+  - id: manifest_schema
+    criterion: Manifest includes software, task, input_dir, generated_files, auxiliary_files, assumptions, and submit_ready.
+    axis: correctness
+    verify: json_file_schema
+  - id: manifest_auxiliary_names
+    criterion: Manifest records the actual auxiliary-file names used for the package.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: output_grounding
+    criterion: Final answer states that the ABACUS input directory was prepared from the SQS seed and available auxiliary-file inventory, and does not claim the calculation was submitted.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
 - id: IG_abacus_010_20260513
   capability: input_generation
   domain: agnostic

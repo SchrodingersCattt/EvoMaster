@@ -1715,3 +1715,117 @@ questions:
     verify: token_budget
     weight: 0.0
     criterion: '[Must] Agent completed within token budget.'
+- id: WO_li_solvent_binding_workflow_001_20260531
+  capability: workflow_orchestration
+  domain: battery
+  intent: Orchestrate a direct Li+-solvent binding-energy screening workflow from solvent SMILES, including molecular construction, geometry optimization, energy evaluation, and result boundaries.
+  human_prompt_seed: '我在筛选低温电解液共溶剂，想比较 EC、DMC、EMC、FEC 对 Li+ 的结合强弱。附件里只有溶剂
+    SMILES。请直接组织/发起这轮量化筛选，输出 `li_solvent_workflow.json`、`li_solvent_qm_jobs.json`
+    和 `li_solvent_screening.json`。'
+  tags:
+  - eng_orca
+  data_files:
+  - key: solvent_targets
+    path: data/WO_li_solvent_binding_workflow_001_20260531/solvent_targets.csv
+    oss_url: ''
+    description: Solvent names and SMILES for the low-temperature electrolyte screening target set.
+  reference_answers:
+  - key: workflow_json
+    value: li_solvent_workflow.json
+  - key: qm_jobs_json
+    value: li_solvent_qm_jobs.json
+  - key: screening_json
+    value: li_solvent_screening.json
+  - key: workflow_required_tokens
+    value:
+      filename: li_solvent_workflow.json
+      tokens:
+      - SMILES
+      - neutral
+      - complex
+      - geometry_optimization
+      - binding_energy
+      flags: i
+  - key: qm_jobs_required_tokens
+    value:
+      filename: li_solvent_qm_jobs.json
+      tokens:
+      - EC
+      - DMC
+      - EMC
+      - FEC
+      - neutral
+      - complex
+      - optimize
+      flags: i
+  - key: screening_required_tokens
+    value:
+      filename: li_solvent_screening.json
+      tokens:
+      - EC
+      - DMC
+      - EMC
+      - FEC
+      - binding_energy_eV
+      - status
+      flags: i
+  - key: binding_energy_method
+    value: Binding energies are reported only when the agent has optimized both the neutral solvent and Li+-solvent complex or has an equivalent reliable completed QM result; the formula is E_bind = E_complex - E_solvent - E_Li+ with a consistent method and units.
+  - key: method_grounding
+    value: The workflow builds neutral solvent and Li+-solvent complex jobs from the provided SMILES, requires geometry optimization before final binding comparison, and does not use unoptimized placed-geometry single-point calculations as final ranking evidence.
+  - key: turn_budget
+    value:
+      max: 14
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 16000
+  scoring_checklist:
+  - id: workflow_json
+    criterion: Agent writes `li_solvent_workflow.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: qm_jobs_json
+    criterion: Agent writes `li_solvent_qm_jobs.json` with reproducible molecule-building and QM job specifications or executed-job records.
+    axis: correctness
+    verify: artifact_exists
+  - id: screening_json
+    criterion: Agent writes `li_solvent_screening.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: workflow_required_tokens
+    criterion: Workflow record covers solvent SMILES, neutral molecules, Li+-solvent complex construction, geometry optimization, and binding-energy computation.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: qm_jobs_required_tokens
+    criterion: Job specification covers neutral and Li+-complex calculations for EC, DMC, EMC, and FEC, including optimization steps.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: screening_required_tokens
+    criterion: Screening output includes all four solvents and binding-energy fields where justified.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: binding_energy_method
+    criterion: Binding energies, if reported, are computed only from optimized neutral-solvent, Li+, and optimized Li+-solvent complex energies using E_complex - E_solvent - E_Li+ with consistent method and units.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: method_grounding
+    criterion: The workflow builds neutral solvent and Li+-solvent complex jobs from the provided SMILES, requires geometry optimization before final binding comparison, and does not use unoptimized placed-geometry single-point calculations as final ranking evidence.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget

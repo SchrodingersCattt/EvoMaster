@@ -61,6 +61,7 @@ Tags indicate which skill(s) the question exercises. A question can have multipl
 | `meta_grounding` | (behavioral) | Boundary recognition, refusal, tool availability |
 | `meta_database` | aissq-explorer / mcp tools | Database/registry queries |
 | `char_diffraction` | mcp-mat-xrd | XRD/diffraction analysis |
+| `char_microscopy` | (no skill, knowledge-based) | Microscopy/image-derived characterization, e.g. TEM/SEM size statistics |
 
 ## Capability vs Tag Decision
 
