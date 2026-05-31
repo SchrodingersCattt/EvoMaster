@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS `evo_chat_sessions` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT '自增ID',
     `user_id` VARCHAR(255) NULL COMMENT '用户ID',
     `session_id` VARCHAR(255) NOT NULL UNIQUE COMMENT '会话ID',
+    `session_title` VARCHAR(255) NULL COMMENT '用户自定义会话标题；NULL 时前端回退 first_user_message',
     `last_task_id` VARCHAR(255) NULL COMMENT '最后一个任务ID',
     `status` VARCHAR(32) NOT NULL DEFAULT 'idle' COMMENT '会话状态：idle=空闲/已结束，active=运行中（用于限流与前端展示）',
     `is_shared` TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否已分享：0=否，1=是（分享后 stream 等可不鉴权）',

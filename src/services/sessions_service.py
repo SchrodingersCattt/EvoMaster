@@ -9,6 +9,7 @@ from functools import lru_cache
 from src.dao.chat_sessions_table import (
     WORKSPACE_PREF_UNSET,
     ChatSessionsTable,
+    _normalize_session_title_cell,
     _parse_first_message_cell,
     get_chat_sessions_table,
 )
@@ -51,6 +52,7 @@ def _session_row_to_item(row: dict) -> dict:
         "id": row["session_id"],
         "project_id": row.get("project_id"),
         "status": row.get("status", "idle"),
+        "title": _normalize_session_title_cell(row.get("session_title")),
         "history_length": int(row.get("history_length") or 0),
         "first_user_message": _parse_first_message_cell(row.get("first_message")),
     }
@@ -440,6 +442,12 @@ class ChatSessionsService:
             directory=WORKSPACE_PREF_UNSET,
             chat_mode=chat_mode,
         )
+
+    def set_session_title(
+        self, session_id: str, title: str | None, user_id: str
+    ) -> bool:
+        """设置/清除会话自定义标题。仅会话所有者可写；title 为空表示清除。"""
+        return self.table.set_session_title(session_id, user_id, title)
 
     def get_share_status(self, session_id: str) -> dict:
         """获取会话分享状态。返回 { \"enabled\": bool }，会话不存在返回 None。"""

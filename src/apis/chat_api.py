@@ -22,6 +22,9 @@ from src.models.chat import (
     SessionListMoreResponse,
     SessionListQuery,
     SessionListResponse,
+    SessionTitleApiResponse,
+    SessionTitleData,
+    SessionTitleSetRequest,
     ShareSetRequest,
     ShareStatusApiResponse,
     ShareStatusData,
@@ -624,6 +627,33 @@ def set_session_directory(
     if not row:
         raise NotFoundErrorResponse(msg="Session not found or you are not the owner")
     return SessionDirectoryApiResponse(data=_session_workspace_data_from_row(row))
+
+
+@router.put(
+    "/{session_id}/title",
+    response_model=SessionTitleApiResponse,
+    summary="重命名会话（设置/清除标题）",
+    description="仅会话所有者可写。传非空 `title` 设置自定义标题；传 null 或空字符串清除，"
+    "清除后前端回退到 first_user_message。标题最长 255 字符。",
+    operation_id="setChatSessionTitle",
+    responses={
+        401: COMMON_ERROR_RESPONSES[401],
+        404: COMMON_ERROR_RESPONSES[404],
+    },
+)
+def set_session_title(
+    session_id: str = Path(..., description="会话 ID", examples=["session-001"]),
+    body: SessionTitleSetRequest = Body(...),
+    user_id: str = Depends(UserService.require_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    """设置或清除会话自定义标题。仅会话所有者可写。"""
+    sid = session_id.strip()
+    if not chat_svc.set_session_title(sid, body.title, user_id):
+        raise NotFoundErrorResponse(
+            msg="Session not found or you are not the owner",
+        )
+    return SessionTitleApiResponse(data=SessionTitleData(id=sid, title=body.title))
 
 
 @router.put(

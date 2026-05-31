@@ -48,6 +48,7 @@ class SessionItem(BaseModel):
     status: str = (
         "idle"  # idle=空闲/已结束，active=运行中，waiting=已入队等待 worker（用于限流与前端展示）
     )
+    title: str | None = None  # 用户自定义标题；为 None 时前端回退 first_user_message
     history_length: int
     first_user_message: str | None = None  # 第一条用户消息
 
@@ -156,6 +157,7 @@ class SessionListApiResponse(BaseResponse[SessionListResponse]):
                                     "id": "session-001",
                                     "project_id": 42,
                                     "status": "idle",
+                                    "title": "结构分析会话",
                                     "history_length": 4,
                                     "first_user_message": "分析结构",
                                 }
@@ -294,6 +296,64 @@ class SessionDirectorySetRequest(BaseModel):
             "example": {
                 "directory": "/share/project/foo",
                 "mode": "planner",
+            }
+        }
+    )
+
+
+# ---------- 会话标题（重命名） ----------
+
+
+class SessionTitleData(BaseModel):
+    """GET? / PUT /chat/sessions/{session_id}/title 的 data 字段"""
+
+    id: str = Field(description="会话 ID")
+    title: str | None = Field(
+        default=None,
+        description="当前自定义标题；为 null 表示未设置/已清除，前端回退 first_user_message",
+    )
+
+
+class SessionTitleApiResponse(BaseResponse[SessionTitleData]):
+    """PUT /chat/sessions/{session_id}/title 规范响应"""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "code": 0,
+                "msg": "success",
+                "data": {
+                    "id": "session-001",
+                    "title": "结构分析会话",
+                },
+            }
+        }
+    )
+
+
+class SessionTitleSetRequest(BaseModel):
+    """PUT /chat/sessions/{session_id}/title 请求体"""
+
+    title: str | None = Field(
+        default=None,
+        max_length=255,
+        description="会话自定义标题；传 null 或空字符串表示清除（前端回退 first_user_message）",
+    )
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def normalize_title(cls, v: object) -> str | None:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            return s or None
+        raise ValueError("title must be a string or null")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "title": "结构分析会话",
             }
         }
     )
