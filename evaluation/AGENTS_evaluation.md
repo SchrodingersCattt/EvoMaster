@@ -441,6 +441,17 @@ scoring_checklist:
 - `intent` 中可以使用通用术语（如"表面构建工具"、"结构优化器"），但同样不应包含具体 MCP tool identifier。
 - 新增或修改题目时，需检查 `human_prompt_seed` 中是否意外泄漏了工具名；审查方式：在所有 YAML 的 `human_prompt_seed` 文本中搜索 `mat_sg_`、`mat_dpa_`、`mat_struct_db_` 等前缀。
 
+### 7. 真实轨迹派生题避免透题
+
+从真实线上轨迹沉淀题目时，除遵守本文件的 YAML/schema 约定外，还必须遵守 `evaluation/skills/real-traj-analysis/SKILL.md` 中的 Realistic Question Design 规则：先还原真实用户任务，再把评测意图放入隐藏 checklist / reference / judge。
+
+红线：
+
+- 不要把失败模式、质控点、来源约束、禁止捷径或期望诊断直接写进 `human_prompt_seed`。
+- 不要为便于判分而新增真实用户不会要求的参考资料、source report、notes 文件或答案化输出字段。
+- fixture 可以包含日志、运行记录、来源备注、杂乱表格等真实线索，但应避免 `expected_*`、`is_valid`、`value_type=experimental/estimated` 这类直接暴露答案的字段。
+- 输出文件名和 JSON key 应像真实交付物，而不是隐藏评分项名称。
+
 ---
 
 ## DevShell 与 Claude Agent SDK 外层编排
