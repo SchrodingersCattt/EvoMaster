@@ -66,6 +66,11 @@ def _build_anthropic_prompt_cache_options(
         system_prompt_breakpoint=prompt_cache.system_prompt_breakpoint,
         cache_control=prompt_cache.cache_control(),
         automatic=prompt_cache.automatic,
+        latest_user_breakpoint=prompt_cache.latest_user_breakpoint,
+        tool_result_breakpoint=prompt_cache.tool_result_breakpoint,
+        flexible_breakpoint=prompt_cache.flexible_breakpoint,
+        max_breakpoints=prompt_cache.max_breakpoints,
+        min_flexible_chars=prompt_cache.min_flexible_chars,
     )
 
 

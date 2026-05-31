@@ -33,6 +33,11 @@ def llm_config() -> LLMConfig:
                     "provider": "anthropic",
                     "system_prompt_breakpoint": True,
                     "automatic": True,
+                    "latest_user_breakpoint": True,
+                    "tool_result_breakpoint": True,
+                    "flexible_breakpoint": True,
+                    "max_breakpoints": 4,
+                    "min_flexible_chars": 1000,
                     "ttl": "5m",
                 },
             ),
@@ -67,15 +72,18 @@ class TestBuildProvider:
         assert "extra_body" in provider._extra_kwargs
         assert provider._client is None  # lazy init
 
-    def test_prompt_cache_options_passed_for_opus(
-        self, llm_config: LLMConfig
-    ) -> None:
+    def test_prompt_cache_options_passed_for_opus(self, llm_config: LLMConfig) -> None:
         provider = build_provider(llm_config)
 
         assert provider._prompt_cache_options == AnthropicPromptCacheOptions(
             system_prompt_breakpoint=True,
             cache_control={"type": "ephemeral"},
             automatic=True,
+            latest_user_breakpoint=True,
+            tool_result_breakpoint=True,
+            flexible_breakpoint=True,
+            max_breakpoints=4,
+            min_flexible_chars=1000,
         )
 
     def test_prompt_cache_options_absent_for_unconfigured_profile(
@@ -100,6 +108,11 @@ class TestBuildProvider:
                         "provider": "anthropic",
                         "system_prompt_breakpoint": True,
                         "automatic": True,
+                        "latest_user_breakpoint": True,
+                        "tool_result_breakpoint": True,
+                        "flexible_breakpoint": True,
+                        "max_breakpoints": 4,
+                        "min_flexible_chars": 1000,
                         "ttl": "5m",
                     },
                 ),
@@ -120,6 +133,11 @@ class TestBuildProvider:
             system_prompt_breakpoint=True,
             cache_control={"type": "ephemeral"},
             automatic=True,
+            latest_user_breakpoint=True,
+            tool_result_breakpoint=True,
+            flexible_breakpoint=True,
+            max_breakpoints=4,
+            min_flexible_chars=1000,
         )
 
     def test_bedrock_provider_does_not_receive_prompt_cache_options(self) -> None:

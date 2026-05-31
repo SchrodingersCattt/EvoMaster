@@ -49,7 +49,180 @@ class AnthropicPromptCacheOptions:
     system_prompt_breakpoint: bool
     cache_control: dict[str, str]
     automatic: bool = False
+    latest_user_breakpoint: bool = True
+    tool_result_breakpoint: bool = False
+    flexible_breakpoint: bool = False
     max_breakpoints: int = 4
+    min_flexible_chars: int = 1000
+
+
+@dataclass(frozen=True)
+class _CacheTarget:
+    message_index: int
+    placement: str  # "text_content" | "tool_message"
+    priority: int
+
+
+def _add_text_content_cache_control(
+    message: dict[str, Any],
+    cache_control: dict[str, str],
+) -> bool:
+    content = message.get("content")
+    if isinstance(content, str):
+        if not content.strip():
+            return False
+        message["content"] = [
+            {
+                "type": "text",
+                "text": content,
+                "cache_control": dict(cache_control),
+            }
+        ]
+        return True
+    if not isinstance(content, list):
+        return False
+    for part in reversed(content):
+        if (
+            isinstance(part, dict)
+            and part.get("type") == "text"
+            and isinstance(part.get("text"), str)
+            and part.get("text", "").strip()
+        ):
+            if "cache_control" not in part:
+                part["cache_control"] = dict(cache_control)
+            return True
+    return False
+
+
+def _add_tool_message_cache_control(
+    message: dict[str, Any],
+    cache_control: dict[str, str],
+) -> bool:
+    if message.get("role") != "tool":
+        return False
+    content = message.get("content")
+    if isinstance(content, str) and not content.strip():
+        return False
+    if isinstance(content, list) and not content:
+        return False
+    if content is None:
+        return False
+    if "cache_control" not in message:
+        message["cache_control"] = dict(cache_control)
+    return True
+
+
+def _tool_call_ids(message: dict[str, Any]) -> list[str]:
+    ids: list[str] = []
+    for call in message.get("tool_calls") or []:
+        if isinstance(call, dict) and call.get("id"):
+            ids.append(str(call["id"]))
+    return ids
+
+
+def _latest_completed_tool_group_tail(messages: list[dict[str, Any]]) -> int | None:
+    for assistant_idx in range(len(messages) - 1, -1, -1):
+        assistant = messages[assistant_idx]
+        if assistant.get("role") != "assistant":
+            continue
+        expected = set(_tool_call_ids(assistant))
+        if not expected:
+            continue
+
+        seen: set[str] = set()
+        tail_idx: int | None = None
+        for idx in range(assistant_idx + 1, len(messages)):
+            message = messages[idx]
+            if message.get("role") == "assistant" and _tool_call_ids(message):
+                break
+            if message.get("role") != "tool":
+                continue
+            tool_call_id = message.get("tool_call_id")
+            if tool_call_id in expected:
+                seen.add(str(tool_call_id))
+                tail_idx = idx
+                if seen == expected:
+                    return tail_idx
+        return None
+    return None
+
+
+def _message_text_size(message: dict[str, Any]) -> int:
+    content = message.get("content")
+    if isinstance(content, str):
+        return len(content.strip())
+    if isinstance(content, list):
+        total = 0
+        for part in content:
+            if isinstance(part, dict) and isinstance(part.get("text"), str):
+                total += len(part["text"].strip())
+        return total
+    return 0
+
+
+def _select_flexible_cache_target(
+    messages: list[dict[str, Any]],
+    used: set[int],
+    options: AnthropicPromptCacheOptions,
+) -> _CacheTarget | None:
+    candidates: list[tuple[int, int, str]] = []
+    for idx, message in enumerate(messages):
+        if idx in used:
+            continue
+        role = message.get("role")
+        if role not in {"user", "tool"}:
+            continue
+        size = _message_text_size(message)
+        if size < options.min_flexible_chars:
+            continue
+        placement = "tool_message" if role == "tool" else "text_content"
+        candidates.append((size, idx, placement))
+    if not candidates:
+        return None
+    _, idx, placement = max(candidates)
+    return _CacheTarget(idx, placement, 3)
+
+
+def _select_anthropic_cache_targets(
+    messages: list[dict[str, Any]],
+    options: AnthropicPromptCacheOptions,
+) -> list[_CacheTarget]:
+    targets: list[_CacheTarget] = []
+    used: set[int] = set()
+
+    def append(target: _CacheTarget) -> None:
+        if len(targets) >= options.max_breakpoints:
+            return
+        if target.message_index in used:
+            return
+        targets.append(target)
+        used.add(target.message_index)
+
+    if options.system_prompt_breakpoint:
+        system_idx = next(
+            (idx for idx, m in enumerate(messages) if m.get("role") == "system"),
+            None,
+        )
+        if system_idx is not None:
+            append(_CacheTarget(system_idx, "text_content", 0))
+
+    if options.automatic and options.latest_user_breakpoint:
+        for idx in range(len(messages) - 1, -1, -1):
+            if messages[idx].get("role") == "user":
+                append(_CacheTarget(idx, "text_content", 1))
+                break
+
+    if options.automatic and options.tool_result_breakpoint:
+        tool_tail_idx = _latest_completed_tool_group_tail(messages)
+        if tool_tail_idx is not None:
+            append(_CacheTarget(tool_tail_idx, "tool_message", 2))
+
+    if options.automatic and options.flexible_breakpoint:
+        flexible = _select_flexible_cache_target(messages, used, options)
+        if flexible is not None:
+            append(flexible)
+
+    return targets
 
 
 def _is_complete_json_document(raw: str) -> bool:
@@ -353,64 +526,32 @@ class OpenAIProvider:
         from matmaster.types.errors import LLMError
 
         prepared = copy.deepcopy(messages)
-        applied = 0
-
-        def add_cache_control(message: dict[str, Any]) -> bool:
-            content = message.get("content")
-            if isinstance(content, str):
-                if not content.strip():
-                    return False
-                message["content"] = [
-                    {
-                        "type": "text",
-                        "text": content,
-                        "cache_control": dict(options.cache_control),
-                    }
-                ]
-                return True
-            if not isinstance(content, list):
-                return False
-            for part in reversed(content):
-                if (
-                    isinstance(part, dict)
-                    and part.get("type") == "text"
-                    and isinstance(part.get("text"), str)
-                    and part.get("text", "").strip()
-                ):
-                    part["cache_control"] = dict(options.cache_control)
-                    return True
-            return False
 
         if options.system_prompt_breakpoint:
-            for message in prepared:
-                if message.get("role") != "system":
-                    continue
-                if not add_cache_control(message):
-                    raise LLMError(
-                        "anthropic prompt cache requires a non-empty string system prompt",
-                        retryable=False,
-                        error_category="payload_validation",
-                    )
-                applied += 1
-                break
-            else:
+            if not any(message.get("role") == "system" for message in prepared):
                 raise LLMError(
                     "anthropic prompt cache enabled but no system message was found",
                     retryable=False,
                     error_category="payload_validation",
                 )
 
-        if options.automatic:
-            available = max(0, options.max_breakpoints - applied)
-            if available:
-                user_indices = [
-                    idx
-                    for idx, message in enumerate(prepared)
-                    if message.get("role") == "user"
-                ][-2:]
-                for idx in reversed(user_indices[-available:]):
-                    if add_cache_control(prepared[idx]):
-                        applied += 1
+        targets = _select_anthropic_cache_targets(prepared, options)
+        for target in targets:
+            message = prepared[target.message_index]
+            if target.placement == "tool_message":
+                ok = _add_tool_message_cache_control(message, options.cache_control)
+            else:
+                ok = _add_text_content_cache_control(message, options.cache_control)
+            if (
+                not ok
+                and target.placement == "text_content"
+                and message.get("role") == "system"
+            ):
+                raise LLMError(
+                    "anthropic prompt cache requires a non-empty string system prompt",
+                    retryable=False,
+                    error_category="payload_validation",
+                )
 
         return prepared
 

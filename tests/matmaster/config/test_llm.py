@@ -54,6 +54,11 @@ class TestLLMProfileConfig:
                 "provider": "anthropic",
                 "system_prompt_breakpoint": True,
                 "automatic": True,
+                "latest_user_breakpoint": True,
+                "tool_result_breakpoint": True,
+                "flexible_breakpoint": True,
+                "max_breakpoints": 4,
+                "min_flexible_chars": 1000,
                 "ttl": "1h",
             }
         )
@@ -62,6 +67,11 @@ class TestLLMProfileConfig:
             provider="anthropic",
             system_prompt_breakpoint=True,
             automatic=True,
+            latest_user_breakpoint=True,
+            tool_result_breakpoint=True,
+            flexible_breakpoint=True,
+            max_breakpoints=4,
+            min_flexible_chars=1000,
             ttl="1h",
         )
 
@@ -76,6 +86,35 @@ class TestPromptCacheConfig:
     def test_one_hour_cache_control(self) -> None:
         cfg = PromptCacheConfig(ttl="1h")
         assert cfg.cache_control() == {"type": "ephemeral", "ttl": "1h"}
+
+    def test_strategy_defaults(self) -> None:
+        cfg = PromptCacheConfig()
+
+        assert cfg.system_prompt_breakpoint is False
+        assert cfg.automatic is False
+        assert cfg.latest_user_breakpoint is True
+        assert cfg.tool_result_breakpoint is False
+        assert cfg.flexible_breakpoint is False
+        assert cfg.max_breakpoints == 4
+        assert cfg.min_flexible_chars == 1000
+
+    def test_strategy_fields_from_dict(self) -> None:
+        cfg = PromptCacheConfig(
+            system_prompt_breakpoint=True,
+            automatic=True,
+            latest_user_breakpoint=True,
+            tool_result_breakpoint=True,
+            flexible_breakpoint=True,
+            max_breakpoints=4,
+            min_flexible_chars=1200,
+            ttl="5m",
+        )
+
+        assert cfg.latest_user_breakpoint is True
+        assert cfg.tool_result_breakpoint is True
+        assert cfg.flexible_breakpoint is True
+        assert cfg.max_breakpoints == 4
+        assert cfg.min_flexible_chars == 1200
 
 
 class TestLLMProfileConfigMethods:

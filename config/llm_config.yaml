@@ -25,6 +25,11 @@ profiles:
       provider: "anthropic"
       system_prompt_breakpoint: true
       automatic: true
+      latest_user_breakpoint: true
+      tool_result_breakpoint: true
+      flexible_breakpoint: true
+      max_breakpoints: 4
+      min_flexible_chars: 1000
       ttl: "5m"
 
   sonnet:
@@ -157,6 +162,11 @@ profiles:
       provider: "anthropic"
       system_prompt_breakpoint: true
       automatic: true
+      latest_user_breakpoint: true
+      tool_result_breakpoint: true
+      flexible_breakpoint: true
+      max_breakpoints: 4
+      min_flexible_chars: 1000
       ttl: "5m"
 
   # Amazon Bedrock Converse（凭证：环境变量 AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY /

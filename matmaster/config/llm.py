@@ -76,6 +76,11 @@ class PromptCacheConfig(BaseModel):
     provider: Literal["anthropic"] = "anthropic"
     system_prompt_breakpoint: bool = False
     automatic: bool = False
+    latest_user_breakpoint: bool = True
+    tool_result_breakpoint: bool = False
+    flexible_breakpoint: bool = False
+    max_breakpoints: int = Field(default=4, ge=1, le=4)
+    min_flexible_chars: int = Field(default=1000, ge=1)
     ttl: Literal["5m", "1h"] = "5m"
 
     def cache_control(self) -> dict[str, str]:
