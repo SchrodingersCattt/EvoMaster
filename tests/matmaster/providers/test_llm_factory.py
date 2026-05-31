@@ -11,6 +11,7 @@ import pytest
 
 from matmaster.config.llm import LLMConfig, LLMProfileConfig, LLMRouteConfig
 from matmaster.providers.llm_factory import build_provider, build_provider_bundle
+from matmaster.providers.openai_provider import AnthropicPromptCacheOptions
 
 
 @pytest.fixture()
@@ -28,6 +29,12 @@ def llm_config() -> LLMConfig:
                 reasoning_protocol="anthropic_adaptive_thinking",
                 temperature_policy="force_one_when_reasoning",
                 temperature=0.7,
+                prompt_cache={
+                    "provider": "anthropic",
+                    "system_prompt_breakpoint": True,
+                    "automatic": True,
+                    "ttl": "5m",
+                },
             ),
             "sonnet": LLMProfileConfig(
                 provider="openai",
@@ -59,6 +66,81 @@ class TestBuildProvider:
         assert provider._temperature == 1.0  # force_one_when_reasoning
         assert "extra_body" in provider._extra_kwargs
         assert provider._client is None  # lazy init
+
+    def test_prompt_cache_options_passed_for_opus(
+        self, llm_config: LLMConfig
+    ) -> None:
+        provider = build_provider(llm_config)
+
+        assert provider._prompt_cache_options == AnthropicPromptCacheOptions(
+            system_prompt_breakpoint=True,
+            cache_control={"type": "ephemeral"},
+        )
+
+    def test_prompt_cache_options_absent_for_unconfigured_profile(
+        self, llm_config: LLMConfig
+    ) -> None:
+        provider = build_provider(llm_config, model_override="claude-sonnet-4-6")
+
+        assert provider._prompt_cache_options is None
+
+    def test_prompt_cache_options_passed_for_opus_global(self) -> None:
+        config = LLMConfig(
+            profiles={
+                "opus_global": LLMProfileConfig(
+                    provider="openai",
+                    model="global.anthropic.claude-opus-4-6-v1",
+                    api_key="sk-test-opus",
+                    base_url="http://litellm-proxy",
+                    thinking_effort="max",
+                    reasoning_protocol="anthropic_adaptive_thinking",
+                    temperature_policy="force_one_when_reasoning",
+                    prompt_cache={
+                        "provider": "anthropic",
+                        "system_prompt_breakpoint": True,
+                        "automatic": True,
+                        "ttl": "5m",
+                    },
+                ),
+            },
+            routes={
+                "global.anthropic.claude-opus-4-6-v1": LLMRouteConfig(
+                    profile="opus_global"
+                )
+            },
+            default="opus_global",
+        )
+
+        provider = build_provider(
+            config, model_override="global.anthropic.claude-opus-4-6-v1"
+        )
+
+        assert provider._prompt_cache_options == AnthropicPromptCacheOptions(
+            system_prompt_breakpoint=True,
+            cache_control={"type": "ephemeral"},
+        )
+
+    def test_bedrock_provider_does_not_receive_prompt_cache_options(self) -> None:
+        config = LLMConfig(
+            profiles={
+                "opus_bedrock": LLMProfileConfig(
+                    provider="bedrock",
+                    model="arn:aws:bedrock:us-east-1:123:inference-profile/global.anthropic.claude-opus-4-6-v1",
+                    bedrock_region="us-east-1",
+                    prompt_cache={
+                        "provider": "anthropic",
+                        "system_prompt_breakpoint": True,
+                        "automatic": True,
+                    },
+                ),
+            },
+            routes={"bedrock-claude-opus": LLMRouteConfig(profile="opus_bedrock")},
+            default="opus_bedrock",
+        )
+
+        provider = build_provider(config)
+
+        assert not hasattr(provider, "_prompt_cache_options")
 
     def test_route_hit(self, llm_config: LLMConfig) -> None:
         """model_override exact match -> sonnet profile."""

@@ -13,7 +13,10 @@ from dataclasses import dataclass
 
 from matmaster.config.llm import LLMConfig
 from matmaster.providers.bedrock_provider import BedrockProvider
-from matmaster.providers.openai_provider import OpenAIProvider
+from matmaster.providers.openai_provider import (
+    AnthropicPromptCacheOptions,
+    OpenAIProvider,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +54,18 @@ def build_provider(
         llm_override=llm_override,
         default_profile_key=default_profile_key,
     ).provider
+
+
+def _build_anthropic_prompt_cache_options(
+    profile,
+) -> AnthropicPromptCacheOptions | None:
+    prompt_cache = profile.prompt_cache
+    if prompt_cache is None or not prompt_cache.system_prompt_breakpoint:
+        return None
+    return AnthropicPromptCacheOptions(
+        system_prompt_breakpoint=prompt_cache.system_prompt_breakpoint,
+        cache_control=prompt_cache.cache_control(),
+    )
 
 
 def build_provider_bundle(
@@ -115,6 +130,7 @@ def build_provider_bundle(
         stream_idle_timeout=profile.stream_idle_timeout,
         max_retries=profile.max_retries,
         retry_delay=profile.retry_delay,
+        prompt_cache_options=_build_anthropic_prompt_cache_options(profile),
         extra_kwargs=profile.build_extra_kwargs(),
     )
     return LLMProviderBundle(
