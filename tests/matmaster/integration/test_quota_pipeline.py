@@ -546,7 +546,7 @@ class TestQuotaNotDeductedOnError:
         )
         assert error_payload is not None
         assert error_payload['source'] == 'System'
-        assert '输出 token 上限截断' in error_payload['message']
+        assert '输出 token 上限截断' in error_payload['content']['message']
         stream_closed_payload = next(
             (payload for payload in payloads if payload.get('type') == 'stream_closed'),
             None,
@@ -633,7 +633,7 @@ class TestQuotaNotDeductedOnError:
         )
         assert error_payload is not None
         assert error_payload['source'] == 'System'
-        assert '没有返回可见最终回答' in error_payload['message']
+        assert '没有返回可见最终回答' in error_payload['content']['message']
         stream_closed_payload = next(
             (payload for payload in payloads if payload.get('type') == 'stream_closed'),
             None,
@@ -719,7 +719,7 @@ class TestQuotaNotDeductedOnError:
         )
         assert error_payload is not None
         assert error_payload['source'] == 'System'
-        assert error_payload['message']
+        assert error_payload['content']['message']
         stream_closed_payload = next(
             (payload for payload in payloads if payload.get('type') == 'stream_closed'),
             None,

@@ -133,8 +133,25 @@ def _carry_top_level_fields(
     event_type: str,
     content: object,
 ) -> None:
-    """Lift remaining raw fields to the top level without duplicating content."""
-    if event_type in {'response', 'thought'} or not isinstance(content, dict):
+    """Lift remaining raw fields to the top level without duplicating content.
+
+    Structured events keep their payload in ``content`` only; the top level
+    carries envelope metadata. Two groups stay in the full-passthrough branch:
+
+    - response / thought: ``normalize_response_sse_payload`` collapses their
+      content to a string, so usage / model / stream fields must be top-level.
+    - run_result / finish: the frontend reads ``final_content`` and ``status``
+      from the top level (scimaster-bohr-chat dispatch/index.ts and
+      ask-question-terminal.ts). Deduping them is deferred until that read is
+      migrated to ``content``.
+
+    A non-dict ``content`` (tool_progress, stream_closed, unknown passthrough)
+    also keeps its structured identifiers at the top level.
+    """
+    if (
+        event_type in {'response', 'thought', 'run_result', 'finish'}
+        or not isinstance(content, dict)
+    ):
         for key, value in raw.items():
             if key in _TOP_LEVEL_DENYLIST:
                 continue
@@ -161,9 +178,10 @@ def build_public_sse_payload_from_bus_dump(
 
     顶层键顺序与 ``chat_events_table.get_session_events`` 回放一致：
     source, type, content, session_id, task_id, invocation_id（若有）, spawn_id。
-    结构化事件（tool_result / run_result 等）的业务字段只放在 ``content`` 内，
-    顶层仅捎带信封元数据（timestamp）；response / thought 与 content 非 dict
-    的事件（tool_progress 等）保持全量上提，详见 ``_carry_top_level_fields``。
+    结构化事件（tool_result / error / mcp_* 等）的业务字段只放在 ``content`` 内，
+    顶层仅捎带信封元数据（timestamp）；response / thought、run_result / finish
+    以及 content 非 dict 的事件（tool_progress 等）保持全量上提，
+    详见 ``_carry_top_level_fields``。
     """
     event_type = str(raw.get('type', ''))
     content = _public_content_for_event(event_type, raw)

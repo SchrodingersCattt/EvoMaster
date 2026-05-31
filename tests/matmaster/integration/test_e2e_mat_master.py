@@ -682,8 +682,8 @@ class TestMatMasterRunAgentE2E:
             None,
         )
         assert bohrium_payload is not None
-        assert bohrium_payload['payload']['type'] == 'node_ready'
-        assert bohrium_payload['payload']['content'] == 'node is ready'
+        assert bohrium_payload['content']['event_type'] == 'node_ready'
+        assert bohrium_payload['content']['message'] == 'node is ready'
 
     @patch('matmaster.config.loader.load_llm_config')
     @patch('matmaster.providers.llm_factory.build_provider')
@@ -860,7 +860,7 @@ class TestMatMasterRunAgentE2E:
             None,
         )
         assert error_payload is not None
-        assert error_payload['message'] == reason
+        assert error_payload['content']['message'] == reason
         stream_closed_payload = next(
             (
                 payload
@@ -952,4 +952,4 @@ class TestMatMasterRunAgentE2E:
         )
         assert error_payload is not None
         assert error_payload['source'] == 'System'
-        assert error_payload['message'] == 'bohrium setup failed'
+        assert error_payload['content']['message'] == 'bohrium setup failed'
