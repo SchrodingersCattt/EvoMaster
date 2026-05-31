@@ -60,6 +60,81 @@ def _session_url(session_id: str) -> str:
     return f'https://matmaster{suffix}.bohrium.com/matmaster/chat-evo/{sid}'
 
 
+def _format_run_duration(duration_sec: float) -> str:
+    """把运行秒数格式化为「X 秒 / X 分 X 秒 / X 小时 X 分」。"""
+    if duration_sec < 60:
+        return f'{duration_sec:.1f} 秒'
+    if duration_sec < 3600:
+        m = int(duration_sec // 60)
+        s = int(duration_sec % 60)
+        return f'{m} 分 {s} 秒'
+    h = int(duration_sec // 3600)
+    m = int((duration_sec % 3600) // 60)
+    return f'{h} 小时 {m} 分'
+
+
+def _build_completion_card(
+    *,
+    session_id: str,
+    session_url: str,
+    user_info_display: str,
+    llm: str | None,
+    model: str | None,
+    user_question: str,
+    run_success: bool,
+    fail_reason: str | None,
+    fail_reason_str: str,
+    duration_str: str,
+    active_count: int,
+    queue_len: int,
+    usage_summary: dict | None,
+) -> tuple[str, list[tuple[str, str]], str]:
+    """构建会话完成/失败/取消的飞书卡片，返回 ``(title, rows, template)``。
+
+    纯函数，无副作用，便于单测（含失败原因行与 token 明细行的插入位置）。
+    """
+    rows: list[tuple[str, str]] = [
+        ('会话ID', session_id),
+        ('会话地址', session_url),
+        ('用户', user_info_display),
+        ('模型', format_llm_model_for_notify(llm, model)),
+        ('用户问题', user_question or '-'),
+        ('执行节点', get_worker_id()),
+        (
+            '结果',
+            (
+                '成功'
+                if run_success
+                else ('已取消' if fail_reason == 'cancelled' else '失败')
+            ),
+        ),
+        ('运行时间', duration_str),
+        ('执行中', str(active_count)),
+        ('排队数', str(queue_len)),
+    ]
+    if not run_success and fail_reason_str and fail_reason_str != 'cancelled':
+        reason = (fail_reason_str or '-')[:500]
+        if len(fail_reason_str) > 500:
+            reason = reason + '…'
+        rows.insert(7, ('失败原因', reason))  # 插在「结果」之后
+    # token 消耗明细插在「运行时间」之后、「执行中/排队数」之前
+    usage_rows = format_usage_rows(usage_summary)
+    if usage_rows:
+        try:
+            anchor = next(
+                i for i, (label, _) in enumerate(rows) if label == '运行时间'
+            )
+            insert_at = anchor + 1
+        except StopIteration:
+            insert_at = len(rows)
+        rows[insert_at:insert_at] = usage_rows
+    if fail_reason == 'cancelled':
+        return '用户取消运行', rows, CARD_TEMPLATE_ORANGE
+    title = 'Worker 执行成功' if run_success else 'Worker 执行失败'
+    template = CARD_TEMPLATE_GREEN if run_success else CARD_TEMPLATE_RED
+    return title, rows, template
+
+
 class RedisCancellationBridge:
     """Daemon thread that polls Redis stop flag and cancels a controller."""
 
@@ -409,73 +484,25 @@ def _run_worker_loop() -> None:
                         duration_sec = elapsed_ms / 1000.0
                     else:
                         duration_sec = time.monotonic() - run_start_time
-                    if duration_sec < 60:
-                        duration_str = f'{duration_sec:.1f} 秒'
-                    elif duration_sec < 3600:
-                        m = int(duration_sec // 60)
-                        s = int(duration_sec % 60)
-                        duration_str = f'{m} 分 {s} 秒'
-                    else:
-                        h = int(duration_sec // 3600)
-                        m = int((duration_sec % 3600) // 60)
-                        duration_str = f'{h} 小时 {m} 分'
-                    rows = [
-                        ('会话ID', session_id),
-                        ('会话地址', session_url),
-                        ('用户', user_info_display),
-                        (
-                            '模型',
-                            format_llm_model_for_notify(llm_override, model_override),
-                        ),
-                        ('用户问题', user_question or '-'),
-                        ('执行节点', get_worker_id()),
-                        (
-                            '结果',
-                            (
-                                '成功'
-                                if run_success
-                                else (
-                                    '已取消' if fail_reason == 'cancelled' else '失败'
-                                )
-                            ),
-                        ),
-                        ('运行时间', duration_str),
-                        ('执行中', str(active_count)),
-                        ('排队数', str(queue_len)),
-                    ]
+                    duration_str = _format_run_duration(duration_sec)
                     fail_reason_str = (
                         str(fail_reason).strip() if fail_reason is not None else ''
                     )
-                    if (
-                        not run_success
-                        and fail_reason_str
-                        and fail_reason_str != 'cancelled'
-                    ):
-                        reason = (fail_reason_str or '-')[:500]
-                        if len(fail_reason_str) > 500:
-                            reason = reason + '…'
-                        rows.insert(7, ('失败原因', reason))  # 插在「结果」之后
-                    # token 消耗明细插在「运行时间」之后、「执行中/排队数」之前
-                    usage_rows = format_usage_rows(usage_summary)
-                    if usage_rows:
-                        try:
-                            anchor = next(
-                                i
-                                for i, (label, _) in enumerate(rows)
-                                if label == '运行时间'
-                            )
-                            insert_at = anchor + 1
-                        except StopIteration:
-                            insert_at = len(rows)
-                        rows[insert_at:insert_at] = usage_rows
-                    if fail_reason == 'cancelled':
-                        title = '用户取消运行'
-                        template = CARD_TEMPLATE_ORANGE
-                    else:
-                        title = 'Worker 执行成功' if run_success else 'Worker 执行失败'
-                        template = (
-                            CARD_TEMPLATE_GREEN if run_success else CARD_TEMPLATE_RED
-                        )
+                    title, rows, template = _build_completion_card(
+                        session_id=session_id,
+                        session_url=session_url,
+                        user_info_display=user_info_display,
+                        llm=llm_override,
+                        model=model_override,
+                        user_question=user_question,
+                        run_success=run_success,
+                        fail_reason=fail_reason,
+                        fail_reason_str=fail_reason_str,
+                        duration_str=duration_str,
+                        active_count=active_count,
+                        queue_len=queue_len,
+                        usage_summary=usage_summary,
+                    )
                     notify_post_async(title, rows, template=template)
                     logger.info(
                         'Agent worker: Feishu completion card queued session_id=%s title=%s',
