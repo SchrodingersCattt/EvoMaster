@@ -55,6 +55,7 @@ from matmaster.types.tool_spec import ResourceClaim
 from matmaster.types.topology import ToolPlane
 
 from .errors import BohriumJobStateError
+from .models import BohriumSubmittedJob
 from .paths import resolve_download_target, resolve_input_source
 from .transfers import (
     download_remote_results,
@@ -84,7 +85,7 @@ def submit_job_via_runtime(
     disk_size: int,
     workdir: Path,
     session,
-) -> tuple[int | str, int | str]:
+) -> BohriumSubmittedJob:
     ctx = build_bohrium_context(session=session, require_project=True)
     source = resolve_input_source(
         raw_path=str(input_dir),
@@ -140,14 +141,17 @@ def submit_job_via_runtime(
         raw_jid = add_data.get("jobId")
         if raw_jid is None:
             raise BohriumError("Missing jobId in sandbox add response")
-        job_id: int | str = str(raw_jid).strip()
-        bohr_raw = add_data.get("bohrJobId")
-        bohr_job_id = str(bohr_raw).strip() if bohr_raw not in (None, "", 0) else job_id
-        return job_id, bohr_job_id
+        job_id = str(raw_jid).strip()
+        return BohriumSubmittedJob(
+            job_id=job_id,
+            raw_add_response=dict(add_data),
+        )
 
-    job_id = int(add_data["jobId"])
-    bohr_job_id = int(add_data.get("bohrJobId") or add_data["jobId"])
-    return job_id, bohr_job_id
+    job_id = str(add_data["jobId"]).strip()
+    return BohriumSubmittedJob(
+        job_id=job_id,
+        raw_add_response=dict(add_data),
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -499,7 +503,7 @@ class BohriumTool(BuiltinTool):
         try:
             ctx = self._build_context(require_project=True)
             self._log_request_context(action="submit", ctx=ctx, sandbox=ctx.sandbox)
-            job_id, bohr_job_id = submit_job_via_runtime(
+            submitted = submit_job_via_runtime(
                 input_dir=str(input_dir),
                 image=str(image),
                 cmd=str(cmd),
@@ -514,8 +518,7 @@ class BohriumTool(BuiltinTool):
                 content=json.dumps(
                     {
                         "success": True,
-                        "job_id": job_id,
-                        "bohr_job_id": bohr_job_id,
+                        "job_id": submitted.job_id,
                         "status": "Submitted",
                         "use_sandbox": ctx.sandbox,
                     },

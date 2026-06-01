@@ -707,9 +707,13 @@ class TestBohriumExecution:
         assert isinstance(result, ToolResult)
         assert result.status == "success"
         payload = json.loads(result.content)
-        assert payload["job_id"] == "job-123"
-        assert payload["bohr_job_id"] == "bohr-456"
-        assert payload["use_sandbox"] is True
+        assert payload == {
+            "success": True,
+            "job_id": "job-123",
+            "status": "Submitted",
+            "use_sandbox": True,
+        }
+        assert "bohr_job_id" not in payload
         assert [path for path, _ in post_calls] == [
             "/openapi/v1/sandbox/job/create",
             "/openapi/v1/sandbox/job/add",
@@ -722,6 +726,62 @@ class TestBohriumExecution:
         assert upload_calls
         assert upload_calls[0][0].endswith("input.zip")
         assert upload_calls[0][2] == "token-123"
+
+    def test_submit_job_via_runtime_returns_named_job_model(
+        self, tmp_path, monkeypatch
+    ):
+        input_dir = tmp_path / "inputs"
+        input_dir.mkdir()
+        (input_dir / "input.inp").write_text("&CONTROL\n", encoding="utf-8")
+
+        post_calls: list[tuple[str, dict]] = []
+        upload_calls: list[tuple[str, str, dict]] = []
+
+        def fake_post(base_url, path, access_key, payload, timeout=30):
+            del base_url, access_key, timeout
+            post_calls.append((path, payload))
+            if path == "/openapi/v1/sandbox/job/create":
+                return {
+                    "code": 0,
+                    "data": {
+                        "storePath": "sandbox/jobs/run-1/",
+                        "storeHost": "https://store.example.com",
+                        "token": "token-123",
+                        "jobId": "create-job-id",
+                    },
+                }
+            if path == "/openapi/v1/sandbox/job/add":
+                return {
+                    "code": 0,
+                    "data": {
+                        "jobId": "job-123",
+                        "bohrJobId": "bohr-456",
+                    },
+                }
+            raise AssertionError(f"unexpected path: {path}")
+
+        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
+        _patch_bridge(monkeypatch)
+        monkeypatch.setattr(bohrium_client_module, "_post", fake_post)
+        _install_fake_sdk_free_upload(monkeypatch, upload_calls)
+
+        submitted = bohrium_tool_module.submit_job_via_runtime(
+            input_dir=str(input_dir),
+            image="registry.dp.tech/dptech/cp2k:2024.1",
+            cmd="cp2k.popt -i input.inp",
+            machine="c64_m256_cpu",
+            job_name="matmaster-job",
+            disk_size=50,
+            workdir=tmp_path,
+            session=None,
+        )
+
+        assert submitted.job_id == "job-123"
+        assert submitted.raw_add_response == {
+            "jobId": "job-123",
+            "bohrJobId": "bohr-456",
+        }
+        assert not isinstance(submitted, tuple)
 
     def test_list_images_filters_and_returns_versions(self, tmp_path, monkeypatch):
         tool = BohriumTool(workdir=tmp_path)
