@@ -48,32 +48,6 @@ profiles:
     max_retries: 3
     retry_delay: 1.0
 
-  haiku:
-    provider: "openai"
-    model: "claude-haiku-4-5"
-    api_key: "${LITELLM_PROXY_API_KEY}"
-    base_url: "${LITELLM_PROXY_API_BASE}"
-    supports_vision: true
-    timeout: 1200
-    stream_timeout: 60
-    stream_idle_timeout: 30
-    max_retries: 3
-    retry_delay: 1.0
-
-  gemini:
-    provider: "openai"
-    model: "gemini-3-flash-preview"
-    api_key: "${LITELLM_PROXY_API_KEY}"
-    base_url: "${LITELLM_PROXY_API_BASE}"
-    reasoning_protocol: "openai_reasoning_effort"
-    thinking_effort: "high"
-    supports_vision: true
-    timeout: 1200
-    stream_timeout: 60
-    stream_idle_timeout: 30
-    max_retries: 3
-    retry_delay: 1.0
-
   gemini-pro:
     provider: "openai"
     model: "gemini-3.1-pro-preview"
@@ -96,34 +70,6 @@ profiles:
     base_url: "${LITELLM_PROXY_API_BASE}"
     reasoning_protocol: "openai_reasoning_effort"
     thinking_effort: "xhigh"
-    timeout: 1200
-    stream_timeout: 120
-    stream_idle_timeout: 60
-    max_retries: 3
-    retry_delay: 1.0
-
-  qwen_3_6_plus:
-    provider: "openai"
-    model: "matmaster/qwen3.6-plus"
-    api_key: "${LITELLM_PROXY_API_KEY}"
-    base_url: "${LITELLM_PROXY_API_BASE}"
-    reasoning_protocol: "openai_reasoning_effort"
-    thinking_effort: "high"
-    supports_vision: true
-    timeout: 1200
-    stream_timeout: 120
-    stream_idle_timeout: 60
-    max_retries: 3
-    retry_delay: 1.0
-
-  qwen_3_6_max_preview:
-    provider: "openai"
-    model: "matmaster/qwen3.6-max-preview"
-    api_key: "${LITELLM_PROXY_API_KEY}"
-    base_url: "${LITELLM_PROXY_API_BASE}"
-    reasoning_protocol: "openai_reasoning_effort"
-    thinking_effort: "high"
-    supports_vision: true
     timeout: 1200
     stream_timeout: 120
     stream_idle_timeout: 60
@@ -212,18 +158,10 @@ routes:
     profile: opus
   "claude-sonnet-4-6":
     profile: sonnet
-  "claude-haiku-4-5":
-    profile: haiku
-  "gemini-3-flash-preview":
-    profile: gemini
   "gemini-3.1-pro-preview":
     profile: gemini-pro
   "cds/GPT-5.4":
     profile: gpt54
-  "matmaster/qwen3.6-plus":
-    profile: qwen_3_6_plus
-  "matmaster/qwen3.6-max-preview":
-    profile: qwen_3_6_max_preview
   "matmaster/qwen3.7-max":
     profile: qwen_3_7_max
   "matmaster/dsk-v4p":
@@ -233,4 +171,4 @@ routes:
   "bedrock-claude-opus":
     profile: opus_bedrock
 
-default: "qwen_3_6_plus"
+default: "qwen_3_7_max"

@@ -3,7 +3,7 @@
 
 agents:
   general:
-    llm: "qwen_3_6_plus"
+    llm: "qwen_3_7_max"
 
 # env: retained as stub -- EvoMasterConfig.env requires cluster/docker/scheduler
 # sub-fields with no defaults. Removing causes Pydantic validation error.
