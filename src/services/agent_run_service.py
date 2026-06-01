@@ -24,6 +24,7 @@ from matmaster.context.assembly import (
 from matmaster.context.ports import SkillResolver
 from matmaster.context.scanner import scan_skill_hits
 from matmaster.context.sections import ContextView
+from matmaster.context.skill_resolver import SkillRegistryResolver
 from matmaster.context.sources.turn_input import TurnInput
 from matmaster.core.playground import PlaygroundManager
 from matmaster.core.run_context import AgentRunContext, AgentRunRequest
@@ -56,7 +57,6 @@ from src.services.quota_service import use_quota
 from src.services.session_event_codec import decode_session_events
 from src.services.sessions_service import get_sessions_service
 from src.services.skill_registry_factory import build_skill_registry
-from src.services.skill_resolver import SkillRegistryResolver
 from src.services.stream_reply_queue import RedisReplyQueue
 from src.services.user_turn_context_service import (
     DEFAULT_TURN_TRANSFORM,
