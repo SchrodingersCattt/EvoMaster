@@ -10,6 +10,7 @@ import re
 import shlex
 import time
 from dataclasses import dataclass, field
+from pathlib import PurePosixPath
 from typing import Any
 
 from pydantic import ValidationError
@@ -39,6 +40,30 @@ def _format_figure_id_for_diagnostic(figure_id: str) -> str:
 
 def _figure_id_has_control_chars(value: str) -> bool:
     return any(ord(ch) < 32 or ord(ch) == 127 for ch in value)
+
+
+def resolve_workspace_output_path(
+    *,
+    raw_path: str,
+    workdir: str | PurePosixPath,
+) -> str | None:
+    """Resolve a declared output path against the workspace root.
+
+    Returns the normalized absolute path if it stays inside ``workdir``,
+    or None if it escapes. Containment is lexical (no symlink resolution),
+    matching WriteTool's boundary model. Unlike resolve_safe_path, an
+    escape returns None (deny) rather than silently falling back to workdir.
+    """
+    root = PurePosixPath(posixpath.normpath(str(workdir)))
+    candidate = (
+        raw_path
+        if posixpath.isabs(raw_path)
+        else posixpath.join(str(root), raw_path)
+    )
+    resolved = PurePosixPath(posixpath.normpath(candidate))
+    if not resolved.is_relative_to(root):
+        return None
+    return str(resolved)
 
 
 @dataclass(slots=True)
