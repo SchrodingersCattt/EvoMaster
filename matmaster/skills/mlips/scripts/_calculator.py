@@ -8,7 +8,7 @@ Usage (inside other scripts in this directory)::
 
     from _calculator import build_calculator, build_fparam, set_fparam
 
-    calc = build_calculator("DPA3.1-3M", head="OMat24")
+    calc = build_calculator("DPA3.1-3M", head="head_name")
     atoms.calc = calc
 """
 
@@ -135,8 +135,45 @@ def resolve_model(model_name_or_path: str) -> tuple[str, Path | str | None]:
 # ---------------------------------------------------------------------------
 
 
+_DP_STRICT_PATCH_APPLIED = False
+
+
+def _patch_dp_strict_loading() -> None:
+    """Force ``ModelWrapper.load_state_dict`` to use ``strict=False``.
+
+    Workaround for deepmd-kit <=3.1.3: the DPA-2.4-7M checkpoint is missing
+    4 ``repinit`` compression keys added to ``ModelWrapper`` after the
+    checkpoint was exported, so ``strict=True`` raises at load time.
+    Upstream fix is PR #5353; remove this once the patched release lands.
+    """
+    global _DP_STRICT_PATCH_APPLIED
+    if _DP_STRICT_PATCH_APPLIED:
+        return
+    try:
+        from deepmd.pt.train.wrapper import ModelWrapper
+    except ImportError as exc:
+        logger.warning("Skipped DP strict-loading patch (import failed): %s", exc)
+        return
+
+    _orig_load = ModelWrapper.load_state_dict
+
+    def _load_state_dict_lax(self, state_dict, strict=True, *args, **kwargs):
+        if strict:
+            logger.debug(
+                "ModelWrapper.load_state_dict: forcing strict=False "
+                "(deepmd-kit <=3.1.3 DPA-2.4-7M compatibility patch)."
+            )
+        return _orig_load(self, state_dict, False, *args, **kwargs)
+
+    ModelWrapper.load_state_dict = _load_state_dict_lax
+    _DP_STRICT_PATCH_APPLIED = True
+    logger.info("Applied DP strict-loading patch (deepmd-kit <=3.1.3 workaround).")
+
+
 def _init_dp(model_path: Path | str, head: str | None = None) -> Calculator:
     from deepmd.calculator import DP
+
+    _patch_dp_strict_loading()
 
     path = str(model_path)
     if head and (path.endswith(".pt") or path.endswith(".pth")):
@@ -238,7 +275,7 @@ def build_calculator(
         One of: a known model name (e.g. ``"DPA3.1-3M"``), a URL, or a
         local file path.
     head
-        Model head (DP family only). E.g. ``"OMat24"``, ``"OMol25"``.
+        Model head (DP family only). Choose by domain: ``"OC22"`` for surface/adsorbate catalysis, ``"OMol25"`` for organics, ``"OMat24"`` for general inorganic.
         Ignored for non-DP families.
 
     Returns
@@ -260,7 +297,7 @@ def build_calculator(
         )
 
     if family == "DP":
-        # Head: explicit arg > model metadata > "OMat24"
+        # Head: explicit arg > model metadata default
         if head is None and model_name_or_path in KNOWN_MODELS:
             head = KNOWN_MODELS[model_name_or_path].get("default_head")
         return init_fn(resolved, head=head)

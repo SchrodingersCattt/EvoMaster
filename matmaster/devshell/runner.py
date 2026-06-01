@@ -26,6 +26,26 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def _patch_bohrium_submit(runtime: Any, error_message: str) -> None:
+    """Monkey-patch BohriumTool._submit to always return an error (eval-only)."""
+    from matmaster.tools.builtin.bohrium_tool.tool import BohriumTool
+    from matmaster.tools.tool_result import ToolResult
+
+    catalog = runtime.kernel_runtime.resources.tool_catalog
+    if catalog is None:
+        return
+    registry = getattr(catalog, '_registry', None)
+    if registry is None:
+        return
+    tool = registry.get_raw('Bohrium')
+    if tool is None or not isinstance(tool, BohriumTool):
+        return
+    tool._submit = lambda args: ToolResult(
+        status="error",
+        content=f"job/create failed: {error_message}",
+    )
+
+
 class DevRunner:
     """Per-run assembly: build_runtime -> kernel.run_stream -> drain -> history.
 
@@ -43,6 +63,8 @@ class DevRunner:
         resolved_route: Any = None,
         stream_hook: DevStreamHook | None = None,
         exp_config: ExpConfig | None = None,
+        exclude_subagents: list[str] | None = None,
+        inject_bohrium_failure: str | None = None,
     ) -> None:
         self._config = config
         self._workdir = workdir
@@ -50,6 +72,8 @@ class DevRunner:
         self._llm_config = llm_config
         self._resolved_route = resolved_route
         self._stream_hook = stream_hook or DevStreamHook()
+        self._exclude_subagents: frozenset[str] = frozenset(exclude_subagents or ())
+        self._inject_bohrium_failure = inject_bohrium_failure
 
         # Build the physical environment + the per-run request.
         session = self._create_session(config, workdir)
@@ -158,7 +182,7 @@ class DevRunner:
         """
         from matmaster.core.stream_drain import DrainResult, drain_run_stream
 
-        exp = Exp(self._exp_config)
+        exp = Exp(self._exp_config, exclude_subagents=self._exclude_subagents)
 
         async def _run_once() -> DrainResult:
             # Build on_event callback for real-time forwarding
@@ -174,6 +198,8 @@ class DevRunner:
             # Share Exp's runtime lifecycle (build + cancel injection + cleanup)
             # instead of hand-copying it; cleanup is guaranteed by the scope.
             async with exp.runtime_scope(ctx, cancel_token) as runtime:
+                if self._inject_bohrium_failure:
+                    _patch_bohrium_submit(runtime, self._inject_bohrium_failure)
                 return await drain_run_stream(
                     runtime.kernel.run_stream(
                         runtime.kernel_runtime,

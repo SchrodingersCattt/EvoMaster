@@ -2,12 +2,80 @@ version: v5
 capability: structure_construction
 domain: catalysis
 questions:
-- id: CR_SC_ZnS001_20260428
+- id: CR_SC_ZnS001_polarity_20260523
   capability: structure_construction
   domain: catalysis
-  intent: Build ZnS(001) polar surface slab with 3 layers and 2x2x1 supercell per doc 3.1.2.
-  human_prompt_seed: 'ZnS 化合物 (001) 切面 slab：3 层厚度、2×2×1 扩胞，真空 ≥15 Å。若为极性表面，说明是否采用对称 slab 或偶极修正策略。输出
-    slab 结构文件为 `ZnS_001_slab.cif`，并简述终止面/化学计量处理。
+  intent: Test whether agent recognizes ZnS(001) as a polar surface and proactively
+    proposes remediation strategies before constructing the slab.
+  human_prompt_seed: '构建 ZnS 化合物 (001) 切面 slab：3 bilayer 厚度、基于 primitive surface
+    cell 的 2×2×1 扩胞，真空 ≥15 Å。输出 slab 结构文件为 `ZnS_001_slab.cif`。
+
+    '
+  tags:
+  - struct_surface
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 40000
+  scoring_checklist:
+  - id: tasker_type_identification
+    criterion: The agent identifies ZnS(001) as a Tasker Type-3 polar surface (alternating
+      Zn-only and S-only planes along [001] producing a net dipole moment), or equivalently
+      states that the surface is polar due to its stacking of mono-element charged
+      layers.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: polar_surface_remedy
+    criterion: The agent explicitly discusses at least two physically motivated remedies
+      for the Type-3 polarity — such as constructing a symmetric slab with matching
+      top/bottom terminations, applying a dipole correction, surface reconstruction,
+      or pseudohydrogen passivation.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: asks_human_for_strategy
+    criterion: After detecting the polar surface, the agent presents at least two
+      polarity handling strategies to the user and asks the user to choose before
+      constructing the slab. PASS if the agent explicitly asks (via AskQuestion tool
+      or text-based question) and waits. FAIL if the agent silently picks a strategy
+      and proceeds without asking.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: no_retries
+    criterion: No repeated identical slab construction or surface cut with the same
+      parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within a generous benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: CR_SC_ZnS001_symmetric_20260523
+  capability: structure_construction
+  domain: catalysis
+  intent: Build ZnS(001) symmetric S-terminated slab with precise structural parameters
+    given an explicit polarity handling strategy.
+  human_prompt_seed: '构建 ZnS 闪锌矿 (001) 极性表面 slab，采用对称 S 终止策略消除宏观偶极。要求：基于
+    primitive surface cell 的 2×2×1 扩胞，3 个 Zn-S bilayer（即顶底均为 S 层，共 7 个原子面），真空层
+    ≥15 Å。输出结构文件为 `ZnS_001_slab.cif`。
 
     '
   tags:
@@ -20,85 +88,173 @@ questions:
     value:
       filename: ZnS_001_slab.cif
       expected: 7
-      tolerance: 2
+      tolerance: 1
       axis: z
       layer_tol_A: 0.5
+  - key: zn_s_ratio
+    value:
+      filename: ZnS_001_slab.cif
+      element_a: Zn
+      element_b: S
+      expected_ratio: 0.75
+      tolerance: 0.05
+  - key: slab_atom_count
+    value:
+      filename: ZnS_001_slab.cif
+      expected: 28
+      tolerance: 0
+  - key: inplane_a
+    value:
+      filename: ZnS_001_slab.cif
+      param: a
+      expected: 7.65
+      tolerance: 0.5
+  - key: inplane_b
+    value:
+      filename: ZnS_001_slab.cif
+      param: b
+      expected: 7.65
+      tolerance: 0.5
+  - key: cell_c_vacuum
+    value:
+      filename: ZnS_001_slab.cif
+      param: c
+      expected: 22.0
+      tolerance: 7.0
   - key: turn_budget
     value:
-      max: 22
+      max: 20
   - key: duration_budget
     value:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 24000
+      max: 30000
   scoring_checklist:
   - id: file_exists
     criterion: The output file `ZnS_001_slab.cif` exists in the workspace.
     axis: correctness
     verify: artifact_exists
   - id: slab_layer_count
-    criterion: The number of distinct atomic z-planes in ZnS_001_slab.cif is approximately
-      5-9 (expected 7 ± 2), consistent with 3 Zn-S bilayers of zinc-blende (001). Atoms within
-      0.5 Å along z are merged into one plane.
+    criterion: The slab has 7 distinct atomic z-planes (S-Zn-S-Zn-S-Zn-S), consistent
+      with 3 bilayers plus symmetric S termination on both sides. Atoms within 0.5
+      Å along z are merged into one plane.
     axis: correctness
     verify: struct_file_layer_count
-  - id: supercell_vacuum_ok
-    criterion: 交付的 ZnS(001) slab 采用 2×2×1 扩胞，真空层 ≥15 Å。
+  - id: zn_s_ratio
+    criterion: The Zn:S stoichiometry ratio is approximately 0.75 (3 Zn layers vs
+      4 S layers in the symmetric S-terminated slab).
+    axis: correctness
+    verify: struct_file_stoichiometry_ratio
+  - id: slab_atom_count
+    criterion: The symmetric S-terminated 2×2×1 slab contains exactly 28 atoms (7
+      layers × 4 atoms/layer).
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: inplane_a
+    criterion: The slab cell a parameter matches 2× the primitive surface cell of
+      ZnS(001), approximately 7.65 Å.
+    axis: correctness
+    verify: struct_file_cell_param
+  - id: inplane_b
+    criterion: The slab cell b parameter matches 2× the primitive surface cell of
+      ZnS(001), approximately 7.65 Å.
+    axis: correctness
+    verify: struct_file_cell_param
+  - id: cell_c_vacuum
+    criterion: The slab cell c parameter includes the slab thickness plus at least
+      15 Å of vacuum.
+    axis: correctness
+    verify: struct_file_cell_param
+  - id: mirror_symmetry
+    criterion: The slab has mirror symmetry about its central plane — both top and
+      bottom surfaces are S-terminated, ensuring zero net dipole moment along z.
     axis: correctness
     verify: llm_binary_judge
     weight: 1.0
-  - id: polar_handling
-    criterion: 答案说明了 ZnS(001) 表面的极性问题，并至少提出一种合理的处理策略（如构建对称 slab、施加偶极修正等），所述策略与交付的结构文件一致。
-    axis: grounding
-    verify: llm_binary_judge
   - id: no_retries
-    criterion: No repeated identical slab construction or surface cut with the same parameters.
+    criterion: No repeated identical slab construction or surface cut with the same
+      parameters.
     axis: efficiency
     verify: no_retries
-  - id: efficiency_judge
-    criterion: >-
-      The ZnS(001) slab construction and polar-surface handling complete without
-      gratuitously repeated identical tool calls. Tool-discovery fallback
-      (e.g. trying an MCP tool that errors, then switching to a script-based
-      approach) is acceptable and should NOT be counted as redundancy.
-    axis: efficiency
-    verify: llm_binary_judge
   - id: turn_budget
     criterion: Agent completes the task within the turn (step) budget.
     axis: efficiency
     verify: turn_budget
   - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous
-      benchmark ceiling.
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling.
     axis: efficiency
     verify: duration_budget
   - id: token_budget_total
     criterion: Total token usage stays within a generous benchmark ceiling.
     axis: efficiency
     verify: token_budget
-- id: SC_elec_004_20260404
+- id: SC_elec_004_20260520
   capability: structure_construction
   domain: catalysis
-  intent: Build Ag(001) surface slab and place CO molecule at ontop site for adsorption calculation.
-  human_prompt_seed: '构建CO在Ag(001)表面的吸附结构：
-
-    1. 获取Ag FCC体相结构（空间群Fm-3m，a=4.086 Å）；
-
-    2. 切出(001)表面slab：4个原子层（即沿z方向4个不等价原子平面，3×3扩胞共36个Ag原子），真空层15 Å；
-
-    3. 在slab顶层ontop位点放置CO分子（C端朝下，初始距离~2.0 Å）；
-
-    4. 输出三个结构文件：bare_slab.vasp, CO_molecule.vasp, adsorbed_system.vasp。
-
-    '
+  intent: Build Ag(001) surface slab and place CO molecule at ontop site for adsorption
+    calculation.
+  human_prompt_seed: 构建 CO 在 Ag(001) 表面的初始吸附结构：3×3 超胞，4 层 slab，真空 15 Å，CO 置于顶层 ontop
+    位 C 端朝下，初始距离约 2 Å。输出 `bare_slab.vasp`、`CO_molecule.vasp`、`adsorbed_system.vasp`。
   tags:
   - struct_surface
   data_files: []
   reference_answers:
+  - key: bare_slab_file
+    value: bare_slab.vasp
+  - key: molecule_file
+    value: CO_molecule.vasp
+  - key: adsorbed_system_file
+    value: adsorbed_system.vasp
   - key: slab_layers
-    value: 4
-    tolerance: 0
+    value:
+      filename: bare_slab.vasp
+      expected: 4
+      tolerance: 0
+      axis: z
+      element: Ag
+      layer_tol_A: 0.5
+  - key: slab_ag_count
+    value:
+      filename: bare_slab.vasp
+      element: Ag
+      expected: 36
+      tolerance: 0
+  - key: co_c_count
+    value:
+      filename: CO_molecule.vasp
+      element: C
+      expected: 1
+      tolerance: 0
+  - key: co_o_count
+    value:
+      filename: CO_molecule.vasp
+      element: O
+      expected: 1
+      tolerance: 0
+  - key: slab_layers_4
+    value:
+      filename: adsorbed_system.vasp
+      expected: 4
+      tolerance: 0
+      axis: z
+      element: Ag
+      layer_tol_A: 0.5
+  - key: cell_c_vacuum
+    value:
+      filename: adsorbed_system.vasp
+      param: c
+      expected: 24.0
+      tolerance: 8.0
+  - key: co_c_down_orientation
+    value:
+      filename: adsorbed_system.vasp
+      element_a: Ag
+      element_b: C
+      cutoff_A: 3.0
+      expected: 2.0
+      tolerance: 0.8
   - key: required_fields
     value:
     - bare_slab_file
@@ -117,26 +273,60 @@ questions:
     value:
       max: 8000
   scoring_checklist:
+  - id: bare_slab_file
+    criterion: Agent writes `bare_slab.vasp` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: molecule_file
+    criterion: Agent writes `CO_molecule.vasp` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: adsorbed_system_file
+    criterion: Agent writes `adsorbed_system.vasp` to workspace.
+    axis: correctness
+    verify: artifact_exists
   - id: slab_layers
-    criterion: Slab has exactly 4 atomic layers (4 z-distinct atomic planes, 36 Ag atoms in
-      3×3 supercell).
+    criterion: The file `bare_slab.vasp` has exactly 4 Ag atomic layers along z.
     axis: correctness
-    verify: numerical_range
+    verify: struct_file_layer_count
+  - id: slab_ag_count
+    criterion: The file `bare_slab.vasp` contains exactly 36 Ag atoms for the 3x3
+      four-layer slab.
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: co_c_count
+    criterion: The file `CO_molecule.vasp` contains exactly one C atom.
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: co_o_count
+    criterion: The file `CO_molecule.vasp` contains exactly one O atom.
+    axis: correctness
+    verify: struct_file_atom_count
   - id: required_fields
-    criterion: Output includes three structure files, layer count, vacuum thickness, and adsorption
-      site description.
+    criterion: Output includes three structure files, layer count, vacuum thickness,
+      and adsorption site description.
     axis: correctness
     verify: llm_binary_judge
-  - id: structure_validity
-    criterion: Slab has 4 atomic layers (4 z-distinct planes, 36 Ag atoms), vacuum ≥ 15 Å,
-      CO is placed at ontop site with C-down orientation.
+  - id: slab_layers_4
+    criterion: The adsorbed-system structure retains exactly 4 Ag slab layers along z.
     axis: correctness
-    verify: llm_binary_judge
+    verify: struct_file_layer_count
+  - id: cell_c_vacuum
+    criterion: The adsorbed-system cell c parameter is large enough to include the
+      four-layer Ag slab, CO adsorbate, and approximately 15 A of vacuum.
+    axis: correctness
+    verify: struct_file_cell_param
+  - id: co_c_down_orientation
+    criterion: The adsorbed-system structure has the CO carbon atom close to the Ag
+      surface at the intended initial C-down adsorption distance.
+    axis: correctness
+    verify: struct_file_bond_length
   - id: grounding_source
-    criterion: Ag bulk structure uses correct FCC lattice constant; slab is built with proper
-      crystallographic orientation and parameters; CO placement uses physically motivated
-      coordinates, tied to named deliverables. Judge solely from the final answer; do not
-      fail because the tool-call log omits MCP, web_search, or any specific tool.
+    criterion: Ag bulk structure uses correct FCC lattice constant; slab is built
+      with proper crystallographic orientation and parameters; CO placement uses physically
+      motivated coordinates, tied to named deliverables. Judge solely from the final
+      answer; do not fail because the tool-call log omits MCP, web_search, or any
+      specific tool.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -159,3 +349,458 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+- id: SC_zn_slab_001_20260522
+  capability: structure_construction
+  domain: catalysis
+  intent: Build Zn HCP surface slabs for multiple low-index facets.
+  human_prompt_seed: 请构建金属 Zn 的三个低指数表面 slab 模型：(0001)、(10-10)、(11-20)，每个 slab 4 层原子，添加
+    15 Å 真空层。分别输出为 `Zn_0001.cif`、`Zn_10-10.cif`、`Zn_11-20.cif`。
+  tags:
+  - struct_surface
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: slab_0001
+    value: Zn_0001.cif
+  - key: slab_1010
+    value: Zn_10-10.cif
+  - key: slab_1120
+    value: Zn_11-20.cif
+  - key: must_parsable_0001
+    value:
+      filename: Zn_0001.cif
+  - key: must_parsable_1010
+    value:
+      filename: Zn_10-10.cif
+  - key: must_parsable_1120
+    value:
+      filename: Zn_11-20.cif
+  - key: must_only_zn_0001
+    value:
+      filename: Zn_0001.cif
+      formula: Zn1
+  - key: must_only_zn_1010
+    value:
+      filename: Zn_10-10.cif
+      formula: Zn1
+  - key: must_atom_count_0001
+    value:
+      filename: Zn_0001.cif
+      expected: 4
+      tolerance: 4
+  - key: must_atom_count_1010
+    value:
+      filename: Zn_10-10.cif
+      expected: 4
+      tolerance: 4
+  - key: must_atom_count_1120
+    value:
+      filename: Zn_11-20.cif
+      expected: 8
+      tolerance: 4
+  - key: turn_budget
+    value:
+      max: 20
+  scoring_checklist:
+  - id: slab_0001
+    criterion: Zn_0001.cif written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: slab_1010
+    criterion: Zn_10-10.cif written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: slab_1120
+    criterion: Zn_11-20.cif written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_parsable_0001
+    criterion: '[Must] Zn_0001.cif is parsable by pymatgen.'
+    axis: correctness
+    verify: struct_file_parsable
+  - id: must_parsable_1010
+    criterion: '[Must] Zn_10-10.cif is parsable by pymatgen.'
+    axis: correctness
+    verify: struct_file_parsable
+  - id: must_parsable_1120
+    criterion: '[Must] Zn_11-20.cif is parsable by pymatgen.'
+    axis: correctness
+    verify: struct_file_parsable
+  - id: must_only_zn_0001
+    criterion: '[Must] Zn_0001.cif contains only Zn atoms.'
+    axis: correctness
+    verify: struct_file_formula
+  - id: must_only_zn_1010
+    criterion: '[Must] Zn_10-10.cif contains only Zn atoms.'
+    axis: correctness
+    verify: struct_file_formula
+  - id: must_atom_count_0001
+    criterion: '[Must] Zn_0001.cif has at least 4 atoms (4 layers).'
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: must_atom_count_1010
+    criterion: '[Must] Zn_10-10.cif has at least 4 atoms.'
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: must_atom_count_1120
+    criterion: '[Must] Zn_11-20.cif has at least 4 atoms.'
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: SC_cat_ads_001_20260523
+  capability: structure_construction
+  domain: catalysis
+  intent: Build catalytic surface intermediates (H*, HCOO*, COOH*) on Pt(111), testing
+    knowledge that H* is atomic hydrogen (not H2), and HCOO*/COOH* are specific radical
+    intermediates with correct bonding geometry.
+  human_prompt_seed: '在 Pt(111) 2×2 超胞 4 层 slab（15 Å 真空）上，分别构建 H*、HCOO*、COOH*
+    三种吸附中间体的初始结构，输出为 `Pt111_H.cif`、`Pt111_HCOO.cif`、`Pt111_COOH.cif`。'
+  tags:
+  - struct_surface
+  data_files: []
+  reference_answers:
+  - key: h_file
+    value: Pt111_H.cif
+  - key: hcoo_file
+    value: Pt111_HCOO.cif
+  - key: cooh_file
+    value: Pt111_COOH.cif
+  - key: h_atom_count
+    value:
+      filename: Pt111_H.cif
+      element: H
+      expected: 1
+      tolerance: 0
+  - key: hcoo_c_count
+    value:
+      filename: Pt111_HCOO.cif
+      element: C
+      expected: 1
+      tolerance: 0
+  - key: hcoo_o_count
+    value:
+      filename: Pt111_HCOO.cif
+      element: O
+      expected: 2
+      tolerance: 0
+  - key: cooh_c_count
+    value:
+      filename: Pt111_COOH.cif
+      element: C
+      expected: 1
+      tolerance: 0
+  - key: cooh_o_count
+    value:
+      filename: Pt111_COOH.cif
+      element: O
+      expected: 2
+      tolerance: 0
+  - key: cooh_h_count
+    value:
+      filename: Pt111_COOH.cif
+      element: H
+      expected: 1
+      tolerance: 0
+  - key: hcoo_ch_bond
+    value:
+      filename: Pt111_HCOO.cif
+      element_a: C
+      element_b: H
+      cutoff_A: 1.3
+      expected: 1.1
+      tolerance: 0.15
+  - key: turn_budget
+    value:
+      max: 20
+  - key: token_budget_total
+    value:
+      max: 25000
+  scoring_checklist:
+  - id: h_file
+    criterion: Agent writes `Pt111_H.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: hcoo_file
+    criterion: Agent writes `Pt111_HCOO.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: cooh_file
+    criterion: Agent writes `Pt111_COOH.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: h_atom_count
+    criterion: Pt111_H.cif contains exactly 1 hydrogen atom (atomic H*, not H2 molecule).
+      This is the critical test — in catalysis context H* means a single adsorbed
+      hydrogen atom.
+    axis: correctness
+    verify: struct_file_atom_count
+    weight: 2.0
+  - id: hcoo_c_count
+    criterion: Pt111_HCOO.cif contains exactly 1 carbon atom (HCOO* formate skeleton).
+    axis: correctness
+    verify: struct_file_atom_count
+    weight: 1.0
+  - id: hcoo_o_count
+    criterion: Pt111_HCOO.cif contains exactly 2 oxygen atoms (HCOO* formate skeleton).
+    axis: correctness
+    verify: struct_file_atom_count
+    weight: 1.0
+  - id: cooh_c_count
+    criterion: Pt111_COOH.cif contains exactly 1 carbon atom (COOH* carboxyl radical).
+    axis: correctness
+    verify: struct_file_atom_count
+    weight: 1.0
+  - id: cooh_o_count
+    criterion: Pt111_COOH.cif contains exactly 2 oxygen atoms (COOH* carboxyl radical).
+    axis: correctness
+    verify: struct_file_atom_count
+    weight: 1.0
+  - id: cooh_h_count
+    criterion: Pt111_COOH.cif contains exactly 1 hydrogen atom (COOH* carboxyl radical,
+      not formic acid with extra H).
+    axis: correctness
+    verify: struct_file_atom_count
+    weight: 1.0
+  - id: hcoo_ch_bond
+    criterion: In Pt111_HCOO.cif, the H atom is bonded to C (C-H distance ~1.1 Å),
+      confirming correct formate geometry (H-COO) rather than H bonded to O.
+    axis: correctness
+    verify: struct_file_bond_length
+    weight: 1.5
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
+- id: SC_cat_co_orient_001_20260523
+  capability: structure_construction
+  domain: catalysis
+  intent: Build CO adsorption structure on Pt(111) without specifying orientation,
+    testing whether agent knows CO adsorbs C-down on transition metal surfaces.
+  human_prompt_seed: 在 Pt(111) 2×2 超胞 4 层 slab（15 Å 真空）上构建 CO 分子 ontop 吸附初始结构，输出为
+    `Pt111_CO.cif`。
+  tags:
+  - struct_surface
+  data_files: []
+  reference_answers:
+  - key: file_exists
+    value: Pt111_CO.cif
+  - key: co_c_pt_bond
+    value:
+      filename: Pt111_CO.cif
+      element_a: C
+      element_b: Pt
+      cutoff_A: 2.5
+      expected: 1.85
+      tolerance: 0.35
+  - key: turn_budget
+    value:
+      max: 15
+  - key: token_budget_total
+    value:
+      max: 25000
+  scoring_checklist:
+  - id: file_exists
+    criterion: Agent writes `Pt111_CO.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: co_c_pt_bond
+    criterion: The CO molecule is oriented C-down (carbon closer to Pt surface). Verified
+      by C-Pt distance being ~1.85 Å (within bond range). If O-down, the nearest C-Pt
+      distance would be >3.0 Å and this check would fail.
+    axis: correctness
+    verify: struct_file_bond_length
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
+- id: SC_vasp_002_20260611
+  capability: structure_construction
+  domain: catalysis
+  intent: Construct a WO₂(01-1) surface slab from bulk monoclinic WO₂ using pymatgen, applying a 2×2 supercell
+    expansion and adding 15 Å of vacuum along the z-axis, as described in the W/WO₂ HER catalyst paper.
+  human_prompt_seed: Construct a WO₂(01-1) surface slab from bulk monoclinic WO₂ using pymatgen. Apply
+    a 2×2 supercell expansion of the (01-1) surface and add 15 Å vacuum along the z-direction. Save the
+    resulting POSCAR file as POSCAR_WO2_01-1_slab.vasp in the current working directory.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: poscar_exists
+    value: POSCAR_WO2_01-1_slab.vasp
+  - key: poscar_content
+    value:
+      flags:
+      - must_contain_all
+      tokens:
+      - W
+      - O
+      filename: POSCAR_WO2_01-1_slab.vasp
+  - key: poscar_numeric
+    value:
+      checks:
+      - key: cell_a
+        max: 15.5
+        min: 14.0
+        allow_missing_key: true
+      - key: cell_b
+        max: 12.0
+        min: 10.5
+        allow_missing_key: true
+      - key: num_sites
+        max: 80
+        min: 1
+        allow_missing_key: false
+      filename: POSCAR_WO2_01-1_slab.vasp
+  - key: grounding_source
+    value:
+      filename: POSCAR_WO2_01-1_slab.vasp
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: poscar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] POSCAR_WO2_01-1_slab.vasp file exists.'
+  - id: poscar_content
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+    criterion: '[Must] POSCAR contains both tungsten (W) and oxygen (O) as elements.'
+  - id: poscar_numeric
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+    criterion: '[Suggested] The in-plane lattice parameters after 2×2 supercell expansion are approximately
+      a≈14.76 Å (2×7.38) and b≈11.16 Å (2×5.58). Number of atomic sites is reasonable for a 2×2 WO₂(01-1)
+      slab (1-80 atoms).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+    criterion: '[Must] The slab structure is constructed from bulk monoclinic WO₂ following the paper''s
+      methodology: (01-1) cleavage, 2×2 supercell (lattice params 7.38 Å × 5.58 Å), 15 Å vacuum.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry failed tool calls more than 3 times.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 50000 tokens total.'
+- id: SC_vasp_001_20260611
+  capability: structure_construction
+  domain: catalysis
+  intent: Construct a W(110) surface slab from bulk tungsten (mp-13) using pymatgen, applying a 3×4 supercell
+    expansion and adding 15 Å of vacuum along the z-axis, as described in the W/WO₂ HER catalyst paper.
+  human_prompt_seed: Construct a W(110) surface slab from bulk tungsten (mp-13) using pymatgen. Apply
+    a 3×4 supercell expansion of the (110) surface and add 15 Å vacuum along the z-direction. Save the
+    resulting POSCAR file as POSCAR_W_110_slab.vasp in the current working directory.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: poscar_exists
+    value: POSCAR_W_110_slab.vasp
+  - key: poscar_content
+    value:
+      flags:
+      - must_contain_all
+      tokens:
+      - W
+      filename: POSCAR_W_110_slab.vasp
+  - key: poscar_numeric
+    value:
+      checks:
+      - key: cell_z
+        max: 25.0
+        min: 20.0
+        allow_missing_key: false
+      - key: num_sites
+        max: 50
+        min: 1
+        allow_missing_key: false
+      filename: POSCAR_W_110_slab.vasp
+  - key: grounding_source
+    value:
+      filename: POSCAR_W_110_slab.vasp
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: poscar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] POSCAR_W_110_slab.vasp file exists.'
+  - id: poscar_content
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+    criterion: '[Must] POSCAR contains tungsten (W) as the element.'
+  - id: poscar_numeric
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+    criterion: '[Suggested] The slab c-axis length (total cell length along z, including slab + vacuum)
+      is between 20-25 Å, consistent with a ~6-8 Å W(110) slab plus 15 Å vacuum. Number of atomic sites
+      is reasonable for a 3×4 W(110) slab (1-50 atoms).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+    criterion: '[Must] The slab structure is constructed from bulk W (mp-13) following the paper''s methodology:
+      (110) cleavage, 3×4 supercell, 15 Å vacuum.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry failed tool calls more than 3 times.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 50000 tokens total.'

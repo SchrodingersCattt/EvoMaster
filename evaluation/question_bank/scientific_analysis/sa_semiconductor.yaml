@@ -12,7 +12,7 @@ questions:
     2) `perovskite_additive_proposal.md`：基于最佳候选，给出研究目标、验证方案、预期结果与风险。
 
     最终回答中简要说明：为什么该候选最值得优先验证。'
-  tags:
+  tags: []
   priority: P0
   data_files: []
   reference_answers:
@@ -84,3 +84,1573 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
+- id: SA_perovskite_pl_lifetime_001_20260506
+  capability: scientific_analysis
+  domain: semiconductor
+  intent: Extract photoluminescence peak, band width, and lifetime metrics from uploaded Mn-doped perovskite spectra.
+  human_prompt_seed: '请下载并分析以下通过 OSS URL 提供的两个光谱数据文件：
+
+    - `mn_perovskite_em_ex365.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_perovskite_pl_lifetime_001/1778080963_mn_perovskite_em_ex365.txt`（365 nm 激发下的 Mn 发光发射谱）
+
+    - `mn_perovskite_decay_ex365_pl520.txt` -> `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_perovskite_pl_lifetime_001/1778080962_mn_perovskite_decay_ex365_pl520.txt`（同一样品在 520 nm 附近监测的时间衰减曲线）
+
+    请完成以下分析：
+
+    1. 从发射谱中确定主要发光峰位置和发射带宽；
+    2. 从衰减曲线中提取一个代表性的发光寿命；
+    3. 判断该发光是否符合 Mn 掺杂卤化物发光材料常见的宽带绿光特征；
+    4. 简要说明背景、噪声或尾部拟合对结果的影响。
+
+    最终回答末尾请追加 `<eval_results>...</eval_results>` JSON，至少包含：
+    `pl.lambda_max_nm`, `pl.fwhm_nm`, `decay.tau_avg_us`。
+
+    JSON 中字段名形如 `a.b` 表示嵌套对象（顶层 `a` 下的子键 `b`），请使用嵌套结构而不要写成扁平字符串键。结构示例（数值仅占位）：
+
+    ```json
+    {"pl": {"lambda_max_nm": 0, "fwhm_nm": 0}, "decay": {"tau_avg_us": 0}}
+    ```'
+  tags:
+  - char_optical_spectrum
+  - char_time_resolved
+  data_files:
+  - key: emission_spectrum
+    path: data/SA_perovskite_pl_lifetime_001/mn_perovskite_em_ex365.txt
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_perovskite_pl_lifetime_001/1778080963_mn_perovskite_em_ex365.txt
+    description: Mn-doped perovskite emission spectrum under 365 nm excitation.
+  - key: lifetime_decay
+    path: data/SA_perovskite_pl_lifetime_001/mn_perovskite_decay_ex365_pl520.txt
+    oss_url: https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/matmaster_evo/eval_data/SA_perovskite_pl_lifetime_001/1778080962_mn_perovskite_decay_ex365_pl520.txt
+    description: Mn-doped perovskite photoluminescence decay trace monitored near 520 nm.
+  reference_answers:
+  - key: lambda_max
+    value:
+      json_path: pl.lambda_max_nm
+      target: 518.0
+      tolerance: 3.0
+    unit: nm
+  - key: fwhm
+    value:
+      json_path: pl.fwhm_nm
+      target: 49.900441952351684
+      tolerance: 10.0
+    unit: nm
+  - key: tau_avg
+    value:
+      json_path: decay.tau_avg_us
+      target: 350.99747059656994
+      tolerance: 80.0
+    unit: us
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 20000
+  scoring_checklist:
+  - id: lambda_max
+    criterion: The emission maximum reported in eval_results is consistent with the uploaded emission spectrum.
+    axis: correctness
+    verify: answer_json_numeric
+    weight: 1.5
+  - id: fwhm
+    criterion: The emission bandwidth reported in eval_results is consistent with the uploaded emission spectrum.
+    axis: correctness
+    verify: answer_json_numeric
+  - id: tau_avg
+    criterion: The representative lifetime reported in eval_results is consistent with the uploaded decay trace.
+    axis: correctness
+    verify: answer_json_numeric
+    weight: 1.5
+  - id: photophysics_interpretation
+    criterion: The final answer recognizes the broad green Mn-related emission and discusses uncertainty from background or tail fitting.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: The reported photophysical metrics are derived from the uploaded spectrum and decay trace.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: SA_gnr_003_20250618
+  capability: scientific_analysis
+  domain: semiconductor
+  intent: Implement the analytic band gap scaling relation for zigzag graphene nanoribbons (ZGNRs) from
+    Son et al. (2006) and compute the predicted band gap for a 12-ZGNR.
+  human_prompt_seed: 'Implement the ZGNR band gap scaling formula from the paper: Δ_z^0(w_z) = 9.33 /
+    (w_z + 15.0), where w_z is the ribbon width in Angstroms. For a 12-ZGNR, the width w_z can be approximated
+    as w_z ≈ (3*N_z - 2) * a_cc / 2, with a_cc = 1.42 Å. Compute the predicted band gap for N_z = 8, 12,
+    16, and 32. Save the results as a JSON file named `zgnr_bandgaps.json` in the current working directory.'
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_json
+    value: zgnr_bandgaps.json
+  - key: has_required_keys
+    value:
+      flags: []
+      tokens:
+      - N_z
+      - w_z
+      - delta_z_0
+      - '12'
+      filename: zgnr_bandgaps.json
+  - key: gap_12zgnr
+    value:
+      checks:
+      - key: delta_z_0_for_Nz12
+        max: 0.35
+        min: 0.25
+        allow_missing_key: false
+      filename: zgnr_bandgaps.json
+  - key: gap_8zgnr
+    value:
+      checks:
+      - key: delta_z_0_for_Nz8
+        max: 0.5
+        min: 0.38
+        allow_missing_key: false
+      filename: zgnr_bandgaps.json
+  - key: gap_32zgnr
+    value:
+      checks:
+      - key: delta_z_0_for_Nz32
+        max: 0.2
+        min: 0.12
+        allow_missing_key: false
+      filename: zgnr_bandgaps.json
+  - key: grounding_source
+    value:
+      filename: zgnr_bandgaps.json
+  - key: turn_budget
+    value:
+      max: 25
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_json
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file zgnr_bandgaps.json exists and is valid JSON.'
+  - id: has_required_keys
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] JSON contains entries for N_z values 8, 12, 16, and 32 with corresponding w_z and
+      delta_z_0 fields.'
+  - id: gap_12zgnr
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] Predicted band gap for 12-ZGNR is between 0.25 and 0.35 eV (expected: ~0.29
+      eV from formula with w_z ≈ 16×1.42/2 ≈ 11.36 Å, giving 9.33/(11.36+15.0) ≈ 0.35 eV; or using w_z
+      from paper Fig 4 data ~17 Å gives ~0.29 eV).'
+  - id: gap_8zgnr
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] Predicted band gap for 8-ZGNR is between 0.38 and 0.50 eV (expected: ~0.43
+      eV from formula).'
+  - id: gap_32zgnr
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] Predicted band gap for 32-ZGNR is between 0.12 and 0.20 eV (expected: ~0.15
+      eV from formula).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The implementation uses the exact formula Δ_z^0(w_z) = 9.33/(w_z + 15.0) from Son
+      et al. (2006) and correctly relates N_z to w_z.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completes within 25 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retry requests needed.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completes within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Uses no more than 50000 tokens total.'
+- id: SA_vasp_002_20250618
+  capability: scientific_analysis
+  domain: semiconductor
+  intent: Implement the phenomenological analytical model from Giovannetti et al. (2008) that predicts
+    the Fermi-level shift of graphene adsorbed on metal surfaces as a function of separation distance,
+    using only the metal work function and graphene work function as inputs.
+  human_prompt_seed: 'Implement the analytical model from Giovannetti et al., Phys. Rev. Lett. 101, 026803
+    (2008) that predicts the Fermi-level shift ΔE_F of graphene on a metal substrate as a function of
+    separation distance d. The model is given by Eq. (1) in the paper with these parameters: α = 34.93
+    eV/Å, D₀ = 0.09 eV⁻² per unit cell, d₀ = 2.4 Å, W_G = 4.48 eV. The chemical interaction term is Δc(d)
+    = exp(-κ·d)(a₀ + a₁·d + a₂·d²) with κ = 1.6443 Å⁻¹, a₀ = -2048.56 eV, a₁ = 1363.87 eV/Å, a₂ = -205.737
+    eV/Å². Write a Python script that computes ΔE_F(d) for d from 3.0 to 5.0 Å in 0.1 Å steps for each
+    of the five weakly-bonded metals: Al (W_M = 4.22 eV), Ag (4.92 eV), Cu (5.22 eV), Au (5.54 eV), Pt
+    (6.13 eV). Save the results as a CSV file named graphene_doping_model.csv with columns: d_Angstrom,
+    metal, W_M_eV, delta_E_F_eV.'
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_script
+    value:
+      filename: compute_doping_model.py
+  - key: artifact_csv
+    value:
+      filename: graphene_doping_model.csv
+  - key: csv_columns
+    value:
+      flags: []
+      tokens:
+      - d_Angstrom
+      - metal
+      - W_M_eV
+      - delta_E_F_eV
+      filename: graphene_doping_model.csv
+  - key: csv_metal_count
+    value:
+      flags: []
+      tokens:
+      - Al
+      - Ag
+      - Cu
+      - Au
+      - Pt
+      filename: graphene_doping_model.csv
+  - key: csv_has_data
+    value:
+      flags: []
+      pattern: ^\d+\.\d+,
+      filename: graphene_doping_model.csv
+  - key: grounding_source
+    value:
+      filename: graphene_doping_model.csv
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: artifact_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Python script compute_doping_model.py exists'
+  - id: artifact_csv
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output CSV file graphene_doping_model.csv exists'
+  - id: csv_columns
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+    criterion: '[Must] CSV header contains columns: d_Angstrom, metal, W_M_eV, delta_E_F_eV'
+  - id: csv_metal_count
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+    criterion: '[Must] CSV contains data for all 5 metals: Al, Ag, Cu, Au, Pt'
+  - id: csv_has_data
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+    criterion: '[Must] CSV contains numeric data rows (distance values in decimal format)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The model implementation is grounded in Eq. (1) and parameters from Giovannetti
+      et al. (2008)'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within the turn budget'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not retry any tool call'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within the duration budget'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent stays within the total token budget'
+- id: SA_gnr_005_20250618
+  capability: scientific_analysis
+  domain: semiconductor
+  intent: Implement the analytic three-family band gap scaling relation for armchair graphene nanoribbons
+    (AGNRs) from Eq. (1) of Son et al. (2006), and verify the gap hierarchy Δ_{3p+1} > Δ_{3p} > Δ_{3p+2}.
+  human_prompt_seed: Implement the AGNR three-family band gap scaling formulas from Eq. (1) of Son et
+    al. (2006). Using t = 2.7 eV and δ = 0.12, compute the band gaps for N_a = 12 (3p, p=4), N_a = 13
+    (3p+1, p=4), and N_a = 14 (3p+2, p=4). Verify the gap hierarchy Δ_{3p+1} > Δ_{3p} > Δ_{3p+2}. Save
+    the results as a JSON file named `agnr_three_family.json` in the current working directory.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_json
+    value: agnr_three_family.json
+  - key: has_required_keys
+    value:
+      flags: []
+      tokens:
+      - Na
+      - family
+      - delta
+      - '12'
+      - '13'
+      - '14'
+      filename: agnr_three_family.json
+  - key: gap_12agnr
+    value:
+      checks:
+      - key: delta_for_Na12
+        max: 1.2
+        min: 0.3
+        allow_missing_key: false
+      filename: agnr_three_family.json
+  - key: gap_13agnr
+    value:
+      checks:
+      - key: delta_for_Na13
+        max: 1.5
+        min: 0.5
+        allow_missing_key: false
+      filename: agnr_three_family.json
+  - key: gap_14agnr
+    value:
+      checks:
+      - key: delta_for_Na14
+        max: 0.5
+        min: 0.01
+        allow_missing_key: false
+      filename: agnr_three_family.json
+  - key: hierarchy_correct
+    value:
+      checks:
+      - key: delta_3p1_gt_3p
+        expected: 1
+        tolerance: 0
+        allow_missing_key: false
+      - key: delta_3p_gt_3p2
+        expected: 1
+        tolerance: 0
+        allow_missing_key: false
+      filename: agnr_three_family.json
+  - key: grounding_source
+    value:
+      filename: agnr_three_family.json
+  - key: turn_budget
+    value:
+      max: 25
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_json
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file agnr_three_family.json exists and is valid JSON.'
+  - id: has_required_keys
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] JSON contains entries for Na = 12, 13, and 14 with their family classification
+      (3p, 3p+1, 3p+2) and computed band gaps.'
+  - id: gap_12agnr
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] Band gap for 12-AGNR (3p, p=4) is between 0.3 and 1.2 eV (expected: ~0.7-0.8
+      eV from Eq. 1).'
+  - id: gap_13agnr
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] Band gap for 13-AGNR (3p+1, p=4) is between 0.5 and 1.5 eV (expected: ~1.0-1.1
+      eV from Eq. 1).'
+  - id: gap_14agnr
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] Band gap for 14-AGNR (3p+2, p=4) is between 0.01 and 0.5 eV (expected: ~0.05-0.15
+      eV from Eq. 1, much smaller than the other two families).'
+  - id: hierarchy_correct
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] The computed gaps satisfy the hierarchy Δ_{3p+1} > Δ_{3p} > Δ_{3p+2} (i.e., gap_13
+      > gap_12 > gap_14).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The implementation correctly uses Eq. (1) from Son et al. (2006) with t = 2.7 eV
+      and δ = 0.12, and correctly classifies Na into the three families.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completes within 25 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retry requests needed.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completes within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Uses no more than 50000 tokens total.'
+- id: SA_dielectric_002_20250612
+  capability: scientific_analysis
+  domain: semiconductor
+  intent: Compute the figure of merit (FOM = band_gap × total_dielectric_constant) for the high-dielectric
+    candidate Cs2Ti(WO4)3 (mp-1226157) using data from the Materials Project, reproducing the screening
+    metric used in the paper's virtual screening task.
+  human_prompt_seed: Retrieve material mp-1226157 from the Materials Project. Extract its band gap (in
+    eV) and total dielectric constant (polycrystalline scalar). Compute the figure of merit FOM = band_gap
+    × total_dielectric_constant. Save the band gap, dielectric constant, and FOM to fom_result.json.
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: artifact_fom_json
+    value:
+      filename: fom_result.json
+  - key: contains_fom_value
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - figure_of_merit
+      - fom
+      filename: fom_result.json
+  - key: contains_band_gap
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - band_gap
+      filename: fom_result.json
+  - key: numeric_fom
+    value:
+      checks:
+      - key: figure_of_merit
+        max: 530.0
+        min: 490.0
+        expected: 511.92
+        tolerance: 15.0
+        allow_missing_key: false
+      filename: fom_result.json
+  - key: numeric_band_gap
+    value:
+      checks:
+      - key: band_gap
+        max: 3.2
+        min: 2.5
+        expected: 2.83
+        tolerance: 0.3
+        allow_missing_key: false
+      filename: fom_result.json
+  - key: grounding_source
+    value:
+      filename: fom_result.json
+  - key: turn_budget
+    value:
+      max: 25
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 100000
+  scoring_checklist:
+  - id: artifact_fom_json
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file fom_result.json exists and is valid JSON.'
+  - id: contains_fom_value
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The output file contains the figure of merit value.'
+  - id: contains_band_gap
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] The output file contains the band gap value.'
+  - id: numeric_fom
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] The FOM falls within [490, 530], consistent with Eg=2.83 × ε=180.89 ≈ 511.92
+      from the paper.'
+  - id: numeric_band_gap
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] The band gap falls within [2.5, 3.2] eV, consistent with the paper-reported
+      2.83 eV.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The answer is grounded in the source paper''s FOM definition and reported values
+      for mp-1226157.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Completion within 25 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] No more than 3 retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Completion within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Total token usage within 100000.'
+- id: SA_agnostic_002_20260625
+  capability: scientific_analysis
+  domain: semiconductor
+  intent: Calculate the mixing entropy (ΔS_mix) and free-energy-corrected decomposition enthalpy (ΔH_decomp
+    - TΔS_mix) at T=298 K for a B-site alloyed perovskite with a given composition, following the ideal
+    solid solution model described in the paper.
+  human_prompt_seed: 'Calculate the mixing entropy ΔS_mix (in meV/atom/K) and the free-energy-corrected
+    decomposition enthalpy ΔH_decomp - TΔS_mix (in meV/atom) at T = 298 K for a B-site alloyed perovskite
+    with composition CsGe₀.₂₅Hg₀.₂₅Pb₀.₂₅Sn₀.₂₅Br₃. Use the ideal solid solution model: ΔS_mix = -k_B
+    Σ x_i ln(x_i), where k_B = 8.617333262×10⁻⁵ eV/K. Given ΔH_decomp = -40 meV/atom, compute -TΔS_mix
+    and ΔH_decomp - TΔS_mix. Write results to entropy_calc.json with keys: composition, delta_S_mix_eV_per_atom_K,
+    T_K, minus_T_delta_S_mix_meV_per_atom, delta_H_decomp_meV_per_atom, delta_H_decomp_minus_T_delta_S_mix_meV_per_atom.'
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: entropy_json_exists
+    value: entropy_calc.json
+  - key: entropy_json_keys
+    value:
+      tokens:
+      - delta_S_mix_eV_per_atom_K
+      - T_K
+      - minus_T_delta_S_mix_meV_per_atom
+      - delta_H_decomp_minus_T_delta_S_mix_meV_per_atom
+      filename: entropy_calc.json
+  - key: entropy_numeric
+    value:
+      checks:
+      - key: delta_S_mix_eV_per_atom_K
+        expected: 0.000119
+        tolerance: 1.0e-06
+      - key: T_K
+        expected: 298
+        tolerance: 0
+      - key: minus_T_delta_S_mix_meV_per_atom
+        expected: -35.5
+        tolerance: 1.0
+      - key: delta_H_decomp_minus_T_delta_S_mix_meV_per_atom
+        expected: -75.5
+        tolerance: 1.5
+      filename: entropy_calc.json
+  - key: grounding_source
+    value:
+      filename: entropy_calc.json
+  - key: turn_budget
+    value:
+      max: 10
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 180
+  - key: token_budget_total
+    value:
+      max: 30000
+  scoring_checklist:
+  - id: entropy_json_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] entropy_calc.json file exists in the working directory.'
+  - id: entropy_json_keys
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] JSON contains required keys: delta_S_mix_eV_per_atom_K, T_K, minus_T_delta_S_mix_meV_per_atom,
+      delta_H_decomp_minus_T_delta_S_mix_meV_per_atom.'
+  - id: entropy_numeric
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] ΔS_mix ≈ 0.000119 eV/atom/K (4-component equimolar: -k_B * 4 * 0.25 * ln(0.25)
+      = k_B * ln(4) = 8.617e-5 * 1.386 ≈ 1.194e-4 eV/K). -TΔS_mix ≈ -35.5 meV/atom at 298 K. ΔH_decomp
+      - TΔS_mix ≈ -75.5 meV/atom.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Answer is grounded in the mixing entropy formula from the paper.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 10 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not retry any tool call.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 180 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses fewer than 30000 tokens total.'
+- id: SA_agnostic_001_20260625
+  capability: scientific_analysis
+  domain: semiconductor
+  intent: Calculate the decomposition enthalpy (ΔH_decomp) for a B-site alloyed perovskite CsGe₀.₅Sn₀.₅Br₃
+    using DFT total energies from Materials Project, following the formula ΔH_decomp(AB*X₃) = E(AB*X₃)
+    - E(AX) - Σ x_i E(B_iX₂) described in the paper.
+  human_prompt_seed: 'Calculate the decomposition enthalpy (ΔH_decomp) in meV/atom for CsGe₀.₅Sn₀.₅Br₃.
+    Use the formula ΔH_decomp = E(CsGe₀.₅Sn₀.₅Br₃) - E(CsBr) - 0.5*E(GeBr₂) - 0.5*E(SnBr₂). Fetch total
+    energies per atom from Materials Project for CsBr (mp-1066996), GeBr₂ (use OQMD or estimate), SnBr₂
+    (mp-23215), and construct the perovskite energy from CsPbBr₃ (mp-570587) by substituting Ge/Sn for
+    Pb. Report ΔH_decomp in meV/atom to a file decomp_energy.json with keys: E_perovskite_eV, E_CsBr_eV,
+    E_GeBr2_eV, E_SnBr2_eV, delta_H_decomp_meV_per_atom.'
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: decomp_json_exists
+    value: decomp_energy.json
+  - key: decomp_json_keys
+    value:
+      tokens:
+      - E_perovskite_eV
+      - E_CsBr_eV
+      - delta_H_decomp_meV_per_atom
+      filename: decomp_energy.json
+  - key: decomp_formula
+    value:
+      pattern: delta_H_decomp.*=.*E_perovskite.*-.*E_CsBr.*-.*0\.5.*E_GeBr2.*-.*0\.5.*E_SnBr2
+      filename: decomp_energy.json
+  - key: grounding_source
+    value:
+      filename: decomp_energy.json
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: decomp_json_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] decomp_energy.json file exists in the working directory.'
+  - id: decomp_json_keys
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] JSON contains required keys: E_perovskite_eV, E_CsBr_eV, delta_H_decomp_meV_per_atom.'
+  - id: decomp_formula
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.5
+    criterion: '[Suggested] JSON values follow the decomposition enthalpy formula: E_perovskite - E_CsBr
+      - 0.5*E_GeBr2 - 0.5*E_SnBr2.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Answer is grounded in the decomposition enthalpy methodology from the paper.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 20 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not retry any tool call.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses fewer than 80000 tokens total.'
+- id: SA_gaas_001_20250618
+  capability: scientific_analysis
+  domain: semiconductor
+  intent: Calculate the formation energy of the triply-charged Ga vacancy (V_Ga^{3-}) in GaAs at the As-rich
+    limit with the electron chemical potential at the conduction band minimum, using the formalism from
+    Zhang & Northrup PRL 67, 2339 (1991).
+  human_prompt_seed: Using the DFT energies in dft_defect_energies.json, calculate the formation energy
+    of V_Ga^{3-} at the As-rich limit with μ_e at the CBM. Use the formalism from Zhang & Northrup PRL
+    67, 2339 (1991). Report the result in eV. Save your calculation and result to vga3p_formation_energy.txt.
+  tags: []
+  data_files:
+  - key: dft_energies
+    path: dft_defect_energies.json
+    oss_url: ''
+    description: DFT-derived energy parameters for V_Ga^{3-} formation energy calculation. Contains E_D_prime
+      (reduced defect energy, 5.34 eV), E_g (GaAs band gap, 1.52 eV), and delta_H (heat of formation,
+      1.05 eV). Values are consistent with the paper's LDA calculations.
+  reference_answers:
+  - key: artifact_result
+    value: vga3p_formation_energy.txt
+  - key: numeric_formation_energy
+    value:
+      checks:
+      - key: formation_energy_eV
+        expected: 0.25
+        tolerance: 0.1
+        allow_missing_key: false
+      filename: vga3p_formation_energy.txt
+  - key: grounding_source
+    value:
+      filename: dft_defect_energies.json
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 1
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 40000
+  scoring_checklist:
+  - id: artifact_result
+    axis: correctness
+    verify: artifact_exists
+    weight: 2.0
+    criterion: '[Must] Output file vga3p_formation_energy.txt exists and contains the formation energy
+      result.'
+  - id: numeric_formation_energy
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 4.0
+    criterion: '[Suggested] The formation energy of V_Ga^{3-} at As-rich limit with μ_e=CBM is approximately
+      0.25 eV (±0.1 eV), consistent with the paper''s stated value.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+    criterion: '[Must] The calculation correctly applies the Zhang-Northrup formalism using the provided
+      DFT energies.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Variable] Agent completed within 15 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Variable] Agent did not retry the task.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Variable] Agent completed within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Variable] Agent used fewer than 40000 tokens total.'
+- id: SA_python_006_20260121
+  capability: scientific_analysis
+  domain: semiconductor
+  intent: Calculate the valence band offset (VBO) and conduction band offset (CBO) at the TiO2(001)/FeS2(100)
+    heterojunction interface using the potential line-up method from the electrostatic potential profile.
+  human_prompt_seed: Using the provided electrostatic potential profile figure (fig8_electrostatic_potential.jpg),
+    extract the macroscopic average potential values for the bulk TiO2 and FeS2 regions far from the interface.
+    Then compute the valence band offset (VBO) and conduction band offset (CBO) at the TiO2(001)/FeS2(100)
+    heterojunction using the potential line-up method. The bulk band gaps are 3.21 eV for TiO2 and 0.96
+    eV for FeS2. The energy differences between the macroscopic average potential and the VBM are 1.24
+    eV (TiO2) and 7.91 eV (FeS2). Save your results to band_alignment_results.txt.
+  tags: []
+  data_files:
+  - key: potential_profile_image
+    path: fig8_electrostatic_potential.jpg
+    oss_url: ''
+    description: 'Fig. 8a: Electrostatic potential profile of the TiO2(001)/FeS2(100) interface along
+      the [001] direction. The black curve is the planar average, the blue curve is the macroscopic average.
+      ΔV̄(z) = 4.05 eV is labeled.'
+  reference_answers:
+  - key: artifact_results
+    value: band_alignment_results.txt
+  - key: numeric_vbo
+    value:
+      checks:
+      - key: VBO_eV
+        max: 2.72
+        min: 2.52
+        expected: 2.62
+      filename: band_alignment_results.txt
+  - key: numeric_cbo
+    value:
+      checks:
+      - key: CBO_eV
+        max: 0.47
+        min: 0.27
+        expected: 0.37
+      filename: band_alignment_results.txt
+  - key: text_results_type
+    value:
+      flags:
+      - i
+      tokens:
+      - type-II
+      - staggered
+      filename: band_alignment_results.txt
+  - key: grounding_source
+    value:
+      filename: electrostatic_potential_profile.csv
+  - key: duration_budget
+    value:
+      max: 600
+  - key: no_retries
+    value:
+      max: 1
+  - key: token_budget_total
+    value:
+      max: 80000
+  - key: turn_budget
+    value:
+      max: 30
+  scoring_checklist:
+  - id: artifact_results
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] band_alignment_results.txt file exists.'
+  - id: numeric_vbo
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] VBO is reported as approximately 2.62 eV (acceptable range 2.52-2.72 eV).'
+  - id: numeric_cbo
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] CBO is reported as approximately 0.37 eV (acceptable range 0.27-0.47 eV).'
+  - id: text_results_type
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Results identify the alignment as type-II (staggered) band alignment.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The analysis is grounded in the provided electrostatic potential profile data.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry any tool call.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 80000 total tokens.'
+- id: SA_sumo_002_20260125
+  capability: scientific_analysis
+  domain: semiconductor
+  intent: Calculate the electron and hole effective masses at the conduction band minimum (CBM) and valence
+    band maximum (VBM) of a 2D bilayer material using the SUMO Python package, following the methodology
+    in the BMDS paper.
+  human_prompt_seed: Calculate the electron and hole effective masses at the CBM and VBM from the provided
+    VASP band structure output (vasprun.xml) using the SUMO Python package. Write the results to effective_masses.txt
+    in units of electron rest mass (m0).
+  tags: []
+  data_files:
+  - key: vasprun_xml
+    path: vasprun.xml
+    oss_url: ''
+    description: VASP output vasprun.xml file containing band structure data for a relaxed bilayer structure
+  reference_answers:
+  - key: artifact_output
+    value:
+      filename: effective_masses.txt
+  - key: text_output_content
+    value:
+      tokens:
+      - effective_mass
+      - CBM
+      - VBM
+      - m0
+      filename: effective_masses.txt
+  - key: numeric_mass_range
+    value:
+      checks:
+      - key: effective_mass_CBM
+        max: 50.0
+        min: 0.01
+        allow_missing_key: true
+      - key: effective_mass_VBM
+        max: 50.0
+        min: 0.01
+        allow_missing_key: true
+      filename: effective_masses.txt
+  - key: grounding_source
+    value:
+      filename: vasprun.xml
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 100000
+  scoring_checklist:
+  - id: artifact_output
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] effective_masses.txt file exists in the output directory.'
+  - id: text_output_content
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+    criterion: '[Must] Output file contains effective mass values for both CBM and VBM in units of m0.'
+  - id: numeric_mass_range
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Effective masses are within physically reasonable range (0.01-50 m0).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The answer is grounded in the provided VASP output file.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completed within 20 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retries were needed.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completed within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Total token usage within 100000.'
+- id: SA_gpumd_002_20260303
+  capability: scientific_analysis
+  domain: semiconductor
+  intent: Apply the degrees-of-freedom scaling factor to raw coarse-grained thermal conductivity values
+    from HNEMD simulations of the quasi-hexagonal C60 monolayer, and compare against the atomistic reference
+    values reported in the paper.
+  human_prompt_seed: Process the raw HNEMD thermal conductivity output for the coarse-grained C60 monolayer.
+    Apply the appropriate degrees-of-freedom scaling factor and write the scaled results with uncertainty
+    estimates to thermal_conductivity_scaled.json in the current working directory.
+  tags:
+  - eng_gpumd
+  - code_mlip
+  data_files:
+  - key: hnemd_raw_output
+    path: hnemd_c60_raw.csv
+    oss_url: ''
+    description: Raw HNEMD thermal conductivity output for the CG C60 monolayer model (unscaled values
+      in W/mK), along with simulation parameters including effective thickness 8.785 Å.
+  reference_answers:
+  - key: output_exists
+    value: thermal_conductivity_scaled.json
+  - key: kappa_x_scaled
+    value:
+      checks:
+      - key: kappa_x_W_mK
+        expected: 64
+        tolerance: 12
+      filename: thermal_conductivity_scaled.json
+  - key: kappa_y_scaled
+    value:
+      checks:
+      - key: kappa_y_W_mK
+        expected: 95
+        tolerance: 9
+      filename: thermal_conductivity_scaled.json
+  - key: scaling_factor_applied
+    value:
+      flags: ''
+      pattern: '60'
+      filename: thermal_conductivity_scaled.json
+  - key: grounding_source
+    value:
+      filename: hnemd_raw_output.csv
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 40000
+  scoring_checklist:
+  - id: output_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file thermal_conductivity_scaled.json exists in the working directory.'
+  - id: kappa_x_scaled
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Scaled thermal conductivity along x-direction (average of [110] and [1-10])
+      is 64±12 W/mK.'
+  - id: kappa_y_scaled
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Scaled thermal conductivity along y-direction ([010]) is 95±9 W/mK.'
+  - id: scaling_factor_applied
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] The output documents that a scaling factor of 60 was applied (CG has 60x fewer
+      DOF than AA).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The agent uses the provided hnemd_c60_raw.csv as input and applies the DOF scaling
+      from the paper.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: Completes within 15 turns.
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: No retry attempts used.
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: Completes within 300 seconds.
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: Total token usage within 40000.
+- id: SA_vasp_004_20250618
+  capability: scientific_analysis
+  domain: semiconductor
+  intent: Calculate the oxygen vacancy formation energy of an ABO₃ perovskite using the formula E_v^O
+    = E(A₂B₂O₅) + μ_O - 2·E(ABO₃) from DFT total energies of the defected and pristine cells.
+  human_prompt_seed: 'Calculate the oxygen vacancy formation energy of LaFeO3 (in eV) using the total
+    energies provided in lafeo3_defect_energies.json and the equation E_v^O = E(La2Fe2O5) + μ_O - 2·E(LaFeO3).
+    Write a Python script that reads the JSON, computes the value, and saves the result to oxygen_vacancy_energy.txt
+    in the format ''Oxygen vacancy formation energy: X.XX eV''.'
+  tags:
+  - eng_vasp
+  data_files:
+  - key: defect_energies
+    path: lafeo3_defect_energies.json
+    oss_url: ''
+    description: 'JSON file containing DFT total energies for oxygen vacancy calculation: E(LaFeO3) =
+      -45.123 eV (primitive cell), E(La2Fe2O5) = -89.876 eV (9-atom defected supercell), E(O2_gas) = -9.836
+      eV'
+  reference_answers:
+  - key: artifact_output
+    value: oxygen_vacancy_energy.txt
+  - key: artifact_script
+    value: calculate_vacancy_energy.py
+  - key: check_value
+    value:
+      flags:
+      - regex
+      pattern: 3\.[5-9]|4\.[0-4]
+      filename: oxygen_vacancy_energy.txt
+  - key: check_unit
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - eV
+      filename: oxygen_vacancy_energy.txt
+  - key: grounding_source
+    value:
+      filename: lafeo3_defect_energies.json
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_output
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] oxygen_vacancy_energy.txt is created with the calculated value.'
+  - id: artifact_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 5.0
+    criterion: '[Must] A Python script is created that performs the calculation.'
+  - id: check_value
+    axis: correctness
+    verify: text_file_regex
+    weight: 15.0
+    criterion: '[Suggested] Oxygen vacancy formation energy is in the range 3.5-4.4 eV (consistent with
+      Figure 4: LaFeO3 ≈ 4.0 eV for 9-atom supercell).'
+  - id: check_unit
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 5.0
+    criterion: '[Must] Output includes units ''eV''.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 5.0
+    criterion: '[Must] Calculation uses the provided energy data and follows Equation 3 from the paper.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Variable] Agent stays within turn budget.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Variable] Agent completes without retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Variable] Agent stays within duration budget.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Variable] Agent stays within total token budget.'
+- id: SA_pymatgen_003_20250618
+  capability: scientific_analysis
+  domain: semiconductor
+  intent: Given a band structure eigenvalue dataset at high-symmetry k-points, determine the fundamental
+    and optical (direct) band gaps, classify the gap as direct or indirect, and identify the k-points
+    of the valence band maximum and conduction band minimum.
+  human_prompt_seed: 'Given the file band_eigenvalues.json containing band eigenvalues (in eV, referenced
+    to the Fermi level) for valence bands (negative indices) and conduction bands (non-negative indices)
+    at high-symmetry k-points Gamma, X, L, and W, write a Python script analyze_bandgap.py that: (1) finds
+    the valence band maximum (VBM) and conduction band minimum (CBM) across all k-points and bands, (2)
+    calculates the fundamental band gap as CBM - VBM, (3) identifies the k-point labels where VBM and
+    CBM occur, (4) classifies the gap as ''direct'' if VBM and CBM are at the same k-point, or ''indirect''
+    otherwise, (5) calculates the optical (direct) band gap as the minimum of (CBM - VBM) computed at
+    each individual k-point. Output results to bandgap_analysis.json with keys: fundamental_gap_eV, optical_gap_eV,
+    gap_type, vbm_kpoint, cbm_kpoint.'
+  tags: []
+  data_files:
+  - key: eigenvalues
+    path: band_eigenvalues.json
+    oss_url: ''
+    description: JSON file containing band eigenvalues (in eV relative to Fermi level) for valence bands
+      (indices -8 to -1) and conduction bands (indices 0 to 7) at four high-symmetry k-points (Gamma,
+      X, L, W). Represents a simplified Si-like band structure with an indirect gap.
+  reference_answers:
+  - key: analysis_script_exists
+    value: analyze_bandgap.py
+  - key: analysis_output_exists
+    value: bandgap_analysis.json
+  - key: fundamental_gap
+    value:
+      checks:
+      - key: fundamental_gap_eV
+        expected: 0.4
+        tolerance: 0.01
+      filename: bandgap_analysis.json
+  - key: optical_gap
+    value:
+      checks:
+      - key: optical_gap_eV
+        expected: 1.1
+        tolerance: 0.01
+      filename: bandgap_analysis.json
+  - key: gap_type
+    value:
+      flags:
+        case_insensitive: true
+      pattern: '"gap_type"\s*:\s*"indirect"'
+      filename: bandgap_analysis.json
+  - key: vbm_kpoint
+    value:
+      flags:
+        case_insensitive: true
+      pattern: '"vbm_kpoint"\s*:\s*"L"'
+      filename: bandgap_analysis.json
+  - key: cbm_kpoint
+    value:
+      flags:
+        case_insensitive: true
+      pattern: '"cbm_kpoint"\s*:\s*"X"'
+      filename: bandgap_analysis.json
+  - key: grounding_source
+    value:
+      filename: band_eigenvalues.json
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: analysis_script_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 5.0
+    criterion: '[Must] Python script analyze_bandgap.py exists in the output directory.'
+  - id: analysis_output_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 5.0
+    criterion: '[Must] Output file bandgap_analysis.json exists and is valid JSON.'
+  - id: fundamental_gap
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 15.0
+    criterion: '[Must] Fundamental band gap is correctly calculated as 0.40 eV (±0.01 eV tolerance).'
+  - id: optical_gap
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 15.0
+    criterion: '[Must] Optical (direct) band gap is correctly calculated as 1.10 eV (±0.01 eV tolerance).'
+  - id: gap_type
+    axis: correctness
+    verify: text_file_regex
+    weight: 10.0
+    criterion: '[Must] Gap is correctly classified as ''indirect'' since VBM and CBM occur at different
+      k-points.'
+  - id: vbm_kpoint
+    axis: correctness
+    verify: text_file_regex
+    weight: 10.0
+    criterion: '[Must] VBM k-point is correctly identified as ''L''.'
+  - id: cbm_kpoint
+    axis: correctness
+    verify: text_file_regex
+    weight: 10.0
+    criterion: '[Must] CBM k-point is correctly identified as ''X''.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] The answer is grounded in the provided band_eigenvalues.json and follows the band
+      gap analysis methodology from Kim et al. (2020).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not retry any tool call.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses fewer than 50000 tokens total.'
+- id: SA_ionization_potential_001_20260508
+  capability: scientific_analysis
+  domain: semiconductor
+  intent: Calculate the ionization potential (IP) of a Cs₂Te surface facet from the vacuum level energy
+    and the valence band maximum (VBM) energy, using the formula IP = E_vac − E_VBM as defined in the
+    paper.
+  human_prompt_seed: Given the band structure data (band_structure_data.json) containing the vacuum level
+    energy (E_vac) and the valence band maximum energy (E_VBM) in eV, calculate the ionization potential
+    (IP) of the Cs₂Te surface facet using the formula from the paper. Write the result in eV to ionization_potential.txt.
+  tags: []
+  data_files:
+  - key: band_data
+    path: band_structure_data.json
+    oss_url: ''
+    description: JSON file containing the vacuum level energy (E_vac) and valence band maximum energy
+      (E_VBM) in eV, referenced to a common energy zero.
+  reference_answers:
+  - key: artifact_ip
+    value:
+      filename: ionization_potential.txt
+  - key: numeric_ip
+    value:
+      checks:
+      - key: ip_eV
+        max: 6.0
+        min: 0.5
+      filename: ionization_potential.txt
+  - key: text_has_formula
+    value:
+      tokens:
+      - E_vac
+      - E_VBM
+      - IP
+      - ionization_potential
+      - vacuum_level
+      - vbm
+      filename: calc_ip.py
+  - key: grounding_source
+    value:
+      filename: band_structure_data.json
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 120
+  - key: token_budget_total
+    value:
+      max: 30000
+  scoring_checklist:
+  - id: artifact_ip
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file ionization_potential.txt exists and contains the calculated ionization
+      potential in eV.'
+  - id: numeric_ip
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Ionization potential falls within the physically reasonable range 0.5–6.0
+      eV consistent with the paper''s reported values for Cs₂Te facets (1.36–3.47 eV).'
+  - id: text_has_formula
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Calculation script implements IP = E_vac − E_VBM as defined in the paper.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Answer is grounded in the provided band structure data file.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completed within 15 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent did not exceed retry budget.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completed within 120 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent total token usage within 30000.'
+- id: SA_boltztrap_004_20260125
+  capability: scientific_analysis
+  domain: semiconductor
+  intent: Set up a BoltzTraP2 transport property calculation workflow to compute the Seebeck coefficient,
+    electrical conductivity, and power factor of a 2D bilayer material at 300 K, following the methodology
+    in the BMDS paper.
+  human_prompt_seed: 'Set up a BoltzTraP2 transport calculation to compute the Seebeck coefficient (S),
+    electrical conductivity (sigma/tau), and power factor (S^2*sigma/tau) at 300 K for the provided VASP
+    band structure output (vasprun.xml). Write the results to transport_properties.csv with columns: temperature,
+    chemical_potential, seebeck, conductivity, power_factor.'
+  tags: []
+  data_files:
+  - key: vasprun_xml
+    path: vasprun.xml
+    oss_url: ''
+    description: VASP output vasprun.xml file containing band structure data for transport property calculation
+  reference_answers:
+  - key: artifact_csv
+    value:
+      filename: transport_properties.csv
+  - key: text_csv_headers
+    value:
+      tokens:
+      - temperature
+      - chemical_potential
+      - seebeck
+      - conductivity
+      - power_factor
+      filename: transport_properties.csv
+  - key: numeric_seebeck_range
+    value:
+      checks:
+      - key: seebeck_at_300K
+        max: 1000.0
+        min: -1000.0
+        allow_missing_key: true
+      filename: transport_properties.csv
+  - key: numeric_temp_300
+    value:
+      checks:
+      - key: temperature
+        expected: 300
+        tolerance: 0
+        allow_missing_key: false
+      filename: transport_properties.csv
+  - key: grounding_source
+    value:
+      filename: vasprun.xml
+  - key: turn_budget
+    value:
+      max: 25
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 120000
+  scoring_checklist:
+  - id: artifact_csv
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] transport_properties.csv file exists in the output directory.'
+  - id: text_csv_headers
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+    criterion: '[Must] CSV file contains required columns: temperature, chemical_potential, seebeck, conductivity,
+      power_factor.'
+  - id: numeric_seebeck_range
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Seebeck coefficient values are within physically reasonable range (-1000 to
+      1000 muV/K).'
+  - id: numeric_temp_300
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] Temperature of 300 K is included in the calculation.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The answer is grounded in the provided VASP output file.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completed within 25 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retries were needed.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completed within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Total token usage within 120000.'

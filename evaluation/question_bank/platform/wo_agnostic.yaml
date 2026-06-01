@@ -1,0 +1,899 @@
+version: v5
+capability: workflow_orchestration
+domain: agnostic
+questions:
+- id: WO_finetune_001_20260519
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Set up a real DP model fine-tuning workflow given training data and a base
+    model, producing training config and submission artifacts.
+  human_prompt_seed: 工作区中有 NaCl 体系的 DFT 训练数据 `train_data/`（dpdata 格式，含 energy/force/virial），基础模型为
+    `DPA2-base.pt`。请对该模型进行 fine-tune 以获得 NaCl 专用势函数。输出训练配置文件 `finetune_input.json`
+    和提交配置 `finetune_submit.json`。
+  tags:
+  - code_mlip
+  data_files:
+  - key: train_data
+    path: data/WO_finetune_001/train_data/type_map.raw
+    oss_url: ''
+    description: Minimal dpdata training set placeholder (type_map.raw with Na Cl).
+  - key: base_model
+    path: data/WO_finetune_001/DPA2-base.pt
+    oss_url: ''
+    description: Dummy base model file (placeholder).
+  reference_answers:
+  - key: config_artifact
+    value: finetune_input.json
+  - key: submit_artifact
+    value: finetune_submit.json
+  - key: must_config_training_data
+    value:
+      filename: finetune_input.json
+      pattern: train_data
+      flags: ''
+  - key: must_config_base_model
+    value:
+      filename: finetune_submit.json
+      pattern: DPA2-base
+      flags: ''
+  - key: must_submit_train_cmd
+    value:
+      filename: finetune_submit.json
+      pattern: dp\s+--pt\s+train|dp\s+train|finetune
+      flags: i
+  - key: turn_budget
+    value:
+      max: 15
+  scoring_checklist:
+  - id: config_artifact
+    criterion: finetune_input.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: submit_artifact
+    criterion: finetune_submit.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_config_training_data
+    criterion: '[Must] Training config references the train_data path.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_config_base_model
+    criterion: '[Must] Training config references DPA2-base.pt as the base/pretrained
+      model for fine-tuning.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_submit_train_cmd
+    criterion: '[Platform] Submission config cmd includes dp train or finetune command.'
+    axis: correctness
+    verify: text_file_regex
+  - id: config_structure
+    criterion: finetune_input.json has a valid DeePMD-kit training config structure
+      including model, learning_rate, loss, and training sections with finetune-appropriate
+      settings (frozen base model, lower learning rate than from-scratch).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: WO_mace_001_20260513
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Test whether agent knows MACE-MP-0 can be used directly by name via mlips
+    skill without manually downloading the model file.
+  human_prompt_seed: 请使用 MACE-MP-0 势函数对工作区中的 `nacl_bulk.cif`（NaCl 岩盐结构，64 原子超胞）进行结构优化，输出提交配置
+    `opt_submit.json`。
+  tags:
+  - code_mlip
+  data_files:
+  - key: nacl_cif
+    path: data/WO_mace_001/nacl_bulk.cif
+    oss_url: ''
+    description: NaCl rock-salt 2x2x2 supercell (64 atoms).
+  reference_answers:
+  - key: submit_artifact
+    value: opt_submit.json
+  - key: must_model_mace
+    value:
+      filename: opt_submit.json
+      pattern: MACE-MP-0|mace
+      flags: i
+  - key: must_optimize_script
+    value:
+      filename: opt_submit.json
+      pattern: optimize_structure
+      flags: ''
+  - key: must_image_mlips
+    value:
+      filename: opt_submit.json
+      pattern: mlips
+      flags: i
+  - key: turn_budget
+    value:
+      max: 10
+  scoring_checklist:
+  - id: submit_artifact
+    criterion: opt_submit.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_model_mace
+    criterion: '[Platform] cmd references MACE-MP-0 model by name.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_optimize_script
+    criterion: '[Platform] cmd uses optimize_structure script from mlips skill.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_image_mlips
+    criterion: '[Platform] image references the multi-family mlips image (not the
+      DPA-only image).'
+    axis: correctness
+    verify: text_file_regex
+  - id: no_download_attempt
+    criterion: Agent did NOT attempt to manually download the MACE model file from
+      GitHub or other URLs. It should know that MACE-MP-0 is a known model name supported
+      directly by the mlips skill scripts.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: PWO_elec_009_20260521
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Validate whether the agent can prepare ABACUS INPUT and Bohrium submit JSON
+    for an Al2O3 Bader workflow without running calculations.
+  human_prompt_seed: 对 Al₂O₃ 准备 ABACUS Bader 电荷分析所需文件和 Bohrium 提交配置（文件名 `al2o3_bader_submit.json`）。本题只检验输入文件与提交
+    JSON，不要投递或执行计算。
+  tags:
+  - eng_abacus
+  data_files: []
+  reference_answers:
+  - key: input_artifact
+    value: INPUT
+  - key: must_input_core
+    value:
+      filename: INPUT
+      must_cover:
+      - calculation scf
+      - out_chg 1
+  - key: submit_json_artifact
+    value: al2o3_bader_submit.json
+  - key: must_submit_json_image
+    value:
+      filename: al2o3_bader_submit.json
+      pattern: '"image"\s*:\s*"registry\.dp\.tech/dptech/dp/native/hub/mrdic2/abacusp:1\.0\.3-1778742780"'
+      flags: i
+  - key: must_bader_cmd
+    value:
+      filename:
+      - al2o3_bader_submit.json
+      - run.sh
+      tokens:
+      - abacus
+      - bader
+      flags: i
+  - key: must_bader_core_ref
+    value:
+      filename:
+      - al2o3_bader_submit.json
+      - run.sh
+      tokens:
+      - -ref
+      flags: i
+  - key: turn_budget
+    value:
+      max: 14
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 18000
+  scoring_checklist:
+  - id: input_artifact
+    criterion: Agent writes ABACUS `INPUT` file to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_input_core
+    criterion: '[Must] INPUT contains ABACUS Bader prerequisite keys (`calculation
+      scf`, `out_chg 1`).'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: submit_json_artifact
+    criterion: Agent writes Bohrium submit config `al2o3_bader_submit.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_submit_json_image
+    criterion: '[Must] submit JSON includes required Bohrium image.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_bader_cmd
+    criterion: '[Must] ABACUS + Bader execution present in cmd or run.sh.'
+    axis: correctness
+    verify: text_file_contains_all
+  - id: must_bader_core_ref
+    criterion: '[Must] Core-charge reference (-ref flag) present in cmd or run.sh.'
+    axis: correctness
+    verify: text_file_contains_all
+  - id: no_retries
+    criterion: No repeated identical tool calls with the same parameter set.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed
+      a generous benchmark ceiling (tunable per deployment).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage is recorded and stays within a generous benchmark
+      ceiling (tunable per task after calibration).
+    axis: efficiency
+    verify: token_budget
+- id: PWO_dpa_head_organic_001_20260521
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Test whether agent selects OMol25 DPA head for organic molecule optimization
+    rather than defaulting to Omat24 or misusing SPICE2.
+  human_prompt_seed: 请使用 DPA 模型对咖啡因分子做构型优化，输出为 `caffeine_optimized.cif`。
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: optimized_artifact
+    value: caffeine_optimized.cif
+  - key: must_head_omol25
+    value:
+      filename: '*_optimized.cif'
+      check_tool_args: true
+      pattern: OMol25
+  - key: must_not_default_head
+    value: {}
+  - key: turn_budget
+    value:
+      max: 15
+  - key: duration_budget
+    value:
+      max: 600000
+  - key: token_budget_total
+    value:
+      max: 60000
+  scoring_checklist:
+  - id: optimized_artifact
+    criterion: '[Must] Agent produces an optimized structure file in the workspace.'
+    axis: correctness
+    verify: artifact_exists
+  - id: must_head_omol25
+    criterion: '[Must] Agent uses OMol25 head for organic molecule optimization, as
+      documented in mlips skill for organic chemistry.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: must_not_default_head
+    criterion: '[Must] Agent does NOT use default Omat24/OMat24 head or SPICE2 for
+      this organic molecule task. Judge from tool call arguments.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+- id: PWO_vasp_submit_001_20260521
+  capability: workflow_orchestration
+  domain: agnostic
+  priority: P1
+  intent: Test whether agent can correctly submit a VASP calculation to Bohrium on
+    first try, using the correct image startup command (Intel MPI env sourcing) without
+    trial-and-error probing.
+  human_prompt_seed: 帮我用 VASP 计算一个 O₂ 分子的平衡键长和结合能，用 PBE 泛函。
+  tags:
+  - eng_vasp
+  data_files:
+  - key: potcar_O
+    path: data/PWO_vasp_submit_001/POT/PAW_PBE/O/POTCAR
+    oss_url: ''
+    description: VASP PAW_PBE pseudopotential for O (standard, not O_s or O_h).
+  reference_answers:
+  - key: must_vasp_env_source
+    value:
+      check_tool_args: true
+      pattern: source.*(intel|oneapi|setvars|compilervars)
+      flags: i
+  - key: must_vasp_binary_path
+    value:
+      check_tool_args: true
+      pattern: /opt/vasp.*bin/vasp_std|vasp_std
+      flags: ''
+  - key: must_not_bare_mpirun
+    value:
+      check_tool_args: true
+      pattern: ^mpirun\s+-np
+      flags: ''
+      negate: true
+  - key: must_spin_polarized
+    value:
+      filename: '**/INCAR'
+      pattern: ISPIN\s*=\s*2
+      flags: ''
+  - key: must_boxed_molecule
+    value:
+      filename: '**/POSCAR'
+      pattern: 1[0-9]\.|2[0-9]\.
+      flags: ''
+  - key: turn_budget
+    value:
+      max: 20
+  scoring_checklist:
+  - id: first_submit_success
+    criterion: '[Must] The FIRST Bohrium submission uses a working VASP command (sources
+      Intel env before calling vasp_std). Agent does NOT fail and retry with different
+      mpirun/env combinations.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: must_vasp_env_source
+    criterion: '[Platform] Bohrium cmd includes Intel MPI/oneAPI environment sourcing
+      (source setvars.sh or compilervars.sh) before vasp_std invocation.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: must_spin_polarized
+    criterion: '[Must] INCAR sets ISPIN=2 for O₂ (triplet ground state).'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_boxed_molecule
+    criterion: '[Must] POSCAR uses a large box (≥10Å) for the isolated molecule to
+      avoid periodic image interaction.'
+    axis: correctness
+    verify: text_file_regex
+  - id: reports_bond_length
+    criterion: Agent reports O-O equilibrium bond length (expected ~1.21-1.23 Å from
+      PBE). Value must be physically reasonable.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: reports_binding_energy
+    criterion: Agent reports O₂ binding energy or atomization energy (expected ~5.5-6.2
+      eV for PBE, vs experimental 5.12 eV). Sign and magnitude must be reasonable.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: PWO_vasp_submit_002_20260528
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Test VASP input preparation + Bohrium submission config generation.
+  human_prompt_seed: '工作区中提供了 Si 金刚石结构 `POSCAR_Si` 和对应的 `POTCAR_Si`。
+
+    请准备 VASP 自洽场计算输入，放入 `si_scf/` 目录（含 POTCAR），并输出提交配置 `submit.json`。'
+  tags:
+  - eng_vasp
+  data_files:
+  - key: poscar_si
+    path: data/PIG_vasp_001_20260513/POSCAR_Si
+    oss_url: ''
+    description: Si diamond POSCAR (2 atoms, conventional).
+  - key: potcar_si
+    path: data/PIG_vasp_001_20260513/POTCAR_Si
+    oss_url: ''
+    description: PAW_PBE Si POTCAR.
+  reference_answers:
+  - key: incar_artifact
+    value: si_scf/INCAR
+  - key: kpoints_artifact
+    value: si_scf/KPOINTS
+  - key: potcar_artifact
+    value: si_scf/POTCAR
+  - key: submit_artifact
+    value: submit.json
+  - key: must_submit_image
+    value:
+      filename: submit.json
+      pattern: registry\.dp\.tech/.+vasp:\d+\.\d+\.\d+
+      flags: i
+  - key: must_submit_cmd
+    value:
+      filename: submit.json
+      pattern: vasp_std
+      flags: i
+  - key: must_submit_input_dir
+    value:
+      filename: submit.json
+      pattern: si_scf
+      flags: ''
+  - key: must_incar_basic
+    value:
+      filename: si_scf/INCAR
+      tokens:
+      - ENCUT
+      - ISMEAR
+      flags: i
+  - key: turn_budget
+    value:
+      max: 15
+  scoring_checklist:
+  - id: incar_artifact
+    criterion: si_scf/INCAR written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: kpoints_artifact
+    criterion: si_scf/KPOINTS written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: potcar_artifact
+    criterion: si_scf/POTCAR exists (copied from provided POTCAR_Si).
+    axis: correctness
+    verify: artifact_exists
+  - id: submit_artifact
+    criterion: submit.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_submit_image
+    criterion: '[Platform] submit.json references a full VASP image path with version
+      tag (e.g., registry.dp.tech/dptech/vasp:5.4.4), not a vague name like
+      vasp:latest or just "vasp".'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_submit_cmd
+    criterion: '[Platform] submit.json cmd uses vasp_std.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_submit_input_dir
+    criterion: '[Platform] submit.json input_dir points to si_scf.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_incar_basic
+    criterion: '[Must] INCAR contains ENCUT and ISMEAR.'
+    axis: correctness
+    verify: text_file_contains_all
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: PWO_dpa_head_case_001_20260524
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Test whether agent uses the correct case-sensitive DPA head name when
+    user specifies DPA-3.2-5M model. The head for DPA-3.2 is `OMat24` (capital M),
+    distinct from DPA-3.1's `Omat24` (lowercase m).
+  human_prompt_seed: |
+    请使用 DPA-3.2-5M 模型对 MgO 做结构优化，输出提交配置 `opt_submit.json`。
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: submit_artifact
+    value: opt_submit.json
+  - key: must_dpa32
+    value:
+      filename: opt_submit.json
+      pattern: DPA.?3\.?2
+      flags: ''
+  - key: no_wrong_head_case
+    value:
+      filename: opt_submit.json
+      pattern: Omat24
+      flags: ''
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: submit_artifact
+    criterion: Agent writes `opt_submit.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_dpa32
+    criterion: '[Platform] cmd references DPA-3.2 model.'
+    axis: correctness
+    verify: text_file_regex
+  - id: no_wrong_head_case
+    criterion: '[Platform] cmd does NOT use `Omat24` (lowercase m, which is the DPA-3.1
+      head name). For DPA-3.2-5M, either omit --head (default is OMat24) or explicitly
+      write `OMat24` (capital M). Writing `Omat24` will cause a head-not-found error.'
+    axis: correctness
+    verify: text_file_regex_absent
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: PWO_gpumd_phonon_001_20260526
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: End-to-end GPUMD phonon dispersion for Si using NEP potential. Agent must
+    know GPUMD requires GPU node and select correct machine type without being told.
+  human_prompt_seed: |
+    使用 GPUMD 计算 Si 金刚石结构的声子色散关系。
+
+    要求：
+    - 使用 NEP 势函数（Si 体系，从 GPUMD 官方 examples 或已有资源获取）
+    - 提交到 Bohrium 运行
+    - 报告 Gamma 点光学支频率
+    - 结果写入工作区根目录 `phonon_result.json`：`{"gamma_optical_THz": ..., "method": "gpumd"}`
+  tags:
+  - eng_gpumd
+  data_files: []
+  reference_answers:
+  - key: output_artifact
+    value: phonon_result.json
+  - key: gamma_optical_range
+    value:
+      filename: phonon_result.json
+      key: gamma_optical_THz
+      min: 14.0
+      max: 17.0
+  - key: turn_budget
+    value:
+      max: 40
+  - key: duration_budget
+    value:
+      max: 1500000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `phonon_result.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: gamma_optical_range
+    criterion: '[Must] Si Gamma-point optical branch frequency is within 14-17 THz
+      (experimental ~15.5 THz). Values far outside indicate wrong potential, wrong
+      supercell, or incorrect post-processing. If agent submitted to CPU node,
+      GPUMD will fail silently (no log) and no result will be produced.'
+    axis: correctness
+    verify: json_file_numeric_range
+    weight: 3.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
+- id: PWO_abacus_phonon_001_20260524
+  capability: workflow_orchestration
+  domain: agnostic
+  priority: P1
+  intent: End-to-end ABACUS phonon dispersion calculation for Si using finite
+    displacement method with phonopy. Agent must prepare ABACUS inputs, submit SCF
+    and force constant calculations to Bohrium (not run locally), use phonopy for
+    post-processing, and report the Gamma-point optical frequency. From real
+    trajectory where agent tried to install ABACUS+phonopy locally instead of
+    using Bohrium images.
+  human_prompt_seed: '工作区中有 Si 金刚石结构的 CIF 文件 `Si.cif`（2 原子原胞）。
+    请用 ABACUS 计算 Si 的声子色散曲线（有限位移法），沿 G-X-K-G 路径绘制，
+    并报告 Gamma 点光学支频率（THz）。'
+  tags:
+  - eng_abacus
+  data_files:
+  - key: si_cif
+    path: data/PWO_abacus_phonon_001/Si.cif
+    oss_url: ''
+    description: Si diamond primitive cell CIF (2 atoms).
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 7200000
+  scoring_checklist:
+  - id: abacus_input_generated
+    criterion: '[Must] Agent generates ABACUS input files (INPUT, STRU, KPT) with
+      appropriate settings for force constant calculation.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: uses_phonopy
+    criterion: '[Must] Agent uses phonopy (finite displacement method) to generate
+      displaced structures and post-process force constants into phonon dispersion.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: bohrium_submission
+    criterion: '[Platform] Agent submits ABACUS force calculation jobs to Bohrium
+      using bohrium-job skill with an ABACUS image.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: gamma_optical_frequency
+    criterion: '[Must] Agent reports Si Gamma-point optical frequency. Expected value
+      is approximately 15-16 THz (experimental 15.5 THz). Values outside 13-18 THz
+      indicate a problem with the calculation or post-processing.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: dispersion_plot_or_data
+    criterion: Agent produces a phonon dispersion plot (PNG/PDF) or structured data
+      file showing frequencies along the G-X-K-G path.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
+- id: PWO_qe_scf_001_20260524
+  capability: workflow_orchestration
+  domain: agnostic
+  priority: P1
+  intent: End-to-end QE pw.x SCF workflow for MgO with platform submission and
+    result retrieval. Agent must produce correct pw.x input, submit to Bohrium
+    (not run locally), wait for completion, and report total energy. From real
+    trajectory where agents repeatedly tried to run pw.x locally.
+  human_prompt_seed: '请帮我对 MgO 岩盐结构做一次 Quantum ESPRESSO pw.x 的 SCF 单点能计算。
+    结构参数：Fm-3m, a=4.21 Å, Mg 在 (0,0,0), O 在 (0.5,0.5,0.5)。
+    使用 PBE 泛函、ecutwfc=60 Ry、4×4×4 k 点网格。帮我跑一下看看总能是多少。'
+  tags:
+  - eng_qe
+  data_files: []
+  reference_answers:
+  - key: input_artifact
+    value:
+      filename: '*.in'
+      glob: true
+  - key: must_scf_calc
+    value:
+      filename: '*.in'
+      pattern: (?im)calculation\s*=\s*['"]?scf['"]?
+      flags: im
+      glob: true
+  - key: must_ecutwfc
+    value:
+      filename: '*.in'
+      pattern: (?im)ecutwfc\s*=\s*60
+      flags: im
+      glob: true
+  - key: must_pbe
+    value:
+      filename: '*.in'
+      pattern: (?im)input_dft\s*=\s*['"]?pbe['"]?
+      flags: im
+      glob: true
+  - key: must_nat_2
+    value:
+      filename: '*.in'
+      pattern: (?im)nat\s*=\s*2
+      flags: im
+      glob: true
+  - key: must_ntyp_2
+    value:
+      filename: '*.in'
+      pattern: (?im)ntyp\s*=\s*2
+      flags: im
+      glob: true
+  - key: must_kpoints
+    value:
+      filename: '*.in'
+      pattern: (?m)^\s*4\s+4\s+4
+      flags: m
+      glob: true
+  - key: turn_budget
+    value:
+      max: 15
+  scoring_checklist:
+  - id: input_artifact
+    criterion: A pw.x input file (*.in) is written to workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: must_scf_calc
+    criterion: '[Must] Input sets calculation = scf.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_ecutwfc
+    criterion: '[Must] ecutwfc is set to 60 Ry as user requested.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_pbe
+    criterion: '[Must] PBE functional is specified via input_dft.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_nat_2
+    criterion: '[Must] nat=2 for the primitive MgO cell (1 Mg + 1 O).'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_ntyp_2
+    criterion: '[Must] ntyp=2 (Mg and O species).'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: must_kpoints
+    criterion: '[Must] K_POINTS grid includes 4 4 4.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+  - id: no_local_execution
+    criterion: '[Must] Agent does NOT attempt to run pw.x locally (no execute_bash
+      with pw.x command). It must submit to Bohrium platform for execution.'
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: bohrium_submission
+    criterion: '[Platform] Agent submits the job to Bohrium using the bohrium-job skill
+      or equivalent submission mechanism with a QE image.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: correct_lattice
+    criterion: The input file contains correct MgO rocksalt lattice parameters (a=4.21
+      Angstrom or equivalent in Bohr, ibrav=2 for FCC, or explicit CELL_PARAMETERS
+      consistent with Fm-3m a=4.21).
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: reports_total_energy
+    criterion: '[Must] Agent waits for the Bohrium job to complete, retrieves the
+      output, and reports the total energy of MgO. The value should be in the range
+      of -930 to -960 Ry (or equivalent in eV) for PBE MgO with this setup.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: PWO_orca_tddft_001_20260525
+  capability: workflow_orchestration
+  domain: agnostic
+  priority: P1
+  intent: End-to-end ORCA TD-DFT excited-state calculation for a small organic
+    molecule. Agent must build 3D structure from SMILES, prepare ORCA input with
+    correct TD-DFT syntax, submit to Bohrium with correct ORCA image (from orca
+    skill), and report the lowest singlet excitation energy and oscillator strength.
+    From real trajectory where agent spent 536 events failing because it never
+    loaded orca skill to get the correct image.
+  human_prompt_seed: '请用 ORCA 计算萘 (naphthalene, C₁₀H₈) 的第一激发态吸收波长。
+    先做几何优化（B3LYP/def2-SVP），然后在优化结构上做 TD-DFT（PBE0/def2-SVP，5 个根）。
+    报告 S₁ 的激发能 (eV) 和振子强度。'
+  tags:
+  - eng_orca
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 20
+  - key: duration_budget
+    value:
+      max: 7200000
+  scoring_checklist:
+  - id: correct_orca_tddft_input
+    criterion: '[Must] Agent writes an ORCA input file with correct TD-DFT syntax:
+      functional (PBE0), basis (def2-SVP), and %tddft block with nroots=5.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: two_step_workflow
+    criterion: '[Must] Agent performs geometry optimization BEFORE TD-DFT. Either
+      as two separate jobs or using ORCA compound job syntax. TD-DFT must NOT be
+      run on an unoptimized structure.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: loads_orca_skill
+    criterion: '[Must] Agent loads the orca skill to obtain the correct ORCA image
+      and submission parameters, rather than guessing image names.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: bohrium_submission
+    criterion: '[Platform] Agent submits ORCA jobs to Bohrium with the correct ORCA
+      image from the skill documentation.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: reports_excitation_energy
+    criterion: '[Must] Agent reports the S₁ excitation energy. Expected value for
+      naphthalene PBE0/def2-SVP is approximately 4.0-4.5 eV (experimental ~4.0 eV).
+      Values outside 3.5-5.0 eV indicate a problem.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: reports_oscillator_strength
+    criterion: Agent reports the oscillator strength (f) for the S₁ state of
+      naphthalene. Expected f is small (~0.0-0.05) since S₁ is symmetry-forbidden
+      (¹Lb state).'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
+- id: PWO_qe_bands_001_20260526
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: End-to-end QE band structure calculation for Si submitted to Bohrium.
+    Agent must perform SCF then bands along high-symmetry path, correctly
+    locate pseudopotential files in the QE Docker image, and report band gap.
+  human_prompt_seed: "使用 Quantum ESPRESSO 计算 Si 的能带结构（金刚石结构，a=5.43 Å）。\n\
+    沿 Γ-X-L-Γ 高对称路径计算能带，报告带隙类型和带隙值。\n"
+  tags:
+  - eng_qe
+  source_session: 2f6940567d1e4d3e936c253e3279afd5
+  data_files: []
+  reference_answers:
+  - key: gap_type
+    value: indirect
+  - key: gap_value_eV
+    value: 0.55
+    tolerance: 0.3
+    description: DFT-PBE Si band gap is ~0.5-0.7 eV (underestimates expt 1.12 eV).
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: two_step_workflow
+    criterion: Agent performs SCF calculation first, then a non-self-consistent bands
+      calculation along the high-symmetry k-path. Both steps must use pw.x.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.5
+  - id: pseudopotential_resolved
+    criterion: Agent correctly locates and uses a Si pseudopotential file from the
+      QE Docker image filesystem (not a broken download or 404 file). The
+      pseudo_dir in the input must point to a valid directory containing the PP.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: kpath_highsym
+    criterion: The bands calculation uses a high-symmetry k-path that includes at
+      least Gamma, X, and L points for the FCC Brillouin zone.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: gap_type_indirect
+    criterion: Agent correctly identifies Si as having an indirect band gap
+      (VBM at Gamma, CBM near X).
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: gap_value_reasonable
+    criterion: Reported band gap is in the DFT-PBE range for Si (0.4-0.8 eV).
+      Values outside this range indicate a calculation error.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: submitted_to_bohrium
+    criterion: '[Platform] Calculation is submitted to Bohrium using the QE image,
+      not run locally.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget

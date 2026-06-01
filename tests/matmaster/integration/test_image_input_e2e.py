@@ -152,7 +152,7 @@ async def test_images_flow_from_service_to_kernel_user_message(tmp_path: Path) -
         assert turn_input is not None
         assert turn_input.attachments.image_detail is None
 
-        ok, _elapsed = await svc.run_agent(
+        ok, _elapsed, _usage = await svc.run_agent(
             session_id="sess-images",
             user_prompt="看图",
             images=["https://oss.example.com/chat/a.png"],

@@ -1,0 +1,154 @@
+version: v5
+capability: workflow_orchestration
+domain: battery
+questions:
+- id: WO_dpmd_001_20260519
+  capability: workflow_orchestration
+  domain: battery
+  intent: Test whether agent correctly identifies that no system-specific DP model covers
+    LiCl aqueous (Li+Cl+H+O) and falls back to a universal pretrained DPA model.
+  human_prompt_seed: '采用 DP-MD 模拟方法，对 2 mol/L LiCl 水溶液（约 1000 原子）进行
+    200 ps NVT 模拟，分析 Li⁺ 的溶剂化结构。请准备好提交配置，输出为 `md_submit.json`。'
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: submit_artifact
+    value: md_submit.json
+  - key: must_use_universal_dpa
+    value:
+      filenames:
+      - md_submit.json
+      - lammps.in
+      pattern: DPA.?[23]|dpa.?[23]|DPA-[23]|deepmd
+      flags: i
+      min_match_count: 1
+  - key: turn_budget
+    value:
+      max: 40
+  scoring_checklist:
+  - id: submit_artifact
+    criterion: md_submit.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_use_universal_dpa
+    criterion: '[Must] md_submit.json references a universal pretrained DPA model (DPA-2
+      or DPA-3 series, or deepmd pair_style) — not a system-specific model that lacks
+      coverage of Li+Cl+H+O.'
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: WO_md_preflight_001_20260524
+  capability: workflow_orchestration
+  domain: battery
+  intent: Test whether agent validates solution box geometry before MD submission and
+    fixes overlapping atoms.
+  human_prompt_seed: '工作区中有一个 1 mol/L ZnSO4 水溶液模型 `znso4_box.xyz`（约 500 原子）。请采用
+    DP-MD 方法对其进行 10 ps NVT 300K 模拟，准备好提交配置，输出为 `md_submit.json`。'
+  tags:
+  - code_mlip
+  data_files:
+  - key: znso4_box
+    path: data/WO_dpmd_preflight_001/znso4_box.xyz
+    oss_url: ''
+    description: ZnSO4 solution box (~468 atoms) with intentional atom overlaps (min_dist
+      ~0.3 A).
+  reference_answers:
+  - key: submit_artifact
+    value: md_submit.json
+  - key: must_cmd_mlip
+    value:
+      filename: md_submit.json
+      pattern: DPA|dpa|deepmd|mace|sevenn|mattersim|run_molecular_dynamics|lammps
+      flags: i
+  - key: structure_min_dist
+    value:
+      submit_file: md_submit.json
+      min_distance_A: 0.8
+  - key: turn_budget
+    value:
+      max: 30
+  scoring_checklist:
+  - id: submit_artifact
+    criterion: md_submit.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_cmd_mlip
+    criterion: '[Platform] md_submit.json references an MLIP model (DPA, MACE, SevenNet,
+      MatterSim) or the run_molecular_dynamics script.'
+    axis: correctness
+    verify: text_file_regex
+  - id: structure_min_dist
+    criterion: The structure file referenced in md_submit.json (resolved from
+      input_dir + --structure argument in cmd) has no overlapping atoms (min
+      interatomic distance >= 0.8 A, allowing for bonded O-H/N-H pairs).
+    axis: correctness
+    verify: md_submit_structure_min_dist
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: WO_dpmd_custom_model_001_20260524
+  capability: workflow_orchestration
+  domain: battery
+  intent: Test whether agent correctly passes a user-provided local DP model path to
+    the MD submission command instead of parsing the file or searching for models.
+  human_prompt_seed: '我在工作区训练了一个针对 LiFSI/DME 电解液的 DP 模型 `lifsi_dme.pt`。请用该模型对
+    工作区中的 `electrolyte_box.xyz` 进行 50 ps NPT 300K MD 模拟，输出提交配置 `md_submit.json`。'
+  tags:
+  - eng_lammps
+  data_files:
+  - key: model_file
+    path: data/WO_dpmd_custom_model_001/lifsi_dme.pt
+    oss_url: ''
+    description: Dummy DP model file (placeholder for user-trained potential).
+  - key: structure_file
+    path: data/WO_dpmd_custom_model_001/electrolyte_box.xyz
+    oss_url: ''
+    description: LiFSI/DME electrolyte box (~800 atoms).
+  reference_answers:
+  - key: submit_artifact
+    value: md_submit.json
+  - key: must_cmd_custom_model
+    value:
+      filename: md_submit.json
+      pattern: lifsi_dme
+      flags: ''
+  - key: must_cmd_md
+    value:
+      filename: md_submit.json
+      pattern: run_molecular_dynamics|lmp\s|lammps
+      flags: i
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: submit_artifact
+    criterion: md_submit.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_cmd_custom_model
+    criterion: '[Platform] md_submit.json references the user-provided model file
+      lifsi_dme.pt (not DPA3 or other default model).'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_cmd_md
+    criterion: '[Platform] cmd invokes MD execution (run_molecular_dynamics script or
+      LAMMPS directly).'
+    axis: correctness
+    verify: text_file_regex
+  - id: no_model_search
+    criterion: Agent did NOT search the web for alternative models, download other
+      models, or use low-level binary parsing (torch.load, zipfile, xxd, hexdump)
+      to inspect the .pt file. Using `dp --pt show` to check type_map or model
+      metadata is acceptable.
+    axis: efficiency
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget

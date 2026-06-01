@@ -1,0 +1,176 @@
+version: v5
+capability: input_generation
+domain: semiconductor
+questions:
+- id: IG_abacus_019_20260513
+  capability: input_generation
+  domain: semiconductor
+  intent: Prepare ABACUS LCAO two-step SCF then NSCF workflow for graphene band structure
+    and DOS with separate KPT files.
+  human_prompt_seed: '工作区中提供了石墨烯原胞结构 `STRU_graphene`。请为其准备 ABACUS LCAO 能带结构与态密度计算：
+
+    1. SCF 步骤放入 `scf/` 目录，生成 INPUT、STRU、KPT；
+
+    2. NSCF 步骤放入 `nscf/` 目录，生成 INPUT、STRU、KPT；
+
+    3. 能带路径请使用石墨烯常规高对称点；
+
+    4. NSCF 步骤同时输出能带和态密度。'
+  tags:
+  - eng_abacus
+  - struct_surface
+  data_files:
+  - key: stru_graphene
+    path: data/IG_abacus_019_20260513/STRU_graphene
+    oss_url: ''
+    description: Graphene primitive cell STRU (2 C atoms, LCAO).
+  reference_answers:
+  - key: scf_input_artifact
+    value: scf/INPUT
+  - key: scf_stru_artifact
+    value: scf/STRU
+  - key: scf_kpt_artifact
+    value: scf/KPT
+  - key: nscf_input_artifact
+    value: nscf/INPUT
+  - key: nscf_stru_artifact
+    value: nscf/STRU
+  - key: nscf_kpt_artifact
+    value: nscf/KPT
+  - key: must_scf_out_chg
+    value:
+      filename: scf/INPUT
+      pattern: (?im)^\s*out_chg\s+1\s*$
+      flags: im
+  - key: must_scf_calculation
+    value:
+      filename: scf/INPUT
+      tokens:
+      - calculation scf
+      - basis_type lcao
+      flags: i
+  - key: must_nscf_init_chg
+    value:
+      filename: nscf/INPUT
+      pattern: (?im)^\s*init_chg\s+file\s*$
+      flags: im
+  - key: must_nscf_symmetry_off
+    value:
+      filename: nscf/INPUT
+      pattern: (?im)^\s*symmetry\s+(0|-1)\s*$
+      flags: im
+  - key: must_nscf_nbands
+    value:
+      filename: nscf/INPUT
+      pattern: (?im)^\s*nbands\s+\d+\s*$
+      flags: im
+  - key: must_nscf_out_band
+    value:
+      filename: nscf/INPUT
+      pattern: (?im)^\s*out_band\s+1\s*$
+      flags: im
+  - key: must_nscf_out_dos
+    value:
+      filename: nscf/INPUT
+      pattern: (?im)^\s*out_dos\s+1\s*$
+      flags: im
+  - key: must_nscf_calculation
+    value:
+      filename: nscf/INPUT
+      tokens:
+      - calculation nscf
+      - basis_type lcao
+      flags: i
+  - key: must_nscf_kpt_line_mode
+    value:
+      filename: nscf/KPT
+      pattern: (?im)^\s*Line\s*$
+      flags: im
+  - key: must_scf_pseudo_dir
+    value:
+      filename: scf/INPUT
+      pattern: (?im)^\s*pseudo_dir\s+\S+
+      flags: im
+  - key: must_scf_orbital_dir
+    value:
+      filename: scf/INPUT
+      pattern: (?im)^\s*orbital_dir\s+\S+
+      flags: im
+  - key: turn_budget
+    value:
+      max: 14
+  scoring_checklist:
+  - id: scf_input_artifact
+    criterion: SCF directory contains INPUT file.
+    axis: correctness
+    verify: artifact_exists
+  - id: scf_stru_artifact
+    criterion: SCF directory contains STRU file.
+    axis: correctness
+    verify: artifact_exists
+  - id: scf_kpt_artifact
+    criterion: SCF directory contains KPT file.
+    axis: correctness
+    verify: artifact_exists
+  - id: nscf_input_artifact
+    criterion: NSCF directory contains INPUT file.
+    axis: correctness
+    verify: artifact_exists
+  - id: nscf_stru_artifact
+    criterion: NSCF directory contains STRU file.
+    axis: correctness
+    verify: artifact_exists
+  - id: nscf_kpt_artifact
+    criterion: NSCF directory contains KPT file.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_scf_out_chg
+    criterion: '[Must] SCF INPUT sets out_chg 1 so charge density is saved for NSCF.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_scf_calculation
+    criterion: '[Must] SCF INPUT uses LCAO SCF calculation type.'
+    axis: correctness
+    verify: text_file_contains_all
+  - id: must_nscf_init_chg
+    criterion: '[Must] NSCF INPUT loads charge from file (init_chg file).'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_nscf_symmetry_off
+    criterion: '[Must] NSCF INPUT disables symmetry for arbitrary k-path.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_nscf_nbands
+    criterion: '[Must] NSCF INPUT explicitly sets nbands.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_nscf_out_band
+    criterion: '[Must] NSCF INPUT enables band output.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_nscf_out_dos
+    criterion: '[Must] NSCF INPUT enables DOS output.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_nscf_calculation
+    criterion: '[Must] NSCF INPUT uses LCAO NSCF calculation type.'
+    axis: correctness
+    verify: text_file_contains_all
+  - id: must_nscf_kpt_line_mode
+    criterion: '[Must] NSCF KPT uses Line mode for band-structure k-path.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_scf_pseudo_dir
+    criterion: '[Must] SCF INPUT sets pseudo_dir explicitly for Bohrium runtime.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.8
+  - id: must_scf_orbital_dir
+    criterion: '[Must] SCF INPUT sets orbital_dir explicitly for Bohrium runtime.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.8
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget

@@ -2,7 +2,7 @@
 name: composition-optimization
 description: Multi-component alloy/material composition optimization via DART GA. Use for alloy composition search, seed design, or converting composition targets to explicit structures.
 skill_type: orchestrator
-depends_on: mcp-mat-compdart, mcp-mat-struct-db, build-atomic-structure, inspect-atomic-structure, mcp-mat-doc
+depends_on: mcp-mat-compdart, mcp-mat-struct-db, mcp-mat-doc
 ---
 
 <!-- multi-server: mat_compdart, mat_struct_db, mat_sg, mat_sn, mat_doc -->
@@ -16,13 +16,6 @@ A routing skill for composition-design workflows with explicit decision branches
 3. Surrogate-aware optimization routing (DART GA when available)
 4. Composition-to-structure conversion when only formula/composition is provided
 5. Validation and result packaging
-
-## When to use
-
-- "Optimize alloy/composition for target property."
-- "Use genetic algorithm or run_dart_ga for composition search."
-- "I only have composition/formula, please generate usable structures."
-- "Build initial candidates from literature, then optimize."
 
 ## Workflow
 
@@ -50,7 +43,7 @@ A routing skill for composition-design workflows with explicit decision branches
    - Use the heuristic in [composition_to_structure_heuristics.md](reference/composition_to_structure_heuristics.md).
    - Generate candidate structures via `mat_struct_db_*` / `mat_sg_*` tools.
    - Ensure each structure has explicit lattice, coordinates, and atom-type mapping for downstream DPA tools.
-   - Validate each new structure using `structure-manager` (`assess_structure.py`).
+   - Validate each new structure using `retrieve-structure` (`assess_structure.py`).
 
 5. **Report results**
    - Provide ranked candidate compositions and associated structures.
@@ -82,7 +75,7 @@ For the depth choice when calling deep-survey: use `--depth brief` when only see
 - Do not download/unzip/inspect `.pt`/`.zip` surrogate files with local shell before first CompDART attempt, unless CompDART returns explicit model-format incompatibility and asks for conversion.
 - Structure-generation and validation stack:
   - `mat_struct_db_*` / `mat_sg_*` for candidate structures
-  - `structure-manager` -> `assess_structure.py` for sanity checks
+  - `retrieve-structure` -> `assess_structure.py` for sanity checks
 
 ## Rules
 

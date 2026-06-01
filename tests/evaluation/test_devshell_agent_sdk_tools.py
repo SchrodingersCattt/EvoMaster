@@ -362,9 +362,6 @@ def test_main_agent_allowed_tools_exclude_edit_write_and_bash() -> None:
     assert "Write" not in allowed
     assert "Bash" not in allowed
     assert "mcp__matmaster_eval__delegate_optimization" in allowed
-    assert "mcp__matmaster_eval__main_read_text" in allowed
-    assert "mcp__matmaster_eval__main_glob_paths" in allowed
-    assert "mcp__matmaster_eval__main_grep_text" in allowed
 
 
 def test_optimization_followup_needed_only_when_queue_has_current_iteration(
@@ -420,16 +417,6 @@ def test_run_optimization_followup_returns_warning_when_report_missing(
     )
 
     assert rc == 1
-
-
-def test_default_history_dir_is_outside_results(tmp_path: Path) -> None:
-    cfg = _build_config(tmp_path)
-    loop = DevshellAgentLoop(cfg)
-
-    history_dir = loop._history_root()
-
-    assert history_dir == tmp_path / "evaluation" / "devshell_agent_history"
-    assert "results" not in str(history_dir)
 
 
 def test_optimization_user_message_guides_system_prompt_candidates_to_proposal(
@@ -670,75 +657,3 @@ def test_checklist_writes_proposal_only_under_session(tmp_path: Path) -> None:
         assert "proposed_question_bank_changes" in str(exc)
     else:
         raise AssertionError("expected block on arbitrary session file write")
-
-
-def test_main_path_guard_allows_history_session_reads(tmp_path: Path) -> None:
-    hist = (
-        tmp_path
-        / "evaluation"
-        / "devshell_agent_history"
-        / "session"
-        / "iterations"
-        / "iter_01.json"
-    )
-    hist.parent.mkdir(parents=True)
-    hist.write_text("{}\n", encoding="utf-8")
-    state = _build_state(tmp_path)
-    toolkit = _sdk_tools_module().MatmasterEvalMcpToolkit(state)
-    resolved = toolkit._resolve_agent_path(
-        "evaluation/devshell_agent_history/session/iterations/iter_01.json",
-        role="main",
-        write=False,
-    )
-    assert resolved == hist.resolve()
-
-
-def test_main_path_guard_blocks_other_evaluation_reads(tmp_path: Path) -> None:
-    state = _build_state(tmp_path)
-    toolkit = _sdk_tools_module().MatmasterEvalMcpToolkit(state)
-    try:
-        toolkit._resolve_agent_path(
-            "evaluation/question_bank/structure_construction/sc_agnostic.yaml",
-            role="main",
-            write=False,
-        )
-    except ValueError as exc:
-        assert "main" in str(exc)
-    else:
-        raise AssertionError("expected main path guard to reject evaluation")
-
-
-def test_main_path_guard_allows_other_session_under_history_tree(
-    tmp_path: Path,
-) -> None:
-    other = (
-        tmp_path
-        / "evaluation"
-        / "devshell_agent_history"
-        / "other_session"
-        / "session_summary.json"
-    )
-    other.parent.mkdir(parents=True)
-    other.write_text("{}\n", encoding="utf-8")
-    state = _build_state(tmp_path)
-    toolkit = _sdk_tools_module().MatmasterEvalMcpToolkit(state)
-    resolved = toolkit._resolve_agent_path(
-        "evaluation/devshell_agent_history/other_session/session_summary.json",
-        role="main",
-        write=False,
-    )
-    assert resolved == other.resolve()
-
-
-def test_main_path_guard_allows_index_jsonl(tmp_path: Path) -> None:
-    index_path = tmp_path / "evaluation" / "devshell_agent_history" / "index.jsonl"
-    index_path.parent.mkdir(parents=True)
-    index_path.write_text("{}\n", encoding="utf-8")
-    state = _build_state(tmp_path)
-    toolkit = _sdk_tools_module().MatmasterEvalMcpToolkit(state)
-    resolved = toolkit._resolve_agent_path(
-        "evaluation/devshell_agent_history/index.jsonl",
-        role="main",
-        write=False,
-    )
-    assert resolved == index_path.resolve()

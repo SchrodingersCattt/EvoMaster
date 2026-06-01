@@ -41,6 +41,7 @@ from matmaster.core.kernel_items import (
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.events import (
     AssistantStateEvent,
+    CheckpointEvent,
     FinishDetail,
     ResponseEvent,
     ThoughtEvent,
@@ -75,6 +76,7 @@ logger = logging.getLogger(__name__)
 
 _TERMINAL_REASON_TO_STATUS: dict[str, str] = {
     "cancelled": "cancelled",
+    "interrupted": "completed",
     "invalid_finish": "failed",
     "natural": "completed",
     "max_turns": "completed",
@@ -182,6 +184,9 @@ class AgentKernel:
                         last_reason = "error"
                 raise
             finally:
+                interrupt_checker = kernel_resources.runtime_ports.interrupt_checker
+                if interrupt_checker is not None:
+                    interrupt_checker.cleanup()
                 if kernel_resources.hook_executor is not None:
                     await kernel_resources.hook_executor.emit(
                         HookEvent.RUN_END,
@@ -352,6 +357,7 @@ class AgentKernel:
                 and response.content
                 and not is_trivial_response_text(response.content)
             ):
+                state.last_emitted_content = response.content
                 yield _KernelItem(
                     event=ResponseEvent(
                         source="agent",
@@ -374,11 +380,18 @@ class AgentKernel:
 
             if not response.tool_calls:
                 if not is_valid_natural_finish(response):
-                    yield self._terminal(
-                        state,
-                        "invalid_finish",
-                        finish_detail=build_finish_detail(response),
-                    )
+                    if state.last_emitted_content and response.finish_reason == "stop":
+                        yield self._terminal(
+                            state,
+                            "natural",
+                            final_content=state.last_emitted_content,
+                        )
+                    else:
+                        yield self._terminal(
+                            state,
+                            "invalid_finish",
+                            finish_detail=build_finish_detail(response),
+                        )
                     return
                 state.messages.append(
                     AssistantMessage(
@@ -433,6 +446,23 @@ class AgentKernel:
                         arguments=tc.arguments,
                     )
                 )
+
+            # Checkpoint: check if user has queued messages to interrupt
+            interrupt_checker = kernel_resources.runtime_ports.interrupt_checker
+            if interrupt_checker is not None and interrupt_checker.has_hint():
+                yield _KernelItem(
+                    event=CheckpointEvent(
+                        source="agent",
+                        turn_index=turn_index,
+                    )
+                )
+                confirmed = await interrupt_checker.wait_for_confirm(timeout=3.0)
+                interrupt_checker.cleanup()
+                if confirmed:
+                    yield self._terminal(
+                        state, "interrupted", final_content=response.content
+                    )
+                    return
 
             async for item in dispatch_tool_calls(
                 tool_calls=response.tool_calls,

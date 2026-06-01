@@ -48,6 +48,7 @@ class SessionItem(BaseModel):
     status: str = (
         "idle"  # idle=空闲/已结束，active=运行中，waiting=已入队等待 worker（用于限流与前端展示）
     )
+    title: str | None = None  # 用户自定义标题；为 None 时前端回退 first_user_message
     history_length: int
     first_user_message: str | None = None  # 第一条用户消息
 
@@ -156,6 +157,7 @@ class SessionListApiResponse(BaseResponse[SessionListResponse]):
                                     "id": "session-001",
                                     "project_id": 42,
                                     "status": "idle",
+                                    "title": "结构分析会话",
                                     "history_length": 4,
                                     "first_user_message": "分析结构",
                                 }
@@ -299,6 +301,64 @@ class SessionDirectorySetRequest(BaseModel):
     )
 
 
+# ---------- 会话标题（重命名） ----------
+
+
+class SessionTitleData(BaseModel):
+    """PUT /chat/sessions/{session_id}/title 的 data 字段"""
+
+    id: str = Field(description="会话 ID")
+    title: str | None = Field(
+        default=None,
+        description="当前自定义标题；为 null 表示未设置/已清除，前端回退 first_user_message",
+    )
+
+
+class SessionTitleApiResponse(BaseResponse[SessionTitleData]):
+    """PUT /chat/sessions/{session_id}/title 规范响应"""
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "code": 0,
+                "msg": "success",
+                "data": {
+                    "id": "session-001",
+                    "title": "结构分析会话",
+                },
+            }
+        }
+    )
+
+
+class SessionTitleSetRequest(BaseModel):
+    """PUT /chat/sessions/{session_id}/title 请求体"""
+
+    title: str | None = Field(
+        default=None,
+        max_length=255,
+        description="会话自定义标题；传 null 或空字符串表示清除（前端回退 first_user_message）",
+    )
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def normalize_title(cls, v: object) -> str | None:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            return s or None
+        raise ValueError("title must be a string or null")
+
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "title": "结构分析会话",
+            }
+        }
+    )
+
+
 # ---------- ag-ui 协议：客户端 -> 服务端 (REST Body) ----------
 
 
@@ -330,6 +390,10 @@ class ChatSendRequest(BaseModel):
         default=None,
         max_length=2048,
         description="可选，前端传入的本轮 Bohrium 远端 /share 工作目录，随 query 写入历史事件；持久化请用 PUT …/session-directory",
+    )
+    replace_last_turn: bool = Field(
+        default=False,
+        description="为 true 时先物理删除最后一条 User/query 及之后的所有事件，再以新 content 发送；用于编辑重发",
     )
 
     model_config = ConfigDict(

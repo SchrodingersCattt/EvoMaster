@@ -79,3 +79,306 @@ questions:
     criterion: Total token usage stays within benchmark ceiling.
     axis: efficiency
     verify: token_budget
+- id: IG_lammps_gaff_001_20260518v2
+  capability: input_generation
+  domain: agnostic
+  intent: Generate LAMMPS input files for polymer structure optimization using GAFF
+    classical force field, testing knowledge of correct units/atom_style/pair_style
+    combination.
+  human_prompt_seed: '工作区中有一个 20 重复单元的聚乙烯链结构 `polyethylene.xyz`。请使用 GAFF
+    力场为该体系准备 LAMMPS 结构优化输入，输出 `in.lammps` 和 `data.lammps`。'
+  tags:
+  - eng_lammps
+  data_files:
+  - key: pe_xyz
+    path: data/IG_lammps_gaff_001/polyethylene.xyz
+    oss_url: ''
+    description: Polyethylene chain (20 repeat units, ~62 atoms).
+  reference_answers:
+  - key: input_artifact
+    value: in.lammps
+  - key: data_artifact
+    value: data.lammps
+  - key: must_units_real
+    value:
+      filename: in.lammps
+      pattern: units\s+real
+      flags: ''
+  - key: must_atom_style_full
+    value:
+      filename: in.lammps
+      pattern: atom_style\s+full
+      flags: ''
+  - key: must_pair_style
+    value:
+      filename: in.lammps
+      pattern: pair_style\s+lj/cut(/coul/(long|cut))?\s
+      flags: ''
+  - key: must_bond_style
+    value:
+      filename: in.lammps
+      pattern: bond_style\s+harmonic
+      flags: ''
+  - key: must_minimize
+    value:
+      filename: in.lammps
+      pattern: minimize
+      flags: ''
+  - key: must_data_bonds
+    value:
+      filename: data.lammps
+      pattern: Bonds
+      flags: ''
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: input_artifact
+    criterion: in.lammps written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: data_artifact
+    criterion: data.lammps written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_units_real
+    criterion: '[Must] Uses "units real" (kcal/mol, Angstrom, fs) appropriate for
+      organic/GAFF systems.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_atom_style_full
+    criterion: '[Must] Uses "atom_style full" (required for bonded interactions with
+      charges).'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_pair_style
+    criterion: '[Must] pair_style is lj/cut or lj/cut/coul/long (Lennard-Jones for
+      GAFF van der Waals), NOT tip4p or other water-specific pair styles.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_bond_style
+    criterion: '[Must] bond_style harmonic (standard for GAFF).'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_minimize
+    criterion: '[Must] Input includes minimize command for structure optimization.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_data_bonds
+    criterion: '[Must] data.lammps contains Bonds section (bonded topology required
+      for polymer).'
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: IG_lammps_sgcmc_001_20260523
+  capability: input_generation
+  domain: agnostic
+  intent: Generate LAMMPS input script using fix sgcmc for semi-grand-canonical MC
+    study of short-range order in FeCu BCC alloy at 800K.
+  human_prompt_seed: '请生成一个 LAMMPS 输入脚本，使用 `fix sgcmc` 研究 BCC Fe-10at%Cu 合金在 800K
+    下的短程有序(SRO)。要求：4x4x4 BCC 超胞（128原子），EAM 势，每100 MD 步尝试一次 MC swap，运行
+    50000 步。输出到 `in.sgcmc`。
+
+    '
+  tags:
+  - eng_lammps
+  data_files: []
+  reference_answers:
+  - key: input_artifact
+    value: in.sgcmc
+  - key: required_keywords
+    value:
+      filename: in.sgcmc
+      tokens:
+      - fix
+      - sgcmc
+      - '800'
+      flags: ''
+  - key: bcc_lattice
+    value:
+      filename: in.sgcmc
+      pattern: (?i)lattice\s+bcc
+      flags: ''
+  - key: eam_potential
+    value:
+      filename: in.sgcmc
+      pattern: (?i)pair_style\s+eam
+      flags: ''
+  - key: atoms_created
+    value:
+      filename: in.sgcmc
+      pattern: (?i)create_atoms|read_data
+      flags: ''
+  - key: turn_budget
+    value:
+      max: 10
+  - key: duration_budget
+    value:
+      max: 7200000
+  scoring_checklist:
+  - id: input_artifact
+    criterion: Agent writes `in.sgcmc` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: required_keywords
+    criterion: The input file contains fix sgcmc command at 800K temperature.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: bcc_lattice
+    criterion: The input file specifies a BCC lattice structure.
+    axis: correctness
+    verify: text_file_regex
+  - id: eam_potential
+    criterion: The input file uses an EAM potential (pair_style eam or eam/alloy or
+      eam/fs).
+    axis: correctness
+    verify: text_file_regex
+  - id: atoms_created
+    criterion: The input file creates atoms (via create_atoms or read_data).
+    axis: correctness
+    verify: text_file_regex
+  - id: physical_params
+    criterion: The input file uses physically reasonable parameters consistent with
+      the request (4x4x4 BCC supercell giving 128 atoms, Fe-10at%Cu composition,
+      MC swap every 100 steps, 50000 total steps).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed ceiling.
+    axis: efficiency
+    verify: duration_budget
+- id: IG_lammps_tensile_bond_001_20260525
+  capability: input_generation
+  domain: agnostic
+  scope: knowledge
+  intent: Generate a LAMMPS input script for uniaxial tensile deformation of FCC Cu
+    that tracks bond length and bond angle evolution during straining. Agent must
+    correctly use compute bond/local and compute angle/local with appropriate
+    output commands.
+  human_prompt_seed: "生成 LAMMPS 输入文件，对 FCC Cu 单晶进行 z 方向单轴拉伸模拟，\
+    并追踪拉伸过程中键长和键角的演化。\n\n要求：\n- EAM 势\n- 300K NVT 平衡后施加应变\n\
+    - 输出键长分布和键角分布随应变的变化数据\n- 输出为 `in.tensile_cu`\n"
+  tags:
+  - eng_lammps
+  source_session: df8f13e0856f4b2eb6b05312409a780c
+  data_files: []
+  reference_answers:
+  - key: input_artifact
+    value: in.tensile_cu
+  - key: turn_budget
+    value:
+      max: 12
+  - key: token_budget_total
+    value:
+      max: 10000
+  scoring_checklist:
+  - id: input_artifact
+    criterion: Agent writes `in.tensile_cu` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: compute_bond_local
+    criterion: Input uses `compute bond/local` or `compute pair/local` to
+      extract per-bond distance information during deformation.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.5
+  - id: compute_angle_local
+    criterion: Input uses `compute angle/local` to extract per-angle
+      values during deformation for bond angle distribution tracking.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.5
+  - id: deformation_applied
+    criterion: Input applies uniaxial strain along z using `fix deform`
+      with appropriate strain rate after equilibration.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: output_evolution_data
+    criterion: Bond/angle data is output at multiple strain increments
+      using fix ave/histo, dump local, or equivalent periodic output.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: equilibration_before_deform
+    criterion: Script includes thermal equilibration (NVT or NPT at 300K)
+      before starting deformation.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
+- id: IG_lammps_deepmd_typemap_001_20260528
+  capability: input_generation
+  domain: agnostic
+  intent: Test whether agent correctly specifies element names in DeePMD pair_coeff
+    command for a multi-element system, ensuring proper type_map mapping.
+  human_prompt_seed: '为含能材料 EAP（乙二胺高氯酸盐，化学式 C₂H₁₂N₂Cl₂O₈，包含 H/C/N/O/Cl
+    五种元素）写一个 LAMMPS DeePMD 分子动力学输入脚本。模型文件为 `model.pb`（全周期表
+    118元素type_map）。体系232原子，2500K NVT模拟100ps，时间步0.1fs。输出 `in.lammps`。
+
+    '
+  tags:
+  - eng_lammps
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: input_file
+    value: in.lammps
+  - key: must_pair_coeff_elements
+    value:
+      filename: in.lammps
+      pattern: (?i)pair_coeff\s+\*\s+\*\s+\S+\s+H\s+C\s+N\s+O\s+Cl
+  - key: turn_budget
+    value:
+      max: 10
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: input_file
+    criterion: in.lammps written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_pair_coeff_elements
+    criterion: '[Must] pair_coeff line explicitly lists element names after model
+      file (e.g., pair_coeff * * model.pb H C N O Cl). Without element names,
+      DeePMD maps type 1->H, 2->He, 3->Li... which is completely wrong for a
+      5-element system. The element order must match the atom type order in the
+      data file.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 3.0
+  - id: has_deepmd_pair_style
+    criterion: Script uses pair_style deepmd with the model file.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: correct_temperature
+    criterion: NVT thermostat set to 2500K as requested.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: correct_timestep
+    criterion: Timestep is 0.1 fs (0.0001 ps in metal units or equivalent).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget

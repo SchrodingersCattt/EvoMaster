@@ -8,12 +8,6 @@ skill_type: operator
 
 Use the local wrapper under `matmaster/skills/playground-skills/md-analysis/scripts/analyze_gmx.py`.
 
-## When to use
-
-- Analyze a finished trajectory or energy file already present in the workspace.
-- Generate `.xvg` outputs for RMSD, RMSF, radius of gyration, MSD, RDF, hydrogen bonds, or energy terms.
-- Produce a quick numeric summary from the generated `.xvg` file.
-
 ## Workflow
 
 1. Confirm the required trajectory, structure, or energy files already exist in the workspace.

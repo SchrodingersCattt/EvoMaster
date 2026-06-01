@@ -1,0 +1,464 @@
+version: v5
+capability: scientific_analysis
+domain: alloy
+questions:
+- id: SA_vasp_003_20260508
+  capability: scientific_analysis
+  domain: alloy
+  intent: Calculate the formation energy per atom for a Nb50Ta50 128-atom BCC solid solution alloy from
+    VASP total energy output and reference elemental energies.
+  human_prompt_seed: 'Calculate the formation energy per atom (in meV/atom) for a Nb64Ta64 (50-50) 128-atom
+    BCC alloy. Read the total energy from `total_energy_NbTa_64_64.txt` and the reference elemental energies
+    from `elemental_energies.txt`. Use the formula: E_form = (E_total - 64*E_Nb - 64*E_Ta) / 128. Write
+    the result to `formation_energy_NbTa_64_64.txt` in the current working directory.'
+  tags:
+  - eng_vasp
+  data_files:
+  - key: vasp_total_energy
+    path: total_energy_NbTa_64_64.txt
+    oss_url: ''
+    description: Sample VASP total energy output for a Nb64Ta64 (50-50) 128-atom BCC alloy configuration
+      after geometry optimization.
+  - key: elemental_energies
+    path: elemental_energies.txt
+    oss_url: ''
+    description: Reference elemental energies for Nb and Ta pure BCC metals (per atom) computed with the
+      same VASP settings.
+  reference_answers:
+  - key: artifact_output
+    value: formation_energy_NbTa_64_64.txt
+  - key: contains_numeric_value
+    value:
+      flags:
+      - multiline
+      pattern: ^[+-]?\d+\.?\d*\s*(meV/atom|eV/atom)?$
+      filename: formation_energy_NbTa_64_64.txt
+  - key: numeric_formation_energy
+    value:
+      checks:
+      - key: formation_energy_meV
+        max: 180
+        min: 170
+        expected: 174.57
+        tolerance: 5
+        allow_missing_key: false
+      filename: formation_energy_NbTa_64_64.txt
+  - key: grounding_source
+    value:
+      filename: formation_energy_NbTa_64_64.txt
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_output
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file formation_energy_NbTa_64_64.txt exists'
+  - id: contains_numeric_value
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Output file contains a numeric formation energy value'
+  - id: numeric_formation_energy
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Formation energy is in the range 170-180 meV/atom (consistent with NbTa mixing
+      being favorable at 0K as shown in paper Fig. 1b)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Formation energy calculation is grounded in the source paper''s methodology'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Variable] Turn budget: 15'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Variable] No retries allowed'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Variable] Duration budget: 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Variable] Token budget: 50000'
+- id: SA_vasp_004_20260508
+  capability: scientific_analysis
+  domain: alloy
+  intent: Calculate the root mean-squared displacement (RMSD) between optimized and ideal BCC lattice
+    positions for a 128-atom NbTa alloy, accounting for cell deformation.
+  human_prompt_seed: 'Calculate the root mean-squared displacement (RMSD) in angstroms between the optimized
+    atomic positions in `CONTCAR_NbTa_optimized` and the ideal BCC lattice positions in `POSCAR_NbTa_ideal`.
+    Account for the cell deformation tensor: first apply the deformation from the CONTCAR cell to the
+    ideal positions, then compute the RMSD. Write the result to `rmsd_NbTa.txt` in the current working
+    directory.'
+  tags:
+  - eng_vasp
+  data_files:
+  - key: contcar_optimized
+    path: CONTCAR_NbTa_optimized
+    oss_url: ''
+    description: CONTCAR file from VASP geometry optimization of a 128-atom NbTa BCC alloy (final optimized
+      atomic positions).
+  - key: poscar_ideal
+    path: POSCAR_NbTa_ideal
+    oss_url: ''
+    description: Reference ideal BCC lattice positions for the same 128-atom supercell (before optimization).
+  reference_answers:
+  - key: artifact_output
+    value: rmsd_NbTa.txt
+  - key: contains_numeric_value
+    value:
+      flags: []
+      pattern: ^[+-]?\d+\.?\d*\s*(angstrom|A|Å)?$
+      filename: rmsd_NbTa.txt
+  - key: numeric_rmsd
+    value:
+      checks:
+      - key: rmsd_angstrom
+        max: 0.035
+        min: 0.015
+        expected: 0.025
+        tolerance: 0.005
+        allow_missing_key: false
+      filename: rmsd_NbTa.txt
+  - key: grounding_source
+    value:
+      filename: rmsd_NbTa.txt
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 60000
+  scoring_checklist:
+  - id: artifact_output
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file rmsd_NbTa.txt exists'
+  - id: contains_numeric_value
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Output file contains a numeric RMSD value'
+  - id: numeric_rmsd
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] RMSD is in the range 0.015-0.035 Å (consistent with NbTa binary alloy RMSD
+      shown in paper Fig. 6a)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] RMSD calculation is grounded in the source paper''s methodology (Eq. 2-3)'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Variable] Turn budget: 20'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Variable] No retries allowed'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Variable] Duration budget: 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Variable] Token budget: 60000'
+- id: SA_thermo_002_20250608
+  capability: scientific_analysis
+  domain: alloy
+  intent: Calculate the average sound velocity (v_m), Debye temperature (θ_d), and Grüneisen parameter
+    (γ) for the three β₁' phases of Mg-Zn alloys (C-MgZn₂, H-MgZn₂, Mg₄Zn₇) from their longitudinal and
+    transverse sound velocities using the Debye-Grüneisen model formulas given in the paper.
+  human_prompt_seed: 'Calculate the average sound velocity (v_m), Debye temperature (θ_d), and Grüneisen
+    parameter (γ) for the three Mg-Zn β₁'' phases using the data in phase_sound_velocities.json and the
+    formulas from the paper. Write the results to thermodynamic_properties.csv with columns: phase, v_l,
+    v_t, v_m, theta_d, gamma. Units: velocities in km/s, θ_d in K, γ dimensionless.'
+  tags: []
+  data_files:
+  - key: sound_velocities
+    path: phase_sound_velocities.json
+    oss_url: ''
+    description: JSON file containing the longitudinal (v_l) and transverse (v_t) sound velocities in
+      km/s, lattice parameters, and atom counts per conventional cell for C-MgZn₂ (cubic, a=7.341 Å, 24
+      atoms), H-MgZn₂ (hexagonal, a=5.223 Å, c=8.566 Å, 12 atoms), and Mg₄Zn₇ (monoclinic, a=25.960 Å,
+      b=5.240 Å, c=14.280 Å, 88 atoms). Also includes the computed number density n/V for each phase.
+  reference_answers:
+  - key: csv_exists
+    value: thermodynamic_properties.csv
+  - key: vm_c_mgzn2
+    value:
+      checks:
+      - key: v_m for C-MgZn2
+        expected: 3.468
+        tolerance: 0.05
+        allow_missing_key: false
+      filename: thermodynamic_properties.csv
+  - key: vm_h_mgzn2
+    value:
+      checks:
+      - key: v_m for H-MgZn2
+        expected: 2.945
+        tolerance: 0.05
+        allow_missing_key: false
+      filename: thermodynamic_properties.csv
+  - key: vm_mg4zn7
+    value:
+      checks:
+      - key: v_m for Mg4Zn7
+        expected: 2.688
+        tolerance: 0.05
+        allow_missing_key: false
+      filename: thermodynamic_properties.csv
+  - key: theta_c_mgzn2
+    value:
+      checks:
+      - key: theta_d for C-MgZn2
+        expected: 366.0
+        tolerance: 5.0
+        allow_missing_key: false
+      filename: thermodynamic_properties.csv
+  - key: theta_h_mgzn2
+    value:
+      checks:
+      - key: theta_d for H-MgZn2
+        expected: 313.0
+        tolerance: 5.0
+        allow_missing_key: false
+      filename: thermodynamic_properties.csv
+  - key: theta_mg4zn7
+    value:
+      checks:
+      - key: theta_d for Mg4Zn7
+        expected: 288.0
+        tolerance: 5.0
+        allow_missing_key: false
+      filename: thermodynamic_properties.csv
+  - key: gamma_c_mgzn2
+    value:
+      checks:
+      - key: gamma for C-MgZn2
+        expected: 0.641
+        tolerance: 0.03
+        allow_missing_key: false
+      filename: thermodynamic_properties.csv
+  - key: grounding_source
+    value:
+      filename: phase_sound_velocities.json
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: csv_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 5.0
+    criterion: '[Must] Output file thermodynamic_properties.csv exists'
+  - id: vm_c_mgzn2
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 15.0
+    criterion: '[Suggested] Average sound velocity v_m for C-MgZn₂ is 3.468±0.05 km/s, computed as v_m
+      = [1/3*(2/v_t³ + 1/v_l³)]^(-1/3) from v_l=5.333 and v_t=3.128 km/s'
+  - id: vm_h_mgzn2
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Suggested] Average sound velocity v_m for H-MgZn₂ is 2.945±0.05 km/s, computed from v_l=4.686
+      and v_t=2.648 km/s'
+  - id: vm_mg4zn7
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Suggested] Average sound velocity v_m for Mg₄Zn₇ is 2.688±0.05 km/s, computed from v_l=4.450
+      and v_t=2.409 km/s'
+  - id: theta_c_mgzn2
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 15.0
+    criterion: '[Suggested] Debye temperature θ_d for C-MgZn₂ is 366±5 K, computed from v_m and number
+      density using the Debye model'
+  - id: theta_h_mgzn2
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Suggested] Debye temperature θ_d for H-MgZn₂ is 313±5 K'
+  - id: theta_mg4zn7
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Suggested] Debye temperature θ_d for Mg₄Zn₇ is 288±5 K'
+  - id: gamma_c_mgzn2
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Suggested] Grüneisen parameter γ for C-MgZn₂ is 0.641±0.03, computed using γ = (3/2)·(3v_l²
+      - 4v_t²)/(v_l² + 2v_t²) or equivalent formula from the paper'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 5.0
+    criterion: '[Must] Computed results are grounded in the input data from phase_sound_velocities.json'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 30 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent uses at most 3 retries'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 600 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses at most 50000 tokens total'
+- id: SA_segregation_quality_gate_001_20260531
+  capability: scientific_analysis
+  domain: alloy
+  intent: Review a small Fe grain-boundary segregation screening bundle and produce a defensible Mn/Sn conclusion from ABACUS run records.
+  human_prompt_seed: '我整理了一批 Fe 晶界 Mn/Sn 偏聚筛选的 ABACUS 运行记录，放在 `fe_gb_abacus_runs.json`。里面有每个 workdir 的能量、日志尾部、结构校验信息和一些实验室备注。
+
+    请帮我判断目前这批结果能支持哪些偏聚结论，并写一个机器可读的筛选备忘录 `segregation_screening_memo.json`。建议包含：
+
+    - `segregation_energies_eV`：你认为当前可以写入备忘录的偏聚能；
+    - `conclusions`：对 Mn/Sn 分别给出一句结论；
+    - `notes`：需要提醒用户或后续补做的事项。
+
+    请直接基于这个 JSON 文件完成，不需要实际重跑 ABACUS。'
+  tags:
+  - eng_abacus
+  data_files:
+  - key: segregation_inputs
+    path: data/SA_segregation_quality_gate_001_20260531/fe_gb_abacus_runs.json
+    oss_url: ''
+    description: ABACUS grain-boundary screening records with energies, log excerpts, structure checksums, and lab notes.
+  reference_answers:
+  - key: report_artifact
+    value: segregation_screening_memo.json
+  - key: valid_mn
+    value:
+      filename: segregation_screening_memo.json
+      tokens:
+      - Mn
+      - -0.45
+      flags: i
+  - key: invalid_sn
+    value:
+      filename: segregation_screening_memo.json
+      tokens:
+      - Sn
+      - rerun
+      - relax
+      - checksum
+      flags: i
+  - key: mn_segregation_energy
+    value:
+      filename: segregation_screening_memo.json
+      key: segregation_energies_eV.Mn
+      expected: -0.45
+      tolerance: 0.03
+  - key: no_sn_energy
+    value:
+      filename: segregation_screening_memo.json
+      pattern: '"segregation_energies_eV"\s*:\s*\{(?:(?!"Sn").)*\}'
+      flags: is
+  - key: grounding_quality_gate
+    value:
+      filename: fe_gb_abacus_runs.json
+  - key: turn_budget
+    value:
+      max: 12
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: report_artifact
+    criterion: '[Must] `segregation_screening_memo.json` is written to the workspace.'
+    axis: correctness
+    verify: artifact_exists
+  - id: valid_mn
+    criterion: '[Must] The memo reports the Mn segregation energy as about -0.45 eV from the paired Mn bulk-like and Mn grain-boundary records.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.5
+  - id: invalid_sn
+    criterion: '[Must] The memo refuses to make a definitive Sn segregation conclusion and asks for rerun/relaxation or input repair, citing the SCF/log issue and the copied-STRU checksum evidence.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+  - id: mn_segregation_energy
+    criterion: '[Must] Mn segregation energy is computed as -524.630 - (-524.180) = -0.45 eV, indicating favorable grain-boundary segregation for Mn only.'
+    axis: correctness
+    verify: json_file_numeric_range
+    weight: 1.5
+  - id: no_sn_energy
+    criterion: '[Must] The memo does not include Sn under directly reported segregation energies or state a definitive "Sn does not segregate" conclusion from the current records.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.5
+  - id: grounding_quality_gate
+    criterion: '[Must] The final reasoning uses the run log excerpts, force hints, relaxation context, and structure checksum evidence from the provided bundle rather than blindly subtracting every listed total energy.'
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget

@@ -1,96 +1,81 @@
 ---
 name: gromacs
-description: "MUST use this skill for ANY task involving GROMACS (classical MD NVT/NPT, energy minimization, free energy perturbation, enhanced sampling, etc.). For system building (solvation, ions), see gromacs-system-prep."
+description: "Use to RUN GROMACS molecular dynamics (NVT/NPT, energy minimization, FEP, enhanced sampling, solvation, ion addition, etc.) - biomolecular / soft-matter focus. DO NOT use for other engines (ABACUS / LAMMPS / GPUMD / VASP / CP2K) or for non-MD tasks."
 skill_type: operator
 ---
 
 # GROMACS Skill
 
-GROMACS is a high-performance molecular dynamics package primarily designed for simulations of proteins, lipids, and nucleic acids, but widely used for any system with classical force fields.
+## Bohrium Config
 
-## Bohrium Submission Config
+| Item | CPU (default) | GPU |
+|------|--------------|-----|
+| image | `registry.dp.tech/dptech/dp/native/hub/mrdic2/a1:1.0.1-1779698340` | same |
+| machine | `c64_m256_cpu` | `c8_m32_1 * NVIDIA 4090` |
+| cmd | `bash run.sh > log 2>&1` | same |
 
-| Item | Default Value (CPU) |
-|------|---------------------|
-| image | `registry.dp.tech/dptech/gromacs:2022.2` |
-| machine | `c32_m128_cpu` (32 cores, 128 GB RAM) |
-| cmd | `gmx grompp -f md.mdp -c conf.gro -p topol.top -o run.tpr && gmx mdrun -v -deffnm run > log 2>&1` |
+Image has **`gmx` only** (GROMACS 2024.2, thread-MPI + CUDA). No `gmx_mpi`. Do NOT use `mpirun`.
 
-| Item | GPU Alternative |
-|------|-----------------|
-| machine | `c6_m60_1 * NVIDIA 4090` |
-| cmd | `gmx grompp -f md.mdp -c conf.gro -p topol.top -o run.tpr && gmx mdrun -v -deffnm run -gpu_id 0 > log 2>&1` |
+## Key Rules
 
-> Adjust `grompp` arguments to match actual filenames.
-> For GPU options: `Bohrium(action="list_machines", machine_type="gpu", keyword="4090")`.
-> For different GROMACS versions: `Bohrium(action="list_images", keyword="gromacs")`.
+1. **run.sh preamble** — every script starts with:
+   ```bash
+   #!/bin/bash
+   set -e
+   export PATH="/usr/local/gmx-2024.2/bin:$PATH"
+   ```
+2. **Chain all steps in one script** — EM → NVT → NPT in a single `run.sh`. Each Bohrium submission has ~1 min scheduling overhead.
+3. **DO NOT run `gmx` locally** — all GROMACS commands go in the submitted `run.sh`.
+4. **`grompp -maxwarn 3`** — always pass to avoid abort on non-fatal notes.
+5. **`genion` requires a `.tpr`** — run `grompp` first, then `echo "SOL" | gmx genion -s ions.tpr ...`.
+6. **`gmx solvate -p` requires topology to exist** — create topology (via `pdb2gmx`) before calling solvate with `-p`.
+7. **Use provided files directly** — if user gives `.gro` + `.top` + `.mdp`, reference as-is in `run.sh`.
+8. **Interactive commands via pipe** — `echo "GROUP" | gmx genion ...`, `echo "0" | gmx make_ndx ...`.
 
-## Input Preparation
-
-GROMACS uses three core files: **topology** (`.top`), **coordinates** (`.gro`), and **simulation parameters** (`.mdp`).
-
-### Using render_input.py (for .mdp generation)
+## Parallel Execution
 
 ```bash
-# Generate mdp file
-uv run python scripts/render_input.py --software gromacs --task md --output md.mdp
+# CPU (32 physical cores): auto-detect is fine for short jobs
+gmx mdrun -deffnm em -v
+
+# CPU (explicit): maximize throughput for long MD
+gmx mdrun -deffnm md -ntmpi 1 -ntomp 32
+
+# GPU:
+gmx mdrun -deffnm md -ntmpi 1 -ntomp 8 -gpu_id 0 -nb gpu -pme gpu
 ```
 
-### System Building Workflow
+## System Building Commands (inside run.sh)
 
-For building a complete system from scratch (solvation, ion addition, topology generation), use the **gromacs-system-prep** skill which provides:
-- `gmx pdb2gmx` for topology generation
-- `gmx solvate` for solvation
-- `gmx genion` for ion addition
-- `gmx make_ndx` for index groups
+```bash
+GMXTOP=$(find /usr/local -type d -name "top" -path "*/gromacs/*" 2>/dev/null | head -1)
+```
 
-### Ready-to-run files
+| Step | Command |
+|------|---------|
+| Topology from PDB | `gmx pdb2gmx -f input.pdb -o processed.gro -water spce` |
+| Edit box | `gmx editconf -f input.gro -o box.gro -d 1.0 -bt cubic` |
+| Solvate | `gmx solvate -cp box.gro -cs $GMXTOP/spc216.gro -o solvated.gro -p topol.top` |
+| Ion prep | `gmx grompp -f ions.mdp -c solvated.gro -p topol.top -o ions.tpr -maxwarn 3` |
+| Add ions | `echo "SOL" \| gmx genion -s ions.tpr -o ionized.gro -p topol.top -pname NA -nname CL -neutral` |
 
-If the user provides `.gro` + `.top` + `.mdp` (or a pre-built `.tpr`), skip preparation.
+## Execution Workflow
 
-## Task Types
+1. Prepare input files locally (MDP, structure, topology — or use provided files)
+2. Write `run.sh` (preamble + system building if needed + `grompp` + `mdrun`)
+3. Place all files in one directory
+4. `Bohrium(action="submit", input_dir="<dir>", image="<image from Config>", cmd="bash run.sh > log 2>&1")`
+5. `Bohrium(action="poll", job_id=<id>)` — repeat until Finished/Failed
+6. `Bohrium(action="download", job_id=<id>, result_dir="<output_dir>")`
 
-| Task | Description | Key MDP Settings |
-|------|-------------|------------------|
-| em | Energy minimization | `integrator = steep`, `emtol`, `nsteps` |
-| nvt | NVT equilibration | `integrator = md`, `tcoupl = V-rescale`, `ref_t` |
-| npt | NPT equilibration | `tcoupl = V-rescale`, `pcoupl = Parrinello-Rahman`, `ref_p` |
-| md | Production MD | `integrator = md`, `nsteps`, `dt`, output frequencies |
-| fep | Free energy perturbation | `free_energy = yes`, `init_lambda_state`, `fep_lambdas` |
+## Ligand Parameterization
 
-## Required Files
+For small-molecule force field parameterization (GAFF/GAFF2/OPLS-AA) → `references/ligand_parameterization.md`
 
-- **Topology** (`.top`): force field parameters, molecule definitions
-- **Coordinates** (`.gro` or `.pdb`): system coordinates, box dimensions
-- **MDP file** (`.mdp`): simulation parameters
-- **Force field**: referenced in `.top`; typically AMBER, CHARMM, OPLS-AA, GROMOS
-- **Index file** (`.ndx`): optional, for custom groups
-- **Restraint files** (`.itp`): optional position restraints
+## Physical Checks & MDP Defaults
 
-## Physical Checks
-
-- **timestep**: 2 fs with LINCS constraints on H-bonds (`constraint_algorithm = lincs`); 1 fs without constraints
-- **Thermostat**: V-rescale (`tcoupl = V-rescale`, `tau_t = 0.1`) for equilibration and production
-- **Barostat**: Berendsen for equilibration, Parrinello-Rahman for production NPT (`tau_p = 2.0`)
-- **Cutoffs**: typically `rcoulomb = 1.0`, `rvdw = 1.0` nm; PME for long-range electrostatics (`coulombtype = PME`)
-- **Neighbor list**: `nstlist = 10`, `ns_type = grid`, `verlet-buffer-tolerance` for Verlet scheme
-- **Output frequency**: `nstxout-compressed = 5000` (every 10 ps at dt=2fs) for trajectory; `nstenergy = 500` for energy
-- **Box size**: minimum image convention requires box dimension > 2 * rcoulomb; check `gmx editconf -d 1.0` padding
-- **Periodic boundary conditions**: `pbc = xyz` for standard 3D periodic
-
-## Submission Workflow
-
-1. Prepare system (use gromacs-system-prep skill if building from scratch)
-2. Generate/verify MDP: `render_input.py --software gromacs --task md --output md.mdp`
-3. Ensure `.gro`, `.top`, `.mdp` are in one directory
-4. Submit (the cmd runs both grompp and mdrun):
-   `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/gromacs:2022.2", cmd="gmx grompp -f md.mdp -c conf.gro -p topol.top -o run.tpr && gmx mdrun -v -deffnm run > log 2>&1")`
-5. Poll: `Bohrium(action="poll", job_id=<id>)`
+For timestep, thermostat, barostat, cutoff, box size rules → `references/physical_checks.md`
 
 ## Post-Processing
 
-After job completion, use the **md-analysis** skill for trajectory analysis (RMSD, RMSF, gyration radius, MSD, RDF, H-bonds, energy).
-
-## Reference
-
-Official documentation: `site:manual.gromacs.org`
+After job completion, use the **md-analysis** skill for trajectory analysis (RMSD, RMSF, RDF, MSD, H-bonds, energy).

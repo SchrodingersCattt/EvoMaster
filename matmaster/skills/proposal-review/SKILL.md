@@ -8,12 +8,6 @@ skill_type: operator
 
 Structured evaluation of research proposals, project plans, and funding applications. Produces scorecards, rationale documents, and risk mitigation plans.
 
-## When to use
-
-* "Review / evaluate this proposal" → full review workflow below
-* "Score this project plan" → scorecard generation
-* "Assess risks of this project" → risk analysis + mitigation
-
 ## Review Workflow
 
 1. **Read** the proposal document thoroughly before scoring.

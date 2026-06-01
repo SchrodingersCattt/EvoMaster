@@ -2,30 +2,100 @@
 
 ## Quick Reference: Mandatory Parameters by Task Type
 
-Always include **universal baseline**: `calculation`, `basis_type`, `ecutwfc`, `scf_thr`, `scf_nmax`, `smearing_method`, `smearing_sigma`.
+Always include **universal baseline**: `calculation`, `basis_type`, `ntype`, `ecutwfc`, `scf_thr`, `scf_nmax`, `smearing_method`, `smearing_sigma`.
+> **`ntype`**: Must equal the number of species in STRU `ATOMIC_SPECIES` section. This is mandatory — ABACUS will fail or behave incorrectly without it.
 > **Basis-aware default**: `ecutwfc 100` is the standard baseline for `basis_type lcao`; for `basis_type pw`, prefer `ecutwfc 50` unless PP/system-specific convergence tests require higher values.
 
 | Task | Additional mandatory parameters | Common omission |
 |------|---------------------------------|-----------------|
 | SCF (pre-NSCF) | `out_chg 1` | Forgetting `out_chg` → NSCF cannot read charge |
-| Band (NSCF) | `init_chg file`, `out_band 1`, `nbands`, `symmetry 0` | Leaving `symmetry 1` → k-path folded |
-| DOS (NSCF) | `init_chg file`, `out_dos 1`, `dos_edelta_ev`, `dos_sigma`, `dos_nche`, `nbands`, `symmetry 0` | Missing `dos_nche` for LCAO |
+| Band (NSCF) | `init_chg file`, `out_band 1`, `nbands`, `symmetry 0`; **PW add `pw_diag_thr 1.0e-5`** | Leaving `symmetry 1` → k-path folded; PW missing `pw_diag_thr` → noisy eigenvalues |
+| DOS (NSCF) | `init_chg file`, `out_dos 1`, `dos_edelta_ev`, `dos_sigma`, `dos_nche`, `nbands`, `symmetry 0`; **PW add `pw_diag_thr 1.0e-5`** | Missing `dos_nche` for LCAO; PW missing `pw_diag_thr` → noisy DOS |
 | Relax | **`cal_force 1`**, `force_thr_ev 0.01`, `relax_nmax 100` | Missing `cal_force` → no force output |
 | Cell-relax | **`cal_force 1`**, **`cal_stress 1`**, `force_thr_ev 0.01`, `stress_thr 0.5`, `relax_nmax 100` | Missing `cal_force` or `cal_stress` → relaxation silently broken |
 | Work function / dipole | `out_pot 2`, `efield_flag 1`, `dip_cor_flag 1`, `efield_dir <vacuum>`, `efield_amp 0.0` | Missing `efield_amp 0.0` (pure dipole correction) |
 | Spin-polarized | `nspin 2`, `mixing_beta 0.1`, `mixing_ndim 20`, `mixing_gg0 1.5` | Omitting mixing params → SCF diverges |
+| DFT+U (strongly correlated) | `dft_plus_u 1`, `orbital_corr`, `hubbard_u`, `nspin 2` | See DFT+U section below |
 | Slab KPT | Always `1` in vacuum direction (e.g. `20 20 1 0 0 0`) | Using dense mesh in vacuum direction |
 | Supercell / vacancy / defect / BSSE | **`kspacing` in INPUT** (e.g. `kspacing 0.10`) | Using fixed KPT mesh for variable-size supercells |
+| Large supercell (>30 atoms) LCAO | `gamma_only 1` (Gamma-point only, no KPT file needed) | Using multi-k on already-folded supercell BZ |
+| Manual orbital occupation (ocp — NOT `smearing_method fixed`) | `ocp 1`, `ocp_set ...`, `nspin 2`, **`gamma_only 1`** | Missing `gamma_only` → band ordering changes with k-points, `ocp_set` indices become wrong |
+| PEXSI solver | `ks_solver pexsi`, `pexsi_npole 80`, `gamma_only 1` | Missing `pexsi_npole` → uses default 40 (less accurate); PEXSI requires LCAO + gamma_only |
+
+> **⚠ `latname` values (exact strings, no abbreviations)**: `sc`, `fcc`, `bcc`, `hexagonal`, `trigonal`, `st`, `bct`, `so`, `baco`, `fco`, `bco`, `sm`, `bacm`, `triclinic`. Do NOT use abbreviations like `hex` — ABACUS will quit with "latname not supported!".
 
 > **⚠ `force_thr_ev` vs `force_thr`**: Always use `force_thr_ev` (unit: eV/Å). The parameter `force_thr` uses Ry/Bohr — completely different units. `force_thr_ev 0.01` ≈ `force_thr 3.9e-4`. Mixing them up produces absurdly loose or tight thresholds.
 
-> **⚠ Supercell k-points**: For **any supercell** (vacancy, defect, BSSE ghost atoms, adsorption), always use `kspacing` inside INPUT instead of a separate KPT file. This guarantees uniform k-point density that automatically adapts to cell size. Value: `0.10` Å⁻¹ for metals, `0.12`–`0.15` for insulators. For slab supercells: `kspacing 0.10 0.10 1.00` (z=vacuum).
+> **⚠ Supercell k-points**: For **any supercell** (vacancy, defect, BSSE ghost atoms, adsorption), always use `kspacing` inside INPUT instead of a separate KPT file. This guarantees uniform k-point density that automatically adapts to cell size. Value: `0.10` Å⁻¹ for metals, `0.12`–`0.15` for insulators. For slab supercells: `kspacing 0.10 0.10 1.00` (z=vacuum). **Exceptions**: (1) when `ocp 1` (fixed occupation) is used, ALWAYS use `gamma_only 1` instead of `kspacing` — `ocp_set` indices are only valid at Gamma point; (2) **gas-phase molecules** in a large vacuum box (≥15 Å) — use `gamma_only 1` (not `kspacing`), since only the Γ point is physically meaningful.
+
+### Smearing Method
+
+| `smearing_method` | Use case | `smearing_sigma` | Notes |
+|-------------------|----------|-------------------|-------|
+| `gauss` | Default for metals and general use | 0.01–0.02 | Standard Gaussian smearing |
+| `mp` | Metals requiring better total energy | 0.01–0.02 | Methfessel-Paxton, more accurate forces |
+| `fd` | Finite-temperature DFT | 0.01–0.05 | Fermi-Dirac distribution |
+| `fixed` | Insulators / exact integer occupation | *(ignored)* | No smearing — each state is 0 or 1. **This is NOT the same as `ocp 1`** (manual orbital occupation). Use `fixed` when you want standard SCF without artificial broadening. |
+
+> **⚠ `smearing_method fixed` ≠ `ocp 1`**: `smearing_method fixed` simply uses step-function occupation (no broadening) in a normal SCF. `ocp 1` manually specifies per-orbital occupation numbers and requires `gamma_only 1`. When a task says "fixed smearing" or "fixed occupation method", it means `smearing_method fixed` — not `ocp 1`.
+
+### Charge Mixing
+
+| `mixing_type` | Use case | `mixing_beta` range | Notes |
+|---------------|----------|---------------------|-------|
+| `broyden` | Default, metals, non-magnetic | 0.7–0.8 | Fast convergence |
+| `pulay` | Magnetic / DFT+U (small systems, <20 atoms) | 0.4–0.6 | Add `mixing_ndim 20`, `mixing_gg0 1.5` |
+| `pulay` | **Large magnetic systems (>30 atoms, DFT+U)** | **0.01–0.05** | See below |
+| `plain` | Debugging / baseline comparison | 0.3–0.4 | Slowest but most stable |
+
+> **⚠️ Large magnetic/DFT+U systems (>30 atoms)**: Use very conservative `mixing_beta 0.01–0.05` to prevent charge sloshing. Also add `mixing_beta_mag 1.6` (separate magnetic moment mixing rate) and increase `scf_nmax` to 200+ since convergence is slow. Without these, SCF will oscillate indefinitely for systems like iron phosphates, transition-metal oxides, etc.
+
+> **Rule**: When setting `mixing_type`, ALWAYS explicitly set `mixing_beta` in the same INPUT. Never rely on the default — it may not converge for your system.
+> When comparing mixing strategies (e.g. broyden vs plain), each INPUT must have its own `mixing_type` + `mixing_beta` pair.
+
+### DFT+U — When and How
+
+**When to use DFT+U**: Systems containing transition-metal 3d or rare-earth 4f electrons in localized environments (oxides, phosphates, fluorides, sulfides). Standard PBE severely over-delocalizes these electrons, giving wrong band gaps, magnetic moments, and relative phase energies.
+
+**Must-use cases** (always add DFT+U without being asked):
+- Fe, Co, Ni, Mn, Cr, V, Ti in oxides/phosphates/silicates (e.g. LiFePO₄, NiO, Fe₂O₃, NFPP)
+- Cu in cuprates, Ce/U in f-electron systems
+
+**Typical U values** (eV, on 3d orbitals):
+| Element | U range | Common choice |
+|---------|---------|---------------|
+| Fe | 3.0–5.0 | 3.5–4.0 |
+| Co | 3.0–5.0 | 3.3 |
+| Ni | 5.0–7.0 | 5.0–6.0 |
+| Mn | 3.5–5.0 | 4.0 |
+| V | 3.0–4.0 | 3.25 |
+| Ti | 2.5–4.0 | 3.0 |
+
+**ABACUS syntax**:
+```
+dft_plus_u      1
+orbital_corr    2 -1        # 2=d for Fe, -1=none for O (one per species in STRU order)
+hubbard_u       3.5 0.0     # U values matching orbital_corr
+```
+
+### Ultrasoft Pseudopotential (USPP) — `ecutrho`
+
+When using ultrasoft pseudopotentials (filename often contains `rrkjus` or `us`), you MUST set `ecutrho` explicitly:
+```
+ecutwfc             50
+ecutrho             400
+```
+- `ecutrho` controls the FFT mesh for augmented charge density
+- Typical ratio: `ecutrho` = 8–10 × `ecutwfc` (for USPP)
+- Without `ecutrho`, ABACUS defaults to 4×ecutwfc which is insufficient for USPP — results will have aliasing errors
+- NCPP (norm-conserving) does NOT need `ecutrho` — omit it for NCPP calculations
 
 ### Relaxation INPUT Example
 ```
 INPUT_PARAMETERS
 calculation relax
 basis_type lcao
+ntype 1
 ecutwfc 100
 scf_thr 1.0e-7
 scf_nmax 100
@@ -34,14 +104,16 @@ smearing_sigma 0.01
 cal_force 1
 force_thr_ev 0.01
 relax_nmax 100
+relax_method cg
 ```
 
 ### Cell Relaxation INPUT Example
 ```
 INPUT_PARAMETERS
 calculation cell-relax
-basis_type lcao
-ecutwfc 100
+basis_type pw
+ntype 1
+ecutwfc 50
 scf_thr 1.0e-7
 scf_nmax 100
 smearing_method gauss
@@ -51,14 +123,38 @@ cal_stress 1
 force_thr_ev 0.01
 stress_thr 0.5
 relax_nmax 100
+relax_method bfgs
 ```
 > **Critical**: `cal_force 1` and `cal_stress 1` are BOTH mandatory for cell-relax. Without `cal_force 1`, ABACUS does not compute forces and the optimizer cannot work. Without `cal_stress 1`, cell vectors are not optimized. These are NOT implied by `calculation cell-relax` — you must include them explicitly.
+
+> **`relax_method`**: Always set explicitly. Use `cg` (conjugate gradient) for atomic relax, `bfgs` (quasi-Newton) for cell-relax. BFGS converges faster for cell optimization via Hessian approximation.
+
+### Noncollinear / Spin-Orbit Coupling (SOC)
+```
+INPUT_PARAMETERS
+calculation scf
+basis_type lcao
+ntype 1
+nspin 4
+noncolin 1
+lspinorb 1
+ecutwfc 100
+scf_thr 1.0e-7
+scf_nmax 200
+smearing_method gauss
+smearing_sigma 0.01
+mixing_type broyden
+mixing_beta 0.2
+mixing_ndim 8
+```
+All three are required together: `nspin 4` + `noncolin 1` + `lspinorb 1`. Values `1` and `true` are both valid. Without `nspin 4`, noncollinear/SOC silently falls back to collinear.
 
 ### BSSE Ghost Atom INPUT Example (Bulk / Supercell)
 ```
 INPUT_PARAMETERS
 calculation scf
 basis_type lcao
+ntype 2
 ecutwfc 100
 scf_thr 1.0e-7
 scf_nmax 100
@@ -75,11 +171,51 @@ Same as above, but set the vacuum direction of kspacing to `1.00`:
 kspacing 0.10 0.10 1.00
 ```
 
+### BSSE Ghost Atom INPUT Example (Gas-phase molecule)
+For isolated molecules in a large vacuum box (≥15 Å), use `gamma_only 1` instead of `kspacing`:
+```
+INPUT_PARAMETERS
+calculation scf
+basis_type lcao
+ntype 3
+ecutwfc 100
+scf_thr 1.0e-7
+scf_nmax 100
+smearing_method gauss
+smearing_sigma 0.015
+gamma_only 1
+pseudo_dir ./
+orbital_dir ./
+```
+> Gas-phase BSSE: `gamma_only 1` is mandatory. Do NOT use `kspacing` — a single Γ point is sufficient for a molecule in vacuum.
+
+### PEXSI Solver INPUT Example (33_pexsi)
+```
+INPUT_PARAMETERS
+calculation scf
+basis_type lcao
+ntype 1
+ks_solver pexsi
+pexsi_npole 80
+pexsi_temp 0.1
+ecutwfc 100
+scf_thr 1.0e-6
+scf_nmax 200
+nspin 2
+gamma_only 1
+smearing_method gauss
+smearing_sigma 0.01
+pseudo_dir /root/apns-pseudopotentials-v1/
+orbital_dir /root/apns-orbitals-efficiency-v1/
+```
+> PEXSI requires `basis_type lcao` and `gamma_only 1`. Always set `pexsi_npole` (default 40, use 80 for production).
+
 ### Work Function / Electrostatic Potential INPUT Example
 ```
 INPUT_PARAMETERS
 calculation scf
 basis_type lcao
+ntype 1
 ecutwfc 100
 scf_thr 1.0e-7
 scf_nmax 100
@@ -95,6 +231,32 @@ efield_amp 0.0
 ```
 Slab KPT for work function (z = vacuum): `20 20 1 0 0 0`
 
+### External Electric Field INPUT Example (28_efield)
+```
+INPUT_PARAMETERS
+calculation scf
+basis_type pw
+ntype 1
+ecutwfc 50
+scf_thr 1.0e-7
+scf_nmax 200
+smearing_method gauss
+smearing_sigma 0.015
+efield_flag 1
+dip_cor_flag 0
+efield_dir 2
+efield_pos_max 0.95
+efield_pos_dec 0.10
+efield_amp 0.001
+pseudo_dir /root/apns-pseudopotentials-v1/
+```
+
+> **⚠ `dip_cor_flag` distinguishes two different physics:**
+> - `dip_cor_flag 1` + `efield_amp 0.0` = **dipole correction only** (work function, no external field)
+> - `dip_cor_flag 0` + `efield_amp ≠ 0` = **external electric field** (sawtooth field applied to slab)
+>
+> When a task says "external electric field" or "apply E-field", use `dip_cor_flag 0`. When it says "work function" or "dipole correction", use `dip_cor_flag 1` + `efield_amp 0.0`.
+
 ---
 
 ## Two-Step Electronic Property Workflow
@@ -106,6 +268,7 @@ Electronic property calculations (band structure, DOS) require: SCF → NSCF.
 INPUT_PARAMETERS
 calculation scf
 basis_type lcao
+ntype 1
 ecutwfc 100
 scf_thr 1.0e-7
 scf_nmax 100
@@ -128,6 +291,7 @@ Gamma
 INPUT_PARAMETERS
 calculation nscf
 basis_type lcao
+ntype 1
 ecutwfc 100
 scf_thr 1.0e-7
 scf_nmax 300
@@ -147,6 +311,9 @@ smearing_sigma 0.01
 | `out_band` | `1` | Write band eigenvalues to `BANDS_1.dat` |
 | `nbands` | integer | Bands to compute: `total_electrons/2 + 20` (insulator) or `×1.5` (metal) |
 | `symmetry` | `0` | **Mandatory for line-mode k-paths.** Symmetry folds/reorders k-points. |
+| `pw_diag_thr` | `1.0e-5` | **Mandatory for `basis_type pw` NSCF.** Default 0.01 is too loose — eigenvalues will have 10–100 meV noise, making band gaps and SOC splittings unreliable. |
+
+> **⚠ PW NSCF precision**: `pw_diag_thr` is NOT optional for PW band/DOS. Without it, SOC splittings, band gaps, and DOS peaks are quantitatively wrong. Always include `pw_diag_thr 1.0e-5` (or tighter) in any `basis_type pw` NSCF INPUT.
 
 Band structure KPT (line mode, example FCC):
 ```
@@ -164,6 +331,7 @@ Line
 INPUT_PARAMETERS
 calculation nscf
 basis_type lcao
+ntype 1
 ecutwfc 100
 scf_thr 1.0e-7
 scf_nmax 300
@@ -187,13 +355,14 @@ DOS-specific parameters:
 | `dos_sigma` | `0.07` | Gaussian smearing width (eV) |
 | `dos_nche` | `100` | Chebyshev expansion order for LCAO DOS |
 
-DOS KPT — **dense uniform mesh** (NOT line-mode):
+DOS KPT — **dense uniform mesh** (NOT line-mode, minimum 8×8×8 for bulk):
 ```
 K_POINTS
 0
 Gamma
 12 12 12 0 0 0
 ```
+> Even for expensive functionals (HSE, PBE0), the DOS k-mesh must remain dense. A sparse SCF mesh is acceptable to save cost, but the DOS NSCF step requires a dense mesh for smooth spectra — never copy the SCF mesh to DOS.
 
 ### Two-Step File Management on Bohrium
 
@@ -202,10 +371,10 @@ Chain SCF and NSCF in a shell script:
 #!/bin/bash
 cp INPUT_scf INPUT
 cp KPT_scf KPT
-OMP_NUM_THREADS=1 mpirun -np 16 abacus
+OMP_NUM_THREADS=1 mpirun -np 32 abacus
 cp INPUT_nscf INPUT
 cp KPT_nscf KPT
-OMP_NUM_THREADS=1 mpirun -np 16 abacus
+OMP_NUM_THREADS=1 mpirun -np 32 abacus
 ```
 
 **Input directory must contain**: `INPUT_scf`, `INPUT_nscf`, `KPT_scf`, `KPT_nscf`, `STRU`, `.upf`, `.orb`, `run.sh`.
@@ -295,6 +464,7 @@ When a task requests "low-cost", "benchmark", or "minimal cost" parameters:
 
 Before finalizing any INPUT file, verify none of these apply:
 
+- ❌ Missing `ntype` in INPUT → must equal STRU ATOMIC_SPECIES count (validator will reject)
 - ❌ `cell-relax` without `cal_force 1` → optimizer has no forces, **silently broken** (most common error)
 - ❌ `cell-relax` without `cal_stress 1` → cell vectors not optimized
 - ❌ `relax` without `cal_force 1` → same problem, forces not computed

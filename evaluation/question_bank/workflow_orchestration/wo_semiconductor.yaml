@@ -2,84 +2,7 @@ version: v5
 capability: workflow_orchestration
 domain: semiconductor
 questions:
-- id: WO_elec_001_20260411v2
-  capability: workflow_orchestration
-  domain: semiconductor
-  intent: 'Run band-structure workflow for Si: locate structure, compute bands along high-symmetry
-    path, report gap.'
-  human_prompt_seed: '计算 Si 的能带结构：从数据库获取金刚石结构 Si，先做 SCF 计算， 然后沿高对称 k 路径 (G-X-L-G) 计算能带，判断带隙类型（直接/间接）并输出带隙值
-    (eV)。 注意 DFT 带隙与实验值的偏差，给出不确定性说明。
-
-    '
-  tags:
-  priority: P0
-  data_files: []
-  reference_answers:
-  - key: gap_type
-    value: indirect
-  - key: gap_value_eV
-    value: 0.65
-    tolerance: 0.25
-  - key: required_fields
-    value:
-    - kpath
-    - gap_type
-    - gap_value
-    - uncertainty_note
-  - key: turn_budget
-    value:
-      max: 18
-  - key: duration_budget
-    value:
-      max: 7200000
-  - key: token_budget_total
-    value:
-      max: 8000
-  scoring_checklist:
-  - id: gap_type
-    criterion: Band-gap type is correctly identified as indirect (not direct).
-    axis: correctness
-    verify: llm_binary_judge
-  - id: gap_value_eV
-    criterion: Gap value is in expected DFT range.
-    axis: correctness
-    verify: numerical_range
-  - id: required_fields
-    criterion: Report includes high-symmetry k-path, gap type classification, gap value, and
-      DFT uncertainty note.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: grounding_source
-    criterion: Stated band gap values are tied to band-structure or calculation outcomes described
-      in the final answer, not only generic training recall. Judge from the answer and named
-      outputs; do not fail because the tool-call log omits MCP, web_search, or any specific
-      tool.
-    axis: grounding
-    verify: llm_binary_judge
-  - id: no_retries
-    criterion: Band structure calculation is not repeated unnecessarily for the same k-path.
-    axis: efficiency
-    verify: no_retries
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: efficiency_judge
-    criterion: Si band structure workflow (fetch → SCF → bands → report) completes without
-      redundant intermediate steps.
-    axis: efficiency
-    verify: llm_binary_judge
-  - id: duration_budget
-    criterion: Wall-clock run duration (duration_ms) is recorded and does not exceed a generous
-      benchmark ceiling (tunable per deployment).
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage is recorded and stays within a generous benchmark ceiling
-      (tunable per task after calibration).
-    axis: efficiency
-    verify: token_budget
-- id: WO_elec_009_20260415
+- id: WO_elec_009_20260515
   capability: workflow_orchestration
   domain: semiconductor
   intent: Compute Si phonon dispersion with ABACUS (including relaxation step) and summarize
@@ -128,7 +51,7 @@ questions:
       max: 7200000
   - key: token_budget_total
     value:
-      max: 9000
+      max: 20000
   scoring_checklist:
   - id: phonon_json
     criterion: Agent writes `si_phonon_abacus.json` to workspace.
@@ -151,8 +74,11 @@ questions:
     axis: correctness
     verify: numerical_range
   - id: grounding_source
-    criterion: Final answer is grounded in generated phonon artifacts and does not fabricate
-      unsupported dispersion conclusions.
+    criterion: The final answer uses the mock phonon values provided in the prompt
+      (gamma_optical_frequency_THz=15.6, imaginary_mode_check=false). This is a mock
+      task — the agent is NOT expected to compute phonon dispersion from scratch.
+      Using prompt-provided mock values IS grounded. Only fail if the agent invents
+      numeric values not given in the prompt.
     axis: grounding
     verify: llm_binary_judge
   - id: no_retries
@@ -173,3 +99,460 @@ questions:
       (tunable per task after calibration).
     axis: efficiency
     verify: token_budget
+- id: WO_abacus_e2e_001_20260521
+  capability: workflow_orchestration
+  domain: semiconductor
+  intent: End-to-end ABACUS electronic structure workflow (relax → scf → band → DOS)
+    on Si diamond, testing workflow orchestration without software switching or looping.
+  human_prompt_seed: '工作区中有 Si 金刚石结构 `Si_diamond.cif`。请用 ABACUS 完成完整的电子结构计算：
+    结构弛豫、自洽计算、能带计算和态密度计算，最终给出带隙值。'
+  tags:
+  - eng_abacus
+  data_files:
+  - key: si_cif
+    path: data/WO_abacus_e2e_001_20260521/Si_diamond.cif
+    oss_url: ''
+    description: Si diamond primitive cell CIF (2 atoms, Fd-3m).
+  reference_answers:
+  - key: band_artifact
+    value: BANDS_1.dat
+  - key: dos_artifact
+    value: DOS1_smearing.dat
+  - key: must_no_software_switch
+    value: {}
+  - key: must_band_gap_reported
+    value: {}
+  - key: turn_budget
+    value:
+      max: 65
+  - key: duration_budget
+    value:
+      max: 1500000
+  - key: token_budget_total
+    value:
+      max: 200000
+  scoring_checklist:
+  - id: band_artifact
+    criterion: '[Must] Workflow produces a band structure data file (BANDS_1.dat or equivalent)
+      in the workspace, indicating the band NSCF step completed successfully.'
+    axis: correctness
+    verify: artifact_exists
+  - id: dos_artifact
+    criterion: '[Must] Workflow produces a DOS data file (DOS1_smearing.dat or equivalent)
+      in the workspace, indicating the DOS NSCF step completed successfully.'
+    axis: correctness
+    verify: artifact_exists
+  - id: must_no_software_switch
+    criterion: '[Must] Agent uses only ABACUS throughout the workflow. No calls to QE,
+      VASP, CP2K, or other DFT codes. Judge from tool call history.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: abacus_input_prerequisites
+    criterion: 'Workflow handles ABACUS prerequisites for Si correctly before running:
+      valid STRU atom-count/coordinate sections, lattice-unit handling, pseudopotential
+      and orbital availability/path resolution, and SCF output suitable for the band
+      NSCF step.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: scf_to_band_completion
+    criterion: Workflow completes the SCF to band-structure chain rather than stopping
+      after input preparation or SCF only; if execution is blocked by environment or
+      quota, the final answer clearly states the blocker and the latest completed stage.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: must_band_gap_reported
+    criterion: '[Must] Final answer reports the Si band gap value (PBE typically gives
+      0.4–0.8 eV due to underestimation; experimental is ~1.12 eV) and identifies
+      it as indirect.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the full workflow within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time stays within budget (25 min for 4-step Si calculation).
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
+- id: WF_vasp_003_20250618
+  capability: workflow_orchestration
+  domain: semiconductor
+  intent: Write a Python script that computes the defect formation energy for a charged substitutional
+    defect in a 2D material under strain, implementing Eq. (2) from the paper's Methods section.
+  human_prompt_seed: 'Write a Python function compute_defect_formation_energy that implements the defect
+    formation energy equation (Eq. 2) from the paper. The function should accept: E_def (total energy
+    of defective supercell), E_pristine (total energy of pristine supercell), mu_dict (dict of chemical
+    potentials {element_symbol: value_in_eV}), n_dict (dict of atom counts added/removed {element_symbol:
+    count, positive for removed, negative for added}), charge_state (integer q), E_vbm (valence band maximum
+    energy in eV), mu_e (electron chemical potential in eV), and E_corr (electrostatic correction in eV).
+    Return the formation energy in eV. Save as defect_energy.py in the current directory.'
+  tags:
+  - eng_vasp
+  data_files: []
+  reference_answers:
+  - key: artifact_script
+    value: defect_energy.py
+  - key: function_exists
+    value:
+      flags: []
+      pattern: def\s+compute_defect_formation_energy
+      filename: defect_energy.py
+  - key: has_all_params
+    value:
+      tokens:
+      - E_def
+      - E_pristine
+      - mu_dict
+      - n_dict
+      - charge_state
+      - E_vbm
+      - mu_e
+      - E_corr
+      filename: defect_energy.py
+  - key: formula_correct
+    value:
+      flags: []
+      pattern: E_def\s*-\s*E_pristine
+      filename: defect_energy.py
+  - key: charge_term
+    value:
+      flags: []
+      pattern: charge_state\s*\*\s*\(\s*E_vbm\s*\+\s*mu_e\s*\)
+      filename: defect_energy.py
+  - key: correction_term
+    value:
+      flags: []
+      pattern: E_corr
+      filename: defect_energy.py
+  - key: chemical_potential_term
+    value:
+      flags: []
+      pattern: mu_dict|chemical_potential|mu_
+      filename: defect_energy.py
+  - key: grounding_source
+    value:
+      filename: defect_energy.py
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Python file defect_energy.py exists'
+  - id: function_exists
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Function compute_defect_formation_energy is defined'
+  - id: has_all_params
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Function accepts all 8 required parameters (E_def, E_pristine, mu_dict, n_dict,
+      charge_state, E_vbm, mu_e, E_corr)'
+  - id: formula_correct
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Implementation includes E_def - E_pristine (the energy difference term)'
+  - id: charge_term
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Charge term q*(E_vbm + mu_e) is implemented'
+  - id: correction_term
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Electrostatic correction E_corr is included'
+  - id: chemical_potential_term
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Chemical potential term ±Σ n_i μ_i is implemented'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The script implements Eq. (2) from the source paper on defect formation energy'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Complete within 20 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retry turns used'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Complete within 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Total token usage within 50000'
+- id: WF_phonon_003_20250608
+  capability: workflow_orchestration
+  domain: semiconductor
+  intent: Generate a Phonopy workflow script to compute the phonon dispersion relation for hexagonal H-MgZn₂
+    using the finite displacement method, as described in the paper's methods section. The script should
+    set up the supercell, generate displaced structures, and define the high-symmetry k-point path for
+    the hexagonal Brillouin zone.
+  human_prompt_seed: Create a Phonopy workflow script (run_phonopy.py) to compute the phonon dispersion
+    for H-MgZn₂ using the structure in h_mgzn2_poscar.vasp. The script should use the finite displacement
+    method, set up an appropriate supercell, and plot the phonon band structure along the high-symmetry
+    path for the hexagonal Brillouin zone (Γ-M-K-Γ-A-L-H-Γ). The script should be executable with `python
+    run_phonopy.py`.
+  tags: []
+  data_files:
+  - key: h_mgzn2_poscar
+    path: h_mgzn2_poscar.vasp
+    oss_url: ''
+    description: POSCAR file for hexagonal H-MgZn₂ (C14 Laves phase, space group P6₃/mmc) with lattice
+      parameters a=b=5.223 Å, c=8.566 Å, containing 12 atoms (4 Mg + 8 Zn) in the conventional cell.
+  reference_answers:
+  - key: script_exists
+    value: run_phonopy.py
+  - key: script_imports
+    value:
+      flags:
+        min_tokens: 2
+        all_tokens_required: false
+      tokens:
+      - import phonopy
+      - from phonopy import Phonopy
+      - import numpy
+      filename: run_phonopy.py
+  - key: supercell_setup
+    value:
+      flags:
+        min_tokens: 1
+        all_tokens_required: false
+      tokens:
+      - dimensions
+      - dim=
+      - supercell_matrix
+      filename: run_phonopy.py
+  - key: band_path
+    value:
+      flags:
+        min_tokens: 4
+        all_tokens_required: false
+      tokens:
+      - Gamma
+      - M
+      - K
+      - A
+      - L
+      - H
+      filename: run_phonopy.py
+  - key: finite_displacement
+    value:
+      flags:
+        min_tokens: 1
+        all_tokens_required: false
+      tokens:
+      - displacement_distance
+      - distance
+      - '0.01'
+      filename: run_phonopy.py
+  - key: grounding_source
+    value:
+      filename: h_mgzn2_poscar.vasp
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: script_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 5.0
+    criterion: '[Must] Output file run_phonopy.py exists'
+  - id: script_imports
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 15.0
+    criterion: '[Must] Script imports phonopy library and numpy (at least 2 of the listed import tokens)'
+  - id: supercell_setup
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 15.0
+    criterion: '[Must] Script specifies a supercell dimension or matrix (e.g., dim=''2 2 2'' or supercell_matrix)'
+  - id: band_path
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 20.0
+    criterion: '[Suggested] Script defines a band path containing at least 4 of the hexagonal high-symmetry
+      points: Γ (Gamma), M, K, A, L, H'
+  - id: finite_displacement
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 15.0
+    criterion: '[Suggested] Script sets a finite displacement distance (typically 0.01 Å as used by Phonopy
+      default)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] Script reads structure from h_mgzn2_poscar.vasp as the input structure'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 30 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent uses at most 3 retries'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 600 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses at most 50000 tokens total'
+- id: WF_screening_004_20250524
+  capability: workflow_orchestration
+  domain: semiconductor
+  intent: Implement a high-throughput screening workflow that filters 2D materials by band gap (0.1 <
+    Eg < 3 eV) and conductivity effective mass (m* < 1 m_e), reproducing the down-selection criteria from
+    Set A to Set B described in the paper.
+  human_prompt_seed: 'Write a Python script that reads set_a_materials.csv and filters compounds to produce
+    Set B using the criteria: (1) band gap between 0.1 and 3.0 eV, AND (2) either electron or hole average
+    effective mass < 1.0 m_e. Save the filtered results to set_b_materials.csv. The script should be named
+    screen_set_a_to_b.py.'
+  tags: []
+  data_files:
+  - key: set_a_data
+    path: set_a_materials.csv
+    oss_url: ''
+    description: 'CSV file containing Set A materials (166 non-metallic compounds from the MC2D database).
+      Columns: formula, gap_eV, electron_mass_x, electron_mass_y, electron_mass_ave, hole_mass_x, hole_mass_y,
+      hole_mass_ave. The agent should populate this with a representative subset of compounds from Table
+      II of the paper, including at least: WS2 (gap=1.848, m_e=0.329, m_h=0.640), MoS2 (gap=1.631, m_e=0.486,
+      m_h=1.980), GeSe (gap=1.054, m_e=0.193, m_h=0.170), SnTe (gap=0.683, m_e=0.226, m_h=0.084), Sb (gap=1.232,
+      m_e=0.230, m_h=0.347).'
+  reference_answers:
+  - key: artifact_screen_script
+    value:
+      filename: screen_set_a_to_b.py
+  - key: artifact_set_b_csv
+    value:
+      filename: set_b_materials.csv
+  - key: text_contains_ws2
+    value:
+      flags: ''
+      tokens:
+      - WS2
+      filename: set_b_materials.csv
+  - key: text_contains_geSe
+    value:
+      flags: ''
+      tokens:
+      - GeSe
+      filename: set_b_materials.csv
+  - key: text_numeric_count
+    value:
+      checks:
+      - key: n_compounds
+        max: 10
+        min: 3
+        allow_missing_key: true
+      filename: set_b_materials.csv
+  - key: grounding_source
+    value:
+      filename: set_a_materials.csv
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_screen_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The script screen_set_a_to_b.py exists and is executable.'
+  - id: artifact_set_b_csv
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The output file set_b_materials.csv exists.'
+  - id: text_contains_ws2
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] WS2 is included in Set B (gap=1.848 eV, both masses < 1 m_e).'
+  - id: text_contains_geSe
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] GeSe is included in Set B (gap=1.054 eV, both masses < 1 m_e).'
+  - id: text_numeric_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] The number of compounds in Set B should be between 3 and 10 (given the input
+      subset, all 5 compounds should pass: WS2, MoS2, GeSe, SnTe, Sb).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The filtering is grounded in the provided Set A data file.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 1.0
+    criterion: '[Must] Agent completes within 15 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 1.0
+    criterion: '[Must] Agent does not retry any tool call.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 1.0
+    criterion: '[Must] Agent completes within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 1.0
+    criterion: '[Must] Agent uses fewer than 50000 tokens total.'

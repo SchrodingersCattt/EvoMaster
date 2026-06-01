@@ -1,0 +1,426 @@
+# Skill trigger-rate evaluation cases.
+# Each skill has 10 positive cases (should trigger this skill)
+# and 5 negative cases (should NOT trigger this skill).
+
+max_turns: 3
+
+cases:
+  - skill: abacus
+    positive:
+      - "帮我用 ABACUS 算一下 Si 的能带结构"
+      - "ABACUS SCF 计算怎么设置"
+      - "用 ABACUS 做一个 Si 的结构优化"
+      - "帮我写一个 ABACUS 的 INPUT 文件"
+      - "ABACUS 怎么做自旋极化计算"
+      - "用 ABACUS 计算 Fe 的磁矩"
+      - "帮我配置 ABACUS 的赝势文件"
+      - "ABACUS LCAO 基组怎么选"
+      - "用 ABACUS 做一个 DOS 计算"
+      - "帮我用 ABACUS 算 GaAs 的介电函数"
+    negative:
+      - "帮我画一个 RDF 分析图"
+      - "用 VASP 算弹性常数"
+      - "帮我跑一个 LAMMPS 的 MD 模拟"
+      - "检索 ABACUS 做二维材料 HSE06 能带计算的教程和相关文献"
+      - "用 GPUMD 做热导率计算"
+
+  - skill: vasp
+    positive:
+      - "帮我用 VASP 算一下能带"
+      - "写一个 VASP 的 INCAR 文件"
+      - "VASP 结构优化怎么设置"
+      - "用 VASP 算弹性常数"
+      - "帮我配置 VASP 的 POTCAR"
+      - "VASP 的 KPOINTS 怎么设置"
+      - "用 VASP 做一个 HSE06 计算"
+      - "帮我用 VASP 算 DOS"
+      - "VASP NEB 计算怎么做"
+      - "用 VASP 做一个分子动力学模拟"
+    negative:
+      - "帮我用 ABACUS 算能带"
+      - "画一个能带图"
+      - "帮我构建一个 slab 模型"
+      - "用 CP2K 做 AIMD"
+      - "分析这个 VASP 产生的 XDATCAR 轨迹，计算 RDF"
+
+  - skill: gpumd
+    positive:
+      - "帮我用 GPUMD 跑一个 MD 模拟"
+      - "GPUMD 的 run.in 怎么写"
+      - "用 GPUMD 算热导率"
+      - "帮我配置 GPUMD 的 NEP 势函数"
+      - "GPUMD 怎么做 NVT 模拟"
+      - "用 GPUMD 计算声子谱"
+      - "帮我用 GPUMD 做扩散系数计算"
+      - "GPUMD 的 model.xyz 格式是什么"
+      - "用 GPUMD 做一个热膨胀模拟"
+      - "帮我训练一个 NEP 势函数"
+    negative:
+      - "帮我用 LAMMPS 往GPU集群上提交 MD任务"
+      - "用 ABACUS 做结构优化"
+      - "画一个 RDF 图"
+      - "帮我做第一性原理计算"
+      - "分析一下 XRD 数据"
+
+  - skill: data-analysis
+    positive:
+      - "帮我画一个 RDF 分析图"
+      - "分析一下这个 MD 轨迹的温度变化"
+      - "画一个能带结构图"
+      - "帮我做一个 MSD 分析"
+      - "把这个数据画成散点图"
+      - "帮我分析一下这个 CSV 数据"
+      - "画一个 DOS 图"
+      - "帮我做 XRD 数据的峰拟合"
+      - "分析一下这个 PDOS 数据"
+      - "帮我画一个应力-应变曲线"
+    negative:
+      - "帮我用 VASP 算能带"
+      - "生成一个 ABACUS 输入文件"
+      - "用 LAMMPS 跑 MD"
+      - "帮我构建一个超胞"
+      - "帮我搜索一篇关于锂电池的文献"
+
+  - skill: lammps
+    positive:
+      - "帮我用 LAMMPS 跑一个 MD 模拟"
+      - "写一个 LAMMPS 的 input 脚本"
+      - "LAMMPS 怎么设置 EAM 势函数"
+      - "用 LAMMPS 做拉伸模拟"
+      - "帮我配置 LAMMPS 的 fix npt"
+      - "LAMMPS 怎么计算 RDF"
+      - "用 LAMMPS 做一个退火模拟"
+      - "帮我用 LAMMPS 算粘度"
+      - "LAMMPS 的 data 文件怎么写"
+      - "用 LAMMPS 做一个剪切模拟"
+    negative:
+      - "帮我用 GPUMD 跑 MD"
+      - "用 ABACUS 做 SCF 计算"
+      - "画一个温度演化图"
+      - "用 Gromacs 跑蛋白质模拟"
+      - "帮我搜索文献"
+
+  - skill: cp2k
+    positive:
+      - "帮我用 CP2K 做一个 AIMD 模拟"
+      - "CP2K 的输入文件怎么写"
+      - "用 CP2K 做结构优化"
+      - "帮我配置 CP2K 的 DFT 参数"
+      - "CP2K 怎么设置 basis set"
+      - "用 CP2K 算能带"
+      - "帮我用 CP2K 做 NEB 计算"
+      - "CP2K 的 MOTION 部分怎么设置"
+      - "用 CP2K 做一个 metadynamics 模拟"
+      - "帮我用 CP2K 算吸附能"
+    negative:
+      - "帮我用 VASP 做计算"
+      - "用 LAMMPS 跑经典 MD"
+      - "画一个能带图"
+      - "帮我构建一个表面模型"
+      - "这是 CP2K 计算的日志和结构，用 dpdata 转成可用于 DeePMD 训练的数据"
+
+  - skill: gromacs
+    positive:
+      - "帮我用 Gromacs 跑一个蛋白质模拟"
+      - "Gromacs 的 mdp 文件怎么写"
+      - "用 Gromacs 做一个溶剂化模拟"
+      - "帮我配置 Gromacs 的力场"
+      - "Gromacs 怎么做自由能计算"
+      - "用 gmx pdb2gmx 处理一下这个蛋白质"
+      - "帮我用 Gromacs 做一个 umbrella sampling"
+      - "Gromacs 的 topology 文件怎么写"
+      - "用 Gromacs 做一个 NPT 平衡"
+      - "帮我用 Gromacs 算结合自由能"
+    negative:
+      - "帮我用 LAMMPS 跑 MD"
+      - "用 ABACUS 做 DFT 计算"
+      - "画一个 RDF 图"
+      - "帮我构建一个晶体结构"
+      - "用 GPUMD 算热导率"
+
+  - skill: mlips
+    positive:
+      - "用本地提供的 DPA3.1 给这个 CIF 做结构优化，relax cell 并输出 optimized CIF"
+      - "用已有 DPA-2 模型通过 ASE 跑一段 300 K NVT 分子动力学"
+      - "用本地提供的  MACE-MP 对这个 POSCAR 做几何优化"
+      - "用本地提供的  SevenNet 给这个晶体算声子谱和热力学 DOS"
+      - "用本地提供的  MatterSim 跑这个结构的短程 MD，保存 extxyz 轨迹"
+      - "用本地提供的  DPA3.1 算这个 relaxed CIF 的弹性矩阵"
+      - "用合适的预训练势函数计算这两个 POSCAR 之间的 NEB 路径"
+      - "用 DPA 的 OC22 head 算 CO 和 OH 在这些 slab 上的吸附能"
+      - "Run quick 10-ps MD for the CO @ Pt system with given checkpoint file of DPA3"
+      - "Given bcc-Fe.cif and local model of MACE, optimize the structure."
+    negative:
+      - "帮我训练一个机器学习势函数"                            # no training workflow in mlips
+      - "用 DeePMD 训练一个势"                                  # no training workflow in mlips
+      - "怎么做主动学习选点"                                    # no active-learning workflow in mlips
+      - "用 DP-GEN 做一个迭代训练"                               # no DP-GEN training workflow in mlips
+      - "AIS Square 上 DPA-3-NM 的 checkpoint 哪里下载"          # → aissq-explorer / retrieve-structure
+      - "把这个OUTCAR转换成MLIP训练的数据集"
+
+  - skill: inspect-atomic-structure
+    positive:
+      - "看一下这个 CIF 的空间群和 Wyckoff 位点"
+      - "这个 PDB 没有 CRYST1，先判断按周期结构还是分子处理"
+      - "判断这个 XYZ 是孤立分子、1D 链、2D slab 还是 3D 周期结构"
+      - "检查这个 POSCAR 的元素顺序、晶格和真空层是否合理"
+      - "看一下这个 CIF 有没有溶剂分子或 disorder 要处理"
+      - "supercell 做完之后再确认一下原子数和对称性"
+      - "Wyckoff 位点和点群打一份"
+      - "这个 slab.cif 的 vacuum 多厚"
+      - "NPT 平衡后的 CONTCAR，跑下一步前先体检"
+      - "What's the space group and Wyckoff list of this CIF?"
+      - "Before any transform, decide whether this MOF is a molecular crystal"
+    negative:
+      - "搭一个 fcc Ni 的原胞"                                  # → build-crystal-from-params
+      - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
+      - "在 Pt(111) top 位放一个 CO 分子"                       # → assemble-atomic-structure
+      - "文献 SI 这个 CIF 链接，下下来并 validate"              # → retrieve-structure
+      - "帮我用 VASP 算一下这个 POSCAR 的能带"                  # → vasp
+
+  - skill: build-crystal-from-params
+    positive:
+      - "搭一个 fcc Ni 的原胞"
+      - "用空间群 P6_3mc + Wyckoff 位置建一个 wurtzite ZnS"
+      - "Build a primitive cell of PbS rocksalt from the lattice constant"
+      - "ZrO2 cubic unit cell 给一个"
+      - "怎么从空间群直接搭一个 Ruddlesden-Popper 钙钛矿"
+      - "搭一个 GaN wurtzite 单胞，后面要跑 NEB"
+      - "Mg hcp 给定 a/c，用 ASE 拼成单胞"
+      - "Construct a diamond Si conventional cell with a = 5.43 Å"
+      - "Build spinel-structured MgAl2O4"
+      - "Build the cubic BaTiO3 unit cell with Pm-3m and a = 4.00 Å"
+      - "搭一个 NiO rocksalt conventional cell，8 原子"
+      - "为 NiO 岩盐结构 conventional cell 准备 ABACUS DFT+U 计算输入"
+    negative:
+      - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
+      - "TiO2 里随机替换 5% 的 Ti 为 Nb"                        # → transform-atomic-structure
+      - "从 Cu bulk 切 (110) slab，5 层，真空 15 Å"             # → assemble-atomic-structure
+      - "文献 SI 这个 CIF 链接，下下来并 validate"              # → retrieve-structure
+      - "用 CALYPSO 搜 Mg-Si-O 的候选晶体结构"                  # → sample-atomic-structures
+      - "SMILES CCC=O 转成带 3D 坐标的 SDF"                    # → agent direct RDKit
+      - "枚举碳酸乙烯酯的氟代衍生物并生成 3D 构象"              # → agent direct RDKit
+      - "搭一个 20 mer 的 PVA 链"                               # → poly-generator
+      - "Generate a 15-mer polypropylene chain for downstream MD" # → poly-generator
+      - "从文献 CIF 链接构建 NaNO3"                             # → retrieve-structure
+      - "用参数直接搭 CaCO3 / K2SO4 这种多原子离子晶体"          # → retrieve-structure
+      - "构建RDX的分子晶体结构"                               # → retrieve-structure
+
+  - skill: sample-atomic-structures
+    positive:
+      - "Mg-Si-O 三元做一次全局结构搜索"
+      - "用 CALYPSO 对 Li-P-S 体系跑一次 evolutionary crystal structure search"
+      - "用 CrystalFormer 按目标带隙条件生成一批候选晶体"
+      - "用 CrystalFormer 生成一批高带隙的 ABO3 候选"
+      - "CALYPSO 的 popsize 和 maxgen 在第一性原理体系下怎么配"
+      - "给定组分做一轮演化搜索，输出候选结构"
+      - "条件生成一批指定空间群的候选晶体"
+      - "用 CrystalFormer 采样 20 个 LiCoO2 类似物候选"
+      - "Li-P 二元相图未知组分能不能做结构预测"
+      - "用生成模型抽几个新的钙钛矿候选拓扑"
+      - "Run a CALYPSO global search on the Ti-O system and return top-5 candidates"
+      - "Sample crystal candidates conditioned on bulk modulus > 200 GPa with a generative model"
+    negative:
+      - "mp-149 的 CIF 帮我搜一下"                             # → mcp-mat-struct-db
+      - "搭一个 fcc Ni 的原胞"                                  # → build-crystal-from-params
+      - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
+      - "文献 SI 这个 CIF 链接，下下来并 validate"              # → retrieve-structure
+      - "帮我用 VASP 做结构优化"                                # → vasp
+
+  - skill: transform-atomic-structure
+    positive:
+      - "把这个 POSCAR 扩成 3x3x2"
+      - "TiO2 里随机替换 5% 的 Ti 为 Nb"
+      - "对这个晶胞沿 c 方向施加 2% 拉伸应变"
+      - "在 NaCl 超胞里删一个 Cl 做 vacancy defect"
+      - "给 NaCl 晶胞施加 2% 双轴张应变"
+      - "在 Si 超胞里造一个 V_Si 空位"
+      - "Mn 掺 ZnO 做磁性研究，按 Wyckoff 选 8% 取代位"
+      - "Cu3Au L1_2 有序化从无序固溶体出发怎么做"
+      - "SrTiO3 里掺 La 替 Sr，电荷补偿怎么处理"
+      - "hcp Mg 晶胞做等比 1% 膨胀"
+      - "Apply an xy shear strain of 0.5% to this CONTCAR"
+      - "Create a 2x2x2 supercell of this MgO crystal with a single F-center"
+    negative:
+      - "搭一个 fcc Ni 的原胞"                                  # → build-crystal-from-params
+      - "从 Cu bulk 切 (110) slab，5 层，真空 15 Å"             # → assemble-atomic-structure
+      - "这个分子晶体 CIF 切 (010) 表面，不要切断分子"          # → operate-molecular-crystal
+      - "切 LiCoO2 (003) slab，极性面，auto-fix 偶极"           # → tasker-polar-surface
+      - "帮我用 LAMMPS 跑 NPT"                                  # → lammps
+
+  - skill: assemble-atomic-structure
+    positive:
+      - "从 Cu bulk 切 (110) slab，5 层，真空 15 Å"
+      - "在 Pt(111) top 位放一个 CO 分子"
+      - "Place a single H2O on the bridge site of TiO2(110)"
+      - "把两个 slab 叠成一个异质界面并加真空层"
+      - "Cu(111) + Al(111) 拼一个异质界面"
+      - "用 PACKMOL 在 60 Å 立方盒里装 300 个乙醇"
+      - "NH3 在 Au(111) 上的吸附结构搭一下"
+      - "做一个 amorphous PMMA 初始模型，~600 原子"
+      - "Au/MgO(001) 异质界面拼一下，应变 ≤ 3%"
+      - "两条 polymer 主链做几何 crosslink，输出 LAMMPS 数据文件"
+      - "Build a 4-layer Ni(100) slab with 12 Å vacuum"
+    negative:
+      - "搭一个 fcc Ni 的原胞"                                  # → build-crystal-from-params
+      - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
+      - "这个分子晶体 CIF 切 (010) 表面，不要切断分子"          # → operate-molecular-crystal
+      - "ZnO (0001) 是不是极性面，先判一下再切"                 # → tasker-polar-surface
+      - "把这个 CIF 转成 POSCAR，元素顺序也理一下"              # → retrieve-structure
+
+  - skill: operate-molecular-crystal
+    positive:
+      - "这个药物晶体 CIF 切 (010) 表面，不要切断分子"
+      - "把这个 solvate molecular crystal 里的溶剂分子整分子删掉"
+      - "给这个有 dangling bond 的有机晶体表面补氢"
+      - "把 MOF 里的客体 DMF 清掉只留主体框架"
+      - "把这个 cocrystal 里 guest 分子单独提一份 XYZ"
+      - "有机层加表面后 sp3 C 缺氢，补全一下"
+      - "MgO 表面悬挂键按八面体几何补 OH"
+      - "这个离散配位单元晶体的金属中心用 CShM 判一下是 sq-pyramid 还是 trigonal-bipyramid"
+      - "基于上传的硝普R-3-羟基哌啶结构的有机阳离子找出极轴并构造翻转极性的结构"
+      - "Compute the coordination number and CShM shape for the Fe center in this CIF"
+      - "Resolve partial occupancy and produce an ordered replica for this disordered CIF"
+    negative:
+      - "从 Cu bulk 切 (110) slab，5 层，真空 15 Å"             # → assemble-atomic-structure
+      - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
+      - "搭一个 fcc Ni 的原胞"                                  # → build-crystal-from-params
+      - "切 LiCoO2 (003) slab，极性面，auto-fix 偶极"           # → tasker-polar-surface
+      - "帮我用 CP2K 做分子动力学"                              # → cp2k
+
+  - skill: tasker-polar-surface
+    positive:
+      - "切 LiCoO2 (003) slab，极性面，auto-fix 偶极"
+      - "ZnO (0001) 是不是极性面，先判一下再切"
+      - "帮我构造一个 rocksalt MgO(111) 的非极性对称 slab"
+      - "判断这个 perovskite (001) slab 的 Tasker type，并给稳定终止面"
+      - "MgO (111) 是 Tasker 几型，切的时候要怎么处理"
+      - "NaCl (111) 给一个非极性 slab"
+      - "SrTiO3 (110) 极性面 slab，按 Tasker auto-fix 跑一遍"
+      - "Al2O3 (0001) 表面建模，注意要不要 reconstruct"
+      - "Fe3O4 (001) 催化体系，slab 选 Tasker 合规的"
+      - "氧化物极性面 reconstruct 后输出 POSCAR"
+      - "Cut a polar PbTiO3 (001) slab with Tasker auto-fix, give me the final POSCAR"
+      - "Build a non-polar TiO2 (110) slab and validate the dipole is zero"
+    negative:
+      - "从 Cu bulk 切 (110) slab，5 层，真空 15 Å"             # → assemble-atomic-structure
+      - "在 Pt(111) top 位放一个 CO 分子"                       # → assemble-atomic-structure
+      - "这个分子晶体 CIF 切 (010) 表面，不要切断分子"          # → operate-molecular-crystal
+      - "把这个 CIF 转成 POSCAR，元素顺序也理一下"              # → retrieve-structure
+      - "用 VASPKIT 算这个 slab 的功函数"                       # → vaspkit-postprocess
+
+
+  - skill: checkcif-validator
+    positive:
+      - "这个 CIF 提交到 IUCr checkCIF 看一下报告"                              # [imperative][task-only]
+      - "精修完了，跑 PLATON checkCIF 看 alert 数"                              # [imperative][workflow]
+      - "这个 CIF 有几个 A-level alert，给一下完整 HTML"                        # [question][imperative]
+      - "发表前跑一遍 IUCr 的 CIF 在线验证"                                     # [imperative][workflow]
+      - "PLATON checkCIF 报告拿来贴 SI，跑一下"                                 # [imperative][workflow]
+      - "这个 refined CIF 提交 IUCr 验证一下"                                   # [imperative]
+      - "这个 CIF 的 B-level 和 A-level alert 分别有几个"                       # [question][task-only]  *v6*
+      - "在线检查一下这个 CIF 的发表质量"                                       # [imperative][task-only]
+      - "Run the IUCr checkCIF on this CIF and tell me how many A-level alerts"  # [english]
+      - "Submit my refined CIF to PLATON checkCIF and summarize the alert table"  # [english]
+    negative:
+      - "帮我做 PXRD 的 Rietveld 精修"                 # → pxrd-refinement
+      - "标定一下这个 XRD 的峰位"                      # → mcp-mat-xrd
+      - "把这个 CIF 转成 POSCAR"                       # → atomic-structure
+      - "帮我看一下这个 CIF 的对称性"                  # → atomic-structure
+      - "用 GSAS-II 做 Pawley 提取晶胞参数"            # → pxrd-refinement
+
+  - skill: pxrd-refinement
+    positive:
+      - "用 GSAS-II 跑 Pawley 精修出晶胞"                                       # [imperative][explicit]
+      - "PXRD + 初始 CIF，跑 Rietveld 给 Rwp"                                   # [imperative]
+      - "Pawley 提取晶胞参数，带 ESD"                                           # [imperative][task-only]
+      - "有 PXRD 和空间群但没有 CIF，能精修晶胞参数吗"                          # [question]
+      - "PXRD 只有峰位，autoindex 猜一组候选晶胞"                               # [imperative][explicit]
+      - "粉末衍射数据跑全谱拟合得到精修后的结构"                                # [imperative][task-only]
+      - "锂电 cathode 精修，PXRD + CIF 跑 Rietveld"                             # [imperative][workflow]
+      - "10 个温度点的 PXRD，每条都 Pawley"                                     # [imperative][workflow]
+      - "Refine this powder XRD pattern with Rietveld in GSAS-II, target Rwp < 10%"  # [english]
+      - "Run a Pawley refinement given space group P 6_3/m m c, output cell + ESD"  # [english]
+    negative:
+      - "帮我把 CIF 提交到 checkCIF 验证一下"          # → checkcif-validator
+      - "标定一下这个 XRD 峰对应什么物相"              # → mcp-mat-xrd
+      - "用 SHELX 精修这个单晶数据"                    # → (single-crystal, not in scope)
+      - "画一下这个 PXRD 数据"                         # → data-analysis
+      - "帮我下载石墨烯的 CIF"                         # → atomic-structure
+
+  - skill: aissq-explorer
+    positive:
+      - "搜索是否可用含能材料的机器学习势函数"                                  # [imperative][task-only]  *v6*
+      - "AIS Square 上 DPA-3-NM 现在最新到哪一版"                               # [question][explicit]
+      - "DP 系列 universal 势函数的下载入口"                                    # [question][task-only]
+      - "找一个公开金属合金 DFT 数据集做 fine-tune"                             # [imperative][workflow]
+      - "DPA-2 omat head 的 ckpt 哪里下"                                        # [question][explicit]
+      - "AIS Square 上有没有专门针对 oxides 的 DP 预训练 head"                  # [question][explicit]  *v6*
+      - "公开 registry 上有哪些 DPA 变体可下载"                                 # [question]
+      - "拿一个公开 DFT 数据集做 MLIP 微调"                                     # [imperative][workflow]
+      - "Pull the latest DPA-3 finetuning checkpoint from the public registry"  # [english]
+      - "Find an open DFT-labeled training dataset for transition metals on the AIS Square registry"  # [english]
+    negative:
+      - "用本地的 DPA-2 模型跑一个 MD"                          # → mlips
+      - "帮我训练一个 NEP 势函数"                               # → mlips
+      - "从 Materials Project 下载 SrTiO3"                      # → retrieve-structure
+      - "去 HuggingFace 上把 MACE-MP large 拉下来跑 NPT"         # → retrieve-structure + mlips
+      - "论文 SI 把 SevenNet-l3i5 的权重挂在 figshare 上了，拉下来跑一段 NPT"  # → retrieve-structure + mlips
+
+  - skill: retrieve-structure
+    positive:
+      - "这个 URL 是 POSCAR 直链，下载到 workspace"                             # [imperative][url]
+      - "文献 SI 这个 CIF 链接，下下来并 validate"                              # [imperative][url][workflow]
+      - "这个 supplementary HTML 页面里嵌了结构文件，抓出来"                    # [imperative][webpage]
+      - "把这个 CIF 转成 POSCAR，元素顺序也理一下"                              # [imperative][convert]
+      - "用 convert_format.py 把 CIF 转 LAMMPS data，带 type-map 和 atom-style"  # [imperative][explicit][convert]
+      - "把这条 XYZ 转成 CIF 并保留对称性"                                      # [imperative][convert]
+      - "用 assess_structure.py 验证一下这个 CIF 能不能被 ASE 读"               # [imperative][explicit][validate]
+      - "切完 slab 后跑 assess_structure 验证维度"                              # [imperative][workflow][validate]
+      - "Download this remote POSCAR URL, validate it, then convert to CIF"    # [english][url][convert][validate]
+      - "Fetch the top-3 perovskite CIFs matching ABO3 with formation energy below -2 eV/atom"  # [english][screening]
+    negative:
+      - "用 ASE 给我搭一个 fcc Ni 单胞"                # → build-crystal-from-params (moved out)
+      - "把这个 POSCAR 扩成 2x2x2 超胞"                # → transform-atomic-structure (moved out)
+      - "从 Cu bulk 切一个 (111) slab"                  # → assemble-atomic-structure (moved out)
+      - "看一下这个 CIF 的空间群是什么"                # → inspect-atomic-structure (moved out)
+      - "mp-149 的 CIF 帮我搜一下"                     # → mcp-mat-struct-db (simple formula lookup)
+
+
+  - skill: composition-optimization
+    positive:
+      - "用 DART GA 优化 FeCoNiMnAl 五元体系的成分"                             # [imperative][explicit]
+      - "LiNiCo + Mn 三元正极成分搜一下能量密度最优"                            # [imperative][task-only]
+      - "Ti-Al-V 合金成分优化，目标抗拉强度"                                    # [imperative][task-only]
+      - "多组分合金成分搜索跑一组"                                              # [imperative][task-only]
+      - "给定 composition 目标，转成具体候选结构"                               # [imperative]
+      - "设计一组 NiCo-base seed 用于后续 ML 训练"                              # [imperative][workflow]
+      - "固溶体做一次成分扫描，挑最稳的组分"                                    # [imperative][task-only]
+      - "Mo-Nb-Ta-W 难熔高熵合金成分怎么 GA 优化"                               # [question]
+      - "Run a DART-style composition GA on the Mg-Al-Zn alloy targeting yield strength"  # [english][explicit]
+      - "Optimize four-component refractory HEA composition for hot hardness"  # [english]
+    negative:
+      - "帮我下载 mp-22862 的 CIF"                     # → atomic-structure
+      - "用 CALYPSO 搜结构"                            # → atomic-structure
+      - "帮我做 Si 的 DFT 能带计算"                    # → vasp
+      - "给这个晶胞掺杂 5% Mg"                         # → atomic-structure
+      - "训练一个 MLIP 势函数"                         # → mlips
+
+  - skill: mcp-mat-nmr
+    positive:
+      - "我有一组 1H 和 13C 化学位移数据，帮我推断分子结构"
+      - "这个分子的 NMR 化学位移预测一下"
+      - "给定 SMILES，预测一下它的碳谱和氢谱"
+      - "我测了一个未知化合物的 NMR 谱，氢谱位移是 1.2, 3.4, 7.2 ppm，推一下可能的结构"
+      - "帮我从 NMR 数据库里查一下这组化学位移对应什么分子"
+      - "反向预测：已知 13C 位移为 20.1, 128.3, 130.5, 170.2 ppm，推断结构"
+      - "预测一下对乙酰氨基酚的 1H NMR 化学位移"
+      - "这个 NMR 谱图数据跟哪个候选分子最匹配"
+      - "我有一个分子式 C10H12O2，加上 NMR 数据，帮我判断结构"
+      - "Predict the 13C NMR chemical shifts for caffeine"
+    negative:
+      - "帮我用 ORCA 算 IR 光谱"                        # → orca
+      - "画一下这个分子的结构图"                        # → build-atomic-structure
+      - "搜索一篇关于 NMR 技术的文献"                  # → paper search, not NMR tool
+      - "帮我用 Gaussian 优化这个分子"                  # → other QC software
+      - "分析这个质谱数据"                              # → data-analysis

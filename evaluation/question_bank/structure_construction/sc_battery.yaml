@@ -1,0 +1,4378 @@
+version: v5
+capability: structure_construction
+domain: battery
+questions:
+- id: SC_solution_box_001_20260522
+  capability: structure_construction
+  domain: battery
+  intent: Build an electrolyte solution box at specified concentration and atom count.
+  human_prompt_seed: 请构建 1 mol/L ZnSO4 水溶液模型，总原子数约 2000 个，输出为 `ZnSO4_solution.cif`。
+  tags:
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: solution_artifact
+    value: ZnSO4_solution.cif
+  - key: must_parsable
+    value:
+      filename: ZnSO4_solution.cif
+  - key: must_atom_count
+    value:
+      filename: ZnSO4_solution.cif
+      expected: 2000
+      tolerance: 500
+  - key: must_elements
+    value:
+      filename: ZnSO4_solution.cif
+      elements: [Zn, S, O, H]
+  - key: min_distance
+    value:
+      filename: ZnSO4_solution.cif
+      min_distance_A: 0.8
+  - key: turn_budget
+    value:
+      max: 25
+  scoring_checklist:
+  - id: solution_artifact
+    criterion: ZnSO4_solution.cif written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_parsable
+    criterion: '[Must] Output file is parsable.'
+    axis: correctness
+    verify: struct_file_parsable
+  - id: must_atom_count
+    criterion: '[Must] Total atom count is approximately 2000 (1500-2500 acceptable).'
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: must_elements
+    criterion: '[Must] Structure contains all required elements (Zn, S, O, H).'
+    axis: correctness
+    verify: struct_file_elements_present
+  - id: min_distance
+    criterion: '[Must] No overlapping atoms — minimum interatomic distance at least 0.8 Å.'
+    axis: correctness
+    verify: struct_file_min_interatomic_distance
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: SC_ec_fluorination_001_20260525
+  capability: structure_construction
+  domain: battery
+  intent: Enumerate fluorine-substituted derivatives of EC molecule and output SMILES
+    list with 3D structures.
+  human_prompt_seed: '以碳酸乙烯酯 EC (SMILES: C1COC(=O)O1) 为母体，枚举所有将 H 替换为
+    F 的衍生物（1 个 F、2 个 F、3 个 F 三种情况），考虑对称性去重。将去重后的所有
+    unique SMILES 写入 `ec_fluorinated.csv`（含列 name, smiles, n_fluorine），并为每个衍生物生成
+    3D 构象文件放入 `structures/` 目录。'
+  tags:
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: csv_artifact
+    value: ec_fluorinated.csv
+  - key: must_csv_header
+    value:
+      filename: ec_fluorinated.csv
+      tokens:
+      - name
+      - smiles
+      - n_fluorine
+      flags: ''
+  - key: min_data_rows
+    value:
+      filename: ec_fluorinated.csv
+      min: 4
+      max: 10
+  - key: has_mono_f
+    value:
+      filename: ec_fluorinated.csv
+      pattern: ',1\s*$'
+      flags: m
+  - key: has_di_f
+    value:
+      filename: ec_fluorinated.csv
+      pattern: ',2\s*$'
+      flags: m
+  - key: has_tri_f
+    value:
+      filename: ec_fluorinated.csv
+      pattern: ',3\s*$'
+      flags: m
+  - key: turn_budget
+    value:
+      max: 20
+  scoring_checklist:
+  - id: csv_artifact
+    criterion: ec_fluorinated.csv written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_csv_header
+    criterion: '[Must] CSV contains required columns (name, smiles, n_fluorine).'
+    axis: correctness
+    verify: text_file_contains_all
+  - id: min_data_rows
+    criterion: CSV contains 4-10 data rows (unique derivatives from symmetry
+      deduplication).
+    axis: correctness
+    verify: csv_row_count
+  - id: has_mono_f
+    criterion: CSV contains at least one mono-fluorinated derivative (n_fluorine=1).
+    axis: correctness
+    verify: text_file_regex
+  - id: has_di_f
+    criterion: CSV contains at least one di-fluorinated derivative (n_fluorine=2).
+    axis: correctness
+    verify: text_file_regex
+  - id: has_tri_f
+    criterion: CSV contains at least one tri-fluorinated derivative (n_fluorine=3).
+    axis: correctness
+    verify: text_file_regex
+  - id: valid_smiles
+    criterion: All SMILES in the CSV are valid (parseable by RDKit) and each contains
+      the correct number of F atoms matching n_fluorine column.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: structures_generated
+    criterion: 3D structure files exist in structures/ directory, one per SMILES entry.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: SC_bat_ltp_001_20260519
+  capability: structure_construction
+  domain: battery
+  intent: Build LiTi2(PO4)3 NASICON structure with correct stoichiometry, testing
+    whether the agent includes all independent oxygen Wyckoff sites in the R-3c cell.
+  human_prompt_seed: 构建 LiTi₂(PO₄)₃ 的 NASICON 结构（空间群 R-3c），输出为 `ltp_nasicon.cif`。
+  tags:
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: file_exists
+    value: ltp_nasicon.cif
+  - key: formula
+    value:
+      filename: ltp_nasicon.cif
+      formula: Li6Ti12P18O72
+  - key: o_count
+    value:
+      filename: ltp_nasicon.cif
+      element: O
+      expected: 72
+      tolerance: 0
+  - key: total_atoms
+    value:
+      filename: ltp_nasicon.cif
+      expected: 108
+      tolerance: 0
+  - key: space_group_number
+    value:
+      filename: ltp_nasicon.cif
+      expected_number: 167
+      symprec: 0.1
+  - key: turn_budget
+    value:
+      max: 15
+  - key: token_budget_total
+    value:
+      max: 20000
+  scoring_checklist:
+  - id: file_exists
+    criterion: Agent writes `ltp_nasicon.cif` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: formula
+    criterion: Structure formula matches LiTi2(PO4)3 stoichiometry (Z=6 gives Li6Ti12P18O72
+      in the hexagonal cell).
+    axis: correctness
+    verify: struct_file_formula
+    weight: 2.0
+  - id: o_count
+    criterion: Structure contains exactly 72 oxygen atoms (from two independent 36f
+      Wyckoff sites). If only one O site is included, there would be only 36 O which
+      breaks PO4 tetrahedra.
+    axis: correctness
+    verify: struct_file_atom_count
+    weight: 2.0
+  - id: total_atoms
+    criterion: Total atom count is 108 (6 Li + 12 Ti + 18 P + 72 O).
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: space_group_number
+    criterion: Structure has R-3c symmetry (space group 167).
+    axis: correctness
+    verify: struct_file_space_group
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
+- id: SC_nfpp_al_dope_001_20260527
+  capability: structure_construction
+  domain: battery
+  priority: P1
+  intent: Test Al-doped NFPP supercell construction with structural sanity
+    verification. Agent must (1) retrieve the NFPP structure, (2) correctly identify
+    PO₄ vs P₂O₇ phosphorus sites, (3) substitute one PO₄-site P with Al in a
+    2×1×1 supercell, and (4) verify that the resulting Al-O bond lengths are
+    physically reasonable (~1.7-1.9 Å). From real trajectory where agent produced
+    Al-O = 0.989 Å without checking.
+  human_prompt_seed: '请获取 Na₄Fe₃(PO₄)₂P₂O₇（NFPP）结构（空间群 Pna2₁），构建 2×1×1 超胞，
+    然后用 Al 替换一个 P 原子来模拟掺杂。输出掺杂后的结构到 `NFPP_Al_doped.cif`。'
+  tags:
+  - struct_build
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: cif_artifact
+    value: NFPP_Al_doped.cif
+  - key: correct_supercell_composition
+    value:
+      filename: NFPP_Al_doped.cif
+      must_contain_elements: [Na, Fe, Al, P, O]
+      must_not_contain_elements: []
+  - key: correct_atom_count
+    value:
+      filename: NFPP_Al_doped.cif
+      expected: 208
+      tolerance: 13
+  - key: al_o_distance_reasonable
+    value:
+      filename: NFPP_Al_doped.cif
+      element_pair: [Al, O]
+      min_distance: 1.4
+      max_distance: 2.2
+      n_neighbors: 4
+  - key: turn_budget
+    value:
+      max: 15
+  scoring_checklist:
+  - id: cif_artifact
+    criterion: Agent writes a doped NFPP CIF file to workspace.
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+  - id: correct_supercell_composition
+    criterion: '[Must] CIF contains Al and has composition consistent with 2×1×1
+      NFPP supercell with one P→Al substitution (Na32Fe24Al1P31O120).'
+    axis: correctness
+    verify: struct_file_composition
+    weight: 1.0
+  - id: correct_atom_count
+    criterion: '[Must] The doped supercell has approximately 208 atoms (2×104 from
+      the unit cell). Acceptable range: 195-221.'
+    axis: correctness
+    verify: struct_file_atom_count
+    weight: 1.5
+  - id: al_o_distance_reasonable
+    criterion: '[Must] The CIF structure has physically reasonable Al-O distances
+      (1.4-2.2 Å). Distances < 1.0 Å or > 3.0 Å indicate an unphysical structure.'
+    axis: correctness
+    verify: struct_file_bond_range
+    weight: 2.5
+  - id: retrieves_from_database
+    criterion: Agent retrieves the NFPP structure from struct_db (using simplified
+      formula Na4Fe3P4O15 if needed) rather than manually constructing from
+      literature Wyckoff positions.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 1.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: SC_latp_composition_001_20260525v2
+  capability: structure_construction
+  domain: battery
+  intent: Construct Al-doped LATP structure from LiTi₂(PO₄)₃ R-3c cell with
+    correct stoichiometry (integer substitution or partial occupancy both valid).
+  human_prompt_seed: "基于 LiTi₂(PO₄)₃ 的 R-3c 单胞（Z=6），构建\
+    \ Li₁.₁₅Al₀.₁₅Ti₁.₈₅(PO₄)₃ 掺杂结构，输出为 `LATP_x015.cif`。\n"
+  tags:
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: cif_artifact
+    value: LATP_x015.cif
+  - key: must_parsable
+    value:
+      filename: LATP_x015.cif
+  - key: has_required_elements
+    value:
+      filename: LATP_x015.cif
+      must_contain_elements: [Li, Al, Ti, P, O]
+      must_not_contain_elements: []
+  - key: al_ti_ratio
+    value:
+      filename: LATP_x015.cif
+      element_a: Al
+      element_b: Ti
+      expected_ratio: 0.081
+      tolerance: 0.04
+  - key: turn_budget
+    value:
+      max: 18
+  scoring_checklist:
+  - id: cif_artifact
+    criterion: Agent writes LATP_x015.cif to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_parsable
+    criterion: '[Must] Output CIF is parsable.'
+    axis: correctness
+    verify: struct_file_parsable
+  - id: has_required_elements
+    criterion: '[Must] CIF contains all five elements (Li, Al, Ti, P, O) of LATP.'
+    axis: correctness
+    verify: struct_file_composition
+  - id: al_ti_ratio
+    criterion: '[Must] Al/Ti ratio is approximately 0.15/1.85 ≈ 0.081 (tolerance
+      ±0.04 to accept both integer approximation and partial occupancy).'
+    axis: correctness
+    verify: struct_file_stoichiometry_ratio
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+- id: SC_agnostic_001_20250618
+  capability: structure_construction
+  domain: battery
+  intent: Construct the primitive rock salt unit cell (space group Fm-3m) used as the basis lattice for
+    coupled cluster expansion of the LiMO2-LiF pseudobinary system, with the lattice parameter specified
+    in the paper.
+  human_prompt_seed: Construct the primitive rock salt unit cell used for cluster expansion in Richards
+    et al. 2018. The lattice is space group Fm-3m with a primitive cell lattice parameter of 3 Å. The
+    cation sublattice is occupied by Li/M (lithium + transition metal) atoms and the anion sublattice
+    by O/F (oxygen + fluorine) atoms. Write the resulting structure to rocksalt_primitive_3a.cif.
+  tags:
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: artifact_cif
+    value:
+      filename: rocksalt_primitive_3a.cif
+  - key: space_group
+    value:
+      flags: case_insensitive
+      tokens:
+      - Fm-3m
+      filename: rocksalt_primitive_3a.cif
+  - key: lattice_parameter
+    value:
+      checks:
+      - key: cell_length_a
+        max: 3.01
+        min: 2.99
+        allow_missing_key: false
+      filename: rocksalt_primitive_3a.cif
+  - key: atom_count
+    value:
+      checks:
+      - key: total_atoms
+        expected: 2
+        tolerance: 0
+      filename: rocksalt_primitive_3a.cif
+  - key: has_cation_site
+    value:
+      flags: case_insensitive
+      tokens:
+      - Li
+      filename: rocksalt_primitive_3a.cif
+  - key: has_anion_site
+    value:
+      flags: case_insensitive
+      tokens:
+      - O
+      filename: rocksalt_primitive_3a.cif
+  - key: grounding_source
+    value:
+      filename: rocksalt_primitive_3a.cif
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 40000
+  scoring_checklist:
+  - id: artifact_cif
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] CIF file rocksalt_primitive_3a.cif exists'
+  - id: space_group
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 20.0
+    criterion: '[Must] CIF specifies space group Fm-3m (or equivalent Hermann-Mauguin symbol)'
+  - id: lattice_parameter
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 25.0
+    criterion: '[Must] Lattice parameter a = 3.0 Å (tolerance ±0.01 Å)'
+  - id: atom_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 15.0
+    criterion: '[Must] Primitive cell contains exactly 2 atoms (1 cation + 1 anion)'
+  - id: has_cation_site
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] Structure includes Li as a cation species (representing the Li/M sublattice)'
+  - id: has_anion_site
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] Structure includes O as an anion species (representing the O/F sublattice)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] Output is grounded in the paper''s specification of the rock salt primitive cell'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Completes within 20 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] No tool-call retries needed'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Completes within 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Total token usage under 40,000'
+- id: SC_chgnet_001_20250626
+  capability: structure_construction
+  domain: battery
+  intent: Construct a disordered rocksalt supercell for Li₁.₁Mn₀.₈Ti₀.₁O₁.₉F₀.₁ and identify all tetrahedral
+    interstitial sites, classifying each as a 0-TM channel (no transition-metal neighbors) or n-TM channel
+    based on the number of nearest-neighbor TM cations.
+  human_prompt_seed: Construct a 2×2×2 supercell of the rocksalt structure (space group Fm-3m, a=4.2 Å)
+    with composition Li₁.₁Mn₀.₈Ti₀.₁O₁.₉F₀.₁. Randomly distribute Li, Mn, and Ti on the octahedral cation
+    sites and O and F on the anion sites. Then identify all tetrahedral interstitial sites in the supercell
+    and classify each one as a 0-TM, 1-TM, 2-TM, 3-TM, or 4-TM channel based on how many of its four nearest-neighbor
+    cation sites are occupied by transition metals (Mn or Ti). Save the structure as a POSCAR file named
+    `lmtof_rocksalt_2x2x2.vasp` and write the channel classification results to a JSON file named `tm_channel_analysis.json`.
+  tags:
+  - struct_transform
+  - struct_inspect
+  data_files: []
+  reference_answers:
+  - key: artifact_poscar
+    value: lmtof_rocksalt_2x2x2.vasp
+  - key: artifact_json
+    value: tm_channel_analysis.json
+  - key: composition_check
+    value:
+      tokens:
+      - Li
+      - Mn
+      - Ti
+      - O
+      - F
+      filename: lmtof_rocksalt_2x2x2.vasp
+  - key: channel_classification_keys
+    value:
+      tokens:
+      - 0-TM
+      - total_tet_sites
+      filename: tm_channel_analysis.json
+  - key: grounding_source
+    value:
+      filename: lmtof_rocksalt_2x2x2.vasp
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 1
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.25
+    criterion: '[Must] POSCAR file lmtof_rocksalt_2x2x2.vasp exists and contains a valid VASP structure
+      format.'
+  - id: artifact_json
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.25
+    criterion: '[Must] JSON file tm_channel_analysis.json exists with valid JSON content.'
+  - id: composition_check
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.15
+    criterion: '[Must] POSCAR contains all five element species: Li, Mn, Ti, O, F.'
+  - id: channel_classification_keys
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.15
+    criterion: '[Must] JSON file contains 0-TM channel count and total tetrahedral site count keys.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 0.1
+    criterion: '[Must] The constructed structure is grounded in the DRX rocksalt framework described in
+      the source paper.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completed within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retries needed.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completed within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Total tokens used within 80000.'
+- id: SC_drx_001_20250715
+  capability: structure_construction
+  domain: battery
+  intent: Construct a 2×2×2 disordered rocksalt supercell with mixed cation (Li, Mn, Ti) and anion (O,
+    F) sublattices for the composition Li₁.₂₅Mn₀.₄₅Ti₀.₃O₁.₈F₀.₂.
+  human_prompt_seed: 'Construct a 2×2×2 supercell of the disordered rocksalt cathode Li₁.₂₅Mn₀.₄₅Ti₀.₃O₁.₈F₀.₂
+    (space group Fm-3m, conventional lattice parameter a = 4.156 Å) using pymatgen. The conventional rocksalt
+    cell has 4 cation sites (Wyckoff 4a) and 4 anion sites (Wyckoff 4b). Scale the composition to the
+    64-atom supercell (32 cations + 32 anions): 20 Li, 7 Mn, 5 Ti on cation sites and 29 O, 3 F on anion
+    sites. Randomly assign species to sites and save the structure as a POSCAR file named drx_supercell.vasp.'
+  tags:
+  - struct_transform
+  data_files: []
+  reference_answers:
+  - key: vasp_exists
+    value: drx_supercell.vasp
+  - key: total_atoms_64
+    value:
+      checks:
+      - key: natoms
+        expected: 64
+        tolerance: 0
+      filename: drx_supercell.vasp
+  - key: li_count
+    value:
+      checks:
+      - key: Li
+        max: 21
+        min: 19
+        allow_missing_key: true
+      filename: drx_supercell.vasp
+  - key: mn_count
+    value:
+      checks:
+      - key: Mn
+        max: 8
+        min: 6
+        allow_missing_key: true
+      filename: drx_supercell.vasp
+  - key: ti_count
+    value:
+      checks:
+      - key: Ti
+        max: 6
+        min: 4
+        allow_missing_key: true
+      filename: drx_supercell.vasp
+  - key: o_count
+    value:
+      checks:
+      - key: O
+        max: 30
+        min: 28
+        allow_missing_key: true
+      filename: drx_supercell.vasp
+  - key: f_count
+    value:
+      checks:
+      - key: F
+        max: 4
+        min: 2
+        allow_missing_key: true
+      filename: drx_supercell.vasp
+  - key: lattice_param
+    value:
+      checks:
+      - key: a_supercell
+        max: 8.4
+        min: 8.25
+        allow_missing_key: true
+      filename: drx_supercell.vasp
+  - key: grounding_source
+    value:
+      filename: drx_supercell.vasp
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 100000
+  scoring_checklist:
+  - id: vasp_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.1
+    criterion: '[Must] Output file drx_supercell.vasp exists.'
+  - id: total_atoms_64
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.1
+    criterion: '[Must] Supercell contains exactly 64 atoms.'
+  - id: li_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.08
+    criterion: '[Suggested] Li count is 20 ± 1 (19-21).'
+  - id: mn_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.07
+    criterion: '[Suggested] Mn count is 7 ± 1 (6-8).'
+  - id: ti_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.07
+    criterion: '[Suggested] Ti count is 5 ± 1 (4-6).'
+  - id: o_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.07
+    criterion: '[Suggested] O count is 29 ± 1 (28-30).'
+  - id: f_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.06
+    criterion: '[Suggested] F count is 3 ± 1 (2-4).'
+  - id: lattice_param
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.1
+    criterion: '[Variable] Supercell lattice parameter a is 8.25-8.40 Å (2×4.156 Å = 8.312 Å ± tolerance).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 0.1
+    criterion: '[Must] The structure is grounded in the paper''s DRX cathode composition and rocksalt
+      Fm-3m space group.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: Completed within 30 turns.
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: No tool-call retries.
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: Completed within 600 seconds.
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: Total tokens within 100,000.
+- id: SC_drx_001_20260125
+  capability: structure_construction
+  domain: battery
+  intent: Construct a 2x2x2 supercell of the disordered rocksalt cathode Li1.2Mn0.2Ti0.4Cr0.2O2 (LMTC02O)
+    with random cation distribution on the fcc sublattice, matching the lattice constant 4.1420 Å reported
+    in Huang et al. 2021.
+  human_prompt_seed: Construct a 2×2×2 supercell of the disordered rocksalt cathode Li1.2Mn0.2Ti0.4Cr0.2O2
+    (LMTC02O) with lattice constant 4.1420 Å and space group Fm-3m. The cations (Li, Mn, Ti, Cr) should
+    be randomly distributed on the 4a Wyckoff sites of the rocksalt lattice, and oxygen on the 4b sites.
+    Save the structure as a POSCAR file named lmtc02o_2x2x2_poscar. Use pymatgen to generate the structure.
+  tags:
+  - struct_transform
+  data_files: []
+  reference_answers:
+  - key: artifact_poscar
+    value: lmtc02o_2x2x2_poscar
+  - key: text_poscar
+    value:
+      tokens:
+      - Direct
+      - Li
+      - Mn
+      - Ti
+      - Cr
+      - O
+      filename: lmtc02o_2x2x2_poscar
+  - key: numeric_poscar
+    value:
+      checks:
+      - key: a_lattice
+        max: 8.29
+        min: 8.28
+      - key: num_Li
+        expected: 48
+        tolerance: 0
+      - key: num_Mn
+        expected: 16
+        tolerance: 0
+      - key: num_Ti
+        expected: 32
+        tolerance: 0
+      - key: num_Cr
+        expected: 16
+        tolerance: 0
+      - key: num_O
+        expected: 128
+        tolerance: 0
+      filename: lmtc02o_2x2x2_poscar
+  - key: grounding_source
+    value:
+      filename: lmtc02o_2x2x2_poscar
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] lmtc02o_2x2x2_poscar file exists'
+  - id: text_poscar
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] POSCAR is in Direct coordinate format and contains Li, Mn, Ti, Cr, O species'
+  - id: numeric_poscar
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 25.0
+    criterion: '[Must] Lattice constant ~8.284 Å (2×4.142), atom counts: Li=48, Mn=16, Ti=32, Cr=16, O=128
+      (ratio 1.2:0.2:0.4:0.2:2.0 scaled to 2x2x2=64 metal + 128 O sites)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] Structure reflects Li1.2Mn0.2Ti0.4Cr0.2O2 composition and 4.1420 Å lattice constant
+      from the paper'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: Completed within 15 turns
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: No retry turns used
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: Completed within 300 seconds
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: Total tokens within 50,000
+- id: SC_matgen_001_20250610
+  capability: structure_construction
+  domain: battery
+  intent: Construct the O3-type R-3m LiCoO2 parent crystal structure using pymatgen and output it as a
+    POSCAR file. This structure serves as the starting point for Na-vacancy-ordered supercells in high-throughput
+    DFT studies of layered oxide battery cathodes.
+  human_prompt_seed: Construct the O3-type layered LiCoO2 crystal structure in the R-3m space group (No.
+    166) using pymatgen. Use lattice parameters a = 2.82 Å, c = 14.05 Å. Place Li at 3a (0,0,0), Co at
+    3b (0,0,0.5), and O at 6c (0,0,0.25). Write the structure to a file named `li_coo2_poscar` in the
+    working directory.
+  tags:
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: artifact_poscar
+    value:
+      filename: li_coo2_poscar
+  - key: grounding_source
+    value:
+      filename: li_coo2_poscar
+  - key: spacegroup_check
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - R-3m
+      - '166'
+      filename: li_coo2_poscar
+  - key: formula_check
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - Li
+      - Co
+      - O
+      filename: li_coo2_poscar
+  - key: atom_count
+    value:
+      checks:
+      - key: num_Li_atoms
+        expected: 3
+        tolerance: 0
+      - key: num_Co_atoms
+        expected: 3
+        tolerance: 0
+      - key: num_O_atoms
+        expected: 6
+        tolerance: 0
+      filename: li_coo2_poscar
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file `li_coo2_poscar` exists in the working directory.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The constructed structure is a valid LiCoO2 O3-type layered oxide in R-3m space
+      group, consistent with the source paper''s methodology.'
+  - id: spacegroup_check
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The structure belongs to space group R-3m (No. 166).'
+  - id: formula_check
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The structure contains Li, Co, and O elements in the correct stoichiometry.'
+  - id: atom_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] The POSCAR contains 3 Li, 3 Co, and 6 O atoms (the primitive R-3m cell).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: Agent completed within turn budget.
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: Agent did not request retries.
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: Agent completed within duration budget.
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: Agent completed within token budget.
+- id: SC_wulff_003_20250623
+  capability: structure_construction
+  domain: battery
+  intent: Construct the Wulff equilibrium shape for Li₃InCl₆ from a set of surface energies for different
+    crystal facets, using the Wulff construction method described in the paper.
+  human_prompt_seed: Given surface energies for multiple crystal facets of Li₃InCl₆, construct the Wulff
+    equilibrium shape using pymatgen's WulffShape class. Save the Wulff shape object information and the
+    Miller indices of the facets that appear on the final shape to wulff_shape_output.txt in the current
+    working directory.
+  tags: []
+  data_files:
+  - key: surface_energies
+    path: li3incl6_surface_energies
+    oss_url: ''
+    description: 'Surface energies (in J/m²) for multiple crystal facets of Li₃InCl₆: (001), (010), (100),
+      (110), (111), (1-11) as calculated by DFT with PBE+vdW-DF'
+  reference_answers:
+  - key: artifact_output
+    value:
+      filename: wulff_shape_output.txt
+  - key: text_output_content
+    value:
+      flags: case_insensitive
+      tokens:
+      - wulff
+      - facet
+      - surface energy
+      - miller
+      filename: wulff_shape_output.txt
+  - key: text_low_energy_facets
+    value:
+      flags: case_insensitive
+      tokens:
+      - '001'
+      filename: wulff_shape_output.txt
+  - key: text_area_volume_ratio
+    value:
+      flags: case_insensitive
+      tokens:
+      - area
+      - volume
+      filename: wulff_shape_output.txt
+  - key: grounding_source
+    value:
+      filename: li3incl6_surface_energies
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 400
+  - key: token_budget_total
+    value:
+      max: 40000
+  scoring_checklist:
+  - id: artifact_output
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file wulff_shape_output.txt exists'
+  - id: text_output_content
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Output file contains Wulff construction results with facet information and surface
+      energies'
+  - id: text_low_energy_facets
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Suggested] Output identifies the (001) facet as a low-energy surface exposed in the Wulff
+      shape (consistent with layered structure)'
+  - id: text_area_volume_ratio
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.3
+    criterion: '[Variable] Output includes geometric properties such as surface area and volume of the
+      Wulff shape'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Task is grounded in the Li₃InCl₆ surface energy data from the seed file'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 1.0
+    criterion: '[Must] Agent completes within 20 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 1.0
+    criterion: '[Must] Agent does not retry any tool calls'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 1.0
+    criterion: '[Must] Agent completes within 400 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 1.0
+    criterion: '[Must] Agent uses fewer than 40000 tokens total'
+- id: SC_lioxide_001_20250115
+  capability: structure_construction
+  domain: battery
+  intent: Construct a 2×2×1 supercell of LiCoO₂ in the O3 layered structure (space group R-3m) containing
+    12 formula units, then remove two adjacent Li atoms from the Li layer to create a divacancy configuration
+    suitable for Li migration barrier calculations.
+  human_prompt_seed: Using the provided LiCoO₂ unit cell (licoo2_unitcell.cif), construct a 2×2×1 supercell
+    in the O3 layered structure (R-3m). Remove exactly two adjacent Li atoms from the same Li layer to
+    create a divacancy configuration for migration barrier calculations. Save the result as a POSCAR file
+    named licoo2_divacancy_supercell.vasp.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: licoo2_unitcell
+    path: licoo2_unitcell.cif
+    oss_url: ''
+    description: Primitive unit cell of LiCoO₂ (O3 structure, space group R-3m) from Materials Project.
+      The agent should build a 2×2×1 supercell from this.
+  reference_answers:
+  - key: artifact_poscar
+    value: licoo2_divacancy_supercell.vasp
+  - key: atom_count
+    value:
+      checks:
+      - key: total_atoms
+        expected: 46
+        tolerance: 0
+      filename: licoo2_divacancy_supercell.vasp
+  - key: li_count
+    value:
+      checks:
+      - key: Li_atoms
+        expected: 10
+        tolerance: 0
+      filename: licoo2_divacancy_supercell.vasp
+  - key: co_count
+    value:
+      checks:
+      - key: Co_atoms
+        expected: 12
+        tolerance: 0
+      filename: licoo2_divacancy_supercell.vasp
+  - key: o_count
+    value:
+      checks:
+      - key: O_atoms
+        expected: 24
+        tolerance: 0
+      filename: licoo2_divacancy_supercell.vasp
+  - key: grounding_source
+    value:
+      filename: licoo2_unitcell.cif
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 30.0
+    criterion: '[Must] Output file licoo2_divacancy_supercell.vasp exists and is a valid VASP POSCAR format.'
+  - id: atom_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 20.0
+    criterion: '[Must] Total atom count is exactly 46 (12 formula units minus 2 Li vacancies).'
+  - id: li_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 15.0
+    criterion: '[Must] Exactly 10 Li atoms remain (2 vacancies created from 12 original Li sites).'
+  - id: co_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] Exactly 12 Co atoms (unchanged from 12 formula units).'
+  - id: o_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] Exactly 24 O atoms (unchanged from 12 formula units).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 15.0
+    criterion: '[Must] The constructed structure is derived from the provided LiCoO₂ unit cell (mp-755047,
+      O3 R-3m structure).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Variable] Agent completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Variable] Agent does not exceed retry budget.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Variable] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Variable] Agent stays within 50000 total token budget.'
+- id: SC_lzcl_001_20250618
+  capability: structure_construction
+  domain: battery
+  intent: Construct a 2x2x2 supercell of Li2ZrCl6 (LZC) from its primitive cell structure and report the
+    resulting lattice parameters, atom counts per species, and space group.
+  human_prompt_seed: Using the provided LZC primitive cell file (lzcl_primitive.cif), construct a 2x2x2
+    supercell suitable for molecular dynamics simulation. Write the resulting structure to supercell_2x2x2.cif
+    and report the lattice parameters (a, b, c, α, β, γ), the total number of atoms, and the atom count
+    per element (Li, Zr, Cl). Save the summary to structure_report.txt.
+  tags: []
+  data_files:
+  - key: lzcl_primitive
+    path: lzcl_primitive.cif
+    oss_url: ''
+    description: 'Primitive cell CIF of alpha-Li2ZrCl6 (hexagonal close-packed Cl framework, space group
+      P-3m1). The agent should construct this from the crystallographic parameters: hcp anion framework
+      with Li/Zr/vacancy ordering on cation sites as described in the paper.'
+  reference_answers:
+  - key: artifact_supercell
+    value: supercell_2x2x2.cif
+  - key: artifact_report
+    value: structure_report.txt
+  - key: atom_ratio
+    value:
+      checks:
+      - key: Li_Zr_Cl_ratio
+        expected: '2:1:6'
+      filename: structure_report.txt
+  - key: formula_units
+    value:
+      checks:
+      - key: n_formula_units
+        max: 16
+        min: 4
+      filename: structure_report.txt
+  - key: space_group
+    value:
+      flags: []
+      tokens:
+      - P-3m1
+      - '164'
+      - hexagonal
+      filename: structure_report.txt
+  - key: grounding_source
+    value:
+      filename: lzcl_primitive.cif
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_supercell
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] Output file supercell_2x2x2.cif exists and is a valid CIF file'
+  - id: artifact_report
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] Output file structure_report.txt exists and contains structure summary'
+  - id: atom_ratio
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 15.0
+    criterion: '[Must] Atomic ratio Li:Zr:Cl = 2:1:6 consistent with Li2ZrCl6 stoichiometry'
+  - id: formula_units
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Suggested] Number of formula units in supercell is between 4 and 16 (consistent with
+      2x2x2 expansion)'
+  - id: space_group
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Suggested] Space group is identified as P-3m1 (No. 164) or hexagonal'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 5.0
+    criterion: '[Must] Answer is grounded in the provided LZC primitive structure file'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completed within 15 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent did not retry any tool call'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completed within 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent used fewer than 50000 tokens total'
+- id: SC_pymatgen_003_20250618
+  capability: structure_construction
+  domain: battery
+  intent: Construct a disordered-rocksalt supercell for the Li2Mn2/3Nb1/3O2F cathode material using pymatgen,
+    based on the Rietveld-refined structural parameters (space group Fm-3m, a=4.2615 A) from the paper.
+  human_prompt_seed: Construct a disordered-rocksalt crystal structure for Li2Mn2/3Nb1/3O2F using pymatgen.
+    Use space group Fm-3m (number 225) with lattice parameter a=4.2615 Angstrom. Place Li, Mn, and Nb
+    on the 4a Wyckoff site (0,0,0) and O and F on the 4b Wyckoff site (0.5,0.5,0.5) according to the target
+    stoichiometry Li2Mn2/3Nb1/3O2F. Create a 2x2x2 supercell of the conventional cell to obtain a model
+    suitable for DFT. Save the resulting structure as a POSCAR file named li2_mn2_3_nb1_3_o2_f_poscar.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: poscar_exists
+    value: li2_mn2_3_nb1_3_o2_f_poscar
+  - key: poscar_lattice
+    value:
+      checks:
+      - key: a_lattice
+        max: 8.55
+        min: 8.5
+        allow_missing_key: false
+      - key: b_lattice
+        max: 8.55
+        min: 8.5
+        allow_missing_key: false
+      - key: c_lattice
+        max: 8.55
+        min: 8.5
+        allow_missing_key: false
+      filename: li2_mn2_3_nb1_3_o2_f_poscar
+  - key: poscar_contains_elements
+    value:
+      flags: case_insensitive
+      tokens:
+      - Li
+      - Mn
+      - Nb
+      - O
+      - F
+      filename: li2_mn2_3_nb1_3_o2_f_poscar
+  - key: poscar_atom_count
+    value:
+      flags: regex_line_6
+      pattern: ^(\d+\s+){4}\d+\s*$
+      filename: li2_mn2_3_nb1_3_o2_f_poscar
+  - key: grounding_source
+    value:
+      filename: li2_mn2_3_nb1_3_o2_f_poscar
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: poscar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] POSCAR file ''li2_mn2_3_nb1_3_o2_f_poscar'' exists'
+  - id: poscar_lattice
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Lattice parameters of the 2x2x2 supercell are approximately 8.523 A (2 x 4.2615
+      A) for all three axes'
+  - id: poscar_contains_elements
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] POSCAR contains all five element types: Li, Mn, Nb, O, F'
+  - id: poscar_atom_count
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Variable] POSCAR line 6 contains integer atom counts summing to 192 (32 formula units
+      x 6 atoms/f.u.) or a similar supercell size'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The structure parameters are grounded in the source paper''s Rietveld refinement
+      data'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: Agent completes within turn budget
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: Agent does not retry failed tool calls
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: Agent completes within duration budget
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: Agent stays within total token budget
+- id: SC_olivine_001_20250612
+  capability: structure_construction
+  domain: battery
+  intent: Construct a 1×2×2 supercell of olivine LiFePO₄ from the Materials Project structure, then verify
+    the supercell contains the expected number of atoms and report the lattice parameters.
+  human_prompt_seed: Using pymatgen, read the primitive LiFePO₄ structure from lifepo4_primitive.cif,
+    construct a 1×2×2 supercell, and write it to lifepo4_supercell_1x2x2.cif. Also write a summary file
+    supercell_summary.txt containing the supercell lattice parameters (a, b, c in Å) and the total number
+    of atoms.
+  tags: []
+  data_files:
+  - key: lifepo4_primitive
+    path: lifepo4_primitive.cif
+    oss_url: ''
+    description: Primitive unit cell of olivine LiFePO₄ from Materials Project
+  reference_answers:
+  - key: artifact_supercell_cif
+    value: lifepo4_supercell_1x2x2.cif
+  - key: artifact_summary_txt
+    value: supercell_summary.txt
+  - key: supercell_lattice_a
+    value:
+      checks:
+      - key: a
+        max: 11.0
+        min: 10.0
+        tolerance: 0.05
+      filename: supercell_summary.txt
+  - key: supercell_lattice_b
+    value:
+      checks:
+      - key: b
+        max: 12.4
+        min: 11.8
+        tolerance: 0.05
+      filename: supercell_summary.txt
+  - key: supercell_lattice_c
+    value:
+      checks:
+      - key: c
+        max: 9.8
+        min: 9.3
+        tolerance: 0.05
+      filename: supercell_summary.txt
+  - key: total_atoms
+    value:
+      checks:
+      - key: natoms
+        expected: 96
+        tolerance: 0
+      filename: supercell_summary.txt
+  - key: grounding_source
+    value:
+      filename: lifepo4_primitive.cif
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_supercell_cif
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The file lifepo4_supercell_1x2x2.cif exists and is a valid CIF file.'
+  - id: artifact_summary_txt
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The file supercell_summary.txt exists and contains lattice parameters and atom
+      count.'
+  - id: supercell_lattice_a
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Supercell lattice parameter a is approximately 10.45 Å (within ±0.3 Å of the
+      paper value scaled by 1×).'
+  - id: supercell_lattice_b
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Supercell lattice parameter b is approximately 12.12 Å (6.06 Å × 2).'
+  - id: supercell_lattice_c
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Supercell lattice parameter c is approximately 9.50 Å (4.75 Å × 2).'
+  - id: total_atoms
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] The supercell contains exactly 96 atoms (24 atoms/unit cell × 4 supercell replicas).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The answer is grounded in the provided LiFePO₄ structure file.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 20 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry failed tool calls.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 80000 tokens total.'
+- id: SC_rocksalt_001_20260109
+  capability: structure_construction
+  domain: battery
+  intent: Construct a 120-atom disordered rocksalt supercell for the Li-excess cathode material Li1.3Mn0.4Nb0.3O1.6F0.4
+    (LMNOF), matching the composition Li39Mn12Nb9O48F12 used in the paper's ensemble-average SGCMC simulations.
+  human_prompt_seed: Construct a 120-atom disordered rocksalt supercell for Li1.3Mn0.4Nb0.3O1.6F0.4 (LMNOF)
+    with composition Li39Mn12Nb9O48F12. The structure should follow the rocksalt (Fm-3m) motif with cations
+    (Li, Mn, Nb) randomly distributed on the cation sublattice and anions (O, F) randomly distributed
+    on the anion sublattice. Save the final structure as a POSCAR file named `lmnof_120atom_rocksalt.vasp`
+    in the current working directory.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_poscar
+    value:
+      filename: lmnof_120atom_rocksalt.vasp
+  - key: atom_count_li
+    value:
+      checks:
+      - key: n_Li
+        expected: 39
+        tolerance: 0
+      filename: lmnof_120atom_rocksalt.vasp
+  - key: atom_count_mn
+    value:
+      checks:
+      - key: n_Mn
+        expected: 12
+        tolerance: 0
+      filename: lmnof_120atom_rocksalt.vasp
+  - key: atom_count_nb
+    value:
+      checks:
+      - key: n_Nb
+        expected: 9
+        tolerance: 0
+      filename: lmnof_120atom_rocksalt.vasp
+  - key: atom_count_o
+    value:
+      checks:
+      - key: n_O
+        expected: 48
+        tolerance: 0
+      filename: lmnof_120atom_rocksalt.vasp
+  - key: atom_count_f
+    value:
+      checks:
+      - key: n_F
+        expected: 12
+        tolerance: 0
+      filename: lmnof_120atom_rocksalt.vasp
+  - key: total_atoms
+    value:
+      checks:
+      - key: n_total
+        expected: 120
+        tolerance: 0
+      filename: lmnof_120atom_rocksalt.vasp
+  - key: lattice_parameter
+    value:
+      checks:
+      - key: a_angstrom
+        max: 10.5
+        min: 9.5
+      filename: lmnof_120atom_rocksalt.vasp
+  - key: grounding_source
+    value:
+      filename: lmnof_120atom_rocksalt.vasp
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 1
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] The file lmnof_120atom_rocksalt.vasp exists and is a valid POSCAR format.'
+  - id: atom_count_li
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] The structure contains exactly 39 Li atoms.'
+  - id: atom_count_mn
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] The structure contains exactly 12 Mn atoms.'
+  - id: atom_count_nb
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] The structure contains exactly 9 Nb atoms.'
+  - id: atom_count_o
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] The structure contains exactly 48 O atoms.'
+  - id: atom_count_f
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] The structure contains exactly 12 F atoms.'
+  - id: total_atoms
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] The total number of atoms is exactly 120.'
+  - id: lattice_parameter
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 5.0
+    criterion: '[Suggested] The supercell lattice constant is approximately 10 Å (within 9.5–10.5 Å).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 5.0
+    criterion: '[Must] The structure is grounded in the source paper''s LMNOF composition.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] The agent completes the task within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] The agent does not retry any tool call more than once.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] The agent completes the task within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] The agent uses fewer than 50000 tokens total.'
+- id: SC_structure_003_20260508
+  capability: structure_construction
+  domain: battery
+  intent: Construct rocksalt, zinc-blende, and wurtzite polymorph structures for LiCl using pymatgen,
+    then compute their volumes per atom for comparison as done in the Yang et al. 2019 polymorph energy
+    study.
+  human_prompt_seed: 'Using pymatgen, construct three polymorph structures for LiCl: (1) rocksalt (Fm-3m,
+    space group 225), (2) zinc-blende (F-43m, space group 216), and (3) wurtzite (P6_3mc, space group
+    186). Use a lattice parameter of 5.0 Angstrom for rocksalt, and reasonable starting values for zinc-blende
+    and wurtzite. Write the three POSCAR files as poscar_rocksalt.vasp, poscar_zincblende.vasp, and poscar_wurtzite.vasp.
+    Also write a summary JSON file polymorph_summary.json containing the volume per atom for each structure.'
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_rocksalt
+    value: poscar_rocksalt.vasp
+  - key: artifact_zincblende
+    value: poscar_zincblende.vasp
+  - key: artifact_wurtzite
+    value: poscar_wurtzite.vasp
+  - key: artifact_summary
+    value: polymorph_summary.json
+  - key: grounding_source
+    value:
+      filename: polymorph_summary.json
+  - key: text_summary_keys
+    value:
+      tokens:
+      - rocksalt
+      - zinc_blende
+      - wurtzite
+      - volume_per_atom
+      filename: polymorph_summary.json
+  - key: numeric_vol_rocksalt
+    value:
+      checks:
+      - key: rocksalt.volume_per_atom
+        max: 20
+        min: 10
+      filename: polymorph_summary.json
+  - key: numeric_vol_zb
+    value:
+      checks:
+      - key: zinc_blende.volume_per_atom
+        max: 25
+        min: 10
+      filename: polymorph_summary.json
+  - key: numeric_vol_wz
+    value:
+      checks:
+      - key: wurtzite.volume_per_atom
+        max: 25
+        min: 10
+      filename: polymorph_summary.json
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 32000
+  scoring_checklist:
+  - id: artifact_rocksalt
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] poscar_rocksalt.vasp exists.'
+  - id: artifact_zincblende
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] poscar_zincblende.vasp exists.'
+  - id: artifact_wurtzite
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] poscar_wurtzite.vasp exists.'
+  - id: artifact_summary
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] polymorph_summary.json exists.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The summary file contains volume-per-atom data for all three polymorphs.'
+  - id: text_summary_keys
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] Summary JSON contains keys for rocksalt, zinc_blende, wurtzite, and volume_per_atom.'
+  - id: numeric_vol_rocksalt
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] Rocksalt LiCl volume per atom is ~12-15 Å³ (a=5.0 Å → V_cell=125 Å³, 8 atoms
+      → ~15.6 Å³/atom).'
+  - id: numeric_vol_zb
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] Zinc-blende LiCl volume per atom is in a reasonable range (10-25 Å³).'
+  - id: numeric_vol_wz
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] Wurtzite LiCl volume per atom is in a reasonable range (10-25 Å³).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: Completes within 20 turns.
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: No retry requests issued.
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: Completes within 300 seconds.
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: Uses fewer than 32000 tokens total.
+- id: SC_spinelvar_002_20250508
+  capability: structure_construction
+  domain: battery
+  intent: Construct all 8 crystallographically distinct spinel variants (α₁–α₄, β₁–β₄) from the parent
+    rocksalt lattice by assigning cation occupancies to the 16c and 16d Wyckoff sites, following the group
+    theory analysis in the paper.
+  human_prompt_seed: Starting from the provided limno2_rocksalt.cif rocksalt structure, construct all
+    8 crystallographically distinct spinel variants (α₁–α₄ and β₁–β₄) by assigning cation species to the
+    16c (vacant in spinel) and 16d (TM-occupied in spinel) Wyckoff sites of the Fd-3m spinel superstructure.
+    Save each variant as a separate POSCAR file named variant_alpha1.vasp through variant_beta4.vasp.
+  tags: []
+  data_files:
+  - key: parent_rocksalt
+    path: limno2_rocksalt.cif
+    oss_url: ''
+    description: LiMnO2 rocksalt parent structure (Fm-3m) from Materials Project, used as the parent lattice
+      for spinel variant construction.
+  reference_answers:
+  - key: artifact_variant_files
+    value: variant_alpha1.vasp
+  - key: artifact_count
+    value: variant_beta4.vasp
+  - key: spacegroup_check
+    value:
+      checks:
+      - key: spacegroup_number
+        expected: 227
+        tolerance: 0
+      filename: variant_alpha1.vasp
+  - key: grounding_source
+    value:
+      filename: limno2_rocksalt.cif
+  - key: turn_budget
+    value:
+      max: 25
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_variant_files
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] At least 8 variant POSCAR files exist (variant_alpha1.vasp through variant_beta4.vasp).'
+  - id: artifact_count
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] All 8 variant files are present: alpha1, alpha2, alpha3, alpha4, beta1, beta2,
+      beta3, beta4.'
+  - id: spacegroup_check
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] Each variant structure has space group Fd-3m (No. 227), consistent with the δ-phase
+      spinel structure.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The agent constructed variants from the provided rocksalt parent structure file.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completed within turn budget.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent did not exceed retry budget.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completed within duration budget.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent completed within token budget.'
+- id: SC_mno2_001_20250618
+  capability: structure_construction
+  domain: battery
+  intent: Construct the β-MnO2 (pyrolusite, rutile-type) crystal structure from experimental lattice parameters
+    and space group using pymatgen, and save as a CIF file.
+  human_prompt_seed: 'Construct the β-MnO2 (pyrolusite) crystal structure using pymatgen. Space group
+    is P42/mnm (No. 136). Experimental lattice parameters: a=4.39 Å, b=4.39 Å, c=2.871 Å. Use the standard
+    rutile-type Wyckoff positions (Mn at 2a, O at 4f with x=0.305). Save the structure to beta_mno2.cif.'
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_cif
+    value: beta_mno2.cif
+  - key: volume_per_fu
+    value:
+      checks:
+      - key: volume_per_fu
+        max: 28.5
+        min: 27.0
+        expected: 27.8
+        tolerance: 0.5
+        allow_missing_key: false
+      filename: beta_mno2.cif
+  - key: grounding_source
+    value:
+      filename: beta_mno2.cif
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_cif
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file beta_mno2.cif exists and is a valid CIF file.'
+  - id: volume_per_fu
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Volume per formula unit is between 27.0 and 28.5 Å³ (expected 27.8 Å³ from
+      Table I).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The constructed structure is grounded in the experimental parameters from the source
+      paper (Table I).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 15 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not request human clarification.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 50000 total tokens.'
+- id: SC_spin_interface_001_20260528
+  capability: structure_construction
+  domain: battery
+  intent: Construct a crystallographic interface supercell between two distinct spinel variants (alpha_1
+    and alpha_3) of LiMn2O4 along the (100) plane, with two interfaces per periodic cell separated by
+    at least 10 Angstroms.
+  human_prompt_seed: Construct an interface supercell between spinel variants alpha_1 and alpha_3 of LiMn2O4
+    along the (100) crystallographic plane. Use the provided spinel CIF as the parent structure. Build
+    a periodic supercell containing two interfaces along the x-y plane (at z=0 and z=0.5) with at least
+    10 Angstroms separation between them. Assign variant alpha_1 to the lower half (0 < z <= 0.5) and
+    variant alpha_3 to the upper half (z > 0.5). Output the final interface supercell as limn2o4_alpha1_alpha3_100.vasp
+    (POSCAR format) and a summary JSON file interface_summary.json listing the lattice parameters, interface
+    plane, and variant assignments.
+  tags:
+  - code_mlip
+  data_files:
+  - key: spinel_cif
+    path: limn2o4_spinel.cif
+    oss_url: ''
+    description: LiMn2O4 spinel structure (Fd-3m) from Materials Project, used as the parent structure
+      for constructing spinel variant domains.
+  reference_answers:
+  - key: artifact_poscar
+    value:
+      filename: limn2o4_alpha1_alpha3_100.vasp
+  - key: artifact_json
+    value:
+      filename: interface_summary.json
+  - key: numeric_lattice
+    value:
+      checks:
+      - key: c_lattice
+        max: 30.0
+        min: 10.0
+        expected: null
+        tolerance: 0
+        allowed_values: null
+        allow_missing_key: false
+      filename: limn2o4_alpha1_alpha3_100.vasp
+  - key: numeric_interfaces
+    value:
+      checks:
+      - key: n_interfaces
+        expected: 2
+        tolerance: 0
+        allow_missing_key: false
+      filename: interface_summary.json
+  - key: grounding_source
+    value:
+      filename: limn2o4_alpha1_alpha3_100.vasp
+  - key: turn_budget
+    value:
+      max: 50
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file limn2o4_alpha1_alpha3_100.vasp exists and is a valid POSCAR/VASP structure
+      file.'
+  - id: artifact_json
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file interface_summary.json exists and contains valid JSON with lattice
+      parameters, interface plane, and variant assignment fields.'
+  - id: numeric_lattice
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] The c-lattice parameter (interface separation direction) is between 10.0 and 30.0
+      Angstroms, ensuring >= 10 Angstrom separation between the two interfaces in the periodic cell.'
+  - id: numeric_interfaces
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] The interface summary reports exactly 2 interfaces in the supercell.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The output structure is a valid spinel-derived interface supercell consistent with
+      the LiMn2O4 parent structure (mp-4215) provided as input.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes the task within 50 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry any tool call more than 3 times.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes the task within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses no more than 80,000 tokens total.'
+- id: SC_inpaint_004_20250618
+  capability: structure_construction
+  domain: battery
+  intent: Given a crystal structure containing Li intercalants, remove all Li atoms to create the host
+    structure, then randomly re-insert Li atoms at random fractional coordinates within the unit cell
+    to create a corrupted structure for inpainting.
+  human_prompt_seed: 'Given the crystal structure file li_ionic_crystal.cif in the working directory,
+    create a corrupted structure for crystal inpainting: (1) Identify and remove all Li atoms to produce
+    the host-only structure, saving it as host_structure.cif. (2) Randomly re-insert the same number of
+    Li atoms at random fractional coordinates (fx, fy, fz) drawn from a normal distribution N(0, I) wrapped
+    into [0,1), saving the corrupted structure as corrupted_structure.cif. (3) Write a JSON file inpainting_config.json
+    containing: number of Li atoms removed, host composition, and the fractional coordinates of each re-inserted
+    Li atom.'
+  tags: []
+  data_files:
+  - key: li_structure
+    path: li_ionic_crystal.cif
+    oss_url: ''
+    description: A Li-containing ionic crystal structure from Materials Project (LiCoO2, mp-18770)
+  reference_answers:
+  - key: host_structure_exists
+    value: host_structure.cif
+  - key: corrupted_structure_exists
+    value: corrupted_structure.cif
+  - key: config_exists
+    value: inpainting_config.json
+  - key: host_no_li
+    value:
+      flags:
+      - re.MULTILINE
+      - re.DOTALL
+      pattern: ^(?!.*\bLi\b)
+      filename: host_structure.cif
+  - key: corrupted_has_li
+    value:
+      pattern: Li
+      filename: corrupted_structure.cif
+  - key: config_li_count
+    value:
+      checks:
+      - key: num_li_removed
+        max: 100
+        min: 1
+        allow_missing_key: false
+      filename: inpainting_config.json
+  - key: config_coordinates
+    value:
+      checks:
+      - key: li_coordinates_length
+        max: 100
+        min: 1
+        allow_missing_key: false
+      filename: inpainting_config.json
+  - key: grounding_source
+    value:
+      filename: inpainting_config.json
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: host_structure_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] File host_structure.cif exists in the working directory'
+  - id: corrupted_structure_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] File corrupted_structure.cif exists in the working directory'
+  - id: config_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] File inpainting_config.json exists in the working directory'
+  - id: host_no_li
+    axis: correctness
+    verify: text_file_regex
+    weight: 10.0
+    criterion: '[Must] host_structure.cif does NOT contain Li atoms (all Li removed)'
+  - id: corrupted_has_li
+    axis: correctness
+    verify: text_file_regex
+    weight: 10.0
+    criterion: '[Must] corrupted_structure.cif contains Li atoms (Li re-inserted)'
+  - id: config_li_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 5.0
+    criterion: '[Suggested] inpainting_config.json reports a positive number of Li atoms removed (between
+      1 and 100)'
+  - id: config_coordinates
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 5.0
+    criterion: '[Suggested] inpainting_config.json contains fractional coordinates for each re-inserted
+      Li atom'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] The corrupted structure preparation follows the inpainting methodology described
+      in the source paper (remove intercalants, random re-insertion with normal distribution)'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes the task within 20 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry any tool calls'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes the task within 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses no more than 50000 tokens total'
+- id: SC_substitution_003_20250711
+  capability: structure_construction
+  domain: battery
+  intent: Given a seed compound structure from Materials Project, apply ionic substitutions above a probability
+    threshold using the Hautier et al. substitution model, verify charge balance, and generate candidate
+    compound formulas and structure files.
+  human_prompt_seed: 'Given the LiFePO4 seed structure (lifepo4_structure.cif) and Fe2+ substitution probabilities
+    (fe2_substitution_probs.json), apply the ionic substitution prediction pipeline from Hautier et al.
+    2011: for each candidate ion with substitution probability > 0.1, construct the substituted compound
+    formula, verify charge balance, and save the resulting candidate structures as CIF files in a candidates/
+    directory. Also write candidates_summary.json listing all valid candidates with their formulas and
+    substitution probabilities.'
+  tags: []
+  data_files:
+  - key: seed_structure
+    path: lifepo4_structure.cif
+    oss_url: ''
+    description: CIF file for LiFePO4 (olivine structure, MP-19009), the seed compound for ionic substitution.
+      Fe2+ is the target site for substitution.
+  - key: substitution_probs
+    path: fe2_substitution_probs.json
+    oss_url: ''
+    description: 'JSON mapping of Fe2+ substitution probabilities to other divalent cations: {ion: probability}.
+      Includes Ni2+, Co2+, Mn2+, Mg2+, Zn2+, Cu2+, Ca2+, Sr2+, Ba2+ with probabilities derived from the
+      Hautier et al. 2011 model.'
+  reference_answers:
+  - key: artifact_candidates_summary
+    value:
+      filename: candidates_summary.json
+  - key: artifact_candidate_cifs
+    value:
+      filename: candidates/linipo4.cif
+  - key: grounding_source
+    value:
+      filename: lifepo4_structure.cif
+  - key: candidate_count
+    value:
+      checks:
+      - key: num_candidates
+        max: 9
+        min: 3
+        allow_missing_key: true
+      filename: candidates_summary.json
+  - key: linipo4_present
+    value:
+      checks:
+      - key: candidates.LiNiPO4.probability
+        max: 1.0
+        min: 0.3
+        allow_missing_key: true
+      filename: candidates_summary.json
+  - key: charge_balance
+    value:
+      checks:
+      - key: all_charge_balanced
+        expected: true
+        tolerance: 0
+      filename: candidates_summary.json
+  - key: threshold_applied
+    value:
+      checks:
+      - key: min_probability
+        max: 0.15
+        min: 0.1
+        allow_missing_key: true
+      filename: candidates_summary.json
+  - key: turn_budget
+    value:
+      max: 35
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 720
+  - key: token_budget_total
+    value:
+      max: 100000
+  scoring_checklist:
+  - id: artifact_candidates_summary
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file candidates_summary.json exists and is valid JSON.'
+  - id: artifact_candidate_cifs
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] At least one candidate CIF file exists in candidates/ directory (e.g., linipo4.cif).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The task uses the provided LiFePO4 seed structure and substitution probabilities,
+      grounded in the Hautier et al. 2011 substitution model.'
+  - id: candidate_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Number of valid candidate compounds is between 3-9 (reasonable number of divalent
+      cations with probability > 0.1).'
+  - id: linipo4_present
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] LiNiPO4 is among the candidates with probability > 0.3, as the paper explicitly
+      states Ni2+ substitutes well for Fe2+ in olivine phosphates.'
+  - id: charge_balance
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] All candidate compounds are charge balanced, per the requirement in Section 2.5
+      of the paper.'
+  - id: threshold_applied
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Variable] The minimum substitution probability among candidates is approximately 0.1
+      (the threshold specified in the prompt).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 35 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not request any retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 720 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses no more than 100000 total tokens.'
+- id: SC_pymatgen_002_20250625
+  capability: structure_construction
+  domain: battery
+  intent: Construct a P2 Na_xCoO2 supercell (4×4×1 conventional cells, 32 formula units) at Na concentration
+    x=0.69 (22 Na atoms) using pymatgen, starting from the Materials Project structure.
+  human_prompt_seed: Using pymatgen, construct a 4×4×1 supercell of P2 NaCoO2 with Na concentration x
+    = 0.69 (22 Na atoms out of 32 sites). Start from the provided p2_nacoo2.cif file. Save the resulting
+    POSCAR as poscar_p2_nacoo2_x069.vasp in the working directory.
+  tags: []
+  data_files:
+  - key: p2_nacoo2_cif
+    path: p2_nacoo2.cif
+    oss_url: ''
+    description: P2 NaCoO2 primitive cell from Materials Project as the parent structure.
+  reference_answers:
+  - key: artifact_poscar
+    value:
+      filename: poscar_p2_nacoo2_x069.vasp
+      description: Generated POSCAR for P2 Na_0.69CoO2 4×4×1 supercell.
+  - key: text_poscar_elements
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - Na
+      - Co
+      - O
+      filename: poscar_p2_nacoo2_x069.vasp
+  - key: numeric_poscar_na_count
+    value:
+      checks:
+      - key: Na_count
+        expected: 22
+        tolerance: 0
+      filename: poscar_p2_nacoo2_x069.vasp
+  - key: numeric_poscar_co_count
+    value:
+      checks:
+      - key: Co_count
+        expected: 32
+        tolerance: 0
+      filename: poscar_p2_nacoo2_x069.vasp
+  - key: numeric_poscar_o_count
+    value:
+      checks:
+      - key: O_count
+        expected: 64
+        tolerance: 0
+      filename: poscar_p2_nacoo2_x069.vasp
+  - key: grounding_source
+    value:
+      filename: p2_nacoo2.cif
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 1
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 30000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] POSCAR file exists with the specified filename.'
+  - id: text_poscar_elements
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] POSCAR contains Na, Co, and O elements.'
+  - id: numeric_poscar_na_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] Exactly 22 Na atoms (x=0.69 of 32 sites).'
+  - id: numeric_poscar_co_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] Exactly 32 Co atoms (one per formula unit in 4×4×1 supercell).'
+  - id: numeric_poscar_o_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Must] Exactly 64 O atoms (two per formula unit in 4×4×1 supercell).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The supercell is derived from the provided P2 NaCoO2 CIF.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completes within turn budget.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retries needed.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completes within duration budget.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Stays within total token budget.'
+- id: SC_surface_001_20250618
+  capability: structure_construction
+  domain: battery
+  intent: Construct a slab model for the nonpolar (10-14) surface of LiCoO2 using pymatgen, matching the
+    surface unit cell dimensions reported in the literature.
+  human_prompt_seed: Using the bulk LiCoO2 structure in licoo2_bulk.cif, construct a slab model for the
+    (10-14) nonpolar surface using pymatgen's SlabGenerator. Use a minimum slab thickness of 10 Å and
+    a vacuum layer of 15 Å. Save the slab structure as licoo2_1014_slab.cif. Write a summary file slab_summary.txt
+    containing the surface Miller indices, slab thickness, vacuum thickness, and the 2D surface unit cell
+    vectors (lengths and angle).
+  tags:
+  - struct_surface
+  data_files:
+  - key: licoo2_bulk_cif
+    path: licoo2_bulk.cif
+    oss_url: ''
+    description: Bulk LiCoO2 crystal structure (R-3m, a=2.826 Å, c=14.207 Å).
+  reference_answers:
+  - key: artifact_slab_cif
+    value:
+      filename: licoo2_1014_slab.cif
+  - key: artifact_summary
+    value:
+      filename: slab_summary.txt
+  - key: text_surface_index
+    value:
+      flags:
+        allow_any: true
+      tokens:
+      - 10-14
+      - (10-14)
+      - (1014)
+      - '1014'
+      filename: slab_summary.txt
+  - key: numeric_slab_thickness
+    value:
+      checks:
+      - key: slab_thickness
+        max: 20.0
+        min: 8.0
+        expected: 10.0
+        tolerance: 2.0
+      filename: slab_summary.txt
+  - key: numeric_vacuum_thickness
+    value:
+      checks:
+      - key: vacuum_thickness
+        max: 20.0
+        min: 12.0
+        expected: 15.0
+        tolerance: 3.0
+      filename: slab_summary.txt
+  - key: grounding_source
+    value:
+      filename: licoo2_bulk.cif
+  - key: turn_budget
+    value:
+      max: 25
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_slab_cif
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file licoo2_1014_slab.cif exists and is a valid CIF file.'
+  - id: artifact_summary
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file slab_summary.txt exists.'
+  - id: text_surface_index
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Summary identifies the surface as (10-14) or (1014).'
+  - id: numeric_slab_thickness
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Slab thickness is between 8-20 Å, consistent with the requested ≥10 Å minimum.'
+  - id: numeric_vacuum_thickness
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Vacuum layer is between 12-20 Å, consistent with the requested 15 Å.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The slab is derived from the LiCoO2 bulk structure from the source paper.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: turn_budget
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: no_retries
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: duration_budget
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: token_budget_total
+- id: SC_matgen_002_20250610
+  capability: structure_construction
+  domain: battery
+  intent: Generate a Na-vacancy-ordered Na_{1/2}MO2 supercell with the electrostatically favorable √3×√3
+    ordering pattern on the triangular lattice, starting from the O3-type parent structure. This ordering
+    appears as a ground state in all seven TM systems studied in the paper.
+  human_prompt_seed: Starting from an O3-type LiCoO2 structure in R-3m space group (a = 2.82 Å, c = 14.05
+    Å), construct a 3×3×1 supercell and substitute Li with Na. Then remove exactly half of the Na atoms
+    to create the √3×√3 vacancy ordering pattern at x_Na = 1/2, where Na ions and vacancies alternate
+    in a hexagonal pattern within each Na layer. Write the resulting structure to a file named `na_half_moo2_supercell_poscar`
+    in the working directory.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_poscar
+    value:
+      filename: na_half_moo2_supercell_poscar
+  - key: grounding_source
+    value:
+      filename: na_half_moo2_supercell_poscar
+  - key: composition_check
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - Na
+      - Co
+      - O
+      filename: na_half_moo2_supercell_poscar
+  - key: na_fraction
+    value:
+      checks:
+      - key: na_to_metal_ratio
+        max: 0.55
+        min: 0.45
+        expected: 0.5
+        tolerance: 0.01
+      filename: na_half_moo2_supercell_poscar
+  - key: supercell_size
+    value:
+      checks:
+      - key: total_formula_units
+        max: 30
+        min: 24
+      filename: na_half_moo2_supercell_poscar
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file `na_half_moo2_supercell_poscar` exists in the working directory.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The structure represents a Na-vacancy-ordered Na_{1/2}MO2 supercell with a √3×√3-type
+      ordering pattern, consistent with Fig. 6(g) in the source paper.'
+  - id: composition_check
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The structure contains Na, Co (or another TM), and O elements.'
+  - id: na_fraction
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] The Na-to-transition-metal ratio is approximately 0.5 (i.e., x_Na ≈ 1/2).'
+  - id: supercell_size
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] The supercell contains approximately 27 formula units (3×3×1 expansion of
+      the 3-atom primitive cell).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: Agent completed within turn budget.
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: Agent did not request retries.
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: Agent completed within duration budget.
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: Agent completed within token budget.
+- id: SC_pymatgen_002_20250610
+  capability: structure_construction
+  domain: battery
+  intent: Enumerate all symmetrically distinct atomic configurations for a cation-disordered Li-TM oxide
+    composition in a specified supercell, using group-theoretical symmetry analysis to eliminate duplicates.
+  human_prompt_seed: Enumerate all symmetrically distinct atomic configurations for LiNi0.5Ti0.5O2 in
+    a 2x2x1 supercell of the rocksalt structure. The cation sublattice should be decorated with Ni and
+    Ti atoms in a 1:1 ratio while keeping Li and O on their ideal sublattices. Use symmetry analysis to
+    eliminate duplicate configurations. Save each unique configuration as a separate POSCAR file in a
+    subdirectory called 'configurations/', and write a summary JSON file listing the number of distinct
+    configurations found and the space group of each.
+  tags: []
+  data_files:
+  - key: primitive_cif
+    path: primitive_rocksalt.cif
+    description: Primitive rocksalt cell for LiTMO2 supercell enumeration
+  reference_answers:
+  - key: artifact_summary
+    value: summary.json
+  - key: artifact_config_dir
+    value: configurations/
+  - key: text_json_keys
+    value:
+      flags: []
+      tokens:
+      - n_configurations
+      - configurations
+      filename: summary.json
+  - key: numeric_n_configurations
+    value:
+      checks:
+      - key: n_configurations
+        max: 500
+        min: 5
+      filename: summary.json
+  - key: numeric_poscar_count
+    value:
+      checks:
+      - key: file_count
+        max: 500
+        min: 5
+      filename: configurations/
+  - key: grounding_source
+    value:
+      filename: primitive_rocksalt.cif
+  - key: turn_budget
+    value:
+      max: 40
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 100000
+  scoring_checklist:
+  - id: artifact_summary
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] summary.json file exists in the working directory'
+  - id: artifact_config_dir
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] configurations/ directory exists'
+  - id: text_json_keys
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] summary.json contains required keys: n_configurations and configurations'
+  - id: numeric_n_configurations
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Suggested] Number of distinct configurations is between 5 and 500 (reasonable range for
+      2x2x1 supercell enumeration)'
+  - id: numeric_poscar_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] Number of POSCAR files matches n_configurations in summary'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] Configurations are derived from the provided primitive rocksalt cell'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 40 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not retry failed operations unnecessarily'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses fewer than 100000 tokens total'
+- id: SC_spinel_001_20250618
+  capability: structure_construction
+  domain: battery
+  intent: Construct the cubic spinel LiMn2O4 crystal structure (space group Fd-3m, No. 227) and save as
+    a POSCAR file.
+  human_prompt_seed: Construct the cubic spinel LiMn2O4 crystal structure (space group Fd-3m, No. 227)
+    with lattice parameter a ≈ 8.24 Å. Place Li at 8a Wyckoff positions (1/8, 1/8, 1/8), Mn at 16d positions
+    (1/2, 1/2, 1/2), and O at 32e positions (u, u, u) with u ≈ 0.26. Save the structure as a POSCAR file
+    named `poscar_spinel_limn2o4`.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_poscar
+    value:
+      filename: poscar_spinel_limn2o4
+  - key: contains_elements
+    value:
+      flags:
+      - -i
+      tokens:
+      - Li
+      - Mn
+      - O
+      filename: poscar_spinel_limn2o4
+  - key: spacegroup_fdm3m
+    value:
+      flags:
+      - -i
+      pattern: Fd-3m|227
+      filename: poscar_spinel_limn2o4
+  - key: lattice_cubic
+    value:
+      checks:
+      - key: a
+        max: 8.5
+        min: 8.0
+      - key: b
+        max: 8.5
+        min: 8.0
+      - key: c
+        max: 8.5
+        min: 8.0
+      filename: poscar_spinel_limn2o4
+  - key: atom_count_li
+    value:
+      flags:
+      - -m
+      pattern: ^\s*8\s*$
+      filename: poscar_spinel_limn2o4
+  - key: grounding_source
+    value:
+      filename: poscar_spinel_limn2o4
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file poscar_spinel_limn2o4 exists and is a valid POSCAR-format crystal structure.'
+  - id: contains_elements
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] POSCAR contains all three elements: Li, Mn, and O.'
+  - id: spacegroup_fdm3m
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] POSCAR is consistent with space group Fd-3m (No. 227) — verify via pymatgen SpacegroupAnalyzer
+      or equivalent.'
+  - id: lattice_cubic
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] Lattice parameters are cubic with a, b, c each in [8.0, 8.5] Å range.'
+  - id: atom_count_li
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] The structure contains 8 Li atoms (8 formula units of LiMn2O4 in the conventional
+      cell).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The constructed structure matches the spinel LiMn2O4 described in the source paper
+      (Li at 8a, Mn at 16d, O at 32e in Fd-3m).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: Completes within 15 turns.
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: No retries needed.
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: Completes within 300 seconds.
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: Total tokens consumed ≤ 50000.
+- id: SC_pymatgen_001_20250815
+  capability: structure_construction
+  domain: battery
+  intent: Construct the orthorhombic Na4TiP2O9 (HT-NTP) structure from space group Bmem (67) with the
+    prototype topology described in the paper, then enumerate symmetrically inequivalent sodium vacancy
+    orderings for the Na4 4a site.
+  human_prompt_seed: Using pymatgen, construct the orthorhombic Na4TiP2O9 (HT-NTP) structure in Bmem (space
+    group 67) with the prototype topology from the provided prototype_info.json, then enumerate all symmetrically
+    inequivalent sodium vacancy orderings where the Na4 4a Wyckoff site is vacant. Save the enumerated
+    structures as individual POSCAR files numbered na4tip2o9_vacancy_001.vasp, na4tip2o9_vacancy_002.vasp,
+    etc.
+  tags: []
+  data_files:
+  - key: prototype_info
+    path: ht_ntp_prototype.json
+    oss_url: ''
+    description: JSON metadata for the HT-NTP orthorhombic prototype (ICSD 39702, Bmem space group 67)
+      including Wyckoff positions and lattice parameters.
+  reference_answers:
+  - key: vacancy_files_exist
+    value:
+      filename: na4tip2o9_vacancy_*.vasp
+      min_count: 1
+  - key: grounding_source
+    value:
+      filename: ht_ntp_prototype.json
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: vacancy_files_exist
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] At least one POSCAR file matching the pattern na4tip2o9_vacancy_*.vasp exists,
+      representing an enumerated sodium vacancy ordering.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The agent uses the provided prototype_info.json to construct the structure.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Variable] Agent completes the task within the turn budget.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Variable] Agent does not retry failed tool calls unnecessarily.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Variable] Agent completes the task within the duration budget.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Variable] Agent completes the task within the total token budget.'
+- id: SC_rocksalt_001_20250624
+  capability: structure_construction
+  domain: battery
+  intent: Construct a disordered rocksalt supercell structure for the Li-ion cathode composition Li1.171Mn0.343V0.486O1.8F0.2
+    (ST-LMVF20) using a rocksalt lattice with Fm-3m symmetry and lattice parameter ~4.175 Å.
+  human_prompt_seed: Construct a disordered rocksalt supercell for the composition Li1.171Mn0.343V0.486O1.8F0.2
+    on a rocksalt lattice (Fm-3m, a ≈ 4.175 Å). Use a supercell of at least 2×2×2 conventional cells to
+    represent the disorder. Distribute Li, Mn, V on the cation sublattice and O, F on the anion sublattice
+    according to the stoichiometry. Save the structure as a POSCAR file named stmvf20_rocksalt.vasp.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: poscar_exists
+    value: stmvf20_rocksalt.vasp
+  - key: poscar_has_elements
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - Li
+      - Mn
+      - V
+      - O
+      - F
+      filename: stmvf20_rocksalt.vasp
+  - key: poscar_has_rocksalt_lattice
+    value:
+      flags:
+      - multiline
+      pattern: ^\s*[3-5]\.[0-9]+\s+[3-5]\.[0-9]+\s+[3-5]\.[0-9]+\s*$
+      filename: stmvf20_rocksalt.vasp
+  - key: grounding_source
+    value:
+      filename: stmvf20_rocksalt.vasp
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: poscar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] POSCAR file stmvf20_rocksalt.vasp exists'
+  - id: poscar_has_elements
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] POSCAR contains all five element species: Li, Mn, V, O, F'
+  - id: poscar_has_rocksalt_lattice
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.5
+    criterion: '[Suggested] Lattice vectors are consistent with rocksalt symmetry (diagonal elements ~4.0-4.3
+      Å)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Structure is a disordered rocksalt for the specified Li-Mn-V-O-F cathode composition'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: Completes within turn budget
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: No unnecessary retries
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: Completes within duration budget
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: Completes within token budget
+- id: SC_ce_001_20250615
+  capability: structure_construction
+  domain: battery
+  intent: Map a DFT-relaxed rocksalt structure back to the ideal disordered lattice using pymatgen's StructureMatcher,
+    producing a refined structure with sites aligned to the reference lattice.
+  human_prompt_seed: Using pymatgen's StructureMatcher, map the DFT-relaxed structure (relaxed_rocksalt.cif)
+    back to the ideal rocksalt lattice (ideal_rocksalt.cif). Determine the site-to-site mapping and produce
+    a refined structure where relaxed atoms are assigned to their corresponding ideal lattice sites. Save
+    the mapping to site_mapping.json and the refined structure to refined_rocksalt.cif.
+  tags: []
+  data_files:
+  - key: ideal_rocksalt
+    path: ideal_rocksalt.cif
+    oss_url: ''
+    description: Ideal rocksalt LiF primitive cell from Materials Project, used as the reference disordered
+      lattice for structure mapping.
+  - key: relaxed_structure
+    path: relaxed_rocksalt.cif
+    oss_url: ''
+    description: DFT-relaxed rocksalt structure with small atomic displacements (~0.1 Å) simulating post-relaxation
+      geometry. Generated by perturbing the ideal structure.
+  reference_answers:
+  - key: artifact_site_mapping
+    value:
+      filename: site_mapping.json
+  - key: artifact_refined_structure
+    value:
+      filename: refined_rocksalt.cif
+  - key: text_contains_match
+    value:
+      flags: []
+      tokens:
+      - StructureMatcher
+      filename: site_mapping.json
+  - key: numeric_num_mapped_sites
+    value:
+      checks:
+      - key: num_mapped_sites
+        max: 100
+        min: 1
+        allow_missing_key: false
+      filename: site_mapping.json
+  - key: grounding_source
+    value:
+      filename: ideal_rocksalt.cif
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_site_mapping
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file site_mapping.json exists and is valid JSON containing the site-to-site
+      mapping.'
+  - id: artifact_refined_structure
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file refined_rocksalt.cif exists and is a valid CIF file.'
+  - id: text_contains_match
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The mapping output references the StructureMatcher algorithm from pymatgen.'
+  - id: numeric_num_mapped_sites
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] The number of mapped sites is between 1 and 100 (consistent with a small supercell).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The answer is grounded in the provided ideal rocksalt structure file.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Variable] Agent completed within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Variable] Agent did not retry any tool calls.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Variable] Agent completed within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Variable] Agent used fewer than 80000 tokens total.'
+- id: SC_vdoped_004_20250618
+  capability: structure_construction
+  domain: battery
+  intent: Construct a V-doped LiTi2(PO4)3 supercell by replacing 2 P atoms with V atoms in the LiTi2(PO4)3
+    structure (mp-18640), approximating the experimental composition LiTi2(VO4)0.3(PO4)2.7 described in
+    section 4.1 of the paper.
+  human_prompt_seed: Given the CIF file `li_ti2_po4_3.cif` for LiTi2(PO4)3, construct a doped supercell
+    by replacing exactly 2 phosphorus (P) atoms with vanadium (V) atoms. This approximates the experimental
+    composition LiTi2(VO4)0.3(PO4)2.7 from the paper. Use pymatgen to perform the substitution and save
+    the resulting structure as `li_ti2_vo4_doped.cif`. Report the final chemical formula and the number
+    of each atom type.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: li_ti2_po4_3
+    path: li_ti2_po4_3.cif
+    oss_url: ''
+    description: LiTi2(PO4)3 structure from Materials Project (mp-18640) in CIF format.
+  reference_answers:
+  - key: artifact_doped_cif
+    value:
+      filename: li_ti2_vo4_doped.cif
+  - key: formula_check
+    value:
+      flags: []
+      tokens:
+      - Li
+      - Ti
+      - V
+      - P
+      - O
+      filename: li_ti2_vo4_doped.cif
+  - key: v_count
+    value:
+      flags: []
+      pattern: V\s+2
+      filename: li_ti2_vo4_doped.cif
+  - key: grounding_source
+    value:
+      filename: li_ti2_vo4_doped.cif
+      description: V-doped structure constructed per Section 4.1 methodology replacing 2 P with V atoms.
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: artifact_doped_cif
+    axis: correctness
+    verify: artifact_exists
+    weight: 30.0
+    criterion: '[Must] li_ti2_vo4_doped.cif exists and is a valid CIF file.'
+  - id: formula_check
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 20.0
+    criterion: '[Must] The doped structure contains Li, Ti, V, P, and O atoms.'
+  - id: v_count
+    axis: correctness
+    verify: text_file_regex
+    weight: 20.0
+    criterion: '[Must] Exactly 2 V atoms are present (replacing 2 P atoms).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] The structure follows the V-doping approach from Section 4.1 of the paper.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Complete within 15 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] No tool-call retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Complete within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Use fewer than 80000 tokens total.'
+- id: SC_sqs_001_20250618
+  capability: structure_construction
+  domain: battery
+  intent: Construct a special quasi-random structure (SQS) for a cation-disordered rocksalt (DRX) Li-ion
+    cathode with composition Li1.3Mn0.4Ti0.3O1.7F0.3, using a supercell of at least 3×3×3 conventional
+    rocksalt unit cells and matching the target site occupancies.
+  human_prompt_seed: Generate a special quasi-random structure (SQS) for the cation-disordered rocksalt
+    composition Li1.3Mn0.4Ti0.3O1.7F0.3 in the tm2_composition.json file. The structure should be based
+    on a rocksalt Fm-3m lattice with a=4.1918 Å, with Li and transition metals (Mn, Ti) randomly distributed
+    on the cation sublattice and O/F on the anion sublattice. Use a supercell of at least 3×3×3 conventional
+    rocksalt unit cells (108 cation sites + 108 anion sites). Write the resulting SQS POSCAR to sqs_tm2.vasp.
+  tags: []
+  data_files:
+  - key: composition
+    path: tm2_composition.json
+    oss_url: ''
+    description: 'Target composition specification for the TM2 DRX cathode: Li1.3Mn0.4Ti0.3O1.7F0.3 in
+      a rocksalt Fm-3m lattice with a=4.1918 Å'
+  reference_answers:
+  - key: artifact_sqs_poscar
+    value:
+      filename: sqs_tm2.vasp
+  - key: poscar_has_direct
+    value:
+      tokens:
+      - Direct
+      - Li
+      - Mn
+      - Ti
+      - O
+      - F
+      filename: sqs_tm2.vasp
+  - key: poscar_site_count
+    value:
+      checks:
+      - key: num_sites
+        expected: 216
+        tolerance: 2
+        allow_missing_key: false
+      filename: sqs_tm2.vasp
+  - key: grounding_source
+    value:
+      filename: tm2_composition.json
+  - key: turn_budget
+    value:
+      max: 40
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 900
+  - key: token_budget_total
+    value:
+      max: 150000
+  scoring_checklist:
+  - id: artifact_sqs_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 2.0
+    criterion: '[Must] sqs_tm2.vasp file exists in the output directory'
+  - id: poscar_has_direct
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+    criterion: '[Must] POSCAR contains all required elements (Li, Mn, Ti, O, F) and uses Direct coordinates'
+  - id: poscar_site_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+    criterion: '[Suggested] POSCAR has approximately 216 total atomic sites (within ±2 for rounding of
+      fractional occupancies)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+    criterion: '[Must] The SQS structure corresponds to the TM2 DRX composition specified in the input
+      file'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 40 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent completes without exceeding 3 retries on any single tool call'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 900 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 150000 total tokens'
+- id: SC_pymatgen_001_20260508
+  capability: structure_construction
+  domain: battery
+  intent: Construct the Li10GeP2S12 (LGPS) crystal structure from published lattice parameters and space
+    group information, and output a CIF file.
+  human_prompt_seed: Construct the crystal structure of Li10GeP2S12 (LGPS) from its crystallographic data
+    and write it to lgps_structure.cif. Use the tetragonal P4₂/nmc space group with lattice parameters
+    a = 8.561 Å, b = 8.847 Å, c = 12.929 Å, α = 91.97°, β = 90.63°, γ = 90.24°. The structure contains
+    Li, Ge, P, and S atoms in the characteristic LGPS framework of (Ge/P)S₄ and PS₄ tetrahedra with Li
+    in octahedral and tetrahedral sites.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_cif
+    value: lgps_structure.cif
+  - key: text_cif_elements
+    value:
+      flags:
+      - ignore_case
+      tokens:
+      - Li
+      - Ge
+      - P
+      - S
+      filename: lgps_structure.cif
+  - key: numeric_volume
+    value:
+      checks:
+      - key: volume_A3
+        max: 1000
+        min: 950
+        expected: 979
+      filename: lgps_structure.cif
+  - key: numeric_lattice_a
+    value:
+      checks:
+      - key: cell_length_a
+        max: 8.7
+        min: 8.4
+        expected: 8.561
+      filename: lgps_structure.cif
+  - key: numeric_lattice_c
+    value:
+      checks:
+      - key: cell_length_c
+        max: 13.1
+        min: 12.7
+        expected: 12.929
+      filename: lgps_structure.cif
+  - key: numeric_atom_count
+    value:
+      checks:
+      - key: num_sites
+        max: 30
+        min: 20
+        expected: 24
+      filename: lgps_structure.cif
+  - key: grounding_source
+    value: {}
+  - key: duration_budget
+    value:
+      max: 600
+  - key: no_retries
+    value:
+      max: 0
+  - key: token_budget_total
+    value:
+      max: 50000
+  - key: turn_budget
+    value:
+      max: 30
+  scoring_checklist:
+  - id: artifact_cif
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] A file lgps_structure.cif exists in the working directory.'
+  - id: text_cif_elements
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The CIF file contains all four element types: Li, Ge, P, and S.'
+  - id: numeric_volume
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.8
+    criterion: '[Suggested] The unit cell volume is in the range 950-1000 Å³ (paper value: 979 Å³ from
+      Table 2).'
+  - id: numeric_lattice_a
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.8
+    criterion: '[Suggested] The lattice parameter a is in the range 8.4-8.7 Å (paper value: 8.561 Å).'
+  - id: numeric_lattice_c
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.8
+    criterion: '[Suggested] The lattice parameter c is in the range 12.7-13.1 Å (paper value: 12.929 Å).'
+  - id: numeric_atom_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] The total number of atomic sites is in the range 20-30 (expected ~24 for LGPS
+      unit cell).'
+  - id: grounding_check
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The answer is grounded in the crystallographic data from the LGPS paper (lattice
+      parameters from Table 2, space group P4₂/nmc).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: Completed within turn budget.
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: No retries needed.
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: Completed within duration budget.
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: Completed within token budget.
+- id: SC_pymatgen_001_20250615
+  capability: structure_construction
+  domain: battery
+  intent: Construct a 2×2×2 supercell of the cation-disordered rocksalt Li1.2Mn0.4Ti0.4O2 (LMTO) with
+    the correct lattice parameter (a = 4.15 Å) and random cation distribution on the rocksalt sublattice,
+    using pymatgen.
+  human_prompt_seed: Construct a 2×2×2 supercell of the cation-disordered rocksalt structure Li1.2Mn0.4Ti0.4O2
+    (LMTO) with space group Fm-3m (No. 225) and lattice parameter a = 4.15 Å. Randomly distribute Li,
+    Mn, and Ti on the cation 4a Wyckoff sites and O on the anion 4b sites according to the stoichiometry.
+    Save the structure as a POSCAR file named lmto_supercell.vasp in the current directory.
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: poscar_exists
+    value: lmto_supercell.vasp
+  - key: species_present
+    value:
+      tokens:
+      - Li
+      - Mn
+      - Ti
+      - O
+      filename: lmto_supercell.vasp
+  - key: lattice_params
+    value:
+      checks:
+      - key: a
+        expected: 4.15
+        tolerance: 0.05
+      - key: alpha
+        expected: 90
+        tolerance: 0.1
+      - key: beta
+        expected: 90
+        tolerance: 0.1
+      - key: gamma
+        expected: 90
+        tolerance: 0.1
+      filename: lmto_supercell.vasp
+  - key: atom_count
+    value:
+      checks:
+      - key: natoms
+        expected: 256
+        tolerance: 0
+      filename: lmto_supercell.vasp
+  - key: grounding_source
+    value:
+      filename: lmto_supercell.vasp
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: poscar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] POSCAR file lmto_supercell.vasp exists in the working directory.'
+  - id: species_present
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The POSCAR contains all four element species: Li, Mn, Ti, O.'
+  - id: lattice_params
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+    criterion: '[Must] Lattice parameter a ≈ 4.15 Å (±0.05 Å) and angles are 90° (cubic).'
+  - id: atom_count
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+    criterion: '[Must] Total atom count is 256 (2×2×2 conventional supercell of rocksalt with 32 atoms
+      per conventional cell × 8 = 256).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The structure corresponds to the LMTO composition Li1.2Mn0.4Ti0.4O2 as described
+      in the paper.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: Agent completed within turn budget.
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: Agent did not require any retries.
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: Agent completed within duration budget.
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: Agent completed within total token budget.
+- id: SC_cacathode_006_20250714
+  capability: structure_construction
+  domain: battery
+  intent: 'Verify topotactic Ca-ion insertion in an empty host structure using pymatgen''s structure matching
+    with the tolerance parameters from Kim et al. (2024): ltol=0.4, stol=0.6, angletol=10 degrees.'
+  human_prompt_seed: 'Verify whether the Ca-intercalated structure in inserted_structure.cif represents
+    a topotactic insertion into the empty host in host_structure.cif. Use pymatgen''s StructureMatcher
+    with tolerance parameters ltol=0.4, stol=0.6, and angletol=10.0 as specified in the paper. Save the
+    matching result to topotactic_check.json with keys: is_topotactic (boolean), rms_dist (float), and
+    matching_details.'
+  tags: []
+  data_files:
+  - key: host_structure
+    path: host_structure.cif
+    oss_url: ''
+    description: CIF file for the empty host structure W2O3(PO4)2 (mp-19522) before Ca insertion.
+  - key: inserted_structure
+    path: inserted_structure.cif
+    oss_url: ''
+    description: CIF file for the Ca-intercalated structure Ca1.5W2O3(PO4)2 (mp-774757) after topotactic
+      insertion.
+  reference_answers:
+  - key: grounding_source
+    value:
+      filename: host_structure.cif
+      description: Seed data file containing empty host structure from mp-19522
+  - key: artifact_topotactic_check
+    value:
+      filename: topotactic_check.json
+  - key: text_has_result_keys
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - is_topotactic
+      - rms_dist
+      - matching_details
+      filename: topotactic_check.json
+  - key: text_has_tolerance
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - ltol
+      - stol
+      - angletol
+      filename: topotactic_check.json
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value: true
+  - key: duration_budget
+    value:
+      max: 180
+  - key: token_budget_total
+    value:
+      max: 30000
+  scoring_checklist:
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 0.15
+    criterion: '[Must] Output is grounded in the host_structure.cif seed file from mp-19522'
+  - id: artifact_topotactic_check
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.2
+    criterion: '[Must] File topotactic_check.json exists with structure matching results'
+  - id: text_has_result_keys
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.2
+    criterion: '[Must] Output includes is_topotactic (boolean), rms_dist (float), and matching_details'
+  - id: text_has_tolerance
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.15
+    criterion: '[Must] Output documents the tolerance parameters used (ltol=0.4, stol=0.6, angletol=10.0)'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within turn budget'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not retry failed tool calls'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within duration budget'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within total token budget'
+- id: SC_lzmc_001_20250618
+  capability: structure_construction
+  domain: battery
+  intent: Construct the Li₁.₂₅Zr₀.₃₇₅Mg₀.₆₂₅Cl₄ (LZMC1.25) inverse spinel crystal structure from Rietveld
+    refinement crystallographic parameters.
+  human_prompt_seed: Using the crystallographic parameters in `lzmc125_crystallographic_params.json`,
+    construct the LZMC1.25 (Li₁.₂₅Zr₀.₃₇₅Mg₀.₆₂₅Cl₄) inverse spinel structure and save the CIF file as
+    `lzmc125.cif`.
+  tags: []
+  data_files:
+  - key: lzmc125_params
+    path: lzmc125_crystallographic_params.json
+    oss_url: ''
+    description: 'JSON file containing crystallographic parameters for LZMC1.25: space group Fd-3m, lattice
+      parameter a=10.3907 Å, atomic positions (Li at 8a/16d/16c, Mg at 16d/16c, Zr at 16d/16c, Cl at 32e)
+      and site occupancies from Table 1 of Yang et al. (2025).'
+  reference_answers:
+  - key: grounding_source
+    value:
+      filename: lzmc125_crystallographic_params.json
+  - key: cif_exists
+    value: lzmc125.cif
+  - key: cif_content
+    value:
+      flags: []
+      tokens:
+      - '10.3907'
+      - Li
+      - Zr
+      - Mg
+      - Cl
+      filename: lzmc125.cif
+  - key: lattice_param
+    value:
+      checks:
+      - key: a
+        expected: 10.3907
+        tolerance: 0.001
+      filename: lzmc125.cif
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 500000
+  scoring_checklist:
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 0.1
+    criterion: '[Must] Answer is grounded in the provided crystallographic parameters file'
+  - id: cif_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.2
+    criterion: '[Must] Output file lzmc125.cif exists'
+  - id: cif_content
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.3
+    criterion: '[Must] CIF contains lattice parameter 10.3907 Å and elements Li, Zr, Mg, Cl'
+  - id: lattice_param
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.2
+    criterion: '[Must] Lattice parameter a is 10.3907 Å (±0.001 Å)'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: Turn budget
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: No retries
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: Duration budget
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: Token budget
+- id: SC_pymatgen_004_20250618
+  capability: structure_construction
+  domain: battery
+  intent: Construct the LiFePO4 olivine crystal structure using pymatgen and export it as a CIF file,
+    verifying the space group and stoichiometry.
+  human_prompt_seed: Using pymatgen, construct the LiFePO4 olivine crystal structure from the provided
+    CIF file (lifepo4_mp761498.cif). Verify the space group, atom counts, and stoichiometry, then export
+    the verified structure as lifepo4_verified.cif in the working directory.
+  tags: []
+  data_files:
+  - key: lifepo4_cif
+    path: lifepo4_mp761498.cif
+    oss_url: ''
+    description: 'LiFePO4 olivine structure (space group Pnma, #62) from Materials Project.'
+  reference_answers:
+  - key: artifact_cif
+    value:
+      filename: lifepo4_verified.cif
+  - key: artifact_script
+    value:
+      filename: construct_lifepo4.py
+  - key: grounding_source
+    value:
+      filename: lifepo4_mp761498.cif
+  - key: space_group_check
+    value:
+      flags: i
+      tokens:
+      - Pnma
+      filename: lifepo4_verified.cif
+  - key: stoichiometry_check
+    value:
+      flags: i
+      tokens:
+      - Li
+      - Fe
+      - P
+      - O
+      filename: lifepo4_verified.cif
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_cif
+    axis: correctness
+    verify: artifact_exists
+    weight: 25.0
+    criterion: '[Must] Output file lifepo4_verified.cif exists and is a valid CIF file.'
+  - id: artifact_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] Python script construct_lifepo4.py exists.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 15.0
+    criterion: '[Must] Agent used the provided seed CIF file (lifepo4_mp761498.cif) as the structural
+      basis.'
+  - id: space_group_check
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 25.0
+    criterion: '[Must] The exported CIF file contains the space group symbol Pnma (or equivalent Hermann-Mauguin
+      notation).'
+  - id: stoichiometry_check
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 25.0
+    criterion: '[Must] The CIF file contains all four element symbols (Li, Fe, P, O) consistent with LiFePO4
+      stoichiometry.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completed the task within 20 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent did not request any retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completed the task within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent used fewer than 50000 total tokens.'
+- id: SC_liCoO2_001_20260528
+  capability: structure_construction
+  domain: battery
+  intent: Construct the ordered Li_{1/2}CoO2 supercell structure with row-type Li-vacancy ordering within
+    the O3 host, as observed experimentally and computed in Van der Ven et al. (1998).
+  human_prompt_seed: 'Starting from the provided LiCoO2 structure (poscar_lico2.vasp, space group R-3m),
+    construct the ordered Li_{1/2}CoO2 supercell structure with the in-plane Li-vacancy row ordering described
+    in Van der Ven et al. (1998) Fig. 4(a): Li ions form rows alternating with rows of vacancies within
+    each Li plane. Output the resulting structure as a POSCAR file named poscar_li_half_coO2.vasp.'
+  tags: []
+  data_files:
+  - key: poscar_lico2
+    path: poscar_lico2.vasp
+    oss_url: ''
+    description: Parent LiCoO2 structure in the O3 host (R-3m) from Materials Project
+  reference_answers:
+  - key: poscar_exists
+    value:
+      filename: poscar_li_half_coO2.vasp
+  - key: composition_check
+    value:
+      flags:
+      - IGNORECASE
+      tokens:
+      - Co
+      - O
+      - Li
+      filename: poscar_li_half_coO2.vasp
+  - key: li_ratio
+    value:
+      checks:
+      - key: Li_fraction
+        expected: 0.5
+        tolerance: 0.01
+      filename: poscar_li_half_coO2.vasp
+  - key: grounding_source
+    value:
+      filename: poscar_lico2.vasp
+  - key: max_turns
+    value:
+      max: 30
+  - key: no_retry
+    value:
+      max: 0
+  - key: max_duration_s
+    value:
+      max: 600
+  - key: max_tokens
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: poscar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 15.0
+    criterion: '[Must] Output POSCAR file poscar_li_half_coO2.vasp exists'
+  - id: composition_check
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 15.0
+    criterion: '[Must] Structure contains Li, Co, and O elements'
+  - id: li_ratio
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 25.0
+    criterion: '[Suggested] Li concentration is 0.5 (Li/(Li+Co) = 0.5, tolerance 0.01)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] Answer is grounded in the provided LiCoO2 seed structure'
+  - id: max_turns
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Completed within turn budget'
+  - id: no_retry
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] No retries used'
+  - id: max_duration_s
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Completed within duration budget'
+  - id: max_tokens
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Completed within token budget'
+- id: SC_pymatgen_001_20250610
+  capability: structure_construction
+  domain: battery
+  intent: Construct a special quasirandom structure (SQS) supercell for a cation-disordered Li-TM oxide
+    with specified composition using pymatgen/ATAT tools.
+  human_prompt_seed: Construct a special quasirandom structure (SQS) supercell for cation-disordered LiNi0.5Ti0.5O2
+    in the rocksalt structure. The cation sublattice should have Ni and Ti randomly distributed with 50:50
+    composition while preserving the overall rocksalt symmetry. Generate a supercell with at least 32
+    atoms. Save the resulting structure as a POSCAR file.
+  tags: []
+  data_files:
+  - key: primitive_cif
+    path: primitive_cell.cif
+    description: Primitive cell of rocksalt LiTMO2 for SQS supercell construction
+  reference_answers:
+  - key: artifact_poscar
+    value: POSCAR
+  - key: text_poscar_elements
+    value:
+      flags: []
+      tokens:
+      - Li
+      - Ni
+      - Ti
+      - O
+      filename: POSCAR
+  - key: numeric_composition_ni
+    value:
+      checks:
+      - key: Ni_count
+        max: 8
+        min: 4
+      filename: POSCAR
+  - key: numeric_composition_ti
+    value:
+      checks:
+      - key: Ti_count
+        max: 8
+        min: 4
+      filename: POSCAR
+  - key: numeric_total_atoms
+    value:
+      checks:
+      - key: natoms
+        max: 128
+        min: 32
+      filename: POSCAR
+  - key: numeric_ni_ti_ratio
+    value:
+      checks:
+      - key: Ni/Ti_ratio
+        expected: 1.0
+        tolerance: 0.15
+      filename: POSCAR
+  - key: grounding_source
+    value:
+      filename: primitive_cell.cif
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] POSCAR file exists in the working directory'
+  - id: text_poscar_elements
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] POSCAR contains Li, Ni, Ti, and O elements'
+  - id: numeric_composition_ni
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 5.0
+    criterion: '[Suggested] Ni count is between 4 and 8 atoms in the supercell'
+  - id: numeric_composition_ti
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 5.0
+    criterion: '[Suggested] Ti count is between 4 and 8 atoms in the supercell'
+  - id: numeric_total_atoms
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Must] Total atom count is at least 32 (supercell requirement)'
+  - id: numeric_ni_ti_ratio
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 10.0
+    criterion: '[Suggested] Ni:Ti ratio is approximately 1:1 (tolerance 15%)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] The SQS structure is derived from the provided primitive cell'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 30 turns'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not retry failed operations unnecessarily'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes within 300 seconds'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses fewer than 80000 tokens total'
+- id: SC_alloy_001_20250618
+  capability: structure_construction
+  domain: battery
+  intent: Construct a 108-atom (3×3×3) supercell of the conventional cubic fcc unit cell starting from
+    the primitive fcc aluminum structure, as used for first-principles defect calculations in Al-Li alloys.
+  human_prompt_seed: Starting from the provided fcc aluminum CIF file, construct a 3×3×3 supercell of
+    the conventional cubic fcc unit cell (108 atoms total). Save the result as a VASP POSCAR file named
+    POSCAR_fcc_108.
+  tags: []
+  data_files:
+  - key: fcc_al_primitive
+    path: mp-134.cif
+    oss_url: ''
+    description: Primitive fcc aluminum structure from Materials Project (mp-134)
+  reference_answers:
+  - key: poscar_exists
+    value: POSCAR_fcc_108
+  - key: poscar_has_108
+    value:
+      flags: []
+      tokens:
+      - '108'
+      filename: POSCAR_fcc_108
+  - key: grounding_source
+    value:
+      filename: mp-134.cif
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: poscar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 0.3
+    criterion: '[Must] POSCAR_fcc_108 file exists in the working directory'
+  - id: poscar_has_108
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] POSCAR file indicates 108 atoms in the element-count line'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 0.2
+    criterion: '[Must] Structure is derived from the provided fcc Al CIF (mp-134)'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: Completes within 15 turns
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: No file overwrite retries
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: Completes within 300 seconds
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: Uses fewer than 50000 tokens total
+- id: SC_pymatgen_001_20250508
+  capability: structure_construction
+  domain: battery
+  intent: Use pymatgen's MagneticStructureEnumerator to generate all collinear antiferromagnetic (AFM)
+    orderings for the provided orthorhombic LiMnO2 structure, then write each magnetic structure to a
+    separate CIF file.
+  human_prompt_seed: Using pymatgen, enumerate all collinear antiferromagnetic (AFM) orderings for the
+    provided orthorhombic LiMnO2 structure using the MagneticStructureEnumerator. Write each enumerated
+    magnetic structure to a separate CIF file named afm_ordering_001.cif, afm_ordering_002.cif, etc. in
+    the working directory.
+  tags: []
+  data_files:
+  - key: structure
+    path: limno2_orthorhombic.cif
+    oss_url: ''
+    description: Orthorhombic LiMnO2 (Pmmn) crystal structure from Materials Project
+  reference_answers:
+  - key: artifact_count
+    value: AFM_COUNT
+  - key: grounding_source
+    value:
+      filename: limno2_orthorhombic.cif
+  - key: numeric_magnetic_structures
+    value:
+      checks:
+      - key: count
+        max: 100
+        min: 10
+        expected: 30
+        tolerance: 10
+      filename: AFM_COUNT
+  - key: artifact_first_cif
+    value: afm_ordering_001.cif
+  - key: text_cif_mn_sites
+    value:
+      flags:
+      - all_present
+      tokens:
+      - Mn
+      filename: afm_ordering_001.cif
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_count
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] A file AFM_COUNT exists containing the number of enumerated magnetic structures.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] The answer is grounded in the provided LiMnO2 structure file.'
+  - id: numeric_magnetic_structures
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 15.0
+    criterion: '[Suggested] The number of enumerated AFM orderings is between 10 and 100 (expected ~30
+      as stated in the paper).'
+  - id: artifact_first_cif
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] At least one magnetic structure CIF file (afm_ordering_001.cif) is generated.'
+  - id: text_cif_mn_sites
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 10.0
+    criterion: '[Must] The generated CIF files contain Mn atomic sites with magnetic moments.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not request retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent uses fewer than 50000 tokens total.'
+- id: SC_agnostic_001_20260528
+  capability: structure_construction
+  domain: battery
+  intent: Construct a 1×2×2 supercell of olivine LiMnPO₄ (Pnma space group, 16 formula units) from a unit-cell
+    structure file, suitable for small polaron migration barrier calculations. The supercell should preserve
+    the orthorhombic symmetry and contain the correct stoichiometry for polaron studies.
+  human_prompt_seed: Using the provided LiMnPO₄ unit cell CIF (limnpo4_unitcell.cif), construct a 1×2×2
+    supercell containing 16 formula units suitable for polaron migration calculations. Save the supercell
+    structure as a POSCAR file named limnpo4_supercell_poscar. Also generate a Python script (construct_supercell.py)
+    that reads the unit cell, applies the supercell transformation, and writes the output. The supercell
+    should maintain the orthorhombic Pnma symmetry.
+  tags: []
+  data_files:
+  - key: unit_cell
+    path: limnpo4_unitcell.cif
+    oss_url: ''
+    description: LiMnPO₄ olivine unit cell (Pnma space group) from Materials Project.
+  reference_answers:
+  - key: artifact_poscar
+    value: limnpo4_supercell_poscar
+  - key: artifact_script
+    value: construct_supercell.py
+  - key: numeric_formula_units
+    value:
+      checks:
+      - key: num_sites
+        max: 129
+        min: 127
+        expected: 128
+        tolerance: 0
+      filename: limnpo4_supercell_poscar
+  - key: text_contains_elements
+    value:
+      flags: []
+      tokens:
+      - Li
+      - Mn
+      - P
+      - O
+      filename: limnpo4_supercell_poscar
+  - key: grounding_source
+    value:
+      filename: limnpo4_unitcell.cif
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: artifact_poscar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] POSCAR file is generated with correct filename.'
+  - id: artifact_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Python script construct_supercell.py is generated.'
+  - id: numeric_formula_units
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Supercell contains 128 atoms (16 formula units of LiMnPO₄ = 16×8 atoms).'
+  - id: text_contains_elements
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] POSCAR contains Li, Mn, P, O element symbols.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The supercell construction is grounded in the source paper''s methodology for LiMnPO₄
+      polaron studies.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within turn budget.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry failed tool calls.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within duration budget.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent completes within total token budget.'
+- id: SC_pymatgen_005_20250618
+  capability: structure_construction
+  domain: battery
+  intent: Build a 2x3x3 supercell of the LiFePO4 olivine structure for use in canonical Monte Carlo simulations,
+    as described in the paper's methodology.
+  human_prompt_seed: Using the provided LiFePO4 CIF file (lifepo4_mp761498.cif), build a 2x3x3 supercell
+    suitable for canonical Monte Carlo simulations of non-equilibrium LixFePO4 states. Export the supercell
+    structure to lifepo4_2x3x3_supercell.cif and write a summary script build_supercell.py that reports
+    the supercell dimensions, total atom count, and Li site count.
+  tags: []
+  data_files:
+  - key: lifepo4_cif
+    path: lifepo4_mp761498.cif
+    oss_url: ''
+    description: 'LiFePO4 olivine unit cell (space group Pnma, #62) from Materials Project.'
+  reference_answers:
+  - key: artifact_supercell_cif
+    value:
+      filename: lifepo4_2x3x3_supercell.cif
+  - key: artifact_script
+    value:
+      filename: build_supercell.py
+  - key: grounding_source
+    value:
+      filename: lifepo4_mp761498.cif
+  - key: supercell_dims
+    value:
+      flags: i
+      tokens:
+      - '2'
+      - '3'
+      - '3'
+      filename: lifepo4_2x3x3_supercell.cif
+  - key: atom_count_check
+    value:
+      checks:
+      - key: total_atoms
+        max: 400
+        min: 300
+        expected: 336
+        tolerance: 10
+        allow_missing_key: false
+      filename: lifepo4_2x3x3_supercell.cif
+  - key: turn_budget
+    value:
+      max: 20
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_supercell_cif
+    axis: correctness
+    verify: artifact_exists
+    weight: 25.0
+    criterion: '[Must] Output file lifepo4_2x3x3_supercell.cif exists and is a valid CIF file.'
+  - id: artifact_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 10.0
+    criterion: '[Must] Python script build_supercell.py exists.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 15.0
+    criterion: '[Must] Agent used the provided seed CIF file (lifepo4_mp761498.cif) as the basis for supercell
+      construction.'
+  - id: supercell_dims
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 20.0
+    criterion: '[Must] The CIF file or script output indicates a 2x3x3 supercell multiplication of the
+      unit cell.'
+  - id: atom_count_check
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 30.0
+    criterion: '[Suggested] The supercell contains approximately 336 atoms (LiFePO4 unit cell has 28 atoms;
+      2×3×3 = 18 unit cells → 28×18 = 504 atoms; or if primitive cell has ~4 formula units, 4×4×28...
+      actual count depends on conventional vs primitive cell used — acceptable range 300-504).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completed the task within 20 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent did not request any retries.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completed the task within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent used fewer than 50000 total tokens.'

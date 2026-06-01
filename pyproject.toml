@@ -48,10 +48,10 @@ dev = [
 ]
 calculation = [
     "ase>=3.22",
-    "pymatgen>=2024.1",
+    "pymatgen>=2024.1,<2026",
     "dpdata>=0.2.18",
     "cp2k-input-tools>=0.9.0",
-    "molcrys-kit @ https://github.com/SchrodingersCattt/MolCrysKit/archive/refs/tags/v0.2.0.tar.gz",
+    "molcrys-kit",
     "mace-torch>=0.3.0",
     # DeepMD 栈及常见传递依赖（版本锁定便于复现；不含 pip）
     "array-api-compat==1.14.0",

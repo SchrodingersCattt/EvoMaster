@@ -1,0 +1,1 @@
+Two intentionally minimal non-orthogonal close-packed slabs. Analyze layers using fractional coordinates along the slab normal; Cartesian z-only heuristics are not sufficient in general for skewed slab cells. Expected fcc stacking: ABCAB; expected hcp stacking: ABABA.

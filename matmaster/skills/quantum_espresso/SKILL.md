@@ -13,11 +13,11 @@ Quantum ESPRESSO (QE) is an integrated suite of codes for electronic-structure c
 | Item | Default Value |
 |------|---------------|
 | image | `registry.dp.tech/dptech/quantum-espresso:7.1` |
-| machine | `c32_m128_cpu` (32 cores, 128 GB RAM) |
+| machine | `c64_m256_cpu` (32 physical cores, 256 GB RAM) |
 | cmd | `OMP_NUM_THREADS=1 mpirun -np 32 pw.x -i {input_file} > log 2>&1` |
 
 > Replace `{input_file}` with the actual `.in` or `.pw` filename.
-> Match `-np` to the machine core count.
+> Match `-np` to the machine's physical core count.
 > For a different QE version, query `Bohrium(action="list_images", keyword="quantum-espresso")`.
 
 ## Input Preparation

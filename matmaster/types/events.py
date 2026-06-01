@@ -161,6 +161,13 @@ class AssistantStateEvent(EventBase):
     model_route: str | None = None
 
 
+class CheckpointEvent(EventBase):
+    """Emitted between LLM response and tool dispatch to allow user interrupt."""
+
+    type: Literal["checkpoint"] = "checkpoint"
+    turn_index: int | None = None
+
+
 class SkillHitEvent(EventBase):
     """Skill hit tracking event."""
 
@@ -305,6 +312,7 @@ AgentEvent = Annotated[
         RunResultEvent,
         ErrorEvent,
         AssistantStateEvent,
+        CheckpointEvent,
         SkillHitEvent,
         ToolProgressEvent,
     ],
@@ -339,6 +347,7 @@ BusEvent = Annotated[
         RunResultEvent,
         ErrorEvent,
         AssistantStateEvent,
+        CheckpointEvent,
         SkillHitEvent,
         ToolProgressEvent,
         # SystemEvent types

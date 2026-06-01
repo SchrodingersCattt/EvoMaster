@@ -1,0 +1,36 @@
+{
+  "calculation_info": {
+    "basis": "DZP",
+    "method": "PBE-LCAO",
+    "software": "ABACUS 3.7.0"
+  },
+  "results": {
+    "Co_metal_bulk": {
+      "converged": true,
+      "energy": -28.452,
+      "formula": "Co2",
+      "natoms": 2,
+      "space_group": "P6_3/mmc"
+    },
+    "LiCoO2_bulk": {
+      "converged": true,
+      "energy": -129.4476,
+      "formula": "Li3Co3O6",
+      "natoms": 12,
+      "space_group": "R-3m"
+    },
+    "Li_metal_bulk": {
+      "converged": true,
+      "energy": -14.8736,
+      "formula": "Li2",
+      "natoms": 2,
+      "space_group": "Im-3m"
+    },
+    "O2_molecule": {
+      "converged": true,
+      "energy": -17.9864,
+      "formula": "O2",
+      "natoms": 2
+    }
+  }
+}

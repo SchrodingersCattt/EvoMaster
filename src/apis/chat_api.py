@@ -7,6 +7,7 @@ from fastapi.responses import StreamingResponse
 
 from matmaster.config.loader import load_llm_config
 from src.base.base_res import BaseResponse
+from src.dao.redis_dao import get_redis_dao
 from src.models.chat import (
     ChatAskQuestionReplyRequest,
     ChatSendRequest,
@@ -22,6 +23,9 @@ from src.models.chat import (
     SessionListMoreResponse,
     SessionListQuery,
     SessionListResponse,
+    SessionTitleApiResponse,
+    SessionTitleData,
+    SessionTitleSetRequest,
     ShareSetRequest,
     ShareStatusApiResponse,
     ShareStatusData,
@@ -624,6 +628,99 @@ def set_session_directory(
     if not row:
         raise NotFoundErrorResponse(msg="Session not found or you are not the owner")
     return SessionDirectoryApiResponse(data=_session_workspace_data_from_row(row))
+
+
+@router.put(
+    "/{session_id}/title",
+    response_model=SessionTitleApiResponse,
+    summary="重命名会话（设置/清除标题）",
+    description="仅会话所有者可写。传非空 `title` 设置自定义标题；传 null 或空字符串清除，"
+    "清除后前端回退到 first_user_message。标题最长 255 字符。",
+    operation_id="setChatSessionTitle",
+    responses={
+        401: COMMON_ERROR_RESPONSES[401],
+        404: COMMON_ERROR_RESPONSES[404],
+    },
+)
+def set_session_title(
+    session_id: str = Path(..., description="会话 ID", examples=["session-001"]),
+    body: SessionTitleSetRequest = Body(...),
+    user_id: str = Depends(UserService.require_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    """设置或清除会话自定义标题。仅会话所有者可写。"""
+    sid = session_id.strip()
+    if not chat_svc.set_session_title(sid, body.title, user_id):
+        raise NotFoundErrorResponse(
+            msg="Session not found or you are not the owner",
+        )
+    return SessionTitleApiResponse(data=SessionTitleData(id=sid, title=body.title))
+
+
+@router.put(
+    "/{session_id}/interrupt-hint",
+    response_model=BaseResponse,
+    summary="设置排队中断提示",
+    description="前端有排队消息时调用，通知后端在下一个 checkpoint 时暂停等待确认。",
+    operation_id="setChatSessionInterruptHint",
+    responses={
+        403: COMMON_ERROR_RESPONSES[403],
+    },
+)
+def set_interrupt_hint(
+    session_id: str = Path(..., description="会话 ID"),
+    user_id: str | None = Depends(UserService.optional_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    sid = session_id.strip()
+    if not chat_svc.can_access_session(sid, user_id):
+        raise ForbiddenErrorResponse(msg="无权限访问该会话")
+    get_redis_dao().set_interrupt_hint(sid)
+    return BaseResponse(msg="ok")
+
+
+@router.delete(
+    "/{session_id}/interrupt-hint",
+    response_model=BaseResponse,
+    summary="清除排队中断提示",
+    description="前端队列清空时调用，取消中断意图。",
+    operation_id="deleteChatSessionInterruptHint",
+    responses={
+        403: COMMON_ERROR_RESPONSES[403],
+    },
+)
+def delete_interrupt_hint(
+    session_id: str = Path(..., description="会话 ID"),
+    user_id: str | None = Depends(UserService.optional_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    sid = session_id.strip()
+    if not chat_svc.can_access_session(sid, user_id):
+        raise ForbiddenErrorResponse(msg="无权限访问该会话")
+    get_redis_dao().delete_interrupt_hint(sid)
+    return BaseResponse(msg="ok")
+
+
+@router.post(
+    "/{session_id}/interrupt",
+    response_model=BaseResponse,
+    summary="确认中断当前轮次",
+    description="前端收到 checkpoint 事件后调用，确认要中断当前 tool dispatch。幂等：重复调用安全。",
+    operation_id="confirmChatSessionInterrupt",
+    responses={
+        403: COMMON_ERROR_RESPONSES[403],
+    },
+)
+def confirm_interrupt(
+    session_id: str = Path(..., description="会话 ID"),
+    user_id: str | None = Depends(UserService.optional_user_id),
+    chat_svc: ChatSessionsService = Depends(get_sessions_service),
+):
+    sid = session_id.strip()
+    if not chat_svc.can_access_session(sid, user_id):
+        raise ForbiddenErrorResponse(msg="无权限访问该会话")
+    get_redis_dao().set_interrupt_confirm(sid)
+    return BaseResponse(msg="ok")
 
 
 @router.delete(

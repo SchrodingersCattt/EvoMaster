@@ -1,0 +1,108 @@
+# Release Gate Cases
+# 从线上 session 中筛选的端到端计算 case，用于上线前回归。
+# 通过标准：丝滑完成（无 retry、无走弯路、结果正确）。
+#
+# 数据来源：prod 轨迹分析 2026-02 ~ 2026-05
+
+version: 2
+cases:
+
+  # ─── 结构构建 ─────────────────────────────────────────────────────────
+
+  - id: rg_01
+    title: "CeO₂(111) Tasker 分类"
+    prompt: "构建CeO₂的(111)表面slab，分析其Tasker极性分类并输出分类结果"
+    source_session: "d359bf02-268c-4930"
+    notes: "测 Tasker Type 识别（应为 Type 2）。线上错分为 Type 1。"
+
+  - id: rg_02
+    title: "MgO 掺 Al（异价替换）"
+    prompt: "构建MgO掺4%Al的超胞结构，用于DFT计算"
+    source_session: "d268fd78-07ce-4dbe"
+    notes: "测异价掺杂电荷补偿。线上没做 Mg 空位补偿，交付了 +4e 结构。"
+
+  - id: rg_03
+    title: "CrMnFeCoNi HEA SQS"
+    prompt: "构建CrMnFeCoNi等摩尔高熵合金的SQS结构，FCC基体，至少100个原子"
+    source_session: "19a75417e6e042f4a82eed65125fd777"
+    notes: "测 icet SQS 生成。线上丝滑完成。"
+
+  - id: rg_04
+    title: "LDPE 非晶构建 + MD"
+    prompt: "构建低密度聚乙烯(LDPE)的非晶结构并做分子动力学优化"
+    source_session: "c9913871165c4ec0"
+    notes: "测 PACKMOL 使用 + 密度验证。线上最终密度 0.002（应 ~0.92）。"
+
+  # ─── DPA / MLIP 计算 ──────────────────────────────────────────────────
+
+  - id: rg_05
+    title: "石墨烯单轴拉伸 (LAMMPS)"
+    prompt: "用LAMMPS模拟石墨烯的单轴拉伸，使用AIREBO势函数，输出应力-应变曲线"
+    source_session: "ddca85e6b2984eca915b29fcb0941739"
+    notes: "测经典 MD (LAMMPS) 端到端流程。线上丝滑完成：AIREBO + velocity 拉伸。"
+
+  - id: rg_07
+    title: "Zn 盐溶液 DP-MD"
+    prompt: "用分子动力学模拟比较ZnSO₄、ZnCl₂、Zn(ClO₄)₂三种锌盐水溶液的径向分布函数和扩散系数"
+    source_session: "c78501d0747e4b50"
+    notes: "测多体系溶液建模 + DPA3 使用。线上做了 22 次文献搜索从未提交计算。"
+
+  - id: rg_08
+    title: "LiVCl₆ 离子电导率"
+    prompt: "找到LiVCl₆的晶体结构，通过分子动力学模拟计算其离子电导率"
+    source_session: "55db4f96e7064166ad59bdce28d878d0"
+    notes: "测多温度 MD + Arrhenius + sanity check。线上 D 非单调但未指出。"
+
+  # ─── ABACUS 第一性原理 ─────────────────────────────────────────────────
+
+  - id: rg_09
+    title: "Pt(111) 功函数 (ABACUS)"
+    prompt: "计算Pt(111)表面的功函数"
+    source_session: "fffc5ed31dd446d0b81f08b9b2136395"
+    notes: "测 ABACUS cal_work_function 全流程。线上丝滑。"
+
+  - id: rg_19
+    title: "graphene/h-BN NEMD 界面热阻 (GPUMD)"
+    prompt: "使用GPUMD计算graphene/h-BN横向异质界面的界面热阻，采用NEMD方法"
+    source_session: "0c832c7ac83c417287af6dc05bf3eb9f"
+    notes: "测 GPUMD NEMD 端到端：结构构建(分组) + run.in 语法(heat_lan/fix/compute_temperature) + 后处理。线上丝滑完成。"
+
+  # ─── 复合工作流 ─────────────────────────────────────────────────────────
+
+  - id: rg_12
+    title: "Zn 表面 H 吸附自由能"
+    prompt: "构建Zn几种常见晶相的表面模型，计算各晶面表面能以筛选最稳定晶面，进而计算该晶面不同位点的H吸附自由能，并进行分析与绘图"
+    source_session: "33f8f39ac00c4f53bb305f3351606bd4"
+    notes: "测多步工作流 + 吸附位点验证。线上 bridge H 弛豫到 hollow 未被发现。"
+
+  - id: rg_13
+    title: "ZnO/TiO₂ CO 吸附对比"
+    prompt: "计算氧化锌和二氧化钛结构，构建平板模型，计算CO在平板模型上的吸附结构，比较结果并写作"
+    source_session: "6a351576c27b4cd28608307eb8694d7c"
+    notes: "测多材料对比工作流。线上正确完成，选面+Lewis 酸性解释合理。"
+
+  - id: rg_15
+    title: "FeNC 单原子催化 ORR 建模"
+    prompt: "帮我建立一个单原子催化剂FeNC的模型，然后根据ORR的反应中间体搭建几个中间体的模型，具体理论细节与建模细节自己去查文献"
+    source_session: "653b67b5c0b24de48dc6ee10a1fc57da"
+    notes: "测文献驱动的复杂建模。线上用了偏小的 4x4 超胞。"
+
+  # ─── 回归守卫（已知失败模式修复验证）──────────────────────────────────────
+
+  - id: rg_16
+    title: "ORCA 几何优化 端到端"
+    prompt: "使用ORCA对水分子做几何优化，使用B3LYP/def2-TZVP泛函基组，提交到Bohrium运行"
+    source_session: "1c2d69007a41484fb2ed5992515eea07"
+    notes: "测 ORCA 从输入生成到 Bohrium 提交到结果解析全流程。线上丝滑完成。"
+
+  - id: rg_17
+    title: "磁性 Fe 磷酸盐 ABACUS SCF 参数"
+    prompt: "对Na₄Fe₃(PO₄)₂P₂O₇做ABACUS自洽场计算，注意这是含磁性Fe的大体系"
+    source_session: "8644540e62f04f13a959bd402b24a4eb"
+    notes: "测磁性体系 SCF 参数选择。线上用 mixing_beta=0.1 导致 13 个 job 全部 charge sloshing。正确值 ≤0.05。"
+
+  - id: rg_18
+    title: "CH₃NH₃⁺ C-N 解离曲线"
+    prompt: "计算CH₃NH₃⁺的C-N键解离势能面（1.2-3.0 Å），使用量子力学方法"
+    source_session: "4312863d-d842-46f6-9"
+    notes: "测 PES 扫描方法选择。线上 DPA 失败后用 Morse 势代替——严禁经典势代替 QM。应用 PySCF/ORCA 替代。"

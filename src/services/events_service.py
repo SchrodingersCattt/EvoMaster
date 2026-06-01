@@ -102,6 +102,14 @@ class ChatEventsService:
         """
         return self.table.get_last_user_query(session_id)
 
+    def get_last_user_query_event(self, session_id: str) -> dict | None:
+        """返回最后一条 User/query 事件的完整行（含 id），用于 replace_last_turn。"""
+        return self.table.get_last_user_query_event(session_id)
+
+    def delete_events_from_id(self, session_id: str, from_event_id: int) -> int:
+        """物理删除 session 中 id >= from_event_id 的所有事件。"""
+        return self.table.delete_events_from_id(session_id, from_event_id)
+
 
 @lru_cache
 def get_events_service() -> ChatEventsService:

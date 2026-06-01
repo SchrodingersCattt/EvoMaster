@@ -27,7 +27,7 @@ async def test_run_agent_builds_turn_input_from_images_without_image_metadata_ke
             "src.services.agent_run_service.get_image_input_service",
             return_value=image_service,
         ):
-            ok, _elapsed = await svc.run_agent(
+            ok, _elapsed, _usage = await svc.run_agent(
                 session_id="sess-images",
                 user_prompt="看图",
                 images=["https://oss.example.com/chat/a.png"],
@@ -67,7 +67,7 @@ async def test_run_agent_enriches_existing_turn_input_images_with_detail():
             "src.services.agent_run_service.get_image_input_service",
             return_value=image_service,
         ):
-            ok, _elapsed = await svc.run_agent(
+            ok, _elapsed, _usage = await svc.run_agent(
                 session_id="sess-images",
                 user_prompt="看图",
                 images=["https://oss.example.com/chat/a.png"],
@@ -107,7 +107,7 @@ async def test_run_agent_validates_images_from_turn_input_without_top_level_imag
             "src.services.agent_run_service.get_image_input_service",
             return_value=image_service,
         ):
-            ok, _elapsed = await svc.run_agent(
+            ok, _elapsed, _usage = await svc.run_agent(
                 session_id="sess-images",
                 user_prompt="看图",
                 turn_input=turn_input,

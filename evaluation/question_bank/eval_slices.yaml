@@ -35,36 +35,60 @@ slices:
     type: skill
     slices:
       - "@code_mlip"
-    count: 9
+    count: 14
 
-  - target: "Skill: build-atomic-structure"
+  - target: "Skill: aissq-explorer"
+    type: skill
+    slices:
+      - "@code_mlip,meta_database"
+    count: 3
+
+  - target: "Skill: atomic-structure"
+    type: skill
+    slices:
+      - "@struct_build,struct_transform,struct_molcrys,struct_surface,meta_database"
+    count: 39
+
+  - target: "Skill: inspect-atomic-structure"
+    type: skill
+    slices:
+      - "@struct_build,struct_transform,struct_molcrys,struct_surface"
+    count: 0
+
+  - target: "Skill: build-crystal-from-params"
     type: skill
     slices:
       - "@struct_build"
-    count: 5
+    count: 0
 
   - target: "Skill: transform-atomic-structure"
     type: skill
     slices:
       - "@struct_transform"
-    count: 9
+    count: 0
+
+  - target: "Skill: assemble-atomic-structure"
+    type: skill
+    slices:
+      - "@struct_surface"
+    count: 0
 
   - target: "Skill: operate-molecular-crystal"
     type: skill
     slices:
       - "@struct_molcrys"
-    count: 3
+    count: 0
 
-  - target: "Skill: tasker-polar-surface"
+  - target: "Skill: sample-atomic-structures"
     type: skill
     slices:
-      - "@struct_surface"
-    count: 22
+      - "@struct_build"
+    count: 0
 
   - target: "Skill: xrd + checkcif"
     type: skill
     slices:
-      - "@char_xrd"
+      - "@char_diffraction"
     count: 3
 
   - target: "Skill: data-analysis"
@@ -90,6 +114,12 @@ slices:
     slices:
       - "@eng_gromacs"
     count: 1
+
+  - target: "Skill: orca"
+    type: skill
+    slices:
+      - "@eng_orca"
+    count: 2
 
   # ── Tools ───────────────────────────────────────────────────────────
 

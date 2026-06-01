@@ -1,0 +1,104 @@
+version: v5
+capability: input_generation
+domain: catalysis
+questions:
+- id: IG_abacus_023_20260517
+  capability: input_generation
+  domain: catalysis
+  intent: Test metal slab k-point density rule and selective dynamics for bottom-layer
+    freezing.
+  human_prompt_seed: '请为 Cu(111) 表面 slab 准备 ABACUS PW 结构弛豫计算。
+
+    结构文件 `STRU_Cu111` 已在工作区中（4 层 Cu slab + 15 Å 真空层）。
+
+    要求底部两层原子固定不动，只弛豫上面两层。'
+  tags:
+  - eng_abacus
+  - struct_surface
+  data_files:
+  - key: stru_cu111
+    path: data/IG_abacus_023_20260513/STRU_Cu111
+    oss_url: ''
+    description: Cu(111) 4-layer slab STRU with 15 Ang vacuum.
+  reference_answers:
+  - key: input_artifact
+    value: INPUT
+  - key: stru_artifact
+    value: STRU*
+  - key: kpt_artifact
+    value: KPT
+  - key: must_calculation_relax
+    value:
+      filename: INPUT
+      pattern: (?im)^\s*calculation\s+relax\s*$
+      flags: im
+  - key: must_cal_force
+    value:
+      filename: INPUT
+      pattern: (?im)^\s*cal_force\s+1\s*$
+      flags: im
+  - key: must_basis_pw
+    value:
+      filename: INPUT
+      pattern: (?im)^\s*basis_type\s+pw\s*$
+      flags: im
+  - key: must_force_thr
+    value:
+      filename: INPUT
+      pattern: (?im)^\s*force_thr_ev\s+[\d.eE-]+
+      flags: im
+  - key: must_kpt_dense_inplane
+    value:
+      filename: KPT
+      pattern: (?m)^\s*(1[2-9]|[2-9]\d|\d{3,})\s+(1[2-9]|[2-9]\d|\d{3,})\s+1\b
+      flags: m
+  - key: must_stru_frozen_atoms
+    value:
+      filename: STRU*
+      pattern: \d+\.\d+\s+\d+\.\d+\s+\d+\.\d+\s+0\s+0\s+0
+      flags: m
+  - key: turn_budget
+    value:
+      max: 15
+  scoring_checklist:
+  - id: input_artifact
+    criterion: INPUT written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: stru_artifact
+    criterion: STRU written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: kpt_artifact
+    criterion: KPT written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_calculation_relax
+    criterion: '[Must] INPUT sets calculation relax.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_cal_force
+    criterion: '[Must] INPUT sets cal_force 1.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_basis_pw
+    criterion: '[Must] INPUT uses PW basis.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_force_thr
+    criterion: '[Must] INPUT contains force convergence threshold for relaxation.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 0.8
+  - id: must_kpt_dense_inplane
+    criterion: '[Must] KPT has at least 12x12 in-plane k-points for metal slab.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_stru_frozen_atoms
+    criterion: '[Must] STRU has frozen atoms (0 0 0 mobility) for bottom layers.'
+    axis: correctness
+    verify: text_file_regex
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget

@@ -57,7 +57,7 @@ async def test_run_agent_idempotent_skip_when_user_turn_context_already_exists()
             "content": existing_payload,
         }
 
-        ok, _elapsed = await svc.run_agent(
+        ok, _elapsed, _usage = await svc.run_agent(
             session_id="sess-1",
             user_prompt="first question",
             send_cb=AsyncMock(),

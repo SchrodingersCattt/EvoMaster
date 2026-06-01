@@ -38,8 +38,9 @@ Accurate starting parameters are critical. Rules of thumb:
 - Cell parameters should be within ±2% of the true values.
 - For phase identification, use the `mcp-mat-xrd` tool (`xrd_phase_identification`) first.
 - For monoclinic/triclinic cells, the angle parameters (β, α, γ) are often known from literature.
-- For multi-temperature data with a phase transition, run **separate** refinements for each phase
-  with appropriate starting cells — do not chain across the transition.
+- For multi-pattern data with a phase or structure-setting change, run **separate**
+  refinements for each continuous segment with appropriate starting cells — do not chain
+  across the discontinuity.
 
 **Typical starting points by crystal system:**
 
@@ -123,10 +124,15 @@ the lowest `wR` wins; every candidate's seed cell + wR + outcome is preserved in
 When to use it:
 
 - **Always for noisy / DFT-simulated single patterns** where the user provides only an
-  approximate initial cell. `--multi-start 5` is a good default; the runtime cost scales
-  linearly with N but each Pawley pass is < 1 min, so 5× is cheap.
-- **Always for variable-temperature series.** Combine with `--chain-cell` (see § 6) so each
-  temperature both samples K seeds *and* benefits from the previous accepted cell.
+  approximate initial cell. `--multi-start 5` is the recommended default. **Do not
+  raise above 5 for standard runs**: each extra start adds ~12 % Bohrium time per
+  pattern, and combined with `--chain-cell-direction both` (which itself doubles
+  work) the total runtime exceeds the 1200 s online task timeout. If 5 starts all
+  collapse to the same wrong basin (typical symptom: |V_refined − V_seed| > 1.5 %
+  with `wR > 10 %`), prefer the cell-distance tiebreak + `merge_audit.warnings`
+  audit path over brute-forcing more starts.
+- **Always for noisy multi-pattern series.** Combine with `--chain-cell` (see § 6) so each
+  pattern both samples K seeds *and* benefits from the previous accepted cell in the same segment.
 - Skip (`--multi-start 1`, the legacy default) only when you already have a CIF / prior
   refinement within < 0.1 % of the truth.
 
@@ -235,11 +241,11 @@ peak markers) for every pattern. **Read it whenever a refinement looks suspiciou
 
 ---
 
-## 6. Multi-Temperature PXRD
+## 6. Multi-Pattern PXRD
 
-The Pawley script supports three modes for multi-temperature data:
+The Pawley script supports three modes for multi-pattern PXRD data:
 
-### A. Individual xy files (one per temperature)
+### A. Individual xy files (one per pattern)
 
 Replace `<SG>` and the `<A>/<B>/<C>/<BETA>` placeholders with the initial cell and space
 group provided by the user / literature / a prior refinement / a CIF model. Do **not**
@@ -249,28 +255,32 @@ invent them from peak positions (see SKILL.md § "Hard contracts").
 # Place all patterns in a directory with consistent naming, then run:
 python gsas2_pawley.py --data /path/to/patterns/ \
   --space-group "<SG>" --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \
-  --multi-start 5 --chain-cell \
+  --multi-start 5 --chain-cell --chain-cell-direction both --standardize-cell ref \
   -o results.json
 ```
 
 `--chain-cell` feeds each accepted refinement into the next pattern as its seed; combined
 with `--multi-start 5`, this makes intra-phase results internally consistent. Promotion is
 gated by `--chain-wr-max` (default 25 %) and `--chain-vol-jump-max` (default 0.05) so a bad
-refinement cannot poison downstream temperatures — when a pattern is rejected the chain
+refinement cannot poison downstream patterns — when a pattern is rejected the chain
 reverts to the last accepted cell. Sort order follows alphabetical filename order, so name
 files consistently (e.g. `pattern_303K.xy`, `pattern_323K.xy`, ...). For data that spans a
-phase transition use **separate** jobs per phase (see "Phase transitions" below); the
+phase or structure-setting change use **separate** jobs per segment (see "Phase / setting changes" below); the
 quality gate will reject a transition jump but the cleanest pattern is to not chain across
-phases at all.
+segments at all. For noisy multi-pattern data, `--chain-cell-direction both` runs
+forward and reverse chains internally and returns merged `results`; inspect
+`merge_audit.table` to see which direction was selected at each pattern, and
+`merge_audit.warnings` for any pattern that ended up high-wR + far from `reference_volume`
+in both directions (the merge picked the lesser-evil candidate but the cell is suspect).
 
 ### B. Wide-table CSV
 
 ```
-# CSV with paired angle/intensity columns per temperature:
+# CSV with paired angle/intensity columns per condition:
 # Header: Angle, 25 C, Angle, 40 C, ...
 python gsas2_pawley.py --data multi_temp.txt --wide-csv \
   --space-group "<SG>" --cell "a=<A>,b=<B>,c=<C>,beta=<BETA>" \
-  --multi-start 5 --chain-cell \
+  --multi-start 5 --chain-cell --chain-cell-direction both --standardize-cell ref \
   -o results.json
 ```
 
@@ -278,19 +288,20 @@ Output contains per-pattern results with `temp_c` and `temp_label` fields, plus
 `seed_cell` (the cell actually used as initial guess after chain promotion) and
 `chain_decision` (`promoted` or `rejected: <reason>`).
 
-### Phase transitions
+### Phase / setting changes
 
-If a structural phase transition occurs between two temperatures, run two **separate**
-refinement jobs with different initial cells (one per phase):
+If a structural phase transition, composition jump, pressure/temperature discontinuity, or
+setting change occurs between two patterns, run **separate** refinement jobs with different
+initial cells (one per continuous segment):
 
 ```bash
-# Low-temperature phase:
-python gsas2_pawley.py --data ltp_data/ --space-group "<SG_LTP>" \
-  --cell "a=<A_LTP>,b=<B_LTP>,c=<C_LTP>,beta=<BETA_LTP>" -o ltp_results.json
+# Segment A:
+python gsas2_pawley.py --data segment_a/ --space-group "<SG_A>" \
+  --cell "a=<A_A>,b=<B_A>,c=<C_A>,beta=<BETA_A>" -o segment_a_results.json
 
-# High-temperature phase:
-python gsas2_pawley.py --data htp_data/ --space-group "<SG_HTP>" \
-  --cell "a=<A_HTP>,b=<B_HTP>,c=<C_HTP>,beta=<BETA_HTP>" -o htp_results.json
+# Segment B:
+python gsas2_pawley.py --data segment_b/ --space-group "<SG_B>" \
+  --cell "a=<A_B>,b=<B_B>,c=<C_B>,beta=<BETA_B>" -o segment_b_results.json
 ```
 
 ---
@@ -318,7 +329,7 @@ python gsas2_pawley.py \
   -o /output/result.json
 ```
 
-For a temperature series, swap `--data` for the directory of xy files and add
+For a multi-pattern series, swap `--data` for the directory of xy files and add
 `--chain-cell` so the refined cell of each accepted pattern seeds the next one
 (quality-gated by default — see § 6).
 

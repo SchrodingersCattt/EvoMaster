@@ -77,6 +77,9 @@ bohrium:
         - skuEnName: "c32_m128_cpu"
           cpuCoreNum: 32
           memory: 128
+        - skuEnName: "c64_m256_cpu"
+          cpuCoreNum: 64
+          memory: 256
       gpu:
         - skuEnName: "c8_m32_1 * NVIDIA 4090"
           cpuCoreNum: 8

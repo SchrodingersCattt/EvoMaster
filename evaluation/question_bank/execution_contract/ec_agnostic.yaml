@@ -6,8 +6,8 @@ questions:
   capability: execution_contract
   domain: agnostic
   priority: P0
-  intent: When run_spec.json contradicts free-text instructions, generated INCAR-like file
-    must follow the spec (direct.toml contract).
+  intent: When run_spec.json contradicts free-text instructions, generated INCAR-like
+    file must follow the spec (direct.toml contract).
   human_prompt_seed: '工作区里有 `run_spec.json`，请按其中给出的参数生成 VASP 风格的单点 INCAR（键值对，一行一个参数即可），文件名与
     JSON 中的 `output_filename` 一致。
 
@@ -15,13 +15,14 @@ questions:
     我这边做类似单点时习惯用 ENCUT=520、ISMEAR=0、SIGMA=0.2，供你对照。
 
     '
-  tags: []
+  tags:
+  - eng_vasp
   data_files:
   - key: run_spec
     path: data/WO_direct_001_spec_conflict/run_spec.json
     oss_url: ''
-    description: ENCUT/ISMEAR/SIGMA and output_filename; seed text suggests different defaults
-      on purpose.
+    description: ENCUT/ISMEAR/SIGMA and output_filename; seed text suggests different
+      defaults on purpose.
   reference_answers:
   - key: incar_artifact
     value: single_point.incar
@@ -55,22 +56,23 @@ questions:
       max: 12000
   scoring_checklist:
   - id: incar_artifact
-    criterion: Workspace contains single_point.incar at project root (or discoverable as artifact).
+    criterion: Workspace contains single_point.incar at project root (or discoverable
+      as artifact).
     axis: correctness
     verify: artifact_exists
   - id: encut_from_spec
-    criterion: single_point.incar sets ENCUT from run_spec.json (400), not the wrong 520 value
-      in the prompt text.
+    criterion: single_point.incar sets ENCUT from run_spec.json (400), not the wrong
+      520 value in the prompt text.
     axis: correctness
     verify: text_file_regex
   - id: ismear_from_spec
-    criterion: single_point.incar sets ISMEAR from run_spec.json (-5), not 0 from the prompt
-      text.
+    criterion: single_point.incar sets ISMEAR from run_spec.json (-5), not 0 from
+      the prompt text.
     axis: correctness
     verify: text_file_regex
   - id: sigma_from_spec
-    criterion: single_point.incar sets SIGMA from run_spec.json (0.05), not 0.2 from the prompt
-      text.
+    criterion: single_point.incar sets SIGMA from run_spec.json (0.05), not 0.2 from
+      the prompt text.
     axis: correctness
     verify: text_file_regex
   - id: turn_budget
@@ -89,10 +91,10 @@ questions:
   capability: execution_contract
   domain: agnostic
   priority: P0
-  intent: Extract provided .tgz so required file appears at workspace root with expected name
-    (direct.toml archive handling).
-  human_prompt_seed: '工作区里有 `bundle.tgz`，里面有 `extract_me.txt`。请解压，并在根目录（与 `bundle.tgz` 同级）留下可打开的
-    `extract_me.txt`。
+  intent: Extract provided .tgz so required file appears at workspace root with expected
+    name (direct.toml archive handling).
+  human_prompt_seed: '工作区里有 `bundle.tgz`，里面有 `extract_me.txt`。请解压，并在根目录（与 `bundle.tgz`
+    同级）留下可打开的 `extract_me.txt`。
 
 
     不要求运行任何计算。
@@ -149,8 +151,8 @@ questions:
   capability: execution_contract
   domain: agnostic
   priority: P0
-  intent: Deliverable must use exact filename summary.md without unauthorized suffix variants
-    (direct.toml workspace naming).
+  intent: Deliverable must use exact filename summary.md without unauthorized suffix
+    variants (direct.toml workspace naming).
   human_prompt_seed: '请在当前工作区根目录写一句简短说明（一两行即可），保存为 Markdown 文件。
 
 
@@ -200,119 +202,6 @@ questions:
     criterion: Total token usage stays within benchmark ceiling (last-turn total_tokens).
     axis: efficiency
     verify: token_budget
-- id: EC_tool_choice_read_001_20260428
-  capability: execution_contract
-  domain: agnostic
-  intent: Agent should prefer the dedicated Read tool over bash cat/head/tail for
-    reading files.
-  human_prompt_seed: '请读取工作目录下的 `config.yaml` 文件内容并告诉我里面配置了什么参数。'
-  tags:
-  data_files:
-  - key: config_yaml
-    path: data/EC_tool_choice_read_001/config.yaml
-    description: Simple YAML config file for read tool preference test.
-  reference_answers:
-  - key: tool_preference
-    value: Read
-  - key: turn_budget
-    value:
-      max: 6
-  - key: duration_budget
-    value:
-      max: 7200000
-  - key: token_budget_total
-    value:
-      max: 6000
-  scoring_checklist:
-  - id: correct_content
-    criterion: Agent correctly reports the content and parameters from config.yaml.
-    axis: correctness
-    verify: llm_binary_judge
-  - id: tool_preference
-    criterion: Agent uses the dedicated Read tool to read the file.
-    axis: efficiency
-    verify: tool_name_used
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration does not exceed ceiling.
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
-- id: EC_tool_choice_write_001_20260428
-  capability: execution_contract
-  domain: agnostic
-  intent: Agent should prefer dedicated Write/Edit tools over bash echo/cat heredoc
-    for creating files.
-  human_prompt_seed: '请在工作目录下创建一个 `README.md` 文件，内容为：
-
-    # Project
-
-    This is a test project for materials simulation.
-
-    ## Requirements
-
-    - Python 3.10+
-
-    - NumPy
-
-    - ASE'
-  tags:
-  data_files: []
-  reference_answers:
-  - key: output_artifact
-    value: README.md
-  - key: tool_preference
-    value: Write
-  - key: correct_content
-    value:
-      filename: README.md
-      tokens:
-      - Project
-      - materials simulation
-      - Python
-      - NumPy
-      - ASE
-      flags: i
-  - key: turn_budget
-    value:
-      max: 6
-  - key: duration_budget
-    value:
-      max: 7200000
-  - key: token_budget_total
-    value:
-      max: 6000
-  scoring_checklist:
-  - id: output_artifact
-    criterion: Agent writes `README.md` to workspace.
-    axis: correctness
-    verify: artifact_exists
-  - id: correct_content
-    criterion: README.md contains the requested content sections.
-    axis: correctness
-    verify: text_file_contains_all
-  - id: tool_preference
-    criterion: Agent uses the dedicated Write tool to create the file.
-    axis: efficiency
-    verify: tool_name_used
-  - id: turn_budget
-    criterion: Agent completes the task within the turn (step) budget.
-    axis: efficiency
-    verify: turn_budget
-  - id: duration_budget
-    criterion: Wall-clock run duration does not exceed ceiling.
-    axis: efficiency
-    verify: duration_budget
-  - id: token_budget_total
-    criterion: Total token usage stays within benchmark ceiling.
-    axis: efficiency
-    verify: token_budget
 - id: EC_no_truncation_001_20260430
   capability: execution_contract
   domain: agnostic
@@ -320,7 +209,7 @@ questions:
   human_prompt_seed: '请生成一个包含 20 种常见金属元素的表格，列出每种元素的符号、原子序数、晶体结构类型（FCC/BCC/HCP）和常温晶格常数（Å）。
 
     将完整表格写入 `metals_table.md`，不要省略任何行。'
-  tags:
+  tags: []
   data_files: []
   reference_answers:
   - key: output_artifact
@@ -328,7 +217,7 @@ questions:
   - key: row_count
     value:
       filename: metals_table.md
-      pattern: '^\|?\s*[A-Z][a-z]?\s*\|'
+      pattern: ^\|?\s*[A-Z][a-z]?\s*\|
       flags: m
   - key: turn_budget
     value:
@@ -345,7 +234,9 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: no_truncation
-    criterion: "The file metals_table.md must not contain any truncation indicators such as '...' (ellipsis) that would indicate omitted rows. Check the file content for any occurrence of '...'."
+    criterion: The file metals_table.md must not contain any truncation indicators
+      such as '...' (ellipsis) that would indicate omitted rows. Check the file content
+      for any occurrence of '...'.
     axis: correctness
     verify: llm_binary_judge
   - id: row_count
@@ -384,7 +275,7 @@ questions:
     6. 刚玉 (Al2O3, corundum)
 
     文件名分别为：diamond.txt, nacl.txt, zns.txt, batio3.txt, mgal2o4.txt, al2o3.txt'
-  tags:
+  tags: []
   priority: P0
   data_files: []
   reference_answers:
@@ -504,11 +395,11 @@ questions:
   - key: encut_from_spec
     value:
       filename: INCAR
-      pattern: 'ENCUT\s*=\s*600'
+      pattern: ENCUT\s*=\s*600
   - key: ismear_from_spec
     value:
       filename: INCAR
-      pattern: 'ISMEAR\s*=\s*1'
+      pattern: ISMEAR\s*=\s*1
   - key: defaults_filled
     value:
       filename: INCAR
@@ -600,5 +491,249 @@ questions:
     verify: duration_budget
   - id: token_budget_total
     criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: EC_unsupported_tool_001_20260513
+  capability: execution_contract
+  domain: agnostic
+  intent: Test whether agent immediately informs user that the requested software
+    (Gaussian16) is not supported, without attempting workarounds or recommending
+    alternatives.
+  human_prompt_seed: 请使用 Gaussian16 在 B3LYP/6-311+G(d) 水平下计算 FEMC（COC(=O)CC(F)(F)F）分子的
+    HOMO、LUMO、垂直电离能（VIP）和垂直电子亲和能（VEA），结果输出到 `results.json`。
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 5
+  scoring_checklist:
+  - id: informs_unsupported
+    criterion: Agent clearly tells the user that Gaussian16 is not available/supported
+      on this platform. The response must explicitly state the unavailability rather
+      than silently switching to another tool.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: no_alternative_execution
+    criterion: Agent did NOT attempt to run the calculation using a substitute tool
+      (PySCF, ORCA, CP2K, etc.). It should only inform the user of the limitation,
+      not take it upon itself to use a different software.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: no_recommendation
+    criterion: Agent did NOT proactively recommend or suggest specific alternative
+      software. It may mention what IS available if asked, but should not volunteer
+      alternatives in the initial response.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent responds within very few turns (should not waste turns exploring
+      or attempting submissions).
+    axis: efficiency
+    verify: turn_budget
+- id: EC_unsupported_env_001_20260513
+  capability: execution_contract
+  domain: agnostic
+  intent: Test whether agent informs user that GROMACS+GAFF topology generation (antechamber/acpype)
+    is not available, rather than producing incomplete workarounds.
+  human_prompt_seed: 工作区中有一个 EC/DEC 1:1 电解液体系的初始构型 `electrolyte_box.xyz`。请使用 GAFF
+    力场为该体系生成完整的 GROMACS 拓扑文件（.top 和 .itp），用于后续 MD 模拟。
+  tags: []
+  data_files:
+  - key: electrolyte_box
+    path: data/EC_unsupported_env_001/electrolyte_box.xyz
+    oss_url: ''
+    description: EC/DEC electrolyte box placeholder.
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 8
+  scoring_checklist:
+  - id: informs_unsupported
+    criterion: Agent clearly tells the user that GAFF topology generation tools (antechamber/acpype)
+      are not available in the current environment. The response must explicitly state
+      this limitation rather than silently producing a hand-written approximation.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: no_incomplete_workaround
+    criterion: Agent did NOT produce a manually written .top/.itp file with approximate
+      or placeholder parameters. If the proper toolchain (antechamber) is unavailable,
+      agent should not deliver a degraded result without clearly flagging it as incomplete.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent responds within few turns.
+    axis: efficiency
+    verify: turn_budget
+- id: EC_url_unreachable_001_20260513
+  capability: execution_contract
+  domain: agnostic
+  intent: Test whether agent quickly recognizes an unreachable URL and informs user
+    instead of retrying repeatedly.
+  human_prompt_seed: 请从以下地址下载 LTP 结构文件并导入工作区： https://raw.githubusercontent.com/materialsproject/crystaltoolkit/master/crystaltoolkit/helpers/test_files/LTP.cif
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 5
+  scoring_checklist:
+  - id: informs_unreachable
+    criterion: Agent informs the user that the provided URL is not accessible (404
+      or download failed). The response must clearly state the URL cannot be reached.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: no_excessive_retry
+    criterion: Agent did NOT retry the same URL more than 2 times. After 1-2 failed
+      attempts it should report the failure, not keep trying.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent reports the issue within very few turns.
+    axis: efficiency
+    verify: turn_budget
+- id: EC_resource_limit_001_20260513
+  capability: execution_contract
+  domain: agnostic
+  intent: Test whether agent informs user of resource limitation after a single MD
+    failure, rather than repeatedly retrying with smaller systems.
+  human_prompt_seed: 工作区中有一个 2000 原子的 ZnSO4 水溶液模型 `znso4_2000.xyz`。请使用 DPA3 模型对其进行
+    1 ns NVT 300K MD 模拟。
+  tags:
+  - code_mlip
+  data_files:
+  - key: znso4_box
+    path: data/EC_resource_limit_001/znso4_2000.xyz
+    oss_url: ''
+    description: ZnSO4 solution box (~2000 atoms) that exceeds typical single-GPU
+      MD resource budget.
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 12
+  scoring_checklist:
+  - id: submitted_md
+    criterion: Agent attempted to submit the MD task (shows it tried rather than refusing
+      upfront without reason).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: informs_resource_limit
+    criterion: After MD submission fails, agent informs user that the task likely
+      exceeds resource limits (memory, time, or GPU capacity) for the given system
+      size. Agent does NOT silently shrink the system or retry with different parameters
+      multiple times.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: no_repeated_shrink
+    criterion: Agent did NOT repeatedly try smaller system sizes (e.g. 1000, 500,
+      100 atoms) on its own. At most one retry with adjusted parameters is acceptable
+      before reporting the issue to user.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent reports the issue within budget rather than spending many turns
+      on trial-and-error.
+    axis: efficiency
+    verify: turn_budget
+- id: EC_tool_choice_ask_001_20260527
+  capability: execution_contract
+  domain: agnostic
+  intent: Test whether agent asks the user for DFT engine preference before silently
+    choosing one, when the task does not specify which software to use and the choice
+    significantly impacts the workflow (k-point support, DFT+U availability, etc.).
+  human_prompt_seed: '帮我计算 NiO 岩盐结构的 AFM-II 基态能量和 band gap，需要 DFT+U 精度。
+    结构文件我已经有了（conventional cell, 8 atoms）。
+
+    '
+  tags:
+  - meta_clarification
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 10
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: asks_engine_preference
+    criterion: Before generating input files or submitting calculations, the agent
+      asks the user which DFT engine to use (presenting options like VASP, ABACUS,
+      QE, or CP2K with brief pros/cons for this task). The agent does NOT silently
+      pick one engine and proceed. This is critical because the choice affects
+      k-point capability, pseudopotential availability, and DFT+U implementation.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: mentions_kpoint_requirement
+    criterion: Agent mentions that this task requires adequate k-point sampling
+      (small 8-atom cell needs dense k-mesh for converged energetics), which
+      rules out or constrains certain engine choices (e.g., CP2K PW Gamma-only).
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: does_not_generate_without_asking
+    criterion: Agent does NOT write any input files (INCAR, INPUT, .inp, etc.) or
+      submit any Bohrium jobs before confirming the user's engine preference.
+      Generating files silently with an assumed engine is a FAIL.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent asks within budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
+- id: EC_mp_api_key_required_001_20260531
+  capability: execution_contract
+  domain: agnostic
+  intent: Ask the user for Materials Project API credentials before attempting an authoritative MP thermo query that requires authenticated access.
+  human_prompt_seed: '帮我查一下 MnO2 和 Li2O2 在 Materials Project 里的相稳定性信息，尤其是 energy above
+    hull 和可能的分解产物。请给我一个简短结论。'
+  tags:
+  - meta_database
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 8
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: asks_for_mp_api_key
+    criterion: Agent asks the user to provide or configure a Materials Project API key
+      (`MP_API_KEY` or equivalent credential) before claiming it can retrieve authoritative
+      energy-above-hull or decomposition-product data.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: explains_credential_need
+    criterion: Agent explains that `energy_above_hull` and decomposition products require
+      authenticated Materials Project thermo/summary access, not just general chemical
+      knowledge or an offline estimate.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: no_fabricated_values
+    criterion: Agent does not invent numeric energy-above-hull values or decomposition
+      products before obtaining authenticated MP data.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: no_blind_retry
+    criterion: Agent does not repeatedly attempt unauthenticated Materials Project API
+      calls or otherwise loop on likely unauthorized access instead of asking for credentials.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent asks for the required credential within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
     axis: efficiency
     verify: token_budget

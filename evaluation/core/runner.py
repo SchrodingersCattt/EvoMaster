@@ -19,7 +19,7 @@ import yaml
 
 from .aggregator import build_summary
 from .evaluator import BinaryEvaluator
-from .evaluator_helpers import token_usage_record_from_evidence
+from .evaluator_wiring import token_usage_record_from_evidence
 from .evidence import EvidenceBundle, EvidenceExtractor
 from .mat_runner import run_mat_task
 from .reporter import append_raw_run, write_reports
@@ -92,6 +92,11 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
             run_dir=mat_runs_dir,
             mat_config_path=mat_config_path,
             empty_completion_max_retries=config.empty_completion_max_retries,
+            inject_bohrium_failure=(
+                question.inject_failure_message
+                if question.inject_bohrium_failure
+                else None
+            ),
         )
         answer = str(mat_result.get('answer', '') or '')
         tool_calls: list[dict[str, Any]] = mat_result.get('tool_calls', [])
@@ -163,7 +168,10 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
 
 
 def _question_matches_slice(question: QuestionItem, sl: CapabilitySlice) -> bool:
-    if sl.capability is not None and question.capability.lower() != sl.capability.lower():
+    if (
+        sl.capability is not None
+        and question.capability.lower() != sl.capability.lower()
+    ):
         return False
     if sl.domains is not None:
         allowed = {d.lower() for d in sl.domains}
@@ -173,6 +181,8 @@ def _question_matches_slice(question: QuestionItem, sl: CapabilitySlice) -> bool
         have = {str(t).lower() for t in question.tags}
         if not all(req.lower() in have for req in sl.tags):
             return False
+    if sl.scope is not None and question.scope != sl.scope:
+        return False
     return True
 
 
@@ -208,16 +218,15 @@ def _apply_filters(
 def expand_run_plan(
     *, questions: list[QuestionItem], config: EvalConfig
 ) -> list[dict[str, Any]]:
-    """Expand direct mode × k repeat plan.
+    """Expand mode × k repeat plan.
 
-    v5: MATTER eval runs only ``direct`` (no per-question mode scope).
+    ``config.exp`` selects the matmaster exp (default ``direct``).
     """
+    mode = config.exp
     plan: list[dict[str, Any]] = []
     for question in questions:
         for repeat_idx in range(config.k):
-            plan.append(
-                {'question': question, 'mode': 'direct', 'repeat_idx': repeat_idx}
-            )
+            plan.append({'question': question, 'mode': mode, 'repeat_idx': repeat_idx})
     return plan
 
 

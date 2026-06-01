@@ -244,6 +244,11 @@ def main() -> int:
         help="When writing claude_review.md, include human_prompt_seed from the question bank.",
     )
     parser.add_argument(
+        "--notify",
+        action="store_true",
+        help="Send Feishu notification with scoring summary after all tasks complete.",
+    )
+    parser.add_argument(
         "--no-eval-ingest",
         action="store_true",
         help="Disable evaluation ingest (no POST to tools-server ingest API).",
@@ -305,6 +310,13 @@ def main() -> int:
             "With --prepare-cc-baseline: stored in manifest for ingest "
             "(EvalIngestRequest.baseline_channel; default: claude_code)."
         ),
+    )
+    parser.add_argument(
+        "--exclude-subagents",
+        nargs="*",
+        default=["verification"],
+        metavar="NAME",
+        help="Subagent exp names to exclude from Agent tool (default: verification).",
     )
     args = parser.parse_args()
 
@@ -533,6 +545,11 @@ def main() -> int:
         console_log_file = log_dir / "devshell_console.log"
 
         primary_route = (args.model or "").strip() or None
+        inject_failure = (
+            question.inject_failure_message
+            if getattr(question, 'inject_bohrium_failure', False)
+            else None
+        )
         cmd = build_mm_devshell_run_cmd(
             py=py,
             workspace_path=workspace_path,
@@ -542,6 +559,8 @@ def main() -> int:
             model=primary_route,
             exp_cli=exp_cli,
             verbose=bool(args.verbose),
+            exclude_subagents=args.exclude_subagents,
+            inject_bohrium_failure=inject_failure,
         )
 
         prepared_tasks.append(
@@ -562,6 +581,7 @@ def main() -> int:
                 "mm_py": py,
                 "exp_cli": exp_cli,
                 "verbose": bool(args.verbose),
+                "inject_bohrium_failure": inject_failure,
             }
         )
 
@@ -656,6 +676,8 @@ def main() -> int:
                 model=fallback_model,
                 exp_cli=prepared["exp_cli"],
                 verbose=bool(prepared["verbose"]),
+                exclude_subagents=args.exclude_subagents,
+                inject_bohrium_failure=prepared.get("inject_bohrium_failure"),
             )
             rc2, d2, summary2 = _run_devshell_task(
                 cmd=cmd_fb,
@@ -945,6 +967,20 @@ def main() -> int:
         print(
             f"Pack for Claude (skipped): uv run python evaluation/scripts/devshell/export_devshell_review_bundle.py --run-dir {run_dir}",
             file=sys.stderr,
+        )
+
+    if args.notify:
+        from evaluation.devshell_agent.feishu_round_notify import (
+            notify_after_scoring_async,
+        )
+
+        notify_after_scoring_async(
+            run_dir=run_dir,
+            ingest_result={
+                "attempted": True,
+                "ok": not ingest_failed,
+                "stderr_tail": "",
+            },
         )
 
     if any_failed:

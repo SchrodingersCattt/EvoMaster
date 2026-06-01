@@ -15,7 +15,6 @@ from evaluation.devshell_agent.path_policy import (
     PROPOSED_MATMASTER_EXPS_CHANGES_NAME,
     PROPOSED_OPTIMIZATION_CHANGES_NAME,
     PROPOSED_QUESTION_BANK_CHANGES_NAME,
-    devshell_main_agent_history_root,
 )
 from evaluation.devshell_agent.path_policy import is_under as _path_is_under
 from evaluation.devshell_agent.sdk_tools_eval_run import MatmasterEvalMcpEvalRunMixin
@@ -44,20 +43,10 @@ class MatmasterEvalMcpToolkit(MatmasterEvalMcpEvalRunMixin):
         return [f"mcp__{cls.MCP_SERVER_NAME}__report_checklist_revision"]
 
     @classmethod
-    def main_agent_fs_tool_names(cls) -> list[str]:
-        prefix = f"mcp__{cls.MCP_SERVER_NAME}__main_"
-        return [
-            prefix + "read_text",
-            prefix + "glob_paths",
-            prefix + "grep_text",
-        ]
-
-    @classmethod
     def allowed_tool_names(cls) -> list[str]:
         """MCP tools for the main (product) iteration agent."""
         return [
             *cls.main_agent_mcp_tool_names(),
-            *cls.main_agent_fs_tool_names(),
             f"mcp__{cls.MCP_SERVER_NAME}__delegate_optimization",
         ]
 
@@ -185,17 +174,6 @@ class MatmasterEvalMcpToolkit(MatmasterEvalMcpEvalRunMixin):
                     path, evaluation_root
                 ):
                     raise ValueError(f"optimization path access denied: {raw_path}")
-            return path
-
-        if role == "main":
-            if write:
-                raise ValueError(
-                    "main agent path access denied: read-only tools "
-                    "(evaluation/devshell_agent_history/ only)"
-                )
-            history_root = devshell_main_agent_history_root(repo_root)
-            if not _path_is_under(path, history_root):
-                raise ValueError(f"main path access denied: {raw_path}")
             return path
 
         if role == "checklist":
@@ -616,40 +594,6 @@ class MatmasterEvalMcpToolkit(MatmasterEvalMcpEvalRunMixin):
             return await toolkit._delegate_optimization(args)
 
         @tool(
-            "main_read_text",
-            (
-                "Read a file under ``evaluation/devshell_agent_history/`` only "
-                "(orchestrator-written snapshots, any session subfolder, and index.jsonl). "
-                "No other ``evaluation/`` paths."
-            ),
-            _mts.READ_TEXT_SCHEMA,
-        )
-        async def main_read_text_tool(args: dict[str, Any]) -> dict[str, Any]:
-            return await toolkit._read_text(role="main", args=args)
-
-        @tool(
-            "main_glob_paths",
-            (
-                "Glob under ``evaluation/devshell_agent_history/`` only (all session "
-                "subfolders and ``index.jsonl``)."
-            ),
-            _mts.GLOB_PATHS_SCHEMA,
-        )
-        async def main_glob_paths_tool(args: dict[str, Any]) -> dict[str, Any]:
-            return await toolkit._glob_paths(role="main", args=args)
-
-        @tool(
-            "main_grep_text",
-            (
-                "Search text under ``evaluation/devshell_agent_history/`` only "
-                "(all sessions)."
-            ),
-            _mts.GREP_TEXT_SCHEMA,
-        )
-        async def main_grep_text_tool(args: dict[str, Any]) -> dict[str, Any]:
-            return await toolkit._grep_text(role="main", args=args)
-
-        @tool(
             "report_optimization_result",
             (
                 "Call exactly once at the end of an optimization sub-round to record "
@@ -772,9 +716,6 @@ class MatmasterEvalMcpToolkit(MatmasterEvalMcpEvalRunMixin):
                 escalate_checklist_revision_tool,
                 report_checklist_revision_tool,
                 delegate_optimization_tool,
-                main_read_text_tool,
-                main_glob_paths_tool,
-                main_grep_text_tool,
                 report_optimization_result_tool,
                 git_revert_commits_after_base_tool,
                 optimization_read_text_tool,

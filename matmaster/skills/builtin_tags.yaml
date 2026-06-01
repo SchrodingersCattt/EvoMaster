@@ -1,76 +1,108 @@
-tag_definitions:
-  first-principles: 第一性原理
-  molecular-dynamics: 分子动力学
-  machine-learning-potential: 机器学习势
-  structure: 结构建模
-  characterization: 表征分析
-  data-analysis: 数据分析
-  literature: 文献检索
-  writing: 学术写作
-  polymer: 高分子
-  planning: 任务规划
-  utility: 工具
+categories:
+  structure-modeling:
+    groups:
+      atomic-structure-ops:
+        skills:
+          - atomic-structure
+          - inspect-atomic-structure
+          - build-crystal-from-params
+          - transform-atomic-structure
+          - assemble-atomic-structure
+          - operate-molecular-crystal
+          - sample-atomic-structures
+          - tasker-polar-surface
+      structure-search:
+        skills:
+          - mcp-mat-struct-db
+          - retrieve-structure
+      polymer-modeling:
+        skills:
+          - poly-generator
 
-skills:
-  abacus: [first-principles]
-  abinit: [first-principles]
-  vasp: [first-principles]
-  cp2k: [first-principles]
-  quantum_espresso: [first-principles]
-  pyscf: [first-principles]
-  orca: [first-principles]
-  pyatb: [first-principles]
+  simulation:
+    groups:
+      abacus:
+        skills:
+          - abacus
+          - pyatb
+      vasp:
+        skills:
+          - vasp
+          - vaspkit-postprocess
+      cp2k:
+        skills:
+          - cp2k
+      quantum-espresso:
+        skills:
+          - quantum_espresso
+      abinit:
+        skills:
+          - abinit
+      pyscf:
+        skills:
+          - pyscf
+      orca:
+        skills:
+          - orca
+      lammps:
+        skills:
+          - lammps
+      gromacs:
+        skills:
+          - gromacs
+          - md-analysis
+          - poly-forcefield
+      gpumd:
+        skills:
+          - gpumd
+      mlips:
+        skills:
+          - mlips
+          - aissq-explorer
 
-  lammps: [molecular-dynamics]
-  gromacs: [molecular-dynamics]
-  gpumd: [machine-learning-potential, molecular-dynamics]
-  mlips: [machine-learning-potential, molecular-dynamics]
+  analysis:
+    groups:
+      general-data-analysis:
+        skills:
+          - data-analysis
+          - result-analysis
+      characterization:
+        skills:
+          - pxrd-refinement
+          - checkcif-validator
+          - mcp-mat-xrd
+          - mcp-mat-nmr
+          - mcp-mat-electron-microscope
+      data-mining:
+        skills:
+          - mcp-mat-compdart
+          - composition-optimization
 
-  inspect-atomic-structure: [structure]
-  build-atomic-structure: [structure]
-  transform-atomic-structure: [structure]
-  assemble-atomic-structure: [structure]
-  operate-molecular-crystal: [structure]
-  sample-atomic-structures: [structure]
-  mcp-mat-struct-db: [structure]
-  structure-manager: [structure]
-  tasker-polar-surface: [structure]
+  research-writing:
+    groups:
+      literature:
+        skills:
+          - mcp-mat-doc
+          - deep-survey
+          - lit-data-organizer
+      academic-writing:
+        skills:
+          - manuscript-scribe
+          - proposal-review
 
-  xrd-analysis: [characterization]
-  pxrd-refinement: [characterization]
-  mcp-mat-xrd: [characterization]
-  mcp-mat-nmr: [characterization]
-  mcp-mat-electron-microscope: [characterization]
-  checkcif-validator: [characterization]
-
-  data-analysis: [data-analysis]
-  result-analysis: [data-analysis]
-  md-analysis: [data-analysis, molecular-dynamics]
-  vaspkit-postprocess: [data-analysis]
-
-  mcp-mat-compdart: [data-analysis]
-  composition-optimization: [data-analysis]
-
-  mcp-mat-doc: [literature]
-  deep-survey: [literature]
-  lit-data-organizer: [literature, data-analysis]
-
-  manuscript-scribe: [writing]
-  proposal-review: [writing]
-
-  poly-generator: [polymer]
-  poly-forcefield: [polymer, molecular-dynamics]
-
-  gromacs-system-prep: [molecular-dynamics]
-  grompp-remote-mdrun: [molecular-dynamics]
-
-  plan-executor: [planning]
-  acceptance-writer: [planning]
-  plan-checker: [planning]
-  plan-writer: [planning]
-  spec-writer: [planning]
-  stack-checker: [planning]
-
-  skill-manager: [utility]
-  compliance-guardian: [utility]
-  input-manual-helper: [utility]
+  workflow-system:
+    groups:
+      task-planning:
+        skills:
+          - plan-writer
+          - plan-checker
+          - plan-executor
+          - spec-writer
+          - acceptance-writer
+          - stack-checker
+      system-tools:
+        skills:
+          - skill-manager
+          - image-manager
+          - session-analyzer
+          - compliance-guardian

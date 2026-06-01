@@ -13,7 +13,7 @@ ORCA is an ab initio quantum chemistry program focused on molecular systems. It 
 | Item | Default Value |
 |------|---------------|
 | image | `registry.dp.tech/dptech/dp/native/prod-19853/orca:v6.1.1` |
-| machine | `c32_m128_cpu` (32 cores, 128 GB RAM) |
+| machine | `c64_m256_cpu` (32 physical cores, 256 GB RAM) |
 | cmd | `OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 OMPI_MCA_rmaps_base_oversubscribe=1 /opt/orca611_avx2/orca {input_file} > log 2>&1` |
 
 > ORCA is run via **absolute path** (`/opt/orca611_avx2/orca`), not through mpirun or PATH.
@@ -67,12 +67,12 @@ If the user provides a complete ORCA `.inp` file, skip preparation and submit di
 
 ## Physical Checks
 
-- **Parallelism**: set `%pal nprocs 32 end` to match machine core count (32 for c32_m128_cpu)
+- **Parallelism**: set `%pal nprocs 32 end` to match physical core count (32 for c64_m256_cpu)
 - **Basis set**: def2-SVP for quick tests, def2-TZVP for production, def2-QZVP for benchmark
 - **RI approximation**: RIJCOSX or RI-JK for DFT; RI for post-HF. Specify `/C` and `/JK` auxiliary basis sets when using RI explicitly
 - **Charge and multiplicity**: first two values after `*xyz`. Verify: total electrons = sum(Z) - charge; multiplicity = 2S+1
 - **SCF convergence**: `TightSCF` for production, `VeryTightSCF` for frequency/NMR
-- **Memory**: `%maxcore 3500` allocates 3.5 GB per process; adjust based on machine memory / nprocs (128 GB / 32 = 4 GB max per core)
+- **Memory**: `%maxcore 7000` allocates 7 GB per process; adjust based on machine memory / nprocs (256 GB / 32 = 8 GB max per core)
 - **TD-DFT**: check `nroots` is sufficient; TDA (Tamm-Dancoff approximation) is default ON, set `TDA false` in `%tddft` for full TD-DFT if needed
 - **Open-shell**: use UHF/UKS for doublets/triplets; check `%scf HFTyp UHF end` or use `! UKS` in simple input
 - **Large molecules + excited states**: prefer sTD-DFT (simplified TD-DFT) over full TD-DFT for molecules > 100 atoms

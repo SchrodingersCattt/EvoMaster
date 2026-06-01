@@ -47,6 +47,82 @@ evaluation/question_bank/
 | `grounding` | 是否使用了正确的工具/数据源，而非凭空编造 |
 | `efficiency` | 过程是否高效（无冗余调用、耗时/token 合理） |
 
+### 提示词 / 工具 / Skill 覆盖率口径
+
+`evaluation/scripts/coverage/extract_and_match.py` 会从 `matmaster/skills`、
+内置工具提示与系统提示中抽取规则，并与题库做匹配。报告同时保留两套口径：
+
+- **Raw coverage**：所有抽取规则都进入分母，用于观察提示词、工具、Skill
+  文档的整体匹配情况。
+- **Actionable coverage**：只统计应由题库 checklist 捕获的规则。每条规则会带
+  `actionability`、`is_actionable` 与 `actionability_reason`；默认只有
+  `actionability: testable` 进入 actionable 分母。
+
+行动性分类配置在
+`evaluation/scripts/coverage/rule_scope_overrides.yaml`。常用分类为：
+
+| actionability | 含义 |
+| --- | --- |
+| `testable` | 应通过题目 checklist、确定性 verifier 或 LLM judge 覆盖 |
+| `policy_only` | 系统/流程/对话策略，不默认要求科学题库覆盖 |
+| `tool_schema` | 工具参数或工具 schema 说明，优先通过工具单测覆盖 |
+| `runtime_dependent` | 依赖 MCP、Bohrium 镜像、机器队列等运行时资源 |
+| `out_of_scope` | 当前评测目标外的能力或暂未启用服务 |
+
+新增大类 Skill、工具或 MCP 时，若其规则不应默认进入题库补题分母，应同步更新
+`rule_scope_overrides.yaml`，并为 `testable` 规则优先设计能真正失败的 checklist；
+不要只靠 tag/关键词把 raw coverage 刷高。
+
+### Skill 触发率评测 cases
+
+Skill 触发率评测位于 `evaluation/skill_trigger/`，用于验证模型面对真实用户
+prompt 时是否会正确加载目标 Skill、且不会在相邻任务上误触发。开发或大幅调整
+Skill 前，必须先准备触发率 case；case 代表用户真实意图，后续评测未达标时优先
+优化 `SKILL.md` frontmatter 的 `description` 触发关键词，不应为了过测反向改 case。
+
+Case 文件为 `evaluation/skill_trigger/cases.yaml`，每个 Skill 一段：
+
+```yaml
+  - skill: your-skill-name
+    positive:
+      - "应触发该 Skill 的用户 prompt"
+    negative:
+      - "不应触发该 Skill 的相邻任务 prompt"
+```
+
+编写要求：
+
+- `skill` 必须与对应 `SKILL.md` frontmatter 中的 `name` 完全一致。
+- 每个 Skill 至少 **10 条 positive**、**5 条 negative**；不要用重复改写凑数。
+- positive 覆盖 Skill 的核心能力边界，包含明确提到软件/方法名的简单 case，也包含
+  只描述任务意图、不直接点名 Skill 的自然 case；至少 2 条英文 prompt。
+- negative 应优先选择最容易混淆的邻近 Skill 或同流程上下游场景，例如同类软件、
+  结构构建 vs 结构变换、计算执行 vs 结果分析；不要写明显无关的废话 prompt。
+- prompt 应是一句话、自然语言、无代码块；避免内部 MCP tool 名、脚本路径或
+  `Skill: <name>` 这类路由泄漏。通用软件/方法名（如 VASP、Pawley、checkCIF）
+  可以使用。
+- case 以"应然正确"为目标：先保证意图清晰、科学语义合理、边界可区分，再考虑运行
+  评测。若 runtime 结果不稳定，通常说明 `description` 触发信号不足。
+- 若某个 `skill_type: orchestrator` 父 Skill 通过决策树串起多个并列 leaf
+  skill，触发率 cases 必须为每个 leaf 单独写一段；父 Skill 的 cases
+  仅用于用户提问模糊、多步、或没明确指向某 leaf 的兜底场景。
+
+本地基础检查：
+
+```bash
+uv run python -c "import yaml; yaml.safe_load(open('evaluation/skill_trigger/cases.yaml'))"
+```
+
+需要实际跑触发率评测时：
+
+```bash
+uv run python -m evaluation.skill_trigger --skills your-skill-name --k 1 --max-cases 2
+uv run python -m evaluation.skill_trigger --skills your-skill-name --jobs 8
+```
+
+默认正式评测 `k=3`，positive 要求每次都触发目标 Skill，negative 要求每次都不触发
+目标 Skill；结果写入 `runs/skill_trigger_eval/`。
+
 ### `EvalConfig` 与 Agent 运行（`run_mat_task`）
 
 - **`empty_completion_max_retries`**（默认 `1`）：当单次运行结果为 `status=completed`、无工具调用、且无可见答案（含内核 `reason=natural` 或旧版 playground 无 `reason` 字段）时，视为「可能因网关/流式偶发空流」，**整题重跑**最多额外次数；`0` 表示关闭。`mat_result` 会附带 `empty_completion_retry_count`（实际执行的重试次数），`duration_ms` 为**多次尝试之和**。
@@ -101,6 +177,7 @@ evaluation/question_bank/
 - 优先写**主题 / 工具链 / 方法族**；若只是想表达“这是个多步流程题”，应由 `capability=workflow_orchestration` 表达，而不是再写 `workflow` tag。
 - **受控词表 + 前缀语义**：合法 tag 为数十个粗粒度值，例如 `meta_userlog`、`wf_batch`、`abacus`、`vasp`、`phy_surface`、`chem_co2rr`、`mat_hea` 等（完整列表见 `question_tags.py`）。**不要在 tags 里堆材料实例名**（如单个化学式、Miller 指数），以免与 `capability`/`domain` 信息重复且难以维护。
 - **命名风格**：仅使用词表内 `lower_snake_case` 字符串；材料名、化学式类 **legacy** 别名仍由 `schemas.CANONICAL_TAG_ALIASES` 拒绝并提示 canonical（归一化后进入上述词表）。
+- **优先对应 `matmaster` skill**：新增 tag 时**尽量让其对应一个真实 skill**（`matmaster/skills/**/SKILL.md`），以便后续做「按 skill 覆盖率 / 触发率」分析；而不是新造一个泛主题词。例如 `struct_inspect`（对应 inspect-atomic-structure，纯解析不改结构）、`analysis_data`（对应 data-analysis，筛选表/相图/文献提数/可视化）、`analysis_post_md`（对应 md-analysis）。确无对应 skill 的稳定主题/工具线（如 `meta_database`、`char_electrochem`）才用主题族前缀。
 
 **与 `--slices` 的关系**：Runner 当前仅按 **`capability` + `domain`** 过滤；**需要稳定用 CLI 切分的维度**应落在二者之一（或专题 capability），不要**只**写在 `tags` 里（除非已实现 tags 筛选，见下文「运行筛选」）。
 
@@ -249,6 +326,10 @@ evaluation/question_bank/
 | `struct_file_stoichiometry_ratio` | `{"filename": str, "element_a": str, "element_b": str, "expected_ratio": float, "tolerance": float}` | 验证 count(A)/count(B) 比值 |
 | `struct_file_coordination` | `{"filename": str, "center_element": str, "expected": int, "tolerance": float, "cutoff_A": float}` | 统计中心元素的配位数均值并校验 |
 | `struct_file_layer_count` | `{"filename": str, "expected": int, "tolerance": float, "axis": str, "layer_tol_A": float, "element": str(可选)}` | 沿指定轴在笛卡尔坐标下统计**不同原子平面**数：排序后，与当前平面锚点距离超过 `layer_tol_A`（Å）则开始新平面；默认 `layer_tol_A` 为 `0.25`。提供 `element` 时仅统计该元素的分层（如仅统计 slab 金属层，不计溶剂/离子层）。旧字段 `gap_threshold_A` 仍可读，但语义为平面合并容差（与现实现一致），新题请写 `layer_tol_A` |
+| `struct_file_parsable` | `{"filename": str}` | 用 pymatgen 解析所有匹配的结构文件；适合单独要求 CIF/POSCAR 等交付物不仅存在而且可读。`filename` 可为 basename glob（如 `ordered_*.cif`），匹配到多个文件时全部必须可解析 |
+| `struct_file_all_occupancy_one` | `{"filename": str, "tolerance": float}` | 用 pymatgen 读取所有匹配文件，要求每个 site 只有一个 species 且 occupancy 为 `1±tolerance`；适合 ordered replica 等题，**不要**用于允许 partial occupancy 的无序/缺陷结构 |
+| `struct_file_space_group` | `{"filename": str, "expected_number": int, "symprec": float, "angle_tolerance": float}` | 用 pymatgen `SpacegroupAnalyzer` 识别周期结构空间群编号并比较；适合高对称 bulk/标准结构，slab/界面/弛豫结构需谨慎设置 `symprec` |
+| `struct_file_min_interatomic_distance` | `{"filename": str, "min_distance_A": float, "elements": list[str](可选)}` | 读结构文件并检查所有选中 atom pair 的最小距离不低于阈值；提供 `elements` 时只在这些元素内筛选，否则检查全结构。适合“无重叠/最短距离下限”类题 |
 | `struct_file_count` | `{"pattern": str, "expected": int, "tolerance": int}` | 统计 workspace 中匹配 glob 的文件数（无需 pymatgen） |
 | `struct_file_surface_termination` | `{"filename": str, "element": str, "axis": "x"\|"y"\|"z", "side": "top"\|"bottom"\|"both", "layer_tol_A": float}` | 检查 slab 最外层（top/bottom/both）是否由指定元素构成；用于验证 O-terminated 或其他特定终止面（如 CeO2(111) 的 O 终止）|
 | `checkcif_no_a_alerts` | `{"filename": str, "max_a_alerts": int}` | 在 workspace 中找到匹配 `filename`（glob，默认 `*.cif`）的 CIF 文件，POST 到 IUCr checkCIF 服务（`https://checkcif.iucr.org/cgi-bin/checkcif_hkl.pl`），解析 HTML 响应中的 A/B/C/G 级别警告数，验证 A 级警告数 ≤ `max_a_alerts`（默认 0）。实现见 `evaluation/validators/checkcif.py`。|
@@ -267,6 +348,11 @@ evaluation/question_bank/
 | `source_type_used` | 检查数据源类型 |
 | `call_count_range` | 分析工具调用次数（建议也配上 ref） |
 | `token_budget` | 用 **最后一轮 LLM** 的原始 ``total_tokens``（**不**扣 cache）：``EvidenceBundle.token_usage_last_turn.total_tokens``（轨迹取 max ``step_id`` 的 ``meta.usage``；无 ``total_tokens`` 时用 prompt+completion 推导）。对 **external baseline** 这类只有整轮汇总、没有 ``usage_vendor_by_turn`` 的摘要，允许用 ``summary.usage.total_tokens / num_turns`` 近似最后一轮。ingest 顶层 ``item["tokens"]`` / ``extra["tokens_last_turn"]`` 与 :func:`evaluation.eval_ingest_client.extract_ingest_tokens` 对齐：有 ``usage_vendor_by_turn`` 时取最后一项的 ``total_tokens``；baseline 若启用近似口径则按 ``summary.usage.total_tokens / num_turns``；其余情况回退到 ``summary.usage.total_tokens``（整表累加标量）。建议配上 ref，格式同 `duration_budget`） |
+
+不要用 `llm_binary_judge` 的 `required_fields` 重复要求 agent 在 final answer
+显式复述已由 deterministic verifier 检查的结构数值（如化学计量比、晶胞角、
+原子数、最小距离）。这些数值应通过 `struct_file_*` / `answer_json_numeric`
+等代码校验；final answer 裁判只保留代码难以判定的解释、grounding 或物理意图。
 
 ---
 
@@ -354,6 +440,17 @@ scoring_checklist:
 - `reference_answers` 中的 `tool_name` / `tool_arg` 字段、`scoring_checklist.criterion` 中引用工具名均为**内部评分逻辑**，不发给 Agent，允许使用工具名。
 - `intent` 中可以使用通用术语（如"表面构建工具"、"结构优化器"），但同样不应包含具体 MCP tool identifier。
 - 新增或修改题目时，需检查 `human_prompt_seed` 中是否意外泄漏了工具名；审查方式：在所有 YAML 的 `human_prompt_seed` 文本中搜索 `mat_sg_`、`mat_dpa_`、`mat_struct_db_` 等前缀。
+
+### 7. 真实轨迹派生题避免透题
+
+从真实线上轨迹沉淀题目时，除遵守本文件的 YAML/schema 约定外，还必须遵守 `evaluation/skills/real-traj-analysis/SKILL.md` 中的 Realistic Question Design 规则：先还原真实用户任务，再把评测意图放入隐藏 checklist / reference / judge。
+
+红线：
+
+- 不要把失败模式、质控点、来源约束、禁止捷径或期望诊断直接写进 `human_prompt_seed`。
+- 不要为便于判分而新增真实用户不会要求的参考资料、source report、notes 文件或答案化输出字段。
+- fixture 可以包含日志、运行记录、来源备注、杂乱表格等真实线索，但应避免 `expected_*`、`is_valid`、`value_type=experimental/estimated` 这类直接暴露答案的字段。
+- 输出文件名和 JSON key 应像真实交付物，而不是隐藏评分项名称。
 
 ---
 

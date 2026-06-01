@@ -466,6 +466,16 @@ class ChatStreamService:
         if not acquired_ok:
             return None
 
+        if req.replace_last_turn:
+            last_query_ev = self._events_service.get_last_user_query_event(sid)
+            if last_query_ev and last_query_ev.get('id'):
+                self._events_service.delete_events_from_id(sid, last_query_ev['id'])
+                logger.info(
+                    "replace_last_turn: deleted events from id=%s session_id=%s",
+                    last_query_ev['id'],
+                    sid,
+                )
+
         mode = (req.mode or DEFAULT_MODE).strip().lower() or DEFAULT_MODE
         if mode not in SUPPORTED_MODES:
             mode = DEFAULT_MODE
@@ -503,7 +513,15 @@ class ChatStreamService:
         self._deploy_state_service.record_session_version(sid)
         user_content = (req.content or '').strip()
         if user_content and user_id:
-            self._sessions_service.set_session_chat_mode(sid, mode, user_id)
+            # 持久化本轮 mode 偏好属非关键副作用：DB 抖动不应中断发送，best-effort。
+            try:
+                self._sessions_service.set_session_chat_mode(sid, mode, user_id)
+            except Exception as e:
+                logger.warning(
+                    "persist chat_mode failed (best-effort) session_id=%s: %s",
+                    sid,
+                    e,
+                )
         user_msg = {
             'source': 'User',
             'type': 'query',

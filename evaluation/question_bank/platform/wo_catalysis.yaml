@@ -1,0 +1,66 @@
+version: v5
+capability: workflow_orchestration
+domain: catalysis
+questions:
+- id: WO_dpa_head_001_20260523
+  capability: workflow_orchestration
+  domain: catalysis
+  intent: Test whether agent selects the correct DPA model head (OC22) for a surface
+    adsorption calculation, as documented in mlips skill.
+  human_prompt_seed: '请使用 DPA 模型计算 CO 在 Pt(111) 表面 ontop 位点的吸附能。需要分别优化
+    clean slab、气相 CO 分子和吸附结构，输出提交配置 `adsorption_submit.json`（包含三个任务的
+    cmd）。'
+  tags:
+  - code_mlip
+  - struct_surface
+  data_files: []
+  reference_answers:
+  - key: submit_artifact
+    value: adsorption_submit.json
+  - key: must_head_oc22
+    value:
+      filename: adsorption_submit.json
+      pattern: OC22
+      flags: ''
+  - key: must_optimize
+    value:
+      filename: adsorption_submit.json
+      pattern: optimize_structure
+      flags: ''
+  - key: must_image_dpa
+    value:
+      filename: adsorption_submit.json
+      pattern: dpa-calculator
+      flags: i
+  - key: turn_budget
+    value:
+      max: 15
+  scoring_checklist:
+  - id: submit_artifact
+    criterion: adsorption_submit.json written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_head_oc22
+    criterion: '[Platform] cmd uses --head OC22 (correct head for surface catalysis
+      / adsorbate-surface interactions as documented in mlips skill).'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_optimize
+    criterion: '[Platform] cmd references optimize_structure script for geometry optimization.'
+    axis: correctness
+    verify: text_file_regex
+  - id: must_image_dpa
+    criterion: '[Platform] image field references the DPA-specific image (dpa-calculator),
+      not the multi-family mlips image or a generic deepmd-kit image.'
+    axis: correctness
+    verify: text_file_regex
+  - id: three_systems
+    criterion: The submission config contains commands for three separate optimizations
+      (clean slab, gas-phase CO molecule, and CO-adsorbed slab), which are needed
+      to compute E_ads = E(slab+CO) - E(slab) - E(CO).
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget

@@ -270,6 +270,53 @@ def test_manifest_bank_metadata_matches_bank_files() -> None:
         assert manifest_domain == bank_domain, entry["path"]
 
 
+def test_manifest_banks_validate_against_v5_schema() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    bank_root = repo_root / "evaluation" / "question_bank"
+    manifest = yaml.safe_load((bank_root / "manifest.yaml").read_text(encoding="utf-8"))
+
+    for entry in manifest["banks"]:
+        bank_path = bank_root / entry["path"]
+        raw_bank = yaml.safe_load(bank_path.read_text(encoding="utf-8"))
+        QuestionBank.model_validate(raw_bank)
+
+
+def test_input_manual_helper_coverage_questions_are_outcome_based() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    bank_root = repo_root / "evaluation" / "question_bank" / "input_generation"
+    question_ids = {
+        "IG_abacus_009_20260508",
+        "IG_abacus_010_20260513",
+        "IG_cp2k_002_20260508",
+        "IG_cp2k_003_20260508",
+        "IG_gromacs_002_20260508",
+    }
+    forbidden_terms = {
+        "input-manual-helper",
+        "skill_dir",
+        "render_input.py",
+        "diagnose_input.py",
+        "write_manifest.py",
+        "references/engine_routes.md",
+        "engine skill",
+    }
+
+    questions = []
+    for bank_path in bank_root.glob("ig_agnostic_*.yaml"):
+        raw_bank = yaml.safe_load(bank_path.read_text(encoding="utf-8"))
+        questions.extend(raw_bank["questions"])
+
+    selected = [q for q in questions if q["id"] in question_ids]
+    assert {q["id"] for q in selected} == question_ids
+
+    for question in selected:
+        chunks = [question["intent"], question["human_prompt_seed"]]
+        chunks.extend(item["criterion"] for item in question["scoring_checklist"])
+        text = "\n".join(chunks).lower()
+        for forbidden in forbidden_terms:
+            assert forbidden not in text, question["id"]
+
+
 def test_active_question_banks_use_only_business_line_domains() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     bank_root = repo_root / "evaluation" / "question_bank"
@@ -310,8 +357,18 @@ def test_bank_yaml_filename_matches_capability_and_domain() -> None:
         if bank_path.name == "manifest.yaml":
             continue
         cap_dir = bank_path.parent.name
+        # platform/ is a cross-capability scope bucket; skip capability==dirname check.
+        if cap_dir == "platform":
+            continue
         raw_bank = yaml.safe_load(bank_path.read_text(encoding="utf-8"))
-        assert raw_bank["capability"] == cap_dir, bank_path.as_posix()
+        if cap_dir == "platform":
+            # platform/ groups cross-capability platform-check questions.
+            assert raw_bank["capability"] in {
+                "input_generation",
+                "workflow_orchestration",
+            }, bank_path.as_posix()
+        else:
+            assert raw_bank["capability"] == cap_dir, bank_path.as_posix()
         assert _bank_yaml_filename_matches_capability_domain(
             capability=raw_bank["capability"],
             domain=raw_bank["domain"],
@@ -357,11 +414,9 @@ def test_phase2_split_banks_have_expected_question_ids() -> None:
     )
 
     wo_semi_ids = [q["id"] for q in semiconductor_bank["questions"]]
-    assert "WO_elec_001_20260411v2" in wo_semi_ids
-    assert "WO_elec_009_20260415" in wo_semi_ids
+    assert "WO_elec_009_20260515" in wo_semi_ids
     wo_cat_ids = [q["id"] for q in catalysis_bank["questions"]]
-    assert "WO_elec_006_20260411v2" in wo_cat_ids
-    assert "WO_elec_007_20260415" in wo_cat_ids
+    assert "WO_elec_007_20260523" in wo_cat_ids
     assert "WO_struct_001_20260404" in wo_cat_ids
     assert "WO_struct_002_20260404" in wo_cat_ids
 
@@ -371,5 +426,5 @@ def test_manifest_active_totals_after_phase2_splits() -> None:
     bank_root = repo_root / "evaluation" / "question_bank"
     manifest = yaml.safe_load((bank_root / "manifest.yaml").read_text(encoding="utf-8"))
 
-    assert len(manifest["banks"]) == 28
-    assert sum(int(entry["questions"]) for entry in manifest["banks"]) == 138
+    assert len(manifest["banks"]) == 49
+    assert sum(int(entry["questions"]) for entry in manifest["banks"]) == 703

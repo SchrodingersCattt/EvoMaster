@@ -113,6 +113,86 @@ def _invalid_finish_error_message(finish_detail: Any) -> str:
     return _INVALID_FINISH_MESSAGES.get(kind, _INVALID_FINISH_DEFAULT)
 
 
+def _sum_vendor_field(vendor_by_turn: list[dict[str, Any]], *paths: tuple) -> int:
+    """跨各 turn 的 provider-native usage 快照按多组 key 路径求和。
+
+    不同 provider 的 usage 字段不一致（OpenAI 嵌在 ``*_tokens_details`` 里，
+    Anthropic 用顶层 ``cache_*_input_tokens``）。每个 path 是从外到内的 key 序列，
+    命中第一个非空 path 即累加，避免同一 turn 重复计数。
+    """
+    total = 0
+    for vendor in vendor_by_turn:
+        if not isinstance(vendor, dict):
+            continue
+        for path in paths:
+            cur: Any = vendor
+            for key in path:
+                if isinstance(cur, dict):
+                    cur = cur.get(key)
+                else:
+                    cur = None
+                    break
+            if isinstance(cur, int) and cur > 0:
+                total += cur
+                break
+    return total
+
+
+def _build_run_usage_summary(event: RunResultEvent) -> dict[str, Any] | None:
+    """从 ``RunResultEvent`` 提取 token 消耗摘要，供飞书通知等审计展示。
+
+    scalar usage 只统计 root kernel 通过 retry gate 的 accepted LLM turns（见
+    token usage events 设计文档），不含 retry 丢弃的 attempt、context compaction
+    summary LLM、sub-agent 内部消耗，因此不等于账单成本。无任何 usage 信息时返回
+    ``None``。
+    """
+    usage = dict(event.usage or {})
+    vendor_by_turn = [
+        dict(item)
+        for item in (event.usage_vendor_by_turn or [])
+        if isinstance(item, dict)
+    ]
+    last_turn_usage: dict[str, int] = {}
+    if event.finish_detail is not None:
+        last_turn_usage = dict(event.finish_detail.last_turn_usage or {})
+
+    if not usage and not last_turn_usage and not vendor_by_turn:
+        return None
+
+    prompt = int(usage.get('prompt_tokens') or 0)
+    completion = int(usage.get('completion_tokens') or 0)
+    total = int(usage.get('total_tokens') or 0) or (prompt + completion)
+    cache_read = int(usage.get('cache_read_tokens') or 0)
+    # scalar 未带缓存命中时，从 vendor-by-turn 兜底聚合
+    # （OpenAI: prompt_tokens_details.cached_tokens；Anthropic: cache_read_input_tokens）
+    if cache_read == 0 and vendor_by_turn:
+        cache_read = _sum_vendor_field(
+            vendor_by_turn,
+            ('prompt_tokens_details', 'cached_tokens'),
+            ('cache_read_input_tokens',),
+        )
+    cache_write = _sum_vendor_field(vendor_by_turn, ('cache_creation_input_tokens',))
+    reasoning = _sum_vendor_field(
+        vendor_by_turn, ('completion_tokens_details', 'reasoning_tokens')
+    )
+
+    summary: dict[str, Any] = {
+        'num_turns': int(event.num_turns or 0),
+        'prompt_tokens': prompt,
+        'completion_tokens': completion,
+        'total_tokens': total,
+    }
+    if cache_read:
+        summary['cache_read_tokens'] = cache_read
+    if cache_write:
+        summary['cache_write_tokens'] = cache_write
+    if reasoning:
+        summary['reasoning_tokens'] = reasoning
+    if last_turn_usage:
+        summary['last_turn_usage'] = dict(last_turn_usage)
+    return summary
+
+
 async def _emit_error_and_close_fanout(
     fanout: RunEventFanout, message: str, source: str = "System"
 ) -> None:
@@ -231,7 +311,7 @@ class AgentRunService:
         turn_input: TurnInput | None = None,
         bohrium_required: bool = False,
         remote_workdir: str | None = None,
-    ) -> tuple[bool | tuple[bool, str], int]:
+    ) -> tuple[bool | tuple[bool, str], int, dict[str, Any] | None]:
         """Execute agent pipeline using generator event stream with fanout dispatch.
 
         Events flow through RunEventFanout directly to handlers:
@@ -241,8 +321,10 @@ class AgentRunService:
         SSE handler is awaited first (low latency), persistence runs as
         background tasks, WorkspaceHandler receives events inline.
 
-        Returns ``(run_result, elapsed_ms)`` where ``run_result`` is ``True``
-        on success or ``(False, reason)`` on failure/cancel.
+        Returns ``(run_result, elapsed_ms, usage_summary)`` where ``run_result``
+        is ``True`` on success or ``(False, reason)`` on failure/cancel, and
+        ``usage_summary`` is the token-usage breakdown (or ``None`` when the run
+        ended before any LLM turn / usage was available).
         """
 
         def _elapsed_ms() -> int:
@@ -284,7 +366,7 @@ class AgentRunService:
                     "run_agent pre-handler setup failed: session_id=%s",
                     session_id,
                 )
-                return ((False, "pre_router_setup_failed"), 0)
+                return ((False, "pre_router_setup_failed"), 0, None)
 
             # -- Stage 2: RunEventFanout bootstrap --
             # SSE handler first for lower frontend latency,
@@ -332,7 +414,8 @@ class AgentRunService:
             )
             bohrium_svc = stage_result.bohrium_svc
             if stage_result.abort_result is not None:
-                return stage_result.abort_result
+                abort = stage_result.abort_result
+                return (abort[0], abort[1], None)
             environment = stage_result.environment
             ssh_attached = stage_result.ssh_attached
             user_instructions = stage_result.user_instructions
@@ -502,7 +585,9 @@ class AgentRunService:
                 if wiring.bohrium_rebuild_events
                 else ()
             )
+            from src.services.interrupt_service import RedisInterruptChecker
 
+            # -- Stage 5b: Phase 2C user_turn_context cutover via ContextAssembler --
             skill_resolver = self._build_skill_resolver(
                 exp_config,
                 session=environment.session,
@@ -592,7 +677,7 @@ class AgentRunService:
                     session_id,
                     invocation_id,
                 )
-                return ((False, str(exc)), _elapsed_ms())
+                return ((False, str(exc)), _elapsed_ms(), None)
 
             user_prompt = rendered_message.content
 
@@ -628,6 +713,7 @@ class AgentRunService:
                         child_event_forward_sink=_child_event_sink,
                         compaction=wiring.compaction,
                         figure_upload=FigureUploadPort(config=figure_upload_config),
+                        interrupt_checker=RedisInterruptChecker(session_id),
                     ),
                 ),
             )
@@ -673,8 +759,9 @@ class AgentRunService:
                 await _emit_error_and_close_fanout(
                     fanout, "Generator terminated without result"
                 )
-                return ((False, "no_result"), _elapsed_ms())
+                return ((False, "no_result"), _elapsed_ms(), None)
 
+            usage_summary = _build_run_usage_summary(run_result_event)
             if run_result_event.reason == "cancelled":
                 await fanout.dispatch(
                     CancelledEvent(source="System", reason="Task cancelled by user.")
@@ -686,7 +773,7 @@ class AgentRunService:
                         task_completed=False,
                     )
                 )
-                return ((False, "cancelled"), _elapsed_ms())
+                return ((False, "cancelled"), _elapsed_ms(), usage_summary)
             else:
                 if run_result_event.reason == "invalid_finish":
                     await fanout.dispatch(
@@ -709,11 +796,11 @@ class AgentRunService:
                     user_id = self._sessions_service.get_session_user_id(session_id)
                     if user_id:
                         await use_quota(user_id, model_key=model_override)
-                    return (True, _elapsed_ms())
+                    return (True, _elapsed_ms(), usage_summary)
                 fail_reason = (
                     run_result_event.reason or run_result_event.status or "failed"
                 )
-                return ((False, fail_reason), _elapsed_ms())
+                return ((False, fail_reason), _elapsed_ms(), usage_summary)
 
         except Exception as exc:
             logger.exception("run_agent error: session_id=%s", session_id)
@@ -722,7 +809,7 @@ class AgentRunService:
                     await _emit_error_and_close_fanout(fanout, str(exc))
                 except Exception:
                     pass
-            return ((False, str(exc)), _elapsed_ms())
+            return ((False, str(exc)), _elapsed_ms(), None)
         finally:
             elapsed = time.monotonic() - run_started_at
             logger.info(

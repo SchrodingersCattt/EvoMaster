@@ -138,7 +138,7 @@ def detect_artifact_end(
 
     Tunables:
       slope_k    — multiplier on the average slope; 1.0 is the default
-                   sweet spot (tested on DFT-simulated VT-PXRD).
+                   sweet spot (tested on DFT-simulated PXRD series).
       sustain_deg— how long the slope must stay flat before calling the
                    region "post-artifact" (2° is robust to peak spacing).
       search_max_deg — cap so we don't clip away half the pattern if the

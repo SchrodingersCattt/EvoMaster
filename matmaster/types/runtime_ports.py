@@ -25,6 +25,7 @@ __all__ = [
     "CompactionCheckpointPayload",
     "EmptySessionEventHistory",
     "FigureUploadPort",
+    "InterruptChecker",
     "KernelRuntimePorts",
     "PlaygroundCompactionPort",
     "PreCompactionBarrier",
@@ -121,6 +122,17 @@ class BohriumRuntimePort:
     snapshot: BohriumRuntimeSnapshot | None = None
 
 
+@runtime_checkable
+class InterruptChecker(Protocol):
+    """Check and wait for user interrupt at checkpoint boundaries."""
+
+    def has_hint(self) -> bool: ...
+
+    async def wait_for_confirm(self, timeout: float) -> bool: ...
+
+    def cleanup(self) -> None: ...
+
+
 @dataclass(frozen=True)
 class AgentRunPorts:
     """Narrow runtime capability ports carried by AgentRunRequest.
@@ -137,9 +149,11 @@ class AgentRunPorts:
         default_factory=PlaygroundCompactionPort
     )
     figure_upload: FigureUploadPort = field(default_factory=FigureUploadPort)
+    interrupt_checker: InterruptChecker | None = None
 
 
 @dataclass(frozen=True)
 class KernelRuntimePorts:
     checkpoint_sink: CheckpointSink | None = None
     pre_compaction_barrier: PreCompactionBarrier | None = None
+    interrupt_checker: InterruptChecker | None = None

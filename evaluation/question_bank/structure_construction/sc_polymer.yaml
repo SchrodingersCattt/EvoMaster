@@ -1,0 +1,63 @@
+version: v5
+capability: structure_construction
+domain: polymer
+questions:
+- id: SC_pe_amorphous_001_20260522
+  capability: structure_construction
+  domain: polymer
+  intent: Build an amorphous LDPE model at correct density without trial-and-error
+    on box size parameters.
+  human_prompt_seed: 请构建一个低密度聚乙烯（LDPE）非晶模型用于后续 MD 模拟，总原子数约 500 个，输出为
+    `PE_amorphous.cif`。
+  tags:
+  - struct_build
+  data_files: []
+  reference_answers:
+  - key: pe_artifact
+    value: PE_amorphous.cif
+  - key: must_parsable
+    value:
+      filename: PE_amorphous.cif
+  - key: must_atom_count
+    value:
+      filename: PE_amorphous.cif
+      expected: 500
+      tolerance: 200
+  - key: min_distance
+    value:
+      filename: PE_amorphous.cif
+      min_distance_A: 0.8
+  - key: density_reasonable
+    value:
+      filename: PE_amorphous.cif
+      min_g_cm3: 0.91
+      max_g_cm3: 0.94
+  - key: turn_budget
+    value:
+      max: 20
+  scoring_checklist:
+  - id: pe_artifact
+    criterion: PE_amorphous.cif written to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: must_parsable
+    criterion: '[Must] Output file is parsable.'
+    axis: correctness
+    verify: struct_file_parsable
+  - id: must_atom_count
+    criterion: '[Must] Total atom count is approximately 500 (300-700 acceptable).'
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: min_distance
+    criterion: '[Must] No overlapping atoms (min interatomic distance >= 0.8 Å).'
+    axis: correctness
+    verify: struct_file_min_interatomic_distance
+  - id: density_reasonable
+    criterion: The constructed model has a density consistent with LDPE (~0.91-0.94
+      g/cm³), computed directly from the delivered periodic structure file.
+    axis: correctness
+    verify: struct_file_density
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget

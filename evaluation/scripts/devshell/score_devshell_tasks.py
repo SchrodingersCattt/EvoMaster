@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Any
 
 from evaluation.core.evaluator import BinaryEvaluator
-from evaluation.core.evaluator_helpers import token_usage_record_from_evidence
+from evaluation.core.evaluator_wiring import token_usage_record_from_evidence
 from evaluation.core.evidence import (
     ArtifactRecord,
     EventRecord,
@@ -49,7 +49,7 @@ _QUESTION_BANK_DIR = REPO_ROOT / "evaluation" / "question_bank"
 
 # Used only by :func:`score_devshell_tasks_for_agent_loop` (in-process).
 _DEVSHELL_AGENT_INGEST_OPTIONAL_IDS = frozenset(
-    {"token_budget_total", "turn_budget", "efficiency_judge", "no_retries"}
+    {"token_budget_total", "turn_budget", "duration_budget", "efficiency_judge", "no_retries"}
 )
 _EVIDENCE_MAPPING_PATH = REPO_ROOT / "evaluation" / "core" / "evidence_mapping.yaml"
 _META_FILENAMES = frozenset(
@@ -78,11 +78,38 @@ def _build_workspace_file_listing(workspace: Path) -> str:
     return "\n".join(entries)
 
 
-def _build_answer(workspace: Path, summary: dict[str, Any]) -> str:
+def _extract_last_response_from_events(log_dir: Path) -> str:
+    """Fallback: extract the last non-empty assistant response from events log."""
+    log_path = _load_latest_events_log(log_dir)
+    if log_path is None:
+        return ""
+    last_response = ""
+    for raw in log_path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(rec, dict) and rec.get("type") == "response":
+            content = rec.get("content", "")
+            if isinstance(content, str) and content.strip():
+                last_response = content.strip()
+    return last_response
+
+
+def _build_answer(
+    workspace: Path, summary: dict[str, Any], *, log_dir: Path | None = None
+) -> str:
     parts: list[str] = []
     final_content = summary.get("final_content", "")
     if isinstance(final_content, str) and final_content.strip():
         parts.append(final_content.strip())
+    elif log_dir is not None:
+        fallback = _extract_last_response_from_events(log_dir)
+        if fallback:
+            parts.append(fallback)
     parts.append(
         f"\n[Workspace deliverable files]\n{_build_workspace_file_listing(workspace)}"
     )
@@ -429,7 +456,7 @@ def score_task(
     summary = row.get("devshell_summary")
     if not isinstance(summary, dict) or not summary:
         summary = _load_summary_from_file(workspace)
-    answer = _build_answer(workspace, summary)
+    answer = _build_answer(workspace, summary, log_dir=log_dir)
     duration_ms = int(row.get("duration_ms") or 0)
     evidence = _build_evidence(
         task_id=task_id,
@@ -791,7 +818,7 @@ def main() -> int:
         eval_ingest_timeout=float(args.eval_ingest_timeout),
         score_jobs=max(1, int(args.score_jobs)),
         parallel_checklist_workers=max(1, int(args.parallel_checklist_workers)),
-        ingest_optional_checklist_ids=frozenset(),
+        ingest_optional_checklist_ids=_DEVSHELL_AGENT_INGEST_OPTIONAL_IDS,
     )
 
 

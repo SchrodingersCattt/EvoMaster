@@ -335,6 +335,9 @@ def _public_content_for_event(
         _copy_nonempty_keys(content, payload, _MODEL_IDENTITY_KEYS)
         return content
 
+    if event_type == 'checkpoint':
+        return {'turn_index': payload.get('turn_index')}
+
     if event_type == 'skill_hit':
         return {'skill_name': payload.get('skill_name')}
 

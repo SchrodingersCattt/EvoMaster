@@ -1,0 +1,966 @@
+version: v5
+capability: input_generation
+domain: semiconductor
+questions:
+- id: IG_gnr_004_20250618
+  capability: input_generation
+  domain: semiconductor
+  intent: Generate a SIESTA-style DFT input deck for a self-consistent field calculation on an armchair
+    graphene nanoribbon (AGNR) using the computational parameters from Son et al. (2006).
+  human_prompt_seed: 'Generate a SIESTA-style input file (`siesta.fdf`) for a spin-polarized LSDA DFT
+    calculation of an armchair graphene nanoribbon (AGNR). Use the following parameters from the paper:
+    energy cutoff of 400 Ry, double-zeta plus polarization (DZP) basis set, force convergence threshold
+    of 16 pN, and 32 k-points along the 1D Brillouin zone. The system is a 1D periodic nanoribbon with
+    vacuum in the other two directions. Save the file as `siesta.fdf` in the current working directory.'
+  tags: []
+  data_files: []
+  reference_answers:
+  - key: artifact_fdf
+    value: siesta.fdf
+  - key: has_energy_cutoff
+    value:
+      flags: []
+      tokens:
+      - '400'
+      - Ry
+      filename: siesta.fdf
+  - key: has_basis_type
+    value:
+      flags:
+      - case_sensitive
+      tokens:
+      - DZP
+      filename: siesta.fdf
+  - key: has_force_tol
+    value:
+      flags: []
+      tokens:
+      - '16'
+      - pN
+      filename: siesta.fdf
+  - key: has_kpoints
+    value:
+      flags: []
+      tokens:
+      - '32'
+      filename: siesta.fdf
+  - key: has_lsda
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - LSDA
+      - SpinPolarization
+      - spin
+      filename: siesta.fdf
+  - key: has_1d_periodic
+    value:
+      flags: []
+      tokens:
+      - '1'
+      - Periodic
+      filename: siesta.fdf
+  - key: grounding_source
+    value:
+      filename: siesta.fdf
+  - key: turn_budget
+    value:
+      max: 25
+  - key: no_retries
+    value:
+      max: 3
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_fdf
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file siesta.fdf exists and is non-empty.'
+  - id: has_energy_cutoff
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Input specifies energy cutoff of 400 Ry (MeshCutoff 400. Ry).'
+  - id: has_basis_type
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Input specifies DZP (double-zeta plus polarization) basis set.'
+  - id: has_force_tol
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] Input specifies force convergence tolerance of 16 pN (MaxForceTol 0.016 eV/Ang
+      or equivalent).'
+  - id: has_kpoints
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Input specifies 32 k-points along the 1D Brillouin zone for the AGNR.'
+  - id: has_lsda
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Input specifies LSDA (local spin density approximation) functional with spin polarization
+      enabled.'
+  - id: has_1d_periodic
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 0.5
+    criterion: '[Must] Input specifies 1D periodicity (PeriodicDirections 1 or equivalent) appropriate
+      for a nanoribbon.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The input deck parameters match those described in Son et al. (2006): 400 Ry cutoff,
+      DZP basis, LSDA, 16 pN force tolerance, 32 k-points for AGNR.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Completes within 25 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] No retry requests needed.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Completes within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Uses no more than 50000 tokens total.'
+- id: IG_vasp_001_20250618
+  capability: input_generation
+  domain: semiconductor
+  intent: 'Generate VASP INCAR files for a two-step band gap calculation workflow: PBE structural relaxation
+    followed by one-shot HSE06 band gap evaluation, following the AMP² methodology described in Kim et
+    al. (Scientific Data, 2020).'
+  human_prompt_seed: 'Retrieve the bulk silicon structure (diamond cubic) from the structure database,
+    then generate two VASP INCAR files: INCAR_relax for PBE structural relaxation and INCAR_hse for one-shot
+    HSE06 band gap calculation. Follow the AMP² computational settings described in Kim et al. (Scientific
+    Data, 2020): PBE functional for relaxation, HSE06 (HFSCREEN=0.2, AEXAC=0.25) for the one-shot calculation.
+    Place both files in the current directory.'
+  tags:
+  - eng_vasp
+  data_files: []
+  reference_answers:
+  - key: relax_incar_tags
+    value:
+      flags:
+        case_insensitive: true
+      tokens:
+      - ISTART = 0
+      - ICHARG = 2
+      - GGA = PE
+      - ENCUT = 520
+      - PREC = Accurate
+      - ISMEAR = 0
+      - SIGMA = 0.05
+      - IBRION = 2
+      - ISIF = 3
+      - EDIFF = 1E-6
+      - EDIFFG = -0.01
+      - LREAL = Auto
+      filename: INCAR_relax
+  - key: hse_incar_tags
+    value:
+      flags:
+        case_insensitive: true
+      tokens:
+      - ISTART = 1
+      - ICHARG = 11
+      - LHFCALC = .TRUE.
+      - HFSCREEN = 0.2
+      - AEXAC = 0.25
+      - ALGO = All
+      - NELM = 1
+      - ENCUT = 520
+      - PREC = Accurate
+      - ISMEAR = 0
+      - SIGMA = 0.05
+      - LREAL = Auto
+      filename: INCAR_hse
+  - key: relax_exists
+    value: INCAR_relax
+  - key: hse_exists
+    value: INCAR_hse
+  - key: grounding_source
+    value:
+      filename: INCAR_relax
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: relax_incar_tags
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 15.0
+    criterion: '[Must] INCAR_relax contains all required PBE relaxation tags: ISTART=0, ICHARG=2, GGA=PE,
+      ENCUT=520, PREC=Accurate, ISMEAR=0, SIGMA=0.05, IBRION=2, ISIF=3, EDIFF=1E-6, EDIFFG=-0.01, LREAL=Auto.'
+  - id: hse_incar_tags
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 15.0
+    criterion: '[Must] INCAR_hse contains all required HSE06 one-shot tags: ISTART=1, ICHARG=11, LHFCALC=.TRUE.,
+      HFSCREEN=0.2, AEXAC=0.25, ALGO=All, NELM=1, ENCUT=520, PREC=Accurate, ISMEAR=0, SIGMA=0.05, LREAL=Auto.'
+  - id: relax_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 5.0
+    criterion: '[Must] File INCAR_relax exists in the output directory.'
+  - id: hse_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 5.0
+    criterion: '[Must] File INCAR_hse exists in the output directory.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 10.0
+    criterion: '[Must] The answer is grounded in the provided structure file si_structure.vasp and the
+      AMP² methodology from Kim et al. (2020).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 30 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not retry any tool call.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses fewer than 50000 tokens total.'
+- id: IG_gaas_001_20250618
+  capability: input_generation
+  domain: semiconductor
+  intent: Generate a VASP INCAR input file for a defect formation energy calculation on a 32-atom GaAs
+    supercell, using LDA functional and plane-wave cutoff equivalent to 8 Ry (~109 eV).
+  human_prompt_seed: Generate a VASP INCAR file for a self-consistent defect calculation on the provided
+    gaas_vga_defect.vasp structure. Use LDA functional, plane-wave energy cutoff of 109 eV (equivalent
+    to 8 Ry), and settings appropriate for a 32-atom semiconductor supercell. Save as INCAR in the working
+    directory.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: gaas_defect
+    path: gaas_vga_defect.vasp
+    oss_url: ''
+    description: 32-atom GaAs supercell with one Ga vacancy (POSCAR format). Provided as input; agent
+      does not need to construct it.
+  reference_answers:
+  - key: artifact_incar
+    value: INCAR
+  - key: text_incar_tags
+    value:
+      flags:
+        require_all: false
+        require_any_group:
+        - - GGA = PE
+          - GGA = none
+          - GGA = --
+          - missing GGA
+        - - ENCUT = 109
+          - ENCUT = 108
+          - ENCUT = 110
+      tokens:
+      - GGA = PE
+      - or
+      - GGA = none
+      - or missing GGA line (LDA default)
+      - ENCUT = 109
+      - ISMEAR = 0
+      - SIGMA
+      filename: INCAR
+  - key: numeric_encut
+    value:
+      checks:
+      - key: ENCUT
+        expected: 109
+        tolerance: 5
+        allow_missing_key: false
+      filename: INCAR
+  - key: numeric_sigma
+    value:
+      checks:
+      - key: SIGMA
+        max: 0.2
+        min: 0.01
+        allow_missing_key: true
+      filename: INCAR
+  - key: grounding_source
+    value:
+      filename: gaas_vga_defect.vasp
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 1
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 40000
+  scoring_checklist:
+  - id: artifact_incar
+    axis: correctness
+    verify: artifact_exists
+    weight: 2.0
+    criterion: '[Must] Output file INCAR exists and is a valid VASP INCAR-format file.'
+  - id: numeric_encut
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 3.0
+    criterion: '[Must] ENCUT is set to approximately 109 eV (8 Ry), within ±5 eV tolerance.'
+  - id: numeric_sigma
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] SIGMA is set to a small value (0.01–0.2 eV) appropriate for semiconductor
+      calculations with ISMEAR=0.'
+  - id: text_incar_tags
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+    criterion: '[Must] INCAR uses LDA functional (default in VASP, or explicitly GGA=none/GGA=--) and
+      includes ISMEAR=0 for semiconductor.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The INCAR is appropriate for the provided GaAs defect supercell structure.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Variable] Agent completed within 15 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Variable] Agent did not retry the task.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Variable] Agent completed within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Variable] Agent used fewer than 40000 tokens total.'
+- id: IG_vasp_002_20250618
+  capability: input_generation
+  domain: semiconductor
+  intent: Generate a VASP INCAR and KPOINTS file for a density-functional-theory SCF calculation of a
+    graphene sheet adsorbed on a metal (111) slab, using the computational parameters described in Giovannetti
+    et al. (2008).
+  human_prompt_seed: I have a POSCAR file for a graphene/Cu(111) slab supercell. Generate the VASP INCAR
+    and KPOINTS files needed for a spin-polarized SCF calculation. Use the LSDA functional, PAW pseudopotentials,
+    a 400 eV plane-wave cutoff, a dipole correction, the tetrahedron method for Brillouin-zone integration,
+    and an energy convergence criterion of 1e-7 eV. Choose an appropriate k-point mesh for the small cell
+    shown in Fig. 1(a) of the paper. Save the files as INCAR and KPOINTS in the working directory.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: poscar
+    path: POSCAR
+    oss_url: ''
+    description: POSCAR file containing a graphene/Cu(111) slab supercell with 6 Cu layers, one graphene
+      sheet (2 C atoms), and ~12 Å vacuum. The in-plane lattice constant is matched to graphene (a = 2.445
+      Å). This file is provided as a local artifact since the specific slab structure is not available
+      in public databases.
+  reference_answers:
+  - key: artifact_incar
+    value:
+      filename: INCAR
+  - key: artifact_kpoints
+    value:
+      filename: KPOINTS
+  - key: incar_content
+    value:
+      flags: []
+      tokens:
+      - ENCUT = 400
+      - PREC = Accurate
+      - ISMEAR = -5
+      - ISPIN = 2
+      - LREAL = Auto
+      - EDIFF = 1E-7
+      - LDIPOL = .TRUE.
+      - IDIPOL = 3
+      - IVDW = 0
+      filename: INCAR
+  - key: kpoints_content
+    value:
+      flags: []
+      pattern: 36\s+36\s+1
+      filename: KPOINTS
+  - key: grounding_source
+    value:
+      filename: POSCAR
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: artifact_incar
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] INCAR file exists in the working directory'
+  - id: artifact_kpoints
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] KPOINTS file exists in the working directory'
+  - id: incar_content
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 3.0
+    criterion: '[Must] INCAR contains required VASP tags: ENCUT=400, ISMEAR=-5 (tetrahedron), ISPIN=2
+      (spin-polarized), EDIFF=1E-7, LDIPOL=.TRUE., IDIPOL=3'
+  - id: kpoints_content
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+    criterion: '[Must] KPOINTS specifies a 36×36×1 Monkhorst-Pack grid for the small cell'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The generated input files are grounded in the source paper''s methodology (Giovannetti
+      et al. 2008, footnote [18])'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within the turn budget'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not retry any tool call'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within the duration budget'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent stays within the total token budget'
+- id: IG_gpumd_002_20260303
+  capability: input_generation
+  domain: semiconductor
+  intent: Generate a GPUMD NEP4 input file (nep.in) for a coarse-grained quasi-hexagonal C60 monolayer
+    model with two crystallographically distinct bead types and large cutoff radii.
+  human_prompt_seed: Generate a GPUMD NEP4 input file (nep.in) for a coarse-grained quasi-hexagonal C60
+    monolayer model. Each C60 molecule is represented by one bead, with two crystallographically distinct
+    bead types. Use the provided structure file. Write nep.in to the current working directory.
+  tags:
+  - eng_gpumd
+  - code_mlip
+  data_files:
+  - key: c60_monolayer_cg_structure
+    path: c60_monolayer_cg_structure.xyz
+    oss_url: ''
+    description: Coarse-grained C60 monolayer structure file (quasi-hexagonal phase) with two crystallographically
+      distinct bead types from the nep-data repository.
+  reference_answers:
+  - key: nep_in_exists
+    value: nep.in
+  - key: nep_in_has_generation
+    value:
+      flags:
+      - IgnoreCase
+      tokens:
+      - generation
+      - '4'
+      filename: nep.in
+  - key: nep_in_neuron_count
+    value:
+      flags: MULTILINE
+      pattern: ^\s*5\s*$
+      filename: nep.in
+  - key: nep_in_radial_cutoff
+    value:
+      flags: ''
+      pattern: 25\.0
+      filename: nep.in
+  - key: nep_in_angular_cutoff
+    value:
+      flags: ''
+      pattern: 25\.0
+      filename: nep.in
+  - key: nep_in_species_count
+    value:
+      flags: MULTILINE
+      pattern: ^\s*2\s*$
+      filename: nep.in
+  - key: grounding_source
+    value:
+      filename: c60_monolayer_cg_structure.xyz
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 80000
+  scoring_checklist:
+  - id: nep_in_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file nep.in exists in the working directory.'
+  - id: nep_in_has_generation
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] nep.in specifies NEP generation 4.'
+  - id: nep_in_neuron_count
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] nep.in specifies neuron count N_neu = 5.'
+  - id: nep_in_radial_cutoff
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] nep.in specifies radial cutoff of 25.0 Å.'
+  - id: nep_in_angular_cutoff
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] nep.in specifies angular cutoff of 25.0 Å.'
+  - id: nep_in_species_count
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] nep.in specifies exactly 2 species types (crystallographically distinct C60 beads).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The agent uses the provided c60_monolayer_cg_structure.xyz as input.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: Completes within 30 turns.
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: No retry attempts used.
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: Completes within 600 seconds.
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: Total token usage within 80000.
+- id: IG_vasp_002_20260625
+  capability: input_generation
+  domain: semiconductor
+  intent: Generate VASP input files (INCAR and KPOINTS) for a PBE0 hybrid functional band structure calculation
+    with spin-orbit coupling (SOC) corrections on a Γ-centered 2×2×2 k-point mesh, as used in the paper
+    for final validation of selected perovskite compounds.
+  human_prompt_seed: Generate VASP INCAR and KPOINTS files for a PBE0 hybrid functional non-self-consistent
+    band structure calculation with spin-orbit coupling (SOC) on a Γ-centered 2×2×2 k-point mesh. The
+    input structure is perovskite_relaxed.vasp. Use the PBEsol-optimized geometry as input. Save INCAR
+    and KPOINTS to the current working directory.
+  tags:
+  - eng_vasp
+  data_files:
+  - key: perovskite_relaxed
+    path: perovskite_relaxed.vasp
+    oss_url: ''
+    description: Relaxed CsPbI₃ perovskite POSCAR/CONTCAR structure from Materials Project
+  reference_answers:
+  - key: incar_exists
+    value: INCAR
+  - key: kpoints_exists
+    value: KPOINTS
+  - key: incar_pbe0
+    value:
+      tokens:
+      - LHFCALC = .TRUE.
+      - AEXX = 0.25
+      - PRECFOCK = Fast
+      filename: INCAR
+  - key: incar_soc
+    value:
+      tokens:
+      - LSORBIT = .TRUE.
+      - LNONCOLLINEAR = .TRUE.
+      - SAXIS = 0 0 1
+      filename: INCAR
+  - key: kpoints_2x2x2
+    value:
+      tokens:
+      - 2 2 2
+      - Gamma
+      filename: KPOINTS
+  - key: grounding_source
+    value:
+      filename: perovskite_relaxed.vasp
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: incar_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] INCAR file exists in the working directory.'
+  - id: kpoints_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] KPOINTS file exists in the working directory.'
+  - id: incar_pbe0
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR enables PBE0 hybrid functional (LHFCALC=.TRUE., AEXX=0.25).'
+  - id: incar_soc
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] INCAR enables SOC (LSORBIT=.TRUE., LNONCOLLINEAR=.TRUE.).'
+  - id: kpoints_2x2x2
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] KPOINTS specifies a 2×2×2 Gamma-centered mesh.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Answer is grounded in the provided perovskite structure file.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 15 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: '[Must] Agent does not retry any tool call.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: '[Must] Agent completes the task within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: '[Must] Agent uses fewer than 50000 tokens total.'
+- id: IG_qe_004_20250618
+  capability: input_generation
+  domain: semiconductor
+  intent: Generate Quantum ESPRESSO nscf and bands input files for computing the electronic band structure
+    of LaSrAlO₄ along high-symmetry k-point paths for a tetragonal I4mm crystal, matching the band structure
+    calculation workflow described in the source paper.
+  human_prompt_seed: Generate Quantum ESPRESSO nscf and bands input files for computing the band structure
+    of the LaSrAlO₄ structure in la_sralo4_eta13.cif. Use the same PBEsol functional and 60 Ry cutoff
+    as the SCF calculation. Include a high-symmetry k-point path appropriate for a tetragonal I4mm crystal
+    that traverses Γ, M, X, and Z points. Save outputs as la_sralo4_nscf.in and la_sralo4_bands.in.
+  tags:
+  - eng_qe
+  data_files:
+  - key: structure
+    path: la_sralo4_eta13.cif
+    oss_url: ''
+    description: CIF file for the η=1/3 cation-ordered LaSrAlO₄ Ruddlesden-Popper structure (I4mm space
+      group, c/a=3.324) from DFT-PBEsol ground-state optimization in the source paper.
+  reference_answers:
+  - key: nscf_input_exists
+    value: la_sralo4_nscf.in
+  - key: bands_input_exists
+    value: la_sralo4_bands.in
+  - key: nscf_input_content
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - calculation
+      - nscf
+      - input_dft
+      - pbesol
+      - ecutwfc
+      - '60'
+      - K_POINTS
+      - crystal_b
+      filename: la_sralo4_nscf.in
+  - key: bands_input_content
+    value:
+      flags:
+      - case_insensitive
+      tokens:
+      - calculation
+      - bands
+      - input_dft
+      - pbesol
+      - ecutwfc
+      - '60'
+      - K_POINTS
+      filename: la_sralo4_bands.in
+  - key: bands_kpath
+    value:
+      flags: []
+      tokens:
+      - 0.0 0.0 0.0
+      - 0.5 0.5 0.0
+      - 0.5 0.0 0.0
+      - 0.0 0.0 0.5
+      filename: la_sralo4_bands.in
+  - key: bands_nkpts
+    value:
+      checks:
+      - key: nks
+        max: 200
+        min: 40
+        allow_missing_key: true
+      filename: la_sralo4_bands.in
+  - key: grounding_source
+    value:
+      filename: la_sralo4_eta13.cif
+  - key: turn_budget
+    value:
+      max: 30
+  - key: no_retries
+    value:
+      max: 1
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: nscf_input_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file la_sralo4_nscf.in exists'
+  - id: bands_input_exists
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Output file la_sralo4_bands.in exists'
+  - id: nscf_input_content
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+    criterion: '[Must] nscf input contains calculation=''nscf'', PBEsol functional, 60 Ry cutoff, and
+      crystal_b k-point specification'
+  - id: bands_input_content
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+    criterion: '[Must] bands input contains calculation=''bands'', PBEsol functional, 60 Ry cutoff, and
+      K_POINTS section'
+  - id: bands_kpath
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 3.0
+    criterion: '[Must] Bands k-point path includes high-symmetry points Γ(0,0,0), M(0.5,0.5,0), X(0.5,0,0),
+      and Z(0,0,0.5) appropriate for tetragonal I4mm'
+  - id: bands_nkpts
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Number of k-points along the band path is between 40 and 200 (sufficient resolution
+      for band structure plotting)'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] Generated inputs are configured for the provided LaSrAlO₄ tetragonal structure'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 0.0
+    criterion: turn_budget
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 0.0
+    criterion: no_retries
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 0.0
+    criterion: duration_budget
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 0.0
+    criterion: token_budget_total
+- id: IG_qe_001_20250524
+  capability: input_generation
+  domain: semiconductor
+  intent: Generate a Quantum ESPRESSO SCF input file for a monolayer WS2 slab calculation using PBE functional,
+    ONCV pseudopotentials from PseudoDojo, and 2D Coulomb truncation, following the computational setup
+    described in the paper.
+  human_prompt_seed: Generate a Quantum ESPRESSO SCF input file (pw.x) for a monolayer WS2 slab calculation.
+    Use the PBE functional, optimized norm-conserving pseudopotentials (ONCV) from the PseudoDojo library,
+    and enable 2D Coulomb truncation to eliminate spurious interactions between periodic slab replicas.
+    The crystal structure is provided in ws2_monolayer.vasp. Write the output to ws2_scf.in.
+  tags:
+  - eng_qe
+  data_files:
+  - key: ws2_monolayer_poscar
+    path: ws2_monolayer.vasp
+    oss_url: ''
+    description: Monolayer WS2 structure from Materials Project (mp-2247). The agent must convert this
+      to a QE-format input with appropriate vacuum spacing for 2D slab geometry.
+  reference_answers:
+  - key: artifact_ws2_scf_in
+    value:
+      filename: ws2_scf.in
+  - key: text_contains_pbe
+    value:
+      flags: -i
+      tokens:
+      - input_dft = 'PBE'
+      - functional = 'PBE'
+      - pseudo_dir
+      filename: ws2_scf.in
+  - key: text_contains_2d_truncation
+    value:
+      flags: -i
+      tokens:
+      - assume_isolated = '2D'
+      - assume_isolated='2D'
+      filename: ws2_scf.in
+  - key: text_contains_oncv
+    value:
+      flags: -i
+      tokens:
+      - ws.upf
+      - s.upf
+      filename: ws2_scf.in
+  - key: text_numeric_ecut
+    value:
+      checks:
+      - key: ecutwfc
+        max: 120
+        min: 40
+        allow_missing_key: true
+      filename: ws2_scf.in
+  - key: grounding_source
+    value:
+      filename: ws2_monolayer.vasp
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 300
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_ws2_scf_in
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The file ws2_scf.in exists and is a valid Quantum ESPRESSO pw.x input file.'
+  - id: text_contains_pbe
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The input file specifies the PBE exchange-correlation functional.'
+  - id: text_contains_2d_truncation
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The input file enables 2D Coulomb truncation via assume_isolated=''2D'' in the
+      SYSTEM card.'
+  - id: text_contains_oncv
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] The input file references pseudopotential files for W and S (ONCV/PseudoDojo convention,
+      e.g., .upf files).'
+  - id: text_numeric_ecut
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 0.5
+    criterion: '[Suggested] The planewave kinetic energy cutoff (ecutwfc) is within a reasonable range
+      (40-120 Ry) for ONCV pseudopotentials.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The generated input is grounded in the provided WS2 structure file.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 1.0
+    criterion: '[Must] Agent completes within 15 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 1.0
+    criterion: '[Must] Agent does not retry any tool call.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 1.0
+    criterion: '[Must] Agent completes within 300 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 1.0
+    criterion: '[Must] Agent uses fewer than 50000 tokens total.'

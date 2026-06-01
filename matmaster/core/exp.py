@@ -39,6 +39,14 @@ from matmaster.context.system_prompt import SystemPromptBuilder
 from matmaster.core.hooks import HookExecutor
 from matmaster.core.path_access import derive_path_access_roots
 from matmaster.core.run_context import AgentRunContext
+from matmaster.skills.settings import (
+    disabled_skill_names_from_remote_settings as _disabled_skill_names_from_remote_settings,
+)
+from matmaster.skills.settings import (
+    disabled_skill_names_from_settings as _disabled_skill_names_from_settings,
+)
+from matmaster.skills.settings import local_user_skills_root as _local_user_skills_root
+from matmaster.skills.settings import remote_skill_roots as _remote_skill_roots
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.run_metadata import RunIdentity
@@ -113,59 +121,6 @@ def _deep_merge_dict(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, A
     return merged
 
 
-def _local_user_skills_root(session: Any | None) -> Path | None:
-    if session is None:
-        return None
-    raw = getattr(session, "local_user_skills_root", None)
-    if not isinstance(raw, str):
-        return None
-    root = raw.strip()
-    return Path(root) if root else None
-
-
-def _remote_skill_roots(session: Any | None) -> list[str]:
-    if session is None:
-        return []
-
-    roots: list[str] = []
-    raw_roots = getattr(session, "remote_skill_roots", None)
-    if isinstance(raw_roots, (list, tuple, set)):
-        roots.extend(
-            root.strip() for root in raw_roots if isinstance(root, str) and root.strip()
-        )
-
-    raw_user_root = getattr(session, "remote_user_skills_root", None)
-    if isinstance(raw_user_root, str) and raw_user_root.strip():
-        roots.append(raw_user_root.strip())
-
-    seen: set[str] = set()
-    unique: list[str] = []
-    for root in roots:
-        if root not in seen:
-            seen.add(root)
-            unique.append(root)
-    return unique
-
-
-def _disabled_skill_names_from_settings(root: Path) -> set[str]:
-    settings_path = root / ".settings.json"
-    if not settings_path.is_file():
-        return set()
-    try:
-        payload = json.loads(settings_path.read_text(encoding="utf-8"))
-    except (json.JSONDecodeError, OSError):
-        _LOGGER.warning(
-            "Failed to read skill settings: %s",
-            settings_path,
-            exc_info=True,
-        )
-        return set()
-    disabled = payload.get("disabled") if isinstance(payload, dict) else None
-    if not isinstance(disabled, list):
-        return set()
-    return {name.strip() for name in disabled if isinstance(name, str) and name.strip()}
-
-
 class Exp:
     """Config-driven assembly layer.
 
@@ -177,9 +132,16 @@ class Exp:
     run_stream() delegates to build_runtime then kernel.run_stream with cleanup guarantee.
     """
 
-    def __init__(self, config: ExpConfig, *, allow_spawn: bool = True) -> None:
+    def __init__(
+        self,
+        config: ExpConfig,
+        *,
+        allow_spawn: bool = True,
+        exclude_subagents: frozenset[str] | None = None,
+    ) -> None:
         self._config = config
         self._allow_spawn = allow_spawn
+        self._exclude_subagents: frozenset[str] = exclude_subagents or frozenset()
         self._cleanup_callbacks: list[Callable[[], Any]] = []
         # Core-layer registry serves SkillTool registration and the
         # registry-wide system prompt prefix. Service-layer resolver state is
@@ -392,6 +354,12 @@ class Exp:
                 )
                 spawn_fn = orchestrator.make_spawn_fn()
                 available_exps = list_model_visible_exps()
+                if self._exclude_subagents:
+                    available_exps = [
+                        e
+                        for e in available_exps
+                        if e.name not in self._exclude_subagents
+                    ]
             agent_tool = AgentTool(
                 session=env.session,
                 workdir=(
@@ -471,6 +439,7 @@ class Exp:
             runtime_ports=KernelRuntimePorts(
                 checkpoint_sink=checkpoint_sink,
                 pre_compaction_barrier=pre_compaction_barrier,
+                interrupt_checker=request.ports.interrupt_checker,
             ),
             tool_runner=full_runner,
             tool_catalog=catalog,
@@ -731,6 +700,11 @@ class Exp:
         disabled_skill_names = set(skills_cfg.disabled_skill_names)
         for root in roots:
             disabled_skill_names.update(_disabled_skill_names_from_settings(root))
+        if remote_roots and env.session is not None:
+            for remote_root in remote_roots:
+                disabled_skill_names.update(
+                    _disabled_skill_names_from_remote_settings(env.session, remote_root)
+                )
         if disabled_skill_names:
             skill_registry.remove_skills(disabled_skill_names)
         schema_cache = ToolSchemaCache(Path(skills_cfg.cache_dir))

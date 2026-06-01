@@ -1,106 +1,68 @@
 ---
 name: abacus
-description: "MUST use this skill for ANY task involving ABACUS (SCF, relax, cell-relax, band structure, DOS, MD, work function, BSSE, vacancy, surface energy, DFT+U, phonon, EOS). Contains hard guards on parameters, low-cost benchmark ranges, K-point rules, and validation scripts that prevent silent failures."
+description: "Use to PREPARE or RUN ABACUS calculations: SCF, relax/cell-relax, band/DOS, MD, surfaces, defects, DFT+U, phonon, EOS. Covers input prep (even if not submitting), Bohrium submit, parsing, parameter guards, K-points, validation. Do NOT use for ABACUS literature search or generic DFT theory."
 skill_type: operator
 ---
 
 # ABACUS Skill
 
-ABACUS supports PW and LCAO basis sets. This skill should focus on producing
-correct, runnable files and avoiding silent-failure configurations.
+PW and LCAO basis; produces correct, runnable files and avoids silent-failure configurations.
 
-## When to Use
+## Gate — STOP Conditions
 
-Use this skill for any ABACUS task: SCF, band/DOS, relax/cell-relax, MD,
-electric-field/dipole, vacancy/defect/supercell, surface/work-function, BSSE.
+- **PP/orbital unresolvable**: If an element's PP/orbital is neither found in the APNS lists (`${SKILL_DIR}/references/apns_pseudopotentials_v1.list` / `${SKILL_DIR}/references/apns_orbitals_efficiency_v1.list`) NOR provided as a file in the workspace, STOP and report. Do not guess filenames.
+- **ASE Calculator mode**: If task uses ASE to drive geometry optimization (ASE Optimizer, NEB, vibrations) AND INPUT has `calculation relax|cell-relax|md` → STOP. ASE-driven workflows require `calculation scf` in INPUT.
+- **Not ABACUS**: Task asks for QE/VASP/CP2K/LAMMPS → this skill does not apply.
 
-## Minimum Workflow
+## Reference Routing — Read BEFORE Writing
 
-1. Read provided `STRU` first and reuse filenames exactly (PP/orbital/structure).
-   Pseudopotentials (`.upf`) default path: `/root/apns-pseudopotentials-v1/`.
-   Orbitals (`.orb`) default path: `/root/apns-orbitals-efficiency-v1/`.
-2. Generate `INPUT` (and `KPT` when needed).
-3. For uncertain params/workflows, check local `references/*` first.
-4. If references are insufficient or ambiguous, use official ABACUS docs on web as fallback.
-5. For complex tasks, do not rely only on pretrained priors; gather relevant knowledge from multiple sources to enrich context before finalizing inputs.
+| Task involves | Read |
+|---------------|------|
+| **Any INPUT generation** | `${SKILL_DIR}/references/input_examples.md` ← always |
+| Multi-element (>=3 species) | `${SKILL_DIR}/references/stru_multispecies.md` |
+| Writing/editing STRU | `${SKILL_DIR}/references/stru_format.md` |
+| Molecular dynamics | `${SKILL_DIR}/references/input_md.md` |
+| Hybrid functional (HSE/PBE0) | `${SKILL_DIR}/references/input_hybrid.md` |
+| DeePKS | `${SKILL_DIR}/references/input_deepks.md` |
+| RT-TDDFT | `${SKILL_DIR}/references/input_rt_tddft.md` |
+| Stochastic DFT | `${SKILL_DIR}/references/input_sdft.md` |
+| LR-TDDFT | `${SKILL_DIR}/references/input_lr_tddft.md` |
+| van der Waals (D2/D3) | `${SKILL_DIR}/references/input_vdw.md` |
+| Surface/slab + dipole/E-field/gate | `${SKILL_DIR}/references/electric_field.md` |
+| Bader / wavefunction / get_wf | `${SKILL_DIR}/references/advanced_tasks.md` |
+| DFT+U / phonon / EOS / surface energy | `${SKILL_DIR}/references/advanced_tasks.md` |
+| H/S matrix output (`out_mat_hs`, `out_mat_hs2`, `get_S`) | `${SKILL_DIR}/references/output_params.md` |
+| Extracting results from output | `${SKILL_DIR}/references/output_params.md` |
+| Troubleshooting | `${SKILL_DIR}/references/troubleshooting.md` |
 
-## Hard Guards (Must Pass)
+## Pre-conditions — Internalize Before Writing
 
-- `ntype` in `INPUT` must equal species count in `STRU` `ATOMIC_SPECIES`.
-- For `relax`/`cell-relax`/`md`, set `cal_force 1` explicitly.
-- For `cell-relax`, also set `cal_stress 1` explicitly.
-- For SCF -> NSCF workflows:
-  - SCF: `out_chg 1`
-  - NSCF: `init_chg file`, `symmetry 0`, `nbands <N>`, plus `out_band 1` or `out_dos 1`
-- If file names are not defaults, set `stru_file` and `kpoint_file` to real names.
-- Every referenced file must exist in workspace.
+- **AFM-prone oxides** (NiO, FeO, MnO under DFT+U): do not default to FM. Split magnetic species in STRU (e.g. Ni_up +2.0, Ni_down −2.0) — see `${SKILL_DIR}/references/stru_format.md` for per-species moment syntax.
+- **DFT+U multi-species**: `orbital_corr` and `hubbard_u` must cover ALL correlated species (same order as ATOMIC_SPECIES).
+- **CIF/POSCAR → STRU**: convert lattice and positions faithfully before applying task-specific parameters.
+- **ecutwfc defaults**: `100` (LCAO), `50` (PW). Task requirements override.
+- **smearing_sigma default**: `0.015` unless task specifies otherwise.
+- **pseudo_dir / orbital_dir**: always present in INPUT — never omit.
+- **Slab k-points**: if smearing is `gauss`/`mp`/`fd` (metallic), in-plane mesh ≥ 12×12 (hard floor). Vacuum direction always `1`. Validator enforces this post-hoc but getting it right avoids a fix cycle.
 
-## K-point Rules
+## Workflow
 
-- Supercell/vacancy/defect/BSSE: prefer `kspacing` in `INPUT` (avoid brittle manual meshes).
-- Band structure: use dedicated line-mode KPT for NSCF step.
-- SCF and NSCF should not share a single KPT by default in band/DOS workflows.
-- Metal slab calculations: **minimum 12×12 in-plane** k-points (or equivalent `kspacing ≤ 0.10` in-plane). Do not use less.
+1. **Read provided STRU** — determine basis_type from presence of `NUMERICAL_ORBITAL`.
+2. **Read references** per Routing table above (always read `${SKILL_DIR}/references/input_examples.md`; additionally read method-specific file if applicable).
+3. **Resolve PP/orbital filenames** — read `${SKILL_DIR}/references/apns_pseudopotentials_v1.list` and `${SKILL_DIR}/references/apns_orbitals_efficiency_v1.list` for LCAO (do NOT grep `/root/apns-*` on the filesystem):
+   - PP/orbital filename in APNS list → ensure STRU uses exact APNS filename, set `pseudo_dir /root/apns-pseudopotentials-v1/`, `orbital_dir /root/apns-orbitals-efficiency-v1/`.
+   - PP/orbital filename NOT in APNS list but file exists in workspace → keep STRU as-is, set `pseudo_dir ./`, `orbital_dir ./`.
+   - Neither in APNS nor in workspace → STOP (Gate rule).
 
-## Parameter Baseline (Use Judgment, Not Blind Fixed Values)
-
-- Use physically reasonable `ecutwfc`, `smearing`, and SCF thresholds for system and PP quality.
-- `ecutwfc` (Type: Real): energy cutoff for plane-wave functions. Unit is `Ry`. Even under `basis_type lcao`, `ecutwfc` is still required because local pseudopotential parts and related forces are evaluated in plane-wave representation. Default baseline: `50` (PW), `100` (LCAO), unless task requirements override.
-- In low-cost or benchmark settings, `ecutwfc` can be set below the default baseline if task intent prioritizes speed over accuracy.
-- For fast tasks with lower accuracy requirements, choose lower-precision settings (including lower `ecutwfc`) to prioritize turnaround time.
-- Distinguish `LCAO` vs `PW` parameter semantics and sensitivity; do not directly copy basis-specific settings across modes.
-- Use `smearing_sigma 0.015` as the default starting point unless the task specifies otherwise.
-- For critical parameters, verify intent and physical meaning before finalizing.
-- If a parameter meaning is unclear, check the official ABACUS input reference:
-  `http://abacus.deepmodeling.com/en/latest/advanced/input_files/input-main.html`.
-- Typical production defaults are acceptable, but task requirements override defaults.
-- If the task specifies cutoffs or convergence policy, follow the task first.
-- **Low-cost / benchmark mode**: when the task requests "low-cost", "benchmark", or "minimal cost" parameters, significantly reduce `ecutwfc` from production defaults. See `references/input_examples.md` for guidance.
-- Keep multi-file studies (EOS/surface/vacancy comparisons) consistent on core numerics.
-
-## Task-Specific Deltas
-
-- `relax`: include `force_thr_ev` and `relax_nmax`.
-- `cell-relax`: include `force_thr_ev`, `stress_thr`, and `relax_nmax`.
-- Work function / slab potential: `out_pot 2`; add dipole correction when needed.
-- Spin/noncollinear/SOC: keep `nspin`, `noncolin`, and `lspinorb` consistent.
+   > **⚠ `/root/apns-*` are Bohrium runtime paths** (pre-installed in the Docker image). They will NOT exist in the local workspace — do not fallback to `./` because the directory is absent locally.
+4. **Write INPUT + KPT** following examples and mandatory-parameter tables from step 2.
+5. **Run validator**: `python ${SKILL_DIR}/scripts/validate_input.py --dir <dir>`. Fix all FAIL items before proceeding.
+6. **Submit to Bohrium** (if task requires execution) — see defaults below.
 
 ## Bohrium Submission Defaults
 
-This section is the **single source of truth** for ABACUS `image` / `machine` / `cmd` on Bohrium. Other skills (for example `matmaster/skills/playground-skills/input-manual-helper`) refer here instead of copying the values.
-
-Keep the previous default profile unless task/environment explicitly overrides it.
-
 | Item | Default |
 |------|---------|
-| image | `registry.dp.tech/dptech/dp/native/hub/mrdic2/abacusp:1.0.1-1778080680` |
-| machine | `c32_m128_cpu` |
-| cmd | `OMP_NUM_THREADS=1 mpirun -np 16 abacus > log 2>&1` |
-
-Notes:
-- `-np` is typically half of CPU cores for this profile (32 -> 16).
-- For GPU tasks, use environment-approved GPU machine profiles with `basis_type pw`.
-
-## Pre-Submission Validation
-
-After generating all INPUT/STRU/KPT files, run the validation script before Bohrium submission:
-```bash
-python ${SKILL_DIR}/scripts/validate_input.py --dir <input_dir>
-```
-It catches the most common silent failures: ntype mismatch, missing cal_force/cal_stress, missing out_chg for SCF→NSCF, wrong basis_type, missing PP/orbital files, and stru_file/kpoint_file reference errors. Fix any FAIL items before submitting.
-
-## References
-
-Reference-first policy:
-- Prefer local references below for stable and task-aligned guidance.
-- Use official ABACUS/Bohrium web documentation as fallback when local references are insufficient.
-
-- **Pre-flight validator**: `scripts/validate_input.py` — run before every Bohrium submit
-- Input templates and multi-step examples: `references/input_examples.md`
-- STRU format basics: `references/stru_format.md`
-- Multi-species STRU examples: `references/stru_multispecies.md`
-- Electric field and dipole notes: `references/electric_field.md`
-- Troubleshooting: `references/troubleshooting.md`
-- Output parameter guide (files, grep patterns): `references/output_params.md`
-- Advanced tasks (surface energy, vacancy, EOS, DFT+U, phonon, basis-type detection): `references/advanced_tasks.md`
-- Parsed results and plots after the run: `matmaster/skills/playground-skills/result-analysis` (`parse_abacus.py`, etc.)
+| image | `registry.dp.tech/dptech/dp/native/hub/mrdic2/abacusp:1.0.3-1778742780` |
+| machine | `c64_m256_cpu` |
+| cmd | `OMP_NUM_THREADS=1 mpirun -np 32 abacus > log 2>&1` |

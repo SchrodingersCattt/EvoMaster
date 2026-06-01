@@ -25,6 +25,8 @@ Reference for multi-step and specialized ABACUS workflows not covered by `input_
 
 **Goal**: γ = (E_slab − n × E_bulk) / (2A)
 
+**⚠️ Common mistake**: Using `calculation scf` for bulk. Bulk **must** use `calculation cell-relax` with `cal_force 1` and `cal_stress 1` to obtain the equilibrium lattice constant — otherwise E_bulk is not at the energy minimum and γ will be wrong.
+
 **Files to generate**:
 
 | File | Purpose |
@@ -216,3 +218,73 @@ kspacing        0.10
 > `cal_force 1` is critical — Phonopy reads forces from the log.
 > Tighter `scf_thr` (1.0e-8) and smaller `smearing_sigma` (0.005) for accurate forces.
 > `kspacing` adapts automatically to supercell size.
+
+---
+
+## Bader Charge Analysis Workflow
+
+**Goal**: Partition electron density into atomic basins using Bader's zero-flux algorithm.
+
+**INPUT requirements**: `calculation scf`, `out_chg 1` (produces `SPIN1_CHG.cube`). Both PW and LCAO basis are supported.
+
+**Critical**: With pseudopotential-only valence density, light elements (Al, Li, Na, Mg, etc.) often show zero Bader charge because the valence density is too flat near the nucleus to find zero-flux surfaces. You **must** augment the valence charge with approximate core charges before running Bader.
+
+**Bohrium cmd chain**:
+```bash
+OMP_NUM_THREADS=1 mpirun -np 32 abacus > log 2>&1 \
+  && cd OUT.{suffix} \
+  && python3 ../add_core_charge.py SPIN1_CHG.cube total_chg.cube \
+  && bader SPIN1_CHG.cube -ref total_chg.cube > bader.log 2>&1
+```
+
+The `add_core_charge.py` script reconstructs approximate core electron density (Gaussian model) and adds it to the valence cube, creating a reference total density. Bader then uses `-ref total_chg.cube` to find basin boundaries on the total density while reporting charges from the valence density.
+
+**Without core augmentation**: Bader will fail silently — atoms with diffuse valence density (Al, Li, etc.) get assigned zero charge, producing physically meaningless results.
+
+---
+
+## Wavefunction Output Workflows
+
+### PW wavefunction output (single-step)
+```
+calculation          scf
+basis_type           pw
+out_wfc_pw           1
+```
+Outputs plane-wave coefficients after SCF converges.
+
+### LCAO wavefunction output (single-step)
+```
+calculation          scf
+basis_type           lcao
+out_wfc_lcao         1
+```
+Outputs LCAO wavefunction coefficients (`wf*.dat`) after SCF converges.
+
+### LCAO get_wf — real-space wavefunction (two-step)
+
+`get_wf` is a **post-processing calculation** that converts LCAO wavefunctions to real-space grid representation. It requires a prior SCF that saved wavefunctions. Two INPUT files are needed:
+
+**Step 1 — SCF** (produces `wf*.dat`):
+```
+calculation          scf
+basis_type           lcao
+out_wfc_lcao         1
+```
+
+**Step 2 — get_wf** (reads `wf*.dat`, outputs real-space wavefunctions):
+```
+calculation          get_wf
+basis_type           lcao
+init_wfc             file
+out_wfc_norm         1
+```
+- `init_wfc file`: read binary wavefunctions from Step 1
+- `out_wfc_norm 1`: output |ψ|² on real-space grid (alternative: `out_wfc_re_im 1` for Re/Im parts)
+- Only works with LCAO basis
+
+**Directory organization**: when running both steps in one Bohrium job, use separate INPUT files (e.g. `INPUT-scf` and `INPUT-getwf`) and a run script that renames them sequentially:
+```bash
+cp INPUT-scf INPUT && mpirun -np 32 abacus > log_scf 2>&1
+cp INPUT-getwf INPUT && mpirun -np 32 abacus > log_getwf 2>&1
+```

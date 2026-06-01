@@ -1,19 +1,12 @@
 ---
 name: data-analysis
-description: "General-purpose data QC, exploratory analysis, and visualization on CSV/JSON tabular data. Load for: missing-value audit, outlier detection (IQR/Z-score), unit consistency checks, statistical summaries, and chart/figure production from experiment metrics or screening results."
+description: "Use when the user wants to read, summarize, or visualize artifacts an earlier run produced — engine logs, computed spectra, MD / DFT trajectories, screening tables, or arbitrary CSV / JSON — including DOS / PDOS, RDF / MSD, or band-structure arrays."
 skill_type: operator
 ---
 
 # Data Analysis Skill
 
 Covers data quality control (QC), exploratory data analysis (EDA), and visualization on tabular/structured data (CSV, JSON).
-
-## When to use
-
-* "Check data quality / QC this CSV" → QC workflow below
-* "Find outliers / anomalies" → IQR or Z-score detection
-* "Summarize experiment metrics" → statistical profiling
-* "Plot / visualize data from a table" → matplotlib rendering
 
 ## QC Workflow
 

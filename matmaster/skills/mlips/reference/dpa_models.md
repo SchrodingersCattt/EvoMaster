@@ -2,6 +2,8 @@
 
 ## Available Models
 
+> URLs below are a snapshot. For the current canonical provenance (latest version, byte size, fresh download link) of any DPA checkpoint — and for models not listed here — invoke the **`aissq-explorer`** skill instead of hardcoding URLs.
+
 | Name | Params | URL | Default Head | Notes |
 |------|--------|-----|-------------|-------|
 | DPA2.4-7M | 6.6M | `https://bohrium.oss-cn-zhangjiakou.aliyuncs.com/13756/27666/store/upload/cd12300a-d3e6-4de9-9783-dd9899376cae/dpa-2.4-7M.pt` | OMat24 | 37-head shared fitting, 120GPU pretrain |
@@ -36,7 +38,7 @@ Other DPA versions (2.4, 3.1) do **not** use fparam — passing charge/spin has 
 | General inorganic solid | DPA3.1-3M (best balance of speed and accuracy) |
 | Charged / radical species | DPA3.2-5M (only model supporting charge/spin) |
 | Cross-validation | Compare DPA with MACE-MP-0 or SevenNet-0 |
-| Organic molecules | DPA3.1-3M with `--head OMol25`, or DPA3.2-5M |
+| Organic molecules | DPA3.2-5M with `--head OMol25` (OMol25 is NOT available on DPA3.1-3M) |
 | Catalysis surfaces | DPA with `--head OC22` |
 
 ## Freezing DPA for LAMMPS
@@ -65,10 +67,10 @@ DPA2.4-7M exposes many more branches (e.g. `Domains_Alloy`, `H2O_H2O_PD`, `Metal
 
 ```bash
 # both flags accepted; --model-branch is canonical in v3.1+
-dp --pt freeze -c DPA-3.2-5M.pt -o frozen_model.pth --model-branch OMat24
+dp --pt freeze -c DPA-3.2-5M.pt -o frozen_model.pth --model-branch [head_name]
 
 # equivalent
-dp --pt freeze -c DPA-3.2-5M.pt -o frozen_model.pth --head OMat24
+dp --pt freeze -c DPA-3.2-5M.pt -o frozen_model.pth --head [head_name]
 ```
 
 Output `frozen_model.pth` is a **single-head** model usable in both LAMMPS and ASE.
@@ -80,6 +82,13 @@ pair_style  deepmd frozen_model.pth
 pair_coeff  * *
 ```
 
+**Type-map alignment (critical):** The frozen model preserves the full-periodic-table type_map from pretraining (H=1, He=2, ..., Fe=26, ..., Ni=28, ...). The LAMMPS data file atom types MUST match these indices. Two valid approaches:
+
+- **Full-index approach** (recommended): declare ≥N atom types in the data file (where N = max atomic number used), assign Fe to type 26 and Ni to type 28 in the Masses section. Types 1-25 and 27 are unused but must be declared.
+- **Compact approach** (advanced): freeze with `--type-map Fe Ni` to produce a model with only 2 types. Then Fe=1, Ni=2 in the data file. This overrides the default full type_map.
+
+If you use compact types (1, 2) but freeze without `--type-map`, LAMMPS will silently map type 1 to H and type 2 to He — producing garbage results.
+
 Run via `$PREFIX/bin/lmp -in in.lmp` (use the `lmp` binary shipped with the deepmd environment, not a system LAMMPS).
 
 ### 4. Optional: zero-shot bias adjustment
@@ -87,7 +96,7 @@ Run via `$PREFIX/bin/lmp -in in.lmp` (use the `lmp` binary shipped with the deep
 Before freezing, you can re-align the per-element energy bias of the pretrained model to your downstream system without retraining:
 
 ```bash
-dp --pt change-bias DPA-3.2-5M.pt -s <your_system> --model-branch OMat24
+dp --pt change-bias DPA-3.2-5M.pt -s <your_system> --model-branch [head_name]
 ```
 
 Then freeze the resulting checkpoint as in step 2.

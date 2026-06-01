@@ -1,0 +1,273 @@
+version: v5
+capability: data_diagnosis
+domain: battery
+questions:
+- id: DD_screening_001_20250618
+  capability: data_diagnosis
+  domain: battery
+  intent: Evaluate NASICON compounds against the DFT-screening stability criteria (E_hull, chemical stability,
+    electrochemical stability, alkaline stability) from the paper's hierarchical screening methodology
+    and determine which compounds pass or fail.
+  human_prompt_seed: 'Evaluate whether each of the following NASICON compounds passes the DFT-screening
+    stability criteria from the hierarchical screening methodology. For each compound, check all seven
+    criteria: (1) E_hull < 25 meV/atom, (2) DeltaE_rex vs H2O > -0.15 eV/atom, (3) DeltaE_rex vs LiOH
+    > -0.15 eV/atom, (4) V_ox > 4.0 V vs Li/Li+, (5) V_red < 2.6 V vs Li/Li+, (6) max Pourbaix potential
+    < 1.1 eV/non-Li/O/H, (7) Passivation Index > 0.8. Report PASS or FAIL for each compound and list which
+    specific criteria it fails (if any).
+
+
+    Compound A: Li3Sc2(PO4)3 - E_hull=14 meV/atom, DeltaE_rex(H2O)=0.0 eV/atom, DeltaE_rex(LiOH)=0.0 eV/atom,
+    V_ox=5.0 V, V_red=2.4 V, max_Pourbaix=0.497 eV/non-Li/O/H, PI=1.0
+
+
+    Compound B: Li3MgHf(PO4)3 - E_hull=26 meV/atom, DeltaE_rex(H2O)=0.0 eV/atom, DeltaE_rex(LiOH)=-0.10
+    eV/atom, V_ox=4.5 V, V_red=2.3 V, max_Pourbaix=0.595 eV/non-Li/O/H, PI=0.9
+
+
+    Compound C: Li3Y2(PO4)3 - E_hull=66 meV/atom, DeltaE_rex(H2O)=0.0 eV/atom, DeltaE_rex(LiOH)=-0.08
+    eV/atom, V_ox=4.8 V, V_red=2.5 V, max_Pourbaix=0.75 eV/non-Li/O/H, PI=1.0
+
+
+    Save the results as screening_results.json with keys: compound_a, compound_b, compound_c, each containing
+    {"pass": bool, "failed_criteria": [list of criterion names]}.'
+  tags:
+  - analysis_data
+  - char_electrochem
+  data_files: []
+  reference_answers:
+  - key: artifact_results
+    value:
+      filename: screening_results.json
+  - key: compound_a_pass
+    value:
+      flags:
+      - multiline
+      - case_insensitive
+      pattern: '"compound_a".*"pass"\s*:\s*true'
+      filename: screening_results.json
+  - key: compound_a_no_failures
+    value:
+      flags:
+      - multiline
+      pattern: '"compound_a".*"failed_criteria"\s*:\s*\[\s*\]'
+      filename: screening_results.json
+  - key: compound_b_fail
+    value:
+      flags:
+      - multiline
+      - case_insensitive
+      pattern: '"compound_b".*"pass"\s*:\s*false'
+      filename: screening_results.json
+  - key: compound_b_ehull_fail
+    value:
+      flags:
+      - multiline
+      - case_insensitive
+      pattern: '"compound_b".*"E_hull"'
+      filename: screening_results.json
+  - key: compound_c_fail
+    value:
+      flags:
+      - multiline
+      - case_insensitive
+      pattern: '"compound_c".*"pass"\s*:\s*false'
+      filename: screening_results.json
+  - key: compound_c_ehull_fail
+    value:
+      flags:
+      - multiline
+      - case_insensitive
+      pattern: '"compound_c".*"E_hull"'
+      filename: screening_results.json
+  - key: grounding_source
+    value:
+      filename: screening_results.json
+  - key: turn_budget
+    value:
+      max: 15
+  - key: no_retries
+    value:
+      max: 0
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 50000
+  scoring_checklist:
+  - id: artifact_results
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] The output file screening_results.json exists and is valid JSON.'
+  - id: compound_a_pass
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Compound A (Li3Sc2(PO4)3) is evaluated as PASS — it meets all seven DFT-screening
+      criteria.'
+  - id: compound_a_no_failures
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Compound A has an empty failed_criteria list (no failures).'
+  - id: compound_b_fail
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Compound B (Li3MgHf(PO4)3) is evaluated as FAIL — its E_hull of 26 meV/atom exceeds
+      the 25 meV/atom cutoff.'
+  - id: compound_b_ehull_fail
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Compound B''s failed_criteria list includes E_hull as a failure reason.'
+  - id: compound_c_fail
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Compound C (Li3Y2(PO4)3) is evaluated as FAIL — its E_hull of 66 meV/atom exceeds
+      the 25 meV/atom cutoff.'
+  - id: compound_c_ehull_fail
+    axis: correctness
+    verify: text_file_regex
+    weight: 1.0
+    criterion: '[Must] Compound C''s failed_criteria list includes E_hull as a failure reason.'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The screening evaluation correctly applies the DFT-screening criteria from Table
+      III of the source paper (E_hull < 25 meV/atom, DeltaE_rex > -0.15 eV/atom, V_ox > 4.0 V, V_red <
+      2.6 V, max_Pourbaix < 1.1 eV/non-Li/O/H, PI > 0.8).'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 1.0
+    criterion: '[Must] Agent completes the task within 15 turns.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    weight: 1.0
+    criterion: '[Must] Agent does not retry any tool call.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 1.0
+    criterion: '[Must] Agent completes the task within 600 seconds.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 1.0
+    criterion: '[Must] Agent uses fewer than 50000 tokens total.'
+- id: DD_agnostic_001_20260528
+  capability: data_diagnosis
+  domain: battery
+  intent: Given the free polaron migration barriers for LiMnPO₄ (303 meV hole, 196 meV electron) and LiFePO₄
+    (170 meV hole, 133 meV electron) from the paper, compute the relative electronic conductivity ratios
+    at room temperature (300 K) using an Arrhenius-type relationship, and compare with the paper's stated
+    ratios of 177× slower for holes and 11× slower for electrons in the Mn olivine.
+  human_prompt_seed: 'Using the provided barrier data file (polaron_barriers.csv) containing HSE06 free
+    polaron migration barriers for LiMnPO₄ and LiFePO₄, write a Python script (calc_conductivity_ratio.py)
+    that computes the relative electronic conductivity ratio σ_Fe/σ_Mn at room temperature (300 K) for
+    both hole and electron carriers using an Arrhenius relationship: σ ∝ exp(-E_a/kT), where E_a is the
+    migration barrier and k = 8.617×10⁻⁵ eV/K. Output the conductivity ratios and compare them to the
+    paper''s stated values (177× for holes, 11× for electrons). Save results to conductivity_ratios.txt.'
+  tags: []
+  data_files:
+  - key: barrier_data
+    path: polaron_barriers.csv
+    oss_url: ''
+    description: 'CSV file with free polaron migration barriers (meV): material, carrier_type, barrier_meV.
+      Rows: LiMnPO4,hole,303; LiMnPO4,electron,196; LiFePO4,hole,170; LiFePO4,electron,133.'
+  reference_answers:
+  - key: artifact_script
+    value: calc_conductivity_ratio.py
+  - key: artifact_result
+    value: conductivity_ratios.txt
+  - key: numeric_hole_ratio
+    value:
+      checks:
+      - key: sigma_ratio_hole
+        max: 200
+        min: 150
+        expected: 177
+        tolerance: 10
+      filename: conductivity_ratios.txt
+  - key: numeric_electron_ratio
+    value:
+      checks:
+      - key: sigma_ratio_electron
+        max: 15
+        min: 8
+        expected: 11
+        tolerance: 2
+      filename: conductivity_ratios.txt
+  - key: text_contains_comparison
+    value:
+      flags: []
+      tokens:
+      - '177'
+      - '11'
+      filename: conductivity_ratios.txt
+  - key: grounding_source
+    value:
+      filename: polaron_barriers.csv
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 8000
+  scoring_checklist:
+  - id: artifact_script
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Python script calc_conductivity_ratio.py is generated.'
+  - id: artifact_result
+    axis: correctness
+    verify: artifact_exists
+    weight: 1.0
+    criterion: '[Must] Result file conductivity_ratios.txt is generated.'
+  - id: numeric_hole_ratio
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Hole conductivity ratio σ_Fe/σ_Mn ≈ 177 (range 150-200), consistent with exp((303-170)meV/kT)
+      at 300 K.'
+  - id: numeric_electron_ratio
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 1.0
+    criterion: '[Suggested] Electron conductivity ratio σ_Fe/σ_Mn ≈ 11 (range 8-15), consistent with exp((196-133)meV/kT)
+      at 300 K.'
+  - id: text_contains_comparison
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 1.0
+    criterion: '[Must] Result file references the paper''s stated values (177× and 11×).'
+  - id: grounding_source
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.0
+    criterion: '[Must] The analysis is grounded in the source paper''s conductivity comparison.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    criterion: '[Must] Agent completes within turn budget.'
+  - id: no_retries
+    axis: efficiency
+    verify: no_retries
+    criterion: '[Must] Agent does not retry failed tool calls.'
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    criterion: '[Must] Agent completes within duration budget.'
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    criterion: '[Must] Agent completes within total token budget.'

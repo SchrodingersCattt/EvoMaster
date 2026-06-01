@@ -21,7 +21,7 @@ questions:
     4. 写出至少一个不确定性来源。
 
     '
-  tags:
+  tags: []
   data_files:
   - key: donor_bundle
     path: data/pl_donor/donor_prescreen_bundle.json
@@ -89,6 +89,123 @@ questions:
     verify: llm_binary_judge
   - id: turn_budget
     criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: SA_solubility_exp_filter_001_20260531
+  capability: scientific_analysis
+  domain: polymer
+  intent: Curate a literature-backed experimental solubility dataset from a mixed provenance table and summarize which records are suitable for modeling.
+  human_prompt_seed: '工作区中有一份小分子水溶解度候选表 `solubility_records.csv`，里面来自不同数据库、工作表和内部整理脚本。
+
+    我想先拿它整理一个“文献/数据库实验值”训练集草案，用于后续做小分子溶解度预测。请检查每条记录的来源说明，保留适合当作实验标签的数据，并把不适合进入这个训练集的记录另行说明。
+
+    请写出：
+
+    1. `experimental_solubility_dataset.csv`：清洗后的训练集草案；
+    2. `solubility_dataset_summary.json`：包含 `n_total_input`、`n_kept`、`n_excluded` 和 `excluded_groups`；
+    3. `solubility_data_report.md`：简要说明筛选依据，并列出后续建模报告应该包含的评估指标和图表。
+
+    这一步不需要真正训练模型。'
+  tags:
+  - analysis_data
+  data_files:
+  - key: solubility_records
+    path: data/SA_solubility_exp_filter_001_20260531/solubility_records.csv
+    oss_url: ''
+    description: Candidate solubility records with mixed source and provenance notes.
+  reference_answers:
+  - key: filtered_dataset_artifact
+    value: experimental_solubility_dataset.csv
+  - key: summary_artifact
+    value: solubility_dataset_summary.json
+  - key: report_artifact
+    value: solubility_data_report.md
+  - key: kept_count
+    value:
+      filename: solubility_dataset_summary.json
+      key: n_kept
+      expected: 6
+      tolerance: 0
+  - key: excluded_count
+    value:
+      filename: solubility_dataset_summary.json
+      key: n_excluded
+      expected: 4
+      tolerance: 0
+  - key: filtered_csv_excludes_estimates
+    value:
+      filename: experimental_solubility_dataset.csv
+      pattern: (?i)\b(estimated|GSE|ModelX|derived|secondary compilation|predicted)\b
+  - key: report_explains_exclusions
+    value:
+      filename: solubility_data_report.md
+      tokens:
+      - GSE
+      - internal_qspr
+      - temperature extrapolation
+      - experimental
+      - metrics
+      - plot
+      flags: i
+  - key: grounding_source
+    value:
+      filename: solubility_records.csv
+  - key: turn_budget
+    value:
+      max: 12
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: filtered_dataset_artifact
+    criterion: '[Must] `experimental_solubility_dataset.csv` is written to the workspace.'
+    axis: correctness
+    verify: artifact_exists
+  - id: summary_artifact
+    criterion: '[Must] `solubility_dataset_summary.json` is written to the workspace.'
+    axis: correctness
+    verify: artifact_exists
+  - id: report_artifact
+    criterion: '[Must] `solubility_data_report.md` is written to the workspace.'
+    axis: correctness
+    verify: artifact_exists
+  - id: kept_count
+    criterion: '[Must] The summary reports exactly 6 kept experimental records.'
+    axis: correctness
+    verify: json_file_numeric_range
+    weight: 1.2
+  - id: excluded_count
+    criterion: '[Must] The summary reports exactly 4 excluded non-experimental records.'
+    axis: correctness
+    verify: json_file_numeric_range
+    weight: 1.2
+  - id: filtered_csv_excludes_estimates
+    criterion: '[Must] The filtered CSV does not contain estimated/GSE/ModelX/derived records or labels.'
+    axis: correctness
+    verify: text_file_regex_absent
+    weight: 1.5
+  - id: report_explains_exclusions
+    criterion: '[Must] The report explains why the GSE worksheet records, internal QSPR model output, and temperature-extrapolated secondary record are not suitable as experimental training labels, and lists expected modeling report contents such as metrics and plots.'
+    axis: grounding
+    verify: text_file_contains_all
+    weight: 1.2
+  - id: grounding_source
+    criterion: '[Must] Data filtering decisions are grounded in the `source`, `provenance`, and `curation_comment` columns of `solubility_records.csv`, not in molecule names or guessed database reputation alone.'
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes the task within the turn budget.
     axis: efficiency
     verify: turn_budget
   - id: duration_budget

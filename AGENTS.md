@@ -36,6 +36,39 @@ MatMaster 的对话与任务执行以 **根目录 `app.py` + `src/`（API）** �
   - `uv run python app.py` 等。
 - **版本约定**：`pyproject.toml` 中 `requires-python = ">=3.11"`；实际开发/CI 使用 uv 安装的版本（如 3.13）。涉及语法或类型注解（如是否保留 `from __future__ import annotations`）时，以 **uv 环境中的 Python 版本** 为准做验证与决策。
 
+---
+
+## 分支与 MR 流程（test → main）
+
+本仓库默认以 **`gitlab/test`** 作为集成/冒烟分支，以 **`gitlab/main`** 作为发布分支。日常开发流程：
+
+1. **从 `gitlab/test` 切分支**开发，例如 `refactor/mlip-skill`；改动直接 MR 到 `test` 跑流水线与联调。
+2. **待该 MR 在 `test` 上验证通过后**，再将同一组改动以 **基于 `gitlab/main`** 的新分支向 `main` 提 MR。不要把 test 分支直接改 target 为 main——test 上累积了尚未入 main 的其他改动，会污染 diff。
+
+### test-verified 改动上 main 的标准操作
+
+假设 `gitlab/test` 上的 commit `<SHA>` 已验证通过，要把它搬到 `main`：
+
+```bash
+git fetch gitlab main
+git checkout -b <name>-main gitlab/main
+git cherry-pick --no-commit <SHA>   # 或 cherry-pick 一组 commit
+git commit --author="<你的名字> <你的邮箱>" -m "..."   # 按需 reword
+git push -u gitlab <name>-main
+# 然后到 GitLab UI 新建 MR：source=<name>-main, target=main
+```
+
+### 不改写已 push 的历史 commit
+
+`gitlab/main`、`gitlab/test` 及各已存在分支的历史 commit **保持原样**——改写会破坏 SHA 链、影响他人分支 rebase 与回溯。需要从 test 搬改动到 main 时，不要 `git rebase -i` 去 reword 原 commit；而是在**新建的 main 基线分支**上 `cherry-pick --no-commit` 后用 `git commit -m "..."` 重新写一条新 commit（cherry-pick 保留原作者，author 字段不用改），原 test commit 保留不动。
+
+### 约定
+
+- test 分支是"集成/冒烟"分支，main 分支为发布分支。
+- 不改写任何已 push 的历史 commit。
+- 把测试通过的改动搬到 main 时保留**原作者**；若需要合并多条 commit 也按本节流程在**新分支**上重新组织。
+
+---
 
 ## 代码风格（pre-commit 强制）
 

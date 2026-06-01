@@ -38,7 +38,7 @@ model_name_or_path
 
 ### DP (DPA)
 
-- Requires `--head` for multi-head models (default: `OMat24`)
+- Requires a domain-matched `--head` for multi-head models; do not rely on the inorganic default for specialized domains.
 - Supports `--charge` and `--spin` via fparam (DPA3.2-5M only)
 - Model files: `.pt` (PyTorch) or `.pb` (TensorFlow, legacy)
 

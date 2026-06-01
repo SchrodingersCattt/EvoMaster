@@ -1,6 +1,6 @@
 ---
 name: checkcif-validator
-description: "Submit a CIF file to the IUCr checkCIF/PLATON web service for crystal structure validation. Returns alert counts (A/B/C/G levels) and the full HTML report. Use after crystal structure refinement to verify CIF quality before reporting R-factors. A-level alerts indicate serious problems that must be resolved or explained."
+description: "Submit CIFs to IUCr checkCIF/PLATON for crystal-structure validation after refinement; report A/B/C/G alert counts and the HTML report, and flag A-level alerts for resolution or explanation."
 skill_type: operator
 ---
 
@@ -66,14 +66,6 @@ python run_checkcif.py --file structure.cif [--timeout 180]
 ```
 python ${SKILL_DIR}/scripts/run_checkcif.py --file refined.cif
 ```
-
-## When to use
-
-- After completing crystal structure refinement, before reporting R-factors.
-- To check whether a CIF produced by any refinement program is
-  publication-quality.
-- To identify and diagnose structural problems (missed symmetry, wrong space
-  group, unusual geometry, etc.) flagged by PLATON.
 
 ## Rules
 

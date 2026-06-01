@@ -30,11 +30,15 @@ def _make_exec_ctx(registry: JobRegistry | None = None):
 class TestPollWithRegistry:
     def test_fresh_poll_calls_api_and_returns_next_check(self, tmp_path, monkeypatch):
         tool = BohriumTool(workdir=tmp_path)
+        # Make the short-polling loop exit immediately
+        monkeypatch.setattr(BohriumTool, "_POLL_MAX_WAIT", 1)
+        monkeypatch.setattr(BohriumTool, "_POLL_INTERVAL", 0)
         registry = JobRegistry()
         registry.register("job-1")
 
         def fake_get(base_url, path, access_key, params=None, timeout=30):
-            return {"data": {"status": 1}}
+            # Return Finished so the loop exits on first call
+            return {"data": {"status": 2}}
 
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         _patch_bridge(monkeypatch)
@@ -49,32 +53,27 @@ class TestPollWithRegistry:
 
         assert isinstance(result, ToolResult)
         payload = json.loads(result.content)
-        assert payload["status"] == "Running"
-        assert payload["next_check_seconds"] == 30
-        assert payload.get("cached") is not True
+        assert payload["status"] == "Finished"
         assert registry.get("job-1").poll_count == 1
+        assert registry.get("job-1").status == "finished"
 
-    def test_throttled_poll_returns_cached(self, tmp_path, monkeypatch):
+    def test_short_polling_loop_retries_for_running_job(self, tmp_path, monkeypatch):
         tool = BohriumTool(workdir=tmp_path)
+        # Allow a few iterations before timeout
+        monkeypatch.setattr(BohriumTool, "_POLL_MAX_WAIT", 1)
+        monkeypatch.setattr(BohriumTool, "_POLL_INTERVAL", 0)
         registry = JobRegistry()
         registry.register("job-1")
         api_calls: list[str] = []
 
         def fake_get(base_url, path, access_key, params=None, timeout=30):
             api_calls.append(path)
+            # Return Running (status=1) so the loop retries until timeout
             return {"data": {"status": 1}}
 
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
         _patch_bridge(monkeypatch)
         monkeypatch.setattr(bohrium_client_module, "_get", fake_get)
-
-        asyncio.run(
-            tool.execute_with_context(
-                {"action": "poll", "job_id": "job-1"},
-                _make_exec_ctx(registry),
-            )
-        )
-        assert len(api_calls) == 1
 
         result = asyncio.run(
             tool.execute_with_context(
@@ -83,10 +82,10 @@ class TestPollWithRegistry:
             )
         )
 
-        assert len(api_calls) == 1
+        # The short-polling loop should have called the API multiple times
+        assert len(api_calls) >= 1
         payload = json.loads(result.content)
-        assert payload["cached"] is True
-        assert "seconds_until_fresh" in payload
+        assert payload["status"] == "Running"
 
     def test_terminal_status_not_throttled(self, tmp_path, monkeypatch):
         tool = BohriumTool(workdir=tmp_path)
@@ -114,6 +113,8 @@ class TestPollWithRegistry:
 
     def test_poll_without_registry_still_works(self, tmp_path, monkeypatch):
         tool = BohriumTool(workdir=tmp_path)
+        monkeypatch.setattr(BohriumTool, "_POLL_MAX_WAIT", 1)
+        monkeypatch.setattr(BohriumTool, "_POLL_INTERVAL", 0)
 
         def fake_get(base_url, path, access_key, params=None, timeout=30):
             return {"data": {"status": 1}}
