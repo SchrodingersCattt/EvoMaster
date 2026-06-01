@@ -31,3 +31,8 @@ BOHRIUM_OPENAPI_BASE_COM = os.getenv(
 # ``require_evaluation_access`` 中的服务密钥分支对齐（Nacos evaluation.service_api_keys）。
 _eval_bearer = os.getenv("MATMASTER_TOOLS_EVALUATION_BEARER", "").strip()
 MATMASTER_TOOLS_EVALUATION_BEARER: str | None = _eval_bearer or None
+
+# 调用 matmaster-tools-server 计费 usage 上报接口时的服务 Bearer，与
+# ``require_billing_ingest_access`` 中的服务密钥分支对齐（Nacos billing.service_api_keys）。
+_billing_bearer = os.getenv("MATMASTER_TOOLS_BILLING_BEARER", "").strip()
+MATMASTER_TOOLS_BILLING_BEARER: str | None = _billing_bearer or None

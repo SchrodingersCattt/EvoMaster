@@ -1,7 +1,8 @@
-"""LLMProvider wrapper that records dry-run billing usage."""
+"""LLMProvider wrapper that reports dry-run billing usage to tools-server."""
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import contextmanager
@@ -21,7 +22,7 @@ logger.setLevel(logging.INFO)
 
 
 class BillingLLMProvider:
-    """Wrap an LLM provider and write one ledger row per completed LLM call."""
+    """Wrap an LLM provider and report one usage event per completed LLM call."""
 
     def __init__(
         self,
@@ -38,6 +39,7 @@ class BillingLLMProvider:
         self._billing_service = billing_service
         self._billing_mode = billing_mode
         self._call_index = 0
+        self._pending: set[asyncio.Task] = set()
         self._spawn_id_var: ContextVar[str | None] = ContextVar(
             "billing_spawn_id",
             default=None,
@@ -56,7 +58,17 @@ class BillingLLMProvider:
         exc_val: BaseException | None,
         exc_tb: object | None,
     ) -> None:
+        await self._drain_pending()
         await self._inner.__aexit__(exc_type, exc_val, exc_tb)
+
+    async def _drain_pending(self) -> None:
+        if not self._pending:
+            return
+        pending = list(self._pending)
+        try:
+            await asyncio.wait(pending, timeout=10)
+        except Exception:
+            logger.warning("draining billing usage reports failed", exc_info=True)
 
     @contextmanager
     def billing_scope(self, *, spawn_id: str | None = None):
@@ -70,7 +82,35 @@ class BillingLLMProvider:
         self._call_index += 1
         return self._call_index
 
-    async def _record(
+    async def _report(
+        self,
+        *,
+        call_index: int,
+        call_kind: str,
+        spawn_id: str | None,
+        usage: dict[str, Any] | None,
+        usage_vendor: dict[str, Any] | None,
+    ) -> None:
+        try:
+            await self._billing_service.report_llm_usage(
+                run_context=self._run_context,
+                model_identity=self._model_identity,
+                call_index=call_index,
+                call_kind=call_kind,
+                spawn_id=spawn_id,
+                usage=usage,
+                usage_vendor=usage_vendor,
+                billing_mode=self._billing_mode,
+            )
+        except Exception:
+            logger.warning(
+                "dry-run billing report failed session_id=%s call_index=%s",
+                self._run_context.session_id,
+                call_index,
+                exc_info=True,
+            )
+
+    def _schedule_report(
         self,
         *,
         call_index: int,
@@ -78,24 +118,20 @@ class BillingLLMProvider:
         usage: dict[str, Any] | None,
         usage_vendor: dict[str, Any] | None,
     ) -> None:
-        try:
-            await self._billing_service.record_llm_usage(
-                run_context=self._run_context,
-                model_identity=self._model_identity,
+        """非阻塞地上报，避免计费 HTTP 往返拖慢用户主链路。"""
+        if not usage and not usage_vendor:
+            return
+        task = asyncio.create_task(
+            self._report(
                 call_index=call_index,
                 call_kind=call_kind,
                 spawn_id=self._spawn_id_var.get(),
                 usage=usage,
                 usage_vendor=usage_vendor,
-                billing_mode=self._billing_mode,
             )
-        except Exception:
-            logger.warning(
-                "dry-run billing record failed session_id=%s call_index=%s",
-                self._run_context.session_id,
-                call_index,
-                exc_info=True,
-            )
+        )
+        self._pending.add(task)
+        task.add_done_callback(self._pending.discard)
 
     async def chat(
         self,
@@ -110,7 +146,7 @@ class BillingLLMProvider:
             tools,
             tool_choice=tool_choice,
         )
-        await self._record(
+        self._schedule_report(
             call_index=call_index,
             call_kind="chat",
             usage=response.usage,
@@ -134,7 +170,7 @@ class BillingLLMProvider:
             if chunk.usage_vendor is not None:
                 last_usage_vendor = dict(chunk.usage_vendor)
             yield chunk
-        await self._record(
+        self._schedule_report(
             call_index=call_index,
             call_kind="chat_stream",
             usage=last_usage,
