@@ -122,21 +122,19 @@ def build_figure_env(workdir: str, tool_call_id: str) -> tuple[str, str]:
     )
 
 
-def _link_figure_into_flat_view(
+def _link_figure_flat(
     *,
     session: Session,
-    artifact_dir: str,
+    flat_dir: str,
     resolved_path: str,
     figure_id: str,
 ) -> None:
-    """Create a flat-view symlink for a successfully uploaded figure.
+    """Create a flat-view symlink <flat_dir>/<figure_id><suffix> -> resolved_path.
 
-    Uses explicit [ -e ]/[ -L ] guard before ln -s to reject every form of
-    link_path preoccupation, including dangling symlinks. Diagnostics are
-    logged only; symlink failures never affect figure collection.
+    Diagnostics are logged only; symlink failures never affect figure
+    collection. Uses an explicit [ -e ]/[ -L ] guard to reject any existing
+    link_path, including dangling symlinks.
     """
-
-    flat_dir = posixpath.dirname(posixpath.dirname(posixpath.normpath(artifact_dir)))
     suffix = posixpath.splitext(resolved_path)[1].lower()
     link_path = posixpath.join(flat_dir, f"{figure_id}{suffix}")
     rel_target = posixpath.relpath(resolved_path, start=flat_dir)
@@ -174,6 +172,22 @@ def _link_figure_into_flat_view(
     err = exec_result.get("stderr", "") or stdout
     snippet = err[:200].strip()
     logger.warning("figure_symlink_failed:%s:%s", safe_figure_id, snippet)
+
+
+def _link_figure_into_flat_view(
+    *,
+    session: Session,
+    artifact_dir: str,
+    resolved_path: str,
+    figure_id: str,
+) -> None:
+    flat_dir = posixpath.dirname(posixpath.dirname(posixpath.normpath(artifact_dir)))
+    _link_figure_flat(
+        session=session,
+        flat_dir=flat_dir,
+        resolved_path=resolved_path,
+        figure_id=figure_id,
+    )
 
 
 def collect_figures_from_session(

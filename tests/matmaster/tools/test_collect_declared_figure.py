@@ -107,3 +107,23 @@ def test_validate_too_large_reason():
 def test_validation_error_is_value_error_subclass():
     # Keeps the old manifest pipeline's `except Exception` / ValueError contract.
     assert issubclass(FigureValidationError, ValueError)
+
+
+from unittest.mock import MagicMock
+
+from matmaster.tools.figure_artifacts import _link_figure_flat
+
+
+def test_link_figure_flat_builds_relative_symlink():
+    session = MagicMock()
+    session.exec_bash.return_value = {"exit_code": 0, "stdout": ""}
+    _link_figure_flat(
+        session=session,
+        flat_dir="/share/.matmaster/figures",
+        resolved_path="/share/results/band.png",
+        figure_id="band-abc123",
+    )
+    cmd = session.exec_bash.call_args.kwargs.get("command") or session.exec_bash.call_args.args[0]
+    assert "/share/.matmaster/figures/band-abc123.png" in cmd
+    # rel target from flat_dir to resolved_path
+    assert "../../results/band.png" in cmd
