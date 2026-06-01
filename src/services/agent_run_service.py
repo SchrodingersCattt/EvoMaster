@@ -17,10 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from matmaster.config.loader import load_agents_general_llm
-from matmaster.context.assembly import (
-    ContextAssemblyIntent,
-    TurnAssemblyRequest,
-)
+from matmaster.context.assembly import ContextAssemblyIntent, TurnAssemblyRequest
 from matmaster.context.ports import SkillResolver
 from matmaster.context.scanner import scan_skill_hits
 from matmaster.context.sections import ContextView
@@ -51,6 +48,12 @@ from src.services.agent_run_bohrium_stage import (
     run_bohrium_stage,
 )
 from src.services.agent_run_history_wiring import build_history_wiring
+from src.services.billing_llm_provider import BillingLLMProvider
+from src.services.billing_service import (
+    BillingModelIdentity,
+    BillingRunContext,
+    get_billing_service,
+)
 from src.services.context_assembly_factory import build_context_assembler
 from src.services.context_turn_intent import resolve_turn_context_intent
 from src.services.history_checkpoint_service import HistoryCheckpointService
@@ -81,6 +84,9 @@ _project_root = Path(__file__).resolve().parent.parent.parent
 RUN_ID_WEB = "mat_master_web"
 
 _MATMASTER_CONFIG_DIR = _project_root / "config"
+_LLM_BILLING_DRY_RUN_ENABLED = os.environ.get(
+    "LLM_BILLING_DRY_RUN_ENABLED", ""
+).strip().lower() in {"1", "true", "yes", "on"}
 
 
 @lru_cache(maxsize=1)
@@ -459,6 +465,45 @@ class AgentRunService:
                 default_profile_key=agent_default_llm,
             )
             llm_provider = llm_bundle.provider
+            if _LLM_BILLING_DRY_RUN_ENABLED:
+                session_info_for_billing: dict[str, Any] = {}
+                try:
+                    session_info_for_billing = (
+                        self._sessions_service.get_session(session_id) or {}
+                    )
+                    llm_provider = BillingLLMProvider(
+                        llm_provider,
+                        run_context=BillingRunContext(
+                            session_id=session_id,
+                            task_id=task_id,
+                            invocation_id=invocation_id,
+                            user_id=(
+                                str(session_info_for_billing.get("user_id"))
+                                if session_info_for_billing.get("user_id") is not None
+                                else None
+                            ),
+                            org_id=(
+                                str(session_info_for_billing.get("org_id"))
+                                if session_info_for_billing.get("org_id") is not None
+                                else None
+                            ),
+                            project_id=session_info_for_billing.get("project_id"),
+                        ),
+                        model_identity=BillingModelIdentity(
+                            provider=llm_bundle.provider_name,
+                            model=llm_bundle.model,
+                            model_profile=llm_bundle.model_profile,
+                            model_route=llm_bundle.model_route,
+                        ),
+                        billing_service=get_billing_service(),
+                        billing_mode="dry_run",
+                    )
+                except Exception:
+                    logger.warning(
+                        "dry-run billing wrapper init failed session_id=%s",
+                        session_id,
+                        exc_info=True,
+                    )
 
             exp = Exp(exp_config)
 

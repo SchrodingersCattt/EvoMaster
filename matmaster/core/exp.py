@@ -501,7 +501,12 @@ class Exp:
             if cancel_token is not None and catalog is not None:
                 catalog.inject_cancel_token(cancel_token)
 
-            yield runtime
+            provider_scope = getattr(ctx.request.llm_provider, "billing_scope", None)
+            if callable(provider_scope):
+                with provider_scope(spawn_id=spawn_id):
+                    yield runtime
+            else:
+                yield runtime
         finally:
             await self._run_cleanup_callbacks()
 

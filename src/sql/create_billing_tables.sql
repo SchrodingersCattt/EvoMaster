@@ -1,0 +1,72 @@
+-- LLM 金额计费 dry-run 表结构
+--
+-- 价格以「每 1M tokens 的微单位金额」存储：
+--   例如 currency=CNY 时，1 元 = 1_000_000 micro-CNY。
+-- 金额流水同样用 micro amount，避免浮点误差。
+
+CREATE TABLE IF NOT EXISTS `evo_model_price_catalog` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT '自增ID',
+    `provider` VARCHAR(64) NOT NULL COMMENT 'provider 名称，如 openai/bedrock',
+    `model` VARCHAR(255) NOT NULL COMMENT '真实模型名',
+    `model_profile` VARCHAR(128) NOT NULL DEFAULT '' COMMENT '内部 profile key；空字符串表示该模型通用价格',
+    `model_route` VARCHAR(128) NOT NULL DEFAULT '' COMMENT '前端 route key；空字符串表示该模型/profile 通用价格',
+    `currency` VARCHAR(16) NOT NULL DEFAULT 'CNY' COMMENT '币种',
+    `unit` VARCHAR(32) NOT NULL DEFAULT '1M_tokens' COMMENT '价格单位',
+    `input_price_micro_per_million` BIGINT NOT NULL DEFAULT 0 COMMENT '普通输入 token 单价',
+    `output_price_micro_per_million` BIGINT NOT NULL DEFAULT 0 COMMENT '输出 token 单价',
+    `cache_read_price_micro_per_million` BIGINT NOT NULL DEFAULT 0 COMMENT '缓存读取 token 单价',
+    `cache_write_price_micro_per_million` BIGINT NOT NULL DEFAULT 0 COMMENT '缓存写入 token 单价',
+    `version` VARCHAR(64) NOT NULL COMMENT '价格版本',
+    `status` VARCHAR(32) NOT NULL DEFAULT 'active' COMMENT 'active/inactive',
+    `effective_from` DATETIME NOT NULL COMMENT '生效开始时间',
+    `effective_to` DATETIME NULL COMMENT '生效结束时间；NULL 表示仍有效',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    UNIQUE KEY `uk_model_price_version` (`provider`, `model`, `model_profile`, `model_route`, `version`),
+    INDEX `idx_model_price_lookup` (`provider`, `model`, `status`, `effective_from`, `effective_to`),
+    INDEX `idx_model_price_route` (`model_route`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='模型价格目录';
+
+CREATE TABLE IF NOT EXISTS `evo_llm_usage_ledger` (
+    `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY COMMENT '自增ID',
+    `idempotency_key` VARCHAR(128) NOT NULL COMMENT '幂等键，避免重试重复记账',
+    `billing_mode` VARCHAR(32) NOT NULL DEFAULT 'dry_run' COMMENT 'dry_run/charge',
+    `pricing_status` VARCHAR(32) NOT NULL DEFAULT 'priced' COMMENT 'priced/missing_price',
+    `user_id` VARCHAR(255) NULL COMMENT '用户ID',
+    `org_id` VARCHAR(255) NULL COMMENT '组织ID',
+    `project_id` BIGINT NULL COMMENT '项目ID',
+    `session_id` VARCHAR(255) NOT NULL COMMENT '会话ID',
+    `task_id` VARCHAR(255) NULL COMMENT '任务ID',
+    `invocation_id` VARCHAR(64) NULL COMMENT '本轮调用唯一标识',
+    `spawn_id` VARCHAR(64) NULL COMMENT '子 agent 调用标识；NULL 为父 agent',
+    `call_index` INT UNSIGNED NOT NULL COMMENT '本次 run 内 LLM 调用序号',
+    `call_kind` VARCHAR(32) NOT NULL COMMENT 'chat/chat_stream',
+    `provider` VARCHAR(64) NOT NULL COMMENT 'provider 名称',
+    `model` VARCHAR(255) NOT NULL COMMENT '真实模型名',
+    `model_profile` VARCHAR(128) NULL COMMENT '内部 profile key',
+    `model_route` VARCHAR(128) NULL COMMENT '前端 route key',
+    `input_tokens` BIGINT NOT NULL DEFAULT 0 COMMENT '总输入 token',
+    `output_tokens` BIGINT NOT NULL DEFAULT 0 COMMENT '输出 token',
+    `cache_read_tokens` BIGINT NOT NULL DEFAULT 0 COMMENT '缓存读取 token',
+    `cache_write_tokens` BIGINT NOT NULL DEFAULT 0 COMMENT '缓存写入 token',
+    `uncached_input_tokens` BIGINT NOT NULL DEFAULT 0 COMMENT '按普通输入价格计费的输入 token',
+    `currency` VARCHAR(16) NOT NULL DEFAULT 'CNY' COMMENT '币种',
+    `price_version` VARCHAR(64) NULL COMMENT '命中的价格版本；missing_price 时为空',
+    `input_price_micro_per_million` BIGINT NOT NULL DEFAULT 0 COMMENT '普通输入 token 单价快照',
+    `output_price_micro_per_million` BIGINT NOT NULL DEFAULT 0 COMMENT '输出 token 单价快照',
+    `cache_read_price_micro_per_million` BIGINT NOT NULL DEFAULT 0 COMMENT '缓存读取 token 单价快照',
+    `cache_write_price_micro_per_million` BIGINT NOT NULL DEFAULT 0 COMMENT '缓存写入 token 单价快照',
+    `input_amount_micro` BIGINT NOT NULL DEFAULT 0 COMMENT '普通输入金额',
+    `output_amount_micro` BIGINT NOT NULL DEFAULT 0 COMMENT '输出金额',
+    `cache_read_amount_micro` BIGINT NOT NULL DEFAULT 0 COMMENT '缓存读取金额',
+    `cache_write_amount_micro` BIGINT NOT NULL DEFAULT 0 COMMENT '缓存写入金额',
+    `total_amount_micro` BIGINT NOT NULL DEFAULT 0 COMMENT '总金额',
+    `usage` JSON NOT NULL COMMENT '标准化 usage',
+    `usage_vendor` JSON NULL COMMENT 'provider 原始 usage',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    UNIQUE KEY `uk_llm_usage_idempotency` (`idempotency_key`),
+    INDEX `idx_llm_usage_session` (`session_id`, `created_at`),
+    INDEX `idx_llm_usage_user` (`user_id`, `created_at`),
+    INDEX `idx_llm_usage_model` (`provider`, `model`, `created_at`),
+    INDEX `idx_llm_usage_reconcile` (`billing_mode`, `pricing_status`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='LLM 用量金额流水';
