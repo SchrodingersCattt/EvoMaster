@@ -95,6 +95,38 @@ class BillingService:
             )
             return False
 
+    async def get_run_cost(
+        self,
+        invocation_id: str | None,
+        *,
+        timeout_seconds: float = 2.0,
+    ) -> dict[str, Any] | None:
+        """按 invocation_id 查本轮 run 全链路费用（best-effort）。
+
+        供飞书完成卡片展示费用用。失败/超时/无数据返回 None，绝不抛异常、
+        不拖慢完成卡片主链路。
+        """
+        if not invocation_id:
+            return None
+        url = f"{self._base_url}/api/v1/billing/usage/summary"
+        timeout = aiohttp.ClientTimeout(total=timeout_seconds)
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.get(
+                    url, params={"invocation_id": invocation_id}
+                ) as resp:
+                    if resp.status >= 400:
+                        return None
+                    data = (await resp.json() or {}).get("data")
+                    return data or None
+        except Exception:
+            logger.warning(
+                "billing run cost query error invocation_id=%s",
+                invocation_id,
+                exc_info=True,
+            )
+            return None
+
 
 @lru_cache(maxsize=1)
 def get_billing_service() -> BillingService:

@@ -192,6 +192,28 @@ def _build_run_usage_summary(event: RunResultEvent) -> dict[str, Any] | None:
     return summary
 
 
+async def _attach_run_cost(
+    usage_summary: dict[str, Any] | None,
+    invocation_id: str | None,
+) -> dict[str, Any] | None:
+    """best-effort 查本轮 run 全链路费用并并入 usage_summary，供飞书卡片展示。
+
+    费用口径是 invocation 维度的全链路（含子 agent / 压缩），与 token 摘要的
+    root-kernel 口径不同；查询失败/无账单时原样返回，不影响完成卡片。
+    """
+    if not invocation_id:
+        return usage_summary
+    try:
+        cost = await get_billing_service().get_run_cost(invocation_id)
+    except Exception:
+        cost = None
+    if not cost:
+        return usage_summary
+    enriched = dict(usage_summary or {})
+    enriched['cost'] = cost
+    return enriched
+
+
 async def _emit_error_and_close_fanout(
     fanout: RunEventFanout, message: str, source: str = "System"
 ) -> None:
@@ -778,6 +800,7 @@ class AgentRunService:
                 return ((False, "no_result"), _elapsed_ms(), None)
 
             usage_summary = _build_run_usage_summary(run_result_event)
+            usage_summary = await _attach_run_cost(usage_summary, invocation_id)
             if run_result_event.reason == "cancelled":
                 await fanout.dispatch(
                     CancelledEvent(source="System", reason="Task cancelled by user.")
