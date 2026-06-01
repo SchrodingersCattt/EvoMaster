@@ -3,21 +3,17 @@
 from __future__ import annotations
 
 import hashlib
-import json
 import logging
 import posixpath
 import re
 import shlex
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Any
 
-from pydantic import ValidationError
-
 from matmaster.types.figures import (
     FigureDescriptor,
-    FigureManifestEntry,
     FigureUploadConfig,
 )
 from matmaster.types.session import Session
@@ -51,10 +47,6 @@ class FigureValidationError(ValueError):
 
 def _format_figure_id_for_diagnostic(figure_id: str) -> str:
     return repr(figure_id[:_FIGURE_ID_MAX_DISPLAY_CHARS])
-
-
-def _figure_id_has_control_chars(value: str) -> bool:
-    return any(ord(ch) < 32 or ord(ch) == 127 for ch in value)
 
 
 def resolve_workspace_output_path(
@@ -97,29 +89,6 @@ def build_figure_id(*, output_path: str, image_bytes: bytes) -> str:
         sanitized = "figure"
     digest = hashlib.sha256(image_bytes).hexdigest()[:12]
     return f"{sanitized}-{digest}"[:_FIGURE_ID_TOTAL_MAX]
-
-
-@dataclass(slots=True)
-class FigureCollectionResult:
-    figures: list[FigureDescriptor] = field(default_factory=list)
-    failure_ids: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
-
-
-@dataclass(slots=True)
-class _ManifestLoadResult:
-    entries: list[tuple[FigureManifestEntry, str]] | None
-    warning: str | None = None
-
-
-def build_figure_env(workdir: str, tool_call_id: str) -> tuple[str, str]:
-    """Return the scoped artifact directory and manifest path for one tool call."""
-
-    base_dir = posixpath.join(workdir, ".matmaster", "figures", tool_call_id)
-    return (
-        posixpath.join(base_dir, "artifacts"),
-        posixpath.join(base_dir, "manifest.json"),
-    )
 
 
 def _link_figure_flat(
@@ -172,165 +141,6 @@ def _link_figure_flat(
     err = exec_result.get("stderr", "") or stdout
     snippet = err[:200].strip()
     logger.warning("figure_symlink_failed:%s:%s", safe_figure_id, snippet)
-
-
-def _link_figure_into_flat_view(
-    *,
-    session: Session,
-    artifact_dir: str,
-    resolved_path: str,
-    figure_id: str,
-) -> None:
-    flat_dir = posixpath.dirname(posixpath.dirname(posixpath.normpath(artifact_dir)))
-    _link_figure_flat(
-        session=session,
-        flat_dir=flat_dir,
-        resolved_path=resolved_path,
-        figure_id=figure_id,
-    )
-
-
-def collect_figures_from_session(
-    *,
-    session: Session,
-    artifact_dir: str,
-    manifest_path: str,
-    tool_call_id: str,
-    upload_config: FigureUploadConfig,
-) -> FigureCollectionResult:
-    """Collect, validate, and upload figures described by a manifest."""
-
-    result = FigureCollectionResult()
-    if not session.path_exists(manifest_path):
-        return result
-
-    manifest_entries = _load_manifest(
-        session=session,
-        manifest_path=manifest_path,
-        artifact_dir=artifact_dir,
-    )
-    if manifest_entries.entries is None:
-        if manifest_entries.warning is not None:
-            result.warnings.append(manifest_entries.warning)
-        return result
-
-    for entry, resolved_path in manifest_entries.entries:
-        try:
-            payload = _download_with_retry(session=session, path=resolved_path)
-            _validate_image_bytes(payload=payload, path=resolved_path)
-            asset_key = _build_asset_key(
-                upload_config=upload_config,
-                tool_call_id=tool_call_id,
-                figure_id=entry.figure_id,
-                source_path=resolved_path,
-                payload=payload,
-            )
-            asset_url = _upload_with_retry(
-                upload_bytes=upload_config.upload_bytes,
-                payload=payload,
-                asset_key=asset_key,
-            )
-        except Exception:
-            result.failure_ids.append(entry.figure_id)
-            continue
-
-        _link_figure_into_flat_view(
-            session=session,
-            artifact_dir=artifact_dir,
-            resolved_path=resolved_path,
-            figure_id=entry.figure_id,
-        )
-        result.figures.append(
-            FigureDescriptor(
-                figure_id=entry.figure_id,
-                asset_url=asset_url,
-                caption=entry.caption,
-                alt=entry.alt,
-                importance=entry.importance,
-                placement_hint=entry.placement_hint,
-                source_tool_call_id=tool_call_id,
-                remote_path=resolved_path,
-            )
-        )
-
-    return result
-
-
-def _load_manifest(
-    *,
-    session: Session,
-    manifest_path: str,
-    artifact_dir: str,
-) -> _ManifestLoadResult:
-    try:
-        raw_manifest = session.read_file(manifest_path)
-        document = json.loads(raw_manifest)
-        figures = document["figures"]
-        if not isinstance(figures, list):
-            raise TypeError("figures must be a list")
-    except (KeyError, TypeError, json.JSONDecodeError):
-        return _ManifestLoadResult(
-            entries=None,
-            warning="invalid_manifest: malformed_or_missing_figures_list",
-        )
-
-    seen_ids: set[str] = set()
-    normalized_entries: list[tuple[FigureManifestEntry, str]] = []
-
-    for raw_entry in figures:
-        try:
-            entry = FigureManifestEntry.model_validate(raw_entry)
-        except ValidationError:
-            return _ManifestLoadResult(
-                entries=None,
-                warning="invalid_manifest: invalid_figure_entry",
-            )
-
-        if "/" in entry.figure_id or _figure_id_has_control_chars(entry.figure_id):
-            return _ManifestLoadResult(
-                entries=None,
-                warning=(
-                    "invalid_manifest: invalid_figure_id:"
-                    f"{_format_figure_id_for_diagnostic(entry.figure_id)}"
-                ),
-            )
-
-        if entry.figure_id in seen_ids:
-            return _ManifestLoadResult(
-                entries=None,
-                warning=f"invalid_manifest: duplicate_figure_id:{entry.figure_id}",
-            )
-        seen_ids.add(entry.figure_id)
-
-        resolved_path = _resolve_artifact_path(
-            artifact_dir=artifact_dir,
-            entry_path=entry.path,
-        )
-        if resolved_path is None:
-            return _ManifestLoadResult(
-                entries=None,
-                warning=f"invalid_manifest: unsafe_path:{entry.path}",
-            )
-
-        normalized_entries.append((entry, resolved_path))
-
-    return _ManifestLoadResult(entries=normalized_entries)
-
-
-def _resolve_artifact_path(*, artifact_dir: str, entry_path: str) -> str | None:
-    artifact_root = posixpath.normpath(artifact_dir)
-    if posixpath.isabs(entry_path):
-        candidate = posixpath.normpath(entry_path)
-    else:
-        candidate = posixpath.normpath(posixpath.join(artifact_root, entry_path))
-
-    try:
-        if posixpath.commonpath([artifact_root, candidate]) != artifact_root:
-            return None
-    except ValueError:
-        return None
-
-    return candidate
 
 
 def _download_with_retry(*, session: Session, path: str) -> bytes:
