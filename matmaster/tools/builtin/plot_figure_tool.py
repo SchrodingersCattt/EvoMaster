@@ -12,6 +12,7 @@ import asyncio
 from typing import Any, ClassVar
 
 from matmaster.tools.figure_artifacts import (
+    DeclaredFigureResult,
     collect_declared_figure,
     resolve_workspace_output_path,
 )
@@ -222,7 +223,7 @@ class PlotFigure(BuiltinTool):
         observation: str,
         exit_code: int,
         has_command: bool,
-        declared: Any,
+        declared: DeclaredFigureResult,
         output_path: str,
         caption: str,
     ) -> ToolResult:
