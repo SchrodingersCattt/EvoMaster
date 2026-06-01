@@ -126,6 +126,7 @@ class TestExpInitSkillTools:
         exp._init_skill_tools(ctx, registry)
 
         assert "Skill" in registry
+        assert "use_skill" not in registry
 
         from matmaster.tools.builtin.skill_tool import SkillTool as BuiltinSkillTool
 

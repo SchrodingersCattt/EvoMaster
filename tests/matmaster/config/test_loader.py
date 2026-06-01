@@ -106,6 +106,16 @@ routes:
         assert "test-route" in cfg.routes
         assert cfg.routes["test-route"].profile == "p1"
 
+    def test_repo_llm_config_routes_current_gpt55(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+
+        cfg = load_llm_config(repo_root / "config" / "llm_config.yaml")
+        resolved = cfg.resolve_route(model_override="cds/GPT-5.5")
+
+        assert resolved.profile_key == "gpt55"
+        assert resolved.model == "matmaster/gpt-5.5"
+        assert all(not route_key.lower().endswith("5.4") for route_key in cfg.routes)
+
 
 class TestLoadExpConfig:
     """Tests for load_exp_config() -- toml-based loading."""

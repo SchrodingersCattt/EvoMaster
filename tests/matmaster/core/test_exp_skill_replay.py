@@ -99,7 +99,7 @@ async def test_init_skill_tools_replays_active_skills_into_registry(tmp_path):
 
     ctx = _make_ctx(tmp_path, active_skills=frozenset({"test-skill"}))
 
-    # No use_skill call -- replay must inject the lazy tool by itself.
+    # No Skill call -- replay must inject the lazy tool by itself.
     exp._init_skill_tools(ctx, registry)
 
     assert "mat_sg_build_bulk" in registry
@@ -111,8 +111,8 @@ async def test_init_skill_tools_replays_active_skills_into_registry(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_replay_is_idempotent_with_use_skill(tmp_path):
-    """Replay + a fresh use_skill call must not duplicate the tool."""
+async def test_replay_is_idempotent_with_skill_tool(tmp_path):
+    """Replay + a fresh Skill call must not duplicate the tool."""
     env = _setup_skill_env(tmp_path)
     cfg = _build_cfg(env)
     exp = Exp(cfg)

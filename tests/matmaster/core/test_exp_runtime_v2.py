@@ -826,6 +826,19 @@ class TestBuildRuntimeCompactorEventSink:
 class TestActivePlanesNewNames:
     """_derive_active_planes recognises new CC-style tool names."""
 
+    def test_legacy_eval_tool_names_do_not_activate_external_service(self) -> None:
+        """Only current CC-style builtin names affect RuntimeTopology planes."""
+        from matmaster.core.exp import Exp
+        from matmaster.types.topology import ToolPlane
+
+        planes = Exp._derive_active_planes(
+            has_session=False,
+            builtin_cfg=["mm_web_search", "web_fetch"],
+            skills_enabled=False,
+        )
+
+        assert planes == frozenset({ToolPlane.CONTROL_PLANE})
+
     @pytest.mark.asyncio
     async def test_build_runtime_adds_external_service_plane_for_websearch(
         self,

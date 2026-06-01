@@ -71,26 +71,17 @@ _EXTERNAL_EFFECT_TOOL_NAMES: frozenset[str] = frozenset(
         "WebFetch",
         "PaperSearch",
         "Bohrium",
-        # Aliases surfaced by evaluation tooling.
-        "mm_web_search",
-        "web_fetch",
     }
 )
 
 # Builtin tool names that require an active session for execution.
 _SESSION_REQUIRING_TOOL_NAMES: frozenset[str] = frozenset(
     {
-        "execute_bash",
         "Bash",
-        "read_file",
         "Read",
-        "write_file",
         "Write",
-        "edit_file",
         "Edit",
-        "glob",
         "Glob",
-        "grep",
         "Grep",
     }
 )
@@ -755,7 +746,7 @@ class Exp:
         env = ctx.environment
 
         from matmaster.skills.registry import SkillRegistry
-        from matmaster.tools.builtin.skill_tool import LegacyUseSkillTool, SkillTool
+        from matmaster.tools.builtin.skill_tool import SkillTool
         from matmaster.tools.lazy_mcp import LazyMCPConnector, LazyMCPTool
         from matmaster.tools.schema_cache import ToolSchemaCache
 
@@ -931,14 +922,6 @@ class Exp:
             on_skill_hit=activate_mcp_server,
         )
         registry.register(skill_tool, source="skill")
-        registry.register(
-            LegacyUseSkillTool(
-                session=env.session,
-                skill_registry=skill_registry,
-                on_skill_hit=activate_mcp_server,
-            ),
-            source="skill",
-        )
 
         # Replay skills activated on past turns of this session.
         # activate_mcp_server reads only from the on-disk schema cache (no MCP IO),

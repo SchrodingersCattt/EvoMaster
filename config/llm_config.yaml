@@ -218,8 +218,8 @@ routes:
     profile: gemini
   "gemini-3.1-pro-preview":
     profile: gemini-pro
-  "cds/GPT-5.4":
-    profile: gpt54
+  "cds/GPT-5.5":
+    profile: gpt55
   "matmaster/qwen3.6-plus":
     profile: qwen_3_6_plus
   "matmaster/qwen3.6-max-preview":

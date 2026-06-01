@@ -52,9 +52,11 @@ Modify:
 - `matmaster/tools/builtin/bash_tool.py` — Chunk 1 delegate execution to `run_bash_command` (behavior unchanged); Chunk 4 strip all figure logic.
 - `matmaster/tools/builtin/__init__.py` — export `PlotFigure`.
 - `matmaster/core/exp.py` — register `PlotFigure`, extend `_SESSION_REQUIRING_TOOL_NAMES`, update docstring.
+- `matmaster/exps/direct.toml`, `matmaster/exps/planner.toml` — add `PlotFigure` to explicit builtin allowlists so the global `_base.toml` figure guidance names an actually available tool in the main user-facing modes.
 - `matmaster/types/figures.py` — Chunk 4 delete `FigureManifestEntry`.
 - `matmaster/types/__init__.py` — Chunk 4 drop `FigureManifestEntry` export.
 - `matmaster/exps/_base.toml` — Chunk 4 prompt migration.
+- `tests/matmaster/core/test_exp.py` — update builtin registration counts/sets and assert direct/planner config exposure.
 - `tests/matmaster/tools/builtin/test_bash_tool.py`, `tests/matmaster/tools/test_figure_artifacts.py`, `tests/matmaster/tools/test_figure_artifacts_real_fs.py`, `tests/matmaster/types/test_figures.py` — Chunk 4 migrate/delete old manifest tests.
 
 ## Constraints
@@ -69,6 +71,7 @@ Modify:
 
 - **Error classification mechanism (spec §9.2 left this unspecified).** `_validate_image_bytes` currently bundles three failures into one `ValueError`. This plan refactors it to raise `FigureValidationError(reason=...)` which **subclasses `ValueError`** so the existing `collect_figures_from_session` (`except Exception`) and any `pytest.raises(ValueError)` stay green until Chunk 4 deletes them. `collect_declared_figure` reads `exc.reason` — stable classification with no exception-text parsing. `download_failed`/`upload_failed` are classified by call site, not text.
 - **`_link_figure_into_flat_view` signature.** Instead of swapping `artifact_dir` for `workdir` (which would break the still-live old caller mid-plan), Chunk 2 extracts the shell body into `_link_figure_flat(*, session, flat_dir, ...)`. Both the old manifest path and the new declared path compute their own `flat_dir` and call it. Chunk 4 deletes the old wrapper and keeps `_link_figure_flat`. Net result equals the spec's workdir-based flat view.
+- **Explicit exp allowlists.** The spec records explicit builtin allowlist migration as a configuration decision, but this plan intentionally includes `direct.toml` and `planner.toml`: `_base.toml` is global, and those two modes are the primary user-facing modes that need figure publication. Without this migration, the prompt would tell the model to call `PlotFigure` while the configured tool list withholds it.
 
 ### Known tradeoffs (recorded, not action items)
 
@@ -1668,7 +1671,10 @@ git commit -m "test: cover PlotFigure command status matrix"
 **Files:**
 - Modify: `matmaster/tools/builtin/__init__.py`
 - Modify: `matmaster/core/exp.py:93-107` (`_SESSION_REQUIRING_TOOL_NAMES`), `exp.py:664-668` (docstring), `exp.py:679-719` (imports + `session_tools`)
+- Modify: `matmaster/exps/direct.toml`
+- Modify: `matmaster/exps/planner.toml`
 - Test: `tests/matmaster/tools/builtin/test_plot_figure_tool.py`
+- Test: `tests/matmaster/core/test_exp.py`
 
 - [ ] **Step 1: Write the failing registration test**
 
@@ -1687,10 +1693,58 @@ def test_in_session_requiring_names():
     assert "PlotFigure" in _SESSION_REQUIRING_TOOL_NAMES
 ```
 
+In `tests/matmaster/core/test_exp.py`, add the loader import near the top:
+
+```python
+from matmaster.config.loader import load_exp_config
+```
+
+Then update the existing builtin registration expectations and add the config exposure test:
+
+```python
+    def test_native_tools_count(self, tmp_path: Path) -> None:
+        """12 native tools registered with source='builtin' (CC names)."""
+        _, registry = self._build_registry(tmp_path)
+        assert len(registry) == 12
+
+    def test_native_tool_names(self, tmp_path: Path) -> None:
+        """All 12 expected CC-name tools are present in registry."""
+        _, registry = self._build_registry(tmp_path)
+        expected_native = {
+            "AskQuestion",
+            "Bash",
+            "PlotFigure",
+            "Read",
+            "Write",
+            "Edit",
+            "Glob",
+            "Grep",
+            "TodoWrite",
+            "WebSearch",
+            "WebFetch",
+            "Bohrium",
+        }
+        for name in expected_native:
+            assert name in registry, f"Expected tool '{name}' not found in registry"
+
+    def test_total_count(self, tmp_path: Path) -> None:
+        """Total tools = 12 native builtin (CC names, no legacy tools)."""
+        _, registry = self._build_registry(tmp_path)
+        assert len(registry) == 12
+
+    def test_direct_and_planner_configs_include_plot_figure(self) -> None:
+        assert "PlotFigure" in load_exp_config("direct").tools.builtin
+        assert "PlotFigure" in load_exp_config("planner").tools.builtin
+```
+
 - [ ] **Step 2: Run to verify it fails**
 
-Run: `uv run pytest tests/matmaster/tools/builtin/test_plot_figure_tool.py -k "exported or session_requiring" -v`
-Expected: FAIL on the import / membership assertions.
+Run:
+```bash
+uv run pytest tests/matmaster/tools/builtin/test_plot_figure_tool.py -k "exported or session_requiring" -v
+uv run pytest tests/matmaster/core/test_exp.py -k "native_tools_count or native_tool_names or total_count or direct_and_planner_configs_include_plot_figure" -v
+```
+Expected: FAIL on the `PlotFigure` import / membership assertions, native tool count/set assertions, and direct/planner config exposure assertion.
 
 - [ ] **Step 3: Wire registration**
 
@@ -1713,16 +1767,23 @@ In `matmaster/core/exp.py`:
 
 - Update the docstring tool list (line 664) to include `PlotFigure` among the session-requiring tools.
 
+In `matmaster/exps/direct.toml`, add `"PlotFigure",` immediately after `"Bash",` in the `[tools].builtin` list.
+
+In `matmaster/exps/planner.toml`, add `"PlotFigure",` immediately after `"Bash",` in the `[tools].builtin` list.
+
 - [ ] **Step 4: Run registration tests + a broad import smoke check**
 
-Run: `uv run pytest tests/matmaster/tools/builtin/test_plot_figure_tool.py -v`
-Then: `uv run python -c "import matmaster.core.exp"`
-Expected: tests pass; import has no errors.
+Run:
+```bash
+uv run pytest tests/matmaster/tools/builtin/test_plot_figure_tool.py tests/matmaster/core/test_exp.py tests/matmaster/integration/test_direct_toml_prompt.py -v
+uv run python -c "import matmaster.core.exp; from matmaster.config.loader import load_exp_config; assert 'PlotFigure' in load_exp_config('direct').tools.builtin; assert 'PlotFigure' in load_exp_config('planner').tools.builtin"
+```
+Expected: tests pass; import has no errors; direct and planner configs expose `PlotFigure`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add matmaster/tools/builtin/__init__.py matmaster/core/exp.py tests/matmaster/tools/builtin/test_plot_figure_tool.py
+git add matmaster/tools/builtin/__init__.py matmaster/core/exp.py matmaster/exps/direct.toml matmaster/exps/planner.toml tests/matmaster/tools/builtin/test_plot_figure_tool.py tests/matmaster/core/test_exp.py
 git commit -m "feat: register PlotFigure as a session tool"
 ```
 
@@ -2069,6 +2130,7 @@ uv run pytest \
   tests/matmaster/tools/test_figure_artifacts.py \
   tests/matmaster/tools/test_figure_artifacts_real_fs.py \
   tests/matmaster/types/test_figures.py \
+  tests/matmaster/core/test_exp.py \
   tests/matmaster/services/test_plot_figure_aggregation.py \
   tests/matmaster/services/test_response_figures_service.py \
   -v
@@ -2103,4 +2165,5 @@ git commit -m "test: end-to-end PlotFigure response-figures aggregation"
 
 - [ ] `uv run pytest --collect-only -q` succeeds with no ImportError/NameError (this project has no ruff; collection is the import gate).
 - [ ] `rg -n "FigureManifestEntry|build_figure_env|collect_figures_from_session|_load_manifest|_resolve_artifact_path|FigureCollectionResult" matmaster src tests` returns nothing.
+- [ ] `uv run pytest tests/matmaster/core/test_exp.py tests/matmaster/integration/test_direct_toml_prompt.py -v` confirms `PlotFigure` registration and direct/planner config exposure.
 - [ ] Full suite for touched areas green (Task 16 Step 3 command).

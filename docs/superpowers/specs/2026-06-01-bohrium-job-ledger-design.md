@@ -153,6 +153,7 @@ LIMIT 50;
 
 配合 `idx_poll_due (next_poll_at, status)`，该查询是有序索引范围扫描 + LIMIT 提前
 结束；终态作业因 `next_poll_at IS NULL`、`<= NOW()` 不成立被天然排除，无需 filesort。
+poller 实际认领时在此基础上加 `FOR UPDATE SKIP LOCKED` 做并发隔离，见 Background poller。
 
 `last_polled_at`
 
@@ -248,8 +249,35 @@ kill 请求成功后更新 `status = 'terminating'`。终态由后续 poller 或
 
 Background poller
 
-独立扫描 `next_poll_at` 到期的非终态作业，调用 Bohrium `get_job_detail`，把平台
-返回归一化到 `status`。poller 不依赖进程内 `JobRegistry` 或当前 HTTP 请求。
+独立扫描 `next_poll_at <= NOW()` 的作业（终态作业 `next_poll_at` 为 NULL，天然不入
+队），调用 Bohrium `get_job_detail`，把平台返回归一化到 `status`。poller 不依赖进程内
+`JobRegistry` 或当前 HTTP 请求：所需的 per-user `access_key` 通过 `session_id` 反查
+会话表得到 `(user_id, org_id)`，再经 `UserService.get_bohrium_access_key` 现查，key
+不落库；同一 `(user_id, org_id)` 的 key 可在一轮轮询内缓存复用。
+
+并发认领用 `SELECT ... FOR UPDATE SKIP LOCKED` 实现，多副本 poller 互不重复领取：
+
+```sql
+-- 短事务：抢一批并占位
+BEGIN;
+SELECT `id`, `session_id`, `job_id`, `sandbox`
+FROM `bohrium_jobs`
+WHERE `next_poll_at` <= NOW()
+ORDER BY `next_poll_at` ASC
+LIMIT 50
+FOR UPDATE SKIP LOCKED;          -- 命中行被本事务锁住，其他实例直接跳过
+
+UPDATE `bohrium_jobs`
+SET `next_poll_at` = NOW() + INTERVAL <poll_interval> SECOND  -- 占位，防止重复领取
+WHERE `id` IN (<上一步选中的 id>);
+COMMIT;                          -- 立刻释放行锁
+
+-- 事务外：逐个调 get_job_detail，再按 Status Rules 写回最终 status 与 next_poll_at
+```
+
+行锁只在短事务内持有，期间只做抢取一批和占位两件事；Bohrium 慢调用一律放在事务外，
+避免长事务。poller 在 COMMIT 前崩溃时事务回滚、锁自动释放，作业回到可领取状态，不会
+卡死。前提：`SKIP LOCKED` 需要 MySQL 8.0+。
 
 `SessionJobsPort`
 
@@ -273,11 +301,18 @@ job_id 已在工具层统一为单一 canonical ID：sandbox 与非 sandbox 都�
 `status` 已能覆盖当前需求；是否继续轮询由 `next_poll_at` 是否为 NULL 决定，`status`
 只用于语义展示和归类。如果未来 `downloaded` 与平台状态混用造成复杂度，再拆分状态维度。
 
+并发认领选 `FOR UPDATE SKIP LOCKED` 而非新增 `locked_at` 租约列：前者不扩表、天然
+支持多副本，且 poller 崩溃时行锁随事务回滚自动释放，无需租约过期与续租逻辑。代价是依赖
+MySQL 8.0+，且必须把 Bohrium 慢调用放在持锁事务外。若未来需要锁状态可见以便监控，再
+迁移到显式租约列。
+
 ## Testing Plan
 
 - DAO 单测：插入 submit 成功记录、重复 upsert、按 session 查询、按 poll due 查询。
 - 状态归一化单测：覆盖 running、finished、failed、stopped、unknown。
 - 工具集成单测：submit/poll/download/kill 成功后正确写表。
 - poller 单测：只轮询到期非终态作业，终态作业不再进入轮询队列。
+- 并发认领单测：两个并发批次经 `FOR UPDATE SKIP LOCKED` 得到不相交作业集；事务回滚后
+  被占作业重新可领。
 - 上下文装配单测：`SessionJobsPort` 从 `bohrium_jobs` 返回结构化 active jobs。
 

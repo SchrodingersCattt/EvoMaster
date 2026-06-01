@@ -35,11 +35,6 @@ _BUILTIN_WHEN_STAR: list[str] = [
     "Bohrium",
 ]
 
-_LEGACY_EVAL_TOOL_NAME_MAP: dict[str, str] = {
-    "WebSearch": "mm_web_search",
-    "WebFetch": "web_fetch",
-}
-
 
 def _append_unique_path(paths: list[Path], candidate: Path) -> None:
     if candidate not in paths:
@@ -75,9 +70,8 @@ def _resolve_builtin_tool_names(builtin_cfg: list[str]) -> list[str]:
     for name in raw_names:
         if name == "*":
             continue
-        public_name = _LEGACY_EVAL_TOOL_NAME_MAP.get(name, name)
-        if public_name not in out:
-            out.append(public_name)
+        if name not in out:
+            out.append(name)
     return out
 
 
@@ -170,8 +164,8 @@ def _build_eval_tooling_dict(
     surface_tools = list(builtin_names)
 
     if exp_cfg.skills.enabled:
-        if "use_skill" not in surface_tools:
-            surface_tools.append("use_skill")
+        if "Skill" not in surface_tools:
+            surface_tools.append("Skill")
         root_paths = _skills_roots_as_paths(exp_cfg.skills, repo_root)
         skills_roots_str = [str(p) for p in root_paths]
         try:

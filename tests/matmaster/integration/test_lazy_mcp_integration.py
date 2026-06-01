@@ -1,6 +1,6 @@
 """End-to-end integration test for lazy MCP loading via skill routing.
 
-Tests the full flow: Exp.build_runtime with skills enabled -> use_skill
+Tests the full flow: Exp.build_runtime with skills enabled -> Skill
 triggers schema injection -> LazyMCPTool appears in registry.
 Does NOT require real MCP connections.
 """
@@ -49,7 +49,7 @@ def _run_context(
     )
 
 
-async def _execute_use_skill(
+async def _execute_skill(
     registry: ToolRegistry,
     *,
     skill_name: str,
@@ -128,11 +128,11 @@ class TestLazyMCPIntegration:
         # Before skill trigger: no MCP tools
         assert 'mat_sg_build_bulk' not in registry
 
-        # Simulate skill trigger via use_skill tool
-        result = await _execute_use_skill(registry, skill_name="test-skill")
+        # Simulate skill trigger via Skill tool
+        result = await _execute_skill(registry, skill_name="test-skill")
 
-        # Verify use_skill returned successfully
-        assert result.status == 'success', f"use_skill failed: {result.content}"
+        # Verify Skill returned successfully
+        assert result.status == 'success', f"Skill failed: {result.content}"
 
         # After skill trigger: mat_sg tools should be injected
         assert 'mat_sg_build_bulk' in registry
@@ -175,11 +175,11 @@ class TestLazyMCPIntegration:
         exp._init_skill_tools(ctx, registry)
 
         # Trigger first skill
-        await _execute_use_skill(registry, skill_name="test-skill")
+        await _execute_skill(registry, skill_name="test-skill")
         assert "mat_sg_build_bulk" in registry
 
         # Trigger second skill — should NOT duplicate
-        await _execute_use_skill(registry, skill_name="second-skill")
+        await _execute_skill(registry, skill_name="second-skill")
         # Still only one mat_sg_build_bulk
         assert 'mat_sg_build_bulk' in registry
 
@@ -211,7 +211,7 @@ class TestLazyMCPIntegration:
         )
         exp1._init_skill_tools(ctx1, registry1)
         assert "mat_sg_build_bulk" not in registry1
-        result = await _execute_use_skill(registry1, skill_name="test-skill")
+        result = await _execute_skill(registry1, skill_name="test-skill")
         assert result.status == "success"
         assert "mat_sg_build_bulk" in registry1
         active_skills.add("test-skill")
@@ -225,7 +225,7 @@ class TestLazyMCPIntegration:
         )
         exp2._init_skill_tools(ctx2, registry2)
 
-        # No use_skill call this turn; replay must have already injected it.
+        # No Skill call this turn; replay must have already injected it.
         assert "mat_sg_build_bulk" in registry2
 
     async def test_no_cache_warns_but_doesnt_crash(self, tmp_path):
@@ -268,7 +268,7 @@ class TestLazyMCPIntegration:
         exp._init_skill_tools(ctx, registry)
 
         # Trigger skill with uncached server
-        result = await _execute_use_skill(registry, skill_name="uncached-skill")
+        result = await _execute_skill(registry, skill_name="uncached-skill")
         assert result.status == "success"
 
         # No tools injected (cache miss)
@@ -325,8 +325,8 @@ class TestExpMCPSelfLoad:
         assert 'Skill' in registry
 
         # Trigger skill to verify lazy tools get injected
-        result = await _execute_use_skill(registry, skill_name="test-skill")
-        assert result.status == "success", f"use_skill failed: {result.content}"
+        result = await _execute_skill(registry, skill_name="test-skill")
+        assert result.status == "success", f"Skill failed: {result.content}"
         assert "mat_sg_build_bulk" in registry
 
     def test_raises_when_mcp_yaml_missing(self, tmp_path):
@@ -392,7 +392,7 @@ class TestLazyMCPTimeoutThreading:
         ctx = _run_context(execution_workdir=str(tmp_path))
 
         exp._init_skill_tools(ctx, registry)
-        await _execute_use_skill(registry, skill_name="test-skill")
+        await _execute_skill(registry, skill_name="test-skill")
 
         from matmaster.tools.lazy_mcp import LazyMCPTool
 
@@ -440,7 +440,7 @@ class TestLazyMCPTimeoutThreading:
         ctx = _run_context(execution_workdir=str(tmp_path))
 
         exp._init_skill_tools(ctx, registry)
-        await _execute_use_skill(registry, skill_name="test-skill")
+        await _execute_skill(registry, skill_name="test-skill")
 
         from matmaster.tools.lazy_mcp import (
             _DEFAULT_MCP_TOOL_TIMEOUT,
