@@ -412,3 +412,138 @@ def _upload_with_retry(
                 time.sleep(_UPLOAD_RETRY_BACKOFF_SECONDS)
     assert last_error is not None
     raise last_error
+
+
+@dataclass(slots=True)
+class DeclaredFigureResult:
+    figure: FigureDescriptor | None
+    failure_reason: str | None
+    guidance: str | None = None
+    resolved_path: str | None = None
+    figure_id: str | None = None
+
+
+def _declared_failure_guidance(reason: str, output_path: str) -> str:
+    table = {
+        "outside_workspace": (
+            f"Expected image inside the workspace: {output_path}\n"
+            "Provide an output_path that is absolute within the workspace "
+            "or relative to the session workspace root."
+        ),
+        "file_not_found": (
+            f"Expected image: {output_path}\n"
+            "The command did not create this file. Re-run PlotFigure with the "
+            "correct output_path, or publish an existing image by omitting command."
+        ),
+        "not_a_file": (
+            f"Path is not a regular file: {output_path}\n"
+            "Point output_path at an image file, not a directory."
+        ),
+        "unsupported_format": (
+            f"Unsupported image format: {output_path}\n"
+            "Use one of: .png, .jpg, .jpeg, .webp."
+        ),
+        "image_header_mismatch": (
+            f"File contents are not a valid image or do not match the extension: "
+            f"{output_path}\n"
+            "Re-export the figure in a supported image format."
+        ),
+        "figure_too_large": (
+            f"Image exceeds the size limit: {output_path}\n"
+            "Reduce resolution or file size and retry."
+        ),
+        "download_failed": (
+            f"Could not read the image from the session: {output_path}\n"
+            "Retry PlotFigure; if it persists the session storage may be unavailable."
+        ),
+        "upload_failed": (
+            f"Image was read but upload failed: {output_path}\n"
+            "Retry PlotFigure; if it persists the asset backend may be unavailable."
+        ),
+    }
+    return table.get(reason, f"Figure attachment failed for {output_path}.")
+
+
+def collect_declared_figure(
+    *,
+    session: Session,
+    workdir: str,
+    output_path: str,
+    caption: str,
+    tool_call_id: str,
+    upload_config: FigureUploadConfig,
+) -> DeclaredFigureResult:
+    """Resolve, validate, upload, and link one declared figure.
+
+    Returns a DeclaredFigureResult with either a FigureDescriptor (success)
+    or a stable failure_reason + actionable guidance. Never raises for
+    expected failures.
+    """
+
+    def _fail(reason: str, *, resolved: str | None = None, figure_id: str | None = None):
+        return DeclaredFigureResult(
+            figure=None,
+            failure_reason=reason,
+            guidance=_declared_failure_guidance(reason, output_path),
+            resolved_path=resolved,
+            figure_id=figure_id,
+        )
+
+    resolved = resolve_workspace_output_path(raw_path=output_path, workdir=workdir)
+    if resolved is None:
+        return _fail("outside_workspace")
+    if not session.path_exists(resolved):
+        return _fail("file_not_found", resolved=resolved)
+    if not session.is_file(resolved):
+        return _fail("not_a_file", resolved=resolved)
+
+    try:
+        payload = _download_with_retry(session=session, path=resolved)
+    except Exception:
+        return _fail("download_failed", resolved=resolved)
+
+    try:
+        _validate_image_bytes(payload=payload, path=resolved)
+    except FigureValidationError as exc:
+        return _fail(exc.reason, resolved=resolved)
+
+    figure_id = build_figure_id(output_path=output_path, image_bytes=payload)
+
+    try:
+        asset_key = _build_asset_key(
+            upload_config=upload_config,
+            tool_call_id=tool_call_id,
+            figure_id=figure_id,
+            source_path=resolved,
+            payload=payload,
+        )
+        asset_url = _upload_with_retry(
+            upload_bytes=upload_config.upload_bytes,
+            payload=payload,
+            asset_key=asset_key,
+        )
+    except Exception:
+        return _fail("upload_failed", resolved=resolved, figure_id=figure_id)
+
+    flat_dir = posixpath.join(
+        posixpath.normpath(str(workdir)), ".matmaster", "figures"
+    )
+    _link_figure_flat(
+        session=session,
+        flat_dir=flat_dir,
+        resolved_path=resolved,
+        figure_id=figure_id,
+    )
+
+    return DeclaredFigureResult(
+        figure=FigureDescriptor(
+            figure_id=figure_id,
+            asset_url=asset_url,
+            caption=caption,
+            source_tool_call_id=tool_call_id,
+            remote_path=resolved,
+        ),
+        failure_reason=None,
+        resolved_path=resolved,
+        figure_id=figure_id,
+    )

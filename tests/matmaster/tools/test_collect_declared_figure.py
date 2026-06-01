@@ -127,3 +127,132 @@ def test_link_figure_flat_builds_relative_symlink():
     assert "/share/.matmaster/figures/band-abc123.png" in cmd
     # rel target from flat_dir to resolved_path
     assert "../../results/band.png" in cmd
+
+
+from matmaster.tools.figure_artifacts import (
+    DeclaredFigureResult,
+    collect_declared_figure,
+)
+from matmaster.types.figures import FigureUploadConfig
+
+
+def make_upload_config(url="https://assets.test/u/fig.png"):
+    return FigureUploadConfig(
+        session_id="sess-1",
+        task_id="task-1",
+        asset_key_prefix="figs",
+        upload_bytes=lambda payload, key: url,
+    )
+
+
+def make_fig_session(*, exists=True, is_file=True, payload=_PNG):
+    s = MagicMock()
+    s.path_exists.return_value = exists
+    s.is_file.return_value = is_file
+    s.download.return_value = payload
+    s.exec_bash.return_value = {"exit_code": 0, "stdout": ""}
+    return s
+
+
+def test_collect_relative_success():
+    session = make_fig_session()
+    result = collect_declared_figure(
+        session=session,
+        workdir="/share",
+        output_path="band.png",
+        caption="Band structure",
+        tool_call_id="call-1",
+        upload_config=make_upload_config(),
+    )
+    assert isinstance(result, DeclaredFigureResult)
+    assert result.failure_reason is None
+    assert result.figure is not None
+    assert result.figure.caption == "Band structure"
+    assert result.figure.source_tool_call_id == "call-1"
+    assert result.figure.asset_url == "https://assets.test/u/fig.png"
+    assert result.figure_id.startswith("band-")
+    assert result.resolved_path == "/share/band.png"
+    assert result.figure.remote_path == "/share/band.png"
+
+
+def test_collect_escape_returns_outside_workspace():
+    result = collect_declared_figure(
+        session=make_fig_session(),
+        workdir="/share",
+        output_path="../escape.png",
+        caption="c",
+        tool_call_id="call-1",
+        upload_config=make_upload_config(),
+    )
+    assert result.figure is None
+    assert result.failure_reason == "outside_workspace"
+    assert result.guidance
+
+
+def test_collect_missing_file_returns_file_not_found():
+    result = collect_declared_figure(
+        session=make_fig_session(exists=False),
+        workdir="/share",
+        output_path="band.png",
+        caption="c",
+        tool_call_id="call-1",
+        upload_config=make_upload_config(),
+    )
+    assert result.failure_reason == "file_not_found"
+
+
+def test_collect_directory_returns_not_a_file():
+    result = collect_declared_figure(
+        session=make_fig_session(is_file=False),
+        workdir="/share",
+        output_path="plots",
+        caption="c",
+        tool_call_id="call-1",
+        upload_config=make_upload_config(),
+    )
+    assert result.failure_reason == "not_a_file"
+
+
+def test_collect_non_image_returns_classification():
+    result = collect_declared_figure(
+        session=make_fig_session(payload=b"not an image"),
+        workdir="/share",
+        output_path="band.png",
+        caption="c",
+        tool_call_id="call-1",
+        upload_config=make_upload_config(),
+    )
+    assert result.failure_reason == "image_header_mismatch"
+
+
+def test_collect_download_failure_classified():
+    session = make_fig_session()
+    session.download.side_effect = RuntimeError("transport down")
+    result = collect_declared_figure(
+        session=session,
+        workdir="/share",
+        output_path="band.png",
+        caption="c",
+        tool_call_id="call-1",
+        upload_config=make_upload_config(),
+    )
+    assert result.failure_reason == "download_failed"
+
+
+def test_collect_upload_failure_classified():
+    def boom(payload, key):
+        raise RuntimeError("upload down")
+
+    cfg = FigureUploadConfig(
+        session_id="s", task_id="t", asset_key_prefix="figs", upload_bytes=boom
+    )
+    result = collect_declared_figure(
+        session=make_fig_session(),
+        workdir="/share",
+        output_path="band.png",
+        caption="c",
+        tool_call_id="call-1",
+        upload_config=cfg,
+    )
+    assert result.failure_reason == "upload_failed"
+    assert result.figure_id is not None  # id is computed before upload
