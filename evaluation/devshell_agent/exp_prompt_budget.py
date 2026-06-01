@@ -5,7 +5,7 @@ agent start: ``SystemPromptBuilder.build_system_prompt()`` output only. Local
 builtin / skill tool guidance now lives in ``function.description``, so it is
 intentionally excluded from this budget.
 
-Uses the same tiktoken model encoding as ``matmaster.core.context_compactor``.
+Uses the same tiktoken model encoding as ``matmaster.context.compaction``.
 """
 
 from __future__ import annotations
@@ -69,7 +69,6 @@ def _build_full_prompt_text(cfg: ExpConfig) -> str:
     descriptions now supplied via ``function.description``.
     """
     from matmaster.context.system_prompt import SystemPromptBuilder
-    from matmaster.core.playground import PlaygroundContext
 
     builder = SystemPromptBuilder()
     skills_text = _build_skills_meta(cfg)
@@ -78,13 +77,7 @@ def _build_full_prompt_text(cfg: ExpConfig) -> str:
         def get_meta_info_context(self) -> str:
             return skills_text
 
-    ctx = PlaygroundContext(
-        workdir=Path("."),
-        session_type="local",
-        cache_area=Path("."),
-    )
     return builder.build_system_prompt(
-        ctx,
         system_prompt=cfg.system_prompt,
         identity=cfg.developer_instructions,
         skill_registry=_SkillRegistrySnapshot() if skills_text else None,

@@ -23,7 +23,6 @@ def ssh_config():
         username="root",
         password="test-pass",
         workspace_path="/workspace",
-        working_dir="/workspace",
     )
 
 
@@ -403,7 +402,7 @@ class TestSSHSessionExecBash:
         assert r2["exit_code"] == 0
 
 
-def test_open_creates_and_verifies_configured_workdir(mock_paramiko):
+def test_open_creates_and_verifies_configured_workspace_path(mock_paramiko):
     from unittest.mock import patch
 
     from matmaster.sessions.ssh import SSHSession
@@ -414,7 +413,6 @@ def test_open_creates_and_verifies_configured_workdir(mock_paramiko):
         username="root",
         password="test-pass",
         workspace_path="/share/case",
-        working_dir="/share/case",
     )
     session = SSHSession(config)
 
@@ -429,7 +427,7 @@ def test_open_creates_and_verifies_configured_workdir(mock_paramiko):
     assert session.is_open is True
 
 
-def test_open_raises_when_workdir_initialization_fails(ssh_config, mock_paramiko):
+def test_open_raises_when_workspace_initialization_fails(ssh_config, mock_paramiko):
     from unittest.mock import patch
 
     import pytest

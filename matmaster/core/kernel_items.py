@@ -20,6 +20,9 @@ class _TerminalItem:
     usage_vendor_by_turn: list[dict[str, Any]] = dc_field(default_factory=list)
     messages: list[Any] = dc_field(default_factory=list)
     finish_detail: FinishDetail | None = None
+    model: str | None = None
+    model_profile: str | None = None
+    model_route: str | None = None
 
 
 @dataclass
@@ -34,7 +37,11 @@ class _KernelState:
     messages: list[Any]
     turn: int = 0
     total_usage: dict[str, int] = dc_field(default_factory=dict)
+    turn_usage: dict[str, int] = dc_field(default_factory=dict)
     usage_vendor_by_turn: list[dict[str, Any]] = dc_field(default_factory=list)
+    llm_model: str | None = None
+    llm_model_profile: str | None = None
+    llm_model_route: str | None = None
     cached_tool_definitions: list[dict[str, Any]] | None = None
     last_catalog_version: int = -1
     pipeline: IncrementalMessagePipeline = dc_field(

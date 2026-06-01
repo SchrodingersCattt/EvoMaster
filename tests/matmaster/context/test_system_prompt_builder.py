@@ -7,12 +7,9 @@ generic tools section (function calling guidance).
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from matmaster.context.system_prompt import SystemPromptBuilder
-from matmaster.core.playground import PlaygroundContext
 
 # ---------------------------------------------------------------------------
 # Test helpers
@@ -27,16 +24,6 @@ class MockSkillRegistry:
 
 
 @pytest.fixture
-def ctx() -> PlaygroundContext:
-    """Minimal PlaygroundContext for testing."""
-    return PlaygroundContext(
-        workdir=Path("/tmp/test"),
-        session_type="local",
-        cache_area=Path("/tmp/cache"),
-    )
-
-
-@pytest.fixture
 def builder() -> SystemPromptBuilder:
     return SystemPromptBuilder()
 
@@ -46,31 +33,26 @@ def builder() -> SystemPromptBuilder:
 # ---------------------------------------------------------------------------
 
 
-def test_build_no_args_produces_tools_only(
-    builder: SystemPromptBuilder, ctx: PlaygroundContext
-) -> None:
+def test_build_no_args_produces_tools_only(builder: SystemPromptBuilder) -> None:
     """Build with all defaults (empty system_prompt, empty identity) produces
     only the generic tools section."""
-    result = builder.build_system_prompt(ctx)
+    result = builder.build_system_prompt()
     assert "function calling" in result
     assert "# Tools" in result
 
 
-def test_build_with_identity_only(
-    builder: SystemPromptBuilder, ctx: PlaygroundContext
-) -> None:
+def test_build_with_identity_only(builder: SystemPromptBuilder) -> None:
     """Passing identity produces identity + tools sections."""
-    result = builder.build_system_prompt(ctx, identity="I am Mat Master.")
+    result = builder.build_system_prompt(identity="I am Mat Master.")
     assert "# Identity" in result
     assert "I am Mat Master." in result
     assert "# System" not in result
 
 
-def test_section_order_fixed(builder: SystemPromptBuilder, ctx: PlaygroundContext) -> None:
+def test_section_order_fixed(builder: SystemPromptBuilder) -> None:
     """All sections enabled -- fixed order system_prompt < identity < skills
     < tools < memory < task."""
     result = builder.build_system_prompt(
-        ctx,
         system_prompt="Test system prompt",
         identity="Test identity",
         skill_registry=MockSkillRegistry(),
@@ -88,18 +70,15 @@ def test_section_order_fixed(builder: SystemPromptBuilder, ctx: PlaygroundContex
     assert idx_system < idx_identity < idx_skills < idx_tools < idx_memory < idx_task
 
 
-def test_disable_section(builder: SystemPromptBuilder, ctx: PlaygroundContext) -> None:
+def test_disable_section(builder: SystemPromptBuilder) -> None:
     """disabled_sections={'tools'} -- tools section absent."""
-    result = builder.build_system_prompt(ctx, disabled_sections={"tools"})
+    result = builder.build_system_prompt(disabled_sections={"tools"})
     assert "# Tools" not in result
 
 
-def test_disable_multiple_sections(
-    builder: SystemPromptBuilder, ctx: PlaygroundContext
-) -> None:
+def test_disable_multiple_sections(builder: SystemPromptBuilder) -> None:
     """disabled_sections={'skills', 'memory'} -- neither appears."""
     result = builder.build_system_prompt(
-        ctx,
         skill_registry=MockSkillRegistry(),
         memory_context="mem",
         disabled_sections={"skills", "memory"},
@@ -108,18 +87,15 @@ def test_disable_multiple_sections(
     assert "# Memory" not in result
 
 
-def test_identity_custom(builder: SystemPromptBuilder, ctx: PlaygroundContext) -> None:
+def test_identity_custom(builder: SystemPromptBuilder) -> None:
     """identity='Custom Identity' -- output contains that text."""
-    result = builder.build_system_prompt(ctx, identity="Custom Identity")
+    result = builder.build_system_prompt(identity="Custom Identity")
     assert "Custom Identity" in result
 
 
-def test_strip_trailing_newlines(
-    builder: SystemPromptBuilder, ctx: PlaygroundContext
-) -> None:
+def test_strip_trailing_newlines(builder: SystemPromptBuilder) -> None:
     """TOML multi-line strings may have trailing newlines -- stripped."""
     result = builder.build_system_prompt(
-        ctx,
         system_prompt="\nBase prompt\n",
         identity="\nMat Master\n",
     )
@@ -127,12 +103,10 @@ def test_strip_trailing_newlines(
     assert "# Identity\n\nMat Master" in result
 
 
-def test_tools_section_generic_guidance(
-    builder: SystemPromptBuilder, ctx: PlaygroundContext
-) -> None:
+def test_tools_section_generic_guidance(builder: SystemPromptBuilder) -> None:
     """Tools section provides generic function calling guidance,
     not per-tool enumeration."""
-    result = builder.build_system_prompt(ctx)
+    result = builder.build_system_prompt()
     assert "function calling" in result
     assert "function definitions" in result
     # Must NOT enumerate individual tools
@@ -140,67 +114,44 @@ def test_tools_section_generic_guidance(
     assert "tool.name" not in result
 
 
-def test_memory_section_included_when_provided(
-    builder: SystemPromptBuilder, ctx: PlaygroundContext
-) -> None:
+def test_memory_section_included_when_provided(builder: SystemPromptBuilder) -> None:
     """memory_context='Previous conversation summary' -- output contains it."""
-    result = builder.build_system_prompt(
-        ctx, memory_context="Previous conversation summary"
-    )
+    result = builder.build_system_prompt(memory_context="Previous conversation summary")
     assert "# Memory" in result
     assert "Previous conversation summary" in result
 
 
-def test_task_section_included_when_provided(
-    builder: SystemPromptBuilder, ctx: PlaygroundContext
-) -> None:
+def test_task_section_included_when_provided(builder: SystemPromptBuilder) -> None:
     """task_context='User task details' -- output contains it."""
-    result = builder.build_system_prompt(ctx, task_context="User task details")
+    result = builder.build_system_prompt(task_context="User task details")
     assert "# Task Context" in result
     assert "User task details" in result
 
 
-def test_empty_optional_sections_omitted(
-    builder: SystemPromptBuilder, ctx: PlaygroundContext
-) -> None:
+def test_empty_optional_sections_omitted(builder: SystemPromptBuilder) -> None:
     """No memory_context or task_context -- neither section appears.
     Tools section still present (always shown)."""
-    result = builder.build_system_prompt(ctx)
+    result = builder.build_system_prompt()
     assert "# Memory" not in result
     assert "# Task Context" not in result
     assert "# Tools" in result
 
 
-def test_skills_section_from_registry(
-    builder: SystemPromptBuilder, ctx: PlaygroundContext
-) -> None:
+def test_skills_section_from_registry(builder: SystemPromptBuilder) -> None:
     """Mock skill_registry with get_meta_info_context() -- output contains
     skill descriptions."""
-    result = builder.build_system_prompt(ctx, skill_registry=MockSkillRegistry())
+    result = builder.build_system_prompt(skill_registry=MockSkillRegistry())
     assert "# Skills" in result
     assert "Skill A: does X" in result
     assert "Skill B: does Y" in result
 
 
-def test_build_with_system_prompt_only(
-    builder: SystemPromptBuilder, ctx: PlaygroundContext
-) -> None:
+def test_build_with_system_prompt_only(builder: SystemPromptBuilder) -> None:
     """Passing system_prompt produces system + tools sections."""
-    result = builder.build_system_prompt(ctx, system_prompt="Base persona.")
+    result = builder.build_system_prompt(system_prompt="Base persona.")
     assert "# System" in result
     assert "Base persona." in result
     assert "# Identity" not in result
-
-
-def test_backward_compat_tool_registry_param(
-    builder: SystemPromptBuilder, ctx: PlaygroundContext
-) -> None:
-    """Passing tool_registry positional arg is accepted but ignored."""
-    result = builder.build_system_prompt(
-        ctx, "some_registry_value", system_prompt="Test."
-    )
-    assert "# System" in result
-    assert "function calling" in result
 
 
 def test_build_method_removed(builder: SystemPromptBuilder) -> None:

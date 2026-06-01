@@ -1,9 +1,4 @@
-"""WorkerRegistry Protocol -- session_run_owner management interface.
-
-Phase 3 defines the Protocol only. Phase 5 provides the Redis-backed
-implementation. Service layer injects the implementation into Exp via
-constructor or typed runtime ports.
-"""
+"""WorkerRegistry Protocol -- session_run_owner management interface."""
 
 from __future__ import annotations
 

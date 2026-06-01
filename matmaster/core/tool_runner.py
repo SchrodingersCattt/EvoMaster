@@ -141,10 +141,10 @@ class FullToolRunner:
         *,
         on_result: Callable[[ToolCallData, ToolResult], Awaitable[None]] | None = None,
     ) -> list[tuple[ToolCallData, ToolResult]]:
-        """Two-phase tool execution.
+        """Two-step tool execution.
 
-        Phase 1 (serial): validate each call through the constraint layers.
-        Phase 2 (concurrent): execute all approved calls via asyncio.gather.
+        Step 1 (serial): validate each call through the constraint layers.
+        Step 2 (concurrent): execute all approved calls via asyncio.gather.
 
         Argument immutability contract:
         every consumer along this chain must treat the received arguments dict
@@ -171,7 +171,7 @@ class FullToolRunner:
             []
         )
 
-        # ── Phase 1: Serial validation ─────────────────────
+        # ── Serial validation ──────────────────────────────
         for idx, tc in enumerate(tool_calls):
             # 1. Catalog lookup
             instance = self._catalog.get_tool(tc.name)
@@ -321,7 +321,7 @@ class FullToolRunner:
 
             approved.append((idx, tc, instance, copy.deepcopy(effective_args), is_fast))
 
-        # ── Phase 2: Concurrent execution ──────────────────
+        # ── Concurrent execution ───────────────────────────
         if approved:
             exec_ctx = _ExecCtx(
                 cancel_token=ctx.cancel_token,

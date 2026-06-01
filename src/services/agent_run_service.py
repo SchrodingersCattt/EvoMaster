@@ -21,11 +21,12 @@ from matmaster.context.assembly import (
     ContextAssemblyIntent,
     TurnAssemblyRequest,
 )
-from matmaster.context.ports import SkillResolver, UserInstructions
+from matmaster.context.ports import SkillResolver
 from matmaster.context.scanner import scan_skill_hits
 from matmaster.context.sections import ContextView
 from matmaster.context.sources.turn_input import TurnInput
 from matmaster.core.playground import PlaygroundManager
+from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.core.runtime_context_assembly import empty_skill_resolver
 from matmaster.integration.event_payloads import _normalize_public_source
 from matmaster.integration.fanout import RunEventFanout
@@ -42,7 +43,7 @@ from matmaster.types.events import (
     ToolResultEvent,
 )
 from matmaster.types.run_metadata import RunMetadata
-from matmaster.types.runtime_ports import FigureUploadPort
+from matmaster.types.runtime_ports import AgentRunPorts, FigureUploadPort
 from src.dao.chat_events_table import get_chat_events_table
 from src.dao.redis_dao import get_redis_dao
 from src.services.agent_run_bohrium_stage import (
@@ -73,42 +74,42 @@ logger.setLevel(logging.INFO)
 
 # Multi-turn dialog: max events from DB to avoid context overflow
 _DIALOG_HISTORY_MAX_EVENTS = int(
-    os.environ.get('CHAT_DIALOG_HISTORY_MAX_EVENTS', '500')
+    os.environ.get("CHAT_DIALOG_HISTORY_MAX_EVENTS", "500")
 )
 
 _project_root = Path(__file__).resolve().parent.parent.parent
-RUN_ID_WEB = 'mat_master_web'
+RUN_ID_WEB = "mat_master_web"
 
-_MATMASTER_CONFIG_DIR = _project_root / 'config'
+_MATMASTER_CONFIG_DIR = _project_root / "config"
 
 
 @lru_cache(maxsize=1)
 def _get_agent_default_llm() -> str | None:
     """Cached read of ``agents.general.llm`` from ``config/config.yaml``."""
-    return load_agents_general_llm(_MATMASTER_CONFIG_DIR / 'config.yaml')
+    return load_agents_general_llm(_MATMASTER_CONFIG_DIR / "config.yaml")
 
 
 _INVALID_FINISH_MESSAGES: dict[str, str] = {
-    'output_length_exceeded': (
-        '模型输出被 provider 的输出 token 上限截断，'
-        '未形成可提交的最终回答，请稍后重试。'
+    "output_length_exceeded": (
+        "模型输出被 provider 的输出 token 上限截断，"
+        "未形成可提交的最终回答，请稍后重试。"
     ),
-    'content_filtered': '模型输出被 provider 内容策略截断或拦截，未形成可提交的最终回答。',
-    'reasoning_only': '模型只返回了思考内容，没有生成可见最终回答。请重试。',
-    'empty_response': '模型本轮没有返回可见最终回答。请重试。',
-    'missing_llm_response': '模型流结束但没有返回可验证的响应对象。请重试。',
-    'missing_tool_call_payload': (
-        '模型声明要调用工具，但 provider 流式响应未返回有效工具调用参数。'
-        '系统已重试仍未恢复，请重试或切换模型。'
+    "content_filtered": "模型输出被 provider 内容策略截断或拦截，未形成可提交的最终回答。",
+    "reasoning_only": "模型只返回了思考内容，没有生成可见最终回答。请重试。",
+    "empty_response": "模型本轮没有返回可见最终回答。请重试。",
+    "missing_llm_response": "模型流结束但没有返回可验证的响应对象。请重试。",
+    "missing_tool_call_payload": (
+        "模型声明要调用工具，但 provider 流式响应未返回有效工具调用参数。"
+        "系统已重试仍未恢复，请重试或切换模型。"
     ),
 }
-_INVALID_FINISH_DEFAULT = '模型没有返回有效最终回答。请重试。'
+_INVALID_FINISH_DEFAULT = "模型没有返回有效最终回答。请重试。"
 
 
 def _invalid_finish_error_message(finish_detail: Any) -> str:
-    kind = getattr(finish_detail, 'kind', None)
+    kind = getattr(finish_detail, "kind", None)
     if kind is None and isinstance(finish_detail, dict):
-        kind = finish_detail.get('kind')
+        kind = finish_detail.get("kind")
     return _INVALID_FINISH_MESSAGES.get(kind, _INVALID_FINISH_DEFAULT)
 
 
@@ -193,14 +194,14 @@ def _build_run_usage_summary(event: RunResultEvent) -> dict[str, Any] | None:
 
 
 async def _emit_error_and_close_fanout(
-    fanout: RunEventFanout, message: str, source: str = 'System'
+    fanout: RunEventFanout, message: str, source: str = "System"
 ) -> None:
     """Dispatch ErrorEvent + StreamClosedEvent(treat_as_failure) pair via fanout."""
     await fanout.dispatch(ErrorEvent(source=source, message=message))
     await fanout.dispatch(
         StreamClosedEvent(
             source=source,
-            end_reason='error',
+            end_reason="error",
             task_completed=False,
             treat_as_failure=True,
         )
@@ -330,10 +331,10 @@ class AgentRunService:
             return int((time.monotonic() - run_started_at) * 1000)
 
         prompt_preview = (
-            (user_prompt[:80] + '...') if len(user_prompt) > 80 else user_prompt
+            (user_prompt[:80] + "...") if len(user_prompt) > 80 else user_prompt
         )
         logger.info(
-            'run_agent start: session_id=%s task_id=%s mode=%s prompt_len=%s preview=%s',
+            "run_agent start: session_id=%s task_id=%s mode=%s prompt_len=%s preview=%s",
             session_id,
             task_id,
             mode,
@@ -349,25 +350,23 @@ class AgentRunService:
         try:
             # -- Stage 1: Playground --
             self.init_playground_sync()
-            task_id = task_id or ('ws_' + uuid.uuid4().hex[:16])
+            task_id = task_id or ("ws_" + uuid.uuid4().hex[:16])
             playground = self._pg_manager.get_or_create(session_id)
-            run_dir = str(_project_root / 'runs' / RUN_ID_WEB)
-            pg_ctx = playground.prepare(
+            run_dir = str(_project_root / "runs" / RUN_ID_WEB)
+            # Physical substrate from Playground; the per-run AgentRunRequest
+            # (turn input, llm, ports, ...) is assembled once near Stage 6.
+            environment = playground.prepare(
                 RunMetadata(run_dir=run_dir, task_id=task_id),
                 session_id=session_id,
             )
-            if turn_input is not None:
-                pg_ctx = pg_ctx.with_metadata(
-                    turn_input=turn_input,
-                )
             try:
                 events_table = get_chat_events_table()
             except Exception:
                 logger.exception(
-                    'run_agent pre-handler setup failed: session_id=%s',
+                    "run_agent pre-handler setup failed: session_id=%s",
                     session_id,
                 )
-                return ((False, 'pre_router_setup_failed'), 0, None)
+                return ((False, "pre_router_setup_failed"), 0, None)
 
             # -- Stage 2: RunEventFanout bootstrap --
             # SSE handler first for lower frontend latency,
@@ -388,7 +387,7 @@ class AgentRunService:
                 ),
             )
 
-            exp_name = mode or 'direct'
+            exp_name = mode or "direct"
             from matmaster.config.loader import load_exp_config
 
             exp_config = load_exp_config(exp_name)
@@ -408,7 +407,7 @@ class AgentRunService:
                 session_id=session_id,
                 task_id=task_id,
                 playground=playground,
-                pg_ctx=pg_ctx,
+                environment=environment,
                 run_started_at=run_started_at,
                 bohrium_required=bohrium_required,
                 remote_workdir=remote_workdir,
@@ -417,24 +416,18 @@ class AgentRunService:
             if stage_result.abort_result is not None:
                 abort = stage_result.abort_result
                 return (abort[0], abort[1], None)
-            pg_ctx = stage_result.pg_ctx
+            environment = stage_result.environment
             ssh_attached = stage_result.ssh_attached
             user_instructions = stage_result.user_instructions
 
             # -- Stage 4: Exp assembly --
             from matmaster.config.loader import load_llm_config
             from matmaster.core.exp import Exp
-            from matmaster.providers.llm_factory import build_provider
+            from matmaster.providers.llm_factory import build_provider_bundle
 
-            llm_config = load_llm_config(_project_root / 'config' / 'llm_config.yaml')
+            llm_config = load_llm_config(_project_root / "config" / "llm_config.yaml")
 
             agent_default_llm = _get_agent_default_llm()
-            resolved_llm = llm_config.resolve_route(
-                model_override=model_override,
-                llm_override=llm_override,
-                default_key=agent_default_llm,
-            )
-            selected_profile = llm_config.get_profile(resolved_llm.profile_key)
             top_level_images = tuple(images or ())
             turn_input_images = turn_input.images if turn_input is not None else ()
             current_images = turn_input_images or top_level_images
@@ -459,22 +452,18 @@ class AgentRunService:
                 )
                 image_detail = selected_profile.vision_detail
 
-            pg_ctx = pg_ctx.model_copy(
-                update={
-                    'llm_provider': build_provider(
-                        llm_config,
-                        model_override=model_override,
-                        llm_override=llm_override,
-                        default_profile_key=agent_default_llm,
-                    ),
-                    'llm_config': llm_config,
-                }
+            llm_bundle = build_provider_bundle(
+                llm_config,
+                model_override=model_override,
+                llm_override=llm_override,
+                default_profile_key=agent_default_llm,
             )
+            llm_provider = llm_bundle.provider
 
             exp = Exp(exp_config)
 
-            if pg_ctx.session is not None:
-                pg_ctx.session._cancel_token = cancel_token
+            if environment.session is not None:
+                environment.session._cancel_token = cancel_token
 
             checkpoint_service = (
                 HistoryCheckpointService(events_table)
@@ -503,7 +492,7 @@ class AgentRunService:
                     )
                 except Exception:
                     logger.warning(
-                        'response_figures dispatch failed reason=%s',
+                        "response_figures dispatch failed reason=%s",
                         reason,
                         exc_info=True,
                     )
@@ -513,8 +502,7 @@ class AgentRunService:
                     figure_accumulator.mark_snapshot_emitted()
                 else:
                     logger.warning(
-                        'response_figures dispatch reported handler failure '
-                        'reason=%s',
+                        "response_figures dispatch reported handler failure reason=%s",
                         reason,
                     )
 
@@ -542,12 +530,12 @@ class AgentRunService:
                         await _record_tool_result_figures_and_dispatch_if_dirty(
                             event,
                             include_spawned=True,
-                            reason='child_tool_result',
+                            reason="child_tool_result",
                         )
                 except Exception:
                     logger.warning(
-                        'child event sink failed for event type=%s',
-                        getattr(event, 'type', '?'),
+                        "child event sink failed for event type=%s",
+                        getattr(event, "type", "?"),
                         exc_info=True,
                     )
 
@@ -570,10 +558,6 @@ class AgentRunService:
                     spawn_id=spawn_id,
                 )
 
-            pg_ctx = pg_ctx.with_runtime_port(
-                figure_upload=FigureUploadPort(config=figure_upload_config),
-            )
-
             # -- Stage 4b: AskQuestion bridge --
             from matmaster.integration.interaction_bridge import AskQuestionBridge
 
@@ -586,41 +570,27 @@ class AgentRunService:
                 reply_queue=RedisReplyQueue(session_id),
                 timeout_seconds=1800,
             )
-            pg_ctx = pg_ctx.model_copy(update={'interaction_bridge': bridge})
             # -- Stage 5: History --
             wiring = build_history_wiring(
-                base_runtime_ports=pg_ctx.runtime_ports,
                 events_table=events_table,
                 session_id=session_id,
                 task_id=task_id,
                 raw_history_limit=_DIALOG_HISTORY_MAX_EVENTS,
-                child_event_sink=_child_event_sink,
                 checkpoint_sink_factory=_checkpoint_sink_factory,
                 pre_compaction_barrier=fanout.flush_persistence_barrier,
             )
             history = wiring.history
-            pg_ctx = pg_ctx.with_runtime_ports(wiring.runtime_ports)
+            bohrium_rebuild_events = (
+                tuple(wiring.bohrium_rebuild_events)
+                if wiring.bohrium_rebuild_events
+                else ()
+            )
             from src.services.interrupt_service import RedisInterruptChecker
 
-            pg_ctx = pg_ctx.with_runtime_port(
-                interrupt_checker=RedisInterruptChecker(session_id),
-            )
-            if wiring.bohrium_rebuild_events:
-                pg_ctx = pg_ctx.with_metadata(
-                    bohrium_rebuild_events=tuple(wiring.bohrium_rebuild_events),
-                )
-
             # -- Stage 5b: Phase 2C user_turn_context cutover via ContextAssembler --
-            instructions_bundle = UserInstructions(
-                text=user_instructions.text,
-                hash=user_instructions.hash,
-                truncated=user_instructions.truncated,
-            )
-            pg_ctx = pg_ctx.with_metadata(user_instructions=instructions_bundle)
-
             skill_resolver = self._build_skill_resolver(
                 exp_config,
-                session=pg_ctx.session,
+                session=environment.session,
             )
             context_assembler, assembly_ports = build_context_assembler(
                 events_table=events_table,
@@ -630,7 +600,7 @@ class AgentRunService:
 
             try:
                 intent = await resolve_turn_context_intent(
-                    instructions_hash=instructions_bundle.hash,
+                    instructions_hash=user_instructions.hash,
                     session_id=session_id,
                     spawn_id=None,
                     events_port=session_events_port,
@@ -667,7 +637,6 @@ class AgentRunService:
                     workspace_paths=turn_input.workspace_paths,
                     pre_turn_history_event_id=turn_input.pre_turn_history_event_id,
                 )
-            pg_ctx = pg_ctx.with_metadata(turn_input=turn_input)
 
             assembly = await context_assembler.assemble_turn(
                 intent=intent,
@@ -675,7 +644,7 @@ class AgentRunService:
                     session_id=session_id,
                     spawn_id=None,
                     turn_input=turn_input,
-                    user_instructions=instructions_bundle,
+                    user_instructions=user_instructions,
                 ),
             )
             rendered_message = assembly.user_turn_context.to_message(
@@ -687,7 +656,7 @@ class AgentRunService:
                 "kind": "anchor" if intent.is_anchor_turn else "continuation",
                 "message": rendered_message.model_dump(mode="json"),
                 "user_instructions_hash": (
-                    instructions_bundle.hash if intent.is_anchor_turn else None
+                    user_instructions.hash if intent.is_anchor_turn else None
                 ),
                 "transform": DEFAULT_TURN_TRANSFORM,
                 "render_version": USER_CONTEXT_RENDER_VERSION,
@@ -725,13 +694,35 @@ class AgentRunService:
                     current = self._active_skills.get(session_id, frozenset())
                     self._active_skills[session_id] = frozenset((*current, skill_name))
 
-            pg_ctx = pg_ctx.with_metadata(active_skills=frozenset(active_skills))
+            # -- Compose the Exp input from the prepared environment and
+            # service-owned runtime request.
+            agent_run_ctx = AgentRunContext(
+                environment=environment,
+                request=AgentRunRequest(
+                    llm_provider=llm_provider,
+                    llm_config=llm_config,
+                    llm_model=llm_bundle.model,
+                    llm_model_profile=llm_bundle.model_profile,
+                    llm_model_route=llm_bundle.model_route,
+                    interaction_bridge=bridge,
+                    turn_input=turn_input,
+                    user_instructions=user_instructions,
+                    active_skills=frozenset(active_skills),
+                    bohrium_rebuild_events=bohrium_rebuild_events,
+                    ports=AgentRunPorts(
+                        child_event_forward_sink=_child_event_sink,
+                        compaction=wiring.compaction,
+                        figure_upload=FigureUploadPort(config=figure_upload_config),
+                        interrupt_checker=RedisInterruptChecker(session_id),
+                    ),
+                ),
+            )
 
             # -- Stage 6: Generator event stream --
             run_result_event = None
             async with aclosing(
                 exp.run_stream(
-                    pg_ctx,
+                    agent_run_ctx,
                     user_prompt,
                     history=history,
                     cancel_token=cancel_token,
@@ -739,17 +730,16 @@ class AgentRunService:
                 )
             ) as stream:
                 async for event in stream:
-                    # Source normalization (ESIN-06)
-                    if hasattr(event, 'source'):
+                    if hasattr(event, "source"):
                         normalized = _normalize_public_source(event.source)
                         if event.source != normalized:
-                            event = event.model_copy(update={'source': normalized})
+                            event = event.model_copy(update={"source": normalized})
 
                     if isinstance(event, SkillHitEvent):
                         _remember_skill_hit(event.skill_name)
 
                     if isinstance(event, RunResultEvent) and event.spawn_id is None:
-                        await _dispatch_response_figures_if_dirty('final_flush')
+                        await _dispatch_response_figures_if_dirty("final_flush")
 
                     await fanout.dispatch(event)
 
@@ -757,7 +747,7 @@ class AgentRunService:
                         await _record_tool_result_figures_and_dispatch_if_dirty(
                             event,
                             include_spawned=False,
-                            reason='tool_result',
+                            reason="tool_result",
                         )
 
                     # Detect terminal event
@@ -767,28 +757,28 @@ class AgentRunService:
             # -- Post-processing --
             if run_result_event is None:
                 await _emit_error_and_close_fanout(
-                    fanout, 'Generator terminated without result'
+                    fanout, "Generator terminated without result"
                 )
-                return ((False, 'no_result'), _elapsed_ms(), None)
+                return ((False, "no_result"), _elapsed_ms(), None)
 
             usage_summary = _build_run_usage_summary(run_result_event)
-            if run_result_event.reason == 'cancelled':
+            if run_result_event.reason == "cancelled":
                 await fanout.dispatch(
-                    CancelledEvent(source='System', reason='Task cancelled by user.')
+                    CancelledEvent(source="System", reason="Task cancelled by user.")
                 )
                 await fanout.dispatch(
                     StreamClosedEvent(
-                        source='System',
-                        end_reason='cancelled',
+                        source="System",
+                        end_reason="cancelled",
                         task_completed=False,
                     )
                 )
-                return ((False, 'cancelled'), _elapsed_ms(), usage_summary)
+                return ((False, "cancelled"), _elapsed_ms(), usage_summary)
             else:
-                if run_result_event.reason == 'invalid_finish':
+                if run_result_event.reason == "invalid_finish":
                     await fanout.dispatch(
                         ErrorEvent(
-                            source='System',
+                            source="System",
                             message=_invalid_finish_error_message(
                                 run_result_event.finish_detail
                             ),
@@ -796,24 +786,24 @@ class AgentRunService:
                     )
                 await fanout.dispatch(
                     StreamClosedEvent(
-                        source='System',
-                        task_completed=run_result_event.reason == 'natural',
+                        source="System",
+                        task_completed=run_result_event.reason == "natural",
                         end_reason=run_result_event.reason,
-                        treat_as_failure=run_result_event.status == 'failed' or None,
+                        treat_as_failure=run_result_event.status == "failed" or None,
                     )
                 )
-                if run_result_event.status == 'completed':
+                if run_result_event.status == "completed":
                     user_id = self._sessions_service.get_session_user_id(session_id)
                     if user_id:
                         await use_quota(user_id, model_key=model_override)
                     return (True, _elapsed_ms(), usage_summary)
                 fail_reason = (
-                    run_result_event.reason or run_result_event.status or 'failed'
+                    run_result_event.reason or run_result_event.status or "failed"
                 )
                 return ((False, fail_reason), _elapsed_ms(), usage_summary)
 
         except Exception as exc:
-            logger.exception('run_agent error: session_id=%s', session_id)
+            logger.exception("run_agent error: session_id=%s", session_id)
             if fanout is not None:
                 try:
                     await _emit_error_and_close_fanout(fanout, str(exc))
@@ -823,7 +813,7 @@ class AgentRunService:
         finally:
             elapsed = time.monotonic() - run_started_at
             logger.info(
-                'run_agent done: session_id=%s elapsed=%.1fs',
+                "run_agent done: session_id=%s elapsed=%.1fs",
                 session_id,
                 elapsed,
             )
@@ -837,7 +827,7 @@ class AgentRunService:
                         ssh_attached=ssh_attached,
                     )
                 except Exception:
-                    logger.warning('Bohrium cleanup error', exc_info=True)
+                    logger.warning("Bohrium cleanup error", exc_info=True)
             # 2. Exp cleanup is owned by Exp.run_stream() via its finally block.
             #    aclosing() guarantees the generator's finally runs before we
             #    reach this point, so the callback list is already cleared.
@@ -848,7 +838,7 @@ class AgentRunService:
                     await asyncio.wait_for(fanout.drain_and_close(), timeout=10)
                 except Exception:
                     logger.warning(
-                        'fanout.drain_and_close() failed during cleanup',
+                        "fanout.drain_and_close() failed during cleanup",
                         exc_info=True,
                     )
             get_redis_dao().delete_stop_requested(session_id, task_id)

@@ -375,7 +375,7 @@ class TestCompactorOutput:
         assert "<session_attachments>" in (msgs[1].content or "")
         assert "Analyze this data" not in (msgs[1].content or "")
 
-    async def test_base_snapshot_contains_only_user_bundle(self) -> None:
+    async def test_base_messages_contains_only_user_bundle(self) -> None:
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
         provider = MockSummaryProvider(summary="summary")
         msgs = _build_long_conversation(5)
@@ -384,9 +384,9 @@ class TestCompactorOutput:
         plan = compactor.plan_preflight_compaction(msgs)
         result = await compactor.apply_summary(plan, msgs, "summary")
 
-        assert result.base_snapshot is not None
-        assert [item["role"] for item in result.base_snapshot] == ["user"]
-        assert "<compacted_history>" in result.base_snapshot[0]["content"]
+        assert result.base_messages is not None
+        assert [item["role"] for item in result.base_messages] == ["user"]
+        assert "<compacted_history>" in result.base_messages[0]["content"]
 
     async def test_second_compact_compresses_first_bundle_without_special_case(
         self,
@@ -604,10 +604,10 @@ class TestPreflightCurrentInputSplit:
         assert "old.cif" not in current_instruction
         assert msgs[1].images[0].url == "https://oss.example.com/chat/new.png"
         assert result.checkpoint_covered_until_event_id == 42
-        assert result.base_snapshot is not None
-        assert "<current_instruction>" not in result.base_snapshot[0]["content"]
-        assert "new.cif" not in result.base_snapshot[0]["content"]
-        assert result.base_snapshot[0].get("images") in (None, [])
+        assert result.base_messages is not None
+        assert "<current_instruction>" not in result.base_messages[0]["content"]
+        assert "new.cif" not in result.base_messages[0]["content"]
+        assert result.base_messages[0].get("images") in (None, [])
 
     async def test_missing_boundary_defaults_to_session_start_and_stays_durable(
         self,
@@ -636,7 +636,7 @@ class TestPreflightCurrentInputSplit:
         assert result.durability == "durable"
         assert result.failure_reason is None
         assert result.checkpoint_covered_until_event_id == 0
-        assert result.base_snapshot is not None
+        assert result.base_messages is not None
 
     async def test_attachment_only_current_input_is_preserved(self) -> None:
         config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)

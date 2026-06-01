@@ -12,7 +12,7 @@ import pytest
 
 import matmaster.config.loader as matmaster_loader
 from matmaster.bohrium.types import BohriumRuntimeSnapshot
-from matmaster.core.playground import PlaygroundContext
+from matmaster.core.playground import ExecutionEnvironment
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.run_metadata import RunMetadata
 from tests.matmaster.core.conftest import MockLLMProvider
@@ -126,7 +126,7 @@ def test_successful_setup_returns_execution_binding_and_stores_runtime(
     cfg = mock_ssh_cls.call_args[0][0]
     assert cfg.host == '10.0.0.1'
     assert cfg.password == 'secret'
-    assert cfg.working_dir == '/share'
+    assert cfg.workspace_path == '/share'
 
     mock_ssh.open.assert_called_once()
 
@@ -377,11 +377,22 @@ def _make_no_attach_bohrium_result() -> MagicMock:
     return r
 
 
-@patch('matmaster.providers.llm_factory.build_provider')
+def _provider_bundle(provider: Any) -> SimpleNamespace:
+    return SimpleNamespace(
+        provider=provider,
+        model="test-model",
+        model_profile="test-profile",
+        model_route="test-route",
+        provider_name="openai",
+        model_family="test-family",
+    )
+
+
+@patch('matmaster.providers.llm_factory.build_provider_bundle')
 @patch('matmaster.config.loader.load_llm_config')
 def test_run_agent_loads_exp_config_without_passing_skill_sync_to_bohrium_setup(
     mock_load_llm: MagicMock,
-    mock_build_provider: MagicMock,
+    mock_build_provider_bundle: MagicMock,
     tmp_path: Path,
 ) -> None:
     """run_agent loads Exp config but does not own skill directory sync."""
@@ -402,13 +413,13 @@ def test_run_agent_loads_exp_config_without_passing_skill_sync_to_bohrium_setup(
     svc = AgentRunService(sessions_service=mock_sessions_svc)
 
     mock_pg = MagicMock()
-    mock_pg_ctx = PlaygroundContext(
+    mock_pg_env = ExecutionEnvironment(
         workdir=tmp_path / 'workspace',
         session_type='local',
         cache_area=tmp_path / 'cache',
         metadata=RunMetadata(run_dir=str(tmp_path), task_id='test-task'),
     )
-    mock_pg.prepare.return_value = mock_pg_ctx
+    mock_pg.prepare.return_value = mock_pg_env
     mock_pg.config_path = Path('config/config.yaml')
     mock_pg.session = None
     captured_setup_kwargs: dict[str, Any] = {}
@@ -420,7 +431,7 @@ def test_run_agent_loads_exp_config_without_passing_skill_sync_to_bohrium_setup(
         return mock_bohrium_result
 
     mock_llm = MockLLMProvider()
-    mock_build_provider.return_value = mock_llm
+    mock_build_provider_bundle.return_value = _provider_bundle(mock_llm)
     mock_load_llm.return_value = MagicMock()
 
     with (
@@ -472,14 +483,14 @@ def test_run_agent_loads_exp_config_without_passing_skill_sync_to_bohrium_setup(
     assert 'skill_sync_spec' not in captured_setup_kwargs
 
 
-@patch('matmaster.providers.llm_factory.build_provider')
+@patch('matmaster.providers.llm_factory.build_provider_bundle')
 @patch('matmaster.config.loader.load_llm_config')
 def test_execution_binding_before_build_runtime(
     mock_load_llm: MagicMock,
-    mock_build_provider: MagicMock,
+    mock_build_provider_bundle: MagicMock,
     tmp_path: Path,
 ) -> None:
-    """When Bohrium returns an execution binding, pg_ctx passed to Exp.build_runtime is updated."""
+    """When Bohrium returns an execution binding, agent_run_ctx passed to Exp.build_runtime is updated."""
     AgentRunService = pytest.importorskip(
         "src.services.agent_run_service",
         reason="src not available (isolation test)",
@@ -490,13 +501,13 @@ def test_execution_binding_before_build_runtime(
     svc = AgentRunService(sessions_service=mock_sessions_svc)
 
     mock_pg = MagicMock()
-    mock_pg_ctx = PlaygroundContext(
+    mock_pg_env = ExecutionEnvironment(
         workdir=tmp_path / 'workspace',
         session_type='local',
         cache_area=tmp_path / 'cache',
         metadata=RunMetadata(run_dir=str(tmp_path), task_id='test-task'),
     )
-    mock_pg.prepare.return_value = mock_pg_ctx
+    mock_pg.prepare.return_value = mock_pg_env
     mock_pg.config_path = Path('config/config.yaml')
     mock_pg.session = None
 
@@ -519,7 +530,7 @@ def test_execution_binding_before_build_runtime(
     )
 
     mock_llm = MagicMock()
-    mock_build_provider.return_value = mock_llm
+    mock_build_provider_bundle.return_value = _provider_bundle(mock_llm)
     mock_load_llm.return_value = MagicMock()
 
     from matmaster.types.events import RunResultEvent
@@ -578,11 +589,11 @@ def test_execution_binding_before_build_runtime(
             )
         )
 
-    pg_passed = captured_run_stream_args['ctx']
-    assert pg_passed.session is mock_exec
-    assert pg_passed.session_type == 'ssh'
-    assert pg_passed.execution_workdir == '/remote/ws'
-    snapshot = pg_passed.runtime_ports.bohrium.snapshot
+    ctx_passed = captured_run_stream_args['ctx']
+    assert ctx_passed.environment.session is mock_exec
+    assert ctx_passed.environment.session_type == 'ssh'
+    assert ctx_passed.environment.execution_workdir == '/remote/ws'
+    snapshot = ctx_passed.environment.bohrium.snapshot
     assert snapshot is not None
     assert snapshot.ssh_attached is True
     assert snapshot.remote_workspace_root == '/share'
@@ -632,7 +643,6 @@ def test_setup_uses_remote_workdir_for_ssh_and_execution_context(
         )
 
     cfg = mock_ssh_cls.call_args.args[0]
-    assert cfg.working_dir == "/share/case"
     assert cfg.workspace_path == "/share/case"
     assert result.execution_workdir == "/share/case"
     assert result.runtime_snapshot is not None

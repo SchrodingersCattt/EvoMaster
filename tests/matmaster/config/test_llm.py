@@ -8,6 +8,7 @@ from matmaster.config.llm import (
     LLMConfig,
     LLMProfileConfig,
     LLMRouteConfig,
+    PromptCacheConfig,
     ResolvedLLMRoute,
 )
 
@@ -42,6 +43,78 @@ class TestLLMProfileConfig:
         )
         assert p.supports_vision is True
         assert p.vision_detail is None
+
+    def test_prompt_cache_defaults_none(self) -> None:
+        p = LLMProfileConfig()
+        assert p.prompt_cache is None
+
+    def test_prompt_cache_field_from_dict(self) -> None:
+        p = LLMProfileConfig(
+            prompt_cache={
+                "provider": "anthropic",
+                "system_prompt_breakpoint": True,
+                "automatic": True,
+                "latest_user_breakpoint": True,
+                "tool_result_breakpoint": True,
+                "flexible_breakpoint": True,
+                "max_breakpoints": 4,
+                "min_flexible_chars": 1000,
+                "ttl": "1h",
+            }
+        )
+
+        assert p.prompt_cache == PromptCacheConfig(
+            provider="anthropic",
+            system_prompt_breakpoint=True,
+            automatic=True,
+            latest_user_breakpoint=True,
+            tool_result_breakpoint=True,
+            flexible_breakpoint=True,
+            max_breakpoints=4,
+            min_flexible_chars=1000,
+            ttl="1h",
+        )
+
+
+class TestPromptCacheConfig:
+    """Prompt cache config produces Anthropic cache_control payloads."""
+
+    def test_default_cache_control(self) -> None:
+        cfg = PromptCacheConfig()
+        assert cfg.cache_control() == {"type": "ephemeral"}
+
+    def test_one_hour_cache_control(self) -> None:
+        cfg = PromptCacheConfig(ttl="1h")
+        assert cfg.cache_control() == {"type": "ephemeral", "ttl": "1h"}
+
+    def test_strategy_defaults(self) -> None:
+        cfg = PromptCacheConfig()
+
+        assert cfg.system_prompt_breakpoint is False
+        assert cfg.automatic is False
+        assert cfg.latest_user_breakpoint is True
+        assert cfg.tool_result_breakpoint is False
+        assert cfg.flexible_breakpoint is False
+        assert cfg.max_breakpoints == 4
+        assert cfg.min_flexible_chars == 1000
+
+    def test_strategy_fields_from_dict(self) -> None:
+        cfg = PromptCacheConfig(
+            system_prompt_breakpoint=True,
+            automatic=True,
+            latest_user_breakpoint=True,
+            tool_result_breakpoint=True,
+            flexible_breakpoint=True,
+            max_breakpoints=4,
+            min_flexible_chars=1200,
+            ttl="5m",
+        )
+
+        assert cfg.latest_user_breakpoint is True
+        assert cfg.tool_result_breakpoint is True
+        assert cfg.flexible_breakpoint is True
+        assert cfg.max_breakpoints == 4
+        assert cfg.min_flexible_chars == 1200
 
 
 class TestLLMProfileConfigMethods:
@@ -141,6 +214,61 @@ class TestLLMProfileConfigMethods:
                 "output_config": {"effort": "low"},
             },
         }
+
+    def test_build_extra_kwargs_anthropic_prompt_cache_does_not_emit_cache_control(
+        self,
+    ) -> None:
+        p = LLMProfileConfig(
+            model="claude-opus-4-6",
+            reasoning_protocol="anthropic_adaptive_thinking",
+            thinking_effort="max",
+            prompt_cache={
+                "provider": "anthropic",
+                "system_prompt_breakpoint": True,
+                "automatic": True,
+                "ttl": "5m",
+            },
+        )
+
+        result = p.build_extra_kwargs()
+
+        assert result == {
+            "extra_body": {
+                "thinking": {"type": "adaptive"},
+                "output_config": {"effort": "max"},
+            },
+        }
+
+    def test_build_extra_kwargs_prompt_cache_without_thinking_effort_returns_none(
+        self,
+    ) -> None:
+        p = LLMProfileConfig(
+            model="claude-opus-4-6",
+            prompt_cache={
+                "provider": "anthropic",
+                "system_prompt_breakpoint": True,
+                "automatic": True,
+                "ttl": "1h",
+            },
+        )
+
+        result = p.build_extra_kwargs()
+
+        assert result is None
+
+    def test_build_extra_kwargs_prompt_cache_disabled_automatic(
+        self,
+    ) -> None:
+        p = LLMProfileConfig(
+            model="claude-opus-4-6",
+            prompt_cache={
+                "provider": "anthropic",
+                "system_prompt_breakpoint": True,
+                "automatic": False,
+            },
+        )
+
+        assert p.build_extra_kwargs() is None
 
     def test_build_extra_kwargs_no_effort(self) -> None:
         p = LLMProfileConfig(reasoning_protocol="anthropic_adaptive_thinking")
@@ -361,38 +489,3 @@ class TestLLMConfigValidation:
                     "default": "missing",
                 }
             )
-
-
-class TestLLMConfigLegacyCompat:
-    """Legacy flat format still works with new route features."""
-
-    def test_legacy_flat_format(self) -> None:
-        cfg = LLMConfig.model_validate(
-            {
-                "opus": {"provider": "openai", "model": "claude-opus-4-6"},
-                "default": "opus",
-            }
-        )
-        assert "opus" in cfg.profiles
-        assert cfg.routes == {}
-
-    def test_legacy_resolve_route_default(self) -> None:
-        cfg = LLMConfig.model_validate(
-            {
-                "opus": {"provider": "openai", "model": "claude-opus-4-6"},
-                "default": "opus",
-            }
-        )
-        r = cfg.resolve_route()
-        assert r.profile_key == "opus"
-        assert r.model == "claude-opus-4-6"
-
-    def test_legacy_resolve_route_model_override_raises(self) -> None:
-        cfg = LLMConfig.model_validate(
-            {
-                "opus": {"provider": "openai", "model": "claude-opus-4-6"},
-                "default": "opus",
-            }
-        )
-        with pytest.raises(KeyError, match="Unknown LLM route key"):
-            cfg.resolve_route(model_override="claude-opus-4-6")

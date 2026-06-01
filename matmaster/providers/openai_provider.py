@@ -9,6 +9,7 @@ Retry strategy is handled by Kernel._call_llm_streaming(), not by the provider.
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 from collections.abc import AsyncIterator
@@ -39,6 +40,189 @@ class _StreamToolCallState:
 
     def has_payload(self) -> bool:
         return bool(self.arguments)
+
+
+@dataclass(frozen=True)
+class AnthropicPromptCacheOptions:
+    """Provider-local Anthropic prompt cache controls."""
+
+    system_prompt_breakpoint: bool
+    cache_control: dict[str, str]
+    automatic: bool = False
+    latest_user_breakpoint: bool = True
+    tool_result_breakpoint: bool = False
+    flexible_breakpoint: bool = False
+    max_breakpoints: int = 4
+    min_flexible_chars: int = 1000
+
+
+@dataclass(frozen=True)
+class _CacheTarget:
+    message_index: int
+    placement: str  # "text_content" | "tool_message"
+    priority: int
+
+
+def _add_text_content_cache_control(
+    message: dict[str, Any],
+    cache_control: dict[str, str],
+) -> bool:
+    content = message.get("content")
+    if isinstance(content, str):
+        if not content.strip():
+            return False
+        message["content"] = [
+            {
+                "type": "text",
+                "text": content,
+                "cache_control": dict(cache_control),
+            }
+        ]
+        return True
+    if not isinstance(content, list):
+        return False
+    for part in reversed(content):
+        if (
+            isinstance(part, dict)
+            and part.get("type") == "text"
+            and isinstance(part.get("text"), str)
+            and part.get("text", "").strip()
+        ):
+            if "cache_control" not in part:
+                part["cache_control"] = dict(cache_control)
+            return True
+    return False
+
+
+def _add_tool_message_cache_control(
+    message: dict[str, Any],
+    cache_control: dict[str, str],
+) -> bool:
+    if message.get("role") != "tool":
+        return False
+    content = message.get("content")
+    if isinstance(content, str) and not content.strip():
+        return False
+    if isinstance(content, list) and not content:
+        return False
+    if content is None:
+        return False
+    if "cache_control" not in message:
+        message["cache_control"] = dict(cache_control)
+    return True
+
+
+def _tool_call_ids(message: dict[str, Any]) -> list[str]:
+    ids: list[str] = []
+    for call in message.get("tool_calls") or []:
+        if isinstance(call, dict) and call.get("id"):
+            ids.append(str(call["id"]))
+    return ids
+
+
+def _latest_completed_tool_group_tail(messages: list[dict[str, Any]]) -> int | None:
+    for assistant_idx in range(len(messages) - 1, -1, -1):
+        assistant = messages[assistant_idx]
+        if assistant.get("role") != "assistant":
+            continue
+        expected = set(_tool_call_ids(assistant))
+        if not expected:
+            continue
+
+        seen: set[str] = set()
+        tail_idx: int | None = None
+        for idx in range(assistant_idx + 1, len(messages)):
+            message = messages[idx]
+            if message.get("role") == "assistant" and _tool_call_ids(message):
+                break
+            if message.get("role") != "tool":
+                continue
+            tool_call_id = message.get("tool_call_id")
+            if tool_call_id in expected:
+                seen.add(str(tool_call_id))
+                tail_idx = idx
+                if seen == expected:
+                    return tail_idx
+        return None
+    return None
+
+
+def _message_text_size(message: dict[str, Any]) -> int:
+    content = message.get("content")
+    if isinstance(content, str):
+        return len(content.strip())
+    if isinstance(content, list):
+        total = 0
+        for part in content:
+            if isinstance(part, dict) and isinstance(part.get("text"), str):
+                total += len(part["text"].strip())
+        return total
+    return 0
+
+
+def _select_flexible_cache_target(
+    messages: list[dict[str, Any]],
+    used: set[int],
+    options: AnthropicPromptCacheOptions,
+) -> _CacheTarget | None:
+    candidates: list[tuple[int, int, str]] = []
+    for idx, message in enumerate(messages):
+        if idx in used:
+            continue
+        role = message.get("role")
+        if role not in {"user", "tool"}:
+            continue
+        size = _message_text_size(message)
+        if size < options.min_flexible_chars:
+            continue
+        placement = "tool_message" if role == "tool" else "text_content"
+        candidates.append((size, idx, placement))
+    if not candidates:
+        return None
+    _, idx, placement = max(candidates)
+    return _CacheTarget(idx, placement, 3)
+
+
+def _select_anthropic_cache_targets(
+    messages: list[dict[str, Any]],
+    options: AnthropicPromptCacheOptions,
+) -> list[_CacheTarget]:
+    targets: list[_CacheTarget] = []
+    used: set[int] = set()
+
+    def append(target: _CacheTarget) -> None:
+        if len(targets) >= options.max_breakpoints:
+            return
+        if target.message_index in used:
+            return
+        targets.append(target)
+        used.add(target.message_index)
+
+    if options.system_prompt_breakpoint:
+        system_idx = next(
+            (idx for idx, m in enumerate(messages) if m.get("role") == "system"),
+            None,
+        )
+        if system_idx is not None:
+            append(_CacheTarget(system_idx, "text_content", 0))
+
+    if options.automatic and options.latest_user_breakpoint:
+        for idx in range(len(messages) - 1, -1, -1):
+            if messages[idx].get("role") == "user":
+                append(_CacheTarget(idx, "text_content", 1))
+                break
+
+    if options.automatic and options.tool_result_breakpoint:
+        tool_tail_idx = _latest_completed_tool_group_tail(messages)
+        if tool_tail_idx is not None:
+            append(_CacheTarget(tool_tail_idx, "tool_message", 2))
+
+    if options.automatic and options.flexible_breakpoint:
+        flexible = _select_flexible_cache_target(messages, used, options)
+        if flexible is not None:
+            append(flexible)
+
+    return targets
 
 
 def _is_complete_json_document(raw: str) -> bool:
@@ -134,6 +318,23 @@ def _should_split_stream_tool_call(
     return False
 
 
+def _dump_usage_detail(value: Any) -> Any:
+    if value is None:
+        return None
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        try:
+            return model_dump(mode="json", exclude_none=True)
+        except TypeError:
+            return model_dump(exclude_none=True)
+    if isinstance(value, dict):
+        return dict(value)
+    cached = getattr(value, "cached_tokens", None)
+    if cached is not None:
+        return {"cached_tokens": cached}
+    return value
+
+
 def _openai_usage_to_vendor_dict(usage: Any) -> dict[str, Any]:
     """Serialize provider-native usage while preserving nested detail fields."""
     if usage is None:
@@ -154,31 +355,26 @@ def _openai_usage_to_vendor_dict(usage: Any) -> dict[str, Any]:
         "total_tokens",
         "input_tokens",
         "output_tokens",
+        "cache_creation_input_tokens",
+        "cache_read_input_tokens",
     ):
         value = getattr(usage, key, None)
         if value is not None:
             out[key] = value
 
-    for detail_key in ("prompt_tokens_details", "completion_tokens_details"):
-        detail = getattr(usage, detail_key, None)
+    for detail_key in (
+        "prompt_tokens_details",
+        "completion_tokens_details",
+        "cache_creation",
+    ):
+        detail = _dump_usage_detail(getattr(usage, detail_key, None))
         if detail is None:
             continue
-        detail_dump = getattr(detail, "model_dump", None)
-        if callable(detail_dump):
-            try:
-                out[detail_key] = detail_dump(mode="json", exclude_none=True)
-            except TypeError:
-                out[detail_key] = detail_dump(exclude_none=True)
-        elif isinstance(detail, dict):
-            out[detail_key] = dict(detail)
-        else:
-            cached = getattr(detail, "cached_tokens", None)
-            if cached is not None:
-                out[detail_key] = {"cached_tokens": cached}
+        if detail_key in ("prompt_tokens_details", "completion_tokens_details"):
+            out[detail_key] = detail
+            continue
+        out[detail_key] = detail
 
-    cache_read = getattr(usage, "cache_read_input_tokens", None)
-    if isinstance(cache_read, int) and cache_read > 0:
-        out["cache_read_input_tokens"] = cache_read
     return out
 
 
@@ -251,6 +447,7 @@ class OpenAIProvider:
         stream_idle_timeout: float | None = None,
         max_retries: int = 3,
         retry_delay: float = 1.0,
+        prompt_cache_options: AnthropicPromptCacheOptions | None = None,
         extra_kwargs: dict[str, Any] | None = None,
     ) -> None:
         self._model = model
@@ -263,6 +460,7 @@ class OpenAIProvider:
         self._stream_idle_timeout = stream_idle_timeout
         self._max_retries = max_retries
         self._retry_delay = retry_delay
+        self._prompt_cache_options = prompt_cache_options
         self._extra_kwargs = extra_kwargs or {}
         self._client: openai.AsyncOpenAI | None = None
         self._enter_count: int = 0
@@ -316,6 +514,46 @@ class OpenAIProvider:
                 "'async with provider:'"
             )
         return self._client
+
+    def _prepare_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Return provider request messages with prompt-cache markers applied."""
+        options = self._prompt_cache_options
+        if options is None or (
+            not options.system_prompt_breakpoint and not options.automatic
+        ):
+            return messages
+
+        from matmaster.types.errors import LLMError
+
+        prepared = copy.deepcopy(messages)
+
+        if options.system_prompt_breakpoint:
+            if not any(message.get("role") == "system" for message in prepared):
+                raise LLMError(
+                    "anthropic prompt cache enabled but no system message was found",
+                    retryable=False,
+                    error_category="payload_validation",
+                )
+
+        targets = _select_anthropic_cache_targets(prepared, options)
+        for target in targets:
+            message = prepared[target.message_index]
+            if target.placement == "tool_message":
+                ok = _add_tool_message_cache_control(message, options.cache_control)
+            else:
+                ok = _add_text_content_cache_control(message, options.cache_control)
+            if (
+                not ok
+                and target.placement == "text_content"
+                and message.get("role") == "system"
+            ):
+                raise LLMError(
+                    "anthropic prompt cache requires a non-empty string system prompt",
+                    retryable=False,
+                    error_category="payload_validation",
+                )
+
+        return prepared
 
     @property
     def stream_timeout(self) -> float | None:
@@ -415,7 +653,7 @@ class OpenAIProvider:
         client = self._ensure_client()
         kwargs: dict[str, Any] = {
             "model": self._model,
-            "messages": messages,
+            "messages": self._prepare_messages(messages),
             "temperature": self._temperature,
         }
         if self._max_tokens is not None:
@@ -488,7 +726,7 @@ class OpenAIProvider:
         client = self._ensure_client()
         kwargs: dict[str, Any] = {
             "model": self._model,
-            "messages": messages,
+            "messages": self._prepare_messages(messages),
             "temperature": self._temperature,
             "stream": True,
         }

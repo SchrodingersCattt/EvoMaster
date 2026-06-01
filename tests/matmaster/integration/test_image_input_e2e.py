@@ -10,7 +10,7 @@ import pytest
 from matmaster.config.exp import ExpConfig
 from matmaster.context.ports import UserInstructions
 from matmaster.context.sources.turn_input import TurnInput
-from matmaster.core.playground import PlaygroundContext
+from matmaster.core.playground import ExecutionEnvironment
 from matmaster.sessions.local import LocalSession
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.messages import LLMResponse, StreamChunk
@@ -60,7 +60,7 @@ async def test_images_flow_from_service_to_kernel_user_message(tmp_path: Path) -
 
     provider = RecordingVisionProvider()
     session = LocalSession(workspace_path=tmp_path / "workspace")
-    pg_ctx = PlaygroundContext(
+    environment = ExecutionEnvironment(
         workdir=tmp_path / "workspace",
         session_type="local",
         session_id="sess-images",
@@ -69,7 +69,7 @@ async def test_images_flow_from_service_to_kernel_user_message(tmp_path: Path) -
         session=session,
     )
     playground = MagicMock()
-    playground.prepare.return_value = pg_ctx
+    playground.prepare.return_value = environment
 
     pg_manager = MagicMock()
     pg_manager.get_or_create.return_value = playground
@@ -89,7 +89,7 @@ async def test_images_flow_from_service_to_kernel_user_message(tmp_path: Path) -
     bohrium_service = MagicMock()
     bohrium_service.run_cleanup = AsyncMock()
     stage_result = SimpleNamespace(
-        pg_ctx=pg_ctx,
+        environment=environment,
         bohrium_svc=bohrium_service,
         abort_result=None,
         ssh_attached=False,
@@ -119,8 +119,15 @@ async def test_images_flow_from_service_to_kernel_user_message(tmp_path: Path) -
             ),
         ),
         patch(
-            "matmaster.providers.llm_factory.build_provider",
-            return_value=provider,
+            "matmaster.providers.llm_factory.build_provider_bundle",
+            return_value=SimpleNamespace(
+                provider=provider,
+                model="vision-model",
+                model_profile="vision",
+                model_route=None,
+                provider_name="openai",
+                model_family="vision",
+            ),
         ),
         patch(
             "src.services.agent_run_service.get_image_input_service",

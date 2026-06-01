@@ -10,11 +10,27 @@ from collections.abc import Awaitable
 from dataclasses import dataclass, field
 from typing import Any, NotRequired, Protocol, TypedDict, runtime_checkable
 
-from pydantic import BaseModel, ConfigDict
-
+from matmaster.bohrium.types import BohriumRuntimeSnapshot
 from matmaster.context.ports import SessionEvent, SessionEventQuery
 from matmaster.types.events import BusEvent
 from matmaster.types.figures import FigureUploadConfig
+
+__all__ = [
+    "AgentRunPorts",
+    "BohriumRuntimePort",
+    "BohriumRuntimeSnapshot",
+    "BusEventSink",
+    "CheckpointSink",
+    "CheckpointSinkFactory",
+    "CompactionCheckpointPayload",
+    "EmptySessionEventHistory",
+    "FigureUploadPort",
+    "InterruptChecker",
+    "KernelRuntimePorts",
+    "PlaygroundCompactionPort",
+    "PreCompactionBarrier",
+    "SessionEventHistoryPort",
+]
 
 
 class CompactionCheckpointPayload(TypedDict):
@@ -101,31 +117,9 @@ class FigureUploadPort:
     config: FigureUploadConfig | None = None
 
 
-class BohriumRuntimeSnapshot(BaseModel):
-    """Narrow Bohrium runtime snapshot for path/runtime consumers."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    ssh_attached: bool = False
-    node_id: int | None = None
-    remote_project_root: str | None = None
-    remote_workspace_root: str | None = None
-
-
 @dataclass(frozen=True)
 class BohriumRuntimePort:
     snapshot: BohriumRuntimeSnapshot | None = None
-
-
-@dataclass(frozen=True)
-class PlaygroundRuntimePorts:
-    child_event_forward_sink: BusEventSink | None = None
-    compaction: PlaygroundCompactionPort = field(
-        default_factory=PlaygroundCompactionPort
-    )
-    figure_upload: FigureUploadPort = field(default_factory=FigureUploadPort)
-    bohrium: BohriumRuntimePort = field(default_factory=BohriumRuntimePort)
-    interrupt_checker: InterruptChecker | None = None
 
 
 @runtime_checkable
@@ -137,6 +131,25 @@ class InterruptChecker(Protocol):
     async def wait_for_confirm(self, timeout: float) -> bool: ...
 
     def cleanup(self) -> None: ...
+
+
+@dataclass(frozen=True)
+class AgentRunPorts:
+    """Narrow runtime capability ports carried by AgentRunRequest.
+
+    The service layer injects these per run. It intentionally does *not* carry
+    the Bohrium snapshot: that is physical execution info and lives on
+    ``ExecutionEnvironment.bohrium`` instead. Stays a narrow capability
+    contract -- only callable / sink / barrier / capability, never a metadata
+    or ``dict[str, Any]`` bag.
+    """
+
+    child_event_forward_sink: BusEventSink | None = None
+    compaction: PlaygroundCompactionPort = field(
+        default_factory=PlaygroundCompactionPort
+    )
+    figure_upload: FigureUploadPort = field(default_factory=FigureUploadPort)
+    interrupt_checker: InterruptChecker | None = None
 
 
 @dataclass(frozen=True)

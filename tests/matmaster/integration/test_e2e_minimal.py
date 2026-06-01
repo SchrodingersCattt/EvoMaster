@@ -13,7 +13,8 @@ from typing import Any
 from matmaster.config.exp import ExpConfig
 from matmaster.core.agent import AgentKernel
 from matmaster.core.exp import Exp
-from matmaster.core.playground import PlaygroundContext
+from matmaster.core.playground import ExecutionEnvironment
+from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.types.events import ResponseEvent, RunResultEvent
 from matmaster.types.messages import LLMResponse, StreamChunk
 
@@ -36,13 +37,15 @@ class MinimalMockLLMProvider:
         yield StreamChunk(content="minimal response", finish_reason="stop")
 
 
-def _make_minimal_ctx(tmp_path: Path, llm_provider: Any = None) -> PlaygroundContext:
-    """Create a minimal PlaygroundContext (no archival, no env vars)."""
-    return PlaygroundContext(
-        workdir=tmp_path / "workspace",
-        session_type="local",
-        cache_area=tmp_path / "cache",
-        llm_provider=llm_provider,
+def _make_minimal_ctx(tmp_path: Path, llm_provider: Any = None) -> AgentRunContext:
+    """Create a minimal AgentRunContext (no archival, no env vars)."""
+    return AgentRunContext(
+        environment=ExecutionEnvironment(
+            workdir=tmp_path / "workspace",
+            session_type="local",
+            cache_area=tmp_path / "cache",
+        ),
+        request=AgentRunRequest(llm_provider=llm_provider),
     )
 
 
@@ -55,16 +58,18 @@ class TestMinimalE2EPipeline:
         Verify pipeline completes with natural finish via run_stream().
         """
         mock_llm = MinimalMockLLMProvider()
-        pg_ctx = _make_minimal_ctx(tmp_path, llm_provider=mock_llm)
+        agent_run_ctx = _make_minimal_ctx(tmp_path, llm_provider=mock_llm)
 
         config = ExpConfig(name="direct")
         exp = Exp(config)
-        runtime = await exp.build_runtime(pg_ctx)
+        runtime = await exp.build_runtime(agent_run_ctx)
 
         # Collect events from kernel.run_stream() generator
         kernel = AgentKernel()
         events = []
-        async for event in kernel.run_stream(runtime.spec, "minimal test task"):
+        async for event in kernel.run_stream(
+            runtime.kernel_runtime, "minimal test task"
+        ):
             events.append(event)
 
         # Generator should have emitted ResponseEvent(s)

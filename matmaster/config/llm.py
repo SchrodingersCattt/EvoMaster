@@ -70,6 +70,27 @@ def _infer_model_family(model: str) -> str | None:
 # ── Profile config ─────────────────────────────────────────────────────────────
 
 
+class PromptCacheConfig(BaseModel):
+    """Prompt cache controls for provider-native prompt caching."""
+
+    provider: Literal["anthropic"] = "anthropic"
+    system_prompt_breakpoint: bool = False
+    automatic: bool = False
+    latest_user_breakpoint: bool = True
+    tool_result_breakpoint: bool = False
+    flexible_breakpoint: bool = False
+    max_breakpoints: int = Field(default=4, ge=1, le=4)
+    min_flexible_chars: int = Field(default=1000, ge=1)
+    ttl: Literal["5m", "1h"] = "5m"
+
+    def cache_control(self) -> dict[str, str]:
+        """Return Anthropic cache_control payload."""
+        payload = {"type": "ephemeral"}
+        if self.ttl == "1h":
+            payload["ttl"] = "1h"
+        return payload
+
+
 class LLMProfileConfig(BaseModel):
     """Single LLM provider profile."""
 
@@ -90,6 +111,9 @@ class LLMProfileConfig(BaseModel):
         None  # "anthropic_adaptive_thinking" | "openai_reasoning_effort"
     )
     fallback_group: str | None = None
+
+    # Prompt cache
+    prompt_cache: PromptCacheConfig | None = None
 
     # Temperature
     temperature_policy: str | None = None  # "force_one_when_reasoning" | "default"
@@ -128,8 +152,9 @@ class LLMProfileConfig(BaseModel):
         return self.temperature
 
     def build_extra_kwargs(self) -> dict[str, Any] | None:
-        """Build vendor-specific reasoning parameters.
-        Returns None when no reasoning parameters are configured.
+        """Build provider-specific request parameters.
+
+        Returns None when no extra request parameters are configured.
         OpenAIProvider.__init__ converts None to {} via ``extra_kwargs or {}``.
         """
         family = self.effective_family()
@@ -137,18 +162,24 @@ class LLMProfileConfig(BaseModel):
             family or "", {}
         ).get("reasoning_protocol")
         effort = (self.thinking_effort or "").strip().lower()
-        if not protocol or not effort:
-            return None
-        if protocol == "anthropic_adaptive_thinking":
-            return {
-                "extra_body": {
+
+        out: dict[str, Any] = {}
+        extra_body: dict[str, Any] = {}
+
+        if protocol == "anthropic_adaptive_thinking" and effort:
+            extra_body.update(
+                {
                     "thinking": {"type": "adaptive"},
                     "output_config": {"effort": effort},
-                },
-            }
-        if protocol == "openai_reasoning_effort":
-            return {"reasoning_effort": effort}
-        return None
+                }
+            )
+        elif protocol == "openai_reasoning_effort" and effort:
+            out["reasoning_effort"] = effort
+
+        if extra_body:
+            out["extra_body"] = extra_body
+
+        return out or None
 
 
 # ── Route schema ───────────────────────────────────────────────────────────────

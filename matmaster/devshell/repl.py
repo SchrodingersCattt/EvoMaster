@@ -211,10 +211,11 @@ def _show_tools(runner: DevRunner) -> None:
     from matmaster.core.exp import Exp
 
     exp = Exp(runner._exp_config)
+    ctx = runner.build_run_context()
     _loop = asyncio.new_event_loop()
     try:
-        runtime = _loop.run_until_complete(exp.build_runtime(runner._pg_ctx))
-        catalog = runtime.spec.tool_catalog
+        runtime = _loop.run_until_complete(exp.build_runtime(ctx))
+        catalog = runtime.kernel_runtime.resources.tool_catalog
         if catalog and catalog.registry.all_tools:
             for tool in catalog.registry.all_tools:
                 desc = getattr(tool, "description", "")

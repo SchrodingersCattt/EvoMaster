@@ -90,9 +90,9 @@ async def test_runtime_compaction_uses_high_water_and_compacted_history_marker()
     assert len(messages) == 2
     assert isinstance(messages[0], SystemMessage)
     assert isinstance(messages[1], UserMessage)
-    assert result.base_snapshot is not None
-    assert "<compacted_history>" in result.base_snapshot[0]["content"]
-    assert "<previous_session_summary>" not in result.base_snapshot[0]["content"]
+    assert result.base_messages is not None
+    assert "<compacted_history>" in result.base_messages[0]["content"]
+    assert "<previous_session_summary>" not in result.base_messages[0]["content"]
     assert result.strategy == "summary"
     assert result.durability == "durable"
     assert result.checkpoint_covered_until_event_id == 9
@@ -122,7 +122,7 @@ async def test_runtime_compaction_missing_boundary_uses_fallback() -> None:
     )
 
     assert result.durability == "ephemeral"
-    assert result.base_snapshot is None
+    assert result.base_messages is None
     assert result.failure_reason == "runtime_current_event_boundary_missing"
 
 
@@ -181,7 +181,7 @@ async def test_apply_summary_replaces_messages_and_returns_durable_snapshot() ->
     assert "<compacted_history>" in (messages[1].content or "")
     assert result.strategy == "summary"
     assert result.durability == "durable"
-    assert result.base_snapshot is not None
+    assert result.base_messages is not None
     assert result.checkpoint_covered_until_event_id == 9
 
 
@@ -219,7 +219,7 @@ async def test_apply_fallback_selects_tool_safe_tail() -> None:
     assert result.strategy == "sliding_window"
     assert result.durability == "ephemeral"
     assert result.failure_reason == "summary failed"
-    assert result.base_snapshot is None
+    assert result.base_messages is None
     normalize_and_validate_openai_messages(messages)
 
 

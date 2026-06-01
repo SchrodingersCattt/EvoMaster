@@ -5,11 +5,13 @@ from __future__ import annotations
 import posixpath
 from typing import Any
 
-from matmaster.core.playground import PlaygroundContext
+from matmaster.core.playground import ExecutionEnvironment
 from matmaster.types.topology import PathAccessRoot
 
 
-def derive_path_access_roots(ctx: PlaygroundContext) -> tuple[PathAccessRoot, ...]:
+def derive_path_access_roots(
+    env: ExecutionEnvironment,
+) -> tuple[PathAccessRoot, ...]:
     """Derive extra read/search roots exposed by the runtime.
 
     The session workspace remains the primary writable root. Extra roots are for
@@ -18,7 +20,7 @@ def derive_path_access_roots(ctx: PlaygroundContext) -> tuple[PathAccessRoot, ..
     under a Bohrium shared workspace.
     """
     roots: list[PathAccessRoot] = []
-    workspace_root = posixpath.normpath(str(ctx.execution_workdir))
+    workspace_root = posixpath.normpath(str(env.execution_workdir))
     seen = {workspace_root}
     read_search = frozenset({"read", "search"})
 
@@ -40,7 +42,7 @@ def derive_path_access_roots(ctx: PlaygroundContext) -> tuple[PathAccessRoot, ..
         )
         seen.add(normalized)
 
-    session = getattr(ctx, "session", None)
+    session = getattr(env, "session", None)
     _add(getattr(session, "remote_project_root", None), "runtime")
     remote_skill_roots = getattr(session, "remote_skill_roots", None)
     if isinstance(remote_skill_roots, (list, tuple, set)):
@@ -48,7 +50,7 @@ def derive_path_access_roots(ctx: PlaygroundContext) -> tuple[PathAccessRoot, ..
             _add(root, "skill")
     _add(getattr(session, "remote_user_skills_root", None), "skill")
 
-    snapshot = ctx.runtime_ports.bohrium.snapshot
+    snapshot = env.bohrium.snapshot
     if snapshot is not None:
         _add(snapshot.remote_project_root, "runtime")
         if snapshot.remote_workspace_root:

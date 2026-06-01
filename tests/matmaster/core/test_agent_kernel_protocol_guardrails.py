@@ -8,7 +8,7 @@ from matmaster.core.agent import AgentKernel
 from matmaster.types.errors import LLMError
 from matmaster.types.messages import StreamChunk
 
-from .agent_kernel_test_helpers import _make_spec, _make_tool_registry
+from .agent_kernel_test_helpers import _make_tool_registry, make_kernel_runtime
 
 
 class _DuplicateIdProvider:
@@ -50,14 +50,17 @@ class TestKernelToolProtocolGuardrails:
     async def test_duplicate_tool_call_ids_fail_before_execute_batch(self) -> None:
         provider = _DuplicateIdProvider()
         registry, _ = _make_tool_registry(tool_names=["test_tool"])
-        spec = _make_spec(provider=provider, tool_registry=registry)
         mock_runner = MagicMock()
         mock_runner.execute_batch = AsyncMock(return_value=[])
-        spec = spec.model_copy(update={"tool_runner": mock_runner})
+        kernel_runtime = make_kernel_runtime(
+            provider=provider,
+            tool_registry=registry,
+            tool_runner=mock_runner,
+        )
 
         kernel = AgentKernel()
         with pytest.raises(LLMError, match="duplicate tool_call ids"):
-            async for _event in kernel.run_stream(spec, "test task"):
+            async for _event in kernel.run_stream(kernel_runtime, "test task"):
                 pass
 
         assert mock_runner.execute_batch.await_count == 0

@@ -9,17 +9,8 @@ from src.services.user_turn_context_service import (
     USER_INSTRUCTIONS_MAX_BYTES,
     hash_user_instructions,
     load_user_instructions_from_session,
-    make_user_instructions_info,
     write_user_turn_context_event,
 )
-
-
-def test_turn_input_is_reexported_from_current_input_shim() -> None:
-    """Phase 2C shim keeps the old import path alive during migration."""
-    from matmaster.context.sources.turn_input import TurnInput as TurnInputSource
-    from matmaster.context.sources.turn_input import TurnInput
-
-    assert TurnInput is TurnInputSource
 
 
 def test_hash_user_instructions_uses_sha256_prefix() -> None:
@@ -33,22 +24,6 @@ def test_hash_user_instructions_does_not_strip_whitespace() -> None:
         "Use SI units.\n"
     )
     assert hash_user_instructions(" abc ") != hash_user_instructions("abc")
-
-
-def test_make_user_instructions_info_uses_empty_string_for_none() -> None:
-    info = make_user_instructions_info(None)
-
-    assert info.text == ""
-    assert info.hash == hash_user_instructions("")
-    assert info.truncated is False
-
-
-def test_make_user_instructions_info_preserves_truncated_flag() -> None:
-    info = make_user_instructions_info("abc", truncated=True)
-
-    assert info.text == "abc"
-    assert info.hash == hash_user_instructions("abc")
-    assert info.truncated is True
 
 
 def test_load_user_instructions_missing_file_returns_empty_hash() -> None:

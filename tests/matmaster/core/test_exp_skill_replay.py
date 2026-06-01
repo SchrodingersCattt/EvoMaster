@@ -10,10 +10,9 @@ import yaml as _yaml
 
 from matmaster.config.exp import ExpConfig
 from matmaster.core.exp import Exp
-from matmaster.core.playground import PlaygroundContext
+from matmaster.core.run_context import AgentRunRequest
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import normalize_tool_result
-from matmaster.types.run_metadata import RunMetadata
 
 
 def _setup_skill_env(tmp_path):
@@ -55,6 +54,21 @@ def _build_cfg(env):
     )
 
 
+def _make_ctx(tmp_path, active_skills=frozenset()):
+    """Build a mock AgentRunContext exposing the new environment/request split.
+
+    Exp._init_skill_tools reads ctx.environment.session,
+    ctx.environment.execution_workdir and ctx.request.active_skills. The session
+    is a MagicMock (it cannot validate into a real ExecutionEnvironment), so the
+    context itself is mocked with the new attribute structure.
+    """
+    ctx = MagicMock()
+    ctx.environment.session = MagicMock()
+    ctx.environment.execution_workdir = str(tmp_path)
+    ctx.request = AgentRunRequest(active_skills=active_skills)
+    return ctx
+
+
 @pytest.mark.asyncio
 async def test_on_skill_hit_does_not_require_metadata_record_callback(tmp_path):
     """Skill execution still injects MCP tools without a metadata record callback."""
@@ -63,10 +77,7 @@ async def test_on_skill_hit_does_not_require_metadata_record_callback(tmp_path):
     exp = Exp(cfg)
     registry = ToolRegistry()
 
-    ctx = MagicMock(spec=PlaygroundContext)
-    ctx.session = MagicMock()
-    ctx.execution_workdir = str(tmp_path)
-    ctx.metadata = RunMetadata()
+    ctx = _make_ctx(tmp_path)
 
     exp._init_skill_tools(ctx, registry)
 
@@ -80,16 +91,13 @@ async def test_on_skill_hit_does_not_require_metadata_record_callback(tmp_path):
 
 @pytest.mark.asyncio
 async def test_init_skill_tools_replays_active_skills_into_registry(tmp_path):
-    """active_skills in metadata must activate skill-declared MCP servers."""
+    """active_skills in the request must activate skill-declared MCP servers."""
     env = _setup_skill_env(tmp_path)
     cfg = _build_cfg(env)
     exp = Exp(cfg)
     registry = ToolRegistry()
 
-    ctx = MagicMock(spec=PlaygroundContext)
-    ctx.session = MagicMock()
-    ctx.execution_workdir = str(tmp_path)
-    ctx.metadata = RunMetadata(active_skills=frozenset({"test-skill"}))
+    ctx = _make_ctx(tmp_path, active_skills=frozenset({"test-skill"}))
 
     # No use_skill call -- replay must inject the lazy tool by itself.
     exp._init_skill_tools(ctx, registry)
@@ -110,10 +118,7 @@ async def test_replay_is_idempotent_with_use_skill(tmp_path):
     exp = Exp(cfg)
     registry = ToolRegistry()
 
-    ctx = MagicMock(spec=PlaygroundContext)
-    ctx.session = MagicMock()
-    ctx.execution_workdir = str(tmp_path)
-    ctx.metadata = RunMetadata(active_skills=frozenset({"test-skill"}))
+    ctx = _make_ctx(tmp_path, active_skills=frozenset({"test-skill"}))
 
     exp._init_skill_tools(ctx, registry)
     assert "mat_sg_build_bulk" in registry
@@ -137,10 +142,7 @@ async def test_old_active_mcp_servers_field_is_ignored(tmp_path):
     exp = Exp(cfg)
     registry = ToolRegistry()
 
-    ctx = MagicMock(spec=PlaygroundContext)
-    ctx.session = MagicMock()
-    ctx.execution_workdir = str(tmp_path)
-    ctx.metadata = RunMetadata()
+    ctx = _make_ctx(tmp_path)
 
     exp._init_skill_tools(ctx, registry)
 
@@ -156,10 +158,7 @@ async def test_replay_silently_skips_missing_skill(tmp_path):
     exp = Exp(cfg)
     registry = ToolRegistry()
 
-    ctx = MagicMock(spec=PlaygroundContext)
-    ctx.session = MagicMock()
-    ctx.execution_workdir = str(tmp_path)
-    ctx.metadata = RunMetadata(active_skills=frozenset({"missing-skill"}))
+    ctx = _make_ctx(tmp_path, active_skills=frozenset({"missing-skill"}))
 
     exp._init_skill_tools(ctx, registry)
 

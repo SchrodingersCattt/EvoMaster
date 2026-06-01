@@ -69,10 +69,9 @@ def build_mock_spec(
     max_turns: int = 10,
     system_prompt: str = "You are a test agent",
 ) -> dict[str, Any]:
-    """Build a dict with AgentRuntimeSpec-like fields for testing.
+    """Build a dict with kernel-resource-like fields for testing.
 
-    Returns a plain dict (not AgentRuntimeSpec) to avoid circular imports.
-    Plan 02 will use actual AgentRuntimeSpec once kernel is complete.
+    Returns a plain dict (not AgentKernelResources) to avoid circular imports.
     """
     return {
         "llm_provider": llm_provider or MockLLMProvider(),

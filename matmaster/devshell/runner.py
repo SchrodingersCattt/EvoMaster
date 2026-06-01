@@ -4,14 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from matmaster.bohrium.runtime import try_attach_local_bohrium_runtime_from_env
 from matmaster.config.exp import ExpConfig, ExpToolsConfig
 from matmaster.core.exp import Exp
-from matmaster.core.playground import PlaygroundContext
+from matmaster.core.playground import ExecutionEnvironment
+from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.devshell.config import DevConfig
 from matmaster.devshell.stream_hook import DevStreamHook
 from matmaster.types.cancellation import CancellationToken
@@ -31,7 +31,7 @@ def _patch_bohrium_submit(runtime: Any, error_message: str) -> None:
     from matmaster.tools.builtin.bohrium_tool.tool import BohriumTool
     from matmaster.tools.tool_result import ToolResult
 
-    catalog = runtime.spec.tool_catalog
+    catalog = runtime.kernel_runtime.resources.tool_catalog
     if catalog is None:
         return
     registry = getattr(catalog, '_registry', None)
@@ -75,20 +75,21 @@ class DevRunner:
         self._exclude_subagents: frozenset[str] = frozenset(exclude_subagents or ())
         self._inject_bohrium_failure = inject_bohrium_failure
 
-        # Build PlaygroundContext
+        # Build the physical environment + the per-run request.
         session = self._create_session(config, workdir)
         cache_area = workdir / ".cache"
         cache_area.mkdir(parents=True, exist_ok=True)
 
-        self._pg_ctx = PlaygroundContext(
+        self._environment = ExecutionEnvironment(
             workdir=workdir,
             session_type=config.session.type,
             cache_area=cache_area,
             session=session,
-            llm_provider=llm_provider,
-            config_dir=None,
-            llm_config=llm_config,
             metadata=RunMetadata(source="devshell"),
+        )
+        self._request = AgentRunRequest(
+            llm_provider=llm_provider,
+            llm_config=llm_config,
         )
         try_attach_local_bohrium_runtime_from_env(session)
 
@@ -121,6 +122,28 @@ class DevRunner:
         session = LocalSession(workspace_path=workdir)
         session.open()
         return session
+
+    def build_run_context(
+        self,
+        *,
+        child_event_sink: Any = None,
+    ) -> AgentRunContext:
+        """Compose the AgentRunContext from the stable environment + request.
+
+        The environment is fixed for the runner; only the request's ports carry
+        the per-run child-event sink. Shared by ``run()`` and the REPL's tool
+        inspection so neither hand-rolls the composition.
+        """
+        request = self._request
+        if child_event_sink is not None:
+            from matmaster.types.runtime_ports import AgentRunPorts
+
+            request = request.model_copy(
+                update={
+                    "ports": AgentRunPorts(child_event_forward_sink=child_event_sink)
+                }
+            )
+        return AgentRunContext(environment=self._environment, request=request)
 
     @staticmethod
     def _build_exp_config(config: DevConfig) -> ExpConfig:
@@ -162,46 +185,30 @@ class DevRunner:
         exp = Exp(self._exp_config, exclude_subagents=self._exclude_subagents)
 
         async def _run_once() -> DrainResult:
-            try:
-                # Build on_event callback for real-time forwarding
-                def _on_event(event: BusEvent) -> None:
-                    self._stream_hook.on_event(event)
-                    if event_observer is not None:
-                        event_observer.emit(event)
+            # Build on_event callback for real-time forwarding
+            def _on_event(event: BusEvent) -> None:
+                self._stream_hook.on_event(event)
+                if event_observer is not None:
+                    event_observer.emit(event)
 
-                # Inject forward sink before build_runtime so child agent spawn
-                # closures capture the runtime port.
-                self._pg_ctx = self._pg_ctx.with_runtime_ports(
-                    replace(
-                        self._pg_ctx.runtime_ports,
-                        child_event_forward_sink=_on_event,
-                    )
-                )
+            # Inject forward sink before build_runtime so child agent spawn
+            # closures capture the runtime port.
+            ctx = self.build_run_context(child_event_sink=_on_event)
 
-                runtime = await exp.build_runtime(self._pg_ctx)
-                spec = runtime.spec
-
+            # Share Exp's runtime lifecycle (build + cancel injection + cleanup)
+            # instead of hand-copying it; cleanup is guaranteed by the scope.
+            async with exp.runtime_scope(ctx, cancel_token) as runtime:
                 if self._inject_bohrium_failure:
                     _patch_bohrium_submit(runtime, self._inject_bohrium_failure)
-
-                # Devshell bypasses Exp.run_stream(), so it must inject
-                # cancellation into the session and tool catalog itself.
-                if cancel_token is not None:
-                    catalog = getattr(spec, "tool_catalog", None)
-                    if catalog is not None:
-                        catalog.inject_cancel_token(cancel_token)
-                    session = self._pg_ctx.session
-                    if session is not None:
-                        session._cancel_token = cancel_token
-
                 return await drain_run_stream(
                     runtime.kernel.run_stream(
-                        spec, task, history=self.history, cancel_token=cancel_token
+                        runtime.kernel_runtime,
+                        task,
+                        history=self.history,
+                        cancel_token=cancel_token,
                     ),
                     on_event=_on_event,
                 )
-            finally:
-                await exp._run_cleanup_callbacks()
 
         result = asyncio.run(_run_once())
 

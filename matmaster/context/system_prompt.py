@@ -9,8 +9,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from matmaster.core.playground import PlaygroundContext
-
 _GENERIC_TOOLS_TEXT = (
     "Use the tools declared in function calling. "
     "Each tool's name, description, and parameter schema are "
@@ -48,7 +46,6 @@ class SystemPromptBuilder:
 
     def build_system_prompt(
         self,
-        ctx: PlaygroundContext,
         tool_registry: Any = None,
         *,
         system_prompt: str = "",

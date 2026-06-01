@@ -1,6 +1,5 @@
 """Durable user-turn context write boundary and AGENT.md helper.
 
-Phase 1 renderer helpers were removed in the Phase 2C runtime cutover.
 Rendering now belongs to matmaster.context.assembly.ContextAssembler; this
 module keeps only shared constants, AGENT.md loading, and durable event write
 deduplication.
@@ -9,10 +8,10 @@ deduplication.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
-from dataclasses import dataclass
 from typing import Any, Literal
+
+from matmaster.context.ports import UserInstructions, hash_user_instructions
 
 logger = logging.getLogger(__name__)
 
@@ -25,18 +24,6 @@ DEFAULT_TURN_TRANSFORM = "raw"
 UserTurnContextWriteStatus = Literal["written", "duplicate"]
 
 
-@dataclass(frozen=True)
-class UserInstructionsInfo:
-    text: str
-    hash: str
-    truncated: bool = False
-
-
-def hash_user_instructions(text: str) -> str:
-    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
-    return f"sha256:{digest}"
-
-
 def truncate_utf8(text: str, max_bytes: int) -> tuple[str, bool]:
     raw = text.encode("utf-8")
     if len(raw) <= max_bytes:
@@ -44,39 +31,34 @@ def truncate_utf8(text: str, max_bytes: int) -> tuple[str, bool]:
     return raw[:max_bytes].decode("utf-8", errors="ignore"), True
 
 
-def make_user_instructions_info(
-    text: str | None,
-    *,
-    truncated: bool = False,
-) -> UserInstructionsInfo:
-    raw_text = text or ""
-    return UserInstructionsInfo(
-        text=raw_text,
-        hash=hash_user_instructions(raw_text),
+def _user_instructions(text: str, *, truncated: bool = False) -> UserInstructions:
+    return UserInstructions(
+        text=text,
+        hash=hash_user_instructions(text),
         truncated=truncated,
     )
 
 
-def load_user_instructions_from_session(session: Any) -> UserInstructionsInfo:
+def load_user_instructions_from_session(session: Any) -> UserInstructions:
     if session is None:
-        return make_user_instructions_info("")
+        return _user_instructions("")
 
     try:
         text = session.read_file(_USER_INSTRUCTIONS_PATH)
     except Exception:
-        return make_user_instructions_info("")
+        return _user_instructions("")
 
     raw_text = str(text or "")
     truncated_text, truncated = truncate_utf8(raw_text, USER_INSTRUCTIONS_MAX_BYTES)
     if not truncated:
-        return make_user_instructions_info(truncated_text)
+        return _user_instructions(truncated_text)
 
     logger.warning(
         "AGENT.md exceeds %s bytes; truncating user instructions for "
         "user_turn_context",
         USER_INSTRUCTIONS_MAX_BYTES,
     )
-    return make_user_instructions_info(truncated_text, truncated=True)
+    return _user_instructions(truncated_text, truncated=True)
 
 
 async def write_user_turn_context_event(

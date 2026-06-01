@@ -2,7 +2,7 @@
 
 Bridges the gap left by @runtime_checkable, which does not distinguish
 sync from async method implementations.  Use validate_async_protocol()
-at assembly time (Exp.assemble) or in tests to catch mismatches early.
+at assembly time (Exp.build_runtime) or in tests to catch mismatches early.
 """
 
 from __future__ import annotations

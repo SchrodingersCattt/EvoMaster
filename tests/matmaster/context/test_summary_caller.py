@@ -6,7 +6,6 @@ from matmaster.context.compaction import (
     SUMMARY_USER_REQUEST_TEMPLATE,
     _select_tool_safe_tail,
     call_summary_llm,
-    estimate_json_tokens,
     prepare_messages_for_summary_call,
 )
 from matmaster.context.sources.turn_input import TurnInput
@@ -35,27 +34,6 @@ def _assistant(*ids: str) -> AssistantMessage:
 
 def _tool(tool_id: str, content: str = "result") -> ToolMessage:
     return ToolMessage(content=content, tool_call_id=tool_id, tool_name="tool")
-
-
-def test_estimate_json_tokens_counts_serialized_schema() -> None:
-    schema = [
-        {
-            "type": "function",
-            "function": {
-                "name": "paper_search",
-                "description": "Search literature",
-                "parameters": {
-                    "type": "object",
-                    "properties": {"q": {"type": "string"}},
-                },
-            },
-        }
-    ]
-
-    assert estimate_json_tokens(schema) > estimate_json_tokens([])
-    assert estimate_json_tokens({"中文": "保留非 ASCII"}, safety_margin=1.5) >= (
-        estimate_json_tokens({"中文": "保留非 ASCII"})
-    )
 
 
 def test_select_tool_safe_tail_keeps_complete_assistant_tool_pair() -> None:
@@ -127,14 +105,12 @@ def test_prepare_messages_common_case_preserves_message_identity() -> None:
         UserMessage(content="old"),
         AssistantMessage(content="answer"),
     ]
-    tool_definitions = [{"type": "function", "function": {"name": "tool"}}]
 
     prep = prepare_messages_for_summary_call(
         full_messages=full_messages,
         phase="runtime",
         turn_input=None,
         compact_request=compact_request,
-        tool_definitions=tool_definitions,
         context_limit=20_000,
         reserved_summary_tokens=1_000,
     )
@@ -143,7 +119,6 @@ def test_prepare_messages_common_case_preserves_message_identity() -> None:
     assert all(left is right for left, right in zip(prep.messages, full_messages))
     assert prep.truncated_tool_call_ids == ()
     assert prep.original_tokens == prep.prepared_tokens
-    assert prep.tool_schema_tokens > 0
     assert prep.request_tokens > 0
     assert prep.message_budget > prep.prepared_tokens
 
@@ -163,7 +138,6 @@ def test_prepare_messages_preflight_excludes_current_user_when_split_applies() -
         phase="preflight",
         turn_input=current,
         compact_request=compact_request,
-        tool_definitions=None,
         context_limit=20_000,
         reserved_summary_tokens=1_000,
     )
@@ -186,7 +160,6 @@ def test_prepare_messages_runtime_includes_trailing_tool_message() -> None:
         phase="runtime",
         turn_input=None,
         compact_request=compact_request,
-        tool_definitions=None,
         context_limit=20_000,
         reserved_summary_tokens=1_000,
     )
@@ -204,10 +177,48 @@ def test_prepare_messages_non_positive_budget_raises() -> None:
             phase="runtime",
             turn_input=None,
             compact_request=compact_request,
-            tool_definitions=[{"schema": "x" * 20_000}],
             context_limit=1_000,
             reserved_summary_tokens=900,
         )
+
+
+@pytest.mark.asyncio
+async def test_call_summary_llm_passes_tools_without_budgeting_schema() -> None:
+    provider = RecordingProvider(content="structured summary")
+    full_messages = [
+        SystemMessage(content="sys"),
+        UserMessage(content="old"),
+        AssistantMessage(content="answer"),
+    ]
+    huge_tool_definitions = [
+        {
+            "type": "function",
+            "function": {
+                "name": f"tool_{idx}",
+                "description": "x" * 8_000,
+                "parameters": {
+                    "type": "object",
+                    "properties": {"arg": {"type": "string"}},
+                },
+            },
+        }
+        for idx in range(8)
+    ]
+
+    summary = await call_summary_llm(
+        llm_provider=provider,
+        system_prompt="sys",
+        full_messages=full_messages,
+        phase="runtime",
+        turn_input=None,
+        tool_definitions=huge_tool_definitions,
+        context_limit=6_000,
+        reserved_summary_tokens=1_000,
+        safety_margin_tokens=500,
+    )
+
+    assert summary == "structured summary"
+    assert provider.calls[0]["tools"] is huge_tool_definitions
 
 
 def test_prepare_messages_truncates_only_largest_tool_results_needed_to_fit() -> None:
@@ -229,7 +240,6 @@ def test_prepare_messages_truncates_only_largest_tool_results_needed_to_fit() ->
         phase="runtime",
         turn_input=None,
         compact_request=compact_request,
-        tool_definitions=None,
         context_limit=7_000,
         reserved_summary_tokens=1_000,
         safety_margin_tokens=500,

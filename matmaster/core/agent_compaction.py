@@ -17,14 +17,15 @@ from matmaster.types.events import CompactionEvent
 
 if TYPE_CHECKING:
     from matmaster.context.sources.turn_input import TurnInput
-    from matmaster.types.runtime import AgentRuntimeSpec
+    from matmaster.types.runtime import AgentKernelResources, AgentKernelSpec
 
 logger = logging.getLogger(__name__)
 
 
 async def run_compaction_plan(
     *,
-    spec: AgentRuntimeSpec,
+    kernel_spec: AgentKernelSpec,
+    kernel_resources: AgentKernelResources,
     state: _KernelState,
     plan: Any,
     checkpoint_sink: Any,
@@ -46,7 +47,7 @@ async def run_compaction_plan(
         )
     )
     messages_before = len(state.messages)
-    pre_compaction_barrier = spec.runtime_ports.pre_compaction_barrier
+    pre_compaction_barrier = kernel_resources.runtime_ports.pre_compaction_barrier
     if pre_compaction_barrier is not None:
         result = pre_compaction_barrier()
         if inspect.isawaitable(result):
@@ -55,16 +56,17 @@ async def run_compaction_plan(
         from matmaster.context.compaction import call_summary_llm
 
         summary = await call_summary_llm(
-            llm_provider=spec.llm_provider,
-            system_prompt=spec.system_prompt,
+            llm_provider=kernel_resources.llm_provider,
+            system_prompt=kernel_spec.system_prompt,
             full_messages=state.messages,
             phase=plan.phase,
             turn_input=turn_input,
             tool_definitions=tool_definitions,
-            context_limit=spec.compaction.context_limit,
-            reserved_summary_tokens=spec.compaction.reserved_summary_tokens,
+            context_limit=kernel_spec.compaction.context_limit,
+            reserved_summary_tokens=kernel_spec.compaction.reserved_summary_tokens,
+            safety_margin_tokens=(kernel_spec.compaction.summary_safety_margin_tokens),
         )
-        result = await spec.compactor.apply_summary(
+        result = await kernel_resources.compactor.apply_summary(
             plan,
             state.messages,
             summary,
@@ -81,7 +83,7 @@ async def run_compaction_plan(
             plan.compaction_count,
             exc_info=True,
         )
-        result = await spec.compactor.apply_fallback(
+        result = await kernel_resources.compactor.apply_fallback(
             plan,
             state.messages,
             failure_reason=str(exc),
@@ -93,8 +95,8 @@ async def run_compaction_plan(
 
     messages_after = len(state.messages)
 
-    if spec.hook_executor is not None:
-        await spec.hook_executor.emit(
+    if kernel_resources.hook_executor is not None:
+        await kernel_resources.hook_executor.emit(
             HookEvent.CONTEXT_COMPACTION,
             CompactionContext(
                 messages_before=messages_before,
@@ -110,7 +112,7 @@ async def run_compaction_plan(
     should_checkpoint = (
         checkpoint_sink is not None
         and result.durability == "durable"
-        and result.base_snapshot is not None
+        and result.base_messages is not None
     )
     if should_checkpoint:
         try:
@@ -128,7 +130,7 @@ async def run_compaction_plan(
                 )
             covered_until_event_id = await checkpoint_sink(
                 payload=payload,
-                base_messages=result.base_snapshot,
+                base_messages=result.base_messages,
             )
         except Exception as exc:
             failure_reason = str(exc)
@@ -159,7 +161,8 @@ async def run_compaction_plan(
 
 async def run_preflight_compaction_if_needed(
     *,
-    spec: AgentRuntimeSpec,
+    kernel_spec: AgentKernelSpec,
+    kernel_resources: AgentKernelResources,
     state: _KernelState,
     history: list | None,
     turn_input: TurnInput | None,
@@ -167,9 +170,11 @@ async def run_preflight_compaction_if_needed(
     tool_definitions: list[dict[str, Any]] | None = None,
 ) -> AsyncIterator[_KernelItem]:
     """Plan + execute a preflight compaction before the first LLM turn."""
-    if not spec.compactor:
+    if not kernel_resources.compactor:
         return
-    preflight_planner = getattr(spec.compactor, "plan_preflight_compaction", None)
+    preflight_planner = getattr(
+        kernel_resources.compactor, "plan_preflight_compaction", None
+    )
     if callable(preflight_planner):
         skip_preflight_for_empty_history = (
             turn_input is not None and turn_input.has_effective_input() and not history
@@ -181,7 +186,8 @@ async def run_preflight_compaction_if_needed(
         )
         if plan is not None:
             async for item in run_compaction_plan(
-                spec=spec,
+                kernel_spec=kernel_spec,
+                kernel_resources=kernel_resources,
                 state=state,
                 plan=plan,
                 checkpoint_sink=checkpoint_sink,
@@ -193,9 +199,9 @@ async def run_preflight_compaction_if_needed(
 
 async def run_runtime_compaction_if_needed(
     *,
-    spec: AgentRuntimeSpec,
+    kernel_spec: AgentKernelSpec,
+    kernel_resources: AgentKernelResources,
     state: _KernelState,
-    turn_usage: dict,
     checkpoint_sink: Any,
     tool_definitions: list[dict[str, Any]] | None = None,
 ) -> AsyncIterator[_KernelItem]:
@@ -204,18 +210,21 @@ async def run_runtime_compaction_if_needed(
     Runtime plans do not receive ``turn_input``; see ``apply_summary``,
     which only branches on it for preflight plans.
     """
-    if not spec.compactor:
+    if not kernel_resources.compactor:
         return
-    runtime_planner = getattr(spec.compactor, "plan_runtime_compaction", None)
+    runtime_planner = getattr(
+        kernel_resources.compactor, "plan_runtime_compaction", None
+    )
     if callable(runtime_planner):
         plan = await runtime_planner(
             state.messages,
-            turn_usage,
+            state.turn_usage,
             turn=state.turn,
         )
         if plan is not None:
             async for item in run_compaction_plan(
-                spec=spec,
+                kernel_spec=kernel_spec,
+                kernel_resources=kernel_resources,
                 state=state,
                 plan=plan,
                 checkpoint_sink=checkpoint_sink,

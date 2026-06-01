@@ -9,7 +9,7 @@ import pytest
 from matmaster.types.events import AssistantStateEvent, ResponseEvent, RunResultEvent
 from matmaster.types.messages import LLMResponse, StreamChunk
 
-from .agent_kernel_test_helpers import _make_spec, _make_tool_registry
+from .agent_kernel_test_helpers import _make_tool_registry, make_kernel_runtime
 
 
 class EmptyStopProvider:
@@ -82,11 +82,11 @@ async def test_empty_sentinel_stop_finishes_as_invalid_finish(
     from matmaster.core.agent import AgentKernel
 
     provider = EmptyStopProvider(content=sentinel)
-    spec = _make_spec(provider=provider)
+    kernel_runtime = make_kernel_runtime(provider=provider)
     kernel = AgentKernel()
 
     events: list[Any] = []
-    async for event in kernel.run_stream(spec, "test task"):
+    async for event in kernel.run_stream(kernel_runtime, "test task"):
         events.append(event)
 
     response_texts = [
@@ -110,11 +110,11 @@ async def test_text_containing_none_still_finishes_naturally() -> None:
 
     content = "None 是 Python 的空值对象"
     provider = EmptyStopProvider(content=content)
-    spec = _make_spec(provider=provider)
+    kernel_runtime = make_kernel_runtime(provider=provider)
     kernel = AgentKernel()
 
     events: list[Any] = []
-    async for event in kernel.run_stream(spec, "test task"):
+    async for event in kernel.run_stream(kernel_runtime, "test task"):
         events.append(event)
 
     assert isinstance(events[-1], RunResultEvent)
@@ -129,11 +129,11 @@ async def test_empty_sentinel_tool_call_preamble_does_not_block_tools() -> None:
 
     provider = SentinelToolPreambleProvider()
     registry, tools = _make_tool_registry(tool_names=["test_tool"])
-    spec = _make_spec(provider=provider, tool_registry=registry)
+    kernel_runtime = make_kernel_runtime(provider=provider, tool_registry=registry)
     kernel = AgentKernel()
 
     events: list[Any] = []
-    async for event in kernel.run_stream(spec, "test task"):
+    async for event in kernel.run_stream(kernel_runtime, "test task"):
         events.append(event)
 
     assistant_state_events = [

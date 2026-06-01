@@ -29,14 +29,12 @@ def test_summary_common_case_shares_main_conversation_prefix() -> None:
         AssistantMessage(content="answer"),
     ]
     compact_request = UserMessage(content=SUMMARY_USER_REQUEST_TEMPLATE)
-    tools = [{"type": "function", "function": {"name": "paper_search"}}]
 
     prep = prepare_messages_for_summary_call(
         full_messages=history,
         phase="runtime",
         turn_input=None,
         compact_request=compact_request,
-        tool_definitions=tools,
         context_limit=20_000,
         reserved_summary_tokens=1_000,
     )
@@ -63,7 +61,6 @@ def test_preflight_summary_prefix_excludes_current_instruction_tail() -> None:
         phase="preflight",
         turn_input=turn_input,
         compact_request=compact_request,
-        tool_definitions=None,
         context_limit=20_000,
         reserved_summary_tokens=1_000,
     )
@@ -113,7 +110,6 @@ def test_parallel_oversized_tool_results_truncate_minimum_needed_without_mutatio
         phase="runtime",
         turn_input=None,
         compact_request=compact_request,
-        tool_definitions=None,
         context_limit=5_000,
         reserved_summary_tokens=1_000,
         safety_margin_tokens=500,

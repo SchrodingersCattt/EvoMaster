@@ -2,16 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any
-
-from pydantic import BaseModel, ConfigDict, Field
-
-from matmaster.context.ports import UserInstructions
-from matmaster.context.sources.turn_input import TurnInput
+from pydantic import BaseModel, ConfigDict
 
 
 class RunIdentity(BaseModel):
-    """Runtime identity shared by PlaygroundContext and AgentRuntimeSpec."""
+    """Runtime identity shared by ExecutionEnvironment and AgentKernelSpec."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -21,18 +16,17 @@ class RunIdentity(BaseModel):
 
 
 class RunMetadata(BaseModel):
-    """Typed metadata carried by PlaygroundContext during one run."""
+    """Passive run identity / directory facts carried by ExecutionEnvironment.
 
-    model_config = ConfigDict(
-        frozen=True,
-        extra="forbid",
-        arbitrary_types_allowed=True,
-    )
+    This type only carries passive identity: ``run_dir`` / ``task_id`` /
+    ``source``. Runtime-assembly fields (turn input, user instructions,
+    active skills, bohrium rebuild events) belong to
+    :class:`~matmaster.core.run_context.AgentRunRequest`, next to the service
+    layer that resolves them.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     run_dir: str = ""
     task_id: str = ""
     source: str = ""
-    turn_input: TurnInput | None = None
-    user_instructions: UserInstructions | None = None
-    active_skills: frozenset[str] = Field(default_factory=frozenset)
-    bohrium_rebuild_events: tuple[Any, ...] = Field(default_factory=tuple)

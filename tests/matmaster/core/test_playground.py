@@ -13,8 +13,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from matmaster.core.playground import (
+    ExecutionEnvironment,
     Playground,
-    PlaygroundContext,
     WorkspaceArchivalConfig,
 )
 from matmaster.sessions.local import LocalSession
@@ -54,19 +54,19 @@ def _metadata(run_dir: Path | None = None, task_id: str = "") -> RunMetadata:
 
 
 # ---------------------------------------------------------------------------
-# prepare() returns PlaygroundContext
+# prepare() returns ExecutionEnvironment
 # ---------------------------------------------------------------------------
 
 
 class TestPrepare:
-    def test_returns_playground_context(self, tmp_path: Path) -> None:
+    def test_returns_execution_environment(self, tmp_path: Path) -> None:
         pg = _make_playground(tmp_path)
         run_dir = tmp_path / "runs" / "run-001"
         run_dir.mkdir(parents=True)
 
         ctx = pg.prepare(_metadata(run_dir, "t1"))
 
-        assert isinstance(ctx, PlaygroundContext)
+        assert isinstance(ctx, ExecutionEnvironment)
         assert ctx.session_type == "local"
         pg.cleanup()
 
@@ -78,6 +78,19 @@ class TestPrepare:
         ctx = pg.prepare(_metadata(run_dir, "t1"))
 
         assert ctx.execution_workdir == str(ctx.workdir)
+        pg.cleanup()
+
+    def test_prepare_updates_session_config_workspace_path_only(
+        self, tmp_path: Path
+    ) -> None:
+        pg = _make_playground(tmp_path)
+        run_dir = tmp_path / "runs" / "run-config"
+        run_dir.mkdir(parents=True)
+
+        ctx = pg.prepare(_metadata(run_dir, "t1"))
+
+        assert pg._session_config["workspace_path"] == str(ctx.workdir)
+        assert "working_dir" not in pg._session_config
         pg.cleanup()
 
     def test_workspace_created_under_run_dir_with_task_id(self, tmp_path: Path) -> None:
@@ -307,18 +320,6 @@ class TestSessionManagement:
         old_session.close.assert_called_once()
         assert pg.session is new_session
 
-    def test_attach_session_propagates_to_agent(self, tmp_path: Path) -> None:
-        pg = _make_playground(tmp_path)
-        mock_agent = MagicMock()
-        pg.agent = mock_agent
-
-        mock_session = MagicMock()
-        mock_session.is_open = True
-
-        pg.attach_session(mock_session)
-
-        assert mock_agent.session is mock_session
-
     def test_detach_session(self, tmp_path: Path) -> None:
         pg = _make_playground(tmp_path)
         mock_session = MagicMock()
@@ -329,18 +330,6 @@ class TestSessionManagement:
 
         assert pg.session is None
         mock_session.close.assert_called_once()
-
-    def test_detach_session_clears_agent_ref(self, tmp_path: Path) -> None:
-        pg = _make_playground(tmp_path)
-        mock_agent = MagicMock()
-        pg.agent = mock_agent
-        mock_session = MagicMock()
-        mock_session.is_open = True
-        pg.session = mock_session
-
-        pg.detach_session()
-
-        assert mock_agent.session is None
 
     def test_detach_session_skips_local(self, tmp_path: Path) -> None:
         pg = _make_playground(tmp_path)

@@ -5,11 +5,13 @@ Responsibilities:
   - Session creation (Local/SSH) or reuse of injected override
   - Cache directory creation under the workspace
   - Run-level file logging setup
-  - Building an immutable ``PlaygroundContext`` snapshot
+  - Building an immutable ``ExecutionEnvironment`` (physical substrate only)
 
 Non-responsibilities (belong to Exp / Service layers):
   - MCP manager, Skill registry, Tool registry, LLM provider
-  - Workspace archival upload (Service layer, Phase 5)
+  - Runtime-assembly inputs (turn input, user instructions, interaction
+    bridge, runtime ports) -- those live on ``AgentRunRequest``
+  - Workspace archival upload (Service layer)
   - Run orchestration and quota management
 """
 
@@ -17,7 +19,6 @@ from __future__ import annotations
 
 import logging
 import threading
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -26,11 +27,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from matmaster.sessions.local import LocalSession
 from matmaster.types.run_metadata import RunMetadata
-from matmaster.types.runtime_ports import (
-    BohriumRuntimePort,
-    BohriumRuntimeSnapshot,
-    PlaygroundRuntimePorts,
-)
+from matmaster.types.runtime_ports import BohriumRuntimePort, BohriumRuntimeSnapshot
 from matmaster.types.session import Session, SSHSessionConfig
 
 
@@ -51,15 +48,19 @@ class WorkspaceArchivalConfig(BaseModel):
     credential_ref: str = ""
 
 
-class PlaygroundContext(BaseModel):
-    """Playground layer environment context contract.
+class ExecutionEnvironment(BaseModel):
+    """Physical execution substrate produced by ``Playground.prepare()``.
 
-    Built by Playground.prepare(), passed to Exp.assemble().
-    frozen=True guarantees immutability during inter-layer transfer.
+    Carries the workspace dirs, the (live) session handle, cache area,
+    archival target, slimmed run identity (``RunMetadata``), and the Bohrium
+    runtime snapshot. This is the authoritative environment for one run --
+    the session it holds is live and may be swapped mid-run by the Bohrium
+    path, so it is intentionally *not* a throwaway "snapshot".
 
-    Contains environment info (workspace, session, cache) and
-    externally-determined capability objects (llm_provider) whose
-    selection is made outside the Exp layer (e.g. by frontend user).
+    Runtime-assembly inputs (llm provider/config, turn input, user
+    instructions, active skills, interaction bridge, runtime ports) belong to
+    :class:`~matmaster.core.run_context.AgentRunRequest`, not here -- keeping
+    this object to the physical facts the platform owns.
     """
 
     model_config = ConfigDict(
@@ -72,25 +73,17 @@ class PlaygroundContext(BaseModel):
     session_type: str
     session_id: str = ""
     cache_area: Path
-    # Resolved directory where tools execute (may differ from workdir for remote sessions).
-    # Empty string means "default to str(workdir)" (see model validator).
+    # Resolved directory where tools execute (may differ from workdir for
+    # remote sessions). Empty string means "default to str(workdir)".
     execution_workdir: str = Field(default="")
-    env_vars: dict[str, str] = Field(default_factory=dict)
     archival: WorkspaceArchivalConfig | None = None
     metadata: RunMetadata = Field(default_factory=RunMetadata)
-    runtime_ports: PlaygroundRuntimePorts = Field(
-        default_factory=PlaygroundRuntimePorts,
+    session: Session | None = None
+    bohrium: BohriumRuntimePort = Field(
+        default_factory=BohriumRuntimePort,
         repr=False,
         exclude=True,
     )
-    interaction_bridge: Any = Field(default=None, repr=False, exclude=True)
-    session: Session | None = None
-    config_dir: Path | None = None
-    # llm_provider is intentionally ``Any`` so duck-typed mocks and partially-
-    # instantiated providers bypass Pydantic's strict isinstance check against
-    # the runtime_checkable ``LLMProvider`` Protocol.
-    llm_provider: Any = None
-    llm_config: Any = None
 
     @model_validator(mode="before")
     @classmethod
@@ -107,8 +100,12 @@ class PlaygroundContext(BaseModel):
         session: Session | None,
         session_type: str,
         execution_workdir: str,
-    ) -> PlaygroundContext:
-        """Return a new frozen instance with execution binding fields updated."""
+    ) -> ExecutionEnvironment:
+        """Return a new frozen instance with execution binding fields updated.
+
+        Used by the Bohrium path to physically rebind the active session and
+        execution directory after attaching a remote SSH node.
+        """
         return self.model_copy(
             update={
                 "session": session,
@@ -120,34 +117,11 @@ class PlaygroundContext(BaseModel):
     def with_bohrium(
         self,
         snapshot: BohriumRuntimeSnapshot,
-    ) -> PlaygroundContext:
-        """Return a new frozen instance with typed Bohrium runtime snapshot."""
-        return self.with_runtime_port(bohrium=BohriumRuntimePort(snapshot=snapshot))
-
-    def with_runtime_ports(
-        self,
-        runtime_ports: PlaygroundRuntimePorts,
-    ) -> PlaygroundContext:
-        """Return a new frozen instance with runtime capability ports updated."""
-        return self.model_copy(update={"runtime_ports": runtime_ports})
-
-    def with_runtime_port(self, **fields: Any) -> PlaygroundContext:
-        """Return a new instance with selected runtime port fields replaced."""
-        if not fields:
-            return self
-        return self.with_runtime_ports(replace(self.runtime_ports, **fields))
-
-    def with_metadata(self, **fields: Any) -> PlaygroundContext:
-        """Return a new frozen instance with typed run metadata fields merged."""
-        if not fields:
-            return self
-        unknown = set(fields) - set(RunMetadata.model_fields)
-        if unknown:
-            names = ", ".join(sorted(unknown))
-            raise ValueError(f"Unknown RunMetadata field(s): {names}")
-        data = {name: getattr(self.metadata, name) for name in RunMetadata.model_fields}
-        data.update(fields)
-        return self.model_copy(update={"metadata": RunMetadata.model_validate(data)})
+    ) -> ExecutionEnvironment:
+        """Return a new frozen instance carrying the typed Bohrium snapshot."""
+        return self.model_copy(
+            update={"bohrium": BohriumRuntimePort(snapshot=snapshot)}
+        )
 
 
 class Playground:
@@ -164,7 +138,7 @@ class Playground:
             session_config={"workspace_path": "/tmp/ws"},
         )
         ctx = pg.prepare(RunMetadata(run_dir="/tmp/runs/run-001", task_id="t1"))
-        # ... pass ctx to Exp.assemble() ...
+        # ... pass ctx to Exp.build_runtime() ...
         pg.cleanup()
     """
 
@@ -187,9 +161,7 @@ class Playground:
         # Kept directly writable (per Pitfall 3: agent_run_bohrium.py
         # does ``pg.session = ssh_session`` and ``pg._owns_session = False``)
         self.session: Session | None = None
-        self.agent: Any = None
         self._owns_session: bool = False
-        self._prepare_metadata: RunMetadata | None = None
         self._log_file_handler: logging.FileHandler | None = None
         self._log_file_stream = None
 
@@ -203,23 +175,22 @@ class Playground:
         *,
         session_id: str = "",
         session_override: Session | None = None,
-    ) -> PlaygroundContext:
-        """Create workspace, session, logging and return a frozen context.
+    ) -> ExecutionEnvironment:
+        """Create workspace, session, logging and return a frozen environment.
 
         Args:
             metadata: typed per-run metadata.
             session_id: explicit session identifier. It is intentionally kept
-                on ``PlaygroundContext`` rather than in metadata.
+                on ``ExecutionEnvironment`` rather than in metadata.
             session_override: caller-owned session to reuse instead of
                 creating a new one.
 
         Returns:
-            Immutable ``PlaygroundContext`` snapshot.
+            Immutable ``ExecutionEnvironment`` (physical substrate only).
         """
         if not isinstance(metadata, RunMetadata):
             raise TypeError(
-                f"prepare() requires RunMetadata, got {type(metadata).__name__}. "
-                "dict input was removed in run-meta-refactor P2."
+                f"prepare() requires RunMetadata, got {type(metadata).__name__}."
             )
 
         workspace_path = self._resolve_workspace_path_explicit(
@@ -236,7 +207,6 @@ class Playground:
             effective_config = {
                 **self._session_config,
                 "workspace_path": str(workspace_path),
-                "working_dir": str(workspace_path),
             }
             self._session_config = effective_config
             self.session = self._create_session_from_config()
@@ -249,14 +219,12 @@ class Playground:
         cache_area.mkdir(parents=True, exist_ok=True)
 
         self._setup_logging_explicit(metadata.run_dir, metadata.task_id)
-        self._prepare_metadata = metadata
-        return PlaygroundContext(
+        return ExecutionEnvironment(
             workdir=workspace_path,
             session_type=self._session_type,
             session_id=session_id,
             cache_area=cache_area,
             execution_workdir=str(workspace_path),
-            env_vars=self._collect_env_vars(),
             archival=self._archival,
             metadata=metadata,
             session=self.session,
@@ -301,10 +269,6 @@ class Playground:
             self.session.open()
             self.logger.info('Attached session opened: %s', type(session).__name__)
 
-        if self.agent is not None:
-            self.agent.session = self.session
-            self.logger.debug('Agent session reference updated')
-
     def attach_ssh_session(
         self,
         host: str,
@@ -312,7 +276,7 @@ class Playground:
         username: str = 'root',
         password: str | None = None,
         key_file: str | None = None,
-        working_dir: str = '/personal/workspace',
+        workspace_path: str = '/personal/workspace',
         session_id: str | None = None,
         **kwargs: Any,
     ) -> Any:
@@ -323,8 +287,8 @@ class Playground:
         external container allocator (e.g. Bohrium).
 
         Args:
-            session_id: When provided, the remote working directory becomes
-                ``{working_dir}/{session_id}`` to isolate concurrent sessions.
+            session_id: When provided, the remote workspace path becomes
+                ``{workspace_path}/{session_id}`` to isolate concurrent sessions.
 
         Returns:
             The opened SSHSession instance.
@@ -332,20 +296,19 @@ class Playground:
         from matmaster.sessions.ssh import SSHSession
 
         if session_id:
-            working_dir = f"{working_dir.rstrip('/')}/{session_id}"
+            workspace_path = f"{workspace_path.rstrip('/')}/{session_id}"
         cfg = SSHSessionConfig(
             host=host,
             port=port,
             username=username,
             password=password,
             key_file=key_file,
-            working_dir=working_dir,
-            workspace_path=working_dir,
+            workspace_path=workspace_path,
             **kwargs,
         )
         session = SSHSession(config=cfg)
         self.attach_session(session)
-        self.logger.info('SSH workspace: %s', working_dir)
+        self.logger.info('SSH workspace: %s', workspace_path)
         return session
 
     def detach_session(self) -> None:
@@ -363,10 +326,6 @@ class Playground:
                     self.logger.warning('Error closing session during detach: %s', e)
 
         self.session = None
-
-        if self.agent is not None:
-            self.agent.session = None
-            self.logger.debug('Agent session reference cleared')
 
     # ------------------------------------------------------------------
     # Private helpers
@@ -415,13 +374,6 @@ class Playground:
         if task_id:
             return Path(run_dir) / 'workspaces' / task_id
         return Path(run_dir) / 'workspace'
-
-    def _resolve_workspace_path(self, metadata: RunMetadata) -> Path:
-        """Determine workspace directory path from typed run metadata."""
-        return self._resolve_workspace_path_explicit(
-            metadata.run_dir,
-            metadata.task_id,
-        )
 
     def _setup_logging_explicit(
         self,
@@ -484,36 +436,6 @@ class Playground:
                 cache_path = workspace_path / cache_path
             return cache_path
         return workspace_path / '.cache'
-
-    def _collect_env_vars(self) -> dict[str, str]:
-        """Collect environment variables to include in context."""
-        return {}
-
-    def _setup_session(self) -> None:
-        """Create and open a session, restoring after Bohrium detach.
-
-        Called by ``cleanup_bohrium_after_run`` after ``detach_session()``.
-        """
-        if self.session is not None:
-            if not self.session.is_open:
-                self.session.open()
-            return
-        if self._prepare_metadata is None:
-            self.logger.warning(
-                '_setup_session: no prepare() metadata; cannot restore session'
-            )
-            return
-        workspace_path = self._resolve_workspace_path(self._prepare_metadata)
-        effective_config = {
-            **self._session_config,
-            "workspace_path": str(workspace_path),
-            "working_dir": str(workspace_path),
-        }
-        self._session_config = effective_config
-        self.session = self._create_session_from_config()
-        self._owns_session = True
-        if not self.session.is_open:
-            self.session.open()
 
 
 class PlaygroundManager:

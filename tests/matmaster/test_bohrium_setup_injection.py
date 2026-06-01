@@ -316,17 +316,17 @@ def test_apply_run_credentials_registers_runtime_without_dual_write() -> None:
     assert not hasattr(session, "_bohrium_credentials")
 
 
-def test_playground_context_with_bohrium_uses_snapshot_dict() -> None:
-    from matmaster.core.playground import PlaygroundContext
+def test_execution_environment_with_bohrium_uses_snapshot_dict() -> None:
+    from matmaster.core.playground import ExecutionEnvironment
     from matmaster.types.runtime_ports import BohriumRuntimeSnapshot
 
-    ctx = PlaygroundContext(
+    env = ExecutionEnvironment(
         workdir=Path("/tmp/work"),
         session_type="local",
         cache_area=Path("/tmp/cache"),
     )
 
-    updated = ctx.with_bohrium(
+    updated = env.with_bohrium(
         BohriumRuntimeSnapshot(
             remote_workspace_root="/share",
             remote_project_root="/share/.matmaster",
@@ -335,7 +335,7 @@ def test_playground_context_with_bohrium_uses_snapshot_dict() -> None:
         )
     )
 
-    snapshot = updated.runtime_ports.bohrium.snapshot
+    snapshot = updated.bohrium.snapshot
     assert snapshot is not None
     assert snapshot.node_id == 9
     assert "bohrium" not in RunMetadata.model_fields

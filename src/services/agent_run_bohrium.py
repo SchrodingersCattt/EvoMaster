@@ -97,12 +97,9 @@ def _restore_playground_session(
     original_session: Any,
     original_owns_session: bool,
 ) -> None:
-    """Restore pg.session / _owns_session / agent.session after a transient SSH swap."""
+    """Restore pg.session / _owns_session after a transient SSH swap."""
     pg.session = original_session
     pg._owns_session = original_owns_session
-    _agent = getattr(pg, 'agent', None)
-    if _agent is not None:
-        _agent.session = original_session
 
 
 def _restore_bohrium_runtime_state(session_id: str, pg: Any | None) -> None:
@@ -686,7 +683,7 @@ def _setup_bohrium_for_run(
                 'Bohrium 节点已就绪',
                 ip=node_ip,
             )
-            ssh_working_dir = (remote_workdir or remote_workspace_root).rstrip(
+            ssh_workspace_path = (remote_workdir or remote_workspace_root).rstrip(
                 '/'
             ) or '/'
             original_session = pg.session
@@ -694,8 +691,7 @@ def _setup_bohrium_for_run(
             ssh_config = SSHSessionConfig(
                 host=node_ip,
                 password=node_pwd,
-                working_dir=ssh_working_dir,
-                workspace_path=ssh_working_dir,
+                workspace_path=ssh_workspace_path,
             )
             ssh_session = SSHSession(ssh_config)
             swapped = False
@@ -707,9 +703,6 @@ def _setup_bohrium_for_run(
                 )
                 pg.session = ssh_session
                 pg._owns_session = False
-                _agent = getattr(pg, 'agent', None)
-                if _agent is not None:
-                    _agent.session = ssh_session
                 swapped = True
                 _store_bohrium_runtime(
                     session_id,
@@ -720,7 +713,7 @@ def _setup_bohrium_for_run(
                 logger.info(
                     'run_agent: SSH session attached to Bohrium node ip=%s workspace=%s',
                     node_ip,
-                    ssh_working_dir,
+                    ssh_workspace_path,
                 )
                 _run_clear_remote_proxy(pg, 'post_ssh')
                 _emit_node_status(
@@ -758,7 +751,7 @@ def _setup_bohrium_for_run(
                 ),
                 execution=BohriumExecutionContext(
                     session_type="ssh",
-                    execution_workdir=ssh_working_dir,
+                    execution_workdir=ssh_workspace_path,
                     remote_workspace_root=remote_workspace_root,
                     remote_project_root=remote_project_root,
                     node_id=node_id,
@@ -772,7 +765,7 @@ def _setup_bohrium_for_run(
                 True,
                 None,
                 ssh_session,
-                ssh_working_dir,
+                ssh_workspace_path,
                 'ssh',
                 runtime.snapshot(),
             )

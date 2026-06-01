@@ -30,9 +30,9 @@ async def test_figure_upload_port_is_set_and_survives_history_wiring() -> None:
 
     ctx = svc._test_fake_exp.last_ctx
 
-    assert ctx.runtime_ports.figure_upload.config is not None
-    assert isinstance(ctx.runtime_ports.figure_upload.config, FigureUploadConfig)
+    assert ctx.request.ports.figure_upload.config is not None
+    assert isinstance(ctx.request.ports.figure_upload.config, FigureUploadConfig)
     assert "figure_upload_config" not in RunMetadata.model_fields
-    assert ctx.runtime_ports.child_event_forward_sink is not None
-    assert ctx.runtime_ports.compaction.history is not None
-    assert ctx.runtime_ports.compaction.checkpoint_sink_factory is not None
+    assert ctx.request.ports.child_event_forward_sink is not None
+    assert ctx.request.ports.compaction.history is not None
+    assert ctx.request.ports.compaction.checkpoint_sink_factory is not None

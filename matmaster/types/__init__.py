@@ -45,13 +45,14 @@ from .messages import (
     UserMessage,
 )
 from .runtime_ports import (
+    AgentRunPorts,
     BusEventSink,
     CheckpointSink,
     CheckpointSinkFactory,
     EmptySessionEventHistory,
+    InterruptChecker,
     KernelRuntimePorts,
     PlaygroundCompactionPort,
-    PlaygroundRuntimePorts,
     PreCompactionBarrier,
     SessionEventHistoryPort,
 )
@@ -61,15 +62,29 @@ from .tool_spec import ResourceClaim, ToolBinding, ToolInstance, ToolSpec
 from .topology import RuntimeTopology, SessionCapabilities, ToolPlane
 from .worker_registry import WorkerRegistry
 
-_RUNTIME_EXPORTS = frozenset({"AgentRuntimeSpec", "CompactionConfig"})
+_RUNTIME_EXPORTS = frozenset(
+    {
+        "AgentKernelSpec",
+        "AgentKernelResources",
+        "AgentKernelRuntime",
+        "CompactionConfig",
+    }
+)
 
 
 def __getattr__(name: str) -> Any:
     if name in _RUNTIME_EXPORTS:
-        from .runtime import AgentRuntimeSpec, CompactionConfig
+        from .runtime import (
+            AgentKernelResources,
+            AgentKernelRuntime,
+            AgentKernelSpec,
+            CompactionConfig,
+        )
 
         exports = {
-            "AgentRuntimeSpec": AgentRuntimeSpec,
+            "AgentKernelSpec": AgentKernelSpec,
+            "AgentKernelResources": AgentKernelResources,
+            "AgentKernelRuntime": AgentKernelRuntime,
             "CompactionConfig": CompactionConfig,
         }
         globals().update(exports)
@@ -126,15 +141,18 @@ __all__ = [
     "ToolMessage",
     "UserMessage",
     # runtime
-    "AgentRuntimeSpec",
+    "AgentRunPorts",
+    "AgentKernelSpec",
+    "AgentKernelResources",
+    "AgentKernelRuntime",
     "BusEventSink",
     "CheckpointSink",
     "CheckpointSinkFactory",
     "CompactionConfig",
     "EmptySessionEventHistory",
+    "InterruptChecker",
     "KernelRuntimePorts",
     "PlaygroundCompactionPort",
-    "PlaygroundRuntimePorts",
     "PreCompactionBarrier",
     "SessionEventHistoryPort",
     # tool runtime v2

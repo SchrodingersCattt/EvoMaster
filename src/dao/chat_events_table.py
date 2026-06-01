@@ -47,6 +47,10 @@ class ChatEventsTable(BaseTable):
                 ev['session_directory'] = content.get('session_directory')
             if content.get('session_directory_source'):
                 ev['session_directory_source'] = content.get('session_directory_source')
+            if content.get('requested_llm'):
+                ev['requested_llm'] = content.get('requested_llm')
+            if content.get('requested_model'):
+                ev['requested_model'] = content.get('requested_model')
 
         return ev
 
@@ -145,10 +149,9 @@ class ChatEventsTable(BaseTable):
         limit: int | None = None,
         order: str = 'asc',
     ) -> list[dict]:
-        """Read events for Phase 2 context assembly ports.
+        """Read events for context assembly ports.
 
-        This is a read-only helper. Phase 2A adds it for AppSessionEventsPort,
-        but no runtime path calls the port until Phase 2C.
+        Read-only helper backing ``AppSessionEventsPort.load_events``.
         """
         if order not in {'asc', 'desc'}:
             raise ValueError("order must be 'asc' or 'desc'")
@@ -397,6 +400,10 @@ class ChatEventsTable(BaseTable):
                             ev['session_directory_source'] = content.get(
                                 'session_directory_source'
                             )
+                        if content.get('requested_llm'):
+                            ev['requested_llm'] = content.get('requested_llm')
+                        if content.get('requested_model'):
+                            ev['requested_model'] = content.get('requested_model')
                     events.append(ev)
                 return events
 
@@ -458,6 +465,8 @@ class ChatEventsTable(BaseTable):
                             'session_directory_source'
                         )
                         or 'none',
+                        'requested_llm': content.get('requested_llm'),
+                        'requested_model': content.get('requested_model'),
                         **base,
                     }
                 return {
@@ -468,6 +477,8 @@ class ChatEventsTable(BaseTable):
                     'mode': 'direct',
                     'session_directory': None,
                     'session_directory_source': 'none',
+                    'requested_llm': None,
+                    'requested_model': None,
                     **base,
                 }
 

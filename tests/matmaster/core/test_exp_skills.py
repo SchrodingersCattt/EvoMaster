@@ -8,9 +8,10 @@ from unittest.mock import MagicMock, patch
 
 from matmaster.config.exp import ExpConfig
 from matmaster.core.exp import Exp
-from matmaster.core.playground import PlaygroundContext
+from matmaster.core.playground import ExecutionEnvironment
+from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.tools.tool_registry import ToolRegistry
-from matmaster.types.run_metadata import RunMetadata
+from matmaster.types.session import Session
 
 
 def _make_skill_dir(tmp_path: Path) -> Path:
@@ -43,10 +44,31 @@ def _make_mcp_yaml(tmp_path: Path) -> None:
     )
 
 
-def _mock_playground_context() -> MagicMock:
-    ctx = MagicMock(spec=PlaygroundContext)
-    ctx.metadata = RunMetadata()
-    return ctx
+def _make_ctx(
+    *,
+    session: object | None = None,
+    execution_workdir: str = "",
+) -> AgentRunContext:
+    """Build an AgentRunContext whose environment carries the test session.
+
+    ``session`` may be a ``MagicMock(spec=Session)`` (passes pydantic's
+    is_instance_of check) or a duck-typed fake. Duck-typed fakes that do not
+    satisfy the runtime-checkable ``Session`` Protocol are injected via
+    ``model_copy`` to bypass field validation, mirroring the way the Bohrium
+    path rebinds a live session post-construction.
+    """
+    env = ExecutionEnvironment(
+        workdir=Path("/tmp/test"),
+        session_type="local",
+        cache_area=Path("/tmp/cache"),
+        execution_workdir=execution_workdir,
+    )
+    if session is not None:
+        # model_copy(update=...) does not re-validate, so duck-typed fakes that
+        # do not satisfy the runtime-checkable Session Protocol are accepted
+        # too (matching how the Bohrium path rebinds a live session post-build).
+        env = env.model_copy(update={"session": session})
+    return AgentRunContext(environment=env, request=AgentRunRequest())
 
 
 class FakeRemoteSkillSession:
@@ -96,9 +118,10 @@ class TestExpInitSkillTools:
         )
         exp = Exp(cfg)
         registry = ToolRegistry()
-        ctx = _mock_playground_context()
-        ctx.session = MagicMock()
-        ctx.execution_workdir = str(tmp_path)
+        ctx = _make_ctx(
+            session=MagicMock(spec=Session),
+            execution_workdir=str(tmp_path),
+        )
 
         exp._init_skill_tools(ctx, registry)
 
@@ -118,7 +141,7 @@ class TestExpInitSkillTools:
         )
         exp = Exp(cfg)
         registry = ToolRegistry()
-        ctx = _mock_playground_context()
+        ctx = _make_ctx()
 
         exp._init_skill_tools(ctx, registry)
 
@@ -146,9 +169,10 @@ class TestExpInitSkillTools:
         )
         exp = Exp(cfg)
         registry = ToolRegistry()
-        ctx = _mock_playground_context()
-        ctx.session = MagicMock()
-        ctx.execution_workdir = str(tmp_path)
+        ctx = _make_ctx(
+            session=MagicMock(spec=Session),
+            execution_workdir=str(tmp_path),
+        )
 
         exp._init_skill_tools(ctx, registry)
 
@@ -218,9 +242,10 @@ class TestExpInitSkillTools:
         )
         exp = Exp(cfg)
         registry = ToolRegistry()
-        ctx = _mock_playground_context()
-        ctx.session = MagicMock()
-        ctx.execution_workdir = str(tmp_path)
+        ctx = _make_ctx(
+            session=MagicMock(spec=Session),
+            execution_workdir=str(tmp_path),
+        )
 
         exp._init_skill_tools(ctx, registry)
 
@@ -246,7 +271,7 @@ class TestExpInitSkillTools:
         assert async_tool._timeout == 120.0
 
     def test_passes_execution_workdir_to_lazy_mcp_connector(self, tmp_path):
-        """Connector should receive ctx.execution_workdir for path adaptor uploads."""
+        """Connector should receive env.execution_workdir for path adaptor uploads."""
         skills_root = _make_skill_dir(tmp_path)
         cache_dir = _make_cache(tmp_path)
         _make_mcp_yaml(tmp_path)
@@ -267,9 +292,8 @@ class TestExpInitSkillTools:
         )
         exp = Exp(cfg)
         registry = ToolRegistry()
-        ctx = _mock_playground_context()
-        ctx.session = MagicMock()
-        ctx.execution_workdir = "/workspace/session-1"
+        session = MagicMock(spec=Session)
+        ctx = _make_ctx(session=session, execution_workdir="/workspace/session-1")
 
         with patch("matmaster.tools.lazy_mcp.LazyMCPConnector") as mock_connector:
             exp._init_skill_tools(ctx, registry)
@@ -280,8 +304,8 @@ class TestExpInitSkillTools:
                 "calculation_preflight": "calculation",
                 "calculation_servers": ["mat_sg"],
             },
-            session=ctx.session,
-            workspace_path=ctx.execution_workdir,
+            session=ctx.environment.session,
+            workspace_path=ctx.environment.execution_workdir,
         )
 
     async def test_session_local_user_skill_root_uses_existing_registry(self, tmp_path):
@@ -313,11 +337,10 @@ class TestExpInitSkillTools:
         )
         exp = Exp(cfg)
         registry = ToolRegistry()
-        ctx = _mock_playground_context()
-        ctx.session = MagicMock()
-        ctx.session.local_user_skills_root = str(user_skill_root)
-        ctx.session.remote_project_root = None
-        ctx.execution_workdir = str(tmp_path)
+        session = MagicMock(spec=Session)
+        session.local_user_skills_root = str(user_skill_root)
+        session.remote_project_root = None
+        ctx = _make_ctx(session=session, execution_workdir=str(tmp_path))
 
         exp._init_skill_tools(ctx, registry)
 
@@ -362,9 +385,7 @@ class TestExpInitSkillTools:
         )
         exp = Exp(cfg)
         registry = ToolRegistry()
-        ctx = _mock_playground_context()
-        ctx.session = session
-        ctx.execution_workdir = str(tmp_path)
+        ctx = _make_ctx(session=session, execution_workdir=str(tmp_path))
 
         exp._init_skill_tools(ctx, registry)
 
@@ -400,10 +421,9 @@ class TestExpInitSkillTools:
         )
         exp = Exp(cfg)
         registry = ToolRegistry()
-        ctx = _mock_playground_context()
-        ctx.session = MagicMock()
-        ctx.session.local_user_skills_root = None
-        ctx.execution_workdir = str(tmp_path)
+        session = MagicMock(spec=Session)
+        session.local_user_skills_root = None
+        ctx = _make_ctx(session=session, execution_workdir=str(tmp_path))
 
         exp._init_skill_tools(ctx, registry)
 

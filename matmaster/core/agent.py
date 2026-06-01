@@ -1,12 +1,12 @@
 """AgentKernel -- pure async execution loop for the agent kernel.
 
-Consumes an AgentRuntimeSpec and executes the LLM -> hook -> tool
+Consumes an AgentKernelRuntime and executes the LLM -> hook -> tool
 -> message accumulate -> loop cycle via run_stream(), the sole public API.
 run_stream() yields BusEvent objects through the _run_items() generator.
 
 Termination conditions:
 - natural: LLM returns no tool_calls
-- max_turns: turn counter reaches spec.max_turns
+- max_turns: turn counter reaches kernel_spec.max_turns
 - cancelled: cancel_token is set (checked each turn, during stream chunks, retry
   backoff, and between serial tool_calls)
 """
@@ -44,11 +44,16 @@ from matmaster.types.events import (
     CheckpointEvent,
     FinishDetail,
     ResponseEvent,
+    ThoughtEvent,
     ToolCallEvent,
 )
 
 if TYPE_CHECKING:
-    from matmaster.types.runtime import AgentRuntimeSpec
+    from matmaster.types.runtime import (
+        AgentKernelResources,
+        AgentKernelRuntime,
+        AgentKernelSpec,
+    )
 
 from matmaster.core.hooks import (
     HookEvent,
@@ -79,37 +84,39 @@ _TERMINAL_REASON_TO_STATUS: dict[str, str] = {
 
 
 def ensure_tool_definitions(
-    spec: AgentRuntimeSpec,
+    kernel_resources: AgentKernelResources,
     state: _KernelState,
 ) -> list[dict[str, Any]] | None:
     """Resolve and cache tool definitions on kernel state."""
-    if spec.tool_catalog is None:
+    if kernel_resources.tool_catalog is None:
         return None
 
-    if spec.tool_catalog.version != state.last_catalog_version:
+    if kernel_resources.tool_catalog.version != state.last_catalog_version:
         state.cached_tool_definitions = None
-        state.last_catalog_version = spec.tool_catalog.version
+        state.last_catalog_version = kernel_resources.tool_catalog.version
 
     if state.cached_tool_definitions is None:
         from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 
         desc_ctx = None
-        if spec.runtime_topology is not None:
+        if kernel_resources.runtime_topology is not None:
             desc_ctx = ToolDescriptionContext(
-                session_kind=spec.runtime_topology.session_kind,
-                workspace_root=spec.runtime_topology.workspace_root,
-                topology=spec.runtime_topology,
+                session_kind=kernel_resources.runtime_topology.session_kind,
+                workspace_root=kernel_resources.runtime_topology.workspace_root,
+                topology=kernel_resources.runtime_topology,
             )
-        state.cached_tool_definitions = spec.tool_catalog.build_definitions(desc_ctx)
+        state.cached_tool_definitions = kernel_resources.tool_catalog.build_definitions(
+            desc_ctx
+        )
     return state.cached_tool_definitions
 
 
 class AgentKernel:
-    """Pure execution loop -- consumes AgentRuntimeSpec, no config assembly."""
+    """Pure execution loop -- consumes AgentKernelRuntime, no config assembly."""
 
     async def run_stream(
         self,
-        spec: AgentRuntimeSpec,
+        kernel_runtime: AgentKernelRuntime,
         task: str,
         history: list[Message] | None = None,
         cancel_token: CancellationToken | None = None,
@@ -123,12 +130,17 @@ class AgentKernel:
         """
         from matmaster.types.events import RunResultEvent
 
-        async with spec.llm_provider:
+        kernel_spec = kernel_runtime.spec
+        kernel_resources = kernel_runtime.resources
+
+        async with kernel_resources.llm_provider:
             last_reason: str | None = None
 
             async def _consume_and_yield():
                 nonlocal last_reason
-                async for item in self._run_items(spec, task, history, cancel_token):
+                async for item in self._run_items(
+                    kernel_spec, kernel_resources, task, history, cancel_token
+                ):
                     if item.terminal is not None:
                         reason = item.terminal.reason
                         last_reason = reason
@@ -143,17 +155,20 @@ class AgentKernel:
                             usage_vendor_by_turn=item.terminal.usage_vendor_by_turn,
                             messages=item.terminal.messages,
                             finish_detail=item.terminal.finish_detail,
+                            model=item.terminal.model,
+                            model_profile=item.terminal.model_profile,
+                            model_route=item.terminal.model_route,
                         )
                         return
                     if item.event is not None:
                         yield item.event
 
-            if spec.hook_executor is not None:
-                await spec.hook_executor.emit(
+            if kernel_resources.hook_executor is not None:
+                await kernel_resources.hook_executor.emit(
                     HookEvent.RUN_START,
                     RunContext(
-                        task_id=spec.run_identity.task_id,
-                        session_id=spec.run_identity.session_id,
+                        task_id=kernel_spec.run_identity.task_id,
+                        session_id=kernel_spec.run_identity.session_id,
                         reason="startup",
                     ),
                 )
@@ -169,17 +184,41 @@ class AgentKernel:
                         last_reason = "error"
                 raise
             finally:
-                if spec.runtime_ports.interrupt_checker is not None:
-                    spec.runtime_ports.interrupt_checker.cleanup()
-                if spec.hook_executor is not None:
-                    await spec.hook_executor.emit(
+                interrupt_checker = kernel_resources.runtime_ports.interrupt_checker
+                if interrupt_checker is not None:
+                    interrupt_checker.cleanup()
+                if kernel_resources.hook_executor is not None:
+                    await kernel_resources.hook_executor.emit(
                         HookEvent.RUN_END,
                         RunContext(
-                            task_id=spec.run_identity.task_id,
-                            session_id=spec.run_identity.session_id,
+                            task_id=kernel_spec.run_identity.task_id,
+                            session_id=kernel_spec.run_identity.session_id,
                             reason=last_reason or "error",
                         ),
                     )
+
+    @staticmethod
+    def _with_model_identity(
+        item: _KernelItem,
+        state: _KernelState,
+    ) -> _KernelItem:
+        """Attach resolved model identity to persisted LLM aggregate events."""
+        event = item.event
+        if not isinstance(event, (ThoughtEvent, ResponseEvent)):
+            return item
+        if event.stream_state != "complete":
+            return item
+        return _KernelItem(
+            event=event.model_copy(
+                update={
+                    "model": state.llm_model,
+                    "model_profile": state.llm_model_profile,
+                    "model_route": state.llm_model_route,
+                }
+            ),
+            llm_response=item.llm_response,
+            terminal=item.terminal,
+        )
 
     @staticmethod
     def _terminal(
@@ -201,12 +240,16 @@ class AgentKernel:
                 ],
                 messages=list(state.messages),
                 finish_detail=finish_detail,
+                model=state.llm_model,
+                model_profile=state.llm_model_profile,
+                model_route=state.llm_model_route,
             )
         )
 
     async def _run_items(
         self,
-        spec: AgentRuntimeSpec,
+        kernel_spec: AgentKernelSpec,
+        kernel_resources: AgentKernelResources,
         task: str,
         history: list[Message] | None,
         cancel_token: CancellationToken | None,
@@ -215,20 +258,20 @@ class AgentKernel:
 
         Yields events for streaming, AssistantState, and SkillHit.
         """
-        if spec.hook_executor is not None:
-            session_id = spec.run_identity.session_id
+        if kernel_resources.hook_executor is not None:
+            session_id = kernel_spec.run_identity.session_id
             prompt_ctx = UserPromptContext(prompt=task, session_id=session_id)
-            task = await spec.hook_executor.emit_rewrite(
+            task = await kernel_resources.hook_executor.emit_rewrite(
                 HookEvent.USER_PROMPT_SUBMIT,
                 prompt_ctx,
                 task,
             )
-            await spec.hook_executor.emit(
+            await kernel_resources.hook_executor.emit(
                 HookEvent.USER_PROMPT_SUBMIT,
                 UserPromptContext(prompt=task, session_id=session_id),
             )
 
-        turn_input = spec.turn_input
+        turn_input = kernel_spec.turn_input
         turn_images = (
             list(turn_input.attachments.images_as_parts())
             if turn_input is not None
@@ -236,17 +279,21 @@ class AgentKernel:
         )
         state = _KernelState(
             messages=[
-                SystemMessage(content=spec.system_prompt),
+                SystemMessage(content=kernel_spec.system_prompt),
                 *(history or []),
                 UserMessage(content=task, images=turn_images),
-            ]
+            ],
+            llm_model=kernel_spec.llm_model,
+            llm_model_profile=kernel_spec.llm_model_profile,
+            llm_model_route=kernel_spec.llm_model_route,
         )
 
-        checkpoint_sink = spec.runtime_ports.checkpoint_sink
-        tool_definitions = ensure_tool_definitions(spec, state)
+        checkpoint_sink = kernel_resources.runtime_ports.checkpoint_sink
+        tool_definitions = ensure_tool_definitions(kernel_resources, state)
 
         async for item in run_preflight_compaction_if_needed(
-            spec=spec,
+            kernel_spec=kernel_spec,
+            kernel_resources=kernel_resources,
             state=state,
             history=history,
             turn_input=turn_input,
@@ -255,20 +302,18 @@ class AgentKernel:
         ):
             yield item
 
-        turn_usage: dict[str, int] = {}
-
-        while state.turn < spec.max_turns:
+        while state.turn < kernel_spec.max_turns:
             if cancel_token and cancel_token.is_cancelled:
                 yield self._terminal(state, "cancelled")
                 return
 
             state.turn += 1
-            tool_definitions = ensure_tool_definitions(spec, state)
+            tool_definitions = ensure_tool_definitions(kernel_resources, state)
 
             async for item in run_runtime_compaction_if_needed(
-                spec=spec,
+                kernel_spec=kernel_spec,
+                kernel_resources=kernel_resources,
                 state=state,
-                turn_usage=turn_usage,
                 checkpoint_sink=checkpoint_sink,
                 tool_definitions=tool_definitions,
             ):
@@ -281,12 +326,12 @@ class AgentKernel:
             llm_response: LLMResponse | None = None
             try:
                 async for item in self._call_llm_streaming(
-                    spec, api_messages, tool_defs, cancel_token=cancel_token
+                    kernel_resources, api_messages, tool_defs, cancel_token=cancel_token
                 ):
                     if item.llm_response is not None:
                         llm_response = item.llm_response
                     elif item.event is not None:
-                        yield item
+                        yield self._with_model_identity(item, state)
             except _KernelStopRequested:
                 yield self._terminal(state, "cancelled")
                 return
@@ -300,13 +345,13 @@ class AgentKernel:
                 return
 
             response = llm_response
-            turn_usage = response.usage
+            state.turn_usage = response.usage
             accumulate_usage(state.total_usage, response.usage)
             state.usage_vendor_by_turn.append(
                 dict(response.usage_vendor) if response.usage_vendor else {}
             )
             turn_index = state.turn - 1
-            is_root_run = spec.run_identity.spawn_id is None
+            is_root_run = kernel_spec.run_identity.spawn_id is None
             if (
                 is_root_run
                 and response.content
@@ -319,13 +364,16 @@ class AgentKernel:
                         content=response.content,
                         stream_state="complete",
                         turn_index=turn_index,
-                        turn_usage=turn_usage,
+                        turn_usage=state.turn_usage,
                         total_usage=state.total_usage,
                         usage_vendor=response.usage_vendor or None,
+                        model=state.llm_model,
+                        model_profile=state.llm_model_profile,
+                        model_route=state.llm_model_route,
                     )
                 )
-            if spec.compactor:
-                spec.compactor.update_message_count(len(state.messages))
+            if kernel_resources.compactor:
+                kernel_resources.compactor.update_message_count(len(state.messages))
 
             if response.tool_calls:
                 validate_tool_call_ids(response.tool_calls)
@@ -380,9 +428,12 @@ class AgentKernel:
                         source="agent",
                         state=assistant_msg.model_dump(mode="json"),
                         turn_index=turn_index,
-                        turn_usage=turn_usage,
+                        turn_usage=state.turn_usage,
                         total_usage=state.total_usage,
                         finish_detail=assistant_finish_detail,
+                        model=state.llm_model,
+                        model_profile=state.llm_model_profile,
+                        model_route=state.llm_model_route,
                     )
                 )
 
@@ -397,7 +448,7 @@ class AgentKernel:
                 )
 
             # Checkpoint: check if user has queued messages to interrupt
-            interrupt_checker = spec.runtime_ports.interrupt_checker
+            interrupt_checker = kernel_resources.runtime_ports.interrupt_checker
             if interrupt_checker is not None and interrupt_checker.has_hint():
                 yield _KernelItem(
                     event=CheckpointEvent(
@@ -414,11 +465,10 @@ class AgentKernel:
                     return
 
             async for item in dispatch_tool_calls(
-                spec=spec,
-                state=state,
                 tool_calls=response.tool_calls,
-                turn_usage=turn_usage,
-                turn_index=turn_index,
+                tool_runner=kernel_resources.tool_runner,
+                max_turns=kernel_spec.max_turns,
+                state=state,
                 cancel_token=cancel_token,
             ):
                 yield item
@@ -427,7 +477,7 @@ class AgentKernel:
 
     async def _call_llm_streaming(
         self,
-        spec: AgentRuntimeSpec,
+        kernel_resources: AgentKernelResources,
         api_messages: list[dict[str, Any]],
         tool_defs: list[dict[str, Any]] | None,
         *,
@@ -435,7 +485,7 @@ class AgentKernel:
     ) -> AsyncIterator[_KernelItem]:
         """Indirection point so tests can monkey-patch the streaming call."""
         async for item in call_llm_streaming(
-            spec,
+            kernel_resources,
             api_messages,
             tool_defs,
             cancel_token=cancel_token,

@@ -10,8 +10,8 @@ from matmaster.types.errors import LLMError
 from matmaster.types.messages import AssistantMessage, ToolMessage
 from src.services.chat_history import ChatHistoryConverter
 from tests.matmaster.core.agent_kernel_test_helpers import (
-    _make_spec,
     _make_tool_registry,
+    make_kernel_runtime,
 )
 
 
@@ -112,10 +112,12 @@ class TestToolProtocolGuardrailsIntegration:
         provider._client = mock_client
 
         registry, tools = _make_tool_registry(tool_names=["test_tool"])
-        spec = _make_spec(provider=provider, tool_registry=registry, max_turns=2)
+        kernel_runtime = make_kernel_runtime(
+            provider=provider, tool_registry=registry, max_turns=2
+        )
         kernel = AgentKernel()
 
-        async for _event in kernel.run_stream(spec, "run test"):
+        async for _event in kernel.run_stream(kernel_runtime, "run test"):
             pass
 
         assert tools[0].calls == [("test_tool", {"x": 1})]
@@ -152,10 +154,12 @@ class TestToolProtocolGuardrailsIntegration:
         provider._client = mock_client
 
         registry, _ = _make_tool_registry(tool_names=["test_tool"])
-        spec = _make_spec(provider=provider, tool_registry=registry, max_turns=2)
+        kernel_runtime = make_kernel_runtime(
+            provider=provider, tool_registry=registry, max_turns=2
+        )
         kernel = AgentKernel()
 
-        async for _event in kernel.run_stream(spec, "run test"):
+        async for _event in kernel.run_stream(kernel_runtime, "run test"):
             pass
 
         second_call_kwargs = mock_client.chat.completions.create.await_args_list[
@@ -171,7 +175,7 @@ class TestToolProtocolGuardrailsIntegration:
     async def test_malformed_history_fails_before_provider_call(self) -> None:
         provider = _NoCallProvider()
         registry, _ = _make_tool_registry(tool_names=["test_tool"])
-        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel_runtime = make_kernel_runtime(provider=provider, tool_registry=registry)
         kernel = AgentKernel()
         history = [
             AssistantMessage(content=None),
@@ -179,7 +183,9 @@ class TestToolProtocolGuardrailsIntegration:
         ]
 
         with pytest.raises(LLMError, match="orphan tool message"):
-            async for _event in kernel.run_stream(spec, "next turn", history=history):
+            async for _event in kernel.run_stream(
+                kernel_runtime, "next turn", history=history
+            ):
                 pass
 
         assert provider.call_count == 0
@@ -190,7 +196,7 @@ class TestToolProtocolGuardrailsIntegration:
     ) -> None:
         provider = _NoCallProvider()
         registry, _ = _make_tool_registry(tool_names=["test_tool"])
-        spec = _make_spec(provider=provider, tool_registry=registry)
+        kernel_runtime = make_kernel_runtime(provider=provider, tool_registry=registry)
         kernel = AgentKernel()
         history = [
             AssistantMessage(
@@ -204,7 +210,9 @@ class TestToolProtocolGuardrailsIntegration:
         ]
 
         with pytest.raises(LLMError, match="missing tool_result ids"):
-            async for _event in kernel.run_stream(spec, "next turn", history=history):
+            async for _event in kernel.run_stream(
+                kernel_runtime, "next turn", history=history
+            ):
                 pass
 
         assert provider.call_count == 0
@@ -223,7 +231,9 @@ class TestToolProtocolGuardrailsIntegration:
         provider._client = mock_client
 
         registry, _ = _make_tool_registry(tool_names=["test_tool"])
-        spec = _make_spec(provider=provider, tool_registry=registry, max_turns=1)
+        kernel_runtime = make_kernel_runtime(
+            provider=provider, tool_registry=registry, max_turns=1
+        )
         kernel = AgentKernel()
 
         history = ChatHistoryConverter.events_to_messages(
@@ -257,7 +267,9 @@ class TestToolProtocolGuardrailsIntegration:
         assert isinstance(history[1], AssistantMessage)
         assert history[1].content is None
 
-        async for _event in kernel.run_stream(spec, "next turn", history=history):
+        async for _event in kernel.run_stream(
+            kernel_runtime, "next turn", history=history
+        ):
             pass
 
         first_call_kwargs = mock_client.chat.completions.create.await_args.kwargs

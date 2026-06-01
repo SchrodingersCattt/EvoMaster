@@ -61,7 +61,7 @@ class SSHSession:
         self._client: paramiko.SSHClient | None = None
         self._connect_lock = threading.Lock()
         self._sftp_pool: SFTPPool | None = None
-        self._workdir: str = config.working_dir
+        self._workspace_path: str = config.workspace_path
 
         # Session lifecycle
         self._is_open: bool = False
@@ -105,9 +105,9 @@ class SSHSession:
 
         self._connect()
         self._sftp_pool = SFTPPool(self._client.get_transport())
-        quoted_workdir = shlex.quote(self._workdir)
+        quoted_workspace_path = shlex.quote(self._workspace_path)
         init_result = self._ssh_exec(
-            f"mkdir -p {quoted_workdir} && test -d {quoted_workdir}"
+            f"mkdir -p {quoted_workspace_path} && test -d {quoted_workspace_path}"
         )
         if init_result.get("exit_code") != 0:
             detail = init_result.get("stderr") or init_result.get("stdout") or ""
@@ -123,7 +123,8 @@ class SSHSession:
                         pass
                 self._client = None
             raise RuntimeError(
-                f"Failed to initialize SSH working directory {self._workdir}: {detail}"
+                f"Failed to initialize SSH working directory "
+                f"{self._workspace_path}: {detail}"
             )
         self._is_open = True
         self.logger.info(
@@ -172,7 +173,8 @@ class SSHSession:
         transport = self._client.get_transport()
         channel = transport.open_session()
         wrapped = (
-            f"bash -l -c {shlex.quote(f'cd {shlex.quote(self._workdir)} && {command}')}"
+            f"bash -l -c "
+            f"{shlex.quote(f'cd {shlex.quote(self._workspace_path)} && {command}')}"
         )
         channel.exec_command(wrapped)
         if cancel_token:
@@ -199,7 +201,7 @@ class SSHSession:
                     "stdout": out,
                     "stderr": f"Command timed out after {timeout}s",
                     "exit_code": -1,
-                    "working_dir": self._workdir,
+                    "working_dir": self._workspace_path,
                     "output": out + f"\nCommand timed out after {timeout}s",
                 }
             if cancel_token and cancel_token.wait(0.05):
@@ -209,7 +211,7 @@ class SSHSession:
                     "stdout": out,
                     "stderr": "Command cancelled.",
                     "exit_code": 130,
-                    "working_dir": self._workdir,
+                    "working_dir": self._workspace_path,
                     "output": out + "\nCommand cancelled.",
                 }
             elif not cancel_token:
@@ -228,7 +230,7 @@ class SSHSession:
             "stdout": out,
             "stderr": err,
             "exit_code": exit_code,
-            "working_dir": self._workdir,
+            "working_dir": self._workspace_path,
             "output": out + err,
         }
 

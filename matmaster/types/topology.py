@@ -57,8 +57,7 @@ class SessionCapabilities(BaseModel):
     """Describes what a session implementation can do.
 
     Used by ToolRunner/ToolScheduler to decide whether a tool can execute
-    in the current session. Phase 34 will wire this into real Session
-    implementations.
+    in the current session.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -74,7 +73,7 @@ class RuntimeTopology(BaseModel):
     """Execution topology for an agent run.
 
     Captures the session kind, workspace roots, active tool planes,
-    and session capabilities. Built by Exp.assemble() and consumed
+    and session capabilities. Built by Exp.build_runtime() and consumed
     by ToolRunner/ToolScheduler.
     """
 

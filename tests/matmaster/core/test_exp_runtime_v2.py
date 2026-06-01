@@ -1,7 +1,4 @@
-"""Tests for Exp.build_runtime() FullToolRunner injection and Exp.run_stream().
-
-Phase 34 Plan 1 Task 2: ESIN-01, ESIN-04, ESIN-05.
-"""
+"""Tests for Exp.build_runtime() FullToolRunner injection and Exp.run_stream()."""
 
 from __future__ import annotations
 
@@ -13,6 +10,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from matmaster.core.playground import ExecutionEnvironment
+from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.messages import (
     LLMResponse,
@@ -99,10 +98,9 @@ async def test_build_runtime_uses_runtime_ports_history(
 ) -> None:
     from matmaster.config.exp import ExpConfig
     from matmaster.core.exp import Exp
-    from matmaster.core.playground import PlaygroundContext
     from matmaster.types.runtime_ports import (
+        AgentRunPorts,
         PlaygroundCompactionPort,
-        PlaygroundRuntimePorts,
     )
 
     class RuntimeHistory:
@@ -122,23 +120,28 @@ async def test_build_runtime_uses_runtime_ports_history(
         def latest_scope_event_id(self):
             return 25
 
-    ctx = PlaygroundContext(
-        workdir=tmp_path,
-        execution_workdir=str(tmp_path),
-        session_type="local",
-        cache_area=tmp_path / "cache",
-        llm_provider=_MockProvider(),
-        runtime_ports=PlaygroundRuntimePorts(
-            compaction=PlaygroundCompactionPort(history=RuntimeHistory()),
+    ctx = AgentRunContext(
+        environment=ExecutionEnvironment(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+        ),
+        request=AgentRunRequest(
+            llm_provider=_MockProvider(),
+            ports=AgentRunPorts(
+                compaction=PlaygroundCompactionPort(history=RuntimeHistory()),
+            ),
         ),
     )
 
     runtime = await Exp(ExpConfig(name="test")).build_runtime(ctx)
 
-    assert runtime.spec.context_assembler is runtime.spec.compactor._context_assembler
-    assert runtime.spec.session_events_port is not None
-    assert runtime.spec.session_jobs_port is not None
-    assert runtime.spec.compactor._runtime_covered_until_provider() == 25
+    assert runtime.kernel_runtime.resources.compactor is not None
+    assert (
+        runtime.kernel_runtime.resources.compactor._runtime_covered_until_provider()
+        == 25
+    )
 
 
 @pytest.mark.asyncio
@@ -147,19 +150,23 @@ async def test_build_runtime_missing_runtime_history_has_no_scope_boundary(
 ) -> None:
     from matmaster.config.exp import ExpConfig
     from matmaster.core.exp import Exp
-    from matmaster.core.playground import PlaygroundContext
 
-    ctx = PlaygroundContext(
-        workdir=tmp_path,
-        execution_workdir=str(tmp_path),
-        session_type="local",
-        cache_area=tmp_path / "cache",
-        llm_provider=_MockProvider(),
+    ctx = AgentRunContext(
+        environment=ExecutionEnvironment(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+        ),
+        request=AgentRunRequest(llm_provider=_MockProvider()),
     )
 
     runtime = await Exp(ExpConfig(name="test")).build_runtime(ctx)
 
-    assert runtime.spec.compactor._runtime_covered_until_provider() is None
+    assert (
+        runtime.kernel_runtime.resources.compactor._runtime_covered_until_provider()
+        is None
+    )
 
 
 @pytest.mark.asyncio
@@ -169,25 +176,28 @@ async def test_build_runtime_passes_turn_input_to_kernel_spec(
     from matmaster.config.exp import ExpConfig
     from matmaster.context.sources.turn_input import TurnInput
     from matmaster.core.exp import Exp
-    from matmaster.core.playground import PlaygroundContext
 
     turn_input = TurnInput.from_values(
         user_text="current task",
         files=["https://oss.example.com/chat/current.cif"],
         pre_turn_history_event_id=12,
     )
-    ctx = PlaygroundContext(
-        workdir=tmp_path,
-        execution_workdir=str(tmp_path),
-        session_type="local",
-        cache_area=tmp_path / "cache",
-        llm_provider=_MockProvider(),
-        metadata=RunMetadata(turn_input=turn_input),
+    ctx = AgentRunContext(
+        environment=ExecutionEnvironment(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+        ),
+        request=AgentRunRequest(
+            llm_provider=_MockProvider(),
+            turn_input=turn_input,
+        ),
     )
 
     runtime = await Exp(ExpConfig(name="test")).build_runtime(ctx)
 
-    assert runtime.spec.turn_input == turn_input
+    assert runtime.kernel_runtime.spec.turn_input == turn_input
 
 
 def _make_playground_context(
@@ -196,18 +206,17 @@ def _make_playground_context(
     session: Any = None,
     llm_provider: Any = None,
 ) -> Any:
-    """Build a minimal PlaygroundContext-like object."""
-    from matmaster.core.playground import PlaygroundContext
-
-    ctx = PlaygroundContext(
-        workdir=Path(workdir),
-        session_type="local",
-        cache_area=Path("/tmp/test-cache"),
-        execution_workdir=execution_workdir,
-        session=session or _MockSession(),
-        llm_provider=llm_provider or _MockProvider(),
+    """Build a minimal AgentRunContext for build_runtime tests."""
+    return AgentRunContext(
+        environment=ExecutionEnvironment(
+            workdir=Path(workdir),
+            session_type="local",
+            cache_area=Path("/tmp/test-cache"),
+            execution_workdir=execution_workdir,
+            session=session or _MockSession(),
+        ),
+        request=AgentRunRequest(llm_provider=llm_provider or _MockProvider()),
     )
-    return ctx
 
 
 def _make_exp_config(**overrides: Any) -> Any:
@@ -242,8 +251,8 @@ class TestBuildRuntimeFullToolRunner:
 
         runtime = await exp.build_runtime(ctx)
 
-        assert runtime.spec.tool_runner is not None
-        assert isinstance(runtime.spec.tool_runner, FullToolRunner)
+        assert runtime.kernel_runtime.resources.tool_runner is not None
+        assert isinstance(runtime.kernel_runtime.resources.tool_runner, FullToolRunner)
 
     @pytest.mark.asyncio
     async def test_spec_has_tool_catalog(self) -> None:
@@ -257,8 +266,8 @@ class TestBuildRuntimeFullToolRunner:
 
         runtime = await exp.build_runtime(ctx)
 
-        assert runtime.spec.tool_catalog is not None
-        assert isinstance(runtime.spec.tool_catalog, ToolCatalog)
+        assert runtime.kernel_runtime.resources.tool_catalog is not None
+        assert isinstance(runtime.kernel_runtime.resources.tool_catalog, ToolCatalog)
 
     @pytest.mark.asyncio
     async def test_build_runtime_identity_uses_explicit_session_id(self) -> None:
@@ -266,17 +275,22 @@ class TestBuildRuntimeFullToolRunner:
 
         config = _make_exp_config()
         exp = Exp(config)
-        ctx = _make_playground_context().model_copy(
+        base = _make_playground_context()
+        ctx = base.model_copy(
             update={
-                "session_id": "sess-explicit",
-                "metadata": RunMetadata(task_id="task-1"),
+                "environment": base.environment.model_copy(
+                    update={
+                        "session_id": "sess-explicit",
+                        "metadata": RunMetadata(task_id="task-1"),
+                    }
+                ),
             }
         )
 
         runtime = await exp.build_runtime(ctx)
 
-        assert runtime.spec.run_identity.task_id == "task-1"
-        assert runtime.spec.run_identity.session_id == "sess-explicit"
+        assert runtime.kernel_runtime.spec.run_identity.task_id == "task-1"
+        assert runtime.kernel_runtime.spec.run_identity.session_id == "sess-explicit"
 
     @pytest.mark.asyncio
     async def test_spec_has_runtime_topology(self) -> None:
@@ -290,8 +304,10 @@ class TestBuildRuntimeFullToolRunner:
 
         runtime = await exp.build_runtime(ctx)
 
-        assert runtime.spec.runtime_topology is not None
-        assert isinstance(runtime.spec.runtime_topology, RuntimeTopology)
+        assert runtime.kernel_runtime.resources.runtime_topology is not None
+        assert isinstance(
+            runtime.kernel_runtime.resources.runtime_topology, RuntimeTopology
+        )
 
     @pytest.mark.asyncio
     async def test_build_runtime_derives_active_planes_for_local_session(self) -> None:
@@ -304,7 +320,7 @@ class TestBuildRuntimeFullToolRunner:
         ctx = _make_playground_context()
 
         runtime = await exp.build_runtime(ctx)
-        topology = runtime.spec.runtime_topology
+        topology = runtime.kernel_runtime.resources.runtime_topology
 
         assert topology.active_planes == frozenset(
             {
@@ -336,7 +352,7 @@ class TestBuildRuntimeFullToolRunner:
         ctx = _make_playground_context(session=_ReadableSession())
 
         runtime = await exp.build_runtime(ctx)
-        results = await runtime.spec.tool_runner.execute_batch(
+        results = await runtime.kernel_runtime.resources.tool_runner.execute_batch(
             [
                 ToolCallData(
                     id="c1",
@@ -350,7 +366,7 @@ class TestBuildRuntimeFullToolRunner:
 
     @pytest.mark.asyncio
     async def test_topology_has_correct_paths(self) -> None:
-        """RuntimeTopology paths match PlaygroundContext."""
+        """RuntimeTopology paths match the ExecutionEnvironment."""
         from matmaster.core.exp import Exp
 
         config = _make_exp_config()
@@ -361,7 +377,7 @@ class TestBuildRuntimeFullToolRunner:
         )
 
         runtime = await exp.build_runtime(ctx)
-        topology = runtime.spec.runtime_topology
+        topology = runtime.kernel_runtime.resources.runtime_topology
 
         assert topology.control_root == "/tmp/ctrl"
         assert topology.workspace_root == "/tmp/exec"
@@ -378,7 +394,7 @@ class TestBuildRuntimeFullToolRunner:
         ctx = _make_playground_context(session=session)
 
         runtime = await exp.build_runtime(ctx)
-        roots = runtime.spec.runtime_topology.path_access_roots
+        roots = runtime.kernel_runtime.resources.runtime_topology.path_access_roots
 
         assert any(
             root.root == "/personal/.matmaster/skills"
@@ -399,7 +415,7 @@ class TestBuildRuntimeFullToolRunner:
         ctx = _make_playground_context(session=session)
 
         runtime = await exp.build_runtime(ctx)
-        roots = runtime.spec.runtime_topology.path_access_roots
+        roots = runtime.kernel_runtime.resources.runtime_topology.path_access_roots
 
         assert any(
             root.root == "/personal/.matmaster/skills"
@@ -414,12 +430,17 @@ class TestBuildRuntimeFullToolRunner:
 
         config = _make_exp_config()
         exp = Exp(config)
-        ctx = _make_playground_context().with_bohrium(
-            BohriumRuntimeSnapshot(remote_workspace_root="/share")
+        base = _make_playground_context()
+        ctx = base.model_copy(
+            update={
+                "environment": base.environment.with_bohrium(
+                    BohriumRuntimeSnapshot(remote_workspace_root="/share")
+                ),
+            }
         )
 
         runtime = await exp.build_runtime(ctx)
-        roots = runtime.spec.runtime_topology.path_access_roots
+        roots = runtime.kernel_runtime.resources.runtime_topology.path_access_roots
 
         assert any(
             root.root == "/share/.matmaster"
@@ -440,7 +461,7 @@ class TestBuildRuntimeFullToolRunner:
         ctx = _make_playground_context(session=session)
 
         runtime = await exp.build_runtime(ctx)
-        registry = runtime.spec.tool_catalog.registry
+        registry = runtime.kernel_runtime.resources.tool_catalog.registry
         glob_tool = registry.get_raw("Glob")
         grep_tool = registry.get_raw("Grep")
 
@@ -454,37 +475,42 @@ class TestBuildRuntimeFullToolRunner:
 
         config = _make_exp_config()
         exp = Exp(config)
-        ctx = _make_playground_context().model_copy(
+        base = _make_playground_context()
+        ctx = base.model_copy(
             update={
-                "metadata": RunMetadata(
-                    bohrium_rebuild_events=(
-                        {
-                            "action": "submit",
-                            "job_id": "job-1",
-                            "job_name": "alpha",
-                            "status": "Submitted",
-                            "cached": False,
-                        },
-                        {
-                            "action": "poll",
-                            "job_id": "job-1",
-                            "status": "Running",
-                            "cached": False,
-                        },
-                        {
-                            "action": "poll",
-                            "job_id": "job-1",
-                            "status": "Running",
-                            "cached": True,
-                        },
-                    )
-                )
+                "request": base.request.model_copy(
+                    update={
+                        "bohrium_rebuild_events": (
+                            {
+                                "action": "submit",
+                                "job_id": "job-1",
+                                "job_name": "alpha",
+                                "status": "Submitted",
+                                "cached": False,
+                            },
+                            {
+                                "action": "poll",
+                                "job_id": "job-1",
+                                "status": "Running",
+                                "cached": False,
+                            },
+                            {
+                                "action": "poll",
+                                "job_id": "job-1",
+                                "status": "Running",
+                                "cached": True,
+                            },
+                        )
+                    }
+                ),
             }
         )
 
         runtime = asyncio.run(exp.build_runtime(ctx))
 
-        registry = runtime.spec.tool_runner.state.get("bohrium_job_registry")
+        registry = runtime.kernel_runtime.resources.tool_runner.state.get(
+            "bohrium_job_registry"
+        )
         assert registry is not None
         rec = registry.get("job-1")
         assert rec is not None
@@ -499,7 +525,7 @@ class TestBuildRuntimeFullToolRunner:
     ) -> None:
         from matmaster.core.exp import Exp
         from matmaster.types.figures import FigureUploadConfig
-        from matmaster.types.runtime_ports import FigureUploadPort
+        from matmaster.types.runtime_ports import AgentRunPorts, FigureUploadPort
 
         figure_upload_config = FigureUploadConfig(
             session_id="sess-1",
@@ -509,13 +535,24 @@ class TestBuildRuntimeFullToolRunner:
         )
         config = _make_exp_config()
         exp = Exp(config)
-        ctx = _make_playground_context().with_runtime_port(
-            figure_upload=FigureUploadPort(config=figure_upload_config)
+        base = _make_playground_context()
+        ctx = base.model_copy(
+            update={
+                "request": base.request.model_copy(
+                    update={
+                        "ports": AgentRunPorts(
+                            figure_upload=FigureUploadPort(config=figure_upload_config)
+                        )
+                    }
+                ),
+            }
         )
 
         runtime = await exp.build_runtime(ctx)
 
-        stored = runtime.spec.tool_runner.state.get("figure_upload_config")
+        stored = runtime.kernel_runtime.resources.tool_runner.state.get(
+            "figure_upload_config"
+        )
         assert stored is figure_upload_config
 
 
@@ -617,19 +654,19 @@ class TestRunStream:
         observed: dict[str, Any] = {}
 
         async def fake_kernel_run_stream(
-            spec: Any,
+            kernel_runtime: Any,
             task: str,
             history: list[Any] | None = None,
             cancel_token: Any = None,
         ) -> AsyncIterator[Any]:
-            observed["spec"] = spec
+            observed["kernel_runtime"] = kernel_runtime
             observed["task"] = task
             observed["history"] = history
             observed["cancel_token"] = cancel_token
             yield MagicMock(type="test.event")
 
         runtime = MagicMock()
-        runtime.spec = MagicMock(tool_catalog=catalog)
+        runtime.kernel_runtime = MagicMock(resources=MagicMock(tool_catalog=catalog))
         runtime.kernel = MagicMock()
         runtime.kernel.run_stream = fake_kernel_run_stream
 
@@ -644,7 +681,7 @@ class TestRunStream:
             events.append(event)
 
         assert len(events) == 1
-        assert ctx.session._cancel_token is controller.token
+        assert ctx.environment.session._cancel_token is controller.token
         catalog.inject_cancel_token.assert_called_once_with(controller.token)
         assert observed["task"] == "test task"
         assert observed["cancel_token"] is controller.token
@@ -727,39 +764,25 @@ class TestSkillOverlayCatalog:
 
 
 class TestBuildRuntimeCompactorEventSink:
-    """Compactor creation uses event_sink=None (bus parameter removed in Phase 36)."""
+    """Compactor creation uses event_sink=None."""
 
     @pytest.mark.asyncio
     async def test_compactor_uses_event_sink(self) -> None:
         """Compactor created with event_sink=None for _run_items() injection."""
-        from matmaster.config.exp import CompactionConfig
         from matmaster.core.exp import Exp
 
-        compaction_cfg = CompactionConfig(
-            context_limit=128000,
-            trigger_ratio=0.9,
-        )
         config = _make_exp_config()
-        # Manually override compaction in the assembled spec
         exp = Exp(config)
         ctx = _make_playground_context()
 
-        # Patch assemble to return spec with compaction enabled
-        original_assemble = exp.assemble
-
-        async def patched_assemble(ctx):
-            spec = await original_assemble(ctx)
-            return spec.model_copy(update={"compaction": compaction_cfg})
-
-        exp.assemble = patched_assemble
-
         runtime = await exp.build_runtime(ctx)
 
+        compactor = runtime.kernel_runtime.resources.compactor
         # Compactor should exist and have _event_sink attribute
-        assert runtime.spec.compactor is not None
-        assert hasattr(runtime.spec.compactor, "_event_sink")
+        assert compactor is not None
+        assert hasattr(compactor, "_event_sink")
         # event_sink should be None (set later by _run_items)
-        assert runtime.spec.compactor._event_sink is None
+        assert compactor._event_sink is None
 
 
 # ── Active planes with new CC tool names ─────────────────
@@ -776,20 +799,24 @@ class TestActivePlanesNewNames:
         """WebSearch in builtin_cfg activates EXTERNAL_SERVICE plane."""
         from matmaster.config.exp import ExpConfig
         from matmaster.core.exp import Exp
-        from matmaster.core.playground import PlaygroundContext
         from matmaster.types.topology import ToolPlane
 
         config = ExpConfig(name="test", tools={"builtin": ["WebSearch"]})
         exp = Exp(config)
-        ctx = PlaygroundContext(
-            workdir=tmp_path,
-            execution_workdir=str(tmp_path / "exec"),
-            session_type="local",
-            cache_area=tmp_path / "cache",
-            session=None,
-            llm_provider=_MockProvider(),
+        ctx = AgentRunContext(
+            environment=ExecutionEnvironment(
+                workdir=tmp_path,
+                execution_workdir=str(tmp_path / "exec"),
+                session_type="local",
+                cache_area=tmp_path / "cache",
+                session=None,
+            ),
+            request=AgentRunRequest(llm_provider=_MockProvider()),
         )
 
         runtime = await exp.build_runtime(ctx)
 
-        assert ToolPlane.EXTERNAL_SERVICE in runtime.spec.runtime_topology.active_planes
+        assert (
+            ToolPlane.EXTERNAL_SERVICE
+            in runtime.kernel_runtime.resources.runtime_topology.active_planes
+        )

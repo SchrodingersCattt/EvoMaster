@@ -43,6 +43,9 @@ class ThoughtEvent(EventBase):
     token_count: int = 0
     context: str | None = None  # e.g. 'step_execution'
     reasoning_content: str | None = None
+    model: str | None = None
+    model_profile: str | None = None
+    model_route: str | None = None
 
 
 class ResponseEvent(EventBase):
@@ -56,6 +59,9 @@ class ResponseEvent(EventBase):
     turn_usage: dict[str, int] = Field(default_factory=dict)
     total_usage: dict[str, int] = Field(default_factory=dict)
     usage_vendor: dict[str, Any] | None = None
+    model: str | None = None
+    model_profile: str | None = None
+    model_route: str | None = None
 
 
 class ToolCallEvent(EventBase):
@@ -124,6 +130,9 @@ class RunResultEvent(EventBase):
     usage: dict[str, int] = Field(default_factory=dict)
     usage_vendor_by_turn: list[dict[str, Any]] = Field(default_factory=list)
     finish_detail: FinishDetail | None = None
+    model: str | None = None
+    model_profile: str | None = None
+    model_route: str | None = None
     # exclude=True: messages carries the full conversation transcript
     # (including system prompt) for internal drain consumers only.
     # model_dump() excludes it, so SSE/frontend never sees it.
@@ -147,6 +156,9 @@ class AssistantStateEvent(EventBase):
     turn_usage: dict[str, int] = Field(default_factory=dict)
     total_usage: dict[str, int] = Field(default_factory=dict)
     finish_detail: FinishDetail | None = None
+    model: str | None = None
+    model_profile: str | None = None
+    model_route: str | None = None
 
 
 class CheckpointEvent(EventBase):

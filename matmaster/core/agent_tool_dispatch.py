@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Sequence
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from matmaster.core.kernel_items import _KernelItem
 from matmaster.core.tool_runner import ToolExecutionContext
@@ -14,7 +14,6 @@ from matmaster.types.messages import ToolCallData, ToolMessage
 
 if TYPE_CHECKING:
     from matmaster.core.kernel_items import _KernelState
-    from matmaster.types.runtime import AgentRuntimeSpec
 
 
 def validate_tool_call_ids(tool_calls: list[ToolCallData]) -> None:
@@ -42,24 +41,24 @@ def accumulate_usage(total: dict[str, int], delta: dict[str, int]) -> None:
 
 async def dispatch_tool_calls(
     *,
-    spec: AgentRuntimeSpec,
-    state: _KernelState,
     tool_calls: Sequence[ToolCallData],
-    turn_usage: dict,
-    turn_index: int,
+    tool_runner: Any,
+    max_turns: int,
+    state: _KernelState,
     cancel_token: CancellationToken | None,
 ) -> AsyncIterator[_KernelItem]:
     """Execute the turn's tool calls, append tool messages, emit events."""
-    if spec.tool_runner is None:
-        raise RuntimeError("No tool_runner in AgentRuntimeSpec")
+    if tool_runner is None:
+        raise RuntimeError("No tool_runner in kernel resources")
 
     exec_ctx = ToolExecutionContext(
         turn=state.turn,
-        max_turns=spec.max_turns,
+        max_turns=max_turns,
         cancel_token=cancel_token,
     )
-    runner_results = await spec.tool_runner.execute_batch(tool_calls, exec_ctx)
+    runner_results = await tool_runner.execute_batch(tool_calls, exec_ctx)
 
+    turn_index = state.turn - 1
     for tc, tool_result in runner_results:
         state.messages.append(
             ToolMessage(
@@ -77,7 +76,7 @@ async def dispatch_tool_calls(
                 status=tool_result.status,
                 payload=tool_result.payload,
                 turn_index=turn_index,
-                turn_usage=turn_usage,
+                turn_usage=state.turn_usage,
                 total_usage=state.total_usage,
             )
         )

@@ -42,6 +42,8 @@ class ChatEventsService:
             'workspace_paths',
             'session_directory',
             'session_directory_source',
+            'requested_llm',
+            'requested_model',
         )
         if (
             source == 'User'
@@ -61,6 +63,10 @@ class ChatEventsService:
                 content['session_directory_source'] = payload[
                     'session_directory_source'
                 ]
+            if payload.get('requested_llm'):
+                content['requested_llm'] = payload['requested_llm']
+            if payload.get('requested_model'):
+                content['requested_model'] = payload['requested_model']
         task_id = payload.get('task_id')
         invocation_id = payload.get('invocation_id')
         self.table.add_event(

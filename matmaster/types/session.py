@@ -32,13 +32,10 @@ class SessionConfig(BaseModel):
     Playground should pass the correct workspace_path at creation time.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     timeout: int = Field(default=300, description="Default execution timeout (seconds)")
     workspace_path: str = Field(default="/share", description="Workspace root path")
-    working_dir: str = Field(
-        default="/share", description="Working directory inside session"
-    )
 
 
 class LocalSessionConfig(SessionConfig):

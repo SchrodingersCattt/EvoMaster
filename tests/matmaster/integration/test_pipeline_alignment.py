@@ -14,7 +14,8 @@ from typing import Any
 from matmaster.config.exp import ExpConfig
 from matmaster.core.agent import AgentKernel
 from matmaster.core.exp import Exp
-from matmaster.core.playground import PlaygroundContext
+from matmaster.core.playground import ExecutionEnvironment
+from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.types.messages import LLMResponse, StreamChunk
 from matmaster.types.tool_spec import ResourceClaim
 from matmaster.types.topology import ToolPlane
@@ -112,24 +113,28 @@ class TestEventSequenceAlignment:
         Expected: thought -> tool_call -> tool_result -> thought -> run_result
         """
         mock_llm = _ToolCallThenFinishLLM()
-        pg_ctx = PlaygroundContext(
-            workdir=tmp_path / "workspace",
-            session_type="local",
-            cache_area=tmp_path / "cache",
-            llm_provider=mock_llm,
+        ctx = AgentRunContext(
+            environment=ExecutionEnvironment(
+                workdir=tmp_path / "workspace",
+                session_type="local",
+                cache_area=tmp_path / "cache",
+            ),
+            request=AgentRunRequest(llm_provider=mock_llm),
         )
         tool = _SimpleTool()
 
         config = ExpConfig(name="direct")
         exp = Exp(config)
-        runtime = await exp.build_runtime(pg_ctx)
+        runtime = await exp.build_runtime(ctx)
         # Register test tool via catalog overlay for version-bumped injection
-        runtime.spec.tool_catalog.register_overlay(tool, source="test")
+        runtime.kernel_runtime.resources.tool_catalog.register_overlay(
+            tool, source="test"
+        )
 
         # Collect events from kernel.run_stream() generator
         kernel = AgentKernel()
         events = []
-        async for event in kernel.run_stream(runtime.spec, "alignment test"):
+        async for event in kernel.run_stream(runtime.kernel_runtime, "alignment test"):
             events.append(event)
 
         # Extract event type sequence

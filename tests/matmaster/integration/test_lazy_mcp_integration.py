@@ -8,25 +8,45 @@ Does NOT require real MCP connections.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import yaml as _yaml
 
 from matmaster.config.exp import ExpConfig, ExpSkillsConfig
 from matmaster.core.exp import Exp
-from matmaster.core.playground import PlaygroundContext
+from matmaster.core.playground import ExecutionEnvironment
+from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import normalize_tool_result
-from matmaster.types.run_metadata import RunMetadata
 
 
-def _mock_playground_context(
+def _run_context(
     *,
+    execution_workdir: str,
     active_skills: frozenset[str] = frozenset(),
-) -> MagicMock:
-    ctx = MagicMock(spec=PlaygroundContext)
-    ctx.metadata = RunMetadata(active_skills=active_skills)
-    return ctx
+) -> AgentRunContext:
+    """Build an AgentRunContext exercising the same fields _init_skill_tools reads.
+
+    _init_skill_tools reads ``ctx.environment.session``,
+    ``ctx.environment.execution_workdir`` and ``ctx.request.active_skills``.
+
+    session is left as None: the skill roots in these tests come entirely from
+    the ``skills_root`` config, and a session contributes only local/remote
+    skill roots (none here), so None is behaviorally equivalent to the old
+    MagicMock session while satisfying ExecutionEnvironment's strict
+    ``Session | None`` typing.
+    """
+    return AgentRunContext(
+        environment=ExecutionEnvironment(
+            workdir=Path(execution_workdir),
+            session_type="local",
+            cache_area=Path(execution_workdir),
+            execution_workdir=execution_workdir,
+            session=None,
+        ),
+        request=AgentRunRequest(active_skills=active_skills),
+    )
 
 
 async def _execute_use_skill(
@@ -97,9 +117,7 @@ class TestLazyMCPIntegration:
         exp = Exp(cfg)
         registry = ToolRegistry()
 
-        ctx = _mock_playground_context()
-        ctx.session = MagicMock()
-        ctx.execution_workdir = str(tmp_path)
+        ctx = _run_context(execution_workdir=str(tmp_path))
 
         # Initialize skill tools
         exp._init_skill_tools(ctx, registry)
@@ -152,9 +170,7 @@ class TestLazyMCPIntegration:
         )
         exp = Exp(cfg)
         registry = ToolRegistry()
-        ctx = _mock_playground_context()
-        ctx.session = MagicMock()
-        ctx.execution_workdir = str(tmp_path)
+        ctx = _run_context(execution_workdir=str(tmp_path))
 
         exp._init_skill_tools(ctx, registry)
 
@@ -189,9 +205,10 @@ class TestLazyMCPIntegration:
         # ---- turn 1 ----
         exp1 = Exp(cfg)
         registry1 = ToolRegistry()
-        ctx1 = _mock_playground_context(active_skills=frozenset(active_skills))
-        ctx1.session = MagicMock()
-        ctx1.execution_workdir = str(tmp_path)
+        ctx1 = _run_context(
+            execution_workdir=str(tmp_path),
+            active_skills=frozenset(active_skills),
+        )
         exp1._init_skill_tools(ctx1, registry1)
         assert "mat_sg_build_bulk" not in registry1
         result = await _execute_use_skill(registry1, skill_name="test-skill")
@@ -202,9 +219,10 @@ class TestLazyMCPIntegration:
         # ---- turn 2 (fresh Exp / registry, but same active set) ----
         exp2 = Exp(cfg)
         registry2 = ToolRegistry()
-        ctx2 = _mock_playground_context(active_skills=frozenset(active_skills))
-        ctx2.session = MagicMock()
-        ctx2.execution_workdir = str(tmp_path)
+        ctx2 = _run_context(
+            execution_workdir=str(tmp_path),
+            active_skills=frozenset(active_skills),
+        )
         exp2._init_skill_tools(ctx2, registry2)
 
         # No use_skill call this turn; replay must have already injected it.
@@ -245,9 +263,7 @@ class TestLazyMCPIntegration:
         )
         exp = Exp(cfg)
         registry = ToolRegistry()
-        ctx = _mock_playground_context()
-        ctx.session = MagicMock()
-        ctx.execution_workdir = str(tmp_path)
+        ctx = _run_context(execution_workdir=str(tmp_path))
 
         exp._init_skill_tools(ctx, registry)
 
@@ -300,9 +316,7 @@ class TestExpMCPSelfLoad:
 
         exp = Exp(cfg)
         registry = ToolRegistry()
-        ctx = _mock_playground_context()
-        ctx.session = MagicMock()
-        ctx.execution_workdir = str(tmp_path)
+        ctx = _run_context(execution_workdir=str(tmp_path))
 
         # Run _init_skill_tools -- should self-load mcp.yaml
         exp._init_skill_tools(ctx, registry)
@@ -375,9 +389,7 @@ class TestLazyMCPTimeoutThreading:
         )
         exp = Exp(cfg)
         registry = ToolRegistry()
-        ctx = _mock_playground_context()
-        ctx.session = MagicMock()
-        ctx.execution_workdir = str(tmp_path)
+        ctx = _run_context(execution_workdir=str(tmp_path))
 
         exp._init_skill_tools(ctx, registry)
         await _execute_use_skill(registry, skill_name="test-skill")
@@ -425,9 +437,7 @@ class TestLazyMCPTimeoutThreading:
         )
         exp = Exp(cfg)
         registry = ToolRegistry()
-        ctx = _mock_playground_context()
-        ctx.session = MagicMock()
-        ctx.execution_workdir = str(tmp_path)
+        ctx = _run_context(execution_workdir=str(tmp_path))
 
         exp._init_skill_tools(ctx, registry)
         await _execute_use_skill(registry, skill_name="test-skill")

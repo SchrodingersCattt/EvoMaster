@@ -189,31 +189,33 @@ class TestDefaultDevshellPath:
         """Exp.assemble() 产出的 CompactionConfig 默认存在且不再暴露 enabled。"""
         from matmaster.config.exp import ExpConfig
         from matmaster.core.exp import Exp
-        from matmaster.core.playground import PlaygroundContext
+        from matmaster.core.playground import ExecutionEnvironment
+        from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 
         config = ExpConfig(name="test", max_turns=5)
         exp = Exp(config)
 
-        # 构造最小 PlaygroundContext
+        # 构造最小 AgentRunContext
         import tempfile
         from pathlib import Path
 
         with tempfile.TemporaryDirectory() as tmpdir:
             workdir = Path(tmpdir)
-            ctx = PlaygroundContext(
-                workdir=workdir,
-                session_type="local",
-                cache_area=workdir / ".cache",
-                session=None,
-                llm_provider=None,
-                config_dir=None,
-                llm_config=None,
-                metadata=RunMetadata(),
+            ctx = AgentRunContext(
+                environment=ExecutionEnvironment(
+                    workdir=workdir,
+                    session_type="local",
+                    cache_area=workdir / ".cache",
+                    session=None,
+                    metadata=RunMetadata(),
+                ),
+                request=AgentRunRequest(llm_provider=None, llm_config=None),
             )
-            spec = await exp.assemble(ctx)
+            runtime = await exp.build_runtime(ctx)
+            kernel_runtime = runtime.kernel_runtime
 
-        assert "enabled" not in type(spec.compaction).model_fields
-        assert spec.compactor is None, "assemble 阶段不应创建 compactor 实例"
+        compaction = kernel_runtime.spec.compaction
+        assert "enabled" not in type(compaction).model_fields
 
     async def test_compactor_skips_when_below_threshold(self) -> None:
         """默认启用压缩时，低于阈值也应保持原消息不变。"""
@@ -445,8 +447,8 @@ class TestCompactionResults:
         assert result.strategy == "summary"
         assert result.trigger_tokens > 0
         assert result.retained_turns == 0
-        assert result.base_snapshot is not None
-        assert [item["role"] for item in result.base_snapshot] == ["user"]
+        assert result.base_messages is not None
+        assert [item["role"] for item in result.base_messages] == ["user"]
 
     async def test_fallback_result_strategy(self) -> None:
         """回退策略的 result.strategy 字段为 sliding_window。"""
@@ -468,7 +470,7 @@ class TestCompactionResults:
         assert result.strategy == "sliding_window"
         assert result.durability == "ephemeral"
         assert result.failure_reason
-        assert result.base_snapshot is None
+        assert result.base_messages is None
 
     async def test_no_event_without_bus(self) -> None:
         """无 event_sink 时仍能完成压缩。"""
@@ -599,7 +601,7 @@ class TestToolTruncationFallback:
         assert result.strategy == "sliding_window"
         assert result.durability == "ephemeral"
         assert result.failure_reason
-        assert result.base_snapshot is None
+        assert result.base_messages is None
 
     async def test_no_truncation_below_threshold(self) -> None:
         """即使只有 1 turn，未超阈值不截断。"""

@@ -89,8 +89,8 @@ async def test_planner_child_tool_result_figures_promote_to_parent_response_figu
     )
 
     async def events(ctx):
-        await ctx.runtime_ports.child_event_forward_sink(child_tool_result)
-        await ctx.runtime_ports.child_event_forward_sink(child_response)
+        await ctx.request.ports.child_event_forward_sink(child_tool_result)
+        await ctx.request.ports.child_event_forward_sink(child_response)
         yield root_run_result
 
     async with _patched_service(events) as (svc, sse_events, _):

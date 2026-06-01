@@ -2,78 +2,69 @@ from __future__ import annotations
 
 import inspect
 from contextlib import asynccontextmanager
-from dataclasses import replace
+from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from matmaster.core.playground import ExecutionEnvironment
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.run_metadata import RunMetadata
+from matmaster.types.session import Session
 
 
-def _make_mock_playground(pg_ctx: Any) -> Any:
-    """Build a mock Playground that returns the given PlaygroundContext."""
+def _make_mock_session() -> MagicMock:
+    """Build a MagicMock session with the configured returns the service reads.
+
+    ``spec=Session`` makes the mock pass ExecutionEnvironment's
+    ``session: Session | None`` isinstance validation (the Session Protocol is
+    ``@runtime_checkable``); a bare MagicMock would be rejected by pydantic.
+    """
+    session = MagicMock(spec=Session)
+    session._cancel_token = None
+    session.capabilities = MagicMock()
+    session.path_exists.return_value = False
+    session.read_file.return_value = ''
+    return session
+
+
+def _make_mock_environment(session: MagicMock | None = None) -> ExecutionEnvironment:
+    """Build a REAL ExecutionEnvironment (physical substrate) for the service.
+
+    The session stays a MagicMock (arbitrary types are allowed on the frozen
+    pydantic model). The service now builds AgentRunContext / AgentRunRequest
+    itself, so prepare() only needs to return this physical environment.
+    """
+    return ExecutionEnvironment(
+        workdir=Path('/tmp/workspace'),
+        session_type='local',
+        cache_area=Path('/tmp/workspace/.cache'),
+        session=session if session is not None else _make_mock_session(),
+        metadata=RunMetadata(),
+    )
+
+
+def _make_mock_playground(environment: ExecutionEnvironment) -> Any:
+    """Build a mock Playground whose prepare() returns a real ExecutionEnvironment.
+
+    ``prepare`` reads ``pg._base_env`` each call so a test can swap the
+    environment's session before invoking ``run_agent`` (the frozen
+    ExecutionEnvironment cannot be mutated in place).
+    """
     pg = MagicMock()
+    pg._base_env = environment
 
     def _prepare(
         metadata: RunMetadata,
         *,
         session_id: str = "",
-    ) -> Any:
-        pg_ctx.session_id = session_id
-        pg_ctx.metadata = metadata
-        return pg_ctx
+    ) -> ExecutionEnvironment:
+        return pg._base_env.model_copy(
+            update={'session_id': session_id, 'metadata': metadata}
+        )
 
     pg.prepare.side_effect = _prepare
     return pg
-
-
-def _make_mock_pg_ctx() -> MagicMock:
-    """Build a mock PlaygroundContext with minimum viable fields."""
-    from matmaster.types.runtime_ports import PlaygroundRuntimePorts
-
-    ctx = MagicMock()
-    ctx.workdir = '/tmp/workspace'
-    ctx.execution_workdir = '/tmp/workspace'
-    ctx.session = MagicMock()
-    ctx.session_id = ''
-    ctx.session._cancel_token = None
-    ctx.session.capabilities = MagicMock()
-    ctx.session.path_exists.return_value = False
-    ctx.session.read_file.return_value = ''
-    ctx.archival = None
-    ctx.metadata = RunMetadata()
-    ctx.runtime_ports = PlaygroundRuntimePorts()
-    ctx.with_bohrium.return_value = ctx
-    ctx.with_execution.return_value = ctx
-
-    def _with_runtime_ports(runtime_ports: PlaygroundRuntimePorts) -> MagicMock:
-        ctx.runtime_ports = runtime_ports
-        return ctx
-
-    ctx.with_runtime_ports.side_effect = _with_runtime_ports
-
-    def _with_runtime_port(**fields: Any) -> MagicMock:
-        if fields:
-            ctx.runtime_ports = replace(ctx.runtime_ports, **fields)
-        return ctx
-
-    ctx.with_runtime_port.side_effect = _with_runtime_port
-
-    def _with_metadata(**fields: Any) -> MagicMock:
-        if fields:
-            ctx.metadata = ctx.metadata.model_copy(update=fields)
-        return ctx
-
-    ctx.with_metadata.side_effect = _with_metadata
-
-    def _model_copy(*, update: dict[str, Any] | None = None, **_: Any) -> MagicMock:
-        if update:
-            for key, value in update.items():
-                setattr(ctx, key, value)
-        return ctx
-
-    ctx.model_copy.side_effect = _model_copy
-    return ctx
 
 
 def _make_cancel_token():
@@ -110,10 +101,12 @@ class _FakeExp:
 
     async def build_runtime(self, *args: Any, **kwargs: Any) -> Any:
         runtime = MagicMock()
-        spec = MagicMock()
-        spec.hook_executor = None
-        spec.tool_catalog = None
-        runtime.spec = spec
+        resources = MagicMock()
+        resources.hook_executor = None
+        resources.tool_catalog = None
+        kernel_runtime = MagicMock()
+        kernel_runtime.resources = resources
+        runtime.kernel_runtime = kernel_runtime
         return runtime
 
     async def _run_cleanup_callbacks(self) -> None:
@@ -178,8 +171,9 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
         history_restore_cls = mocks[6]
         redis_fn = mocks[7]
 
-        pg_ctx = _make_mock_pg_ctx()
-        pg = _make_mock_playground(pg_ctx)
+        mock_session = _make_mock_session()
+        environment = _make_mock_environment(mock_session)
+        pg = _make_mock_playground(environment)
         pg_mgr = MagicMock()
         pg_mgr.get_or_create.return_value = pg
         pg_mgr_cls.return_value = pg_mgr
@@ -235,7 +229,12 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
         bohrium_result = MagicMock()
         bohrium_result.ssh_attached = False
         bohrium_result.abort_result = None
+        # None runtime_snapshot / execution_session / session_type means the
+        # real run_bohrium_stage passes the ExecutionEnvironment through
+        # unchanged (no with_bohrium / with_execution rebinding).
+        bohrium_result.runtime_snapshot = None
         bohrium_result.execution_session = None
+        bohrium_result.session_type = None
         bohrium_result._asdict.return_value = {
             'ssh_attached': False,
             'abort_result': None,
@@ -261,13 +260,21 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
         events_table_fn.return_value = events_table
 
         fake_exp = _FakeExp(events)
+        provider_bundle = SimpleNamespace(
+            provider=MagicMock(),
+            model="test-model",
+            model_profile="test-profile",
+            model_route="test-route",
+            provider_name="openai",
+            model_family="test-family",
+        )
 
         with (
             patch('matmaster.config.loader.load_exp_config', return_value=MagicMock()),
             patch('matmaster.config.loader.load_llm_config', return_value=MagicMock()),
             patch(
-                'matmaster.providers.llm_factory.build_provider',
-                return_value=MagicMock(),
+                'matmaster.providers.llm_factory.build_provider_bundle',
+                return_value=provider_bundle,
             ),
             patch('matmaster.core.exp.Exp', new=lambda config: fake_exp),
         ):
@@ -280,7 +287,8 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
             svc._pg_manager = pg_mgr
             svc._active_skills = {}
             svc._test_fake_exp = fake_exp
-            svc._test_pg_ctx = pg_ctx
+            svc._test_environment = environment
+            svc._test_session = mock_session
             svc._test_playground = pg
             svc._test_events_table = events_table_fn.return_value
             svc._test_bohrium_svc = bohrium_inst

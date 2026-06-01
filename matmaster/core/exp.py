@@ -1,17 +1,26 @@
 """Exp -- config-driven assembly layer.
 
-Exp is a concrete class that transforms an ExpConfig + PlaygroundContext
-into an AgentRuntimeSpec (assemble), builds runtime resources (build_runtime),
-and executes the agent loop (run_stream).
+Exp is a concrete class that transforms an ExpConfig + AgentRunContext into an
+AgentRuntime (build_runtime) and executes the agent loop (run_stream). The
+AgentRuntime bundles the kernel, the kernel-facing AgentKernelRuntime
+(AgentKernelSpec + AgentKernelResources), and a cleanup callable.
 
-Three-phase lifecycle:
-1. assemble(ctx) -- pure data transform: config + ctx -> AgentRuntimeSpec
-2. build_runtime(ctx) -- resource creation: tools, prompt, kernel -> AgentRuntime
-3. run_stream(ctx, task, ...) -- build_runtime -> kernel.run_stream -> cleanup
+The ``AgentRunContext`` it consumes keeps physical facts under
+``ctx.environment`` (ExecutionEnvironment) and per-run runtime ingredients
+under ``ctx.request`` (AgentRunRequest).
+
+Lifecycle:
+1. build_runtime(ctx) -- one-shot assembly: config + ctx -> tools, prompt,
+   kernel_spec + kernel_resources -> AgentRuntime
+2. run_stream(ctx, task, ...) -- thin driver over runtime_scope()
+
+The run lifecycle (build_runtime -> cancel-token injection -> cleanup) lives in
+runtime_scope(), a reusable async context manager shared by both run_stream()
+and devshell, so neither hand-copies build/inject/cleanup.
 
 Cleanup: Exp owns capability resource cleanup via _cleanup_callbacks.
-run_stream() wraps kernel.run_stream in try/finally to guarantee cleanup
-even when the kernel raises.
+runtime_scope() wraps the run in try/finally to guarantee cleanup even when the
+kernel raises.
 """
 
 from __future__ import annotations
@@ -19,17 +28,17 @@ from __future__ import annotations
 import inspect
 import json
 import logging
-import uuid
 from collections.abc import AsyncIterator, Callable
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from matmaster.config.exp import ExpConfig
 from matmaster.context.ports import SkillResolver
 from matmaster.context.system_prompt import SystemPromptBuilder
-from matmaster.core.hooks import HookEvent, HookExecutor, SubagentContext
+from matmaster.core.hooks import HookExecutor
 from matmaster.core.path_access import derive_path_access_roots
-from matmaster.core.playground import PlaygroundContext
+from matmaster.core.run_context import AgentRunContext
 from matmaster.skills.settings import (
     disabled_skill_names_from_remote_settings as _disabled_skill_names_from_remote_settings,
 )
@@ -41,7 +50,12 @@ from matmaster.skills.settings import remote_skill_roots as _remote_skill_roots
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.run_metadata import RunIdentity
-from matmaster.types.runtime import AgentRuntime, AgentRuntimeSpec
+from matmaster.types.runtime import (
+    AgentKernelResources,
+    AgentKernelRuntime,
+    AgentKernelSpec,
+    AgentRuntime,
+)
 from matmaster.types.runtime_ports import KernelRuntimePorts
 
 if TYPE_CHECKING:
@@ -113,8 +127,8 @@ class Exp:
     Instantiated with an ExpConfig. exp_name comes from config.name
     (defaults to 'direct').
 
-    assemble() is a pure data transform: config + ctx -> AgentRuntimeSpec.
-    build_runtime() creates resources (ToolRegistry, SystemPromptBuilder, Kernel).
+    build_runtime() creates resources (ToolRegistry, SystemPromptBuilder, Kernel)
+    and assembles kernel_spec + kernel_resources into an AgentKernelRuntime.
     run_stream() delegates to build_runtime then kernel.run_stream with cleanup guarantee.
     """
 
@@ -173,118 +187,51 @@ class Exp:
                 )
         self._cleanup_callbacks.clear()
 
-    # ── Spawn function factory ────────────────────────────
+    # ── Child runtime factory ─────────────────────────────
 
-    @staticmethod
-    def _make_spawn_fn(
-        ctx: PlaygroundContext,
-        source_prefix: str,
-        hook_executor: HookExecutor | None = None,
-        skill_resolver: SkillResolver | None = None,
-    ) -> Any:
-        """Create async spawn_fn closure capturing parent runtime context.
+    def _make_child_run_factory(
+        self, ctx: AgentRunContext
+    ) -> Callable[..., AsyncIterator[Any]]:
+        """Seam :class:`SubagentOrchestrator` uses to run one child agent.
 
-        The returned async callable creates a child Exp from exp_name,
-        runs it via child_exp.run_stream() with the parent's PlaygroundContext,
-        drains the event stream, and returns the final content.
+        Exp owns *assembling* the child runtime -- load its config, construct a
+        child Exp with spawn disabled (one-level recursion cap), and drive its
+        ``run_stream`` with the parent ``ctx``. The orchestrator owns the spawn
+        lifecycle (id, hooks, event retag, drain) around the returned stream.
         """
+        skill_resolver = self._skill_resolver
 
-        async def spawn_fn(
+        def child_run_factory(
             exp_name: str,
             task: str,
+            *,
             cancel_token: CancellationToken | None = None,
-        ) -> str:
+            spawn_id: str | None = None,
+        ) -> AsyncIterator[Any]:
             from matmaster.config.loader import load_exp_config
-            from matmaster.core.stream_drain import drain_run_stream
 
-            child_config = load_exp_config(exp_name)
-            child_exp = Exp(child_config, allow_spawn=False)
-            child_source = f"{source_prefix}:{exp_name}"
-            child_spawn_id = uuid.uuid4().hex[:16]
-            parent_session_id = ctx.session_id
-            event_sink = ctx.runtime_ports.child_event_forward_sink
-
-            async def _forward_child_event(event: Any) -> None:
-                if event_sink is None:
-                    return
-                try:
-                    forwarded = event.model_copy(
-                        update={
-                            "source": child_source,
-                            "spawn_id": child_spawn_id,
-                        }
-                    )
-                    result = event_sink(forwarded)
-                    if inspect.isawaitable(result):
-                        await result
-                except Exception:
-                    logging.getLogger(__name__).warning(
-                        "subagent event forwarding failed type=%s spawn_id=%s",
-                        getattr(event, "type", "?"),
-                        child_spawn_id,
-                        exc_info=True,
-                    )
-
-            if hook_executor is not None:
-                await hook_executor.emit(
-                    HookEvent.SUBAGENT_START,
-                    SubagentContext(
-                        agent_id=child_spawn_id,
-                        agent_type=exp_name,
-                        parent_session_id=parent_session_id,
-                        task_preview=task[:200],
-                    ),
-                )
-            try:
-                drain = await drain_run_stream(
-                    child_exp.run_stream(
-                        ctx,
-                        task,
-                        cancel_token=cancel_token,
-                        spawn_id=child_spawn_id,
-                        skill_resolver=skill_resolver,
-                    ),
-                    on_event=_forward_child_event,
-                )
-            finally:
-                if hook_executor is not None:
-                    await hook_executor.emit(
-                        HookEvent.SUBAGENT_STOP,
-                        SubagentContext(
-                            agent_id=child_spawn_id,
-                            agent_type=exp_name,
-                            parent_session_id=parent_session_id,
-                            task_preview=task[:200],
-                        ),
-                    )
-            if drain.status == "completed" and drain.final_content:
-                return drain.final_content
-            return (
-                f"SubAgent finished with status={drain.status}, reason={drain.reason}"
+            child_exp = Exp(load_exp_config(exp_name), allow_spawn=False)
+            return child_exp.run_stream(
+                ctx,
+                task,
+                cancel_token=cancel_token,
+                spawn_id=spawn_id,
+                skill_resolver=skill_resolver,
             )
 
-        return spawn_fn
+        return child_run_factory
 
-    # ── Phase 1: assemble ────────────────────────────────
-
-    async def assemble(self, ctx: PlaygroundContext) -> AgentRuntimeSpec:
-        """Data transform: config + ctx -> AgentRuntimeSpec."""
-        return AgentRuntimeSpec(
-            system_prompt_builder=SystemPromptBuilder(),
-            llm_provider=ctx.llm_provider,
-            max_turns=self._config.max_turns,
-            compaction=self._config.compaction,
-        )
+    # ── Run identity ─────────────────────────────────────
 
     @staticmethod
     def _build_run_identity(
-        ctx: PlaygroundContext,
+        ctx: AgentRunContext,
         *,
         spawn_id: str | None,
     ) -> RunIdentity:
         return RunIdentity(
-            task_id=ctx.metadata.task_id,
-            session_id=ctx.session_id,
+            task_id=ctx.environment.metadata.task_id,
+            session_id=ctx.environment.session_id,
             spawn_id=spawn_id,
         )
 
@@ -313,22 +260,24 @@ class Exp:
             planes.add(ToolPlane.EXTERNAL_SERVICE)
         return frozenset(planes)
 
-    # ── Phase 2: build_runtime ───────────────────────────
+    # ── Runtime construction ─────────────────────────────
 
     async def build_runtime(
         self,
-        ctx: PlaygroundContext,
+        ctx: AgentRunContext,
         *,
         skills: dict[str, Any] | None = None,
         skill_resolver: SkillResolver | None = None,
         spawn_id: str | None = None,
     ) -> AgentRuntime:
-        """Resource creation: assemble -> tools -> prompt -> kernel.
+        """One-shot assembly: tools -> prompt -> context assembly -> kernel.
 
         Constructs FullToolRunner + ToolCatalog + RuntimeTopology as the
-        default execution path.
+        default execution path, then bundles kernel_spec + kernel_resources
+        into an AgentKernelRuntime (see the §5.4 six-step ordering).
         """
-        spec = await self.assemble(ctx)
+        env = ctx.environment
+        request = ctx.request
 
         # Discard any registry from a prior run so a turn that turns skills off
         # cannot expose stale state to the prompt builder.
@@ -339,7 +288,7 @@ class Exp:
 
         registry = ToolRegistry()
         builtin_cfg = self._config.tools.builtin
-        path_access_roots = derive_path_access_roots(ctx)
+        path_access_roots = derive_path_access_roots(env)
         if builtin_cfg:
             self._init_builtin_tools(
                 ctx,
@@ -358,21 +307,21 @@ class Exp:
         from matmaster.types.topology import RuntimeTopology, SessionCapabilities
 
         session_caps = SessionCapabilities()
-        if ctx.session is not None and hasattr(ctx.session, "capabilities"):
-            caps = ctx.session.capabilities
+        if env.session is not None and hasattr(env.session, "capabilities"):
+            caps = env.session.capabilities
             if isinstance(caps, SessionCapabilities):
                 session_caps = caps
 
         active_planes = self._derive_active_planes(
-            has_session=ctx.session is not None,
+            has_session=env.session is not None,
             builtin_cfg=self._config.tools.builtin,
             skills_enabled=self._config.skills.enabled,
         )
 
         topology = RuntimeTopology(
-            session_kind=ctx.session_type or "local",
-            control_root=str(ctx.workdir),
-            workspace_root=str(ctx.execution_workdir),
+            session_kind=env.session_type or "local",
+            control_root=str(env.workdir),
+            workspace_root=str(env.execution_workdir),
             active_planes=active_planes,
             session_capabilities=session_caps,
             path_access_roots=path_access_roots,
@@ -395,12 +344,15 @@ class Exp:
             spawn_fn = None
             available_exps = None
             if self._allow_spawn:
-                spawn_fn = self._make_spawn_fn(
-                    ctx,
-                    source_prefix="MatMaster",
+                from matmaster.core.subagent_orchestrator import SubagentOrchestrator
+
+                orchestrator = SubagentOrchestrator(
+                    child_run_factory=self._make_child_run_factory(ctx),
+                    child_event_sink=request.ports.child_event_forward_sink,
                     hook_executor=hook_executor,
-                    skill_resolver=self._skill_resolver,
+                    parent_session_id=env.session_id,
                 )
+                spawn_fn = orchestrator.make_spawn_fn()
                 available_exps = list_model_visible_exps()
                 if self._exclude_subagents:
                     available_exps = [
@@ -409,11 +361,11 @@ class Exp:
                         if e.name not in self._exclude_subagents
                     ]
             agent_tool = AgentTool(
-                session=ctx.session,
+                session=env.session,
                 workdir=(
-                    Path(ctx.execution_workdir)
-                    if ctx.session is not None
-                    else ctx.workdir
+                    Path(env.execution_workdir)
+                    if env.session is not None
+                    else env.workdir
                 ),
                 spawn_fn=spawn_fn,
                 available_exps=available_exps,
@@ -422,7 +374,6 @@ class Exp:
 
         system_prompt_builder = SystemPromptBuilder()
         system_prompt = system_prompt_builder.build_system_prompt(
-            ctx,
             registry,
             system_prompt=self._config.system_prompt,
             identity=self._config.developer_instructions,
@@ -436,7 +387,8 @@ class Exp:
         from matmaster.types.tool_runner_state import ToolRunnerState
 
         runtime_context = build_runtime_context_assembly(
-            spec=spec,
+            llm_provider=request.llm_provider,
+            compaction=self._config.compaction,
             ctx=ctx,
             skill_resolver=self._skill_resolver,
             spawn_id=spawn_id,
@@ -448,10 +400,10 @@ class Exp:
         scheduler = ToolScheduler()
         runner_state = ToolRunnerState()
         bohrium_registry = JobRegistry.rebuild_from_events(
-            ctx.metadata.bohrium_rebuild_events
+            request.bohrium_rebuild_events
         )
         runner_state.set("bohrium_job_registry", bohrium_registry)
-        figure_upload_config = ctx.runtime_ports.figure_upload.config
+        figure_upload_config = request.ports.figure_upload.config
         if figure_upload_config is not None:
             runner_state.set("figure_upload_config", figure_upload_config)
         self._register_cleanup(runner_state.clear)
@@ -466,41 +418,40 @@ class Exp:
             state=runner_state,
         )
 
-        checkpoint_sink_factory = ctx.runtime_ports.compaction.checkpoint_sink_factory
+        checkpoint_sink_factory = request.ports.compaction.checkpoint_sink_factory
         checkpoint_sink = None
         if callable(checkpoint_sink_factory):
             checkpoint_sink = checkpoint_sink_factory(spawn_id=spawn_id)
-        pre_compaction_barrier = ctx.runtime_ports.compaction.pre_compaction_barrier
-        spec = spec.model_copy(
-            update={
-                "tool_catalog": catalog,
-                "tool_runner": full_runner,
-                "runtime_topology": topology,
-                "capability_policy": capability_policy,
-                "structural_validation": structural_validation,
-                "system_prompt": system_prompt,
-                "system_prompt_builder": system_prompt_builder,
-                "hook_executor": hook_executor,
-                "compactor": runtime_context.compactor,
-                "context_assembler": runtime_context.context_assembler,
-                "session_events_port": (
-                    runtime_context.assembly_ports.session_events
-                    if runtime_context.assembly_ports is not None
-                    else None
-                ),
-                "session_jobs_port": (
-                    runtime_context.assembly_ports.session_jobs
-                    if runtime_context.assembly_ports is not None
-                    else None
-                ),
-                "runtime_ports": KernelRuntimePorts(
-                    checkpoint_sink=checkpoint_sink,
-                    pre_compaction_barrier=pre_compaction_barrier,
-                    interrupt_checker=ctx.runtime_ports.interrupt_checker,
-                ),
-                "run_identity": self._build_run_identity(ctx, spawn_id=spawn_id),
-                "turn_input": ctx.metadata.turn_input,
-            }
+        pre_compaction_barrier = request.ports.compaction.pre_compaction_barrier
+
+        kernel_spec = AgentKernelSpec(
+            system_prompt=system_prompt,
+            max_turns=self._config.max_turns,
+            compaction=self._config.compaction,
+            run_identity=self._build_run_identity(ctx, spawn_id=spawn_id),
+            turn_input=request.turn_input,
+            llm_model=request.llm_model,
+            llm_model_profile=request.llm_model_profile,
+            llm_model_route=request.llm_model_route,
+        )
+        kernel_resources = AgentKernelResources(
+            llm_provider=request.llm_provider,
+            runtime_ports=KernelRuntimePorts(
+                checkpoint_sink=checkpoint_sink,
+                pre_compaction_barrier=pre_compaction_barrier,
+                interrupt_checker=request.ports.interrupt_checker,
+            ),
+            tool_runner=full_runner,
+            tool_catalog=catalog,
+            runtime_topology=topology,
+            hook_executor=hook_executor,
+            compactor=runtime_context.compactor,
+            capability_policy=capability_policy,
+            structural_validation=structural_validation,
+        )
+        kernel_runtime = AgentKernelRuntime(
+            spec=kernel_spec,
+            resources=kernel_resources,
         )
 
         from matmaster.core.agent import AgentKernel
@@ -509,28 +460,30 @@ class Exp:
 
         return AgentRuntime(
             kernel=kernel,
-            spec=spec,
+            kernel_runtime=kernel_runtime,
             cleanup=self._run_cleanup_callbacks,
         )
 
-    # ── Phase 3: run_stream ────────────────────────────────
+    # ── Runtime scope + run_stream ───────────────────────
 
-    async def run_stream(
+    @asynccontextmanager
+    async def runtime_scope(
         self,
-        ctx: PlaygroundContext,
-        task: str,
-        *,
-        history: list[Message] | None = None,
+        ctx: AgentRunContext,
         cancel_token: CancellationToken | None = None,
+        *,
         skills: dict[str, Any] | None = None,
         skill_resolver: SkillResolver | None = None,
         spawn_id: str | None = None,
-    ) -> AsyncIterator[Any]:
-        """build_runtime -> kernel.run_stream -> cleanup.
+    ) -> AsyncIterator[AgentRuntime]:
+        """Reusable run lifecycle: build_runtime -> cancel-token injection
+        -> (caller drives kernel.run_stream) -> guaranteed cleanup.
 
-        Async generator that yields BusEvent from the kernel generator.
-        try/finally ensures cleanup runs on normal completion, break,
-        and exception.
+        Yields the built AgentRuntime; the caller drives
+        ``runtime.kernel.run_stream(...)`` itself. The try/finally guarantees
+        capability cleanup on normal completion, break, and exception, so every
+        driver (service run_stream, devshell) shares one lifecycle instead of
+        hand-copying build/inject/cleanup.
         """
         try:
             runtime = await self.build_runtime(
@@ -539,27 +492,56 @@ class Exp:
                 skill_resolver=skill_resolver,
                 spawn_id=spawn_id,
             )
-            spec = runtime.spec
-            if ctx.session is not None:
-                ctx.session._cancel_token = cancel_token
+            kernel_runtime = runtime.kernel_runtime
+            if ctx.environment.session is not None:
+                ctx.environment.session._cancel_token = cancel_token
 
             # Inject cancel_token into tools for cancel propagation.
-            catalog = getattr(spec, "tool_catalog", None)
+            catalog = kernel_runtime.resources.tool_catalog
             if cancel_token is not None and catalog is not None:
                 catalog.inject_cancel_token(cancel_token)
 
-            async for event in runtime.kernel.run_stream(
-                spec, task, history=history, cancel_token=cancel_token
-            ):
-                yield event
+            yield runtime
         finally:
             await self._run_cleanup_callbacks()
+
+    async def run_stream(
+        self,
+        ctx: AgentRunContext,
+        task: str,
+        *,
+        history: list[Message] | None = None,
+        cancel_token: CancellationToken | None = None,
+        skills: dict[str, Any] | None = None,
+        skill_resolver: SkillResolver | None = None,
+        spawn_id: str | None = None,
+    ) -> AsyncIterator[Any]:
+        """Thin driver over :meth:`runtime_scope`.
+
+        Async generator that yields BusEvent from the kernel generator.
+        Cleanup is guaranteed by the scope's try/finally on normal completion,
+        break, and exception.
+        """
+        async with self.runtime_scope(
+            ctx,
+            cancel_token,
+            skills=skills,
+            skill_resolver=skill_resolver,
+            spawn_id=spawn_id,
+        ) as runtime:
+            async for event in runtime.kernel.run_stream(
+                runtime.kernel_runtime,
+                task,
+                history=history,
+                cancel_token=cancel_token,
+            ):
+                yield event
 
     # ── Capability initialization helpers ────────────────
 
     def _init_builtin_tools(
         self,
-        ctx: PlaygroundContext,
+        ctx: AgentRunContext,
         registry: ToolRegistry,
         builtin_cfg: list[str],
         *,
@@ -574,12 +556,13 @@ class Exp:
 
         Tools are split into two categories:
         - Session-requiring: BashTool, ReadTool, WriteTool, EditTool,
-          GlobTool, GrepTool (need ctx.session for execution)
+          GlobTool, GrepTool (need ctx.environment.session for execution)
         - Sessionless: TodoWriteTool, WebSearchTool, WebFetchTool
           (operate without a session; AgentTool is registered separately
           in build_runtime)
 
-        When ctx.session is None, only sessionless tools are registered.
+        When ctx.environment.session is None, only sessionless tools are
+        registered.
         """
         allow_all = "*" in builtin_cfg
         allowed: set[str] | None = None if allow_all else set(builtin_cfg)
@@ -601,8 +584,9 @@ class Exp:
             WriteTool,
         )
 
-        exec_wd = Path(ctx.execution_workdir)
-        has_session = ctx.session is not None
+        env = ctx.environment
+        exec_wd = Path(env.execution_workdir)
+        has_session = env.session is not None
         search_path_roots = tuple(
             root.root
             for root in path_access_roots
@@ -612,17 +596,17 @@ class Exp:
         session_tools: list[Any] = []
         if has_session:
             session_tools = [
-                BashTool(session=ctx.session, workdir=exec_wd),
-                ReadTool(session=ctx.session, workdir=exec_wd),
-                WriteTool(session=ctx.session, workdir=exec_wd),
-                EditTool(session=ctx.session, workdir=exec_wd),
+                BashTool(session=env.session, workdir=exec_wd),
+                ReadTool(session=env.session, workdir=exec_wd),
+                WriteTool(session=env.session, workdir=exec_wd),
+                EditTool(session=env.session, workdir=exec_wd),
                 GlobTool(
-                    session=ctx.session,
+                    session=env.session,
                     workdir=exec_wd,
                     path_access_roots=search_path_roots,
                 ),
                 GrepTool(
-                    session=ctx.session,
+                    session=env.session,
                     workdir=exec_wd,
                     path_access_roots=search_path_roots,
                 ),
@@ -631,21 +615,23 @@ class Exp:
             allowed is not None and allowed & _SESSION_REQUIRING_TOOL_NAMES
         ):
             self.logger.debug(
-                "No session in PlaygroundContext, skipping session-requiring tools"
+                "No session in ExecutionEnvironment, skipping session-requiring tools"
             )
 
         sessionless_tools: list[Any] = [
-            TodoWriteTool(workdir=ctx.workdir),
+            TodoWriteTool(workdir=env.workdir),
             WebSearchTool(),
-            WebFetchTool(workdir=ctx.workdir),
-            BohriumTool(session=ctx.session, workdir=ctx.workdir),
+            WebFetchTool(workdir=env.workdir),
+            BohriumTool(session=env.session, workdir=env.workdir),
         ]
 
-        interaction_bridge = ctx.interaction_bridge if spawn_id is None else None
+        interaction_bridge = (
+            ctx.request.interaction_bridge if spawn_id is None else None
+        )
         control_tools: list[Any] = [
             AskQuestionTool(
-                session=ctx.session,
-                workdir=exec_wd if ctx.session is not None else ctx.workdir,
+                session=env.session,
+                workdir=exec_wd if env.session is not None else env.workdir,
                 bridge=interaction_bridge,
             ),
         ]
@@ -665,7 +651,7 @@ class Exp:
 
     def _init_skill_tools(
         self,
-        ctx: PlaygroundContext,
+        ctx: AgentRunContext,
         registry: ToolRegistry,
         skills_config: dict[str, Any] | None = None,
         catalog: Any | None = None,
@@ -680,6 +666,8 @@ class Exp:
         if not skills_cfg.enabled:
             return
 
+        env = ctx.environment
+
         from matmaster.skills.registry import SkillRegistry
         from matmaster.tools.builtin.skill_tool import LegacyUseSkillTool, SkillTool
         from matmaster.tools.lazy_mcp import LazyMCPConnector, LazyMCPTool
@@ -691,10 +679,10 @@ class Exp:
             roots = [Path(r) for r in roots_raw if r]
         else:
             roots = [Path(roots_raw)] if roots_raw else []
-        local_user_skills_root = _local_user_skills_root(ctx.session)
+        local_user_skills_root = _local_user_skills_root(env.session)
         if local_user_skills_root is not None:
             roots.append(local_user_skills_root)
-        remote_roots = _remote_skill_roots(ctx.session)
+        remote_roots = _remote_skill_roots(env.session)
         if not roots and not remote_roots:
             self.logger.warning(
                 "skills.enabled=true but no skill roots are available, skipping skill init"
@@ -706,16 +694,16 @@ class Exp:
         # registry serves SkillTool registration into ToolCatalog.
         skill_registry = SkillRegistry(
             roots,
-            remote_session=ctx.session if remote_roots else None,
+            remote_session=env.session if remote_roots else None,
             remote_roots=remote_roots,
         )
         disabled_skill_names = set(skills_cfg.disabled_skill_names)
         for root in roots:
             disabled_skill_names.update(_disabled_skill_names_from_settings(root))
-        if remote_roots and ctx.session is not None:
+        if remote_roots and env.session is not None:
             for remote_root in remote_roots:
                 disabled_skill_names.update(
-                    _disabled_skill_names_from_remote_settings(ctx.session, remote_root)
+                    _disabled_skill_names_from_remote_settings(env.session, remote_root)
                 )
         if disabled_skill_names:
             skill_registry.remove_skills(disabled_skill_names)
@@ -769,8 +757,8 @@ class Exp:
         connector = LazyMCPConnector(
             mcp_server_config=server_config,
             mcp_config=mcp_config,
-            session=ctx.session,
-            workspace_path=ctx.execution_workdir,
+            session=env.session,
+            workspace_path=env.execution_workdir,
         )
         self._register_cleanup(connector.cleanup)
 
@@ -852,14 +840,14 @@ class Exp:
                     registry.register(lazy_tool, source="mcp")
 
         skill_tool = SkillTool(
-            session=ctx.session,
+            session=env.session,
             skill_registry=skill_registry,
             on_skill_hit=activate_mcp_server,
         )
         registry.register(skill_tool, source="skill")
         registry.register(
             LegacyUseSkillTool(
-                session=ctx.session,
+                session=env.session,
                 skill_registry=skill_registry,
                 on_skill_hit=activate_mcp_server,
             ),
@@ -870,7 +858,7 @@ class Exp:
         # activate_mcp_server reads only from the on-disk schema cache (no MCP IO),
         # is idempotent (skips tools already in registry), and warns +
         # skips on cache miss.
-        replay_skills = ctx.metadata.active_skills
+        replay_skills = ctx.request.active_skills
         if isinstance(replay_skills, (set, frozenset, list, tuple)):
             for skill_name in replay_skills:
                 if not isinstance(skill_name, str) or not skill_name:

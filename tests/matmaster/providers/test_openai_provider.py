@@ -14,7 +14,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from matmaster.providers.openai_provider import OpenAIProvider
+from matmaster.providers.openai_provider import (
+    OpenAIProvider,
+)
 from matmaster.types.errors import LLMError
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import LLMResponse, StreamChunk
@@ -243,6 +245,43 @@ class TestChatContent:
             "prompt_tokens": 10,
             "completion_tokens": 5,
             "total_tokens": 15,
+        }
+
+    async def test_chat_usage_vendor_preserves_anthropic_cache_fields(self) -> None:
+        class Usage:
+            prompt_tokens = 10
+            completion_tokens = 5
+            total_tokens = 15
+            input_tokens = 10
+            output_tokens = 5
+            cache_creation_input_tokens = 123
+            cache_read_input_tokens = 45
+            cache_creation = {"ephemeral_5m_input_tokens": 123}
+
+        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create.return_value = _make_mock_completion(
+            usage=Usage(),
+        )
+        provider._client = mock_client
+
+        result = await provider.chat([{"role": "user", "content": "Hi"}])
+
+        assert result.usage == {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+            "cache_read_tokens": 45,
+        }
+        assert result.usage_vendor == {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+            "input_tokens": 10,
+            "output_tokens": 5,
+            "cache_creation_input_tokens": 123,
+            "cache_read_input_tokens": 45,
+            "cache_creation": {"ephemeral_5m_input_tokens": 123},
         }
 
     async def test_chat_finish_reason(self) -> None:
@@ -805,182 +844,3 @@ class TestChatStreamContent:
         # Verify it's an async iterable
         async for chunk in result:
             assert isinstance(chunk, StreamChunk)
-
-
-class TestChatStreamUsage:
-    async def test_stream_options_included_in_kwargs(self) -> None:
-        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
-        mock_client = AsyncMock()
-        mock_client.chat.completions.create.return_value = _async_iter([])
-        provider._client = mock_client
-        _ = [
-            chunk
-            async for chunk in provider.chat_stream([{"role": "user", "content": "hi"}])
-        ]
-
-        call_kwargs = mock_client.chat.completions.create.call_args
-        assert call_kwargs.kwargs.get("stream_options") == {"include_usage": True}
-
-    async def test_usage_emitted_as_final_chunk(self) -> None:
-        usage = MagicMock()
-        usage.prompt_tokens = 10
-        usage.completion_tokens = 5
-        usage.total_tokens = 15
-
-        usage_only_chunk = MagicMock()
-        usage_only_chunk.choices = []
-        usage_only_chunk.usage = usage
-
-        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
-        mock_client = AsyncMock()
-        mock_client.chat.completions.create.return_value = _async_iter(
-            [
-                _make_stream_chunk(content="answer", finish_reason="stop"),
-                usage_only_chunk,
-            ]
-        )
-        provider._client = mock_client
-        chunks = [
-            chunk
-            async for chunk in provider.chat_stream([{"role": "user", "content": "Hi"}])
-        ]
-
-        assert len(chunks) == 2
-        assert chunks[1].usage == {
-            "prompt_tokens": 10,
-            "completion_tokens": 5,
-            "total_tokens": 15,
-        }
-
-
-# -- Error handling -------------------------------------------------------
-
-
-class TestErrorHandling:
-    async def test_invalid_json_in_tool_call_arguments(self) -> None:
-        """Invalid JSON in tool_call arguments is handled gracefully."""
-        tc_mock = MagicMock()
-        tc_mock.id = "tc-1"
-        tc_mock.function.name = "fn"
-        tc_mock.function.arguments = "not valid json {"
-
-        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
-        mock_client = AsyncMock()
-        mock_client.chat.completions.create.return_value = _make_mock_completion(
-            content=None,
-            tool_calls=[tc_mock],
-        )
-        provider._client = mock_client
-        result = await provider.chat([{"role": "user", "content": "test"}])
-
-        assert result.tool_calls is not None
-        assert result.tool_calls[0].arguments == {"_raw": "not valid json {"}
-
-    async def test_empty_arguments(self) -> None:
-        """Empty/None arguments returns empty dict."""
-        tc_mock = MagicMock()
-        tc_mock.id = "tc-1"
-        tc_mock.function.name = "fn"
-        tc_mock.function.arguments = None
-
-        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
-        mock_client = AsyncMock()
-        mock_client.chat.completions.create.return_value = _make_mock_completion(
-            content=None,
-            tool_calls=[tc_mock],
-        )
-        provider._client = mock_client
-        result = await provider.chat([{"role": "user", "content": "test"}])
-
-        assert result.tool_calls is not None
-        assert result.tool_calls[0].arguments == {}
-
-    async def test_chat_with_tools_kwarg(self) -> None:
-        """chat() passes tools to the API when provided."""
-        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
-        mock_client = AsyncMock()
-        mock_client.chat.completions.create.return_value = _make_mock_completion()
-        provider._client = mock_client
-
-        tools = [{"type": "function", "function": {"name": "fn"}}]
-        await provider.chat(
-            [{"role": "user", "content": "Hi"}],
-            tools=tools,
-        )
-
-        call_kwargs = mock_client.chat.completions.create.call_args
-        assert call_kwargs.kwargs.get("tools") == tools or (
-            len(call_kwargs.args) == 0 and "tools" in call_kwargs.kwargs
-        )
-
-
-# -- Async context manager lifecycle tests --------------------------------
-
-
-class TestAsyncContextManager:
-    async def test_aenter_creates_client(self) -> None:
-        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
-        assert provider._client is None
-        with patch(
-            "matmaster.providers.openai_provider.openai.AsyncOpenAI"
-        ) as mock_cls:
-            mock_client = AsyncMock()
-            mock_cls.return_value = mock_client
-            async with provider:
-                assert provider._client is mock_client
-            mock_cls.assert_called_once()
-
-    async def test_aexit_closes_client(self) -> None:
-        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
-        with patch(
-            "matmaster.providers.openai_provider.openai.AsyncOpenAI"
-        ) as mock_cls:
-            mock_client = AsyncMock()
-            mock_cls.return_value = mock_client
-            async with provider:
-                pass
-            mock_client.close.assert_awaited_once()
-            assert provider._client is None
-
-    async def test_chat_without_context_raises(self) -> None:
-        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
-        with pytest.raises(RuntimeError, match="async context manager"):
-            await provider.chat([{"role": "user", "content": "Hi"}])
-
-    async def test_chat_stream_without_context_raises(self) -> None:
-        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
-        with pytest.raises(RuntimeError, match="async context manager"):
-            async for _ in provider.chat_stream([{"role": "user", "content": "Hi"}]):
-                pass
-
-    async def test_validate_async_protocol(self) -> None:
-        from matmaster.types.llm_provider import LLMProvider
-        from matmaster.validation import validate_async_protocol
-
-        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
-        errors = validate_async_protocol(provider, LLMProvider)
-        assert errors == [], f"Protocol validation errors: {errors}"
-
-    async def test_reentrant_context_manager(self) -> None:
-        """Nested async-with on same provider must not close client early.
-
-        Reproduces the spawn bug: parent enters provider, child enters the
-        same provider, child exits -> client must stay alive for parent.
-        """
-        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
-        with patch(
-            "matmaster.providers.openai_provider.openai.AsyncOpenAI"
-        ) as mock_cls:
-            mock_client = AsyncMock()
-            mock_cls.return_value = mock_client
-
-            async with provider:  # parent enters
-                assert provider._client is mock_client
-                async with provider:  # child enters (reentrant)
-                    assert provider._client is mock_client
-                # child exits -- client must still be alive
-                assert provider._client is mock_client
-                mock_client.close.assert_not_awaited()
-            # parent exits -- now client should be closed
-            mock_client.close.assert_awaited_once()
-            assert provider._client is None

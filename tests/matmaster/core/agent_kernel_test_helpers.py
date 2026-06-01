@@ -8,7 +8,6 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
-from matmaster.context.system_prompt import SystemPromptBuilder
 from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
@@ -18,7 +17,14 @@ from matmaster.types.messages import (
     StreamChunk,
     ToolCallData,
 )
-from matmaster.types.runtime import AgentRuntimeSpec
+from matmaster.types.run_metadata import RunIdentity
+from matmaster.types.runtime import (
+    AgentKernelResources,
+    AgentKernelRuntime,
+    AgentKernelSpec,
+    CompactionConfig,
+)
+from matmaster.types.runtime_ports import KernelRuntimePorts
 from matmaster.types.topology import ToolPlane
 
 from .conftest import MockLLMProvider
@@ -219,26 +225,65 @@ class _SimpleTestToolRunner:
         return results
 
 
-def _make_spec(
+def make_kernel_runtime(
     *,
     provider: Any | None = None,
     tool_registry: ToolRegistry | None = None,
+    tool_catalog: Any | None = None,
+    tool_runner: Any | None = None,
+    runtime_topology: Any | None = None,
     max_turns: int = 10,
     system_prompt: str = 'You are a test agent',
-) -> AgentRuntimeSpec:
-    if tool_registry is None:
-        tool_registry, _ = _make_tool_registry()
-    catalog = ToolCatalog(tool_registry)
-    runner = _SimpleTestToolRunner(catalog)
-    return AgentRuntimeSpec(
-        system_prompt_builder=SystemPromptBuilder(),
-        llm_provider=provider or MockLLMProvider(),
-        tool_catalog=catalog,
-        tool_runner=runner,
-        runtime_topology=catalog._topology,
-        max_turns=max_turns,
+    compaction: CompactionConfig | None = None,
+    compactor: Any | None = None,
+    hook_executor: Any | None = None,
+    capability_policy: Any | None = None,
+    structural_validation: Any | None = None,
+    runtime_ports: KernelRuntimePorts | None = None,
+    run_identity: RunIdentity | None = None,
+    turn_input: Any | None = None,
+    llm_model: str | None = None,
+    llm_model_profile: str | None = None,
+    llm_model_route: str | None = None,
+) -> AgentKernelRuntime:
+    """Build an AgentKernelRuntime for kernel tests.
+
+    Splits config into AgentKernelSpec and live resources into
+    AgentKernelResources, then bundles them as AgentKernelRuntime -- the object
+    AgentKernel.run_stream() consumes.
+    """
+    prov = provider or MockLLMProvider()
+    if tool_catalog is None:
+        if tool_registry is None:
+            tool_registry, _ = _make_tool_registry()
+        tool_catalog = ToolCatalog(tool_registry)
+    if tool_runner is None:
+        tool_runner = _SimpleTestToolRunner(tool_catalog)
+    if runtime_topology is None:
+        runtime_topology = tool_catalog._topology
+
+    kernel_spec = AgentKernelSpec(
         system_prompt=system_prompt,
+        max_turns=max_turns,
+        compaction=compaction or CompactionConfig(),
+        run_identity=run_identity or RunIdentity(),
+        turn_input=turn_input,
+        llm_model=llm_model,
+        llm_model_profile=llm_model_profile,
+        llm_model_route=llm_model_route,
     )
+    kernel_resources = AgentKernelResources(
+        llm_provider=prov,
+        runtime_ports=runtime_ports or KernelRuntimePorts(),
+        tool_runner=tool_runner,
+        tool_catalog=tool_catalog,
+        runtime_topology=runtime_topology,
+        hook_executor=hook_executor,
+        compactor=compactor,
+        capability_policy=capability_policy,
+        structural_validation=structural_validation,
+    )
+    return AgentKernelRuntime(spec=kernel_spec, resources=kernel_resources)
 
 
 class ErrorThenSuccessProvider:

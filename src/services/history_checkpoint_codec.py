@@ -28,7 +28,7 @@ MARKERS_V1 = {"<compacted_history>"}
 
 
 def _has_acceptable_marker(content: str) -> bool:
-    # COMPAT:v0-checkpoint-marker -- keep accepting v0 marker until Phase 4.
+    # COMPAT:v0-checkpoint-marker -- keep accepting legacy checkpoint markers.
     return any(marker in content for marker in MARKERS_V0 | MARKERS_V1)
 
 

@@ -15,7 +15,8 @@ from typing import Any
 from matmaster.bohrium.runtime import try_attach_local_bohrium_runtime_from_env
 from matmaster.config.loader import load_exp_config, load_llm_config
 from matmaster.core.exp import Exp
-from matmaster.core.playground import PlaygroundContext
+from matmaster.core.playground import ExecutionEnvironment
+from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.providers.llm_factory import build_provider
 from matmaster.sessions.local import LocalSession
 from matmaster.types.messages import AssistantMessage
@@ -133,13 +134,13 @@ def _patch_bohrium_submit(runtime: Any, error_message: str) -> None:
     from matmaster.tools.builtin.bohrium_tool.tool import BohriumTool
     from matmaster.tools.tool_result import ToolResult
 
-    catalog = runtime.spec.tool_catalog
+    catalog = runtime.kernel_runtime.resources.tool_catalog
     if catalog is None:
         return
     registry = getattr(catalog, '_registry', None)
     if registry is None:
         return
-    tool = registry.get('Bohrium')
+    tool = registry.get_raw('Bohrium')
     if tool is None or not isinstance(tool, BohriumTool):
         return
     tool._submit = lambda args: ToolResult(
@@ -183,15 +184,19 @@ def _run_mat_task_once(
     session = LocalSession(workspace_path=workspace)
     session.open()
 
-    # 4. Build PlaygroundContext
-    pg_ctx = PlaygroundContext(
-        workdir=workspace,
-        session_type="local",
-        cache_area=cache_area,
-        session=session,
-        llm_provider=llm_provider,
-        llm_config=llm_config,
-        metadata=RunMetadata(source="evaluation", task_id=task_id),
+    # 4. Build the run context (environment + request)
+    agent_run_ctx = AgentRunContext(
+        environment=ExecutionEnvironment(
+            workdir=workspace,
+            session_type="local",
+            cache_area=cache_area,
+            session=session,
+            metadata=RunMetadata(source="evaluation", task_id=task_id),
+        ),
+        request=AgentRunRequest(
+            llm_provider=llm_provider,
+            llm_config=llm_config,
+        ),
     )
     try_attach_local_bohrium_runtime_from_env(session)
 
@@ -203,11 +208,11 @@ def _run_mat_task_once(
         from matmaster.core.stream_drain import drain_run_stream
 
         try:
-            runtime = await exp.build_runtime(pg_ctx)
+            runtime = await exp.build_runtime(agent_run_ctx)
             if inject_bohrium_failure:
                 _patch_bohrium_submit(runtime, inject_bohrium_failure)
             return await drain_run_stream(
-                runtime.kernel.run_stream(runtime.spec, prompt)
+                runtime.kernel.run_stream(runtime.kernel_runtime, prompt)
             )
         finally:
             await exp._run_cleanup_callbacks()

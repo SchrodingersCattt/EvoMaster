@@ -8,8 +8,8 @@ def test_turn_input_module_cold_imports_without_type_contract_cycle() -> None:
     script = (
         "import importlib\n"
         "importlib.import_module('matmaster.context.sources.turn_input')\n"
-        "from matmaster.types import AgentRuntimeSpec, CompactionConfig\n"
-        "assert AgentRuntimeSpec.__name__ == 'AgentRuntimeSpec'\n"
+        "from matmaster.types import AgentKernelSpec, CompactionConfig\n"
+        "assert AgentKernelSpec.__name__ == 'AgentKernelSpec'\n"
         "assert CompactionConfig.__name__ == 'CompactionConfig'\n"
     )
 

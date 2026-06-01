@@ -21,7 +21,7 @@ from matmaster.types.events import ResponseEvent, ThoughtEvent
 from matmaster.types.messages import LLMResponse, ToolCallData, parse_tool_arguments
 
 if TYPE_CHECKING:
-    from matmaster.types.runtime import AgentRuntimeSpec
+    from matmaster.types.runtime import AgentKernelResources
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +71,7 @@ async def _sleep_backoff_with_cancel(
 
 
 async def stream_llm_items(
-    spec: AgentRuntimeSpec,
+    kernel_resources: AgentKernelResources,
     api_messages: list[dict[str, Any]],
     tool_defs: list[dict[str, Any]] | None,
     *,
@@ -104,7 +104,7 @@ async def stream_llm_items(
     t_stream0 = time.perf_counter()
     ttft_ms: float | None = None
     try:
-        async for chunk in spec.llm_provider.chat_stream(
+        async for chunk in kernel_resources.llm_provider.chat_stream(
             api_messages, tool_defs, timeout=timeout
         ):
             if (
@@ -143,9 +143,7 @@ async def stream_llm_items(
             if chunk.content:
                 # Segment transition: reasoning -> content
                 if producing_reasoning:
-                    yield _thought_item(
-                        "".join(reasoning_parts), stream_id, "complete"
-                    )
+                    yield _thought_item("".join(reasoning_parts), stream_id, "complete")
                     producing_reasoning = False
                 content_parts.append(chunk.content)
                 producing_content = True
@@ -159,9 +157,7 @@ async def stream_llm_items(
             if chunk.tool_call_deltas:
                 # Segment transition: reasoning -> tool_calls
                 if producing_reasoning:
-                    yield _thought_item(
-                        "".join(reasoning_parts), stream_id, "complete"
-                    )
+                    yield _thought_item("".join(reasoning_parts), stream_id, "complete")
                     producing_reasoning = False
                 # Segment transition: content -> tool_calls
                 if producing_content:
@@ -256,14 +252,14 @@ async def stream_llm_items(
 
 
 async def call_llm_streaming(
-    spec: AgentRuntimeSpec,
+    kernel_resources: AgentKernelResources,
     api_messages: list[dict[str, Any]],
     tool_defs: list[dict[str, Any]] | None,
     *,
     cancel_token: CancellationToken | None = None,
 ) -> AsyncIterator[_KernelItem]:
     """Retry wrapper around _stream_llm_items with timeout-doubling retry on transient errors."""
-    provider = spec.llm_provider
+    provider = kernel_resources.llm_provider
     current_timeout = getattr(provider, "stream_timeout", None) or getattr(
         provider, "_timeout", 300.0
     )
@@ -279,7 +275,7 @@ async def call_llm_streaming(
             # Collect all items to handle incomplete-response retry
             items: list[_KernelItem] = []
             async for item in stream_llm_items(
-                spec,
+                kernel_resources,
                 api_messages,
                 tool_defs,
                 timeout=current_timeout,

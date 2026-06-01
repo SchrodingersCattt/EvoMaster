@@ -7,7 +7,12 @@ from matmaster.core.agent_compaction import run_compaction_plan
 from matmaster.core.kernel_items import _KernelState
 from matmaster.types.events import CompactionEvent
 from matmaster.types.messages import SystemMessage, ToolCallData, UserMessage
-from matmaster.types.runtime import AgentRuntimeSpec, CompactionConfig
+from matmaster.types.run_metadata import RunIdentity
+from matmaster.types.runtime import (
+    AgentKernelResources,
+    AgentKernelSpec,
+    CompactionConfig,
+)
 from matmaster.types.runtime_ports import KernelRuntimePorts
 
 
@@ -57,7 +62,7 @@ class Compactor:
             trigger_tokens=plan.trigger_tokens,
             retained_turns=0,
             failure_reason=None,
-            base_snapshot=[messages[1].model_dump(mode="json")],
+            base_messages=[messages[1].model_dump(mode="json")],
         )
 
     async def apply_fallback(self, plan, messages, *, failure_reason):
@@ -73,21 +78,29 @@ class Compactor:
             trigger_tokens=plan.trigger_tokens,
             retained_turns=len(messages) - 1,
             failure_reason=failure_reason,
-            base_snapshot=None,
+            base_messages=None,
         )
 
 
-def _spec(provider: Provider, compactor: Compactor) -> AgentRuntimeSpec:
-    return AgentRuntimeSpec.model_construct(
-        llm_provider=provider,
+def _kernel_spec() -> AgentKernelSpec:
+    return AgentKernelSpec(
+        system_prompt="sys",
         max_turns=10,
-        runtime_ports=KernelRuntimePorts(),
         compaction=CompactionConfig(
             context_limit=20_000, reserved_summary_tokens=1_000
         ),
-        system_prompt="sys",
+        run_identity=RunIdentity(),
+    )
+
+
+def _kernel_resources(provider: Provider, compactor: Compactor) -> AgentKernelResources:
+    return AgentKernelResources(
+        llm_provider=provider,
+        runtime_ports=KernelRuntimePorts(),
+        tool_runner=None,
+        tool_catalog=None,
+        runtime_topology=None,
         compactor=compactor,
-        system_prompt_builder=object(),
     )
 
 
@@ -113,7 +126,8 @@ async def test_compaction_plan_runner_summary_success_calls_apply_summary() -> N
     events = [
         item.event
         async for item in run_compaction_plan(
-            spec=_spec(provider, compactor),
+            kernel_spec=_kernel_spec(),
+            kernel_resources=_kernel_resources(provider, compactor),
             state=state,
             plan=_plan("runtime"),
             checkpoint_sink=None,
@@ -132,6 +146,51 @@ async def test_compaction_plan_runner_summary_success_calls_apply_summary() -> N
 
 
 @pytest.mark.asyncio
+async def test_compaction_plan_runner_passes_configured_summary_safety_margin(
+    monkeypatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    async def fake_call_summary_llm(**kwargs):
+        captured.update(kwargs)
+        return "summary text"
+
+    monkeypatch.setattr(
+        "matmaster.context.compaction.call_summary_llm",
+        fake_call_summary_llm,
+    )
+    provider = Provider("unused")
+    compactor = Compactor()
+    state = _KernelState(
+        messages=[SystemMessage(content="sys"), UserMessage(content="old")]
+    )
+    kernel_spec = AgentKernelSpec(
+        system_prompt="sys",
+        max_turns=10,
+        compaction=CompactionConfig(
+            context_limit=20_000,
+            reserved_summary_tokens=1_000,
+            summary_safety_margin_tokens=123,
+        ),
+        run_identity=RunIdentity(),
+    )
+
+    [
+        item
+        async for item in run_compaction_plan(
+            kernel_spec=kernel_spec,
+            kernel_resources=_kernel_resources(provider, compactor),
+            state=state,
+            plan=_plan("runtime"),
+            checkpoint_sink=None,
+            tool_definitions=None,
+        )
+    ]
+
+    assert captured["safety_margin_tokens"] == 123
+
+
+@pytest.mark.asyncio
 async def test_compaction_plan_runner_preflight_summary_failure_raises() -> None:
     provider = Provider(RuntimeError("network down"))
     compactor = Compactor()
@@ -141,7 +200,8 @@ async def test_compaction_plan_runner_preflight_summary_failure_raises() -> None
 
     with pytest.raises(RuntimeError, match="network down"):
         async for _item in run_compaction_plan(
-            spec=_spec(provider, compactor),
+            kernel_spec=_kernel_spec(),
+            kernel_resources=_kernel_resources(provider, compactor),
             state=state,
             plan=_plan("preflight"),
             checkpoint_sink=None,
@@ -163,7 +223,8 @@ async def test_compaction_plan_runner_runtime_summary_failure_uses_fallback() ->
     events = [
         item.event
         async for item in run_compaction_plan(
-            spec=_spec(provider, compactor),
+            kernel_spec=_kernel_spec(),
+            kernel_resources=_kernel_resources(provider, compactor),
             state=state,
             plan=_plan("runtime"),
             checkpoint_sink=None,
@@ -192,7 +253,8 @@ async def test_compaction_plan_runner_runtime_tool_call_response_uses_fallback()
     events = [
         item.event
         async for item in run_compaction_plan(
-            spec=_spec(provider, compactor),
+            kernel_spec=_kernel_spec(),
+            kernel_resources=_kernel_resources(provider, compactor),
             state=state,
             plan=_plan("runtime"),
             checkpoint_sink=None,
