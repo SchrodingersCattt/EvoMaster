@@ -53,9 +53,12 @@ async def run_compaction_plan(
         if inspect.isawaitable(result):
             await result
     try:
-        from matmaster.context.compaction import call_summary_llm
+        from matmaster.context.compaction import (
+            call_summary_llm_response,
+            validate_summary_response,
+        )
 
-        summary = await call_summary_llm(
+        response = await call_summary_llm_response(
             llm_provider=kernel_resources.llm_provider,
             system_prompt=kernel_spec.system_prompt,
             full_messages=state.messages,
@@ -66,6 +69,7 @@ async def run_compaction_plan(
             reserved_summary_tokens=kernel_spec.compaction.reserved_summary_tokens,
             safety_margin_tokens=(kernel_spec.compaction.summary_safety_margin_tokens),
         )
+        summary = validate_summary_response(response)
         result = await kernel_resources.compactor.apply_summary(
             plan,
             state.messages,

@@ -31,6 +31,7 @@ from matmaster.types.message_normalization import (
 )
 from matmaster.types.messages import (
     AssistantMessage,
+    LLMResponse,
     Message,
     SystemMessage,
     ToolMessage,
@@ -287,7 +288,7 @@ def prepare_messages_for_summary_call(
     )
 
 
-async def call_summary_llm(
+async def call_summary_llm_response(
     *,
     llm_provider: LLMProvider,
     system_prompt: str,
@@ -298,7 +299,7 @@ async def call_summary_llm(
     context_limit: int,
     reserved_summary_tokens: int,
     safety_margin_tokens: int = 5_000,
-) -> str:
+) -> LLMResponse:
     """Call the main LLM to summarize conversation history."""
     if not full_messages:
         raise ValueError("Cannot summarize empty message list")
@@ -323,11 +324,15 @@ async def call_summary_llm(
     api_messages = normalize_and_validate_openai_messages(
         canonicalize_messages_for_provider(summary_messages)
     )
-    response = await llm_provider.chat(
+    return await llm_provider.chat(
         api_messages,
         tools=tool_definitions,
         tool_choice="none",
     )
+
+
+def validate_summary_response(response: LLMResponse) -> str:
+    """Validate a summary LLM response and return stripped summary content."""
     if response.tool_calls:
         raise ValueError("Summary LLM attempted tool calls")
     if not response.content or not response.content.strip():

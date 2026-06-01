@@ -151,13 +151,15 @@ async def test_compaction_plan_runner_passes_configured_summary_safety_margin(
 ) -> None:
     captured: dict[str, object] = {}
 
-    async def fake_call_summary_llm(**kwargs):
+    async def fake_call_summary_llm_response(**kwargs):
         captured.update(kwargs)
-        return "summary text"
+        from matmaster.types.messages import LLMResponse
+
+        return LLMResponse(content="summary text", finish_reason="stop")
 
     monkeypatch.setattr(
-        "matmaster.context.compaction.call_summary_llm",
-        fake_call_summary_llm,
+        "matmaster.context.compaction.call_summary_llm_response",
+        fake_call_summary_llm_response,
     )
     provider = Provider("unused")
     compactor = Compactor()
