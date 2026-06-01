@@ -36,6 +36,19 @@ _FIGURE_ID_STEM_MAX = 48
 _FIGURE_ID_TOTAL_MAX = 64
 
 
+class FigureValidationError(ValueError):
+    """Image validation failure carrying a stable classification reason.
+
+    Subclasses ValueError so existing callers that catch ValueError keep
+    working; new callers read ``.reason`` for stable classification.
+    """
+
+    def __init__(self, reason: str, detail: str = "") -> None:
+        self.reason = reason
+        self.detail = detail
+        super().__init__(f"{reason}:{detail}" if detail else reason)
+
+
 def _format_figure_id_for_diagnostic(figure_id: str) -> str:
     return repr(figure_id[:_FIGURE_ID_MAX_DISPLAY_CHARS])
 
@@ -320,16 +333,16 @@ def _download_with_retry(*, session: Session, path: str) -> bytes:
 def _validate_image_bytes(*, payload: bytes, path: str) -> None:
     suffix = posixpath.splitext(path)[1].lower()
     if suffix not in _ALLOWED_SUFFIXES:
-        raise ValueError(f"unsupported_format:{suffix}")
+        raise FigureValidationError("unsupported_format", suffix)
     if len(payload) > _MAX_FIGURE_BYTES:
-        raise ValueError(f"figure_too_large:{len(payload)}")
+        raise FigureValidationError("figure_too_large", str(len(payload)))
     sniffed = _sniff_image_format(payload)
     if sniffed is None:
-        raise ValueError(f"image_header_mismatch:{suffix}")
+        raise FigureValidationError("image_header_mismatch", suffix)
     if suffix in {".jpg", ".jpeg"} and sniffed == ".jpg":
         return
     if sniffed != suffix:
-        raise ValueError(f"image_header_mismatch:{suffix}")
+        raise FigureValidationError("image_header_mismatch", suffix)
 
 
 def _sniff_image_format(payload: bytes) -> str | None:

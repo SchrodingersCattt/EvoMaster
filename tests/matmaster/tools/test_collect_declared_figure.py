@@ -72,3 +72,38 @@ def test_figure_id_length_bounded_and_charset():
     assert len(fid) <= 64
     assert all(c.isalnum() or c in "._-" for c in fid)
     assert "/" not in fid
+
+
+import pytest
+
+from matmaster.tools.figure_artifacts import (
+    FigureValidationError,
+    _validate_image_bytes,
+)
+
+_JPG = b"\xff\xd8\xff" + b"\x00" * 64
+
+
+def test_validate_unsupported_format_reason():
+    with pytest.raises(FigureValidationError) as exc:
+        _validate_image_bytes(payload=_PNG, path="/share/x.gif")
+    assert exc.value.reason == "unsupported_format"
+
+
+def test_validate_header_mismatch_reason():
+    # .png suffix but JPG magic bytes
+    with pytest.raises(FigureValidationError) as exc:
+        _validate_image_bytes(payload=_JPG, path="/share/x.png")
+    assert exc.value.reason == "image_header_mismatch"
+
+
+def test_validate_too_large_reason():
+    big = b"\x89PNG\r\n\x1a\n" + b"\x00" * (10 * 1024 * 1024 + 1)
+    with pytest.raises(FigureValidationError) as exc:
+        _validate_image_bytes(payload=big, path="/share/x.png")
+    assert exc.value.reason == "figure_too_large"
+
+
+def test_validation_error_is_value_error_subclass():
+    # Keeps the old manifest pipeline's `except Exception` / ValueError contract.
+    assert issubclass(FigureValidationError, ValueError)
