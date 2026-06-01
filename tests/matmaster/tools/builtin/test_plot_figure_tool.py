@@ -143,3 +143,59 @@ class TestPlotFigureNoCommand:
         ctx = make_ctx(session, make_upload_config(), tool_call_id=None)
         result = run_ctx(tool, {"output_path": "band.png", "caption": "c"}, ctx)
         assert result.status == "error"
+
+
+def make_cmd_session(exit_code=0, output="done", payload=_PNG, file_after=True):
+    s = MagicMock()
+    s.exec_bash.return_value = {
+        "output": output,
+        "exit_code": exit_code,
+        "working_dir": "/share",
+        "stdout": "",
+    }
+    s.path_exists.return_value = file_after
+    s.is_file.return_value = True
+    s.download.return_value = payload
+    return s
+
+
+class TestPlotFigureWithCommand:
+    def test_command_success_and_figure(self):
+        session = make_cmd_session(exit_code=0)
+        tool = PlotFigure(session=session, workdir="/share")
+        ctx = make_ctx(session, make_upload_config())
+        result = run_ctx(
+            tool,
+            {"command": "python plot.py", "output_path": "xrd.png", "caption": "XRD"},
+            ctx,
+        )
+        assert result.status == "success"
+        assert result.payload["figures"]
+        assert "[Command finished with exit code 0]" in result.content
+        assert "[[fig:" in result.content
+
+    def test_command_fails_but_figure_collected(self):
+        session = make_cmd_session(exit_code=1, file_after=True)
+        tool = PlotFigure(session=session, workdir="/share")
+        ctx = make_ctx(session, make_upload_config())
+        result = run_ctx(
+            tool,
+            {"command": "python plot.py", "output_path": "xrd.png", "caption": "XRD"},
+            ctx,
+        )
+        assert result.status == "error"
+        assert result.payload["figures"]  # figure survives a failed command
+        assert "[Command finished with exit code 1]" in result.content
+
+    def test_command_succeeds_but_no_figure(self):
+        session = make_cmd_session(exit_code=0, file_after=False)
+        tool = PlotFigure(session=session, workdir="/share")
+        ctx = make_ctx(session, make_upload_config())
+        result = run_ctx(
+            tool,
+            {"command": "python plot.py", "output_path": "xrd.png", "caption": "XRD"},
+            ctx,
+        )
+        assert result.status == "error"
+        assert not result.payload.get("figures")
+        assert "file_not_found" in result.content
