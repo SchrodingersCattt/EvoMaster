@@ -36,3 +36,39 @@ def test_escape_absolute_denied():
         resolve_workspace_output_path(raw_path="/etc/passwd", workdir="/share")
         is None
     )
+
+
+from matmaster.tools.figure_artifacts import build_figure_id
+
+_PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+
+
+def test_figure_id_sanitizes_spaces():
+    fid = build_figure_id(output_path="plots/band structure.png", image_bytes=_PNG)
+    stem, _, digest = fid.rpartition("-")
+    assert stem == "band-structure"
+    assert len(digest) == 12
+
+
+def test_figure_id_non_ascii_stem_falls_back_to_figure():
+    fid = build_figure_id(output_path="结果图.png", image_bytes=_PNG)
+    assert fid.startswith("figure-")
+
+
+def test_figure_id_is_deterministic_for_same_bytes():
+    a = build_figure_id(output_path="x.png", image_bytes=_PNG)
+    b = build_figure_id(output_path="x.png", image_bytes=_PNG)
+    assert a == b
+
+
+def test_figure_id_changes_with_bytes():
+    a = build_figure_id(output_path="x.png", image_bytes=_PNG)
+    b = build_figure_id(output_path="x.png", image_bytes=_PNG + b"x")
+    assert a != b
+
+
+def test_figure_id_length_bounded_and_charset():
+    fid = build_figure_id(output_path="A" * 200 + ".png", image_bytes=_PNG)
+    assert len(fid) <= 64
+    assert all(c.isalnum() or c in "._-" for c in fid)
+    assert "/" not in fid

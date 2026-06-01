@@ -32,6 +32,8 @@ _UPLOAD_RETRY_BACKOFF_SECONDS = 0.01
 _SYMLINK_EXISTS_MARKER = "FIGURE_SYMLINK_EXISTS"
 _SYMLINK_EXISTS_EXIT_CODE = 73
 _FIGURE_ID_MAX_DISPLAY_CHARS = 64
+_FIGURE_ID_STEM_MAX = 48
+_FIGURE_ID_TOTAL_MAX = 64
 
 
 def _format_figure_id_for_diagnostic(figure_id: str) -> str:
@@ -64,6 +66,24 @@ def resolve_workspace_output_path(
     if not resolved.is_relative_to(root):
         return None
     return str(resolved)
+
+
+def build_figure_id(*, output_path: str, image_bytes: bytes) -> str:
+    """Stable, sanitized figure_id: sanitized stem + sha256(bytes)[:12].
+
+    Charset limited to [A-Za-z0-9._-]; other runs fold to '-'; consecutive
+    '-' merge; leading/trailing '-' stripped; empty stem -> 'figure';
+    stem capped at 48 chars, total capped at 64. Never contains '/', NUL,
+    control chars, or whitespace.
+    """
+    stem = posixpath.splitext(posixpath.basename(output_path))[0]
+    sanitized = re.sub(r"[^A-Za-z0-9._-]+", "-", stem)
+    sanitized = re.sub(r"-{2,}", "-", sanitized).strip("-")
+    sanitized = sanitized[:_FIGURE_ID_STEM_MAX].strip("-")
+    if not sanitized:
+        sanitized = "figure"
+    digest = hashlib.sha256(image_bytes).hexdigest()[:12]
+    return f"{sanitized}-{digest}"[:_FIGURE_ID_TOTAL_MAX]
 
 
 @dataclass(slots=True)
