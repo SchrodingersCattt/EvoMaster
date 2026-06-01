@@ -616,7 +616,7 @@ class TestRunStream:
         ctx = _make_playground_context()
 
         events: list = []
-        async for event in exp.run_stream(ctx, "test task"):
+        async for event in exp.run_stream(ctx, "test task", spawn_id="test-spawn"):
             events.append(event)
 
         # Should have at least some events (start, streaming, complete, end)
@@ -648,7 +648,7 @@ class TestRunStream:
 
         exp._register_cleanup(on_cleanup)
 
-        async for _ in exp.run_stream(ctx, "test task"):
+        async for _ in exp.run_stream(ctx, "test task", spawn_id="test-spawn"):
             pass
 
         assert cleanup_called, "Cleanup callback should have been called"
@@ -670,7 +670,7 @@ class TestRunStream:
 
         exp._register_cleanup(on_cleanup)
 
-        gen = exp.run_stream(ctx, "test task")
+        gen = exp.run_stream(ctx, "test task", spawn_id="test-spawn")
         try:
             await gen.__anext__()  # Get first item
         finally:
@@ -716,6 +716,7 @@ class TestRunStream:
             ctx,
             "test task",
             cancel_token=controller.token,
+            spawn_id="test-spawn",
         ):
             events.append(event)
 

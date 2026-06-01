@@ -17,18 +17,9 @@ from pathlib import Path
 from typing import Any
 
 from matmaster.config.loader import load_agents_general_llm
-from matmaster.context.assembly import (
-    ContextAssemblyIntent,
-    TurnAssemblyRequest,
-)
-from matmaster.context.ports import SkillResolver
-from matmaster.context.scanner import scan_skill_hits
-from matmaster.context.sections import ContextView
-from matmaster.context.skill_resolver import SkillRegistryResolver
 from matmaster.context.sources.turn_input import TurnInput
 from matmaster.core.playground import PlaygroundManager
 from matmaster.core.run_context import AgentRunContext, AgentRunRequest
-from matmaster.core.runtime_context_assembly import empty_skill_resolver
 from matmaster.integration.event_payloads import _normalize_public_source
 from matmaster.integration.fanout import RunEventFanout
 from matmaster.integration.persistence_handler import PersistenceHandler
@@ -48,22 +39,13 @@ from src.dao.chat_events_table import get_chat_events_table
 from src.dao.redis_dao import get_redis_dao
 from src.services.agent_run_bohrium_stage import run_bohrium_stage
 from src.services.agent_run_history_wiring import build_history_wiring
-from src.services.context_assembly_factory import build_context_assembler
-from src.services.context_turn_intent import resolve_turn_context_intent
 from src.services.figure_coordinator import FigureCoordinator
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.image_input_service import get_image_input_service
 from src.services.quota_service import use_quota
-from src.services.session_event_codec import decode_session_events
 from src.services.sessions_service import get_sessions_service
-from src.services.skill_registry_factory import build_skill_registry
 from src.services.stream_reply_queue import RedisReplyQueue
-from src.services.user_turn_context_service import (
-    DEFAULT_TURN_TRANSFORM,
-    USER_CONTEXT_RENDER_VERSION,
-    USER_TURN_CONTEXT_SCHEMA_VERSION,
-    write_user_turn_context_event,
-)
+from src.services.user_turn_context_service import write_user_turn_context_event
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -204,6 +186,32 @@ async def _emit_error_and_close_fanout(
     )
 
 
+def _build_user_turn_context_writer(
+    *,
+    events_table: Any,
+    session_id: str,
+):
+    async def _writer(request) -> None:
+        payload = {
+            "schema_version": request.schema_version,
+            "kind": request.kind,
+            "message": request.message.model_dump(mode="json"),
+            "user_instructions_hash": request.user_instructions_hash,
+            "transform": request.transform,
+            "render_version": request.render_version,
+        }
+        await write_user_turn_context_event(
+            events_table=events_table,
+            session_id=session_id,
+            task_id=request.task_id,
+            invocation_id=request.invocation_id,
+            spawn_id=request.spawn_id,
+            payload=payload,
+        )
+
+    return _writer
+
+
 class AgentRunService:
     """Agent execution service: pipeline orchestration via matmaster components."""
 
@@ -214,73 +222,6 @@ class AgentRunService:
     def init_playground_sync(self) -> None:
         """Validate configs at startup -- delegates to PlaygroundManager."""
         self._pg_manager.validate_startup()
-
-    def _build_skill_resolver(
-        self,
-        exp_config: Any,
-        session: Any | None,
-    ) -> SkillResolver:
-        skills_cfg = getattr(exp_config, "skills", None)
-        if skills_cfg is None or not getattr(skills_cfg, "enabled", False):
-            return empty_skill_resolver
-
-        roots_raw = getattr(skills_cfg, "skills_root", None)
-        if isinstance(roots_raw, (list, tuple)):
-            config_roots: tuple[str | Path, ...] = tuple(
-                root for root in roots_raw if isinstance(root, (str, Path)) and root
-            )
-        elif isinstance(roots_raw, (str, Path)) and roots_raw:
-            config_roots = (roots_raw,)
-        else:
-            config_roots = ()
-
-        disabled_raw = getattr(skills_cfg, "disabled_skill_names", ())
-        config_disabled = (
-            tuple(disabled_raw)
-            if isinstance(disabled_raw, (list, tuple, set, frozenset))
-            else ()
-        )
-        try:
-            registry = build_skill_registry(
-                config_roots=config_roots,
-                session=session,
-                config_disabled=config_disabled,
-            )
-        except Exception:
-            logger.warning(
-                "active skill resolver: building SkillRegistry failed",
-                exc_info=True,
-            )
-            registry = None
-        return SkillRegistryResolver(registry)
-
-    def _resolve_active_skill_names(
-        self,
-        session_id: str,
-        events_table: Any,
-        *,
-        until_event_id: int | None = None,
-    ) -> frozenset[str]:
-        raw_events: list[dict] = []
-        if events_table is not None:
-            try:
-                raw_events = events_table.get_session_events(
-                    session_id,
-                    limit=_DIALOG_HISTORY_MAX_EVENTS,
-                )
-            except Exception:
-                logger.warning(
-                    "active skill rehydrate: get_session_events failed for session_id=%s",
-                    session_id,
-                    exc_info=True,
-                )
-
-        events = decode_session_events(raw_events)
-        if until_event_id is not None:
-            events = tuple(event for event in events if event.id <= until_event_id)
-        return frozenset(
-            record.skill_name for record in scan_skill_hits(events) if record.skill_name
-        )
 
     async def run_agent(
         self,
@@ -499,87 +440,12 @@ class AgentRunService:
             )
             from src.services.interrupt_service import RedisInterruptChecker
 
-            # -- Stage 5b: Phase 2C user_turn_context cutover via ContextAssembler --
-            skill_resolver = self._build_skill_resolver(
-                exp_config,
-                session=environment.session,
-            )
-            context_assembler, assembly_ports = build_context_assembler(
-                events_table=events_table,
-                skill_resolver=skill_resolver,
-            )
-            session_events_port = assembly_ports.session_events
-
-            try:
-                intent = await resolve_turn_context_intent(
-                    instructions_hash=user_instructions.hash,
-                    session_id=session_id,
-                    spawn_id=None,
-                    events_port=session_events_port,
-                )
-            except Exception:
-                logger.warning(
-                    "resolve_turn_context_intent failed; treating current turn as anchor",
-                    exc_info=True,
-                )
-                intent = ContextAssemblyIntent.ANCHOR_TURN
-
+            # -- Stage 5b: Turn input enrichment --
             turn_input = image_service.enrich_turn_input_images(
                 turn_input=turn_input,
                 user_prompt=user_prompt,
                 top_level_images=top_level_images,
                 image_detail=image_detail,
-            )
-
-            assembly = await context_assembler.assemble_turn(
-                intent=intent,
-                request=TurnAssemblyRequest(
-                    session_id=session_id,
-                    spawn_id=None,
-                    turn_input=turn_input,
-                    user_instructions=user_instructions,
-                ),
-            )
-            rendered_message = assembly.user_turn_context.to_message(
-                ContextView.RUNTIME
-            )
-
-            user_turn_payload = {
-                "schema_version": USER_TURN_CONTEXT_SCHEMA_VERSION,
-                "kind": "anchor" if intent.is_anchor_turn else "continuation",
-                "message": rendered_message.model_dump(mode="json"),
-                "user_instructions_hash": (
-                    user_instructions.hash if intent.is_anchor_turn else None
-                ),
-                "transform": DEFAULT_TURN_TRANSFORM,
-                "render_version": USER_CONTEXT_RENDER_VERSION,
-            }
-            try:
-                await write_user_turn_context_event(
-                    events_table=events_table,
-                    session_id=session_id,
-                    task_id=task_id,
-                    invocation_id=invocation_id,
-                    spawn_id=None,
-                    payload=user_turn_payload,
-                )
-            except Exception as exc:
-                logger.exception(
-                    "user_turn_context write failed; aborting turn "
-                    "session_id=%s invocation_id=%s",
-                    session_id,
-                    invocation_id,
-                )
-                return ((False, str(exc)), _elapsed_ms(), None)
-
-            user_prompt = rendered_message.content
-
-            # Resolve active skills (hot cache + DB rehydrate). Must run
-            # AFTER history is available so the snapshot frozen below reflects
-            # any skills recovered from past turns.
-            active_skills = self._resolve_active_skill_names(
-                session_id,
-                events_table,
             )
 
             # -- Compose the Exp input from the prepared environment and
@@ -592,16 +458,21 @@ class AgentRunService:
                     llm_model=llm_bundle.model,
                     llm_model_profile=llm_bundle.model_profile,
                     llm_model_route=llm_bundle.model_route,
+                    invocation_id=invocation_id,
                     interaction_bridge=bridge,
                     turn_input=turn_input,
                     user_instructions=user_instructions,
-                    active_skills=frozenset(active_skills),
+                    active_skills=frozenset(),
                     bohrium_rebuild_events=bohrium_rebuild_events,
                     ports=AgentRunPorts(
                         child_event_forward_sink=figure_coordinator.child_event_sink,
                         compaction=wiring.compaction,
                         figure_upload=FigureUploadPort(config=figure_upload_config),
                         interrupt_checker=RedisInterruptChecker(session_id),
+                        user_turn_context_writer=_build_user_turn_context_writer(
+                            events_table=events_table,
+                            session_id=session_id,
+                        ),
                     ),
                 ),
             )
@@ -611,10 +482,8 @@ class AgentRunService:
             async with aclosing(
                 exp.run_stream(
                     agent_run_ctx,
-                    user_prompt,
                     history=history,
                     cancel_token=cancel_token,
-                    skill_resolver=skill_resolver,
                 )
             ) as stream:
                 async for event in stream:

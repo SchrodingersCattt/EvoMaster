@@ -743,7 +743,7 @@ class TestSpawnGuardWiring:
         await child_stream.aclose()
 
     @pytest.mark.asyncio
-    async def test_child_run_factory_propagates_skill_resolver_to_child_exp(
+    async def test_child_run_factory_does_not_pass_skill_resolver_to_child_exp(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
@@ -780,11 +780,7 @@ class TestSpawnGuardWiring:
             request=AgentRunRequest(llm_provider=MockLLMProvider()),
         )
 
-        def sentinel_resolver(events):
-            return ()
-
         parent = original_exp(ExpConfig(name="parent"))
-        parent._skill_resolver = sentinel_resolver
         factory = parent._make_child_run_factory(ctx)
 
         with patch(
@@ -793,7 +789,7 @@ class TestSpawnGuardWiring:
         ):
             child_stream = factory("direct", "summarize this task", spawn_id="x")
 
-        assert captured_kwargs["skill_resolver"] is sentinel_resolver
+        assert "skill_resolver" not in captured_kwargs
         await child_stream.aclose()
 
     @pytest.mark.asyncio

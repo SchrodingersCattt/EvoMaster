@@ -30,11 +30,25 @@ import json
 import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from matmaster.config.exp import ExpConfig
+from matmaster.context.assembly import (
+    ContextAssemblyIntent,
+    ContextAssembler,
+    TurnAssemblyRequest,
+)
 from matmaster.context.ports import SkillResolver
+from matmaster.context.ports import UserInstructions, hash_user_instructions
+from matmaster.context.sections import ContextView
+from matmaster.context.turn_intent import TurnIntentResolution, resolve_turn_intent
+from matmaster.context.user_turn_context import (
+    DEFAULT_TURN_TRANSFORM,
+    USER_CONTEXT_RENDER_VERSION,
+    USER_TURN_CONTEXT_SCHEMA_VERSION,
+)
 from matmaster.context.system_prompt import SystemPromptBuilder
 from matmaster.core.hooks import HookExecutor
 from matmaster.core.path_access import derive_path_access_roots
@@ -56,7 +70,11 @@ from matmaster.types.runtime import (
     AgentKernelSpec,
     AgentRuntime,
 )
-from matmaster.types.runtime_ports import KernelRuntimePorts
+from matmaster.types.runtime_ports import (
+    EmptySessionEventHistory,
+    KernelRuntimePorts,
+    UserTurnContextWriteRequest,
+)
 
 if TYPE_CHECKING:
     from matmaster.types.messages import Message
@@ -97,6 +115,11 @@ _SESSION_REQUIRING_TOOL_NAMES: frozenset[str] = frozenset(
         "Grep",
     }
 )
+
+
+@dataclass(frozen=True)
+class RootTurnRender:
+    rendered_content: str
 
 
 def _resolve_skill_config_dir(raw_dir: str) -> Path:
@@ -199,8 +222,6 @@ class Exp:
         ``run_stream`` with the parent ``ctx``. The orchestrator owns the spawn
         lifecycle (id, hooks, event retag, drain) around the returned stream.
         """
-        skill_resolver = self._skill_resolver
-
         def child_run_factory(
             exp_name: str,
             task: str,
@@ -216,7 +237,6 @@ class Exp:
                 task,
                 cancel_token=cancel_token,
                 spawn_id=spawn_id,
-                skill_resolver=skill_resolver,
             )
 
         return child_run_factory
@@ -267,7 +287,6 @@ class Exp:
         ctx: AgentRunContext,
         *,
         skills: dict[str, Any] | None = None,
-        skill_resolver: SkillResolver | None = None,
         spawn_id: str | None = None,
     ) -> AgentRuntime:
         """One-shot assembly: tools -> prompt -> context assembly -> kernel.
@@ -285,7 +304,7 @@ class Exp:
         from matmaster.context.skill_resolver import SkillRegistryResolver
         from matmaster.core.runtime_context_assembly import empty_skill_resolver
 
-        self._skill_resolver = skill_resolver or empty_skill_resolver
+        self._skill_resolver = empty_skill_resolver
 
         registry = ToolRegistry()
         builtin_cfg = self._config.tools.builtin
@@ -334,8 +353,7 @@ class Exp:
 
         if skills or self._config.skills.enabled:
             self._init_skill_tools(ctx, registry, skills_config=skills, catalog=catalog)
-        if skill_resolver is None:
-            self._skill_resolver = SkillRegistryResolver(self._skill_registry)
+        self._skill_resolver = SkillRegistryResolver(self._skill_registry)
 
         # When allow_spawn is False (child Exp), spawn_fn is None, which causes
         # AgentTool to set exposed_to_model=False (hidden from LLM but still
@@ -477,7 +495,6 @@ class Exp:
         cancel_token: CancellationToken | None = None,
         *,
         skills: dict[str, Any] | None = None,
-        skill_resolver: SkillResolver | None = None,
         spawn_id: str | None = None,
     ) -> AsyncIterator[AgentRuntime]:
         """Reusable run lifecycle: build_runtime -> cancel-token injection
@@ -493,7 +510,6 @@ class Exp:
             runtime = await self.build_runtime(
                 ctx,
                 skills=skills,
-                skill_resolver=skill_resolver,
                 spawn_id=spawn_id,
             )
             kernel_runtime = runtime.kernel_runtime
@@ -512,12 +528,11 @@ class Exp:
     async def run_stream(
         self,
         ctx: AgentRunContext,
-        task: str,
+        task: str | None = None,
         *,
         history: list[Message] | None = None,
         cancel_token: CancellationToken | None = None,
         skills: dict[str, Any] | None = None,
-        skill_resolver: SkillResolver | None = None,
         spawn_id: str | None = None,
     ) -> AsyncIterator[Any]:
         """Thin driver over :meth:`runtime_scope`.
@@ -526,13 +541,53 @@ class Exp:
         Cleanup is guaranteed by the scope's try/finally on normal completion,
         break, and exception.
         """
+        resolution: TurnIntentResolution | None = None
+        user_instructions: UserInstructions | None = None
+        if spawn_id is None:
+            if ctx.request.turn_input is None:
+                raise RuntimeError("AgentRunRequest.turn_input is required for root run")
+            events_port = (
+                ctx.request.ports.compaction.history or EmptySessionEventHistory()
+            )
+            user_instructions = ctx.request.user_instructions or UserInstructions(
+                text="",
+                hash=hash_user_instructions(""),
+                truncated=False,
+            )
+            resolution = await resolve_turn_intent(
+                events_port=events_port,
+                instructions_hash=user_instructions.hash,
+                session_id=ctx.environment.session_id,
+                spawn_id=None,
+            )
+            ctx = ctx.model_copy(
+                update={
+                    "request": ctx.request.model_copy(
+                        update={"active_skills": resolution.active_skills}
+                    )
+                }
+            )
+        elif task is None:
+            raise RuntimeError("task is required for spawn run")
+
         async with self.runtime_scope(
             ctx,
             cancel_token,
             skills=skills,
-            skill_resolver=skill_resolver,
             spawn_id=spawn_id,
         ) as runtime:
+            if spawn_id is None:
+                if resolution is None or user_instructions is None:
+                    raise RuntimeError("root turn resolution is missing")
+                if runtime.context_runtime is None:
+                    raise RuntimeError("context runtime is unavailable for root run")
+                turn = await self._render_and_persist_root_turn(
+                    ctx=ctx,
+                    intent=resolution.intent,
+                    assembler=runtime.context_runtime.assembler,
+                    user_instructions=user_instructions,
+                )
+                task = turn.rendered_content
             async for event in runtime.kernel.run_stream(
                 runtime.kernel_runtime,
                 task,
@@ -540,6 +595,62 @@ class Exp:
                 cancel_token=cancel_token,
             ):
                 yield event
+
+    async def _render_and_persist_root_turn(
+        self,
+        *,
+        ctx: AgentRunContext,
+        intent: ContextAssemblyIntent,
+        assembler: ContextAssembler,
+        user_instructions: UserInstructions,
+    ) -> RootTurnRender:
+        if ctx.request.turn_input is None:
+            raise RuntimeError("AgentRunRequest.turn_input is required for root run")
+        assembly = await assembler.assemble_turn(
+            intent=intent,
+            request=TurnAssemblyRequest(
+                session_id=ctx.environment.session_id,
+                spawn_id=None,
+                turn_input=ctx.request.turn_input,
+                user_instructions=user_instructions,
+            ),
+        )
+        message = assembly.user_turn_context.to_message(ContextView.RUNTIME)
+        await self._write_user_turn_context_if_configured(
+            ctx=ctx,
+            intent=intent,
+            message=message,
+            user_instructions=user_instructions,
+        )
+        return RootTurnRender(rendered_content=message.content)
+
+    async def _write_user_turn_context_if_configured(
+        self,
+        *,
+        ctx: AgentRunContext,
+        intent: ContextAssemblyIntent,
+        message: Message,
+        user_instructions: UserInstructions,
+    ) -> None:
+        writer = ctx.request.ports.user_turn_context_writer
+        if writer is None:
+            return
+        await writer(
+            UserTurnContextWriteRequest(
+                session_id=ctx.environment.session_id,
+                task_id=ctx.environment.metadata.task_id,
+                invocation_id=ctx.request.invocation_id,
+                spawn_id=None,
+                kind="anchor" if intent.is_anchor_turn else "continuation",
+                message=message,
+                user_instructions_hash=(
+                    user_instructions.hash if intent.is_anchor_turn else None
+                ),
+                transform=DEFAULT_TURN_TRANSFORM,
+                render_version=USER_CONTEXT_RENDER_VERSION,
+                schema_version=USER_TURN_CONTEXT_SCHEMA_VERSION,
+            )
+        )
 
     # ── Capability initialization helpers ────────────────
 

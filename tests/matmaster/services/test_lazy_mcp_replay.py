@@ -60,23 +60,14 @@ class FakeRemoteSkillSession:
 
 
 @pytest.mark.asyncio
-async def test_run_agent_rehydrates_active_skills_from_events(monkeypatch):
-    """Persisted skill_hit events are the source for the request snapshot."""
+async def test_run_agent_leaves_active_skill_backfill_to_exp():
+    """Service passes an empty snapshot; Exp resolves persisted skill_hit events."""
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
 
     async with _patched_service([run_result]) as (svc, _, __):
-        svc._test_events_table.get_session_events.return_value = [
+        svc._test_events_table.query_context_events.return_value = [
             {"id": 1, "type": "skill_hit", "content": {"skill_name": "pxrd"}}
         ]
-
-        called = {"n": 0}
-        original = svc._resolve_active_skill_names
-
-        def _spy(session_id, events_table, **kwargs):
-            called["n"] += 1
-            return original(session_id, events_table, **kwargs)
-
-        monkeypatch.setattr(svc, "_resolve_active_skill_names", _spy)
 
         await svc.run_agent(
             session_id="sess-1",
@@ -89,10 +80,9 @@ async def test_run_agent_rehydrates_active_skills_from_events(monkeypatch):
         )
 
     snapshot = svc._test_fake_exp.last_ctx.request.active_skills
-    assert snapshot == frozenset({"pxrd"})
+    assert snapshot == frozenset()
     assert isinstance(snapshot, frozenset)
-    assert called["n"] == 1
-    svc._test_events_table.get_session_events.assert_called_once()
+    assert svc._test_fake_exp.last_ctx.request.ports.compaction.history is not None
 
 
 @pytest.mark.asyncio
@@ -119,7 +109,7 @@ async def test_run_agent_skill_hit_event_does_not_create_hot_cache_state():
 
 @pytest.mark.asyncio
 async def test_run_agent_rehydrates_from_db_on_cache_miss(tmp_path, monkeypatch):
-    """When the hot cache is empty, run_agent must scan skill_hit events once."""
+    """Service no longer scans skill_hit events; Exp receives the history port."""
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
 
     cache_dir = tmp_path / "cache"
@@ -175,7 +165,8 @@ async def test_run_agent_rehydrates_from_db_on_cache_miss(tmp_path, monkeypatch)
             )
 
     snapshot = svc._test_fake_exp.last_ctx.request.active_skills
-    assert snapshot == frozenset({"pxrd", "sg"})
+    assert snapshot == frozenset()
+    assert svc._test_fake_exp.last_ctx.request.ports.compaction.history is not None
 
 
 @pytest.mark.asyncio
@@ -183,7 +174,7 @@ async def test_run_agent_rehydrates_remote_skill_from_session_root(
     tmp_path,
     monkeypatch,
 ):
-    """Skill-hit replay should include skills exposed by the active SSH session."""
+    """Remote skill-hit replay is resolved by Exp through the history port."""
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
     remote_root = "/remote/user/skills"
     session = FakeRemoteSkillSession(
@@ -249,4 +240,5 @@ async def test_run_agent_rehydrates_remote_skill_from_session_root(
             )
 
     snapshot = svc._test_fake_exp.last_ctx.request.active_skills
-    assert snapshot == frozenset({"remote-skill"})
+    assert snapshot == frozenset()
+    assert svc._test_fake_exp.last_ctx.request.ports.compaction.history is not None

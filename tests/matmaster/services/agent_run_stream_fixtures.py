@@ -88,6 +88,9 @@ class _FakeExp:
         self.last_ctx = args[0] if args else None
         self.last_task = args[1] if len(args) > 1 else None
         self.last_run_kwargs = kwargs
+        if self.last_task is None and self.last_ctx is not None:
+            turn_input = self.last_ctx.request.turn_input
+            self.last_task = turn_input.user_text if turn_input is not None else None
         try:
             if callable(self._events):
                 stream = self._events(self.last_ctx)
