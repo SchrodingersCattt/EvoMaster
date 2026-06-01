@@ -121,7 +121,7 @@ def download_remote_results(
             host, path, token = get_file_token(
                 ctx,
                 file_path="log",
-                bohr_job_id=str(job_id),
+                job_id=str(job_id),
             )
             if host and path and token:
                 payload["sandbox_log_file"] = {

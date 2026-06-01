@@ -99,7 +99,8 @@ def test_download_job_artifacts_delegates_to_transfer_package(tmp_path, monkeypa
     )
     captured: dict = {}
 
-    def fake_get_file_token(ctx, *, file_path, bohr_job_id):
+    def fake_get_file_token(ctx, *, file_path, job_id):
+        assert job_id == "job-55"
         return "https://store.example", "prefix/log", "log-token"
 
     def fake_run_download_results_payload(payload):

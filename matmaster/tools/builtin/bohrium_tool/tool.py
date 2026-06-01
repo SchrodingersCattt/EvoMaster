@@ -632,7 +632,7 @@ class BohriumTool(BuiltinTool):
         self, ctx: BohriumContext, job_id: str, max_lines: int = 15
     ) -> str:
         """Best-effort fetch of live log tail from a sandbox job."""
-        host, path, token = get_file_token(ctx, file_path="log", bohr_job_id=job_id)
+        host, path, token = get_file_token(ctx, file_path="log", job_id=job_id)
         if not (host and path and token):
             return ""
         import urllib.request
