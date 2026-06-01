@@ -68,7 +68,7 @@ logger = logging.getLogger(__name__)
 
 
 def _created_job_ref(create_data: dict[str, Any]) -> str:
-    for key in ("jobId", "bohrJobId", "id"):
+    for key in ("jobId", "id"):
         value = create_data.get(key)
         if value not in (None, ""):
             return str(value)
