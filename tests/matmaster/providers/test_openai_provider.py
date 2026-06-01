@@ -14,9 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from matmaster.providers.openai_provider import (
-    OpenAIProvider,
-)
+from matmaster.providers.openai_provider import OpenAIProvider
 from matmaster.types.errors import LLMError
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import LLMResponse, StreamChunk
@@ -272,6 +270,7 @@ class TestChatContent:
             "completion_tokens": 5,
             "total_tokens": 15,
             "cache_read_tokens": 45,
+            "cache_write_tokens": 123,
         }
         assert result.usage_vendor == {
             "prompt_tokens": 10,

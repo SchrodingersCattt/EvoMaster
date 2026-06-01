@@ -17,10 +17,7 @@ from pathlib import Path
 from typing import Any
 
 from matmaster.config.loader import load_agents_general_llm
-from matmaster.context.assembly import (
-    ContextAssemblyIntent,
-    TurnAssemblyRequest,
-)
+from matmaster.context.assembly import ContextAssemblyIntent, TurnAssemblyRequest
 from matmaster.context.ports import SkillResolver
 from matmaster.context.scanner import scan_skill_hits
 from matmaster.context.sections import ContextView
@@ -51,6 +48,8 @@ from src.services.agent_run_bohrium_stage import (
     run_bohrium_stage,
 )
 from src.services.agent_run_history_wiring import build_history_wiring
+from src.services.billing_llm_provider import BillingLLMProvider
+from src.services.billing_service import BillingRunContext, get_billing_service
 from src.services.context_assembly_factory import build_context_assembler
 from src.services.context_turn_intent import resolve_turn_context_intent
 from src.services.history_checkpoint_service import HistoryCheckpointService
@@ -191,6 +190,28 @@ def _build_run_usage_summary(event: RunResultEvent) -> dict[str, Any] | None:
     if last_turn_usage:
         summary['last_turn_usage'] = dict(last_turn_usage)
     return summary
+
+
+async def _attach_run_cost(
+    usage_summary: dict[str, Any] | None,
+    invocation_id: str | None,
+) -> dict[str, Any] | None:
+    """best-effort 查本轮 run 全链路费用并并入 usage_summary，供飞书卡片展示。
+
+    费用口径是 invocation 维度的全链路（含子 agent / 压缩），与 token 摘要的
+    root-kernel 口径不同；查询失败/无账单时原样返回，不影响完成卡片。
+    """
+    if not invocation_id:
+        return usage_summary
+    try:
+        cost = await get_billing_service().get_run_cost(invocation_id)
+    except Exception:
+        cost = None
+    if not cost:
+        return usage_summary
+    enriched = dict(usage_summary or {})
+    enriched['cost'] = cost
+    return enriched
 
 
 async def _emit_error_and_close_fanout(
@@ -459,6 +480,23 @@ class AgentRunService:
                 default_profile_key=agent_default_llm,
             )
             llm_provider = llm_bundle.provider
+            try:
+                llm_provider = BillingLLMProvider(
+                    llm_provider,
+                    run_context=BillingRunContext(
+                        session_id=session_id,
+                        task_id=task_id,
+                        invocation_id=invocation_id,
+                    ),
+                    model=llm_bundle.model,
+                    billing_service=get_billing_service(),
+                )
+            except Exception:
+                logger.warning(
+                    "billing wrapper init failed session_id=%s",
+                    session_id,
+                    exc_info=True,
+                )
 
             exp = Exp(exp_config)
 
@@ -762,6 +800,7 @@ class AgentRunService:
                 return ((False, "no_result"), _elapsed_ms(), None)
 
             usage_summary = _build_run_usage_summary(run_result_event)
+            usage_summary = await _attach_run_cost(usage_summary, invocation_id)
             if run_result_event.reason == "cancelled":
                 await fanout.dispatch(
                     CancelledEvent(source="System", reason="Task cancelled by user.")

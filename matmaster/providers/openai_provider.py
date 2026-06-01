@@ -399,6 +399,24 @@ def _extract_cached_tokens(usage: Any) -> int:
     return 0
 
 
+def _extract_cache_write_tokens(usage: Any) -> int:
+    """Best-effort extraction of prompt cache-write tokens."""
+    val = getattr(usage, "cache_creation_input_tokens", None)
+    if isinstance(val, int) and val > 0:
+        return val
+    cache_creation = _dump_usage_detail(getattr(usage, "cache_creation", None))
+    if isinstance(cache_creation, dict):
+        for key in (
+            "ephemeral_5m_input_tokens",
+            "ephemeral_1h_input_tokens",
+            "input_tokens",
+        ):
+            val = cache_creation.get(key)
+            if isinstance(val, int) and val > 0:
+                return val
+    return 0
+
+
 def _is_non_retryable_tool_protocol_bad_request(err_str: str) -> bool:
     text = err_str.lower()
     patterns = (
@@ -695,6 +713,9 @@ class OpenAIProvider:
             cache_read = _extract_cached_tokens(response.usage)
             if cache_read:
                 usage["cache_read_tokens"] = cache_read
+            cache_write = _extract_cache_write_tokens(response.usage)
+            if cache_write:
+                usage["cache_write_tokens"] = cache_write
             usage_vendor = _openai_usage_to_vendor_dict(response.usage)
 
         return LLMResponse(
@@ -765,6 +786,9 @@ class OpenAIProvider:
                     cache_read = _extract_cached_tokens(usage)
                     if cache_read:
                         last_chunk_usage["cache_read_tokens"] = cache_read
+                    cache_write = _extract_cache_write_tokens(usage)
+                    if cache_write:
+                        last_chunk_usage["cache_write_tokens"] = cache_write
                     last_chunk_usage_vendor = _openai_usage_to_vendor_dict(usage)
                 if not chunk.choices:
                     continue

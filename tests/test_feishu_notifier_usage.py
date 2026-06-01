@@ -95,3 +95,67 @@ def test_zero_num_turns_omits_turns_row() -> None:
         {"prompt_tokens": 100, "completion_tokens": 10, "num_turns": 0}
     )
     assert all(k != "LLM 轮数" for k, _ in rows)
+
+
+def test_cost_row_appended_after_tokens() -> None:
+    rows = format_usage_rows(
+        {
+            "prompt_tokens": 1000,
+            "completion_tokens": 500,
+            "total_tokens": 1500,
+            "cost": {
+                "settlement_currency": "CNY",
+                "total_amount_settle_micro": 30000,
+                "missing_price_count": 0,
+            },
+        }
+    )
+    labels = [k for k, _ in rows]
+    assert labels == ["Token 消耗", "预估费用"]
+    # 30000 micro-CNY = ¥0.0300
+    assert _val(rows, "预估费用") == "¥0.0300（全链路）"
+
+
+def test_cost_row_flags_missing_price() -> None:
+    rows = format_usage_rows(
+        {
+            "prompt_tokens": 100,
+            "completion_tokens": 10,
+            "cost": {
+                "settlement_currency": "CNY",
+                "total_amount_settle_micro": 125000,
+                "missing_price_count": 1,
+            },
+        }
+    )
+    assert _val(rows, "预估费用") == "¥0.1250（全链路），部分模型未定价"
+
+
+def test_cost_only_without_tokens() -> None:
+    """无 token 摘要时仍能单独展示费用（如压缩/子任务消耗）。"""
+    rows = format_usage_rows(
+        {
+            "cost": {
+                "settlement_currency": "CNY",
+                "total_amount_settle_micro": 5000,
+                "missing_price_count": 0,
+            }
+        }
+    )
+    labels = [k for k, _ in rows]
+    assert labels == ["预估费用"]
+
+
+def test_zero_cost_omits_cost_row() -> None:
+    rows = format_usage_rows(
+        {
+            "prompt_tokens": 100,
+            "completion_tokens": 10,
+            "cost": {
+                "settlement_currency": "CNY",
+                "total_amount_settle_micro": 0,
+                "missing_price_count": 0,
+            },
+        }
+    )
+    assert all(k != "预估费用" for k, _ in rows)

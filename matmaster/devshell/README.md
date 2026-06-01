@@ -30,7 +30,7 @@ mm-devshell repl --workdir ./workspace --log-dir ./logs --model claude-sonnet-4-
 可选 **`--config`**：仅覆盖 agent / session / tools（见 `matmaster/devshell/dev.yaml.example`），**不包含** LLM 连接信息。
 
 ```bash
-uv run python -m matmaster.devshell --workdir ./workspace --log-dir ./logs --model gemini-3-flash-preview
+uv run python -m matmaster.devshell --workdir ./workspace --log-dir ./logs --model claude-sonnet-4-6
 ```
 
 ### 单轮非交互 `run`
