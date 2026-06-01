@@ -32,7 +32,6 @@ from matmaster.context.assembly import (
 from matmaster.context.ports import (
     SkillResolver,
     UserInstructions,
-    hash_user_instructions,
 )
 from matmaster.context.sections import ContextView
 from matmaster.context.system_prompt import SystemPromptBuilder
@@ -544,10 +543,8 @@ class Exp:
             events_port = (
                 ctx.request.ports.compaction.history or EmptySessionEventHistory()
             )
-            user_instructions = ctx.request.user_instructions or UserInstructions(
-                text="",
-                hash=hash_user_instructions(""),
-                truncated=False,
+            user_instructions = (
+                ctx.request.user_instructions or UserInstructions.empty()
             )
             resolution = await resolve_turn_intent(
                 events_port=events_port,

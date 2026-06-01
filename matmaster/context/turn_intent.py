@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 
 from matmaster.context.assembly import ContextAssemblyIntent
@@ -34,25 +35,27 @@ async def resolve_turn_intent(
     spawn_id: str | None,
     active_skill_event_limit: int = DEFAULT_ACTIVE_SKILL_EVENT_LIMIT,
 ) -> TurnIntentResolution:
-    intent_events = await events_port.load_events(
-        SessionEventQuery(
-            session_id=session_id,
-            spawn_id=spawn_id,
-            event_types=("user_turn_context", "history_checkpoint"),
-            limit=DEFAULT_INTENT_EVENT_LIMIT,
-            order="desc",
-        )
+    intent_events, skill_events = await asyncio.gather(
+        events_port.load_events(
+            SessionEventQuery(
+                session_id=session_id,
+                spawn_id=spawn_id,
+                event_types=("user_turn_context", "history_checkpoint"),
+                limit=DEFAULT_INTENT_EVENT_LIMIT,
+                order="desc",
+            )
+        ),
+        events_port.load_events(
+            SessionEventQuery(
+                session_id=session_id,
+                spawn_id=spawn_id,
+                event_types=("skill_hit",),
+                limit=active_skill_event_limit,
+                order="asc",
+            )
+        ),
     )
     latest_hash = _latest_anchor_hash_from_events(intent_events)
-    skill_events = await events_port.load_events(
-        SessionEventQuery(
-            session_id=session_id,
-            spawn_id=spawn_id,
-            event_types=("skill_hit",),
-            limit=active_skill_event_limit,
-            order="asc",
-        )
-    )
     active_skills = frozenset(
         record.skill_name
         for record in scan_skill_hits(skill_events)

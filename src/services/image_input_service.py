@@ -204,6 +204,15 @@ class ImageInputService:
             )
         return profile
 
+    @staticmethod
+    def select_current_images(
+        turn_input: TurnInput | None,
+        top_level_images: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        """Turn-input images take precedence over top-level images."""
+        turn_input_images = turn_input.images if turn_input is not None else ()
+        return turn_input_images or top_level_images
+
     def resolve_image_detail(
         self,
         *,
@@ -232,7 +241,7 @@ class ImageInputService:
         image_detail: ImageDetail | None,
     ) -> TurnInput:
         turn_input_images = turn_input.images if turn_input is not None else ()
-        current_images = turn_input_images or top_level_images
+        current_images = self.select_current_images(turn_input, top_level_images)
         if (
             turn_input_images
             and top_level_images

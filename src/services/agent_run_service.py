@@ -359,11 +359,12 @@ class AgentRunService:
             agent_default_llm = _get_agent_default_llm()
             image_service = get_image_input_service()
             top_level_images = tuple(images or ())
-            turn_input_images = turn_input.images if turn_input is not None else ()
-            current_images = turn_input_images or top_level_images
+            current_images = image_service.select_current_images(
+                turn_input, top_level_images
+            )
             image_detail = image_service.resolve_image_detail(
                 llm_config=llm_config,
-                images=tuple(current_images),
+                images=current_images,
                 llm_override=llm_override,
                 model_override=model_override,
                 default_profile_key=agent_default_llm,
