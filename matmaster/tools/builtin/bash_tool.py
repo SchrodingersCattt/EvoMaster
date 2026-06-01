@@ -15,12 +15,11 @@ from typing import Any, ClassVar
 
 from pydantic import ValidationError
 
-from matmaster.bohrium.runtime import get_runtime
+from matmaster.tools.bash_runner import run_bash_command
 from matmaster.tools.figure_artifacts import (
     build_figure_env,
     collect_figures_from_session,
 )
-from matmaster.tools.filesystem_semantics.shell_planner import plan_shell_command
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.figures import FigureUploadConfig
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
@@ -176,16 +175,9 @@ class BashTool(BuiltinTool):
             if _PURE_SLEEP_RE.fullmatch(command)
             else _GENERAL_TIMEOUT_CAP_MS
         )
-        timeout_ms = min(timeout_ms, cap)
-        timeout_s = timeout_ms / 1000  # float division preserves sub-second
+        timeout_s = min(timeout_ms, cap) / 1000
 
-        from matmaster.tools.script_env import (
-            prepare_inline_command,
-            prepare_script_command,
-        )
-
-        runtime = get_runtime(session)
-        env = runtime.build_env() if runtime is not None else {}
+        extra_env: dict[str, str] | None = None
         artifact_dir: str | None = None
         manifest_path: str | None = None
         if figure_cfg is not None and tool_call_id and self._workdir is not None:
@@ -194,36 +186,20 @@ class BashTool(BuiltinTool):
                 tool_call_id,
             )
             session.exec_bash(f"mkdir -p {shlex.quote(artifact_dir)}")
-            env = {
-                **env,
+            extra_env = {
                 "ARTIFACT_DIR": artifact_dir,
                 "MANIFEST_PATH": manifest_path,
             }
-        plan = plan_shell_command(command)
-        if plan.mode == "script":
-            command = prepare_script_command(
-                command,
-                env,
-                session,
-                shell_path="bash",
-            )
-        else:
-            command = prepare_inline_command(command, env, session)
 
-        result = session.exec_bash(
+        run = run_bash_command(
+            session=session,
             command=command,
-            timeout=timeout_s,
+            timeout_s=timeout_s,
             cancel_token=self._cancel_token_for_exec(),
+            extra_env=extra_env,
         )
-
-        output = result.get("output", "") or result.get("stdout", "")
-        exit_code = result.get("exit_code", 0)
-        working_dir = result.get("working_dir", "")
-
-        obs = output
-        if working_dir:
-            obs += f"\n[Session working directory: {working_dir}]"
-        obs += f"\n[Command finished with exit code {exit_code}]"
+        obs = run.observation
+        exit_code = run.exit_code
 
         if (
             figure_cfg is not None
