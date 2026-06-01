@@ -783,6 +783,58 @@ class TestBohriumExecution:
         }
         assert not isinstance(submitted, tuple)
 
+    def test_poll_live_log_uses_canonical_job_id(self, tmp_path, monkeypatch):
+        tool = BohriumTool(workdir=tmp_path)
+        calls: list[dict] = []
+
+        def fake_get(base_url, path, access_key, params=None, timeout=30):
+            del base_url, access_key, params, timeout
+            assert path == "/openapi/v1/sandbox/job/job-123"
+            return {"data": {"status": 1}}
+
+        def fake_post(base_url, path, access_key, payload, timeout=30):
+            del base_url, access_key, timeout
+            assert path == "/openapi/v1/sandbox/job/file/token"
+            calls.append(payload)
+            return {
+                "code": 0,
+                "data": {
+                    "host": "https://store.example",
+                    "path": "prefix/log",
+                    "token": "log-token",
+                },
+            }
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return b"line1\nline2\n"
+
+        def fake_urlopen(req, timeout=5):
+            del req, timeout
+            return FakeResponse()
+
+        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
+        _patch_bridge(monkeypatch)
+        monkeypatch.setattr(bohrium_client_module, "_get", fake_get)
+        monkeypatch.setattr(bohrium_client_module, "_post", fake_post)
+        import urllib.request
+
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+        result = asyncio.run(tool.execute({"action": "poll", "job_id": "job-123"}))
+
+        assert result.status == "success"
+        payload = json.loads(result.content)
+        assert payload["job_id"] == "job-123"
+        assert payload["log_tail"] == "line1\nline2"
+        assert calls == [{"filePath": "log", "jobId": "job-123"}]
+
     def test_list_images_filters_and_returns_versions(self, tmp_path, monkeypatch):
         tool = BohriumTool(workdir=tmp_path)
         calls: list[tuple[str, str, int, bool]] = []
