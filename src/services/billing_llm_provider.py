@@ -31,13 +31,11 @@ class BillingLLMProvider:
         run_context: BillingRunContext,
         model_identity: BillingModelIdentity,
         billing_service: BillingService,
-        billing_mode: str = "dry_run",
     ) -> None:
         self._inner = inner
         self._run_context = run_context
         self._model_identity = model_identity
         self._billing_service = billing_service
-        self._billing_mode = billing_mode
         self._call_index = 0
         self._pending: set[asyncio.Task] = set()
         self._spawn_id_var: ContextVar[str | None] = ContextVar(
@@ -86,21 +84,16 @@ class BillingLLMProvider:
         self,
         *,
         call_index: int,
-        call_kind: str,
         spawn_id: str | None,
         usage: dict[str, Any] | None,
-        usage_vendor: dict[str, Any] | None,
     ) -> None:
         try:
             await self._billing_service.report_llm_usage(
                 run_context=self._run_context,
                 model_identity=self._model_identity,
                 call_index=call_index,
-                call_kind=call_kind,
                 spawn_id=spawn_id,
                 usage=usage,
-                usage_vendor=usage_vendor,
-                billing_mode=self._billing_mode,
             )
         except Exception:
             logger.warning(
@@ -114,20 +107,16 @@ class BillingLLMProvider:
         self,
         *,
         call_index: int,
-        call_kind: str,
         usage: dict[str, Any] | None,
-        usage_vendor: dict[str, Any] | None,
     ) -> None:
         """非阻塞地上报，避免计费 HTTP 往返拖慢用户主链路。"""
-        if not usage and not usage_vendor:
+        if not usage:
             return
         task = asyncio.create_task(
             self._report(
                 call_index=call_index,
-                call_kind=call_kind,
                 spawn_id=self._spawn_id_var.get(),
                 usage=usage,
-                usage_vendor=usage_vendor,
             )
         )
         self._pending.add(task)
@@ -148,9 +137,7 @@ class BillingLLMProvider:
         )
         self._schedule_report(
             call_index=call_index,
-            call_kind="chat",
             usage=response.usage,
-            usage_vendor=response.usage_vendor,
         )
         return response
 
@@ -163,16 +150,11 @@ class BillingLLMProvider:
     ) -> AsyncIterator[StreamChunk]:
         call_index = self._next_call_index()
         last_usage: dict[str, Any] | None = None
-        last_usage_vendor: dict[str, Any] | None = None
         async for chunk in self._inner.chat_stream(messages, tools, timeout=timeout):
             if chunk.usage is not None:
                 last_usage = dict(chunk.usage)
-            if chunk.usage_vendor is not None:
-                last_usage_vendor = dict(chunk.usage_vendor)
             yield chunk
         self._schedule_report(
             call_index=call_index,
-            call_kind="chat_stream",
             usage=last_usage,
-            usage_vendor=last_usage_vendor,
         )

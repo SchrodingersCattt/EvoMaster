@@ -492,11 +492,8 @@ class AgentRunService:
                         model_identity=BillingModelIdentity(
                             provider=llm_bundle.provider_name,
                             model=llm_bundle.model,
-                            model_profile=llm_bundle.model_profile,
-                            model_route=llm_bundle.model_route,
                         ),
                         billing_service=get_billing_service(),
-                        billing_mode="dry_run",
                     )
                 except Exception:
                     logger.warning(

@@ -66,12 +66,7 @@ def _ctx() -> BillingRunContext:
 
 
 def _identity() -> BillingModelIdentity:
-    return BillingModelIdentity(
-        provider="openai",
-        model="claude-sonnet-4-6",
-        model_profile="sonnet",
-        model_route="claude-sonnet-4-6",
-    )
+    return BillingModelIdentity(provider="openai", model="claude-sonnet-4-6")
 
 
 @pytest.mark.asyncio
@@ -88,11 +83,8 @@ async def test_report_llm_usage_posts_expected_payload(monkeypatch):
         run_context=_ctx(),
         model_identity=_identity(),
         call_index=3,
-        call_kind="chat_stream",
         spawn_id="child-1",
         usage={"prompt_tokens": 1000, "completion_tokens": 200},
-        usage_vendor={"cache_creation_input_tokens": 100},
-        billing_mode="dry_run",
     )
 
     assert ok is True
@@ -105,9 +97,13 @@ async def test_report_llm_usage_posts_expected_payload(monkeypatch):
     assert body["spawn_id"] == "child-1"
     assert body["project_id"] == 42
     assert body["provider"] == "openai"
-    assert body["model_route"] == "claude-sonnet-4-6"
+    assert body["model"] == "claude-sonnet-4-6"
     assert body["usage"] == {"prompt_tokens": 1000, "completion_tokens": 200}
-    assert body["usage_vendor"] == {"cache_creation_input_tokens": 100}
+    assert "model_route" not in body
+    assert "model_profile" not in body
+    assert "call_kind" not in body
+    assert "usage_vendor" not in body
+    assert "billing_mode" not in body
 
 
 @pytest.mark.asyncio
@@ -123,10 +119,8 @@ async def test_report_llm_usage_skips_empty_usage(monkeypatch):
         run_context=_ctx(),
         model_identity=_identity(),
         call_index=1,
-        call_kind="chat",
         spawn_id=None,
         usage=None,
-        usage_vendor=None,
     )
 
     assert ok is False
@@ -145,10 +139,8 @@ async def test_report_llm_usage_swallows_server_error(monkeypatch):
         run_context=_ctx(),
         model_identity=_identity(),
         call_index=1,
-        call_kind="chat",
         spawn_id=None,
         usage={"prompt_tokens": 10},
-        usage_vendor=None,
     )
 
     assert ok is False
@@ -166,10 +158,8 @@ async def test_report_llm_usage_omits_auth_header_when_no_bearer(monkeypatch):
         run_context=_ctx(),
         model_identity=_identity(),
         call_index=1,
-        call_kind="chat",
         spawn_id=None,
         usage={"prompt_tokens": 10},
-        usage_vendor=None,
     )
 
     assert "Authorization" not in session_cls.last_post["headers"]

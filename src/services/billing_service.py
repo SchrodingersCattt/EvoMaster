@@ -36,8 +36,6 @@ class BillingRunContext:
 class BillingModelIdentity:
     provider: str
     model: str
-    model_profile: str | None
-    model_route: str | None
 
 
 class BillingService:
@@ -66,17 +64,14 @@ class BillingService:
         run_context: BillingRunContext,
         model_identity: BillingModelIdentity,
         call_index: int,
-        call_kind: str,
         spawn_id: str | None,
         usage: dict[str, Any] | None,
-        usage_vendor: dict[str, Any] | None,
-        billing_mode: str = "dry_run",
     ) -> bool:
         """上报一次 LLM 调用 usage 事件。成功记账返回 True，其余返回 False。
 
         网络/服务异常在此吞掉并记 warning，避免影响用户请求主链路。
         """
-        if not usage and not usage_vendor:
+        if not usage:
             return False
 
         payload: dict[str, Any] = {
@@ -88,14 +83,9 @@ class BillingService:
             "org_id": run_context.org_id,
             "project_id": run_context.project_id,
             "call_index": call_index,
-            "call_kind": call_kind,
             "provider": model_identity.provider,
             "model": model_identity.model,
-            "model_profile": model_identity.model_profile,
-            "model_route": model_identity.model_route,
-            "usage": usage or {},
-            "usage_vendor": usage_vendor,
-            "billing_mode": billing_mode,
+            "usage": usage,
         }
         url = f"{self._base_url}/api/v1/billing/usage"
         timeout = aiohttp.ClientTimeout(total=self._timeout_seconds)
