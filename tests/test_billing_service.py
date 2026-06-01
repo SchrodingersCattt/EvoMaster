@@ -51,14 +51,7 @@ def _make_session_cls(status: int, payload: dict):
 
 
 def _ctx() -> BillingRunContext:
-    return BillingRunContext(
-        session_id="s1",
-        task_id="t1",
-        invocation_id="i1",
-        user_id="u1",
-        org_id="o1",
-        project_id=42,
-    )
+    return BillingRunContext(session_id="s1", task_id="t1", invocation_id="i1")
 
 
 @pytest.mark.asyncio
@@ -87,9 +80,11 @@ async def test_report_llm_usage_posts_expected_payload(monkeypatch):
     assert body["session_id"] == "s1"
     assert body["call_index"] == 3
     assert body["spawn_id"] == "child-1"
-    assert body["project_id"] == 42
     assert body["model"] == "claude-sonnet-4-6"
     assert body["usage"] == {"prompt_tokens": 1000, "completion_tokens": 200}
+    assert "user_id" not in body
+    assert "org_id" not in body
+    assert "project_id" not in body
     assert "provider" not in body
     assert "model_route" not in body
     assert "model_profile" not in body

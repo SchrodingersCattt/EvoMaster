@@ -27,9 +27,6 @@ class BillingRunContext:
     session_id: str
     task_id: str | None
     invocation_id: str | None
-    user_id: str | None
-    org_id: str | None = None
-    project_id: int | None = None
 
 
 class BillingService:
@@ -73,9 +70,6 @@ class BillingService:
             "task_id": run_context.task_id,
             "invocation_id": run_context.invocation_id,
             "spawn_id": spawn_id,
-            "user_id": run_context.user_id,
-            "org_id": run_context.org_id,
-            "project_id": run_context.project_id,
             "call_index": call_index,
             "model": model,
             "usage": usage,

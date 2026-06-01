@@ -462,28 +462,13 @@ class AgentRunService:
             )
             llm_provider = llm_bundle.provider
             if _LLM_BILLING_DRY_RUN_ENABLED:
-                session_info_for_billing: dict[str, Any] = {}
                 try:
-                    session_info_for_billing = (
-                        self._sessions_service.get_session(session_id) or {}
-                    )
                     llm_provider = BillingLLMProvider(
                         llm_provider,
                         run_context=BillingRunContext(
                             session_id=session_id,
                             task_id=task_id,
                             invocation_id=invocation_id,
-                            user_id=(
-                                str(session_info_for_billing.get("user_id"))
-                                if session_info_for_billing.get("user_id") is not None
-                                else None
-                            ),
-                            org_id=(
-                                str(session_info_for_billing.get("org_id"))
-                                if session_info_for_billing.get("org_id") is not None
-                                else None
-                            ),
-                            project_id=session_info_for_billing.get("project_id"),
                         ),
                         model=llm_bundle.model,
                         billing_service=get_billing_service(),
