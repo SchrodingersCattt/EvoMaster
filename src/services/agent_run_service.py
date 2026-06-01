@@ -93,68 +93,28 @@ def _invalid_finish_error_message(finish_detail: Any) -> str:
     return _INVALID_FINISH_MESSAGES.get(kind, _INVALID_FINISH_DEFAULT)
 
 
-def _sum_vendor_field(vendor_by_turn: list[dict[str, Any]], *paths: tuple) -> int:
-    """跨各 turn 的 provider-native usage 快照按多组 key 路径求和。
-
-    不同 provider 的 usage 字段不一致（OpenAI 嵌在 ``*_tokens_details`` 里，
-    Anthropic 用顶层 ``cache_*_input_tokens``）。每个 path 是从外到内的 key 序列，
-    命中第一个非空 path 即累加，避免同一 turn 重复计数。
-    """
-    total = 0
-    for vendor in vendor_by_turn:
-        if not isinstance(vendor, dict):
-            continue
-        for path in paths:
-            cur: Any = vendor
-            for key in path:
-                if isinstance(cur, dict):
-                    cur = cur.get(key)
-                else:
-                    cur = None
-                    break
-            if isinstance(cur, int) and cur > 0:
-                total += cur
-                break
-    return total
-
-
 def _build_run_usage_summary(event: RunResultEvent) -> dict[str, Any] | None:
     """从 ``RunResultEvent`` 提取 token 消耗摘要，供飞书通知等审计展示。
 
-    scalar usage 只统计 root kernel 通过 retry gate 的 accepted LLM turns（见
-    token usage events 设计文档），不含 retry 丢弃的 attempt、context compaction
-    summary LLM、sub-agent 内部消耗，因此不等于账单成本。无任何 usage 信息时返回
-    ``None``。
+    ``event.usage`` 是 run-level aggregate scalar usage，包含 root accepted
+    LLM turns、Agent subagent usage 和 compaction summary usage。``usage_vendor_by_turn``
+    仍只表示 root accepted turns 的 provider-native 快照，不参与 aggregate cache /
+    reasoning 补账。无任何 usage 信息时返回 ``None``。
     """
     usage = dict(event.usage or {})
-    vendor_by_turn = [
-        dict(item)
-        for item in (event.usage_vendor_by_turn or [])
-        if isinstance(item, dict)
-    ]
     last_turn_usage: dict[str, int] = {}
     if event.finish_detail is not None:
         last_turn_usage = dict(event.finish_detail.last_turn_usage or {})
 
-    if not usage and not last_turn_usage and not vendor_by_turn:
+    if not usage and not last_turn_usage:
         return None
 
     prompt = int(usage.get('prompt_tokens') or 0)
     completion = int(usage.get('completion_tokens') or 0)
     total = int(usage.get('total_tokens') or 0) or (prompt + completion)
     cache_read = int(usage.get('cache_read_tokens') or 0)
-    # scalar 未带缓存命中时，从 vendor-by-turn 兜底聚合
-    # （OpenAI: prompt_tokens_details.cached_tokens；Anthropic: cache_read_input_tokens）
-    if cache_read == 0 and vendor_by_turn:
-        cache_read = _sum_vendor_field(
-            vendor_by_turn,
-            ('prompt_tokens_details', 'cached_tokens'),
-            ('cache_read_input_tokens',),
-        )
-    cache_write = _sum_vendor_field(vendor_by_turn, ('cache_creation_input_tokens',))
-    reasoning = _sum_vendor_field(
-        vendor_by_turn, ('completion_tokens_details', 'reasoning_tokens')
-    )
+    cache_write = int(usage.get('cache_write_tokens') or 0)
+    reasoning = int(usage.get('reasoning_tokens') or 0)
 
     summary: dict[str, Any] = {
         'num_turns': int(event.num_turns or 0),
