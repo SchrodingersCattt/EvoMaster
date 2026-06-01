@@ -9,7 +9,11 @@ import pytest
 from matmaster.types.events import AssistantStateEvent, ResponseEvent, RunResultEvent
 from matmaster.types.messages import LLMResponse, StreamChunk
 
-from .agent_kernel_test_helpers import _make_tool_registry, make_kernel_runtime
+from .agent_kernel_test_helpers import (
+    _make_tool_registry,
+    make_kernel_runtime,
+    make_kernel_turn,
+)
 
 
 class EmptyStopProvider:
@@ -86,7 +90,7 @@ async def test_empty_sentinel_stop_finishes_as_invalid_finish(
     kernel = AgentKernel()
 
     events: list[Any] = []
-    async for event in kernel.run_stream(kernel_runtime, "test task"):
+    async for event in kernel.run_stream(kernel_runtime, make_kernel_turn("test task")):
         events.append(event)
 
     response_texts = [
@@ -114,7 +118,7 @@ async def test_text_containing_none_still_finishes_naturally() -> None:
     kernel = AgentKernel()
 
     events: list[Any] = []
-    async for event in kernel.run_stream(kernel_runtime, "test task"):
+    async for event in kernel.run_stream(kernel_runtime, make_kernel_turn("test task")):
         events.append(event)
 
     assert isinstance(events[-1], RunResultEvent)
@@ -133,7 +137,7 @@ async def test_empty_sentinel_tool_call_preamble_does_not_block_tools() -> None:
     kernel = AgentKernel()
 
     events: list[Any] = []
-    async for event in kernel.run_stream(kernel_runtime, "test task"):
+    async for event in kernel.run_stream(kernel_runtime, make_kernel_turn("test task")):
         events.append(event)
 
     assistant_state_events = [

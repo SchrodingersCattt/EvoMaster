@@ -12,16 +12,13 @@ from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.errors import LLMError
-from matmaster.types.messages import (
-    LLMResponse,
-    StreamChunk,
-    ToolCallData,
-)
+from matmaster.types.messages import LLMResponse, StreamChunk, ToolCallData
 from matmaster.types.run_metadata import RunIdentity
 from matmaster.types.runtime import (
     AgentKernelResources,
     AgentKernelRuntime,
     AgentKernelSpec,
+    AgentKernelTurnRequest,
     CompactionConfig,
 )
 from matmaster.types.runtime_ports import KernelRuntimePorts
@@ -33,7 +30,7 @@ from .conftest import MockLLMProvider
 class _CatchAllTool:
     """Tool that accepts any name and records calls for test assertions."""
 
-    def __init__(self, result: str = 'tool result') -> None:
+    def __init__(self, result: str = "tool result") -> None:
         self._result = result
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self.resource_claims = ()
@@ -52,11 +49,11 @@ class _CatchAllTool:
 
     @property
     def description(self) -> str:
-        return 'catch-all test tool'
+        return "catch-all test tool"
 
     @property
     def json_schema(self) -> dict[str, Any]:
-        return {'type': 'object', 'properties': {}}
+        return {"type": "object", "properties": {}}
 
     def describe(self, ctx: Any) -> str:
         return self.description
@@ -71,7 +68,7 @@ class _CatchAllTool:
 
 def _make_tool_registry(
     tool_names: list[str] | None = None,
-    result: str = 'tool result',
+    result: str = "tool result",
 ) -> tuple[ToolRegistry, list[_CatchAllTool]]:
     """Create a ToolRegistry with named catch-all tools.
 
@@ -79,20 +76,20 @@ def _make_tool_registry(
     """
     registry = ToolRegistry()
     names = tool_names or [
-        'test_tool',
-        'some_tool',
-        'bad_tool',
-        'skip_me',
-        'my_tool',
-        'fn',
-        'tool',
+        "test_tool",
+        "some_tool",
+        "bad_tool",
+        "skip_me",
+        "my_tool",
+        "fn",
+        "tool",
     ]
     tools: list[_CatchAllTool] = []
     for n in names:
         t = _CatchAllTool(result=result)
         t._name = n
         tools.append(t)
-        registry.register(t, source='test')
+        registry.register(t, source="test")
     return registry, tools
 
 
@@ -113,7 +110,7 @@ class StreamingProvider:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
-        return LLMResponse(content='not used', finish_reason='stop')
+        return LLMResponse(content="not used", finish_reason="stop")
 
     async def chat_stream(
         self,
@@ -133,7 +130,7 @@ class ToolCallingProvider:
         self,
         tool_calls: list[ToolCallData],
         max_tool_turns: int = 999,
-        final_content: str = 'done',
+        final_content: str = "done",
     ) -> None:
         self._tool_calls = tool_calls
         self._max_tool_turns = max_tool_turns
@@ -151,7 +148,7 @@ class ToolCallingProvider:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
-        return LLMResponse(content='not used', finish_reason='stop')
+        return LLMResponse(content="not used", finish_reason="stop")
 
     async def chat_stream(
         self,
@@ -166,16 +163,16 @@ class ToolCallingProvider:
                 yield StreamChunk(
                     tool_call_deltas=[
                         {
-                            'index': i,
-                            'id': tc.id,
-                            'name': tc.name,
-                            'arguments': str(tc.arguments).replace("'", '"'),
+                            "index": i,
+                            "id": tc.id,
+                            "name": tc.name,
+                            "arguments": str(tc.arguments).replace("'", '"'),
                         }
                     ],
                 )
-            yield StreamChunk(finish_reason='stop')
+            yield StreamChunk(finish_reason="stop")
         else:
-            yield StreamChunk(content=self._final_content, finish_reason='stop')
+            yield StreamChunk(content=self._final_content, finish_reason="stop")
 
 
 class _SimpleTestToolRunner:
@@ -225,6 +222,17 @@ class _SimpleTestToolRunner:
         return results
 
 
+def make_kernel_turn(
+    user_message_content: str,
+    *,
+    turn_input: Any | None = None,
+) -> AgentKernelTurnRequest:
+    return AgentKernelTurnRequest(
+        user_message_content=user_message_content,
+        turn_input=turn_input,
+    )
+
+
 def make_kernel_runtime(
     *,
     provider: Any | None = None,
@@ -233,7 +241,7 @@ def make_kernel_runtime(
     tool_runner: Any | None = None,
     runtime_topology: Any | None = None,
     max_turns: int = 10,
-    system_prompt: str = 'You are a test agent',
+    system_prompt: str = "You are a test agent",
     compaction: CompactionConfig | None = None,
     compactor: Any | None = None,
     hook_executor: Any | None = None,
@@ -241,7 +249,6 @@ def make_kernel_runtime(
     structural_validation: Any | None = None,
     runtime_ports: KernelRuntimePorts | None = None,
     run_identity: RunIdentity | None = None,
-    turn_input: Any | None = None,
     prompt_submit_rewrite_enabled: bool = True,
     llm_model: str | None = None,
     llm_model_profile: str | None = None,
@@ -268,7 +275,6 @@ def make_kernel_runtime(
         max_turns=max_turns,
         compaction=compaction or CompactionConfig(),
         run_identity=run_identity or RunIdentity(),
-        turn_input=turn_input,
         prompt_submit_rewrite_enabled=prompt_submit_rewrite_enabled,
         llm_model=llm_model,
         llm_model_profile=llm_model_profile,
@@ -310,7 +316,7 @@ class ErrorThenSuccessProvider:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> LLMResponse:
-        return LLMResponse(content='not used', finish_reason='stop')
+        return LLMResponse(content="not used", finish_reason="stop")
 
     async def chat_stream(
         self,
@@ -322,4 +328,4 @@ class ErrorThenSuccessProvider:
         self._call_count += 1
         if self._call_count <= self._fail_count:
             raise self._error
-        yield StreamChunk(content='recovered', finish_reason='stop')
+        yield StreamChunk(content="recovered", finish_reason="stop")

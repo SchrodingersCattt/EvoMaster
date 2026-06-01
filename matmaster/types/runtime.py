@@ -2,11 +2,13 @@
 
 Layer 2 boundary contracts:
 - AgentKernelSpec: pure configuration + identity the kernel needs (no live
-  resources). frozen.
+  resources, no per-turn input). frozen.
+- AgentKernelTurnRequest: typed current-turn input consumed by
+  ``AgentKernel.run_stream``. frozen.
 - AgentKernelResources: the live runtime resources the kernel calls
   (provider, tool runner/catalog, hooks, compactor, runtime ports). frozen.
-- AgentKernelRuntime: ``spec + resources``; the single object
-  ``AgentKernel.run_stream(kernel_runtime, task)`` consumes. frozen.
+- AgentKernelRuntime: ``spec + resources``; paired with
+  ``AgentKernelTurnRequest`` by ``AgentKernel.run_stream``. frozen.
 - AgentRuntime: runtime bundle returned by ``Exp.build_runtime()``. Holds the
   kernel, the kernel_runtime, cleanup, and non-kernel context assembly
   lifecycle objects.
@@ -59,19 +61,34 @@ class AgentKernelSpec:
     """Kernel-facing configuration + identity. No live resources.
 
     Built once by ``Exp.build_runtime()`` and read by ``AgentKernel`` for
-    system prompt, turn budget, compaction config, run identity, and the
-    per-turn ``turn_input`` (preflight compaction + image inputs).
+    system prompt, turn budget, compaction config, and run identity.
     """
 
     system_prompt: str
     max_turns: int
     compaction: CompactionConfig
     run_identity: RunIdentity
-    turn_input: TurnInput | None = None
     prompt_submit_rewrite_enabled: bool = True
     llm_model: str | None = None
     llm_model_profile: str | None = None
     llm_model_route: str | None = None
+
+
+@dataclass(frozen=True)
+class AgentKernelTurnRequest:
+    """Current-turn input consumed by ``AgentKernel.run_stream``.
+
+    ``user_message_content`` is the exact text used for the kernel's current
+    user message. For root runs this is Exp's rendered runtime prompt; for
+    direct or spawn runs it is the prompt text supplied by that caller.
+
+    ``turn_input`` is the semantic current input used for image parts and
+    preflight compaction reattachment. It intentionally stays outside
+    ``AgentKernelSpec`` because it changes per run invocation.
+    """
+
+    user_message_content: str
+    turn_input: TurnInput | None = None
 
 
 @dataclass(frozen=True)

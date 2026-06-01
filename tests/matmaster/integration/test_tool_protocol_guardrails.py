@@ -12,6 +12,7 @@ from src.services.chat_history import ChatHistoryConverter
 from tests.matmaster.core.agent_kernel_test_helpers import (
     _make_tool_registry,
     make_kernel_runtime,
+    make_kernel_turn,
 )
 
 
@@ -117,7 +118,9 @@ class TestToolProtocolGuardrailsIntegration:
         )
         kernel = AgentKernel()
 
-        async for _event in kernel.run_stream(kernel_runtime, "run test"):
+        async for _event in kernel.run_stream(
+            kernel_runtime, make_kernel_turn("run test")
+        ):
             pass
 
         assert tools[0].calls == [("test_tool", {"x": 1})]
@@ -159,7 +162,9 @@ class TestToolProtocolGuardrailsIntegration:
         )
         kernel = AgentKernel()
 
-        async for _event in kernel.run_stream(kernel_runtime, "run test"):
+        async for _event in kernel.run_stream(
+            kernel_runtime, make_kernel_turn("run test")
+        ):
             pass
 
         second_call_kwargs = mock_client.chat.completions.create.await_args_list[
@@ -184,7 +189,7 @@ class TestToolProtocolGuardrailsIntegration:
 
         with pytest.raises(LLMError, match="orphan tool message"):
             async for _event in kernel.run_stream(
-                kernel_runtime, "next turn", history=history
+                kernel_runtime, make_kernel_turn("next turn"), history=history
             ):
                 pass
 
@@ -211,7 +216,7 @@ class TestToolProtocolGuardrailsIntegration:
 
         with pytest.raises(LLMError, match="missing tool_result ids"):
             async for _event in kernel.run_stream(
-                kernel_runtime, "next turn", history=history
+                kernel_runtime, make_kernel_turn("next turn"), history=history
             ):
                 pass
 
@@ -268,7 +273,7 @@ class TestToolProtocolGuardrailsIntegration:
         assert history[1].content is None
 
         async for _event in kernel.run_stream(
-            kernel_runtime, "next turn", history=history
+            kernel_runtime, make_kernel_turn("next turn"), history=history
         ):
             pass
 

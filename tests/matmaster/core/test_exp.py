@@ -13,9 +13,7 @@ from matmaster.core.hooks import HookExecutor
 from matmaster.core.playground import ExecutionEnvironment
 from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.tools.tool_registry import ToolRegistry
-from matmaster.types.runtime import (
-    AgentRuntime,
-)
+from matmaster.types.runtime import AgentRuntime
 from matmaster.types.session import Session
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.tool_runner_state import ToolRunnerState
@@ -40,22 +38,22 @@ def _make_ctx(
     ``session`` is omitted unless passed (so ``session=None`` is distinct from
     not passing it).
     """
-    wd = Path('/tmp/test') if workdir is None else workdir
-    cache_area = Path('/tmp/cache') if workdir is None else wd / 'cache'
+    wd = Path("/tmp/test") if workdir is None else workdir
+    cache_area = Path("/tmp/cache") if workdir is None else wd / "cache"
     env_kwargs: dict = {
-        'workdir': wd,
-        'session_type': 'local',
-        'cache_area': cache_area,
+        "workdir": wd,
+        "session_type": "local",
+        "cache_area": cache_area,
     }
     if execution_workdir is not None:
-        env_kwargs['execution_workdir'] = execution_workdir
+        env_kwargs["execution_workdir"] = execution_workdir
     if session is not _UNSET:
-        env_kwargs['session'] = session
+        env_kwargs["session"] = session
     request_kwargs: dict = {}
     if with_llm:
-        request_kwargs['llm_provider'] = MockLLMProvider()
+        request_kwargs["llm_provider"] = MockLLMProvider()
     if interaction_bridge is not None:
-        request_kwargs['interaction_bridge'] = interaction_bridge
+        request_kwargs["interaction_bridge"] = interaction_bridge
     return AgentRunContext(
         environment=ExecutionEnvironment(**env_kwargs),
         request=AgentRunRequest(**request_kwargs),
@@ -82,18 +80,18 @@ class TestExpConstruction:
 
     def test_exp_is_concrete(self) -> None:
         """Exp can be instantiated directly (not abstract)."""
-        exp = Exp(ExpConfig(name='test'))
+        exp = Exp(ExpConfig(name="test"))
         assert isinstance(exp, Exp)
 
     def test_exp_name_from_config(self) -> None:
         """exp_name reads from config.name."""
-        exp = Exp(ExpConfig(name='my-experiment'))
-        assert exp.exp_name == 'my-experiment'
+        exp = Exp(ExpConfig(name="my-experiment"))
+        assert exp.exp_name == "my-experiment"
 
     def test_exp_name_defaults_to_direct(self) -> None:
         """Default name in ExpConfig is 'direct'."""
         exp = Exp(ExpConfig())
-        assert exp.exp_name == 'direct'
+        assert exp.exp_name == "direct"
 
     def test_exp_stores_config(self) -> None:
         """Exp accepts ExpConfig."""
@@ -114,7 +112,7 @@ class TestExpBuildRuntimeConfig:
 
     async def test_max_turns_from_config(self) -> None:
         """max_turns in config propagates to the kernel spec."""
-        exp = Exp(ExpConfig(name='test', max_turns=50))
+        exp = Exp(ExpConfig(name="test", max_turns=50))
         ctx = _make_ctx(with_llm=True)
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
@@ -122,7 +120,7 @@ class TestExpBuildRuntimeConfig:
 
     async def test_max_turns_default(self) -> None:
         """Default max_turns is 100 when not in config."""
-        exp = Exp(ExpConfig(name='test'))
+        exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
@@ -130,7 +128,7 @@ class TestExpBuildRuntimeConfig:
 
     async def test_runtime_identity_defaults_empty(self) -> None:
         """Runtime identity is explicit and empty for a top-level run."""
-        exp = Exp(ExpConfig(name='test'))
+        exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
@@ -138,11 +136,10 @@ class TestExpBuildRuntimeConfig:
         assert spec.run_identity.task_id == ""
         assert spec.run_identity.session_id == ""
         assert spec.run_identity.spawn_id is None
-        assert spec.turn_input is None
 
     async def test_llm_provider_from_ctx(self) -> None:
         """llm_provider comes from ctx, not config."""
-        exp = Exp(ExpConfig(name='test'))
+        exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
@@ -157,7 +154,7 @@ class TestExpBuildRuntime:
 
     async def test_returns_agent_runtime(self) -> None:
         """build_runtime() returns an AgentRuntime dataclass."""
-        exp = Exp(ExpConfig(name='test'))
+        exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
 
         with patch("matmaster.core.agent.AgentKernel"):
@@ -167,7 +164,7 @@ class TestExpBuildRuntime:
 
     async def test_uses_ctx_llm_provider(self) -> None:
         """Runtime spec uses LLM provider from ctx."""
-        exp = Exp(ExpConfig(name='test'))
+        exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
 
         with patch("matmaster.core.agent.AgentKernel"):
@@ -177,17 +174,17 @@ class TestExpBuildRuntime:
 
     async def test_build_runtime_has_no_bus_parameter(self) -> None:
         """build_runtime() does not accept a bus parameter."""
-        exp = Exp(ExpConfig(name='test'))
+        exp = Exp(ExpConfig(name="test"))
         _make_ctx(with_llm=True)
 
         import inspect
 
         sig = inspect.signature(exp.build_runtime)
-        assert 'bus' not in sig.parameters
+        assert "bus" not in sig.parameters
 
     async def test_build_runtime_creates_hook_executor(self) -> None:
         """build_runtime() always injects a HookExecutor."""
-        exp = Exp(ExpConfig(name='test'))
+        exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
 
         with patch("matmaster.core.agent.AgentKernel"):
@@ -197,7 +194,7 @@ class TestExpBuildRuntime:
 
     async def test_runtime_has_cleanup_callable(self) -> None:
         """AgentRuntime.cleanup is a callable."""
-        exp = Exp(ExpConfig(name='test'))
+        exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(with_llm=True)
 
         with patch("matmaster.core.agent.AgentKernel"):
@@ -368,8 +365,8 @@ class TestExpCleanup:
 
     async def test_multiple_cleanups_all_execute(self) -> None:
         """All registered cleanup callbacks run even if one raises."""
-        exp = Exp(ExpConfig(name='test'))
-        cb1 = MagicMock(side_effect=ValueError('cb1 broken'))
+        exp = Exp(ExpConfig(name="test"))
+        cb1 = MagicMock(side_effect=ValueError("cb1 broken"))
         cb2 = MagicMock()
         exp._register_cleanup(cb1)
         exp._register_cleanup(cb2)
@@ -381,7 +378,7 @@ class TestExpCleanup:
 
     async def test_cleanup_clears_list(self) -> None:
         """_run_cleanup_callbacks clears the list after execution."""
-        exp = Exp(ExpConfig(name='test'))
+        exp = Exp(ExpConfig(name="test"))
         cb = MagicMock()
         exp._register_cleanup(cb)
 
@@ -453,21 +450,21 @@ class TestIdentityOverride:
         runtime = await exp.build_runtime(ctx)
 
         assert (
-            'I am a materials scientist.' in runtime.kernel_runtime.spec.system_prompt
+            "I am a materials scientist." in runtime.kernel_runtime.spec.system_prompt
         )
 
     async def test_default_identity_when_not_set(self) -> None:
         """Empty developer_instructions means no identity section in prompt."""
         exp = Exp(
             ExpConfig(
-                name='test',
+                name="test",
                 tools=ExpToolsConfig(builtin=[]),
             )
         )
         ctx = _make_ctx(with_llm=True)
         runtime = await exp.build_runtime(ctx)
 
-        assert '# Identity' not in runtime.kernel_runtime.spec.system_prompt
+        assert "# Identity" not in runtime.kernel_runtime.spec.system_prompt
 
 
 class TestSystemPromptOverride:
@@ -484,7 +481,7 @@ class TestSystemPromptOverride:
         ctx = _make_ctx(with_llm=True)
         runtime = await exp.build_runtime(ctx)
 
-        assert 'Base persona text.' in runtime.kernel_runtime.spec.system_prompt
+        assert "Base persona text." in runtime.kernel_runtime.spec.system_prompt
 
     async def test_empty_system_prompt_skips_section(self) -> None:
         exp = Exp(
@@ -497,7 +494,7 @@ class TestSystemPromptOverride:
         ctx = _make_ctx(with_llm=True)
         runtime = await exp.build_runtime(ctx)
 
-        assert '# System' not in runtime.kernel_runtime.spec.system_prompt
+        assert "# System" not in runtime.kernel_runtime.spec.system_prompt
 
 
 # ── TestExpBuiltinTools ─────────────────────────────────
@@ -511,8 +508,8 @@ class TestExpBuiltinTools:
         return AgentRunContext(
             environment=ExecutionEnvironment(
                 workdir=tmp_path,
-                session_type='local',
-                cache_area=tmp_path / 'cache',
+                session_type="local",
+                cache_area=tmp_path / "cache",
                 session=MagicMock(spec=Session),
             ),
             request=AgentRunRequest(llm_provider=MockLLMProvider()),
@@ -520,10 +517,10 @@ class TestExpBuiltinTools:
 
     def _build_registry(self, tmp_path: Path) -> tuple[Exp, ToolRegistry]:
         """Build an Exp and run _init_builtin_tools, returning (exp, registry)."""
-        exp = Exp(ExpConfig(name='test'))
+        exp = Exp(ExpConfig(name="test"))
         ctx = self._make_ctx_with_session(tmp_path)
         registry = ToolRegistry()
-        exp._init_builtin_tools(ctx, registry, ['*'])
+        exp._init_builtin_tools(ctx, registry, ["*"])
         return exp, registry
 
     def test_native_tools_count(self, tmp_path: Path) -> None:
@@ -535,17 +532,17 @@ class TestExpBuiltinTools:
         """All 11 expected CC-name tools are present in registry."""
         _, registry = self._build_registry(tmp_path)
         expected_native = {
-            'AskQuestion',
-            'Bash',
-            'Read',
-            'Write',
-            'Edit',
-            'Glob',
-            'Grep',
-            'TodoWrite',
-            'WebSearch',
-            'WebFetch',
-            'Bohrium',
+            "AskQuestion",
+            "Bash",
+            "Read",
+            "Write",
+            "Edit",
+            "Glob",
+            "Grep",
+            "TodoWrite",
+            "WebSearch",
+            "WebFetch",
+            "Bohrium",
         }
         for name in expected_native:
             assert name in registry, f"Expected tool '{name}' not found in registry"
@@ -555,12 +552,12 @@ class TestExpBuiltinTools:
         All tools are native builtins; no 'builtin_evo' source exists."""
         _, registry = self._build_registry(tmp_path)
         for tool in registry.all_tools:
-            assert 'evo' not in tool.name.lower(), f"Unexpected evo tool: {tool.name}"
+            assert "evo" not in tool.name.lower(), f"Unexpected evo tool: {tool.name}"
 
     def test_editor_tool_removed(self, tmp_path: Path) -> None:
         """str_replace_editor (EditorTool) is NOT in the registry."""
         _, registry = self._build_registry(tmp_path)
-        assert 'str_replace_editor' not in registry
+        assert "str_replace_editor" not in registry
 
     def test_total_count(self, tmp_path: Path) -> None:
         """Total tools = 11 native builtin (CC names, no legacy tools)."""
@@ -570,16 +567,16 @@ class TestExpBuiltinTools:
     def test_web_search_is_native_builtin(self, tmp_path: Path) -> None:
         """WebSearchTool is registered as native builtin with CC name."""
         _, registry = self._build_registry(tmp_path)
-        assert 'WebSearch' in registry
+        assert "WebSearch" in registry
 
     def test_init_builtin_tools_no_session(self, tmp_path: Path) -> None:
         """session=None registers only sessionless tools."""
         from matmaster.tools.tool_registry import ToolRegistry
 
-        exp = Exp(ExpConfig(name='test'))
+        exp = Exp(ExpConfig(name="test"))
         ctx = _make_ctx(workdir=tmp_path, session=None, with_llm=True)
         registry = ToolRegistry()
-        exp._init_builtin_tools(ctx, registry, ['*'])
+        exp._init_builtin_tools(ctx, registry, ["*"])
         assert len(registry) == 5
         assert "AskQuestion" in registry
         assert "TodoWrite" in registry
@@ -591,8 +588,8 @@ class TestExpBuiltinTools:
         """Non-empty explicit tool list registers only the requested tools."""
         exp = Exp(
             ExpConfig(
-                name='test',
-                tools=ExpToolsConfig(builtin=['Bash', 'Read']),
+                name="test",
+                tools=ExpToolsConfig(builtin=["Bash", "Read"]),
             )
         )
         ctx = self._make_ctx_with_session(tmp_path)
@@ -604,13 +601,13 @@ class TestExpBuiltinTools:
             t.name
             for t in runtime.kernel_runtime.resources.tool_catalog.registry.all_tools
         }
-        assert registered_names == {'Bash', 'Read'}
+        assert registered_names == {"Bash", "Read"}
 
     async def test_empty_builtin_config_skips_init(self, tmp_path: Path) -> None:
         """Empty builtin list skips _init_builtin_tools entirely."""
         exp = Exp(
             ExpConfig(
-                name='test',
+                name="test",
                 tools=ExpToolsConfig(builtin=[]),
             )
         )
@@ -639,8 +636,8 @@ class TestExecutionWorkdirBinding:
             environment=ExecutionEnvironment(
                 workdir=control,
                 execution_workdir=str(execution),
-                session_type='local',
-                cache_area=tmp_path / 'cache',
+                session_type="local",
+                cache_area=tmp_path / "cache",
                 session=MagicMock(spec=Session),
             ),
             request=AgentRunRequest(llm_provider=MockLLMProvider()),
@@ -649,30 +646,30 @@ class TestExecutionWorkdirBinding:
     def test_execution_side_tools_use_execution_workdir(self, tmp_path: Path) -> None:
         from matmaster.tools.tool_registry import ToolRegistry
 
-        control = tmp_path / 'control'
-        execution = tmp_path / 'execution'
+        control = tmp_path / "control"
+        execution = tmp_path / "execution"
         control.mkdir()
         execution.mkdir()
         ctx = self._ctx(tmp_path, control=control, execution=execution)
-        exp = Exp(ExpConfig(name='test'))
+        exp = Exp(ExpConfig(name="test"))
         registry = ToolRegistry()
-        exp._init_builtin_tools(ctx, registry, ['*'])
+        exp._init_builtin_tools(ctx, registry, ["*"])
         by_name = {t.name: t for t in registry.all_tools}
         for name in (
-            'Bash',
-            'Read',
-            'Write',
-            'Edit',
-            'Glob',
-            'Grep',
+            "Bash",
+            "Read",
+            "Write",
+            "Edit",
+            "Glob",
+            "Grep",
         ):
             assert by_name[name]._workdir == execution, name
 
     async def test_agent_tool_uses_execution_workdir(self, tmp_path: Path) -> None:
         from matmaster.tools.builtin.agent_tool import AgentTool
 
-        control = tmp_path / 'control'
-        execution = tmp_path / 'execution'
+        control = tmp_path / "control"
+        execution = tmp_path / "execution"
         control.mkdir()
         execution.mkdir()
         ctx = self._ctx(tmp_path, control=control, execution=execution)
@@ -692,7 +689,7 @@ class TestExpCompaction:
     async def test_build_runtime_compaction_defaults_present(self) -> None:
         from matmaster.types.runtime import CompactionConfig
 
-        exp = Exp(ExpConfig(name='test', tools=ExpToolsConfig(builtin=[])))
+        exp = Exp(ExpConfig(name="test", tools=ExpToolsConfig(builtin=[])))
         ctx = _make_ctx(with_llm=True)
 
         with patch("matmaster.core.agent.AgentKernel"):

@@ -122,9 +122,11 @@ class TestDevRunner:
         catalog = MagicMock()
         observed: dict[str, Any] = {}
 
-        def fake_run_stream(kernel_runtime, task, history=None, cancel_token=None):
+        def fake_run_stream(
+            kernel_runtime, turn_request, history=None, cancel_token=None
+        ):
             observed["kernel_runtime"] = kernel_runtime
-            observed["task"] = task
+            observed["turn_request"] = turn_request
             observed["history"] = history
             observed["cancel_token"] = cancel_token
             return object()
@@ -154,7 +156,8 @@ class TestDevRunner:
         assert result.reason == "cancelled"
         assert runner._environment.session._cancel_token is controller.token
         catalog.inject_cancel_token.assert_called_once_with(controller.token)
-        assert observed["task"] == "test"
+        assert observed["turn_request"].user_message_content == "test"
+        assert observed["turn_request"].turn_input.user_text == "test"
         assert observed["cancel_token"] is controller.token
 
     def test_observer_run_result_preserves_finish_detail(self, tmp_path: Path) -> None:

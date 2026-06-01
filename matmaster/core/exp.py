@@ -19,7 +19,7 @@ import json
 import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -29,10 +29,7 @@ from matmaster.context.assembly import (
     ContextAssemblyIntent,
     TurnAssemblyRequest,
 )
-from matmaster.context.ports import (
-    SkillResolver,
-    UserInstructions,
-)
+from matmaster.context.ports import SkillResolver, UserInstructions
 from matmaster.context.sections import ContextView
 from matmaster.context.sources.turn_input import TurnInput
 from matmaster.context.system_prompt import SystemPromptBuilder
@@ -42,6 +39,7 @@ from matmaster.context.user_turn_context import (
     USER_CONTEXT_RENDER_VERSION,
     USER_TURN_CONTEXT_SCHEMA_VERSION,
 )
+from matmaster.core import exp_helpers
 from matmaster.core.hooks import HookExecutor
 from matmaster.core.path_access import derive_path_access_roots
 from matmaster.core.run_context import AgentRunContext
@@ -60,6 +58,7 @@ from matmaster.types.runtime import (
     AgentKernelResources,
     AgentKernelRuntime,
     AgentKernelSpec,
+    AgentKernelTurnRequest,
     AgentRuntime,
 )
 from matmaster.types.runtime_ports import (
@@ -107,33 +106,6 @@ _SESSION_REQUIRING_TOOL_NAMES: frozenset[str] = frozenset(
         "Grep",
     }
 )
-
-
-@dataclass(frozen=True)
-class RootTurnRender:
-    rendered_content: str
-
-
-def _resolve_skill_config_dir(raw_dir: str) -> Path:
-    """Map legacy ``matmaster_config`` references onto this repo's ``config`` dir."""
-    candidate = Path(raw_dir)
-    if candidate.exists():
-        return candidate
-    if raw_dir == "matmaster_config":
-        compat = Path("config")
-        if compat.exists():
-            return compat
-    return candidate
-
-
-def _deep_merge_dict(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
-    merged = dict(base)
-    for key, value in patch.items():
-        if isinstance(value, dict) and isinstance(merged.get(key), dict):
-            merged[key] = _deep_merge_dict(merged[key], value)
-        else:
-            merged[key] = value
-    return merged
 
 
 class Exp:
@@ -443,7 +415,6 @@ class Exp:
             max_turns=self._config.max_turns,
             compaction=self._config.compaction,
             run_identity=self._build_run_identity(ctx, spawn_id=spawn_id),
-            turn_input=request.turn_input,
             llm_model=request.llm_model,
             llm_model_profile=request.llm_model_profile,
             llm_model_route=request.llm_model_route,
@@ -591,6 +562,10 @@ class Exp:
                     user_instructions=user_instructions,
                 )
                 task = turn.rendered_content
+                turn_request = AgentKernelTurnRequest(
+                    user_message_content=task,
+                    turn_input=ctx.request.turn_input,
+                )
                 kernel_runtime = replace(
                     runtime.kernel_runtime,
                     spec=replace(
@@ -600,9 +575,13 @@ class Exp:
                 )
             else:
                 kernel_runtime = runtime.kernel_runtime
+                turn_request = AgentKernelTurnRequest(
+                    user_message_content=task,
+                    turn_input=ctx.request.turn_input,
+                )
             async for event in runtime.kernel.run_stream(
                 kernel_runtime,
-                task,
+                turn_request,
                 history=history,
                 cancel_token=cancel_token,
             ):
@@ -615,7 +594,7 @@ class Exp:
         intent: ContextAssemblyIntent,
         assembler: ContextAssembler,
         user_instructions: UserInstructions,
-    ) -> RootTurnRender:
+    ) -> exp_helpers.RootTurnRender:
         if ctx.request.turn_input is None:
             raise RuntimeError("AgentRunRequest.turn_input is required for root run")
         assembly = await assembler.assemble_turn(
@@ -634,7 +613,7 @@ class Exp:
             message=message,
             user_instructions=user_instructions,
         )
-        return RootTurnRender(rendered_content=message.content)
+        return exp_helpers.RootTurnRender(rendered_content=message.content)
 
     async def _write_user_turn_context_if_configured(
         self,
@@ -841,7 +820,9 @@ class Exp:
         # calculation_executors) is a separate concern from skill routing.
         from matmaster.config.loader import _load_raw
 
-        resolved_config_dir = _resolve_skill_config_dir(skills_cfg.config_dir)
+        resolved_config_dir = exp_helpers.resolve_skill_config_dir(
+            skills_cfg.config_dir
+        )
         mcp_runtime_path = resolved_config_dir / skills_cfg.mcp_runtime_file
         if mcp_runtime_path.exists():
             mcp_config = _load_raw(mcp_runtime_path)
@@ -852,7 +833,7 @@ class Exp:
             )
         runtime_patch = skills_cfg.mcp_runtime_patch or {}
         if isinstance(runtime_patch, dict) and runtime_patch:
-            mcp_config = _deep_merge_dict(mcp_config, runtime_patch)
+            mcp_config = exp_helpers.deep_merge_dict(mcp_config, runtime_patch)
 
         mcp_config_file = mcp_config.get("config_file", skills_cfg.mcp_config_file)
         config_path = Path(mcp_config_file)

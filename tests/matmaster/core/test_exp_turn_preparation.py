@@ -21,7 +21,7 @@ from matmaster.types.messages import LLMResponse, StreamChunk
 from matmaster.types.runtime import AgentRuntime
 from matmaster.types.runtime_ports import AgentRunPorts, PlaygroundCompactionPort
 
-from .agent_kernel_test_helpers import make_kernel_runtime
+from .agent_kernel_test_helpers import make_kernel_runtime, make_kernel_turn
 
 
 class _Provider:
@@ -75,10 +75,10 @@ class _History:
 
 class _CapturingKernel:
     def __init__(self) -> None:
-        self.calls: list[tuple[Any, str | None, dict[str, Any]]] = []
+        self.calls: list[tuple[Any, Any, dict[str, Any]]] = []
 
-    async def run_stream(self, kernel_runtime, task, **kwargs):
-        self.calls.append((kernel_runtime, task, kwargs))
+    async def run_stream(self, kernel_runtime, turn_request, **kwargs):
+        self.calls.append((kernel_runtime, turn_request, kwargs))
         if False:
             yield None
 
@@ -184,8 +184,9 @@ async def test_root_run_disables_kernel_prompt_rewrite_on_derived_runtime(
     [event async for event in exp.run_stream(ctx)]
 
     assert len(kernel.calls) == 1
-    root_kernel_runtime, task, _kwargs = kernel.calls[0]
-    assert task == "rendered root prompt"
+    root_kernel_runtime, turn_request, _kwargs = kernel.calls[0]
+    assert turn_request.user_message_content == "rendered root prompt"
+    assert turn_request.turn_input.user_text == "hello"
     assert base_kernel_runtime.spec.prompt_submit_rewrite_enabled is True
     assert root_kernel_runtime is not base_kernel_runtime
     assert root_kernel_runtime.spec.prompt_submit_rewrite_enabled is False

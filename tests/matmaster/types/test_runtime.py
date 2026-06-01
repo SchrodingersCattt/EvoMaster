@@ -23,6 +23,7 @@ from matmaster.types.runtime import (
     AgentKernelResources,
     AgentKernelRuntime,
     AgentKernelSpec,
+    AgentKernelTurnRequest,
     AgentRuntime,
     CompactionConfig,
     KernelResult,
@@ -149,23 +150,20 @@ class TestAgentKernelSpec:
         assert spec.max_turns == 100
         assert isinstance(spec.compaction, CompactionConfig)
         assert isinstance(spec.run_identity, RunIdentity)
-        assert spec.turn_input is None
 
     def test_custom_config_values(self) -> None:
         spec = _make_kernel_spec(max_turns=50, system_prompt="You are a scientist.")
         assert spec.max_turns == 50
         assert spec.system_prompt == "You are a scientist."
 
-    def test_typed_run_identity_and_turn_input(self) -> None:
-        turn_input = TurnInput.from_values(user_text="hello")
+    def test_typed_run_identity(self) -> None:
         identity = RunIdentity(
             task_id="task-1", session_id="session-1", spawn_id="child"
         )
 
-        spec = _make_kernel_spec(run_identity=identity, turn_input=turn_input)
+        spec = _make_kernel_spec(run_identity=identity)
 
         assert spec.run_identity is identity
-        assert spec.turn_input is turn_input
 
     def test_run_identity_is_single_sourced(self) -> None:
         from matmaster.types.run_metadata import RunIdentity as CanonicalRunIdentity
@@ -183,7 +181,6 @@ class TestAgentKernelSpec:
             "max_turns",
             "compaction",
             "run_identity",
-            "turn_input",
             "prompt_submit_rewrite_enabled",
             "llm_model",
             "llm_model_profile",
@@ -196,6 +193,29 @@ class TestAgentKernelSpec:
             spec.max_turns = 50  # type: ignore[misc]
         with pytest.raises(FrozenInstanceError):
             spec.system_prompt = "changed"  # type: ignore[misc]
+
+
+# ── AgentKernelTurnRequest ──────────────────────────────
+
+
+class TestAgentKernelTurnRequest:
+    """AgentKernelTurnRequest: frozen per-turn kernel input."""
+
+    def test_holds_message_content_and_turn_input(self) -> None:
+        turn_input = TurnInput.from_values(user_text="hello")
+
+        request = AgentKernelTurnRequest(
+            user_message_content="rendered prompt",
+            turn_input=turn_input,
+        )
+
+        assert request.user_message_content == "rendered prompt"
+        assert request.turn_input is turn_input
+
+    def test_frozen_rejects_mutation(self) -> None:
+        request = AgentKernelTurnRequest(user_message_content="prompt")
+        with pytest.raises(FrozenInstanceError):
+            request.user_message_content = "changed"  # type: ignore[misc]
 
 
 # ── AgentKernelResources ────────────────────────────────

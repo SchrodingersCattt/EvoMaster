@@ -17,6 +17,7 @@ from matmaster.core.playground import ExecutionEnvironment
 from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.types.events import ResponseEvent, RunResultEvent
 from matmaster.types.messages import LLMResponse, StreamChunk
+from matmaster.types.runtime import AgentKernelTurnRequest
 
 
 class MinimalMockLLMProvider:
@@ -68,7 +69,8 @@ class TestMinimalE2EPipeline:
         kernel = AgentKernel()
         events = []
         async for event in kernel.run_stream(
-            runtime.kernel_runtime, "minimal test task"
+            runtime.kernel_runtime,
+            AgentKernelTurnRequest(user_message_content="minimal test task"),
         ):
             events.append(event)
 

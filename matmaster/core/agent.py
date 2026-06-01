@@ -1,7 +1,8 @@
 """AgentKernel -- pure async execution loop for the agent kernel.
 
-Consumes an AgentKernelRuntime and executes the LLM -> hook -> tool
--> message accumulate -> loop cycle via run_stream(), the sole public API.
+Consumes an AgentKernelRuntime plus AgentKernelTurnRequest and executes the
+LLM -> hook -> tool -> message accumulate -> loop cycle via run_stream(), the
+sole public API.
 run_stream() yields BusEvent objects through the _run_items() generator.
 
 Termination conditions:
@@ -18,7 +19,6 @@ import logging
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
-from matmaster.context.sources.turn_input import TurnInput
 from matmaster.core.agent_compaction import (
     run_preflight_compaction_if_needed,
     run_runtime_compaction_if_needed,
@@ -54,16 +54,11 @@ if TYPE_CHECKING:
         AgentKernelResources,
         AgentKernelRuntime,
         AgentKernelSpec,
+        AgentKernelTurnRequest,
     )
 
-from matmaster.core.hooks import (
-    HookEvent,
-    RunContext,
-    UserPromptContext,
-)
-from matmaster.response_text import (
-    is_trivial_response_text,
-)
+from matmaster.core.hooks import HookEvent, RunContext, UserPromptContext
+from matmaster.response_text import is_trivial_response_text
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -118,7 +113,7 @@ class AgentKernel:
     async def run_stream(
         self,
         kernel_runtime: AgentKernelRuntime,
-        task: str,
+        turn_request: AgentKernelTurnRequest,
         history: list[Message] | None = None,
         cancel_token: CancellationToken | None = None,
     ) -> AsyncIterator[Any]:
@@ -140,7 +135,11 @@ class AgentKernel:
             async def _consume_and_yield():
                 nonlocal last_reason
                 async for item in self._run_items(
-                    kernel_spec, kernel_resources, task, history, cancel_token
+                    kernel_spec,
+                    kernel_resources,
+                    turn_request,
+                    history,
+                    cancel_token,
                 ):
                     if item.terminal is not None:
                         reason = item.terminal.reason
@@ -251,7 +250,7 @@ class AgentKernel:
         self,
         kernel_spec: AgentKernelSpec,
         kernel_resources: AgentKernelResources,
-        task: str,
+        turn_request: AgentKernelTurnRequest,
         history: list[Message] | None,
         cancel_token: CancellationToken | None,
     ) -> AsyncIterator[_KernelItem]:
@@ -259,6 +258,8 @@ class AgentKernel:
 
         Yields events for streaming, AssistantState, and SkillHit.
         """
+        task = turn_request.user_message_content
+        turn_input = turn_request.turn_input
         if kernel_resources.hook_executor is not None:
             session_id = kernel_spec.run_identity.session_id
             if kernel_spec.prompt_submit_rewrite_enabled:
@@ -273,9 +274,6 @@ class AgentKernel:
                 UserPromptContext(prompt=task, session_id=session_id),
             )
 
-        turn_input = kernel_spec.turn_input
-        if turn_input is None and history:
-            turn_input = TurnInput.from_values(user_text=task)
         turn_images = (
             list(turn_input.attachments.images_as_parts())
             if turn_input is not None

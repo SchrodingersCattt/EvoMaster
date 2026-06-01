@@ -13,10 +13,7 @@ import pytest
 from matmaster.core.playground import ExecutionEnvironment
 from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.types.cancellation import CancellationController
-from matmaster.types.messages import (
-    LLMResponse,
-    StreamChunk,
-)
+from matmaster.types.messages import LLMResponse, StreamChunk
 from matmaster.types.run_metadata import RunMetadata
 from matmaster.types.runtime_ports import BohriumRuntimeSnapshot
 
@@ -98,10 +95,7 @@ async def test_build_runtime_uses_runtime_ports_history(
 ) -> None:
     from matmaster.config.exp import ExpConfig
     from matmaster.core.exp import Exp
-    from matmaster.types.runtime_ports import (
-        AgentRunPorts,
-        PlaygroundCompactionPort,
-    )
+    from matmaster.types.runtime_ports import AgentRunPorts, PlaygroundCompactionPort
 
     class RuntimeHistory:
         def query_events(self):
@@ -170,7 +164,7 @@ async def test_build_runtime_missing_runtime_history_has_no_scope_boundary(
 
 
 @pytest.mark.asyncio
-async def test_build_runtime_passes_turn_input_to_kernel_spec(
+async def test_build_runtime_keeps_turn_input_out_of_kernel_spec(
     tmp_path: Path,
 ) -> None:
     from matmaster.config.exp import ExpConfig
@@ -197,7 +191,7 @@ async def test_build_runtime_passes_turn_input_to_kernel_spec(
 
     runtime = await Exp(ExpConfig(name="test")).build_runtime(ctx)
 
-    assert runtime.kernel_runtime.spec.turn_input == turn_input
+    assert not hasattr(runtime.kernel_runtime.spec, "turn_input")
 
 
 @pytest.mark.asyncio
@@ -625,7 +619,7 @@ class TestRunStream:
         # All events should have 'type' attribute (BusEvent contract)
         for event in events:
             assert hasattr(
-                event, 'type'
+                event, "type"
             ), f"Yielded object missing 'type' attribute: {type(event).__name__}"
         terminal_events = [e for e in events if isinstance(e, RunResultEvent)]
         assert len(terminal_events) == 1
@@ -694,12 +688,12 @@ class TestRunStream:
 
         async def fake_kernel_run_stream(
             kernel_runtime: Any,
-            task: str,
+            turn_request: Any,
             history: list[Any] | None = None,
             cancel_token: Any = None,
         ) -> AsyncIterator[Any]:
             observed["kernel_runtime"] = kernel_runtime
-            observed["task"] = task
+            observed["turn_request"] = turn_request
             observed["history"] = history
             observed["cancel_token"] = cancel_token
             yield MagicMock(type="test.event")
@@ -723,7 +717,8 @@ class TestRunStream:
         assert len(events) == 1
         assert ctx.environment.session._cancel_token is controller.token
         catalog.inject_cancel_token.assert_called_once_with(controller.token)
-        assert observed["task"] == "test task"
+        assert observed["turn_request"].user_message_content == "test task"
+        assert observed["turn_request"].turn_input.user_text == "test task"
         assert observed["cancel_token"] is controller.token
 
 

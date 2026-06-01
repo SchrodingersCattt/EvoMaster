@@ -28,11 +28,7 @@ from matmaster.core.tool_scheduler import ToolScheduler
 from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
-from matmaster.types.events import (
-    ResponseEvent,
-    RunResultEvent,
-    ToolCallEvent,
-)
+from matmaster.types.events import ResponseEvent, RunResultEvent, ToolCallEvent
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -43,7 +39,7 @@ from matmaster.types.run_metadata import RunIdentity, RunMetadata
 from matmaster.types.topology import ToolPlane
 from tests.conftest import MockAsyncTool
 
-from .agent_kernel_test_helpers import make_kernel_runtime
+from .agent_kernel_test_helpers import make_kernel_runtime, make_kernel_turn
 from .conftest import MockLLMProvider
 from .test_full_tool_runner import _make_ctx, _make_tc, _make_topology
 
@@ -549,7 +545,10 @@ class TestAgentKernelHookWiring:
 
         kernel = AgentKernel()
         events = [
-            event async for event in kernel.run_stream(kernel_runtime, "original")
+            event
+            async for event in kernel.run_stream(
+                kernel_runtime, make_kernel_turn("original")
+            )
         ]
 
         assert isinstance(events[-1], RunResultEvent)
@@ -577,7 +576,7 @@ class TestAgentKernelHookWiring:
         )
 
         kernel = AgentKernel()
-        stream = kernel.run_stream(kernel_runtime, "original")
+        stream = kernel.run_stream(kernel_runtime, make_kernel_turn("original"))
 
         await anext(stream)
         await stream.aclose()
@@ -607,7 +606,12 @@ class TestAgentKernelHookWiring:
         )
 
         kernel = AgentKernel()
-        [event async for event in kernel.run_stream(kernel_runtime, "original")]
+        [
+            event
+            async for event in kernel.run_stream(
+                kernel_runtime, make_kernel_turn("original")
+            )
+        ]
 
         assert provider.seen_messages[0][-1]["content"] == "original rewritten"
         assert seen_prompts == ["original rewritten"]
@@ -638,7 +642,12 @@ class TestAgentKernelHookWiring:
         )
 
         kernel = AgentKernel()
-        [event async for event in kernel.run_stream(kernel_runtime, "original")]
+        [
+            event
+            async for event in kernel.run_stream(
+                kernel_runtime, make_kernel_turn("original")
+            )
+        ]
 
         assert provider.seen_messages[0][-1]["content"] == "original"
         assert seen_prompts == ["original"]
@@ -663,7 +672,12 @@ class TestAgentKernelHookWiring:
         )
 
         kernel = AgentKernel()
-        [event async for event in kernel.run_stream(kernel_runtime, "original")]
+        [
+            event
+            async for event in kernel.run_stream(
+                kernel_runtime, make_kernel_turn("original")
+            )
+        ]
 
         assert seen == [
             CompactionContext(
@@ -698,7 +712,7 @@ class TestAgentKernelHookWiring:
             event
             async for event in kernel.run_stream(
                 kernel_runtime,
-                "original",
+                make_kernel_turn("original"),
                 history=[
                     UserMessage(content="previous user"),
                     AssistantMessage(content="previous assistant"),
