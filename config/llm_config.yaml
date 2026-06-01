@@ -102,6 +102,20 @@ profiles:
     max_retries: 3
     retry_delay: 1.0
 
+  gpt55:
+    provider: "openai"
+    model: "matmaster/gpt-5.5"
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+    reasoning_protocol: "openai_reasoning_effort"
+    thinking_effort: "xhigh"
+    supports_vision: true
+    timeout: 1200
+    stream_timeout: 120
+    stream_idle_timeout: 60
+    max_retries: 3
+    retry_delay: 1.0
+
   qwen_3_6_plus:
     provider: "openai"
     model: "matmaster/qwen3.6-plus"
@@ -147,6 +161,19 @@ profiles:
   deepseek_v4_pro:
     provider: "openai"
     model: "aliyun/deepseek-v4-pro"
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+    reasoning_protocol: "openai_reasoning_effort"
+    thinking_effort: "max"
+    timeout: 1200
+    stream_timeout: 120
+    stream_idle_timeout: 60
+    max_retries: 3
+    retry_delay: 1.0
+
+  deepseek_v4_pro_mm:
+    provider: "openai"
+    model: "matmaster/DeepSeek-v4-Pro"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
     reasoning_protocol: "openai_reasoning_effort"
@@ -220,6 +247,8 @@ routes:
     profile: gemini-pro
   "cds/GPT-5.4":
     profile: gpt54
+  "matmaster/gpt-5.5":
+    profile: gpt55
   "matmaster/qwen3.6-plus":
     profile: qwen_3_6_plus
   "matmaster/qwen3.6-max-preview":
@@ -228,6 +257,8 @@ routes:
     profile: qwen_3_7_max
   "matmaster/dsk-v4p":
     profile: deepseek_v4_pro
+  "matmaster/DeepSeek-v4-Pro":
+    profile: deepseek_v4_pro_mm
   "global.anthropic.claude-opus-4-6-v1":
     profile: opus_global
   "bedrock-claude-opus":
