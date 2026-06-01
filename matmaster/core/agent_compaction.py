@@ -11,6 +11,7 @@ import logging
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
+from matmaster.core.agent_tool_dispatch import accumulate_usage
 from matmaster.core.hooks import CompactionContext, HookEvent
 from matmaster.core.kernel_items import _KernelItem, _KernelState
 from matmaster.types.events import CompactionEvent
@@ -52,6 +53,7 @@ async def run_compaction_plan(
         result = pre_compaction_barrier()
         if inspect.isawaitable(result):
             await result
+    summary_usage: dict[str, int] = {}
     try:
         from matmaster.context.compaction import (
             call_summary_llm_response,
@@ -69,6 +71,9 @@ async def run_compaction_plan(
             reserved_summary_tokens=kernel_spec.compaction.reserved_summary_tokens,
             safety_margin_tokens=(kernel_spec.compaction.summary_safety_margin_tokens),
         )
+        summary_usage = dict(response.usage or {})
+        if summary_usage:
+            accumulate_usage(state.total_usage, summary_usage)
         summary = validate_summary_response(response)
         result = await kernel_resources.compactor.apply_summary(
             plan,
@@ -159,6 +164,8 @@ async def run_compaction_plan(
             checkpoint_written=checkpoint_written,
             failure_reason=failure_reason,
             covered_until_event_id=covered_until_event_id,
+            turn_usage=dict(summary_usage) if summary_usage else None,
+            total_usage=dict(state.total_usage) if summary_usage else None,
         )
     )
 

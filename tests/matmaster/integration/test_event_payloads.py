@@ -172,6 +172,34 @@ class TestPublicContentForEvent:
             'retained_turns': 3,
         }
 
+    def test_compaction_public_content_includes_usage_fields(self) -> None:
+        content = _public_content_for_event(
+            'compaction',
+            {
+                'compaction_id': 'root:1',
+                'status': 'complete',
+                'phase': 'runtime',
+                'turn_usage': {'prompt_tokens': 40},
+                'total_usage': {'prompt_tokens': 55},
+            },
+        )
+
+        assert content['turn_usage'] == {'prompt_tokens': 40}
+        assert content['total_usage'] == {'prompt_tokens': 55}
+
+        running = _public_content_for_event(
+            'compaction',
+            {
+                'compaction_id': 'root:1',
+                'status': 'running',
+                'phase': 'runtime',
+                'turn_usage': None,
+                'total_usage': None,
+            },
+        )
+        assert 'turn_usage' not in running
+        assert 'total_usage' not in running
+
     def test_response_uses_content_field(self) -> None:
         payload = {'type': 'response', 'source': 'Agent', 'content': 'hello'}
 

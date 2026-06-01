@@ -230,6 +230,8 @@ class CompactionEvent(EventBase):
     checkpoint_written: bool | None = None
     failure_reason: str | None = None
     covered_until_event_id: int | None = None
+    turn_usage: dict[str, int] | None = None
+    total_usage: dict[str, int] | None = None
 
 
 class ExpRunEvent(EventBase):

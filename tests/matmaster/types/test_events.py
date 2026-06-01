@@ -321,6 +321,30 @@ class TestSystemEvents:
         assert restored.checkpoint_written is True
         assert restored.covered_until_event_id == 88
 
+    def test_compaction_event_usage_fields_default_to_none(self) -> None:
+        evt = CompactionEvent(
+            source="context_compactor",
+            compaction_id="root:1",
+            status="complete",
+            phase="runtime",
+        )
+
+        assert evt.turn_usage is None
+        assert evt.total_usage is None
+
+    def test_compaction_event_accepts_usage_fields(self) -> None:
+        evt = CompactionEvent(
+            source="context_compactor",
+            compaction_id="root:1",
+            status="complete",
+            phase="runtime",
+            turn_usage={"prompt_tokens": 40},
+            total_usage={"prompt_tokens": 55},
+        )
+
+        assert evt.turn_usage == {"prompt_tokens": 40}
+        assert evt.total_usage == {"prompt_tokens": 55}
+
     def test_exp_run(self) -> None:
         evt = ExpRunEvent(source="system", exp_name="mat_master")
         assert evt.type == "exp_run"

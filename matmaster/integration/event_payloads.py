@@ -299,6 +299,9 @@ def _public_content_for_event(
         ):
             if key in payload and payload.get(key) is not None:
                 content[key] = payload[key]
+        for key in ('turn_usage', 'total_usage'):
+            if payload.get(key):
+                content[key] = payload[key]
         return content
 
     if event_type == 'response_figures':
