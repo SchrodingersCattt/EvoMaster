@@ -25,8 +25,8 @@ cd "${REPO_ROOT}"
 #   FAKE_LLM_LOG_PATH 可选，指定伪造日志文件；不传则用内置故障日志模板
 #   LOG_DIR         默认 ./logs/job_polling_tests
 #   INJECT_DIR      默认 ./logs/monitor_job_injections（monitor_job 测试注入目录）
-#   INJECT_FAKE_LOG 默认 1；在拿到 bohr_job_id 后注入伪造故障日志
-#   INJECT_DELAY    默认 1（秒）；拿到 bohr_job_id 后多久写入注入日志
+#   INJECT_FAKE_LOG 默认 1；在拿到 job_id 后注入伪造故障日志
+#   INJECT_DELAY    默认 1（秒）；拿到 job_id 后多久写入注入日志
 
 API_BASE="${API_BASE:-http://127.0.0.1:8002/api/v1}"
 USER_ID="${USER_ID:-3656033}"
@@ -38,7 +38,7 @@ LOG_DIR="${LOG_DIR:-./logs/job_polling_tests}"
 TASK_PROMPT="${TASK_PROMPT:-石墨烯建模并进行dp 弛豫}"
 INJECT_DIR="${INJECT_DIR:-./logs/monitor_job_injections}"
 INJECT_FAKE_LOG="${INJECT_FAKE_LOG:-1}"  # 是否在任务运行中注入伪造日志
-INJECT_DELAY="${INJECT_DELAY:-1}"  # 拿到 bohr_job_id 后多久执行注入
+INJECT_DELAY="${INJECT_DELAY:-1}"  # 拿到 job_id 后多久执行注入
 FAKE_LLM_LOG_PATH="${FAKE_LLM_LOG_PATH:-}"
 AUTO_START_SERVER="${AUTO_START_SERVER:-1}"
 UVICORN_BIN="${UVICORN_BIN:-./.venv/bin/uvicorn}"
@@ -143,22 +143,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "== 等待 bohr_job_id（意味着弛豫提交成功并开始监控）..."
-BOHR_JOB_ID=""
+echo "== 等待 job_id（意味着弛豫提交成功并开始监控）..."
 JOB_ID=""
 DEADLINE=$(( $(date +%s) + WAIT_TIMEOUT ))
 while [[ $(date +%s) -lt ${DEADLINE} ]]; do
   if [[ -s "${SSE_OUT}" ]]; then
-    BOHR_JOB_ID="$(python - "${SSE_OUT}" <<'PY'
-import re
-import sys
-
-path = sys.argv[1]
-text = open(path, "r", encoding="utf-8", errors="ignore").read()
-matches = re.findall(r'"bohr_job_id"\s*:\s*"([^"]+)"', text)
-print(matches[-1] if matches else "")
-PY
-)"
     JOB_ID="$(python - "${SSE_OUT}" <<'PY'
 import re
 import sys
@@ -169,26 +158,23 @@ matches = re.findall(r'"job_id"\s*:\s*"([^"]+)"', text)
 print(matches[-1] if matches else "")
 PY
 )"
-    if [[ -n "${BOHR_JOB_ID}" ]]; then
+    if [[ -n "${JOB_ID}" ]]; then
       break
     fi
   fi
   if ! kill -0 "${SSE_PID}" >/dev/null 2>&1; then
-    echo "ERROR: SSE 请求已提前结束，且未获取到 bohr_job_id。请检查 ${SSE_OUT}"
+    echo "ERROR: SSE 请求已提前结束，且未获取到 job_id。请检查 ${SSE_OUT}"
     exit 4
   fi
   sleep 2
 done
 
-if [[ -z "${BOHR_JOB_ID}" ]]; then
-  echo "ERROR: 在 ${WAIT_TIMEOUT}s 内未获取到 bohr_job_id。请检查 ${SSE_OUT}"
+if [[ -z "${JOB_ID}" ]]; then
+  echo "ERROR: 在 ${WAIT_TIMEOUT}s 内未获取到 job_id。请检查 ${SSE_OUT}"
   exit 2
 fi
 
-echo "== 已获取 bohr_job_id: ${BOHR_JOB_ID}"
-if [[ -n "${JOB_ID}" ]]; then
-  echo "== 已获取 job_id: ${JOB_ID}"
-fi
+echo "== 已获取 job_id: ${JOB_ID}"
 
 # 如果启用日志注入，在后台等待指定时间后写入 monitor_job 注入文件
 if [[ "${INJECT_FAKE_LOG}" == "1" ]]; then
@@ -197,16 +183,16 @@ if [[ "${INJECT_FAKE_LOG}" == "1" ]]; then
     sleep "${INJECT_DELAY}"
 
     echo "== 开始写入注入日志..."
-    python - "${BOHR_JOB_ID}" "${FAKE_LLM_LOG_PATH}" "${INJECT_DIR}" <<'PY'
+    python - "${JOB_ID}" "${FAKE_LLM_LOG_PATH}" "${INJECT_DIR}" <<'PY'
 import sys
 from pathlib import Path
 
-bohr_job_id = (sys.argv[1] or "").strip()
+job_id = (sys.argv[1] or "").strip()
 fake_log_path = (sys.argv[2] or "").strip()
 inject_dir = Path((sys.argv[3] or "").strip()).resolve()
 
-if not bohr_job_id:
-    print("ERROR: bohr_job_id is required")
+if not job_id:
+    print("ERROR: job_id is required")
     raise SystemExit(1)
 
 default_fake_log = """
@@ -232,7 +218,7 @@ else:
     fake_log = default_fake_log
 
 inject_dir.mkdir(parents=True, exist_ok=True)
-inject_path = inject_dir / f"{bohr_job_id}.log.inject"
+inject_path = inject_dir / f"{job_id}.log.inject"
 inject_path.write_text(fake_log.strip() + "\n", encoding="utf-8")
 print(f"✓ 已写入 monitor_job 注入日志: {inject_path}")
 print("  monitor_job 会在下一次 LLM 决策前读取该文件（默认一次性消费）")
@@ -277,5 +263,5 @@ fi
 echo ""
 echo "== 说明："
 echo "   monitor_job 工具内部会自动执行 LLM 决策（默认 auto_terminate）"
-echo "   本脚本通过 ${INJECT_DIR}/<bohr_job_id>.log.inject 注入故障日志，模拟运行中日志突变"
+echo "   本脚本通过 ${INJECT_DIR}/<job_id>.log.inject 注入故障日志，模拟运行中日志突变"
 echo "   查看 SSE 输出中的 llm_decision_history / termination 字段可判断是否提前终止"
