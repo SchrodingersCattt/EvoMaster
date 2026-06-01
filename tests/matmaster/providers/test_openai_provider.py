@@ -247,6 +247,30 @@ class TestChatContent:
             "total_tokens": 15,
         }
 
+    async def test_chat_usage_projects_reasoning_tokens(self) -> None:
+        details = MagicMock()
+        details.reasoning_tokens = 7
+        usage = MagicMock()
+        usage.prompt_tokens = 10
+        usage.completion_tokens = 5
+        usage.total_tokens = 15
+        usage.completion_tokens_details = details
+
+        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create.return_value = _make_mock_completion(
+            usage=usage,
+        )
+        provider._client = mock_client
+        result = await provider.chat([{"role": "user", "content": "Hi"}])
+
+        assert result.usage == {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+            "reasoning_tokens": 7,
+        }
+
     async def test_chat_usage_vendor_preserves_anthropic_cache_fields(self) -> None:
         class Usage:
             prompt_tokens = 10
@@ -272,6 +296,7 @@ class TestChatContent:
             "completion_tokens": 5,
             "total_tokens": 15,
             "cache_read_tokens": 45,
+            "cache_write_tokens": 123,
         }
         assert result.usage_vendor == {
             "prompt_tokens": 10,
