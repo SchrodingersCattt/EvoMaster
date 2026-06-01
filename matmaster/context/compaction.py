@@ -150,15 +150,28 @@ def _summary_base_messages(
     phase: Literal["preflight", "runtime"],
     turn_input: TurnInput | None,
 ) -> list[Message]:
-    current_split = (
+    current_split = _should_split_current_input_for_preflight(
+        phase=phase,
+        messages=full_messages,
+        turn_input=turn_input,
+    )
+    return full_messages[:-1] if current_split else full_messages
+
+
+def _should_split_current_input_for_preflight(
+    *,
+    phase: Literal["preflight", "runtime"],
+    messages: list[Message],
+    turn_input: TurnInput | None,
+) -> bool:
+    return (
         phase == "preflight"
         and turn_input is not None
         and turn_input.has_effective_input()
-        and len(full_messages) >= 3
-        and isinstance(full_messages[-1], UserMessage)
-        and bool(full_messages[1:-1])
+        and len(messages) >= 3
+        and isinstance(messages[-1], UserMessage)
+        and bool(messages[1:-1])
     )
-    return full_messages[:-1] if current_split else full_messages
 
 
 @dataclass(frozen=True)
@@ -444,13 +457,10 @@ class ContextCompactor:
                 f"messages[0] must be SystemMessage, got {type(messages[0])}"
             )
         system_msg = messages[0]
-        current_split = (
-            plan.phase == "preflight"
-            and turn_input is not None
-            and turn_input.has_effective_input()
-            and len(messages) >= 3
-            and isinstance(messages[-1], UserMessage)
-            and bool(messages[1:-1])
+        current_split = _should_split_current_input_for_preflight(
+            phase=plan.phase,
+            messages=messages,
+            turn_input=turn_input,
         )
         intent = (
             ContextAssemblyIntent.PREFLIGHT_COMPACTION

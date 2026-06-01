@@ -38,6 +38,7 @@ def test_kernel_spec_holds_only_config_fields() -> None:
         "compaction",
         "run_identity",
         "turn_input",
+        "prompt_submit_rewrite_enabled",
         "llm_model",
         "llm_model_profile",
         "llm_model_route",

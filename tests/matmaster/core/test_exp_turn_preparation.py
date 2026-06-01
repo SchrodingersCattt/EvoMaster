@@ -1,19 +1,27 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
 from matmaster.config.exp import ExpConfig
-from matmaster.context.ports import SessionEvent, UserInstructions, hash_user_instructions
+from matmaster.context.ports import (
+    SessionEvent,
+    UserInstructions,
+    hash_user_instructions,
+)
 from matmaster.context.sources.turn_input import TurnInput
 from matmaster.core.exp import Exp
 from matmaster.core.playground import ExecutionEnvironment
 from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.types.events import RunResultEvent
 from matmaster.types.messages import LLMResponse, StreamChunk
+from matmaster.types.runtime import AgentRuntime
 from matmaster.types.runtime_ports import AgentRunPorts, PlaygroundCompactionPort
+
+from .agent_kernel_test_helpers import make_kernel_runtime
 
 
 class _Provider:
@@ -63,6 +71,16 @@ class _History:
 
     def latest_scope_event_id(self):
         return None
+
+
+class _CapturingKernel:
+    def __init__(self) -> None:
+        self.calls: list[tuple[Any, str | None, dict[str, Any]]] = []
+
+    async def run_stream(self, kernel_runtime, task, **kwargs):
+        self.calls.append((kernel_runtime, task, kwargs))
+        if False:
+            yield None
 
 
 def _ctx(
@@ -131,6 +149,46 @@ async def test_root_run_renders_and_writes_user_turn_context(tmp_path: Path):
     assert calls[0].user_instructions_hash == instructions.hash
     assert "Use SI units." in calls[0].message.content
     assert "hello" in calls[0].message.content
+
+
+@pytest.mark.asyncio
+async def test_root_run_disables_kernel_prompt_rewrite_on_derived_runtime(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    exp = Exp(ExpConfig(name="test"))
+    kernel = _CapturingKernel()
+    base_kernel_runtime = make_kernel_runtime(prompt_submit_rewrite_enabled=True)
+    runtime = AgentRuntime(
+        kernel=kernel,
+        kernel_runtime=base_kernel_runtime,
+        cleanup=lambda: None,
+        context_runtime=SimpleNamespace(assembler=object()),
+    )
+
+    async def build_runtime(ctx, *, skills=None, spawn_id=None):
+        return runtime
+
+    async def render_root_turn(**kwargs):
+        return SimpleNamespace(rendered_content="rendered root prompt")
+
+    monkeypatch.setattr(exp, "build_runtime", build_runtime)
+    monkeypatch.setattr(exp, "_render_and_persist_root_turn", render_root_turn)
+
+    ctx = _ctx(
+        tmp_path,
+        turn_input=TurnInput.from_values(user_text="hello"),
+        history=_History(),
+    )
+
+    [event async for event in exp.run_stream(ctx)]
+
+    assert len(kernel.calls) == 1
+    root_kernel_runtime, task, _kwargs = kernel.calls[0]
+    assert task == "rendered root prompt"
+    assert base_kernel_runtime.spec.prompt_submit_rewrite_enabled is True
+    assert root_kernel_runtime is not base_kernel_runtime
+    assert root_kernel_runtime.spec.prompt_submit_rewrite_enabled is False
 
 
 @pytest.mark.asyncio

@@ -68,6 +68,7 @@ class AgentKernelSpec:
     compaction: CompactionConfig
     run_identity: RunIdentity
     turn_input: TurnInput | None = None
+    prompt_submit_rewrite_enabled: bool = True
     llm_model: str | None = None
     llm_model_profile: str | None = None
     llm_model_route: str | None = None

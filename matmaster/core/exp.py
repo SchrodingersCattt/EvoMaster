@@ -19,7 +19,7 @@ import json
 import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -580,8 +580,17 @@ class Exp:
                     user_instructions=user_instructions,
                 )
                 task = turn.rendered_content
+                kernel_runtime = replace(
+                    runtime.kernel_runtime,
+                    spec=replace(
+                        runtime.kernel_runtime.spec,
+                        prompt_submit_rewrite_enabled=False,
+                    ),
+                )
+            else:
+                kernel_runtime = runtime.kernel_runtime
             async for event in runtime.kernel.run_stream(
-                runtime.kernel_runtime,
+                kernel_runtime,
                 task,
                 history=history,
                 cancel_token=cancel_token,

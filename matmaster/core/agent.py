@@ -260,12 +260,13 @@ class AgentKernel:
         """
         if kernel_resources.hook_executor is not None:
             session_id = kernel_spec.run_identity.session_id
-            prompt_ctx = UserPromptContext(prompt=task, session_id=session_id)
-            task = await kernel_resources.hook_executor.emit_rewrite(
-                HookEvent.USER_PROMPT_SUBMIT,
-                prompt_ctx,
-                task,
-            )
+            if kernel_spec.prompt_submit_rewrite_enabled:
+                prompt_ctx = UserPromptContext(prompt=task, session_id=session_id)
+                task = await kernel_resources.hook_executor.emit_rewrite(
+                    HookEvent.USER_PROMPT_SUBMIT,
+                    prompt_ctx,
+                    task,
+                )
             await kernel_resources.hook_executor.emit(
                 HookEvent.USER_PROMPT_SUBMIT,
                 UserPromptContext(prompt=task, session_id=session_id),

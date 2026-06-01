@@ -613,6 +613,37 @@ class TestAgentKernelHookWiring:
         assert seen_prompts == ["original rewritten"]
 
     @pytest.mark.asyncio
+    async def test_user_prompt_submit_rewrite_can_be_disabled_but_observe_still_runs(
+        self,
+    ) -> None:
+        provider = RecordingProvider()
+        executor = HookExecutor()
+        seen_prompts: list[str] = []
+
+        async def rewrite(ctx, prompt: str) -> str:
+            return prompt + " rewritten"
+
+        async def observe(ctx) -> None:
+            seen_prompts.append(ctx.prompt)
+
+        executor.rewrite(HookEvent.USER_PROMPT_SUBMIT, rewrite)
+        executor.on(HookEvent.USER_PROMPT_SUBMIT, observe)
+
+        kernel_runtime = make_kernel_runtime(
+            provider=provider,
+            hook_executor=executor,
+            run_identity=RunIdentity(task_id="task-1", session_id="session-1"),
+            system_prompt="You are a test agent",
+            prompt_submit_rewrite_enabled=False,
+        )
+
+        kernel = AgentKernel()
+        [event async for event in kernel.run_stream(kernel_runtime, "original")]
+
+        assert provider.seen_messages[0][-1]["content"] == "original"
+        assert seen_prompts == ["original"]
+
+    @pytest.mark.asyncio
     async def test_context_compaction_emits_hook_context(self) -> None:
         provider = RecordingProvider()
         compactor = FakeCompactor()
