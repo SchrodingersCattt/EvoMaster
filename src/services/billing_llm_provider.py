@@ -11,11 +11,7 @@ from typing import Any
 
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import LLMResponse, StreamChunk
-from src.services.billing_service import (
-    BillingModelIdentity,
-    BillingRunContext,
-    BillingService,
-)
+from src.services.billing_service import BillingRunContext, BillingService
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -29,12 +25,12 @@ class BillingLLMProvider:
         inner: LLMProvider,
         *,
         run_context: BillingRunContext,
-        model_identity: BillingModelIdentity,
+        model: str,
         billing_service: BillingService,
     ) -> None:
         self._inner = inner
         self._run_context = run_context
-        self._model_identity = model_identity
+        self._model = model
         self._billing_service = billing_service
         self._call_index = 0
         self._pending: set[asyncio.Task] = set()
@@ -90,7 +86,7 @@ class BillingLLMProvider:
         try:
             await self._billing_service.report_llm_usage(
                 run_context=self._run_context,
-                model_identity=self._model_identity,
+                model=self._model,
                 call_index=call_index,
                 spawn_id=spawn_id,
                 usage=usage,

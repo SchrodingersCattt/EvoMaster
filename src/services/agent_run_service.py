@@ -49,11 +49,7 @@ from src.services.agent_run_bohrium_stage import (
 )
 from src.services.agent_run_history_wiring import build_history_wiring
 from src.services.billing_llm_provider import BillingLLMProvider
-from src.services.billing_service import (
-    BillingModelIdentity,
-    BillingRunContext,
-    get_billing_service,
-)
+from src.services.billing_service import BillingRunContext, get_billing_service
 from src.services.context_assembly_factory import build_context_assembler
 from src.services.context_turn_intent import resolve_turn_context_intent
 from src.services.history_checkpoint_service import HistoryCheckpointService
@@ -489,10 +485,7 @@ class AgentRunService:
                             ),
                             project_id=session_info_for_billing.get("project_id"),
                         ),
-                        model_identity=BillingModelIdentity(
-                            provider=llm_bundle.provider_name,
-                            model=llm_bundle.model,
-                        ),
+                        model=llm_bundle.model,
                         billing_service=get_billing_service(),
                     )
                 except Exception:

@@ -32,12 +32,6 @@ class BillingRunContext:
     project_id: int | None = None
 
 
-@dataclass(frozen=True)
-class BillingModelIdentity:
-    provider: str
-    model: str
-
-
 class BillingService:
     """把一次 LLM 调用的 usage 事件上报给 tools-server 计费服务。"""
 
@@ -62,7 +56,7 @@ class BillingService:
         self,
         *,
         run_context: BillingRunContext,
-        model_identity: BillingModelIdentity,
+        model: str,
         call_index: int,
         spawn_id: str | None,
         usage: dict[str, Any] | None,
@@ -83,8 +77,7 @@ class BillingService:
             "org_id": run_context.org_id,
             "project_id": run_context.project_id,
             "call_index": call_index,
-            "provider": model_identity.provider,
-            "model": model_identity.model,
+            "model": model,
             "usage": usage,
         }
         url = f"{self._base_url}/api/v1/billing/usage"

@@ -2,11 +2,7 @@
 
 import pytest
 
-from src.services.billing_service import (
-    BillingModelIdentity,
-    BillingRunContext,
-    BillingService,
-)
+from src.services.billing_service import BillingRunContext, BillingService
 
 
 class _FakeResponse:
@@ -65,10 +61,6 @@ def _ctx() -> BillingRunContext:
     )
 
 
-def _identity() -> BillingModelIdentity:
-    return BillingModelIdentity(provider="openai", model="claude-sonnet-4-6")
-
-
 @pytest.mark.asyncio
 async def test_report_llm_usage_posts_expected_payload(monkeypatch):
     session_cls = _make_session_cls(
@@ -81,7 +73,7 @@ async def test_report_llm_usage_posts_expected_payload(monkeypatch):
     service = BillingService(base_url="https://tools.example.com", bearer="secret")
     ok = await service.report_llm_usage(
         run_context=_ctx(),
-        model_identity=_identity(),
+        model="claude-sonnet-4-6",
         call_index=3,
         spawn_id="child-1",
         usage={"prompt_tokens": 1000, "completion_tokens": 200},
@@ -96,9 +88,9 @@ async def test_report_llm_usage_posts_expected_payload(monkeypatch):
     assert body["call_index"] == 3
     assert body["spawn_id"] == "child-1"
     assert body["project_id"] == 42
-    assert body["provider"] == "openai"
     assert body["model"] == "claude-sonnet-4-6"
     assert body["usage"] == {"prompt_tokens": 1000, "completion_tokens": 200}
+    assert "provider" not in body
     assert "model_route" not in body
     assert "model_profile" not in body
     assert "call_kind" not in body
@@ -117,7 +109,7 @@ async def test_report_llm_usage_skips_empty_usage(monkeypatch):
     service = BillingService(base_url="https://tools.example.com", bearer=None)
     ok = await service.report_llm_usage(
         run_context=_ctx(),
-        model_identity=_identity(),
+        model="claude-sonnet-4-6",
         call_index=1,
         spawn_id=None,
         usage=None,
@@ -137,7 +129,7 @@ async def test_report_llm_usage_swallows_server_error(monkeypatch):
     service = BillingService(base_url="https://tools.example.com", bearer="secret")
     ok = await service.report_llm_usage(
         run_context=_ctx(),
-        model_identity=_identity(),
+        model="claude-sonnet-4-6",
         call_index=1,
         spawn_id=None,
         usage={"prompt_tokens": 10},
@@ -156,7 +148,7 @@ async def test_report_llm_usage_omits_auth_header_when_no_bearer(monkeypatch):
     service = BillingService(base_url="https://tools.example.com", bearer=None)
     await service.report_llm_usage(
         run_context=_ctx(),
-        model_identity=_identity(),
+        model="claude-sonnet-4-6",
         call_index=1,
         spawn_id=None,
         usage={"prompt_tokens": 10},
