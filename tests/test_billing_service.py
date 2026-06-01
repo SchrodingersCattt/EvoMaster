@@ -37,9 +37,12 @@ class _FakeSession:
     async def __aexit__(self, *args):
         return False
 
-    def post(self, url, headers=None, json=None):
+    def post(self, url, headers=None, json=None, timeout=None):
         _FakeSession.last_post = {"url": url, "headers": headers, "json": json}
         return _FakeResponse(self._status, self._payload)
+
+    async def close(self):
+        return None
 
 
 def _make_session_cls(status: int, payload: dict):
@@ -112,6 +115,37 @@ async def test_report_llm_usage_skips_empty_usage(monkeypatch):
 
     assert ok is False
     assert session_cls.last_post == {}
+
+
+@pytest.mark.asyncio
+async def test_report_llm_usage_reuses_provided_session(monkeypatch):
+    """传入 session 时复用它，不再新建 ClientSession（一次 run 内共享连接池）。"""
+
+    def _boom(*_args, **_kwargs):
+        raise AssertionError("should not create a new ClientSession")
+
+    monkeypatch.setattr("src.services.billing_service.aiohttp.ClientSession", _boom)
+
+    shared_cls = _make_session_cls(
+        200, {"code": 0, "data": {"recorded": True}}
+    )
+    shared = shared_cls()
+    _FakeSession.last_post = {}
+
+    service = BillingService(base_url="https://tools.example.com")
+    ok = await service.report_llm_usage(
+        run_context=_ctx(),
+        model="claude-sonnet-4-6",
+        call_index=1,
+        spawn_id=None,
+        usage={"prompt_tokens": 10},
+        session=shared,
+    )
+
+    assert ok is True
+    assert _FakeSession.last_post["url"] == (
+        "https://tools.example.com/api/v1/billing/usage"
+    )
 
 
 @pytest.mark.asyncio

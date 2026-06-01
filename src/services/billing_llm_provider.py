@@ -1,4 +1,4 @@
-"""LLMProvider wrapper that reports dry-run billing usage to tools-server."""
+"""LLMProvider wrapper that reports billing usage to tools-server."""
 
 from __future__ import annotations
 
@@ -8,6 +8,8 @@ from collections.abc import AsyncIterator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any
+
+import aiohttp
 
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import LLMResponse, StreamChunk
@@ -34,6 +36,7 @@ class BillingLLMProvider:
         self._billing_service = billing_service
         self._call_index = 0
         self._pending: set[asyncio.Task] = set()
+        self._http_session: aiohttp.ClientSession | None = None
         self._spawn_id_var: ContextVar[str | None] = ContextVar(
             "billing_spawn_id",
             default=None,
@@ -44,6 +47,8 @@ class BillingLLMProvider:
 
     async def __aenter__(self) -> BillingLLMProvider:
         await self._inner.__aenter__()
+        # 一次 run 内复用一个 session 的连接池，避免每次上报重新握手。
+        self._http_session = aiohttp.ClientSession()
         return self
 
     async def __aexit__(
@@ -52,7 +57,11 @@ class BillingLLMProvider:
         exc_val: BaseException | None,
         exc_tb: object | None,
     ) -> None:
+        # 先 drain 完仍在用 session 的上报任务，再关 session。
         await self._drain_pending()
+        if self._http_session is not None:
+            await self._http_session.close()
+            self._http_session = None
         await self._inner.__aexit__(exc_type, exc_val, exc_tb)
 
     async def _drain_pending(self) -> None:
@@ -90,10 +99,11 @@ class BillingLLMProvider:
                 call_index=call_index,
                 spawn_id=spawn_id,
                 usage=usage,
+                session=self._http_session,
             )
         except Exception:
             logger.warning(
-                "dry-run billing report failed session_id=%s call_index=%s",
+                "billing report failed session_id=%s call_index=%s",
                 self._run_context.session_id,
                 call_index,
                 exc_info=True,
