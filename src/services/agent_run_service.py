@@ -80,9 +80,6 @@ _project_root = Path(__file__).resolve().parent.parent.parent
 RUN_ID_WEB = "mat_master_web"
 
 _MATMASTER_CONFIG_DIR = _project_root / "config"
-_LLM_BILLING_DRY_RUN_ENABLED = os.environ.get(
-    "LLM_BILLING_DRY_RUN_ENABLED", ""
-).strip().lower() in {"1", "true", "yes", "on"}
 
 
 @lru_cache(maxsize=1)
@@ -461,24 +458,23 @@ class AgentRunService:
                 default_profile_key=agent_default_llm,
             )
             llm_provider = llm_bundle.provider
-            if _LLM_BILLING_DRY_RUN_ENABLED:
-                try:
-                    llm_provider = BillingLLMProvider(
-                        llm_provider,
-                        run_context=BillingRunContext(
-                            session_id=session_id,
-                            task_id=task_id,
-                            invocation_id=invocation_id,
-                        ),
-                        model=llm_bundle.model,
-                        billing_service=get_billing_service(),
-                    )
-                except Exception:
-                    logger.warning(
-                        "dry-run billing wrapper init failed session_id=%s",
-                        session_id,
-                        exc_info=True,
-                    )
+            try:
+                llm_provider = BillingLLMProvider(
+                    llm_provider,
+                    run_context=BillingRunContext(
+                        session_id=session_id,
+                        task_id=task_id,
+                        invocation_id=invocation_id,
+                    ),
+                    model=llm_bundle.model,
+                    billing_service=get_billing_service(),
+                )
+            except Exception:
+                logger.warning(
+                    "billing wrapper init failed session_id=%s",
+                    session_id,
+                    exc_info=True,
+                )
 
             exp = Exp(exp_config)
 
