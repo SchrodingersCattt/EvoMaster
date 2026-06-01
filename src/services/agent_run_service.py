@@ -425,29 +425,17 @@ class AgentRunService:
             llm_config = load_llm_config(_project_root / "config" / "llm_config.yaml")
 
             agent_default_llm = _get_agent_default_llm()
+            image_service = get_image_input_service()
             top_level_images = tuple(images or ())
             turn_input_images = turn_input.images if turn_input is not None else ()
             current_images = turn_input_images or top_level_images
-            if (
-                turn_input_images
-                and top_level_images
-                and turn_input_images != top_level_images
-            ):
-                logger.warning(
-                    "run_agent image inputs differ; using TurnInput images "
-                    "session_id=%s task_id=%s",
-                    session_id,
-                    task_id,
-                )
-            image_detail = None
-            if current_images:
-                selected_profile = get_image_input_service().ensure_vision_supported(
-                    llm_config=llm_config,
-                    llm_override=llm_override,
-                    model_override=model_override,
-                    default_profile_key=agent_default_llm,
-                )
-                image_detail = selected_profile.vision_detail
+            image_detail = image_service.resolve_image_detail(
+                llm_config=llm_config,
+                images=tuple(current_images),
+                llm_override=llm_override,
+                model_override=model_override,
+                default_profile_key=agent_default_llm,
+            )
 
             llm_bundle = build_provider_bundle(
                 llm_config,
@@ -547,31 +535,12 @@ class AgentRunService:
                 )
                 intent = ContextAssemblyIntent.ANCHOR_TURN
 
-            pre_turn_history_event_id = (
-                turn_input.pre_turn_history_event_id if turn_input is not None else 0
+            turn_input = image_service.enrich_turn_input_images(
+                turn_input=turn_input,
+                user_prompt=user_prompt,
+                top_level_images=top_level_images,
+                image_detail=image_detail,
             )
-            if turn_input is None:
-                turn_input = TurnInput.from_values(
-                    user_text=user_prompt,
-                    files=(),
-                    images=current_images,
-                    image_detail=image_detail if current_images else None,
-                    workspace_paths=(),
-                    pre_turn_history_event_id=pre_turn_history_event_id,
-                )
-            elif current_images:
-                turn_input = TurnInput.from_values(
-                    user_text=turn_input.user_text,
-                    files=turn_input.files,
-                    images=current_images,
-                    image_detail=(
-                        image_detail
-                        if image_detail is not None
-                        else turn_input.attachments.image_detail
-                    ),
-                    workspace_paths=turn_input.workspace_paths,
-                    pre_turn_history_event_id=turn_input.pre_turn_history_event_id,
-                )
 
             assembly = await context_assembler.assemble_turn(
                 intent=intent,

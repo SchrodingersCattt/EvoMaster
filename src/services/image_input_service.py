@@ -1,17 +1,19 @@
 from __future__ import annotations
 
 import ipaddress
+import logging
 import os
 import posixpath
 import re
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import unquote, urljoin, urlparse
 
 import httpx
 
 from matmaster.config.llm import LLMConfig, LLMProfileConfig
+from matmaster.context.sources.turn_input import TurnInput
 from matmaster.types.messages import ImageContentPart, Message, UserMessage
 
 IMAGE_INPUT_TOO_MANY = "IMAGE_INPUT_TOO_MANY"
@@ -28,6 +30,9 @@ IMAGE_INPUT_UNSUPPORTED_MIME = "IMAGE_INPUT_UNSUPPORTED_MIME"
 IMAGE_INPUT_SIZE_UNKNOWN = "IMAGE_INPUT_SIZE_UNKNOWN"
 IMAGE_INPUT_TOO_LARGE = "IMAGE_INPUT_TOO_LARGE"
 VISION_MODEL_NOT_SUPPORTED = "VISION_MODEL_NOT_SUPPORTED"
+
+logger = logging.getLogger(__name__)
+ImageDetail = Literal["low", "high", "auto"]
 
 _ALLOWED_MIME_TYPES = {"image/png", "image/jpeg", "image/webp"}
 _RANGE_HEADER = {"Range": "bytes=0-4095"}
@@ -198,6 +203,68 @@ class ImageInputService:
                 "当前模型不支持图片输入，请切换到支持图片的模型后重试。",
             )
         return profile
+
+    def resolve_image_detail(
+        self,
+        *,
+        llm_config: LLMConfig,
+        images: tuple[str, ...],
+        llm_override: str | None,
+        model_override: str | None,
+        default_profile_key: str | None,
+    ) -> ImageDetail | None:
+        if not images:
+            return None
+        profile = self.ensure_vision_supported(
+            llm_config=llm_config,
+            llm_override=llm_override,
+            model_override=model_override,
+            default_profile_key=default_profile_key,
+        )
+        return profile.vision_detail
+
+    def enrich_turn_input_images(
+        self,
+        *,
+        turn_input: TurnInput | None,
+        user_prompt: str,
+        top_level_images: tuple[str, ...],
+        image_detail: ImageDetail | None,
+    ) -> TurnInput:
+        turn_input_images = turn_input.images if turn_input is not None else ()
+        current_images = turn_input_images or top_level_images
+        if (
+            turn_input_images
+            and top_level_images
+            and turn_input_images != top_level_images
+        ):
+            logger.warning("run_agent image inputs differ; using TurnInput images")
+
+        if turn_input is None:
+            return TurnInput.from_values(
+                user_text=user_prompt,
+                files=(),
+                images=current_images,
+                image_detail=image_detail if current_images else None,
+                workspace_paths=(),
+                pre_turn_history_event_id=0,
+            )
+
+        if not current_images:
+            return turn_input
+
+        return TurnInput.from_values(
+            user_text=turn_input.user_text,
+            files=turn_input.files,
+            images=current_images,
+            image_detail=(
+                image_detail
+                if image_detail is not None
+                else turn_input.attachments.image_detail
+            ),
+            workspace_paths=turn_input.workspace_paths,
+            pre_turn_history_event_id=turn_input.pre_turn_history_event_id,
+        )
 
     def _dedupe_images(self, images: list[str]) -> list[str]:
         seen: set[str] = set()

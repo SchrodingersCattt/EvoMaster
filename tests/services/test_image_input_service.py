@@ -4,6 +4,7 @@ import httpx
 import pytest
 
 from matmaster.config.llm import LLMConfig, LLMProfileConfig
+from matmaster.context.sources.turn_input import TurnInput
 from src.services.image_input_service import (
     IMAGE_INPUT_DOMAIN_BLOCKED,
     IMAGE_INPUT_DUPLICATE_ATTACHMENT,
@@ -285,3 +286,99 @@ def test_ensure_vision_supported_returns_profile_for_vision_profile() -> None:
     )
 
     assert profile.supports_vision is True
+
+
+def test_resolve_image_detail_returns_none_without_images() -> None:
+    config = LLMConfig(
+        profiles={"plain": LLMProfileConfig(model="plain")},
+        default="plain",
+    )
+
+    result = _service().resolve_image_detail(
+        llm_config=config,
+        images=(),
+        llm_override=None,
+        model_override=None,
+        default_profile_key=None,
+    )
+
+    assert result is None
+
+
+def test_resolve_image_detail_returns_profile_detail_for_images() -> None:
+    config = LLMConfig(
+        profiles={
+            "vision": LLMProfileConfig(
+                model="vision",
+                supports_vision=True,
+                vision_detail="high",
+            )
+        },
+        default="vision",
+    )
+
+    result = _service().resolve_image_detail(
+        llm_config=config,
+        images=("https://oss.example.com/chat/a.png",),
+        llm_override=None,
+        model_override=None,
+        default_profile_key=None,
+    )
+
+    assert result == "high"
+
+
+def test_enrich_turn_input_images_builds_turn_input_when_missing() -> None:
+    enriched = _service().enrich_turn_input_images(
+        turn_input=None,
+        user_prompt="inspect image",
+        top_level_images=("https://oss.example.com/chat/a.png",),
+        image_detail="low",
+    )
+
+    assert enriched.user_text == "inspect image"
+    assert enriched.images == ("https://oss.example.com/chat/a.png",)
+    assert enriched.attachments.image_detail == "low"
+
+
+def test_enrich_turn_input_images_preserves_existing_turn_input_images() -> None:
+    turn_input = TurnInput.from_values(
+        user_text="from turn input",
+        files=("https://oss.example.com/chat/a.cif",),
+        images=("https://oss.example.com/chat/existing.png",),
+        image_detail="auto",
+        workspace_paths=("/workspace/note.md",),
+        pre_turn_history_event_id=22,
+    )
+
+    enriched = _service().enrich_turn_input_images(
+        turn_input=turn_input,
+        user_prompt="ignored",
+        top_level_images=("https://oss.example.com/chat/top.png",),
+        image_detail="high",
+    )
+
+    assert enriched.user_text == "from turn input"
+    assert enriched.files == ("https://oss.example.com/chat/a.cif",)
+    assert enriched.images == ("https://oss.example.com/chat/existing.png",)
+    assert enriched.workspace_paths == ("/workspace/note.md",)
+    assert enriched.pre_turn_history_event_id == 22
+    assert enriched.attachments.image_detail == "high"
+
+
+def test_enrich_turn_input_images_preserves_existing_detail_when_no_new_detail() -> None:
+    turn_input = TurnInput.from_values(
+        user_text="from turn input",
+        images=("https://oss.example.com/chat/existing.png",),
+        image_detail="auto",
+    )
+
+    enriched = _service().enrich_turn_input_images(
+        turn_input=turn_input,
+        user_prompt="ignored",
+        top_level_images=(),
+        image_detail=None,
+    )
+
+    assert enriched.images == ("https://oss.example.com/chat/existing.png",)
+    assert enriched.attachments.image_detail == "auto"

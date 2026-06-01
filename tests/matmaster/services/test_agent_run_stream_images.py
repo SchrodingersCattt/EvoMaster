@@ -8,10 +8,21 @@ from matmaster.context.sources.turn_input import TurnInput
 from matmaster.types.events import RunResultEvent
 from matmaster.types.messages import ImageContentPart
 from matmaster.types.run_metadata import RunMetadata
+from src.services.image_input_service import ImageInputService
 from tests.matmaster.services.agent_run_stream_fixtures import (
     _make_cancel_token,
     _patched_service,
 )
+
+
+def _mock_image_service(*, detail: str | None) -> MagicMock:
+    image_service = MagicMock()
+    real_service = ImageInputService()
+    image_service.resolve_image_detail.return_value = detail
+    image_service.enrich_turn_input_images.side_effect = (
+        real_service.enrich_turn_input_images
+    )
+    return image_service
 
 
 @pytest.mark.asyncio
@@ -19,10 +30,7 @@ async def test_run_agent_builds_turn_input_from_images_without_image_metadata_ke
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
 
     async with _patched_service([run_result]) as (svc, _sse, _persist):
-        image_service = MagicMock()
-        image_service.ensure_vision_supported.return_value = MagicMock(
-            vision_detail="high"
-        )
+        image_service = _mock_image_service(detail="high")
         with patch(
             "src.services.agent_run_service.get_image_input_service",
             return_value=image_service,
@@ -59,10 +67,7 @@ async def test_run_agent_enriches_existing_turn_input_images_with_detail():
     )
 
     async with _patched_service([run_result]) as (svc, _sse, _persist):
-        image_service = MagicMock()
-        image_service.ensure_vision_supported.return_value = MagicMock(
-            vision_detail="high"
-        )
+        image_service = _mock_image_service(detail="high")
         with patch(
             "src.services.agent_run_service.get_image_input_service",
             return_value=image_service,
@@ -99,10 +104,7 @@ async def test_run_agent_validates_images_from_turn_input_without_top_level_imag
     )
 
     async with _patched_service([run_result]) as (svc, _sse, _persist):
-        image_service = MagicMock()
-        image_service.ensure_vision_supported.return_value = MagicMock(
-            vision_detail="high"
-        )
+        image_service = _mock_image_service(detail="high")
         with patch(
             "src.services.agent_run_service.get_image_input_service",
             return_value=image_service,
@@ -119,7 +121,7 @@ async def test_run_agent_validates_images_from_turn_input_without_top_level_imag
             )
 
     assert ok is True
-    image_service.ensure_vision_supported.assert_called_once()
+    image_service.resolve_image_detail.assert_called_once()
     enriched = svc._test_fake_exp.last_ctx.request.turn_input
     assert enriched.images == ("https://oss.example.com/chat/a.png",)
     assert enriched.attachments.image_detail == "high"

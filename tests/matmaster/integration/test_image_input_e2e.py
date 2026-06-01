@@ -14,6 +14,7 @@ from matmaster.core.playground import ExecutionEnvironment
 from matmaster.sessions.local import LocalSession
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.messages import LLMResponse, StreamChunk
+from src.services.image_input_service import ImageInputService
 
 
 class RecordingVisionProvider:
@@ -84,7 +85,10 @@ async def test_images_flow_from_service_to_kernel_user_message(tmp_path: Path) -
     llm_config.get_profile.return_value = vision_profile
 
     image_service = MagicMock()
-    image_service.ensure_vision_supported.return_value = vision_profile
+    image_service.resolve_image_detail.return_value = vision_profile.vision_detail
+    image_service.enrich_turn_input_images.side_effect = (
+        ImageInputService().enrich_turn_input_images
+    )
 
     bohrium_service = MagicMock()
     bohrium_service.run_cleanup = AsyncMock()

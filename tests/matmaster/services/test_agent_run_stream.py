@@ -27,6 +27,7 @@ from matmaster.types.events import (
 )
 from matmaster.types.figures import FigureUploadConfig
 from matmaster.types.run_metadata import RunMetadata
+from src.services.image_input_service import ImageInputService
 from tests.matmaster.services.agent_run_stream_fixtures import (
     _FakeExp,
     _make_cancel_token,
@@ -522,8 +523,9 @@ async def test_run_agent_user_turn_context_records_full_provider_facing_with_att
             workspace_paths=["/workspace/notes.md"],
         )
         image_service = MagicMock()
-        image_service.ensure_vision_supported.return_value = MagicMock(
-            vision_detail=None
+        image_service.resolve_image_detail.return_value = None
+        image_service.enrich_turn_input_images.side_effect = (
+            ImageInputService().enrich_turn_input_images
         )
 
         with patch(
