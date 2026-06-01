@@ -63,7 +63,7 @@ async def test_report_llm_usage_posts_expected_payload(monkeypatch):
         "src.services.billing_service.aiohttp.ClientSession", session_cls
     )
 
-    service = BillingService(base_url="https://tools.example.com", bearer="secret")
+    service = BillingService(base_url="https://tools.example.com")
     ok = await service.report_llm_usage(
         run_context=_ctx(),
         model="claude-sonnet-4-6",
@@ -75,7 +75,7 @@ async def test_report_llm_usage_posts_expected_payload(monkeypatch):
     assert ok is True
     sent = session_cls.last_post
     assert sent["url"] == "https://tools.example.com/api/v1/billing/usage"
-    assert sent["headers"]["Authorization"] == "Bearer secret"
+    assert "Authorization" not in sent["headers"]
     body = sent["json"]
     assert body["session_id"] == "s1"
     assert body["call_index"] == 3
@@ -101,7 +101,7 @@ async def test_report_llm_usage_skips_empty_usage(monkeypatch):
     )
     session_cls.last_post = {}
 
-    service = BillingService(base_url="https://tools.example.com", bearer=None)
+    service = BillingService(base_url="https://tools.example.com")
     ok = await service.report_llm_usage(
         run_context=_ctx(),
         model="claude-sonnet-4-6",
@@ -121,7 +121,7 @@ async def test_report_llm_usage_swallows_server_error(monkeypatch):
         "src.services.billing_service.aiohttp.ClientSession", session_cls
     )
 
-    service = BillingService(base_url="https://tools.example.com", bearer="secret")
+    service = BillingService(base_url="https://tools.example.com")
     ok = await service.report_llm_usage(
         run_context=_ctx(),
         model="claude-sonnet-4-6",
@@ -131,22 +131,3 @@ async def test_report_llm_usage_swallows_server_error(monkeypatch):
     )
 
     assert ok is False
-
-
-@pytest.mark.asyncio
-async def test_report_llm_usage_omits_auth_header_when_no_bearer(monkeypatch):
-    session_cls = _make_session_cls(200, {"code": 0, "data": {"recorded": True}})
-    monkeypatch.setattr(
-        "src.services.billing_service.aiohttp.ClientSession", session_cls
-    )
-
-    service = BillingService(base_url="https://tools.example.com", bearer=None)
-    await service.report_llm_usage(
-        run_context=_ctx(),
-        model="claude-sonnet-4-6",
-        call_index=1,
-        spawn_id=None,
-        usage={"prompt_tokens": 10},
-    )
-
-    assert "Authorization" not in session_cls.last_post["headers"]

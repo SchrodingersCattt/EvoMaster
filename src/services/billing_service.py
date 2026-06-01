@@ -14,7 +14,7 @@ from typing import Any
 
 import aiohttp
 
-from utils.env import MATMASTER_TOOLS_BILLING_BEARER, MATMASTER_TOOLS_SERVER
+from utils.env import MATMASTER_TOOLS_SERVER
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -36,18 +36,10 @@ class BillingService:
         self,
         *,
         base_url: str | None = None,
-        bearer: str | None = None,
         timeout_seconds: float = _REQUEST_TIMEOUT_SECONDS,
     ) -> None:
         self._base_url = (base_url or MATMASTER_TOOLS_SERVER).rstrip("/")
-        self._bearer = bearer if bearer is not None else MATMASTER_TOOLS_BILLING_BEARER
         self._timeout_seconds = timeout_seconds
-
-    def _headers(self) -> dict[str, str]:
-        headers = {"Content-Type": "application/json"}
-        if self._bearer:
-            headers["Authorization"] = f"Bearer {self._bearer}"
-        return headers
 
     async def report_llm_usage(
         self,
@@ -79,7 +71,7 @@ class BillingService:
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(
-                    url, headers=self._headers(), json=payload
+                    url, headers={"Content-Type": "application/json"}, json=payload
                 ) as resp:
                     if resp.status >= 400:
                         body = await resp.text()
