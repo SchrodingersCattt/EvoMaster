@@ -617,6 +617,40 @@ async def test_kernel_passes_raw_turn_input_to_preflight_compactor():
 
 
 @pytest.mark.asyncio
+async def test_direct_kernel_derives_ephemeral_turn_input_for_preflight_history():
+    from matmaster.core.agent import AgentKernel
+
+    compactor = _RecordingTurnInputCompactor()
+
+    async def checkpoint_sink(**kwargs):
+        return 42
+
+    kernel_runtime = make_kernel_runtime(
+        provider=ContentOnlyProvider(),
+        compactor=compactor,
+        turn_input=None,
+        runtime_ports=KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
+    )
+
+    [
+        event
+        async for event in AgentKernel().run_stream(
+            kernel_runtime,
+            "direct current task",
+            history=[
+                UserMessage(content="old question"),
+                AssistantMessage(content="old answer"),
+            ],
+        )
+    ]
+
+    assert compactor.seen_turn_input is not None
+    assert compactor.seen_turn_input.user_text == "direct current task"
+    assert compactor.seen_turn_input.files == ()
+    assert compactor.seen_turn_input.pre_turn_history_event_id == 0
+
+
+@pytest.mark.asyncio
 async def test_kernel_skips_preflight_current_split_when_history_is_empty() -> None:
     from matmaster.core.agent import AgentKernel
 

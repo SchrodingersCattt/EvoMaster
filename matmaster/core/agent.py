@@ -18,6 +18,7 @@ import logging
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
+from matmaster.context.sources.turn_input import TurnInput
 from matmaster.core.agent_compaction import (
     run_preflight_compaction_if_needed,
     run_runtime_compaction_if_needed,
@@ -273,6 +274,8 @@ class AgentKernel:
             )
 
         turn_input = kernel_spec.turn_input
+        if turn_input is None and history:
+            turn_input = TurnInput.from_values(user_text=task)
         turn_images = (
             list(turn_input.attachments.images_as_parts())
             if turn_input is not None

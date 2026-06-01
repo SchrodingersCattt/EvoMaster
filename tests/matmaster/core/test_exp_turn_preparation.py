@@ -236,6 +236,51 @@ async def test_spawn_run_does_not_write_user_turn_context(tmp_path: Path):
 
 
 @pytest.mark.asyncio
+async def test_spawn_run_derives_child_turn_input_from_task(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    exp = Exp(ExpConfig(name="test"))
+    parent_turn_input = TurnInput.from_values(
+        user_text="parent root",
+        files=["https://oss.example.com/parent.cif"],
+        pre_turn_history_event_id=12,
+    )
+    seen_turn_inputs: list[TurnInput | None] = []
+    original_build_runtime = exp.build_runtime
+
+    async def build_runtime(ctx, *, skills=None, spawn_id=None):
+        seen_turn_inputs.append(ctx.request.turn_input)
+        return await original_build_runtime(ctx, skills=skills, spawn_id=spawn_id)
+
+    monkeypatch.setattr(exp, "build_runtime", build_runtime)
+
+    ctx = _ctx(
+        tmp_path,
+        turn_input=parent_turn_input,
+        history=_History(),
+    )
+
+    events = [
+        event
+        async for event in exp.run_stream(
+            ctx,
+            "child task",
+            spawn_id="child-1",
+        )
+    ]
+
+    assert any(isinstance(event, RunResultEvent) for event in events)
+    assert len(seen_turn_inputs) == 1
+    child_turn_input = seen_turn_inputs[0]
+    assert child_turn_input is not parent_turn_input
+    assert child_turn_input is not None
+    assert child_turn_input.user_text == "child task"
+    assert child_turn_input.files == ()
+    assert child_turn_input.pre_turn_history_event_id == 0
+
+
+@pytest.mark.asyncio
 async def test_root_run_falls_back_when_history_and_instructions_are_missing(
     tmp_path: Path,
 ):

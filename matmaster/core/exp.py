@@ -34,6 +34,7 @@ from matmaster.context.ports import (
     UserInstructions,
 )
 from matmaster.context.sections import ContextView
+from matmaster.context.sources.turn_input import TurnInput
 from matmaster.context.system_prompt import SystemPromptBuilder
 from matmaster.context.turn_intent import TurnIntentResolution, resolve_turn_intent
 from matmaster.context.user_turn_context import (
@@ -561,6 +562,16 @@ class Exp:
             )
         elif task is None:
             raise RuntimeError("task is required for spawn run")
+        else:
+            ctx = ctx.model_copy(
+                update={
+                    "request": ctx.request.model_copy(
+                        update={
+                            "turn_input": TurnInput.from_values(user_text=task),
+                        }
+                    )
+                }
+            )
 
         async with self.runtime_scope(
             ctx,
