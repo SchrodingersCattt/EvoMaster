@@ -221,6 +221,13 @@ class TestAgentRunRequest:
         )
         assert request.ports.child_event_forward_sink is sink
 
+    def test_carries_invocation_id_as_runtime_request_identity(self) -> None:
+        request = AgentRunRequest(invocation_id="inv-1")
+
+        assert request.invocation_id == "inv-1"
+        assert "invocation_id" in request.model_dump()
+        assert "invocation_id" not in RunMetadata.model_fields
+
 
 # ── AgentRunContext ──────────────────────────────────────────────
 

@@ -12,14 +12,16 @@ import logging
 from typing import Any, Literal
 
 from matmaster.context.ports import UserInstructions, hash_user_instructions
+from matmaster.context.user_turn_context import (
+    DEFAULT_TURN_TRANSFORM,
+    USER_CONTEXT_RENDER_VERSION,
+    USER_TURN_CONTEXT_SCHEMA_VERSION,
+)
 
 logger = logging.getLogger(__name__)
 
 _USER_INSTRUCTIONS_PATH = "/personal/.matmaster/AGENT.md"
 USER_INSTRUCTIONS_MAX_BYTES = 50 * 1024
-USER_TURN_CONTEXT_SCHEMA_VERSION = "user_turn_context.v1"
-USER_CONTEXT_RENDER_VERSION = "user_context_render.v1"
-DEFAULT_TURN_TRANSFORM = "raw"
 
 UserTurnContextWriteStatus = Literal["written", "duplicate"]
 
