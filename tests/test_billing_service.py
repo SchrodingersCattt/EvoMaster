@@ -126,9 +126,7 @@ async def test_report_llm_usage_reuses_provided_session(monkeypatch):
 
     monkeypatch.setattr("src.services.billing_service.aiohttp.ClientSession", _boom)
 
-    shared_cls = _make_session_cls(
-        200, {"code": 0, "data": {"recorded": True}}
-    )
+    shared_cls = _make_session_cls(200, {"code": 0, "data": {"recorded": True}})
     shared = shared_cls()
     _FakeSession.last_post = {}
 
