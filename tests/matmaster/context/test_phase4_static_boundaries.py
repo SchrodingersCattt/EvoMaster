@@ -1,6 +1,5 @@
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[3]
 
 
@@ -69,17 +68,16 @@ def test_core_context_does_not_import_service_codec() -> None:
     assert offenders == []
 
 
-def test_matmaster_context_does_not_reference_skill_registry() -> None:
+def test_matmaster_context_does_not_import_concrete_skill_registry() -> None:
     context_root = ROOT / "matmaster" / "context"
     offenders: list[str] = []
     for path in context_root.rglob("*.py"):
         text = path.read_text(encoding="utf-8")
-        if "skill_registry" in text or "SkillRegistry" in text:
+        if "matmaster.skills.registry" in text:
             offenders.append(path.relative_to(ROOT).as_posix())
 
-    offenders = [path for path in offenders if "system_prompt.py" not in path]
     assert offenders == [], (
-        "matmaster/context/* must not depend on SkillRegistry; "
+        "matmaster/context/* must not import the concrete SkillRegistry; "
         f"violations: {offenders}"
     )
 

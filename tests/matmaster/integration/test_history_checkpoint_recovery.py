@@ -7,14 +7,7 @@ import pytest
 
 from matmaster.context.assembly import ContextAssembler
 from matmaster.context.compaction import CompactionPlan, ContextCompactor
-from matmaster.context.ports import (
-    ContextAssemblyPorts,
-    SessionEvent,
-    SessionEventQuery,
-    SessionJobs,
-    SessionJobsQuery,
-    UserInstructions,
-)
+from matmaster.context.ports import ContextAssemblyPorts, UserInstructions
 from matmaster.core.runtime_context_assembly import (
     build_session_context_factory,
     empty_skill_resolver,
@@ -30,7 +23,10 @@ from matmaster.types.runtime import CompactionConfig
 from src.services.history_checkpoint_codec import serialize_base_messages
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.model_history_restore_service import ModelHistoryRestoreService
-from src.services.session_event_codec import decode_session_events
+from tests.matmaster.integration.test_context_ports import (
+    EmptySessionJobsPort,
+    TableSessionEventsPort,
+)
 
 
 def _compact_user_message(summary: str) -> UserMessage:
@@ -56,33 +52,6 @@ class _SummaryProvider:
         yield StreamChunk(content=self.summary, finish_reason="stop")
 
 
-class _TableSessionEventsPort:
-    def __init__(self, events_table: InMemoryEventsTable) -> None:
-        self._events_table = events_table
-
-    async def load_events(
-        self,
-        query: SessionEventQuery,
-    ) -> tuple[SessionEvent, ...]:
-        rows = self._events_table.query_context_events(
-            session_id=query.session_id,
-            spawn_id=query.spawn_id,
-            until_event_id=query.until_event_id,
-            event_types=query.event_types,
-            limit=query.limit,
-            order=query.order,
-        )
-        return decode_session_events(rows)
-
-
-class _EmptySessionJobsPort:
-    async def load_session_jobs(
-        self,
-        query: SessionJobsQuery,
-    ) -> SessionJobs:
-        return SessionJobs.empty()
-
-
 def _make_compactor_for_table(
     *,
     events_table: InMemoryEventsTable,
@@ -92,8 +61,8 @@ def _make_compactor_for_table(
 ) -> ContextCompactor:
     assembler = ContextAssembler(
         ports=ContextAssemblyPorts(
-            session_events=_TableSessionEventsPort(events_table=events_table),
-            session_jobs=_EmptySessionJobsPort(),
+            session_events=TableSessionEventsPort(events_table=events_table),
+            session_jobs=EmptySessionJobsPort(),
         ),
         session_context_factory=build_session_context_factory(
             skill_resolver=empty_skill_resolver,

@@ -1,8 +1,4 @@
-"""Shared user_turn_context constants.
-
-Core runtime code may import this module. Durable DB writes stay in
-src.services.user_turn_context_service.
-"""
+"""Shared user_turn_context constants for context/runtime code."""
 
 from __future__ import annotations
 

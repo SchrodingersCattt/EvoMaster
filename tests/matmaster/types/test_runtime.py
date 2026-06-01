@@ -335,7 +335,7 @@ class TestAgentRuntime:
 
     def test_agent_runtime_fields(self) -> None:
         names = {f.name for f in dataclasses.fields(AgentRuntime)}
-        assert names == {"kernel", "kernel_runtime", "cleanup"}
+        assert names == {"kernel", "kernel_runtime", "cleanup", "context_runtime"}
 
     def test_agent_runtime_is_frozen(self) -> None:
         """AgentRuntime is frozen — reassignment raises FrozenInstanceError."""

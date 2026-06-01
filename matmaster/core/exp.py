@@ -9,18 +9,7 @@ The ``AgentRunContext`` it consumes keeps physical facts under
 ``ctx.environment`` (ExecutionEnvironment) and per-run runtime ingredients
 under ``ctx.request`` (AgentRunRequest).
 
-Lifecycle:
-1. build_runtime(ctx) -- one-shot assembly: config + ctx -> tools, prompt,
-   kernel_spec + kernel_resources -> AgentRuntime
-2. run_stream(ctx, task, ...) -- thin driver over runtime_scope()
-
-The run lifecycle (build_runtime -> cancel-token injection -> cleanup) lives in
-runtime_scope(), a reusable async context manager shared by both run_stream()
-and devshell, so neither hand-copies build/inject/cleanup.
-
-Cleanup: Exp owns capability resource cleanup via _cleanup_callbacks.
-runtime_scope() wraps the run in try/finally to guarantee cleanup even when the
-kernel raises.
+Cleanup is registered on Exp and drained by runtime_scope().
 """
 
 from __future__ import annotations
@@ -36,20 +25,23 @@ from typing import TYPE_CHECKING, Any
 
 from matmaster.config.exp import ExpConfig
 from matmaster.context.assembly import (
-    ContextAssemblyIntent,
     ContextAssembler,
+    ContextAssemblyIntent,
     TurnAssemblyRequest,
 )
-from matmaster.context.ports import SkillResolver
-from matmaster.context.ports import UserInstructions, hash_user_instructions
+from matmaster.context.ports import (
+    SkillResolver,
+    UserInstructions,
+    hash_user_instructions,
+)
 from matmaster.context.sections import ContextView
+from matmaster.context.system_prompt import SystemPromptBuilder
 from matmaster.context.turn_intent import TurnIntentResolution, resolve_turn_intent
 from matmaster.context.user_turn_context import (
     DEFAULT_TURN_TRANSFORM,
     USER_CONTEXT_RENDER_VERSION,
     USER_TURN_CONTEXT_SCHEMA_VERSION,
 )
-from matmaster.context.system_prompt import SystemPromptBuilder
 from matmaster.core.hooks import HookExecutor
 from matmaster.core.path_access import derive_path_access_roots
 from matmaster.core.run_context import AgentRunContext
@@ -222,6 +214,7 @@ class Exp:
         ``run_stream`` with the parent ``ctx``. The orchestrator owns the spawn
         lifecycle (id, hooks, event retag, drain) around the returned stream.
         """
+
         def child_run_factory(
             exp_name: str,
             task: str,
@@ -545,7 +538,9 @@ class Exp:
         user_instructions: UserInstructions | None = None
         if spawn_id is None:
             if ctx.request.turn_input is None:
-                raise RuntimeError("AgentRunRequest.turn_input is required for root run")
+                raise RuntimeError(
+                    "AgentRunRequest.turn_input is required for root run"
+                )
             events_port = (
                 ctx.request.ports.compaction.history or EmptySessionEventHistory()
             )
