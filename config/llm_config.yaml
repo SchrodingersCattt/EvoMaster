@@ -89,9 +89,9 @@ profiles:
     max_retries: 3
     retry_delay: 1.0
 
-  gpt54:
+  gpt55:
     provider: "openai"
-    model: "cds/GPT-5.4"
+    model: "matmaster/gpt-5.5"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
     reasoning_protocol: "openai_reasoning_effort"

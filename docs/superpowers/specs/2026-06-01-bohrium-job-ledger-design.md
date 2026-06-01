@@ -28,7 +28,6 @@
 - 不替代 `evo_chat_events` 的对话审计职责。
 - 不在第一版实现完整作业详情页、作业统计或前端作业中心。
 - 不引入单独的状态历史表。
-- 不把 `bohr_job_id` 提升为核心字段；原始 submit 返回放入 JSON 以便排障。
 
 ## Table
 
@@ -44,6 +43,7 @@ CREATE TABLE `bohrium_jobs` (
     `job_id` VARCHAR(128) NOT NULL,
     `job_name` VARCHAR(255) NULL,
     `project_id` BIGINT NULL,
+    `sandbox` TINYINT(1) NOT NULL DEFAULT 0,
 
     `status` VARCHAR(64) NOT NULL DEFAULT 'submitted',
     `status_code` INT NULL,
@@ -54,7 +54,7 @@ CREATE TABLE `bohrium_jobs` (
 
     `submitted_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `finished_at` DATETIME NULL,
-    `result_dir` TEXT NULL,
+    `result_dir` VARCHAR(1024) NULL,
 
     `submit_response_json` JSON NULL,
     `last_detail_json` JSON NULL,
@@ -63,10 +63,9 @@ CREATE TABLE `bohrium_jobs` (
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-    UNIQUE KEY `uk_job_id` (`job_id`),
+    UNIQUE KEY `uk_job_id` (`sandbox`, `job_id`),
     KEY `idx_session_status` (`session_id`, `status`),
-    KEY `idx_poll_due` (`status`, `next_poll_at`),
-    KEY `idx_project_status` (`project_id`, `status`)
+    KEY `idx_poll_due` (`next_poll_at`, `status`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 COMMENT='Bohrium 作业状态表';
 ```
@@ -88,8 +87,10 @@ COMMENT='Bohrium 作业状态表';
 
 `job_id`
 
-Canonical Bohrium 作业 ID。后续 poll、download、kill 默认使用该字段。
-第一版不单列 `bohr_job_id`，避免两个相近 ID 成为并列核心字段。
+Canonical Bohrium 作业 ID。poll、download、kill 均以该字段为键，
+`get_job_detail`、`terminate_job`、`get_file_token` 都只接受 `job_id`。
+sandbox 与非 sandbox 各自平台返回的 `jobId` 共用此列，但二者属于不同的发号空间，
+因此唯一性由 `(sandbox, job_id)` 共同保证，而不是 `job_id` 单列。
 
 `job_name`
 
@@ -100,6 +101,13 @@ Canonical Bohrium 作业 ID。后续 poll、download、kill 默认使用该字�
 
 Bohrium project ID 快照。即使 session 后续切换 project，历史 job 仍属于提交时
 的 project，因此在 job 表中保留一份快照。
+
+`sandbox`
+
+是否为 sandbox 作业，提交时取 `ctx.sandbox` 快照。这是后台 poller 的必读判别位：
+poll、download、kill 都按它分支（sandbox 与非 sandbox 走不同端点、`job_id` 强转
+方式也不同）。它同时是 `(sandbox, job_id)` 唯一键的一维，因此提升为独立列，而不是
+只留在 `submit_response_json` 里。
 
 `status`
 
@@ -129,18 +137,22 @@ Bohrium 原始状态码。业务代码读取 `status`，排障和兼容 Bohrium 
 
 `next_poll_at`
 
-下一次应轮询时间。后台 poller 的主要调度条件应基于该字段，而不是全表扫描。
+下一次应轮询时间，是后台 poller 的主调度条件。约定：活跃作业该字段恒为非空
+（insert 时写成 `submitted_at`，新作业即到期）；进入终态时置为 NULL，表示不再轮询。
+NULL 等价于不调度，因此 poll 查询无需再用 `status IN (...)` 兜底。
 
 典型查询：
 
 ```sql
 SELECT *
 FROM `bohrium_jobs`
-WHERE `status` IN ('submitted', 'running', 'terminating', 'unknown')
-  AND (`next_poll_at` IS NULL OR `next_poll_at` <= NOW())
-ORDER BY `next_poll_at` ASC, `submitted_at` ASC
+WHERE `next_poll_at` <= NOW()
+ORDER BY `next_poll_at` ASC
 LIMIT 50;
 ```
+
+配合 `idx_poll_due (next_poll_at, status)`，该查询是有序索引范围扫描 + LIMIT 提前
+结束；终态作业因 `next_poll_at IS NULL`、`<= NOW()` 不成立被天然排除，无需 filesort。
 
 `last_polled_at`
 
@@ -163,8 +175,8 @@ LIMIT 50;
 
 `submit_response_json`
 
-submit 成功时的原始响应快照。可包含 `job_id`、`bohr_job_id`、`use_sandbox` 等
-字段。这样不会丢失 `bohr_job_id`，但也不把它提升为第一版核心字段。
+submit 成功时的原始响应快照，仅用于排障，不要求常规消费者解析。`sandbox` 等主流程
+判别位已提升为独立列，这里保留完整原始返回以便对照。
 
 示例：
 
@@ -172,7 +184,6 @@ submit 成功时的原始响应快照。可包含 `job_id`、`bohr_job_id`、`us
 {
   "success": true,
   "job_id": "12345",
-  "bohr_job_id": "12345",
   "status": "Submitted",
   "use_sandbox": true
 }
@@ -198,23 +209,29 @@ submit 成功时的原始响应快照。可包含 `job_id`、`bohr_job_id`、`us
 
 ## Status Rules
 
-第一版的状态更新规则保持简单：
+第一版的状态更新规则保持简单。贯穿规则：非终态作业必须有 `next_poll_at`，进入任一
+终态时统一置 `next_poll_at = NULL`。
 
-- submit 成功后插入记录，`status = 'submitted'`。
-- poller 或工具 poll 发现非终态时，统一写 `status = 'running'`。
-- poller 或工具 poll 发现成功终态时，写 `status = 'finished'` 和 `finished_at`。
-- poller 或工具 poll 发现失败终态时，写 `status = 'failed'` 和 `finished_at`。
-- kill 请求成功后先写 `status = 'terminating'`，最终状态仍以后续 poll 结果为准。
-- download 成功后写 `status = 'downloaded'` 和 `result_dir`。
-- 查询异常时不覆盖明确终态；仅更新 `last_error`，必要时将非终态作业标记为
-  `unknown`。
+- submit 成功后插入记录，`status = 'submitted'`，`next_poll_at = submitted_at`。
+- poller 或工具 poll 发现非终态时，写 `status = 'running'`，并按 backoff 推进
+  `next_poll_at`。
+- poller 或工具 poll 发现成功终态时，写 `status = 'finished'`、`finished_at`，
+  并置 `next_poll_at = NULL`。
+- poller 或工具 poll 发现失败终态时，写 `status = 'failed'`、`finished_at`，
+  并置 `next_poll_at = NULL`。
+- kill 请求成功后先写 `status = 'terminating'`，保留 `next_poll_at` 以便后续 poll
+  确认最终状态。
+- download 成功后写 `status = 'downloaded'`、`result_dir`，并置 `next_poll_at = NULL`。
+- 查询异常时不覆盖明确终态；仅更新 `last_error`，必要时把非终态作业标记为 `unknown`
+  并按 backoff 推进 `next_poll_at`。
 
 ## Integration Points
 
 `BohriumTool._submit`
 
-在 `job/add` 成功且工具返回 `job_id` 后 upsert `bohrium_jobs`。如果只完成
-`job/create` 但上传或 `job/add` 失败，不写入作业表。
+在 `job/add` 成功且工具返回 `job_id` 后 upsert `bohrium_jobs`，同时写入 `sandbox`
+（取 `ctx.sandbox`）和 `next_poll_at = submitted_at`。如果只完成 `job/create` 但
+上传或 `job/add` 失败，不写入作业表。
 
 `BohriumTool._poll`
 
@@ -242,17 +259,19 @@ Background poller
 
 ## Rationale
 
-只保留一个 `job_id` 是为了避免 `job_id` 与 `bohr_job_id` 在第一版模型中并列出现。
-当前系统真正需要的是一个 canonical ID；额外 ID 放入 `submit_response_json`，既可
-保留排障信息，也不会扩大表的核心语义。
+job_id 已在工具层统一为单一 canonical ID：sandbox 与非 sandbox 都取平台返回的
+`jobId`，不再有第二个 `bohr_job_id`。但 sandbox 与非 sandbox 是两套独立发号空间，
+同一数字 `jobId` 可能在两边各出现一次，进表后会落到同一 `job_id` 字符串，因此唯一键
+取 `(sandbox, job_id)`，避免后写记录静默覆盖前者。单一 Bohrium 部署下这两维已足够；
+若将来对接多个 base_url，需再补一维。
 
 第一版不保存 `input_dir`、`image`、`machine`、`cmd`、`disk_size`。这些字段对复现
 和审计有价值，但不是 agent 实时读取作业状态的必要条件。后续如果要做作业详情页、
 重跑或成本统计，可以通过迁移补充。
 
 第一版不拆分 `bohrium_status`、`artifact_status`、`lifecycle_status`。单字段
-`status` 已能覆盖当前需求，后台 poller 通过 `status IN (...)` 判断是否继续轮询。
-如果未来 `downloaded` 与平台状态混用造成复杂度，再拆分状态维度。
+`status` 已能覆盖当前需求；是否继续轮询由 `next_poll_at` 是否为 NULL 决定，`status`
+只用于语义展示和归类。如果未来 `downloaded` 与平台状态混用造成复杂度，再拆分状态维度。
 
 ## Testing Plan
 

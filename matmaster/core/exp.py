@@ -1,15 +1,7 @@
-"""Exp -- config-driven assembly layer.
+"""Exp config-driven runtime assembly and execution driver.
 
-Exp is a concrete class that transforms an ExpConfig + AgentRunContext into an
-AgentRuntime (build_runtime) and executes the agent loop (run_stream). The
-AgentRuntime bundles the kernel, the kernel-facing AgentKernelRuntime
-(AgentKernelSpec + AgentKernelResources), and a cleanup callable.
-
-The ``AgentRunContext`` it consumes keeps physical facts under
-``ctx.environment`` (ExecutionEnvironment) and per-run runtime ingredients
-under ``ctx.request`` (AgentRunRequest).
-
-Cleanup is registered on Exp and drained by runtime_scope().
+This module turns ExpConfig + AgentRunContext into AgentRuntime and exposes the
+shared runtime_scope/run_stream lifecycle used by service and devshell paths.
 """
 
 from __future__ import annotations
@@ -19,7 +11,7 @@ import json
 import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -39,7 +31,6 @@ from matmaster.context.user_turn_context import (
     USER_CONTEXT_RENDER_VERSION,
     USER_TURN_CONTEXT_SCHEMA_VERSION,
 )
-from matmaster.core import exp_helpers
 from matmaster.core.hooks import HookExecutor
 from matmaster.core.path_access import derive_path_access_roots
 from matmaster.core.run_context import AgentRunContext
@@ -69,9 +60,6 @@ from matmaster.types.runtime_ports import (
 
 if TYPE_CHECKING:
     from matmaster.types.messages import Message
-
-
-_LOGGER = logging.getLogger(__name__)
 
 
 # Builtin tools whose execution reaches outside the workspace.
@@ -108,16 +96,24 @@ _SESSION_REQUIRING_TOOL_NAMES: frozenset[str] = frozenset(
 )
 
 
+@dataclass(frozen=True)
+class RootTurnRender:
+    rendered_content: str
+
+
+def _deep_merge_dict(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(base)
+    for key, value in patch.items():
+        base_value = merged.get(key)
+        if isinstance(base_value, dict) and isinstance(value, dict):
+            merged[key] = _deep_merge_dict(base_value, value)
+            continue
+        merged[key] = value
+    return merged
+
+
 class Exp:
-    """Config-driven assembly layer.
-
-    Instantiated with an ExpConfig. exp_name comes from config.name
-    (defaults to 'direct').
-
-    build_runtime() creates resources (ToolRegistry, SystemPromptBuilder, Kernel)
-    and assembles kernel_spec + kernel_resources into an AgentKernelRuntime.
-    run_stream() delegates to build_runtime then kernel.run_stream with cleanup guarantee.
-    """
+    """Config-driven assembly layer for AgentRuntime and kernel execution."""
 
     def __init__(
         self,
@@ -137,14 +133,10 @@ class Exp:
         self._skill_resolver: SkillResolver | None = None
         self.logger = logging.getLogger(self.__class__.__name__)
 
-    # ── Properties ───────────────────────────────────────
-
     @property
     def exp_name(self) -> str:
         """From config.name, defaults to 'direct'."""
         return self._config.name
-
-    # ── Cleanup infrastructure ───────────────────────────
 
     def _register_cleanup(self, callback: Callable[[], Any]) -> None:
         """Register a cleanup callback to run after kernel execution."""
@@ -173,8 +165,6 @@ class Exp:
                     exc_info=True,
                 )
         self._cleanup_callbacks.clear()
-
-    # ── Child runtime factory ─────────────────────────────
 
     def _make_child_run_factory(
         self, ctx: AgentRunContext
@@ -206,8 +196,6 @@ class Exp:
 
         return child_run_factory
 
-    # ── Run identity ─────────────────────────────────────
-
     @staticmethod
     def _build_run_identity(
         ctx: AgentRunContext,
@@ -219,8 +207,6 @@ class Exp:
             session_id=ctx.environment.session_id,
             spawn_id=spawn_id,
         )
-
-    # ── Active planes derivation ────────────────────────
 
     @staticmethod
     def _derive_active_planes(
@@ -244,8 +230,6 @@ class Exp:
         if skills_enabled or "*" in cfg_set or cfg_set & _EXTERNAL_EFFECT_TOOL_NAMES:
             planes.add(ToolPlane.EXTERNAL_SERVICE)
         return frozenset(planes)
-
-    # ── Runtime construction ─────────────────────────────
 
     async def build_runtime(
         self,
@@ -450,8 +434,6 @@ class Exp:
             context_runtime=runtime_context.context_runtime,
         )
 
-    # ── Runtime scope + run_stream ───────────────────────
-
     @asynccontextmanager
     async def runtime_scope(
         self,
@@ -594,7 +576,7 @@ class Exp:
         intent: ContextAssemblyIntent,
         assembler: ContextAssembler,
         user_instructions: UserInstructions,
-    ) -> exp_helpers.RootTurnRender:
+    ) -> RootTurnRender:
         if ctx.request.turn_input is None:
             raise RuntimeError("AgentRunRequest.turn_input is required for root run")
         assembly = await assembler.assemble_turn(
@@ -613,7 +595,7 @@ class Exp:
             message=message,
             user_instructions=user_instructions,
         )
-        return exp_helpers.RootTurnRender(rendered_content=message.content)
+        return RootTurnRender(rendered_content=message.content)
 
     async def _write_user_turn_context_if_configured(
         self,
@@ -642,8 +624,6 @@ class Exp:
                 schema_version=USER_TURN_CONTEXT_SCHEMA_VERSION,
             )
         )
-
-    # ── Capability initialization helpers ────────────────
 
     def _init_builtin_tools(
         self,
@@ -820,9 +800,7 @@ class Exp:
         # calculation_executors) is a separate concern from skill routing.
         from matmaster.config.loader import _load_raw
 
-        resolved_config_dir = exp_helpers.resolve_skill_config_dir(
-            skills_cfg.config_dir
-        )
+        resolved_config_dir = Path(skills_cfg.config_dir)
         mcp_runtime_path = resolved_config_dir / skills_cfg.mcp_runtime_file
         if mcp_runtime_path.exists():
             mcp_config = _load_raw(mcp_runtime_path)
@@ -833,7 +811,7 @@ class Exp:
             )
         runtime_patch = skills_cfg.mcp_runtime_patch or {}
         if isinstance(runtime_patch, dict) and runtime_patch:
-            mcp_config = exp_helpers.deep_merge_dict(mcp_config, runtime_patch)
+            mcp_config = _deep_merge_dict(mcp_config, runtime_patch)
 
         mcp_config_file = mcp_config.get("config_file", skills_cfg.mcp_config_file)
         config_path = Path(mcp_config_file)
