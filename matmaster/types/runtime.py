@@ -8,7 +8,8 @@ Layer 2 boundary contracts:
 - AgentKernelRuntime: ``spec + resources``; the single object
   ``AgentKernel.run_stream(kernel_runtime, task)`` consumes. frozen.
 - AgentRuntime: runtime bundle returned by ``Exp.build_runtime()``. Holds the
-  kernel, the kernel_runtime, and a cleanup callable.
+  kernel, the kernel_runtime, cleanup, and non-kernel context assembly
+  lifecycle objects.
 
 Context assembly internals (assembler, session event/job ports, user
 instructions loader) are intentionally NOT exposed here -- they are owned by
@@ -132,10 +133,12 @@ class KernelResult:
 class AgentRuntime:
     """Runtime bundle returned by Exp.build_runtime().
 
-    Holds the kernel, the assembled kernel_runtime, and a cleanup callable.
+    Holds the kernel, the assembled kernel_runtime, cleanup, and non-kernel
+    context assembly lifecycle objects needed by Exp.run_stream.
     frozen=True guarantees the bundle is not mutated after construction.
     """
 
     kernel: Any  # AgentKernel (avoid circular import)
     kernel_runtime: AgentKernelRuntime
     cleanup: Callable[[], Any]
+    context_runtime: Any | None = None

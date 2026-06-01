@@ -282,6 +282,7 @@ class Exp:
         # Discard any registry from a prior run so a turn that turns skills off
         # cannot expose stale state to the prompt builder.
         self._skill_registry = None
+        from matmaster.context.skill_resolver import SkillRegistryResolver
         from matmaster.core.runtime_context_assembly import empty_skill_resolver
 
         self._skill_resolver = skill_resolver or empty_skill_resolver
@@ -333,6 +334,8 @@ class Exp:
 
         if skills or self._config.skills.enabled:
             self._init_skill_tools(ctx, registry, skills_config=skills, catalog=catalog)
+        if skill_resolver is None:
+            self._skill_resolver = SkillRegistryResolver(self._skill_registry)
 
         # When allow_spawn is False (child Exp), spawn_fn is None, which causes
         # AgentTool to set exposed_to_model=False (hidden from LLM but still
@@ -462,6 +465,7 @@ class Exp:
             kernel=kernel,
             kernel_runtime=kernel_runtime,
             cleanup=self._run_cleanup_callbacks,
+            context_runtime=runtime_context.context_runtime,
         )
 
     # ── Runtime scope + run_stream ───────────────────────

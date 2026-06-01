@@ -200,6 +200,45 @@ async def test_build_runtime_passes_turn_input_to_kernel_spec(
     assert runtime.kernel_runtime.spec.turn_input == turn_input
 
 
+@pytest.mark.asyncio
+async def test_build_runtime_exposes_context_runtime_outside_kernel_runtime(
+    tmp_path: Path,
+) -> None:
+    from matmaster.config.exp import ExpConfig
+    from matmaster.core.exp import Exp
+
+    ctx = AgentRunContext(
+        environment=ExecutionEnvironment(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+        ),
+        request=AgentRunRequest(llm_provider=_MockProvider()),
+    )
+
+    runtime = await Exp(ExpConfig(name="test")).build_runtime(ctx)
+
+    assert runtime.context_runtime is not None
+    assert runtime.context_runtime.assembler is not None
+    assert not hasattr(runtime.kernel_runtime.spec, "context_runtime")
+    assert not hasattr(runtime.kernel_runtime.spec, "context_assembler")
+    assert not hasattr(runtime.kernel_runtime.resources, "context_runtime")
+    assert not hasattr(runtime.kernel_runtime.resources, "context_assembler")
+
+
+def test_build_runtime_signature_has_no_prebuilt_parameters() -> None:
+    import inspect
+
+    from matmaster.core.exp import Exp
+
+    params = inspect.signature(Exp.build_runtime).parameters
+
+    assert "prebuilt_skill_registry" not in params
+    assert "prebuilt_skill_resolver" not in params
+    assert "prebuilt_context_runtime" not in params
+
+
 def _make_playground_context(
     workdir: str = "/tmp/test-workdir",
     execution_workdir: str = "/tmp/test-exec",
