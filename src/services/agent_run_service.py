@@ -46,17 +46,14 @@ from matmaster.types.run_metadata import RunMetadata
 from matmaster.types.runtime_ports import AgentRunPorts, FigureUploadPort
 from src.dao.chat_events_table import get_chat_events_table
 from src.dao.redis_dao import get_redis_dao
-from src.services.agent_run_bohrium_stage import (
-    _build_figure_upload_config,
-    run_bohrium_stage,
-)
+from src.services.agent_run_bohrium_stage import run_bohrium_stage
 from src.services.agent_run_history_wiring import build_history_wiring
 from src.services.context_assembly_factory import build_context_assembler
 from src.services.context_turn_intent import resolve_turn_context_intent
+from src.services.figure_coordinator import FigureCoordinator
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.image_input_service import get_image_input_service
 from src.services.quota_service import use_quota
-from src.services.response_figures_service import ResponseFiguresAccumulator
 from src.services.session_event_codec import decode_session_events
 from src.services.sessions_service import get_sessions_service
 from src.services.skill_registry_factory import build_skill_registry
@@ -470,74 +467,12 @@ class AgentRunService:
                 if events_table is not None
                 else None
             )
-            figure_accumulator = ResponseFiguresAccumulator()
-            figure_dispatch_lock = asyncio.Lock()
-            figure_upload_config = _build_figure_upload_config(
+            figure_coordinator = FigureCoordinator(
+                fanout=fanout,
                 session_id=session_id,
                 task_id=task_id,
             )
-
-            async def _dispatch_response_figures_if_dirty_unlocked(
-                reason: str,
-            ) -> None:
-                response_figures_event = (
-                    figure_accumulator.build_snapshot_event_if_dirty()
-                )
-                if response_figures_event is None:
-                    return
-                try:
-                    await fanout.flush_persistence_barrier()
-                    dispatched = await fanout.dispatch_and_wait_persistence(
-                        response_figures_event
-                    )
-                except Exception:
-                    logger.warning(
-                        "response_figures dispatch failed reason=%s",
-                        reason,
-                        exc_info=True,
-                    )
-                    return
-
-                if dispatched:
-                    figure_accumulator.mark_snapshot_emitted()
-                else:
-                    logger.warning(
-                        "response_figures dispatch reported handler failure reason=%s",
-                        reason,
-                    )
-
-            async def _dispatch_response_figures_if_dirty(reason: str) -> None:
-                async with figure_dispatch_lock:
-                    await _dispatch_response_figures_if_dirty_unlocked(reason)
-
-            async def _record_tool_result_figures_and_dispatch_if_dirty(
-                event: ToolResultEvent,
-                *,
-                include_spawned: bool,
-                reason: str,
-            ) -> None:
-                async with figure_dispatch_lock:
-                    figure_accumulator.add_tool_result(
-                        event,
-                        include_spawned=include_spawned,
-                    )
-                    await _dispatch_response_figures_if_dirty_unlocked(reason)
-
-            async def _child_event_sink(event: BusEvent) -> None:
-                try:
-                    await fanout.dispatch(event)
-                    if isinstance(event, ToolResultEvent):
-                        await _record_tool_result_figures_and_dispatch_if_dirty(
-                            event,
-                            include_spawned=True,
-                            reason="child_tool_result",
-                        )
-                except Exception:
-                    logger.warning(
-                        "child event sink failed for event type=%s",
-                        getattr(event, "type", "?"),
-                        exc_info=True,
-                    )
+            figure_upload_config = figure_coordinator.upload_config
 
             def _checkpoint_sink_factory(*, spawn_id: str | None = None):
                 if checkpoint_service is None:
@@ -710,7 +645,7 @@ class AgentRunService:
                     active_skills=frozenset(active_skills),
                     bohrium_rebuild_events=bohrium_rebuild_events,
                     ports=AgentRunPorts(
-                        child_event_forward_sink=_child_event_sink,
+                        child_event_forward_sink=figure_coordinator.child_event_sink,
                         compaction=wiring.compaction,
                         figure_upload=FigureUploadPort(config=figure_upload_config),
                         interrupt_checker=RedisInterruptChecker(session_id),
@@ -739,12 +674,12 @@ class AgentRunService:
                         _remember_skill_hit(event.skill_name)
 
                     if isinstance(event, RunResultEvent) and event.spawn_id is None:
-                        await _dispatch_response_figures_if_dirty("final_flush")
+                        await figure_coordinator.flush_if_dirty("final_flush")
 
                     await fanout.dispatch(event)
 
                     if isinstance(event, ToolResultEvent):
-                        await _record_tool_result_figures_and_dispatch_if_dirty(
+                        await figure_coordinator.record_tool_result(
                             event,
                             include_spawned=False,
                             reason="tool_result",
