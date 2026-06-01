@@ -460,6 +460,7 @@ Your job is complete only when the user has planning artifacts they can review.
 [tools]
 builtin = [
   "Bash",
+  "PlotFigure",
   "Read",
   "Write",
   "Edit",

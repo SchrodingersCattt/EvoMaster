@@ -70,6 +70,7 @@ developer_instructions = '''
 [tools]
 builtin = [
   "Bash",
+  "PlotFigure",
   "Read",
   "Write",
   "Edit",

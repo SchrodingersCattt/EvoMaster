@@ -199,3 +199,15 @@ class TestPlotFigureWithCommand:
         assert result.status == "error"
         assert not result.payload.get("figures")
         assert "file_not_found" in result.content
+
+
+def test_exported_from_builtin_package():
+    from matmaster.tools.builtin import PlotFigure as Exported
+
+    assert Exported is PlotFigure
+
+
+def test_in_session_requiring_names():
+    from matmaster.core.exp import _SESSION_REQUIRING_TOOL_NAMES
+
+    assert "PlotFigure" in _SESSION_REQUIRING_TOOL_NAMES

@@ -13,6 +13,7 @@ from matmaster.tools.builtin.edit_tool import EditTool
 from matmaster.tools.builtin.glob_tool import GlobTool
 from matmaster.tools.builtin.grep_tool import GrepTool
 from matmaster.tools.builtin.paper_search_tool import PaperSearchTool
+from matmaster.tools.builtin.plot_figure_tool import PlotFigure
 from matmaster.tools.builtin.read_tool import ReadTool
 from matmaster.tools.builtin.skill_tool import SkillTool
 from matmaster.tools.builtin.todo_write_tool import TodoWriteTool
@@ -32,6 +33,7 @@ __all__ = [
     "ReadTool",
     "SkillTool",
     "PaperSearchTool",
+    "PlotFigure",
     "TodoWriteTool",
     "WebFetchTool",
     "WebSearchTool",
