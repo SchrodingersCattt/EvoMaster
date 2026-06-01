@@ -279,6 +279,9 @@ class TestExpWiring:
                 status="completed",
                 final_content="child done",
                 reason="natural",
+                usage={"prompt_tokens": 3},
+                num_turns=1,
+                messages=[],
             )
 
         orchestrator = SubagentOrchestrator(
@@ -292,7 +295,8 @@ class TestExpWiring:
         ):
             result = await orchestrator.make_spawn_fn()("direct", "summarize this task")
 
-        assert result == "child done"
+        assert result.final_content == "child done"
+        assert result.usage == {"prompt_tokens": 3}
         assert len(started) == 1
         assert len(stopped) == 1
         assert started[0].agent_type == "direct"
@@ -324,6 +328,9 @@ class TestExpWiring:
                 status="completed",
                 final_content="child done",
                 reason="natural",
+                usage={"prompt_tokens": 3},
+                num_turns=1,
+                messages=[],
             )
 
         orchestrator = SubagentOrchestrator(
@@ -337,7 +344,8 @@ class TestExpWiring:
         ):
             result = await orchestrator.make_spawn_fn()("direct", "summarize this task")
 
-        assert result == "child done"
+        assert result.final_content == "child done"
+        assert result.usage == {"prompt_tokens": 3}
         assert len(forwarded) == 2
         assert {event.source for event in forwarded} == {"MatMaster:direct"}
         assert all(event.spawn_id for event in forwarded)
@@ -357,6 +365,9 @@ class TestExpWiring:
                 status="completed",
                 final_content="child done",
                 reason="natural",
+                usage={"prompt_tokens": 3},
+                num_turns=1,
+                messages=[],
             )
 
         orchestrator = SubagentOrchestrator(
@@ -370,7 +381,8 @@ class TestExpWiring:
         ):
             result = await orchestrator.make_spawn_fn()("direct", "summarize this task")
 
-        assert result == "child done"
+        assert result.final_content == "child done"
+        assert result.usage == {"prompt_tokens": 3}
         assert len(forwarded) == 1
         assert forwarded[0].source == "MatMaster:direct"
         assert forwarded[0].spawn_id
@@ -386,6 +398,9 @@ class TestExpWiring:
                 status="completed",
                 final_content="child done",
                 reason="natural",
+                usage={"prompt_tokens": 3},
+                num_turns=1,
+                messages=[],
             )
 
         orchestrator = SubagentOrchestrator(
@@ -399,7 +414,8 @@ class TestExpWiring:
         ):
             result = await orchestrator.make_spawn_fn()("direct", "summarize this task")
 
-        assert result == "child done"
+        assert result.final_content == "child done"
+        assert result.usage == {"prompt_tokens": 3}
 
 
 class TestFullToolRunnerHookWiring:
@@ -919,7 +935,8 @@ class TestSpawnGuardWiring:
         ):
             result = await orchestrator.make_spawn_fn()("direct", "summarize this task")
 
-        assert result == "child done"
+        assert result.final_content == "child done"
+        assert result.status == "completed"
         assert received["allow_spawn"] is False
         assert received["spawn_id"]
         assert len(forwarded) == 1

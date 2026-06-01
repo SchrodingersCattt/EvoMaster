@@ -9,11 +9,12 @@ from matmaster.config.exp import ExpSubagentMeta
 from matmaster.tools.builtin.base import BuiltinTool
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.cancellation import CancellationToken
+from matmaster.types.stream_drain import DrainResult
 from matmaster.types.tool_decision import ToolDecision
 from matmaster.types.tool_runner_state import ToolRunnerState
 from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext
 
-SpawnFn = Callable[[str, str, CancellationToken | None], Awaitable[str]]
+SpawnFn = Callable[[str, str, CancellationToken | None], Awaitable[DrainResult]]
 
 
 class AgentTool(BuiltinTool):
@@ -206,18 +207,27 @@ class AgentTool(BuiltinTool):
             return f"Error: {error}"
 
         assert normalized is not None
-        result = await self._spawn_fn(
+        drain = await self._spawn_fn(
             normalized["exp_name"],
             normalized["prompt"],
             self._cancel_token_for_exec(),
         )
+        content = (
+            drain.final_content
+            if drain.status == "completed" and drain.final_content
+            else f"SubAgent finished with status={drain.status}, reason={drain.reason}"
+        )
         return ToolResult(
             status="success",
-            content=result,
+            content=content,
             payload={
                 "exp_name": normalized["exp_name"],
                 "task_summary": normalized["task_summary"],
                 "prompt": normalized["prompt"],
+                "subagent_usage": dict(drain.usage or {}),
+                "subagent_status": drain.status,
+                "subagent_reason": drain.reason,
+                "subagent_num_turns": drain.num_turns,
             },
         )
 

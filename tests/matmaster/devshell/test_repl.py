@@ -189,7 +189,7 @@ class TestCliParsing:
 
 class TestCliRunMode:
     def test_run_single_uses_drain_result_fields(self, capsys, tmp_path: Path) -> None:
-        from matmaster.core.stream_drain import DrainResult
+        from matmaster.types.stream_drain import DrainResult
         from matmaster.devshell.cli import _run_single, parse_args
 
         args = parse_args(
@@ -235,7 +235,7 @@ class TestCliRunMode:
     def test_run_single_serializes_finish_detail_on_invalid_finish(
         self, capsys, tmp_path: Path
     ) -> None:
-        from matmaster.core.stream_drain import DrainResult
+        from matmaster.types.stream_drain import DrainResult
         from matmaster.devshell.cli import _run_single, parse_args
         from matmaster.types.events import FinishDetail
 

@@ -22,8 +22,8 @@ from matmaster.types.run_metadata import RunMetadata
 from matmaster.types.runtime import AgentKernelTurnRequest
 
 if TYPE_CHECKING:
-    from matmaster.core.stream_drain import DrainResult
     from matmaster.devshell.event_observer import DevEventObserver
+    from matmaster.types.stream_drain import DrainResult
 
 logger = logging.getLogger(__name__)
 
@@ -182,7 +182,8 @@ class DevRunner:
         to DevStreamHook and DevEventObserver via the on_event callback
         during drain, replacing the old hook-based streaming path.
         """
-        from matmaster.core.stream_drain import DrainResult, drain_run_stream
+        from matmaster.core.stream_drain import drain_run_stream
+        from matmaster.types.stream_drain import DrainResult
 
         exp = Exp(self._exp_config, exclude_subagents=self._exclude_subagents)
 

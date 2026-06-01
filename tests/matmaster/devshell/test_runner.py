@@ -161,7 +161,7 @@ class TestDevRunner:
         assert observed["cancel_token"] is controller.token
 
     def test_observer_run_result_preserves_finish_detail(self, tmp_path: Path) -> None:
-        from matmaster.core.stream_drain import DrainResult
+        from matmaster.types.stream_drain import DrainResult
         from matmaster.devshell.event_observer import DevEventObserver
         from matmaster.types.events import FinishDetail, RunResultEvent
 
