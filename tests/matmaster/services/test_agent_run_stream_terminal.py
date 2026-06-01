@@ -75,7 +75,8 @@ async def test_run_agent_idempotent_skip_when_user_turn_context_already_exists()
     ]
     assert utc_calls == []
     assert svc._test_fake_exp.last_task is not None
-    assert "Use SI units." in svc._test_fake_exp.last_task
+    assert svc._test_fake_exp.last_task == "first question"
+    assert svc._test_fake_exp.last_ctx.request.ports.user_turn_context_writer is not None
 
 
 @pytest.mark.asyncio
@@ -252,7 +253,6 @@ async def test_exception_emits_error_and_closed():
             svc = AgentRunService.__new__(AgentRunService)
             svc._sessions_service = MagicMock()
             svc._pg_manager = pg_mgr
-            svc._active_skills = {}
 
             result = await svc.run_agent(
                 session_id='s1',

@@ -103,7 +103,6 @@ async def test_images_flow_from_service_to_kernel_user_message(tmp_path: Path) -
     svc = AgentRunService.__new__(AgentRunService)
     svc._sessions_service = sessions_service
     svc._pg_manager = pg_manager
-    svc._active_skills = {}
 
     with (
         patch("src.services.agent_run_service.get_chat_events_table") as events_fn,

@@ -45,7 +45,9 @@ from src.services.image_input_service import get_image_input_service
 from src.services.quota_service import use_quota
 from src.services.sessions_service import get_sessions_service
 from src.services.stream_reply_queue import RedisReplyQueue
-from src.services.user_turn_context_service import write_user_turn_context_event
+from src.services.user_turn_context_service import (
+    write_user_turn_context_event as _persist_utc_event,
+)
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -200,7 +202,7 @@ def _build_user_turn_context_writer(
             "transform": request.transform,
             "render_version": request.render_version,
         }
-        await write_user_turn_context_event(
+        await _persist_utc_event(
             events_table=events_table,
             session_id=session_id,
             task_id=request.task_id,
