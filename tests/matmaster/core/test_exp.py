@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from matmaster.config.exp import ExpConfig, ExpSubagentMeta, ExpToolsConfig
+from matmaster.config.loader import load_exp_config
 from matmaster.core.exp import Exp
 from matmaster.core.hooks import HookExecutor
 from matmaster.core.playground import ExecutionEnvironment
@@ -524,16 +525,17 @@ class TestExpBuiltinTools:
         return exp, registry
 
     def test_native_tools_count(self, tmp_path: Path) -> None:
-        """11 native tools registered with source='builtin' (CC names)."""
+        """12 native tools registered with source='builtin' (CC names)."""
         _, registry = self._build_registry(tmp_path)
-        assert len(registry) == 11
+        assert len(registry) == 12
 
     def test_native_tool_names(self, tmp_path: Path) -> None:
-        """All 11 expected CC-name tools are present in registry."""
+        """All 12 expected CC-name tools are present in registry."""
         _, registry = self._build_registry(tmp_path)
         expected_native = {
             "AskQuestion",
             "Bash",
+            "PlotFigure",
             "Read",
             "Write",
             "Edit",
@@ -560,9 +562,13 @@ class TestExpBuiltinTools:
         assert "str_replace_editor" not in registry
 
     def test_total_count(self, tmp_path: Path) -> None:
-        """Total tools = 11 native builtin (CC names, no legacy tools)."""
+        """Total tools = 12 native builtin (CC names, no legacy tools)."""
         _, registry = self._build_registry(tmp_path)
-        assert len(registry) == 11
+        assert len(registry) == 12
+
+    def test_direct_and_planner_configs_include_plot_figure(self) -> None:
+        assert "PlotFigure" in load_exp_config("direct").tools.builtin
+        assert "PlotFigure" in load_exp_config("planner").tools.builtin
 
     def test_web_search_is_native_builtin(self, tmp_path: Path) -> None:
         """WebSearchTool is registered as native builtin with CC name."""

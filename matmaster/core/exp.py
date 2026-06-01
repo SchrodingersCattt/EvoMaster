@@ -78,6 +78,7 @@ _EXTERNAL_EFFECT_TOOL_NAMES: frozenset[str] = frozenset(
 _SESSION_REQUIRING_TOOL_NAMES: frozenset[str] = frozenset(
     {
         "Bash",
+        "PlotFigure",
         "Read",
         "Write",
         "Edit",
@@ -632,8 +633,9 @@ class Exp:
         in the list are registered, cutting prompt-token overhead.
 
         Tools are split into two categories:
-        - Session-requiring: BashTool, ReadTool, WriteTool, EditTool,
-          GlobTool, GrepTool (need ctx.environment.session for execution)
+        - Session-requiring: BashTool, PlotFigure, ReadTool, WriteTool,
+          EditTool, GlobTool, GrepTool (need ctx.environment.session for
+          execution)
         - Sessionless: TodoWriteTool, WebSearchTool, WebFetchTool
           (operate without a session; AgentTool is registered separately
           in build_runtime)
@@ -654,6 +656,7 @@ class Exp:
             EditTool,
             GlobTool,
             GrepTool,
+            PlotFigure,
             ReadTool,
             TodoWriteTool,
             WebFetchTool,
@@ -674,6 +677,7 @@ class Exp:
         if has_session:
             session_tools = [
                 BashTool(session=env.session, workdir=exec_wd),
+                PlotFigure(session=env.session, workdir=exec_wd),
                 ReadTool(session=env.session, workdir=exec_wd),
                 WriteTool(session=env.session, workdir=exec_wd),
                 EditTool(session=env.session, workdir=exec_wd),

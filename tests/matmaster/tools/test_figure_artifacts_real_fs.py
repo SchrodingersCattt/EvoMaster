@@ -1,8 +1,9 @@
 """Real-filesystem tests for figure flat-view symlinks.
 
 These tests use LocalSession and tmp_path to execute the actual guard plus
-ln script. Mock-based tests cannot verify the important POSIX behavior where
-bare ln -s would create a link inside an existing directory.
+ln script through the declared-figure pipeline. Mock-based tests cannot verify
+the important POSIX behavior where a bare ln -s would create a link inside an
+existing directory.
 """
 
 from __future__ import annotations
@@ -15,8 +16,8 @@ import pytest
 
 from matmaster.sessions.local import LocalSession
 from matmaster.tools.figure_artifacts import (
-    build_figure_env,
-    collect_figures_from_session,
+    build_figure_id,
+    collect_declared_figure,
 )
 from matmaster.types.figures import FigureUploadConfig
 
@@ -33,6 +34,8 @@ _TINY_PNG = (
     b"\x00\x00\x00\x00IEND\xaeB`\x82"
 )
 
+_OUTPUT_PATH = "results/band.png"
+
 
 def _upload_cfg() -> FigureUploadConfig:
     return FigureUploadConfig(
@@ -43,22 +46,15 @@ def _upload_cfg() -> FigureUploadConfig:
     )
 
 
-def _setup_artifact(workdir: Path, call_id: str, figure_id: str) -> tuple[str, str]:
-    """Write artifact file and manifest. Return (artifact_dir, manifest_path)."""
+def _write_image(workdir: Path, rel_path: str = _OUTPUT_PATH) -> None:
+    """Write a tiny real PNG at workdir/rel_path."""
+    path = workdir / rel_path
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(_TINY_PNG)
 
-    artifact_dir, manifest_path = build_figure_env(str(workdir), call_id)
-    artifact_path = Path(artifact_dir) / f"{figure_id}.png"
-    artifact_path.parent.mkdir(parents=True, exist_ok=True)
-    artifact_path.write_bytes(_TINY_PNG)
-    Path(manifest_path).parent.mkdir(parents=True, exist_ok=True)
-    Path(manifest_path).write_text(
-        '{"figures":[{"figure_id":"'
-        + figure_id
-        + '","path":"'
-        + figure_id
-        + '.png","caption":"c"}]}'
-    )
-    return artifact_dir, manifest_path
+
+def _expected_figure_id() -> str:
+    return build_figure_id(output_path=_OUTPUT_PATH, image_bytes=_TINY_PNG)
 
 
 @pytest.fixture
@@ -73,24 +69,29 @@ def local_session(tmp_path: Path):
         session.close()
 
 
-def test_real_fs_creates_symlink(local_session: LocalSession, tmp_path: Path) -> None:
-    workdir = tmp_path
-    artifact_dir, manifest_path = _setup_artifact(workdir, "call-1", "band")
-
-    result = collect_figures_from_session(
+def _collect(local_session: LocalSession, workdir: Path, tool_call_id: str):
+    return collect_declared_figure(
         session=local_session,
-        artifact_dir=artifact_dir,
-        manifest_path=manifest_path,
-        tool_call_id="call-1",
+        workdir=str(workdir),
+        output_path=_OUTPUT_PATH,
+        caption="c",
+        tool_call_id=tool_call_id,
         upload_config=_upload_cfg(),
     )
 
-    assert len(result.figures) == 1
-    assert result.warnings == []
 
-    link_path = workdir / ".matmaster" / "figures" / "band.png"
+def test_real_fs_creates_symlink(local_session: LocalSession, tmp_path: Path) -> None:
+    workdir = tmp_path
+    _write_image(workdir)
+
+    result = _collect(local_session, workdir, "call-1")
+
+    assert result.figure is not None
+    assert result.failure_reason is None
+
+    link_path = workdir / ".matmaster" / "figures" / f"{_expected_figure_id()}.png"
     assert link_path.is_symlink()
-    assert os.readlink(link_path) == "call-1/artifacts/band.png"
+    assert os.readlink(link_path) == "../../results/band.png"
     assert link_path.read_bytes() == _TINY_PNG
 
 
@@ -102,25 +103,20 @@ def test_real_fs_rejects_existing_regular_file(
     caplog.set_level(logging.WARNING, logger="matmaster.tools.figure_artifacts")
 
     workdir = tmp_path
-    artifact_dir, manifest_path = _setup_artifact(workdir, "call-1", "band")
+    _write_image(workdir)
 
     flat_dir = workdir / ".matmaster" / "figures"
     flat_dir.mkdir(parents=True, exist_ok=True)
-    squatter = flat_dir / "band.png"
+    squatter = flat_dir / f"{_expected_figure_id()}.png"
     squatter.write_bytes(b"SQUATTER")
 
-    result = collect_figures_from_session(
-        session=local_session,
-        artifact_dir=artifact_dir,
-        manifest_path=manifest_path,
-        tool_call_id="call-1",
-        upload_config=_upload_cfg(),
-    )
+    result = _collect(local_session, workdir, "call-1")
 
-    assert len(result.figures) == 1
+    # Collection still succeeds; the flat-view symlink is best-effort only.
+    assert result.figure is not None
     assert squatter.read_bytes() == b"SQUATTER"
     assert not squatter.is_symlink()
-    assert any("figure_symlink_exists:'band'" in r.getMessage() for r in caplog.records)
+    assert any("figure_symlink_exists" in r.getMessage() for r in caplog.records)
 
 
 def test_real_fs_rejects_existing_directory(
@@ -131,23 +127,17 @@ def test_real_fs_rejects_existing_directory(
     caplog.set_level(logging.WARNING, logger="matmaster.tools.figure_artifacts")
 
     workdir = tmp_path
-    artifact_dir, manifest_path = _setup_artifact(workdir, "call-1", "band")
+    _write_image(workdir)
 
     flat_dir = workdir / ".matmaster" / "figures"
     flat_dir.mkdir(parents=True, exist_ok=True)
-    squatter_dir = flat_dir / "band.png"
+    squatter_dir = flat_dir / f"{_expected_figure_id()}.png"
     squatter_dir.mkdir()
     (squatter_dir / "untouched").write_text("keep me")
 
-    result = collect_figures_from_session(
-        session=local_session,
-        artifact_dir=artifact_dir,
-        manifest_path=manifest_path,
-        tool_call_id="call-1",
-        upload_config=_upload_cfg(),
-    )
+    result = _collect(local_session, workdir, "call-1")
 
-    assert len(result.figures) == 1
+    assert result.figure is not None
     assert squatter_dir.is_dir()
     assert not squatter_dir.is_symlink()
     assert (squatter_dir / "untouched").read_text() == "keep me"
@@ -155,7 +145,7 @@ def test_real_fs_rejects_existing_directory(
     assert entries == [
         "untouched"
     ], f"guard should reject directory; found extra entries: {entries}"
-    assert any("figure_symlink_exists:'band'" in r.getMessage() for r in caplog.records)
+    assert any("figure_symlink_exists" in r.getMessage() for r in caplog.records)
 
 
 def test_real_fs_rejects_existing_dangling_symlink(
@@ -166,26 +156,20 @@ def test_real_fs_rejects_existing_dangling_symlink(
     caplog.set_level(logging.WARNING, logger="matmaster.tools.figure_artifacts")
 
     workdir = tmp_path
-    artifact_dir, manifest_path = _setup_artifact(workdir, "call-1", "band")
+    _write_image(workdir)
 
     flat_dir = workdir / ".matmaster" / "figures"
     flat_dir.mkdir(parents=True, exist_ok=True)
-    dangling = flat_dir / "band.png"
+    dangling = flat_dir / f"{_expected_figure_id()}.png"
     os.symlink("nowhere-to-be-seen", dangling)
     assert dangling.is_symlink()
     assert not dangling.exists()
 
-    result = collect_figures_from_session(
-        session=local_session,
-        artifact_dir=artifact_dir,
-        manifest_path=manifest_path,
-        tool_call_id="call-1",
-        upload_config=_upload_cfg(),
-    )
+    result = _collect(local_session, workdir, "call-1")
 
-    assert len(result.figures) == 1
+    assert result.figure is not None
     assert os.readlink(dangling) == "nowhere-to-be-seen"
-    assert any("figure_symlink_exists:'band'" in r.getMessage() for r in caplog.records)
+    assert any("figure_symlink_exists" in r.getMessage() for r in caplog.records)
 
 
 def test_real_fs_success_then_collision_same_workdir(
@@ -196,30 +180,19 @@ def test_real_fs_success_then_collision_same_workdir(
     caplog.set_level(logging.WARNING, logger="matmaster.tools.figure_artifacts")
 
     workdir = tmp_path
-    artifact_dir_1, manifest_path_1 = _setup_artifact(workdir, "call-1", "band")
-    result_1 = collect_figures_from_session(
-        session=local_session,
-        artifact_dir=artifact_dir_1,
-        manifest_path=manifest_path_1,
-        tool_call_id="call-1",
-        upload_config=_upload_cfg(),
-    )
-    assert len(result_1.figures) == 1
+    _write_image(workdir)
 
-    link_path = workdir / ".matmaster" / "figures" / "band.png"
+    result_1 = _collect(local_session, workdir, "call-1")
+    assert result_1.figure is not None
+
+    # Same output_path + same bytes -> same figure_id -> same flat-view link.
+    link_path = workdir / ".matmaster" / "figures" / f"{_expected_figure_id()}.png"
     assert link_path.is_symlink()
-    assert os.readlink(link_path) == "call-1/artifacts/band.png"
+    assert os.readlink(link_path) == "../../results/band.png"
 
-    artifact_dir_2, manifest_path_2 = _setup_artifact(workdir, "call-2", "band")
     caplog.clear()
-    result_2 = collect_figures_from_session(
-        session=local_session,
-        artifact_dir=artifact_dir_2,
-        manifest_path=manifest_path_2,
-        tool_call_id="call-2",
-        upload_config=_upload_cfg(),
-    )
-    assert len(result_2.figures) == 1
+    result_2 = _collect(local_session, workdir, "call-2")
+    assert result_2.figure is not None
 
-    assert os.readlink(link_path) == "call-1/artifacts/band.png"
-    assert any("figure_symlink_exists:'band'" in r.getMessage() for r in caplog.records)
+    assert os.readlink(link_path) == "../../results/band.png"
+    assert any("figure_symlink_exists" in r.getMessage() for r in caplog.records)

@@ -2,19 +2,7 @@
 
 from __future__ import annotations
 
-from matmaster.types.figures import FigureDescriptor, FigureManifestEntry
-
-
-def test_figure_manifest_entry_defaults() -> None:
-    entry = FigureManifestEntry(
-        figure_id="band_structure",
-        path="plots/band.png",
-        caption="Si 的能带图",
-    )
-
-    assert entry.importance == "secondary"
-    assert entry.placement_hint == "sidebar_only"
-    assert entry.alt is None
+from matmaster.types.figures import FigureDescriptor
 
 
 def test_figure_descriptor_defaults() -> None:
