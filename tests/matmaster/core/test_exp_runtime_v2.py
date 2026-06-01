@@ -138,7 +138,10 @@ async def test_build_runtime_uses_runtime_ports_history(
     runtime = await Exp(ExpConfig(name="test")).build_runtime(ctx)
 
     assert runtime.kernel_runtime.resources.compactor is not None
-    assert runtime.kernel_runtime.resources.compactor._runtime_covered_until_provider() == 25
+    assert (
+        runtime.kernel_runtime.resources.compactor._runtime_covered_until_provider()
+        == 25
+    )
 
 
 @pytest.mark.asyncio

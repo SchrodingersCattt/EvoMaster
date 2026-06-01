@@ -37,34 +37,34 @@
 
 ## File Structure
 
-- Create: `src/services/session_event_codec.py`  
+- Create: `src/services/session_event_codec.py`
   唯一 row decoder。提供 `freeze_json_value()`、`freeze_json_object()`、`coerce_event_id()`、`coerce_created_at_ms()`、`row_to_event()`、`decode_session_events()`。
 
-- Modify: `matmaster/context/ports.py`  
+- Modify: `matmaster/context/ports.py`
   给 `SessionEvent` 增加 `created_at_ms: int | None = None`。
 
-- Modify: `src/services/context_assembly_ports.py`  
+- Modify: `src/services/context_assembly_ports.py`
   删除本地 `_freeze_json_value()`、`_freeze_json_object()`、`AppSessionEventsPort._row_to_event()`，改用 codec。
 
-- Modify: `src/services/agent_run_history_wiring.py`  
+- Modify: `src/services/agent_run_history_wiring.py`
   `_RunSessionEventHistory` 增加 async `load_events(query)`，内部通过 codec 返回 typed tuple。
 
-- Modify: `matmaster/types/runtime_ports.py`  
+- Modify: `matmaster/types/runtime_ports.py`
   `SessionEventHistoryPort` 和 `EmptySessionEventHistory` 增加 typed `load_events()`，保留 `latest_scope_event_id()` 给 compactor 使用。
 
-- Modify: `matmaster/core/runtime_context_assembly.py`  
+- Modify: `matmaster/core/runtime_context_assembly.py`
   删除 `RuntimeHistorySessionEventsPort` 和 `coerce_session_events` import。`ContextAssemblyPorts.session_events` 直接接收 `history_port`。
 
-- Modify: `src/services/agent_run_service.py`  
+- Modify: `src/services/agent_run_service.py`
   active skill rehydration 从 `coerce_session_events(raw_events)` 改为 `decode_session_events(raw_events)`。
 
-- Modify: `matmaster/context/scanner.py`  
+- Modify: `matmaster/context/scanner.py`
   删除 row decoder，只保留 typed scanner。`SkillHitRecord` 使用 `created_at_ms`。
 
-- Modify: `matmaster/context/session.py`  
+- Modify: `matmaster/context/session.py`
   更新错误信息，去掉对 `matmaster.context.scanner.coerce_session_events` 的提示。
 
-- Modify: `matmaster/context/sources/attachments.py`  
+- Modify: `matmaster/context/sources/attachments.py`
   删除只被测试使用的 raw row legacy scanner `scan_legacy_attachment_entries()`，从而去掉对 `scanner.coerce_event_id` 的依赖。
 
 - Modify tests:

@@ -115,7 +115,9 @@ class DevRunner:
             from matmaster.types.runtime_ports import AgentRunPorts
 
             request = request.model_copy(
-                update={"ports": AgentRunPorts(child_event_forward_sink=child_event_sink)}
+                update={
+                    "ports": AgentRunPorts(child_event_forward_sink=child_event_sink)
+                }
             )
         return AgentRunContext(environment=self._environment, request=request)
 

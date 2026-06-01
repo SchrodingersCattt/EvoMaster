@@ -143,9 +143,7 @@ async def stream_llm_items(
             if chunk.content:
                 # Segment transition: reasoning -> content
                 if producing_reasoning:
-                    yield _thought_item(
-                        "".join(reasoning_parts), stream_id, "complete"
-                    )
+                    yield _thought_item("".join(reasoning_parts), stream_id, "complete")
                     producing_reasoning = False
                 content_parts.append(chunk.content)
                 producing_content = True
@@ -159,9 +157,7 @@ async def stream_llm_items(
             if chunk.tool_call_deltas:
                 # Segment transition: reasoning -> tool_calls
                 if producing_reasoning:
-                    yield _thought_item(
-                        "".join(reasoning_parts), stream_id, "complete"
-                    )
+                    yield _thought_item("".join(reasoning_parts), stream_id, "complete")
                     producing_reasoning = False
                 # Segment transition: content -> tool_calls
                 if producing_content:

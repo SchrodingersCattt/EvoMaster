@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+
 def test_terminal_events_use_distinct_result_and_stream_names() -> None:
     """Terminal event names should distinguish business result from stream closure."""
     from matmaster.types import events as events_module

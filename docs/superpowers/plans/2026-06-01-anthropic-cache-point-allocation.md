@@ -795,4 +795,3 @@ Expected usage behavior on repeated/growing-prefix call:
 - Do not make user-message marking conditional on length. The latest user message is a semantic boundary, not a pure size optimization.
 - Keep the flexible slot simple and deterministic. Largest remaining user/tool content above `min_flexible_chars` is enough for this iteration.
 - If a message already has `cache_control`, do not overwrite it unless the existing codebase already assumes provider-owned mutation. Prefer leaving existing explicit markers intact if encountered during implementation.
-

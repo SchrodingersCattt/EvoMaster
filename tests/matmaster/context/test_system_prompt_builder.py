@@ -116,9 +116,7 @@ def test_tools_section_generic_guidance(builder: SystemPromptBuilder) -> None:
 
 def test_memory_section_included_when_provided(builder: SystemPromptBuilder) -> None:
     """memory_context='Previous conversation summary' -- output contains it."""
-    result = builder.build_system_prompt(
-        memory_context="Previous conversation summary"
-    )
+    result = builder.build_system_prompt(memory_context="Previous conversation summary")
     assert "# Memory" in result
     assert "Previous conversation summary" in result
 

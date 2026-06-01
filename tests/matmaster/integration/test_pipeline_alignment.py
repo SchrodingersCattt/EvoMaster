@@ -134,9 +134,7 @@ class TestEventSequenceAlignment:
         # Collect events from kernel.run_stream() generator
         kernel = AgentKernel()
         events = []
-        async for event in kernel.run_stream(
-            runtime.kernel_runtime, "alignment test"
-        ):
+        async for event in kernel.run_stream(runtime.kernel_runtime, "alignment test"):
             events.append(event)
 
         # Extract event type sequence

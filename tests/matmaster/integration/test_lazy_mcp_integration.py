@@ -8,11 +8,10 @@ Does NOT require real MCP connections.
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import yaml as _yaml
-
-from pathlib import Path
 
 from matmaster.config.exp import ExpConfig, ExpSkillsConfig
 from matmaster.core.exp import Exp

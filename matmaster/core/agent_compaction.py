@@ -64,9 +64,7 @@ async def run_compaction_plan(
             tool_definitions=tool_definitions,
             context_limit=kernel_spec.compaction.context_limit,
             reserved_summary_tokens=kernel_spec.compaction.reserved_summary_tokens,
-            safety_margin_tokens=(
-                kernel_spec.compaction.summary_safety_margin_tokens
-            ),
+            safety_margin_tokens=(kernel_spec.compaction.summary_safety_margin_tokens),
         )
         result = await kernel_resources.compactor.apply_summary(
             plan,

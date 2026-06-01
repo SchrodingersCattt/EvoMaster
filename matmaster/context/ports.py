@@ -70,9 +70,7 @@ class SessionEvent:
     created_at_ms: int | None = None
 
 
-SkillResolver: TypeAlias = Callable[
-    [tuple[SessionEvent, ...]], tuple[ActiveSkill, ...]
-]
+SkillResolver: TypeAlias = Callable[[tuple[SessionEvent, ...]], tuple[ActiveSkill, ...]]
 
 
 @dataclass(frozen=True)

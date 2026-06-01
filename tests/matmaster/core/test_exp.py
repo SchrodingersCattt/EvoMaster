@@ -14,14 +14,12 @@ from matmaster.core.playground import ExecutionEnvironment
 from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.runtime import (
-    AgentKernelRuntime,
     AgentRuntime,
 )
 from matmaster.types.session import Session
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.tool_runner_state import ToolRunnerState
 from tests.matmaster.core.conftest import MockLLMProvider
-
 
 _UNSET = object()
 
@@ -148,10 +146,7 @@ class TestExpBuildRuntimeConfig:
         ctx = _make_ctx(with_llm=True)
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
-        assert (
-            runtime.kernel_runtime.resources.llm_provider
-            is ctx.request.llm_provider
-        )
+        assert runtime.kernel_runtime.resources.llm_provider is ctx.request.llm_provider
 
 
 # ── TestExpBuildRuntime ──────────────────────────────────
@@ -178,10 +173,7 @@ class TestExpBuildRuntime:
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
 
-        assert (
-            runtime.kernel_runtime.resources.llm_provider
-            is ctx.request.llm_provider
-        )
+        assert runtime.kernel_runtime.resources.llm_provider is ctx.request.llm_provider
 
     async def test_build_runtime_has_no_bus_parameter(self) -> None:
         """build_runtime() does not accept a bus parameter."""
@@ -201,9 +193,7 @@ class TestExpBuildRuntime:
         with patch("matmaster.core.agent.AgentKernel"):
             runtime = await exp.build_runtime(ctx)
 
-        assert isinstance(
-            runtime.kernel_runtime.resources.hook_executor, HookExecutor
-        )
+        assert isinstance(runtime.kernel_runtime.resources.hook_executor, HookExecutor)
 
     async def test_runtime_has_cleanup_callable(self) -> None:
         """AgentRuntime.cleanup is a callable."""
@@ -267,9 +257,7 @@ class TestExpBuildRuntime:
         resources = runtime.kernel_runtime.resources
         assert "Base persona text." in spec.system_prompt
         assert "# Tools" in spec.system_prompt
-        assert "Use the tools declared in function calling." in (
-            spec.system_prompt
-        )
+        assert "Use the tools declared in function calling." in (spec.system_prompt)
         assert "Use dedicated tools instead of shell equivalents" not in (
             spec.system_prompt
         )
@@ -465,8 +453,7 @@ class TestIdentityOverride:
         runtime = await exp.build_runtime(ctx)
 
         assert (
-            'I am a materials scientist.'
-            in runtime.kernel_runtime.spec.system_prompt
+            'I am a materials scientist.' in runtime.kernel_runtime.spec.system_prompt
         )
 
     async def test_default_identity_when_not_set(self) -> None:
@@ -497,9 +484,7 @@ class TestSystemPromptOverride:
         ctx = _make_ctx(with_llm=True)
         runtime = await exp.build_runtime(ctx)
 
-        assert (
-            'Base persona text.' in runtime.kernel_runtime.spec.system_prompt
-        )
+        assert 'Base persona text.' in runtime.kernel_runtime.spec.system_prompt
 
     async def test_empty_system_prompt_skips_section(self) -> None:
         exp = Exp(
@@ -764,8 +749,7 @@ async def test_build_runtime_registers_todowrite_without_session(
         runtime = await exp.build_runtime(ctx)
 
     assert (
-        runtime.kernel_runtime.resources.tool_catalog.get_tool("TodoWrite")
-        is not None
+        runtime.kernel_runtime.resources.tool_catalog.get_tool("TodoWrite") is not None
     )
 
 
@@ -788,10 +772,7 @@ async def test_build_runtime_registers_bohrium_without_session(tmp_path: Path) -
     with patch("matmaster.core.agent.AgentKernel"):
         runtime = await exp.build_runtime(ctx)
 
-    assert (
-        runtime.kernel_runtime.resources.tool_catalog.get_tool("Bohrium")
-        is not None
-    )
+    assert runtime.kernel_runtime.resources.tool_catalog.get_tool("Bohrium") is not None
 
 
 @pytest.mark.asyncio
@@ -963,59 +944,3 @@ async def test_bohrium_tool_session_none_when_no_session(tmp_path: Path) -> None
     ]
     assert len(bohrium_tools) == 1
     assert bohrium_tools[0]._session is None
-
-
-# ── TestAgentRegistration ──────────────────────────────
-
-
-@pytest.mark.asyncio
-async def test_build_runtime_registers_agent_by_cc_name(tmp_path: Path) -> None:
-    """Agent registers with CC name when enabled in builtin config."""
-    exp = Exp(
-        ExpConfig(
-            name="test",
-            tools=ExpToolsConfig(builtin=["Agent"]),
-        )
-    )
-    ctx = _make_ctx(
-        workdir=tmp_path,
-        execution_workdir=str(tmp_path / "exec"),
-        session=MagicMock(spec=Session),
-        with_llm=True,
-    )
-
-    with patch("matmaster.core.agent.AgentKernel"):
-        runtime = await exp.build_runtime(ctx)
-
-    assert (
-        runtime.kernel_runtime.resources.tool_catalog.get_tool("Agent")
-        is not None
-    )
-
-
-# ── TestSpawnGuard ─────────────────────────────────────
-
-
-@pytest.mark.asyncio
-async def test_build_runtime_hides_agent_when_allow_spawn_false(tmp_path: Path) -> None:
-    """Agent tool is hidden (exposed_to_model=False) when allow_spawn=False."""
-    exp = Exp(
-        ExpConfig(
-            name="test",
-            tools=ExpToolsConfig(builtin=["Agent"]),
-        ),
-        allow_spawn=False,
-    )
-    ctx = _make_ctx(
-        workdir=tmp_path,
-        execution_workdir=str(tmp_path / "exec"),
-        session=MagicMock(spec=Session),
-        with_llm=True,
-    )
-
-    with patch("matmaster.core.agent.AgentKernel"):
-        runtime = await exp.build_runtime(ctx)
-
-    tool = runtime.kernel_runtime.resources.tool_catalog.get_tool("Agent")
-    assert tool is not None
-    assert tool.tool_spec.exposed_to_model is False

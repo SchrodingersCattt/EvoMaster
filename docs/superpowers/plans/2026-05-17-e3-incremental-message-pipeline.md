@@ -2071,7 +2071,7 @@ Expected: `modified: docs/superpowers/plans/2026-05-17-core-refactor-deferred-si
 
 **Placeholder scan：** ✓ 全部 step 含实际代码，无 TBD/TODO。
 
-**Type consistency 检查：** 
+**Type consistency 检查：**
 - `IncrementalMessagePipeline.feed_tail(messages: list[Message]) -> list[dict[str, Any]]`：Task 3 step 3.3 定义，Task 4 step 4.2 调用形式一致
 - `state.pipeline.reset()`：Task 3 step 3.3 + Task 4 step 4.4 一致
 - `ToolCallData.arguments_json` (cached_property)：Task 2 step 2.4 定义，step 2.5 使用，benchmark 间接验证一致

@@ -93,9 +93,7 @@ def _kernel_spec() -> AgentKernelSpec:
     )
 
 
-def _kernel_resources(
-    provider: Provider, compactor: Compactor
-) -> AgentKernelResources:
+def _kernel_resources(provider: Provider, compactor: Compactor) -> AgentKernelResources:
     return AgentKernelResources(
         llm_provider=provider,
         runtime_ports=KernelRuntimePorts(),

@@ -149,9 +149,7 @@ def test_prepare_send_message_captures_turn_input_before_user_event():
 
     assert ctx.turn_input.user_text == "analyze current"
     assert ctx.turn_input.files == ("https://oss.example.com/chat/new.cif",)
-    assert ctx.turn_input.images == (
-        "https://oss.example.com/chat/current.png",
-    )
+    assert ctx.turn_input.images == ("https://oss.example.com/chat/current.png",)
     assert ctx.turn_input.workspace_paths == ("/share/current/POSCAR",)
     assert ctx.turn_input.pre_turn_history_event_id == 77
     assert ctx.user_msg["content"] == "analyze current"

@@ -12,7 +12,6 @@ from matmaster.config.exp import ExpConfig
 from matmaster.core.agent import AgentKernel
 from matmaster.core.capability_policy import DefaultCapabilityPolicy
 from matmaster.core.exp import Exp
-from matmaster.core.subagent_orchestrator import SubagentOrchestrator
 from matmaster.core.hooks import (
     CompactionContext,
     HookEvent,
@@ -23,6 +22,7 @@ from matmaster.core.hooks import (
 from matmaster.core.playground import ExecutionEnvironment
 from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.core.structural_validation import StructuralValidation
+from matmaster.core.subagent_orchestrator import SubagentOrchestrator
 from matmaster.core.tool_runner import FullToolRunner
 from matmaster.core.tool_scheduler import ToolScheduler
 from matmaster.tools.tool_catalog import ToolCatalog
@@ -45,6 +45,7 @@ from tests.conftest import MockAsyncTool
 
 from .agent_kernel_test_helpers import make_kernel_runtime
 from .conftest import MockLLMProvider
+from .test_full_tool_runner import _make_ctx, _make_tc, _make_topology
 
 
 def _stub_child_run_factory(exp_name, task, *, cancel_token=None, spawn_id=None):
@@ -55,7 +56,6 @@ def _stub_child_run_factory(exp_name, task, *, cancel_token=None, spawn_id=None)
             yield None
 
     return _gen()
-from .test_full_tool_runner import _make_ctx, _make_tc, _make_topology
 
 
 class RecordingProvider:
@@ -548,7 +548,9 @@ class TestAgentKernelHookWiring:
         )
 
         kernel = AgentKernel()
-        events = [event async for event in kernel.run_stream(kernel_runtime, "original")]
+        events = [
+            event async for event in kernel.run_stream(kernel_runtime, "original")
+        ]
 
         assert isinstance(events[-1], RunResultEvent)
         assert seen == [
@@ -818,7 +820,13 @@ class TestSpawnGuardWiring:
                 self.allow_spawn = allow_spawn
 
             def run_stream(
-                self, ctx, task, *, cancel_token=None, spawn_id=None, skill_resolver=None
+                self,
+                ctx,
+                task,
+                *,
+                cancel_token=None,
+                spawn_id=None,
+                skill_resolver=None,
             ):
                 received["spawn_id"] = spawn_id
                 received["allow_spawn"] = self.allow_spawn

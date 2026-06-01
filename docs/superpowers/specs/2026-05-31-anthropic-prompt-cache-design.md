@@ -352,4 +352,3 @@ uv run pytest \
 - 历史消息仍然保持 OpenAI-compatible 字符串形态。
 - Provider 发送前的 content block 改写不持久化。
 - checkpoint 里不会出现 `cache_control`。
-
