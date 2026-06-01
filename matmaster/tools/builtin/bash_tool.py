@@ -10,18 +10,10 @@ from __future__ import annotations
 
 import asyncio
 import re
-import shlex
 from typing import Any, ClassVar
 
-from pydantic import ValidationError
-
 from matmaster.tools.bash_runner import run_bash_command
-from matmaster.tools.figure_artifacts import (
-    build_figure_env,
-    collect_figures_from_session,
-)
 from matmaster.tools.tool_result import ToolResult
-from matmaster.types.figures import FigureUploadConfig
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext
 from matmaster.types.topology import ToolPlane
@@ -109,16 +101,8 @@ class BashTool(BuiltinTool):
             "**Turn economy:** each Bash call costs one turn. Combine related "
             "operations into a single command with `&&` or `;`, or write a "
             "self-contained script (heredoc or file) for multi-step workflows "
-            "instead of issuing many small sequential calls. "
-            "If a Bash command generates figures for the final answer, save them under "
-            "`$ARTIFACT_DIR` and write `$MANIFEST_PATH` as JSON like "
-            '`{"figures":[{"figure_id":"...","path":"relative/path.png","caption":"..."}]}`. '
-            "`path` must be relative to `$ARTIFACT_DIR`; supported formats are png, jpg, "
-            "jpeg, and webp; files not listed in the manifest are ignored."
+            "instead of issuing many small sequential calls."
         )
-
-    def _execute(self, arguments: dict[str, Any]) -> str | ToolResult:
-        return self._execute_with_figure_support(arguments)
 
     async def execute_with_context(
         self,
@@ -126,45 +110,13 @@ class BashTool(BuiltinTool):
         exec_ctx: ToolExecutionContext | None,
     ) -> str | ToolResult:
         try:
-            figure_cfg: FigureUploadConfig | None = None
-            tool_call_id: str | None = None
-            if exec_ctx is not None:
-                tool_call_id = exec_ctx.tool_call_id
-                if exec_ctx.runner_state is not None:
-                    raw_figure_cfg = exec_ctx.runner_state.get("figure_upload_config")
-                    if isinstance(raw_figure_cfg, FigureUploadConfig):
-                        figure_cfg = raw_figure_cfg
-                    elif raw_figure_cfg is not None:
-                        try:
-                            figure_cfg = FigureUploadConfig.model_validate(
-                                raw_figure_cfg
-                            )
-                        except ValidationError as exc:
-                            self.logger.warning(
-                                "Ignoring invalid figure_upload_config for %s: %s",
-                                self.name,
-                                exc,
-                            )
-                            figure_cfg = None
-
-            return await asyncio.to_thread(
-                self._execute_with_figure_support,
-                arguments,
-                figure_cfg,
-                tool_call_id,
-            )
+            return await asyncio.to_thread(self._execute, arguments)
         except Exception as e:
             self.logger.error("Tool %s failed: %s", self.name, e, exc_info=True)
             return f"Error: {e}"
 
-    def _execute_with_figure_support(
-        self,
-        arguments: dict[str, Any],
-        figure_cfg: FigureUploadConfig | None = None,
-        tool_call_id: str | None = None,
-    ) -> str | ToolResult:
+    def _execute(self, arguments: dict[str, Any]) -> str | ToolResult:
         session = self._require_session()
-
         command: str = (arguments.get("command") or "").strip()
         if not command:
             return "Error: command is required and must not be empty."
@@ -177,68 +129,12 @@ class BashTool(BuiltinTool):
         )
         timeout_s = min(timeout_ms, cap) / 1000
 
-        extra_env: dict[str, str] | None = None
-        artifact_dir: str | None = None
-        manifest_path: str | None = None
-        if figure_cfg is not None and tool_call_id and self._workdir is not None:
-            artifact_dir, manifest_path = build_figure_env(
-                str(self._workdir),
-                tool_call_id,
-            )
-            session.exec_bash(f"mkdir -p {shlex.quote(artifact_dir)}")
-            extra_env = {
-                "ARTIFACT_DIR": artifact_dir,
-                "MANIFEST_PATH": manifest_path,
-            }
-
         run = run_bash_command(
             session=session,
             command=command,
             timeout_s=timeout_s,
             cancel_token=self._cancel_token_for_exec(),
-            extra_env=extra_env,
         )
-        obs = run.observation
-        exit_code = run.exit_code
-
-        if (
-            figure_cfg is not None
-            and tool_call_id is not None
-            and artifact_dir is not None
-            and manifest_path is not None
-        ):
-            collection = collect_figures_from_session(
-                session=session,
-                artifact_dir=artifact_dir,
-                manifest_path=manifest_path,
-                tool_call_id=tool_call_id,
-                upload_config=figure_cfg,
-            )
-            if collection.figures or collection.failure_ids or collection.warnings:
-                content = obs
-                if collection.failure_ids:
-                    content += (
-                        "\n[Figure pipeline: "
-                        f"{len(collection.failure_ids)} failed: "
-                        + ", ".join(collection.failure_ids)
-                        + "]"
-                    )
-                if collection.warnings:
-                    content += (
-                        "\n[Figure manifest ignored: "
-                        + "; ".join(collection.warnings)
-                        + "]"
-                    )
-                return ToolResult(
-                    status="error" if exit_code != 0 else "success",
-                    content=content,
-                    payload={
-                        "figures": [
-                            fig.model_dump(mode="json") for fig in collection.figures
-                        ]
-                    },
-                )
-
-        if exit_code != 0:
-            return ToolResult(status="error", content=obs)
-        return obs
+        if run.exit_code != 0:
+            return ToolResult(status="error", content=run.observation)
+        return run.observation
