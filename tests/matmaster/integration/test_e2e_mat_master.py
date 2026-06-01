@@ -313,7 +313,6 @@ class TestMatMasterRunAgentE2E:
                 'src.services.agent_run_service.get_chat_events_table'
             ) as mock_events_table_fn,
             patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
-            patch('src.services.agent_run_service.use_quota') as mock_use_quota,
         ):
             # Configure Bohrium mock
             mock_bohrium_result = MagicMock()
@@ -344,12 +343,6 @@ class TestMatMasterRunAgentE2E:
             mock_redis = MagicMock()
             mock_redis_fn.return_value = mock_redis
 
-            # use_quota is async
-            async def _mock_use_quota(uid, **_kwargs):
-                pass
-
-            mock_use_quota.side_effect = _mock_use_quota
-
             # Track SSE sends
             sse_payloads = []
 
@@ -357,7 +350,7 @@ class TestMatMasterRunAgentE2E:
                 sse_payloads.append(payload)
 
             # Execute
-            asyncio.run(
+            result = asyncio.run(
                 svc.run_agent(
                     session_id='sess-1',
                     user_prompt='test prompt',
@@ -369,17 +362,10 @@ class TestMatMasterRunAgentE2E:
                 )
             )
 
-            # Verify: pipeline completed successfully -- use_quota called (success path)
-            # use_quota is the strongest signal that kernel.run() returned a
-            # non-cancelled RunResultEvent and post-processing ran.
-            assert mock_use_quota.called, 'use_quota should be called on success'
-
-            # Verify: SSE events were sent (send_cb was called).
-            # In direct mode, streaming thought events (stream_state="start") are pushed.
-            # Non-streaming thoughts are filtered. At minimum, the pipeline ran end-to-end.
-            # Note: PersistenceHandler skips streaming thoughts (stream_state in start/streaming/end)
-            # so add_event may not be called for this minimal mock. That's correct behavior.
-            # The key E2E validation is: kernel ran -> finish -> use_quota called.
+            # Verify: pipeline completed successfully -- run_agent returns success.
+            # 计价化后扣费在 tools-server 侧完成；run_agent 成功（结果首元素为 True）即
+            # kernel.run() 返回非 cancelled 的 RunResultEvent 且后处理完成的最强信号。
+            assert result[0] is True, 'run_agent should succeed on success path'
 
     @patch('matmaster.config.loader.load_llm_config')
     @patch('matmaster.providers.llm_factory.build_provider_bundle')
@@ -438,7 +424,6 @@ class TestMatMasterRunAgentE2E:
                 'src.services.agent_run_service.get_chat_events_table'
             ) as mock_events_table_fn,
             patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
-            patch('src.services.agent_run_service.use_quota') as mock_use_quota,
         ):
             mock_bohrium_result = MagicMock()
             mock_bohrium_result.ssh_attached = False
@@ -465,11 +450,6 @@ class TestMatMasterRunAgentE2E:
 
             mock_redis = MagicMock()
             mock_redis_fn.return_value = mock_redis
-
-            async def _mock_use_quota(uid, **_kwargs):
-                pass
-
-            mock_use_quota.side_effect = _mock_use_quota
 
             asyncio.run(
                 svc.run_agent(
@@ -534,7 +514,6 @@ class TestMatMasterRunAgentE2E:
                 side_effect=RuntimeError('events table unavailable'),
             ),
             patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
-            patch('src.services.agent_run_service.use_quota') as mock_use_quota,
         ):
             sse_payloads: list[dict[str, Any]] = []
 
@@ -556,7 +535,6 @@ class TestMatMasterRunAgentE2E:
         mock_fanout_cls.assert_not_called()
         mock_bohrium_cls.assert_not_called()
         mock_build_provider_bundle.assert_not_called()
-        mock_use_quota.assert_not_called()
         assert sse_payloads == []
         mock_redis_fn.return_value.delete_stop_requested.assert_called_once_with(
             'sess-events-table-error',
@@ -599,7 +577,6 @@ class TestMatMasterRunAgentE2E:
                 'src.services.agent_run_service.get_chat_events_table'
             ) as mock_events_table_fn,
             patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
-            patch('src.services.agent_run_service.use_quota') as mock_use_quota,
         ):
             mock_bohrium_result = MagicMock()
             mock_bohrium_result.ssh_attached = False
@@ -632,11 +609,6 @@ class TestMatMasterRunAgentE2E:
 
             mock_redis = MagicMock()
             mock_redis_fn.return_value = mock_redis
-
-            async def _mock_use_quota(uid, **_kwargs):
-                pass
-
-            mock_use_quota.side_effect = _mock_use_quota
 
             sse_payloads: list[dict[str, Any]] = []
             bohrium_seen_by_sse = threading.Event()
@@ -737,7 +709,6 @@ class TestMatMasterRunAgentE2E:
                 'src.services.agent_run_service.get_chat_events_table'
             ) as mock_events_table_fn,
             patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
-            patch('src.services.agent_run_service.use_quota') as mock_use_quota,
         ):
             mock_bohrium_svc = mock_bohrium_cls.return_value
             mock_bohrium_svc.load_credentials.return_value = ({}, None, 'org-1')
@@ -757,11 +728,6 @@ class TestMatMasterRunAgentE2E:
 
             mock_redis = MagicMock()
             mock_redis_fn.return_value = mock_redis
-
-            async def _mock_use_quota(uid, **_kwargs):
-                pass
-
-            mock_use_quota.side_effect = _mock_use_quota
 
             result = asyncio.run(
                 svc.run_agent(
@@ -826,7 +792,6 @@ class TestMatMasterRunAgentE2E:
                 'src.services.agent_run_service.get_chat_events_table'
             ) as mock_events_table_fn,
             patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
-            patch('src.services.agent_run_service.use_quota') as mock_use_quota,
             patch(
                 'src.services.agent_run_bohrium.UserService.fetch_bohrium_access_key_result',
                 return_value=failed_result,
@@ -843,11 +808,6 @@ class TestMatMasterRunAgentE2E:
 
             mock_redis = MagicMock()
             mock_redis_fn.return_value = mock_redis
-
-            async def _mock_use_quota(uid, **_kwargs):
-                pass
-
-            mock_use_quota.side_effect = _mock_use_quota
 
             sse_payloads: list[dict[str, Any]] = []
 
@@ -922,7 +882,6 @@ class TestMatMasterRunAgentE2E:
                 'src.services.agent_run_service.get_chat_events_table'
             ) as mock_events_table_fn,
             patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
-            patch('src.services.agent_run_service.use_quota') as mock_use_quota,
         ):
             mock_bohrium_svc = mock_bohrium_cls.return_value
             mock_bohrium_svc.load_credentials.return_value = ({}, None, 'org-1')
@@ -938,11 +897,6 @@ class TestMatMasterRunAgentE2E:
 
             mock_redis = MagicMock()
             mock_redis_fn.return_value = mock_redis
-
-            async def _mock_use_quota(uid, **_kwargs):
-                pass
-
-            mock_use_quota.side_effect = _mock_use_quota
 
             sse_payloads: list[dict[str, Any]] = []
 

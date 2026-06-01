@@ -33,7 +33,7 @@ from src.models.chat import (
 from src.services.agent_run_service import _get_agent_default_llm
 from src.services.events_service import ChatEventsService, get_events_service
 from src.services.image_input_service import ImageInputError, get_image_input_service
-from src.services.quota_service import check_model_quota, check_quota
+from src.services.quota_service import check_quota_status
 from src.services.session_directory_service import (
     SessionDirectoryError,
     normalize_session_directory_for_storage,
@@ -261,15 +261,17 @@ async def chat_stream(
             headers=SSE_HEADERS,
         )
 
-    # 发送消息前检查配额（与 MatMaster 一致：有 user_id 时检查，无剩余则 403）
+    # 发送消息前检查额度（计价化：金额额度 <= 0 则 403；模型级限制已并入金额额度）
     assert req is not None
     if user_id:
-        remaining = await check_quota(user_id)
+        quota_status = await check_quota_status(user_id)
+        remaining = quota_status.remaining
         logger.info(
-            "stream quota check: session_id=%s user_id=%s remaining=%s",
+            "stream quota check: session_id=%s user_id=%s remaining=%s reset_at=%s",
             sid,
             user_id,
             remaining,
+            quota_status.reset_at,
         )
         if remaining <= 0:
             # 403 时打出请求详情便于 UAT 排查
@@ -298,33 +300,13 @@ async def chat_stream(
                 safe_headers,
                 body_summary,
             )
+            reset_at = quota_status.reset_at
             raise ForbiddenErrorResponse(
-                msg="当日免费额度已用完。请填写问卷申请额度，审核通过后再试。",
-            )
-
-    # Model-level quota check (e.g. bedrock-claude-opus: 3/day)
-    model_route_key = (req.model or "").strip() if req else ""
-    if user_id and model_route_key:
-        try:
-            model_remaining = await check_model_quota(user_id, model_route_key)
-            logger.info(
-                "stream model_quota check: session_id=%s user_id=%s model=%s remaining=%s",
-                sid,
-                user_id,
-                model_route_key,
-                model_remaining,
-            )
-            if model_remaining == 0:
-                raise ForbiddenErrorResponse(
-                    msg="当前模型今日免费次数已用完，请切换其他模型或明天再试。",
-                )
-        except ForbiddenErrorResponse:
-            raise
-        except Exception as e:
-            logger.warning(
-                "stream model_quota check failed (allowing): session_id=%s error=%s",
-                sid,
-                e,
+                msg=(
+                    f"免费额度已用完，将于 {reset_at} 恢复。"
+                    if reset_at
+                    else "免费额度已用完，请稍后再试或填写问卷申请额度。"
+                ),
             )
 
     # 仅 Worker 队列模式：发送消息需 REDIS_URL，否则返回 503

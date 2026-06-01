@@ -49,8 +49,10 @@ def _mock_events_table():
     return t
 
 
-async def _check_quota_noop(user_id: str) -> int:
-    return 10
+async def _check_quota_noop(user_id: str):
+    from src.services.quota_service import QuotaStatus
+
+    return QuotaStatus(remaining=10.0, reset_at=None)
 
 
 def _decode_sse_payload(frame: str) -> dict:
@@ -85,7 +87,7 @@ def test_chat_stream_returns_503_when_redis_url_missing(tmp_path):
             'src.dao.chat_events_table.get_chat_events_table',
             return_value=mock_events,
         ),
-        patch('src.apis.chat_api.check_quota', side_effect=_check_quota_noop),
+        patch('src.apis.chat_api.check_quota_status', side_effect=_check_quota_noop),
     ]
 
     for p in patches:

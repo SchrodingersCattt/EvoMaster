@@ -54,7 +54,6 @@ from src.services.context_assembly_factory import build_context_assembler
 from src.services.context_turn_intent import resolve_turn_context_intent
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.image_input_service import get_image_input_service
-from src.services.quota_service import use_quota
 from src.services.response_figures_service import ResponseFiguresAccumulator
 from src.services.session_event_codec import decode_session_events
 from src.services.sessions_service import get_sessions_service
@@ -832,9 +831,8 @@ class AgentRunService:
                     )
                 )
                 if run_result_event.status == "completed":
-                    user_id = self._sessions_service.get_session_user_id(session_id)
-                    if user_id:
-                        await use_quota(user_id, model_key=model_override)
+                    # 扣费由 tools-server 侧按金额实时完成（billing usage 上报），
+                    # evo 不再做按次扣减。
                     return (True, _elapsed_ms(), usage_summary)
                 fail_reason = (
                     run_result_event.reason or run_result_event.status or "failed"

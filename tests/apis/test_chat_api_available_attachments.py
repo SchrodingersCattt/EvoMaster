@@ -16,7 +16,7 @@ async def test_chat_stream_sends_raw_user_text_to_stream_service(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(chat_api, "REDIS_URL", "redis://unit-test")
-    monkeypatch.setattr(chat_api, "check_quota", MagicMock())
+    monkeypatch.setattr(chat_api, "check_quota_status", MagicMock())
 
     request = MagicMock()
     request.url.path = "/api/v1/chat/sessions/sess-attachments/stream"
