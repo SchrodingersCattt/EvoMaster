@@ -38,7 +38,6 @@ from matmaster.types.events import (
     CancelledEvent,
     ErrorEvent,
     RunResultEvent,
-    SkillHitEvent,
     StreamClosedEvent,
     ToolResultEvent,
 )
@@ -211,10 +210,6 @@ class AgentRunService:
     def __init__(self, sessions_service=None):
         self._sessions_service = sessions_service or get_sessions_service()
         self._pg_manager = PlaygroundManager(_project_root)
-        # Hot cache: session_id -> frozenset of skill names already activated.
-        # The authoritative source is DB skill_hit events; this dict only
-        # avoids re-scanning the DB on every turn. Populated lazily on cache miss.
-        self._active_skills: dict[str, frozenset[str]] = {}
 
     def init_playground_sync(self) -> None:
         """Validate configs at startup -- delegates to PlaygroundManager."""
@@ -266,10 +261,6 @@ class AgentRunService:
         *,
         until_event_id: int | None = None,
     ) -> frozenset[str]:
-        cached = self._active_skills.get(session_id)
-        if cached is not None:
-            return cached
-
         raw_events: list[dict] = []
         if events_table is not None:
             try:
@@ -287,11 +278,9 @@ class AgentRunService:
         events = decode_session_events(raw_events)
         if until_event_id is not None:
             events = tuple(event for event in events if event.id <= until_event_id)
-        names = frozenset(
+        return frozenset(
             record.skill_name for record in scan_skill_hits(events) if record.skill_name
         )
-        self._active_skills[session_id] = names
-        return names
 
     async def run_agent(
         self,
@@ -593,11 +582,6 @@ class AgentRunService:
                 events_table,
             )
 
-            def _remember_skill_hit(skill_name: str) -> None:
-                if skill_name:
-                    current = self._active_skills.get(session_id, frozenset())
-                    self._active_skills[session_id] = frozenset((*current, skill_name))
-
             # -- Compose the Exp input from the prepared environment and
             # service-owned runtime request.
             agent_run_ctx = AgentRunContext(
@@ -638,9 +622,6 @@ class AgentRunService:
                         normalized = _normalize_public_source(event.source)
                         if event.source != normalized:
                             event = event.model_copy(update={"source": normalized})
-
-                    if isinstance(event, SkillHitEvent):
-                        _remember_skill_hit(event.skill_name)
 
                     if isinstance(event, RunResultEvent) and event.spawn_id is None:
                         await figure_coordinator.flush_if_dirty("final_flush")

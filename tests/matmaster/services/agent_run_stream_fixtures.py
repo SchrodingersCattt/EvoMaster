@@ -285,7 +285,6 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
             svc._sessions_service = MagicMock()
             svc._sessions_service.get_session_user_id.return_value = 'user-1'
             svc._pg_manager = pg_mgr
-            svc._active_skills = {}
             svc._test_fake_exp = fake_exp
             svc._test_environment = environment
             svc._test_session = mock_session

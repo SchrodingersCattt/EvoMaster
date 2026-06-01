@@ -13,8 +13,8 @@ from matmaster.types.run_metadata import RunMetadata
 from tests.matmaster.services.test_agent_run_stream import _patched_service
 
 
-def test_agent_run_service_initializes_active_skills_dict():
-    """AgentRunService must hold a session-keyed dict of active skill names."""
+def test_agent_run_service_does_not_initialize_active_skills_hot_cache():
+    """AgentRunService should not keep process-local active skill state."""
     from src.services.agent_run_service import AgentRunService
 
     svc = AgentRunService.__new__(AgentRunService)
@@ -23,8 +23,7 @@ def test_agent_run_service_initializes_active_skills_dict():
     # pattern used by _patched_service in tests/matmaster/services/test_agent_run_stream.py.
     AgentRunService.__init__(svc, sessions_service=MagicMock())
 
-    assert isinstance(svc._active_skills, dict)
-    assert svc._active_skills == {}
+    assert not hasattr(svc, "_active_skills")
 
 
 def _make_cancel_token():
@@ -61,13 +60,14 @@ class FakeRemoteSkillSession:
 
 
 @pytest.mark.asyncio
-async def test_run_agent_uses_hot_cache_when_present(monkeypatch):
-    """When the hot cache already has a set, no DB rescan is performed."""
+async def test_run_agent_rehydrates_active_skills_from_events(monkeypatch):
+    """Persisted skill_hit events are the source for the request snapshot."""
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
 
     async with _patched_service([run_result]) as (svc, _, __):
-        # Helper bypasses __init__, so the field must be set explicitly.
-        svc._active_skills = {"sess-1": frozenset({"pxrd"})}
+        svc._test_events_table.get_session_events.return_value = [
+            {"id": 1, "type": "skill_hit", "content": {"skill_name": "pxrd"}}
+        ]
 
         called = {"n": 0}
         original = svc._resolve_active_skill_names
@@ -92,18 +92,16 @@ async def test_run_agent_uses_hot_cache_when_present(monkeypatch):
     assert snapshot == frozenset({"pxrd"})
     assert isinstance(snapshot, frozenset)
     assert called["n"] == 1
-    svc._test_events_table.get_session_events.assert_not_called()
+    svc._test_events_table.get_session_events.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_run_agent_skill_hit_event_writes_back_to_hot_cache():
+async def test_run_agent_skill_hit_event_does_not_create_hot_cache_state():
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
 
     async with _patched_service(
         [SkillHitEvent(source="agent", skill_name="test-skill"), run_result]
     ) as (svc, _, __):
-        svc._active_skills = {}
-
         await svc.run_agent(
             session_id="sess-2",
             user_prompt="hi",
@@ -115,7 +113,8 @@ async def test_run_agent_skill_hit_event_writes_back_to_hot_cache():
         )
 
     assert "record_active_mcp_server" not in RunMetadata.model_fields
-    assert svc._active_skills["sess-2"] == frozenset({"test-skill"})
+    assert not hasattr(svc, "_active_skills")
+    assert svc._test_fake_exp.last_ctx.request.active_skills == frozenset()
 
 
 @pytest.mark.asyncio
@@ -127,8 +126,6 @@ async def test_run_agent_rehydrates_from_db_on_cache_miss(tmp_path, monkeypatch)
     cache_dir.mkdir()
 
     async with _patched_service([run_result]) as (svc, _, __):
-        svc._active_skills = {}
-
         # Force exp_config.skills to our tmp skill root.
         from matmaster.config.exp import ExpConfig, ExpSkillsConfig
 
@@ -177,7 +174,6 @@ async def test_run_agent_rehydrates_from_db_on_cache_miss(tmp_path, monkeypatch)
                 invocation_id="inv-rehydrate",
             )
 
-    assert svc._active_skills["sess-rehydrate"] == frozenset({"pxrd", "sg"})
     snapshot = svc._test_fake_exp.last_ctx.request.active_skills
     assert snapshot == frozenset({"pxrd", "sg"})
 
@@ -210,7 +206,6 @@ async def test_run_agent_rehydrates_remote_skill_from_session_root(
     skills_root.mkdir()
 
     async with _patched_service([run_result]) as (svc, _, __):
-        svc._active_skills = {}
         # ExecutionEnvironment is frozen; rebind the active session by rebuilding
         # the playground's base environment (prepare() reads pg._base_env).
         svc._test_playground._base_env = svc._test_environment.model_copy(
@@ -253,6 +248,5 @@ async def test_run_agent_rehydrates_remote_skill_from_session_root(
                 invocation_id="inv-remote-rehydrate",
             )
 
-    assert svc._active_skills["sess-remote-rehydrate"] == frozenset({"remote-skill"})
     snapshot = svc._test_fake_exp.last_ctx.request.active_skills
     assert snapshot == frozenset({"remote-skill"})

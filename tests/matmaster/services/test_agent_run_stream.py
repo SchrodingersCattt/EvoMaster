@@ -563,6 +563,39 @@ async def test_run_agent_user_turn_context_records_full_provider_facing_with_att
 
 
 @pytest.mark.asyncio
+async def test_run_agent_resolves_active_skills_from_events_without_hot_cache():
+    run_result = RunResultEvent(source="agent", status="completed", reason="natural")
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        svc._test_events_table.get_session_events.return_value = [
+            {
+                "id": 1,
+                "type": "skill_hit",
+                "source": "MatMaster",
+                "content": {"skill_name": "mlip"},
+            }
+        ]
+
+        ok, _elapsed, _usage = await svc.run_agent(
+            session_id="sess-1",
+            user_prompt="hello",
+            send_cb=AsyncMock(),
+            cancel_token=_make_cancel_token(),
+            mode="direct",
+            task_id="task-1",
+            invocation_id="inv-active-skills",
+        )
+
+    assert ok is True
+    assert not hasattr(svc, "_active_skills")
+    assert svc._test_fake_exp.last_ctx.request.active_skills == frozenset({"mlip"})
+    svc._test_events_table.get_session_events.assert_called_with(
+        "sess-1",
+        limit=ANY,
+    )
+
+
+@pytest.mark.asyncio
 async def test_run_agent_writes_continuation_when_instruction_hash_matches():
     from src.services.user_turn_context_service import hash_user_instructions
 
@@ -890,7 +923,6 @@ async def test_exception_emits_error_and_closed():
             svc = AgentRunService.__new__(AgentRunService)
             svc._sessions_service = MagicMock()
             svc._pg_manager = pg_mgr
-            svc._active_skills = {}
 
             result = await svc.run_agent(
                 session_id='s1',
