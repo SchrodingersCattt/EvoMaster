@@ -25,6 +25,7 @@ from matmaster.core.agent_compaction import (
 )
 from matmaster.core.agent_llm_stream import call_llm_streaming
 from matmaster.core.agent_tool_dispatch import (
+    InvalidToolUsageDelta,
     accumulate_usage,
     dispatch_tool_calls,
     validate_tool_call_ids,
@@ -73,6 +74,7 @@ logger = logging.getLogger(__name__)
 _TERMINAL_REASON_TO_STATUS: dict[str, str] = {
     "cancelled": "cancelled",
     "interrupted": "completed",
+    "internal_error": "failed",
     "invalid_finish": "failed",
     "natural": "completed",
     "max_turns": "completed",
@@ -366,8 +368,8 @@ class AgentKernel:
                         content=response.content,
                         stream_state="complete",
                         turn_index=turn_index,
-                        turn_usage=state.turn_usage,
-                        total_usage=state.total_usage,
+                        turn_usage=dict(state.turn_usage),
+                        total_usage=dict(state.total_usage),
                         usage_vendor=response.usage_vendor or None,
                         model=state.llm_model,
                         model_profile=state.llm_model_profile,
@@ -430,8 +432,8 @@ class AgentKernel:
                         source="agent",
                         state=assistant_msg.model_dump(mode="json"),
                         turn_index=turn_index,
-                        turn_usage=state.turn_usage,
-                        total_usage=state.total_usage,
+                        turn_usage=dict(state.turn_usage),
+                        total_usage=dict(state.total_usage),
                         finish_detail=assistant_finish_detail,
                         model=state.llm_model,
                         model_profile=state.llm_model_profile,
@@ -466,14 +468,19 @@ class AgentKernel:
                     )
                     return
 
-            async for item in dispatch_tool_calls(
-                tool_calls=response.tool_calls,
-                tool_runner=kernel_resources.tool_runner,
-                max_turns=kernel_spec.max_turns,
-                state=state,
-                cancel_token=cancel_token,
-            ):
-                yield item
+            try:
+                async for item in dispatch_tool_calls(
+                    tool_calls=response.tool_calls,
+                    tool_runner=kernel_resources.tool_runner,
+                    max_turns=kernel_spec.max_turns,
+                    state=state,
+                    cancel_token=cancel_token,
+                ):
+                    yield item
+            except InvalidToolUsageDelta:
+                logger.exception("malformed tool usage delta; ending run as failed")
+                yield self._terminal(state, "internal_error")
+                return
 
         yield self._terminal(state, "max_turns")
 
