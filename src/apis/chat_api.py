@@ -265,7 +265,7 @@ async def chat_stream(
     assert req is not None
     if user_id:
         quota_status = await check_quota_status(user_id)
-        remaining = quota_status.remaining
+        remaining = quota_status.remaining_yuan
         logger.info(
             "stream quota check: session_id=%s user_id=%s remaining=%s reset_at=%s",
             sid,
@@ -273,7 +273,7 @@ async def chat_stream(
             remaining,
             quota_status.reset_at,
         )
-        if remaining <= 0:
+        if quota_status.is_exhausted:
             # 403 时打出请求详情便于 UAT 排查
             req_headers = dict(request.headers) if request else {}
             safe_headers = {}
@@ -300,12 +300,9 @@ async def chat_stream(
                 safe_headers,
                 body_summary,
             )
-            reset_at = quota_status.reset_at
             raise ForbiddenErrorResponse(
-                msg=(
-                    f"免费额度已用完，将于 {reset_at} 恢复。"
-                    if reset_at
-                    else "免费额度已用完，请稍后再试或填写问卷申请额度。"
+                msg=quota_status.exhausted_message(
+                    "免费额度已用完，请稍后再试或填写问卷申请额度。"
                 ),
             )
 

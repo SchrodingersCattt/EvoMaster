@@ -28,12 +28,27 @@ logger.setLevel(logging.INFO)
 class QuotaStatus:
     """发送前配额状态。
 
-    remaining: 剩余金额额度（元）。
+    remaining_yuan: 剩余金额额度（元）。
     reset_at: 下次额度刷新日期（ISO，如 ``2026-06-09``），无则 None。
     """
 
-    remaining: float
+    remaining_yuan: float
     reset_at: str | None = None
+
+    @property
+    def is_exhausted(self) -> bool:
+        """额度是否耗尽（<= 0 拦截发送）。"""
+        return self.remaining_yuan <= 0
+
+    def exhausted_message(self, fallback: str) -> str:
+        """额度耗尽时的用户提示文案。
+
+        有刷新日期则带出恢复时间；否则用调用方给的兜底措辞
+        （网页端引导填问卷、飞书端引导网页申请等差异在此参数化）。
+        """
+        if self.reset_at:
+            return f"免费额度已用完，将于 {self.reset_at} 恢复。"
+        return fallback
 
 
 def _coerce_number(value: Any) -> float | None:
@@ -70,4 +85,4 @@ async def check_quota_status(user_id: str) -> QuotaStatus:
                 remaining,
                 reset_at,
             )
-            return QuotaStatus(remaining=remaining, reset_at=reset_at)
+            return QuotaStatus(remaining_yuan=remaining, reset_at=reset_at)

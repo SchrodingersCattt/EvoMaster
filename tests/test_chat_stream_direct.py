@@ -52,7 +52,7 @@ def _mock_events_table():
 async def _check_quota_noop(user_id: str):
     from src.services.quota_service import QuotaStatus
 
-    return QuotaStatus(remaining=10.0, reset_at=None)
+    return QuotaStatus(remaining_yuan=10.0, reset_at=None)
 
 
 def _decode_sse_payload(frame: str) -> dict:

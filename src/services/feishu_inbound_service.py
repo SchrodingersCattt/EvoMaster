@@ -137,14 +137,11 @@ async def _run_agent_and_reply_feishu(
     )
     try:
         quota_status = await check_quota_status(user_id)
-        if quota_status.remaining <= 0:
-            reset_at = quota_status.reset_at
+        if quota_status.is_exhausted:
             reply_text_message(
                 message_id,
-                (
-                    f"免费额度已用完，将于 {reset_at} 恢复。"
-                    if reset_at
-                    else "免费额度已用完，请稍后再试或通过网页申请额度。"
+                quota_status.exhausted_message(
+                    "免费额度已用完，请稍后再试或通过网页申请额度。"
                 ),
                 tenant_token=tenant_token,
             )
