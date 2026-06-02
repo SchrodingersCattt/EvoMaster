@@ -382,3 +382,117 @@ questions:
     criterion: Token usage within budget.
     axis: efficiency
     verify: token_budget
+- id: IG_lammps_eap_deepmd_preflight_001_20260602
+  capability: input_generation
+  domain: agnostic
+  intent: Generate corrected LAMMPS DeePMD input for EAP high-temperature MD, testing explicit element mapping and verified run command instead of a bare pair_coeff.
+  human_prompt_seed: |
+    工作区中有 `eap_model_notes.txt`，记录了 EAP（乙二胺高氯酸盐）232 原子 DeePMD 高温 MD 的体系和模型信息。请生成 LAMMPS 输入文件，不需要真实运行。
+
+    要求：
+    - 2500 K NVT，100 ps，时间步 0.1 fs；
+    - DeePMD 模型文件是 `iter23_0.pb`；
+    - data 文件的原子类型顺序是 H C N O Cl；
+    - 输出 `in.eap_deepmd` 和 `run.sh`。
+  tags:
+  - eng_lammps
+  - code_mlip
+  data_files:
+  - key: eap_model_notes
+    path: data/IG_lammps_eap_deepmd_preflight_001_20260602/eap_model_notes.txt
+    oss_url: ''
+    description: EAP DeePMD model note with full periodic-table type_map and data-file atom-type order.
+  reference_answers:
+  - key: input_file
+    value: in.eap_deepmd
+  - key: run_script
+    value: run.sh
+  - key: pair_coeff_elements
+    value:
+      filename: in.eap_deepmd
+      pattern: (?i)pair_coeff\s+\*\s+\*\s+iter23_0\.pb\s+H\s+C\s+N\s+O\s+Cl
+  - key: deepmd_pair_style
+    value:
+      filename: in.eap_deepmd
+      pattern: (?i)pair_style\s+deepmd\s+iter23_0\.pb
+  - key: nvt_temperature
+    value:
+      filename: in.eap_deepmd
+      tokens:
+      - nvt
+      - '2500'
+      flags: i
+  - key: timestep_01fs
+    value:
+      filename: in.eap_deepmd
+      pattern: (?i)timestep\s+(0\.0001|0\.1)
+  - key: run_100ps
+    value:
+      filename: in.eap_deepmd
+      pattern: (?i)run\s+1000000\b
+  - key: run_script_not_guess_only
+    value:
+      filename: run.sh
+      tokens:
+      - lmp
+      - in.eap_deepmd
+      flags: i
+  - key: turn_budget
+    value:
+      max: 12
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: input_file
+    criterion: Agent writes `in.eap_deepmd` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: run_script
+    criterion: Agent writes `run.sh` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: pair_coeff_elements
+    criterion: '[Must] pair_coeff explicitly lists the data-file atom-type elements after the DeePMD model: H C N O Cl.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 3.0
+  - id: deepmd_pair_style
+    criterion: Script uses pair_style deepmd with `iter23_0.pb`.
+    axis: correctness
+    verify: text_file_regex
+  - id: nvt_temperature
+    criterion: Script sets an NVT thermostat at 2500 K.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: timestep_01fs
+    criterion: Script uses a 0.1 fs timestep, expressed consistently with the chosen LAMMPS units.
+    axis: correctness
+    verify: text_file_regex
+  - id: run_100ps
+    criterion: For metal-style ps units with 0.0001 ps timestep, script runs 1,000,000 steps for 100 ps, or otherwise gives an equivalent correct conversion.
+    axis: correctness
+    verify: text_file_regex
+  - id: typemap_reasoning
+    criterion: Agent recognizes from the provided notes that the data-file atom-type order H C N O Cl must be passed explicitly after the DeePMD model, rather than relying on the full periodic-table model type_map default.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: run_command_verified
+    criterion: Agent either uses a locally verified LAMMPS command or clearly marks the run command as something to verify before submission; it does not invent Bohrium image details as facts.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget

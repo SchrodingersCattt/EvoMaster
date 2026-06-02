@@ -1,0 +1,34 @@
+{
+  "task": "Ni irradiation defects: perfect Ni, He4V4 helium bubble, and V6 void",
+  "poscar_species": {
+    "perfect_Ni": ["Ni"],
+    "he4v4": ["Ni", "He"],
+    "v6": ["Ni"]
+  },
+  "available_potcars": [
+    {
+      "element": "Ni",
+      "title": "PAW_PBE Ni 02Aug2007",
+      "lexch": "PE",
+      "zval": 10,
+      "enmax_eV": 269.9,
+      "path": "POT_GGA_PAW_PBE/Ni/POTCAR"
+    },
+    {
+      "element": "H",
+      "title": "PAW_PBE H 15Jun2001",
+      "lexch": "PE",
+      "zval": 1,
+      "enmax_eV": 250.0,
+      "path": "POT_GGA_PAW_PBE/H/POTCAR"
+    },
+    {
+      "element": "Ne",
+      "title": "PAW_PBE Ne 08Apr2002",
+      "lexch": "PE",
+      "zval": 8,
+      "enmax_eV": 350.0,
+      "path": "POT_GGA_PAW_PBE/Ne/POTCAR"
+    }
+  ]
+}

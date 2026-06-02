@@ -1,0 +1,35 @@
+{
+  "target": "DFT-QHA thermal expansion workflow using VASP + PBEsol",
+  "temperature_range_K": [0, 450],
+  "volume_grid_percent": [-2.0, -1.5, -1.0, -0.5, 0.0, 0.5, 1.0, 1.5, 2.0],
+  "systems": [
+    {
+      "name": "Pr2(MoO4)3",
+      "primitive_atoms": 34,
+      "elements": ["Pr", "Mo", "O"],
+      "structure_note": "rare-earth molybdate"
+    },
+    {
+      "name": "Ca3W2O9",
+      "primitive_atoms": 56,
+      "elements": ["Ca", "W", "O"],
+      "structure_note": "tungstate oxide"
+    },
+    {
+      "name": "NaZr3Nb(PO4)6",
+      "primitive_atoms": 105,
+      "elements": ["Na", "Zr", "Nb", "P", "O"],
+      "supercell": [2, 2, 1]
+    },
+    {
+      "name": "NaZr3Ta(PO4)6",
+      "primitive_atoms": 105,
+      "elements": ["Na", "Zr", "Ta", "P", "O"],
+      "supercell": [2, 2, 1]
+    }
+  ],
+  "vasp_notes": {
+    "functional": "PBEsol",
+    "incar_functional_tag": "GGA = PS"
+  }
+}
