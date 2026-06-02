@@ -256,3 +256,156 @@ def test_collect_upload_failure_classified():
     )
     assert result.failure_reason == "upload_failed"
     assert result.figure_id is not None  # id is computed before upload
+
+
+# --------------------------------------------------------------------------- #
+# prepare_declared_figure / publish_prepared_figure (publish-only split)
+# --------------------------------------------------------------------------- #
+
+from matmaster.tools.figure_artifacts import (
+    FigurePrepareResult,
+    FigurePublishResult,
+    PreparedFigure,
+    prepare_declared_figure,
+    publish_prepared_figure,
+)
+
+
+def test_prepare_success_returns_prepared_and_does_not_upload():
+    session = make_fig_session()
+    result = prepare_declared_figure(
+        session=session,
+        workdir="/share",
+        output_path="/share/band.png",
+        caption="Band structure",
+    )
+    assert isinstance(result, FigurePrepareResult)
+    assert result.failure_reason is None
+    prepared = result.prepared
+    assert isinstance(prepared, PreparedFigure)
+    assert prepared.figure_id.startswith("band-")
+    assert prepared.image_bytes == _PNG
+    assert prepared.resolved_path == "/share/band.png"
+    assert prepared.output_path == "/share/band.png"
+    assert prepared.caption == "Band structure"
+    # prepare never uploads: it takes no upload_config and touches no uploader.
+    session.download.assert_called_once()
+
+
+def test_prepare_outside_workspace():
+    result = prepare_declared_figure(
+        session=make_fig_session(),
+        workdir="/share",
+        output_path="/etc/passwd.png",
+        caption="c",
+    )
+    assert result.prepared is None
+    assert result.failure_reason == "outside_workspace"
+    assert result.guidance
+
+
+def test_prepare_missing_file():
+    result = prepare_declared_figure(
+        session=make_fig_session(exists=False),
+        workdir="/share",
+        output_path="/share/band.png",
+        caption="c",
+    )
+    assert result.failure_reason == "file_not_found"
+
+
+def test_prepare_not_a_file():
+    result = prepare_declared_figure(
+        session=make_fig_session(is_file=False),
+        workdir="/share",
+        output_path="/share/plots",
+        caption="c",
+    )
+    assert result.failure_reason == "not_a_file"
+
+
+def test_prepare_header_mismatch():
+    result = prepare_declared_figure(
+        session=make_fig_session(payload=b"not an image"),
+        workdir="/share",
+        output_path="/share/band.png",
+        caption="c",
+    )
+    assert result.failure_reason == "image_header_mismatch"
+
+
+def test_prepare_download_failure():
+    session = make_fig_session()
+    session.download.side_effect = RuntimeError("transport down")
+    result = prepare_declared_figure(
+        session=session,
+        workdir="/share",
+        output_path="/share/band.png",
+        caption="c",
+    )
+    assert result.failure_reason == "download_failed"
+
+
+def test_publish_success_builds_descriptor():
+    prepared = PreparedFigure(
+        figure_id="band-abc123",
+        image_bytes=_PNG,
+        resolved_path="/share/band.png",
+        output_path="/share/band.png",
+        caption="Band structure",
+    )
+    result = publish_prepared_figure(
+        prepared=prepared,
+        upload_config=make_upload_config("https://assets.test/u/band.png"),
+        tool_call_id="call-1",
+    )
+    assert isinstance(result, FigurePublishResult)
+    assert result.failure_reason is None
+    fig = result.figure
+    assert fig is not None
+    assert fig.figure_id == "band-abc123"
+    assert fig.asset_url == "https://assets.test/u/band.png"
+    assert fig.caption == "Band structure"
+    assert fig.source_tool_call_id == "call-1"
+    assert fig.remote_path == "/share/band.png"
+
+
+def test_publish_upload_failure_classified():
+    def boom(payload, key):
+        raise RuntimeError("upload down")
+
+    cfg = FigureUploadConfig(
+        session_id="s", task_id="t", asset_key_prefix="figs", upload_bytes=boom
+    )
+    prepared = PreparedFigure(
+        figure_id="band-abc123",
+        image_bytes=_PNG,
+        resolved_path="/share/band.png",
+        output_path="/share/band.png",
+        caption="c",
+    )
+    result = publish_prepared_figure(
+        prepared=prepared, upload_config=cfg, tool_call_id="call-1"
+    )
+    assert result.figure is None
+    assert result.failure_reason == "upload_failed"
+    assert result.guidance
+
+
+def test_prepare_then_publish_roundtrip():
+    session = make_fig_session()
+    prep = prepare_declared_figure(
+        session=session,
+        workdir="/share",
+        output_path="/share/results/xrd.png",
+        caption="XRD",
+    )
+    assert prep.prepared is not None
+    pub = publish_prepared_figure(
+        prepared=prep.prepared,
+        upload_config=make_upload_config("https://assets.test/u/xrd.png"),
+        tool_call_id="call-9",
+    )
+    assert pub.figure is not None
+    assert pub.figure.figure_id == prep.prepared.figure_id
+    assert pub.figure.remote_path == "/share/results/xrd.png"

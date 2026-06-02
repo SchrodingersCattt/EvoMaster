@@ -233,17 +233,41 @@ class DeclaredFigureResult:
     figure_id: str | None = None
 
 
+@dataclass(slots=True)
+class PreparedFigure:
+    """A validated, content-addressed figure ready to upload (no upload yet)."""
+
+    figure_id: str
+    image_bytes: bytes
+    resolved_path: str
+    output_path: str
+    caption: str
+
+
+@dataclass(slots=True)
+class FigurePrepareResult:
+    prepared: PreparedFigure | None
+    failure_reason: str | None
+    guidance: str | None = None
+
+
+@dataclass(slots=True)
+class FigurePublishResult:
+    figure: FigureDescriptor | None
+    failure_reason: str | None
+    guidance: str | None = None
+
+
 def _declared_failure_guidance(reason: str, output_path: str) -> str:
     table = {
         "outside_workspace": (
             f"Expected image inside the workspace: {output_path}\n"
-            "Provide an output_path that is absolute within the workspace "
-            "or relative to the session workspace root."
+            "Provide an output_path that is absolute and inside the workspace."
         ),
         "file_not_found": (
             f"Expected image: {output_path}\n"
-            "The command did not create this file. Re-run PlotFigure with the "
-            "correct output_path, or publish an existing image by omitting command."
+            "No file exists at this path. Generate the image first (e.g. with "
+            "Bash), then attach it, or fix output_path to point at an existing image."
         ),
         "not_a_file": (
             f"Path is not a regular file: {output_path}\n"
@@ -264,11 +288,11 @@ def _declared_failure_guidance(reason: str, output_path: str) -> str:
         ),
         "download_failed": (
             f"Could not read the image from the session: {output_path}\n"
-            "Retry PlotFigure; if it persists the session storage may be unavailable."
+            "Retry AttachFigure; if it persists the session storage may be unavailable."
         ),
         "upload_failed": (
             f"Image was read but upload failed: {output_path}\n"
-            "Retry PlotFigure; if it persists the asset backend may be unavailable."
+            "Retry AttachFigure; if it persists the asset backend may be unavailable."
         ),
     }
     return table.get(reason, f"Figure attachment failed for {output_path}.")
@@ -356,4 +380,99 @@ def collect_declared_figure(
         failure_reason=None,
         resolved_path=resolved,
         figure_id=figure_id,
+    )
+
+
+def prepare_declared_figure(
+    *,
+    session: Session,
+    workdir: str,
+    output_path: str,
+    caption: str,
+) -> FigurePrepareResult:
+    """Resolve -> exists -> is_file -> download -> validate -> figure_id. No upload.
+
+    Returns a FigurePrepareResult carrying a PreparedFigure (validated bytes plus
+    the content-addressed figure_id) on success, or a stable failure_reason plus
+    actionable guidance. Never raises for expected failures, and never uploads.
+    """
+
+    def _fail(reason: str) -> FigurePrepareResult:
+        return FigurePrepareResult(
+            prepared=None,
+            failure_reason=reason,
+            guidance=_declared_failure_guidance(reason, output_path),
+        )
+
+    resolved = resolve_workspace_output_path(raw_path=output_path, workdir=workdir)
+    if resolved is None:
+        return _fail("outside_workspace")
+    if not session.path_exists(resolved):
+        return _fail("file_not_found")
+    if not session.is_file(resolved):
+        return _fail("not_a_file")
+
+    try:
+        payload = _download_with_retry(session=session, path=resolved)
+    except Exception:
+        return _fail("download_failed")
+
+    try:
+        _validate_image_bytes(payload=payload, path=resolved)
+    except FigureValidationError as exc:
+        return _fail(exc.reason)
+
+    figure_id = build_figure_id(output_path=output_path, image_bytes=payload)
+    return FigurePrepareResult(
+        prepared=PreparedFigure(
+            figure_id=figure_id,
+            image_bytes=payload,
+            resolved_path=resolved,
+            output_path=output_path,
+            caption=caption,
+        ),
+        failure_reason=None,
+    )
+
+
+def publish_prepared_figure(
+    *,
+    prepared: PreparedFigure,
+    upload_config: FigureUploadConfig,
+    tool_call_id: str,
+) -> FigurePublishResult:
+    """Upload an already-prepared figure (content-addressed key) -> descriptor.
+
+    The asset key and figure_id are content-addressed, so a retried or partial
+    batch re-upload is idempotent.
+    """
+    try:
+        asset_key = _build_asset_key(
+            upload_config=upload_config,
+            tool_call_id=tool_call_id,
+            figure_id=prepared.figure_id,
+            source_path=prepared.resolved_path,
+            payload=prepared.image_bytes,
+        )
+        asset_url = _upload_with_retry(
+            upload_bytes=upload_config.upload_bytes,
+            payload=prepared.image_bytes,
+            asset_key=asset_key,
+        )
+    except Exception:
+        return FigurePublishResult(
+            figure=None,
+            failure_reason="upload_failed",
+            guidance=_declared_failure_guidance("upload_failed", prepared.output_path),
+        )
+
+    return FigurePublishResult(
+        figure=FigureDescriptor(
+            figure_id=prepared.figure_id,
+            asset_url=asset_url,
+            caption=prepared.caption,
+            source_tool_call_id=tool_call_id,
+            remote_path=prepared.resolved_path,
+        ),
+        failure_reason=None,
     )
