@@ -1,0 +1,10 @@
+#include "forcefield.itp"
+#include "Pb_PNA_merged.itp"
+
+[ system ]
+Pb surface grafted with naphthoic-acid ligands
+
+[ molecules ]
+; Compound   nmols
+Pb_NA        2
+PB           1
