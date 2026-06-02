@@ -168,9 +168,8 @@ def _carry_top_level_fields(
     non-dict (tool_progress, stream_closed, unknown passthrough), which keeps
     its structured identifiers at the top level.
     """
-    if (
-        event_type in _STRUCTURAL_PASSTHROUGH_EVENT_TYPES
-        or not isinstance(content, dict)
+    if event_type in _STRUCTURAL_PASSTHROUGH_EVENT_TYPES or not isinstance(
+        content, dict
     ):
         for key, value in raw.items():
             if key in _TOP_LEVEL_DENYLIST:

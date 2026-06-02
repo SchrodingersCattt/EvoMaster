@@ -147,7 +147,9 @@ class FakeEventsTable:
         spawn_id: str | None,
     ) -> bool:
         self.calls.append(("has_user_turn_context", session_id, spawn_id))
-        return any(event.get("type") == "user_turn_context" for event in self.scope_events)
+        return any(
+            event.get("type") == "user_turn_context" for event in self.scope_events
+        )
 
 
 def test_row_to_event_includes_event_id() -> None:

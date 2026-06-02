@@ -22,13 +22,13 @@ from tests.matmaster.services.test_agent_run_stream import (
 
 @pytest.mark.asyncio
 async def test_run_agent_idempotent_skip_when_user_turn_context_already_exists():
-    from matmaster.types.messages import UserMessage
     from matmaster.context.ports import hash_user_instructions
     from matmaster.context.user_turn_context import (
         DEFAULT_TURN_TRANSFORM,
         USER_CONTEXT_RENDER_VERSION,
         USER_TURN_CONTEXT_SCHEMA_VERSION,
     )
+    from matmaster.types.messages import UserMessage
 
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
 
@@ -76,7 +76,9 @@ async def test_run_agent_idempotent_skip_when_user_turn_context_already_exists()
     assert utc_calls == []
     assert svc._test_fake_exp.last_task is not None
     assert svc._test_fake_exp.last_task == "first question"
-    assert svc._test_fake_exp.last_ctx.request.ports.user_turn_context_writer is not None
+    assert (
+        svc._test_fake_exp.last_ctx.request.ports.user_turn_context_writer is not None
+    )
 
 
 @pytest.mark.asyncio

@@ -21,7 +21,7 @@ from matmaster.types.messages import LLMResponse, StreamChunk
 from matmaster.types.runtime import AgentRuntime
 from matmaster.types.runtime_ports import AgentRunPorts, PlaygroundCompactionPort
 
-from .agent_kernel_test_helpers import make_kernel_runtime, make_kernel_turn
+from .agent_kernel_test_helpers import make_kernel_runtime
 
 
 class _Provider:

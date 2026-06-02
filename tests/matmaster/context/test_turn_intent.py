@@ -227,9 +227,7 @@ async def test_resolve_turn_intent_uses_separate_skill_hit_query() -> None:
                     ),
                 )
             if query.event_types == ("skill_hit",):
-                return (
-                    _event("skill_hit", {"skill_name": "older-skill"}, 1),
-                )
+                return (_event("skill_hit", {"skill_name": "older-skill"}, 1),)
             return ()
 
     port = SplitEventsPort()
