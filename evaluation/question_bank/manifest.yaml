@@ -73,7 +73,7 @@ banks:
 - path: input_generation/ig_agnostic_vasp.yaml
   capability: input_generation
   domain: agnostic
-  questions: 23
+  questions: 26
 - path: input_generation/ig_agnostic_abacus.yaml
   capability: input_generation
   domain: agnostic
@@ -85,7 +85,7 @@ banks:
 - path: input_generation/ig_agnostic_lammps.yaml
   capability: input_generation
   domain: agnostic
-  questions: 5
+  questions: 6
 - path: input_generation/ig_agnostic_cp2k.yaml
   capability: input_generation
   domain: agnostic

@@ -2297,6 +2297,305 @@ questions:
     axis: efficiency
     verify: token_budget
     criterion: Total token usage stays within benchmark ceiling.
+- id: IG_vasp_he_potcar_gate_001_20260602
+  capability: input_generation
+  domain: agnostic
+  intent: Generate practical VASP input templates for Ni irradiation-defect calculations, testing whether the agent blocks the He-containing case when He POTCAR is unavailable instead of substituting H or editing POTCARs.
+  human_prompt_seed: |
+    我想用 VASP 做 Ni 中辐照缺陷的电子结构计算：完美 Ni、一个 He4V4 氦泡模型、一个 V6 空洞模型。工作区中有 `potcar_inventory.json`，请根据这个 POTCAR 清单，在 `vasp_inputs/` 下为能准备的体系生成输入模板。
+
+    请把需要用户后续确认或补齐的信息统一写在 `vasp_inputs/README.md`。
+
+    不需要真实提交计算。
+  tags:
+  - eng_vasp
+  data_files:
+  - key: potcar_inventory
+    path: data/IG_vasp_he_potcar_gate_001_20260602/potcar_inventory.json
+    oss_url: ''
+    description: POTCAR inventory for Ni/He/V vacancy task. He is intentionally missing.
+  reference_answers:
+  - key: perfect_incar
+    value: vasp_inputs/perfect_Ni/INCAR
+  - key: v6_incar
+    value: vasp_inputs/v6/INCAR
+  - key: readme_artifact
+    value: vasp_inputs/README.md
+  - key: blocks_he_system
+    value:
+      filename: vasp_inputs/README.md
+      tokens:
+      - He
+      - POTCAR
+      flags: i
+  - key: no_h_proxy
+    value:
+      filename: vasp_inputs/README.md
+      pattern: (?is)\A(?:(?!(H\s+proxy|H\s+代理|substitute\s+H|use\s+H\s+for\s+He|NELECT.*He)).)*\Z
+  - key: potcar_order
+    value:
+      filename: vasp_inputs/README.md
+      tokens:
+      - Ni
+      - He
+      - species
+      flags: i
+  - key: turn_budget
+    value:
+      max: 12
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 15000
+  scoring_checklist:
+  - id: perfect_incar
+    criterion: Agent writes a practical INCAR template for the perfect Ni system under `vasp_inputs/perfect_Ni/`.
+    axis: correctness
+    verify: artifact_exists
+  - id: v6_incar
+    criterion: Agent writes a practical INCAR template for the V6 void system under `vasp_inputs/v6/`.
+    axis: correctness
+    verify: artifact_exists
+  - id: readme_artifact
+    criterion: Agent writes a short `vasp_inputs/README.md` only to document unavailable or manual prerequisites.
+    axis: correctness
+    verify: artifact_exists
+  - id: blocks_he_system
+    criterion: '[Must] The He4V4 system is treated as blocked because no He POTCAR exists in the provided inventory.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 3.0
+  - id: no_h_proxy
+    criterion: '[Must] Agent does not propose using H as a default proxy for He, does not hand-edit POTCARs, and does not use NELECT to pretend the He calculation is valid.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: potcar_order
+    criterion: Agent records the required POTCAR species order and notes it must match each POSCAR species order.
+    axis: correctness
+    verify: text_file_contains_all
+  - id: conservative_next_step
+    criterion: Agent proposes a conservative next step such as asking for a valid He POTCAR or changing the scientific target explicitly, rather than silently downgrading the calculation.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
+- id: IG_vasp_qha_pbesol_workflow_001_20260602
+  capability: input_generation
+  domain: agnostic
+  intent: Generate reusable VASP/PBEsol QHA input templates for four structures, testing method routing between DFPT and finite displacement plus DFPT parallel-parameter preflight.
+  human_prompt_seed: |
+    工作区中有 `qha_systems.json`，列出了 4 个晶体结构的原子数、元素和 QHA 体积点。请在 `qha_inputs/` 下生成 VASP + PBEsol 做 QHA 会用到的输入模板和命令脚本，不需要真实提交计算。
+
+    需要至少包含：
+    - `qha_inputs/dfpt/INCAR`
+    - `qha_inputs/finite_displacement/INCAR`
+    - `qha_inputs/phonopy_commands.sh`
+  tags:
+  - eng_vasp
+  data_files:
+  - key: qha_systems
+    path: data/IG_vasp_qha_pbesol_plan_001_20260602/qha_systems.json
+    oss_url: ''
+    description: Four-system QHA metadata and VASP/PBEsol notes.
+  reference_answers:
+  - key: dfpt_template
+    value: qha_inputs/dfpt/INCAR
+  - key: fd_template
+    value: qha_inputs/finite_displacement/INCAR
+  - key: phonopy_commands
+    value: qha_inputs/phonopy_commands.sh
+  - key: pbesol_dfpt
+    value:
+      filename: qha_inputs/dfpt/INCAR
+      tokens:
+      - GGA = PS
+      - IBRION = 8
+      flags: i
+  - key: dfpt_no_ncore_npar
+    value:
+      filename: qha_inputs/dfpt/INCAR
+      pattern: (?ims)\A(?!.*^\s*(NCORE|NPAR)\s*=).*
+  - key: fd_has_static_force
+    value:
+      filename: qha_inputs/finite_displacement/INCAR
+      tokens:
+      - GGA = PS
+      - NSW = 0
+      flags: i
+  - key: turn_budget
+    value:
+      max: 16
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 20000
+  scoring_checklist:
+  - id: dfpt_template
+    criterion: Agent writes `qha_inputs/dfpt/INCAR` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: fd_template
+    criterion: Agent writes `qha_inputs/finite_displacement/INCAR` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: phonopy_commands
+    criterion: Agent writes `qha_inputs/phonopy_commands.sh` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: pbesol_dfpt
+    criterion: '[Must] DFPT template uses VASP PBEsol via GGA = PS and sets IBRION = 8.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+  - id: dfpt_no_ncore_npar
+    criterion: '[Must] DFPT template does not set NCORE or NPAR, because DFPT/LEPSILON jobs can fail with incompatible parallel decomposition.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: fd_has_static_force
+    criterion: '[Must] FD template is a static force calculation using PBEsol and NSW = 0.'
+    axis: correctness
+    verify: text_file_contains_all
+  - id: method_routing
+    criterion: Agent routes Pr2(MoO4)3 and Ca3W2O9 to DFPT and NaZr3Nb/Ta(PO4)6 to finite displacement, or gives a clear size-based rationale for any deviation.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: smoke_before_batch
+    criterion: Agent plans an equilibrium-volume smoke test before generating/submitting all volume points.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
+- id: IG_vasp_fenc_orr_restart_001_20260602
+  capability: input_generation
+  domain: agnostic
+  intent: Generate stable VASP restart inputs for continuing FeN4 ORR DFT+U relaxations from existing directories, testing that the agent updates sensitive settings rather than reusing the previous INCAR unchanged.
+  human_prompt_seed: |
+    工作区中有 `fenc_restart_bundle.json`，记录了 FeN4/graphene ORR 中间体已有计算目录、上一版公共 INCAR 和可用的 CONTCAR 情况。请据此生成下一轮“稳定重跑”会用到的 VASP 输入文件，不需要真实提交计算。
+
+    请输出 `INCAR_restart`，并写一个 `restart_inputs/check_before_submit.sh`，用于在提交前检查 POTCAR、CONTCAR/OSZICAR 和 VASP 启动命令等基本条件。
+  tags:
+  - eng_vasp
+  data_files:
+  - key: restart_bundle
+    path: data/IG_vasp_fenc_orr_restart_001_20260602/fenc_restart_bundle.json
+    oss_url: ''
+    description: Existing FeN4 ORR VASP DFT+U directories, reusable CONTCAR availability, and submission environment notes.
+  reference_answers:
+  - key: incar_restart
+    value: INCAR_restart
+  - key: check_script
+    value: restart_inputs/check_before_submit.sh
+  - key: incar_small_potim
+    value:
+      filename: INCAR_restart
+      checks:
+      - key: POTIM
+        min: 0.01
+        max: 0.1
+  - key: incar_has_mixing
+    value:
+      filename: INCAR_restart
+      tokens:
+      - AMIX
+      - BMIX
+      - AMIX_MAG
+      flags: i
+  - key: incar_no_fast
+    value:
+      filename: INCAR_restart
+      pattern: (?ims)\A(?!.*^\s*ALGO\s*=\s*Fast\b).*
+  - key: preflight_potcar
+    value:
+      filename: restart_inputs/check_before_submit.sh
+      tokens:
+      - POTCAR
+      - CONTCAR
+      - OSZICAR
+      flags: i
+  - key: turn_budget
+    value:
+      max: 14
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 18000
+  scoring_checklist:
+  - id: incar_restart
+    criterion: Agent writes `INCAR_restart` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: check_script
+    criterion: Agent writes `restart_inputs/check_before_submit.sh` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: incar_small_potim
+    criterion: '[Must] Restart INCAR uses a conservative POTIM between 0.01 and 0.1 to avoid large ionic steps.'
+    axis: correctness
+    verify: text_file_numeric_range
+    weight: 2.0
+  - id: incar_has_mixing
+    criterion: '[Must] Restart INCAR includes charge and spin mixing controls for magnetic DFT+U slab systems.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+  - id: incar_no_fast
+    criterion: '[Must] Restart INCAR does not keep ALGO = Fast after the previous SCF explosions; it should use a more stable algorithm or omit Fast.'
+    axis: correctness
+    verify: text_file_regex
+  - id: restart_plan_contcar
+    criterion: Agent uses available CONTCAR files for restartable intermediates and does not restart every system from scratch.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: no_unchanged_resubmit
+    criterion: Agent explicitly avoids using the previous INCAR settings unchanged for the restart inputs.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: preflight_potcar
+    criterion: Check script includes POTCAR presence/species order, CONTCAR/OSZICAR sanity checks, and VASP launch-command checks.
+    axis: grounding
+    verify: text_file_contains_all
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget
 - id: IG_vasp_dftu_001_20260522
   capability: input_generation
   domain: agnostic
