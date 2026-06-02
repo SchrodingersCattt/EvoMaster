@@ -897,3 +897,133 @@ questions:
     criterion: Wall-clock time within budget.
     axis: efficiency
     verify: duration_budget
+- id: PWO_dpa_finetune_001_20260603
+  capability: workflow_orchestration
+  domain: agnostic
+  scope: platform
+  intent: End-to-end DPA3 fine-tuning on a user-provided DeePMD dataset, submitted
+    to Bohrium, reporting real train/validation loss. Agent must make the submission
+    self-contained (stage the pretrained DPA3 checkpoint AND the training data/config
+    into the submitted input_dir), use the correct fine-tune invocation (correct
+    head/model-branch, .pt checkpoint), wait for the remote job to finish, and report
+    the actual loss read from the run outputs. From a real trajectory where the first
+    job failed because the pretrained model was not staged into input_dir and a
+    related run reported placeholder/synthetic results instead of real ones.
+  human_prompt_seed: 工作区 `data/` 下是我的一份 DeePMD 格式训练数据集。帮我用 DPA3 预训练模型在这份数据上微调大约
+    3000 步，跑完把训练和测试（验证）的 loss 告诉我。
+  tags:
+  - code_mlip
+  source_session: a5132ded290340cebe77a378cf4a2760
+  data_files:
+  - key: train_type_map
+    path: data/PWO_dpa_finetune_001/data/data_0/type_map.raw
+    oss_url: ''
+    description: DeePMD training system data_0 (O/H, 60 frames) type_map.
+  - key: train_type
+    path: data/PWO_dpa_finetune_001/data/data_0/type.raw
+    oss_url: ''
+    description: data_0 per-atom type indices (8 O + 16 H = 24 atoms).
+  - key: train_coord
+    path: data/PWO_dpa_finetune_001/data/data_0/set.000/coord.npy
+    oss_url: ''
+    description: data_0 coordinates (60, 72) float64.
+  - key: train_box
+    path: data/PWO_dpa_finetune_001/data/data_0/set.000/box.npy
+    oss_url: ''
+    description: data_0 cell (60, 9) float64.
+  - key: train_energy
+    path: data/PWO_dpa_finetune_001/data/data_0/set.000/energy.npy
+    oss_url: ''
+    description: data_0 energies (60,) float64.
+  - key: train_force
+    path: data/PWO_dpa_finetune_001/data/data_0/set.000/force.npy
+    oss_url: ''
+    description: data_0 forces (60, 72) float64.
+  - key: valid_type_map
+    path: data/PWO_dpa_finetune_001/data/data_1/type_map.raw
+    oss_url: ''
+    description: DeePMD validation system data_1 (O/H, 16 frames) type_map.
+  - key: valid_type
+    path: data/PWO_dpa_finetune_001/data/data_1/type.raw
+    oss_url: ''
+    description: data_1 per-atom type indices.
+  - key: valid_coord
+    path: data/PWO_dpa_finetune_001/data/data_1/set.000/coord.npy
+    oss_url: ''
+    description: data_1 coordinates (16, 72) float64.
+  - key: valid_box
+    path: data/PWO_dpa_finetune_001/data/data_1/set.000/box.npy
+    oss_url: ''
+    description: data_1 cell (16, 9) float64.
+  - key: valid_energy
+    path: data/PWO_dpa_finetune_001/data/data_1/set.000/energy.npy
+    oss_url: ''
+    description: data_1 energies (16,) float64.
+  - key: valid_force
+    path: data/PWO_dpa_finetune_001/data/data_1/set.000/force.npy
+    oss_url: ''
+    description: data_1 forces (16, 72) float64.
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 30
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 60000
+  scoring_checklist:
+  - id: submission_self_contained
+    criterion: '[Platform] The Bohrium submission is self-contained: the pretrained
+      DPA3 checkpoint AND the training data + training config are all placed inside
+      the submitted input_dir, so the remote job does not fail with a missing
+      model/data/config file. Staging only the config while leaving the pretrained
+      model out of input_dir (the failure seen in the real session) is a FAIL.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.5
+  - id: uses_finetune_invocation
+    criterion: '[Platform] The run actually fine-tunes from the DPA3 pretrained model
+      (e.g. `dp --pt train ... --finetune <model.pt>` with a valid head/model-branch),
+      using the .pt checkpoint format. It must NOT silently train from scratch and
+      must not fail on a wrong/miscased head name.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: job_completes_on_bohrium
+    criterion: '[Platform] The fine-tuning job runs on Bohrium (not locally) and
+      reaches successful completion, producing training outputs (lcurve.out and a
+      fine-tuned model checkpoint). Training length is roughly the requested ~3000
+      steps.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: reports_real_loss
+    criterion: '[Must] Agent reports the actual training and validation/test loss
+      obtained from the completed run (read from lcurve.out or `dp test`), not
+      fabricated, guessed, or placeholder numbers. If the job did not actually
+      finish, the agent must say so and report the blocker rather than presenting
+      made-up loss values as real.'
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.5
+  - id: no_fabricated_fallback
+    criterion: Agent does NOT fabricate data or results to fill a gap — e.g. it does
+      not invent loss numbers, nor substitute synthetic/placeholder training data
+      for the provided dataset and report the outcome as if it were the requested run.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 1.5
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
