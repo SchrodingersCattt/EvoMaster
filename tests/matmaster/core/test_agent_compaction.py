@@ -22,9 +22,11 @@ class Provider:
         content: str | Exception = "summary",
         *,
         tool_calls: list[ToolCallData] | None = None,
+        usage: dict[str, int] | None = None,
     ) -> None:
         self.content = content
         self.tool_calls = tool_calls
+        self.usage = usage or {}
         self.calls = []
 
     async def chat(self, messages, tools=None, *, tool_choice=None):
@@ -37,6 +39,7 @@ class Provider:
             content=self.content,
             finish_reason="stop",
             tool_calls=self.tool_calls,
+            usage=dict(self.usage),
         )
 
 
@@ -151,13 +154,15 @@ async def test_compaction_plan_runner_passes_configured_summary_safety_margin(
 ) -> None:
     captured: dict[str, object] = {}
 
-    async def fake_call_summary_llm(**kwargs):
+    async def fake_call_summary_llm_response(**kwargs):
         captured.update(kwargs)
-        return "summary text"
+        from matmaster.types.messages import LLMResponse
+
+        return LLMResponse(content="summary text", finish_reason="stop")
 
     monkeypatch.setattr(
-        "matmaster.context.compaction.call_summary_llm",
-        fake_call_summary_llm,
+        "matmaster.context.compaction.call_summary_llm_response",
+        fake_call_summary_llm_response,
     )
     provider = Provider("unused")
     compactor = Compactor()
@@ -265,3 +270,86 @@ async def test_compaction_plan_runner_runtime_tool_call_response_uses_fallback()
     assert compactor.summary_calls == []
     assert compactor.fallback_calls[0][1] == "Summary LLM attempted tool calls"
     assert events[-1].strategy == "sliding_window"
+
+
+@pytest.mark.asyncio
+async def test_compaction_plan_runner_accumulates_summary_usage_on_success() -> None:
+    provider = Provider(
+        "summary text",
+        usage={"prompt_tokens": 40, "completion_tokens": 5, "total_tokens": 45},
+    )
+    compactor = Compactor()
+    state = _KernelState(
+        messages=[SystemMessage(content="sys"), UserMessage(content="old")],
+        total_usage={"prompt_tokens": 10},
+    )
+
+    events = [
+        item.event
+        async for item in run_compaction_plan(
+            kernel_spec=_kernel_spec(),
+            kernel_resources=_kernel_resources(provider, compactor),
+            state=state,
+            plan=_plan("runtime"),
+            checkpoint_sink=None,
+            tool_definitions=None,
+        )
+    ]
+
+    complete = events[-1]
+    assert isinstance(complete, CompactionEvent)
+    assert complete.turn_usage == {
+        "prompt_tokens": 40,
+        "completion_tokens": 5,
+        "total_tokens": 45,
+    }
+    assert complete.total_usage == {
+        "prompt_tokens": 50,
+        "completion_tokens": 5,
+        "total_tokens": 45,
+    }
+    assert state.turn_usage == {}
+    assert state.total_usage == complete.total_usage
+
+
+@pytest.mark.asyncio
+async def test_compaction_plan_runner_accumulates_usage_before_validation_fallback() -> (
+    None
+):
+    provider = Provider(
+        "summary text",
+        tool_calls=[ToolCallData(id="tc-1", name="tool", arguments={})],
+        usage={"prompt_tokens": 40, "completion_tokens": 5, "total_tokens": 45},
+    )
+    compactor = Compactor()
+    state = _KernelState(
+        messages=[SystemMessage(content="sys"), UserMessage(content="old")],
+        total_usage={"prompt_tokens": 10},
+    )
+
+    events = [
+        item.event
+        async for item in run_compaction_plan(
+            kernel_spec=_kernel_spec(),
+            kernel_resources=_kernel_resources(provider, compactor),
+            state=state,
+            plan=_plan("runtime"),
+            checkpoint_sink=None,
+            tool_definitions=[{"type": "function", "function": {"name": "tool"}}],
+        )
+    ]
+
+    complete = events[-1]
+    assert compactor.summary_calls == []
+    assert compactor.fallback_calls[0][1] == "Summary LLM attempted tool calls"
+    assert complete.strategy == "sliding_window"
+    assert complete.turn_usage == {
+        "prompt_tokens": 40,
+        "completion_tokens": 5,
+        "total_tokens": 45,
+    }
+    assert complete.total_usage == {
+        "prompt_tokens": 50,
+        "completion_tokens": 5,
+        "total_tokens": 45,
+    }

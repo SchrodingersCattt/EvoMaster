@@ -9,6 +9,7 @@ from pydantic import TypeAdapter, ValidationError
 
 from matmaster.types.events import ResponseEvent
 from matmaster.types.figures import FigureUploadConfig
+from matmaster.types.messages import UserMessage
 from matmaster.types.runtime_ports import (
     AgentRunPorts,
     BohriumRuntimeSnapshot,
@@ -19,6 +20,7 @@ from matmaster.types.runtime_ports import (
     FigureUploadPort,
     KernelRuntimePorts,
     PlaygroundCompactionPort,
+    UserTurnContextWriteRequest,
 )
 
 
@@ -62,6 +64,42 @@ def test_agent_run_ports_defaults_are_narrow() -> None:
     assert not hasattr(ports, "metadata")
     assert not hasattr(ports, "state")
     assert not hasattr(ports, "services")
+
+
+def test_user_turn_context_writer_port_defaults_to_none() -> None:
+    ports = AgentRunPorts()
+
+    assert ports.user_turn_context_writer is None
+
+
+def test_user_turn_context_write_request_is_typed_dataclass() -> None:
+    request = UserTurnContextWriteRequest(
+        session_id="sess-1",
+        task_id="task-1",
+        invocation_id="inv-1",
+        spawn_id=None,
+        kind="anchor",
+        message=UserMessage(content="hello"),
+        user_instructions_hash="sha256:abc",
+        transform="raw",
+        render_version="user_context_render.v1",
+        schema_version="user_turn_context.v1",
+    )
+
+    assert is_dataclass(request)
+    assert request.kind == "anchor"
+    assert request.message.content == "hello"
+    with pytest.raises(FrozenInstanceError):
+        request.kind = "continuation"
+
+
+def test_agent_run_ports_has_no_service_bag_after_writer_port_added() -> None:
+    ports = AgentRunPorts()
+
+    assert not hasattr(ports, "payload")
+    assert not hasattr(ports, "context")
+    assert not hasattr(ports, "services")
+    assert not hasattr(ports, "dict")
 
 
 def test_figure_upload_port_is_frozen_dataclass() -> None:

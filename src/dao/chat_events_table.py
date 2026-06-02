@@ -151,7 +151,7 @@ class ChatEventsTable(BaseTable):
     ) -> list[dict]:
         """Read events for context assembly ports.
 
-        Read-only helper backing ``AppSessionEventsPort.load_events``.
+        Read-only helper used by runtime context event ports.
         """
         if order not in {'asc', 'desc'}:
             raise ValueError("order must be 'asc' or 'desc'")

@@ -18,7 +18,7 @@ from matmaster.types.messages import (
 from matmaster.types.run_metadata import RunIdentity, RunMetadata
 from matmaster.types.runtime_ports import KernelRuntimePorts
 
-from .agent_kernel_test_helpers import make_kernel_runtime
+from .agent_kernel_test_helpers import make_kernel_runtime, make_kernel_turn
 
 # ── Providers ────────────────────────────────────────────────
 
@@ -246,7 +246,7 @@ class TestCheckpointAwareCompaction:
         )
 
         async for event in AgentKernel().run_stream(
-            runtime, "task", history=_build_long_history()
+            runtime, make_kernel_turn("task"), history=_build_long_history()
         ):
             events.append(event)
 
@@ -276,7 +276,7 @@ class TestCheckpointAwareCompaction:
         )
 
         async for event in AgentKernel().run_stream(
-            runtime, "task", history=_build_long_history()
+            runtime, make_kernel_turn("task"), history=_build_long_history()
         ):
             events.append(event)
 
@@ -305,7 +305,7 @@ class TestCheckpointAwareCompaction:
             event
             async for event in AgentKernel().run_stream(
                 kernel_runtime,
-                "task",
+                make_kernel_turn("task"),
                 history=_build_long_history(),
             )
         ]
@@ -351,7 +351,7 @@ class TestCheckpointAwareCompaction:
         events: list[Any] = []
         async for event in kernel.run_stream(
             kernel_runtime,
-            "test task",
+            make_kernel_turn("test task"),
             history=[
                 UserMessage(content="old question"),
                 AssistantMessage(content="old answer"),
@@ -400,7 +400,7 @@ class TestCheckpointAwareCompaction:
         kernel = AgentKernel()
         async for event in kernel.run_stream(
             kernel_runtime,
-            "test task",
+            make_kernel_turn("test task"),
             history=[
                 UserMessage(content="old question"),
                 AssistantMessage(content="old answer"),
@@ -437,7 +437,7 @@ class TestCheckpointAwareCompaction:
         kernel = AgentKernel()
         async for event in kernel.run_stream(
             kernel_runtime,
-            "test task",
+            make_kernel_turn("test task"),
             history=[
                 UserMessage(content="old question"),
                 AssistantMessage(content="old answer"),
@@ -484,7 +484,7 @@ async def test_kernel_reads_checkpoint_sink_from_runtime_ports() -> None:
         event
         async for event in AgentKernel().run_stream(
             kernel_runtime,
-            "test task",
+            make_kernel_turn("test task"),
             history=[
                 UserMessage(content="old question"),
                 AssistantMessage(content="old answer"),
@@ -586,14 +586,14 @@ async def test_kernel_passes_raw_turn_input_to_preflight_compactor():
     async def checkpoint_sink(**kwargs):
         return 42
 
+    turn_input = TurnInput.from_values(
+        user_text="original before rewrite",
+        files=["https://oss.example.com/chat/current.cif"],
+        pre_turn_history_event_id=42,
+    )
     kernel_runtime = make_kernel_runtime(
         provider=ContentOnlyProvider(),
         compactor=compactor,
-        turn_input=TurnInput.from_values(
-            user_text="original before rewrite",
-            files=["https://oss.example.com/chat/current.cif"],
-            pre_turn_history_event_id=42,
-        ),
         runtime_ports=KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
     )
 
@@ -601,7 +601,7 @@ async def test_kernel_passes_raw_turn_input_to_preflight_compactor():
         event
         async for event in AgentKernel().run_stream(
             kernel_runtime,
-            "effective task text",
+            make_kernel_turn("effective task text", turn_input=turn_input),
             history=[
                 UserMessage(content="old question"),
                 AssistantMessage(content="old answer"),
@@ -617,7 +617,7 @@ async def test_kernel_passes_raw_turn_input_to_preflight_compactor():
 
 
 @pytest.mark.asyncio
-async def test_kernel_skips_preflight_current_split_when_history_is_empty() -> None:
+async def test_direct_kernel_keeps_missing_turn_input_explicit_for_preflight_history():
     from matmaster.core.agent import AgentKernel
 
     compactor = _RecordingTurnInputCompactor()
@@ -628,11 +628,6 @@ async def test_kernel_skips_preflight_current_split_when_history_is_empty() -> N
     kernel_runtime = make_kernel_runtime(
         provider=ContentOnlyProvider(),
         compactor=compactor,
-        turn_input=TurnInput.from_values(
-            user_text="current task",
-            files=["https://oss.example.com/chat/current.cif"],
-            pre_turn_history_event_id=42,
-        ),
         runtime_ports=KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
     )
 
@@ -640,7 +635,42 @@ async def test_kernel_skips_preflight_current_split_when_history_is_empty() -> N
         event
         async for event in AgentKernel().run_stream(
             kernel_runtime,
-            "current task",
+            make_kernel_turn("direct current task"),
+            history=[
+                UserMessage(content="old question"),
+                AssistantMessage(content="old answer"),
+            ],
+        )
+    ]
+
+    assert compactor.seen_turn_input is None
+
+
+@pytest.mark.asyncio
+async def test_kernel_skips_preflight_current_split_when_history_is_empty() -> None:
+    from matmaster.core.agent import AgentKernel
+
+    compactor = _RecordingTurnInputCompactor()
+
+    async def checkpoint_sink(**kwargs):
+        return 42
+
+    turn_input = TurnInput.from_values(
+        user_text="current task",
+        files=["https://oss.example.com/chat/current.cif"],
+        pre_turn_history_event_id=42,
+    )
+    kernel_runtime = make_kernel_runtime(
+        provider=ContentOnlyProvider(),
+        compactor=compactor,
+        runtime_ports=KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
+    )
+
+    [
+        event
+        async for event in AgentKernel().run_stream(
+            kernel_runtime,
+            make_kernel_turn("current task", turn_input=turn_input),
             history=None,
         )
     ]
@@ -676,7 +706,7 @@ async def test_kernel_passes_checkpoint_covered_until_override_to_sink() -> None
         event
         async for event in AgentKernel().run_stream(
             kernel_runtime,
-            "test task",
+            make_kernel_turn("test task"),
             history=[
                 UserMessage(content="old question"),
                 AssistantMessage(content="old answer"),
@@ -718,7 +748,7 @@ async def test_kernel_sync_pre_compaction_barrier_error_stops_compaction() -> No
             event
             async for event in AgentKernel().run_stream(
                 kernel_runtime,
-                "test task",
+                make_kernel_turn("test task"),
                 history=[
                     UserMessage(content="old question"),
                     AssistantMessage(content="old answer"),
@@ -752,7 +782,7 @@ async def test_kernel_async_pre_compaction_barrier_error_stops_compaction() -> N
             event
             async for event in AgentKernel().run_stream(
                 kernel_runtime,
-                "test task",
+                make_kernel_turn("test task"),
                 history=[
                     UserMessage(content="old question"),
                     AssistantMessage(content="old answer"),
@@ -864,7 +894,7 @@ async def test_kernel_runs_pre_compaction_barrier_before_compactor() -> None:
 
     async for _event in AgentKernel().run_stream(
         kernel_runtime,
-        "task",
+        make_kernel_turn("task"),
         history=[UserMessage(content="old"), AssistantMessage(content="answer")],
     ):
         pass

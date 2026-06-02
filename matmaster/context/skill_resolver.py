@@ -1,4 +1,4 @@
-"""Service-layer SkillResolver implementation."""
+"""SkillResolver implementation owned by the context layer."""
 
 from __future__ import annotations
 

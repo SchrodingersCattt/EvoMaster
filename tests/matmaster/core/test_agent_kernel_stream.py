@@ -6,9 +6,7 @@ from typing import Any
 
 import pytest
 
-from matmaster.core.agent_llm_stream import (
-    stream_llm_items,
-)
+from matmaster.core.agent_llm_stream import stream_llm_items
 from matmaster.types.events import (
     AssistantStateEvent,
     ResponseEvent,
@@ -23,6 +21,9 @@ from .agent_kernel_test_helpers import (
     _make_tool_registry,
     make_kernel_runtime,
 )
+from .agent_kernel_test_helpers import make_kernel_turn as turn
+
+MODEL_IDENTITY_FIELDS = {'model', 'model_profile', 'model_route'}
 
 
 class ReasoningThenContentProvider:
@@ -475,7 +476,7 @@ class TestRunItemsAssistantState:
         kernel_runtime = make_kernel_runtime(provider=provider)
         kernel = AgentKernel()
 
-        async for _event in kernel.run_stream(kernel_runtime, task):
+        async for _event in kernel.run_stream(kernel_runtime, turn(task)):
             pass
 
         assert provider.seen_messages
@@ -493,18 +494,19 @@ class TestRunItemsAssistantState:
         from matmaster.core.agent import AgentKernel
 
         provider = RecordingContentProvider()
-        kernel_runtime = make_kernel_runtime(
-            provider=provider,
-            turn_input=TurnInput.from_values(
-                user_text="看图",
-                images=["https://oss.example.com/chat/a.png"],
-                image_detail="high",
-            ),
+        turn_input = TurnInput.from_values(
+            user_text="看图",
+            images=["https://oss.example.com/chat/a.png"],
+            image_detail="high",
         )
+        kernel_runtime = make_kernel_runtime(provider=provider)
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(kernel_runtime, "看图"):
+        async for event in kernel.run_stream(
+            kernel_runtime,
+            turn("看图", turn_input=turn_input),
+        ):
             events.append(event)
 
         user_message = provider.seen_messages[0][-1]
@@ -531,7 +533,7 @@ class TestRunItemsAssistantState:
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(kernel_runtime, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, turn("test task")):
             events.append(event)
 
         assistant_state_events = [
@@ -545,8 +547,8 @@ class TestRunItemsAssistantState:
         assert assistant_state_events[0].turn_usage != {}
 
     @pytest.mark.asyncio
-    async def test_llm_output_events_include_model_identity(self) -> None:
-        """Persistable LLM output events carry the resolved model identity."""
+    async def test_llm_output_events_scope_model_identity(self) -> None:
+        """Response and run_result carry model identity; thoughts do not."""
         from matmaster.core.agent import AgentKernel
 
         provider = ReasoningThenContentProvider()
@@ -559,7 +561,7 @@ class TestRunItemsAssistantState:
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(kernel_runtime, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, turn("test task")):
             events.append(event)
 
         complete_response = next(
@@ -574,10 +576,12 @@ class TestRunItemsAssistantState:
             if isinstance(e, ThoughtEvent) and e.stream_state == "complete"
         )
 
-        for event in (complete_response, run_result, complete_thought):
+        for event in (complete_response, run_result):
             assert event.model == "claude-opus-4-6"
             assert event.model_profile == "opus"
             assert event.model_route == "bedrock-claude-opus"
+
+        assert MODEL_IDENTITY_FIELDS.isdisjoint(complete_thought.model_dump())
 
     @pytest.mark.asyncio
     async def test_streaming_llm_output_events_do_not_include_model_identity(
@@ -596,14 +600,13 @@ class TestRunItemsAssistantState:
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(kernel_runtime, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, turn("test task")):
             events.append(event)
 
         streaming_events = [
             e
             for e in events
-            if isinstance(e, (ThoughtEvent, ResponseEvent))
-            and e.stream_state != "complete"
+            if isinstance(e, ResponseEvent) and e.stream_state != "complete"
         ]
         assert streaming_events
         for event in streaming_events:
@@ -628,7 +631,7 @@ class TestRunItemsAssistantState:
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(kernel_runtime, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, turn("test task")):
             events.append(event)
 
         assistant_state = next(e for e in events if isinstance(e, AssistantStateEvent))
@@ -650,7 +653,7 @@ class TestRunItemsAssistantState:
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(kernel_runtime, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, turn("test task")):
             events.append(event)
 
         assistant_state_events = [
@@ -676,7 +679,7 @@ class TestRunItemsSkillHit:
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(kernel_runtime, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, turn("test task")):
             events.append(event)
 
         skill_hit_events = [e for e in events if isinstance(e, SkillHitEvent)]
@@ -694,7 +697,7 @@ class TestRunItemsSkillHit:
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(kernel_runtime, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, turn("test task")):
             events.append(event)
 
         skill_hit_events = [e for e in events if isinstance(e, SkillHitEvent)]
@@ -738,7 +741,7 @@ class TestGap1FullToolRunnerActivation:
 
         kernel = AgentKernel()
         items: list[_KernelItem] = []
-        async for item in kernel.run_stream(kernel_runtime, "test task"):
+        async for item in kernel.run_stream(kernel_runtime, turn("test task")):
             items.append(item)
 
         # FullToolRunner.execute_batch should have been called
@@ -787,7 +790,7 @@ class TestGap1FullToolRunnerActivation:
 
         kernel = AgentKernel()
         with pytest.raises(RuntimeError, match="No tool_runner"):
-            async for _event in kernel.run_stream(kernel_runtime, "test task"):
+            async for _event in kernel.run_stream(kernel_runtime, turn("test task")):
                 pass
 
 
@@ -805,7 +808,7 @@ class TestGap2RunStreamYieldsBusEvent:
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(kernel_runtime, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, turn("test task")):
             events.append(event)
 
         # No event should be a _KernelItem
@@ -838,7 +841,7 @@ class TestGap2RunStreamYieldsBusEvent:
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(kernel_runtime, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, turn("test task")):
             events.append(event)
 
         for event in events:
@@ -866,7 +869,7 @@ class TestEmptyFinalResponseInvalidFinish:
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(kernel_runtime, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, turn("test task")):
             events.append(event)
 
         assert isinstance(events[-1], RunResultEvent)
@@ -883,7 +886,7 @@ class TestEmptyFinalResponseInvalidFinish:
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(kernel_runtime, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, turn("test task")):
             events.append(event)
 
         assert isinstance(events[-1], RunResultEvent)
@@ -900,7 +903,7 @@ class TestEmptyFinalResponseInvalidFinish:
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(kernel_runtime, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, turn("test task")):
             events.append(event)
 
         assert isinstance(events[-1], RunResultEvent)
@@ -918,7 +921,7 @@ class TestEmptyFinalResponseInvalidFinish:
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(kernel_runtime, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, turn("test task")):
             events.append(event)
 
         assert any(isinstance(event, SkillHitEvent) for event in events)
@@ -935,7 +938,7 @@ class TestEmptyFinalResponseInvalidFinish:
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(kernel_runtime, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, turn("test task")):
             events.append(event)
 
         assert provider.call_count == 2
@@ -956,7 +959,7 @@ class TestEmptyFinalResponseInvalidFinish:
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(kernel_runtime, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, turn("test task")):
             events.append(event)
 
         assert provider.call_count == 2
@@ -976,7 +979,7 @@ class TestEmptyFinalResponseInvalidFinish:
         kernel = AgentKernel()
 
         events: list[Any] = []
-        async for event in kernel.run_stream(kernel_runtime, "test task"):
+        async for event in kernel.run_stream(kernel_runtime, turn("test task")):
             events.append(event)
 
         assert provider.call_count == 2

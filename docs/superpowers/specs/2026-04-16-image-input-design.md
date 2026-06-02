@@ -331,7 +331,7 @@ class UserMessage(Message):
 profiles:
   gemini:
     supports_vision: true
-  gpt54:
+  gpt55:
     supports_vision: true
   opus:
     supports_vision: true

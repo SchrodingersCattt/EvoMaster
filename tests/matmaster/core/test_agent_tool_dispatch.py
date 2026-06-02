@@ -1,0 +1,162 @@
+from __future__ import annotations
+
+import pytest
+
+from matmaster.core.agent_tool_dispatch import (
+    InvalidToolUsageDelta,
+    dispatch_tool_calls,
+    extract_tool_usage_delta,
+)
+from matmaster.core.kernel_items import _KernelState
+from matmaster.tools.tool_result import ToolResult
+from matmaster.types.events import ToolResultEvent
+from matmaster.types.messages import SystemMessage, ToolCallData
+
+
+def test_extract_tool_usage_delta_ignores_non_agent_tools() -> None:
+    result = ToolResult(
+        status="success",
+        content="ok",
+        payload={"subagent_usage": {"prompt_tokens": 10}},
+    )
+
+    assert extract_tool_usage_delta("Read", result) == {}
+
+
+def test_extract_tool_usage_delta_missing_subagent_usage_returns_empty() -> None:
+    result = ToolResult(status="success", content="ok", payload={})
+
+    assert extract_tool_usage_delta("Agent", result) == {}
+
+
+@pytest.mark.parametrize(
+    "usage",
+    [
+        "not-a-dict",
+        {"prompt_tokens": "10"},
+        {"prompt_tokens": True},
+        {"prompt_tokens": -1},
+    ],
+)
+def test_extract_tool_usage_delta_rejects_malformed_agent_usage(usage) -> None:
+    result = ToolResult(
+        status="success",
+        content="ok",
+        payload={"subagent_usage": usage},
+    )
+
+    with pytest.raises(InvalidToolUsageDelta):
+        extract_tool_usage_delta("Agent", result)
+
+
+def test_extract_tool_usage_delta_allows_cancelled_agent_without_usage() -> None:
+    result = ToolResult(status="cancelled", content="Run cancelled.", payload={})
+
+    assert extract_tool_usage_delta("Agent", result) == {}
+
+
+class StaticRunner:
+    def __init__(self, results):
+        self.results = results
+
+    async def execute_batch(self, tool_calls, ctx, *, on_result=None):
+        del ctx, on_result
+        return list(zip(tool_calls, self.results))
+
+
+@pytest.mark.asyncio
+async def test_dispatch_tool_calls_accumulates_agent_usage_before_event() -> None:
+    state = _KernelState(
+        messages=[SystemMessage(content="sys")],
+        turn=1,
+        turn_usage={"prompt_tokens": 5},
+        total_usage={"prompt_tokens": 5},
+    )
+    tool_call = ToolCallData(
+        id="call-agent",
+        name="Agent",
+        arguments={"prompt": "child task"},
+    )
+    runner = StaticRunner(
+        [
+            ToolResult(
+                status="success",
+                content="child answer",
+                payload={
+                    "subagent_usage": {
+                        "prompt_tokens": 10,
+                        "completion_tokens": 2,
+                        "total_tokens": 12,
+                    }
+                },
+            )
+        ]
+    )
+
+    items = [
+        item
+        async for item in dispatch_tool_calls(
+            tool_calls=[tool_call],
+            tool_runner=runner,
+            max_turns=10,
+            state=state,
+            cancel_token=None,
+        )
+    ]
+
+    event = items[0].event
+    assert isinstance(event, ToolResultEvent)
+    assert event.turn_usage == {"prompt_tokens": 5}
+    assert event.total_usage == {
+        "prompt_tokens": 15,
+        "completion_tokens": 2,
+        "total_tokens": 12,
+    }
+    assert state.total_usage == event.total_usage
+
+
+@pytest.mark.asyncio
+async def test_dispatch_tool_calls_usage_fields_are_snapshots() -> None:
+    state = _KernelState(
+        messages=[SystemMessage(content="sys")],
+        turn=1,
+        turn_usage={"prompt_tokens": 5},
+        total_usage={"prompt_tokens": 5},
+    )
+    tool_calls = [
+        ToolCallData(id="call-1", name="Agent", arguments={}),
+        ToolCallData(id="call-2", name="Agent", arguments={}),
+    ]
+    runner = StaticRunner(
+        [
+            ToolResult(
+                status="success",
+                content="one",
+                payload={"subagent_usage": {"prompt_tokens": 10}},
+            ),
+            ToolResult(
+                status="success",
+                content="two",
+                payload={"subagent_usage": {"prompt_tokens": 20}},
+            ),
+        ]
+    )
+
+    events = [
+        item.event
+        async for item in dispatch_tool_calls(
+            tool_calls=tool_calls,
+            tool_runner=runner,
+            max_turns=10,
+            state=state,
+            cancel_token=None,
+        )
+        if isinstance(item.event, ToolResultEvent)
+    ]
+
+    assert events[0].total_usage == {"prompt_tokens": 15}
+    assert events[1].total_usage == {"prompt_tokens": 35}
+    state.total_usage["prompt_tokens"] = 999
+    state.turn_usage["prompt_tokens"] = 888
+    assert events[0].total_usage == {"prompt_tokens": 15}
+    assert events[0].turn_usage == {"prompt_tokens": 5}

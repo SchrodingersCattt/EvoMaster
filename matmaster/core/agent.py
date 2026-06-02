@@ -1,7 +1,8 @@
 """AgentKernel -- pure async execution loop for the agent kernel.
 
-Consumes an AgentKernelRuntime and executes the LLM -> hook -> tool
--> message accumulate -> loop cycle via run_stream(), the sole public API.
+Consumes an AgentKernelRuntime plus AgentKernelTurnRequest and executes the
+LLM -> hook -> tool -> message accumulate -> loop cycle via run_stream(), the
+sole public API.
 run_stream() yields BusEvent objects through the _run_items() generator.
 
 Termination conditions:
@@ -24,6 +25,7 @@ from matmaster.core.agent_compaction import (
 )
 from matmaster.core.agent_llm_stream import call_llm_streaming
 from matmaster.core.agent_tool_dispatch import (
+    InvalidToolUsageDelta,
     accumulate_usage,
     dispatch_tool_calls,
     validate_tool_call_ids,
@@ -44,7 +46,6 @@ from matmaster.types.events import (
     CheckpointEvent,
     FinishDetail,
     ResponseEvent,
-    ThoughtEvent,
     ToolCallEvent,
 )
 
@@ -53,16 +54,11 @@ if TYPE_CHECKING:
         AgentKernelResources,
         AgentKernelRuntime,
         AgentKernelSpec,
+        AgentKernelTurnRequest,
     )
 
-from matmaster.core.hooks import (
-    HookEvent,
-    RunContext,
-    UserPromptContext,
-)
-from matmaster.response_text import (
-    is_trivial_response_text,
-)
+from matmaster.core.hooks import HookEvent, RunContext, UserPromptContext
+from matmaster.response_text import is_trivial_response_text
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -77,6 +73,7 @@ logger = logging.getLogger(__name__)
 _TERMINAL_REASON_TO_STATUS: dict[str, str] = {
     "cancelled": "cancelled",
     "interrupted": "completed",
+    "internal_error": "failed",
     "invalid_finish": "failed",
     "natural": "completed",
     "max_turns": "completed",
@@ -117,7 +114,7 @@ class AgentKernel:
     async def run_stream(
         self,
         kernel_runtime: AgentKernelRuntime,
-        task: str,
+        turn_request: AgentKernelTurnRequest,
         history: list[Message] | None = None,
         cancel_token: CancellationToken | None = None,
     ) -> AsyncIterator[Any]:
@@ -139,7 +136,11 @@ class AgentKernel:
             async def _consume_and_yield():
                 nonlocal last_reason
                 async for item in self._run_items(
-                    kernel_spec, kernel_resources, task, history, cancel_token
+                    kernel_spec,
+                    kernel_resources,
+                    turn_request,
+                    history,
+                    cancel_token,
                 ):
                     if item.terminal is not None:
                         reason = item.terminal.reason
@@ -202,9 +203,9 @@ class AgentKernel:
         item: _KernelItem,
         state: _KernelState,
     ) -> _KernelItem:
-        """Attach resolved model identity to persisted LLM aggregate events."""
+        """Attach resolved model identity to persisted assistant output events."""
         event = item.event
-        if not isinstance(event, (ThoughtEvent, ResponseEvent)):
+        if not isinstance(event, ResponseEvent):
             return item
         if event.stream_state != "complete":
             return item
@@ -250,7 +251,7 @@ class AgentKernel:
         self,
         kernel_spec: AgentKernelSpec,
         kernel_resources: AgentKernelResources,
-        task: str,
+        turn_request: AgentKernelTurnRequest,
         history: list[Message] | None,
         cancel_token: CancellationToken | None,
     ) -> AsyncIterator[_KernelItem]:
@@ -258,20 +259,22 @@ class AgentKernel:
 
         Yields events for streaming, AssistantState, and SkillHit.
         """
+        task = turn_request.user_message_content
+        turn_input = turn_request.turn_input
         if kernel_resources.hook_executor is not None:
             session_id = kernel_spec.run_identity.session_id
-            prompt_ctx = UserPromptContext(prompt=task, session_id=session_id)
-            task = await kernel_resources.hook_executor.emit_rewrite(
-                HookEvent.USER_PROMPT_SUBMIT,
-                prompt_ctx,
-                task,
-            )
+            if kernel_spec.prompt_submit_rewrite_enabled:
+                prompt_ctx = UserPromptContext(prompt=task, session_id=session_id)
+                task = await kernel_resources.hook_executor.emit_rewrite(
+                    HookEvent.USER_PROMPT_SUBMIT,
+                    prompt_ctx,
+                    task,
+                )
             await kernel_resources.hook_executor.emit(
                 HookEvent.USER_PROMPT_SUBMIT,
                 UserPromptContext(prompt=task, session_id=session_id),
             )
 
-        turn_input = kernel_spec.turn_input
         turn_images = (
             list(turn_input.attachments.images_as_parts())
             if turn_input is not None
@@ -364,8 +367,8 @@ class AgentKernel:
                         content=response.content,
                         stream_state="complete",
                         turn_index=turn_index,
-                        turn_usage=state.turn_usage,
-                        total_usage=state.total_usage,
+                        turn_usage=dict(state.turn_usage),
+                        total_usage=dict(state.total_usage),
                         usage_vendor=response.usage_vendor or None,
                         model=state.llm_model,
                         model_profile=state.llm_model_profile,
@@ -428,8 +431,8 @@ class AgentKernel:
                         source="agent",
                         state=assistant_msg.model_dump(mode="json"),
                         turn_index=turn_index,
-                        turn_usage=state.turn_usage,
-                        total_usage=state.total_usage,
+                        turn_usage=dict(state.turn_usage),
+                        total_usage=dict(state.total_usage),
                         finish_detail=assistant_finish_detail,
                         model=state.llm_model,
                         model_profile=state.llm_model_profile,
@@ -464,14 +467,19 @@ class AgentKernel:
                     )
                     return
 
-            async for item in dispatch_tool_calls(
-                tool_calls=response.tool_calls,
-                tool_runner=kernel_resources.tool_runner,
-                max_turns=kernel_spec.max_turns,
-                state=state,
-                cancel_token=cancel_token,
-            ):
-                yield item
+            try:
+                async for item in dispatch_tool_calls(
+                    tool_calls=response.tool_calls,
+                    tool_runner=kernel_resources.tool_runner,
+                    max_turns=kernel_spec.max_turns,
+                    state=state,
+                    cancel_token=cancel_token,
+                ):
+                    yield item
+            except InvalidToolUsageDelta:
+                logger.exception("malformed tool usage delta; ending run as failed")
+                yield self._terminal(state, "internal_error")
+                return
 
         yield self._terminal(state, "max_turns")
 

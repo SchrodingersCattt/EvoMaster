@@ -74,7 +74,7 @@ payload 更容易测试，也能同时覆盖顶层 automatic cache。
 
 ## 4. 非目标
 
-- 不给 `sonnet`、`haiku`、`gemini`、`gpt54`、`qwen`、`deepseek` 等模型开启 cache。
+- 不给 `sonnet`、`haiku`、`gemini`、`gpt55`、`qwen`、`deepseek` 等模型开启 cache。
 - 不给 `opus_bedrock` 开启 automatic caching。Bedrock 需要单独映射 Converse
   `cachePoint` 语义，本设计不覆盖。
 - 不做 cache pre-warm。

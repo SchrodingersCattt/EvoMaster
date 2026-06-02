@@ -17,6 +17,10 @@ class UserInstructions:
     hash: str
     truncated: bool = False
 
+    @classmethod
+    def empty(cls) -> UserInstructions:
+        return cls(text="", hash=hash_user_instructions(""), truncated=False)
+
 
 def hash_user_instructions(text: str) -> str:
     """Canonical AGENT.md content hash: ``sha256:`` + hex of raw utf-8 bytes.

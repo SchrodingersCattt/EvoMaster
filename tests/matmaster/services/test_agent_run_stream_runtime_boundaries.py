@@ -60,13 +60,15 @@ async def test_run_agent_runs_bohrium_cleanup_after_success():
     )
 
 
-def test_agent_run_service_imports_resolve_turn_context_intent_after_cutover() -> None:
-    """Phase 2C cutover smoke check for the Stage 5b import boundary."""
+def test_agent_run_service_no_longer_imports_context_turn_intent_after_exp_cutover() -> (
+    None
+):
+    """Root turn preparation belongs to Exp, not AgentRunService."""
     import src.services.agent_run_service as svc_module
 
     src = svc_module.__file__
     assert src is not None
 
     text = Path(src).read_text()
-    assert "from src.services.context_turn_intent import" in text
-    assert "from matmaster.context.assembly import" in text
+    assert "from src.services.context_turn_intent import" not in text
+    assert "build_context_assembler" not in text

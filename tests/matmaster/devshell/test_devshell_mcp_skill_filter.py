@@ -1,4 +1,4 @@
-"""Lazy MCP: only struct-DB skill registered; MCP tools inject after use_skill get_info."""
+"""Lazy MCP: only struct-DB skill registered; MCP tools inject after Skill."""
 
 from __future__ import annotations
 
@@ -50,12 +50,12 @@ def test_devshell_mcp_only_struct_db_skill_and_lazy_mcp(
     )
 
     exp_cfg = ExpConfig(
-        tools=ExpToolsConfig(builtin=["execute_bash"]),
+        tools=ExpToolsConfig(builtin=["Bash"]),
         skills=ExpSkillsConfig(
             enabled=True,
             skills_root=["matmaster/skills/lazymcp/mcp-mat-struct-db"],
             cache_dir="matmaster/cache",
-            config_dir="matmaster_config",
+            config_dir="config",
             mcp_config_file="mcp_config.json",
             mcp_runtime_file="mcp.yaml",
         ),
@@ -71,17 +71,15 @@ def test_devshell_mcp_only_struct_db_skill_and_lazy_mcp(
             runtime = await exp.build_runtime(ctx)
             reg = runtime.kernel_runtime.resources.tool_catalog.registry
             names = _tool_names(reg)
-            assert "use_skill" in names
+            assert "Skill" in names
             assert "mat_struct_db_fetch_structures_from_db" not in names
 
             skills = exp._skill_registry.get_all_skills()
             assert len(skills) == 1
             assert skills[0].meta_info.name == "mcp-mat-struct-db"
 
-            use_skill = next(t for t in reg.all_tools if t.name == "use_skill")
-            await use_skill.execute(
-                {"skill_name": "mcp-mat-struct-db", "action": "get_info"}
-            )
+            skill_tool = next(t for t in reg.all_tools if t.name == "Skill")
+            await skill_tool.execute({"skill": "mcp-mat-struct-db"})
             assert "mat_struct_db_fetch_structures_from_db" in _tool_names(reg)
         finally:
             await exp._run_cleanup_callbacks()
@@ -122,7 +120,7 @@ def test_mcp_runtime_patch_limits_mat_sg_lazy_tools(
     # this patch narrows that further to a single CALYPSO submit tool to prove
     # mcp_runtime_patch can override mcp.yaml.
     exp_cfg = ExpConfig(
-        tools=ExpToolsConfig(builtin=["execute_bash"]),
+        tools=ExpToolsConfig(builtin=["Bash"]),
         skills=ExpSkillsConfig(
             enabled=True,
             skills_root=["matmaster/skills/sample-atomic-structures"],
@@ -132,7 +130,7 @@ def test_mcp_runtime_patch_limits_mat_sg_lazy_tools(
                 },
             },
             cache_dir="matmaster/cache",
-            config_dir="matmaster_config",
+            config_dir="config",
             mcp_config_file="mcp_config.json",
             mcp_runtime_file="mcp.yaml",
         ),
@@ -146,10 +144,8 @@ def test_mcp_runtime_patch_limits_mat_sg_lazy_tools(
             reg = runtime.kernel_runtime.resources.tool_catalog.registry
             assert "mat_sg_build_surface_slab" not in _tool_names(reg)
 
-            use_skill = next(t for t in reg.all_tools if t.name == "use_skill")
-            await use_skill.execute(
-                {"skill_name": "sample-atomic-structures", "action": "get_info"}
-            )
+            skill_tool = next(t for t in reg.all_tools if t.name == "Skill")
+            await skill_tool.execute({"skill": "sample-atomic-structures"})
             names = _tool_names(reg)
             # Build/transform/assemble tools no longer ship in the schema cache.
             assert "mat_sg_build_surface_slab" not in names

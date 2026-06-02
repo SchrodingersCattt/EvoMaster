@@ -8,12 +8,13 @@ from __future__ import annotations
 
 from collections.abc import Awaitable
 from dataclasses import dataclass, field
-from typing import Any, NotRequired, Protocol, TypedDict, runtime_checkable
+from typing import Any, Literal, NotRequired, Protocol, TypedDict, runtime_checkable
 
 from matmaster.bohrium.types import BohriumRuntimeSnapshot
 from matmaster.context.ports import SessionEvent, SessionEventQuery
 from matmaster.types.events import BusEvent
 from matmaster.types.figures import FigureUploadConfig
+from matmaster.types.messages import Message
 
 __all__ = [
     "AgentRunPorts",
@@ -30,6 +31,8 @@ __all__ = [
     "PlaygroundCompactionPort",
     "PreCompactionBarrier",
     "SessionEventHistoryPort",
+    "UserTurnContextWriteRequest",
+    "UserTurnContextWriter",
 ]
 
 
@@ -134,6 +137,25 @@ class InterruptChecker(Protocol):
 
 
 @dataclass(frozen=True)
+class UserTurnContextWriteRequest:
+    session_id: str
+    task_id: str | None
+    invocation_id: str | None
+    spawn_id: str | None
+    kind: Literal["anchor", "continuation"]
+    message: Message
+    user_instructions_hash: str | None
+    transform: str
+    render_version: str
+    schema_version: str
+
+
+@runtime_checkable
+class UserTurnContextWriter(Protocol):
+    async def __call__(self, request: UserTurnContextWriteRequest) -> None: ...
+
+
+@dataclass(frozen=True)
 class AgentRunPorts:
     """Narrow runtime capability ports carried by AgentRunRequest.
 
@@ -150,6 +172,7 @@ class AgentRunPorts:
     )
     figure_upload: FigureUploadPort = field(default_factory=FigureUploadPort)
     interrupt_checker: InterruptChecker | None = None
+    user_turn_context_writer: UserTurnContextWriter | None = None
 
 
 @dataclass(frozen=True)

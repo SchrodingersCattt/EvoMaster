@@ -17,6 +17,7 @@ from matmaster.types.runtime import (
     AgentKernelResources,
     AgentKernelRuntime,
     AgentKernelSpec,
+    AgentKernelTurnRequest,
     CompactionConfig,
 )
 
@@ -37,11 +38,16 @@ def test_kernel_spec_holds_only_config_fields() -> None:
         "max_turns",
         "compaction",
         "run_identity",
-        "turn_input",
+        "prompt_submit_rewrite_enabled",
         "llm_model",
         "llm_model_profile",
         "llm_model_route",
     }
+
+
+def test_kernel_turn_request_holds_per_turn_input() -> None:
+    names = {f.name for f in dataclasses.fields(AgentKernelTurnRequest)}
+    assert names == {"user_message_content", "turn_input"}
 
 
 def test_kernel_resources_holds_live_resource_fields() -> None:

@@ -31,7 +31,7 @@ from .events import (
     ToolResultEvent,
     WorkspaceUploadErrorEvent,
 )
-from .figures import FigureDescriptor, FigureManifestEntry, FigureUploadConfig
+from .figures import FigureDescriptor, FigureUploadConfig
 from .llm_provider import LLMProvider
 from .messages import (
     AssistantMessage,
@@ -113,7 +113,6 @@ __all__ = [
     "ExpRunEvent",
     "FinishDetail",
     "FigureDescriptor",
-    "FigureManifestEntry",
     "FigureUploadConfig",
     "McpConnectEvent",
     "McpServerStatusEvent",

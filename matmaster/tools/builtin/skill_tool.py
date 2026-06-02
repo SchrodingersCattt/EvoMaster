@@ -78,9 +78,7 @@ class SkillTool(BuiltinTool):
 
     async def execute(self, arguments: dict[str, Any]) -> str:
         try:
-            skill_name = (
-                arguments.get("skill") or arguments.get("skill_name") or ""
-            ).lstrip("/")
+            skill_name = (arguments.get("skill") or "").lstrip("/")
 
             if self._registry is None:
                 return "Error: skill registry not available"
@@ -136,38 +134,3 @@ class SkillTool(BuiltinTool):
 
     def _execute(self, arguments: dict[str, Any]) -> str:
         raise NotImplementedError("SkillTool uses async execute() directly")
-
-
-class LegacyUseSkillTool(SkillTool):
-    """Backward-compatible alias for older ``use_skill`` callers."""
-
-    name: ClassVar[str] = "use_skill"
-    description: ClassVar[str] = "Legacy alias for the Skill tool."
-    json_schema: ClassVar[dict[str, Any]] = {
-        "type": "object",
-        "properties": {
-            "skill_name": {
-                "type": "string",
-                "description": "Legacy skill name field.",
-            },
-            "action": {
-                "type": "string",
-                "description": "Legacy action field; `get_info` maps to Skill info lookup.",
-            },
-            "skill": {
-                "type": "string",
-                "description": "Accepted for compatibility with the new Skill tool.",
-            },
-        },
-        "required": ["skill_name"],
-    }
-    exposed_to_model: ClassVar[bool] = False
-
-    async def execute(self, arguments: dict[str, Any]) -> str:
-        action = (arguments.get("action") or "").strip()
-        if action and action != "get_info":
-            return f"Error: unsupported legacy use_skill action '{action}'"
-        mapped = dict(arguments)
-        if "skill" not in mapped and "skill_name" in mapped:
-            mapped["skill"] = mapped["skill_name"]
-        return await super().execute(mapped)

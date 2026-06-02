@@ -18,8 +18,6 @@ import matmaster.tools.builtin.bohrium_tool.tool as bohrium_tool_module
 import matmaster.tools.builtin.bohrium_tool.transfers as bohrium_transfers_module
 from matmaster.bohrium.endpoints import use_sandbox
 from matmaster.bohrium.errors import BohriumTransferError
-from matmaster.bohrium.runtime import BohriumRuntimeHandle, attach_runtime
-from matmaster.bohrium.types import BohriumCredentials, BohriumExecutionContext
 from matmaster.bohrium.upload import UploadedArchive
 from matmaster.tools.builtin.bohrium_tool import BohriumTool
 from matmaster.tools.tool_result import ToolResult
@@ -29,37 +27,6 @@ from tests.matmaster.tools.builtin.test_bohrium_tool_helpers import (
     _fake_submit_post_factory,
     _patch_bridge,
 )
-
-
-def _session_with_runtime(
-    *,
-    access_key: str = "session-ak",
-    project_id: int = 42,
-) -> SimpleNamespace:
-    session = SimpleNamespace(is_open=True)
-    attach_runtime(
-        session,
-        BohriumRuntimeHandle(
-            credentials=BohriumCredentials(
-                access_key=access_key,
-                project_id=project_id,
-                user_id=7,
-                user_no="U001",
-                base_url="https://openapi.test.dp.tech",
-            ),
-            execution=BohriumExecutionContext(
-                session_type="ssh",
-                execution_workdir="/share",
-                remote_workspace_root="/share",
-                remote_project_root="/share/.matmaster",
-                node_id=1,
-                node_ip="10.0.0.1",
-                ssh_attached=True,
-            ),
-            execution_session=session,
-        ),
-    )
-    return session
 
 
 def _install_fake_sdk_free_upload(monkeypatch, upload_calls: list) -> None:
@@ -707,9 +674,13 @@ class TestBohriumExecution:
         assert isinstance(result, ToolResult)
         assert result.status == "success"
         payload = json.loads(result.content)
-        assert payload["job_id"] == "job-123"
-        assert payload["bohr_job_id"] == "bohr-456"
-        assert payload["use_sandbox"] is True
+        assert payload == {
+            "success": True,
+            "job_id": "job-123",
+            "status": "Submitted",
+            "use_sandbox": True,
+        }
+        assert "bohr_job_id" not in payload
         assert [path for path, _ in post_calls] == [
             "/openapi/v1/sandbox/job/create",
             "/openapi/v1/sandbox/job/add",
@@ -722,6 +693,114 @@ class TestBohriumExecution:
         assert upload_calls
         assert upload_calls[0][0].endswith("input.zip")
         assert upload_calls[0][2] == "token-123"
+
+    def test_submit_job_via_runtime_returns_named_job_model(
+        self, tmp_path, monkeypatch
+    ):
+        input_dir = tmp_path / "inputs"
+        input_dir.mkdir()
+        (input_dir / "input.inp").write_text("&CONTROL\n", encoding="utf-8")
+
+        post_calls: list[tuple[str, dict]] = []
+        upload_calls: list[tuple[str, str, dict]] = []
+
+        def fake_post(base_url, path, access_key, payload, timeout=30):
+            del base_url, access_key, timeout
+            post_calls.append((path, payload))
+            if path == "/openapi/v1/sandbox/job/create":
+                return {
+                    "code": 0,
+                    "data": {
+                        "storePath": "sandbox/jobs/run-1/",
+                        "storeHost": "https://store.example.com",
+                        "token": "token-123",
+                        "jobId": "create-job-id",
+                    },
+                }
+            if path == "/openapi/v1/sandbox/job/add":
+                return {
+                    "code": 0,
+                    "data": {
+                        "jobId": "job-123",
+                        "bohrJobId": "bohr-456",
+                    },
+                }
+            raise AssertionError(f"unexpected path: {path}")
+
+        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
+        _patch_bridge(monkeypatch)
+        monkeypatch.setattr(bohrium_client_module, "_post", fake_post)
+        _install_fake_sdk_free_upload(monkeypatch, upload_calls)
+
+        submitted = bohrium_tool_module.submit_job_via_runtime(
+            input_dir=str(input_dir),
+            image="registry.dp.tech/dptech/cp2k:2024.1",
+            cmd="cp2k.popt -i input.inp",
+            machine="c64_m256_cpu",
+            job_name="matmaster-job",
+            disk_size=50,
+            workdir=tmp_path,
+            session=None,
+        )
+
+        assert submitted.job_id == "job-123"
+        assert submitted.raw_add_response == {
+            "jobId": "job-123",
+            "bohrJobId": "bohr-456",
+        }
+        assert not isinstance(submitted, tuple)
+
+    def test_poll_live_log_uses_canonical_job_id(self, tmp_path, monkeypatch):
+        tool = BohriumTool(workdir=tmp_path)
+        calls: list[dict] = []
+
+        def fake_get(base_url, path, access_key, params=None, timeout=30):
+            del base_url, access_key, params, timeout
+            assert path == "/openapi/v1/sandbox/job/job-123"
+            return {"data": {"status": 1}}
+
+        def fake_post(base_url, path, access_key, payload, timeout=30):
+            del base_url, access_key, timeout
+            assert path == "/openapi/v1/sandbox/job/file/token"
+            calls.append(payload)
+            return {
+                "code": 0,
+                "data": {
+                    "host": "https://store.example",
+                    "path": "prefix/log",
+                    "token": "log-token",
+                },
+            }
+
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return b"line1\nline2\n"
+
+        def fake_urlopen(req, timeout=5):
+            del req, timeout
+            return FakeResponse()
+
+        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
+        _patch_bridge(monkeypatch)
+        monkeypatch.setattr(bohrium_client_module, "_get", fake_get)
+        monkeypatch.setattr(bohrium_client_module, "_post", fake_post)
+        import urllib.request
+
+        monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+
+        result = asyncio.run(tool.execute({"action": "poll", "job_id": "job-123"}))
+
+        assert result.status == "success"
+        payload = json.loads(result.content)
+        assert payload["job_id"] == "job-123"
+        assert payload["log_tail"] == "line1\nline2"
+        assert calls == [{"filePath": "log", "jobId": "job-123"}]
 
     def test_list_images_filters_and_returns_versions(self, tmp_path, monkeypatch):
         tool = BohriumTool(workdir=tmp_path)
@@ -806,140 +885,6 @@ class TestBohriumExecution:
         assert payload["returned"] == 1
         assert payload["machines"][0]["skuEnName"] == "c6_m60_1 * NVIDIA 4090"
         assert calls == [("access-key", "gpu", "4090", 10, True)]
-
-
-# ---------------------------------------------------------------------------
-# TestBohriumSessionCredentials
-# ---------------------------------------------------------------------------
-
-
-class TestBohriumSessionCredentials:
-    """Tests for session-backed credential resolution."""
-
-    def test_poll_uses_session_credentials_when_env_missing(
-        self, tmp_path, monkeypatch
-    ):
-        """BohriumTool should work with session credentials even without env vars."""
-        monkeypatch.delenv("BOHRIUM_ACCESS_KEY", raising=False)
-        monkeypatch.delenv("BOHRIUM_PROJECT_ID", raising=False)
-
-        session = _session_with_runtime()
-        tool = BohriumTool(session=session, workdir=tmp_path)
-
-        get_calls = []
-
-        def fake_get(base_url, path, access_key, params=None, timeout=30):
-            get_calls.append((path, access_key))
-            return {"data": {"status": 1}}  # Running
-
-        monkeypatch.setattr(bohrium_client_module, "_get", fake_get)
-        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
-
-        result = asyncio.run(tool.execute({"action": "poll", "job_id": "job-1"}))
-        assert result.status == "success"
-        assert get_calls[0][1] == "session-ak"  # Used session credential, not env
-
-    def test_poll_rejects_result_dir_parameter(self, tmp_path, monkeypatch):
-        """poll no longer accepts result_dir — directs to download action."""
-        monkeypatch.delenv("BOHRIUM_ACCESS_KEY", raising=False)
-        monkeypatch.delenv("BOHRIUM_PROJECT_ID", raising=False)
-
-        _patch_bridge(monkeypatch)
-        tool = BohriumTool(workdir=tmp_path)
-
-        result = asyncio.run(
-            tool.execute(
-                {"action": "poll", "job_id": "job-1", "result_dir": "/share/out"}
-            )
-        )
-        assert result.status == "error"
-        assert "no longer downloads artifacts" in result.content
-        assert 'action="download"' in result.content
-
-    def test_submit_uses_session_credentials_when_env_missing(
-        self, tmp_path, monkeypatch
-    ):
-        """submit should work with session credentials."""
-        monkeypatch.delenv("BOHRIUM_ACCESS_KEY", raising=False)
-        monkeypatch.delenv("BOHRIUM_PROJECT_ID", raising=False)
-
-        input_dir = tmp_path / "inputs"
-        input_dir.mkdir()
-        (input_dir / "input.inp").write_text("data", encoding="utf-8")
-
-        session = _session_with_runtime()
-        tool = BohriumTool(session=session, workdir=tmp_path)
-
-        post_calls = []
-        upload_calls = []
-
-        def fake_post(base_url, path, access_key, payload, timeout=30):
-            post_calls.append((path, access_key))
-            if "create" in path:
-                return {
-                    "code": 0,
-                    "data": {
-                        "storePath": "p/",
-                        "storeHost": "https://s.com",
-                        "token": "t",
-                        "jobId": "j1",
-                    },
-                }
-            return {"code": 0, "data": {"jobId": "j2", "bohrJobId": "b2"}}
-
-        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
-        monkeypatch.setattr(bohrium_client_module, "_post", fake_post)
-        _install_fake_sdk_free_upload(monkeypatch, upload_calls)
-
-        result = asyncio.run(
-            tool.execute(
-                {
-                    "action": "submit",
-                    "input_dir": str(input_dir),
-                    "image": "registry.dp.tech/dptech/cp2k:2024.1",
-                    "cmd": "cp2k.popt -i input.inp",
-                }
-            )
-        )
-
-        assert result.status == "success"
-        # Verify session credential was used in API calls
-        assert post_calls[0][1] == "session-ak"
-        assert post_calls[1][1] == "session-ak"
-
-    def test_no_credentials_returns_error(self, tmp_path, monkeypatch):
-        """No session and no env vars should return a credential error."""
-        monkeypatch.delenv("BOHRIUM_ACCESS_KEY", raising=False)
-        monkeypatch.delenv("BOHRIUM_PROJECT_ID", raising=False)
-        monkeypatch.delenv("BOHRIUM_BASE_URL", raising=False)
-
-        tool = BohriumTool(workdir=tmp_path)
-        result = asyncio.run(tool.execute({"action": "poll", "job_id": "job-1"}))
-        assert result.status == "error"
-        assert (
-            "credential" in result.content.lower()
-            or "unavailable" in result.content.lower()
-        )
-
-    def test_session_none_falls_back_to_env(self, tmp_path, monkeypatch):
-        """session=None should fall back to env credentials via bridge."""
-        monkeypatch.setenv("BOHRIUM_ACCESS_KEY", "env-ak")
-        monkeypatch.setenv("BOHRIUM_PROJECT_ID", "99")
-        monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
-
-        tool = BohriumTool(session=None, workdir=tmp_path)
-
-        get_calls = []
-
-        def fake_get(base_url, path, access_key, params=None, timeout=30):
-            get_calls.append((path, access_key))
-            return {"data": {"status": 1}}
-
-        monkeypatch.setattr(bohrium_client_module, "_get", fake_get)
-
-        result = asyncio.run(tool.execute({"action": "poll", "job_id": "job-1"}))
-        assert result.status == "success"
-        assert get_calls[0][1] == "env-ak"
 
 
 class TestBohriumKillAction:

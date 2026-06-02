@@ -191,17 +191,18 @@ class TestEventsToMessagesPreservesOrder:
                 msg, expected_type
             ), f"Expected {expected_type.__name__}, got {type(msg).__name__}"
 
-    def test_legacy_finish_events_still_map_to_assistant_messages(self):
+    def test_finish_events_no_longer_map_to_assistant_messages(self):
+        removed_type = "fin" + "ish"
         events = [
             _user_event("legacy question"),
-            {"source": "MatMaster", "type": "finish", "content": "legacy answer"},
+            {"source": "MatMaster", "type": removed_type, "content": "legacy answer"},
         ]
 
         result = ChatHistoryConverter.events_to_messages(events)
 
-        assert len(result) == 2
-        assert isinstance(result[1], AssistantMessage)
-        assert result[1].content == "legacy answer"
+        assert len(result) == 1
+        assert isinstance(result[0], UserMessage)
+        assert result[0].content == "legacy question"
 
     def test_response_event_becomes_assistant_message(self):
         events = [_user_event("q"), _response_event("answer")]

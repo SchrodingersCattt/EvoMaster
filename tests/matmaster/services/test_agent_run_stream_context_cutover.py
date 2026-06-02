@@ -23,7 +23,7 @@ from matmaster.context.sources.turn_input import (
     TurnInput,
     TurnInstructionSource,
 )
-from src.services.user_turn_context_service import (
+from matmaster.context.user_turn_context import (
     DEFAULT_TURN_TRANSFORM,
     USER_CONTEXT_RENDER_VERSION,
     USER_TURN_CONTEXT_SCHEMA_VERSION,

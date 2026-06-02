@@ -3,7 +3,11 @@ from __future__ import annotations
 import pytest
 
 from matmaster.context.assembly import ContextAssembler
-from matmaster.context.compaction import CompactionPlan, ContextCompactor
+from matmaster.context.compaction import (
+    CompactionPlan,
+    ContextCompactor,
+    prepare_messages_for_summary_call,
+)
 from matmaster.context.ports import ContextAssemblyPorts, SessionEvent, UserInstructions
 from matmaster.context.sections import ContextSection, ContextView, SectionOrder
 from matmaster.context.sources.turn_input import TurnInput
@@ -155,6 +159,57 @@ async def test_preflight_compaction_uses_raw_current_input_without_double_wrap()
     assert "Use current file." in runtime_content
     assert "wrapped" not in runtime_content
     assert result.checkpoint_covered_until_event_id == 7
+
+
+@pytest.mark.asyncio
+async def test_preflight_summary_split_and_reattach_share_current_input_source() -> (
+    None
+):
+    compactor = make_compactor()
+    turn_input = TurnInput.from_values(
+        user_text="current query",
+        pre_turn_history_event_id=7,
+    )
+    messages = [
+        SystemMessage(content="sys"),
+        UserMessage(content="old question"),
+        AssistantMessage(content="old answer"),
+        UserMessage(
+            content=(
+                "<user_instructions>rendered instructions</user_instructions>\n"
+                "<current_instruction>rendered current query</current_instruction>"
+            )
+        ),
+    ]
+
+    prep = prepare_messages_for_summary_call(
+        full_messages=messages,
+        phase="preflight",
+        turn_input=turn_input,
+        compact_request=UserMessage(content="Summarize history."),
+        context_limit=10_000,
+        reserved_summary_tokens=1_000,
+        safety_margin_tokens=100,
+    )
+
+    assert prep.messages == messages[:-1]
+    assert all(
+        "rendered current query" not in (message.content or "")
+        for message in prep.messages
+    )
+
+    result = await compactor.apply_summary(
+        compactor.plan_preflight_compaction(messages),
+        messages,
+        "Summary text.",
+        turn_input=turn_input,
+    )
+
+    runtime_content = messages[1].content or ""
+    assert result.checkpoint_covered_until_event_id == 7
+    assert runtime_content.count("<current_instruction>") == 1
+    assert "current query" in runtime_content
+    assert "rendered current query" not in runtime_content
 
 
 @pytest.mark.asyncio

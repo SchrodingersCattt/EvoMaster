@@ -194,16 +194,49 @@ def _bedrock_stop_to_openai_finish(reason: str | None) -> str | None:
     return reason
 
 
+def _get_positive_int(usage: dict[str, Any], *keys: str) -> int:
+    for key in keys:
+        value = usage.get(key)
+        if isinstance(value, int) and value > 0:
+            return value
+    return 0
+
+
 def _usage_from_metadata(meta: dict[str, Any]) -> tuple[dict[str, int], dict[str, Any]]:
     usage = meta.get("usage") or {}
-    inp = int(usage.get("inputTokens") or 0)
-    out = int(usage.get("outputTokens") or 0)
-    tot = int(usage.get("totalTokens") or (inp + out))
+    inp = int(usage.get("inputTokens") or usage.get("input_tokens") or 0)
+    out = int(usage.get("outputTokens") or usage.get("output_tokens") or 0)
+    tot = int(usage.get("totalTokens") or usage.get("total_tokens") or (inp + out))
     flat = {
         "prompt_tokens": inp,
         "completion_tokens": out,
         "total_tokens": tot,
     }
+    cache_read = _get_positive_int(
+        usage,
+        "cacheReadInputTokens",
+        "cache_read_input_tokens",
+        "cache_read_tokens",
+    )
+    if cache_read:
+        flat["cache_read_tokens"] = cache_read
+    cache_write = _get_positive_int(
+        usage,
+        "cacheWriteInputTokens",
+        "cacheCreationInputTokens",
+        "cache_write_input_tokens",
+        "cache_creation_input_tokens",
+        "cache_write_tokens",
+    )
+    if cache_write:
+        flat["cache_write_tokens"] = cache_write
+    reasoning = _get_positive_int(
+        usage,
+        "reasoningTokens",
+        "reasoning_tokens",
+    )
+    if reasoning:
+        flat["reasoning_tokens"] = reasoning
     return flat, dict(usage)
 
 
@@ -377,21 +410,7 @@ class BedrockProvider:
         usage_vendor: dict[str, Any] | None = None
         u = raw.get("usage") or {}
         if u:
-            inp = int(
-                u.get("inputTokens") or u.get("input_tokens") or 0,
-            )
-            out_t = int(
-                u.get("outputTokens") or u.get("output_tokens") or 0,
-            )
-            tot = int(
-                u.get("totalTokens") or u.get("total_tokens") or (inp + out_t),
-            )
-            usage = {
-                "prompt_tokens": inp,
-                "completion_tokens": out_t,
-                "total_tokens": tot,
-            }
-            usage_vendor = dict(u)
+            usage, usage_vendor = _usage_from_metadata({"usage": u})
         return LLMResponse(
             content=llm.content,
             tool_calls=llm.tool_calls,

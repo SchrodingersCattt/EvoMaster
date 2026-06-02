@@ -13,10 +13,7 @@ import pytest
 from matmaster.core.playground import ExecutionEnvironment
 from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.types.cancellation import CancellationController
-from matmaster.types.messages import (
-    LLMResponse,
-    StreamChunk,
-)
+from matmaster.types.messages import LLMResponse, StreamChunk
 from matmaster.types.run_metadata import RunMetadata
 from matmaster.types.runtime_ports import BohriumRuntimeSnapshot
 
@@ -98,10 +95,7 @@ async def test_build_runtime_uses_runtime_ports_history(
 ) -> None:
     from matmaster.config.exp import ExpConfig
     from matmaster.core.exp import Exp
-    from matmaster.types.runtime_ports import (
-        AgentRunPorts,
-        PlaygroundCompactionPort,
-    )
+    from matmaster.types.runtime_ports import AgentRunPorts, PlaygroundCompactionPort
 
     class RuntimeHistory:
         def query_events(self):
@@ -170,7 +164,7 @@ async def test_build_runtime_missing_runtime_history_has_no_scope_boundary(
 
 
 @pytest.mark.asyncio
-async def test_build_runtime_passes_turn_input_to_kernel_spec(
+async def test_build_runtime_keeps_turn_input_out_of_kernel_spec(
     tmp_path: Path,
 ) -> None:
     from matmaster.config.exp import ExpConfig
@@ -197,7 +191,46 @@ async def test_build_runtime_passes_turn_input_to_kernel_spec(
 
     runtime = await Exp(ExpConfig(name="test")).build_runtime(ctx)
 
-    assert runtime.kernel_runtime.spec.turn_input == turn_input
+    assert not hasattr(runtime.kernel_runtime.spec, "turn_input")
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_exposes_context_runtime_outside_kernel_runtime(
+    tmp_path: Path,
+) -> None:
+    from matmaster.config.exp import ExpConfig
+    from matmaster.core.exp import Exp
+
+    ctx = AgentRunContext(
+        environment=ExecutionEnvironment(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+        ),
+        request=AgentRunRequest(llm_provider=_MockProvider()),
+    )
+
+    runtime = await Exp(ExpConfig(name="test")).build_runtime(ctx)
+
+    assert runtime.context_runtime is not None
+    assert runtime.context_runtime.assembler is not None
+    assert not hasattr(runtime.kernel_runtime.spec, "context_runtime")
+    assert not hasattr(runtime.kernel_runtime.spec, "context_assembler")
+    assert not hasattr(runtime.kernel_runtime.resources, "context_runtime")
+    assert not hasattr(runtime.kernel_runtime.resources, "context_assembler")
+
+
+def test_build_runtime_signature_has_no_prebuilt_parameters() -> None:
+    import inspect
+
+    from matmaster.core.exp import Exp
+
+    params = inspect.signature(Exp.build_runtime).parameters
+
+    assert "prebuilt_skill_registry" not in params
+    assert "prebuilt_skill_resolver" not in params
+    assert "prebuilt_context_runtime" not in params
 
 
 def _make_playground_context(
@@ -577,7 +610,7 @@ class TestRunStream:
         ctx = _make_playground_context()
 
         events: list = []
-        async for event in exp.run_stream(ctx, "test task"):
+        async for event in exp.run_stream(ctx, "test task", spawn_id="test-spawn"):
             events.append(event)
 
         # Should have at least some events (start, streaming, complete, end)
@@ -586,7 +619,7 @@ class TestRunStream:
         # All events should have 'type' attribute (BusEvent contract)
         for event in events:
             assert hasattr(
-                event, 'type'
+                event, "type"
             ), f"Yielded object missing 'type' attribute: {type(event).__name__}"
         terminal_events = [e for e in events if isinstance(e, RunResultEvent)]
         assert len(terminal_events) == 1
@@ -609,7 +642,7 @@ class TestRunStream:
 
         exp._register_cleanup(on_cleanup)
 
-        async for _ in exp.run_stream(ctx, "test task"):
+        async for _ in exp.run_stream(ctx, "test task", spawn_id="test-spawn"):
             pass
 
         assert cleanup_called, "Cleanup callback should have been called"
@@ -631,7 +664,7 @@ class TestRunStream:
 
         exp._register_cleanup(on_cleanup)
 
-        gen = exp.run_stream(ctx, "test task")
+        gen = exp.run_stream(ctx, "test task", spawn_id="test-spawn")
         try:
             await gen.__anext__()  # Get first item
         finally:
@@ -655,12 +688,12 @@ class TestRunStream:
 
         async def fake_kernel_run_stream(
             kernel_runtime: Any,
-            task: str,
+            turn_request: Any,
             history: list[Any] | None = None,
             cancel_token: Any = None,
         ) -> AsyncIterator[Any]:
             observed["kernel_runtime"] = kernel_runtime
-            observed["task"] = task
+            observed["turn_request"] = turn_request
             observed["history"] = history
             observed["cancel_token"] = cancel_token
             yield MagicMock(type="test.event")
@@ -677,13 +710,15 @@ class TestRunStream:
             ctx,
             "test task",
             cancel_token=controller.token,
+            spawn_id="test-spawn",
         ):
             events.append(event)
 
         assert len(events) == 1
         assert ctx.environment.session._cancel_token is controller.token
         catalog.inject_cancel_token.assert_called_once_with(controller.token)
-        assert observed["task"] == "test task"
+        assert observed["turn_request"].user_message_content == "test task"
+        assert observed["turn_request"].turn_input.user_text == "test task"
         assert observed["cancel_token"] is controller.token
 
 
@@ -790,6 +825,19 @@ class TestBuildRuntimeCompactorEventSink:
 
 class TestActivePlanesNewNames:
     """_derive_active_planes recognises new CC-style tool names."""
+
+    def test_legacy_eval_tool_names_do_not_activate_external_service(self) -> None:
+        """Only current CC-style builtin names affect RuntimeTopology planes."""
+        from matmaster.core.exp import Exp
+        from matmaster.types.topology import ToolPlane
+
+        planes = Exp._derive_active_planes(
+            has_session=False,
+            builtin_cfg=["mm_web_search", "web_fetch"],
+            skills_enabled=False,
+        )
+
+        assert planes == frozenset({ToolPlane.CONTROL_PLANE})
 
     @pytest.mark.asyncio
     async def test_build_runtime_adds_external_service_plane_for_websearch(

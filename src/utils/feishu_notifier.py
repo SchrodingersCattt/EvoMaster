@@ -76,8 +76,8 @@ def format_usage_rows(usage_summary: dict | None) -> list[tuple[str, str]]:
     """把 run 的 token 消耗摘要格式化为飞书卡片行（标签, 值）。
 
     入参为 ``agent_run_service`` 构建的 usage 摘要 dict（或 ``None``）；无有效
-    usage 时返回空列表，调用方据此决定是否追加行。展示的是 root kernel accepted
-    LLM turns 的累计用量，不等于账单成本。
+    usage 时返回空列表，调用方据此决定是否追加行。展示的是 run-level aggregate
+    token usage。
     """
     if not usage_summary:
         return []

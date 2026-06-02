@@ -25,6 +25,7 @@ from typing import Any
 
 from matmaster.core.hooks import HookEvent, HookExecutor, SubagentContext
 from matmaster.types.cancellation import CancellationToken
+from matmaster.types.stream_drain import DrainResult
 
 logger = logging.getLogger(__name__)
 
@@ -56,14 +57,14 @@ class SubagentOrchestrator:
         self._parent_session_id = parent_session_id
         self._source_prefix = source_prefix
 
-    def make_spawn_fn(self) -> Callable[..., Awaitable[str]]:
+    def make_spawn_fn(self) -> Callable[..., Awaitable[DrainResult]]:
         """Return the ``spawn_fn`` closure AgentTool forwards LLM calls to."""
 
         async def spawn_fn(
             exp_name: str,
             task: str,
             cancel_token: CancellationToken | None = None,
-        ) -> str:
+        ) -> DrainResult:
             return await self.spawn(exp_name, task, cancel_token=cancel_token)
 
         return spawn_fn
@@ -74,8 +75,8 @@ class SubagentOrchestrator:
         task: str,
         *,
         cancel_token: CancellationToken | None = None,
-    ) -> str:
-        """Run one child agent and return its final content (or a status line)."""
+    ) -> DrainResult:
+        """Run one child agent and return its drained terminal result."""
         from matmaster.core.stream_drain import drain_run_stream
 
         child_source = f"{self._source_prefix}:{exp_name}"
@@ -102,7 +103,7 @@ class SubagentOrchestrator:
 
         await self._emit(HookEvent.SUBAGENT_START, spawn_id, exp_name, task)
         try:
-            drain = await drain_run_stream(
+            return await drain_run_stream(
                 self._child_run_factory(
                     exp_name, task, cancel_token=cancel_token, spawn_id=spawn_id
                 ),
@@ -110,10 +111,6 @@ class SubagentOrchestrator:
             )
         finally:
             await self._emit(HookEvent.SUBAGENT_STOP, spawn_id, exp_name, task)
-
-        if drain.status == "completed" and drain.final_content:
-            return drain.final_content
-        return f"SubAgent finished with status={drain.status}, reason={drain.reason}"
 
     async def _emit(
         self, event: HookEvent, spawn_id: str, exp_name: str, task: str

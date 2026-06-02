@@ -25,7 +25,6 @@ from matmaster.context.ports import (
     SessionJobsQuery,
     SkillResolver,
     UserInstructions,
-    hash_user_instructions,
 )
 from matmaster.context.session import SessionContextBuilder
 from matmaster.core.run_context import AgentRunContext
@@ -95,11 +94,7 @@ def build_runtime_context_assembly(
     if history_port is None:
         history_port = EmptySessionEventHistory()
 
-    user_instructions = ctx.request.user_instructions or UserInstructions(
-        text="",
-        hash=hash_user_instructions(""),
-        truncated=False,
-    )
+    user_instructions = ctx.request.user_instructions or UserInstructions.empty()
     assembly_ports = ContextAssemblyPorts(
         session_events=history_port,
         session_jobs=_EmptySessionJobsPort(),

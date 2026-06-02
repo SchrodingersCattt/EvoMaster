@@ -106,15 +106,12 @@ def _submit_one(label: str, input_dir: Path) -> dict:
 
     if ctx.sandbox:
         job_id = str(add_data.get("jobId", "")).strip()
-        bohr_job_id = str(add_data.get("bohrJobId", job_id)).strip()
     else:
-        job_id = int(add_data["jobId"])
-        bohr_job_id = int(add_data.get("bohrJobId") or job_id)
+        job_id = str(add_data["jobId"]).strip()
 
     result = {
         "label": label,
         "job_id": job_id,
-        "bohr_job_id": bohr_job_id,
         "job_name": job_name,
         "elapsed_seconds": round(elapsed, 2),
         "sandbox": ctx.sandbox,

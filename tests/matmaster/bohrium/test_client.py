@@ -94,7 +94,7 @@ def test_get_file_token(monkeypatch: pytest.MonkeyPatch) -> None:
         return {"data": {"host": "h", "path": "p", "token": "t"}}
 
     monkeypatch.setattr("matmaster.bohrium.client._post", fake_post)
-    host, path, token = get_file_token(_make_ctx(), file_path="log", bohr_job_id="1")
+    host, path, token = get_file_token(_make_ctx(), file_path="log", job_id="1")
     assert (host, path, token) == ("h", "p", "t")
 
 

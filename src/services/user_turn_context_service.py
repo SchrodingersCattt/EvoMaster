@@ -1,8 +1,7 @@
 """Durable user-turn context write boundary and AGENT.md helper.
 
 Rendering now belongs to matmaster.context.assembly.ContextAssembler; this
-module keeps only shared constants, AGENT.md loading, and durable event write
-deduplication.
+module keeps AGENT.md loading and durable event write deduplication.
 """
 
 from __future__ import annotations
@@ -17,9 +16,6 @@ logger = logging.getLogger(__name__)
 
 _USER_INSTRUCTIONS_PATH = "/personal/.matmaster/AGENT.md"
 USER_INSTRUCTIONS_MAX_BYTES = 50 * 1024
-USER_TURN_CONTEXT_SCHEMA_VERSION = "user_turn_context.v1"
-USER_CONTEXT_RENDER_VERSION = "user_context_render.v1"
-DEFAULT_TURN_TRANSFORM = "raw"
 
 UserTurnContextWriteStatus = Literal["written", "duplicate"]
 

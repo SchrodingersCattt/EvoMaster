@@ -406,7 +406,7 @@ class ChatStreamService:
                                 except TimeoutError:
                                     yield self.sse_format(self._ping_payload(sid))
                                     continue
-                                if payload.get('type') in {'stream_closed', 'end'}:
+                                if payload.get('type') == 'stream_closed':
                                     yield self.sse_format(payload)
                                     break
                                 yield self.sse_format(payload)
@@ -697,21 +697,6 @@ class ChatStreamService:
             turn_input_payload = (
                 ctx.turn_input.to_payload() if ctx.turn_input is not None else None
             )
-            # Backward-compat wire channel (2026-05-29 cleanup, audit N2):
-            # older workers may consume the legacy
-            # 'current_input_context' payload, whose history boundary lives under
-            # the 'pre_query_scope_event_id' key. Keep emitting it until all
-            # in-flight Redis jobs using the legacy payload have drained, then drop this block
-            # (see .planning/context-refactor/CLEANUP-AUDIT.md N2). Plain string
-            # (not concatenated) so the key stays greppable for that removal.
-            legacy_current_input_payload = None
-            if ctx.turn_input is not None and turn_input_payload is not None:
-                legacy_current_input_payload = {
-                    **turn_input_payload,
-                    "pre_query_scope_event_id": (
-                        ctx.turn_input.pre_turn_history_event_id
-                    ),
-                }
 
             job = {
                 'session_id': sid,
@@ -722,7 +707,6 @@ class ChatStreamService:
                 'llm': ctx.llm,
                 'model': ctx.model,
                 'turn_input': turn_input_payload,
-                'current_input_context': legacy_current_input_payload,
                 'images': list(ctx.images),
                 'bohrium_required': ctx.bohrium_required,
                 'remote_workdir': ctx.remote_workdir,
@@ -800,7 +784,7 @@ class ChatStreamService:
                         or ctx.invocation_id,
                     }
                     yield self.sse_format(out)
-                    if payload.get('type') in {'stream_closed', 'end'}:
+                    if payload.get('type') == 'stream_closed':
                         break
             finally:
                 shutdown_event.set()

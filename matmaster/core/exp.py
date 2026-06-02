@@ -1,26 +1,7 @@
-"""Exp -- config-driven assembly layer.
+"""Exp config-driven runtime assembly and execution driver.
 
-Exp is a concrete class that transforms an ExpConfig + AgentRunContext into an
-AgentRuntime (build_runtime) and executes the agent loop (run_stream). The
-AgentRuntime bundles the kernel, the kernel-facing AgentKernelRuntime
-(AgentKernelSpec + AgentKernelResources), and a cleanup callable.
-
-The ``AgentRunContext`` it consumes keeps physical facts under
-``ctx.environment`` (ExecutionEnvironment) and per-run runtime ingredients
-under ``ctx.request`` (AgentRunRequest).
-
-Lifecycle:
-1. build_runtime(ctx) -- one-shot assembly: config + ctx -> tools, prompt,
-   kernel_spec + kernel_resources -> AgentRuntime
-2. run_stream(ctx, task, ...) -- thin driver over runtime_scope()
-
-The run lifecycle (build_runtime -> cancel-token injection -> cleanup) lives in
-runtime_scope(), a reusable async context manager shared by both run_stream()
-and devshell, so neither hand-copies build/inject/cleanup.
-
-Cleanup: Exp owns capability resource cleanup via _cleanup_callbacks.
-runtime_scope() wraps the run in try/finally to guarantee cleanup even when the
-kernel raises.
+This module turns ExpConfig + AgentRunContext into AgentRuntime and exposes the
+shared runtime_scope/run_stream lifecycle used by service and devshell paths.
 """
 
 from __future__ import annotations
@@ -30,12 +11,26 @@ import json
 import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from matmaster.config.exp import ExpConfig
-from matmaster.context.ports import SkillResolver
+from matmaster.context.assembly import (
+    ContextAssembler,
+    ContextAssemblyIntent,
+    TurnAssemblyRequest,
+)
+from matmaster.context.ports import SkillResolver, UserInstructions
+from matmaster.context.sections import ContextView
+from matmaster.context.sources.turn_input import TurnInput
 from matmaster.context.system_prompt import SystemPromptBuilder
+from matmaster.context.turn_intent import TurnIntentResolution, resolve_turn_intent
+from matmaster.context.user_turn_context import (
+    DEFAULT_TURN_TRANSFORM,
+    USER_CONTEXT_RENDER_VERSION,
+    USER_TURN_CONTEXT_SCHEMA_VERSION,
+)
 from matmaster.core.hooks import HookExecutor
 from matmaster.core.path_access import derive_path_access_roots
 from matmaster.core.run_context import AgentRunContext
@@ -54,15 +49,17 @@ from matmaster.types.runtime import (
     AgentKernelResources,
     AgentKernelRuntime,
     AgentKernelSpec,
+    AgentKernelTurnRequest,
     AgentRuntime,
 )
-from matmaster.types.runtime_ports import KernelRuntimePorts
+from matmaster.types.runtime_ports import (
+    EmptySessionEventHistory,
+    KernelRuntimePorts,
+    UserTurnContextWriteRequest,
+)
 
 if TYPE_CHECKING:
     from matmaster.types.messages import Message
-
-
-_LOGGER = logging.getLogger(__name__)
 
 
 # Builtin tools whose execution reaches outside the workspace.
@@ -74,63 +71,42 @@ _EXTERNAL_EFFECT_TOOL_NAMES: frozenset[str] = frozenset(
         "WebFetch",
         "PaperSearch",
         "Bohrium",
-        # Aliases surfaced by evaluation tooling.
-        "mm_web_search",
-        "web_fetch",
+        "AttachFigure",
     }
 )
 
 # Builtin tool names that require an active session for execution.
 _SESSION_REQUIRING_TOOL_NAMES: frozenset[str] = frozenset(
     {
-        "execute_bash",
         "Bash",
-        "read_file",
+        "AttachFigure",
         "Read",
-        "write_file",
         "Write",
-        "edit_file",
         "Edit",
-        "glob",
         "Glob",
-        "grep",
         "Grep",
     }
 )
 
 
-def _resolve_skill_config_dir(raw_dir: str) -> Path:
-    """Map legacy ``matmaster_config`` references onto this repo's ``config`` dir."""
-    candidate = Path(raw_dir)
-    if candidate.exists():
-        return candidate
-    if raw_dir == "matmaster_config":
-        compat = Path("config")
-        if compat.exists():
-            return compat
-    return candidate
+@dataclass(frozen=True)
+class RootTurnRender:
+    rendered_content: str
 
 
 def _deep_merge_dict(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     merged = dict(base)
     for key, value in patch.items():
-        if isinstance(value, dict) and isinstance(merged.get(key), dict):
-            merged[key] = _deep_merge_dict(merged[key], value)
-        else:
-            merged[key] = value
+        base_value = merged.get(key)
+        if isinstance(base_value, dict) and isinstance(value, dict):
+            merged[key] = _deep_merge_dict(base_value, value)
+            continue
+        merged[key] = value
     return merged
 
 
 class Exp:
-    """Config-driven assembly layer.
-
-    Instantiated with an ExpConfig. exp_name comes from config.name
-    (defaults to 'direct').
-
-    build_runtime() creates resources (ToolRegistry, SystemPromptBuilder, Kernel)
-    and assembles kernel_spec + kernel_resources into an AgentKernelRuntime.
-    run_stream() delegates to build_runtime then kernel.run_stream with cleanup guarantee.
-    """
+    """Config-driven assembly layer for AgentRuntime and kernel execution."""
 
     def __init__(
         self,
@@ -150,14 +126,10 @@ class Exp:
         self._skill_resolver: SkillResolver | None = None
         self.logger = logging.getLogger(self.__class__.__name__)
 
-    # ── Properties ───────────────────────────────────────
-
     @property
     def exp_name(self) -> str:
         """From config.name, defaults to 'direct'."""
         return self._config.name
-
-    # ── Cleanup infrastructure ───────────────────────────
 
     def _register_cleanup(self, callback: Callable[[], Any]) -> None:
         """Register a cleanup callback to run after kernel execution."""
@@ -187,8 +159,6 @@ class Exp:
                 )
         self._cleanup_callbacks.clear()
 
-    # ── Child runtime factory ─────────────────────────────
-
     def _make_child_run_factory(
         self, ctx: AgentRunContext
     ) -> Callable[..., AsyncIterator[Any]]:
@@ -199,7 +169,6 @@ class Exp:
         ``run_stream`` with the parent ``ctx``. The orchestrator owns the spawn
         lifecycle (id, hooks, event retag, drain) around the returned stream.
         """
-        skill_resolver = self._skill_resolver
 
         def child_run_factory(
             exp_name: str,
@@ -216,12 +185,9 @@ class Exp:
                 task,
                 cancel_token=cancel_token,
                 spawn_id=spawn_id,
-                skill_resolver=skill_resolver,
             )
 
         return child_run_factory
-
-    # ── Run identity ─────────────────────────────────────
 
     @staticmethod
     def _build_run_identity(
@@ -234,8 +200,6 @@ class Exp:
             session_id=ctx.environment.session_id,
             spawn_id=spawn_id,
         )
-
-    # ── Active planes derivation ────────────────────────
 
     @staticmethod
     def _derive_active_planes(
@@ -260,14 +224,11 @@ class Exp:
             planes.add(ToolPlane.EXTERNAL_SERVICE)
         return frozenset(planes)
 
-    # ── Runtime construction ─────────────────────────────
-
     async def build_runtime(
         self,
         ctx: AgentRunContext,
         *,
         skills: dict[str, Any] | None = None,
-        skill_resolver: SkillResolver | None = None,
         spawn_id: str | None = None,
     ) -> AgentRuntime:
         """One-shot assembly: tools -> prompt -> context assembly -> kernel.
@@ -282,9 +243,10 @@ class Exp:
         # Discard any registry from a prior run so a turn that turns skills off
         # cannot expose stale state to the prompt builder.
         self._skill_registry = None
+        from matmaster.context.skill_resolver import SkillRegistryResolver
         from matmaster.core.runtime_context_assembly import empty_skill_resolver
 
-        self._skill_resolver = skill_resolver or empty_skill_resolver
+        self._skill_resolver = empty_skill_resolver
 
         registry = ToolRegistry()
         builtin_cfg = self._config.tools.builtin
@@ -333,6 +295,7 @@ class Exp:
 
         if skills or self._config.skills.enabled:
             self._init_skill_tools(ctx, registry, skills_config=skills, catalog=catalog)
+        self._skill_resolver = SkillRegistryResolver(self._skill_registry)
 
         # When allow_spawn is False (child Exp), spawn_fn is None, which causes
         # AgentTool to set exposed_to_model=False (hidden from LLM but still
@@ -429,7 +392,6 @@ class Exp:
             max_turns=self._config.max_turns,
             compaction=self._config.compaction,
             run_identity=self._build_run_identity(ctx, spawn_id=spawn_id),
-            turn_input=request.turn_input,
             llm_model=request.llm_model,
             llm_model_profile=request.llm_model_profile,
             llm_model_route=request.llm_model_route,
@@ -462,9 +424,8 @@ class Exp:
             kernel=kernel,
             kernel_runtime=kernel_runtime,
             cleanup=self._run_cleanup_callbacks,
+            context_runtime=runtime_context.context_runtime,
         )
-
-    # ── Runtime scope + run_stream ───────────────────────
 
     @asynccontextmanager
     async def runtime_scope(
@@ -473,7 +434,6 @@ class Exp:
         cancel_token: CancellationToken | None = None,
         *,
         skills: dict[str, Any] | None = None,
-        skill_resolver: SkillResolver | None = None,
         spawn_id: str | None = None,
     ) -> AsyncIterator[AgentRuntime]:
         """Reusable run lifecycle: build_runtime -> cancel-token injection
@@ -489,7 +449,6 @@ class Exp:
             runtime = await self.build_runtime(
                 ctx,
                 skills=skills,
-                skill_resolver=skill_resolver,
                 spawn_id=spawn_id,
             )
             kernel_runtime = runtime.kernel_runtime
@@ -513,12 +472,11 @@ class Exp:
     async def run_stream(
         self,
         ctx: AgentRunContext,
-        task: str,
+        task: str | None = None,
         *,
         history: list[Message] | None = None,
         cancel_token: CancellationToken | None = None,
         skills: dict[str, Any] | None = None,
-        skill_resolver: SkillResolver | None = None,
         spawn_id: str | None = None,
     ) -> AsyncIterator[Any]:
         """Thin driver over :meth:`runtime_scope`.
@@ -527,22 +485,143 @@ class Exp:
         Cleanup is guaranteed by the scope's try/finally on normal completion,
         break, and exception.
         """
+        resolution: TurnIntentResolution | None = None
+        user_instructions: UserInstructions | None = None
+        if spawn_id is None:
+            if ctx.request.turn_input is None:
+                raise RuntimeError(
+                    "AgentRunRequest.turn_input is required for root run"
+                )
+            events_port = (
+                ctx.request.ports.compaction.history or EmptySessionEventHistory()
+            )
+            user_instructions = (
+                ctx.request.user_instructions or UserInstructions.empty()
+            )
+            resolution = await resolve_turn_intent(
+                events_port=events_port,
+                instructions_hash=user_instructions.hash,
+                session_id=ctx.environment.session_id,
+                spawn_id=None,
+            )
+            ctx = ctx.model_copy(
+                update={
+                    "request": ctx.request.model_copy(
+                        update={"active_skills": resolution.active_skills}
+                    )
+                }
+            )
+        elif task is None:
+            raise RuntimeError("task is required for spawn run")
+        else:
+            ctx = ctx.model_copy(
+                update={
+                    "request": ctx.request.model_copy(
+                        update={
+                            "turn_input": TurnInput.from_values(user_text=task),
+                        }
+                    )
+                }
+            )
+
         async with self.runtime_scope(
             ctx,
             cancel_token,
             skills=skills,
-            skill_resolver=skill_resolver,
             spawn_id=spawn_id,
         ) as runtime:
+            if spawn_id is None:
+                if resolution is None or user_instructions is None:
+                    raise RuntimeError("root turn resolution is missing")
+                if runtime.context_runtime is None:
+                    raise RuntimeError("context runtime is unavailable for root run")
+                turn = await self._render_and_persist_root_turn(
+                    ctx=ctx,
+                    intent=resolution.intent,
+                    assembler=runtime.context_runtime.assembler,
+                    user_instructions=user_instructions,
+                )
+                task = turn.rendered_content
+                turn_request = AgentKernelTurnRequest(
+                    user_message_content=task,
+                    turn_input=ctx.request.turn_input,
+                )
+                kernel_runtime = replace(
+                    runtime.kernel_runtime,
+                    spec=replace(
+                        runtime.kernel_runtime.spec,
+                        prompt_submit_rewrite_enabled=False,
+                    ),
+                )
+            else:
+                kernel_runtime = runtime.kernel_runtime
+                turn_request = AgentKernelTurnRequest(
+                    user_message_content=task,
+                    turn_input=ctx.request.turn_input,
+                )
             async for event in runtime.kernel.run_stream(
-                runtime.kernel_runtime,
-                task,
+                kernel_runtime,
+                turn_request,
                 history=history,
                 cancel_token=cancel_token,
             ):
                 yield event
 
-    # ── Capability initialization helpers ────────────────
+    async def _render_and_persist_root_turn(
+        self,
+        *,
+        ctx: AgentRunContext,
+        intent: ContextAssemblyIntent,
+        assembler: ContextAssembler,
+        user_instructions: UserInstructions,
+    ) -> RootTurnRender:
+        if ctx.request.turn_input is None:
+            raise RuntimeError("AgentRunRequest.turn_input is required for root run")
+        assembly = await assembler.assemble_turn(
+            intent=intent,
+            request=TurnAssemblyRequest(
+                session_id=ctx.environment.session_id,
+                spawn_id=None,
+                turn_input=ctx.request.turn_input,
+                user_instructions=user_instructions,
+            ),
+        )
+        message = assembly.user_turn_context.to_message(ContextView.RUNTIME)
+        await self._write_user_turn_context_if_configured(
+            ctx=ctx,
+            intent=intent,
+            message=message,
+            user_instructions=user_instructions,
+        )
+        return RootTurnRender(rendered_content=message.content)
+
+    async def _write_user_turn_context_if_configured(
+        self,
+        *,
+        ctx: AgentRunContext,
+        intent: ContextAssemblyIntent,
+        message: Message,
+        user_instructions: UserInstructions,
+    ) -> None:
+        writer = ctx.request.ports.user_turn_context_writer
+        if writer is None:
+            return
+        await writer(
+            UserTurnContextWriteRequest(
+                session_id=ctx.environment.session_id,
+                task_id=ctx.environment.metadata.task_id,
+                invocation_id=ctx.request.invocation_id,
+                spawn_id=None,
+                kind="anchor" if intent.is_anchor_turn else "continuation",
+                message=message,
+                user_instructions_hash=(
+                    user_instructions.hash if intent.is_anchor_turn else None
+                ),
+                transform=DEFAULT_TURN_TRANSFORM,
+                render_version=USER_CONTEXT_RENDER_VERSION,
+                schema_version=USER_TURN_CONTEXT_SCHEMA_VERSION,
+            )
+        )
 
     def _init_builtin_tools(
         self,
@@ -560,8 +639,9 @@ class Exp:
         in the list are registered, cutting prompt-token overhead.
 
         Tools are split into two categories:
-        - Session-requiring: BashTool, ReadTool, WriteTool, EditTool,
-          GlobTool, GrepTool (need ctx.environment.session for execution)
+        - Session-requiring: BashTool, AttachFigure, ReadTool, WriteTool,
+          EditTool, GlobTool, GrepTool (need ctx.environment.session for
+          execution)
         - Sessionless: TodoWriteTool, WebSearchTool, WebFetchTool
           (operate without a session; AgentTool is registered separately
           in build_runtime)
@@ -577,6 +657,7 @@ class Exp:
 
         from matmaster.tools.builtin import (
             AskQuestionTool,
+            AttachFigure,
             BashTool,
             BohriumTool,
             EditTool,
@@ -602,6 +683,7 @@ class Exp:
         if has_session:
             session_tools = [
                 BashTool(session=env.session, workdir=exec_wd),
+                AttachFigure(session=env.session, workdir=exec_wd),
                 ReadTool(session=env.session, workdir=exec_wd),
                 WriteTool(session=env.session, workdir=exec_wd),
                 EditTool(session=env.session, workdir=exec_wd),
@@ -674,7 +756,7 @@ class Exp:
         env = ctx.environment
 
         from matmaster.skills.registry import SkillRegistry
-        from matmaster.tools.builtin.skill_tool import LegacyUseSkillTool, SkillTool
+        from matmaster.tools.builtin.skill_tool import SkillTool
         from matmaster.tools.lazy_mcp import LazyMCPConnector, LazyMCPTool
         from matmaster.tools.schema_cache import ToolSchemaCache
 
@@ -719,7 +801,7 @@ class Exp:
         # calculation_executors) is a separate concern from skill routing.
         from matmaster.config.loader import _load_raw
 
-        resolved_config_dir = _resolve_skill_config_dir(skills_cfg.config_dir)
+        resolved_config_dir = Path(skills_cfg.config_dir)
         mcp_runtime_path = resolved_config_dir / skills_cfg.mcp_runtime_file
         if mcp_runtime_path.exists():
             mcp_config = _load_raw(mcp_runtime_path)
@@ -850,14 +932,6 @@ class Exp:
             on_skill_hit=activate_mcp_server,
         )
         registry.register(skill_tool, source="skill")
-        registry.register(
-            LegacyUseSkillTool(
-                session=env.session,
-                skill_registry=skill_registry,
-                on_skill_hit=activate_mcp_server,
-            ),
-            source="skill",
-        )
 
         # Replay skills activated on past turns of this session.
         # activate_mcp_server reads only from the on-disk schema cache (no MCP IO),

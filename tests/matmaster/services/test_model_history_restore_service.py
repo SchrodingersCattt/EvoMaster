@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from typing import Any
 
+import pytest
+
 import src.services.model_history_restore_service as restore_module
+from matmaster.context.history_restore import (
+    HistoryCheckpointCorruptedError,
+    HistoryRestoreFailedError,
+)
 from matmaster.types.message_normalization import normalize_and_validate_openai_messages
 from matmaster.types.messages import (
     AssistantMessage,
@@ -279,14 +285,8 @@ class FakeEventsTable:
         return self.has_utc
 
 
-def test_no_checkpoint_without_user_turn_context_uses_legacy_restore() -> None:
-    events_table = FakeEventsTable(
-        session_events=[
-            _raw_user("legacy question", event_id=1, invocation_id="inv-1"),
-            _response("legacy answer", event_id=2),
-        ],
-        has_utc=False,
-    )
+def test_no_checkpoint_without_user_turn_context_returns_empty_history() -> None:
+    events_table = FakeEventsTable(has_utc=False)
 
     history = ModelHistoryRestoreService(events_table).restore_history(
         session_id="sess-1",
@@ -295,15 +295,12 @@ def test_no_checkpoint_without_user_turn_context_uses_legacy_restore() -> None:
         raw_limit=50,
     )
 
-    assert [message.role for message in history] == ["user", "assistant"]
-    assert [message.content for message in history] == [
-        "legacy question",
-        "legacy answer",
-    ]
+    assert history == []
     assert ("has_user_turn_context", "sess-1", None) in events_table.calls
     assert not any(
         call[0] == "get_scope_events_after_id" for call in events_table.calls
     )
+    assert not any(call[0] == "get_session_events" for call in events_table.calls)
 
 
 def test_no_checkpoint_with_user_turn_context_uses_v1_restore() -> None:
@@ -526,30 +523,22 @@ def test_v1_restore_excludes_current_task_events() -> None:
     ]
 
 
-def test_v1_checkpoint_with_null_boundary_falls_back_to_legacy() -> None:
+def test_v1_checkpoint_with_null_boundary_raises_corrupted() -> None:
     events_table = FakeEventsTable(
         checkpoints=[_v1_checkpoint(covered_until_event_id=None)],
-        session_events=[
-            _raw_user("legacy fallback question", event_id=1),
-            _response("legacy fallback answer", event_id=2),
-        ],
         has_utc=True,
     )
 
-    history = ModelHistoryRestoreService(events_table).restore_history(
-        session_id="sess-1",
-        spawn_id=None,
-        task_id=None,
-    )
-
-    assert [message.content for message in history] == [
-        "legacy fallback question",
-        "legacy fallback answer",
-    ]
-    assert any(call[0] == "get_session_events" for call in events_table.calls)
+    with pytest.raises(HistoryCheckpointCorruptedError, match="covered_until_event_id"):
+        ModelHistoryRestoreService(events_table).restore_history(
+            session_id="sess-1",
+            spawn_id=None,
+            task_id=None,
+        )
+    assert not any(call[0] == "get_session_events" for call in events_table.calls)
 
 
-def test_hybrid_v1_keeps_pre_phase1_user_query_without_utc() -> None:
+def test_hybrid_v1_discards_pre_phase1_raw_tail() -> None:
     events_table = FakeEventsTable(
         scope_events=[
             _raw_user("pre phase 1 question", event_id=1, invocation_id="legacy-inv"),
@@ -567,8 +556,6 @@ def test_hybrid_v1_keeps_pre_phase1_user_query_without_utc() -> None:
     )
 
     assert [message.content for message in history] == [
-        "pre phase 1 question",
-        "pre phase 1 answer",
         "phase 1 question",
         "phase 1 answer",
     ]
@@ -596,7 +583,7 @@ def test_hybrid_v1_skips_covered_user_query() -> None:
     ]
 
 
-def test_hybrid_v1_keeps_pre_phase1_user_query_without_invocation_id() -> None:
+def test_hybrid_v1_discards_raw_user_without_invocation_id() -> None:
     events_table = FakeEventsTable(
         scope_events=[
             _raw_user("old query without invocation", event_id=1),
@@ -611,10 +598,7 @@ def test_hybrid_v1_keeps_pre_phase1_user_query_without_invocation_id() -> None:
         task_id=None,
     )
 
-    assert [message.content for message in history] == [
-        "old query without invocation",
-        "new context",
-    ]
+    assert [message.content for message in history] == ["new context"]
 
 
 def test_restore_history_delegates_algorithm_to_model_history_restorer(
@@ -648,6 +632,31 @@ def test_restore_history_delegates_algorithm_to_model_history_restorer(
     assert constructed
     assert restore_calls == [("sess-1", None)]
     assert [message.content for message in history] == ["delegated"]
+    assert "legacy_restore" not in constructed[0]
+
+
+def test_all_recoverable_v1_checkpoints_failed_raises_restore_failed(
+    monkeypatch,
+) -> None:
+    events_table = FakeEventsTable(
+        checkpoints=[
+            _v1_checkpoint(checkpoint_id=2, covered_until_event_id=20),
+            _v1_checkpoint(checkpoint_id=1, covered_until_event_id=10),
+        ],
+        has_utc=True,
+    )
+
+    def fail_deserialize(_raw):
+        raise ValueError("bad base messages")
+
+    monkeypatch.setattr(restore_module, "deserialize_base_messages", fail_deserialize)
+
+    with pytest.raises(HistoryRestoreFailedError, match="no usable"):
+        ModelHistoryRestoreService(events_table).restore_history(
+            session_id="sess-1",
+            spawn_id=None,
+            task_id=None,
+        )
 
 
 def test_v1_restore_mixed_fixture_preserves_phase1_message_bytes() -> None:

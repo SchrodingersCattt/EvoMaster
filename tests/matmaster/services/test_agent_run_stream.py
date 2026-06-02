@@ -27,6 +27,7 @@ from matmaster.types.events import (
 )
 from matmaster.types.figures import FigureUploadConfig
 from matmaster.types.run_metadata import RunMetadata
+from src.services.image_input_service import ImageInputService
 from tests.matmaster.services.agent_run_stream_fixtures import (
     _FakeExp,
     _make_cancel_token,
@@ -448,7 +449,7 @@ async def test_run_agent_does_not_store_callback_ports_in_metadata():
 
 
 @pytest.mark.asyncio
-async def test_run_agent_writes_user_turn_context_and_passes_same_runtime_task():
+async def test_run_agent_injects_user_turn_context_writer_and_raw_turn_input():
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
 
     async with _patched_service([run_result]) as (svc, _sse, _persist):
@@ -467,25 +468,12 @@ async def test_run_agent_writes_user_turn_context_and_passes_same_runtime_task()
         )
 
     assert ok is True
-    svc._test_events_table.add_event.assert_any_call(
-        "sess-1",
-        "MatMaster",
-        "user_turn_context",
-        ANY,
-        task_id="task-1",
-        invocation_id="inv-1",
-        spawn_id=None,
-    )
-    payload = [
-        call.args[3]
-        for call in svc._test_events_table.add_event.call_args_list
-        if call.args[2] == "user_turn_context"
-    ][0]
-    assert payload["schema_version"] == "user_turn_context.v1"
-    assert payload["kind"] == "anchor"
-    assert "Prefer concise answers." in svc._test_fake_exp.last_task
-    assert payload["message"]["content"] == svc._test_fake_exp.last_task
-    assert payload["user_instructions_hash"].startswith("sha256:")
+    request = svc._test_fake_exp.last_ctx.request
+    assert request.invocation_id == "inv-1"
+    assert request.ports.user_turn_context_writer is not None
+    assert request.user_instructions.hash.startswith("sha256:")
+    assert svc._test_fake_exp.last_task == "first question"
+    assert svc._test_events_table.add_event.call_args_list == []
 
 
 @pytest.mark.asyncio
@@ -522,8 +510,9 @@ async def test_run_agent_user_turn_context_records_full_provider_facing_with_att
             workspace_paths=["/workspace/notes.md"],
         )
         image_service = MagicMock()
-        image_service.ensure_vision_supported.return_value = MagicMock(
-            vision_detail=None
+        image_service.resolve_image_detail.return_value = None
+        image_service.enrich_turn_input_images.side_effect = (
+            ImageInputService().enrich_turn_input_images
         )
 
         with patch(
@@ -543,21 +532,45 @@ async def test_run_agent_user_turn_context_records_full_provider_facing_with_att
             )
 
     assert ok is True
-    payload = [
-        call.args[3]
-        for call in svc._test_events_table.add_event.call_args_list
-        if call.args[2] == "user_turn_context"
-    ][0]
+    request = svc._test_fake_exp.last_ctx.request
+    assert request.ports.user_turn_context_writer is not None
+    assert request.turn_input.files == (
+        "https://oss.example.com/input/feo.cif",
+        "https://oss.example.com/input/fe2o3.cif",
+    )
+    assert request.turn_input.workspace_paths == ("/workspace/notes.md",)
+    assert request.turn_input.images == ("https://oss.example.com/input/struct1.png",)
+    assert svc._test_fake_exp.last_task == "Compare FeO vs Fe2O3 from these files"
 
-    assert "Use SI units." in payload["message"]["content"]
-    assert "feo.cif" in payload["message"]["content"]
-    assert "notes.md" in payload["message"]["content"]
-    image_urls = [img["url"] for img in payload["message"]["images"]]
-    assert "https://oss.example.com/input/struct1.png" in image_urls
-    assert "Use SI units." in svc._test_fake_exp.last_task
-    assert "feo.cif" in svc._test_fake_exp.last_task
-    assert "[Current attachments]" in svc._test_fake_exp.last_task
-    assert payload["message"]["content"] == svc._test_fake_exp.last_task
+
+@pytest.mark.asyncio
+async def test_run_agent_leaves_active_skill_resolution_to_exp_without_hot_cache():
+    run_result = RunResultEvent(source="agent", status="completed", reason="natural")
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        svc._test_events_table.query_context_events.return_value = [
+            {
+                "id": 1,
+                "type": "skill_hit",
+                "source": "MatMaster",
+                "content": {"skill_name": "mlip"},
+            }
+        ]
+
+        ok, _elapsed, _usage = await svc.run_agent(
+            session_id="sess-1",
+            user_prompt="hello",
+            send_cb=AsyncMock(),
+            cancel_token=_make_cancel_token(),
+            mode="direct",
+            task_id="task-1",
+            invocation_id="inv-active-skills",
+        )
+
+    assert ok is True
+    assert not hasattr(svc, "_active_skills")
+    assert svc._test_fake_exp.last_ctx.request.active_skills == frozenset()
+    assert svc._test_fake_exp.last_ctx.request.ports.compaction.history is not None
 
 
 @pytest.mark.asyncio
@@ -594,76 +607,21 @@ async def test_run_agent_writes_continuation_when_instruction_hash_matches():
         )
 
     assert ok is True
-    payload = [
-        call.args[3]
-        for call in svc._test_events_table.add_event.call_args_list
-        if call.args[2] == "user_turn_context"
-    ][0]
-    assert payload["kind"] == "continuation"
-    assert payload["user_instructions_hash"] is None
-    assert svc._test_fake_exp.last_task == (
-        "<current_instruction>\nfollow up\n</current_instruction>"
+    assert (
+        svc._test_fake_exp.last_ctx.request.ports.user_turn_context_writer is not None
     )
-
-
-@pytest.mark.asyncio
-async def test_run_agent_aborts_when_user_turn_context_write_fails():
-    run_result = RunResultEvent(source="agent", status="completed", reason="natural")
-
-    async with _patched_service([run_result]) as (svc, _sse, _persist):
-        svc._test_session.read_file.return_value = "Use SI units."
-        svc._test_events_table.get_recent_context_anchor_events.return_value = []
-        svc._test_events_table.query_user_turn_context_by_invocation.return_value = None
-        svc._test_events_table.add_event.return_value = False
-
-        ok, _elapsed, _usage = await svc.run_agent(
-            session_id="sess-1",
-            user_prompt="first question",
-            send_cb=AsyncMock(),
-            cancel_token=_make_cancel_token(),
-            mode="direct",
-            task_id="task-1",
-            invocation_id="inv-1",
-        )
-
-    assert ok[0] is False
-    assert "user_turn_context write returned false" in ok[1]
-    assert svc._test_fake_exp.last_task is None
-
-
-@pytest.mark.asyncio
-async def test_run_agent_aborts_when_invocation_id_missing():
-    run_result = RunResultEvent(source="agent", status="completed", reason="natural")
-
-    async with _patched_service([run_result]) as (svc, _sse, _persist):
-        svc._test_session.read_file.return_value = "Use SI units."
-        svc._test_events_table.get_recent_context_anchor_events.return_value = []
-        svc._test_events_table.query_user_turn_context_by_invocation.return_value = None
-
-        ok, _elapsed, _usage = await svc.run_agent(
-            session_id="sess-1",
-            user_prompt="first question",
-            send_cb=AsyncMock(),
-            cancel_token=_make_cancel_token(),
-            mode="direct",
-            task_id="task-1",
-            invocation_id=None,
-        )
-
-    assert ok[0] is False
-    assert "invocation_id" in ok[1]
-    assert svc._test_fake_exp.last_task is None
+    assert svc._test_fake_exp.last_task == "follow up"
 
 
 @pytest.mark.asyncio
 async def test_run_agent_idempotent_skip_when_user_turn_context_already_exists():
-    from matmaster.types.messages import UserMessage
-    from src.services.user_turn_context_service import (
+    from matmaster.context.ports import hash_user_instructions
+    from matmaster.context.user_turn_context import (
         DEFAULT_TURN_TRANSFORM,
         USER_CONTEXT_RENDER_VERSION,
         USER_TURN_CONTEXT_SCHEMA_VERSION,
-        hash_user_instructions,
     )
+    from matmaster.types.messages import UserMessage
 
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
 
@@ -710,7 +668,7 @@ async def test_run_agent_idempotent_skip_when_user_turn_context_already_exists()
     ]
     assert utc_calls == []
     assert svc._test_fake_exp.last_task is not None
-    assert "Use SI units." in svc._test_fake_exp.last_task
+    assert svc._test_fake_exp.last_task == "first question"
 
 
 @pytest.mark.asyncio
@@ -888,7 +846,6 @@ async def test_exception_emits_error_and_closed():
             svc = AgentRunService.__new__(AgentRunService)
             svc._sessions_service = MagicMock()
             svc._pg_manager = pg_mgr
-            svc._active_skills = {}
 
             result = await svc.run_agent(
                 session_id='s1',

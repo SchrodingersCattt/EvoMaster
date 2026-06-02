@@ -44,7 +44,7 @@ def test_zero_optional_fields_are_omitted() -> None:
     assert "last_turn_usage" not in s
 
 
-def test_vendor_fallback_openai_nested_cache() -> None:
+def test_vendor_by_turn_does_not_backfill_aggregate_cache() -> None:
     s = _build_run_usage_summary(
         _event(
             usage={"prompt_tokens": 100, "completion_tokens": 20},
@@ -52,64 +52,33 @@ def test_vendor_fallback_openai_nested_cache() -> None:
         )
     )
     assert s is not None
-    assert s["cache_read_tokens"] == 40
+    assert "cache_read_tokens" not in s
 
 
-def test_vendor_fallback_anthropic_top_level_cache() -> None:
-    s = _build_run_usage_summary(
-        _event(
-            usage={"prompt_tokens": 100, "completion_tokens": 20},
-            usage_vendor_by_turn=[{"cache_read_input_tokens": 25}],
-        )
-    )
-    assert s is not None
-    assert s["cache_read_tokens"] == 25
-
-
-def test_scalar_cache_read_takes_precedence_over_vendor() -> None:
+def test_scalar_cache_and_reasoning_fields_are_used_directly() -> None:
     s = _build_run_usage_summary(
         _event(
             usage={
                 "prompt_tokens": 100,
                 "completion_tokens": 20,
-                "cache_read_tokens": 5,
+                "total_tokens": 120,
+                "cache_read_tokens": 10,
+                "cache_write_tokens": 5,
+                "reasoning_tokens": 3,
             },
-            usage_vendor_by_turn=[{"cache_read_input_tokens": 99}],
-        )
-    )
-    assert s is not None
-    assert s["cache_read_tokens"] == 5
-
-
-def test_vendor_reasoning_and_cache_write() -> None:
-    s = _build_run_usage_summary(
-        _event(
-            usage={"prompt_tokens": 100, "completion_tokens": 20},
             usage_vendor_by_turn=[
                 {
-                    "cache_creation_input_tokens": 15,
-                    "completion_tokens_details": {"reasoning_tokens": 10},
+                    "cache_read_input_tokens": 99,
+                    "cache_creation_input_tokens": 88,
+                    "completion_tokens_details": {"reasoning_tokens": 77},
                 }
             ],
         )
     )
     assert s is not None
-    assert s["cache_write_tokens"] == 15
-    assert s["reasoning_tokens"] == 10
-
-
-def test_vendor_sum_across_turns() -> None:
-    s = _build_run_usage_summary(
-        _event(
-            usage={"prompt_tokens": 100, "completion_tokens": 20},
-            usage_vendor_by_turn=[
-                {"cache_read_input_tokens": 10},
-                {"cache_read_input_tokens": 7},
-            ],
-        )
-    )
-    assert s is not None
-    assert s["cache_read_tokens"] == 17
+    assert s["cache_read_tokens"] == 10
+    assert s["cache_write_tokens"] == 5
+    assert s["reasoning_tokens"] == 3
 
 
 def test_last_turn_usage_from_finish_detail() -> None:
