@@ -30,7 +30,9 @@ def make_session(path_bytes=None, default=_PNG, exists=True):
 
 def make_upload_config(url):
     return FigureUploadConfig(
-        session_id="s", task_id="t", asset_key_prefix="figs",
+        session_id="s",
+        task_id="t",
+        asset_key_prefix="figs",
         upload_bytes=lambda payload, key: url,
     )
 
@@ -56,10 +58,12 @@ def test_batch_publish_reaches_snapshot():
     tool = AttachFigure(session=make_session(path_bytes=path_bytes), workdir="/share")
     event = publish(
         tool,
-        {"figures": [
-            {"output_path": "/share/a.png", "caption": "A"},
-            {"output_path": "/share/b.png", "caption": "B"},
-        ]},
+        {
+            "figures": [
+                {"output_path": "/share/a.png", "caption": "A"},
+                {"output_path": "/share/b.png", "caption": "B"},
+            ]
+        },
         make_upload_config("https://a/x.png"),
         "call-1",
     )
@@ -92,11 +96,13 @@ def test_failure_yields_zero_figures_invariant():
     tool = AttachFigure(session=make_session(path_bytes=path_bytes), workdir="/share")
     event = publish(
         tool,
-        {"figures": [
-            {"output_path": "/share/a.png", "caption": "A"},
-            {"output_path": "/share/b.png", "caption": "B"},
-            {"output_path": "/share/c.png", "caption": "C"},
-        ]},
+        {
+            "figures": [
+                {"output_path": "/share/a.png", "caption": "A"},
+                {"output_path": "/share/b.png", "caption": "B"},
+                {"output_path": "/share/c.png", "caption": "C"},
+            ]
+        },
         cfg,
         "call-err",
     )
@@ -111,8 +117,10 @@ def test_multiple_publishes_build_incremental_snapshots():
     acc = ResponseFiguresAccumulator()
     t1 = AttachFigure(session=make_session(default=_png(b"a")), workdir="/share")
     e1 = publish(
-        t1, {"figures": [{"output_path": "/share/a.png", "caption": "A"}]},
-        make_upload_config("https://a/a.png"), "call-a",
+        t1,
+        {"figures": [{"output_path": "/share/a.png", "caption": "A"}]},
+        make_upload_config("https://a/a.png"),
+        "call-a",
     )
     acc.add_tool_result(e1)
     snap1 = acc.build_snapshot_event_if_dirty()
@@ -120,8 +128,10 @@ def test_multiple_publishes_build_incremental_snapshots():
 
     t2 = AttachFigure(session=make_session(default=_png(b"b")), workdir="/share")
     e2 = publish(
-        t2, {"figures": [{"output_path": "/share/b.png", "caption": "B"}]},
-        make_upload_config("https://a/b.png"), "call-b",
+        t2,
+        {"figures": [{"output_path": "/share/b.png", "caption": "B"}]},
+        make_upload_config("https://a/b.png"),
+        "call-b",
     )
     acc.add_tool_result(e2)
     snap2 = acc.build_snapshot_event_if_dirty()
@@ -136,13 +146,17 @@ def test_duplicate_figure_id_first_writer_wins_across_calls():
     acc = ResponseFiguresAccumulator()
     t1 = AttachFigure(session=make_session(default=_PNG), workdir="/share")
     e1 = publish(
-        t1, {"figures": [{"output_path": "/share/dup.png", "caption": "first"}]},
-        make_upload_config("https://a/x.png"), "call-x",
+        t1,
+        {"figures": [{"output_path": "/share/dup.png", "caption": "first"}]},
+        make_upload_config("https://a/x.png"),
+        "call-x",
     )
     t2 = AttachFigure(session=make_session(default=_PNG), workdir="/share")
     e2 = publish(
-        t2, {"figures": [{"output_path": "/share/dup.png", "caption": "second"}]},
-        make_upload_config("https://a/y.png"), "call-y",
+        t2,
+        {"figures": [{"output_path": "/share/dup.png", "caption": "second"}]},
+        make_upload_config("https://a/y.png"),
+        "call-y",
     )
     assert acc.add_tool_result(e1) is True
     assert acc.add_tool_result(e2) is False  # duplicate id ignored

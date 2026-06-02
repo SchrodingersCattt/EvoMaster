@@ -651,8 +651,8 @@ class Exp:
             return allowed is None or name in allowed
 
         from matmaster.tools.builtin import (
-            AttachFigure,
             AskQuestionTool,
+            AttachFigure,
             BashTool,
             BohriumTool,
             EditTool,

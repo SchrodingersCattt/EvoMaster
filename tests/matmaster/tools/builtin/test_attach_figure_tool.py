@@ -34,7 +34,9 @@ def make_session(path_bytes=None, default=_PNG):
 
 def make_upload_config(url="https://assets.test/u/fig.png"):
     return FigureUploadConfig(
-        session_id="s", task_id="t", asset_key_prefix="figs",
+        session_id="s",
+        task_id="t",
+        asset_key_prefix="figs",
         upload_bytes=lambda payload, key: url,
     )
 
@@ -112,28 +114,42 @@ class TestAttachFigureValidateInput:
 
     def test_relative_path_denied(self):
         tool = AttachFigure(workdir="/share")
-        d = validate(tool, {"figures": [{"output_path": "results/band.png", "caption": "c"}]})
+        d = validate(
+            tool, {"figures": [{"output_path": "results/band.png", "caption": "c"}]}
+        )
         assert d is not None and d.decision == "deny"
 
     def test_escape_path_denied(self):
         tool = AttachFigure(workdir="/share")
-        d = validate(tool, {"figures": [{"output_path": "/etc/passwd.png", "caption": "c"}]})
+        d = validate(
+            tool, {"figures": [{"output_path": "/etc/passwd.png", "caption": "c"}]}
+        )
         assert d is not None and d.decision == "deny"
 
     def test_duplicate_output_path_denied(self):
         tool = AttachFigure(workdir="/share")
-        d = validate(tool, {"figures": [
-            {"output_path": "/share/band.png", "caption": "a"},
-            {"output_path": "/share/band.png", "caption": "b"},
-        ]})
+        d = validate(
+            tool,
+            {
+                "figures": [
+                    {"output_path": "/share/band.png", "caption": "a"},
+                    {"output_path": "/share/band.png", "caption": "b"},
+                ]
+            },
+        )
         assert d is not None and d.decision == "deny"
 
     def test_valid_absolute_batch_allowed(self):
         tool = AttachFigure(workdir="/share")
-        d = validate(tool, {"figures": [
-            {"output_path": "/share/a.png", "caption": "A"},
-            {"output_path": "/share/results/b.png", "caption": "B"},
-        ]})
+        d = validate(
+            tool,
+            {
+                "figures": [
+                    {"output_path": "/share/a.png", "caption": "A"},
+                    {"output_path": "/share/results/b.png", "caption": "B"},
+                ]
+            },
+        )
         assert d is None
 
 
@@ -168,10 +184,12 @@ class TestAttachFigurePublish:
         tool = AttachFigure(session=session, workdir="/share")
         result = run_ctx(
             tool,
-            {"figures": [
-                {"output_path": "/share/a.png", "caption": "A"},
-                {"output_path": "/share/b.png", "caption": "B"},
-            ]},
+            {
+                "figures": [
+                    {"output_path": "/share/a.png", "caption": "A"},
+                    {"output_path": "/share/b.png", "caption": "B"},
+                ]
+            },
             make_ctx(make_upload_config()),
         )
         assert result.status == "success"
@@ -184,7 +202,9 @@ class TestAttachFigurePublish:
         session.path_exists.return_value = False
         uploads = []
         cfg = FigureUploadConfig(
-            session_id="s", task_id="t", asset_key_prefix="figs",
+            session_id="s",
+            task_id="t",
+            asset_key_prefix="figs",
             upload_bytes=lambda payload, key: uploads.append(key) or "https://a/x.png",
         )
         tool = AttachFigure(session=session, workdir="/share")
@@ -204,16 +224,20 @@ class TestAttachFigurePublish:
         session = make_session(path_bytes=path_bytes)
         uploads = []
         cfg = FigureUploadConfig(
-            session_id="s", task_id="t", asset_key_prefix="figs",
+            session_id="s",
+            task_id="t",
+            asset_key_prefix="figs",
             upload_bytes=lambda payload, key: uploads.append(key) or "https://a/x.png",
         )
         tool = AttachFigure(session=session, workdir="/share")
         result = run_ctx(
             tool,
-            {"figures": [
-                {"output_path": "/share/x/band.png", "caption": "first"},
-                {"output_path": "/share/y/band.png", "caption": "second"},
-            ]},
+            {
+                "figures": [
+                    {"output_path": "/share/x/band.png", "caption": "first"},
+                    {"output_path": "/share/y/band.png", "caption": "second"},
+                ]
+            },
             make_ctx(cfg),
         )
         assert result.status == "error"
@@ -235,17 +259,21 @@ class TestAttachFigurePublish:
             return "https://a/" + key
 
         cfg = FigureUploadConfig(
-            session_id="s", task_id="t", asset_key_prefix="figs",
+            session_id="s",
+            task_id="t",
+            asset_key_prefix="figs",
             upload_bytes=upload_bytes,
         )
         tool = AttachFigure(session=session, workdir="/share")
         result = run_ctx(
             tool,
-            {"figures": [
-                {"output_path": "/share/a.png", "caption": "A"},
-                {"output_path": "/share/b.png", "caption": "B"},
-                {"output_path": "/share/c.png", "caption": "C"},
-            ]},
+            {
+                "figures": [
+                    {"output_path": "/share/a.png", "caption": "A"},
+                    {"output_path": "/share/b.png", "caption": "B"},
+                    {"output_path": "/share/c.png", "caption": "C"},
+                ]
+            },
             make_ctx(cfg),
         )
         assert result.status == "error"
