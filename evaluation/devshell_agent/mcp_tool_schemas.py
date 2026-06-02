@@ -48,7 +48,8 @@ RUN_DEVSHELL_EVAL_SCHEMA: dict[str, Any] = {
         "fallback_model": {
             "type": "string",
             "description": (
-                "run_devshell_eval --fallback-model (default: claude-opus-4-6): retry a "
+                "run_devshell_eval --fallback-model (default: "
+                "global.anthropic.claude-opus-4-6-v1): retry a "
                 "failed task once when devshell logs indicate Bedrock transport errors; "
                 "omit or match model to skip fallback."
             ),

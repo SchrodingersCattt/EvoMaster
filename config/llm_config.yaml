@@ -6,32 +6,6 @@
 # 鉴权凭据从 .env 读取，使用 ${VAR} 引用
 
 profiles:
-  opus:
-    provider: "openai"
-    model: "claude-opus-4-6"
-    api_key: "${LITELLM_PROXY_API_KEY}"
-    base_url: "${LITELLM_PROXY_API_BASE}"
-    thinking_effort: "max"
-    reasoning_protocol: "anthropic_adaptive_thinking"
-    temperature_policy: "force_one_when_reasoning"
-    temperature: 0.7
-    supports_vision: true
-    timeout: 1200
-    stream_timeout: 120
-    stream_idle_timeout: 60
-    max_retries: 3
-    retry_delay: 1.0
-    prompt_cache:
-      provider: "anthropic"
-      system_prompt_breakpoint: true
-      automatic: true
-      latest_user_breakpoint: true
-      tool_result_breakpoint: true
-      flexible_breakpoint: true
-      max_breakpoints: 4
-      min_flexible_chars: 1000
-      ttl: "5m"
-
   sonnet:
     provider: "openai"
     model: "claude-sonnet-4-6"
@@ -181,8 +155,6 @@ profiles:
 
 # 路由表：前端 model_override 字符串 → 内部 profile
 routes:
-  "claude-opus-4-6":
-    profile: opus
   "claude-sonnet-4-6":
     profile: sonnet
   "gemini-3.1-pro-preview":
