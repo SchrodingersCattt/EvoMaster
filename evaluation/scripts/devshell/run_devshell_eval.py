@@ -95,6 +95,12 @@ def main() -> int:
     if env_file:
         load_dotenv(env_file, override=True)
 
+    sys.path.insert(0, str(REPO_ROOT))
+    from evaluation.scripts.devshell.eval_model_routes import (
+        DEFAULT_DEVSHELL_FALLBACK_MODEL_ROUTE,
+        DEFAULT_DEVSHELL_MODEL_ROUTE,
+    )
+
     parser = argparse.ArgumentParser(
         description="Run MATTER question bank through mm-devshell (matmaster devshell run).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -126,21 +132,21 @@ def main() -> int:
     parser.add_argument(
         "--model",
         type=str,
-        default="bedrock-claude-opus",
+        default=DEFAULT_DEVSHELL_MODEL_ROUTE,
         help=(
             "LLM route key passed to ``mm-devshell run --model`` (see llm_config.yaml routes; "
-            "default: bedrock-claude-opus)"
+            f"default: {DEFAULT_DEVSHELL_MODEL_ROUTE})"
         ),
     )
     parser.add_argument(
         "--fallback-model",
         type=str,
-        default="global.anthropic.claude-opus-4-6-v1",
+        default=DEFAULT_DEVSHELL_FALLBACK_MODEL_ROUTE,
         metavar="ROUTE_KEY",
         help=(
             "Second LLM route for one retry per task when logs look like a Bedrock/botocore "
-            "transport error (read timeout, etc.). Default: "
-            "global.anthropic.claude-opus-4-6-v1 (LiteLLM). "
+            f"transport error (read timeout, etc.). Default: "
+            f"{DEFAULT_DEVSHELL_FALLBACK_MODEL_ROUTE} (LiteLLM). "
             "Use the same value as --model to disable fallback retries. "
             "Each new task still starts with --model."
         ),

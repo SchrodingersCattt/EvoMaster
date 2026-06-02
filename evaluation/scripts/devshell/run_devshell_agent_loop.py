@@ -36,6 +36,12 @@ class DevshellAgentLoopCli:
 
     @staticmethod
     def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+        sys.path.insert(0, str(REPO_ROOT))
+        from evaluation.scripts.devshell.eval_model_routes import (
+            DEFAULT_DEVSHELL_FALLBACK_MODEL_ROUTE,
+            DEFAULT_DEVSHELL_MODEL_ROUTE,
+        )
+
         p = argparse.ArgumentParser(
             description=(
                 "DevShell Agent SDK loop: run_devshell_eval → judge → edit repo "
@@ -201,20 +207,21 @@ class DevshellAgentLoopCli:
         p.add_argument(
             "--model",
             type=str,
-            default="bedrock-claude-opus",
+            default=DEFAULT_DEVSHELL_MODEL_ROUTE,
             help=(
                 "Forwarded to run_devshell_eval --model (inner mm-devshell route key; "
-                "default: bedrock-claude-opus → opus_bedrock in config/llm_config.yaml)."
+                f"default: {DEFAULT_DEVSHELL_MODEL_ROUTE} → opus_bedrock in "
+                "config/llm_config.yaml)."
             ),
         )
         p.add_argument(
             "--fallback-model",
             type=str,
-            default="global.anthropic.claude-opus-4-6-v1",
+            default=DEFAULT_DEVSHELL_FALLBACK_MODEL_ROUTE,
             metavar="ROUTE_KEY",
             help=(
                 "Forwarded to run_devshell_eval --fallback-model "
-                "(default: global.anthropic.claude-opus-4-6-v1). "
+                f"(default: {DEFAULT_DEVSHELL_FALLBACK_MODEL_ROUTE}). "
                 "Per-task retry once when logs indicate Bedrock/botocore transport failures; "
                 "set to the same value as --model to disable."
             ),
