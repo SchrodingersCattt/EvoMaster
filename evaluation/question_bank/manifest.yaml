@@ -93,7 +93,7 @@ banks:
 - path: input_generation/ig_agnostic_gromacs.yaml
   capability: input_generation
   domain: agnostic
-  questions: 5
+  questions: 6
 - path: input_generation/ig_agnostic_orca.yaml
   capability: input_generation
   domain: agnostic
