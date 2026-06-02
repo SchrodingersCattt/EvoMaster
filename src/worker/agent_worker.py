@@ -330,9 +330,7 @@ def _run_worker_loop() -> None:
             if isinstance(raw_images, list)
             else []
         )
-        turn_input = TurnInput.from_payload(
-            payload.get('turn_input') or payload.get('current_input_context')
-        )
+        turn_input = TurnInput.from_payload(payload.get('turn_input'))
         bohrium_required = bool(payload.get('bohrium_required'))
         raw_remote_workdir = payload.get('remote_workdir')
         remote_workdir = (

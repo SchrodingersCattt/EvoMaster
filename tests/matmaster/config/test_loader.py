@@ -19,14 +19,15 @@ from matmaster.config.loader import (
 # Minimal YAML content for tests
 _YAML_CONTENT = """\
 llm:
-  opus:
-    provider: "openai"
-    model: "claude-opus-4-6"
-    temperature: 0.7
-  sonnet:
-    provider: "openai"
-    model: "claude-sonnet-4-6"
-    temperature: 0.5
+  profiles:
+    opus:
+      provider: "openai"
+      model: "claude-opus-4-6"
+      temperature: 0.7
+    sonnet:
+      provider: "openai"
+      model: "claude-sonnet-4-6"
+      temperature: 0.5
   default: "opus"
 
 agents:
@@ -62,7 +63,7 @@ class TestLoadLlmConfig:
     def test_from_dict(self) -> None:
         raw = {
             "llm": {
-                "p1": {"model": "m1"},
+                "profiles": {"p1": {"model": "m1"}},
                 "default": "p1",
             }
         }
@@ -77,7 +78,14 @@ class TestLoadLlmConfig:
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setenv("TEST_API_KEY", "sk-secret")
-        yaml = 'llm:\n  p1:\n    model: "m1"\n    api_key: "${TEST_API_KEY}"\n  default: "p1"\n'
+        yaml = (
+            'llm:\n'
+            '  profiles:\n'
+            '    p1:\n'
+            '      model: "m1"\n'
+            '      api_key: "${TEST_API_KEY}"\n'
+            '  default: "p1"\n'
+        )
         f = tmp_path / "config.yaml"
         f.write_text(yaml)
         cfg = load_llm_config(f)

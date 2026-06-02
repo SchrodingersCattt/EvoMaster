@@ -186,6 +186,11 @@ class TestRunResultEvent:
         assert evt.reason == ""
         assert evt.final_content is None
 
+    def test_rejects_legacy_finish_type(self) -> None:
+        legacy_type = "fin" + "ish"
+        with pytest.raises(ValidationError):
+            RunResultEvent.model_validate({"type": legacy_type, "source": "agent"})
+
     def test_finish_detail_round_trips(self) -> None:
         evt = RunResultEvent(
             source="agent",
@@ -362,6 +367,11 @@ class TestSystemEvents:
         assert evt.task_completed is False
         assert evt.end_reason is None
         assert evt.treat_as_failure is None
+
+    def test_stream_closed_rejects_legacy_end_type(self) -> None:
+        legacy_type = "e" + "nd"
+        with pytest.raises(ValidationError):
+            StreamClosedEvent.model_validate({"type": legacy_type, "source": "system"})
 
     def test_workspace_upload_error(self) -> None:
         evt = WorkspaceUploadErrorEvent(source="system", message="upload failed")

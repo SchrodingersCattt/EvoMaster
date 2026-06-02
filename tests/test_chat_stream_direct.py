@@ -597,7 +597,8 @@ async def test_sse_frames_match_frontend_contract_without_mysql():
         'error': None,
     }
     assert frames[6]['content'] == 'done'
-    assert frames[7]['final_content'] == 'done'
+    assert frames[7]['content']['content'] == 'done'
+    assert 'final_content' not in frames[7]
     assert frames[8]['task_completed'] is True
     assert frames[8]['end_reason'] == 'natural'
 
@@ -687,7 +688,10 @@ def test_generate_send_stream_replay_prefers_run_result_over_response():
         {
             'source': 'MatMaster',
             'type': 'response',
-            'content': 'old answer',
+            'content': {
+                'content': 'old answer',
+                'model': 'provider/private-model',
+            },
             'session_id': 'sess-1',
             'task_id': 'task-0',
         },
@@ -808,6 +812,13 @@ def test_generate_send_stream_subscribes_before_enqueue():
     def _lpush_agent_run_job(_job: dict) -> bool:
         call_order.append('lpush')
         assert subscribe_ready.is_set()
+        removed_context_key = 'current_input' '_context'
+        removed_boundary_key = 'pre_query' '_scope_event_id'
+        assert 'turn_input' in _job
+        assert removed_context_key not in _job
+        assert removed_boundary_key not in json.dumps(
+            _job, ensure_ascii=False
+        )
         published.put(
             {
                 'type': 'message',
@@ -946,7 +957,10 @@ def test_generate_subscribe_stream_replay_prefers_run_result_over_response():
         {
             'source': 'MatMaster',
             'type': 'response',
-            'content': 'old answer',
+            'content': {
+                'content': 'old answer',
+                'model': 'provider/private-model',
+            },
             'session_id': 'sess-1',
             'task_id': 'task-0',
         },

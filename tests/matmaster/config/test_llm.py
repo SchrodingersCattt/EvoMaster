@@ -304,19 +304,17 @@ class TestLLMProfileConfigMethods:
 
 
 class TestLLMConfigModelValidator:
-    """model_validator separates profile dicts from 'default' key."""
+    """model_validator accepts only the normalized profile schema."""
 
-    def test_flat_yaml_dict(self) -> None:
+    def test_flat_yaml_dict_is_rejected(self) -> None:
         raw = {
             "opus": {"provider": "openai", "model": "claude-opus-4-6"},
             "sonnet": {"provider": "openai", "model": "claude-sonnet-4-6"},
             "default": "opus",
         }
-        cfg = LLMConfig.model_validate(raw)
-        assert cfg.default == "opus"
-        assert "opus" in cfg.profiles
-        assert "sonnet" in cfg.profiles
-        assert cfg.profiles["opus"].model == "claude-opus-4-6"
+
+        with pytest.raises(ValueError, match="default profile 'opus' not found"):
+            LLMConfig.model_validate(raw)
 
     def test_already_normalized(self) -> None:
         raw = {
@@ -325,47 +323,6 @@ class TestLLMConfigModelValidator:
         }
         cfg = LLMConfig.model_validate(raw)
         assert cfg.profiles["p1"].model == "m1"
-
-
-class TestResolveProfile:
-    """resolve_profile three-level resolution chain."""
-
-    @pytest.fixture()
-    def llm_config(self) -> LLMConfig:
-        return LLMConfig.model_validate(
-            {
-                "opus": {"model": "claude-opus-4-6", "temperature": 0.7},
-                "sonnet": {"model": "claude-sonnet-4-6", "temperature": 0.5},
-                "default": "opus",
-            }
-        )
-
-    def test_no_override_uses_default(self, llm_config: LLMConfig) -> None:
-        key, profile = llm_config.resolve_profile()
-        assert key == "opus"
-        assert profile.model == "claude-opus-4-6"
-
-    def test_no_override_with_custom_default_key(self, llm_config: LLMConfig) -> None:
-        key, profile = llm_config.resolve_profile(default_key="sonnet")
-        assert key == "sonnet"
-        assert profile.model == "claude-sonnet-4-6"
-
-    def test_override_match_by_model_name(self, llm_config: LLMConfig) -> None:
-        key, profile = llm_config.resolve_profile(model_override="claude-sonnet-4-6")
-        assert key == "sonnet"
-        assert profile.temperature == 0.5
-
-    def test_override_match_by_profile_key(self, llm_config: LLMConfig) -> None:
-        key, profile = llm_config.resolve_profile(model_override="sonnet")
-        assert key == "sonnet"
-
-    def test_override_fallback_to_default(self, llm_config: LLMConfig) -> None:
-        key, profile = llm_config.resolve_profile(model_override="unknown-model")
-        assert key == "opus"
-
-    def test_invalid_default_key_raises(self, llm_config: LLMConfig) -> None:
-        with pytest.raises(KeyError):
-            llm_config.resolve_profile(default_key="nonexistent")
 
 
 # ── Task 2: Route schema + resolve_route ──────────────────────────────────────

@@ -130,7 +130,7 @@ def _dedupe_replayed_terminal_events(events: list[dict]) -> list[dict]:
         event_type = str(event.get('type') or '')
         if (
             dedupe_key is not None
-            and event_type in {'run_result', 'finish'}
+            and event_type == 'run_result'
             and _should_emit_event_to_sse(event)
         ):
             terminal_keys.add(dedupe_key)

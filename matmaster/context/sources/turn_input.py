@@ -126,14 +126,7 @@ class TurnInput:
     def from_payload(cls, payload: Any) -> TurnInput | None:
         if not isinstance(payload, dict):
             return None
-        # 'pre_query_scope_event_id' is the legacy boundary key emitted by
-        # pre-cutover workers (see stream_service legacy_current_input_payload
-        # and CLEANUP-AUDIT.md N2); kept as a fallback until those in-flight
-        # Redis jobs drain.
-        raw_boundary = payload.get(
-            "pre_turn_history_event_id",
-            payload.get("pre_query_scope_event_id", 0),
-        )
+        raw_boundary = payload.get("pre_turn_history_event_id", 0)
         try:
             boundary = int(raw_boundary or 0)
         except (TypeError, ValueError):

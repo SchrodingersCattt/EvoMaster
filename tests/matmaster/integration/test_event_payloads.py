@@ -271,7 +271,7 @@ class TestPublicContentForEvent:
             'completion_tokens': 6,
         }
 
-    def test_run_result_public_content_includes_model(self) -> None:
+    def test_run_result_public_content_omits_model_identity(self) -> None:
         payload = {
             'type': 'run_result',
             'source': 'Agent',
@@ -287,9 +287,6 @@ class TestPublicContentForEvent:
             'content': 'done',
             'status': 'completed',
             'reason': 'natural',
-            'model': 'claude-opus-4-6',
-            'model_profile': 'opus',
-            'model_route': 'bedrock-claude-opus',
         }
 
     def test_assistant_state_public_content_includes_model(self) -> None:
@@ -610,12 +607,10 @@ class TestRunResultOmitsVendorByTurn:
 class TestBuildPublicSsePayloadDedup:
     """Top-level projection rules for the live SSE payload.
 
-    Structured events (tool_result, tool_call, error, mcp_*, ...) keep their
-    business fields in ``content`` only -- the frontend reads them from there, so
-    the top level must not double-encode them. run_result / finish are the
-    exception: the frontend still reads final_content / status from the top
-    level, so those stay until that read is migrated to ``content``.
-    usage_vendor_by_turn is dropped from the public payload entirely.
+    Structured events (tool_result, run_result, tool_call, error, mcp_*, ...)
+    keep their business fields in ``content`` only. The top level must not
+    double-encode them. usage_vendor_by_turn is dropped from the public payload
+    entirely.
     """
 
     def _build(self, raw: dict) -> dict:
@@ -661,10 +656,7 @@ class TestBuildPublicSsePayloadDedup:
         assert out['timestamp'] == '2026-05-31T00:00:00'
         assert out['session_id'] == 's'
 
-    def test_run_result_keeps_top_level_but_drops_vendor_by_turn(self) -> None:
-        # run_result stays in the full-passthrough branch: the frontend reads
-        # final_content / status from the top level. Only usage_vendor_by_turn is
-        # stripped (from both the top level and content).
+    def test_run_result_business_fields_not_duplicated_at_top_level(self) -> None:
         raw = {
             'source': 'agent',
             'type': 'run_result',
@@ -675,15 +667,32 @@ class TestBuildPublicSsePayloadDedup:
             'num_turns': 4,
             'usage': {'total_tokens': 100},
             'usage_vendor_by_turn': [{'total_tokens': 10}],
+            'model': 'm',
+            'model_profile': 'p',
+            'model_route': 'r',
         }
         out = self._build(raw)
-        # Frontend-facing top-level fields are preserved.
-        assert out['final_content'] == 'answer'
-        assert out['status'] == 'completed'
-        # Aggregated usage stays in content; per-turn vendor detail is gone.
+        assert out['content']['content'] == 'answer'
+        assert out['content']['status'] == 'completed'
+        assert out['content']['reason'] == 'natural'
+        assert out['content']['num_turns'] == 4
         assert out['content']['usage'] == {'total_tokens': 100}
-        assert 'usage_vendor_by_turn' not in out
         assert 'usage_vendor_by_turn' not in out['content']
+        for key in (
+            'final_content',
+            'usage',
+            'usage_vendor_by_turn',
+            'status',
+            'reason',
+            'num_turns',
+            'model',
+            'model_profile',
+            'model_route',
+        ):
+            assert key not in out, f'{key} duplicated at top level'
+        for key in ('model', 'model_profile', 'model_route'):
+            assert key not in out['content'], f'{key} leaked into content'
+        assert out['timestamp'] == '2026-05-31T00:00:00'
 
     def test_tool_progress_keeps_top_level_identifiers(self) -> None:
         # tool_progress has no structured-content branch: content is the string,

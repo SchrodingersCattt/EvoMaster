@@ -160,6 +160,16 @@ def test_turn_input_missing_boundary_defaults_to_zero() -> None:
     assert turn_input.pre_turn_history_event_id == 0
 
 
+def test_turn_input_ignores_removed_query_scope_boundary_key() -> None:
+    removed_boundary_key = "pre_query" "_scope_event_id"
+    turn_input = TurnInput.from_payload(
+        {"user_text": "hi", removed_boundary_key: 42}
+    )
+
+    assert turn_input is not None
+    assert turn_input.pre_turn_history_event_id == 0
+
+
 def test_turn_input_invalid_boundary_defaults_to_zero() -> None:
     turn_input = TurnInput.from_payload(
         {"user_text": "hi", "pre_turn_history_event_id": "not-an-int"}
