@@ -23,11 +23,12 @@ All commands below use placeholders `$HOST`, `$PORT`, `$USER` — replace with a
 
 | Key | Model |
 |---|---|
-| `global.anthropic.claude-opus-4-6-v1` | Claude Opus 4.6 (default) |
+| `global.anthropic.claude-opus-4-6-v1` | Claude Opus 4.6 |
 | `claude-sonnet-4-6` | Claude Sonnet 4.6 |
-| `claude-haiku-4-5` | Claude Haiku 4.5 |
-| `gemini-3-flash-preview` | Gemini 3 Flash |
-| `matmaster/qwen3.6-plus` | Qwen 3.6 Plus |
+| `gemini-3.1-pro-preview` | Gemini 3.1 Pro |
+| `cds/GPT-5.4` | GPT-5.4 |
+| `matmaster/qwen3.7-max` | Qwen 3.7 Max (default) |
+| `matmaster/dsk-v4p` | DeepSeek V4 Pro |
 
 ## Hard Rules
 

@@ -14,9 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from matmaster.providers.openai_provider import (
-    OpenAIProvider,
-)
+from matmaster.providers.openai_provider import OpenAIProvider
 from matmaster.types.errors import LLMError
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import LLMResponse, StreamChunk

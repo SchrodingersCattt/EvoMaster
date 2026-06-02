@@ -147,7 +147,7 @@ def test_devshell_eval_verbose_is_on_by_default(tmp_path, monkeypatch) -> None:
     assert man["eval_tooling"]["exp_config_name"] == "direct"
     assert "matmaster_exp" not in man
     assert man.get("model") == "bedrock-claude-opus"
-    assert man.get("fallback_model") == "claude-opus-4-6"
+    assert man.get("fallback_model") == "global.anthropic.claude-opus-4-6-v1"
 
 
 def test_devshell_eval_no_verbose_disables_forwarding(tmp_path, monkeypatch) -> None:
@@ -309,7 +309,9 @@ def test_devshell_eval_provider_fallback_retries_once(tmp_path, monkeypatch) -> 
         calls.append("fallback")
         cmd_s = [str(x) for x in cmd]
         assert "--model" in cmd_s
-        assert cmd_s[cmd_s.index("--model") + 1] == "claude-opus-4-6"
+        assert (
+            cmd_s[cmd_s.index("--model") + 1] == "global.anthropic.claude-opus-4-6-v1"
+        )
         summary_file.write_text(
             '{"status":"completed","reason":"natural","final_content":"ok",'
             '"num_turns":1,"usage":{"total_tokens":1}}\n',
@@ -344,7 +346,7 @@ def test_devshell_eval_provider_fallback_retries_once(tmp_path, monkeypatch) -> 
             "--model",
             "bedrock-claude-opus",
             "--fallback-model",
-            "claude-opus-4-6",
+            "global.anthropic.claude-opus-4-6-v1",
         ],
     )
 
@@ -356,4 +358,4 @@ def test_devshell_eval_provider_fallback_retries_once(tmp_path, monkeypatch) -> 
     )
     row = json.loads(raw_lines[-1])
     assert row.get("llm_provider_fallback_used") is True
-    assert row.get("llm_model_route_used") == "claude-opus-4-6"
+    assert row.get("llm_model_route_used") == "global.anthropic.claude-opus-4-6-v1"

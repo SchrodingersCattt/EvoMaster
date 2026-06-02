@@ -144,9 +144,9 @@ def test_build_run_devshell_eval_argv_fallback_model() -> None:
         task_timeout_sec=600.0,
         eval_config=None,
         extra_args=[],
-        fallback_model="claude-opus-4-6",
+        fallback_model="global.anthropic.claude-opus-4-6-v1",
     )
     invoker = DevshellEvalSubprocess(repo)
     argv = invoker.build_argv(script, params)
     i = argv.index("--fallback-model")
-    assert argv[i + 1] == "claude-opus-4-6"
+    assert argv[i + 1] == "global.anthropic.claude-opus-4-6-v1"

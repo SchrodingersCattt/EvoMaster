@@ -483,7 +483,7 @@ class ChatStreamService:
         llm = (req.llm or '').strip() or None
         model = (
             req.model or ''
-        ).strip() or None  # 本轮模型名，如 gemini-3-flash-preview / claude-sonnet-4-6
+        ).strip() or None  # 本轮模型名，如 matmaster/qwen3.7-max / claude-sonnet-4-6
 
         org_id_val = org_id.strip() if org_id else None
         try:

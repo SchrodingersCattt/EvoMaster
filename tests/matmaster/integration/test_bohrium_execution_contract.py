@@ -441,7 +441,6 @@ def test_run_agent_loads_exp_config_without_passing_skill_sync_to_bohrium_setup(
         ) as mock_bohrium_cls,
         patch('src.services.agent_run_service.get_chat_events_table') as mock_events_fn,
         patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
-        patch('src.services.agent_run_service.use_quota') as mock_use_quota,
         patch.object(
             matmaster_loader,
             'load_exp_config',
@@ -461,11 +460,6 @@ def test_run_agent_loads_exp_config_without_passing_skill_sync_to_bohrium_setup(
         _allow_user_turn_context_write(mock_events_table)
         mock_events_fn.return_value = mock_events_table
         mock_redis_fn.return_value = MagicMock()
-
-        async def _mock_use_quota(uid: str, **_: Any) -> None:
-            pass
-
-        mock_use_quota.side_effect = _mock_use_quota
 
         asyncio.run(
             svc.run_agent(
@@ -559,7 +553,6 @@ def test_execution_binding_before_build_runtime(
         ) as mock_bohrium_cls,
         patch('src.services.agent_run_service.get_chat_events_table') as mock_events_fn,
         patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
-        patch('src.services.agent_run_service.use_quota') as mock_use_quota,
         patch('matmaster.core.exp.Exp', return_value=mock_exp_inst),
     ):
         mock_bohrium_svc = mock_bohrium_cls.return_value
@@ -571,11 +564,6 @@ def test_execution_binding_before_build_runtime(
         _allow_user_turn_context_write(mock_events_table)
         mock_events_fn.return_value = mock_events_table
         mock_redis_fn.return_value = MagicMock()
-
-        async def _mock_use_quota(uid: str, **_: Any) -> None:
-            pass
-
-        mock_use_quota.side_effect = _mock_use_quota
 
         asyncio.run(
             svc.run_agent(

@@ -42,6 +42,36 @@ def _fmt_tokens(n: int) -> str:
         return str(n)
 
 
+_CURRENCY_SYMBOLS = {'CNY': '¥', 'USD': '$'}
+
+
+def _fmt_money(micro: int, currency: str) -> str:
+    """micro（百万分之一货币单位）整数渲染为带币种符号的金额，保留 4 位小数。"""
+    amount = int(micro or 0) / 1_000_000
+    symbol = _CURRENCY_SYMBOLS.get((currency or '').upper())
+    if symbol:
+        return f'{symbol}{amount:.4f}'
+    return f'{amount:.4f} {currency or ""}'.strip()
+
+
+def _format_cost_row(cost: dict | None) -> tuple[str, str] | None:
+    """把 run 全链路费用渲染为飞书卡片行（标签, 值）。无有效费用返回 None。
+
+    费用为 invocation 维度全链路口径（含子 agent / 压缩），与 Token 消耗行的
+    root-kernel 口径不同，故单独标注「全链路」。
+    """
+    if not isinstance(cost, dict) or not cost:
+        return None
+    settle_micro = int(cost.get('total_amount_settle_micro') or 0)
+    if settle_micro <= 0:
+        return None
+    currency = str(cost.get('settlement_currency') or 'CNY')
+    value = f'{_fmt_money(settle_micro, currency)}（全链路）'
+    if int(cost.get('missing_price_count') or 0) > 0:
+        value += '，部分模型未定价'
+    return ('预估费用', value)
+
+
 def format_usage_rows(usage_summary: dict | None) -> list[tuple[str, str]]:
     """把 run 的 token 消耗摘要格式化为飞书卡片行（标签, 值）。
 
@@ -60,8 +90,11 @@ def format_usage_rows(usage_summary: dict | None) -> list[tuple[str, str]]:
     reasoning = int(usage_summary.get('reasoning_tokens') or 0)
     num_turns = int(usage_summary.get('num_turns') or 0)
 
+    cost_row = _format_cost_row(usage_summary.get('cost'))
+
     if total == 0 and prompt == 0 and completion == 0:
-        return []
+        # 无 token 摘要时，仍可单独展示全链路费用（如压缩/子任务消耗）
+        return [cost_row] if cost_row else []
 
     detail_parts = [
         f'输入 {_fmt_tokens(prompt)}',
@@ -100,6 +133,8 @@ def format_usage_rows(usage_summary: dict | None) -> list[tuple[str, str]]:
                     f'（输入 {_fmt_tokens(lt_prompt)} / 输出 {_fmt_tokens(lt_completion)}）',
                 )
             )
+    if cost_row:
+        rows.append(cost_row)
     return rows
 
 

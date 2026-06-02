@@ -62,7 +62,7 @@ Body: { "directory": "<grouping directory>" }
 2. **Worker runs independently** of SSE connection — close after confirming HTTP 200.
 3. **`X-Org-Id` header is required** — without it, Bohrium access_key lookup fails.
 4. **`bohrium_project_id` in body is required** — without it, worker aborts with "project_id 缺失".
-5. **`model` in body controls which LLM** — omitting it uses server default (qwen_3_6_plus).
+5. **`model` in body controls which LLM** — omitting it uses server default (qwen_3_7_max).
 6. **`directory` in body only writes to event history** — it does NOT persist to session metadata. Must call `PUT /session-directory` after fire for the session to appear grouped in the frontend list.
 7. **Frontend list filters by `project_id`** — the `bohrium_project_id` you pass must match the project the user has selected in the frontend, otherwise the session won't appear in the sidebar.
 

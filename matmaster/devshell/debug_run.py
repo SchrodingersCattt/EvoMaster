@@ -16,7 +16,9 @@ PROMPT = "Build the nitroprusside anion. Export as `nitroprusside.xyz`. In the f
 WORKDIR = Path(__file__).resolve().parent.parent.parent / "debug_workspace"
 LOG_DIR = WORKDIR / "logs"
 LLM_CONFIG: Path | None = None  # None = auto-detect config/llm_config.yaml
-MODEL_OVERRIDE: str | None = "claude-opus-4-6"  # e.g. "claude-sonnet-4-6"
+MODEL_OVERRIDE: str | None = (
+    "global.anthropic.claude-opus-4-6-v1"  # e.g. "claude-sonnet-4-6"
+)
 # Same as mm-devshell default without --exp: matmaster/exps/direct.toml.
 VERBOSE = True
 # --
