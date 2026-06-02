@@ -110,6 +110,7 @@ class LLMProfileConfig(BaseModel):
     reasoning_protocol: str | None = (
         None  # "anthropic_adaptive_thinking" | "openai_reasoning_effort"
     )
+    reasoning_summary: Literal["auto", "concise", "detailed"] | None = None
     fallback_group: str | None = None
 
     # Prompt cache
@@ -173,8 +174,14 @@ class LLMProfileConfig(BaseModel):
                     "output_config": {"effort": effort},
                 }
             )
-        elif protocol == "openai_reasoning_effort" and effort:
-            out["reasoning_effort"] = effort
+        elif protocol == "openai_reasoning_effort":
+            if effort:
+                out["reasoning_effort"] = effort
+            if self.reasoning_summary:
+                reasoning: dict[str, str] = {"summary": self.reasoning_summary}
+                if effort:
+                    reasoning["effort"] = effort
+                extra_body["reasoning"] = reasoning
 
         if extra_body:
             out["extra_body"] = extra_body

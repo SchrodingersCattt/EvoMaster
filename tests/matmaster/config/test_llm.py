@@ -47,6 +47,7 @@ class TestLLMProfileConfig:
     def test_prompt_cache_defaults_none(self) -> None:
         p = LLMProfileConfig()
         assert p.prompt_cache is None
+        assert p.reasoning_summary is None
 
     def test_prompt_cache_field_from_dict(self) -> None:
         p = LLMProfileConfig(
@@ -204,6 +205,23 @@ class TestLLMProfileConfigMethods:
         )
         result = p.build_extra_kwargs()
         assert result == {"reasoning_effort": "medium"}
+
+    def test_build_extra_kwargs_openai_reasoning_summary(self) -> None:
+        p = LLMProfileConfig(
+            reasoning_protocol="openai_reasoning_effort",
+            thinking_effort="xhigh",
+            reasoning_summary="detailed",
+        )
+        result = p.build_extra_kwargs()
+        assert result == {
+            "reasoning_effort": "xhigh",
+            "extra_body": {
+                "reasoning": {
+                    "effort": "xhigh",
+                    "summary": "detailed",
+                },
+            },
+        }
 
     def test_build_extra_kwargs_from_family_default(self) -> None:
         p = LLMProfileConfig(model="claude-opus-4-6", thinking_effort="low")
