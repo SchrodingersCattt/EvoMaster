@@ -139,6 +139,30 @@ def normalize_response_sse_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return normalized
 
 
+def normalize_replayed_terminal_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Lift persisted run_result/finish content fields back to the live SSE shape.
+
+    The live path lifts these fields to the top level via
+    ``_carry_top_level_fields``, but persistence stores only the ``content`` dict
+    produced by ``_public_content_for_event``, so replay reconstructs the
+    top-level shape here. Counterpart of ``normalize_response_sse_payload`` for
+    the ``_FRONTEND_COMPAT_PASSTHROUGH_EVENT_TYPES`` set.
+    """
+    if payload.get('type') not in _FRONTEND_COMPAT_PASSTHROUGH_EVENT_TYPES:
+        return payload
+
+    content = payload.get('content')
+    if not isinstance(content, dict):
+        return payload
+
+    normalized = dict(payload)
+    normalized['final_content'] = content.get('content') or ''
+    for key in ('status', 'reason', 'finish_detail', 'num_turns', 'usage', *_MODEL_IDENTITY_KEYS):
+        if content.get(key) is not None:
+            normalized[key] = content[key]
+    return normalized
+
+
 def _carry_top_level_fields(
     out: dict[str, Any],
     raw: dict[str, Any],

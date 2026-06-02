@@ -665,7 +665,7 @@ def test_generate_send_stream_normalizes_replayed_history_source():
     events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
 
 
-def test_generate_send_stream_replay_prefers_response_over_run_result():
+def test_generate_send_stream_replay_prefers_run_result_over_response():
     from src.services.stream_service import ChatStreamService, SendStreamContext
 
     sessions_service = MagicMock()
@@ -743,10 +743,11 @@ def test_generate_send_stream_replay_prefers_response_over_run_result():
     assert [frame['type'] for frame in frames] == [
         'status',
         'query',
-        'response',
+        'run_result',
         'query',
     ]
-    assert frames[2]['content'] == 'old answer'
+    assert frames[2]['final_content'] == 'old answer'
+    assert frames[2]['status'] == 'completed'
     assert frames[3]['content'] == 'new question'
     events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
 
@@ -926,7 +927,7 @@ def test_generate_subscribe_stream_normalizes_replayed_history_source():
     events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
 
 
-def test_generate_subscribe_stream_replay_prefers_response_over_run_result():
+def test_generate_subscribe_stream_replay_prefers_run_result_over_response():
     from src.services.stream_service import ChatStreamService
 
     sessions_service = MagicMock()
@@ -982,6 +983,7 @@ def test_generate_subscribe_stream_replay_prefers_response_over_run_result():
     with patch('src.services.stream_service.REDIS_URL', None):
         frames = asyncio.run(_collect_frames())
 
-    assert [frame['type'] for frame in frames] == ['status', 'response']
-    assert frames[1]['content'] == 'old answer'
+    assert [frame['type'] for frame in frames] == ['status', 'run_result']
+    assert frames[1]['final_content'] == 'old answer'
+    assert frames[1]['status'] == 'completed'
     events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
