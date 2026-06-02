@@ -1,0 +1,30 @@
+Coarse-grained LiPF6 electrolyte smoke-test data
+
+4 atoms
+0 bonds
+0 angles
+0 dihedrals
+0 impropers
+
+2 atom types
+
+0.0 20.0 xlo xhi
+0.0 20.0 ylo yhi
+0.0 20.0 zlo zhi
+
+Masses
+
+1 6.94
+2 144.96
+
+Pair Coeffs
+
+1 0.0180 1.82
+2 0.2000 3.70
+
+Atoms # full
+
+1 1 1  1.0  5.0  5.0  5.0
+2 1 2 -1.0  7.5  5.0  5.0
+3 2 1  1.0 12.0 12.0 12.0
+4 2 2 -1.0 14.5 12.0 12.0
