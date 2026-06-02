@@ -407,7 +407,7 @@ class ChatHistoryConverter:
         - thought|planner_reply -> 缓存为 pending_reasoning
         - tool_call -> 与后续 tool_result 配对，先输出 AssistantMessage(tool_calls)，再输出 ToolMessage
         - response -> AssistantMessage(content, reasoning_content=...)
-        - run_result|finish -> AssistantMessage(content, reasoning_content=...)（仅 response 缺失时作为兼容兜底）
+        - run_result -> AssistantMessage(content, reasoning_content=...)（仅 response 缺失时作为 terminal fallback）
         """
         out: list[dict] = []
         pending_tool_calls: list[dict] = []
@@ -571,7 +571,7 @@ class ChatHistoryConverter:
                     )
                 continue
 
-            if _is_matmaster_source(source) and typ in ('run_result', 'finish'):
+            if _is_matmaster_source(source) and typ == 'run_result':
                 flush_tool_calls()
                 assistant_state_tool_ids.clear()
                 active_tool_turn_ids.clear()

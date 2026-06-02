@@ -4,7 +4,11 @@ import json
 import logging
 from typing import Any
 
-from matmaster.context.history_restore import ModelHistoryRestorer
+from matmaster.context.history_restore import (
+    HistoryCheckpointCorruptedError,
+    HistoryRestoreFailedError,
+    ModelHistoryRestorer,
+)
 from matmaster.types.messages import Message
 from src.services.chat_history import ChatHistoryConverter
 from src.services.history_checkpoint_codec import (
@@ -50,10 +54,19 @@ class ModelHistoryRestoreService:
                     session_id=session_id,
                     spawn_id=spawn_id,
                     task_id=task_id,
-                    raw_limit=raw_limit,
                     checkpoint=v1_checkpoint,
                 )
                 return trim_history_images(messages)
+            except HistoryCheckpointCorruptedError:
+                logger.warning(
+                    "model_history_restore: v1 checkpoint has null boundary; aborting "
+                    "session_id=%s spawn_id=%s checkpoint_id=%s",
+                    session_id,
+                    spawn_id,
+                    v1_checkpoint.get("id"),
+                    exc_info=True,
+                )
+                raise
             except Exception as exc:
                 logger.warning(
                     "model_history_restore: v1 checkpoint restore failed; trying older "
@@ -68,20 +81,15 @@ class ModelHistoryRestoreService:
                 continue
 
         if v1_checkpoints:
-            return trim_history_images(
-                self._restore_legacy_untrimmed(
-                    session_id,
-                    spawn_id,
-                    task_id,
-                    raw_limit,
-                )
+            raise HistoryRestoreFailedError(
+                "no usable history_checkpoint.v1 could be restored "
+                f"session_id={session_id} spawn_id={spawn_id}"
             )
 
         messages = self._delegate_v1_restore(
             session_id=session_id,
             spawn_id=spawn_id,
             task_id=task_id,
-            raw_limit=raw_limit,
             checkpoint=None,
         )
         return trim_history_images(messages)
@@ -92,7 +100,6 @@ class ModelHistoryRestoreService:
         session_id: str,
         spawn_id: str | None,
         task_id: str | None,
-        raw_limit: int | None,
         checkpoint: dict[str, Any] | None,
     ) -> list[Message]:
         def get_latest_checkpoint(
@@ -117,14 +124,6 @@ class ModelHistoryRestoreService:
         def has_user_turn_context(_session_id: str, _spawn_id: str | None) -> bool:
             return self._session_has_user_turn_context(session_id, spawn_id)
 
-        def legacy_restore(_session_id: str, _spawn_id: str | None) -> list[Message]:
-            return self._restore_legacy_untrimmed(
-                session_id,
-                spawn_id,
-                task_id,
-                raw_limit,
-            )
-
         def deserialize_checkpoint_base_messages(
             raw: list[dict[str, Any]],
         ) -> list[Message]:
@@ -136,34 +135,12 @@ class ModelHistoryRestoreService:
             get_latest_checkpoint=get_latest_checkpoint,
             get_events_after=get_events_after,
             has_user_turn_context=has_user_turn_context,
-            legacy_restore=legacy_restore,
             deserialize_base_messages=deserialize_checkpoint_base_messages,
             events_to_messages=ChatHistoryConverter.events_to_messages,
             normalize_tool_result_event=self._normalize_tool_result_event,
             validate_history=validate_base_messages,
         )
         return restorer.restore(session_id, spawn_id=spawn_id)
-
-    def _restore_legacy_untrimmed(
-        self,
-        session_id: str,
-        spawn_id: str | None,
-        task_id: str | None,
-        raw_limit: int | None,
-    ) -> list[Message]:
-        raw_events = self.events_table.get_session_events(
-            session_id,
-            limit=raw_limit,
-            include_spawn=spawn_id is not None,
-        )
-        if spawn_id is None:
-            raw_events = ChatHistoryConverter.exclude_spawn_events(raw_events)
-        else:
-            raw_events = [
-                event for event in raw_events if event.get("spawn_id") == spawn_id
-            ]
-        raw_events = ChatHistoryConverter.exclude_task_events(raw_events, task_id)
-        return ChatHistoryConverter.events_to_messages(raw_events)
 
     @staticmethod
     def _coerce_to_restorer_dict(event: dict[str, Any]) -> dict[str, Any]:

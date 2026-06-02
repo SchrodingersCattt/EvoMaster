@@ -24,7 +24,7 @@ from matmaster.core.playground import ExecutionEnvironment
 from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.events import ResponseEvent, ToolCallEvent, ToolResultEvent
-from matmaster.types.messages import LLMResponse, StreamChunk
+from matmaster.types.messages import LLMResponse, StreamChunk, UserMessage
 from matmaster.types.run_metadata import RunMetadata
 from matmaster.types.runtime import AgentKernelTurnRequest
 from matmaster.types.tool_spec import ResourceClaim
@@ -410,22 +410,43 @@ class TestMatMasterRunAgentE2E:
         current_task_id = "task-1"
         raw_events = [
             {
-                "source": "User",
-                "type": "query",
-                "content": "old question",
+                "source": "MatMaster",
+                "type": "user_turn_context",
+                "content": {
+                    "schema_version": "user_turn_context.v1",
+                    "kind": "anchor",
+                    "message": UserMessage(content="old question").model_dump(
+                        mode="json"
+                    ),
+                    "user_instructions_hash": "sha256:old",
+                    "transform": "raw",
+                    "render_version": "user_context_render.v1",
+                },
                 "task_id": "task-0",
+                "invocation_id": "inv-old",
             },
             {
                 "source": "MatMaster",
-                "type": "finish",
-                "content": "old answer",
+                "type": "run_result",
+                "content": {"content": "old answer"},
                 "task_id": "task-0",
+                "invocation_id": "inv-old",
             },
             {
-                "source": "User",
-                "type": "query",
-                "content": "new question",
+                "source": "MatMaster",
+                "type": "user_turn_context",
+                "content": {
+                    "schema_version": "user_turn_context.v1",
+                    "kind": "anchor",
+                    "message": UserMessage(content="new question").model_dump(
+                        mode="json"
+                    ),
+                    "user_instructions_hash": "sha256:new",
+                    "transform": "raw",
+                    "render_version": "user_context_render.v1",
+                },
                 "task_id": current_task_id,
+                "invocation_id": "inv-task-current",
             },
         ]
 
@@ -459,8 +480,9 @@ class TestMatMasterRunAgentE2E:
             mock_bohrium_svc.run_cleanup = AsyncMock()
 
             mock_events_table = MagicMock()
-            mock_events_table.get_session_events.return_value = raw_events
             _allow_user_turn_context_write(mock_events_table)
+            mock_events_table.has_user_turn_context.return_value = True
+            mock_events_table.get_scope_events_after_id.return_value = raw_events
             mock_events_table_fn.return_value = mock_events_table
 
             mock_redis = MagicMock()

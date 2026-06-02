@@ -1,16 +1,12 @@
 """Typed config accessors for matmaster.
 
-Two independent entry points, each accepting a YAML path or a pre-loaded
-dict.  These are the matmaster-specific counterpart to
-``evomaster.config.ConfigManager`` -- both can coexist during migration.
+These helpers load MatMaster YAML files or pre-loaded dictionaries and validate
+them into typed config models.
 
 Usage::
 
-    # From YAML (independent entry)
     llm = load_llm_config("config/llm_config.yaml")
-
-    # From ConfigManager dict (dual entry)
-    llm = LLMConfig.model_validate(playground.config.llm)
+    exp = load_exp_config("direct")
 """
 
 from __future__ import annotations

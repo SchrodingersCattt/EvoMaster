@@ -466,7 +466,7 @@ def test_restore_v1_dedup_keeps_single_user_message_on_worker_retry() -> None:
     assert user_messages[0].content == "single question"
 
 
-def test_restore_v1_hybrid_mixed_session_preserves_pre_phase1_user_query() -> None:
+def test_restore_v1_hybrid_mixed_session_discards_pre_phase1_raw_turn() -> None:
     table = InMemoryEventsTable()
     table.add_event(
         "sess-mix",
@@ -530,9 +530,11 @@ def test_restore_v1_hybrid_mixed_session_preserves_pre_phase1_user_query() -> No
     )
 
     user_messages = [m for m in history if isinstance(m, UserMessage)]
-    assert len(user_messages) == 2
-    assert user_messages[0].content == "old raw question"
-    assert user_messages[1].content == "new rendered question with instructions"
+    assistant_messages = [m for m in history if isinstance(m, AssistantMessage)]
+    assert [m.content for m in user_messages] == [
+        "new rendered question with instructions"
+    ]
+    assert [m.content for m in assistant_messages] == ["new answer"]
 
 
 @pytest.mark.asyncio
@@ -968,15 +970,7 @@ async def test_spawn_id_checkpoint_does_not_affect_parent_restore() -> None:
         task_id=None,
     )
 
-    assert [type(message) for message in parent_history] == [
-        UserMessage,
-        AssistantMessage,
-    ]
-    assert [message.content for message in parent_history] == [
-        "parent raw question",
-        "parent raw answer",
-    ]
-    assert all("child" not in str(message.content) for message in parent_history)
+    assert parent_history == []
     assert [type(message) for message in child_history] == [
         UserMessage,
         UserMessage,

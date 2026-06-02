@@ -106,41 +106,43 @@ def _replay_terminal_dedupe_key(event: dict) -> tuple[str, str | None] | None:
 
 
 def _dedupe_replayed_terminal_events(events: list[dict]) -> list[dict]:
-    """Hide replayed run_result when the same task already has a replayable response.
+    """Hide replayed response when the same task has a terminal result.
 
-    Live SSE already streamed the final `response` content. After persisted
-    complete response segments were added, replaying the trailing `run_result`
-    would duplicate the final answer after reconnect. We suppress terminal
-    events once a replayable `response` has been seen for the same
-    `(task_id, spawn_id)` stream.
+    Live SSE may persist both final `response` content and a trailing
+    `run_result`. Replay should keep the terminal result as the canonical
+    completed-run event, and suppress response rows for the same
+    `(task_id, spawn_id)` stream to avoid duplicate final answers.
 
     `response_figures` is replayable answer metadata. It may appear before the
     first response, between response chunks, or after a response. It is kept in
-    replay output and does not reset or suppress the response-seen state.
+    replay output and does not affect terminal dedupe.
 
-    Dedupe is keyed by (task_id, spawn_id) so a sub-agent `response` does not
-    suppress the parent stream's `run_result`.
+    Dedupe is keyed by (task_id, spawn_id) so a parent `run_result` does not
+    suppress a sub-agent `response`.
     """
-    deduped: list[dict] = []
-    saw_response_by_key: dict[tuple[str, str | None], bool] = {}
+    terminal_keys: set[tuple[str, str | None]] = set()
+    for event in events:
+        event_type = str(event.get('type') or '')
+        if event_type != 'run_result':
+            continue
+        if not _should_emit_event_to_sse(event):
+            continue
+        dedupe_key = _replay_terminal_dedupe_key(event)
+        if dedupe_key is not None:
+            terminal_keys.add(dedupe_key)
 
+    deduped: list[dict] = []
     for event in events:
         dedupe_key = _replay_terminal_dedupe_key(event)
         event_type = str(event.get('type') or '')
         if (
             dedupe_key is not None
-            and event_type in {'run_result', 'finish'}
-            and saw_response_by_key.get(dedupe_key, False)
+            and event_type == 'response'
+            and dedupe_key in terminal_keys
         ):
             continue
 
         deduped.append(event)
-
-        if dedupe_key is not None and _should_emit_event_to_sse(event):
-            if event_type == 'response':
-                saw_response_by_key[dedupe_key] = True
-            elif event_type in {'run_result', 'finish'}:
-                saw_response_by_key.setdefault(dedupe_key, False)
 
     return deduped
 

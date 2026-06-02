@@ -116,8 +116,8 @@ class TestReplayDedupeSpawnId:
         types = [e["type"] for e in out]
         assert types == ["response", "run_result"]
 
-    def test_same_spawn_stream_still_dedupes_run_result_after_response(self) -> None:
-        """Within one (task_id, spawn_id) stream, response still hides trailing run_result."""
+    def test_same_spawn_stream_prefers_run_result_over_response(self) -> None:
+        """Within one (task_id, spawn_id) stream, terminal events hide response."""
         from src.services.stream_service import _dedupe_replayed_terminal_events
 
         events = [
@@ -137,9 +137,9 @@ class TestReplayDedupeSpawnId:
             },
         ]
         out = _dedupe_replayed_terminal_events(events)
-        assert [e["type"] for e in out] == ["response"]
+        assert [e["type"] for e in out] == ["run_result"]
 
-    def test_response_figures_between_response_and_run_result_keeps_dedupe(
+    def test_response_figures_between_response_and_run_result_are_preserved(
         self,
     ) -> None:
         from src.services.stream_service import _dedupe_replayed_terminal_events
@@ -177,9 +177,9 @@ class TestReplayDedupeSpawnId:
         ]
 
         out = _dedupe_replayed_terminal_events(events)
-        assert [e["type"] for e in out] == ["response", "response_figures"]
+        assert [e["type"] for e in out] == ["response_figures", "run_result"]
 
-    def test_response_figures_before_response_still_dedupes_later_run_result(
+    def test_response_figures_before_response_are_preserved_with_run_result(
         self,
     ) -> None:
         from src.services.stream_service import _dedupe_replayed_terminal_events
@@ -217,7 +217,7 @@ class TestReplayDedupeSpawnId:
         ]
 
         out = _dedupe_replayed_terminal_events(events)
-        assert [e["type"] for e in out] == ["response_figures", "response"]
+        assert [e["type"] for e in out] == ["response_figures", "run_result"]
 
     def test_interleaved_response_and_multiple_response_figures_keep_order(
         self,
@@ -279,8 +279,8 @@ class TestReplayDedupeSpawnId:
         out = _dedupe_replayed_terminal_events(events)
         assert [e["type"] for e in out] == [
             "response_figures",
-            "response",
             "response_figures",
+            "run_result",
         ]
 
 

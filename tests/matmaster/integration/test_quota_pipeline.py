@@ -298,9 +298,12 @@ class TestQuotaDeductedOnSuccess:
             None,
         )
         assert run_result_payload is not None
-        assert run_result_payload['status'] == 'completed'
-        assert run_result_payload['reason'] == 'natural'
-        assert run_result_payload['final_content'] == 'success'
+        assert run_result_payload['content']['status'] == 'completed'
+        assert run_result_payload['content']['reason'] == 'natural'
+        assert run_result_payload['content']['content'] == 'success'
+        assert 'status' not in run_result_payload
+        assert 'reason' not in run_result_payload
+        assert 'final_content' not in run_result_payload
         assert run_result_payload['source'] == 'MatMaster'
 
         stream_closed_payload = next(
@@ -531,8 +534,8 @@ class TestQuotaNotDeductedOnError:
             None,
         )
         assert run_result_payload is not None
-        assert run_result_payload['status'] == 'failed'
-        assert run_result_payload['reason'] == 'invalid_finish'
+        assert run_result_payload['content']['status'] == 'failed'
+        assert run_result_payload['content']['reason'] == 'invalid_finish'
         assert run_result_payload['content']['finish_detail']['kind'] == (
             'output_length_exceeded'
         )
@@ -621,9 +624,10 @@ class TestQuotaNotDeductedOnError:
             None,
         )
         assert run_result_payload is not None
-        assert run_result_payload['status'] == 'failed'
-        assert run_result_payload['reason'] == 'invalid_finish'
-        assert run_result_payload.get('final_content') is None
+        assert run_result_payload['content']['status'] == 'failed'
+        assert run_result_payload['content']['reason'] == 'invalid_finish'
+        assert run_result_payload['content']['content'] == ''
+        assert 'final_content' not in run_result_payload
         assert run_result_payload['content']['finish_detail']['kind'] == (
             'empty_response'
         )
@@ -710,9 +714,10 @@ class TestQuotaNotDeductedOnError:
             None,
         )
         assert run_result_payload is not None
-        assert run_result_payload['status'] == 'failed'
-        assert run_result_payload['reason'] == 'invalid_finish'
-        assert run_result_payload.get('final_content') is None
+        assert run_result_payload['content']['status'] == 'failed'
+        assert run_result_payload['content']['reason'] == 'invalid_finish'
+        assert run_result_payload['content']['content'] == ''
+        assert 'final_content' not in run_result_payload
         error_payload = next(
             (payload for payload in payloads if payload.get('type') == 'error'),
             None,
