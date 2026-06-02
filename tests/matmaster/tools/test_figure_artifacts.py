@@ -28,6 +28,7 @@ def _upload_cfg(
         upload_bytes=upload_bytes,
     )
 
+
 # --------------------------------------------------------------------------- #
 # _sniff_image_format
 # --------------------------------------------------------------------------- #
@@ -52,14 +53,14 @@ def test_asset_key_is_deterministic_and_preserves_basename() -> None:
         tool_call_id="call-1",
         figure_id="band",
         source_path="/share/plots/band-plot.png",
-        payload=_PNG,
+        content_sha256=hashlib.sha256(_PNG).hexdigest(),
     )
     key2 = _build_asset_key(
         upload_config=cfg,
         tool_call_id="call-1",
         figure_id="band",
         source_path="/share/plots/band-plot.png",
-        payload=_PNG,
+        content_sha256=hashlib.sha256(_PNG).hexdigest(),
     )
     assert key1 == key2
     assert key1.endswith("/band-plot.png")
@@ -77,7 +78,7 @@ def test_asset_key_uses_stable_sanitized_segments() -> None:
         tool_call_id="call 1/alpha",
         figure_id="Band Figure 01",
         source_path="/share/plots/final image.png",
-        payload=_PNG,
+        content_sha256=hashlib.sha256(_PNG).hexdigest(),
     )
     expected_digest = hashlib.sha256(_PNG).hexdigest()[:16]
     assert key == (
@@ -124,7 +125,9 @@ def test_upload_retries_before_success() -> None:
             raise RuntimeError("transient oss failure")
         return f"https://oss.example/{key}"
 
-    url = _upload_with_retry(upload_bytes=upload_bytes, payload=_PNG, asset_key="k/x.png")
+    url = _upload_with_retry(
+        upload_bytes=upload_bytes, payload=_PNG, asset_key="k/x.png"
+    )
     assert url == "https://oss.example/k/x.png"
     assert attempts["count"] == 3
 

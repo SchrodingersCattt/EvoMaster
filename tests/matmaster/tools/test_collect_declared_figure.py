@@ -1,6 +1,22 @@
 """Figure artifact path, id, validation, prepare, and publish tests."""
 
-from matmaster.tools.figure_artifacts import resolve_workspace_output_path
+import hashlib
+from unittest.mock import MagicMock
+
+import pytest
+
+from matmaster.tools.figure_artifacts import (
+    FigurePrepareResult,
+    FigurePublishResult,
+    FigureValidationError,
+    PreparedFigure,
+    _validate_image_bytes,
+    build_figure_id,
+    prepare_declared_figure,
+    publish_prepared_figure,
+    resolve_workspace_output_path,
+)
+from matmaster.types.figures import FigureUploadConfig
 
 
 def test_relative_path_joins_workspace():
@@ -33,53 +49,48 @@ def test_escape_relative_denied():
 
 def test_escape_absolute_denied():
     assert (
-        resolve_workspace_output_path(raw_path="/etc/passwd", workdir="/share")
-        is None
+        resolve_workspace_output_path(raw_path="/etc/passwd", workdir="/share") is None
     )
 
 
-from matmaster.tools.figure_artifacts import build_figure_id
-
 _PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+_PNG_SHA = hashlib.sha256(_PNG).hexdigest()
 
 
 def test_figure_id_sanitizes_spaces():
-    fid = build_figure_id(output_path="plots/band structure.png", image_bytes=_PNG)
+    fid = build_figure_id(
+        output_path="plots/band structure.png", content_sha256=_PNG_SHA
+    )
     stem, _, digest = fid.rpartition("-")
     assert stem == "band-structure"
     assert len(digest) == 12
 
 
 def test_figure_id_non_ascii_stem_falls_back_to_figure():
-    fid = build_figure_id(output_path="结果图.png", image_bytes=_PNG)
+    fid = build_figure_id(output_path="结果图.png", content_sha256=_PNG_SHA)
     assert fid.startswith("figure-")
 
 
 def test_figure_id_is_deterministic_for_same_bytes():
-    a = build_figure_id(output_path="x.png", image_bytes=_PNG)
-    b = build_figure_id(output_path="x.png", image_bytes=_PNG)
+    a = build_figure_id(output_path="x.png", content_sha256=_PNG_SHA)
+    b = build_figure_id(output_path="x.png", content_sha256=_PNG_SHA)
     assert a == b
 
 
 def test_figure_id_changes_with_bytes():
-    a = build_figure_id(output_path="x.png", image_bytes=_PNG)
-    b = build_figure_id(output_path="x.png", image_bytes=_PNG + b"x")
+    a = build_figure_id(output_path="x.png", content_sha256=_PNG_SHA)
+    b = build_figure_id(
+        output_path="x.png", content_sha256=hashlib.sha256(_PNG + b"x").hexdigest()
+    )
     assert a != b
 
 
 def test_figure_id_length_bounded_and_charset():
-    fid = build_figure_id(output_path="A" * 200 + ".png", image_bytes=_PNG)
+    fid = build_figure_id(output_path="A" * 200 + ".png", content_sha256=_PNG_SHA)
     assert len(fid) <= 64
     assert all(c.isalnum() or c in "._-" for c in fid)
     assert "/" not in fid
 
-
-import pytest
-
-from matmaster.tools.figure_artifacts import (
-    FigureValidationError,
-    _validate_image_bytes,
-)
 
 _JPG = b"\xff\xd8\xff" + b"\x00" * 64
 
@@ -109,11 +120,6 @@ def test_validation_error_is_value_error_subclass():
     assert issubclass(FigureValidationError, ValueError)
 
 
-from unittest.mock import MagicMock
-
-from matmaster.types.figures import FigureUploadConfig
-
-
 def make_upload_config(url="https://assets.test/u/fig.png"):
     return FigureUploadConfig(
         session_id="sess-1",
@@ -130,19 +136,6 @@ def make_fig_session(*, exists=True, is_file=True, payload=_PNG):
     s.download.return_value = payload
     s.exec_bash.return_value = {"exit_code": 0, "stdout": ""}
     return s
-
-
-# --------------------------------------------------------------------------- #
-# prepare_declared_figure / publish_prepared_figure (publish-only split)
-# --------------------------------------------------------------------------- #
-
-from matmaster.tools.figure_artifacts import (
-    FigurePrepareResult,
-    FigurePublishResult,
-    PreparedFigure,
-    prepare_declared_figure,
-    publish_prepared_figure,
-)
 
 
 def test_prepare_success_returns_prepared_and_does_not_upload():
@@ -224,6 +217,7 @@ def test_publish_success_builds_descriptor():
     prepared = PreparedFigure(
         figure_id="band-abc123",
         image_bytes=_PNG,
+        content_sha256=_PNG_SHA,
         resolved_path="/share/band.png",
         output_path="/share/band.png",
         caption="Band structure",
@@ -254,6 +248,7 @@ def test_publish_upload_failure_classified():
     prepared = PreparedFigure(
         figure_id="band-abc123",
         image_bytes=_PNG,
+        content_sha256=_PNG_SHA,
         resolved_path="/share/band.png",
         output_path="/share/band.png",
         caption="c",

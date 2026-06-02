@@ -190,20 +190,11 @@ class AttachFigure(BuiltinTool):
     def _resolve_figure_cfg(
         self, runner_state: ToolRunnerState | None
     ) -> FigureUploadConfig | None:
+        # The runtime stores a typed FigureUploadConfig (Exp wires
+        # request.ports.figure_upload.config, which is FigureUploadConfig | None).
         if runner_state is None:
             return None
-        raw = runner_state.get("figure_upload_config")
-        if isinstance(raw, FigureUploadConfig):
-            return raw
-        if raw is None:
-            return None
-        try:
-            return FigureUploadConfig.model_validate(raw)
-        except Exception:
-            self.logger.warning(
-                "Ignoring invalid figure_upload_config for %s", self.name
-            )
-            return None
+        return runner_state.get("figure_upload_config")
 
     def _run(
         self,
@@ -229,8 +220,10 @@ class AttachFigure(BuiltinTool):
         workdir = str(self._workdir)
         figures: list[dict[str, Any]] = arguments["figures"]
 
-        # Phase A -- validate + hash the whole batch; upload nothing.
+        # Phase A -- validate + hash the whole batch; upload nothing. A shared
+        # figure_id means two paths hash to identical contents, which we reject.
         prepared: list[PreparedFigure] = []
+        by_id: dict[str, str] = {}
         for item in figures:
             result = prepare_declared_figure(
                 session=session,
@@ -247,10 +240,7 @@ class AttachFigure(BuiltinTool):
                         guidance=result.guidance,
                     ),
                 )
-            prepared.append(result.prepared)
-
-        by_id: dict[str, str] = {}
-        for p in prepared:
+            p = result.prepared
             if p.figure_id in by_id:
                 return ToolResult(
                     status="error",
@@ -262,6 +252,7 @@ class AttachFigure(BuiltinTool):
                     ),
                 )
             by_id[p.figure_id] = p.output_path
+            prepared.append(p)
 
         # Phase B -- upload the whole batch.
         descriptors = []
@@ -294,18 +285,12 @@ class AttachFigure(BuiltinTool):
         )
 
     @staticmethod
-    def _failure_block(
-        *, output_path: str, reason: str, guidance: str | None
-    ) -> str:
+    def _failure_block(*, output_path: str, reason: str, guidance: str | None) -> str:
         return (
             f"Figure attachment failed for {output_path}: {reason}\n{guidance or ''}"
         ).rstrip()
 
     def _execute(self, arguments: dict[str, Any]) -> str | ToolResult:
-        return ToolResult(
-            status="error",
-            content=(
-                "AttachFigure requires execution context "
-                "(figure upload config and tool_call_id)."
-            ),
+        raise NotImplementedError(
+            "AttachFigure requires execute_with_context; direct _execute is not supported"
         )

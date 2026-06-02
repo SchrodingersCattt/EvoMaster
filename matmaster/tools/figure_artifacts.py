@@ -35,7 +35,10 @@ class FigureValidationError(ValueError):
     def __init__(self, reason: str, detail: str = "") -> None:
         self.reason = reason
         self.detail = detail
-        super().__init__(f"{reason}:{detail}" if detail else reason)
+        super().__init__(reason, detail)
+
+    def __str__(self) -> str:
+        return f"{self.reason}:{self.detail}" if self.detail else self.reason
 
 
 def resolve_workspace_output_path(
@@ -52,9 +55,7 @@ def resolve_workspace_output_path(
     """
     root = PurePosixPath(posixpath.normpath(str(workdir)))
     candidate = (
-        raw_path
-        if posixpath.isabs(raw_path)
-        else posixpath.join(str(root), raw_path)
+        raw_path if posixpath.isabs(raw_path) else posixpath.join(str(root), raw_path)
     )
     resolved = PurePosixPath(posixpath.normpath(candidate))
     if not resolved.is_relative_to(root):
@@ -62,8 +63,11 @@ def resolve_workspace_output_path(
     return str(resolved)
 
 
-def build_figure_id(*, output_path: str, image_bytes: bytes) -> str:
-    """Stable, sanitized figure_id: sanitized stem + sha256(bytes)[:12].
+def build_figure_id(*, output_path: str, content_sha256: str) -> str:
+    """Stable, sanitized figure_id: sanitized stem + content_sha256[:12].
+
+    ``content_sha256`` is the hex sha256 of the image bytes, computed once by
+    the caller and shared with the asset key so the payload is hashed only once.
 
     Charset limited to [A-Za-z0-9._-]; other runs fold to '-'; consecutive
     '-' merge; leading/trailing '-' stripped; empty stem -> 'figure';
@@ -76,8 +80,7 @@ def build_figure_id(*, output_path: str, image_bytes: bytes) -> str:
     sanitized = sanitized[:_FIGURE_ID_STEM_MAX].strip("-")
     if not sanitized:
         sanitized = "figure"
-    digest = hashlib.sha256(image_bytes).hexdigest()[:12]
-    return f"{sanitized}-{digest}"[:_FIGURE_ID_TOTAL_MAX]
+    return f"{sanitized}-{content_sha256[:12]}"[:_FIGURE_ID_TOTAL_MAX]
 
 
 def _download_with_retry(*, session: Session, path: str) -> bytes:
@@ -122,9 +125,9 @@ def _build_asset_key(
     tool_call_id: str,
     figure_id: str,
     source_path: str,
-    payload: bytes,
+    content_sha256: str,
 ) -> str:
-    digest = hashlib.sha256(payload).hexdigest()[:16]
+    digest = content_sha256[:16]
     basename = posixpath.basename(source_path)
     parts = [
         upload_config.asset_key_prefix.strip("/"),
@@ -167,6 +170,7 @@ class PreparedFigure:
 
     figure_id: str
     image_bytes: bytes
+    content_sha256: str
     resolved_path: str
     output_path: str
     caption: str
@@ -265,11 +269,13 @@ def prepare_declared_figure(
     except FigureValidationError as exc:
         return _fail(exc.reason)
 
-    figure_id = build_figure_id(output_path=output_path, image_bytes=payload)
+    content_sha256 = hashlib.sha256(payload).hexdigest()
+    figure_id = build_figure_id(output_path=output_path, content_sha256=content_sha256)
     return FigurePrepareResult(
         prepared=PreparedFigure(
             figure_id=figure_id,
             image_bytes=payload,
+            content_sha256=content_sha256,
             resolved_path=resolved,
             output_path=output_path,
             caption=caption,
@@ -295,7 +301,7 @@ def publish_prepared_figure(
             tool_call_id=tool_call_id,
             figure_id=prepared.figure_id,
             source_path=prepared.resolved_path,
-            payload=prepared.image_bytes,
+            content_sha256=prepared.content_sha256,
         )
         asset_url = _upload_with_retry(
             upload_bytes=upload_config.upload_bytes,
