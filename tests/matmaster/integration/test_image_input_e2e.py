@@ -137,7 +137,6 @@ async def test_images_flow_from_service_to_kernel_user_message(tmp_path: Path) -
             "src.services.agent_run_service._get_agent_default_llm",
             return_value=None,
         ),
-        patch("src.services.agent_run_service.use_quota", new_callable=AsyncMock),
     ):
         events_fn.return_value = _make_events_table()
         sse_cls.return_value.handle = AsyncMock()

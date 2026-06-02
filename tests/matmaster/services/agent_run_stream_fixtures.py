@@ -143,7 +143,6 @@ def _standard_patches():
             create=True,
         ),
         patch('src.services.agent_run_service.get_redis_dao'),
-        patch('src.services.agent_run_service.use_quota', new_callable=AsyncMock),
         patch(
             'src.services.agent_run_service._get_agent_default_llm', return_value=None
         ),

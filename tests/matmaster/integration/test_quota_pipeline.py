@@ -1,7 +1,8 @@
-"""Quota pipeline tests: verify use_quota deduction logic for all paths.
+"""Run pipeline outcome tests: verify run_agent success/failure semantics per path.
 
-QUAL-05: use_quota on success, skip on failure, skip on cancel,
-run_agent mode handling.
+计价化后扣费迁移到 tools-server（evo 不再调用 use_quota），本文件改为校验 run_agent
+的成功/失败语义与生命周期事件：成功路径返回成功、cancel/error/invalid_finish 返回失败，
+并发出对应的 run_result / stream_closed / cancelled / error 事件。
 
 All external dependencies mocked per D-10.
 """
@@ -163,7 +164,7 @@ def _build_patched_service(mock_llm, mock_sessions_svc=None, mock_environment=No
         mock_sessions_svc.get_session_user_id.return_value = 'user-123'
 
     svc = AgentRunService(sessions_service=mock_sessions_svc)
-    # mock_llm stored for _run_with_quota_mock to wire up via build_provider_bundle patch
+    # mock_llm stored for _run_agent to wire up via build_provider_bundle patch
     svc._test_mock_llm = mock_llm
 
     mock_pg = MagicMock()
@@ -175,16 +176,19 @@ def _build_patched_service(mock_llm, mock_sessions_svc=None, mock_environment=No
     return svc, mock_pg
 
 
-def _run_with_quota_mock(
+def _run_agent(
     svc,
     mock_pg,
-    use_quota_mock,
     cancel_token=None,
     send_cb=None,
     *,
     return_result: bool = False,
 ):
-    """Run agent with standard patches and return whether use_quota was called."""
+    """Run agent with standard patches.
+
+    默认返回 run_agent 是否成功（结果首元素为 True）；``return_result=True`` 时直接返回
+    run_agent 的完整结果元组，供需要校验失败原因/耗时的用例使用。
+    """
     with (
         patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
         patch(
@@ -192,7 +196,6 @@ def _run_with_quota_mock(
         ) as mock_bohrium_cls,
         patch('src.services.agent_run_service.get_chat_events_table') as mock_events_fn,
         patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
-        patch('src.services.agent_run_service.use_quota', use_quota_mock),
         patch(
             'matmaster.providers.llm_factory.build_provider_bundle',
             return_value=SimpleNamespace(
@@ -253,27 +256,23 @@ def _run_with_quota_mock(
 
     if return_result:
         return result
-    return use_quota_mock.called
+    return result[0] is True
 
 
 # ── QUAL-05: Quota pipeline tests ────────────────────
 
 
-class TestQuotaDeductedOnSuccess:
-    """Verify use_quota called when kernel completes successfully."""
+class TestRunSucceedsOnSuccess:
+    """Verify run_agent reports success when the kernel completes naturally."""
 
-    def test_quota_deducted_on_success(self, tmp_path: Path) -> None:
-        """Verify use_quota called when kernel completes successfully."""
+    def test_run_succeeds_on_success(self, tmp_path: Path) -> None:
+        """Verify run_agent reports success when the kernel completes naturally."""
         environment = _make_environment(tmp_path)
         mock_llm = _SuccessLLM()
         svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
 
-        async def mock_use_quota(uid, **kwargs):
-            pass
-
-        use_quota_mock = MagicMock(side_effect=mock_use_quota)
-        called = _run_with_quota_mock(svc, mock_pg, use_quota_mock)
-        assert called, 'use_quota should be called on success'
+        called = _run_agent(svc, mock_pg)
+        assert called, 'run should succeed on success path'
 
     def test_run_result_event_is_sent_on_success(self, tmp_path: Path) -> None:
         """Verify run_agent emits run_result and stream_closed on success."""
@@ -282,14 +281,9 @@ class TestQuotaDeductedOnSuccess:
         svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
         payloads: list[dict[str, Any]] = []
 
-        async def mock_use_quota(uid, **kwargs):
-            pass
-
-        use_quota_mock = MagicMock(side_effect=mock_use_quota)
-        _run_with_quota_mock(
+        _run_agent(
             svc,
             mock_pg,
-            use_quota_mock,
             send_cb=_async_collect(payloads),
         )
 
@@ -328,14 +322,9 @@ class TestQuotaDeductedOnSuccess:
         svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
         payloads: list[dict[str, Any]] = []
 
-        async def mock_use_quota(uid, **kwargs):
-            pass
-
-        use_quota_mock = MagicMock(side_effect=mock_use_quota)
-        _run_with_quota_mock(
+        _run_agent(
             svc,
             mock_pg,
-            use_quota_mock,
             send_cb=_async_collect(payloads),
         )
 
@@ -345,11 +334,11 @@ class TestQuotaDeductedOnSuccess:
         assert payload_types.index('run_result') < payload_types.index('stream_closed')
 
 
-class TestQuotaNotDeductedOnCancel:
-    """Verify use_quota NOT called when task is cancelled."""
+class TestRunFailsOnCancel:
+    """Verify run_agent reports failure when the task is cancelled."""
 
-    def test_quota_not_deducted_on_cancel(self, tmp_path: Path) -> None:
-        """Verify use_quota NOT called when task is cancelled."""
+    def test_run_fails_on_cancel(self, tmp_path: Path) -> None:
+        """Verify run_agent reports failure when the task is cancelled."""
         environment = _make_environment(tmp_path)
         mock_llm = _SuccessLLM()  # LLM would succeed, but the token is pre-cancelled
         svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
@@ -357,14 +346,8 @@ class TestQuotaNotDeductedOnCancel:
         # Pre-cancel before run -> kernel returns cancelled immediately
         cancel_token = _make_cancel_token(cancelled=True)
 
-        async def mock_use_quota(uid, **kwargs):
-            pass
-
-        use_quota_mock = MagicMock(side_effect=mock_use_quota)
-        called = _run_with_quota_mock(
-            svc, mock_pg, use_quota_mock, cancel_token=cancel_token
-        )
-        assert not called, 'use_quota should NOT be called on cancel'
+        called = _run_agent(svc, mock_pg, cancel_token=cancel_token)
+        assert not called, 'run should not succeed on cancel'
 
     def test_cancelled_run_emits_stream_closed_event(self, tmp_path: Path) -> None:
         """Verify cancelled runs still emit stream_closed for frontend stream closure."""
@@ -375,14 +358,9 @@ class TestQuotaNotDeductedOnCancel:
 
         cancel_token = _make_cancel_token(cancelled=True)
 
-        async def mock_use_quota(uid, **kwargs):
-            pass
-
-        use_quota_mock = MagicMock(side_effect=mock_use_quota)
-        _run_with_quota_mock(
+        _run_agent(
             svc,
             mock_pg,
-            use_quota_mock,
             cancel_token=cancel_token,
             send_cb=_async_collect(payloads),
         )
@@ -406,14 +384,9 @@ class TestQuotaNotDeductedOnCancel:
 
         cancel_token = _make_cancel_token(cancelled=True)
 
-        async def mock_use_quota(uid, **kwargs):
-            pass
-
-        use_quota_mock = MagicMock(side_effect=mock_use_quota)
-        result = _run_with_quota_mock(
+        result = _run_agent(
             svc,
             mock_pg,
-            use_quota_mock,
             cancel_token=cancel_token,
             return_result=True,
         )
@@ -424,21 +397,17 @@ class TestQuotaNotDeductedOnCancel:
         assert result[1] >= 0
 
 
-class TestQuotaNotDeductedOnError:
-    """Verify use_quota NOT called when kernel raises exception."""
+class TestRunFailsOnError:
+    """Verify run_agent reports failure when the kernel raises / finishes invalid."""
 
-    def test_quota_not_deducted_on_error(self, tmp_path: Path) -> None:
-        """Verify use_quota NOT called when kernel raises exception."""
+    def test_run_fails_on_error(self, tmp_path: Path) -> None:
+        """Verify run_agent reports failure when the kernel raises exception."""
         environment = _make_environment(tmp_path)
         mock_llm = _ErrorLLM()
         svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
 
-        async def mock_use_quota(uid, **kwargs):
-            pass
-
-        use_quota_mock = MagicMock(side_effect=mock_use_quota)
-        called = _run_with_quota_mock(svc, mock_pg, use_quota_mock)
-        assert not called, 'use_quota should NOT be called on error'
+        called = _run_agent(svc, mock_pg)
+        assert not called, 'run should not succeed on error'
 
     def test_error_run_emits_stream_closed_event(self, tmp_path: Path) -> None:
         """Verify error runs emit stream_closed after the error event."""
@@ -447,14 +416,9 @@ class TestQuotaNotDeductedOnError:
         svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
         payloads: list[dict[str, Any]] = []
 
-        async def mock_use_quota(uid, **kwargs):
-            pass
-
-        use_quota_mock = MagicMock(side_effect=mock_use_quota)
-        _run_with_quota_mock(
+        _run_agent(
             svc,
             mock_pg,
-            use_quota_mock,
             send_cb=_async_collect(payloads),
         )
 
@@ -476,14 +440,9 @@ class TestQuotaNotDeductedOnError:
         mock_llm = _ErrorLLM()
         svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
 
-        async def mock_use_quota(uid, **kwargs):
-            pass
-
-        use_quota_mock = MagicMock(side_effect=mock_use_quota)
-        result = _run_with_quota_mock(
+        result = _run_agent(
             svc,
             mock_pg,
-            use_quota_mock,
             return_result=True,
         )
 
@@ -493,18 +452,14 @@ class TestQuotaNotDeductedOnError:
         assert isinstance(result[1], int)
         assert result[1] >= 0
 
-    def test_quota_not_deducted_on_invalid_finish(self, tmp_path: Path) -> None:
-        """Verify use_quota NOT called when run_result validation fails."""
+    def test_run_fails_on_invalid_finish(self, tmp_path: Path) -> None:
+        """Verify run_agent reports failure when run_result validation fails."""
         environment = _make_environment(tmp_path)
         mock_llm = _InvalidFinishLLM()
         svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
 
-        async def mock_use_quota(uid, **kwargs):
-            pass
-
-        use_quota_mock = MagicMock(side_effect=mock_use_quota)
-        called = _run_with_quota_mock(svc, mock_pg, use_quota_mock)
-        assert not called, 'use_quota should NOT be called on invalid finish'
+        called = _run_agent(svc, mock_pg)
+        assert not called, 'run should not succeed on invalid finish'
 
     def test_invalid_finish_emits_error_and_stream_closed_event(
         self, tmp_path: Path
@@ -515,14 +470,9 @@ class TestQuotaNotDeductedOnError:
         svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
         payloads: list[dict[str, Any]] = []
 
-        async def mock_use_quota(uid, **kwargs):
-            pass
-
-        use_quota_mock = MagicMock(side_effect=mock_use_quota)
-        _run_with_quota_mock(
+        _run_agent(
             svc,
             mock_pg,
-            use_quota_mock,
             send_cb=_async_collect(payloads),
         )
 
@@ -565,14 +515,9 @@ class TestQuotaNotDeductedOnError:
         mock_llm = _InvalidFinishLLM()
         svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
 
-        async def mock_use_quota(uid, **kwargs):
-            pass
-
-        use_quota_mock = MagicMock(side_effect=mock_use_quota)
-        result = _run_with_quota_mock(
+        result = _run_agent(
             svc,
             mock_pg,
-            use_quota_mock,
             return_result=True,
         )
 
@@ -581,20 +526,14 @@ class TestQuotaNotDeductedOnError:
         assert isinstance(result[1], int)
         assert result[1] >= 0
 
-    def test_quota_not_deducted_on_empty_stop_invalid_finish(
-        self, tmp_path: Path
-    ) -> None:
-        """Verify empty stop finish validation failure skips quota deduction."""
+    def test_run_fails_on_empty_stop_invalid_finish(self, tmp_path: Path) -> None:
+        """Verify empty stop finish validation failure reports run failure."""
         environment = _make_environment(tmp_path)
         mock_llm = _EmptyStopLLM()
         svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
 
-        async def mock_use_quota(uid, **kwargs):
-            pass
-
-        use_quota_mock = MagicMock(side_effect=mock_use_quota)
-        called = _run_with_quota_mock(svc, mock_pg, use_quota_mock)
-        assert not called, 'use_quota should NOT be called on empty stop'
+        called = _run_agent(svc, mock_pg)
+        assert not called, 'run should not succeed on empty stop'
 
     def test_empty_stop_invalid_finish_emits_error_and_stream_closed_event(
         self, tmp_path: Path
@@ -605,14 +544,9 @@ class TestQuotaNotDeductedOnError:
         svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
         payloads: list[dict[str, Any]] = []
 
-        async def mock_use_quota(uid, **kwargs):
-            pass
-
-        use_quota_mock = MagicMock(side_effect=mock_use_quota)
-        _run_with_quota_mock(
+        _run_agent(
             svc,
             mock_pg,
-            use_quota_mock,
             send_cb=_async_collect(payloads),
         )
 
@@ -654,14 +588,9 @@ class TestQuotaNotDeductedOnError:
         mock_llm = _EmptyStopLLM()
         svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
 
-        async def mock_use_quota(uid, **kwargs):
-            pass
-
-        use_quota_mock = MagicMock(side_effect=mock_use_quota)
-        result = _run_with_quota_mock(
+        result = _run_agent(
             svc,
             mock_pg,
-            use_quota_mock,
             return_result=True,
         )
 
@@ -670,20 +599,14 @@ class TestQuotaNotDeductedOnError:
         assert isinstance(result[1], int)
         assert result[1] >= 0
 
-    def test_quota_not_deducted_on_sentinel_stop_invalid_finish(
-        self, tmp_path: Path
-    ) -> None:
-        """Verify empty-value sentinel finish validation skips quota deduction."""
+    def test_run_fails_on_sentinel_stop_invalid_finish(self, tmp_path: Path) -> None:
+        """Verify empty-value sentinel finish validation reports run failure."""
         environment = _make_environment(tmp_path)
         mock_llm = _SentinelStopLLM()
         svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
 
-        async def mock_use_quota(uid, **kwargs):
-            pass
-
-        use_quota_mock = MagicMock(side_effect=mock_use_quota)
-        called = _run_with_quota_mock(svc, mock_pg, use_quota_mock)
-        assert not called, 'use_quota should NOT be called on sentinel stop'
+        called = _run_agent(svc, mock_pg)
+        assert not called, 'run should not succeed on sentinel stop'
 
     def test_sentinel_stop_invalid_finish_emits_error_and_stream_closed_event(
         self, tmp_path: Path
@@ -694,14 +617,9 @@ class TestQuotaNotDeductedOnError:
         svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
         payloads: list[dict[str, Any]] = []
 
-        async def mock_use_quota(uid, **kwargs):
-            pass
-
-        use_quota_mock = MagicMock(side_effect=mock_use_quota)
-        _run_with_quota_mock(
+        _run_agent(
             svc,
             mock_pg,
-            use_quota_mock,
             send_cb=_async_collect(payloads),
         )
 
@@ -733,22 +651,16 @@ class TestQuotaNotDeductedOnError:
         assert payload_types.index('error') < payload_types.index('stream_closed')
 
 
-class TestQuotaDeduction:
-    """Verify use_quota called via native await."""
+class TestRunSucceedsOnNaturalFinish:
+    """Verify run_agent reports success on a natural finish (post-billing migration)."""
 
-    def test_quota_deduction(self, tmp_path: Path) -> None:
-        """Verify use_quota called via native await."""
+    def test_run_succeeds_on_natural_finish(self, tmp_path: Path) -> None:
+        """Natural finish -> run_agent returns success (result first element is True)."""
         environment = _make_environment(tmp_path)
         mock_llm = _SuccessLLM()
         svc, mock_pg = _build_patched_service(mock_llm, mock_environment=environment)
 
-        use_quota_calls = []
+        result = _run_agent(svc, mock_pg, return_result=True)
 
-        async def mock_use_quota(uid, **kwargs):
-            use_quota_calls.append(uid)
-
-        use_quota_mock = MagicMock(side_effect=mock_use_quota)
-        _run_with_quota_mock(svc, mock_pg, use_quota_mock)
-
-        assert len(use_quota_calls) == 1
-        assert use_quota_calls[0] == 'user-123'
+        assert isinstance(result, tuple)
+        assert result[0] is True
