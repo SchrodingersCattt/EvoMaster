@@ -1,34 +1,41 @@
 {
-  "task": "Ni irradiation defects: perfect Ni, He4V4 helium bubble, and V6 void",
-  "poscar_species": {
-    "perfect_Ni": ["Ni"],
-    "he4v4": ["Ni", "He"],
-    "v6": ["Ni"]
-  },
   "available_potcars": [
     {
       "element": "Ni",
-      "title": "PAW_PBE Ni 02Aug2007",
-      "lexch": "PE",
-      "zval": 10,
       "enmax_eV": 269.9,
-      "path": "POT_GGA_PAW_PBE/Ni/POTCAR"
+      "lexch": "PE",
+      "path": "POT_GGA_PAW_PBE/Ni/POTCAR",
+      "title": "PAW_PBE Ni 02Aug2007",
+      "zval": 10
     },
     {
       "element": "H",
-      "title": "PAW_PBE H 15Jun2001",
-      "lexch": "PE",
-      "zval": 1,
       "enmax_eV": 250.0,
-      "path": "POT_GGA_PAW_PBE/H/POTCAR"
+      "lexch": "PE",
+      "path": "POT_GGA_PAW_PBE/H/POTCAR",
+      "title": "PAW_PBE H 15Jun2001",
+      "zval": 1
     },
     {
       "element": "Ne",
-      "title": "PAW_PBE Ne 08Apr2002",
-      "lexch": "PE",
-      "zval": 8,
       "enmax_eV": 350.0,
-      "path": "POT_GGA_PAW_PBE/Ne/POTCAR"
+      "lexch": "PE",
+      "path": "POT_GGA_PAW_PBE/Ne/POTCAR",
+      "title": "PAW_PBE Ne 08Apr2002",
+      "zval": 8
     }
-  ]
+  ],
+  "poscar_species": {
+    "he4v4": [
+      "Ni",
+      "He"
+    ],
+    "perfect_Ni": [
+      "Ni"
+    ],
+    "v6": [
+      "Ni"
+    ]
+  },
+  "task": "Ni irradiation defects: perfect Ni, He4V4 helium bubble, and V6 void"
 }
