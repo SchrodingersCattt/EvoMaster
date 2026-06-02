@@ -1,6 +1,11 @@
 from __future__ import annotations
 
-from matmaster.types.messages import AssistantMessage, SystemMessage, UserMessage
+from matmaster.types.messages import (
+    AssistantMessage,
+    ImageContentPart,
+    SystemMessage,
+    UserMessage,
+)
 from src.dao.chat_events_table import ChatEventsTable
 from src.services.history_checkpoint_codec import serialize_base_messages
 from src.services.model_history_restore_service import ModelHistoryRestoreService
@@ -60,14 +65,22 @@ def _user_event(
     return event
 
 
-def _utc_event(content: str, *, invocation_id: str = "inv-utc") -> dict:
+def _utc_event(
+    content: str,
+    *,
+    invocation_id: str = "inv-utc",
+    images: list[str] | None = None,
+) -> dict:
     return {
         "source": "MatMaster",
         "type": "user_turn_context",
         "content": {
             "schema_version": "user_turn_context.v1",
             "kind": "anchor",
-            "message": UserMessage(content=content).model_dump(mode="json"),
+            "message": UserMessage(
+                content=content,
+                images=[ImageContentPart(url=url) for url in images or []],
+            ).model_dump(mode="json"),
             "user_instructions_hash": "sha256:abc",
             "transform": "raw",
             "render_version": "user_context_render.v1",
@@ -134,7 +147,9 @@ class FakeEventsTable:
         spawn_id: str | None,
     ) -> bool:
         self.calls.append(("has_user_turn_context", session_id, spawn_id))
-        return False
+        return any(
+            event.get("type") == "user_turn_context" for event in self.scope_events
+        )
 
 
 def test_row_to_event_includes_event_id() -> None:
@@ -252,13 +267,8 @@ def test_restore_skips_old_system_checkpoint_and_uses_older_valid_checkpoint() -
     assert "valid" in (history[0].content or "")
 
 
-def test_restore_without_checkpoint_uses_raw_event_history() -> None:
-    events_table = FakeEventsTable(
-        session_events=[
-            _user_event("raw question"),
-            _response_event("raw answer"),
-        ]
-    )
+def test_restore_without_checkpoint_and_without_utc_returns_empty_history() -> None:
+    events_table = FakeEventsTable()
 
     service = ModelHistoryRestoreService(events_table)
 
@@ -268,19 +278,18 @@ def test_restore_without_checkpoint_uses_raw_event_history() -> None:
         task_id=None,
     )
 
-    assert [message.role for message in history] == ["user", "assistant"]
-    assert isinstance(history[0], UserMessage)
-    assert isinstance(history[1], AssistantMessage)
+    assert history == []
+    assert not any(call[0] == "get_session_events" for call in events_table.calls)
 
 
 def test_restore_trims_history_images_by_image_turns() -> None:
     events_table = FakeEventsTable(
-        session_events=[
-            _user_event("img 1", images=["https://oss.example.com/chat/1.png"]),
-            _user_event("text only"),
-            _user_event("img 2", images=["https://oss.example.com/chat/2.png"]),
-            _user_event("img 3", images=["https://oss.example.com/chat/3.png"]),
-            _user_event("img 4", images=["https://oss.example.com/chat/4.png"]),
+        scope_events=[
+            _utc_event("img 1", images=["https://oss.example.com/chat/1.png"]),
+            _utc_event("text only"),
+            _utc_event("img 2", images=["https://oss.example.com/chat/2.png"]),
+            _utc_event("img 3", images=["https://oss.example.com/chat/3.png"]),
+            _utc_event("img 4", images=["https://oss.example.com/chat/4.png"]),
         ]
     )
     service = ModelHistoryRestoreService(events_table)

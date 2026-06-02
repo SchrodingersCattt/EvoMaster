@@ -4,8 +4,8 @@ from pathlib import Path
 from typing import Any
 
 from matmaster.context.ports import ActiveSkill, SessionEvent
+from matmaster.context.skill_resolver import SkillRegistryResolver
 from src.services.skill_registry_factory import build_skill_registry
-from src.services.skill_resolver import SkillRegistryResolver
 
 
 def _write_skill(root: Path, name: str, mcp_server: str | None = None) -> None:

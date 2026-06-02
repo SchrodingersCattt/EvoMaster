@@ -34,6 +34,10 @@ class TestSkillToolMetadata:
         tool = SkillTool(skill_registry=make_registry())
         assert "args" not in tool.json_schema["properties"]
 
+    def test_schema_does_not_have_legacy_skill_name_param(self):
+        tool = SkillTool(skill_registry=make_registry())
+        assert "skill_name" not in tool.json_schema["properties"]
+
 
 class TestSkillToolDescriptionSlim:
     def test_description_is_short_summary(self) -> None:
@@ -59,6 +63,17 @@ class TestSkillExecution:
         result = asyncio.run(tool.execute({"skill": "test-skill"}))
         assert "Test Skill" in result
         assert "/skills/test-skill" in result
+
+    def test_legacy_skill_name_param_not_accepted(self):
+        skill = make_skill()
+        registry = make_registry(skill=skill)
+        registry.get_skill.side_effect = lambda name: (
+            skill if name == "test-skill" else None
+        )
+        tool = SkillTool(skill_registry=registry)
+        result = asyncio.run(tool.execute({"skill_name": "test-skill"}))
+        assert "error" in result.lower()
+        registry.get_skill.assert_called_with("")
 
     def test_mcp_hit_callback(self):
         skill = make_skill(mcp="my-server")

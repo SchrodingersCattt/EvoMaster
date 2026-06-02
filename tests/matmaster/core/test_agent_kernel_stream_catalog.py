@@ -14,7 +14,11 @@ from matmaster.types.cancellation import CancellationController
 from matmaster.types.events import RunResultEvent
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 
-from .agent_kernel_test_helpers import _make_tool_registry, make_kernel_runtime
+from .agent_kernel_test_helpers import (
+    _make_tool_registry,
+    make_kernel_runtime,
+    make_kernel_turn,
+)
 from .test_agent_kernel_stream import ContentOnlyProvider, ToolCallStreamProvider
 
 
@@ -41,7 +45,9 @@ class TestGap3CatalogVersionInvalidation:
 
         kernel = AgentKernel()
         events = []
-        async for event in kernel.run_stream(kernel_runtime, "test task"):
+        async for event in kernel.run_stream(
+            kernel_runtime, make_kernel_turn("test task")
+        ):
             events.append(event)
 
         assert (
@@ -73,7 +79,9 @@ class TestGap3CatalogVersionInvalidation:
 
         kernel = AgentKernel()
         events = []
-        async for event in kernel.run_stream(kernel_runtime, "test task"):
+        async for event in kernel.run_stream(
+            kernel_runtime, make_kernel_turn("test task")
+        ):
             events.append(event)
 
         build_calls = mock_catalog.build_definitions.call_count
@@ -97,7 +105,7 @@ class TestCancellationTokenSupport:
 
         events: list[object] = []
         async for event in kernel.run_stream(
-            kernel_runtime, "test task", cancel_token=ctrl.token
+            kernel_runtime, make_kernel_turn("test task"), cancel_token=ctrl.token
         ):
             events.append(event)
 

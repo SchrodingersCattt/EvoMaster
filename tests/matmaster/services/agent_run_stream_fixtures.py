@@ -88,6 +88,9 @@ class _FakeExp:
         self.last_ctx = args[0] if args else None
         self.last_task = args[1] if len(args) > 1 else None
         self.last_run_kwargs = kwargs
+        if self.last_task is None and self.last_ctx is not None:
+            turn_input = self.last_ctx.request.turn_input
+            self.last_task = turn_input.user_text if turn_input is not None else None
         try:
             if callable(self._events):
                 stream = self._events(self.last_ctx)
@@ -284,7 +287,6 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
             svc._sessions_service = MagicMock()
             svc._sessions_service.get_session_user_id.return_value = 'user-1'
             svc._pg_manager = pg_mgr
-            svc._active_skills = {}
             svc._test_fake_exp = fake_exp
             svc._test_environment = environment
             svc._test_session = mock_session

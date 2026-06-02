@@ -8,19 +8,6 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 
-class FigureManifestEntry(BaseModel):
-    """Manifest entry describing a locally generated figure."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    figure_id: str
-    path: str
-    caption: str
-    alt: str | None = None
-    importance: Literal["primary", "secondary"] = "secondary"
-    placement_hint: Literal["sidebar_only", "appendix_candidate"] = "sidebar_only"
-
-
 class FigureDescriptor(BaseModel):
     """Public figure metadata emitted to clients."""
 

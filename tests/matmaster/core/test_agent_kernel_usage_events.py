@@ -9,7 +9,7 @@ import pytest
 from matmaster.types.events import ResponseEvent, RunResultEvent
 from matmaster.types.run_metadata import RunIdentity
 
-from .agent_kernel_test_helpers import make_kernel_runtime
+from .agent_kernel_test_helpers import make_kernel_runtime, make_kernel_turn
 from .test_agent_kernel_stream import (
     ContentOnlyProvider,
     EmptyThenContentProvider,
@@ -54,7 +54,8 @@ async def test_run_stream_emits_usage_bearing_response_complete() -> None:
 
     events: list[Any] = []
     async for event in AgentKernel().run_stream(
-        make_kernel_runtime(provider=ContentOnlyProvider()), "test task"
+        make_kernel_runtime(provider=ContentOnlyProvider()),
+        make_kernel_turn("test task"),
     ):
         events.append(event)
 
@@ -77,7 +78,8 @@ async def test_retry_discarded_attempt_does_not_emit_usage_response_complete() -
     provider = EmptyThenContentProvider()
     events: list[Any] = []
     async for event in AgentKernel().run_stream(
-        make_kernel_runtime(provider=provider), "test task"
+        make_kernel_runtime(provider=provider),
+        make_kernel_turn("test task"),
     ):
         events.append(event)
 
@@ -99,7 +101,9 @@ async def test_child_runtime_does_not_emit_usage_response_complete() -> None:
         run_identity=RunIdentity(spawn_id="child-1"),
     )
     events: list[Any] = []
-    async for event in AgentKernel().run_stream(kernel_runtime, "child task"):
+    async for event in AgentKernel().run_stream(
+        kernel_runtime, make_kernel_turn("child task")
+    ):
         events.append(event)
 
     assert not [
@@ -110,14 +114,15 @@ async def test_child_runtime_does_not_emit_usage_response_complete() -> None:
 
 
 @pytest.mark.asyncio
-async def test_completed_run_result_usage_matches_distinct_response_turn_usage() -> (
+async def test_root_only_run_result_usage_matches_distinct_response_turn_usage() -> (
     None
 ):
     from matmaster.core.agent import AgentKernel
 
     events: list[Any] = []
     async for event in AgentKernel().run_stream(
-        make_kernel_runtime(provider=ContentOnlyProvider()), "test task"
+        make_kernel_runtime(provider=ContentOnlyProvider()),
+        make_kernel_turn("test task"),
     ):
         events.append(event)
 
@@ -136,3 +141,141 @@ async def test_completed_run_result_usage_matches_distinct_response_turn_usage()
 
     run_result = next(e for e in events if isinstance(e, RunResultEvent))
     assert usage == run_result.usage
+
+
+@pytest.mark.asyncio
+async def test_agent_tool_usage_delta_reaches_parent_run_result() -> None:
+    from matmaster.core.agent import AgentKernel
+    from matmaster.tools.tool_result import ToolResult
+    from matmaster.types.events import ToolResultEvent
+    from matmaster.types.messages import StreamChunk, ToolCallData
+
+    from .agent_kernel_test_helpers import ToolCallingProvider, make_kernel_runtime
+
+    class AgentUsageRunner:
+        async def execute_batch(self, tool_calls, ctx, *, on_result=None):
+            del ctx, on_result
+            return [
+                (
+                    tool_calls[0],
+                    ToolResult(
+                        status="success",
+                        content="child answer",
+                        payload={
+                            "subagent_usage": {
+                                "prompt_tokens": 10,
+                                "completion_tokens": 2,
+                                "total_tokens": 12,
+                            }
+                        },
+                    ),
+                )
+            ]
+
+    class UsageProvider(ToolCallingProvider):
+        async def chat_stream(self, messages, tools=None, *, timeout=None):
+            self._call_count += 1
+            if self._call_count == 1:
+                yield StreamChunk(
+                    tool_call_deltas=[
+                        {
+                            "index": 0,
+                            "id": "call-agent",
+                            "name": "Agent",
+                            "arguments": '{"prompt": "child"}',
+                        }
+                    ],
+                )
+                yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 5})
+                return
+            yield StreamChunk(content="done", finish_reason="stop")
+            yield StreamChunk(
+                usage={
+                    "prompt_tokens": 7,
+                    "completion_tokens": 3,
+                    "total_tokens": 10,
+                }
+            )
+
+    events: list[Any] = []
+    async for event in AgentKernel().run_stream(
+        make_kernel_runtime(
+            provider=UsageProvider(
+                [ToolCallData(id="unused", name="Agent", arguments={})],
+                max_tool_turns=1,
+            ),
+            tool_runner=AgentUsageRunner(),
+        ),
+        make_kernel_turn("test task"),
+    ):
+        events.append(event)
+
+    tool_event = next(e for e in events if isinstance(e, ToolResultEvent))
+    run_result = next(e for e in events if isinstance(e, RunResultEvent))
+    assert tool_event.turn_usage == {"prompt_tokens": 5}
+    assert tool_event.total_usage == {
+        "prompt_tokens": 15,
+        "completion_tokens": 2,
+        "total_tokens": 12,
+    }
+    assert run_result.usage == {
+        "prompt_tokens": 22,
+        "completion_tokens": 5,
+        "total_tokens": 22,
+    }
+    assert run_result.usage_vendor_by_turn == [{}, {}]
+
+
+@pytest.mark.asyncio
+async def test_malformed_agent_subagent_usage_aborts_run_via_error_path() -> None:
+    from matmaster.core.agent import AgentKernel
+    from matmaster.tools.tool_result import ToolResult
+    from matmaster.types.messages import StreamChunk, ToolCallData
+
+    from .agent_kernel_test_helpers import ToolCallingProvider, make_kernel_runtime
+
+    class MalformedUsageRunner:
+        async def execute_batch(self, tool_calls, ctx, *, on_result=None):
+            del ctx, on_result
+            return [
+                (
+                    tool_calls[0],
+                    ToolResult(
+                        status="success",
+                        content="child answer",
+                        payload={"subagent_usage": {"prompt_tokens": -1}},
+                    ),
+                )
+            ]
+
+    class UsageProvider(ToolCallingProvider):
+        async def chat_stream(self, messages, tools=None, *, timeout=None):
+            yield StreamChunk(
+                tool_call_deltas=[
+                    {
+                        "index": 0,
+                        "id": "call-agent",
+                        "name": "Agent",
+                        "arguments": '{"prompt": "child"}',
+                    }
+                ],
+            )
+            yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 5})
+
+    events: list[Any] = []
+    async for event in AgentKernel().run_stream(
+        make_kernel_runtime(
+            provider=UsageProvider(
+                [ToolCallData(id="unused", name="Agent", arguments={})],
+                max_tool_turns=1,
+            ),
+            tool_runner=MalformedUsageRunner(),
+        ),
+        make_kernel_turn("test task"),
+    ):
+        events.append(event)
+
+    run_result = next(e for e in events if isinstance(e, RunResultEvent))
+    assert run_result.status == "failed"
+    assert run_result.reason == "internal_error"
+    assert run_result.usage == {"prompt_tokens": 5}

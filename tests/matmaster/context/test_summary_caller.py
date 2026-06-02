@@ -5,8 +5,9 @@ import pytest
 from matmaster.context.compaction import (
     SUMMARY_USER_REQUEST_TEMPLATE,
     _select_tool_safe_tail,
-    call_summary_llm,
+    call_summary_llm_response,
     prepare_messages_for_summary_call,
+    validate_summary_response,
 )
 from matmaster.context.sources.turn_input import TurnInput
 from matmaster.types.message_normalization import (
@@ -205,7 +206,7 @@ async def test_call_summary_llm_passes_tools_without_budgeting_schema() -> None:
         for idx in range(8)
     ]
 
-    summary = await call_summary_llm(
+    response = await call_summary_llm_response(
         llm_provider=provider,
         system_prompt="sys",
         full_messages=full_messages,
@@ -217,7 +218,7 @@ async def test_call_summary_llm_passes_tools_without_budgeting_schema() -> None:
         safety_margin_tokens=500,
     )
 
-    assert summary == "structured summary"
+    assert validate_summary_response(response) == "structured summary"
     assert provider.calls[0]["tools"] is huge_tool_definitions
 
 
@@ -268,9 +269,11 @@ class RecordingProvider:
         content: str | None = "summary",
         *,
         tool_calls: list[ToolCallData] | None = None,
+        usage: dict[str, int] | None = None,
     ) -> None:
         self.content = content
         self.tool_calls = tool_calls
+        self.usage = usage or {}
         self.calls: list[dict[str, object]] = []
 
     async def chat(self, messages, tools=None, *, tool_choice=None):
@@ -285,6 +288,7 @@ class RecordingProvider:
             content=self.content,
             finish_reason="stop",
             tool_calls=self.tool_calls,
+            usage=dict(self.usage),
         )
 
 
@@ -298,7 +302,7 @@ async def test_call_summary_llm_uses_real_messages_tools_and_tool_choice_none() 
     ]
     tools = [{"type": "function", "function": {"name": "paper_search"}}]
 
-    summary = await call_summary_llm(
+    response = await call_summary_llm_response(
         llm_provider=provider,
         system_prompt="main system",
         full_messages=full_messages,
@@ -309,7 +313,7 @@ async def test_call_summary_llm_uses_real_messages_tools_and_tool_choice_none() 
         reserved_summary_tokens=1_000,
     )
 
-    assert summary == "structured summary"
+    assert validate_summary_response(response) == "structured summary"
     assert len(provider.calls) == 1
     call = provider.calls[0]
     assert call["tools"] is tools
@@ -321,39 +325,44 @@ async def test_call_summary_llm_uses_real_messages_tools_and_tool_choice_none() 
 
 
 @pytest.mark.asyncio
-async def test_call_summary_llm_raises_on_empty_response() -> None:
-    provider = RecordingProvider(content="  ")
-    full_messages = [SystemMessage(content="sys"), UserMessage(content="old")]
-
+async def test_validate_summary_response_raises_on_empty_response() -> None:
     with pytest.raises(ValueError, match="Summary LLM returned empty content"):
-        await call_summary_llm(
-            llm_provider=provider,
-            system_prompt="sys",
-            full_messages=full_messages,
-            phase="runtime",
-            turn_input=None,
-            tool_definitions=None,
-            context_limit=20_000,
-            reserved_summary_tokens=1_000,
-        )
+        validate_summary_response(LLMResponse(content="   ", finish_reason="stop"))
 
 
 @pytest.mark.asyncio
-async def test_call_summary_llm_rejects_tool_calls_in_response() -> None:
-    provider = RecordingProvider(
+async def test_validate_summary_response_rejects_tool_calls() -> None:
+    response = LLMResponse(
         content="summary",
+        finish_reason="tool_calls",
         tool_calls=[ToolCallData(id="tc-1", name="tool", arguments={})],
     )
-    full_messages = [SystemMessage(content="sys"), UserMessage(content="old")]
 
     with pytest.raises(ValueError, match="Summary LLM attempted tool calls"):
-        await call_summary_llm(
-            llm_provider=provider,
-            system_prompt="sys",
-            full_messages=full_messages,
-            phase="runtime",
-            turn_input=None,
-            tool_definitions=[{"type": "function", "function": {"name": "tool"}}],
-            context_limit=20_000,
-            reserved_summary_tokens=1_000,
-        )
+        validate_summary_response(response)
+
+
+@pytest.mark.asyncio
+async def test_call_summary_llm_response_preserves_usage() -> None:
+    provider = RecordingProvider(
+        content="summary text",
+        usage={"prompt_tokens": 40, "completion_tokens": 5, "total_tokens": 45},
+    )
+
+    response = await call_summary_llm_response(
+        llm_provider=provider,
+        system_prompt="sys",
+        full_messages=[SystemMessage(content="sys"), UserMessage(content="old")],
+        phase="runtime",
+        turn_input=None,
+        tool_definitions=None,
+        context_limit=20_000,
+        reserved_summary_tokens=1_000,
+    )
+
+    assert response.usage == {
+        "prompt_tokens": 40,
+        "completion_tokens": 5,
+        "total_tokens": 45,
+    }
+    assert validate_summary_response(response) == "summary text"

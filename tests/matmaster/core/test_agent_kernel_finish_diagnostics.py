@@ -7,7 +7,11 @@ import pytest
 from matmaster.types.events import AssistantStateEvent, RunResultEvent
 from matmaster.types.messages import LLMResponse, StreamChunk
 
-from .agent_kernel_test_helpers import _make_tool_registry, make_kernel_runtime
+from .agent_kernel_test_helpers import (
+    _make_tool_registry,
+    make_kernel_runtime,
+    make_kernel_turn,
+)
 
 
 class ContentOnlyProvider:
@@ -146,7 +150,7 @@ async def test_tool_call_length_finish_adds_assistant_state_detail(caplog) -> No
                 provider=ToolCallLengthProvider(),
                 tool_registry=registry,
             ),
-            "test task",
+            make_kernel_turn("test task"),
         )
     ]
 
@@ -182,7 +186,7 @@ class TestInvalidFinishTerminalDetails:
             event
             async for event in AgentKernel().run_stream(
                 make_kernel_runtime(provider=LengthFinishProvider()),
-                "test task",
+                make_kernel_turn("test task"),
             )
         ]
 
@@ -202,7 +206,7 @@ class TestInvalidFinishTerminalDetails:
             event
             async for event in AgentKernel().run_stream(
                 make_kernel_runtime(provider=ContentFilterProvider()),
-                "test task",
+                make_kernel_turn("test task"),
             )
         ]
 
@@ -216,7 +220,7 @@ class TestInvalidFinishTerminalDetails:
             event
             async for event in AgentKernel().run_stream(
                 make_kernel_runtime(provider=EmptyStopProvider()),
-                "test task",
+                make_kernel_turn("test task"),
             )
         ]
 
@@ -232,7 +236,7 @@ class TestInvalidFinishTerminalDetails:
                 make_kernel_runtime(
                     provider=EmptyStopProvider(reasoning="thinking only")
                 ),
-                "test task",
+                make_kernel_turn("test task"),
             )
         ]
 
@@ -246,7 +250,7 @@ class TestInvalidFinishTerminalDetails:
             event
             async for event in AgentKernel().run_stream(
                 make_kernel_runtime(provider=NonStopFinishProvider()),
-                "test task",
+                make_kernel_turn("test task"),
             )
         ]
 
@@ -266,7 +270,7 @@ class TestInvalidFinishTerminalDetails:
             event
             async for event in AgentKernel().run_stream(
                 make_kernel_runtime(provider=provider),
-                "test task",
+                make_kernel_turn("test task"),
             )
         ]
 
@@ -299,7 +303,7 @@ async def test_missing_llm_response_terminal_sets_detail(monkeypatch) -> None:
         event
         async for event in kernel.run_stream(
             make_kernel_runtime(provider=ContentOnlyProvider()),
-            "test task",
+            make_kernel_turn("test task"),
         )
     ]
 

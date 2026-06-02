@@ -2,7 +2,12 @@ from __future__ import annotations
 
 from typing import Any
 
-from matmaster.context.history_restore import ModelHistoryRestorer
+import pytest
+
+from matmaster.context.history_restore import (
+    HistoryCheckpointCorruptedError,
+    ModelHistoryRestorer,
+)
 from matmaster.types.messages import (
     AssistantMessage,
     Message,
@@ -16,13 +21,11 @@ def _build(
     checkpoint: dict[str, Any] | None = None,
     events_after: list[dict[str, Any]] | None = None,
     has_utc: bool = False,
-    legacy: list[Message] | None = None,
 ):
     calls: dict[str, list] = {
         "checkpoint": [],
         "events_after": [],
         "has_utc": [],
-        "legacy": [],
     }
 
     def get_latest_checkpoint(session_id: str, spawn_id: str | None) -> dict | None:
@@ -40,10 +43,6 @@ def _build(
     def has_user_turn_context(session_id: str, spawn_id: str | None) -> bool:
         calls["has_utc"].append((session_id, spawn_id))
         return has_utc
-
-    def legacy_restore(session_id: str, spawn_id: str | None) -> list[Message]:
-        calls["legacy"].append((session_id, spawn_id))
-        return legacy or []
 
     def deserialize_base_messages(raw: list[dict[str, Any]]) -> list[Message]:
         return [
@@ -63,7 +62,7 @@ def _build(
             payload = event.get("content") or {}
             if event.get("source") == "User" and etype == "query":
                 messages.append(UserMessage(content=str(payload.get("content") or "")))
-            elif etype in {"response", "run_result", "finish"}:
+            elif etype in {"response", "run_result"}:
                 messages.append(
                     AssistantMessage(content=str(payload.get("content") or ""))
                 )
@@ -96,7 +95,6 @@ def _build(
         get_latest_checkpoint=get_latest_checkpoint,
         get_events_after=get_events_after,
         has_user_turn_context=has_user_turn_context,
-        legacy_restore=legacy_restore,
         deserialize_base_messages=deserialize_base_messages,
         events_to_messages=events_to_messages,
         normalize_tool_result_event=normalize_tool_result_event,
@@ -104,36 +102,33 @@ def _build(
     return restorer, calls
 
 
-def test_restore_pure_v0_delegates_to_legacy() -> None:
+def test_restore_pure_v0_returns_empty_history() -> None:
     restorer, calls = _build(
         checkpoint=None,
         has_utc=False,
-        legacy=[UserMessage(content="legacy")],
     )
 
     result = restorer.restore("sess-1")
 
-    assert len(result) == 1
-    assert isinstance(result[0], UserMessage)
-    assert result[0].content == "legacy"
-    assert calls["legacy"] == [("sess-1", None)]
+    assert result == []
     assert calls["events_after"] == []
+    assert calls["has_utc"] == [("sess-1", None)]
 
 
-def test_restore_v0_checkpoint_falls_back_to_legacy() -> None:
+def test_restore_v0_checkpoint_without_utc_returns_empty_history() -> None:
     restorer, calls = _build(
         checkpoint={"content": {"schema_version": "checkpoint.v0"}, "id": 99},
         has_utc=False,
-        legacy=[UserMessage(content="legacy")],
     )
 
     result = restorer.restore("sess-1")
 
-    assert len(result) == 1
-    assert calls["legacy"] == [("sess-1", None)]
+    assert result == []
+    assert calls["events_after"] == []
+    assert calls["has_utc"] == [("sess-1", None)]
 
 
-def test_restore_hybrid_v1_consumes_uncovered_user_query() -> None:
+def test_restore_hybrid_v1_discards_pre_utc_raw_turn() -> None:
     events = [
         {
             "id": 5,
@@ -146,6 +141,7 @@ def test_restore_hybrid_v1_consumes_uncovered_user_query() -> None:
             "id": 6,
             "type": "response",
             "content": {"content": "old response"},
+            "invocation_id": "inv-old",
         },
         {
             "id": 7,
@@ -158,19 +154,22 @@ def test_restore_hybrid_v1_consumes_uncovered_user_query() -> None:
                 }
             },
         },
+        {
+            "id": 8,
+            "type": "response",
+            "content": {"content": "new response"},
+            "invocation_id": "inv-new",
+        },
     ]
     restorer, calls = _build(checkpoint=None, events_after=events, has_utc=True)
 
     result = restorer.restore("sess-1")
 
-    contents = [m.content for m in result]
-    assert "pre-Phase-1 turn" in contents
-    assert "old response" in contents
-    assert "rendered new turn" in contents
-    assert calls["legacy"] == []
+    assert [m.content for m in result] == ["rendered new turn", "new response"]
+    assert calls["events_after"] == [("sess-1", None, None)]
 
 
-def test_restore_hybrid_v1_skips_user_query_covered_by_utc() -> None:
+def test_restore_hybrid_v1_skips_raw_query_before_utc_anchor() -> None:
     events = [
         {
             "id": 5,
@@ -234,7 +233,6 @@ def test_restore_pure_v1_loads_base_messages_and_skips_user_query() -> None:
 
     result = restorer.restore("sess-1")
 
-    assert calls["legacy"] == []
     assert calls["events_after"][0] == ("sess-1", 50, None)
     contents = [m.content for m in result]
     assert contents[0] == "summary as user"
@@ -243,7 +241,7 @@ def test_restore_pure_v1_loads_base_messages_and_skips_user_query() -> None:
     assert any(isinstance(m, ToolMessage) and m.content == "tool out" for m in result)
 
 
-def test_restore_pure_v1_with_null_covered_until_falls_back_to_legacy() -> None:
+def test_restore_pure_v1_with_null_covered_until_raises_corrupted() -> None:
     checkpoint = {
         "id": 99,
         "content": {
@@ -252,16 +250,11 @@ def test_restore_pure_v1_with_null_covered_until_falls_back_to_legacy() -> None:
             "base_messages": [],
         },
     }
-    restorer, calls = _build(
-        checkpoint=checkpoint,
-        legacy=[UserMessage(content="from legacy")],
-    )
+    restorer, calls = _build(checkpoint=checkpoint)
 
-    result = restorer.restore("sess-1")
-
-    assert len(result) == 1
-    assert result[0].content == "from legacy"
-    assert calls["legacy"] == [("sess-1", None)]
+    with pytest.raises(HistoryCheckpointCorruptedError, match="covered_until_event_id"):
+        restorer.restore("sess-1")
+    assert calls["events_after"] == []
 
 
 def test_restore_pure_v1_consumes_assistant_state_and_response() -> None:
@@ -320,10 +313,9 @@ def test_restore_passes_spawn_id_to_callbacks() -> None:
     restorer, calls = _build(
         checkpoint=None,
         has_utc=False,
-        legacy=[],
     )
 
-    restorer.restore("sess-1", spawn_id="spawn-A")
+    result = restorer.restore("sess-1", spawn_id="spawn-A")
 
-    assert calls["legacy"] == [("sess-1", "spawn-A")]
+    assert result == []
     assert calls["has_utc"] == [("sess-1", "spawn-A")]

@@ -5,6 +5,7 @@ import asyncio
 from matmaster.config.exp import ExpSubagentMeta
 from matmaster.tools.builtin.agent_tool import AgentTool
 from matmaster.tools.tool_result import ToolResult
+from matmaster.types.stream_drain import DrainResult
 
 
 def _meta(**overrides):
@@ -113,7 +114,14 @@ class TestAgentValidation:
 
     def test_execute_returns_tool_result_payload(self):
         async def fake_spawn(exp_name, task, cancel_token=None):
-            return f"Ran {exp_name}: {task}"
+            return DrainResult(
+                status="completed",
+                reason="natural",
+                final_content=f"Ran {exp_name}: {task}",
+                num_turns=1,
+                usage={},
+                messages=[],
+            )
 
         tool = AgentTool(spawn_fn=fake_spawn, available_exps=[_meta()])
         result = asyncio.run(
@@ -128,3 +136,83 @@ class TestAgentValidation:
         assert isinstance(result, ToolResult)
         assert result.payload["exp_name"] == "explore"
         assert result.payload["task_summary"] == "trace parser flow"
+
+    def test_execute_maps_completed_drain_result_to_tool_result_payload(self):
+        async def fake_spawn(exp_name, task, cancel_token=None):
+            return DrainResult(
+                status="completed",
+                reason="natural",
+                final_content="child answer",
+                num_turns=2,
+                usage={
+                    "prompt_tokens": 100,
+                    "completion_tokens": 20,
+                    "total_tokens": 120,
+                    "cache_read_tokens": 40,
+                },
+                messages=[],
+            )
+
+        tool = AgentTool(spawn_fn=fake_spawn, available_exps=[_meta()])
+        result = asyncio.run(
+            tool.execute(
+                {
+                    "exp_name": "explore",
+                    "task_summary": "trace parser flow",
+                    "prompt": "Inspect the parser stack and summarize the path.",
+                }
+            )
+        )
+
+        assert isinstance(result, ToolResult)
+        assert result.status == "success"
+        assert result.content == "child answer"
+        assert result.payload["exp_name"] == "explore"
+        assert result.payload["task_summary"] == "trace parser flow"
+        assert result.payload["prompt"] == (
+            "Inspect the parser stack and summarize the path."
+        )
+        assert result.payload["subagent_usage"] == {
+            "prompt_tokens": 100,
+            "completion_tokens": 20,
+            "total_tokens": 120,
+            "cache_read_tokens": 40,
+        }
+        assert result.payload["subagent_status"] == "completed"
+        assert result.payload["subagent_reason"] == "natural"
+        assert result.payload["subagent_num_turns"] == 2
+
+    def test_execute_maps_noncompleted_drain_result_to_status_content(self):
+        async def fake_spawn(exp_name, task, cancel_token=None):
+            return DrainResult(
+                status="cancelled",
+                reason="user_stop",
+                final_content=None,
+                num_turns=1,
+                usage={"prompt_tokens": 10, "total_tokens": 10},
+                messages=[],
+            )
+
+        tool = AgentTool(spawn_fn=fake_spawn, available_exps=[_meta()])
+        result = asyncio.run(
+            tool.execute(
+                {
+                    "exp_name": "explore",
+                    "task_summary": "trace parser flow",
+                    "prompt": "Inspect the parser stack.",
+                }
+            )
+        )
+
+        assert isinstance(result, ToolResult)
+        assert result.status == "success"
+        assert result.content == (
+            "SubAgent finished with status=cancelled, reason=user_stop"
+        )
+        assert result.payload["subagent_usage"] == {
+            "prompt_tokens": 10,
+            "total_tokens": 10,
+        }
+        assert result.payload["subagent_status"] == "cancelled"
+        assert result.payload["subagent_reason"] == "user_stop"
+        assert result.payload["subagent_num_turns"] == 1

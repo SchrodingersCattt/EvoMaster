@@ -1,264 +1,86 @@
-"""Helpers for collecting generated figure artifacts from a session."""
+"""Helpers for validating and publishing figure artifacts from a session."""
 
 from __future__ import annotations
 
 import hashlib
-import json
-import logging
 import posixpath
 import re
-import shlex
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from pathlib import PurePosixPath
 from typing import Any
-
-from pydantic import ValidationError
 
 from matmaster.types.figures import (
     FigureDescriptor,
-    FigureManifestEntry,
     FigureUploadConfig,
 )
 from matmaster.types.session import Session
-
-logger = logging.getLogger(__name__)
 
 _ALLOWED_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp"}
 _MAX_FIGURE_BYTES = 10 * 1024 * 1024
 _DOWNLOAD_ATTEMPTS = 2
 _UPLOAD_ATTEMPTS = 3
 _UPLOAD_RETRY_BACKOFF_SECONDS = 0.01
-_SYMLINK_EXISTS_MARKER = "FIGURE_SYMLINK_EXISTS"
-_SYMLINK_EXISTS_EXIT_CODE = 73
-_FIGURE_ID_MAX_DISPLAY_CHARS = 64
+_FIGURE_ID_STEM_MAX = 48
+_FIGURE_ID_TOTAL_MAX = 64
 
 
-def _format_figure_id_for_diagnostic(figure_id: str) -> str:
-    return repr(figure_id[:_FIGURE_ID_MAX_DISPLAY_CHARS])
+class FigureValidationError(ValueError):
+    """Image validation failure carrying a stable classification reason.
 
-
-def _figure_id_has_control_chars(value: str) -> bool:
-    return any(ord(ch) < 32 or ord(ch) == 127 for ch in value)
-
-
-@dataclass(slots=True)
-class FigureCollectionResult:
-    figures: list[FigureDescriptor] = field(default_factory=list)
-    failure_ids: list[str] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
-
-
-@dataclass(slots=True)
-class _ManifestLoadResult:
-    entries: list[tuple[FigureManifestEntry, str]] | None
-    warning: str | None = None
-
-
-def build_figure_env(workdir: str, tool_call_id: str) -> tuple[str, str]:
-    """Return the scoped artifact directory and manifest path for one tool call."""
-
-    base_dir = posixpath.join(workdir, ".matmaster", "figures", tool_call_id)
-    return (
-        posixpath.join(base_dir, "artifacts"),
-        posixpath.join(base_dir, "manifest.json"),
-    )
-
-
-def _link_figure_into_flat_view(
-    *,
-    session: Session,
-    artifact_dir: str,
-    resolved_path: str,
-    figure_id: str,
-) -> None:
-    """Create a flat-view symlink for a successfully uploaded figure.
-
-    Uses explicit [ -e ]/[ -L ] guard before ln -s to reject every form of
-    link_path preoccupation, including dangling symlinks. Diagnostics are
-    logged only; symlink failures never affect figure collection.
+    Subclasses ValueError so existing callers that catch ValueError keep
+    working; new callers read ``.reason`` for stable classification.
     """
 
-    flat_dir = posixpath.dirname(posixpath.dirname(posixpath.normpath(artifact_dir)))
-    suffix = posixpath.splitext(resolved_path)[1].lower()
-    link_path = posixpath.join(flat_dir, f"{figure_id}{suffix}")
-    rel_target = posixpath.relpath(resolved_path, start=flat_dir)
-    safe_figure_id = _format_figure_id_for_diagnostic(figure_id)
+    def __init__(self, reason: str, detail: str = "") -> None:
+        self.reason = reason
+        self.detail = detail
+        super().__init__(reason, detail)
 
-    q_flat = shlex.quote(flat_dir)
-    q_link = shlex.quote(link_path)
-    q_target = shlex.quote(rel_target)
-    q_marker = shlex.quote(_SYMLINK_EXISTS_MARKER)
-
-    cmd = (
-        f"mkdir -p -- {q_flat} && "
-        f"if [ -e {q_link} ] || [ -L {q_link} ]; then "
-        f"printf '%s\\n' {q_marker} && "
-        f"exit {_SYMLINK_EXISTS_EXIT_CODE}; "
-        f"fi && "
-        f"ln -s -- {q_target} {q_link}"
-    )
-
-    try:
-        exec_result = session.exec_bash(command=cmd)
-    except Exception as exc:
-        logger.warning("figure_symlink_failed:%s:%s", safe_figure_id, exc)
-        return
-
-    exit_code = exec_result.get("exit_code", 0)
-    if exit_code == 0:
-        return
-
-    stdout = exec_result.get("stdout", "")
-    if exit_code == _SYMLINK_EXISTS_EXIT_CODE or _SYMLINK_EXISTS_MARKER in stdout:
-        logger.warning("figure_symlink_exists:%s", safe_figure_id)
-        return
-
-    err = exec_result.get("stderr", "") or stdout
-    snippet = err[:200].strip()
-    logger.warning("figure_symlink_failed:%s:%s", safe_figure_id, snippet)
+    def __str__(self) -> str:
+        return f"{self.reason}:{self.detail}" if self.detail else self.reason
 
 
-def collect_figures_from_session(
+def resolve_workspace_output_path(
     *,
-    session: Session,
-    artifact_dir: str,
-    manifest_path: str,
-    tool_call_id: str,
-    upload_config: FigureUploadConfig,
-) -> FigureCollectionResult:
-    """Collect, validate, and upload figures described by a manifest."""
+    raw_path: str,
+    workdir: str | PurePosixPath,
+) -> str | None:
+    """Resolve a declared output path against the workspace root.
 
-    result = FigureCollectionResult()
-    if not session.path_exists(manifest_path):
-        return result
-
-    manifest_entries = _load_manifest(
-        session=session,
-        manifest_path=manifest_path,
-        artifact_dir=artifact_dir,
+    Returns the normalized absolute path if it stays inside ``workdir``,
+    or None if it escapes. Containment is lexical (no symlink resolution),
+    matching WriteTool's boundary model. Unlike resolve_safe_path, an
+    escape returns None (deny) rather than silently falling back to workdir.
+    """
+    root = PurePosixPath(posixpath.normpath(str(workdir)))
+    candidate = (
+        raw_path if posixpath.isabs(raw_path) else posixpath.join(str(root), raw_path)
     )
-    if manifest_entries.entries is None:
-        if manifest_entries.warning is not None:
-            result.warnings.append(manifest_entries.warning)
-        return result
-
-    for entry, resolved_path in manifest_entries.entries:
-        try:
-            payload = _download_with_retry(session=session, path=resolved_path)
-            _validate_image_bytes(payload=payload, path=resolved_path)
-            asset_key = _build_asset_key(
-                upload_config=upload_config,
-                tool_call_id=tool_call_id,
-                figure_id=entry.figure_id,
-                source_path=resolved_path,
-                payload=payload,
-            )
-            asset_url = _upload_with_retry(
-                upload_bytes=upload_config.upload_bytes,
-                payload=payload,
-                asset_key=asset_key,
-            )
-        except Exception:
-            result.failure_ids.append(entry.figure_id)
-            continue
-
-        _link_figure_into_flat_view(
-            session=session,
-            artifact_dir=artifact_dir,
-            resolved_path=resolved_path,
-            figure_id=entry.figure_id,
-        )
-        result.figures.append(
-            FigureDescriptor(
-                figure_id=entry.figure_id,
-                asset_url=asset_url,
-                caption=entry.caption,
-                alt=entry.alt,
-                importance=entry.importance,
-                placement_hint=entry.placement_hint,
-                source_tool_call_id=tool_call_id,
-                remote_path=resolved_path,
-            )
-        )
-
-    return result
-
-
-def _load_manifest(
-    *,
-    session: Session,
-    manifest_path: str,
-    artifact_dir: str,
-) -> _ManifestLoadResult:
-    try:
-        raw_manifest = session.read_file(manifest_path)
-        document = json.loads(raw_manifest)
-        figures = document["figures"]
-        if not isinstance(figures, list):
-            raise TypeError("figures must be a list")
-    except (KeyError, TypeError, json.JSONDecodeError):
-        return _ManifestLoadResult(
-            entries=None,
-            warning="invalid_manifest: malformed_or_missing_figures_list",
-        )
-
-    seen_ids: set[str] = set()
-    normalized_entries: list[tuple[FigureManifestEntry, str]] = []
-
-    for raw_entry in figures:
-        try:
-            entry = FigureManifestEntry.model_validate(raw_entry)
-        except ValidationError:
-            return _ManifestLoadResult(
-                entries=None,
-                warning="invalid_manifest: invalid_figure_entry",
-            )
-
-        if "/" in entry.figure_id or _figure_id_has_control_chars(entry.figure_id):
-            return _ManifestLoadResult(
-                entries=None,
-                warning=(
-                    "invalid_manifest: invalid_figure_id:"
-                    f"{_format_figure_id_for_diagnostic(entry.figure_id)}"
-                ),
-            )
-
-        if entry.figure_id in seen_ids:
-            return _ManifestLoadResult(
-                entries=None,
-                warning=f"invalid_manifest: duplicate_figure_id:{entry.figure_id}",
-            )
-        seen_ids.add(entry.figure_id)
-
-        resolved_path = _resolve_artifact_path(
-            artifact_dir=artifact_dir,
-            entry_path=entry.path,
-        )
-        if resolved_path is None:
-            return _ManifestLoadResult(
-                entries=None,
-                warning=f"invalid_manifest: unsafe_path:{entry.path}",
-            )
-
-        normalized_entries.append((entry, resolved_path))
-
-    return _ManifestLoadResult(entries=normalized_entries)
-
-
-def _resolve_artifact_path(*, artifact_dir: str, entry_path: str) -> str | None:
-    artifact_root = posixpath.normpath(artifact_dir)
-    if posixpath.isabs(entry_path):
-        candidate = posixpath.normpath(entry_path)
-    else:
-        candidate = posixpath.normpath(posixpath.join(artifact_root, entry_path))
-
-    try:
-        if posixpath.commonpath([artifact_root, candidate]) != artifact_root:
-            return None
-    except ValueError:
+    resolved = PurePosixPath(posixpath.normpath(candidate))
+    if not resolved.is_relative_to(root):
         return None
+    return str(resolved)
 
-    return candidate
+
+def build_figure_id(*, output_path: str, content_sha256: str) -> str:
+    """Stable, sanitized figure_id: sanitized stem + content_sha256[:12].
+
+    ``content_sha256`` is the hex sha256 of the image bytes, computed once by
+    the caller and shared with the asset key so the payload is hashed only once.
+
+    Charset limited to [A-Za-z0-9._-]; other runs fold to '-'; consecutive
+    '-' merge; leading/trailing '-' stripped; empty stem -> 'figure';
+    stem capped at 48 chars, total capped at 64. Never contains '/', NUL,
+    control chars, or whitespace.
+    """
+    stem = posixpath.splitext(posixpath.basename(output_path))[0]
+    sanitized = re.sub(r"[^A-Za-z0-9._-]+", "-", stem)
+    sanitized = re.sub(r"-{2,}", "-", sanitized).strip("-")
+    sanitized = sanitized[:_FIGURE_ID_STEM_MAX].strip("-")
+    if not sanitized:
+        sanitized = "figure"
+    return f"{sanitized}-{content_sha256[:12]}"[:_FIGURE_ID_TOTAL_MAX]
 
 
 def _download_with_retry(*, session: Session, path: str) -> bytes:
@@ -275,16 +97,16 @@ def _download_with_retry(*, session: Session, path: str) -> bytes:
 def _validate_image_bytes(*, payload: bytes, path: str) -> None:
     suffix = posixpath.splitext(path)[1].lower()
     if suffix not in _ALLOWED_SUFFIXES:
-        raise ValueError(f"unsupported_format:{suffix}")
+        raise FigureValidationError("unsupported_format", suffix)
     if len(payload) > _MAX_FIGURE_BYTES:
-        raise ValueError(f"figure_too_large:{len(payload)}")
+        raise FigureValidationError("figure_too_large", str(len(payload)))
     sniffed = _sniff_image_format(payload)
     if sniffed is None:
-        raise ValueError(f"image_header_mismatch:{suffix}")
+        raise FigureValidationError("image_header_mismatch", suffix)
     if suffix in {".jpg", ".jpeg"} and sniffed == ".jpg":
         return
     if sniffed != suffix:
-        raise ValueError(f"image_header_mismatch:{suffix}")
+        raise FigureValidationError("image_header_mismatch", suffix)
 
 
 def _sniff_image_format(payload: bytes) -> str | None:
@@ -303,9 +125,9 @@ def _build_asset_key(
     tool_call_id: str,
     figure_id: str,
     source_path: str,
-    payload: bytes,
+    content_sha256: str,
 ) -> str:
-    digest = hashlib.sha256(payload).hexdigest()[:16]
+    digest = content_sha256[:16]
     basename = posixpath.basename(source_path)
     parts = [
         upload_config.asset_key_prefix.strip("/"),
@@ -340,3 +162,166 @@ def _upload_with_retry(
                 time.sleep(_UPLOAD_RETRY_BACKOFF_SECONDS)
     assert last_error is not None
     raise last_error
+
+
+@dataclass(slots=True)
+class PreparedFigure:
+    """A validated, content-addressed figure ready to upload (no upload yet)."""
+
+    figure_id: str
+    image_bytes: bytes
+    content_sha256: str
+    resolved_path: str
+    output_path: str
+    caption: str
+
+
+@dataclass(slots=True)
+class FigurePrepareResult:
+    prepared: PreparedFigure | None
+    failure_reason: str | None
+    guidance: str | None = None
+
+
+@dataclass(slots=True)
+class FigurePublishResult:
+    figure: FigureDescriptor | None
+    failure_reason: str | None
+    guidance: str | None = None
+
+
+def _declared_failure_guidance(reason: str, output_path: str) -> str:
+    table = {
+        "outside_workspace": (
+            f"Expected image inside the workspace: {output_path}\n"
+            "Provide an output_path that is absolute and inside the workspace."
+        ),
+        "file_not_found": (
+            f"Expected image: {output_path}\n"
+            "No file exists at this path. Generate the image first (e.g. with "
+            "Bash), then attach it, or fix output_path to point at an existing image."
+        ),
+        "not_a_file": (
+            f"Path is not a regular file: {output_path}\n"
+            "Point output_path at an image file, not a directory."
+        ),
+        "unsupported_format": (
+            f"Unsupported image format: {output_path}\n"
+            "Use one of: .png, .jpg, .jpeg, .webp."
+        ),
+        "image_header_mismatch": (
+            f"File contents are not a valid image or do not match the extension: "
+            f"{output_path}\n"
+            "Re-export the figure in a supported image format."
+        ),
+        "figure_too_large": (
+            f"Image exceeds the size limit: {output_path}\n"
+            "Reduce resolution or file size and retry."
+        ),
+        "download_failed": (
+            f"Could not read the image from the session: {output_path}\n"
+            "Retry AttachFigure; if it persists the session storage may be unavailable."
+        ),
+        "upload_failed": (
+            f"Image was read but upload failed: {output_path}\n"
+            "Retry AttachFigure; if it persists the asset backend may be unavailable."
+        ),
+    }
+    return table.get(reason, f"Figure attachment failed for {output_path}.")
+
+
+def prepare_declared_figure(
+    *,
+    session: Session,
+    workdir: str,
+    output_path: str,
+    caption: str,
+) -> FigurePrepareResult:
+    """Resolve -> exists -> is_file -> download -> validate -> figure_id. No upload.
+
+    Returns a FigurePrepareResult carrying a PreparedFigure (validated bytes plus
+    the content-addressed figure_id) on success, or a stable failure_reason plus
+    actionable guidance. Never raises for expected failures, and never uploads.
+    """
+
+    def _fail(reason: str) -> FigurePrepareResult:
+        return FigurePrepareResult(
+            prepared=None,
+            failure_reason=reason,
+            guidance=_declared_failure_guidance(reason, output_path),
+        )
+
+    resolved = resolve_workspace_output_path(raw_path=output_path, workdir=workdir)
+    if resolved is None:
+        return _fail("outside_workspace")
+    if not session.path_exists(resolved):
+        return _fail("file_not_found")
+    if not session.is_file(resolved):
+        return _fail("not_a_file")
+
+    try:
+        payload = _download_with_retry(session=session, path=resolved)
+    except Exception:
+        return _fail("download_failed")
+
+    try:
+        _validate_image_bytes(payload=payload, path=resolved)
+    except FigureValidationError as exc:
+        return _fail(exc.reason)
+
+    content_sha256 = hashlib.sha256(payload).hexdigest()
+    figure_id = build_figure_id(output_path=output_path, content_sha256=content_sha256)
+    return FigurePrepareResult(
+        prepared=PreparedFigure(
+            figure_id=figure_id,
+            image_bytes=payload,
+            content_sha256=content_sha256,
+            resolved_path=resolved,
+            output_path=output_path,
+            caption=caption,
+        ),
+        failure_reason=None,
+    )
+
+
+def publish_prepared_figure(
+    *,
+    prepared: PreparedFigure,
+    upload_config: FigureUploadConfig,
+    tool_call_id: str,
+) -> FigurePublishResult:
+    """Upload an already-prepared figure (content-addressed key) -> descriptor.
+
+    The asset key and figure_id are content-addressed, so a retried or partial
+    batch re-upload is idempotent.
+    """
+    try:
+        asset_key = _build_asset_key(
+            upload_config=upload_config,
+            tool_call_id=tool_call_id,
+            figure_id=prepared.figure_id,
+            source_path=prepared.resolved_path,
+            content_sha256=prepared.content_sha256,
+        )
+        asset_url = _upload_with_retry(
+            upload_bytes=upload_config.upload_bytes,
+            payload=prepared.image_bytes,
+            asset_key=asset_key,
+        )
+    except Exception:
+        return FigurePublishResult(
+            figure=None,
+            failure_reason="upload_failed",
+            guidance=_declared_failure_guidance("upload_failed", prepared.output_path),
+        )
+
+    return FigurePublishResult(
+        figure=FigureDescriptor(
+            figure_id=prepared.figure_id,
+            asset_url=asset_url,
+            caption=prepared.caption,
+            source_tool_call_id=tool_call_id,
+            remote_path=prepared.resolved_path,
+        ),
+        failure_reason=None,
+    )

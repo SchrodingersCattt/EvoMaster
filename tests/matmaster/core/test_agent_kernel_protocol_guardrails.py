@@ -8,7 +8,11 @@ from matmaster.core.agent import AgentKernel
 from matmaster.types.errors import LLMError
 from matmaster.types.messages import StreamChunk
 
-from .agent_kernel_test_helpers import _make_tool_registry, make_kernel_runtime
+from .agent_kernel_test_helpers import (
+    _make_tool_registry,
+    make_kernel_runtime,
+    make_kernel_turn,
+)
 
 
 class _DuplicateIdProvider:
@@ -60,7 +64,9 @@ class TestKernelToolProtocolGuardrails:
 
         kernel = AgentKernel()
         with pytest.raises(LLMError, match="duplicate tool_call ids"):
-            async for _event in kernel.run_stream(kernel_runtime, "test task"):
+            async for _event in kernel.run_stream(
+                kernel_runtime, make_kernel_turn("test task")
+            ):
                 pass
 
         assert mock_runner.execute_batch.await_count == 0

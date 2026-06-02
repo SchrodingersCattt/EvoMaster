@@ -31,6 +31,7 @@ from matmaster.types.message_normalization import (
 )
 from matmaster.types.messages import (
     AssistantMessage,
+    LLMResponse,
     Message,
     SystemMessage,
     ToolMessage,
@@ -150,15 +151,28 @@ def _summary_base_messages(
     phase: Literal["preflight", "runtime"],
     turn_input: TurnInput | None,
 ) -> list[Message]:
-    current_split = (
+    current_split = _should_split_current_input_for_preflight(
+        phase=phase,
+        messages=full_messages,
+        turn_input=turn_input,
+    )
+    return full_messages[:-1] if current_split else full_messages
+
+
+def _should_split_current_input_for_preflight(
+    *,
+    phase: Literal["preflight", "runtime"],
+    messages: list[Message],
+    turn_input: TurnInput | None,
+) -> bool:
+    return (
         phase == "preflight"
         and turn_input is not None
         and turn_input.has_effective_input()
-        and len(full_messages) >= 3
-        and isinstance(full_messages[-1], UserMessage)
-        and bool(full_messages[1:-1])
+        and len(messages) >= 3
+        and isinstance(messages[-1], UserMessage)
+        and bool(messages[1:-1])
     )
-    return full_messages[:-1] if current_split else full_messages
 
 
 @dataclass(frozen=True)
@@ -274,7 +288,7 @@ def prepare_messages_for_summary_call(
     )
 
 
-async def call_summary_llm(
+async def call_summary_llm_response(
     *,
     llm_provider: LLMProvider,
     system_prompt: str,
@@ -285,7 +299,7 @@ async def call_summary_llm(
     context_limit: int,
     reserved_summary_tokens: int,
     safety_margin_tokens: int = 5_000,
-) -> str:
+) -> LLMResponse:
     """Call the main LLM to summarize conversation history."""
     if not full_messages:
         raise ValueError("Cannot summarize empty message list")
@@ -310,11 +324,15 @@ async def call_summary_llm(
     api_messages = normalize_and_validate_openai_messages(
         canonicalize_messages_for_provider(summary_messages)
     )
-    response = await llm_provider.chat(
+    return await llm_provider.chat(
         api_messages,
         tools=tool_definitions,
         tool_choice="none",
     )
+
+
+def validate_summary_response(response: LLMResponse) -> str:
+    """Validate a summary LLM response and return stripped summary content."""
     if response.tool_calls:
         raise ValueError("Summary LLM attempted tool calls")
     if not response.content or not response.content.strip():
@@ -444,13 +462,10 @@ class ContextCompactor:
                 f"messages[0] must be SystemMessage, got {type(messages[0])}"
             )
         system_msg = messages[0]
-        current_split = (
-            plan.phase == "preflight"
-            and turn_input is not None
-            and turn_input.has_effective_input()
-            and len(messages) >= 3
-            and isinstance(messages[-1], UserMessage)
-            and bool(messages[1:-1])
+        current_split = _should_split_current_input_for_preflight(
+            phase=plan.phase,
+            messages=messages,
+            turn_input=turn_input,
         )
         intent = (
             ContextAssemblyIntent.PREFLIGHT_COMPACTION

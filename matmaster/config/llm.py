@@ -6,14 +6,18 @@ LLM backend (provider, model, auth, reasoning, timeout, retry).
 YAML example::
 
     llm:
-      opus:
-        provider: "openai"
-        model: "claude-opus-4-6"
-        api_key: "${LITELLM_PROXY_API_KEY}"
-        base_url: "${LITELLM_PROXY_API_BASE}"
-        thinking_effort: "high"
-        reasoning_protocol: "anthropic_adaptive_thinking"
-        ...
+      profiles:
+        opus:
+          provider: "openai"
+          model: "claude-opus-4-6"
+          api_key: "${LITELLM_PROXY_API_KEY}"
+          base_url: "${LITELLM_PROXY_API_BASE}"
+          thinking_effort: "high"
+          reasoning_protocol: "anthropic_adaptive_thinking"
+          ...
+      routes:
+        claude-opus-4-6:
+          profile: "opus"
       default: "opus"
 """
 
@@ -110,6 +114,7 @@ class LLMProfileConfig(BaseModel):
     reasoning_protocol: str | None = (
         None  # "anthropic_adaptive_thinking" | "openai_reasoning_effort"
     )
+    reasoning_summary: Literal["auto", "concise", "detailed"] | None = None
     fallback_group: str | None = None
 
     # Prompt cache
@@ -173,8 +178,14 @@ class LLMProfileConfig(BaseModel):
                     "output_config": {"effort": effort},
                 }
             )
-        elif protocol == "openai_reasoning_effort" and effort:
-            out["reasoning_effort"] = effort
+        elif protocol == "openai_reasoning_effort":
+            if effort:
+                out["reasoning_effort"] = effort
+            if self.reasoning_summary:
+                reasoning: dict[str, str] = {"summary": self.reasoning_summary}
+                if effort:
+                    reasoning["effort"] = effort
+                extra_body["reasoning"] = reasoning
 
         if extra_body:
             out["extra_body"] = extra_body
@@ -211,21 +222,6 @@ class LLMConfig(BaseModel):
     profiles: dict[str, LLMProfileConfig] = Field(default_factory=dict)
     routes: dict[str, LLMRouteConfig] = Field(default_factory=dict)
     default: str = "opus"
-
-    @model_validator(mode="before")
-    @classmethod
-    def _normalize_legacy_or_explicit_schema(cls, data: Any) -> Any:
-        """Support both normalized and legacy flat YAML formats."""
-        if not isinstance(data, dict):
-            return data
-        if "profiles" in data:
-            return data
-        default = data.pop("default", "opus")
-        profiles: dict[str, Any] = {}
-        for key, value in data.items():
-            if isinstance(value, dict):
-                profiles[key] = value
-        return {"profiles": profiles, "default": default}
 
     @model_validator(mode="after")
     def _validate_internal_references(self) -> LLMConfig:
@@ -288,25 +284,3 @@ class LLMConfig(BaseModel):
             provider=profile.provider,
             model=profile.model,
         )
-
-    # Keep resolve_profile for backward compatibility during migration
-    def resolve_profile(
-        self,
-        model_override: str | None = None,
-        default_key: str | None = None,
-    ) -> tuple[str, LLMProfileConfig]:
-        """Legacy three-level profile resolution (kept for compat)."""
-        effective_default = default_key or self.default
-        if effective_default not in self.profiles:
-            raise KeyError(
-                f"LLM profile '{effective_default}' not found, "
-                f"available: {list(self.profiles)}"
-            )
-        if not model_override:
-            return effective_default, self.profiles[effective_default]
-        for key, profile in self.profiles.items():
-            if profile.model == model_override:
-                return key, profile
-        if model_override in self.profiles:
-            return model_override, self.profiles[model_override]
-        return effective_default, self.profiles[effective_default]

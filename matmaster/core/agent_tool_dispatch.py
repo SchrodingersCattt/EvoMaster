@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import AsyncIterator, Sequence
 from typing import TYPE_CHECKING, Any
 
@@ -14,6 +15,14 @@ from matmaster.types.messages import ToolCallData, ToolMessage
 
 if TYPE_CHECKING:
     from matmaster.core.kernel_items import _KernelState
+
+logger = logging.getLogger(__name__)
+
+AGENT_TOOL_NAME = "Agent"
+
+
+class InvalidToolUsageDelta(RuntimeError):
+    """Raised when an internal tool usage payload violates scalar usage shape."""
 
 
 def validate_tool_call_ids(tool_calls: list[ToolCallData]) -> None:
@@ -37,6 +46,43 @@ def accumulate_usage(total: dict[str, int], delta: dict[str, int]) -> None:
     """Accumulate per-turn usage into running total."""
     for k, v in delta.items():
         total[k] = total.get(k, 0) + v
+
+
+def extract_tool_usage_delta(tool_name: str, tool_result: Any) -> dict[str, int]:
+    """Extract a validated usage delta from a structured tool result."""
+    if tool_name != AGENT_TOOL_NAME:
+        return {}
+
+    payload = getattr(tool_result, "payload", {}) or {}
+    if "subagent_usage" not in payload:
+        return {}
+
+    usage = payload["subagent_usage"]
+    if not isinstance(usage, dict):
+        logger.warning(
+            "malformed Agent subagent_usage: expected dict, got %s",
+            type(usage).__name__,
+        )
+        raise InvalidToolUsageDelta("Agent subagent_usage must be a dict")
+
+    out: dict[str, int] = {}
+    for key, value in usage.items():
+        if (
+            not isinstance(key, str)
+            or not isinstance(value, int)
+            or isinstance(value, bool)
+            or value < 0
+        ):
+            logger.warning(
+                "malformed Agent subagent_usage field=%r value_type=%s",
+                key,
+                type(value).__name__,
+            )
+            raise InvalidToolUsageDelta(
+                "Agent subagent_usage values must be non-negative ints"
+            )
+        out[key] = value
+    return out
 
 
 async def dispatch_tool_calls(
@@ -67,6 +113,9 @@ async def dispatch_tool_calls(
                 content=tool_result.content,
             )
         )
+        usage_delta = extract_tool_usage_delta(tc.name, tool_result)
+        if usage_delta:
+            accumulate_usage(state.total_usage, usage_delta)
         yield _KernelItem(
             event=ToolResultEvent(
                 source="agent",
@@ -76,8 +125,8 @@ async def dispatch_tool_calls(
                 status=tool_result.status,
                 payload=tool_result.payload,
                 turn_index=turn_index,
-                turn_usage=state.turn_usage,
-                total_usage=state.total_usage,
+                turn_usage=dict(state.turn_usage),
+                total_usage=dict(state.total_usage),
             )
         )
         if tc.name == "Skill":

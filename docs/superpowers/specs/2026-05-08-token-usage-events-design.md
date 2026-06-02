@@ -33,13 +33,14 @@
 ## 非目标
 
 - 不实现账单级全量成本统计。`run_result.usage` 不等于真实账单成本；retry 失败
-  attempt、context compaction summary LLM、subagent 内部 LLM 消耗等可在后续专门的
-  token audit 事件中补充。
+  attempt、provider 异常前未返回的调用、外部服务侧隐藏消耗等仍需专门 token audit
+  事件补充。
 - 不改变 quota 扣减语义。当前 `use_quota` 仍是成功后扣一次额度，不按 token 扣费。
 - 不要求 streaming response chunk 实时携带 usage。provider usage 通常要到 LLM
   turn 结束才可用。
 - 不重构 replay dedupe 的整体策略，只做 response content 结构化后的兼容处理。
-- 不在本阶段实现 sub-agent 全量 usage 聚合；本阶段 root run audit 优先。
+- 后续聚合语义见
+  `docs/superpowers/specs/2026-06-01-agent-token-usage-aggregation-design.md`。
 
 ## 当前链路
 
@@ -86,14 +87,22 @@ usage 只表示这一轮 LLM call，不代表整次 run 的最终成本。
 
 ### run_result 表达终态 run usage
 
-`run_result` 是业务终态。它携带的 usage 是 root kernel 已累计的 accepted LLM
-turn usage 总和，适合做 run 级查询、展示和粗粒度审计。
+`run_result` 是业务终态。它携带的 `usage` 是 root run 下已知的 run-level aggregate
+scalar usage，包含：
+
+- root agent 通过 retry gate 后被接受的主循环 LLM turns。
+- `Agent` 工具触发的 subagent run usage。
+- context compaction summary LLM usage。
+
+`response.complete.turn_usage` 仍只表示当前 root accepted LLM turn。`ToolResultEvent.turn_usage`
+仍只表示父 agent 当前 LLM turn。subagent 与 compaction usage 只进入
+`state.total_usage` / `RunResultEvent.usage`，不覆盖 `turn_usage`。
 
 ### run_result usage 不是账单成本
 
-本阶段的 usage 只统计 root kernel 中通过 retry gate 后进入 `state.total_usage` 的
-LLM response。被 retry 丢弃的 attempt、compaction summary LLM、sub-agent 内部 LLM
-调用不在该数字内。因此它适合做产品内审计和排查，不适合作为账单结算依据。
+当前 usage 统计的是运行时已知并被接受进 `state.total_usage` 的 scalar usage。
+被 retry 丢弃的 attempt、provider 异常前未形成 `LLMResponse` 的调用、以及外部服务侧
+隐藏消耗不在该数字内。因此它适合做产品内审计和排查，不适合作为账单结算依据。
 
 ### 持久化字段不破坏文本消费
 
@@ -316,13 +325,14 @@ response-content unpack helper，并在两个出口使用：
 - 每个 root accepted turn 最多持久化 1 条 usage-bearing `response.complete`。
 - 每个 root tool-call accepted turn 至少持久化 1 条带 `turn_usage` 的
   `assistant_state`，即使 visible preamble 是 `...` 这类 trivial response。
-- 对 completed root run，`run_result.usage` 应等于按 distinct `turn_index` 汇总后的
-  turn usage 之和。比较时只比较 normalized scalar usage key，例如
-  `prompt_tokens`、`completion_tokens`、`total_tokens`。
+- 对只包含 root accepted LLM turns 的 completed run，`run_result.usage` 应等于按
+  distinct `turn_index` 汇总后的 turn usage 之和。存在 subagent 或 compaction summary
+  调用时，turn-level response usage 是 final aggregate 的子集。
 - invalid_finish/cancelled/retry 等失败边界不要求满足 completed-run 等式；
   `run_result.usage` 和 `finish_detail.last_turn_usage` 是失败场景的权威审计来源。
-- `usage_vendor` / `usage_vendor_by_turn` 只保存 provider-native 快照，不做跨 provider
-  normalize；若未来要统一字段，应在 view/reporting 层单独实现。
+- `usage_vendor_by_turn` 只保存 root accepted LLM turns 的 provider-native usage 快照，
+  用于诊断和 root-turn 对齐。它不包含 subagent 或 compaction 调用，也不再作为
+  run-level aggregate cache / reasoning 字段的补账来源。
 
 ## Replay 兼容
 
@@ -377,17 +387,17 @@ Replay SSE 输出：
 
 ## 子 agent 语义
 
-本设计保持当前 root run 语义：
+`Agent` 工具的 subagent run 会先被 drain 成结构化 terminal result，再由父 run 的
+tool dispatch 把 `subagent_usage` 作为 scalar delta 累加到 `state.total_usage`。
 
-- root `run_result.usage` 只表示 root kernel accepted LLM turns 的累计 usage。
-- 本阶段只在 root kernel（`spawn_id is None`）处理 usage-bearing
-  `response.complete` 持久化。
-- subagent 事件通过 `spawn_id` 转发，但 child terminal event 当前不稳定进入 public
-  persistence path。
-- 子 agent 全量成本审计属于后续 token audit 事件范围。
+- child `response.complete.turn_usage` 仍属于 child run 自身，不进入父 run 的
+  turn-level usage。
+- 父 run 的 `ToolResultEvent.turn_usage` 仍表示触发工具调用的父 LLM turn。
+- 父 run 的 `ToolResultEvent.total_usage` 在事件发出前已包含该次 subagent delta。
+- forwarded child events 只用于展示和 replay，不作为父 run aggregate 的二次聚合来源。
 
-如果 child kernel 在旧路径中产生 response event，本阶段不新增 child usage 聚合分支。
-实现和测试应明确证明 child response 不会被 root run audit 误聚合。
+这样 `RunResultEvent.usage` 能覆盖已知 subagent 消耗，同时避免从 forwarded events 或
+DB replay 重复计数。
 
 ## 错误与异常场景
 
@@ -420,8 +430,14 @@ response.complete usage。`run_result` 使用当前已累计的 usage。
 
 ### compaction
 
-context compaction summary LLM 的 usage 不并入 response.complete 或 run_result.usage。
-本阶段只保留已有 `CompactionEvent.trigger_tokens` 估算字段。
+context compaction summary LLM 的 usage 会作为 summary call 的 scalar delta 累加到
+`state.total_usage`，并在 `CompactionEvent(status="complete")` 上携带：
+
+- `turn_usage`：该次 summary call usage。
+- `total_usage`：累加后的 root run total usage。
+
+running compaction event 不携带 usage。runtime summary response 若返回 usage 但校验失败，
+仍先计入 usage，再走 fallback；preflight 校验失败保持既有 abort 路径。
 
 ## 测试计划
 
@@ -492,5 +508,7 @@ context compaction summary LLM 的 usage 不并入 response.complete 或 run_res
 - retry gate 之前的 response segment marker 使用 `segment_end`，不写入 DB。
 - tool-call turn 的 trivial preamble 不丢失 usage 审计，因为 `assistant_state` 带
   `turn_index` / `turn_usage`。
-- completed root run 的 `run_result.usage` 能与 distinct turn-level usage 对账。
+- 只包含 root accepted LLM turns 的 completed run，`run_result.usage` 能与 distinct
+  turn-level usage 对账；包含 subagent 或 compaction summary 的 run，`run_result.usage`
+  是 turn-level usage 加额外 scalar delta 后的 aggregate。
 - 现有 replay dedupe 行为不回退。

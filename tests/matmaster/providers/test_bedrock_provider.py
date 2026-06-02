@@ -170,3 +170,64 @@ async def test_bedrock_chat_none_tool_choice_preserves_tools(monkeypatch) -> Non
     assert result.content == "ok"
     assert "toolConfig" in captured
     assert "toolChoice" not in captured.get("toolConfig", {})
+
+
+async def test_bedrock_chat_projects_cache_and_reasoning_usage() -> None:
+    provider = BedrockProvider(model_id="m1", region="us-west-2")
+
+    def fake_converse(**kwargs):
+        del kwargs
+        return {
+            "output": {"message": {"content": [{"text": "ok"}]}},
+            "stopReason": "end_turn",
+            "usage": {
+                "inputTokens": 10,
+                "outputTokens": 5,
+                "totalTokens": 15,
+                "cacheReadInputTokens": 4,
+                "cacheWriteInputTokens": 3,
+                "reasoningTokens": 2,
+            },
+        }
+
+    client = MagicMock()
+    client.converse.side_effect = fake_converse
+    provider._client = client
+
+    result = await provider.chat([{"role": "user", "content": "hi"}])
+
+    assert result.usage == {
+        "prompt_tokens": 10,
+        "completion_tokens": 5,
+        "total_tokens": 15,
+        "cache_read_tokens": 4,
+        "cache_write_tokens": 3,
+        "reasoning_tokens": 2,
+    }
+
+
+def test_bedrock_usage_from_metadata_projects_cache_and_reasoning() -> None:
+    from matmaster.providers.bedrock_provider import _usage_from_metadata
+
+    flat, vendor = _usage_from_metadata(
+        {
+            "usage": {
+                "inputTokens": 10,
+                "outputTokens": 5,
+                "totalTokens": 15,
+                "cacheReadInputTokens": 4,
+                "cacheWriteInputTokens": 3,
+                "reasoningTokens": 2,
+            }
+        }
+    )
+
+    assert flat == {
+        "prompt_tokens": 10,
+        "completion_tokens": 5,
+        "total_tokens": 15,
+        "cache_read_tokens": 4,
+        "cache_write_tokens": 3,
+        "reasoning_tokens": 2,
+    }
+    assert vendor["cacheReadInputTokens"] == 4

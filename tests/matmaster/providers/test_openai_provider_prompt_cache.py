@@ -370,6 +370,42 @@ class TestChatStreamUsage:
             "total_tokens": 15,
         }
 
+    async def test_usage_final_chunk_projects_cache_write_and_reasoning(self) -> None:
+        details = MagicMock()
+        details.reasoning_tokens = 7
+        usage = MagicMock()
+        usage.prompt_tokens = 10
+        usage.completion_tokens = 5
+        usage.total_tokens = 15
+        usage.cache_creation_input_tokens = 3
+        usage.completion_tokens_details = details
+
+        usage_only_chunk = MagicMock()
+        usage_only_chunk.choices = []
+        usage_only_chunk.usage = usage
+
+        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
+        mock_client = AsyncMock()
+        mock_client.chat.completions.create.return_value = _async_iter(
+            [
+                _make_stream_chunk(content="answer", finish_reason="stop"),
+                usage_only_chunk,
+            ]
+        )
+        provider._client = mock_client
+        chunks = [
+            chunk
+            async for chunk in provider.chat_stream([{"role": "user", "content": "Hi"}])
+        ]
+
+        assert chunks[1].usage == {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+            "cache_write_tokens": 3,
+            "reasoning_tokens": 7,
+        }
+
 
 class TestErrorHandling:
     async def test_invalid_json_in_tool_call_arguments(self) -> None:

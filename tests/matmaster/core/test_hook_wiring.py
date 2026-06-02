@@ -28,11 +28,7 @@ from matmaster.core.tool_scheduler import ToolScheduler
 from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
-from matmaster.types.events import (
-    ResponseEvent,
-    RunResultEvent,
-    ToolCallEvent,
-)
+from matmaster.types.events import ResponseEvent, RunResultEvent, ToolCallEvent
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -43,7 +39,7 @@ from matmaster.types.run_metadata import RunIdentity, RunMetadata
 from matmaster.types.topology import ToolPlane
 from tests.conftest import MockAsyncTool
 
-from .agent_kernel_test_helpers import make_kernel_runtime
+from .agent_kernel_test_helpers import make_kernel_runtime, make_kernel_turn
 from .conftest import MockLLMProvider
 from .test_full_tool_runner import _make_ctx, _make_tc, _make_topology
 
@@ -283,6 +279,9 @@ class TestExpWiring:
                 status="completed",
                 final_content="child done",
                 reason="natural",
+                usage={"prompt_tokens": 3},
+                num_turns=1,
+                messages=[],
             )
 
         orchestrator = SubagentOrchestrator(
@@ -296,7 +295,8 @@ class TestExpWiring:
         ):
             result = await orchestrator.make_spawn_fn()("direct", "summarize this task")
 
-        assert result == "child done"
+        assert result.final_content == "child done"
+        assert result.usage == {"prompt_tokens": 3}
         assert len(started) == 1
         assert len(stopped) == 1
         assert started[0].agent_type == "direct"
@@ -328,6 +328,9 @@ class TestExpWiring:
                 status="completed",
                 final_content="child done",
                 reason="natural",
+                usage={"prompt_tokens": 3},
+                num_turns=1,
+                messages=[],
             )
 
         orchestrator = SubagentOrchestrator(
@@ -341,7 +344,8 @@ class TestExpWiring:
         ):
             result = await orchestrator.make_spawn_fn()("direct", "summarize this task")
 
-        assert result == "child done"
+        assert result.final_content == "child done"
+        assert result.usage == {"prompt_tokens": 3}
         assert len(forwarded) == 2
         assert {event.source for event in forwarded} == {"MatMaster:direct"}
         assert all(event.spawn_id for event in forwarded)
@@ -361,6 +365,9 @@ class TestExpWiring:
                 status="completed",
                 final_content="child done",
                 reason="natural",
+                usage={"prompt_tokens": 3},
+                num_turns=1,
+                messages=[],
             )
 
         orchestrator = SubagentOrchestrator(
@@ -374,7 +381,8 @@ class TestExpWiring:
         ):
             result = await orchestrator.make_spawn_fn()("direct", "summarize this task")
 
-        assert result == "child done"
+        assert result.final_content == "child done"
+        assert result.usage == {"prompt_tokens": 3}
         assert len(forwarded) == 1
         assert forwarded[0].source == "MatMaster:direct"
         assert forwarded[0].spawn_id
@@ -390,6 +398,9 @@ class TestExpWiring:
                 status="completed",
                 final_content="child done",
                 reason="natural",
+                usage={"prompt_tokens": 3},
+                num_turns=1,
+                messages=[],
             )
 
         orchestrator = SubagentOrchestrator(
@@ -403,7 +414,8 @@ class TestExpWiring:
         ):
             result = await orchestrator.make_spawn_fn()("direct", "summarize this task")
 
-        assert result == "child done"
+        assert result.final_content == "child done"
+        assert result.usage == {"prompt_tokens": 3}
 
 
 class TestFullToolRunnerHookWiring:
@@ -549,7 +561,10 @@ class TestAgentKernelHookWiring:
 
         kernel = AgentKernel()
         events = [
-            event async for event in kernel.run_stream(kernel_runtime, "original")
+            event
+            async for event in kernel.run_stream(
+                kernel_runtime, make_kernel_turn("original")
+            )
         ]
 
         assert isinstance(events[-1], RunResultEvent)
@@ -577,7 +592,7 @@ class TestAgentKernelHookWiring:
         )
 
         kernel = AgentKernel()
-        stream = kernel.run_stream(kernel_runtime, "original")
+        stream = kernel.run_stream(kernel_runtime, make_kernel_turn("original"))
 
         await anext(stream)
         await stream.aclose()
@@ -607,10 +622,51 @@ class TestAgentKernelHookWiring:
         )
 
         kernel = AgentKernel()
-        [event async for event in kernel.run_stream(kernel_runtime, "original")]
+        [
+            event
+            async for event in kernel.run_stream(
+                kernel_runtime, make_kernel_turn("original")
+            )
+        ]
 
         assert provider.seen_messages[0][-1]["content"] == "original rewritten"
         assert seen_prompts == ["original rewritten"]
+
+    @pytest.mark.asyncio
+    async def test_user_prompt_submit_rewrite_can_be_disabled_but_observe_still_runs(
+        self,
+    ) -> None:
+        provider = RecordingProvider()
+        executor = HookExecutor()
+        seen_prompts: list[str] = []
+
+        async def rewrite(ctx, prompt: str) -> str:
+            return prompt + " rewritten"
+
+        async def observe(ctx) -> None:
+            seen_prompts.append(ctx.prompt)
+
+        executor.rewrite(HookEvent.USER_PROMPT_SUBMIT, rewrite)
+        executor.on(HookEvent.USER_PROMPT_SUBMIT, observe)
+
+        kernel_runtime = make_kernel_runtime(
+            provider=provider,
+            hook_executor=executor,
+            run_identity=RunIdentity(task_id="task-1", session_id="session-1"),
+            system_prompt="You are a test agent",
+            prompt_submit_rewrite_enabled=False,
+        )
+
+        kernel = AgentKernel()
+        [
+            event
+            async for event in kernel.run_stream(
+                kernel_runtime, make_kernel_turn("original")
+            )
+        ]
+
+        assert provider.seen_messages[0][-1]["content"] == "original"
+        assert seen_prompts == ["original"]
 
     @pytest.mark.asyncio
     async def test_context_compaction_emits_hook_context(self) -> None:
@@ -632,7 +688,12 @@ class TestAgentKernelHookWiring:
         )
 
         kernel = AgentKernel()
-        [event async for event in kernel.run_stream(kernel_runtime, "original")]
+        [
+            event
+            async for event in kernel.run_stream(
+                kernel_runtime, make_kernel_turn("original")
+            )
+        ]
 
         assert seen == [
             CompactionContext(
@@ -667,7 +728,7 @@ class TestAgentKernelHookWiring:
             event
             async for event in kernel.run_stream(
                 kernel_runtime,
-                "original",
+                make_kernel_turn("original"),
                 history=[
                     UserMessage(content="previous user"),
                     AssistantMessage(content="previous assistant"),
@@ -743,7 +804,7 @@ class TestSpawnGuardWiring:
         await child_stream.aclose()
 
     @pytest.mark.asyncio
-    async def test_child_run_factory_propagates_skill_resolver_to_child_exp(
+    async def test_child_run_factory_does_not_pass_skill_resolver_to_child_exp(
         self,
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
@@ -780,11 +841,7 @@ class TestSpawnGuardWiring:
             request=AgentRunRequest(llm_provider=MockLLMProvider()),
         )
 
-        def sentinel_resolver(events):
-            return ()
-
         parent = original_exp(ExpConfig(name="parent"))
-        parent._skill_resolver = sentinel_resolver
         factory = parent._make_child_run_factory(ctx)
 
         with patch(
@@ -793,7 +850,7 @@ class TestSpawnGuardWiring:
         ):
             child_stream = factory("direct", "summarize this task", spawn_id="x")
 
-        assert captured_kwargs["skill_resolver"] is sentinel_resolver
+        assert "skill_resolver" not in captured_kwargs
         await child_stream.aclose()
 
     @pytest.mark.asyncio
@@ -878,7 +935,8 @@ class TestSpawnGuardWiring:
         ):
             result = await orchestrator.make_spawn_fn()("direct", "summarize this task")
 
-        assert result == "child done"
+        assert result.final_content == "child done"
+        assert result.status == "completed"
         assert received["allow_spawn"] is False
         assert received["spawn_id"]
         assert len(forwarded) == 1

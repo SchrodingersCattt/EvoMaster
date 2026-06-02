@@ -43,9 +43,6 @@ class ThoughtEvent(EventBase):
     token_count: int = 0
     context: str | None = None  # e.g. 'step_execution'
     reasoning_content: str | None = None
-    model: str | None = None
-    model_profile: str | None = None
-    model_route: str | None = None
 
 
 class ResponseEvent(EventBase):
@@ -116,13 +113,9 @@ class FinishDetail(BaseModel):
 
 
 class RunResultEvent(EventBase):
-    """Business terminal event for a run outcome.
+    """Business terminal event for a run outcome."""
 
-    Canonical type is ``run_result``. Legacy ``finish`` payloads are still
-    accepted during migration so persisted history can be replayed.
-    """
-
-    type: Literal["run_result", "finish"] = "run_result"
+    type: Literal["run_result"] = "run_result"
     status: str = "completed"  # 'completed' | 'failed' | 'cancelled'
     reason: str = ""
     final_content: str | None = None
@@ -230,6 +223,8 @@ class CompactionEvent(EventBase):
     checkpoint_written: bool | None = None
     failure_reason: str | None = None
     covered_until_event_id: int | None = None
+    turn_usage: dict[str, int] | None = None
+    total_usage: dict[str, int] | None = None
 
 
 class ExpRunEvent(EventBase):
@@ -247,13 +242,9 @@ class CancelledEvent(EventBase):
 
 
 class StreamClosedEvent(EventBase):
-    """Transport-level marker indicating the live SSE stream can close.
+    """Transport-level marker indicating the live SSE stream can close."""
 
-    Canonical type is ``stream_closed``. Legacy ``end`` payloads are still
-    accepted during migration so old live/history payloads remain readable.
-    """
-
-    type: Literal["stream_closed", "end"] = "stream_closed"
+    type: Literal["stream_closed"] = "stream_closed"
     content: str = ""
     task_completed: bool = False
     end_reason: str | None = None

@@ -13,11 +13,18 @@ _V1_SCHEMA = "history_checkpoint.v1"
 GetLatestCheckpoint = Callable[[str, str | None], dict[str, Any] | None]
 GetEventsAfter = Callable[[str, int | None, str | None], list[dict[str, Any]]]
 HasUserTurnContext = Callable[[str, str | None], bool]
-LegacyRestore = Callable[[str, str | None], list[Message]]
 DeserializeBaseMessages = Callable[[list[dict[str, Any]]], list[Message]]
 EventsToMessages = Callable[[list[dict[str, Any]]], list[Message]]
 NormalizeToolResultEvent = Callable[[dict[str, Any]], dict[str, Any]]
 ValidateHistory = Callable[[list[Message]], None]
+
+
+class HistoryCheckpointCorruptedError(RuntimeError):
+    """A v1 history checkpoint exists but its boundary is structurally invalid."""
+
+
+class HistoryRestoreFailedError(RuntimeError):
+    """No usable v1 history checkpoint could be restored."""
 
 
 class ModelHistoryRestorer:
@@ -29,7 +36,6 @@ class ModelHistoryRestorer:
         get_latest_checkpoint: GetLatestCheckpoint,
         get_events_after: GetEventsAfter,
         has_user_turn_context: HasUserTurnContext,
-        legacy_restore: LegacyRestore,
         deserialize_base_messages: DeserializeBaseMessages,
         events_to_messages: EventsToMessages,
         normalize_tool_result_event: NormalizeToolResultEvent,
@@ -38,7 +44,6 @@ class ModelHistoryRestorer:
         self._get_latest_checkpoint = get_latest_checkpoint
         self._get_events_after = get_events_after
         self._has_user_turn_context = has_user_turn_context
-        self._legacy_restore = legacy_restore
         self._deserialize_base_messages = deserialize_base_messages
         self._events_to_messages = events_to_messages
         self._normalize_tool_result_event = normalize_tool_result_event
@@ -55,7 +60,7 @@ class ModelHistoryRestorer:
 
         if not schema_v1:
             if not self._has_user_turn_context(session_id, spawn_id):
-                return self._legacy_restore(session_id, spawn_id)
+                return []
             return self._restore_v1(
                 session_id=session_id,
                 spawn_id=spawn_id,
@@ -66,11 +71,19 @@ class ModelHistoryRestorer:
         content = checkpoint["content"]
         covered = content.get("covered_until_event_id")
         if covered is None:
+            checkpoint_id = checkpoint.get("id")
             logger.warning(
                 "history_checkpoint.v1 has null covered_until_event_id; "
-                "falling back to legacy restore"
+                "aborting restore session_id=%s spawn_id=%s checkpoint_id=%s",
+                session_id,
+                spawn_id,
+                checkpoint_id,
             )
-            return self._legacy_restore(session_id, spawn_id)
+            raise HistoryCheckpointCorruptedError(
+                "history_checkpoint.v1 covered_until_event_id is null "
+                f"session_id={session_id} spawn_id={spawn_id} "
+                f"checkpoint_id={checkpoint_id}"
+            )
 
         return self._restore_v1(
             session_id=session_id,
@@ -108,21 +121,27 @@ class ModelHistoryRestorer:
 
         events = self._get_events_after(session_id, after, spawn_id)
 
-        covered_invocations: set[str] = set()
-        if hybrid_mode:
-            for event in events:
-                if event.get("type") == "user_turn_context":
-                    invocation_id = event.get("invocation_id")
-                    if invocation_id:
-                        covered_invocations.add(str(invocation_id))
-
         compatible_tail_events: list[dict[str, Any]] = []
+        hybrid_turn_active = not hybrid_mode
         for event in events:
-            compatible = self._event_to_v1_compatible_event(
-                event,
-                hybrid_mode=hybrid_mode,
-                covered_invocations=covered_invocations,
-            )
+            if hybrid_mode:
+                etype = str(event.get("type") or "").strip()
+                source = str(event.get("source") or "").strip()
+                if etype == "user_turn_context":
+                    hybrid_turn_active = True
+                elif source == "User" and etype == "query":
+                    hybrid_turn_active = False
+                    continue
+                elif not hybrid_turn_active and etype in {
+                    "assistant_state",
+                    "response",
+                    "run_result",
+                    "tool_call",
+                    "tool_result",
+                }:
+                    continue
+
+            compatible = self._event_to_v1_compatible_event(event)
             if compatible is not None:
                 compatible_tail_events.append(compatible)
 
@@ -135,9 +154,6 @@ class ModelHistoryRestorer:
     def _event_to_v1_compatible_event(
         self,
         event: dict[str, Any],
-        *,
-        hybrid_mode: bool,
-        covered_invocations: set[str],
     ) -> dict[str, Any] | None:
         etype = str(event.get("type") or "").strip()
         source = str(event.get("source") or "").strip()
@@ -163,12 +179,7 @@ class ModelHistoryRestorer:
             }
 
         if source == "User" and etype == "query":
-            if not hybrid_mode:
-                return None
-            invocation_id = event.get("invocation_id")
-            if invocation_id and str(invocation_id) in covered_invocations:
-                return None
-            return event
+            return None
 
         if etype == "tool_result":
             return self._normalize_tool_result_event(event)
@@ -177,7 +188,6 @@ class ModelHistoryRestorer:
             "assistant_state",
             "response",
             "run_result",
-            "finish",
             "tool_call",
         }:
             return event

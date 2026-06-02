@@ -23,16 +23,10 @@ from matmaster.core.exp import Exp
 from matmaster.core.playground import ExecutionEnvironment
 from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.types.cancellation import CancellationController
-from matmaster.types.events import (
-    ResponseEvent,
-    ToolCallEvent,
-    ToolResultEvent,
-)
-from matmaster.types.messages import (
-    LLMResponse,
-    StreamChunk,
-)
+from matmaster.types.events import ResponseEvent, ToolCallEvent, ToolResultEvent
+from matmaster.types.messages import LLMResponse, StreamChunk, UserMessage
 from matmaster.types.run_metadata import RunMetadata
+from matmaster.types.runtime import AgentKernelTurnRequest
 from matmaster.types.tool_spec import ResourceClaim
 from matmaster.types.topology import ToolPlane
 
@@ -45,7 +39,7 @@ class MockLLMProvider:
     Streams a single chunk with content, then a finish chunk.
     """
 
-    def __init__(self, content: str = 'Hello from mock LLM') -> None:
+    def __init__(self, content: str = "Hello from mock LLM") -> None:
         self._content = content
 
     async def __aenter__(self) -> MockLLMProvider:
@@ -57,7 +51,7 @@ class MockLLMProvider:
     async def chat(
         self, messages: list[dict[str, Any]], tools: list[dict[str, Any]] | None = None
     ) -> LLMResponse:
-        return LLMResponse(content=self._content, finish_reason='stop')
+        return LLMResponse(content=self._content, finish_reason="stop")
 
     async def chat_stream(
         self,
@@ -68,9 +62,9 @@ class MockLLMProvider:
     ) -> AsyncIterator[StreamChunk]:
         yield StreamChunk(
             content=self._content,
-            stream_state='start',
-            stream_id='s1',
-            finish_reason='stop',
+            stream_state="start",
+            stream_id="s1",
+            finish_reason="stop",
         )
 
 
@@ -102,7 +96,7 @@ class MockLLMProviderWithToolCall:
         pass
 
     async def chat(self, messages, tools=None) -> LLMResponse:
-        return LLMResponse(content='done', finish_reason='stop')
+        return LLMResponse(content="done", finish_reason="stop")
 
     async def chat_stream(
         self, messages, tools=None, *, timeout=None
@@ -113,17 +107,17 @@ class MockLLMProviderWithToolCall:
             yield StreamChunk(
                 tool_call_deltas=[
                     {
-                        'index': 0,
-                        'id': 'call_001',
-                        'name': 'echo',
-                        'arguments': json.dumps({'text': 'hello'}),
+                        "index": 0,
+                        "id": "call_001",
+                        "name": "echo",
+                        "arguments": json.dumps({"text": "hello"}),
                     }
                 ],
-                finish_reason='tool_calls',
+                finish_reason="tool_calls",
             )
         else:
             # Second turn: natural finish
-            yield StreamChunk(content='Done after tool.', finish_reason='stop')
+            yield StreamChunk(content="Done after tool.", finish_reason="stop")
 
 
 class MockLLMProviderCapturingMessages:
@@ -139,13 +133,13 @@ class MockLLMProviderCapturingMessages:
         pass
 
     async def chat(self, messages, tools=None) -> LLMResponse:
-        return LLMResponse(content='ok', finish_reason='stop')
+        return LLMResponse(content="ok", finish_reason="stop")
 
     async def chat_stream(
         self, messages, tools=None, *, timeout=None
     ) -> AsyncIterator[StreamChunk]:
         self.captured_messages.append(list(messages))
-        yield StreamChunk(content='Acknowledged history.', finish_reason='stop')
+        yield StreamChunk(content="Acknowledged history.", finish_reason="stop")
 
 
 # ── Mock tool ─────────────────────────────────────────
@@ -166,18 +160,18 @@ class EchoTool:
 
     @property
     def name(self) -> str:
-        return 'echo'
+        return "echo"
 
     @property
     def description(self) -> str:
-        return 'Echoes the input text'
+        return "Echoes the input text"
 
     @property
     def json_schema(self) -> dict[str, Any]:
         return {
-            'type': 'object',
-            'properties': {'text': {'type': 'string'}},
-            'required': ['text'],
+            "type": "object",
+            "properties": {"text": {"type": "string"}},
+            "required": ["text"],
         }
 
     def describe(self, ctx: Any | None = None) -> str:
@@ -200,10 +194,10 @@ def _make_environment(tmp_path: Path) -> ExecutionEnvironment:
     value for ``mock_pg.prepare``.
     """
     return ExecutionEnvironment(
-        workdir=tmp_path / 'workspace',
-        session_type='local',
-        cache_area=tmp_path / 'cache',
-        metadata=RunMetadata(run_dir=str(tmp_path), task_id='test-task'),
+        workdir=tmp_path / "workspace",
+        session_type="local",
+        cache_area=tmp_path / "cache",
+        metadata=RunMetadata(run_dir=str(tmp_path), task_id="test-task"),
     )
 
 
@@ -231,7 +225,7 @@ def _allow_user_turn_context_write(events_table: MagicMock) -> None:
 class TestMatMasterE2EPipeline:
     """QUAL-02: Full E2E pipeline with mock LLM -- generator-based event collection."""
 
-    _EXP_CONFIG: ExpConfig = ExpConfig(name='direct')
+    _EXP_CONFIG: ExpConfig = ExpConfig(name="direct")
 
     async def test_mat_master_e2e_pipeline(self, tmp_path: Path) -> None:
         """E2E: Playground.prepare() -> Exp.build_runtime() -> Kernel.run_stream() with mock LLM."""
@@ -243,7 +237,10 @@ class TestMatMasterE2EPipeline:
 
         kernel = AgentKernel()
         events = []
-        async for event in kernel.run_stream(runtime.kernel_runtime, 'test task'):
+        async for event in kernel.run_stream(
+            runtime.kernel_runtime,
+            AgentKernelTurnRequest(user_message_content="test task"),
+        ):
             events.append(event)
 
         response_events = [e for e in events if isinstance(e, ResponseEvent)]
@@ -259,26 +256,29 @@ class TestMatMasterE2EPipeline:
         runtime = await exp.build_runtime(agent_run_ctx)
         # Register echo tool via catalog overlay for version-bumped injection
         runtime.kernel_runtime.resources.tool_catalog.register_overlay(
-            echo_tool, source='test'
+            echo_tool, source="test"
         )
 
         kernel = AgentKernel()
         events = []
-        async for event in kernel.run_stream(runtime.kernel_runtime, 'call echo tool'):
+        async for event in kernel.run_stream(
+            runtime.kernel_runtime,
+            AgentKernelTurnRequest(user_message_content="call echo tool"),
+        ):
             events.append(event)
 
         tool_call_events = [e for e in events if isinstance(e, ToolCallEvent)]
         tool_result_events = [e for e in events if isinstance(e, ToolResultEvent)]
         assert len(tool_call_events) >= 1
         assert len(tool_result_events) >= 1
-        assert tool_call_events[0].tool_name == 'echo'
+        assert tool_call_events[0].tool_name == "echo"
 
 
 class TestMatMasterRunAgentE2E:
     """QUAL-02: run_agent() with mock LLM provider injected."""
 
-    @patch('matmaster.config.loader.load_llm_config')
-    @patch('matmaster.providers.llm_factory.build_provider_bundle')
+    @patch("matmaster.config.loader.load_llm_config")
+    @patch("matmaster.providers.llm_factory.build_provider_bundle")
     def test_mat_master_run_agent_e2e(
         self, mock_build_provider_bundle, mock_load_config, tmp_path: Path
     ) -> None:
@@ -289,11 +289,11 @@ class TestMatMasterRunAgentE2E:
         ).AgentRunService
 
         mock_sessions_svc = MagicMock()
-        mock_sessions_svc.get_session_user_id.return_value = 'user-123'
+        mock_sessions_svc.get_session_user_id.return_value = "user-123"
 
         svc = AgentRunService(sessions_service=mock_sessions_svc)
 
-        mock_llm = MockLLMProvider('E2E test response')
+        mock_llm = MockLLMProvider("E2E test response")
         mock_build_provider_bundle.return_value = _provider_bundle(mock_llm)
         mock_load_config.return_value = MagicMock()
 
@@ -301,18 +301,18 @@ class TestMatMasterRunAgentE2E:
         mock_pg = MagicMock()
         mock_environment = _make_environment(tmp_path)
         mock_pg.prepare.return_value = mock_environment
-        mock_pg.config_path = Path('config/config.yaml')
+        mock_pg.config_path = Path("config/config.yaml")
         mock_pg.session = None
 
         with (
-            patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
+            patch.object(svc._pg_manager, "get_or_create", return_value=mock_pg),
             patch(
-                'src.services.agent_run_bohrium_stage.BohriumSetupService'
+                "src.services.agent_run_bohrium_stage.BohriumSetupService"
             ) as mock_bohrium_cls,
             patch(
-                'src.services.agent_run_service.get_chat_events_table'
+                "src.services.agent_run_service.get_chat_events_table"
             ) as mock_events_table_fn,
-            patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
+            patch("src.services.agent_run_service.get_redis_dao") as mock_redis_fn,
         ):
             # Configure Bohrium mock
             mock_bohrium_result = MagicMock()
@@ -329,7 +329,7 @@ class TestMatMasterRunAgentE2E:
                 "session_type": None,
             }
             mock_bohrium_svc = mock_bohrium_cls.return_value
-            mock_bohrium_svc.load_credentials.return_value = ({}, None, 'org-1')
+            mock_bohrium_svc.load_credentials.return_value = ({}, None, "org-1")
             mock_bohrium_svc.run_setup = AsyncMock(return_value=mock_bohrium_result)
             mock_bohrium_svc.run_cleanup = AsyncMock()
 
@@ -352,23 +352,23 @@ class TestMatMasterRunAgentE2E:
             # Execute
             result = asyncio.run(
                 svc.run_agent(
-                    session_id='sess-1',
-                    user_prompt='test prompt',
+                    session_id="sess-1",
+                    user_prompt="test prompt",
                     send_cb=mock_send_cb,
                     cancel_token=CancellationController().token,
-                    mode='direct',
-                    task_id='task-1',
-                    invocation_id='inv-task-1',
+                    mode="direct",
+                    task_id="task-1",
+                    invocation_id="inv-task-1",
                 )
             )
 
             # Verify: pipeline completed successfully -- run_agent returns success.
             # 计价化后扣费在 tools-server 侧完成；run_agent 成功（结果首元素为 True）即
             # kernel.run() 返回非 cancelled 的 RunResultEvent 且后处理完成的最强信号。
-            assert result[0] is True, 'run_agent should succeed on success path'
+            assert result[0] is True, "run_agent should succeed on success path"
 
-    @patch('matmaster.config.loader.load_llm_config')
-    @patch('matmaster.providers.llm_factory.build_provider_bundle')
+    @patch("matmaster.config.loader.load_llm_config")
+    @patch("matmaster.providers.llm_factory.build_provider_bundle")
     def test_run_agent_excludes_current_task_query_from_history(
         self, mock_build_provider_bundle, mock_load_config, tmp_path: Path
     ) -> None:
@@ -379,7 +379,7 @@ class TestMatMasterRunAgentE2E:
         ).AgentRunService
 
         mock_sessions_svc = MagicMock()
-        mock_sessions_svc.get_session_user_id.return_value = 'user-123'
+        mock_sessions_svc.get_session_user_id.return_value = "user-123"
 
         svc = AgentRunService(sessions_service=mock_sessions_svc)
 
@@ -390,40 +390,61 @@ class TestMatMasterRunAgentE2E:
         mock_pg = MagicMock()
         mock_environment = _make_environment(tmp_path)
         mock_pg.prepare.return_value = mock_environment
-        mock_pg.config_path = Path('config/config.yaml')
+        mock_pg.config_path = Path("config/config.yaml")
         mock_pg.session = None
 
-        current_task_id = 'task-1'
+        current_task_id = "task-1"
         raw_events = [
             {
-                'source': 'User',
-                'type': 'query',
-                'content': 'old question',
-                'task_id': 'task-0',
+                "source": "MatMaster",
+                "type": "user_turn_context",
+                "content": {
+                    "schema_version": "user_turn_context.v1",
+                    "kind": "anchor",
+                    "message": UserMessage(content="old question").model_dump(
+                        mode="json"
+                    ),
+                    "user_instructions_hash": "sha256:old",
+                    "transform": "raw",
+                    "render_version": "user_context_render.v1",
+                },
+                "task_id": "task-0",
+                "invocation_id": "inv-old",
             },
             {
-                'source': 'MatMaster',
-                'type': 'finish',
-                'content': 'old answer',
-                'task_id': 'task-0',
+                "source": "MatMaster",
+                "type": "run_result",
+                "content": {"content": "old answer"},
+                "task_id": "task-0",
+                "invocation_id": "inv-old",
             },
             {
-                'source': 'User',
-                'type': 'query',
-                'content': 'new question',
-                'task_id': current_task_id,
+                "source": "MatMaster",
+                "type": "user_turn_context",
+                "content": {
+                    "schema_version": "user_turn_context.v1",
+                    "kind": "anchor",
+                    "message": UserMessage(content="new question").model_dump(
+                        mode="json"
+                    ),
+                    "user_instructions_hash": "sha256:new",
+                    "transform": "raw",
+                    "render_version": "user_context_render.v1",
+                },
+                "task_id": current_task_id,
+                "invocation_id": "inv-task-current",
             },
         ]
 
         with (
-            patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
+            patch.object(svc._pg_manager, "get_or_create", return_value=mock_pg),
             patch(
-                'src.services.agent_run_bohrium_stage.BohriumSetupService'
+                "src.services.agent_run_bohrium_stage.BohriumSetupService"
             ) as mock_bohrium_cls,
             patch(
-                'src.services.agent_run_service.get_chat_events_table'
+                "src.services.agent_run_service.get_chat_events_table"
             ) as mock_events_table_fn,
-            patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
+            patch("src.services.agent_run_service.get_redis_dao") as mock_redis_fn,
         ):
             mock_bohrium_result = MagicMock()
             mock_bohrium_result.ssh_attached = False
@@ -439,13 +460,14 @@ class TestMatMasterRunAgentE2E:
                 "session_type": None,
             }
             mock_bohrium_svc = mock_bohrium_cls.return_value
-            mock_bohrium_svc.load_credentials.return_value = ({}, None, 'org-1')
+            mock_bohrium_svc.load_credentials.return_value = ({}, None, "org-1")
             mock_bohrium_svc.run_setup = AsyncMock(return_value=mock_bohrium_result)
             mock_bohrium_svc.run_cleanup = AsyncMock()
 
             mock_events_table = MagicMock()
-            mock_events_table.get_session_events.return_value = raw_events
             _allow_user_turn_context_write(mock_events_table)
+            mock_events_table.has_user_turn_context.return_value = True
+            mock_events_table.get_scope_events_after_id.return_value = raw_events
             mock_events_table_fn.return_value = mock_events_table
 
             mock_redis = MagicMock()
@@ -453,32 +475,32 @@ class TestMatMasterRunAgentE2E:
 
             asyncio.run(
                 svc.run_agent(
-                    session_id='sess-1',
-                    user_prompt='new question',
+                    session_id="sess-1",
+                    user_prompt="new question",
                     send_cb=AsyncMock(),
                     cancel_token=CancellationController().token,
-                    mode='direct',
+                    mode="direct",
                     task_id=current_task_id,
-                    invocation_id='inv-task-current',
+                    invocation_id="inv-task-current",
                 )
             )
 
         assert len(mock_llm.captured_messages) == 1
         llm_messages = mock_llm.captured_messages[0]
-        assert [m['role'] for m in llm_messages] == [
-            'system',
-            'user',
-            'assistant',
-            'user',
+        assert [m["role"] for m in llm_messages] == [
+            "system",
+            "user",
+            "assistant",
+            "user",
         ]
-        assert [m['content'] for m in llm_messages[1:]] == [
-            'old question',
-            'old answer',
-            '<current_instruction>\nnew question\n</current_instruction>',
+        assert [m["content"] for m in llm_messages[1:]] == [
+            "old question",
+            "old answer",
+            "<current_instruction>\nnew question\n</current_instruction>",
         ]
 
-    @patch('matmaster.config.loader.load_llm_config')
-    @patch('matmaster.providers.llm_factory.build_provider_bundle')
+    @patch("matmaster.config.loader.load_llm_config")
+    @patch("matmaster.providers.llm_factory.build_provider_bundle")
     def test_events_table_failure_returns_cleanly_without_router_lifecycle(
         self, mock_build_provider_bundle, mock_load_config, tmp_path: Path
     ) -> None:
@@ -489,7 +511,7 @@ class TestMatMasterRunAgentE2E:
         ).AgentRunService
 
         mock_sessions_svc = MagicMock()
-        mock_sessions_svc.get_session_user_id.return_value = 'user-123'
+        mock_sessions_svc.get_session_user_id.return_value = "user-123"
 
         svc = AgentRunService(sessions_service=mock_sessions_svc)
         mock_load_config.return_value = MagicMock()
@@ -497,23 +519,23 @@ class TestMatMasterRunAgentE2E:
         mock_pg = MagicMock()
         mock_environment = _make_environment(tmp_path)
         mock_pg.prepare.return_value = mock_environment
-        mock_pg.config_path = Path('config/config.yaml')
+        mock_pg.config_path = Path("config/config.yaml")
         mock_pg.session = None
 
         # Pre-populate the PlaygroundManager cache so release() finds the mock
-        svc._pg_manager._playgrounds['sess-events-table-error'] = mock_pg
+        svc._pg_manager._playgrounds["sess-events-table-error"] = mock_pg
 
         with (
-            patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
-            patch('src.services.agent_run_service.RunEventFanout') as mock_fanout_cls,
+            patch.object(svc._pg_manager, "get_or_create", return_value=mock_pg),
+            patch("src.services.agent_run_service.RunEventFanout") as mock_fanout_cls,
             patch(
-                'src.services.agent_run_bohrium_stage.BohriumSetupService'
+                "src.services.agent_run_bohrium_stage.BohriumSetupService"
             ) as mock_bohrium_cls,
             patch(
-                'src.services.agent_run_service.get_chat_events_table',
-                side_effect=RuntimeError('events table unavailable'),
+                "src.services.agent_run_service.get_chat_events_table",
+                side_effect=RuntimeError("events table unavailable"),
             ),
-            patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
+            patch("src.services.agent_run_service.get_redis_dao") as mock_redis_fn,
         ):
             sse_payloads: list[dict[str, Any]] = []
 
@@ -522,28 +544,28 @@ class TestMatMasterRunAgentE2E:
 
             result = asyncio.run(
                 svc.run_agent(
-                    session_id='sess-events-table-error',
-                    user_prompt='test prompt',
+                    session_id="sess-events-table-error",
+                    user_prompt="test prompt",
                     send_cb=mock_send_cb,
                     cancel_token=CancellationController().token,
-                    mode='direct',
-                    task_id='task-events-table-error',
+                    mode="direct",
+                    task_id="task-events-table-error",
                 )
             )
 
-        assert result == ((False, 'pre_router_setup_failed'), 0, None)
+        assert result == ((False, "pre_router_setup_failed"), 0, None)
         mock_fanout_cls.assert_not_called()
         mock_bohrium_cls.assert_not_called()
         mock_build_provider_bundle.assert_not_called()
         assert sse_payloads == []
         mock_redis_fn.return_value.delete_stop_requested.assert_called_once_with(
-            'sess-events-table-error',
-            'task-events-table-error',
+            "sess-events-table-error",
+            "task-events-table-error",
         )
         mock_pg.cleanup.assert_called_once()
 
-    @patch('matmaster.config.loader.load_llm_config')
-    @patch('matmaster.providers.llm_factory.build_provider_bundle')
+    @patch("matmaster.config.loader.load_llm_config")
+    @patch("matmaster.providers.llm_factory.build_provider_bundle")
     def test_bohrium_events_reach_sse_before_setup_returns(
         self, mock_build_provider_bundle, mock_load_config, tmp_path: Path
     ) -> None:
@@ -554,29 +576,29 @@ class TestMatMasterRunAgentE2E:
         ).AgentRunService
 
         mock_sessions_svc = MagicMock()
-        mock_sessions_svc.get_session_user_id.return_value = 'user-123'
+        mock_sessions_svc.get_session_user_id.return_value = "user-123"
 
         svc = AgentRunService(sessions_service=mock_sessions_svc)
         mock_build_provider_bundle.return_value = _provider_bundle(
-            MockLLMProvider('Bohrium event test response')
+            MockLLMProvider("Bohrium event test response")
         )
         mock_load_config.return_value = MagicMock()
 
         mock_pg = MagicMock()
         mock_environment = _make_environment(tmp_path)
         mock_pg.prepare.return_value = mock_environment
-        mock_pg.config_path = Path('config/config.yaml')
+        mock_pg.config_path = Path("config/config.yaml")
         mock_pg.session = None
 
         with (
-            patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
+            patch.object(svc._pg_manager, "get_or_create", return_value=mock_pg),
             patch(
-                'src.services.agent_run_bohrium_stage.BohriumSetupService'
+                "src.services.agent_run_bohrium_stage.BohriumSetupService"
             ) as mock_bohrium_cls,
             patch(
-                'src.services.agent_run_service.get_chat_events_table'
+                "src.services.agent_run_service.get_chat_events_table"
             ) as mock_events_table_fn,
-            patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
+            patch("src.services.agent_run_service.get_redis_dao") as mock_redis_fn,
         ):
             mock_bohrium_result = MagicMock()
             mock_bohrium_result.ssh_attached = False
@@ -594,10 +616,10 @@ class TestMatMasterRunAgentE2E:
             # Capture event_sink from BohriumSetupService constructor
             captured_sink = [None]
             real_mock_svc = MagicMock()
-            real_mock_svc.load_credentials.return_value = ({}, None, 'org-1')
+            real_mock_svc.load_credentials.return_value = ({}, None, "org-1")
 
             def _capture_init(*args, **kwargs):
-                captured_sink[0] = kwargs.get('event_sink')
+                captured_sink[0] = kwargs.get("event_sink")
                 return real_mock_svc
 
             mock_bohrium_cls.side_effect = _capture_init
@@ -616,7 +638,7 @@ class TestMatMasterRunAgentE2E:
 
             async def mock_send_cb(payload: dict[str, Any]) -> None:
                 sse_payloads.append(payload)
-                if payload.get('type') == 'bohrium_node':
+                if payload.get("type") == "bohrium_node":
                     bohrium_seen_by_sse.set()
 
             async def _mock_setup(**kwargs):
@@ -626,16 +648,16 @@ class TestMatMasterRunAgentE2E:
                 if sink is not None:
                     sink(
                         BohriumNodeEvent(
-                            source='BohriumSetup',
+                            source="BohriumSetup",
                             payload={
-                                'type': 'node_ready',
-                                'content': 'node is ready',
-                                'stage': 'setup',
+                                "type": "node_ready",
+                                "content": "node is ready",
+                                "stage": "setup",
                             },
                         )
                     )
                 await asyncio.sleep(0.05)  # yield to let fanout dispatch
-                setup_state['saw_bohrium_event_before_return'] = (
+                setup_state["saw_bohrium_event_before_return"] = (
                     bohrium_seen_by_sse.wait(timeout=1.0)
                 )
                 return mock_bohrium_result
@@ -645,31 +667,31 @@ class TestMatMasterRunAgentE2E:
 
             asyncio.run(
                 svc.run_agent(
-                    session_id='sess-bohrium-event',
-                    user_prompt='test prompt',
+                    session_id="sess-bohrium-event",
+                    user_prompt="test prompt",
                     send_cb=mock_send_cb,
                     cancel_token=CancellationController().token,
-                    mode='direct',
-                    task_id='task-bohrium-event',
-                    invocation_id='inv-bohrium-event',
+                    mode="direct",
+                    task_id="task-bohrium-event",
+                    invocation_id="inv-bohrium-event",
                 )
             )
 
-        assert setup_state['saw_bohrium_event_before_return'] is True
+        assert setup_state["saw_bohrium_event_before_return"] is True
         bohrium_payload = next(
             (
                 payload
                 for payload in sse_payloads
-                if payload.get('type') == 'bohrium_node'
+                if payload.get("type") == "bohrium_node"
             ),
             None,
         )
         assert bohrium_payload is not None
-        assert bohrium_payload['content']['event_type'] == 'node_ready'
-        assert bohrium_payload['content']['message'] == 'node is ready'
+        assert bohrium_payload["content"]["event_type"] == "node_ready"
+        assert bohrium_payload["content"]["message"] == "node is ready"
 
-    @patch('matmaster.config.loader.load_llm_config')
-    @patch('matmaster.providers.llm_factory.build_provider_bundle')
+    @patch("matmaster.config.loader.load_llm_config")
+    @patch("matmaster.providers.llm_factory.build_provider_bundle")
     def test_bohrium_abort_emits_top_level_error_and_stream_closed(
         self, mock_build_provider_bundle, mock_load_config, tmp_path: Path
     ) -> None:
@@ -684,34 +706,34 @@ class TestMatMasterRunAgentE2E:
         ).AgentRunService
 
         mock_sessions_svc = MagicMock()
-        mock_sessions_svc.get_session_user_id.return_value = 'user-123'
+        mock_sessions_svc.get_session_user_id.return_value = "user-123"
 
         svc = AgentRunService(sessions_service=mock_sessions_svc)
         mock_build_provider_bundle.return_value = _provider_bundle(
-            MockLLMProvider('unused')
+            MockLLMProvider("unused")
         )
         mock_load_config.return_value = MagicMock()
 
         mock_pg = MagicMock()
         mock_environment = _make_environment(tmp_path)
         mock_pg.prepare.return_value = mock_environment
-        mock_pg.config_path = Path('config/config.yaml')
+        mock_pg.config_path = Path("config/config.yaml")
         mock_pg.session = None
 
-        reason = 'Bohrium 节点创建失败: no attach'
+        reason = "Bohrium 节点创建失败: no attach"
 
         with (
-            patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
+            patch.object(svc._pg_manager, "get_or_create", return_value=mock_pg),
             patch(
-                'src.services.agent_run_bohrium_stage.BohriumSetupService'
+                "src.services.agent_run_bohrium_stage.BohriumSetupService"
             ) as mock_bohrium_cls,
             patch(
-                'src.services.agent_run_service.get_chat_events_table'
+                "src.services.agent_run_service.get_chat_events_table"
             ) as mock_events_table_fn,
-            patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
+            patch("src.services.agent_run_service.get_redis_dao") as mock_redis_fn,
         ):
             mock_bohrium_svc = mock_bohrium_cls.return_value
-            mock_bohrium_svc.load_credentials.return_value = ({}, None, 'org-1')
+            mock_bohrium_svc.load_credentials.return_value = ({}, None, "org-1")
 
             async def _mock_setup(**kwargs):
                 return BohriumSetupResult(
@@ -731,21 +753,21 @@ class TestMatMasterRunAgentE2E:
 
             result = asyncio.run(
                 svc.run_agent(
-                    session_id='sess-bohrium-abort',
-                    user_prompt='test prompt',
+                    session_id="sess-bohrium-abort",
+                    user_prompt="test prompt",
                     send_cb=AsyncMock(),
                     cancel_token=CancellationController().token,
-                    mode='direct',
-                    task_id='task-bohrium-abort',
-                    invocation_id='inv-bohrium-abort',
+                    mode="direct",
+                    task_id="task-bohrium-abort",
+                    invocation_id="inv-bohrium-abort",
                 )
             )
 
         # abort_result is returned directly -- pipeline terminates before SSE dispatch
         assert result == ((False, reason), 10, None)
 
-    @patch('matmaster.config.loader.load_llm_config')
-    @patch('matmaster.providers.llm_factory.build_provider_bundle')
+    @patch("matmaster.config.loader.load_llm_config")
+    @patch("matmaster.providers.llm_factory.build_provider_bundle")
     def test_bohrium_access_key_abort_emits_top_level_error_and_stream_closed(
         self, mock_build_provider_bundle, mock_load_config, tmp_path: Path
     ) -> None:
@@ -759,45 +781,45 @@ class TestMatMasterRunAgentE2E:
         ).BohriumAccessKeyFetchResult
 
         mock_sessions_svc = MagicMock()
-        mock_sessions_svc.get_session_user_id.return_value = 'u1'
+        mock_sessions_svc.get_session_user_id.return_value = "u1"
         mock_sessions_svc.get_session.return_value = {
-            'user_id': 'u1',
-            'org_id': 'o1',
-            'project_id': 9,
+            "user_id": "u1",
+            "org_id": "o1",
+            "project_id": 9,
         }
 
         svc = AgentRunService(sessions_service=mock_sessions_svc)
         mock_build_provider_bundle.return_value = _provider_bundle(
-            MockLLMProvider('unused')
+            MockLLMProvider("unused")
         )
         mock_load_config.return_value = MagicMock()
 
         mock_pg = MagicMock()
         mock_environment = _make_environment(tmp_path)
         mock_pg.prepare.return_value = mock_environment
-        mock_pg.config_path = Path('config/config.yaml')
+        mock_pg.config_path = Path("config/config.yaml")
         mock_pg.session = None
 
-        reason = 'Bohrium access_key 获取失败：请求 Bohrium Core 超时'
+        reason = "Bohrium access_key 获取失败：请求 Bohrium Core 超时"
         failed_result = BohriumAccessKeyFetchResult(
-            status='timeout',
+            status="timeout",
             retryable=False,
             attempts=3,
             access_key=None,
         )
 
         with (
-            patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
+            patch.object(svc._pg_manager, "get_or_create", return_value=mock_pg),
             patch(
-                'src.services.agent_run_service.get_chat_events_table'
+                "src.services.agent_run_service.get_chat_events_table"
             ) as mock_events_table_fn,
-            patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
+            patch("src.services.agent_run_service.get_redis_dao") as mock_redis_fn,
             patch(
-                'src.services.agent_run_bohrium.UserService.fetch_bohrium_access_key_result',
+                "src.services.agent_run_bohrium.UserService.fetch_bohrium_access_key_result",
                 return_value=failed_result,
             ),
             patch(
-                'src.services.agent_run_bohrium.UserService.get_user_no_by_user_id',
+                "src.services.agent_run_bohrium.UserService.get_user_no_by_user_id",
                 return_value=None,
             ),
         ):
@@ -816,13 +838,13 @@ class TestMatMasterRunAgentE2E:
 
             result = asyncio.run(
                 svc.run_agent(
-                    session_id='sess-bohrium-access-key-abort',
-                    user_prompt='test prompt',
+                    session_id="sess-bohrium-access-key-abort",
+                    user_prompt="test prompt",
                     send_cb=mock_send_cb,
                     cancel_token=CancellationController().token,
-                    mode='direct',
-                    task_id='task-bohrium-access-key-abort',
-                    invocation_id='inv-bohrium-access-key-abort',
+                    mode="direct",
+                    task_id="task-bohrium-access-key-abort",
+                    invocation_id="inv-bohrium-access-key-abort",
                     bohrium_required=True,
                 )
             )
@@ -831,24 +853,24 @@ class TestMatMasterRunAgentE2E:
         assert isinstance(result[1], int)
         assert result[1] >= 0
         error_payload = next(
-            (payload for payload in sse_payloads if payload.get('type') == 'error'),
+            (payload for payload in sse_payloads if payload.get("type") == "error"),
             None,
         )
         assert error_payload is not None
-        assert error_payload['content']['message'] == reason
+        assert error_payload["content"]["message"] == reason
         stream_closed_payload = next(
             (
                 payload
                 for payload in sse_payloads
-                if payload.get('type') == 'stream_closed'
+                if payload.get("type") == "stream_closed"
             ),
             None,
         )
         assert stream_closed_payload is not None
-        assert stream_closed_payload['treat_as_failure'] is True
+        assert stream_closed_payload["treat_as_failure"] is True
 
-    @patch('matmaster.config.loader.load_llm_config')
-    @patch('matmaster.providers.llm_factory.build_provider_bundle')
+    @patch("matmaster.config.loader.load_llm_config")
+    @patch("matmaster.providers.llm_factory.build_provider_bundle")
     def test_bohrium_setup_exception_is_sent_to_sse_when_router_starts_early(
         self, mock_build_provider_bundle, mock_load_config, tmp_path: Path
     ) -> None:
@@ -859,34 +881,34 @@ class TestMatMasterRunAgentE2E:
         ).AgentRunService
 
         mock_sessions_svc = MagicMock()
-        mock_sessions_svc.get_session_user_id.return_value = 'user-123'
+        mock_sessions_svc.get_session_user_id.return_value = "user-123"
 
         svc = AgentRunService(sessions_service=mock_sessions_svc)
         mock_build_provider_bundle.return_value = _provider_bundle(
-            MockLLMProvider('Bohrium exception test response')
+            MockLLMProvider("Bohrium exception test response")
         )
         mock_load_config.return_value = MagicMock()
 
         mock_pg = MagicMock()
         mock_environment = _make_environment(tmp_path)
         mock_pg.prepare.return_value = mock_environment
-        mock_pg.config_path = Path('config/config.yaml')
+        mock_pg.config_path = Path("config/config.yaml")
         mock_pg.session = None
 
         with (
-            patch.object(svc._pg_manager, 'get_or_create', return_value=mock_pg),
+            patch.object(svc._pg_manager, "get_or_create", return_value=mock_pg),
             patch(
-                'src.services.agent_run_bohrium_stage.BohriumSetupService'
+                "src.services.agent_run_bohrium_stage.BohriumSetupService"
             ) as mock_bohrium_cls,
             patch(
-                'src.services.agent_run_service.get_chat_events_table'
+                "src.services.agent_run_service.get_chat_events_table"
             ) as mock_events_table_fn,
-            patch('src.services.agent_run_service.get_redis_dao') as mock_redis_fn,
+            patch("src.services.agent_run_service.get_redis_dao") as mock_redis_fn,
         ):
             mock_bohrium_svc = mock_bohrium_cls.return_value
-            mock_bohrium_svc.load_credentials.return_value = ({}, None, 'org-1')
+            mock_bohrium_svc.load_credentials.return_value = ({}, None, "org-1")
             mock_bohrium_svc.run_setup = AsyncMock(
-                side_effect=RuntimeError('bohrium setup failed')
+                side_effect=RuntimeError("bohrium setup failed")
             )
             mock_bohrium_svc.run_cleanup = AsyncMock()
 
@@ -905,20 +927,20 @@ class TestMatMasterRunAgentE2E:
 
             asyncio.run(
                 svc.run_agent(
-                    session_id='sess-bohrium-error',
-                    user_prompt='test prompt',
+                    session_id="sess-bohrium-error",
+                    user_prompt="test prompt",
                     send_cb=mock_send_cb,
                     cancel_token=CancellationController().token,
-                    mode='direct',
-                    task_id='task-bohrium-error',
-                    invocation_id='inv-bohrium-error',
+                    mode="direct",
+                    task_id="task-bohrium-error",
+                    invocation_id="inv-bohrium-error",
                 )
             )
 
         error_payload = next(
-            (payload for payload in sse_payloads if payload.get('type') == 'error'),
+            (payload for payload in sse_payloads if payload.get("type") == "error"),
             None,
         )
         assert error_payload is not None
-        assert error_payload['source'] == 'System'
-        assert error_payload['content']['message'] == 'bohrium setup failed'
+        assert error_payload["source"] == "System"
+        assert error_payload["content"]["message"] == "bohrium setup failed"

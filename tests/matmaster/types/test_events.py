@@ -186,6 +186,11 @@ class TestRunResultEvent:
         assert evt.reason == ""
         assert evt.final_content is None
 
+    def test_rejects_legacy_finish_type(self) -> None:
+        legacy_type = "fin" + "ish"
+        with pytest.raises(ValidationError):
+            RunResultEvent.model_validate({"type": legacy_type, "source": "agent"})
+
     def test_finish_detail_round_trips(self) -> None:
         evt = RunResultEvent(
             source="agent",
@@ -321,6 +326,30 @@ class TestSystemEvents:
         assert restored.checkpoint_written is True
         assert restored.covered_until_event_id == 88
 
+    def test_compaction_event_usage_fields_default_to_none(self) -> None:
+        evt = CompactionEvent(
+            source="context_compactor",
+            compaction_id="root:1",
+            status="complete",
+            phase="runtime",
+        )
+
+        assert evt.turn_usage is None
+        assert evt.total_usage is None
+
+    def test_compaction_event_accepts_usage_fields(self) -> None:
+        evt = CompactionEvent(
+            source="context_compactor",
+            compaction_id="root:1",
+            status="complete",
+            phase="runtime",
+            turn_usage={"prompt_tokens": 40},
+            total_usage={"prompt_tokens": 55},
+        )
+
+        assert evt.turn_usage == {"prompt_tokens": 40}
+        assert evt.total_usage == {"prompt_tokens": 55}
+
     def test_exp_run(self) -> None:
         evt = ExpRunEvent(source="system", exp_name="mat_master")
         assert evt.type == "exp_run"
@@ -338,6 +367,11 @@ class TestSystemEvents:
         assert evt.task_completed is False
         assert evt.end_reason is None
         assert evt.treat_as_failure is None
+
+    def test_stream_closed_rejects_legacy_end_type(self) -> None:
+        legacy_type = "e" + "nd"
+        with pytest.raises(ValidationError):
+            StreamClosedEvent.model_validate({"type": legacy_type, "source": "system"})
 
     def test_workspace_upload_error(self) -> None:
         evt = WorkspaceUploadErrorEvent(source="system", message="upload failed")

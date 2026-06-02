@@ -76,6 +76,22 @@ def test_cache_write_rendered_when_present() -> None:
     assert "缓存写入 30" in _val(rows, "Token 消耗")
 
 
+def test_aggregate_usage_rows_include_cache_write_and_reasoning_from_scalar() -> None:
+    rows = format_usage_rows(
+        {
+            "prompt_tokens": 100,
+            "completion_tokens": 10,
+            "total_tokens": 110,
+            "cache_write_tokens": 30,
+            "reasoning_tokens": 7,
+        }
+    )
+
+    text = "\n".join(value for _, value in rows)
+    assert "缓存写入 30" in text
+    assert "推理 7" in text
+
+
 def test_last_turn_usage_adds_row() -> None:
     rows = format_usage_rows(
         {

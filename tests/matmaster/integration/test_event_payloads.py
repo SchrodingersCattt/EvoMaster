@@ -172,12 +172,40 @@ class TestPublicContentForEvent:
             'retained_turns': 3,
         }
 
+    def test_compaction_public_content_includes_usage_fields(self) -> None:
+        content = _public_content_for_event(
+            'compaction',
+            {
+                'compaction_id': 'root:1',
+                'status': 'complete',
+                'phase': 'runtime',
+                'turn_usage': {'prompt_tokens': 40},
+                'total_usage': {'prompt_tokens': 55},
+            },
+        )
+
+        assert content['turn_usage'] == {'prompt_tokens': 40}
+        assert content['total_usage'] == {'prompt_tokens': 55}
+
+        running = _public_content_for_event(
+            'compaction',
+            {
+                'compaction_id': 'root:1',
+                'status': 'running',
+                'phase': 'runtime',
+                'turn_usage': None,
+                'total_usage': None,
+            },
+        )
+        assert 'turn_usage' not in running
+        assert 'total_usage' not in running
+
     def test_response_uses_content_field(self) -> None:
         payload = {'type': 'response', 'source': 'Agent', 'content': 'hello'}
 
         assert _public_content_for_event('response', payload) == 'hello'
 
-    def test_thought_with_model_returns_structured_content(self) -> None:
+    def test_thought_with_model_returns_plain_content(self) -> None:
         payload = {
             'type': 'thought',
             'source': 'Agent',
@@ -187,12 +215,7 @@ class TestPublicContentForEvent:
             'model_route': 'bedrock-claude-opus',
         }
 
-        assert _public_content_for_event('thought', payload) == {
-            'content': 'reasoning',
-            'model': 'claude-opus-4-6',
-            'model_profile': 'opus',
-            'model_route': 'bedrock-claude-opus',
-        }
+        assert _public_content_for_event('thought', payload) == 'reasoning'
 
     def test_response_with_usage_returns_structured_content(self) -> None:
         payload = {
@@ -248,7 +271,7 @@ class TestPublicContentForEvent:
             'completion_tokens': 6,
         }
 
-    def test_run_result_public_content_includes_model(self) -> None:
+    def test_run_result_public_content_omits_model_identity(self) -> None:
         payload = {
             'type': 'run_result',
             'source': 'Agent',
@@ -264,9 +287,6 @@ class TestPublicContentForEvent:
             'content': 'done',
             'status': 'completed',
             'reason': 'natural',
-            'model': 'claude-opus-4-6',
-            'model_profile': 'opus',
-            'model_route': 'bedrock-claude-opus',
         }
 
     def test_assistant_state_public_content_includes_model(self) -> None:
@@ -353,7 +373,7 @@ class TestPublicContentForEvent:
         assert normalized['turn_index'] == 3
         assert normalized['turn_usage'] == {'total_tokens': 12}
 
-    def test_structured_thought_content_is_unpacked_for_sse(self) -> None:
+    def test_structured_thought_content_strips_model_identity_for_sse(self) -> None:
         payload = {
             'source': 'MatMaster',
             'type': 'thought',
@@ -371,9 +391,9 @@ class TestPublicContentForEvent:
         normalized = normalize_response_sse_payload(payload)
 
         assert normalized['content'] == 'thinking'
-        assert normalized['model'] == 'claude-opus-4-6'
-        assert normalized['model_profile'] == 'opus'
-        assert normalized['model_route'] == 'bedrock-claude-opus'
+        assert 'model' not in normalized
+        assert 'model_profile' not in normalized
+        assert 'model_route' not in normalized
 
     def test_response_figures_payload_maps_to_public_content(self) -> None:
         payload = {
@@ -587,12 +607,10 @@ class TestRunResultOmitsVendorByTurn:
 class TestBuildPublicSsePayloadDedup:
     """Top-level projection rules for the live SSE payload.
 
-    Structured events (tool_result, tool_call, error, mcp_*, ...) keep their
-    business fields in ``content`` only -- the frontend reads them from there, so
-    the top level must not double-encode them. run_result / finish are the
-    exception: the frontend still reads final_content / status from the top
-    level, so those stay until that read is migrated to ``content``.
-    usage_vendor_by_turn is dropped from the public payload entirely.
+    Structured events (tool_result, run_result, tool_call, error, mcp_*, ...)
+    keep their business fields in ``content`` only. The top level must not
+    double-encode them. usage_vendor_by_turn is dropped from the public payload
+    entirely.
     """
 
     def _build(self, raw: dict) -> dict:
@@ -638,10 +656,7 @@ class TestBuildPublicSsePayloadDedup:
         assert out['timestamp'] == '2026-05-31T00:00:00'
         assert out['session_id'] == 's'
 
-    def test_run_result_keeps_top_level_but_drops_vendor_by_turn(self) -> None:
-        # run_result stays in the full-passthrough branch: the frontend reads
-        # final_content / status from the top level. Only usage_vendor_by_turn is
-        # stripped (from both the top level and content).
+    def test_run_result_business_fields_not_duplicated_at_top_level(self) -> None:
         raw = {
             'source': 'agent',
             'type': 'run_result',
@@ -652,15 +667,32 @@ class TestBuildPublicSsePayloadDedup:
             'num_turns': 4,
             'usage': {'total_tokens': 100},
             'usage_vendor_by_turn': [{'total_tokens': 10}],
+            'model': 'm',
+            'model_profile': 'p',
+            'model_route': 'r',
         }
         out = self._build(raw)
-        # Frontend-facing top-level fields are preserved.
-        assert out['final_content'] == 'answer'
-        assert out['status'] == 'completed'
-        # Aggregated usage stays in content; per-turn vendor detail is gone.
+        assert out['content']['content'] == 'answer'
+        assert out['content']['status'] == 'completed'
+        assert out['content']['reason'] == 'natural'
+        assert out['content']['num_turns'] == 4
         assert out['content']['usage'] == {'total_tokens': 100}
-        assert 'usage_vendor_by_turn' not in out
         assert 'usage_vendor_by_turn' not in out['content']
+        for key in (
+            'final_content',
+            'usage',
+            'usage_vendor_by_turn',
+            'status',
+            'reason',
+            'num_turns',
+            'model',
+            'model_profile',
+            'model_route',
+        ):
+            assert key not in out, f'{key} duplicated at top level'
+        for key in ('model', 'model_profile', 'model_route'):
+            assert key not in out['content'], f'{key} leaked into content'
+        assert out['timestamp'] == '2026-05-31T00:00:00'
 
     def test_tool_progress_keeps_top_level_identifiers(self) -> None:
         # tool_progress has no structured-content branch: content is the string,

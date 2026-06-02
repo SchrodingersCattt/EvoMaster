@@ -71,17 +71,14 @@ _ENVELOPE_TOP_LEVEL_KEYS = ('timestamp',)
 # via the event object; the public payload carries the aggregated ``usage`` only.
 _TOP_LEVEL_DENYLIST = frozenset({'usage_vendor_by_turn'})
 # Event types whose raw fields are lifted to the SSE top level instead of being
-# confined to ``content``. Two sets, exempt for unrelated reasons:
-#
-# Structural -- ``normalize_response_sse_payload`` collapses response / thought
-# content to a string, so their usage / model / stream fields must live at the
-# top level. Must stay in sync with the set gating that normalizer.
+# confined to ``content``. ``normalize_response_sse_payload`` collapses response
+# / thought content to a string, so their usage / model / stream fields must
+# live at the top level. Must stay in sync with the set gating that normalizer.
 _STRUCTURAL_PASSTHROUGH_EVENT_TYPES = frozenset({'response', 'thought'})
-# Frontend-compat seam -- the frontend still reads ``final_content`` / ``status``
-# from the top level (scimaster-bohr-chat dispatch/index.ts and
-# ask-question-terminal.ts), so run_result / finish keep full passthrough until
-# that read migrates to ``content``. Drop this set once the migration lands.
-_FRONTEND_COMPAT_PASSTHROUGH_EVENT_TYPES = frozenset({'run_result', 'finish'})
+# ``finish`` is retained only for the #4 frontend migration hold. Backend event
+# models and active consumers no longer produce or accept it as a live terminal
+# event type.
+_TERMINAL_EVENT_TYPES = frozenset({'run_result', 'finish'})
 
 
 def _copy_nonempty_keys(
@@ -108,15 +105,6 @@ def _response_public_content(payload: dict[str, Any]) -> object | None:
     return out
 
 
-def _thought_public_content(payload: dict[str, Any]) -> object | None:
-    content = payload.get('content')
-    if not any(payload.get(key) for key in _MODEL_IDENTITY_KEYS):
-        return content
-    out: dict[str, Any] = {'content': content or ''}
-    _copy_nonempty_keys(out, payload, _MODEL_IDENTITY_KEYS)
-    return out
-
-
 def normalize_response_sse_payload(payload: dict[str, Any]) -> dict[str, Any]:
     event_type = payload.get('type')
     if event_type not in _STRUCTURAL_PASSTHROUGH_EVENT_TYPES:
@@ -128,13 +116,40 @@ def normalize_response_sse_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
     normalized = dict(payload)
     normalized['content'] = str(content.get('content') or '')
-    keys = (
-        (*_RESPONSE_USAGE_KEYS, *_MODEL_IDENTITY_KEYS)
-        if event_type == 'response'
-        else _MODEL_IDENTITY_KEYS
-    )
-    for key in keys:
-        if key in content and content.get(key) is not None:
+    if event_type == 'response':
+        for key in (*_RESPONSE_USAGE_KEYS, *_MODEL_IDENTITY_KEYS):
+            if key in content and content.get(key) is not None:
+                normalized[key] = content[key]
+    return normalized
+
+
+def normalize_replayed_terminal_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Lift persisted run_result/finish content fields back to the live SSE shape.
+
+    The live path lifts these fields to the top level via
+    ``_carry_top_level_fields``, but persistence stores only the ``content`` dict
+    produced by ``_public_content_for_event``, so replay reconstructs the
+    top-level shape here. Counterpart of ``normalize_response_sse_payload`` for
+    terminal event payloads.
+    """
+    if payload.get('type') not in _TERMINAL_EVENT_TYPES:
+        return payload
+
+    content = payload.get('content')
+    if not isinstance(content, dict):
+        return payload
+
+    normalized = dict(payload)
+    normalized['final_content'] = content.get('content') or ''
+    for key in (
+        'status',
+        'reason',
+        'finish_detail',
+        'num_turns',
+        'usage',
+        *_MODEL_IDENTITY_KEYS,
+    ):
+        if content.get(key) is not None:
             normalized[key] = content[key]
     return normalized
 
@@ -149,17 +164,12 @@ def _carry_top_level_fields(
 
     Structured events keep their payload in ``content`` only; the top level
     carries envelope metadata. The full-passthrough branch instead lifts every
-    raw field, covering the two passthrough event-type sets -- see
-    ``_STRUCTURAL_PASSTHROUGH_EVENT_TYPES`` and
-    ``_FRONTEND_COMPAT_PASSTHROUGH_EVENT_TYPES`` for why each is exempt -- plus
-    any event whose ``content`` is non-dict (tool_progress, stream_closed,
-    unknown passthrough), which keeps its structured identifiers at the top
-    level.
+    raw field for response / thought plus any event whose ``content`` is
+    non-dict (tool_progress, stream_closed, unknown passthrough), which keeps
+    its structured identifiers at the top level.
     """
-    if (
-        event_type in _STRUCTURAL_PASSTHROUGH_EVENT_TYPES
-        or event_type in _FRONTEND_COMPAT_PASSTHROUGH_EVENT_TYPES
-        or not isinstance(content, dict)
+    if event_type in _STRUCTURAL_PASSTHROUGH_EVENT_TYPES or not isinstance(
+        content, dict
     ):
         for key, value in raw.items():
             if key in _TOP_LEVEL_DENYLIST:
@@ -187,10 +197,10 @@ def build_public_sse_payload_from_bus_dump(
 
     顶层键顺序与 ``chat_events_table.get_session_events`` 回放一致：
     source, type, content, session_id, task_id, invocation_id（若有）, spawn_id。
-    结构化事件（tool_result / error / mcp_* 等）的业务字段只放在 ``content`` 内，
-    顶层仅捎带信封元数据（timestamp）；response / thought、run_result / finish
-    以及 content 非 dict 的事件（tool_progress 等）保持全量上提，
-    详见 ``_carry_top_level_fields``。
+    结构化事件（tool_result / run_result / error / mcp_* 等）的业务字段只放在
+    ``content`` 内，顶层仅捎带信封元数据（timestamp）；response / thought 以及
+    content 非 dict 的事件（tool_progress 等）保持全量上提，详见
+    ``_carry_top_level_fields``。
     """
     event_type = str(raw.get('type', ''))
     content = _public_content_for_event(event_type, raw)
@@ -223,7 +233,7 @@ def _public_content_for_event(
         return _response_public_content(payload)
 
     if event_type == 'thought':
-        return _thought_public_content(payload)
+        return payload.get('content')
 
     if event_type == 'tool_call':
         call_id = payload.get('call_id')
@@ -299,12 +309,15 @@ def _public_content_for_event(
         ):
             if key in payload and payload.get(key) is not None:
                 content[key] = payload[key]
+        for key in ('turn_usage', 'total_usage'):
+            if payload.get(key):
+                content[key] = payload[key]
         return content
 
     if event_type == 'response_figures':
         return {'figures': payload.get('figures') or []}
 
-    if event_type in _FRONTEND_COMPAT_PASSTHROUGH_EVENT_TYPES:
+    if event_type in _TERMINAL_EVENT_TYPES:
         content = {
             'content': payload.get('final_content') or '',
             'status': payload.get('status'),
@@ -320,7 +333,6 @@ def _public_content_for_event(
         # projected into the public payload: it is consumed only by the
         # in-process drain (eval / devshell) via the event object, never by the
         # frontend, so keeping it here would bloat SSE / persistence.
-        _copy_nonempty_keys(content, payload, _MODEL_IDENTITY_KEYS)
         return content
 
     if event_type == 'assistant_state':

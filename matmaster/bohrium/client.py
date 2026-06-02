@@ -209,13 +209,13 @@ def get_file_token(
     ctx: BohriumContext,
     *,
     file_path: str,
-    bohr_job_id: str,
+    job_id: str,
 ) -> tuple[str, str, str]:
     result = _post(
         ctx.credentials.base_url,
         "/openapi/v1/sandbox/job/file/token",
         ctx.credentials.access_key,
-        {"filePath": file_path, "jobId": bohr_job_id},
+        {"filePath": file_path, "jobId": job_id},
     )
     data = result.get("data", {})
     return data.get("host", ""), data.get("path", ""), data.get("token", "")

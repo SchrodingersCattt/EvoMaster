@@ -14,6 +14,7 @@ from typing import Any
 
 from matmaster.bohrium.runtime import try_attach_local_bohrium_runtime_from_env
 from matmaster.config.loader import load_exp_config, load_llm_config
+from matmaster.context.sources.turn_input import TurnInput
 from matmaster.core.exp import Exp
 from matmaster.core.playground import ExecutionEnvironment
 from matmaster.core.run_context import AgentRunContext, AgentRunRequest
@@ -21,6 +22,7 @@ from matmaster.providers.llm_factory import build_provider
 from matmaster.sessions.local import LocalSession
 from matmaster.types.messages import AssistantMessage
 from matmaster.types.run_metadata import RunMetadata
+from matmaster.types.runtime import AgentKernelTurnRequest
 
 from .schemas import ModeLiteral
 
@@ -137,10 +139,10 @@ def _patch_bohrium_submit(runtime: Any, error_message: str) -> None:
     catalog = runtime.kernel_runtime.resources.tool_catalog
     if catalog is None:
         return
-    registry = getattr(catalog, '_registry', None)
+    registry = getattr(catalog, "_registry", None)
     if registry is None:
         return
-    tool = registry.get_raw('Bohrium')
+    tool = registry.get_raw("Bohrium")
     if tool is None or not isinstance(tool, BohriumTool):
         return
     tool._submit = lambda args: ToolResult(
@@ -212,7 +214,13 @@ def _run_mat_task_once(
             if inject_bohrium_failure:
                 _patch_bohrium_submit(runtime, inject_bohrium_failure)
             return await drain_run_stream(
-                runtime.kernel.run_stream(runtime.kernel_runtime, prompt)
+                runtime.kernel.run_stream(
+                    runtime.kernel_runtime,
+                    AgentKernelTurnRequest(
+                        user_message_content=prompt,
+                        turn_input=TurnInput.from_values(user_text=prompt),
+                    ),
+                )
             )
         finally:
             await exp._run_cleanup_callbacks()

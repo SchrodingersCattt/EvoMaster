@@ -406,15 +406,42 @@ def _extract_cache_write_tokens(usage: Any) -> int:
         return val
     cache_creation = _dump_usage_detail(getattr(usage, "cache_creation", None))
     if isinstance(cache_creation, dict):
-        for key in (
-            "ephemeral_5m_input_tokens",
-            "ephemeral_1h_input_tokens",
-            "input_tokens",
-        ):
-            val = cache_creation.get(key)
-            if isinstance(val, int) and val > 0:
-                return val
+        total = 0
+        for value in cache_creation.values():
+            if isinstance(value, int) and value > 0:
+                total += value
+        return total
     return 0
+
+
+def _extract_reasoning_tokens(usage: Any) -> int:
+    details = getattr(usage, "completion_tokens_details", None)
+    if details is not None:
+        val = getattr(details, "reasoning_tokens", None)
+        if isinstance(val, int) and val > 0:
+            return val
+    val = getattr(usage, "reasoning_tokens", None)
+    if isinstance(val, int) and val > 0:
+        return val
+    return 0
+
+
+def _openai_usage_to_scalar_dict(usage: Any) -> dict[str, int]:
+    out = {
+        "prompt_tokens": usage.prompt_tokens,
+        "completion_tokens": usage.completion_tokens,
+        "total_tokens": usage.total_tokens,
+    }
+    cache_read = _extract_cached_tokens(usage)
+    if cache_read:
+        out["cache_read_tokens"] = cache_read
+    cache_write = _extract_cache_write_tokens(usage)
+    if cache_write:
+        out["cache_write_tokens"] = cache_write
+    reasoning = _extract_reasoning_tokens(usage)
+    if reasoning:
+        out["reasoning_tokens"] = reasoning
+    return out
 
 
 def _is_non_retryable_tool_protocol_bad_request(err_str: str) -> bool:
@@ -705,17 +732,7 @@ class OpenAIProvider:
         usage: dict[str, int] = {}
         usage_vendor: dict[str, Any] | None = None
         if response.usage:
-            usage = {
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens,
-            }
-            cache_read = _extract_cached_tokens(response.usage)
-            if cache_read:
-                usage["cache_read_tokens"] = cache_read
-            cache_write = _extract_cache_write_tokens(response.usage)
-            if cache_write:
-                usage["cache_write_tokens"] = cache_write
+            usage = _openai_usage_to_scalar_dict(response.usage)
             usage_vendor = _openai_usage_to_vendor_dict(response.usage)
 
         return LLMResponse(
@@ -778,17 +795,7 @@ class OpenAIProvider:
                     and isinstance(getattr(usage, "completion_tokens", None), int)
                     and isinstance(getattr(usage, "total_tokens", None), int)
                 ):
-                    last_chunk_usage = {
-                        "prompt_tokens": usage.prompt_tokens,
-                        "completion_tokens": usage.completion_tokens,
-                        "total_tokens": usage.total_tokens,
-                    }
-                    cache_read = _extract_cached_tokens(usage)
-                    if cache_read:
-                        last_chunk_usage["cache_read_tokens"] = cache_read
-                    cache_write = _extract_cache_write_tokens(usage)
-                    if cache_write:
-                        last_chunk_usage["cache_write_tokens"] = cache_write
+                    last_chunk_usage = _openai_usage_to_scalar_dict(usage)
                     last_chunk_usage_vendor = _openai_usage_to_vendor_dict(usage)
                 if not chunk.choices:
                     continue

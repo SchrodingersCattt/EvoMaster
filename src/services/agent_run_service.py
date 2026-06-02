@@ -17,14 +17,9 @@ from pathlib import Path
 from typing import Any
 
 from matmaster.config.loader import load_agents_general_llm
-from matmaster.context.assembly import ContextAssemblyIntent, TurnAssemblyRequest
-from matmaster.context.ports import SkillResolver
-from matmaster.context.scanner import scan_skill_hits
-from matmaster.context.sections import ContextView
 from matmaster.context.sources.turn_input import TurnInput
 from matmaster.core.playground import PlaygroundManager
 from matmaster.core.run_context import AgentRunContext, AgentRunRequest
-from matmaster.core.runtime_context_assembly import empty_skill_resolver
 from matmaster.integration.event_payloads import _normalize_public_source
 from matmaster.integration.fanout import RunEventFanout
 from matmaster.integration.persistence_handler import PersistenceHandler
@@ -35,7 +30,6 @@ from matmaster.types.events import (
     CancelledEvent,
     ErrorEvent,
     RunResultEvent,
-    SkillHitEvent,
     StreamClosedEvent,
     ToolResultEvent,
 )
@@ -43,28 +37,17 @@ from matmaster.types.run_metadata import RunMetadata
 from matmaster.types.runtime_ports import AgentRunPorts, FigureUploadPort
 from src.dao.chat_events_table import get_chat_events_table
 from src.dao.redis_dao import get_redis_dao
-from src.services.agent_run_bohrium_stage import (
-    _build_figure_upload_config,
-    run_bohrium_stage,
-)
+from src.services.agent_run_bohrium_stage import run_bohrium_stage
 from src.services.agent_run_history_wiring import build_history_wiring
 from src.services.billing_llm_provider import BillingLLMProvider
 from src.services.billing_service import BillingRunContext, get_billing_service
-from src.services.context_assembly_factory import build_context_assembler
-from src.services.context_turn_intent import resolve_turn_context_intent
+from src.services.figure_coordinator import FigureCoordinator
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.image_input_service import get_image_input_service
-from src.services.response_figures_service import ResponseFiguresAccumulator
-from src.services.session_event_codec import decode_session_events
 from src.services.sessions_service import get_sessions_service
-from src.services.skill_registry_factory import build_skill_registry
-from src.services.skill_resolver import SkillRegistryResolver
 from src.services.stream_reply_queue import RedisReplyQueue
 from src.services.user_turn_context_service import (
-    DEFAULT_TURN_TRANSFORM,
-    USER_CONTEXT_RENDER_VERSION,
-    USER_TURN_CONTEXT_SCHEMA_VERSION,
-    write_user_turn_context_event,
+    write_user_turn_context_event as _persist_utc_event,
 )
 
 logger = logging.getLogger(__name__)
@@ -111,68 +94,28 @@ def _invalid_finish_error_message(finish_detail: Any) -> str:
     return _INVALID_FINISH_MESSAGES.get(kind, _INVALID_FINISH_DEFAULT)
 
 
-def _sum_vendor_field(vendor_by_turn: list[dict[str, Any]], *paths: tuple) -> int:
-    """跨各 turn 的 provider-native usage 快照按多组 key 路径求和。
-
-    不同 provider 的 usage 字段不一致（OpenAI 嵌在 ``*_tokens_details`` 里，
-    Anthropic 用顶层 ``cache_*_input_tokens``）。每个 path 是从外到内的 key 序列，
-    命中第一个非空 path 即累加，避免同一 turn 重复计数。
-    """
-    total = 0
-    for vendor in vendor_by_turn:
-        if not isinstance(vendor, dict):
-            continue
-        for path in paths:
-            cur: Any = vendor
-            for key in path:
-                if isinstance(cur, dict):
-                    cur = cur.get(key)
-                else:
-                    cur = None
-                    break
-            if isinstance(cur, int) and cur > 0:
-                total += cur
-                break
-    return total
-
-
 def _build_run_usage_summary(event: RunResultEvent) -> dict[str, Any] | None:
     """从 ``RunResultEvent`` 提取 token 消耗摘要，供飞书通知等审计展示。
 
-    scalar usage 只统计 root kernel 通过 retry gate 的 accepted LLM turns（见
-    token usage events 设计文档），不含 retry 丢弃的 attempt、context compaction
-    summary LLM、sub-agent 内部消耗，因此不等于账单成本。无任何 usage 信息时返回
-    ``None``。
+    ``event.usage`` 是 run-level aggregate scalar usage，包含 root accepted
+    LLM turns、Agent subagent usage 和 compaction summary usage。``usage_vendor_by_turn``
+    仍只表示 root accepted turns 的 provider-native 快照，不参与 aggregate cache /
+    reasoning 补账。无任何 usage 信息时返回 ``None``。
     """
     usage = dict(event.usage or {})
-    vendor_by_turn = [
-        dict(item)
-        for item in (event.usage_vendor_by_turn or [])
-        if isinstance(item, dict)
-    ]
     last_turn_usage: dict[str, int] = {}
     if event.finish_detail is not None:
         last_turn_usage = dict(event.finish_detail.last_turn_usage or {})
 
-    if not usage and not last_turn_usage and not vendor_by_turn:
+    if not usage and not last_turn_usage:
         return None
 
     prompt = int(usage.get('prompt_tokens') or 0)
     completion = int(usage.get('completion_tokens') or 0)
     total = int(usage.get('total_tokens') or 0) or (prompt + completion)
     cache_read = int(usage.get('cache_read_tokens') or 0)
-    # scalar 未带缓存命中时，从 vendor-by-turn 兜底聚合
-    # （OpenAI: prompt_tokens_details.cached_tokens；Anthropic: cache_read_input_tokens）
-    if cache_read == 0 and vendor_by_turn:
-        cache_read = _sum_vendor_field(
-            vendor_by_turn,
-            ('prompt_tokens_details', 'cached_tokens'),
-            ('cache_read_input_tokens',),
-        )
-    cache_write = _sum_vendor_field(vendor_by_turn, ('cache_creation_input_tokens',))
-    reasoning = _sum_vendor_field(
-        vendor_by_turn, ('completion_tokens_details', 'reasoning_tokens')
-    )
+    cache_write = int(usage.get('cache_write_tokens') or 0)
+    reasoning = int(usage.get('reasoning_tokens') or 0)
 
     summary: dict[str, Any] = {
         'num_turns': int(event.num_turns or 0),
@@ -228,93 +171,42 @@ async def _emit_error_and_close_fanout(
     )
 
 
+def _build_user_turn_context_writer(
+    *,
+    events_table: Any,
+    session_id: str,
+):
+    async def _writer(request) -> None:
+        payload = {
+            "schema_version": request.schema_version,
+            "kind": request.kind,
+            "message": request.message.model_dump(mode="json"),
+            "user_instructions_hash": request.user_instructions_hash,
+            "transform": request.transform,
+            "render_version": request.render_version,
+        }
+        await _persist_utc_event(
+            events_table=events_table,
+            session_id=session_id,
+            task_id=request.task_id,
+            invocation_id=request.invocation_id,
+            spawn_id=request.spawn_id,
+            payload=payload,
+        )
+
+    return _writer
+
+
 class AgentRunService:
     """Agent execution service: pipeline orchestration via matmaster components."""
 
     def __init__(self, sessions_service=None):
         self._sessions_service = sessions_service or get_sessions_service()
         self._pg_manager = PlaygroundManager(_project_root)
-        # Hot cache: session_id -> frozenset of skill names already activated.
-        # The authoritative source is DB skill_hit events; this dict only
-        # avoids re-scanning the DB on every turn. Populated lazily on cache miss.
-        self._active_skills: dict[str, frozenset[str]] = {}
 
     def init_playground_sync(self) -> None:
         """Validate configs at startup -- delegates to PlaygroundManager."""
         self._pg_manager.validate_startup()
-
-    def _build_skill_resolver(
-        self,
-        exp_config: Any,
-        session: Any | None,
-    ) -> SkillResolver:
-        skills_cfg = getattr(exp_config, "skills", None)
-        if skills_cfg is None or not getattr(skills_cfg, "enabled", False):
-            return empty_skill_resolver
-
-        roots_raw = getattr(skills_cfg, "skills_root", None)
-        if isinstance(roots_raw, (list, tuple)):
-            config_roots: tuple[str | Path, ...] = tuple(
-                root for root in roots_raw if isinstance(root, (str, Path)) and root
-            )
-        elif isinstance(roots_raw, (str, Path)) and roots_raw:
-            config_roots = (roots_raw,)
-        else:
-            config_roots = ()
-
-        disabled_raw = getattr(skills_cfg, "disabled_skill_names", ())
-        config_disabled = (
-            tuple(disabled_raw)
-            if isinstance(disabled_raw, (list, tuple, set, frozenset))
-            else ()
-        )
-        try:
-            registry = build_skill_registry(
-                config_roots=config_roots,
-                session=session,
-                config_disabled=config_disabled,
-            )
-        except Exception:
-            logger.warning(
-                "active skill resolver: building SkillRegistry failed",
-                exc_info=True,
-            )
-            registry = None
-        return SkillRegistryResolver(registry)
-
-    def _resolve_active_skill_names(
-        self,
-        session_id: str,
-        events_table: Any,
-        *,
-        until_event_id: int | None = None,
-    ) -> frozenset[str]:
-        cached = self._active_skills.get(session_id)
-        if cached is not None:
-            return cached
-
-        raw_events: list[dict] = []
-        if events_table is not None:
-            try:
-                raw_events = events_table.get_session_events(
-                    session_id,
-                    limit=_DIALOG_HISTORY_MAX_EVENTS,
-                )
-            except Exception:
-                logger.warning(
-                    "active skill rehydrate: get_session_events failed for session_id=%s",
-                    session_id,
-                    exc_info=True,
-                )
-
-        events = decode_session_events(raw_events)
-        if until_event_id is not None:
-            events = tuple(event for event in events if event.id <= until_event_id)
-        names = frozenset(
-            record.skill_name for record in scan_skill_hits(events) if record.skill_name
-        )
-        self._active_skills[session_id] = names
-        return names
 
     async def run_agent(
         self,
@@ -448,29 +340,18 @@ class AgentRunService:
             llm_config = load_llm_config(_project_root / "config" / "llm_config.yaml")
 
             agent_default_llm = _get_agent_default_llm()
+            image_service = get_image_input_service()
             top_level_images = tuple(images or ())
-            turn_input_images = turn_input.images if turn_input is not None else ()
-            current_images = turn_input_images or top_level_images
-            if (
-                turn_input_images
-                and top_level_images
-                and turn_input_images != top_level_images
-            ):
-                logger.warning(
-                    "run_agent image inputs differ; using TurnInput images "
-                    "session_id=%s task_id=%s",
-                    session_id,
-                    task_id,
-                )
-            image_detail = None
-            if current_images:
-                selected_profile = get_image_input_service().ensure_vision_supported(
-                    llm_config=llm_config,
-                    llm_override=llm_override,
-                    model_override=model_override,
-                    default_profile_key=agent_default_llm,
-                )
-                image_detail = selected_profile.vision_detail
+            current_images = image_service.select_current_images(
+                turn_input, top_level_images
+            )
+            image_detail = image_service.resolve_image_detail(
+                llm_config=llm_config,
+                images=current_images,
+                llm_override=llm_override,
+                model_override=model_override,
+                default_profile_key=agent_default_llm,
+            )
 
             llm_bundle = build_provider_bundle(
                 llm_config,
@@ -507,74 +388,12 @@ class AgentRunService:
                 if events_table is not None
                 else None
             )
-            figure_accumulator = ResponseFiguresAccumulator()
-            figure_dispatch_lock = asyncio.Lock()
-            figure_upload_config = _build_figure_upload_config(
+            figure_coordinator = FigureCoordinator(
+                fanout=fanout,
                 session_id=session_id,
                 task_id=task_id,
             )
-
-            async def _dispatch_response_figures_if_dirty_unlocked(
-                reason: str,
-            ) -> None:
-                response_figures_event = (
-                    figure_accumulator.build_snapshot_event_if_dirty()
-                )
-                if response_figures_event is None:
-                    return
-                try:
-                    await fanout.flush_persistence_barrier()
-                    dispatched = await fanout.dispatch_and_wait_persistence(
-                        response_figures_event
-                    )
-                except Exception:
-                    logger.warning(
-                        "response_figures dispatch failed reason=%s",
-                        reason,
-                        exc_info=True,
-                    )
-                    return
-
-                if dispatched:
-                    figure_accumulator.mark_snapshot_emitted()
-                else:
-                    logger.warning(
-                        "response_figures dispatch reported handler failure reason=%s",
-                        reason,
-                    )
-
-            async def _dispatch_response_figures_if_dirty(reason: str) -> None:
-                async with figure_dispatch_lock:
-                    await _dispatch_response_figures_if_dirty_unlocked(reason)
-
-            async def _record_tool_result_figures_and_dispatch_if_dirty(
-                event: ToolResultEvent,
-                *,
-                include_spawned: bool,
-                reason: str,
-            ) -> None:
-                async with figure_dispatch_lock:
-                    figure_accumulator.add_tool_result(
-                        event,
-                        include_spawned=include_spawned,
-                    )
-                    await _dispatch_response_figures_if_dirty_unlocked(reason)
-
-            async def _child_event_sink(event: BusEvent) -> None:
-                try:
-                    await fanout.dispatch(event)
-                    if isinstance(event, ToolResultEvent):
-                        await _record_tool_result_figures_and_dispatch_if_dirty(
-                            event,
-                            include_spawned=True,
-                            reason="child_tool_result",
-                        )
-                except Exception:
-                    logger.warning(
-                        "child event sink failed for event type=%s",
-                        getattr(event, "type", "?"),
-                        exc_info=True,
-                    )
+            figure_upload_config = figure_coordinator.upload_config
 
             def _checkpoint_sink_factory(*, spawn_id: str | None = None):
                 if checkpoint_service is None:
@@ -624,112 +443,13 @@ class AgentRunService:
             )
             from src.services.interrupt_service import RedisInterruptChecker
 
-            # -- Stage 5b: Phase 2C user_turn_context cutover via ContextAssembler --
-            skill_resolver = self._build_skill_resolver(
-                exp_config,
-                session=environment.session,
+            # -- Stage 5b: Turn input enrichment --
+            turn_input = image_service.enrich_turn_input_images(
+                turn_input=turn_input,
+                user_prompt=user_prompt,
+                top_level_images=top_level_images,
+                image_detail=image_detail,
             )
-            context_assembler, assembly_ports = build_context_assembler(
-                events_table=events_table,
-                skill_resolver=skill_resolver,
-            )
-            session_events_port = assembly_ports.session_events
-
-            try:
-                intent = await resolve_turn_context_intent(
-                    instructions_hash=user_instructions.hash,
-                    session_id=session_id,
-                    spawn_id=None,
-                    events_port=session_events_port,
-                )
-            except Exception:
-                logger.warning(
-                    "resolve_turn_context_intent failed; treating current turn as anchor",
-                    exc_info=True,
-                )
-                intent = ContextAssemblyIntent.ANCHOR_TURN
-
-            pre_turn_history_event_id = (
-                turn_input.pre_turn_history_event_id if turn_input is not None else 0
-            )
-            if turn_input is None:
-                turn_input = TurnInput.from_values(
-                    user_text=user_prompt,
-                    files=(),
-                    images=current_images,
-                    image_detail=image_detail if current_images else None,
-                    workspace_paths=(),
-                    pre_turn_history_event_id=pre_turn_history_event_id,
-                )
-            elif current_images:
-                turn_input = TurnInput.from_values(
-                    user_text=turn_input.user_text,
-                    files=turn_input.files,
-                    images=current_images,
-                    image_detail=(
-                        image_detail
-                        if image_detail is not None
-                        else turn_input.attachments.image_detail
-                    ),
-                    workspace_paths=turn_input.workspace_paths,
-                    pre_turn_history_event_id=turn_input.pre_turn_history_event_id,
-                )
-
-            assembly = await context_assembler.assemble_turn(
-                intent=intent,
-                request=TurnAssemblyRequest(
-                    session_id=session_id,
-                    spawn_id=None,
-                    turn_input=turn_input,
-                    user_instructions=user_instructions,
-                ),
-            )
-            rendered_message = assembly.user_turn_context.to_message(
-                ContextView.RUNTIME
-            )
-
-            user_turn_payload = {
-                "schema_version": USER_TURN_CONTEXT_SCHEMA_VERSION,
-                "kind": "anchor" if intent.is_anchor_turn else "continuation",
-                "message": rendered_message.model_dump(mode="json"),
-                "user_instructions_hash": (
-                    user_instructions.hash if intent.is_anchor_turn else None
-                ),
-                "transform": DEFAULT_TURN_TRANSFORM,
-                "render_version": USER_CONTEXT_RENDER_VERSION,
-            }
-            try:
-                await write_user_turn_context_event(
-                    events_table=events_table,
-                    session_id=session_id,
-                    task_id=task_id,
-                    invocation_id=invocation_id,
-                    spawn_id=None,
-                    payload=user_turn_payload,
-                )
-            except Exception as exc:
-                logger.exception(
-                    "user_turn_context write failed; aborting turn "
-                    "session_id=%s invocation_id=%s",
-                    session_id,
-                    invocation_id,
-                )
-                return ((False, str(exc)), _elapsed_ms(), None)
-
-            user_prompt = rendered_message.content
-
-            # Resolve active skills (hot cache + DB rehydrate). Must run
-            # AFTER history is available so the snapshot frozen below reflects
-            # any skills recovered from past turns.
-            active_skills = self._resolve_active_skill_names(
-                session_id,
-                events_table,
-            )
-
-            def _remember_skill_hit(skill_name: str) -> None:
-                if skill_name:
-                    current = self._active_skills.get(session_id, frozenset())
-                    self._active_skills[session_id] = frozenset((*current, skill_name))
 
             # -- Compose the Exp input from the prepared environment and
             # service-owned runtime request.
@@ -741,16 +461,21 @@ class AgentRunService:
                     llm_model=llm_bundle.model,
                     llm_model_profile=llm_bundle.model_profile,
                     llm_model_route=llm_bundle.model_route,
+                    invocation_id=invocation_id,
                     interaction_bridge=bridge,
                     turn_input=turn_input,
                     user_instructions=user_instructions,
-                    active_skills=frozenset(active_skills),
+                    active_skills=frozenset(),
                     bohrium_rebuild_events=bohrium_rebuild_events,
                     ports=AgentRunPorts(
-                        child_event_forward_sink=_child_event_sink,
+                        child_event_forward_sink=figure_coordinator.child_event_sink,
                         compaction=wiring.compaction,
                         figure_upload=FigureUploadPort(config=figure_upload_config),
                         interrupt_checker=RedisInterruptChecker(session_id),
+                        user_turn_context_writer=_build_user_turn_context_writer(
+                            events_table=events_table,
+                            session_id=session_id,
+                        ),
                     ),
                 ),
             )
@@ -760,10 +485,8 @@ class AgentRunService:
             async with aclosing(
                 exp.run_stream(
                     agent_run_ctx,
-                    user_prompt,
                     history=history,
                     cancel_token=cancel_token,
-                    skill_resolver=skill_resolver,
                 )
             ) as stream:
                 async for event in stream:
@@ -772,16 +495,13 @@ class AgentRunService:
                         if event.source != normalized:
                             event = event.model_copy(update={"source": normalized})
 
-                    if isinstance(event, SkillHitEvent):
-                        _remember_skill_hit(event.skill_name)
-
                     if isinstance(event, RunResultEvent) and event.spawn_id is None:
-                        await _dispatch_response_figures_if_dirty("final_flush")
+                        await figure_coordinator.flush_if_dirty("final_flush")
 
                     await fanout.dispatch(event)
 
                     if isinstance(event, ToolResultEvent):
-                        await _record_tool_result_figures_and_dispatch_if_dirty(
+                        await figure_coordinator.record_tool_result(
                             event,
                             include_spawned=False,
                             reason="tool_result",

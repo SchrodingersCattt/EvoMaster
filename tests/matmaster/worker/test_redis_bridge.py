@@ -76,6 +76,8 @@ class TestAgentWorkerCancellationIntegration:
     def test_run_worker_loop_passes_cancel_token_and_cleans_up_controller(self) -> None:
         from src.worker import agent_worker as mod
 
+        removed_context_key = "current_input" "_context"
+        removed_boundary_key = "pre_query" "_scope_event_id"
         payload = {
             "session_id": "sid-1",
             "task_id": "task-1",
@@ -85,6 +87,10 @@ class TestAgentWorkerCancellationIntegration:
             "remote_workdir": "/share/case",
             "session_directory_source": "request",
             "bohrium_required": True,
+            removed_context_key: {
+                "user_text": "legacy only",
+                removed_boundary_key: 99,
+            },
         }
         redis_dao = MagicMock()
         redis_dao.create_client.return_value = True
@@ -156,6 +162,7 @@ class TestAgentWorkerCancellationIntegration:
         log_context.clear.assert_called()
         assert observed["remote_workdir"] == "/share/case"
         assert observed["bohrium_required"] is True
+        assert observed["turn_input"] is None
 
     def test_main_sigterm_handler_drains_without_cancelling_active_controller(
         self,

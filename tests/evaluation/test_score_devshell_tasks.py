@@ -42,7 +42,7 @@ def _write_summary(
     ws: Path, *, status: str = "completed", final_content: str = "Done."
 ) -> None:
     summary = {
-        "model": "cds/GPT-5.4",
+        "model": "cds/GPT-5.5",
         "profile_key": "devshell",
         "status": status,
         "reason": "natural" if status == "completed" else "error",

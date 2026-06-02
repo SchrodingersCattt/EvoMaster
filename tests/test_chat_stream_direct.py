@@ -599,7 +599,8 @@ async def test_sse_frames_match_frontend_contract_without_mysql():
         'error': None,
     }
     assert frames[6]['content'] == 'done'
-    assert frames[7]['final_content'] == 'done'
+    assert frames[7]['content']['content'] == 'done'
+    assert 'final_content' not in frames[7]
     assert frames[8]['task_completed'] is True
     assert frames[8]['end_reason'] == 'natural'
 
@@ -667,7 +668,7 @@ def test_generate_send_stream_normalizes_replayed_history_source():
     events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
 
 
-def test_generate_send_stream_replay_prefers_response_over_run_result():
+def test_generate_send_stream_replay_prefers_run_result_over_response():
     from src.services.stream_service import ChatStreamService, SendStreamContext
 
     sessions_service = MagicMock()
@@ -689,7 +690,10 @@ def test_generate_send_stream_replay_prefers_response_over_run_result():
         {
             'source': 'MatMaster',
             'type': 'response',
-            'content': 'old answer',
+            'content': {
+                'content': 'old answer',
+                'model': 'provider/private-model',
+            },
             'session_id': 'sess-1',
             'task_id': 'task-0',
         },
@@ -745,10 +749,11 @@ def test_generate_send_stream_replay_prefers_response_over_run_result():
     assert [frame['type'] for frame in frames] == [
         'status',
         'query',
-        'response',
+        'run_result',
         'query',
     ]
-    assert frames[2]['content'] == 'old answer'
+    assert frames[2]['final_content'] == 'old answer'
+    assert frames[2]['status'] == 'completed'
     assert frames[3]['content'] == 'new question'
     events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
 
@@ -809,6 +814,11 @@ def test_generate_send_stream_subscribes_before_enqueue():
     def _lpush_agent_run_job(_job: dict) -> bool:
         call_order.append('lpush')
         assert subscribe_ready.is_set()
+        removed_context_key = 'current_input' '_context'
+        removed_boundary_key = 'pre_query' '_scope_event_id'
+        assert 'turn_input' in _job
+        assert removed_context_key not in _job
+        assert removed_boundary_key not in json.dumps(_job, ensure_ascii=False)
         published.put(
             {
                 'type': 'message',
@@ -874,116 +884,3 @@ def test_generate_send_stream_subscribes_before_enqueue():
 
     assert [frame['type'] for frame in frames] == ['status', 'query', 'stream_closed']
     assert call_order[:2] == ['subscribe', 'lpush']
-
-
-def test_generate_subscribe_stream_normalizes_replayed_history_source():
-    from src.services.stream_service import ChatStreamService
-
-    sessions_service = MagicMock()
-    sessions_service.get_session_status_payload.return_value = {
-        'source': 'System',
-        'type': 'status',
-        'content': '',
-        'session_id': 'sess-1',
-        'status': 'idle',
-    }
-    sessions_service.is_session_running_on_this_pod.return_value = False
-    sessions_service.is_session_run_on_another_pod.return_value = False
-
-    events_service = MagicMock()
-    events_service.get_session_events.return_value = [
-        {
-            'source': 'Planner',
-            'type': 'run_result',
-            'content': 'old answer',
-            'session_id': 'sess-1',
-            'task_id': 'task-0',
-        }
-    ]
-
-    service = ChatStreamService(
-        sessions_service=sessions_service,
-        events_service=events_service,
-        agent_run_service=MagicMock(),
-        deploy_state_service=MagicMock(),
-    )
-
-    async def _collect_frames() -> list[dict]:
-        gen = service.generate_subscribe_stream('sess-1')
-        try:
-            return [
-                _decode_sse_payload(await gen.__anext__()),
-                _decode_sse_payload(await gen.__anext__()),
-            ]
-        finally:
-            await gen.aclose()
-
-    with patch('src.services.stream_service.REDIS_URL', None):
-        frames = asyncio.run(_collect_frames())
-
-    history_frames = [frame for frame in frames if frame['type'] == 'run_result']
-    assert len(history_frames) == 1
-    assert history_frames[0]['source'] == 'MatMaster'
-    assert history_frames[0]['content'] == 'old answer'
-    events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
-
-
-def test_generate_subscribe_stream_replay_prefers_response_over_run_result():
-    from src.services.stream_service import ChatStreamService
-
-    sessions_service = MagicMock()
-    sessions_service.get_session_status_payload.return_value = {
-        'source': 'System',
-        'type': 'status',
-        'content': '',
-        'session_id': 'sess-1',
-        'status': 'idle',
-    }
-    sessions_service.is_session_running_on_this_pod.return_value = False
-    sessions_service.is_session_run_on_another_pod.return_value = False
-
-    events_service = MagicMock()
-    events_service.get_session_events.return_value = [
-        {
-            'source': 'MatMaster',
-            'type': 'response',
-            'content': 'old answer',
-            'session_id': 'sess-1',
-            'task_id': 'task-0',
-        },
-        {
-            'source': 'MatMaster',
-            'type': 'run_result',
-            'content': {
-                'content': 'old answer',
-                'status': 'completed',
-                'reason': 'natural',
-            },
-            'session_id': 'sess-1',
-            'task_id': 'task-0',
-        },
-    ]
-
-    service = ChatStreamService(
-        sessions_service=sessions_service,
-        events_service=events_service,
-        agent_run_service=MagicMock(),
-        deploy_state_service=MagicMock(),
-    )
-
-    async def _collect_frames() -> list[dict]:
-        frames = []
-        gen = service.generate_subscribe_stream('sess-1')
-        try:
-            async for frame in gen:
-                frames.append(_decode_sse_payload(frame))
-        finally:
-            await gen.aclose()
-        return frames
-
-    with patch('src.services.stream_service.REDIS_URL', None):
-        frames = asyncio.run(_collect_frames())
-
-    assert [frame['type'] for frame in frames] == ['status', 'response']
-    assert frames[1]['content'] == 'old answer'
-    events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)

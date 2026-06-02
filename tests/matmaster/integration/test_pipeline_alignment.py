@@ -17,6 +17,7 @@ from matmaster.core.exp import Exp
 from matmaster.core.playground import ExecutionEnvironment
 from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.types.messages import LLMResponse, StreamChunk
+from matmaster.types.runtime import AgentKernelTurnRequest
 from matmaster.types.tool_spec import ResourceClaim
 from matmaster.types.topology import ToolPlane
 
@@ -134,7 +135,10 @@ class TestEventSequenceAlignment:
         # Collect events from kernel.run_stream() generator
         kernel = AgentKernel()
         events = []
-        async for event in kernel.run_stream(runtime.kernel_runtime, "alignment test"):
+        async for event in kernel.run_stream(
+            runtime.kernel_runtime,
+            AgentKernelTurnRequest(user_message_content="alignment test"),
+        ):
             events.append(event)
 
         # Extract event type sequence

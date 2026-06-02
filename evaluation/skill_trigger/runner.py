@@ -25,14 +25,16 @@ import yaml
 
 from matmaster.bohrium.runtime import try_attach_local_bohrium_runtime_from_env
 from matmaster.config.loader import load_exp_config, load_llm_config
+from matmaster.context.sources.turn_input import TurnInput
 from matmaster.core.exp import Exp
-from matmaster.core.playground import PlaygroundContext
-from matmaster.core.stream_drain import DrainResult
+from matmaster.core.playground import ExecutionEnvironment
+from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.providers.llm_factory import build_provider
 from matmaster.sessions.local import LocalSession
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.events import ToolCallEvent
 from matmaster.types.run_metadata import RunMetadata
+from matmaster.types.stream_drain import DrainResult
 
 logger = logging.getLogger(__name__)
 
@@ -206,14 +208,19 @@ async def _run_single_repeat(
         session = LocalSession(workspace_path=workspace)
         session.open()
 
-        pg_ctx = PlaygroundContext(
-            workdir=workspace,
-            session_type="local",
-            cache_area=cache_area,
-            session=session,
-            llm_provider=llm_provider,
-            llm_config=llm_config,
-            metadata=RunMetadata(source="skill_trigger_eval", task_id=task_id),
+        pg_ctx = AgentRunContext(
+            environment=ExecutionEnvironment(
+                workdir=workspace,
+                session_type="local",
+                cache_area=cache_area,
+                session=session,
+                metadata=RunMetadata(source="skill_trigger_eval", task_id=task_id),
+            ),
+            request=AgentRunRequest(
+                llm_provider=llm_provider,
+                llm_config=llm_config,
+                turn_input=TurnInput.from_values(user_text=prompt),
+            ),
         )
         try_attach_local_bohrium_runtime_from_env(session)
 
