@@ -210,10 +210,11 @@ class DevshellAgentLoopCli:
         p.add_argument(
             "--fallback-model",
             type=str,
-            default="claude-opus-4-6",
+            default="global.anthropic.claude-opus-4-6-v1",
             metavar="ROUTE_KEY",
             help=(
-                "Forwarded to run_devshell_eval --fallback-model (default: claude-opus-4-6). "
+                "Forwarded to run_devshell_eval --fallback-model "
+                "(default: global.anthropic.claude-opus-4-6-v1). "
                 "Per-task retry once when logs indicate Bedrock/botocore transport failures; "
                 "set to the same value as --model to disable."
             ),

@@ -41,7 +41,7 @@ See matmaster-tools-server ``docs/apifox-evaluation-openapi.json`` for the schem
 Usage (from repository root)::
 
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --limit 3
-    # Defaults: --model bedrock-claude-opus, --fallback-model claude-opus-4-6
+    # Defaults: --model bedrock-claude-opus, --fallback-model global.anthropic.claude-opus-4-6-v1
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --slices structure_construction --limit 3
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --no-clean-results --limit 5   # keep previous results/ contents
     uv run python evaluation/scripts/devshell/run_devshell_eval.py --no-export-review --limit 3   # skip Markdown bundle
@@ -135,11 +135,12 @@ def main() -> int:
     parser.add_argument(
         "--fallback-model",
         type=str,
-        default="claude-opus-4-6",
+        default="global.anthropic.claude-opus-4-6-v1",
         metavar="ROUTE_KEY",
         help=(
             "Second LLM route for one retry per task when logs look like a Bedrock/botocore "
-            "transport error (read timeout, etc.). Default: claude-opus-4-6 (LiteLLM). "
+            "transport error (read timeout, etc.). Default: "
+            "global.anthropic.claude-opus-4-6-v1 (LiteLLM). "
             "Use the same value as --model to disable fallback retries. "
             "Each new task still starts with --model."
         ),
