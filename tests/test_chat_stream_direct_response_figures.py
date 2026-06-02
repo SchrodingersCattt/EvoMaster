@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 from tests.test_chat_stream_direct import _decode_sse_payload
 
 
-def test_generate_send_stream_replay_keeps_response_figures_and_run_result():
+def test_generate_send_stream_replay_keeps_response_figures_but_prefers_run_result():
     from src.services.stream_service import ChatStreamService, SendStreamContext
 
     sessions_service = MagicMock()
@@ -97,11 +97,12 @@ def test_generate_send_stream_replay_keeps_response_figures_and_run_result():
         'query',
     ]
     assert frames[1]['content']['figures'][0]['figure_id'] == 'band'
-    assert frames[2]['content']['content'] == 'old answer'
+    assert frames[2]['final_content'] == 'old answer'
+    assert frames[2]['status'] == 'completed'
     events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
 
 
-def test_generate_subscribe_stream_replay_keeps_response_figures_and_run_result():
+def test_generate_subscribe_stream_replay_keeps_response_figures_but_prefers_run_result():
     from src.services.stream_service import ChatStreamService
 
     sessions_service = MagicMock()
@@ -181,5 +182,6 @@ def test_generate_subscribe_stream_replay_keeps_response_figures_and_run_result(
         'run_result',
     ]
     assert frames[1]['content']['figures'][0]['figure_id'] == 'band'
-    assert frames[2]['content']['content'] == 'old answer'
+    assert frames[2]['final_content'] == 'old answer'
+    assert frames[2]['status'] == 'completed'
     events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)

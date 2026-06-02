@@ -750,9 +750,8 @@ def test_generate_send_stream_replay_prefers_run_result_over_response():
         'run_result',
         'query',
     ]
-    assert frames[2]['content']['content'] == 'old answer'
-    assert 'model' not in frames[2]
-    assert 'model' not in frames[2]['content']
+    assert frames[2]['final_content'] == 'old answer'
+    assert frames[2]['status'] == 'completed'
     assert frames[3]['content'] == 'new question'
     events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
 
@@ -999,7 +998,6 @@ def test_generate_subscribe_stream_replay_prefers_run_result_over_response():
         frames = asyncio.run(_collect_frames())
 
     assert [frame['type'] for frame in frames] == ['status', 'run_result']
-    assert frames[1]['content']['content'] == 'old answer'
-    assert 'model' not in frames[1]
-    assert 'model' not in frames[1]['content']
+    assert frames[1]['final_content'] == 'old answer'
+    assert frames[1]['status'] == 'completed'
     events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)

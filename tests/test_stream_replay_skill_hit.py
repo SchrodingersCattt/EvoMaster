@@ -90,8 +90,35 @@ def test_normalize_replayed_event_unpacks_structured_response_content() -> None:
     assert out["turn_index"] == 1
 
 
+def test_normalize_replayed_event_lifts_structured_run_result_content() -> None:
+    from src.services.stream_service import _normalize_replayed_event
+
+    out = _normalize_replayed_event(
+        {
+            "source": "agent",
+            "type": "run_result",
+            "content": {
+                "content": "answer",
+                "status": "completed",
+                "reason": "natural",
+                "usage": {"total_tokens": 20},
+                "model": "gpt-5-mini",
+            },
+            "session_id": "sess",
+            "task_id": "task",
+            "spawn_id": None,
+        }
+    )
+    assert out["source"] == "MatMaster"
+    assert out["final_content"] == "answer"
+    assert out["status"] == "completed"
+    assert out["reason"] == "natural"
+    assert out["usage"] == {"total_tokens": 20}
+    assert out["model"] == "gpt-5-mini"
+
+
 class TestReplayDedupeSpawnId:
-    """Replay dedupe must key by (task_id, spawn_id) so subagent response does not hide parent run_result."""
+    """Replay dedupe must key by (task_id, spawn_id) so child and parent terminal streams stay independent."""
 
     def test_child_response_does_not_suppress_parent_run_result(self) -> None:
         from src.services.stream_service import _dedupe_replayed_terminal_events
@@ -117,7 +144,7 @@ class TestReplayDedupeSpawnId:
         assert types == ["response", "run_result"]
 
     def test_same_spawn_stream_prefers_run_result_over_response(self) -> None:
-        """Within one (task_id, spawn_id) stream, terminal events hide response."""
+        """Within one (task_id, spawn_id) stream, run_result is the replayed terminal answer."""
         from src.services.stream_service import _dedupe_replayed_terminal_events
 
         events = [

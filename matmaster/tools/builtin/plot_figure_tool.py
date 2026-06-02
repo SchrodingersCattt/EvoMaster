@@ -51,8 +51,7 @@ class PlotFigure(BuiltinTool):
                 "type": "string",
                 "minLength": 1,
                 "description": (
-                    "Path to the image to attach. Absolute, or relative to "
-                    "the session workspace."
+                    "Absolute path to the figure to attach."
                 ),
             },
             "caption": {
@@ -84,11 +83,10 @@ class PlotFigure(BuiltinTool):
 
     def prompt(self, ctx: ToolDescriptionContext | None = None) -> str:
         return (
-            "Use PlotFigure for any figure that should appear in the final answer.\n\n"
-            "If you need to create the image now, provide command, output_path, and "
-            "caption. If the image already exists from Bash, Bohrium, a skill, or a "
-            "previous command, omit command and provide output_path and caption.\n\n"
-            "Bash output is never shown as an answer image by itself. To show an "
+            "Use PlotFigure for any figure.\n\n"
+            "If you need to create the figure now, provide command, output_path, and "
+            "caption. If the figure already exists, omit command and provide output_path and caption.\n\n"
+            "Bash output is never shown as an answer figure by itself. To show an "
             "existing image, publish it with PlotFigure. Write one figure per "
             "PlotFigure call; call it again for additional figures. After a "
             "successful call, reference the figure with the returned "

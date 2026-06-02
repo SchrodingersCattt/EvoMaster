@@ -7,7 +7,10 @@ callers that import these internals from ``stream_service``.
 
 from __future__ import annotations
 
-from matmaster.integration.event_payloads import normalize_response_sse_payload
+from matmaster.integration.event_payloads import (
+    normalize_replayed_terminal_payload,
+    normalize_response_sse_payload,
+)
 from matmaster.utils.event_source import normalize_event_source
 
 
@@ -43,6 +46,7 @@ def _normalize_replayed_event(event: dict) -> dict:
     """Normalize source labels in replayed history events to the public set."""
     replay_event = dict(event)
     replay_event['source'] = normalize_event_source(replay_event.get('source'))
+    replay_event = normalize_replayed_terminal_payload(replay_event)
     return normalize_response_sse_payload(replay_event)
 
 
@@ -106,32 +110,33 @@ def _replay_terminal_dedupe_key(event: dict) -> tuple[str, str | None] | None:
 
 
 def _dedupe_replayed_terminal_events(events: list[dict]) -> list[dict]:
-    """Hide replayed response when the same task has a terminal result.
+    """Hide replayed response when the same task has a replayable terminal event.
 
-    Live SSE may persist both final `response` content and a trailing
-    `run_result`. Replay should keep the terminal result as the canonical
-    completed-run event, and suppress response rows for the same
-    `(task_id, spawn_id)` stream to avoid duplicate final answers.
+    `run_result` is the canonical business terminal event, so replay should use
+    it as the final answer carrier when it exists. Persisted complete
+    `response` segments are hidden for the same `(task_id, spawn_id)` stream to
+    avoid duplicating the final answer after reconnect.
 
     `response_figures` is replayable answer metadata. It may appear before the
-    first response, between response chunks, or after a response. It is kept in
-    replay output and does not affect terminal dedupe.
+    hidden response, between response chunks, or before the terminal event. It is
+    kept in replay output because it does not duplicate answer text.
 
-    Dedupe is keyed by (task_id, spawn_id) so a parent `run_result` does not
-    suppress a sub-agent `response`.
+    Dedupe is keyed by (task_id, spawn_id) so a sub-agent `response` does not
+    get suppressed by the parent stream's `run_result`.
     """
     terminal_keys: set[tuple[str, str | None]] = set()
     for event in events:
-        event_type = str(event.get('type') or '')
-        if event_type != 'run_result':
-            continue
-        if not _should_emit_event_to_sse(event):
-            continue
         dedupe_key = _replay_terminal_dedupe_key(event)
-        if dedupe_key is not None:
+        event_type = str(event.get('type') or '')
+        if (
+            dedupe_key is not None
+            and event_type == 'run_result'
+            and _should_emit_event_to_sse(event)
+        ):
             terminal_keys.add(dedupe_key)
 
     deduped: list[dict] = []
+
     for event in events:
         dedupe_key = _replay_terminal_dedupe_key(event)
         event_type = str(event.get('type') or '')
@@ -139,6 +144,7 @@ def _dedupe_replayed_terminal_events(events: list[dict]) -> list[dict]:
             dedupe_key is not None
             and event_type == 'response'
             and dedupe_key in terminal_keys
+            and _should_emit_event_to_sse(event)
         ):
             continue
 

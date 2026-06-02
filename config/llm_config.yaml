@@ -96,6 +96,7 @@ profiles:
     base_url: "${LITELLM_PROXY_API_BASE}"
     reasoning_protocol: "openai_reasoning_effort"
     thinking_effort: "xhigh"
+    reasoning_summary: "detailed"
     timeout: 1200
     stream_timeout: 120
     stream_idle_timeout: 60
