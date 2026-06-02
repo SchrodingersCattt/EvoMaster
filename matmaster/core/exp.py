@@ -71,6 +71,7 @@ _EXTERNAL_EFFECT_TOOL_NAMES: frozenset[str] = frozenset(
         "WebFetch",
         "PaperSearch",
         "Bohrium",
+        "AttachFigure",
     }
 )
 
@@ -78,7 +79,7 @@ _EXTERNAL_EFFECT_TOOL_NAMES: frozenset[str] = frozenset(
 _SESSION_REQUIRING_TOOL_NAMES: frozenset[str] = frozenset(
     {
         "Bash",
-        "PlotFigure",
+        "AttachFigure",
         "Read",
         "Write",
         "Edit",
@@ -633,7 +634,7 @@ class Exp:
         in the list are registered, cutting prompt-token overhead.
 
         Tools are split into two categories:
-        - Session-requiring: BashTool, PlotFigure, ReadTool, WriteTool,
+        - Session-requiring: BashTool, AttachFigure, ReadTool, WriteTool,
           EditTool, GlobTool, GrepTool (need ctx.environment.session for
           execution)
         - Sessionless: TodoWriteTool, WebSearchTool, WebFetchTool
@@ -650,13 +651,13 @@ class Exp:
             return allowed is None or name in allowed
 
         from matmaster.tools.builtin import (
+            AttachFigure,
             AskQuestionTool,
             BashTool,
             BohriumTool,
             EditTool,
             GlobTool,
             GrepTool,
-            PlotFigure,
             ReadTool,
             TodoWriteTool,
             WebFetchTool,
@@ -677,7 +678,7 @@ class Exp:
         if has_session:
             session_tools = [
                 BashTool(session=env.session, workdir=exec_wd),
-                PlotFigure(session=env.session, workdir=exec_wd),
+                AttachFigure(session=env.session, workdir=exec_wd),
                 ReadTool(session=env.session, workdir=exec_wd),
                 WriteTool(session=env.session, workdir=exec_wd),
                 EditTool(session=env.session, workdir=exec_wd),

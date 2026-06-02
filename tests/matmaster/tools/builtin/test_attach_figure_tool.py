@@ -274,3 +274,21 @@ class TestAttachFigurePublish:
             make_ctx(make_upload_config(), tool_call_id=None),
         )
         assert result.status == "error"
+
+
+def test_exported_from_builtin_package():
+    from matmaster.tools.builtin import AttachFigure as Exported
+
+    assert Exported is AttachFigure
+
+
+def test_in_session_requiring_names():
+    from matmaster.core.exp import _SESSION_REQUIRING_TOOL_NAMES
+
+    assert "AttachFigure" in _SESSION_REQUIRING_TOOL_NAMES
+
+
+def test_in_external_effect_names():
+    from matmaster.core.exp import _EXTERNAL_EFFECT_TOOL_NAMES
+
+    assert "AttachFigure" in _EXTERNAL_EFFECT_TOOL_NAMES

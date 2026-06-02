@@ -535,7 +535,7 @@ class TestExpBuiltinTools:
         expected_native = {
             "AskQuestion",
             "Bash",
-            "PlotFigure",
+            "AttachFigure",
             "Read",
             "Write",
             "Edit",
@@ -566,9 +566,9 @@ class TestExpBuiltinTools:
         _, registry = self._build_registry(tmp_path)
         assert len(registry) == 12
 
-    def test_direct_and_planner_configs_include_plot_figure(self) -> None:
-        assert "PlotFigure" in load_exp_config("direct").tools.builtin
-        assert "PlotFigure" in load_exp_config("planner").tools.builtin
+    def test_direct_and_planner_configs_include_attach_figure(self) -> None:
+        assert "AttachFigure" in load_exp_config("direct").tools.builtin
+        assert "AttachFigure" in load_exp_config("planner").tools.builtin
 
     def test_web_search_is_native_builtin(self, tmp_path: Path) -> None:
         """WebSearchTool is registered as native builtin with CC name."""
