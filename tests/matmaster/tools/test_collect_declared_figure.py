@@ -1,4 +1,4 @@
-"""tests/matmaster/tools/test_collect_declared_figure.py"""
+"""Figure artifact path, id, validation, prepare, and publish tests."""
 
 from matmaster.tools.figure_artifacts import resolve_workspace_output_path
 
@@ -111,28 +111,6 @@ def test_validation_error_is_value_error_subclass():
 
 from unittest.mock import MagicMock
 
-from matmaster.tools.figure_artifacts import _link_figure_flat
-
-
-def test_link_figure_flat_builds_relative_symlink():
-    session = MagicMock()
-    session.exec_bash.return_value = {"exit_code": 0, "stdout": ""}
-    _link_figure_flat(
-        session=session,
-        flat_dir="/share/.matmaster/figures",
-        resolved_path="/share/results/band.png",
-        figure_id="band-abc123",
-    )
-    cmd = session.exec_bash.call_args.kwargs.get("command") or session.exec_bash.call_args.args[0]
-    assert "/share/.matmaster/figures/band-abc123.png" in cmd
-    # rel target from flat_dir to resolved_path
-    assert "../../results/band.png" in cmd
-
-
-from matmaster.tools.figure_artifacts import (
-    DeclaredFigureResult,
-    collect_declared_figure,
-)
 from matmaster.types.figures import FigureUploadConfig
 
 
@@ -152,110 +130,6 @@ def make_fig_session(*, exists=True, is_file=True, payload=_PNG):
     s.download.return_value = payload
     s.exec_bash.return_value = {"exit_code": 0, "stdout": ""}
     return s
-
-
-def test_collect_relative_success():
-    session = make_fig_session()
-    result = collect_declared_figure(
-        session=session,
-        workdir="/share",
-        output_path="band.png",
-        caption="Band structure",
-        tool_call_id="call-1",
-        upload_config=make_upload_config(),
-    )
-    assert isinstance(result, DeclaredFigureResult)
-    assert result.failure_reason is None
-    assert result.figure is not None
-    assert result.figure.caption == "Band structure"
-    assert result.figure.source_tool_call_id == "call-1"
-    assert result.figure.asset_url == "https://assets.test/u/fig.png"
-    assert result.figure_id.startswith("band-")
-    assert result.resolved_path == "/share/band.png"
-    assert result.figure.remote_path == "/share/band.png"
-
-
-def test_collect_escape_returns_outside_workspace():
-    result = collect_declared_figure(
-        session=make_fig_session(),
-        workdir="/share",
-        output_path="../escape.png",
-        caption="c",
-        tool_call_id="call-1",
-        upload_config=make_upload_config(),
-    )
-    assert result.figure is None
-    assert result.failure_reason == "outside_workspace"
-    assert result.guidance
-
-
-def test_collect_missing_file_returns_file_not_found():
-    result = collect_declared_figure(
-        session=make_fig_session(exists=False),
-        workdir="/share",
-        output_path="band.png",
-        caption="c",
-        tool_call_id="call-1",
-        upload_config=make_upload_config(),
-    )
-    assert result.failure_reason == "file_not_found"
-
-
-def test_collect_directory_returns_not_a_file():
-    result = collect_declared_figure(
-        session=make_fig_session(is_file=False),
-        workdir="/share",
-        output_path="plots",
-        caption="c",
-        tool_call_id="call-1",
-        upload_config=make_upload_config(),
-    )
-    assert result.failure_reason == "not_a_file"
-
-
-def test_collect_non_image_returns_classification():
-    result = collect_declared_figure(
-        session=make_fig_session(payload=b"not an image"),
-        workdir="/share",
-        output_path="band.png",
-        caption="c",
-        tool_call_id="call-1",
-        upload_config=make_upload_config(),
-    )
-    assert result.failure_reason == "image_header_mismatch"
-
-
-def test_collect_download_failure_classified():
-    session = make_fig_session()
-    session.download.side_effect = RuntimeError("transport down")
-    result = collect_declared_figure(
-        session=session,
-        workdir="/share",
-        output_path="band.png",
-        caption="c",
-        tool_call_id="call-1",
-        upload_config=make_upload_config(),
-    )
-    assert result.failure_reason == "download_failed"
-
-
-def test_collect_upload_failure_classified():
-    def boom(payload, key):
-        raise RuntimeError("upload down")
-
-    cfg = FigureUploadConfig(
-        session_id="s", task_id="t", asset_key_prefix="figs", upload_bytes=boom
-    )
-    result = collect_declared_figure(
-        session=make_fig_session(),
-        workdir="/share",
-        output_path="band.png",
-        caption="c",
-        tool_call_id="call-1",
-        upload_config=cfg,
-    )
-    assert result.failure_reason == "upload_failed"
-    assert result.figure_id is not None  # id is computed before upload
 
 
 # --------------------------------------------------------------------------- #
