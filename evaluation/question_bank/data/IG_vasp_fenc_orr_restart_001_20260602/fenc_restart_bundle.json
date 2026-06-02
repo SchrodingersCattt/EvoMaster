@@ -1,47 +1,74 @@
 {
-  "task": "FeN4/graphene ORR intermediates with VASP DFT+U",
+  "available_intermediate_directories": [
+    {
+      "files": [
+        "POSCAR",
+        "INCAR",
+        "OSZICAR",
+        "OUTCAR",
+        "CONTCAR"
+      ],
+      "last_observed_moment_muB": 2.0,
+      "system": "clean"
+    },
+    {
+      "files": [
+        "POSCAR",
+        "INCAR",
+        "OSZICAR",
+        "OUTCAR",
+        "CONTCAR"
+      ],
+      "oszicar_note": "several electronic steps reached NELM",
+      "system": "O_ads"
+    },
+    {
+      "files": [
+        "POSCAR",
+        "INCAR",
+        "OSZICAR",
+        "OUTCAR",
+        "CONTCAR"
+      ],
+      "oszicar_note": "electronic energy varied strongly during some ionic steps",
+      "system": "OH_ads"
+    },
+    {
+      "files": [
+        "POSCAR",
+        "INCAR",
+        "OSZICAR",
+        "OUTCAR",
+        "CONTCAR"
+      ],
+      "oszicar_note": "early ionic steps produced usable geometries",
+      "system": "OOH_ads"
+    },
+    {
+      "files": [
+        "POSCAR",
+        "INCAR"
+      ],
+      "oszicar_note": "no reusable CONTCAR is present",
+      "system": "O2_ads"
+    }
+  ],
   "previous_incar_common": {
-    "ENCUT": 500,
+    "ALGO": "Fast",
     "EDIFF": "1E-6",
     "EDIFFG": "-0.02",
+    "ENCUT": 500,
     "IBRION": 2,
-    "POTIM": 0.5,
     "ISPIN": 2,
     "LDAU": true,
     "LDAUU_Fe_eV": 4.0,
     "LREAL": "Auto",
-    "ALGO": "Fast"
+    "POTIM": 0.5
   },
-  "available_intermediate_directories": [
-    {
-      "system": "clean",
-      "files": ["POSCAR", "INCAR", "OSZICAR", "OUTCAR", "CONTCAR"],
-      "last_observed_moment_muB": 2.0
-    },
-    {
-      "system": "O_ads",
-      "files": ["POSCAR", "INCAR", "OSZICAR", "OUTCAR", "CONTCAR"],
-      "oszicar_note": "several electronic steps reached NELM"
-    },
-    {
-      "system": "OH_ads",
-      "files": ["POSCAR", "INCAR", "OSZICAR", "OUTCAR", "CONTCAR"],
-      "oszicar_note": "electronic energy varied strongly during some ionic steps"
-    },
-    {
-      "system": "OOH_ads",
-      "files": ["POSCAR", "INCAR", "OSZICAR", "OUTCAR", "CONTCAR"],
-      "oszicar_note": "early ionic steps produced usable geometries"
-    },
-    {
-      "system": "O2_ads",
-      "files": ["POSCAR", "INCAR"],
-      "oszicar_note": "no reusable CONTCAR is present"
-    }
-  ],
   "submission_environment_notes": [
     "Some available directories were collected from separate submissions.",
     "POTCAR is not guaranteed to be present in every intermediate directory.",
     "The VASP launch command should be checked against the selected runtime image before submission."
-  ]
+  ],
+  "task": "FeN4/graphene ORR intermediates with VASP DFT+U"
 }
