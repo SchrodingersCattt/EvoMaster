@@ -205,7 +205,7 @@ class TestPublicContentForEvent:
 
         assert _public_content_for_event('response', payload) == 'hello'
 
-    def test_thought_with_model_returns_structured_content(self) -> None:
+    def test_thought_with_model_returns_plain_content(self) -> None:
         payload = {
             'type': 'thought',
             'source': 'Agent',
@@ -215,12 +215,7 @@ class TestPublicContentForEvent:
             'model_route': 'bedrock-claude-opus',
         }
 
-        assert _public_content_for_event('thought', payload) == {
-            'content': 'reasoning',
-            'model': 'claude-opus-4-6',
-            'model_profile': 'opus',
-            'model_route': 'bedrock-claude-opus',
-        }
+        assert _public_content_for_event('thought', payload) == 'reasoning'
 
     def test_response_with_usage_returns_structured_content(self) -> None:
         payload = {
@@ -381,7 +376,7 @@ class TestPublicContentForEvent:
         assert normalized['turn_index'] == 3
         assert normalized['turn_usage'] == {'total_tokens': 12}
 
-    def test_structured_thought_content_is_unpacked_for_sse(self) -> None:
+    def test_structured_thought_content_strips_model_identity_for_sse(self) -> None:
         payload = {
             'source': 'MatMaster',
             'type': 'thought',
@@ -399,9 +394,9 @@ class TestPublicContentForEvent:
         normalized = normalize_response_sse_payload(payload)
 
         assert normalized['content'] == 'thinking'
-        assert normalized['model'] == 'claude-opus-4-6'
-        assert normalized['model_profile'] == 'opus'
-        assert normalized['model_route'] == 'bedrock-claude-opus'
+        assert 'model' not in normalized
+        assert 'model_profile' not in normalized
+        assert 'model_route' not in normalized
 
     def test_response_figures_payload_maps_to_public_content(self) -> None:
         payload = {

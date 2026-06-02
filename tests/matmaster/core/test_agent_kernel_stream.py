@@ -23,6 +23,8 @@ from .agent_kernel_test_helpers import (
 )
 from .agent_kernel_test_helpers import make_kernel_turn as turn
 
+MODEL_IDENTITY_FIELDS = {'model', 'model_profile', 'model_route'}
+
 
 class ReasoningThenContentProvider:
     """Provider that streams reasoning chunks then content chunks."""
@@ -545,8 +547,8 @@ class TestRunItemsAssistantState:
         assert assistant_state_events[0].turn_usage != {}
 
     @pytest.mark.asyncio
-    async def test_llm_output_events_include_model_identity(self) -> None:
-        """Persistable LLM output events carry the resolved model identity."""
+    async def test_llm_output_events_scope_model_identity(self) -> None:
+        """Response and run_result carry model identity; thoughts do not."""
         from matmaster.core.agent import AgentKernel
 
         provider = ReasoningThenContentProvider()
@@ -574,10 +576,12 @@ class TestRunItemsAssistantState:
             if isinstance(e, ThoughtEvent) and e.stream_state == "complete"
         )
 
-        for event in (complete_response, run_result, complete_thought):
+        for event in (complete_response, run_result):
             assert event.model == "claude-opus-4-6"
             assert event.model_profile == "opus"
             assert event.model_route == "bedrock-claude-opus"
+
+        assert MODEL_IDENTITY_FIELDS.isdisjoint(complete_thought.model_dump())
 
     @pytest.mark.asyncio
     async def test_streaming_llm_output_events_do_not_include_model_identity(
@@ -602,8 +606,7 @@ class TestRunItemsAssistantState:
         streaming_events = [
             e
             for e in events
-            if isinstance(e, (ThoughtEvent, ResponseEvent))
-            and e.stream_state != "complete"
+            if isinstance(e, ResponseEvent) and e.stream_state != "complete"
         ]
         assert streaming_events
         for event in streaming_events:
