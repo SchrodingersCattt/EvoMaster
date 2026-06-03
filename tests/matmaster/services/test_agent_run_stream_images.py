@@ -125,3 +125,62 @@ async def test_run_agent_validates_images_from_turn_input_without_top_level_imag
     enriched = svc._test_fake_exp.last_ctx.request.turn_input
     assert enriched.images == ("https://oss.example.com/chat/a.png",)
     assert enriched.attachments.image_detail == "high"
+
+
+@pytest.mark.asyncio
+async def test_run_agent_byok_uses_profile_vision_detail():
+    from matmaster.config.llm import LLMProfileConfig
+
+    run_result = RunResultEvent(source="agent", status="completed", reason="natural")
+    byok_profile = LLMProfileConfig(
+        provider="openai",
+        model="model-a",
+        api_key="sk-test",
+        base_url="https://api.example.com/v1",
+        supports_vision=True,
+        vision_detail="low",
+    )
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        real_service = ImageInputService()
+        image_service = MagicMock()
+        image_service.select_current_images.side_effect = (
+            real_service.select_current_images
+        )
+        image_service.resolve_image_detail.return_value = "high"
+        image_service.enrich_turn_input_images.side_effect = (
+            real_service.enrich_turn_input_images
+        )
+        with (
+            patch(
+                "src.services.agent_run_service.get_image_input_service",
+                return_value=image_service,
+            ),
+            patch(
+                "matmaster.providers.llm_factory.build_provider_from_profile",
+                return_value=MagicMock(),
+            ),
+        ):
+            ok, _elapsed, _usage = await svc.run_agent(
+                session_id="sess-images",
+                user_prompt="看图",
+                images=["https://oss.example.com/chat/a.png"],
+                send_cb=AsyncMock(),
+                cancel_token=_make_cancel_token(),
+                mode="direct",
+                task_id="task-images",
+                invocation_id="inv-images-byok",
+                byok_profile=byok_profile,
+                byok_config_id=12,
+                byok_config_version=3,
+                billing_mode="byok",
+            )
+
+    assert ok is True
+    image_service.resolve_image_detail.assert_not_called()
+    turn_input = svc._test_fake_exp.last_ctx.request.turn_input
+    assert turn_input.images == ("https://oss.example.com/chat/a.png",)
+    assert turn_input.attachments.image_detail == "low"
+    assert turn_input.attachments.images_as_parts() == (
+        ImageContentPart(url="https://oss.example.com/chat/a.png", detail="low"),
+    )

@@ -14,8 +14,9 @@ from collections.abc import Callable
 from contextlib import aclosing
 from functools import lru_cache
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
+from matmaster.config.llm import LLMProfileConfig
 from matmaster.config.loader import load_agents_general_llm
 from matmaster.context.sources.turn_input import TurnInput
 from matmaster.core.playground import PlaygroundManager
@@ -41,7 +42,7 @@ from src.services.agent_run_bohrium_stage import run_bohrium_stage
 from src.services.agent_run_history_wiring import build_history_wiring
 from src.services.figure_coordinator import FigureCoordinator
 from src.services.history_checkpoint_service import HistoryCheckpointService
-from src.services.image_input_service import get_image_input_service
+from src.services.image_input_service import ImageInputError, get_image_input_service
 from src.services.quota_service import use_quota
 from src.services.sessions_service import get_sessions_service
 from src.services.stream_reply_queue import RedisReplyQueue
@@ -200,6 +201,10 @@ class AgentRunService:
         turn_input: TurnInput | None = None,
         bohrium_required: bool = False,
         remote_workdir: str | None = None,
+        byok_profile: LLMProfileConfig | None = None,
+        byok_config_id: int | None = None,
+        byok_config_version: int | None = None,
+        billing_mode: Literal["platform", "byok"] = "platform",
     ) -> tuple[bool | tuple[bool, str], int, dict[str, Any] | None]:
         """Execute agent pipeline using generator event stream with fanout dispatch.
 
@@ -312,7 +317,11 @@ class AgentRunService:
             # -- Stage 4: Exp assembly --
             from matmaster.config.loader import load_llm_config
             from matmaster.core.exp import Exp
-            from matmaster.providers.llm_factory import build_provider_bundle
+            from matmaster.providers.llm_factory import (
+                LLMProviderBundle,
+                build_provider_bundle,
+                build_provider_from_profile,
+            )
 
             llm_config = load_llm_config(_project_root / "config" / "llm_config.yaml")
 
@@ -322,20 +331,41 @@ class AgentRunService:
             current_images = image_service.select_current_images(
                 turn_input, top_level_images
             )
-            image_detail = image_service.resolve_image_detail(
-                llm_config=llm_config,
-                images=current_images,
-                llm_override=llm_override,
-                model_override=model_override,
-                default_profile_key=agent_default_llm,
-            )
+            if byok_profile is not None:
+                if current_images and not byok_profile.supports_vision:
+                    raise ImageInputError(
+                        error_code="byok_vision_required",
+                        message="该自定义模型不支持图片输入，请切换模型。",
+                        http_status=400,
+                    )
+                image_detail = byok_profile.vision_detail if current_images else None
+                llm_provider = build_provider_from_profile(
+                    byok_profile,
+                    byok_profile.model,
+                )
+                llm_bundle = LLMProviderBundle(
+                    provider=llm_provider,
+                    model=byok_profile.model,
+                    model_profile=f"byok:{byok_config_id}",
+                    model_route=None,
+                    provider_name="openai",
+                    model_family=None,
+                )
+            else:
+                image_detail = image_service.resolve_image_detail(
+                    llm_config=llm_config,
+                    images=current_images,
+                    llm_override=llm_override,
+                    model_override=model_override,
+                    default_profile_key=agent_default_llm,
+                )
 
-            llm_bundle = build_provider_bundle(
-                llm_config,
-                model_override=model_override,
-                llm_override=llm_override,
-                default_profile_key=agent_default_llm,
-            )
+                llm_bundle = build_provider_bundle(
+                    llm_config,
+                    model_override=model_override,
+                    llm_override=llm_override,
+                    default_profile_key=agent_default_llm,
+                )
             llm_provider = llm_bundle.provider
 
             exp = Exp(exp_config)
@@ -511,7 +541,7 @@ class AgentRunService:
                 )
                 if run_result_event.status == "completed":
                     user_id = self._sessions_service.get_session_user_id(session_id)
-                    if user_id:
+                    if user_id and billing_mode == "platform":
                         await use_quota(user_id, model_key=model_override)
                     return (True, _elapsed_ms(), usage_summary)
                 fail_reason = (
