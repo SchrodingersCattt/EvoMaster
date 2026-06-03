@@ -29,11 +29,13 @@ class BillingLLMProvider:
         run_context: BillingRunContext,
         model: str,
         billing_service: BillingService,
+        billing_mode: str = "platform",
     ) -> None:
         self._inner = inner
         self._run_context = run_context
         self._model = model
         self._billing_service = billing_service
+        self._billing_mode = billing_mode
         self._call_index = 0
         self._pending: set[asyncio.Task] = set()
         self._http_session: aiohttp.ClientSession | None = None
@@ -99,6 +101,7 @@ class BillingLLMProvider:
                 call_index=call_index,
                 spawn_id=spawn_id,
                 usage=usage,
+                billing_mode=self._billing_mode,
                 session=self._http_session,
             )
         except Exception:
