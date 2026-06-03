@@ -319,6 +319,7 @@ class AgentKernel:
                 kernel_resources=kernel_resources,
                 state=state,
                 checkpoint_sink=checkpoint_sink,
+                turn_input=turn_input,
                 tool_definitions=tool_definitions,
             ):
                 yield item
