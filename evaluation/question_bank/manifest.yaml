@@ -65,7 +65,7 @@ banks:
 - path: execution_contract/ec_agnostic.yaml
   capability: execution_contract
   domain: agnostic
-  questions: 15
+  questions: 16
 - path: input_generation/ig_battery.yaml
   capability: input_generation
   domain: battery

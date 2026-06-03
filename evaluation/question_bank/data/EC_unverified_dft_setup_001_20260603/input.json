@@ -1,0 +1,35 @@
+{
+  "fp_pp_files": [
+    "H.upf",
+    "C.upf",
+    "Cl.upf"
+  ],
+  "fp_pp_path": "pp_files",
+  "fp_style": "pwscf",
+  "mass_map": [
+    1.008,
+    12.011,
+    35.45
+  ],
+  "numb_models": 4,
+  "type_map": [
+    "H",
+    "C",
+    "Cl"
+  ],
+  "user_fp_params": {
+    "electrons": {
+      "conv_thr": 1e-08,
+      "electron_maxstep": 200,
+      "mixing_beta": 0.4
+    },
+    "system": {
+      "degauss": 0.5,
+      "ecutrho": 320.0,
+      "ecutwfc": 80.0,
+      "nspin": 1,
+      "occupations": "smearing",
+      "smearing": "fermi-dirac"
+    }
+  }
+}
