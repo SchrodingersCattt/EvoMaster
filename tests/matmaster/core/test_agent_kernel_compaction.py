@@ -577,6 +577,28 @@ class _RecordingTurnInputCompactor(_DurablePreflightCompactor):
         )
 
 
+class _RecordingRuntimeTurnInputCompactor(_LifecycleCompactor):
+    def __init__(self) -> None:
+        super().__init__("runtime summary")
+        self.seen_turn_inputs: list[Any] = []
+
+    async def apply_summary(
+        self,
+        plan,
+        messages: list[Any],
+        summary: str,
+        *,
+        turn_input=None,
+    ):
+        self.seen_turn_inputs.append(turn_input)
+        return await super().apply_summary(
+            plan,
+            messages,
+            summary,
+            turn_input=turn_input,
+        )
+
+
 @pytest.mark.asyncio
 async def test_kernel_passes_raw_turn_input_to_preflight_compactor():
     from matmaster.core.agent import AgentKernel
@@ -614,6 +636,47 @@ async def test_kernel_passes_raw_turn_input_to_preflight_compactor():
         "https://oss.example.com/chat/current.cif",
     )
     assert compactor.seen_turn_input.pre_turn_history_event_id == 42
+
+
+@pytest.mark.asyncio
+async def test_kernel_passes_raw_turn_input_to_runtime_compactor():
+    from matmaster.core.agent import AgentKernel
+
+    compactor = _RecordingRuntimeTurnInputCompactor()
+
+    async def checkpoint_sink(**kwargs):
+        return 42
+
+    turn_input = TurnInput.from_values(
+        user_text="runtime original request",
+        files=["https://oss.example.com/chat/current.cif"],
+        pre_turn_history_event_id=42,
+    )
+    kernel_runtime = make_kernel_runtime(
+        provider=ContentOnlyProvider(),
+        compactor=compactor,
+        runtime_ports=KernelRuntimePorts(checkpoint_sink=checkpoint_sink),
+    )
+
+    [
+        event
+        async for event in AgentKernel().run_stream(
+            kernel_runtime,
+            make_kernel_turn("effective task text", turn_input=turn_input),
+            history=[
+                UserMessage(content="old question"),
+                AssistantMessage(content="old answer"),
+            ],
+        )
+    ]
+
+    assert compactor.seen_turn_inputs
+    assert compactor.seen_turn_inputs[0] is turn_input
+    assert compactor.seen_turn_inputs[0].user_text == "runtime original request"
+    assert compactor.seen_turn_inputs[0].files == (
+        "https://oss.example.com/chat/current.cif",
+    )
+    assert compactor.seen_turn_inputs[0].pre_turn_history_event_id == 42
 
 
 @pytest.mark.asyncio

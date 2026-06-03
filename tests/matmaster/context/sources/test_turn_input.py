@@ -74,6 +74,31 @@ def test_turn_input_default_merges_attachments_into_current_instruction() -> Non
     )
 
 
+def test_turn_input_instruction_only_keeps_text_and_drops_attachments() -> None:
+    turn_input = TurnInput(
+        instruction=TurnInstructionSource(
+            user_text=" Analyze current structure. ",
+            deferred=True,
+        ),
+        attachments=TurnAttachmentsSource(
+            files=("https://oss.example.com/current.cif",),
+            images=("https://oss.example.com/current.png",),
+            image_detail="high",
+            workspace_paths=("/share/current/POSCAR",),
+        ),
+        pre_turn_history_event_id=42,
+    )
+
+    stripped = turn_input.instruction_only()
+
+    assert stripped.user_text == " Analyze current structure. "
+    assert stripped.instruction.deferred is True
+    assert stripped.attachments == TurnAttachmentsSource()
+    assert stripped.pre_turn_history_event_id == 42
+    assert stripped.to_sections()[0].content == "Analyze current structure."
+    assert stripped.attachments.images_as_parts() == ()
+
+
 def test_turn_input_default_shape_matches_current_instruction_renderer() -> None:
     turn_input = TurnInput(
         instruction=TurnInstructionSource(user_text="Explain FeO."),
