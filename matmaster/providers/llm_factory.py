@@ -76,9 +76,7 @@ def _build_anthropic_prompt_cache_options(
     )
 
 
-def _merge_byok_extra_kwargs(
-    base: dict | None, extra_body: dict | None
-) -> dict | None:
+def _merge_byok_extra_kwargs(base: dict | None, extra_body: dict | None) -> dict | None:
     """把凭证侧的黑盒 extra_body 叠加到族默认 extra_kwargs 上（同名 key 用户优先）。
 
     SDK 侧 extra_body 与请求体浅合并、且 extra_body 覆盖同名 key，故这里直接覆盖即可。
