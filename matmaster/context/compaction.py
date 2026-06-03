@@ -175,6 +175,23 @@ def _should_split_current_input_for_preflight(
     )
 
 
+def _resolve_injected_turn_input(
+    *,
+    phase: Literal["preflight", "runtime"],
+    current_split: bool,
+    turn_input: TurnInput | None,
+) -> TurnInput | None:
+    if current_split:
+        return turn_input
+    if (
+        phase == "runtime"
+        and turn_input is not None
+        and turn_input.has_effective_input()
+    ):
+        return turn_input.instruction_only()
+    return None
+
+
 @dataclass(frozen=True)
 class CompactionPlan:
     compaction_id: str
@@ -489,7 +506,11 @@ class ContextCompactor:
                 spawn_id=self._spawn_id,
                 user_instructions=self._user_instructions,
                 compacted_history_summary=summary,
-                turn_input=turn_input if current_split else None,
+                turn_input=_resolve_injected_turn_input(
+                    phase=plan.phase,
+                    current_split=current_split,
+                    turn_input=turn_input,
+                ),
                 covered_until_event_id=covered_until_event_id,
             ),
         )
