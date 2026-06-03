@@ -117,6 +117,7 @@ class SendStreamContext:
     request_event_queue: asyncio.Queue
     llm: str | None = None  # 本轮使用的 LLM 配置块名，不传则用 agent 默认
     model: str | None = None  # 本轮使用的模型名（覆盖 LLM 配置里的 model）
+    byok_credential_id: str | None = None  # 本轮 BYOK 凭证 ID；命中时用用户自带 Key
     turn_input: TurnInput | None = None
     bohrium_required: bool = False  # 本轮是否显式依赖 Bohrium access_key / project
     images: list[str] = field(default_factory=list)
@@ -484,6 +485,7 @@ class ChatStreamService:
         model = (
             req.model or ''
         ).strip() or None  # 本轮模型名，如 matmaster/qwen3.7-max / claude-sonnet-4-6
+        byok_credential_id = (req.byok_credential_id or '').strip() or None
 
         org_id_val = org_id.strip() if org_id else None
         try:
@@ -566,6 +568,7 @@ class ChatStreamService:
             request_event_queue=request_event_queue,
             llm=llm,
             model=model,
+            byok_credential_id=byok_credential_id,
             turn_input=turn_input,
             bohrium_required=bohrium_required,
             images=list(req.images or []),
@@ -706,6 +709,7 @@ class ChatStreamService:
                 'mode': mode,
                 'llm': ctx.llm,
                 'model': ctx.model,
+                'byok_credential_id': ctx.byok_credential_id,
                 'turn_input': turn_input_payload,
                 'images': list(ctx.images),
                 'bohrium_required': ctx.bohrium_required,

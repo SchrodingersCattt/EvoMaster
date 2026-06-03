@@ -382,6 +382,9 @@ class ChatSendRequest(BaseModel):
     model: str | None = (
         None  # 可选，本轮使用的模型名（如 claude-sonnet-4-6、matmaster/qwen3.7-max），覆盖所选 LLM 配置里的 model
     )
+    byok_credential_id: str | None = (
+        None  # 可选，用户自带 Key（BYOK）凭证 ID；命中时本轮用该凭证的 endpoint/model/key，不走平台模型
+    )
     bohrium_project_id: int | str | None = None  # 可选的 Bohrium project id
     bohrium_user_id: int | str | None = (
         None  # 可选的 Bohrium user id（MCP 计算类工具需要）

@@ -219,6 +219,8 @@ class AgentRunService:
         invocation_id: str | None = None,
         llm_override: str | None = None,
         model_override: str | None = None,
+        byok_credential_id: str | None = None,
+        user_id: str | None = None,
         images: list[str] | None = None,
         turn_input: TurnInput | None = None,
         bohrium_required: bool = False,
@@ -345,20 +347,54 @@ class AgentRunService:
             current_images = image_service.select_current_images(
                 turn_input, top_level_images
             )
-            image_detail = image_service.resolve_image_detail(
-                llm_config=llm_config,
-                images=current_images,
-                llm_override=llm_override,
-                model_override=model_override,
-                default_profile_key=agent_default_llm,
-            )
 
-            llm_bundle = build_provider_bundle(
-                llm_config,
-                model_override=model_override,
-                llm_override=llm_override,
-                default_profile_key=agent_default_llm,
-            )
+            byok_id = (byok_credential_id or "").strip() or None
+            if byok_id:
+                # BYOK：凭证由 tools-server 下发，绕开 llm_config / routes，用户自付不扣额度。
+                from matmaster.providers.llm_factory import build_byok_provider_bundle
+                from src.services.llm_credential_client import (
+                    ByokCredentialError,
+                    fetch_byok_credential,
+                )
+
+                try:
+                    cred = await fetch_byok_credential(
+                        user_id=user_id or "", credential_id=byok_id
+                    )
+                except ByokCredentialError as exc:
+                    logger.warning(
+                        "byok credential fetch failed session_id=%s cred=%s: %s",
+                        session_id,
+                        byok_id,
+                        exc,
+                    )
+                    return ((False, "byok_credential_unavailable"), _elapsed_ms(), None)
+
+                llm_bundle = build_byok_provider_bundle(
+                    model=cred.model,
+                    api_key=cred.api_key,
+                    base_url=cred.base_url,
+                    credential_id=byok_id,
+                    extra_body=cred.extra_body,
+                )
+                # BYOK 第一期不接入族级 vision 校验：有图片用默认 detail，无图为 None。
+                image_detail = "high" if current_images else None
+                billing_mode = "byok"
+            else:
+                image_detail = image_service.resolve_image_detail(
+                    llm_config=llm_config,
+                    images=current_images,
+                    llm_override=llm_override,
+                    model_override=model_override,
+                    default_profile_key=agent_default_llm,
+                )
+                llm_bundle = build_provider_bundle(
+                    llm_config,
+                    model_override=model_override,
+                    llm_override=llm_override,
+                    default_profile_key=agent_default_llm,
+                )
+                billing_mode = "platform"
             llm_provider = llm_bundle.provider
             try:
                 llm_provider = BillingLLMProvider(
@@ -370,6 +406,7 @@ class AgentRunService:
                     ),
                     model=llm_bundle.model,
                     billing_service=get_billing_service(),
+                    billing_mode=billing_mode,
                 )
             except Exception:
                 logger.warning(

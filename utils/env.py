@@ -31,3 +31,8 @@ BOHRIUM_OPENAPI_BASE_COM = os.getenv(
 # ``require_evaluation_access`` 中的服务密钥分支对齐（Nacos evaluation.service_api_keys）。
 _eval_bearer = os.getenv("MATMASTER_TOOLS_EVALUATION_BEARER", "").strip()
 MATMASTER_TOOLS_EVALUATION_BEARER: str | None = _eval_bearer or None
+
+# 调用 matmaster-tools-server BYOK 内部下发接口（取解密凭证）时的鉴权，与
+# ``require_byok_service_token`` 对齐（Nacos byok.service_api_keys）。
+_byok_bearer = os.getenv("MATMASTER_TOOLS_BYOK_BEARER", "").strip()
+MATMASTER_TOOLS_BYOK_BEARER: str | None = _byok_bearer or None

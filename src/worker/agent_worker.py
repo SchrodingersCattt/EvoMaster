@@ -324,6 +324,7 @@ def _run_worker_loop() -> None:
             mode = DEFAULT_MODE
         llm_override = (payload.get('llm') or '').strip() or None
         model_override = (payload.get('model') or '').strip() or None
+        byok_credential_id = (payload.get('byok_credential_id') or '').strip() or None
         raw_images = payload.get('images') or []
         images = (
             [url for url in raw_images if isinstance(url, str)]
@@ -435,6 +436,8 @@ def _run_worker_loop() -> None:
                         invocation_id=invocation_id,
                         llm_override=llm_override,
                         model_override=model_override,
+                        byok_credential_id=byok_credential_id,
+                        user_id=session_user_id,
                         images=images,
                         turn_input=turn_input,
                         remote_workdir=remote_workdir,
