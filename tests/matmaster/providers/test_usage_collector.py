@@ -75,7 +75,7 @@ async def test_reporter_reports_each_call_and_backfills_cost() -> None:
         with provider.billing_scope(spawn_id="child-1"):
             await provider.chat([])  # subagent
 
-    # Pending reports are drained and the reporter closed on __aexit__.
+    # Each call is reported inline; the reporter is closed on __aexit__.
     assert reporter.closed is True
     assert len(reporter.calls) == 2
 
