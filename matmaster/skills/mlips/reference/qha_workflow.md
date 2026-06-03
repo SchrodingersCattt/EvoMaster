@@ -4,7 +4,7 @@ Quasi-Harmonic Approximation (QHA) for computing thermal expansion coefficients 
 
 ## Import & API
 
-The correct import in the `dpa-calculator:e13a296f` image (phonopy 2.34):
+The correct import in the `dpa-calculator:5bdb7c53` image (phonopy 2.34):
 
 ```python
 from phonopy import PhonopyQHA

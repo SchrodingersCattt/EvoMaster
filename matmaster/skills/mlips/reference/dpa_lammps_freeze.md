@@ -30,6 +30,45 @@ pair_coeff  * *
 
 **Inspecting type_map of a model file:** Use `dp --pt show <model.pt> type-map` to print the element ordering. For user-provided custom models, this is the correct way to determine what elements the model covers and their ordering — do NOT attempt `torch.load`, `zipfile`, or binary parsing of `.pt` files.
 
+## DPA4-Neo LAMMPS path
+
+DPA4 raw checkpoints (`DPA4-Neo-OMat24*.pt`) cannot be loaded directly by
+LAMMPS. Freeze them into a `.pt2` artifact first, then run LAMMPS with the
+DPA4 image:
+
+```bash
+dp --pt freeze -c DPA4-Neo-OMat24.pt -o dpa4_frozen.pt2
+```
+
+Use:
+
+```text
+atom_modify map yes
+pair_style  deepmd dpa4_frozen.pt2
+pair_coeff  * * Si
+```
+
+`atom_modify map yes` is required for DPA4 `.pt2` in LAMMPS; without it, the
+model may load but atom-ID mapping fails. For DPA4 LAMMPS jobs, submit with:
+
+```text
+registry.dp.tech/dptech/dp/native/hub/custom_images/dpa4:260601-1780311840
+```
+
+Compatibility boundary from runtime testing:
+- `dpa4:260601-1780311840` supports DPA3 and DPA4 ASE/LAMMPS workflows.
+- DPA4 LAMMPS requires freeze to `.pt2`; raw checkpoints report "Cannot
+  detect the backend".
+- DPA1 TensorFlow `.pb` is not ready because this image has no TensorFlow
+  backend.
+- DPA1 legacy TorchScript `.pth` is not ready in LAMMPS because the C++
+  interface misses `has_message_passing`.
+- DPA2.4 freeze to LAMMPS is not ready in this image because the checkpoint
+  state dict is incompatible (`repinit.type_embd_data` missing).
+
+Keep existing non-DPA4 LAMMPS images/workflows unless the task explicitly uses
+DPA4 `.pt2`.
+
 Notes:
 - The frozen `.pth` is also directly usable by ASE: `from deepmd.calculator import DP; atoms.calc = DP("frozen_model.pth")`.
 - The ASE workflows provided by this skill (optimize/phonon/MD/elastic/NEB/adsorption) load the **multi-head `.pt`** directly and select the head via `--head`, so freezing is only required when you actually need LAMMPS.

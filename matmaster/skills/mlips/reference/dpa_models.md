@@ -9,6 +9,8 @@
 | DPA2.4-7M | 6.6M | `https://bohrium.oss-cn-zhangjiakou.aliyuncs.com/13756/27666/store/upload/cd12300a-d3e6-4de9-9783-dd9899376cae/dpa-2.4-7M.pt` | OMat24 | 37-head shared fitting, 120GPU pretrain |
 | DPA3.1-3M | 3.3M | `https://bohrium.oss-cn-zhangjiakou.aliyuncs.com/13756/27666/store/upload/18b8f35e-69f5-47de-92ef-af8ef2c13f54/DPA-3.1-3M.pt` | OMat24 | 16 layers, dynamic neighbor selection |
 | DPA3.2-5M | 4.8M | `https://dp-storage-test2.oss-cn-zhangjiakou.aliyuncs.com/bohrium-test/bohrium/feedback/attachment/01KF3BF3TX9GVTC96Q0PCV01H3/DPA-3.2-5M.pt` | OMat24 | 24 layers, supports charge/spin fparam |
+| DPA4-Neo-OMat24 | Unknown | `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/mlips/dpa4/1780496518_DPA4-Neo-OMat24.pt` | OMat24 | AIS Square `DPA4-Neo-OMat24-v20260528_rc`; SeZM checkpoint |
+| DPA4-Neo-OMat24-ZBL | Unknown | `https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/mlips/dpa4/1780496518_DPA4-Neo-OMat24-ZBL.pt` | OMat24 | AIS Square `DPA4-Neo-OMat24-ZBL-v20260528_rc`; includes ZBL short-range repulsion |
 
 ## Model Heads
 
