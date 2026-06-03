@@ -22,6 +22,7 @@ from src.services.byok_model_resolver import (
     BYOKResolveError,
     get_byok_model_resolver,
 )
+from src.services.byok_redaction import sanitize_provider_error
 from src.services.sessions_service import get_sessions_service
 from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
@@ -499,21 +500,22 @@ def _run_worker_loop() -> None:
                 else:
                     run_success = True
             except BYOKResolveError as e:
+                safe_message = sanitize_provider_error(e.message)
                 run_success = False
-                fail_reason = e.message
+                fail_reason = safe_message
                 logger.warning(
                     'Agent worker: BYOK resolve failed session_id=%s task_id=%s error_code=%s: %s',
                     session_id,
                     task_id,
                     e.error_code,
-                    e.message,
+                    safe_message,
                 )
                 try:
                     send_cb(
                         {
                             'source': 'System',
                             'type': 'error',
-                            'content': e.message,
+                            'content': safe_message,
                             'session_id': session_id,
                             'task_id': task_id,
                             'invocation_id': invocation_id,
@@ -524,7 +526,7 @@ def _run_worker_loop() -> None:
                         {
                             'source': 'System',
                             'type': 'stream_closed',
-                            'content': e.message,
+                            'content': safe_message,
                             'session_id': session_id,
                             'task_id': task_id,
                             'invocation_id': invocation_id,

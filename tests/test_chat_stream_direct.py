@@ -289,6 +289,90 @@ def test_chat_stream_byok_with_images_does_not_call_static_vision_gate(monkeypat
     assert image_service.ensure_vision_supported_calls == 0
 
 
+def test_preset_model_still_checks_model_quota(monkeypatch):
+    app, chat_api, _stream_svc, resolver = _install_chat_stream_overrides(monkeypatch)
+    quota_calls: list[str] = []
+    model_quota_calls: list[tuple[str, str]] = []
+
+    async def _check_quota(user_id: str) -> int:
+        quota_calls.append(user_id)
+        return 10
+
+    async def _check_model_quota(user_id: str, model: str) -> int:
+        model_quota_calls.append((user_id, model))
+        return 10
+
+    monkeypatch.setattr(chat_api, 'check_quota', _check_quota)
+    monkeypatch.setattr(chat_api, 'check_model_quota', _check_model_quota)
+    try:
+        from fastapi.testclient import TestClient
+
+        response = TestClient(app).post(
+            '/api/v1/chat/sessions/sess-preset/stream',
+            headers={'X-User-Id': 'user-1'},
+            json={
+                'content': 'hello',
+                'mode': 'direct',
+                'model': 'claude-sonnet-4-6',
+            },
+        )
+    finally:
+        _clear_chat_stream_overrides(app)
+
+    assert response.status_code == 200, response.text
+    assert quota_calls == ['user-1']
+    assert model_quota_calls == [('user-1', 'claude-sonnet-4-6')]
+    assert resolver.calls == []
+
+
+def test_preset_model_still_uses_static_vision_gate(monkeypatch):
+    app, chat_api, _stream_svc, resolver = _install_chat_stream_overrides(monkeypatch)
+    image_service = _FakeImageInputService()
+    fake_llm_config = MagicMock()
+    load_calls: list[object] = []
+
+    async def _check_quota(_user_id: str) -> int:
+        return 10
+
+    async def _check_model_quota(_user_id: str, _model: str) -> int:
+        return 10
+
+    def _load_llm_config(path):
+        load_calls.append(path)
+        return fake_llm_config
+
+    monkeypatch.setattr(chat_api, 'check_quota', _check_quota)
+    monkeypatch.setattr(chat_api, 'check_model_quota', _check_model_quota)
+    monkeypatch.setattr(chat_api, 'get_image_input_service', lambda: image_service)
+    monkeypatch.setattr(chat_api, 'load_llm_config', _load_llm_config)
+    try:
+        from fastapi.testclient import TestClient
+
+        response = TestClient(app).post(
+            '/api/v1/chat/sessions/sess-preset/stream',
+            headers={'X-User-Id': 'user-1'},
+            json={
+                'content': '看图',
+                'mode': 'direct',
+                'model': 'claude-sonnet-4-6',
+                'images': ['https://oss.example.com/chat/a.png'],
+            },
+        )
+    finally:
+        _clear_chat_stream_overrides(app)
+
+    assert response.status_code == 200, response.text
+    assert resolver.calls == []
+    assert load_calls
+    assert image_service.validate_calls == [
+        {
+            'files': [],
+            'images': ['https://oss.example.com/chat/a.png'],
+        }
+    ]
+    assert image_service.ensure_vision_supported_calls == 1
+
+
 def _decode_sse_payload(frame: str) -> dict:
     return json.loads(frame.split('data: ', 1)[1].strip())
 

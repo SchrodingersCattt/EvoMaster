@@ -342,6 +342,92 @@ class TestAgentWorkerCancellationIntegration:
         assert closed_payload["treat_as_failure"] is True
         assert closed_payload["end_reason"] == "byok_version_mismatch"
 
+    def test_worker_decrypt_failure_is_redacted_in_stream_error(self) -> None:
+        from src.services.byok_model_resolver import BYOKResolveError
+        from src.worker import agent_worker as mod
+
+        payload = {
+            "session_id": "sid-1",
+            "task_id": "task-1",
+            "invocation_id": "inv-1",
+            "user_prompt": "hello",
+            "mode": "direct",
+            "byok": {"config_id": 12, "version": 3},
+        }
+        redis_dao = MagicMock()
+        redis_dao.create_client.return_value = True
+        redis_dao.blpop_agent_run_job.side_effect = [payload]
+        redis_dao.llen_agent_run_queue.return_value = 0
+
+        sessions_service = MagicMock()
+        sessions_service.get_session_user_id.return_value = "user-1"
+        sessions_service.try_acquire_session_run.return_value = (True, None)
+
+        resolver = MagicMock()
+        resolver.resolve_for_worker_run.side_effect = BYOKResolveError(
+            "decrypt failed api_key=sk-1234567890abcdef",
+            http_status=400,
+            error_code="byok_secret_error",
+        )
+
+        agent_run_service = MagicMock()
+        agent_run_service.init_playground_sync.return_value = None
+        agent_run_service.run_agent = MagicMock()
+
+        class FakeBridge:
+            def __init__(self, *_args, **_kwargs) -> None:
+                return None
+
+            def start(self) -> None:
+                return None
+
+            def stop(self) -> None:
+                return None
+
+        with (
+            patch.object(mod, "_drain_requested", True),
+            patch.object(mod, "_current_session_id", None),
+            patch.object(mod, "_active_controller", None, create=True),
+            patch.object(mod, "get_redis_dao", return_value=redis_dao),
+            patch.object(mod, "get_sessions_service", return_value=sessions_service),
+            patch.object(mod, "get_agent_run_service", return_value=agent_run_service),
+            patch.object(
+                mod,
+                "get_byok_model_resolver",
+                return_value=resolver,
+                create=True,
+            ),
+            patch.object(mod, "UserService") as user_service_cls,
+            patch.object(mod, "get_worker_registry_service") as registry_fn,
+            patch.object(mod, "notify_post_async"),
+            patch.object(mod, "send_session_complete_email_async"),
+            patch.object(mod, "LogContext"),
+            patch.object(mod, "RedisCancellationBridge", FakeBridge),
+            patch.object(mod, "get_worker_id", return_value="worker-1"),
+        ):
+            user_service_cls.get_user_info_for_display.return_value = {
+                "user_id": "u1",
+                "nickname": "nick",
+                "email": "user@example.com",
+            }
+            registry = MagicMock()
+            registry.count_active_runs.return_value = 0
+            registry_fn.return_value = registry
+
+            mod._run_worker_loop()
+
+        agent_run_service.run_agent.assert_not_called()
+        published = [call.args[1] for call in redis_dao.publish_stream_event.call_args_list]
+        error_payload = next(item for item in published if item["type"] == "error")
+        closed_payload = next(
+            item for item in published if item["type"] == "stream_closed"
+        )
+        error_text = error_payload["content"]
+        closed_text = closed_payload["content"]
+        assert "sk-1234567890abcdef" not in error_text
+        assert "sk-1234567890abcdef" not in closed_text
+        assert "api_key=<redacted>" in error_text
+
     def test_main_sigterm_handler_drains_without_cancelling_active_controller(
         self,
     ) -> None:

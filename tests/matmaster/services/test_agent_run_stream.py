@@ -670,6 +670,29 @@ async def test_run_agent_uses_byok_profile_identity_and_skips_model_quota():
 
 
 @pytest.mark.asyncio
+async def test_preset_model_success_still_uses_platform_quota():
+    from src.services import agent_run_service as mod
+
+    run_result = RunResultEvent(source="agent", status="completed", reason="natural")
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        quota_mock = mod.use_quota
+        ok, _elapsed, _usage = await svc.run_agent(
+            session_id="sess-1",
+            user_prompt="hello",
+            send_cb=AsyncMock(),
+            cancel_token=_make_cancel_token(),
+            mode="direct",
+            task_id="task-1",
+            invocation_id="inv-platform-quota",
+            model_override="claude-sonnet-4-6",
+        )
+
+    assert ok is True
+    quota_mock.assert_awaited_once_with("user-1", model_key="claude-sonnet-4-6")
+
+
+@pytest.mark.asyncio
 async def test_run_agent_idempotent_skip_when_user_turn_context_already_exists():
     from matmaster.types.messages import UserMessage
     from matmaster.context.ports import hash_user_instructions

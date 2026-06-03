@@ -200,6 +200,26 @@ def test_list_returns_current_user_configs(monkeypatch) -> None:
     _assert_no_key_material(response.json())
 
 
+def test_byok_api_response_never_contains_cipher_or_plaintext(monkeypatch) -> None:
+    table = FakeTable()
+    table.rows[12] = _row(
+        api_key_cipher="cipher:sk-1234567890abcdef",
+        verification_error="provider error api_key=<redacted>",
+    )
+    _install(monkeypatch, table=table)
+    try:
+        with _client() as client:
+            response = client.get(
+                "/api/v1/llm-configs/12",
+                headers={"X-User-Id": "user-1"},
+            )
+    finally:
+        _clear_overrides()
+
+    assert response.status_code == 200, response.text
+    _assert_no_key_material(response.json())
+
+
 def test_patch_omitted_fields_are_not_updated(monkeypatch) -> None:
     table, _verifier = _install(monkeypatch)
     try:
