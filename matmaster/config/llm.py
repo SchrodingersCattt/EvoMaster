@@ -119,6 +119,8 @@ class LLMProfileConfig(BaseModel):
 
     # Prompt cache
     prompt_cache: PromptCacheConfig | None = None
+    passthrough_params: dict[str, Any] | None = None
+    passthrough_extra_body: dict[str, Any] | None = None
 
     # Temperature
     temperature_policy: str | None = None  # "force_one_when_reasoning" | "default"
@@ -187,9 +189,13 @@ class LLMProfileConfig(BaseModel):
                     reasoning["effort"] = effort
                 extra_body["reasoning"] = reasoning
 
+        if self.passthrough_params:
+            out.update(self.passthrough_params)
+        if self.passthrough_extra_body:
+            extra_body.update(self.passthrough_extra_body)
+
         if extra_body:
             out["extra_body"] = extra_body
-
         return out or None
 
 

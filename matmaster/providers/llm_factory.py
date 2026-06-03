@@ -11,7 +11,7 @@ import logging
 import os
 from dataclasses import dataclass
 
-from matmaster.config.llm import LLMConfig
+from matmaster.config.llm import LLMConfig, LLMProfileConfig
 from matmaster.providers.bedrock_provider import BedrockProvider
 from matmaster.providers.openai_provider import (
     AnthropicPromptCacheOptions,
@@ -74,6 +74,45 @@ def _build_anthropic_prompt_cache_options(
     )
 
 
+def build_provider_from_profile(
+    profile: LLMProfileConfig,
+    model: str,
+) -> OpenAIProvider | BedrockProvider:
+    if profile.provider == "bedrock":
+        region = (
+            (profile.bedrock_region or "").strip()
+            or os.environ.get("AWS_REGION")
+            or os.environ.get("AWS_DEFAULT_REGION")
+            or "us-east-1"
+        )
+        return BedrockProvider(
+            model_id=model,
+            region=region,
+            temperature=profile.effective_temperature(),
+            max_tokens=profile.max_tokens,
+            timeout=profile.timeout,
+            stream_timeout=profile.stream_timeout,
+            stream_idle_timeout=profile.stream_idle_timeout,
+            max_retries=profile.max_retries,
+            retry_delay=profile.retry_delay,
+        )
+
+    return OpenAIProvider(
+        model=model,
+        api_key=profile.api_key,
+        base_url=profile.base_url,
+        temperature=profile.effective_temperature(),
+        max_tokens=profile.max_tokens,
+        timeout=profile.timeout,
+        stream_timeout=profile.stream_timeout,
+        stream_idle_timeout=profile.stream_idle_timeout,
+        max_retries=profile.max_retries,
+        retry_delay=profile.retry_delay,
+        prompt_cache_options=_build_anthropic_prompt_cache_options(profile),
+        extra_kwargs=profile.build_extra_kwargs(),
+    )
+
+
 def build_provider_bundle(
     llm_config: LLMConfig,
     *,
@@ -98,47 +137,7 @@ def build_provider_bundle(
         profile.provider,
     )
 
-    if profile.provider == "bedrock":
-        region = (
-            (profile.bedrock_region or "").strip()
-            or os.environ.get("AWS_REGION")
-            or os.environ.get("AWS_DEFAULT_REGION")
-            or "us-east-1"
-        )
-        provider = BedrockProvider(
-            model_id=resolved.model,
-            region=region,
-            temperature=profile.effective_temperature(),
-            max_tokens=profile.max_tokens,
-            timeout=profile.timeout,
-            stream_timeout=profile.stream_timeout,
-            stream_idle_timeout=profile.stream_idle_timeout,
-            max_retries=profile.max_retries,
-            retry_delay=profile.retry_delay,
-        )
-        return LLMProviderBundle(
-            provider=provider,
-            model=resolved.model,
-            model_profile=resolved.profile_key,
-            model_route=resolved.route_key,
-            provider_name=profile.provider,
-            model_family=profile.effective_family(),
-        )
-
-    provider = OpenAIProvider(
-        model=resolved.model,
-        api_key=profile.api_key,
-        base_url=profile.base_url,
-        temperature=profile.effective_temperature(),
-        max_tokens=profile.max_tokens,
-        timeout=profile.timeout,
-        stream_timeout=profile.stream_timeout,
-        stream_idle_timeout=profile.stream_idle_timeout,
-        max_retries=profile.max_retries,
-        retry_delay=profile.retry_delay,
-        prompt_cache_options=_build_anthropic_prompt_cache_options(profile),
-        extra_kwargs=profile.build_extra_kwargs(),
-    )
+    provider = build_provider_from_profile(profile, resolved.model)
     return LLMProviderBundle(
         provider=provider,
         model=resolved.model,
