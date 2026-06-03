@@ -640,6 +640,12 @@ def build_ingest_item(
         ]
     if tokens is not None:
         extra["tokens_last_turn"] = int(tokens)
+    per_call = s.get("per_call_usage")
+    if isinstance(per_call, list) and per_call:
+        extra["per_call_usage"] = [
+            _json_safe_usage_tree(dict(x)) if isinstance(x, dict) else x
+            for x in per_call
+        ]
 
     item: dict[str, Any] = {
         "question_id": question_id,

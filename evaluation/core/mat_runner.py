@@ -18,7 +18,11 @@ from matmaster.context.sources.turn_input import TurnInput
 from matmaster.core.exp import Exp
 from matmaster.core.playground import ExecutionEnvironment
 from matmaster.core.run_context import AgentRunContext, AgentRunRequest
-from matmaster.providers.llm_factory import build_provider
+from matmaster.providers.llm_factory import build_provider_bundle
+from matmaster.providers.usage_collector import (
+    UsageCollectingProvider,
+    per_call_usage_payload,
+)
 from matmaster.sessions.local import LocalSession
 from matmaster.types.messages import AssistantMessage
 from matmaster.types.run_metadata import RunMetadata
@@ -170,9 +174,12 @@ def _run_mat_task_once(
             mat_config_path=mat_config_path,
         )
 
-    # 1. Load LLM config and build provider
+    # 1. Load LLM config and build provider (wrapped to collect per-call usage)
     llm_config = load_llm_config(mat_config_path)
-    llm_provider = build_provider(llm_config)
+    provider_bundle = build_provider_bundle(llm_config)
+    llm_provider = UsageCollectingProvider(
+        provider_bundle.provider, model=provider_bundle.model
+    )
 
     # 2. Load exp config (mode maps to exp name)
     exp_config = load_exp_config(mode)
@@ -247,6 +254,8 @@ def _run_mat_task_once(
             trajectory_path, task_id=task_id
         )
 
+    per_call_usage = per_call_usage_payload(llm_provider.collected_calls)
+
     return {
         "task_id": task_id,
         "mode": mode,
@@ -258,6 +267,7 @@ def _run_mat_task_once(
             "num_turns": drain_result.num_turns,
             "usage": drain_result.usage,
         },
+        "per_call_usage": per_call_usage,
         "trajectory_path": str(trajectory_path) if trajectory_path else "",
         "status": drain_result.status,
         "duration_ms": duration_ms,

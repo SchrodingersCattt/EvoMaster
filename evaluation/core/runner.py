@@ -148,6 +148,9 @@ def run_evaluation(config: EvalConfig) -> dict[str, Any]:
         )
         # Attach raw result for debugging
         record.raw_result = mat_result
+        per_call_usage = mat_result.get('per_call_usage')
+        if isinstance(per_call_usage, list):
+            record.per_call_usage = per_call_usage
 
         records.append(record)
         append_raw_run(output_dir=run_dir, record=record)

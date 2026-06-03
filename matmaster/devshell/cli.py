@@ -177,6 +177,7 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
 
     from matmaster.config.loader import load_llm_config
     from matmaster.providers.llm_factory import build_provider_bundle
+    from matmaster.providers.usage_collector import UsageCollectingProvider
 
     llm_config = load_llm_config(llm_yaml)
     agent_default_llm = load_agents_general_llm(main_yaml)
@@ -197,6 +198,11 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
     except KeyError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
+
+    # Collect per-call usage (root + subagent + compaction share this instance).
+    llm_provider = UsageCollectingProvider(
+        llm_provider, model=getattr(resolved, "model", "") or ""
+    )
 
     # Load .env files (same as main app in src/utils/constant.py)
     from dotenv import find_dotenv, load_dotenv
@@ -359,6 +365,11 @@ def _run_single(
     vendor_turns = getattr(result, "usage_vendor_by_turn", ())
     if vendor_turns:
         summary["usage_vendor_by_turn"] = [dict(item) for item in vendor_turns]
+    collected = getattr(getattr(runner, "_llm_provider", None), "collected_calls", None)
+    if collected:
+        from matmaster.providers.usage_collector import per_call_usage_payload
+
+        summary["per_call_usage"] = per_call_usage_payload(collected)
     finish_detail = getattr(result, "finish_detail", None)
     if finish_detail is not None:
         if hasattr(finish_detail, "model_dump"):

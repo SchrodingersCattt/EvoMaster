@@ -358,6 +358,63 @@ def test_build_ingest_item_usage_vendor_by_turn_in_extra() -> None:
     assert "num_turns" not in item["extra"]
 
 
+def test_build_ingest_item_per_call_usage_in_extra() -> None:
+    item = build_ingest_item(
+        question_id="Q1",
+        task_id="Q1_direct_r0",
+        mode="direct",
+        repeat_idx=0,
+        devshell_exit_code=0,
+        summary={
+            "status": "done",
+            "per_call_usage": [
+                {
+                    "call_index": 1,
+                    "spawn_id": None,
+                    "kind": "root",
+                    "model": "claude-sonnet-4-6",
+                    "usage": {
+                        "prompt_tokens": 100,
+                        "completion_tokens": 20,
+                        "total_tokens": 120,
+                        "cache_read_tokens": 40,
+                        "cache_write_tokens": 10,
+                        "reasoning_tokens": 8,
+                    },
+                },
+                {
+                    "call_index": 2,
+                    "spawn_id": "child-1",
+                    "kind": "subagent",
+                    "model": "claude-sonnet-4-6",
+                    "usage": {"prompt_tokens": 5, "total_tokens": 6},
+                },
+            ],
+        },
+        duration_ms=1,
+    )
+    per_call = item["extra"]["per_call_usage"]
+    assert len(per_call) == 2
+    assert per_call[0]["kind"] == "root"
+    assert per_call[0]["usage"]["cache_write_tokens"] == 10
+    assert per_call[0]["usage"]["reasoning_tokens"] == 8
+    assert per_call[1]["kind"] == "subagent"
+    assert per_call[1]["spawn_id"] == "child-1"
+
+
+def test_build_ingest_item_no_per_call_usage_when_absent() -> None:
+    item = build_ingest_item(
+        question_id="Q1",
+        task_id="Q1_direct_r0",
+        mode="direct",
+        repeat_idx=0,
+        devshell_exit_code=0,
+        summary={"status": "done"},
+        duration_ms=1,
+    )
+    assert "per_call_usage" not in item["extra"]
+
+
 def test_build_ingest_item_repeat_idx_top_level() -> None:
     item = build_ingest_item(
         question_id="Q1",
