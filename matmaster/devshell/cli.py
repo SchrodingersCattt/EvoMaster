@@ -150,6 +150,23 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="MSG",
         help="Patch BohriumTool._submit to always return this error (eval-only)",
     )
+    run_p.add_argument(
+        "--billing-mode",
+        type=str,
+        default=None,
+        metavar="MODE",
+        help=(
+            "Enable per-call usage reporting to tools-server with this billing_mode "
+            "(e.g. 'eval'; 'eval'/'byok' do not debit credits). Omit to disable."
+        ),
+    )
+    run_p.add_argument(
+        "--invocation-id",
+        type=str,
+        default=None,
+        metavar="ID",
+        help="Stable invocation id used to correlate billing usage/cost for this run.",
+    )
 
     return parser
 
@@ -200,8 +217,31 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
         sys.exit(1)
 
     # Collect per-call usage (root + subagent + compaction share this instance).
+    # When --billing-mode is set, also report each call to tools-server and
+    # back-fill per-call cost (eval/byok do not debit credits).
+    reporter = None
+    billing_mode = (getattr(args, "billing_mode", None) or "").strip() or None
+    if billing_mode:
+        from clients.billing import (
+            BillingRunContext,
+            BillingUsageReporter,
+            get_billing_service,
+        )
+
+        invocation_id = (getattr(args, "invocation_id", None) or "").strip() or None
+        reporter = BillingUsageReporter(
+            billing_service=get_billing_service(),
+            run_context=BillingRunContext(
+                session_id=invocation_id or "eval",
+                task_id=None,
+                invocation_id=invocation_id,
+            ),
+            billing_mode=billing_mode,
+        )
     llm_provider = UsageCollectingProvider(
-        llm_provider, model=getattr(resolved, "model", "") or ""
+        llm_provider,
+        model=getattr(resolved, "model", "") or "",
+        reporter=reporter,
     )
 
     # Load .env files (same as main app in src/utils/constant.py)

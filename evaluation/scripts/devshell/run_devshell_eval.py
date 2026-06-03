@@ -351,6 +351,8 @@ def main() -> int:
             verbose=bool(args.verbose),
             exclude_subagents=args.exclude_subagents,
             inject_bohrium_failure=inject_failure,
+            billing_mode=(getattr(args, "eval_billing_mode", None) or None),
+            invocation_id=task_id,
         )
 
         prepared_tasks.append(
@@ -468,6 +470,8 @@ def main() -> int:
                 verbose=bool(prepared["verbose"]),
                 exclude_subagents=args.exclude_subagents,
                 inject_bohrium_failure=prepared.get("inject_bohrium_failure"),
+                billing_mode=(getattr(args, "eval_billing_mode", None) or None),
+                invocation_id=task_id,
             )
             rc2, d2, summary2 = _run_devshell_task(
                 cmd=cmd_fb,

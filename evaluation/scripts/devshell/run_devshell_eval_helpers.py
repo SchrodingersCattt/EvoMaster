@@ -93,6 +93,8 @@ def build_mm_devshell_run_cmd(
     verbose: bool,
     exclude_subagents: list[str] | None = None,
     inject_bohrium_failure: str | None = None,
+    billing_mode: str | None = None,
+    invocation_id: str | None = None,
 ) -> list[str | Path]:
     """Build ``python -m matmaster.devshell run ...`` argv (single task)."""
     cmd: list[str | Path] = [
@@ -117,6 +119,10 @@ def build_mm_devshell_run_cmd(
         cmd.extend(["--exclude-subagents", *exclude_subagents])
     if inject_bohrium_failure:
         cmd.extend(["--inject-bohrium-failure", inject_bohrium_failure])
+    if billing_mode:
+        cmd.extend(["--billing-mode", billing_mode])
+        if invocation_id:
+            cmd.extend(["--invocation-id", invocation_id])
     if verbose:
         cmd.append("--verbose")
     return cmd
@@ -365,6 +371,18 @@ def build_devshell_eval_arg_parser(
             f"{default_fallback_model_route} (LiteLLM). "
             "Use the same value as --model to disable fallback retries. "
             "Each new task still starts with --model."
+        ),
+    )
+    parser.add_argument(
+        "--eval-billing-mode",
+        type=str,
+        default=None,
+        metavar="MODE",
+        help=(
+            "Enable per-call usage reporting to tools-server with this billing_mode "
+            "(e.g. 'eval'). 'eval'/'byok' record + price but do NOT debit credits. "
+            "Per-call cost is back-filled into ingest extra.per_call_usage. "
+            "Omit to disable reporting."
         ),
     )
     parser.add_argument(
