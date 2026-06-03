@@ -782,7 +782,7 @@ def test_planarity_rejects_folded_core(tmp_path: Path) -> None:
     ymid = (max(ys) + min(ys)) / 2
     theta = math.radians(60)
     folded = []
-    for (x, y, z) in core:
+    for x, y, z in core:
         if y >= ymid:
             dy = y - ymid
             folded.append((x, ymid + dy * math.cos(theta), dy * math.sin(theta)))
