@@ -52,6 +52,7 @@ def test_run_runtime_compaction_splits_spec_and_resources() -> None:
     params = _params(run_runtime_compaction_if_needed)
     assert "kernel_spec" in params
     assert "kernel_resources" in params
+    assert "turn_input" in params
     assert "kernel_runtime" not in params
     assert "spec" not in params
 
