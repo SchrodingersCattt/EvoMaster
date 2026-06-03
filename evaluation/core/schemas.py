@@ -586,6 +586,14 @@ class EvalRunRecord(BaseModel):
         description="Wall-clock milliseconds for the agent run (mat task).",
     )
     token_usage: TokenUsageRecord = Field(default_factory=TokenUsageRecord)
+    per_call_usage: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description=(
+            "Per-LLM-call usage breakdown (root + subagent + compaction). Each "
+            "item: call_index, spawn_id, kind, model, usage (scalar token dict "
+            "incl. cache_read/cache_write/reasoning when reported)."
+        ),
+    )
     tool_calls: list[dict[str, Any]] = Field(default_factory=list)
     safety_veto: SafetyVetoRecord = Field(default_factory=SafetyVetoRecord)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
