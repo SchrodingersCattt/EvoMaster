@@ -193,7 +193,15 @@ def _h_checkcif(ctx):
 check_vasp_incar_from_evidence = _make_domain_check_handler(
     "vasp_incar_check",
     check_vasp_incar,
-    cfg_keys=("param", "expected", "allowed", "min", "max", "atom_count", "species_index"),
+    cfg_keys=(
+        "param",
+        "expected",
+        "allowed",
+        "min",
+        "max",
+        "atom_count",
+        "species_index",
+    ),
 )
 
 check_gpumd_run_in_from_evidence = _make_domain_check_handler(
