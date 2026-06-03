@@ -115,8 +115,6 @@ class LLMProfileConfig(BaseModel):
         None  # "anthropic_adaptive_thinking" | "openai_reasoning_effort"
     )
     reasoning_summary: Literal["auto", "concise", "detailed"] | None = None
-    # 思考开关：透传到 extra_body.enable_thinking（如 Qwen/DashScope）。None 表示不下发。
-    enable_thinking: bool | None = None
     fallback_group: str | None = None
 
     # Prompt cache
@@ -188,10 +186,6 @@ class LLMProfileConfig(BaseModel):
                 if effort:
                     reasoning["effort"] = effort
                 extra_body["reasoning"] = reasoning
-
-        # 思考开关独立于协议：显式 True/False 都下发（如 Qwen/DashScope）；None 不下发。
-        if self.enable_thinking is not None:
-            extra_body["enable_thinking"] = self.enable_thinking
 
         if extra_body:
             out["extra_body"] = extra_body

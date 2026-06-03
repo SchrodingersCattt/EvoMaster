@@ -375,9 +375,7 @@ class AgentRunService:
                     api_key=cred.api_key,
                     base_url=cred.base_url,
                     credential_id=byok_id,
-                    enable_thinking=cred.enable_thinking,
-                    reasoning_protocol=cred.reasoning_protocol,
-                    thinking_effort=cred.thinking_effort,
+                    extra_body=cred.extra_body,
                 )
                 # BYOK 第一期不接入族级 vision 校验：有图片用默认 detail，无图为 None。
                 image_detail = "high" if current_images else None
