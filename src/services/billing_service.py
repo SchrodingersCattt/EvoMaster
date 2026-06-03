@@ -81,9 +81,11 @@ class BillingService:
             "spawn_id": spawn_id,
             "call_index": call_index,
             "model": model,
-            "billing_mode": billing_mode,
             "usage": usage,
         }
+        # 仅在非默认（byok）时显式带上；tools-server 缺省即 platform，保持 payload 向后兼容。
+        if billing_mode and billing_mode != "platform":
+            payload["billing_mode"] = billing_mode
         url = f"{self._base_url}/api/v1/billing/usage"
         timeout = aiohttp.ClientTimeout(total=self._timeout_seconds)
         try:
