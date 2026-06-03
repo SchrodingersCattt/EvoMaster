@@ -78,4 +78,4 @@ git push -u gitlab <name>-main
 2. **Import 排序（isort `--profile black`）**：分组顺序为 标准库 → 第三方 → 本地，组间空一行；使用 black 兼容模式，二者不冲突。
 3. **死代码清理（autoflake + pyupgrade）**：自动删除未使用的 import 和变量；自动将旧式语法升级为现代写法（如 `format()` → f-string）。
 4. **静态检查（flake8 + flake8-bugbear）**：`max-line-length=88`，忽略 E501（行长由 black 管控）、E203（black 切片格式）、B008（FastAPI `Depends()` 等依赖注入）、B036；其余规则全部生效。
-5. **文件卫生**：单文件不超过 1000 行，超过1000行会导致CICD pipeline fail；自动修正行尾空白、文件末尾换行、混合换行符和 BOM；JSON 自动格式化并保留非 ASCII 原文。
+5. **文件卫生**：除了doc文档以外，单文件不超过 1000 行，超过1000行会导致CICD pipeline fail；自动修正行尾空白、文件末尾换行、混合换行符和 BOM；JSON 自动格式化并保留非 ASCII 原文。
