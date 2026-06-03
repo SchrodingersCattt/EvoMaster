@@ -31,6 +31,10 @@ from src.models.chat import (
     ShareStatusData,
 )
 from src.services.agent_run_service import _get_agent_default_llm
+from src.services.byok_model_resolver import (
+    BYOKResolveError,
+    get_byok_model_resolver,
+)
 from src.services.events_service import ChatEventsService, get_events_service
 from src.services.image_input_service import ImageInputError, get_image_input_service
 from src.services.quota_service import check_model_quota, check_quota
@@ -263,6 +267,31 @@ async def chat_stream(
 
     # 发送消息前检查配额（与 MatMaster 一致：有 user_id 时检查，无剩余则 403）
     assert req is not None
+    mode = (req.mode or "direct").strip().lower() or "direct"
+    byok_preflight = None
+    if req.custom_llm_config_id is not None:
+        if not user_id:
+            raise BaseErrorResponse(
+                http_status=401,
+                code=401,
+                msg="使用自定义模型配置需要登录",
+                data={"error_code": "byok_requires_user"},
+            )
+        try:
+            byok_preflight = get_byok_model_resolver().resolve_for_preflight(
+                user_id=user_id,
+                config_id=req.custom_llm_config_id,
+                mode=mode,
+                has_images=bool(req.images),
+            )
+        except BYOKResolveError as exc:
+            raise BaseErrorResponse(
+                http_status=exc.http_status,
+                code=exc.http_status,
+                msg=exc.message,
+                data={"error_code": exc.error_code},
+            ) from exc
+
     if user_id:
         remaining = await check_quota(user_id)
         logger.info(
@@ -304,7 +333,7 @@ async def chat_stream(
 
     # Model-level quota check (e.g. bedrock-claude-opus: 3/day)
     model_route_key = (req.model or "").strip() if req else ""
-    if user_id and model_route_key:
+    if byok_preflight is None and user_id and model_route_key:
         try:
             model_remaining = await check_model_quota(user_id, model_route_key)
             logger.info(
@@ -351,13 +380,16 @@ async def chat_stream(
                 files=req.files or [],
                 images=req.images,
             )
-            llm_config = load_llm_config(_PROJECT_ROOT / "config" / "llm_config.yaml")
-            image_service.ensure_vision_supported(
-                llm_config=llm_config,
-                llm_override=(req.llm or "").strip() or None,
-                model_override=(req.model or "").strip() or None,
-                default_profile_key=_get_agent_default_llm(),
-            )
+            if byok_preflight is None:
+                llm_config = load_llm_config(
+                    _PROJECT_ROOT / "config" / "llm_config.yaml"
+                )
+                image_service.ensure_vision_supported(
+                    llm_config=llm_config,
+                    llm_override=(req.llm or "").strip() or None,
+                    model_override=(req.model or "").strip() or None,
+                    default_profile_key=_get_agent_default_llm(),
+                )
         except ImageInputError as exc:
             raise BaseErrorResponse(
                 http_status=exc.http_status,
@@ -369,7 +401,10 @@ async def chat_stream(
             update={"images": [image.url for image in validated_images]}
         )
     try:
-        ctx = stream_svc.prepare_send_message(sid, req, user_id, org_id=org_id)
+        prepare_kwargs = {"org_id": org_id}
+        if byok_preflight is not None:
+            prepare_kwargs["byok_ref"] = byok_preflight.ref
+        ctx = stream_svc.prepare_send_message(sid, req, user_id, **prepare_kwargs)
     except SessionDirectoryError as exc:
         raise _session_directory_error(exc) from exc
     if ctx is None:

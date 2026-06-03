@@ -6,9 +6,11 @@ import os
 import queue
 import threading
 import uuid
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
+from pydantic import ValidationError
 
 # 测试中屏蔽 DB：任何真实 BaseTable 触发的连接直接报错（应通过 get_*_table mock 避免走到这里）
 _DB_DISABLED_ERROR = RuntimeError('DB disabled in test (use mock tables only)')
@@ -51,6 +53,240 @@ def _mock_events_table():
 
 async def _check_quota_noop(user_id: str) -> int:
     return 10
+
+
+def test_chat_send_request_rejects_byok_with_model_or_llm():
+    from src.models.chat import ChatSendRequest
+
+    with pytest.raises(ValidationError):
+        ChatSendRequest(
+            content='hello',
+            custom_llm_config_id=12,
+            model='claude-sonnet-4-6',
+        )
+    with pytest.raises(ValidationError):
+        ChatSendRequest(
+            content='hello',
+            custom_llm_config_id=12,
+            llm='opus',
+        )
+
+
+def test_chat_send_request_accepts_byok_alone():
+    from src.models.chat import ChatSendRequest
+
+    req = ChatSendRequest(content='hello', custom_llm_config_id=12)
+
+    assert req.custom_llm_config_id == 12
+    assert req.model is None
+    assert req.llm is None
+
+
+class _FakeByokResolver:
+    def __init__(self) -> None:
+        self.calls: list[dict] = []
+
+    def resolve_for_preflight(self, **kwargs):
+        from src.models.byok import BYOKRunReference
+
+        self.calls.append(kwargs)
+        return SimpleNamespace(
+            ref=BYOKRunReference(
+                config_id=kwargs['config_id'],
+                version=3,
+                display_name='Research Proxy',
+                model='model-a',
+            )
+        )
+
+
+class _FakeChatService:
+    def can_access_session(self, *_args, **_kwargs) -> bool:
+        return True
+
+    def ensure_session(self, *_args, **_kwargs) -> None:
+        return None
+
+
+class _FakeStreamService:
+    def __init__(self) -> None:
+        self.prepare_calls: list[tuple[tuple, dict]] = []
+
+    def prepare_send_message(self, *args, **kwargs):
+        self.prepare_calls.append((args, kwargs))
+        return SimpleNamespace()
+
+    async def generate_send_stream(self, session_id, _base_prompt, _ctx):
+        yield (
+            'event: ag-ui\n'
+            f'data: {json.dumps({"type": "stream_closed", "session_id": session_id})}\n\n'
+        )
+
+
+class _FakeImageInputService:
+    def __init__(self) -> None:
+        self.validate_calls: list[dict] = []
+        self.ensure_vision_supported_calls = 0
+
+    def validate_current_images(self, *, files, images):
+        self.validate_calls.append({'files': list(files), 'images': list(images)})
+        return [SimpleNamespace(url=image) for image in images]
+
+    def ensure_vision_supported(self, **_kwargs) -> None:
+        self.ensure_vision_supported_calls += 1
+
+
+def _install_chat_stream_overrides(monkeypatch):
+    from app import app
+    from src.apis import chat_api
+    from src.services.events_service import get_events_service
+    from src.services.sessions_service import get_sessions_service
+    from src.services.stream_service import get_stream_service
+
+    chat_svc = _FakeChatService()
+    stream_svc = _FakeStreamService()
+    resolver = _FakeByokResolver()
+    app.dependency_overrides[get_sessions_service] = lambda: chat_svc
+    app.dependency_overrides[get_stream_service] = lambda: stream_svc
+    app.dependency_overrides[get_events_service] = lambda: MagicMock()
+    monkeypatch.setattr(chat_api, 'REDIS_URL', 'redis://test')
+    monkeypatch.setattr(
+        chat_api,
+        'get_byok_model_resolver',
+        lambda: resolver,
+        raising=False,
+    )
+    return app, chat_api, stream_svc, resolver
+
+
+def _clear_chat_stream_overrides(app) -> None:
+    from src.services.events_service import get_events_service
+    from src.services.sessions_service import get_sessions_service
+    from src.services.stream_service import get_stream_service
+
+    app.dependency_overrides.pop(get_sessions_service, None)
+    app.dependency_overrides.pop(get_stream_service, None)
+    app.dependency_overrides.pop(get_events_service, None)
+
+
+def test_chat_stream_byok_preflight_skips_model_quota(monkeypatch):
+    app, chat_api, stream_svc, resolver = _install_chat_stream_overrides(monkeypatch)
+    quota_calls: list[str] = []
+    model_quota_calls: list[tuple[str, str]] = []
+
+    async def _check_quota(user_id: str) -> int:
+        quota_calls.append(user_id)
+        return 10
+
+    async def _check_model_quota(user_id: str, model: str) -> int:
+        model_quota_calls.append((user_id, model))
+        return 10
+
+    monkeypatch.setattr(chat_api, 'check_quota', _check_quota)
+    monkeypatch.setattr(chat_api, 'check_model_quota', _check_model_quota)
+    try:
+        from fastapi.testclient import TestClient
+
+        response = TestClient(app).post(
+            '/api/v1/chat/sessions/sess-byok/stream',
+            headers={'X-User-Id': 'user-1'},
+            json={
+                'content': 'hello',
+                'mode': 'direct',
+                'custom_llm_config_id': 12,
+            },
+        )
+    finally:
+        _clear_chat_stream_overrides(app)
+
+    assert response.status_code == 200, response.text
+    assert quota_calls == ['user-1']
+    assert model_quota_calls == []
+    assert resolver.calls == [
+        {
+            'user_id': 'user-1',
+            'config_id': 12,
+            'mode': 'direct',
+            'has_images': False,
+        }
+    ]
+    assert stream_svc.prepare_calls[0][1]['byok_ref'].config_id == 12
+
+
+def test_chat_stream_byok_without_user_id_returns_401(monkeypatch):
+    app, chat_api, _stream_svc, resolver = _install_chat_stream_overrides(monkeypatch)
+    quota_calls: list[str] = []
+
+    async def _check_quota(user_id: str) -> int:
+        quota_calls.append(user_id)
+        return 10
+
+    monkeypatch.setattr(chat_api, 'check_quota', _check_quota)
+    try:
+        from fastapi.testclient import TestClient
+
+        response = TestClient(app).post(
+            '/api/v1/chat/sessions/sess-byok/stream',
+            json={
+                'content': 'hello',
+                'mode': 'direct',
+                'custom_llm_config_id': 12,
+            },
+        )
+    finally:
+        _clear_chat_stream_overrides(app)
+
+    assert response.status_code == 401, response.text
+    assert response.json()['data']['error_code'] == 'byok_requires_user'
+    assert quota_calls == []
+    assert resolver.calls == []
+
+
+def test_chat_stream_byok_with_images_does_not_call_static_vision_gate(monkeypatch):
+    app, chat_api, _stream_svc, resolver = _install_chat_stream_overrides(monkeypatch)
+    image_service = _FakeImageInputService()
+
+    async def _check_quota(_user_id: str) -> int:
+        return 10
+
+    async def _check_model_quota(_user_id: str, _model: str) -> int:
+        raise AssertionError('model quota should be skipped for BYOK')
+
+    monkeypatch.setattr(chat_api, 'check_quota', _check_quota)
+    monkeypatch.setattr(chat_api, 'check_model_quota', _check_model_quota)
+    monkeypatch.setattr(chat_api, 'get_image_input_service', lambda: image_service)
+    monkeypatch.setattr(
+        chat_api,
+        'load_llm_config',
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError('static LLM config should not load for BYOK images')
+        ),
+    )
+    try:
+        from fastapi.testclient import TestClient
+
+        response = TestClient(app).post(
+            '/api/v1/chat/sessions/sess-byok/stream',
+            headers={'X-User-Id': 'user-1'},
+            json={
+                'content': '看图',
+                'mode': 'direct',
+                'custom_llm_config_id': 12,
+                'images': ['https://oss.example.com/chat/a.png'],
+            },
+        )
+    finally:
+        _clear_chat_stream_overrides(app)
+
+    assert response.status_code == 200, response.text
+    assert resolver.calls[0]['has_images'] is True
+    assert image_service.validate_calls == [
+        {
+            'files': [],
+            'images': ['https://oss.example.com/chat/a.png'],
+        }
+    ]
+    assert image_service.ensure_vision_supported_calls == 0
 
 
 def _decode_sse_payload(frame: str) -> dict:

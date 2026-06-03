@@ -382,6 +382,10 @@ class ChatSendRequest(BaseModel):
     model: str | None = (
         None  # 可选，本轮使用的模型名（如 gemini-3-flash-preview、claude-sonnet-4-6），覆盖所选 LLM 配置里的 model
     )
+    custom_llm_config_id: int | None = Field(
+        default=None,
+        description="用户自定义 BYOK LLM 配置 ID",
+    )
     bohrium_project_id: int | str | None = None  # 可选的 Bohrium project id
     bohrium_user_id: int | str | None = (
         None  # 可选的 Bohrium user id（MCP 计算类工具需要）
@@ -416,6 +420,14 @@ class ChatSendRequest(BaseModel):
             ]
         }
     )
+
+    @model_validator(mode="after")
+    def validate_model_choice(self) -> "ChatSendRequest":
+        if self.custom_llm_config_id is not None and (
+            (self.llm or "").strip() or (self.model or "").strip()
+        ):
+            raise ValueError("custom_llm_config_id cannot be used with llm or model")
+        return self
 
 
 class ChatAskQuestionReplyRequest(BaseModel):
