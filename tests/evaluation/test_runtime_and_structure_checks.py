@@ -722,6 +722,97 @@ def test_min_interatomic_distance_rejects_overlap(tmp_path: Path) -> None:
     assert '0.5000' in reason
 
 
+def _write_xyz(path: Path, symbols: list[str], coords: list[tuple]) -> None:
+    lines = [str(len(symbols)), ""]
+    for s, (x, y, z) in zip(symbols, coords):
+        lines.append(f"{s} {x:.4f} {y:.4f} {z:.4f}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _honeycomb_carbon_patch(nx: int = 4, ny: int = 4, a: float = 1.42) -> list[tuple]:
+    """Planar (z=0) honeycomb carbon patch, all C-C ~1.42 Å."""
+    import math
+
+    dx = a * math.sqrt(3)
+    dy = a * 1.5
+    pts: list[tuple] = []
+    for i in range(nx):
+        for j in range(ny):
+            x0 = i * dx + (j % 2) * (dx / 2)
+            y0 = j * dy
+            pts.append((x0, y0, 0.0))
+            pts.append((x0, y0 + a, 0.0))
+    return pts
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec('pymatgen') is None,
+    reason='pymatgen optional; install with uv sync --extra calculation',
+)
+def test_planarity_accepts_flat_conjugated_core(tmp_path: Path) -> None:
+    """A flat fused-aromatic core (plus sp3 alkyl carbons) is reported planar."""
+    from evaluation.validators.structure_planarity import check_planarity
+
+    core = _honeycomb_carbon_patch()
+    # sp3 alkyl carbons at ~1.52 Å must be excluded from the aromatic core.
+    alkyl = [(core[0][0], core[0][1] - 1.52, 0.0), (core[0][0], core[0][1] - 3.04, 0.5)]
+    symbols = ['C'] * (len(core) + len(alkyl))
+    _write_xyz(tmp_path / 'planar.xyz', symbols, core + alkyl)
+
+    ok, reason = check_planarity(tmp_path, filename='planar.xyz', max_rms_A=0.3)
+    assert ok is True, reason
+    assert 'planar' in reason
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec('pymatgen') is None,
+    reason='pymatgen optional; install with uv sync --extra calculation',
+)
+def test_planarity_rejects_folded_core(tmp_path: Path) -> None:
+    """A hinge-folded core (bond lengths preserved) is reported non-planar.
+
+    Mirrors the real PDI-4OH failure: correct connectivity, folded geometry.
+    """
+    import math
+
+    from evaluation.validators.structure_planarity import check_planarity
+
+    core = _honeycomb_carbon_patch()
+    ys = [p[1] for p in core]
+    ymid = (max(ys) + min(ys)) / 2
+    theta = math.radians(60)
+    folded = []
+    for (x, y, z) in core:
+        if y >= ymid:
+            dy = y - ymid
+            folded.append((x, ymid + dy * math.cos(theta), dy * math.sin(theta)))
+        else:
+            folded.append((x, y, z))
+    _write_xyz(tmp_path / 'folded.xyz', ['C'] * len(folded), folded)
+
+    ok, reason = check_planarity(tmp_path, filename='folded.xyz', max_rms_A=0.3)
+    assert ok is False, reason
+    assert 'FOLDED' in reason or 'non-planar' in reason
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec('pymatgen') is None,
+    reason='pymatgen optional; install with uv sync --extra calculation',
+)
+def test_planarity_fails_when_no_aromatic_core(tmp_path: Path) -> None:
+    """A pure alkyl chain has no fused conjugated core -> fails clearly."""
+    from evaluation.validators.structure_planarity import check_planarity
+
+    _write_xyz(
+        tmp_path / 'alkyl.xyz',
+        ['C', 'C', 'C'],
+        [(0.0, 0.0, 0.0), (1.52, 0.0, 0.0), (3.04, 0.0, 0.3)],
+    )
+    ok, reason = check_planarity(tmp_path, filename='alkyl.xyz', max_rms_A=0.3)
+    assert ok is False
+    assert 'aromatic core' in reason
+
+
 def test_removed_slab_centered_verify_is_rejected() -> None:
     from evaluation.core.schemas import ScoringCheckItem
 

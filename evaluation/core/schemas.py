@@ -64,6 +64,7 @@ VerifyLiteral = Literal[
     "struct_file_charge_balance",
     "struct_file_coordination",
     "struct_file_layer_count",
+    "struct_file_planarity",
     "struct_file_parsable",
     "struct_file_all_occupancy_one",
     "struct_file_space_group",
