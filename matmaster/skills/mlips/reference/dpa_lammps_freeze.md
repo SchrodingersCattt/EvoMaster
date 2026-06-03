@@ -30,7 +30,7 @@ pair_coeff  * *
 
 **Inspecting type_map of a model file:** Use `dp --pt show <model.pt> type-map` to print the element ordering. For user-provided custom models, this is the correct way to determine what elements the model covers and their ordering — do NOT attempt `torch.load`, `zipfile`, or binary parsing of `.pt` files.
 
-## DPA4-Neo LAMMPS path
+**For DPA4-Neo**
 
 DPA4 raw checkpoints (`DPA4-Neo-OMat24*.pt`) cannot be loaded directly by
 LAMMPS. Freeze them into a `.pt2` artifact first, then run LAMMPS with the
@@ -40,7 +40,7 @@ DPA4 image:
 dp --pt freeze -c DPA4-Neo-OMat24.pt -o dpa4_frozen.pt2
 ```
 
-Use:
+Use script like:
 
 ```text
 atom_modify map yes
