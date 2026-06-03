@@ -62,11 +62,13 @@ class BillingService:
         call_index: int,
         spawn_id: str | None,
         usage: dict[str, Any] | None,
+        billing_mode: str = "platform",
         session: aiohttp.ClientSession | None = None,
     ) -> bool:
         """上报一次 LLM 调用 usage 事件。成功记账返回 True，其余返回 False。
 
         ``session`` 用于在一次 run 内复用连接池；None 时临时新建。
+        ``billing_mode`` 为 'byok' 时 tools-server 仅记账不扣额度。
         网络/服务异常在此吞掉并记 warning，避免影响用户请求主链路。
         """
         if not usage:
@@ -79,6 +81,7 @@ class BillingService:
             "spawn_id": spawn_id,
             "call_index": call_index,
             "model": model,
+            "billing_mode": billing_mode,
             "usage": usage,
         }
         url = f"{self._base_url}/api/v1/billing/usage"

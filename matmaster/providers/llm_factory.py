@@ -11,12 +11,14 @@ import logging
 import os
 from dataclasses import dataclass
 
-from matmaster.config.llm import LLMConfig
+from matmaster.config.llm import LLMConfig, LLMProfileConfig
 from matmaster.providers.bedrock_provider import BedrockProvider
 from matmaster.providers.openai_provider import (
     AnthropicPromptCacheOptions,
     OpenAIProvider,
 )
+
+BYOK_PROFILE_KEY = "byok"
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +73,54 @@ def _build_anthropic_prompt_cache_options(
         flexible_breakpoint=prompt_cache.flexible_breakpoint,
         max_breakpoints=prompt_cache.max_breakpoints,
         min_flexible_chars=prompt_cache.min_flexible_chars,
+    )
+
+
+def build_byok_provider_bundle(
+    *,
+    model: str,
+    api_key: str,
+    base_url: str,
+    credential_id: str | None = None,
+) -> LLMProviderBundle:
+    """用用户自带 Key（BYOK）构造 OpenAI 兼容 Provider。
+
+    不读 llm_config / routes：model/api_key/base_url 全部来自 tools-server 下发的凭证。
+    其余参数沿用 LLMProfileConfig 默认（温度/推理协议按 model 名推断的族默认生效）。
+    """
+    profile = LLMProfileConfig(
+        provider="openai",
+        model=model,
+        api_key=api_key,
+        base_url=base_url,
+    )
+    logger.info(
+        "build_byok_provider: model=%s family=%s base_url_host=%s",
+        model,
+        profile.effective_family(),
+        (base_url.split("//", 1)[-1].split("/", 1)[0] if base_url else ""),
+    )
+    provider = OpenAIProvider(
+        model=model,
+        api_key=api_key,
+        base_url=base_url,
+        temperature=profile.effective_temperature(),
+        max_tokens=profile.max_tokens,
+        timeout=profile.timeout,
+        stream_timeout=profile.stream_timeout,
+        stream_idle_timeout=profile.stream_idle_timeout,
+        max_retries=profile.max_retries,
+        retry_delay=profile.retry_delay,
+        prompt_cache_options=_build_anthropic_prompt_cache_options(profile),
+        extra_kwargs=profile.build_extra_kwargs(),
+    )
+    return LLMProviderBundle(
+        provider=provider,
+        model=model,
+        model_profile=BYOK_PROFILE_KEY,
+        model_route=f"byok:{credential_id}" if credential_id else BYOK_PROFILE_KEY,
+        provider_name="openai",
+        model_family=profile.effective_family(),
     )
 
 
