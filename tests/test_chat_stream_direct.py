@@ -564,6 +564,56 @@ def test_prepare_send_message_persists_images_in_user_message():
     ]
 
 
+def test_prepare_send_message_records_byok_metadata_without_secret():
+    from src.models.byok import BYOKRunReference
+    from src.models.chat import ChatSendRequest
+    from src.services.stream_service import ChatStreamService
+
+    sessions_service = MagicMock()
+    sessions_service.get_session.return_value = {"session_directory": None}
+    sessions_service.try_acquire_session_run.return_value = (True, None)
+    events_service = MagicMock()
+    deploy_state_service = MagicMock()
+    fake_redis = MagicMock()
+    byok_ref = BYOKRunReference(
+        config_id=12,
+        version=3,
+        display_name='Research Proxy',
+        model='model-a',
+    )
+
+    service = ChatStreamService(
+        sessions_service=sessions_service,
+        events_service=events_service,
+        agent_run_service=MagicMock(),
+        deploy_state_service=deploy_state_service,
+    )
+
+    req = ChatSendRequest(content='run', custom_llm_config_id=12)
+
+    with (
+        patch('src.services.stream_service.REDIS_URL', 'redis://test'),
+        patch('src.services.stream_service.get_redis_dao', return_value=fake_redis),
+    ):
+        ctx = service.prepare_send_message(
+            'sess-1',
+            req,
+            user_id='user-1',
+            byok_ref=byok_ref,
+        )
+
+    assert ctx is not None
+    assert ctx.byok_ref.config_id == 12
+    assert ctx.user_msg['requested_byok_config_id'] == 12
+    assert ctx.user_msg['requested_byok_display_name'] == 'Research Proxy'
+    assert ctx.user_msg['requested_model'] == 'model-a'
+    user_msg_text = json.dumps(ctx.user_msg, ensure_ascii=False)
+    assert 'api_key' not in user_msg_text
+    assert 'api_key_cipher' not in user_msg_text
+    assert 'sk-' not in user_msg_text
+    events_service.add_history_event.assert_called_once()
+
+
 @pytest.mark.asyncio
 async def test_generate_send_stream_enqueues_bohrium_required_flag():
     from src.services.stream_service import ChatStreamService, SendStreamContext
@@ -692,6 +742,81 @@ async def test_generate_send_stream_enqueues_images():
 
     pushed_job = fake_redis.lpush_agent_run_job.call_args.args[0]
     assert pushed_job['images'] == ['https://oss.example.com/chat/a.png']
+
+
+@pytest.mark.asyncio
+async def test_generate_send_stream_enqueues_byok_reference_only():
+    from src.models.byok import BYOKRunReference
+    from src.services.stream_service import ChatStreamService, SendStreamContext
+
+    service = ChatStreamService(
+        sessions_service=MagicMock(
+            get_session_status_payload=MagicMock(
+                return_value={
+                    'source': 'System',
+                    'type': 'status',
+                    'content': '',
+                    'session_id': 'sess-1',
+                }
+            )
+        ),
+        events_service=MagicMock(get_session_events=MagicMock(return_value=[])),
+        agent_run_service=MagicMock(),
+        deploy_state_service=MagicMock(),
+    )
+
+    ctx = SendStreamContext(
+        task_id='tid-1',
+        invocation_id='inv-1',
+        mode='direct',
+        user_msg={'source': 'User', 'type': 'query', 'content': 'run'},
+        request_event_queue=asyncio.Queue(),
+        byok_ref=BYOKRunReference(
+            config_id=12,
+            version=3,
+            display_name='Research Proxy',
+            model='model-a',
+        ),
+    )
+
+    fake_redis = MagicMock()
+    fake_redis.create_client.return_value = None
+    fake_redis.set_session_run_queued.return_value = True
+    fake_redis.llen_agent_run_queue.return_value = 0
+    fake_redis.lpush_agent_run_job.side_effect = lambda job: True
+
+    async def _stream_closed_immediately(awaitable, timeout):
+        close = getattr(awaitable, 'close', None)
+        if callable(close):
+            close()
+        return {
+            'source': 'System',
+            'type': 'stream_closed',
+            'content': '',
+            'session_id': 'sess-1',
+        }
+
+    with (
+        patch('src.services.stream_service.REDIS_URL', 'redis://test'),
+        patch('src.services.stream_service.get_redis_dao', return_value=fake_redis),
+        patch('src.services.stream_service.notify_post_async'),
+        patch(
+            'src.services.stream_service.asyncio.wait_for',
+            side_effect=_stream_closed_immediately,
+        ),
+    ):
+        gen = service.generate_send_stream('sess-1', 'run', ctx)
+        await gen.__anext__()
+        await gen.__anext__()
+        await gen.__anext__()
+        await gen.aclose()
+
+    pushed_job = fake_redis.lpush_agent_run_job.call_args.args[0]
+    assert pushed_job['byok'] == {'config_id': 12, 'version': 3}
+    job_text = json.dumps(pushed_job, ensure_ascii=False)
+    assert 'api_key' not in job_text
+    assert 'api_key_cipher' not in job_text
+    assert 'sk-' not in job_text
 
 
 async def test_sse_frames_match_frontend_contract_without_mysql():

@@ -19,6 +19,7 @@ from src.dao.redis_dao import (
     STREAM_CHANNEL_PREFIX,
     get_redis_dao,
 )
+from src.models.byok import BYOKRunReference
 from src.models.chat import ChatSendRequest
 from src.services.agent_run_service import (
     AgentRunService,
@@ -122,6 +123,7 @@ class SendStreamContext:
     images: list[str] = field(default_factory=list)
     remote_workdir: str | None = None
     session_directory_source: SessionDirectorySource = "none"
+    byok_ref: BYOKRunReference | None = None
 
 
 class ChatStreamService:
@@ -444,6 +446,7 @@ class ChatStreamService:
         req: ChatSendRequest,
         user_id: str | None,
         org_id: str | None = None,
+        byok_ref: BYOKRunReference | None = None,
     ) -> SendStreamContext | None:
         """
         为发送消息做准备：确保会话、尝试占用 run、更新 Bohrium 凭证、写入用户消息、创建队列。
@@ -535,6 +538,12 @@ class ChatStreamService:
             user_msg['requested_llm'] = llm
         if model:
             user_msg['requested_model'] = model
+        if byok_ref is not None:
+            user_msg["requested_byok_config_id"] = byok_ref.config_id
+            if byok_ref.display_name:
+                user_msg["requested_byok_display_name"] = byok_ref.display_name
+            if byok_ref.model:
+                user_msg["requested_model"] = byok_ref.model
         if req.files:
             user_msg['files'] = list(req.files)
         if req.images:
@@ -571,6 +580,7 @@ class ChatStreamService:
             images=list(req.images or []),
             remote_workdir=resolved_directory.remote_workdir,
             session_directory_source=resolved_directory.source,
+            byok_ref=byok_ref,
         )
 
     def get_reply_queue(self, session_id: str) -> ReplyQueueLike | None:
@@ -713,6 +723,8 @@ class ChatStreamService:
                 'session_directory_source': ctx.session_directory_source,
                 'submitted_at': datetime.now(timezone.utc).isoformat(),
             }
+            if ctx.byok_ref is not None:
+                job["byok"] = ctx.byok_ref.to_job_payload()
             # 先设为 waiting 再入队，避免 Worker 接手后 set active 被此处覆盖（竞态）
             self._sessions_service.set_session_status(sid, 'waiting')
             get_redis_dao().set_session_run_queued(sid)
