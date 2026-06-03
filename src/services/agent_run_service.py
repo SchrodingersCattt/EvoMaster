@@ -358,7 +358,7 @@ class AgentRunService:
                 )
 
                 try:
-                    cred = fetch_byok_credential(
+                    cred = await fetch_byok_credential(
                         user_id=user_id or "", credential_id=byok_id
                     )
                 except ByokCredentialError as exc:

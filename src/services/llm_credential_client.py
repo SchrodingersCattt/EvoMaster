@@ -33,8 +33,11 @@ class ByokCredentialError(Exception):
     """凭证拉取失败（缺鉴权配置 / 不存在 / 服务异常）。"""
 
 
-def fetch_byok_credential(*, user_id: str, credential_id: str) -> ByokCredential:
-    """同步拉取解密凭证。失败抛 ByokCredentialError，由调用方决定如何向用户报错。"""
+async def fetch_byok_credential(*, user_id: str, credential_id: str) -> ByokCredential:
+    """异步拉取解密凭证（用 AsyncClient 避免阻塞事件循环）。
+
+    失败抛 ByokCredentialError，由调用方决定如何向用户报错。
+    """
     if not MATMASTER_TOOLS_BYOK_BEARER:
         raise ByokCredentialError("未配置 MATMASTER_TOOLS_BYOK_BEARER")
     if not (user_id and credential_id):
@@ -43,8 +46,8 @@ def fetch_byok_credential(*, user_id: str, credential_id: str) -> ByokCredential
     base = MATMASTER_TOOLS_SERVER.rstrip("/")
     url = f"{base}/api/v1/internal/llm-credentials/{credential_id}"
     try:
-        with httpx.Client(timeout=_REQUEST_TIMEOUT_SECONDS) as client:
-            resp = client.get(
+        async with httpx.AsyncClient(timeout=_REQUEST_TIMEOUT_SECONDS) as client:
+            resp = await client.get(
                 url,
                 params={"user_id": user_id},
                 headers={"Authorization": f"Bearer {MATMASTER_TOOLS_BYOK_BEARER}"},
