@@ -29,6 +29,7 @@ dependencies = [
     "requests",
     "boto3>=1.34.0",
     "beautifulsoup4",
+    "cryptography>=46.0.0",
     "lxml",
     "pymupdf",
     "markdownify>=0.14.1",
