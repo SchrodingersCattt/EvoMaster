@@ -43,9 +43,6 @@ class ThoughtEvent(EventBase):
     token_count: int = 0
     context: str | None = None  # e.g. 'step_execution'
     reasoning_content: str | None = None
-    model: str | None = None
-    model_profile: str | None = None
-    model_route: str | None = None
 
 
 class ResponseEvent(EventBase):

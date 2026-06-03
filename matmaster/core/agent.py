@@ -46,7 +46,6 @@ from matmaster.types.events import (
     CheckpointEvent,
     FinishDetail,
     ResponseEvent,
-    ThoughtEvent,
     ToolCallEvent,
 )
 
@@ -204,9 +203,9 @@ class AgentKernel:
         item: _KernelItem,
         state: _KernelState,
     ) -> _KernelItem:
-        """Attach resolved model identity to persisted LLM aggregate events."""
+        """Attach resolved model identity to persisted assistant output events."""
         event = item.event
-        if not isinstance(event, (ThoughtEvent, ResponseEvent)):
+        if not isinstance(event, ResponseEvent):
             return item
         if event.stream_state != "complete":
             return item

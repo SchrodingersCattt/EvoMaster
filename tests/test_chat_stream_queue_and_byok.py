@@ -121,21 +121,19 @@ def _clear_chat_stream_overrides(app) -> None:
     app.dependency_overrides.pop(get_events_service, None)
 
 
-def test_chat_stream_byok_preflight_skips_model_quota(monkeypatch):
+def test_chat_stream_byok_preflight_passes_reference_and_checks_quota_status(
+    monkeypatch,
+):
     app, chat_api, stream_svc, resolver = _install_chat_stream_overrides(monkeypatch)
     quota_calls: list[str] = []
-    model_quota_calls: list[tuple[str, str]] = []
 
-    async def _check_quota(user_id: str) -> int:
+    async def _check_quota_status(user_id: str):
+        from src.services.quota_service import QuotaStatus
+
         quota_calls.append(user_id)
-        return 10
+        return QuotaStatus(remaining_yuan=10.0, reset_at=None)
 
-    async def _check_model_quota(user_id: str, model: str) -> int:
-        model_quota_calls.append((user_id, model))
-        return 10
-
-    monkeypatch.setattr(chat_api, 'check_quota', _check_quota)
-    monkeypatch.setattr(chat_api, 'check_model_quota', _check_model_quota)
+    monkeypatch.setattr(chat_api, 'check_quota_status', _check_quota_status)
     try:
         from fastapi.testclient import TestClient
 
@@ -153,7 +151,6 @@ def test_chat_stream_byok_preflight_skips_model_quota(monkeypatch):
 
     assert response.status_code == 200, response.text
     assert quota_calls == ['user-1']
-    assert model_quota_calls == []
     assert resolver.calls == [
         {
             'user_id': 'user-1',
@@ -169,11 +166,13 @@ def test_chat_stream_byok_without_user_id_returns_401(monkeypatch):
     app, chat_api, _stream_svc, resolver = _install_chat_stream_overrides(monkeypatch)
     quota_calls: list[str] = []
 
-    async def _check_quota(user_id: str) -> int:
-        quota_calls.append(user_id)
-        return 10
+    async def _check_quota_status(user_id: str):
+        from src.services.quota_service import QuotaStatus
 
-    monkeypatch.setattr(chat_api, 'check_quota', _check_quota)
+        quota_calls.append(user_id)
+        return QuotaStatus(remaining_yuan=10.0, reset_at=None)
+
+    monkeypatch.setattr(chat_api, 'check_quota_status', _check_quota_status)
     try:
         from fastapi.testclient import TestClient
 
@@ -198,14 +197,12 @@ def test_chat_stream_byok_with_images_does_not_call_static_vision_gate(monkeypat
     app, chat_api, _stream_svc, resolver = _install_chat_stream_overrides(monkeypatch)
     image_service = _FakeImageInputService()
 
-    async def _check_quota(_user_id: str) -> int:
-        return 10
+    async def _check_quota_status(_user_id: str):
+        from src.services.quota_service import QuotaStatus
 
-    async def _check_model_quota(_user_id: str, _model: str) -> int:
-        raise AssertionError('model quota should be skipped for BYOK')
+        return QuotaStatus(remaining_yuan=10.0, reset_at=None)
 
-    monkeypatch.setattr(chat_api, 'check_quota', _check_quota)
-    monkeypatch.setattr(chat_api, 'check_model_quota', _check_model_quota)
+    monkeypatch.setattr(chat_api, 'check_quota_status', _check_quota_status)
     monkeypatch.setattr(chat_api, 'get_image_input_service', lambda: image_service)
     monkeypatch.setattr(
         chat_api,
@@ -241,21 +238,17 @@ def test_chat_stream_byok_with_images_does_not_call_static_vision_gate(monkeypat
     assert image_service.ensure_vision_supported_calls == 0
 
 
-def test_preset_model_still_checks_model_quota(monkeypatch):
+def test_preset_model_uses_monetary_quota_status(monkeypatch):
     app, chat_api, _stream_svc, resolver = _install_chat_stream_overrides(monkeypatch)
     quota_calls: list[str] = []
-    model_quota_calls: list[tuple[str, str]] = []
 
-    async def _check_quota(user_id: str) -> int:
+    async def _check_quota_status(user_id: str):
+        from src.services.quota_service import QuotaStatus
+
         quota_calls.append(user_id)
-        return 10
+        return QuotaStatus(remaining_yuan=10.0, reset_at=None)
 
-    async def _check_model_quota(user_id: str, model: str) -> int:
-        model_quota_calls.append((user_id, model))
-        return 10
-
-    monkeypatch.setattr(chat_api, 'check_quota', _check_quota)
-    monkeypatch.setattr(chat_api, 'check_model_quota', _check_model_quota)
+    monkeypatch.setattr(chat_api, 'check_quota_status', _check_quota_status)
     try:
         from fastapi.testclient import TestClient
 
@@ -273,7 +266,6 @@ def test_preset_model_still_checks_model_quota(monkeypatch):
 
     assert response.status_code == 200, response.text
     assert quota_calls == ['user-1']
-    assert model_quota_calls == [('user-1', 'claude-sonnet-4-6')]
     assert resolver.calls == []
 
 
@@ -283,18 +275,16 @@ def test_preset_model_still_uses_static_vision_gate(monkeypatch):
     fake_llm_config = MagicMock()
     load_calls: list[object] = []
 
-    async def _check_quota(_user_id: str) -> int:
-        return 10
+    async def _check_quota_status(_user_id: str):
+        from src.services.quota_service import QuotaStatus
 
-    async def _check_model_quota(_user_id: str, _model: str) -> int:
-        return 10
+        return QuotaStatus(remaining_yuan=10.0, reset_at=None)
 
     def _load_llm_config(path):
         load_calls.append(path)
         return fake_llm_config
 
-    monkeypatch.setattr(chat_api, 'check_quota', _check_quota)
-    monkeypatch.setattr(chat_api, 'check_model_quota', _check_model_quota)
+    monkeypatch.setattr(chat_api, 'check_quota_status', _check_quota_status)
     monkeypatch.setattr(chat_api, 'get_image_input_service', lambda: image_service)
     monkeypatch.setattr(chat_api, 'load_llm_config', _load_llm_config)
     try:

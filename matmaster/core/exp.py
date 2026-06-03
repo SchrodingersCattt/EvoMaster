@@ -71,6 +71,7 @@ _EXTERNAL_EFFECT_TOOL_NAMES: frozenset[str] = frozenset(
         "WebFetch",
         "PaperSearch",
         "Bohrium",
+        "AttachFigure",
     }
 )
 
@@ -78,7 +79,7 @@ _EXTERNAL_EFFECT_TOOL_NAMES: frozenset[str] = frozenset(
 _SESSION_REQUIRING_TOOL_NAMES: frozenset[str] = frozenset(
     {
         "Bash",
-        "PlotFigure",
+        "AttachFigure",
         "Read",
         "Write",
         "Edit",
@@ -459,7 +460,12 @@ class Exp:
             if cancel_token is not None and catalog is not None:
                 catalog.inject_cancel_token(cancel_token)
 
-            yield runtime
+            provider_scope = getattr(ctx.request.llm_provider, "billing_scope", None)
+            if callable(provider_scope):
+                with provider_scope(spawn_id=spawn_id):
+                    yield runtime
+            else:
+                yield runtime
         finally:
             await self._run_cleanup_callbacks()
 
@@ -633,7 +639,7 @@ class Exp:
         in the list are registered, cutting prompt-token overhead.
 
         Tools are split into two categories:
-        - Session-requiring: BashTool, PlotFigure, ReadTool, WriteTool,
+        - Session-requiring: BashTool, AttachFigure, ReadTool, WriteTool,
           EditTool, GlobTool, GrepTool (need ctx.environment.session for
           execution)
         - Sessionless: TodoWriteTool, WebSearchTool, WebFetchTool
@@ -651,12 +657,12 @@ class Exp:
 
         from matmaster.tools.builtin import (
             AskQuestionTool,
+            AttachFigure,
             BashTool,
             BohriumTool,
             EditTool,
             GlobTool,
             GrepTool,
-            PlotFigure,
             ReadTool,
             TodoWriteTool,
             WebFetchTool,
@@ -677,7 +683,7 @@ class Exp:
         if has_session:
             session_tools = [
                 BashTool(session=env.session, workdir=exec_wd),
-                PlotFigure(session=env.session, workdir=exec_wd),
+                AttachFigure(session=env.session, workdir=exec_wd),
                 ReadTool(session=env.session, workdir=exec_wd),
                 WriteTool(session=env.session, workdir=exec_wd),
                 EditTool(session=env.session, workdir=exec_wd),

@@ -400,10 +400,11 @@ def _extract_cached_tokens(usage: Any) -> int:
 
 
 def _extract_cache_write_tokens(usage: Any) -> int:
+    """Best-effort extraction of prompt cache-write tokens."""
     val = getattr(usage, "cache_creation_input_tokens", None)
     if isinstance(val, int) and val > 0:
         return val
-    cache_creation = getattr(usage, "cache_creation", None)
+    cache_creation = _dump_usage_detail(getattr(usage, "cache_creation", None))
     if isinstance(cache_creation, dict):
         total = 0
         for value in cache_creation.values():

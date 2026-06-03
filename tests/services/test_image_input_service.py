@@ -366,7 +366,9 @@ def test_enrich_turn_input_images_preserves_existing_turn_input_images() -> None
     assert enriched.attachments.image_detail == "high"
 
 
-def test_enrich_turn_input_images_preserves_existing_detail_when_no_new_detail() -> None:
+def test_enrich_turn_input_images_preserves_existing_detail_when_no_new_detail() -> (
+    None
+):
     turn_input = TurnInput.from_values(
         user_text="from turn input",
         images=("https://oss.example.com/chat/existing.png",),

@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from evaluation.scripts.devshell.eval_model_routes import (
+    DEFAULT_DEVSHELL_FALLBACK_MODEL_ROUTE,
+    DEFAULT_DEVSHELL_MODEL_ROUTE,
+)
+
 RUN_DEVSHELL_EVAL_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -42,13 +47,15 @@ RUN_DEVSHELL_EVAL_SCHEMA: dict[str, Any] = {
         "model": {
             "type": "string",
             "description": (
-                "LLM route for inner mm-devshell --model (default: bedrock-claude-opus)."
+                "LLM route for inner mm-devshell --model "
+                f"(default: {DEFAULT_DEVSHELL_MODEL_ROUTE})."
             ),
         },
         "fallback_model": {
             "type": "string",
             "description": (
-                "run_devshell_eval --fallback-model (default: claude-opus-4-6): retry a "
+                "run_devshell_eval --fallback-model (default: "
+                f"{DEFAULT_DEVSHELL_FALLBACK_MODEL_ROUTE}): retry a "
                 "failed task once when devshell logs indicate Bedrock transport errors; "
                 "omit or match model to skip fallback."
             ),

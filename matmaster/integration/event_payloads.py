@@ -105,15 +105,6 @@ def _response_public_content(payload: dict[str, Any]) -> object | None:
     return out
 
 
-def _thought_public_content(payload: dict[str, Any]) -> object | None:
-    content = payload.get('content')
-    if not any(payload.get(key) for key in _MODEL_IDENTITY_KEYS):
-        return content
-    out: dict[str, Any] = {'content': content or ''}
-    _copy_nonempty_keys(out, payload, _MODEL_IDENTITY_KEYS)
-    return out
-
-
 def normalize_response_sse_payload(payload: dict[str, Any]) -> dict[str, Any]:
     event_type = payload.get('type')
     if event_type not in _STRUCTURAL_PASSTHROUGH_EVENT_TYPES:
@@ -125,14 +116,10 @@ def normalize_response_sse_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
     normalized = dict(payload)
     normalized['content'] = str(content.get('content') or '')
-    keys = (
-        (*_RESPONSE_USAGE_KEYS, *_MODEL_IDENTITY_KEYS)
-        if event_type == 'response'
-        else _MODEL_IDENTITY_KEYS
-    )
-    for key in keys:
-        if key in content and content.get(key) is not None:
-            normalized[key] = content[key]
+    if event_type == 'response':
+        for key in (*_RESPONSE_USAGE_KEYS, *_MODEL_IDENTITY_KEYS):
+            if key in content and content.get(key) is not None:
+                normalized[key] = content[key]
     return normalized
 
 
@@ -154,7 +141,14 @@ def normalize_replayed_terminal_payload(payload: dict[str, Any]) -> dict[str, An
 
     normalized = dict(payload)
     normalized['final_content'] = content.get('content') or ''
-    for key in ('status', 'reason', 'finish_detail', 'num_turns', 'usage', *_MODEL_IDENTITY_KEYS):
+    for key in (
+        'status',
+        'reason',
+        'finish_detail',
+        'num_turns',
+        'usage',
+        *_MODEL_IDENTITY_KEYS,
+    ):
         if content.get(key) is not None:
             normalized[key] = content[key]
     return normalized
@@ -174,9 +168,8 @@ def _carry_top_level_fields(
     non-dict (tool_progress, stream_closed, unknown passthrough), which keeps
     its structured identifiers at the top level.
     """
-    if (
-        event_type in _STRUCTURAL_PASSTHROUGH_EVENT_TYPES
-        or not isinstance(content, dict)
+    if event_type in _STRUCTURAL_PASSTHROUGH_EVENT_TYPES or not isinstance(
+        content, dict
     ):
         for key, value in raw.items():
             if key in _TOP_LEVEL_DENYLIST:
@@ -240,7 +233,7 @@ def _public_content_for_event(
         return _response_public_content(payload)
 
     if event_type == 'thought':
-        return _thought_public_content(payload)
+        return payload.get('content')
 
     if event_type == 'tool_call':
         call_id = payload.get('call_id')

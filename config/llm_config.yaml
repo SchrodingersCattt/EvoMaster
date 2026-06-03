@@ -6,32 +6,6 @@
 # 鉴权凭据从 .env 读取，使用 ${VAR} 引用
 
 profiles:
-  opus:
-    provider: "openai"
-    model: "claude-opus-4-6"
-    api_key: "${LITELLM_PROXY_API_KEY}"
-    base_url: "${LITELLM_PROXY_API_BASE}"
-    thinking_effort: "max"
-    reasoning_protocol: "anthropic_adaptive_thinking"
-    temperature_policy: "force_one_when_reasoning"
-    temperature: 0.7
-    supports_vision: true
-    timeout: 1200
-    stream_timeout: 120
-    stream_idle_timeout: 60
-    max_retries: 3
-    retry_delay: 1.0
-    prompt_cache:
-      provider: "anthropic"
-      system_prompt_breakpoint: true
-      automatic: true
-      latest_user_breakpoint: true
-      tool_result_breakpoint: true
-      flexible_breakpoint: true
-      max_breakpoints: 4
-      min_flexible_chars: 1000
-      ttl: "5m"
-
   sonnet:
     provider: "openai"
     model: "claude-sonnet-4-6"
@@ -45,32 +19,6 @@ profiles:
     timeout: 1200
     stream_timeout: 120
     stream_idle_timeout: 60
-    max_retries: 3
-    retry_delay: 1.0
-
-  haiku:
-    provider: "openai"
-    model: "claude-haiku-4-5"
-    api_key: "${LITELLM_PROXY_API_KEY}"
-    base_url: "${LITELLM_PROXY_API_BASE}"
-    supports_vision: true
-    timeout: 1200
-    stream_timeout: 60
-    stream_idle_timeout: 30
-    max_retries: 3
-    retry_delay: 1.0
-
-  gemini:
-    provider: "openai"
-    model: "gemini-3-flash-preview"
-    api_key: "${LITELLM_PROXY_API_KEY}"
-    base_url: "${LITELLM_PROXY_API_BASE}"
-    reasoning_protocol: "openai_reasoning_effort"
-    thinking_effort: "high"
-    supports_vision: true
-    timeout: 1200
-    stream_timeout: 60
-    stream_idle_timeout: 30
     max_retries: 3
     retry_delay: 1.0
 
@@ -97,33 +45,6 @@ profiles:
     reasoning_protocol: "openai_reasoning_effort"
     thinking_effort: "xhigh"
     reasoning_summary: "detailed"
-    timeout: 1200
-    stream_timeout: 120
-    stream_idle_timeout: 60
-    max_retries: 3
-    retry_delay: 1.0
-
-  qwen_3_6_plus:
-    provider: "openai"
-    model: "matmaster/qwen3.6-plus"
-    api_key: "${LITELLM_PROXY_API_KEY}"
-    base_url: "${LITELLM_PROXY_API_BASE}"
-    reasoning_protocol: "openai_reasoning_effort"
-    thinking_effort: "high"
-    supports_vision: true
-    timeout: 1200
-    stream_timeout: 120
-    stream_idle_timeout: 60
-    max_retries: 3
-    retry_delay: 1.0
-
-  qwen_3_6_max_preview:
-    provider: "openai"
-    model: "matmaster/qwen3.6-max-preview"
-    api_key: "${LITELLM_PROXY_API_KEY}"
-    base_url: "${LITELLM_PROXY_API_BASE}"
-    reasoning_protocol: "openai_reasoning_effort"
-    thinking_effort: "high"
     supports_vision: true
     timeout: 1200
     stream_timeout: 120
@@ -148,6 +69,19 @@ profiles:
   deepseek_v4_pro:
     provider: "openai"
     model: "aliyun/deepseek-v4-pro"
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+    reasoning_protocol: "openai_reasoning_effort"
+    thinking_effort: "max"
+    timeout: 1200
+    stream_timeout: 120
+    stream_idle_timeout: 60
+    max_retries: 3
+    retry_delay: 1.0
+
+  deepseek_v4_pro_mm:
+    provider: "openai"
+    model: "matmaster/DeepSeek-v4-Pro"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
     reasoning_protocol: "openai_reasoning_effort"
@@ -209,29 +143,23 @@ profiles:
 
 # 路由表：前端 model_override 字符串 → 内部 profile
 routes:
-  "claude-opus-4-6":
-    profile: opus
   "claude-sonnet-4-6":
     profile: sonnet
-  "claude-haiku-4-5":
-    profile: haiku
-  "gemini-3-flash-preview":
-    profile: gemini
   "gemini-3.1-pro-preview":
     profile: gemini-pro
   "cds/GPT-5.5":
     profile: gpt55
-  "matmaster/qwen3.6-plus":
-    profile: qwen_3_6_plus
-  "matmaster/qwen3.6-max-preview":
-    profile: qwen_3_6_max_preview
+  "matmaster/gpt-5.5":
+    profile: gpt55
   "matmaster/qwen3.7-max":
     profile: qwen_3_7_max
   "matmaster/dsk-v4p":
     profile: deepseek_v4_pro
+  "matmaster/DeepSeek-v4-Pro":
+    profile: deepseek_v4_pro_mm
   "global.anthropic.claude-opus-4-6-v1":
     profile: opus_global
   "bedrock-claude-opus":
     profile: opus_bedrock
 
-default: "qwen_3_6_plus"
+default: "qwen_3_7_max"

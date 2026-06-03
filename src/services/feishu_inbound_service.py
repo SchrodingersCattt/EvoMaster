@@ -18,7 +18,7 @@ from src.services.feishu_open_api import (
     remove_reaction,
     reply_text_message,
 )
-from src.services.quota_service import check_quota
+from src.services.quota_service import check_quota_status
 from src.services.stream_service import get_stream_service
 from src.utils.constant import DB_CONFIG, REDIS_URL
 from src.utils.feishu_event_crypto import parse_event_json as feishu_parse_event_json
@@ -136,11 +136,13 @@ async def _run_agent_and_reply_feishu(
         model=model,
     )
     try:
-        remaining = await check_quota(user_id)
-        if remaining <= 0:
+        quota_status = await check_quota_status(user_id)
+        if quota_status.is_exhausted:
             reply_text_message(
                 message_id,
-                "当日免费额度已用完，请稍后再试或通过网页申请额度。",
+                quota_status.exhausted_message(
+                    "免费额度已用完，请稍后再试或通过网页申请额度。"
+                ),
                 tenant_token=tenant_token,
             )
             return

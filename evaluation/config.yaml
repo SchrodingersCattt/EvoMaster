@@ -34,7 +34,7 @@ axis_weights:
 
 evaluator_llm:
   provider: "openai"
-  model: "claude-opus-4-6"
+  model: "global.anthropic.claude-opus-4-6-v1"
   api_key: "${LITELLM_PROXY_API_KEY}"
   base_url: "${LITELLM_PROXY_API_BASE}"
   temperature: 0.0

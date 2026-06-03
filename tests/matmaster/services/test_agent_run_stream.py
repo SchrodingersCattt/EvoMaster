@@ -630,7 +630,6 @@ async def test_run_agent_writes_continuation_when_instruction_hash_matches():
 @pytest.mark.asyncio
 async def test_run_agent_uses_byok_profile_identity_and_skips_model_quota():
     from matmaster.config.llm import LLMProfileConfig
-    from src.services import agent_run_service as mod
 
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
     byok_profile = LLMProfileConfig(
@@ -642,7 +641,6 @@ async def test_run_agent_uses_byok_profile_identity_and_skips_model_quota():
     byok_provider = MagicMock()
 
     async with _patched_service([run_result]) as (svc, _sse, _persist):
-        quota_mock = mod.use_quota
         with patch(
             "matmaster.providers.llm_factory.build_provider_from_profile",
             return_value=byok_provider,
@@ -668,17 +666,15 @@ async def test_run_agent_uses_byok_profile_identity_and_skips_model_quota():
     assert request.llm_model == byok_profile.model
     assert request.llm_model_profile == "byok:12"
     assert request.llm_model_route is None
-    quota_mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_preset_model_success_still_uses_platform_quota():
+async def test_preset_model_success_wraps_provider_for_platform_billing():
     from src.services import agent_run_service as mod
 
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
 
     async with _patched_service([run_result]) as (svc, _sse, _persist):
-        quota_mock = mod.use_quota
         ok, _elapsed, _usage = await svc.run_agent(
             session_id="sess-1",
             user_prompt="hello",
@@ -691,7 +687,9 @@ async def test_preset_model_success_still_uses_platform_quota():
         )
 
     assert ok is True
-    quota_mock.assert_awaited_once_with("user-1", model_key="claude-sonnet-4-6")
+    request = svc._test_fake_exp.last_ctx.request
+    assert isinstance(request.llm_provider, mod.BillingLLMProvider)
+    assert request.llm_model == "test-model"
 
 
 @pytest.mark.asyncio

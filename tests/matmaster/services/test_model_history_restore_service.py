@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
+
 import src.services.model_history_restore_service as restore_module
 from matmaster.context.history_restore import (
     HistoryCheckpointCorruptedError,

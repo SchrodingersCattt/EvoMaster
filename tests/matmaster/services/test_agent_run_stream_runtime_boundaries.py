@@ -60,7 +60,9 @@ async def test_run_agent_runs_bohrium_cleanup_after_success():
     )
 
 
-def test_agent_run_service_no_longer_imports_context_turn_intent_after_exp_cutover() -> None:
+def test_agent_run_service_no_longer_imports_context_turn_intent_after_exp_cutover() -> (
+    None
+):
     """Root turn preparation belongs to Exp, not AgentRunService."""
     import src.services.agent_run_service as svc_module
 

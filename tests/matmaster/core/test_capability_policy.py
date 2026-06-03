@@ -218,3 +218,58 @@ class TestCapabilityPolicyExternalEffect:
         policy = DefaultCapabilityPolicy()
         decision = policy.evaluate(topology_with_external, instance, {})
         assert decision.decision == "allow"
+
+
+class TestAttachFigurePlaneGate:
+    """AttachFigure (external_effect, EXTERNAL_SERVICE) is gated by the plane."""
+
+    def _compile(self):
+        from matmaster.tools.builtin.attach_figure_tool import AttachFigure
+        from matmaster.tools.tool_compiler import ToolCompiler
+        from matmaster.types.topology import RuntimeTopology
+
+        topology_for_compile = RuntimeTopology(
+            session_kind="local",
+            control_root="/tmp/ctrl",
+            workspace_root="/tmp/ws",
+            active_planes=frozenset(ToolPlane),
+        )
+        return ToolCompiler().compile(
+            AttachFigure(workdir="/tmp/ws"),
+            topology_for_compile,
+            source="builtin",
+        )
+
+    def test_denied_without_external_service_plane(self) -> None:
+        from matmaster.types.topology import RuntimeTopology
+
+        instance = self._compile()
+        topology = RuntimeTopology(
+            session_kind="local",
+            control_root="/tmp/ctrl",
+            workspace_root="/tmp/ws",
+            active_planes=frozenset({ToolPlane.CONTROL_PLANE, ToolPlane.SESSION_FS}),
+        )
+        decision = DefaultCapabilityPolicy().evaluate(
+            topology,
+            instance,
+            {"figures": [{"output_path": "/tmp/ws/x.png", "caption": "c"}]},
+        )
+        assert decision.decision == "deny"
+
+    def test_allowed_with_external_service_plane(self) -> None:
+        from matmaster.types.topology import RuntimeTopology
+
+        instance = self._compile()
+        topology = RuntimeTopology(
+            session_kind="local",
+            control_root="/tmp/ctrl",
+            workspace_root="/tmp/ws",
+            active_planes=frozenset(ToolPlane),
+        )
+        decision = DefaultCapabilityPolicy().evaluate(
+            topology,
+            instance,
+            {"figures": [{"output_path": "/tmp/ws/x.png", "caption": "c"}]},
+        )
+        assert decision.decision == "allow"
