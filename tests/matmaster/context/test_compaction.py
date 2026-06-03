@@ -151,9 +151,7 @@ async def test_runtime_compaction_reinjects_current_instruction_text() -> None:
 
 
 @pytest.mark.asyncio
-async def test_runtime_compaction_keeps_omitted_current_request_authoritative() -> (
-    None
-):
+async def test_runtime_compaction_keeps_omitted_current_request_authoritative() -> None:
     compactor = make_compactor()
     turn_input = TurnInput.from_values(
         user_text="Do not relax the cell; only compute static energy.",
