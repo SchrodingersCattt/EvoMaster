@@ -18,11 +18,6 @@ from matmaster.context.sources.turn_input import TurnInput
 from matmaster.types.cancellation import CancellationController
 from src.dao.redis_dao import get_redis_dao
 from src.services.agent_run_service import get_agent_run_service
-from src.services.byok_model_resolver import (
-    BYOKResolveError,
-    get_byok_model_resolver,
-)
-from src.services.byok_redaction import sanitize_provider_error
 from src.services.sessions_service import get_sessions_service
 from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
@@ -329,14 +324,12 @@ def _run_worker_loop() -> None:
             mode = DEFAULT_MODE
         llm_override = (payload.get('llm') or '').strip() or None
         model_override = (payload.get('model') or '').strip() or None
+        byok_credential_id = (payload.get('byok_credential_id') or '').strip() or None
         raw_images = payload.get('images') or []
         images = (
             [url for url in raw_images if isinstance(url, str)]
             if isinstance(raw_images, list)
             else []
-        )
-        raw_byok = (
-            payload.get("byok") if isinstance(payload.get("byok"), dict) else None
         )
         turn_input = TurnInput.from_payload(payload.get('turn_input'))
         bohrium_required = bool(payload.get('bohrium_required'))
@@ -432,31 +425,6 @@ def _run_worker_loop() -> None:
             elapsed_ms: int | None = None
             usage_summary: dict | None = None
             try:
-                resolved_byok = None
-                if raw_byok is not None:
-                    try:
-                        config_id = int(raw_byok.get("config_id"))
-                        expected_version = int(raw_byok.get("version"))
-                    except (TypeError, ValueError) as exc:
-                        raise BYOKResolveError(
-                            "自定义模型配置引用无效，请重新发送消息。",
-                            http_status=400,
-                            error_code="byok_reference_invalid",
-                        ) from exc
-                    if not session_user_id:
-                        raise BYOKResolveError(
-                            "使用自定义模型配置需要登录。",
-                            http_status=401,
-                            error_code="byok_requires_user",
-                        )
-                    resolved_byok = get_byok_model_resolver().resolve_for_worker_run(
-                        user_id=session_user_id,
-                        config_id=config_id,
-                        expected_version=expected_version,
-                        mode=mode,
-                        has_images=bool(images),
-                    )
-
                 run_agent_kwargs = {
                     "session_id": session_id,
                     "user_prompt": user_prompt,
@@ -467,20 +435,13 @@ def _run_worker_loop() -> None:
                     "invocation_id": invocation_id,
                     "llm_override": llm_override,
                     "model_override": model_override,
+                    "byok_credential_id": byok_credential_id,
+                    "user_id": session_user_id,
                     "images": images,
                     "turn_input": turn_input,
                     "remote_workdir": remote_workdir,
                     "bohrium_required": bohrium_required,
                 }
-                if resolved_byok is not None:
-                    run_agent_kwargs.update(
-                        {
-                            "byok_profile": resolved_byok.profile,
-                            "byok_config_id": resolved_byok.config_id,
-                            "byok_config_version": resolved_byok.version,
-                            "billing_mode": "byok",
-                        }
-                    )
                 result = asyncio.run(agent_run_service.run_agent(**run_agent_kwargs))
                 run_result = result
                 if isinstance(result, tuple) and len(result) >= 2:
@@ -503,44 +464,6 @@ def _run_worker_loop() -> None:
                     run_success = False
                 else:
                     run_success = True
-            except BYOKResolveError as e:
-                safe_message = sanitize_provider_error(e.message)
-                run_success = False
-                fail_reason = safe_message
-                logger.warning(
-                    'Agent worker: BYOK resolve failed session_id=%s task_id=%s error_code=%s: %s',
-                    session_id,
-                    task_id,
-                    e.error_code,
-                    safe_message,
-                )
-                try:
-                    send_cb(
-                        {
-                            'source': 'System',
-                            'type': 'error',
-                            'content': safe_message,
-                            'session_id': session_id,
-                            'task_id': task_id,
-                            'invocation_id': invocation_id,
-                            'error_code': e.error_code,
-                        }
-                    )
-                    send_cb(
-                        {
-                            'source': 'System',
-                            'type': 'stream_closed',
-                            'content': safe_message,
-                            'session_id': session_id,
-                            'task_id': task_id,
-                            'invocation_id': invocation_id,
-                            'end_reason': e.error_code,
-                            'treat_as_failure': True,
-                            'task_completed': False,
-                        }
-                    )
-                except Exception:
-                    pass
             except Exception as e:
                 run_success = False
                 fail_reason = str(e)

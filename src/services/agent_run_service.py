@@ -14,9 +14,8 @@ from collections.abc import Callable
 from contextlib import aclosing
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
-from matmaster.config.llm import LLMProfileConfig
 from matmaster.config.loader import load_agents_general_llm
 from matmaster.context.sources.turn_input import TurnInput
 from matmaster.core.playground import PlaygroundManager
@@ -44,7 +43,7 @@ from src.services.billing_llm_provider import BillingLLMProvider
 from src.services.billing_service import BillingRunContext, get_billing_service
 from src.services.figure_coordinator import FigureCoordinator
 from src.services.history_checkpoint_service import HistoryCheckpointService
-from src.services.image_input_service import ImageInputError, get_image_input_service
+from src.services.image_input_service import get_image_input_service
 from src.services.sessions_service import get_sessions_service
 from src.services.stream_reply_queue import RedisReplyQueue
 from src.services.user_turn_context_service import (
@@ -220,14 +219,12 @@ class AgentRunService:
         invocation_id: str | None = None,
         llm_override: str | None = None,
         model_override: str | None = None,
+        byok_credential_id: str | None = None,
+        user_id: str | None = None,
         images: list[str] | None = None,
         turn_input: TurnInput | None = None,
         bohrium_required: bool = False,
         remote_workdir: str | None = None,
-        byok_profile: LLMProfileConfig | None = None,
-        byok_config_id: int | None = None,
-        byok_config_version: int | None = None,
-        billing_mode: Literal["platform", "byok"] = "platform",
     ) -> tuple[bool | tuple[bool, str], int, dict[str, Any] | None]:
         """Execute agent pipeline using generator event stream with fanout dispatch.
 
@@ -340,11 +337,7 @@ class AgentRunService:
             # -- Stage 4: Exp assembly --
             from matmaster.config.loader import load_llm_config
             from matmaster.core.exp import Exp
-            from matmaster.providers.llm_factory import (
-                LLMProviderBundle,
-                build_provider_bundle,
-                build_provider_from_profile,
-            )
+            from matmaster.providers.llm_factory import build_provider_bundle
 
             llm_config = load_llm_config(_project_root / "config" / "llm_config.yaml")
 
@@ -354,26 +347,39 @@ class AgentRunService:
             current_images = image_service.select_current_images(
                 turn_input, top_level_images
             )
-            if byok_profile is not None:
-                if current_images and not byok_profile.supports_vision:
-                    raise ImageInputError(
-                        error_code="byok_vision_required",
-                        message="该自定义模型不支持图片输入，请切换模型。",
-                        http_status=400,
+
+            byok_id = (byok_credential_id or "").strip() or None
+            if byok_id:
+                # BYOK：凭证由 tools-server 下发，绕开 llm_config / routes，用户自付不扣额度。
+                from matmaster.providers.llm_factory import build_byok_provider_bundle
+                from src.services.llm_credential_client import (
+                    ByokCredentialError,
+                    fetch_byok_credential,
+                )
+
+                try:
+                    cred = await fetch_byok_credential(
+                        user_id=user_id or "", credential_id=byok_id
                     )
-                image_detail = byok_profile.vision_detail if current_images else None
-                llm_provider = build_provider_from_profile(
-                    byok_profile,
-                    byok_profile.model,
+                except ByokCredentialError as exc:
+                    logger.warning(
+                        "byok credential fetch failed session_id=%s cred=%s: %s",
+                        session_id,
+                        byok_id,
+                        exc,
+                    )
+                    return ((False, "byok_credential_unavailable"), _elapsed_ms(), None)
+
+                llm_bundle = build_byok_provider_bundle(
+                    model=cred.model,
+                    api_key=cred.api_key,
+                    base_url=cred.base_url,
+                    credential_id=byok_id,
+                    extra_body=cred.extra_body,
                 )
-                llm_bundle = LLMProviderBundle(
-                    provider=llm_provider,
-                    model=byok_profile.model,
-                    model_profile=f"byok:{byok_config_id}",
-                    model_route=None,
-                    provider_name="openai",
-                    model_family=None,
-                )
+                # BYOK 第一期不接入族级 vision 校验：有图片用默认 detail，无图为 None。
+                image_detail = "high" if current_images else None
+                billing_mode = "byok"
             else:
                 image_detail = image_service.resolve_image_detail(
                     llm_config=llm_config,
@@ -382,32 +388,32 @@ class AgentRunService:
                     model_override=model_override,
                     default_profile_key=agent_default_llm,
                 )
-
                 llm_bundle = build_provider_bundle(
                     llm_config,
                     model_override=model_override,
                     llm_override=llm_override,
                     default_profile_key=agent_default_llm,
                 )
+                billing_mode = "platform"
             llm_provider = llm_bundle.provider
-            if billing_mode == "platform":
-                try:
-                    llm_provider = BillingLLMProvider(
-                        llm_provider,
-                        run_context=BillingRunContext(
-                            session_id=session_id,
-                            task_id=task_id,
-                            invocation_id=invocation_id,
-                        ),
-                        model=llm_bundle.model,
-                        billing_service=get_billing_service(),
-                    )
-                except Exception:
-                    logger.warning(
-                        "billing wrapper init failed session_id=%s",
-                        session_id,
-                        exc_info=True,
-                    )
+            try:
+                llm_provider = BillingLLMProvider(
+                    llm_provider,
+                    run_context=BillingRunContext(
+                        session_id=session_id,
+                        task_id=task_id,
+                        invocation_id=invocation_id,
+                    ),
+                    model=llm_bundle.model,
+                    billing_service=get_billing_service(),
+                    billing_mode=billing_mode,
+                )
+            except Exception:
+                logger.warning(
+                    "billing wrapper init failed session_id=%s",
+                    session_id,
+                    exc_info=True,
+                )
 
             exp = Exp(exp_config)
 

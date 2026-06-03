@@ -10,11 +10,7 @@ from __future__ import annotations
 import pytest
 
 from matmaster.config.llm import LLMConfig, LLMProfileConfig, LLMRouteConfig
-from matmaster.providers.llm_factory import (
-    build_provider,
-    build_provider_bundle,
-    build_provider_from_profile,
-)
+from matmaster.providers.llm_factory import build_provider, build_provider_bundle
 from matmaster.providers.openai_provider import AnthropicPromptCacheOptions
 
 
@@ -207,86 +203,6 @@ class TestBuildProvider:
         assert bundle.model_route == "claude-sonnet-4-6"
         assert bundle.provider_name == "openai"
         assert bundle.model_family == "claude-4.6"
-
-    def test_build_provider_from_profile_builds_byok_openai_provider(self) -> None:
-        profile = LLMProfileConfig(
-            provider="openai",
-            model="configured-model",
-            api_key="sk-user-key",
-            base_url="https://byok.example.com/v1",
-            temperature=0.2,
-            max_tokens=512,
-            timeout=600,
-            stream_timeout=120,
-            stream_idle_timeout=60,
-            passthrough_params={"seed": 42},
-            passthrough_extra_body={"metadata": {"byok": True}},
-            prompt_cache={
-                "provider": "anthropic",
-                "system_prompt_breakpoint": True,
-                "automatic": True,
-                "latest_user_breakpoint": True,
-                "tool_result_breakpoint": True,
-                "flexible_breakpoint": True,
-                "max_breakpoints": 4,
-                "min_flexible_chars": 1000,
-                "ttl": "1h",
-            },
-        )
-
-        provider = build_provider_from_profile(profile, "runtime-model")
-
-        assert provider._model == "runtime-model"
-        assert provider._api_key == "sk-user-key"
-        assert provider._base_url == "https://byok.example.com/v1"
-        assert provider._temperature == 0.2
-        assert provider._max_tokens == 512
-        assert provider._timeout == 600
-        assert provider.stream_timeout == 120
-        assert provider.stream_idle_timeout == 60
-        assert provider._extra_kwargs == {
-            "seed": 42,
-            "extra_body": {"metadata": {"byok": True}},
-        }
-        assert provider._prompt_cache_options == AnthropicPromptCacheOptions(
-            system_prompt_breakpoint=True,
-            cache_control={"type": "ephemeral", "ttl": "1h"},
-            automatic=True,
-            latest_user_breakpoint=True,
-            tool_result_breakpoint=True,
-            flexible_breakpoint=True,
-            max_breakpoints=4,
-            min_flexible_chars=1000,
-        )
-
-    def test_build_provider_bundle_reuses_profile_builder(
-        self,
-        llm_config: LLMConfig,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        sentinel = object()
-        captured: dict[str, object] = {}
-
-        def fake_build_provider_from_profile(
-            profile: LLMProfileConfig,
-            model: str,
-        ) -> object:
-            captured["profile"] = profile
-            captured["model"] = model
-            return sentinel
-
-        monkeypatch.setattr(
-            "matmaster.providers.llm_factory.build_provider_from_profile",
-            fake_build_provider_from_profile,
-        )
-
-        bundle = build_provider_bundle(llm_config, model_override="claude-sonnet-4-6")
-
-        assert bundle.provider is sentinel
-        assert captured["profile"] is llm_config.profiles["sonnet"]
-        assert captured["model"] == "claude-sonnet-4-6"
-        assert bundle.model == "claude-sonnet-4-6"
-        assert bundle.model_profile == "sonnet"
 
     def test_stream_timeout_passed(self) -> None:
         """stream_timeout and stream_idle_timeout from profile are passed to provider."""

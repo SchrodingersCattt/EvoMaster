@@ -302,37 +302,6 @@ class TestLLMProfileConfigMethods:
         )
         assert p.build_extra_kwargs() is None
 
-    def test_build_extra_kwargs_merges_passthrough_params_and_extra_body(
-        self,
-    ) -> None:
-        p = LLMProfileConfig(
-            reasoning_protocol="openai_reasoning_effort",
-            thinking_effort="medium",
-            passthrough_params={
-                "seed": 42,
-                "reasoning_effort": "high",
-            },
-            passthrough_extra_body={"metadata": {"byok": True}},
-        )
-
-        assert p.build_extra_kwargs() == {
-            "reasoning_effort": "high",
-            "seed": 42,
-            "extra_body": {"metadata": {"byok": True}},
-        }
-
-    def test_build_extra_kwargs_preset_without_passthrough_is_unchanged(
-        self,
-    ) -> None:
-        p = LLMProfileConfig(model="claude-opus-4-6", thinking_effort="low")
-
-        assert p.build_extra_kwargs() == {
-            "extra_body": {
-                "thinking": {"type": "adaptive"},
-                "output_config": {"effort": "low"},
-            },
-        }
-
 
 class TestLLMConfigModelValidator:
     """model_validator accepts only the normalized profile schema."""

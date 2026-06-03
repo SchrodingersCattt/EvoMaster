@@ -65,20 +65,6 @@ async def test_run_agent_signature_does_not_accept_reply_queue():
     )
 
 
-def test_run_agent_signature_accepts_byok_runtime_kwargs():
-    from src.services.agent_run_service import AgentRunService
-
-    params = inspect.signature(AgentRunService.run_agent).parameters
-
-    for name in (
-        "byok_profile",
-        "byok_config_id",
-        "byok_config_version",
-        "billing_mode",
-    ):
-        assert name in params
-
-
 @pytest.mark.asyncio
 async def test_run_agent_injects_cancel_token_into_session_and_exp():
     run_result = RunResultEvent(source='agent', status='completed', reason='natural')
@@ -625,71 +611,6 @@ async def test_run_agent_writes_continuation_when_instruction_hash_matches():
         svc._test_fake_exp.last_ctx.request.ports.user_turn_context_writer is not None
     )
     assert svc._test_fake_exp.last_task == "follow up"
-
-
-@pytest.mark.asyncio
-async def test_run_agent_uses_byok_profile_identity_and_skips_model_quota():
-    from matmaster.config.llm import LLMProfileConfig
-
-    run_result = RunResultEvent(source="agent", status="completed", reason="natural")
-    byok_profile = LLMProfileConfig(
-        provider="openai",
-        model="model-a",
-        api_key="sk-test",
-        base_url="https://api.example.com/v1",
-    )
-    byok_provider = MagicMock()
-
-    async with _patched_service([run_result]) as (svc, _sse, _persist):
-        with patch(
-            "matmaster.providers.llm_factory.build_provider_from_profile",
-            return_value=byok_provider,
-        ) as build_from_profile:
-            ok, _elapsed, _usage = await svc.run_agent(
-                session_id="sess-1",
-                user_prompt="hello",
-                send_cb=AsyncMock(),
-                cancel_token=_make_cancel_token(),
-                mode="direct",
-                task_id="task-1",
-                invocation_id="inv-byok",
-                byok_profile=byok_profile,
-                byok_config_id=12,
-                byok_config_version=3,
-                billing_mode="byok",
-            )
-
-    assert ok is True
-    build_from_profile.assert_called_once_with(byok_profile, byok_profile.model)
-    request = svc._test_fake_exp.last_ctx.request
-    assert request.llm_provider is byok_provider
-    assert request.llm_model == byok_profile.model
-    assert request.llm_model_profile == "byok:12"
-    assert request.llm_model_route is None
-
-
-@pytest.mark.asyncio
-async def test_preset_model_success_wraps_provider_for_platform_billing():
-    from src.services import agent_run_service as mod
-
-    run_result = RunResultEvent(source="agent", status="completed", reason="natural")
-
-    async with _patched_service([run_result]) as (svc, _sse, _persist):
-        ok, _elapsed, _usage = await svc.run_agent(
-            session_id="sess-1",
-            user_prompt="hello",
-            send_cb=AsyncMock(),
-            cancel_token=_make_cancel_token(),
-            mode="direct",
-            task_id="task-1",
-            invocation_id="inv-platform-quota",
-            model_override="claude-sonnet-4-6",
-        )
-
-    assert ok is True
-    request = svc._test_fake_exp.last_ctx.request
-    assert isinstance(request.llm_provider, mod.BillingLLMProvider)
-    assert request.llm_model == "test-model"
 
 
 @pytest.mark.asyncio
