@@ -76,6 +76,34 @@ def _build_anthropic_prompt_cache_options(
     )
 
 
+def _build_openai_provider(
+    profile: LLMProfileConfig,
+    *,
+    model: str,
+    api_key: str,
+    base_url: str | None,
+    extra_kwargs: dict | None,
+) -> OpenAIProvider:
+    """按 profile 的通用参数构造 OpenAIProvider；model/api_key/base_url/extra_kwargs 由调用方决定。
+
+    供标准路径与 BYOK 路径共用，避免两处重复一长串 timeout/retry/cache 等 kwargs。
+    """
+    return OpenAIProvider(
+        model=model,
+        api_key=api_key,
+        base_url=base_url,
+        temperature=profile.effective_temperature(),
+        max_tokens=profile.max_tokens,
+        timeout=profile.timeout,
+        stream_timeout=profile.stream_timeout,
+        stream_idle_timeout=profile.stream_idle_timeout,
+        max_retries=profile.max_retries,
+        retry_delay=profile.retry_delay,
+        prompt_cache_options=_build_anthropic_prompt_cache_options(profile),
+        extra_kwargs=extra_kwargs,
+    )
+
+
 def _merge_byok_extra_kwargs(base: dict | None, extra_body: dict | None) -> dict | None:
     """把凭证侧的黑盒 extra_body 叠加到族默认 extra_kwargs 上（同名 key 用户优先）。
 
@@ -117,18 +145,11 @@ def build_byok_provider_bundle(
         (base_url.split("//", 1)[-1].split("/", 1)[0] if base_url else ""),
         sorted((extra_body or {}).keys()),
     )
-    provider = OpenAIProvider(
+    provider = _build_openai_provider(
+        profile,
         model=model,
         api_key=api_key,
         base_url=base_url,
-        temperature=profile.effective_temperature(),
-        max_tokens=profile.max_tokens,
-        timeout=profile.timeout,
-        stream_timeout=profile.stream_timeout,
-        stream_idle_timeout=profile.stream_idle_timeout,
-        max_retries=profile.max_retries,
-        retry_delay=profile.retry_delay,
-        prompt_cache_options=_build_anthropic_prompt_cache_options(profile),
         extra_kwargs=extra_kwargs,
     )
     return LLMProviderBundle(
@@ -192,18 +213,11 @@ def build_provider_bundle(
             model_family=profile.effective_family(),
         )
 
-    provider = OpenAIProvider(
+    provider = _build_openai_provider(
+        profile,
         model=resolved.model,
         api_key=profile.api_key,
         base_url=profile.base_url,
-        temperature=profile.effective_temperature(),
-        max_tokens=profile.max_tokens,
-        timeout=profile.timeout,
-        stream_timeout=profile.stream_timeout,
-        stream_idle_timeout=profile.stream_idle_timeout,
-        max_retries=profile.max_retries,
-        retry_delay=profile.retry_delay,
-        prompt_cache_options=_build_anthropic_prompt_cache_options(profile),
         extra_kwargs=profile.build_extra_kwargs(),
     )
     return LLMProviderBundle(
