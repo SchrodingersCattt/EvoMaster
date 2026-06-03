@@ -82,23 +82,34 @@ def build_byok_provider_bundle(
     api_key: str,
     base_url: str,
     credential_id: str | None = None,
+    enable_thinking: bool | None = None,
+    reasoning_protocol: str | None = None,
+    thinking_effort: str | None = None,
 ) -> LLMProviderBundle:
     """用用户自带 Key（BYOK）构造 OpenAI 兼容 Provider。
 
     不读 llm_config / routes：model/api_key/base_url 全部来自 tools-server 下发的凭证。
-    其余参数沿用 LLMProfileConfig 默认（温度/推理协议按 model 名推断的族默认生效）。
+    enable_thinking/reasoning_protocol/thinking_effort 为凭证侧高级参数，显式传入则覆盖
+    族默认；未传则沿用按 model 名推断的族默认。
     """
     profile = LLMProfileConfig(
         provider="openai",
         model=model,
         api_key=api_key,
         base_url=base_url,
+        enable_thinking=enable_thinking,
+        reasoning_protocol=reasoning_protocol,
+        thinking_effort=thinking_effort,
     )
     logger.info(
-        "build_byok_provider: model=%s family=%s base_url_host=%s",
+        "build_byok_provider: model=%s family=%s base_url_host=%s "
+        "enable_thinking=%s reasoning_protocol=%s thinking_effort=%s",
         model,
         profile.effective_family(),
         (base_url.split("//", 1)[-1].split("/", 1)[0] if base_url else ""),
+        enable_thinking,
+        reasoning_protocol,
+        thinking_effort,
     )
     provider = OpenAIProvider(
         model=model,

@@ -24,6 +24,10 @@ class ByokCredential:
     model: str
     base_url: str
     api_key: str
+    # 高级模型参数（来自 tools-server model_params，可为空）。
+    enable_thinking: bool | None = None
+    reasoning_protocol: str | None = None
+    thinking_effort: str | None = None
 
 
 class ByokCredentialError(Exception):
@@ -55,8 +59,19 @@ def fetch_byok_credential(*, user_id: str, credential_id: str) -> ByokCredential
     if body.get("code") != 0 or not body.get("data"):
         raise ByokCredentialError(body.get("msg") or "凭证不存在或不可用")
     data = body["data"]
+    params = data.get("model_params") or {}
+    if not isinstance(params, dict):
+        params = {}
+    enable_thinking = params.get("enable_thinking")
+    reasoning_protocol = (params.get("reasoning_protocol") or "").strip() or None
+    thinking_effort = (params.get("thinking_effort") or "").strip() or None
     return ByokCredential(
         model=data.get("model") or "",
         base_url=data.get("base_url") or "",
         api_key=data.get("api_key") or "",
+        enable_thinking=(
+            bool(enable_thinking) if enable_thinking is not None else None
+        ),
+        reasoning_protocol=reasoning_protocol,
+        thinking_effort=thinking_effort,
     )
