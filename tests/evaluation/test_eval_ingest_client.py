@@ -415,6 +415,81 @@ def test_build_ingest_item_no_per_call_usage_when_absent() -> None:
     assert "per_call_usage" not in item["extra"]
 
 
+def test_build_ingest_item_per_call_cost_summary_in_extra() -> None:
+    def _cost(micro: int) -> dict:
+        return {
+            "total_amount_micro": micro,
+            "total_amount_settle_micro": micro,
+            "pricing_status": "priced",
+            "currency": "CNY",
+            "settlement_currency": "CNY",
+        }
+
+    item = build_ingest_item(
+        question_id="Q1",
+        task_id="Q1_direct_r0",
+        mode="direct",
+        repeat_idx=0,
+        devshell_exit_code=0,
+        summary={
+            "status": "done",
+            "per_call_usage": [
+                {
+                    "call_index": 1,
+                    "spawn_id": None,
+                    "kind": "root",
+                    "model": "claude-sonnet-4-6",
+                    "usage": {"prompt_tokens": 100, "completion_tokens": 20},
+                    "cost": _cost(1000),
+                },
+                {
+                    "call_index": 2,
+                    "spawn_id": "child-1",
+                    "kind": "subagent",
+                    "model": "claude-sonnet-4-6",
+                    "usage": {"prompt_tokens": 5},
+                    "cost": _cost(500),
+                },
+            ],
+        },
+        duration_ms=1,
+    )
+    per_call = item["extra"]["per_call_usage"]
+    assert per_call[0]["cost"]["total_amount_micro"] == 1000
+    cost = item["extra"]["per_call_cost"]
+    assert cost["total_amount_micro"] == 1500
+    assert cost["total_amount_settle_micro"] == 1500
+    assert cost["priced_calls"] == 2
+    assert cost["missing_price_calls"] == 0
+    assert cost["call_count"] == 2
+    assert cost["currency"] == "CNY"
+
+
+def test_build_ingest_item_no_per_call_cost_when_costless() -> None:
+    item = build_ingest_item(
+        question_id="Q1",
+        task_id="Q1_direct_r0",
+        mode="direct",
+        repeat_idx=0,
+        devshell_exit_code=0,
+        summary={
+            "status": "done",
+            "per_call_usage": [
+                {
+                    "call_index": 1,
+                    "spawn_id": None,
+                    "kind": "root",
+                    "model": "m",
+                    "usage": {"prompt_tokens": 1},
+                }
+            ],
+        },
+        duration_ms=1,
+    )
+    assert "per_call_usage" in item["extra"]
+    assert "per_call_cost" not in item["extra"]
+
+
 def test_build_ingest_item_repeat_idx_top_level() -> None:
     item = build_ingest_item(
         question_id="Q1",

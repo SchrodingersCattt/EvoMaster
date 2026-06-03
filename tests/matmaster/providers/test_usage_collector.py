@@ -44,6 +44,59 @@ class _FakeProvider:
         )
 
 
+class _FakeReporter:
+    """Records report_call invocations and returns a fixed cost payload."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[int, str | None, str, dict]] = []
+        self.closed = False
+
+    async def report_call(self, *, call_index, spawn_id, model, usage):
+        self.calls.append((call_index, spawn_id, model, dict(usage)))
+        return {
+            "total_amount_micro": 1155,
+            "total_amount_settle_micro": 1155,
+            "pricing_status": "priced",
+            "currency": "CNY",
+            "settlement_currency": "CNY",
+        }
+
+    async def aclose(self) -> None:
+        self.closed = True
+
+
+async def test_reporter_reports_each_call_and_backfills_cost() -> None:
+    reporter = _FakeReporter()
+    provider = UsageCollectingProvider(
+        _FakeProvider(), model="claude-sonnet-4-6", reporter=reporter
+    )
+    async with provider:
+        await provider.chat([])  # root
+        with provider.billing_scope(spawn_id="child-1"):
+            await provider.chat([])  # subagent
+
+    # Pending reports are drained and the reporter closed on __aexit__.
+    assert reporter.closed is True
+    assert len(reporter.calls) == 2
+
+    calls = provider.collected_calls
+    assert all(c.cost is not None for c in calls)
+    assert calls[0].cost["total_amount_micro"] == 1155
+
+    payload = per_call_usage_payload(calls)
+    assert payload[0]["cost"]["pricing_status"] == "priced"
+    assert payload[1]["spawn_id"] == "child-1"
+
+
+async def test_no_reporter_leaves_cost_unset() -> None:
+    provider = UsageCollectingProvider(_FakeProvider(), model="m")
+    async with provider:
+        await provider.chat([])
+    calls = provider.collected_calls
+    assert calls[0].cost is None
+    assert "cost" not in per_call_usage_payload(calls)[0]
+
+
 async def test_collects_root_subagent_and_streaming_calls() -> None:
     inner = _FakeProvider()
     provider = UsageCollectingProvider(inner, model="claude-sonnet-4-6")

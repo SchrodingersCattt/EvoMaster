@@ -243,6 +243,51 @@ def _json_safe_usage_tree(obj: Any) -> Any:
     return str(obj)
 
 
+def _summarize_per_call_cost(per_call: list[Any]) -> dict[str, Any] | None:
+    """Aggregate per-call billing cost into a run-level summary for ingest ``extra``.
+
+    Each call's ``cost`` (when present) carries tools-server ``UsageIngestData``
+    fields (``total_amount_micro`` / ``total_amount_settle_micro`` /
+    ``pricing_status`` / ``currency`` / ``settlement_currency``). Returns ``None``
+    when no call carries cost (billing disabled or tools-server unreachable), so
+    the run record stays clean instead of reporting a misleading zero.
+    """
+    total_micro = 0
+    settle_micro = 0
+    priced = 0
+    missing = 0
+    currency: str | None = None
+    settle_currency: str | None = None
+    seen = False
+    for call in per_call:
+        if not isinstance(call, dict):
+            continue
+        cost = call.get("cost")
+        if not isinstance(cost, dict):
+            continue
+        seen = True
+        status = cost.get("pricing_status")
+        if status == "priced":
+            priced += 1
+        elif status in ("missing_price", "skipped"):
+            missing += 1
+        total_micro += int(cost.get("total_amount_micro") or 0)
+        settle_micro += int(cost.get("total_amount_settle_micro") or 0)
+        currency = currency or cost.get("currency")
+        settle_currency = settle_currency or cost.get("settlement_currency")
+    if not seen:
+        return None
+    return {
+        "total_amount_micro": total_micro,
+        "total_amount_settle_micro": settle_micro,
+        "currency": currency or "CNY",
+        "settlement_currency": settle_currency or "CNY",
+        "priced_calls": priced,
+        "missing_price_calls": missing,
+        "call_count": len(per_call),
+    }
+
+
 def extract_ingest_tokens(
     summary: Any, *, approximate_last_turn_from_total: bool = False
 ) -> int | None:
@@ -646,6 +691,9 @@ def build_ingest_item(
             _json_safe_usage_tree(dict(x)) if isinstance(x, dict) else x
             for x in per_call
         ]
+        per_call_cost = _summarize_per_call_cost(per_call)
+        if per_call_cost is not None:
+            extra["per_call_cost"] = per_call_cost
 
     item: dict[str, Any] = {
         "question_id": question_id,
