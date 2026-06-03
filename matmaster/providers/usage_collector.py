@@ -19,6 +19,7 @@ report latency is acceptable.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import contextmanager
@@ -157,6 +158,11 @@ class UsageCollectingProvider:
     async def _report(self, call: PerCallUsage) -> None:
         if self._reporter is None:
             return
+        logger.info(
+            "usage report start call=%s spawn=%s",
+            call.call_index,
+            call.spawn_id,
+        )
         try:
             cost = await self._reporter.report_call(
                 call_index=call.call_index,
@@ -166,10 +172,30 @@ class UsageCollectingProvider:
             )
             if cost is not None:
                 call.cost = cost
+                logger.info(
+                    "usage report done call=%s spawn=%s amt=%s",
+                    call.call_index,
+                    call.spawn_id,
+                    cost.get("total_amount_micro"),
+                )
+            else:
+                logger.warning(
+                    "usage report returned no cost call=%s spawn=%s",
+                    call.call_index,
+                    call.spawn_id,
+                )
+        except asyncio.CancelledError:
+            logger.warning(
+                "usage report CANCELLED call=%s spawn=%s",
+                call.call_index,
+                call.spawn_id,
+            )
+            raise
         except Exception:
             logger.warning(
-                "usage report failed call_index=%s",
+                "usage report failed call=%s spawn=%s",
                 call.call_index,
+                call.spawn_id,
                 exc_info=True,
             )
 
