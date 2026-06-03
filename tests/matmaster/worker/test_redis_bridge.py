@@ -164,6 +164,184 @@ class TestAgentWorkerCancellationIntegration:
         assert observed["bohrium_required"] is True
         assert observed["turn_input"] is None
 
+    def test_run_worker_loop_resolves_byok_reference_before_run_agent(self) -> None:
+        from matmaster.config.llm import LLMProfileConfig
+        from src.models.byok import BYOKResolvedWorkerRun
+        from src.worker import agent_worker as mod
+
+        payload = {
+            "session_id": "sid-1",
+            "task_id": "task-1",
+            "invocation_id": "inv-1",
+            "user_prompt": "hello",
+            "mode": "direct",
+            "byok": {"config_id": 12, "version": 3},
+        }
+        redis_dao = MagicMock()
+        redis_dao.create_client.return_value = True
+        redis_dao.blpop_agent_run_job.side_effect = [payload]
+        redis_dao.llen_agent_run_queue.return_value = 0
+
+        sessions_service = MagicMock()
+        sessions_service.get_session_user_id.return_value = "user-1"
+        sessions_service.try_acquire_session_run.return_value = (True, None)
+
+        byok_profile = LLMProfileConfig(
+            provider="openai",
+            model="model-a",
+            api_key="sk-test",
+            base_url="https://api.example.com/v1",
+        )
+        resolver = MagicMock()
+        resolver.resolve_for_worker_run.return_value = BYOKResolvedWorkerRun(
+            config_id=12,
+            version=3,
+            model="model-a",
+            display_name="Research Proxy",
+            profile=byok_profile,
+        )
+
+        observed: dict[str, object] = {}
+
+        async def fake_run_agent(**kwargs):
+            observed.update(kwargs)
+            return (True, 0)
+
+        agent_run_service = MagicMock()
+        agent_run_service.init_playground_sync.return_value = None
+        agent_run_service.run_agent = fake_run_agent
+
+        class FakeBridge:
+            def __init__(self, *_args, **_kwargs) -> None:
+                return None
+
+            def start(self) -> None:
+                return None
+
+            def stop(self) -> None:
+                return None
+
+        with (
+            patch.object(mod, "_drain_requested", True),
+            patch.object(mod, "_current_session_id", None),
+            patch.object(mod, "_active_controller", None, create=True),
+            patch.object(mod, "get_redis_dao", return_value=redis_dao),
+            patch.object(mod, "get_sessions_service", return_value=sessions_service),
+            patch.object(mod, "get_agent_run_service", return_value=agent_run_service),
+            patch.object(mod, "get_byok_model_resolver", return_value=resolver, create=True),
+            patch.object(mod, "UserService") as user_service_cls,
+            patch.object(mod, "get_worker_registry_service") as registry_fn,
+            patch.object(mod, "notify_post_async"),
+            patch.object(mod, "send_session_complete_email_async"),
+            patch.object(mod, "LogContext"),
+            patch.object(mod, "RedisCancellationBridge", FakeBridge),
+            patch.object(mod, "get_worker_id", return_value="worker-1"),
+        ):
+            user_service_cls.get_user_info_for_display.return_value = {
+                "user_id": "u1",
+                "nickname": "nick",
+                "email": "user@example.com",
+            }
+            registry = MagicMock()
+            registry.count_active_runs.return_value = 0
+            registry_fn.return_value = registry
+
+            mod._run_worker_loop()
+
+        resolver.resolve_for_worker_run.assert_called_once_with(
+            user_id="user-1",
+            config_id=12,
+            expected_version=3,
+            mode="direct",
+            has_images=False,
+        )
+        assert observed["byok_profile"] is byok_profile
+        assert observed["byok_config_id"] == 12
+        assert observed["byok_config_version"] == 3
+        assert observed["billing_mode"] == "byok"
+
+    def test_run_worker_loop_byok_version_mismatch_emits_error_and_skips_run_agent(
+        self,
+    ) -> None:
+        from src.services.byok_model_resolver import BYOKResolveError
+        from src.worker import agent_worker as mod
+
+        payload = {
+            "session_id": "sid-1",
+            "task_id": "task-1",
+            "invocation_id": "inv-1",
+            "user_prompt": "hello",
+            "mode": "direct",
+            "byok": {"config_id": 12, "version": 3},
+        }
+        redis_dao = MagicMock()
+        redis_dao.create_client.return_value = True
+        redis_dao.blpop_agent_run_job.side_effect = [payload]
+        redis_dao.llen_agent_run_queue.return_value = 0
+
+        sessions_service = MagicMock()
+        sessions_service.get_session_user_id.return_value = "user-1"
+        sessions_service.try_acquire_session_run.return_value = (True, None)
+
+        resolver = MagicMock()
+        resolver.resolve_for_worker_run.side_effect = BYOKResolveError(
+            "自定义模型配置已变更，请重新发送消息。",
+            http_status=409,
+            error_code="byok_version_mismatch",
+        )
+
+        agent_run_service = MagicMock()
+        agent_run_service.init_playground_sync.return_value = None
+        agent_run_service.run_agent = MagicMock()
+
+        class FakeBridge:
+            def __init__(self, *_args, **_kwargs) -> None:
+                return None
+
+            def start(self) -> None:
+                return None
+
+            def stop(self) -> None:
+                return None
+
+        with (
+            patch.object(mod, "_drain_requested", True),
+            patch.object(mod, "_current_session_id", None),
+            patch.object(mod, "_active_controller", None, create=True),
+            patch.object(mod, "get_redis_dao", return_value=redis_dao),
+            patch.object(mod, "get_sessions_service", return_value=sessions_service),
+            patch.object(mod, "get_agent_run_service", return_value=agent_run_service),
+            patch.object(mod, "get_byok_model_resolver", return_value=resolver, create=True),
+            patch.object(mod, "UserService") as user_service_cls,
+            patch.object(mod, "get_worker_registry_service") as registry_fn,
+            patch.object(mod, "notify_post_async"),
+            patch.object(mod, "send_session_complete_email_async"),
+            patch.object(mod, "LogContext"),
+            patch.object(mod, "RedisCancellationBridge", FakeBridge),
+            patch.object(mod, "get_worker_id", return_value="worker-1"),
+        ):
+            user_service_cls.get_user_info_for_display.return_value = {
+                "user_id": "u1",
+                "nickname": "nick",
+                "email": "user@example.com",
+            }
+            registry = MagicMock()
+            registry.count_active_runs.return_value = 0
+            registry_fn.return_value = registry
+
+            mod._run_worker_loop()
+
+        agent_run_service.run_agent.assert_not_called()
+        published = [call.args[1] for call in redis_dao.publish_stream_event.call_args_list]
+        error_payload = next(item for item in published if item["type"] == "error")
+        closed_payload = next(
+            item for item in published if item["type"] == "stream_closed"
+        )
+        assert error_payload["content"] == "自定义模型配置已变更，请重新发送消息。"
+        assert error_payload["error_code"] == "byok_version_mismatch"
+        assert closed_payload["treat_as_failure"] is True
+        assert closed_payload["end_reason"] == "byok_version_mismatch"
+
     def test_main_sigterm_handler_drains_without_cancelling_active_controller(
         self,
     ) -> None:
