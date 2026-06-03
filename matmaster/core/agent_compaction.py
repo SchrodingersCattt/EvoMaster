@@ -35,8 +35,8 @@ async def run_compaction_plan(
 ) -> AsyncIterator[_KernelItem]:
     """Run a compaction plan, emit start/complete events, persist checkpoint.
 
-    ``turn_input`` is only consulted by ``apply_summary`` for
-    preflight plans; runtime callers pass ``None``.
+    ``turn_input`` is used by preflight plans to reattach the full current
+    input and by runtime plans to reattach the current instruction text.
     """
     yield _KernelItem(
         event=CompactionEvent(
@@ -214,12 +214,13 @@ async def run_runtime_compaction_if_needed(
     kernel_resources: AgentKernelResources,
     state: _KernelState,
     checkpoint_sink: Any,
+    turn_input: TurnInput | None = None,
     tool_definitions: list[dict[str, Any]] | None = None,
 ) -> AsyncIterator[_KernelItem]:
     """Plan + execute a runtime compaction between LLM turns when budget exceeded.
 
-    Runtime plans do not receive ``turn_input``; see ``apply_summary``,
-    which only branches on it for preflight plans.
+    ``turn_input`` is forwarded so summary application can re-inject the
+    current instruction text after runtime compaction.
     """
     if not kernel_resources.compactor:
         return
@@ -239,6 +240,7 @@ async def run_runtime_compaction_if_needed(
                 state=state,
                 plan=plan,
                 checkpoint_sink=checkpoint_sink,
+                turn_input=turn_input,
                 tool_definitions=tool_definitions,
             ):
                 yield item

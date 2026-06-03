@@ -3,7 +3,11 @@ from __future__ import annotations
 import pytest
 
 from matmaster.context.compaction import CompactionPlan
-from matmaster.core.agent_compaction import run_compaction_plan
+from matmaster.context.sources.turn_input import TurnInput
+from matmaster.core.agent_compaction import (
+    run_compaction_plan,
+    run_runtime_compaction_if_needed,
+)
 from matmaster.core.kernel_items import _KernelState
 from matmaster.types.events import CompactionEvent
 from matmaster.types.messages import SystemMessage, ToolCallData, UserMessage
@@ -115,6 +119,60 @@ def _plan(phase: str) -> CompactionPlan:
         trigger_tokens=123,
         turn=2,
     )
+
+
+@pytest.mark.asyncio
+async def test_runtime_compaction_runner_forwards_turn_input(monkeypatch) -> None:
+    class RuntimePlanningCompactor(Compactor):
+        async def plan_runtime_compaction(
+            self,
+            messages: list[object],
+            turn_usage: dict[str, int],
+            *,
+            turn: int,
+        ) -> CompactionPlan:
+            return CompactionPlan(
+                compaction_id="root:1",
+                compaction_count=1,
+                phase="runtime",
+                trigger_tokens=123,
+                turn=turn,
+            )
+
+    captured: dict[str, object] = {}
+
+    async def fake_run_compaction_plan(**kwargs):
+        captured.update(kwargs)
+        if False:
+            yield None
+
+    monkeypatch.setattr(
+        "matmaster.core.agent_compaction.run_compaction_plan",
+        fake_run_compaction_plan,
+    )
+    turn_input = TurnInput.from_values(user_text="current request")
+    state = _KernelState(
+        messages=[SystemMessage(content="sys"), UserMessage(content="old")],
+        turn=2,
+    )
+
+    items = [
+        item
+        async for item in run_runtime_compaction_if_needed(
+            kernel_spec=_kernel_spec(),
+            kernel_resources=_kernel_resources(
+                Provider("unused"),
+                RuntimePlanningCompactor(),
+            ),
+            state=state,
+            checkpoint_sink=None,
+            turn_input=turn_input,
+            tool_definitions=None,
+        )
+    ]
+
+    assert items == []
+    assert captured["turn_input"] is turn_input
 
 
 @pytest.mark.asyncio

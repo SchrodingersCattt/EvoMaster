@@ -199,6 +199,9 @@ class TurnInput:
             instruction=dataclasses.replace(self.instruction, deferred=True),
         )
 
+    def instruction_only(self) -> TurnInput:
+        return dataclasses.replace(self, attachments=TurnAttachmentsSource())
+
     def _merged_current_instruction_text(self) -> str:
         lines: list[str] = []
         user_text = self.instruction.user_text.strip()

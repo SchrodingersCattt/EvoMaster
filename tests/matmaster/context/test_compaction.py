@@ -105,6 +105,83 @@ async def test_runtime_compaction_uses_high_water_and_compacted_history_marker()
 
 
 @pytest.mark.asyncio
+async def test_runtime_compaction_reinjects_current_instruction_text() -> None:
+    compactor = make_compactor()
+    turn_input = TurnInput.from_values(
+        user_text="Run exact fitting with alpha=0.37.",
+        files=["https://oss.example.com/current.cif"],
+        images=["https://oss.example.com/current.png"],
+        image_detail="high",
+        workspace_paths=["/share/current/POSCAR"],
+        pre_turn_history_event_id=3,
+    )
+    messages = [
+        SystemMessage(content="sys"),
+        UserMessage(content="Run exact fitting with alpha=0.37."),
+        AssistantMessage(content="working"),
+    ]
+
+    result = await compactor.apply_summary(
+        CompactionPlan(
+            compaction_id="root:1",
+            compaction_count=1,
+            phase="runtime",
+            trigger_tokens=999,
+            turn=3,
+        ),
+        messages,
+        "Summary only mentions previous context.",
+        turn_input=turn_input,
+    )
+
+    runtime_content = messages[1].content or ""
+    assert "<compacted_history>" in runtime_content
+    assert (
+        "<current_instruction>\n"
+        "Run exact fitting with alpha=0.37.\n"
+        "</current_instruction>"
+    ) in runtime_content
+    assert "current.cif" not in runtime_content
+    assert "current.png" not in runtime_content
+    assert "/share/current/POSCAR" not in runtime_content
+    assert messages[1].images == []
+    assert result.base_messages is not None
+    assert "<current_instruction>" not in result.base_messages[0]["content"]
+    assert result.checkpoint_covered_until_event_id == 9
+
+
+@pytest.mark.asyncio
+async def test_runtime_compaction_keeps_omitted_current_request_authoritative() -> None:
+    compactor = make_compactor()
+    turn_input = TurnInput.from_values(
+        user_text="Do not relax the cell; only compute static energy.",
+        pre_turn_history_event_id=3,
+    )
+    messages = [
+        SystemMessage(content="sys"),
+        UserMessage(content="Do not relax the cell; only compute static energy."),
+        AssistantMessage(content="starting calculation"),
+    ]
+
+    await compactor.apply_summary(
+        CompactionPlan(
+            compaction_id="root:1",
+            compaction_count=1,
+            phase="runtime",
+            trigger_tokens=999,
+            turn=3,
+        ),
+        messages,
+        "Previous context says the user asked about FeO.",
+        turn_input=turn_input,
+    )
+
+    runtime_content = messages[1].content or ""
+    assert "Previous context says the user asked about FeO." in runtime_content
+    assert "Do not relax the cell; only compute static energy." in runtime_content
+
+
+@pytest.mark.asyncio
 async def test_runtime_compaction_missing_boundary_uses_fallback() -> None:
     compactor = make_compactor(boundary=lambda: None)
     messages = [
@@ -157,8 +234,39 @@ async def test_preflight_compaction_uses_raw_current_input_without_double_wrap()
     runtime_content = messages[1].content or ""
     assert runtime_content.count("<current_instruction>") == 1
     assert "Use current file." in runtime_content
+    assert "file_1 current.cif https://oss/current.cif" in runtime_content
     assert "wrapped" not in runtime_content
     assert result.checkpoint_covered_until_event_id == 7
+
+
+@pytest.mark.asyncio
+async def test_preflight_plan_without_current_split_keeps_runtime_boundary() -> None:
+    compactor = make_compactor(boundary=lambda: 33)
+    turn_input = TurnInput.from_values(
+        user_text="current query",
+        pre_turn_history_event_id=7,
+    )
+    messages = [
+        SystemMessage(content="sys"),
+        UserMessage(content="current query"),
+    ]
+
+    result = await compactor.apply_summary(
+        CompactionPlan(
+            compaction_id="root:1",
+            compaction_count=1,
+            phase="preflight",
+            trigger_tokens=999,
+            turn=0,
+        ),
+        messages,
+        "Summary text.",
+        turn_input=turn_input,
+    )
+
+    runtime_content = messages[1].content or ""
+    assert "<current_instruction>" not in runtime_content
+    assert result.checkpoint_covered_until_event_id == 33
 
 
 @pytest.mark.asyncio

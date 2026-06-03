@@ -425,47 +425,38 @@ def _run_worker_loop() -> None:
             elapsed_ms: int | None = None
             usage_summary: dict | None = None
             try:
-                result = asyncio.run(
-                    agent_run_service.run_agent(
-                        session_id=session_id,
-                        user_prompt=user_prompt,
-                        send_cb=send_cb,
-                        cancel_token=controller.token,
-                        mode=mode,
-                        task_id=task_id,
-                        invocation_id=invocation_id,
-                        llm_override=llm_override,
-                        model_override=model_override,
-                        byok_credential_id=byok_credential_id,
-                        user_id=session_user_id,
-                        images=images,
-                        turn_input=turn_input,
-                        remote_workdir=remote_workdir,
-                        bohrium_required=bohrium_required,
-                    )
-                )
-                # run_agent 统一返回 (run_result, elapsed_ms)。run_result 可为 True、False 或 (False, reason)
-                run_result = (
-                    result[0]
-                    if isinstance(result, tuple) and len(result) >= 2
-                    else result
-                )
-                elapsed_ms = (
-                    result[1]
-                    if isinstance(result, tuple) and len(result) >= 2
-                    else None
-                )
-                usage_summary = (
-                    result[2]
-                    if isinstance(result, tuple)
+                run_agent_kwargs = {
+                    "session_id": session_id,
+                    "user_prompt": user_prompt,
+                    "send_cb": send_cb,
+                    "cancel_token": controller.token,
+                    "mode": mode,
+                    "task_id": task_id,
+                    "invocation_id": invocation_id,
+                    "llm_override": llm_override,
+                    "model_override": model_override,
+                    "byok_credential_id": byok_credential_id,
+                    "user_id": session_user_id,
+                    "images": images,
+                    "turn_input": turn_input,
+                    "remote_workdir": remote_workdir,
+                    "bohrium_required": bohrium_required,
+                }
+                result = asyncio.run(agent_run_service.run_agent(**run_agent_kwargs))
+                run_result = result
+                if isinstance(result, tuple) and len(result) >= 2:
+                    run_result = result[0]
+                    elapsed_ms = result[1]
+                if (
+                    isinstance(result, tuple)
                     and len(result) >= 3
                     and isinstance(result[2], dict)
-                    else None
-                )
+                ):
+                    usage_summary = result[2]
                 if (
                     isinstance(run_result, tuple)
                     and len(run_result) >= 2
-                    and run_result[0] is False
+                    and (run_result[0] is False)
                 ):
                     run_success = False
                     fail_reason = run_result[1]
