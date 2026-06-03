@@ -335,7 +335,9 @@ def _run_worker_loop() -> None:
             if isinstance(raw_images, list)
             else []
         )
-        raw_byok = payload.get("byok") if isinstance(payload.get("byok"), dict) else None
+        raw_byok = (
+            payload.get("byok") if isinstance(payload.get("byok"), dict) else None
+        )
         turn_input = TurnInput.from_payload(payload.get('turn_input'))
         bohrium_required = bool(payload.get('bohrium_required'))
         raw_remote_workdir = payload.get('remote_workdir')
@@ -490,8 +492,10 @@ def _run_worker_loop() -> None:
                     and isinstance(result[2], dict)
                 ):
                     usage_summary = result[2]
-                if isinstance(run_result, tuple) and len(run_result) >= 2 and (
-                    run_result[0] is False
+                if (
+                    isinstance(run_result, tuple)
+                    and len(run_result) >= 2
+                    and (run_result[0] is False)
                 ):
                     run_success = False
                     fail_reason = run_result[1]

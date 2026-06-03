@@ -10,7 +10,6 @@ from pydantic import (
     Field,
     SecretStr,
     field_validator,
-    model_validator,
 )
 
 _ALLOWED_PARAM_KEYS = frozenset(

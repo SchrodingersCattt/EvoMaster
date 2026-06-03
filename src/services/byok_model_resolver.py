@@ -4,7 +4,6 @@ from functools import lru_cache
 from typing import Any
 
 from matmaster.config.llm import LLMProfileConfig
-
 from src.dao.user_llm_config_table import (
     UserLLMConfigTable,
     get_user_llm_config_table,
@@ -26,11 +25,10 @@ class BYOKResolveError(RuntimeError):
     def __init__(
         self,
         message: str,
-        *,
         http_status: int = 400,
         error_code: str = "byok_invalid",
     ) -> None:
-        super().__init__(message)
+        super().__init__(message, http_status, error_code)
         self.message = message
         self.http_status = http_status
         self.error_code = error_code

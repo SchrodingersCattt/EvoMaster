@@ -141,9 +141,7 @@ def test_worker_resolve_decrypts_and_builds_profile() -> None:
     assert resolved.profile.temperature == 0.2
     assert resolved.profile.max_tokens == 512
     assert resolved.profile.passthrough_params == {"seed": 42}
-    assert resolved.profile.passthrough_extra_body == {
-        "metadata": {"team": "lab"}
-    }
+    assert resolved.profile.passthrough_extra_body == {"metadata": {"team": "lab"}}
     assert resolved.profile.timeout == 600
     assert resolved.profile.stream_timeout == 120
     assert resolved.profile.stream_idle_timeout == 60

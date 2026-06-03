@@ -213,7 +213,7 @@ class TestAgentWorkerCancellationIntegration:
 
         class FakeBridge:
             def __init__(self, *_args, **_kwargs) -> None:
-                return None
+                pass
 
             def start(self) -> None:
                 return None
@@ -228,7 +228,9 @@ class TestAgentWorkerCancellationIntegration:
             patch.object(mod, "get_redis_dao", return_value=redis_dao),
             patch.object(mod, "get_sessions_service", return_value=sessions_service),
             patch.object(mod, "get_agent_run_service", return_value=agent_run_service),
-            patch.object(mod, "get_byok_model_resolver", return_value=resolver, create=True),
+            patch.object(
+                mod, "get_byok_model_resolver", return_value=resolver, create=True
+            ),
             patch.object(mod, "UserService") as user_service_cls,
             patch.object(mod, "get_worker_registry_service") as registry_fn,
             patch.object(mod, "notify_post_async"),
@@ -296,7 +298,7 @@ class TestAgentWorkerCancellationIntegration:
 
         class FakeBridge:
             def __init__(self, *_args, **_kwargs) -> None:
-                return None
+                pass
 
             def start(self) -> None:
                 return None
@@ -311,7 +313,9 @@ class TestAgentWorkerCancellationIntegration:
             patch.object(mod, "get_redis_dao", return_value=redis_dao),
             patch.object(mod, "get_sessions_service", return_value=sessions_service),
             patch.object(mod, "get_agent_run_service", return_value=agent_run_service),
-            patch.object(mod, "get_byok_model_resolver", return_value=resolver, create=True),
+            patch.object(
+                mod, "get_byok_model_resolver", return_value=resolver, create=True
+            ),
             patch.object(mod, "UserService") as user_service_cls,
             patch.object(mod, "get_worker_registry_service") as registry_fn,
             patch.object(mod, "notify_post_async"),
@@ -332,7 +336,9 @@ class TestAgentWorkerCancellationIntegration:
             mod._run_worker_loop()
 
         agent_run_service.run_agent.assert_not_called()
-        published = [call.args[1] for call in redis_dao.publish_stream_event.call_args_list]
+        published = [
+            call.args[1] for call in redis_dao.publish_stream_event.call_args_list
+        ]
         error_payload = next(item for item in published if item["type"] == "error")
         closed_payload = next(
             item for item in published if item["type"] == "stream_closed"
@@ -376,7 +382,7 @@ class TestAgentWorkerCancellationIntegration:
 
         class FakeBridge:
             def __init__(self, *_args, **_kwargs) -> None:
-                return None
+                pass
 
             def start(self) -> None:
                 return None
@@ -417,7 +423,9 @@ class TestAgentWorkerCancellationIntegration:
             mod._run_worker_loop()
 
         agent_run_service.run_agent.assert_not_called()
-        published = [call.args[1] for call in redis_dao.publish_stream_event.call_args_list]
+        published = [
+            call.args[1] for call in redis_dao.publish_stream_event.call_args_list
+        ]
         error_payload = next(item for item in published if item["type"] == "error")
         closed_payload = next(
             item for item in published if item["type"] == "stream_closed"

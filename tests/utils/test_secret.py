@@ -55,7 +55,7 @@ def test_enabled_requires_valid_fernet_key(
         {
             "MATMASTER_BYOK_ENABLED": "1",
             "MATMASTER_BYOK_FERNET_KEY": "not-a-fernet-key",
-        }
+        },
     )
 
     assert secret.is_byok_enabled() is True
@@ -71,7 +71,7 @@ def test_disabled_secret_service_rejects_encrypt(
         {
             "MATMASTER_BYOK_ENABLED": "false",
             "MATMASTER_BYOK_FERNET_KEY": Fernet.generate_key().decode(),
-        }
+        },
     )
 
     assert secret.is_byok_enabled() is False

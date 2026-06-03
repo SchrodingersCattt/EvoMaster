@@ -33,7 +33,9 @@ class BYOKEndpointPolicy:
         if parts.username is not None or parts.password is not None:
             raise BYOKEndpointPolicyError("base_url must not contain userinfo.")
         if parts.query or parts.fragment:
-            raise BYOKEndpointPolicyError("base_url must not contain query or fragment.")
+            raise BYOKEndpointPolicyError(
+                "base_url must not contain query or fragment."
+            )
 
         try:
             port = parts.port or 443
