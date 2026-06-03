@@ -49,25 +49,11 @@ pair_coeff  * * Si
 ```
 
 `atom_modify map yes` is required for DPA4 `.pt2` in LAMMPS; without it, the
-model may load but atom-ID mapping fails. For DPA4 LAMMPS jobs, submit with:
+model may load but atom-ID mapping fails. ONLY for DPA4 LAMMPS jobs, submit with:
 
 ```text
 registry.dp.tech/dptech/dp/native/hub/custom_images/dpa4:260601-1780311840
 ```
-
-Compatibility boundary from runtime testing:
-- `dpa4:260601-1780311840` supports DPA3 and DPA4 ASE/LAMMPS workflows.
-- DPA4 LAMMPS requires freeze to `.pt2`; raw checkpoints report "Cannot
-  detect the backend".
-- DPA1 TensorFlow `.pb` is not ready because this image has no TensorFlow
-  backend.
-- DPA1 legacy TorchScript `.pth` is not ready in LAMMPS because the C++
-  interface misses `has_message_passing`.
-- DPA2.4 freeze to LAMMPS is not ready in this image because the checkpoint
-  state dict is incompatible (`repinit.type_embd_data` missing).
-
-Keep existing non-DPA4 LAMMPS images/workflows unless the task explicitly uses
-DPA4 `.pt2`.
 
 Notes:
 - The frozen `.pth` is also directly usable by ASE: `from deepmd.calculator import DP; atoms.calc = DP("frozen_model.pth")`.
