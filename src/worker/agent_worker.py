@@ -73,6 +73,13 @@ def _format_run_duration(duration_sec: float) -> str:
     return f'{h} 小时 {m} 分'
 
 
+def _should_notify_completion(delivery: dict | None) -> bool:
+    """job.delivery 控制完成通知；缺省或缺 notify 键时保持原有发通知语义。"""
+    if not isinstance(delivery, dict):
+        return True
+    return bool(delivery.get("notify", True))
+
+
 def _build_completion_card(
     *,
     session_id: str,
@@ -288,7 +295,7 @@ def _worker_heartbeat_loop(stop_ev: threading.Event) -> None:
 def _run_worker_loop() -> None:
     global _current_session_id, _active_controller
     redis_dao = get_redis_dao()
-    if not redis_dao.create_client():
+    if not redis_dao.get_command_client():
         logger.error(
             'Agent worker: REDIS_URL not configured or Redis unreachable. Exit.'
         )
@@ -339,6 +346,7 @@ def _run_worker_loop() -> None:
             if isinstance(raw_remote_workdir, str)
             else None
         )
+        delivery = payload.get('delivery')
 
         if not session_id:
             logger.warning('Agent worker: skip job with empty session_id')
@@ -524,39 +532,45 @@ def _run_worker_loop() -> None:
                     fail_reason_str = (
                         str(fail_reason).strip() if fail_reason is not None else ''
                     )
-                    title, rows, template = _build_completion_card(
-                        session_id=session_id,
-                        session_url=session_url,
-                        user_info_display=user_info_display,
-                        llm=llm_override,
-                        model=model_override,
-                        user_question=user_question,
-                        run_success=run_success,
-                        fail_reason=fail_reason,
-                        fail_reason_str=fail_reason_str,
-                        duration_str=duration_str,
-                        active_count=active_count,
-                        queue_len=queue_len,
-                        usage_summary=usage_summary,
-                    )
-                    notify_post_async(title, rows, template=template)
-                    logger.info(
-                        'Agent worker: Feishu completion card queued session_id=%s title=%s',
-                        session_id,
-                        title,
-                    )
-                    # 会话完成/失败时给用户发邮件（模板：会话已执行完成+链接），与飞书通知并行
-                    _send_completion_email(
-                        session_user_id=session_user_id,
-                        user_info=user_info,
-                        payload=payload,
-                        session_url=session_url,
-                        user_question=user_question,
-                        duration_str=duration_str,
-                        run_success=run_success,
-                        fail_reason=fail_reason,
-                        fail_reason_str=fail_reason_str,
-                    )
+                    if _should_notify_completion(delivery):
+                        title, rows, template = _build_completion_card(
+                            session_id=session_id,
+                            session_url=session_url,
+                            user_info_display=user_info_display,
+                            llm=llm_override,
+                            model=model_override,
+                            user_question=user_question,
+                            run_success=run_success,
+                            fail_reason=fail_reason,
+                            fail_reason_str=fail_reason_str,
+                            duration_str=duration_str,
+                            active_count=active_count,
+                            queue_len=queue_len,
+                            usage_summary=usage_summary,
+                        )
+                        notify_post_async(title, rows, template=template)
+                        logger.info(
+                            'Agent worker: Feishu completion card queued session_id=%s title=%s',
+                            session_id,
+                            title,
+                        )
+                        # 会话完成/失败时给用户发邮件（模板：会话已执行完成+链接），与飞书通知并行
+                        _send_completion_email(
+                            session_user_id=session_user_id,
+                            user_info=user_info,
+                            payload=payload,
+                            session_url=session_url,
+                            user_question=user_question,
+                            duration_str=duration_str,
+                            run_success=run_success,
+                            fail_reason=fail_reason,
+                            fail_reason_str=fail_reason_str,
+                        )
+                    else:
+                        logger.info(
+                            'Agent worker: completion notify suppressed by delivery session_id=%s',
+                            session_id,
+                        )
                 except Exception:
                     logger.exception(
                         'Agent worker: completion notify block failed session_id=%s task_id=%s',

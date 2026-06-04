@@ -1,7 +1,7 @@
 import asyncio
 from unittest.mock import MagicMock, patch
 
-from tests.test_chat_stream_direct import _decode_sse_payload
+from tests.test_chat_stream_direct import _decode_sse_payload, _send_stream_job
 
 
 def test_generate_send_stream_replay_keeps_response_figures_but_prefers_run_result():
@@ -75,6 +75,7 @@ def test_generate_send_stream_replay_keeps_response_figures_but_prefers_run_resu
                 'invocation_id': 'inv-1',
             },
             request_event_queue=asyncio.Queue(),
+            job=_send_stream_job(),
         )
         gen = service.generate_send_stream('sess-1', 'new question', ctx)
         try:

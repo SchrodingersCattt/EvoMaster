@@ -12,6 +12,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from tests.test_chat_stream_direct import _send_stream_job
+
 
 def test_prepare_send_message_accepts_planner_mode() -> None:
     """mode='planner' 合法，stream_service 不应将其 fallback 到 direct。"""
@@ -121,6 +123,13 @@ async def test_planner_job_enqueues_with_planner_mode_field() -> None:
             'mode': 'planner',
         },
         request_event_queue=asyncio.Queue(),
+        job=_send_stream_job(
+            session_id='sess-planner',
+            task_id='task-planner-1',
+            invocation_id='inv-planner-1',
+            prompt='plan it',
+            mode='planner',
+        ),
     )
 
     fake_redis = MagicMock()

@@ -253,9 +253,8 @@ def prepare_messages_for_summary_call(
         phase=phase,
         turn_input=turn_input,
     )
-    input_budget = context_limit - reserved_summary_tokens - safety_margin_tokens
     request_tokens = estimate_tokens([compact_request], safety_margin=1.1)
-    message_budget = input_budget - request_tokens
+    message_budget = context_limit - reserved_summary_tokens
     if message_budget <= 0:
         raise ValueError("summary message budget non-positive")
 

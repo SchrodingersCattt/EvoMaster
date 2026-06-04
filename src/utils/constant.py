@@ -21,6 +21,8 @@ DB_CONFIG = {
 # Redis（多 worker 时用于跨进程停止会话：Pub/Sub）
 # 未配置则 stop 仅在本进程生效。配 REDIS_URL，例：redis://:密码@host:6379/0
 REDIS_URL = (os.getenv("REDIS_URL") or "").strip() or None
+# 内部程序化触发鉴权 token（共享密钥，仅内网可达）。未配置则禁用 /stream 内部发起。
+INTERNAL_TRIGGER_TOKEN = (os.getenv("INTERNAL_TRIGGER_TOKEN") or "").strip() or None
 
 # 配额服务（与 MatMaster 一致：matmaster-tools-server；根 URL 见 ``utils.env``）
 # 支持/通知服务（模板发送等），按环境：test -> support.test.dp.tech，uat -> support.uat.dp.tech，prod -> support.dp.tech

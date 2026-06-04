@@ -362,6 +362,12 @@ class SessionTitleSetRequest(BaseModel):
 # ---------- ag-ui 协议：客户端 -> 服务端 (REST Body) ----------
 
 
+class DeliverySpec(BaseModel):
+    """控制一次 run 完成后的通知行为。第一版仅 notify 开关；后续可扩展渠道字段。"""
+
+    notify: bool = True
+
+
 class ChatSendRequest(BaseModel):
     """POST /chat/sessions/{session_id}/stream 请求体：不传或 content 为空则仅拉历史+ping；有 content 则发送消息并返回本次运行的 SSE 流"""
 
@@ -397,6 +403,23 @@ class ChatSendRequest(BaseModel):
     replace_last_turn: bool = Field(
         default=False,
         description="为 true 时先物理删除最后一条 User/query 及之后的所有事件，再以新 content 发送；用于编辑重发",
+    )
+    # 以下字段仅在 /stream 内部发起模式（X-Internal-Token）下有意义
+    origin: str | None = Field(
+        default=None,
+        description="内部发起来源标记，如 hpc_job/cron/loop/external_tool；写入 System 触发事件，用于前端渲染、审计、dedup 命名",
+    )
+    dedup_key: str | None = Field(
+        default=None,
+        description="内部发起幂等键；命中已存在则不触发。仅成功入队后标记，busy/error 不标记",
+    )
+    on_busy: str = Field(
+        default="skip",
+        description="会话运行锁被占时的策略；第一版仅 skip（放弃本次触发，返回 busy 可重试）",
+    )
+    delivery: DeliverySpec | None = Field(
+        default=None,
+        description="内部发起的完成通知控制；缺省时按 origin 约定默认（用户发送路径恒为 None=保持现状）",
     )
 
     model_config = ConfigDict(

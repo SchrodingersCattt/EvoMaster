@@ -8,8 +8,6 @@ import threading
 import uuid
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 # 测试中屏蔽 DB：任何真实 BaseTable 触发的连接直接报错（应通过 get_*_table mock 避免走到这里）
 _DB_DISABLED_ERROR = RuntimeError('DB disabled in test (use mock tables only)')
 
@@ -57,6 +55,44 @@ async def _check_quota_noop(user_id: str):
 
 def _decode_sse_payload(frame: str) -> dict:
     return json.loads(frame.split('data: ', 1)[1].strip())
+
+
+def _send_stream_job(
+    *,
+    session_id: str = 'sess-1',
+    task_id: str = 'task-1',
+    invocation_id: str = 'inv-1',
+    prompt: str = 'new question',
+    mode: str = 'direct',
+    **overrides,
+) -> dict:
+    job = {
+        'session_id': session_id,
+        'task_id': task_id,
+        'invocation_id': invocation_id,
+        'user_prompt': prompt,
+        'mode': mode,
+        'llm': None,
+        'model': None,
+        'byok_credential_id': None,
+        'turn_input': {
+            'user_text': prompt,
+            'files': [],
+            'images': [],
+            'image_detail': None,
+            'workspace_paths': [],
+            'pre_turn_history_event_id': 0,
+        },
+        'images': [],
+        'bohrium_required': False,
+        'remote_workdir': None,
+        'session_directory_source': 'none',
+        'origin': None,
+        'delivery': None,
+        'submitted_at': '2026-06-04T00:00:00+00:00',
+    }
+    job.update(overrides)
+    return job
 
 
 def test_chat_stream_returns_503_when_redis_url_missing(tmp_path):
@@ -149,11 +185,13 @@ def test_prepare_send_message_captures_turn_input_before_user_event():
     ):
         ctx = service.prepare_send_message("sess-1", req, user_id="user-1")
 
-    assert ctx.turn_input.user_text == "analyze current"
-    assert ctx.turn_input.files == ("https://oss.example.com/chat/new.cif",)
-    assert ctx.turn_input.images == ("https://oss.example.com/chat/current.png",)
-    assert ctx.turn_input.workspace_paths == ("/share/current/POSCAR",)
-    assert ctx.turn_input.pre_turn_history_event_id == 77
+    assert ctx.job["turn_input"]["user_text"] == "analyze current"
+    assert ctx.job["turn_input"]["files"] == ["https://oss.example.com/chat/new.cif"]
+    assert ctx.job["turn_input"]["images"] == [
+        "https://oss.example.com/chat/current.png"
+    ]
+    assert ctx.job["turn_input"]["workspace_paths"] == ["/share/current/POSCAR"]
+    assert ctx.job["turn_input"]["pre_turn_history_event_id"] == 77
     assert ctx.user_msg["content"] == "analyze current"
     assert "schema_version" not in ctx.user_msg
     events_service.get_latest_scope_event_id.assert_called_once_with("sess-1", None)
@@ -225,6 +263,7 @@ def test_generate_send_stream_skips_current_task_in_history_replay():
                 'invocation_id': 'inv-1',
             },
             request_event_queue=asyncio.Queue(),
+            job=_send_stream_job(),
         )
         gen = service.generate_send_stream('sess-1', 'new question', ctx)
         try:
@@ -291,7 +330,7 @@ def test_prepare_send_message_marks_explicit_bohrium_requirement():
         )
 
     assert ctx is not None
-    assert ctx.bohrium_required is True
+    assert ctx.job['bohrium_required'] is True
 
 
 def test_prepare_send_message_persists_images_in_user_message():
@@ -325,139 +364,10 @@ def test_prepare_send_message_persists_images_in_user_message():
 
     assert ctx is not None
     assert ctx.user_msg['images'] == ['https://oss.example.com/chat/a.png']
+    assert ctx.job['images'] == ['https://oss.example.com/chat/a.png']
     assert events_service.add_history_event.call_args.args[1]['images'] == [
         'https://oss.example.com/chat/a.png'
     ]
-
-
-@pytest.mark.asyncio
-async def test_generate_send_stream_enqueues_bohrium_required_flag():
-    from src.services.stream_service import ChatStreamService, SendStreamContext
-
-    service = ChatStreamService(
-        sessions_service=MagicMock(
-            get_session_status_payload=MagicMock(
-                return_value={
-                    'source': 'System',
-                    'type': 'status',
-                    'content': '',
-                    'session_id': 'sess-1',
-                }
-            )
-        ),
-        events_service=MagicMock(get_session_events=MagicMock(return_value=[])),
-        agent_run_service=MagicMock(),
-        deploy_state_service=MagicMock(),
-    )
-
-    ctx = SendStreamContext(
-        task_id='task-1',
-        invocation_id='inv-1',
-        mode='direct',
-        user_msg={'source': 'User', 'type': 'query', 'content': 'run'},
-        request_event_queue=asyncio.Queue(),
-        bohrium_required=True,
-    )
-
-    fake_redis = MagicMock()
-    fake_redis.create_client.return_value = None
-    fake_redis.set_session_run_queued.return_value = True
-    fake_redis.llen_agent_run_queue.return_value = 0
-    fake_redis.lpush_agent_run_job.side_effect = lambda job: True
-
-    async def _stream_closed_immediately(awaitable, timeout):
-        close = getattr(awaitable, 'close', None)
-        if callable(close):
-            close()
-        return {
-            'source': 'System',
-            'type': 'stream_closed',
-            'content': '',
-            'session_id': 'sess-1',
-        }
-
-    with (
-        patch('src.services.stream_service.REDIS_URL', 'redis://test'),
-        patch('src.services.stream_service.get_redis_dao', return_value=fake_redis),
-        patch('src.services.stream_service.notify_post_async'),
-        patch(
-            'src.services.stream_service.asyncio.wait_for',
-            side_effect=_stream_closed_immediately,
-        ),
-    ):
-        gen = service.generate_send_stream('sess-1', 'run', ctx)
-        await gen.__anext__()
-        await gen.__anext__()
-        await gen.__anext__()
-        await gen.aclose()
-
-    pushed_job = fake_redis.lpush_agent_run_job.call_args.args[0]
-    assert pushed_job['bohrium_required'] is True
-
-
-@pytest.mark.asyncio
-async def test_generate_send_stream_enqueues_images():
-    from src.services.stream_service import ChatStreamService, SendStreamContext
-
-    service = ChatStreamService(
-        sessions_service=MagicMock(
-            get_session_status_payload=MagicMock(
-                return_value={
-                    'source': 'System',
-                    'type': 'status',
-                    'content': '',
-                    'session_id': 'sess-1',
-                }
-            )
-        ),
-        events_service=MagicMock(get_session_events=MagicMock(return_value=[])),
-        agent_run_service=MagicMock(),
-        deploy_state_service=MagicMock(),
-    )
-
-    ctx = SendStreamContext(
-        task_id='task-1',
-        invocation_id='inv-1',
-        mode='direct',
-        user_msg={'source': 'User', 'type': 'query', 'content': 'run'},
-        request_event_queue=asyncio.Queue(),
-        images=['https://oss.example.com/chat/a.png'],
-    )
-
-    fake_redis = MagicMock()
-    fake_redis.create_client.return_value = None
-    fake_redis.set_session_run_queued.return_value = True
-    fake_redis.llen_agent_run_queue.return_value = 0
-    fake_redis.lpush_agent_run_job.side_effect = lambda job: True
-
-    async def _stream_closed_immediately(awaitable, timeout):
-        close = getattr(awaitable, 'close', None)
-        if callable(close):
-            close()
-        return {
-            'source': 'System',
-            'type': 'stream_closed',
-            'content': '',
-            'session_id': 'sess-1',
-        }
-
-    with (
-        patch('src.services.stream_service.REDIS_URL', 'redis://test'),
-        patch('src.services.stream_service.get_redis_dao', return_value=fake_redis),
-        patch('src.services.stream_service.notify_post_async'),
-        patch(
-            'src.services.stream_service.asyncio.wait_for',
-            side_effect=_stream_closed_immediately,
-        ),
-    ):
-        gen = service.generate_send_stream('sess-1', 'run', ctx)
-        await gen.__anext__()
-        await gen.__anext__()
-        await gen.__anext__()
-        await gen.aclose()
-
-    pushed_job = fake_redis.lpush_agent_run_job.call_args.args[0]
-    assert pushed_job['images'] == ['https://oss.example.com/chat/a.png']
 
 
 async def test_sse_frames_match_frontend_contract_without_mysql():
@@ -647,6 +557,7 @@ def test_generate_send_stream_normalizes_replayed_history_source():
                 'invocation_id': 'inv-1',
             },
             request_event_queue=asyncio.Queue(),
+            job=_send_stream_job(),
         )
         gen = service.generate_send_stream('sess-1', 'new question', ctx)
         try:
@@ -731,6 +642,7 @@ def test_generate_send_stream_replay_prefers_run_result_over_response():
                 'invocation_id': 'inv-1',
             },
             request_event_queue=asyncio.Queue(),
+            job=_send_stream_job(),
         )
         gen = service.generate_send_stream('sess-1', 'new question', ctx)
         try:
@@ -852,6 +764,7 @@ def test_generate_send_stream_subscribes_before_enqueue():
                 'invocation_id': 'inv-1',
             },
             request_event_queue=asyncio.Queue(),
+            job=_send_stream_job(),
         )
         gen = service.generate_send_stream('sess-1', 'new question', ctx)
         try:

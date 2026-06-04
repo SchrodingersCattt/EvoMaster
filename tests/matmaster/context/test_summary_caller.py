@@ -179,8 +179,37 @@ def test_prepare_messages_non_positive_budget_raises() -> None:
             turn_input=None,
             compact_request=compact_request,
             context_limit=1_000,
-            reserved_summary_tokens=900,
+            reserved_summary_tokens=1_000,
         )
+
+
+def test_prepare_messages_budget_uses_context_limit_minus_reserved(
+    monkeypatch,
+) -> None:
+    from matmaster.context import compaction
+
+    compact_request = UserMessage(content=SUMMARY_USER_REQUEST_TEMPLATE)
+    full_messages = [SystemMessage(content="sys"), UserMessage(content="old")]
+
+    def fake_estimate(messages, safety_margin=1.0):
+        if len(messages) == 1 and messages[0] is compact_request:
+            return 9_000
+        return 100
+
+    monkeypatch.setattr(compaction, "estimate_tokens", fake_estimate)
+
+    prep = prepare_messages_for_summary_call(
+        full_messages=full_messages,
+        phase="runtime",
+        turn_input=None,
+        compact_request=compact_request,
+        context_limit=20_000,
+        reserved_summary_tokens=1_000,
+        safety_margin_tokens=8_000,
+    )
+
+    assert prep.request_tokens == 9_000
+    assert prep.message_budget == 19_000
 
 
 @pytest.mark.asyncio
@@ -241,7 +270,7 @@ def test_prepare_messages_truncates_only_largest_tool_results_needed_to_fit() ->
         phase="runtime",
         turn_input=None,
         compact_request=compact_request,
-        context_limit=7_000,
+        context_limit=6_000,
         reserved_summary_tokens=1_000,
         safety_margin_tokens=500,
     )

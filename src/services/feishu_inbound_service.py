@@ -218,7 +218,7 @@ async def _run_agent_and_reply_feishu(
 def _session_id_for_chat(chat_id: str, open_id: str) -> str:
     if not REDIS_URL:
         return f"feishu_{uuid.uuid4().hex}"
-    client = get_redis_dao().create_client()
+    client = get_redis_dao().get_command_client()
     if not client:
         return f"feishu_{uuid.uuid4().hex}"
     key = f"{_FEISHU_SESS_PREFIX}{chat_id}:{open_id}"
@@ -237,7 +237,7 @@ def _session_id_for_chat(chat_id: str, open_id: str) -> str:
 def _event_dedup_once(message_id: str) -> bool:
     if not REDIS_URL or not message_id:
         return True
-    client = get_redis_dao().create_client()
+    client = get_redis_dao().get_command_client()
     if not client:
         return True
     key = _FEISHU_DEDUP_PREFIX + message_id

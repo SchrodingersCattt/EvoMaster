@@ -7,8 +7,8 @@ import logging
 import threading
 import time
 import uuid
-from collections.abc import AsyncGenerator
-from dataclasses import dataclass, field
+from collections.abc import AsyncGenerator, Callable
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Protocol, runtime_checkable
@@ -16,10 +16,11 @@ from typing import Protocol, runtime_checkable
 from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES
 from matmaster.context.sources.turn_input import TurnInput
 from src.dao.redis_dao import (
+    DEFAULT_DEDUP_TTL_SEC,
     STREAM_CHANNEL_PREFIX,
     get_redis_dao,
 )
-from src.models.chat import ChatSendRequest
+from src.models.chat import ChatSendRequest, DeliverySpec
 from src.services.agent_run_service import (
     AgentRunService,
     get_agent_run_service,
@@ -107,6 +108,35 @@ class StreamQueueManager:
 
 
 @dataclass
+class RunHandle:
+    """_prepare_run 的成功产物：已写好发起事件、已组好 job，待 _enqueue_run 入队。"""
+
+    task_id: str
+    invocation_id: str
+    turn_input: TurnInput
+    job: dict
+    event: dict  # 已落库的发起事件（User/query 或 System/trigger）
+
+
+@dataclass
+class Busy:
+    """_prepare_run 因会话运行锁被占而放弃的产物。"""
+
+    reason: str  # already_in_run | db_update_failed | unknown
+
+
+@dataclass
+class TriggerResult:
+    """trigger_run 的返回。status: enqueued | deduped | busy | error。"""
+
+    status: str
+    task_id: str | None = None
+    invocation_id: str | None = None
+    dedup_key: str | None = None
+    reason: str | None = None
+
+
+@dataclass
 class SendStreamContext:
     """发送消息流所需上下文，由 prepare_send_message 返回。"""
 
@@ -115,14 +145,7 @@ class SendStreamContext:
     mode: str
     user_msg: dict
     request_event_queue: asyncio.Queue
-    llm: str | None = None  # 本轮使用的 LLM 配置块名，不传则用 agent 默认
-    model: str | None = None  # 本轮使用的模型名（覆盖 LLM 配置里的 model）
-    byok_credential_id: str | None = None  # 本轮 BYOK 凭证 ID；命中时用用户自带 Key
-    turn_input: TurnInput | None = None
-    bohrium_required: bool = False  # 本轮是否显式依赖 Bohrium access_key / project
-    images: list[str] = field(default_factory=list)
-    remote_workdir: str | None = None
-    session_directory_source: SessionDirectorySource = "none"
+    job: dict  # _prepare_run 组好的入队 job；由 generate_send_stream 经 _enqueue_run 入队
 
 
 class ChatStreamService:
@@ -177,6 +200,225 @@ class ChatStreamService:
             )
             return None
         return value if isinstance(value, int) else None
+
+    @staticmethod
+    def _resolve_mode(mode: str | None) -> str:
+        """归一化 chat mode：空白或未知一律回落到 DEFAULT_MODE。"""
+        resolved = (mode or DEFAULT_MODE).strip().lower() or DEFAULT_MODE
+        return resolved if resolved in SUPPORTED_MODES else DEFAULT_MODE
+
+    def _prepare_run(
+        self,
+        session_id: str,
+        *,
+        user_id: str,
+        user_text: str,
+        files: list[str] | None,
+        images: list[str] | None,
+        workspace_paths: list[str] | None,
+        event_writer: Callable[[str, str], dict],
+        id_prefix: str,
+        mode: str,
+        llm: str | None = None,
+        model: str | None = None,
+        byok_credential_id: str | None = None,
+        bohrium_required: bool = False,
+        remote_workdir: str | None = None,
+        session_directory_source: SessionDirectorySource = "none",
+        origin: str | None = None,
+        delivery: dict | None = None,
+        pre_event_hook: Callable[[], None] | None = None,
+    ) -> RunHandle | Busy:
+        """共享内核：确保会话、占锁、快照边界、写发起事件并组装 job。
+
+        不负责 lpush，以保护用户发送路径 subscribe-before-enqueue 的不变量。
+        占锁失败时直接返回 Busy，由调用方决定后续策略。
+        """
+        sid = session_id.strip()
+        self._sessions_service.ensure_session(sid, user_id=user_id)
+        acquired_ok, reason = self._sessions_service.try_acquire_session_run(sid)
+        if not acquired_ok:
+            return Busy(reason=reason or "unknown")
+        if pre_event_hook is not None:
+            pre_event_hook()
+        task_id = id_prefix + uuid.uuid4().hex[:16]
+        invocation_id = 'inv_' + uuid.uuid4().hex[:16]
+        self._sessions_service.set_session_last_task(sid, task_id, user_id=user_id)
+        self._deploy_state_service.record_session_version(sid)
+        pre_turn_history_event_id = self._get_pre_turn_history_event_id(sid) or 0
+        turn_input = TurnInput.from_values(
+            user_text=user_text,
+            files=files,
+            images=images,
+            workspace_paths=workspace_paths,
+            pre_turn_history_event_id=pre_turn_history_event_id,
+        )
+        event = event_writer(task_id, invocation_id)
+        job = {
+            'session_id': sid,
+            'task_id': task_id,
+            'invocation_id': invocation_id,
+            'user_prompt': turn_input.user_text,
+            'mode': mode,
+            'llm': llm,
+            'model': model,
+            'byok_credential_id': byok_credential_id,
+            'turn_input': turn_input.to_payload(),
+            'images': list(images or []),
+            'bohrium_required': bohrium_required,
+            'remote_workdir': remote_workdir,
+            'session_directory_source': session_directory_source,
+            'origin': origin,
+            'delivery': delivery,
+            'submitted_at': datetime.now(timezone.utc).isoformat(),
+        }
+        return RunHandle(
+            task_id=task_id,
+            invocation_id=invocation_id,
+            turn_input=turn_input,
+            job=job,
+            event=event,
+        )
+
+    def _notify_run_queued(self, session_id: str, job: dict) -> None:
+        """发送任务进入排队运维通知，失败不影响入队。"""
+        sid = session_id.strip()
+        try:
+            session_user_id = self._sessions_service.get_session_user_id(sid)
+            user_info = UserService.get_user_info_for_display(session_user_id)
+            user_info_display = f"{user_info['user_id']} | {user_info['nickname']} | {user_info['email']}"
+            env = (SERVICE_ENV or '').strip().lower()
+            session_url = f"https://matmaster{'' if not env or env == 'prod' else f'.{env}'}.bohrium.com/matmaster/chat-evo/{sid}"
+            queue_len = get_redis_dao().llen_agent_run_queue()
+            active_count = get_worker_registry_service().count_active_runs()
+            user_question = (job.get('user_prompt') or '').strip()
+            if len(user_question) > 500:
+                user_question = user_question[:500] + '…'
+            notify_post_async(
+                '任务进入排队',
+                [
+                    ('会话ID', sid),
+                    ('会话地址', session_url),
+                    ('用户', user_info_display),
+                    (
+                        '模型',
+                        format_llm_model_for_notify(job.get('llm'), job.get('model')),
+                    ),
+                    ('用户问题', user_question or '-'),
+                    ('排队数', str(queue_len)),
+                    ('执行中', str(active_count)),
+                ],
+                template=CARD_TEMPLATE_ORANGE,
+            )
+        except Exception as e:
+            logger.warning('Feishu 进入排队通知发送失败 session_id=%s: %s', sid, e)
+
+    def _enqueue_run(self, session_id: str, job: dict) -> bool:
+        """共享入队：set waiting、标记 queued、脱离本 pod 占用、通知、lpush。"""
+        sid = session_id.strip()
+        self._sessions_service.set_session_status(sid, 'waiting')
+        get_redis_dao().set_session_run_queued(sid)
+        self._sessions_service.discard_session_run_from_this_pod(sid)
+        self._notify_run_queued(sid, job)
+        if not get_redis_dao().lpush_agent_run_job(job):
+            self._sessions_service.set_session_status(sid, 'idle')
+            get_redis_dao().delete_session_run_queued(sid)
+            return False
+        return True
+
+    def trigger_run(
+        self,
+        session_id: str,
+        prompt: str,
+        *,
+        origin: str,
+        dedup_key: str | None = None,
+        delivery: DeliverySpec | dict | None = None,
+        on_busy: str = "skip",
+        mode: str | None = None,
+        llm: str | None = None,
+        model: str | None = None,
+        dedup_ttl_sec: int = DEFAULT_DEDUP_TTL_SEC,
+    ) -> TriggerResult:
+        """程序化触发一次 agent run。"""
+        sid = session_id.strip()
+        owner = self._sessions_service.get_session_user_id(sid)
+        if not owner:
+            logger.warning(
+                "trigger_run rejected: session not found or no owner session_id=%s",
+                sid,
+            )
+            return TriggerResult(status="error", reason="session_not_found_or_no_owner")
+
+        if dedup_key and get_redis_dao().dedup_key_exists(dedup_key):
+            logger.info(
+                "trigger_run deduped session_id=%s dedup_key=%s", sid, dedup_key
+            )
+            return TriggerResult(status="deduped", dedup_key=dedup_key)
+
+        resolved_mode = self._resolve_mode(mode)
+        llm_val = (llm or '').strip() or None
+        model_val = (model or '').strip() or None
+        if delivery is None:
+            delivery_payload: dict | None = None
+        elif hasattr(delivery, "model_dump"):
+            delivery_payload = delivery.model_dump()
+        else:
+            delivery_payload = dict(delivery)
+
+        def _system_event_writer(task_id: str, invocation_id: str) -> dict:
+            event = {
+                'source': 'System',
+                'type': 'trigger',
+                'content': {'text': prompt, 'origin': origin},
+                'session_id': sid,
+                'task_id': task_id,
+                'invocation_id': invocation_id,
+            }
+            self._events_service.add_history_event(sid, event, user_id=owner)
+            return event
+
+        handle = self._prepare_run(
+            sid,
+            user_id=owner,
+            user_text=prompt,
+            files=None,
+            images=None,
+            workspace_paths=None,
+            event_writer=_system_event_writer,
+            id_prefix='trig_',
+            mode=resolved_mode,
+            llm=llm_val,
+            model=model_val,
+            byok_credential_id=None,
+            bohrium_required=False,
+            remote_workdir=None,
+            session_directory_source="none",
+            origin=origin,
+            delivery=delivery_payload,
+        )
+        if isinstance(handle, Busy):
+            logger.info("trigger_run busy session_id=%s reason=%s", sid, handle.reason)
+            return TriggerResult(status="busy", reason=handle.reason)
+
+        if not self._enqueue_run(sid, handle.job):
+            return TriggerResult(status="error", reason="enqueue_failed")
+
+        if dedup_key:
+            get_redis_dao().mark_dedup_key_nx(
+                dedup_key, handle.task_id, ttl_sec=dedup_ttl_sec
+            )
+        logger.info(
+            "trigger_run enqueued session_id=%s task_id=%s origin=%s",
+            sid,
+            handle.task_id,
+            origin,
+        )
+        return TriggerResult(
+            status="enqueued",
+            task_id=handle.task_id,
+            invocation_id=handle.invocation_id,
+        )
 
     async def generate_subscribe_stream(
         self, session_id: str
@@ -463,23 +705,7 @@ class ChatStreamService:
             request_directory_provided="directory" in req_fields,
         )
 
-        acquired_ok, _ = self._sessions_service.try_acquire_session_run(sid)
-        if not acquired_ok:
-            return None
-
-        if req.replace_last_turn:
-            last_query_ev = self._events_service.get_last_user_query_event(sid)
-            if last_query_ev and last_query_ev.get('id'):
-                self._events_service.delete_events_from_id(sid, last_query_ev['id'])
-                logger.info(
-                    "replace_last_turn: deleted events from id=%s session_id=%s",
-                    last_query_ev['id'],
-                    sid,
-                )
-
-        mode = (req.mode or DEFAULT_MODE).strip().lower() or DEFAULT_MODE
-        if mode not in SUPPORTED_MODES:
-            mode = DEFAULT_MODE
+        mode = self._resolve_mode(req.mode)
 
         llm = (req.llm or '').strip() or None
         model = (
@@ -501,79 +727,94 @@ class ChatStreamService:
             or resolved_directory.bohrium_required
         )
 
-        # Bohrium：org_id / project_id 直接入库，需要时从库读，不常驻内存
-        if req.bohrium_project_id is not None or org_id is not None:
-            self._sessions_service.set_session_bohrium(
-                sid,
-                org_id=org_id_val,
-                project_id=project_id_val,
-            )
-
-        task_id = 'sse_' + uuid.uuid4().hex[:16]
-        invocation_id = 'inv_' + uuid.uuid4().hex[:16]
-        self._sessions_service.set_session_last_task(sid, task_id, user_id=user_id)
-        self._deploy_state_service.record_session_version(sid)
         user_content = (req.content or '').strip()
-        if user_content and user_id:
-            # 持久化本轮 mode 偏好属非关键副作用：DB 抖动不应中断发送，best-effort。
-            try:
-                self._sessions_service.set_session_chat_mode(sid, mode, user_id)
-            except Exception as e:
-                logger.warning(
-                    "persist chat_mode failed (best-effort) session_id=%s: %s",
+
+        def _run_pre_event_hook() -> None:
+            if req.replace_last_turn:
+                last_query_ev = self._events_service.get_last_user_query_event(sid)
+                if last_query_ev and last_query_ev.get('id'):
+                    self._events_service.delete_events_from_id(sid, last_query_ev['id'])
+                    logger.info(
+                        "replace_last_turn: deleted events from id=%s session_id=%s",
+                        last_query_ev['id'],
+                        sid,
+                    )
+            if req.bohrium_project_id is not None or org_id is not None:
+                self._sessions_service.set_session_bohrium(
                     sid,
-                    e,
+                    org_id=org_id_val,
+                    project_id=project_id_val,
                 )
-        user_msg = {
-            'source': 'User',
-            'type': 'query',
-            'content': user_content,
-            'mode': mode,
-            'session_id': sid,
-            'task_id': task_id,
-            'invocation_id': invocation_id,
-        }
-        if llm:
-            user_msg['requested_llm'] = llm
-        if model:
-            user_msg['requested_model'] = model
-        if req.files:
-            user_msg['files'] = list(req.files)
-        if req.images:
-            user_msg['images'] = list(req.images)
-        if req.workspace_paths:
-            user_msg['workspace_paths'] = list(req.workspace_paths)
-        if resolved_directory.source != "none":
-            user_msg["session_directory"] = resolved_directory.remote_workdir
-            user_msg["session_directory_source"] = resolved_directory.source
-        pre_turn_history_event_id = self._get_pre_turn_history_event_id(sid) or 0
-        turn_input = TurnInput.from_values(
+            if user_content and user_id:
+                try:
+                    self._sessions_service.set_session_chat_mode(sid, mode, user_id)
+                except Exception as e:
+                    logger.warning(
+                        "persist chat_mode failed (best-effort) session_id=%s: %s",
+                        sid,
+                        e,
+                    )
+
+        def _user_event_writer(task_id: str, invocation_id: str) -> dict:
+            user_msg = {
+                'source': 'User',
+                'type': 'query',
+                'content': user_content,
+                'mode': mode,
+                'session_id': sid,
+                'task_id': task_id,
+                'invocation_id': invocation_id,
+            }
+            if llm:
+                user_msg['requested_llm'] = llm
+            if model:
+                user_msg['requested_model'] = model
+            if req.files:
+                user_msg['files'] = list(req.files)
+            if req.images:
+                user_msg['images'] = list(req.images)
+            if req.workspace_paths:
+                user_msg['workspace_paths'] = list(req.workspace_paths)
+            if resolved_directory.source != "none":
+                user_msg["session_directory"] = resolved_directory.remote_workdir
+                user_msg["session_directory_source"] = resolved_directory.source
+            self._events_service.add_history_event(sid, user_msg, user_id=user_id)
+            return user_msg
+
+        handle = self._prepare_run(
+            sid,
+            user_id=user_id,
             user_text=user_content,
             files=req.files,
             images=req.images,
             workspace_paths=req.workspace_paths,
-            pre_turn_history_event_id=pre_turn_history_event_id,
+            event_writer=_user_event_writer,
+            id_prefix='sse_',
+            mode=mode,
+            llm=llm,
+            model=model,
+            byok_credential_id=byok_credential_id,
+            bohrium_required=bohrium_required,
+            remote_workdir=resolved_directory.remote_workdir,
+            session_directory_source=resolved_directory.source,
+            origin=None,
+            delivery=None,
+            pre_event_hook=_run_pre_event_hook,
         )
-        self._events_service.add_history_event(sid, user_msg, user_id=user_id)
+        if isinstance(handle, Busy):
+            return None
 
         dao = get_redis_dao()
         dao.delete_interaction_reply_list(sid)
         request_event_queue: asyncio.Queue = asyncio.Queue()
 
         return SendStreamContext(
-            task_id=task_id,
-            invocation_id=invocation_id,
+            task_id=handle.task_id,
+            invocation_id=handle.invocation_id,
             mode=mode,
-            user_msg=user_msg,
+            user_msg=handle.event,
             request_event_queue=request_event_queue,
-            llm=llm,
-            model=model,
-            byok_credential_id=byok_credential_id,
-            turn_input=turn_input,
-            bohrium_required=bohrium_required,
-            images=list(req.images or []),
-            remote_workdir=resolved_directory.remote_workdir,
-            session_directory_source=resolved_directory.source,
+            job=handle.job,
         )
 
     def get_reply_queue(self, session_id: str) -> ReplyQueueLike | None:
@@ -697,60 +938,7 @@ class ChatStreamService:
                     sid,
                     ctx.task_id,
                 )
-            turn_input_payload = (
-                ctx.turn_input.to_payload() if ctx.turn_input is not None else None
-            )
-
-            job = {
-                'session_id': sid,
-                'task_id': ctx.task_id,
-                'invocation_id': ctx.invocation_id,
-                'user_prompt': user_prompt,
-                'mode': mode,
-                'llm': ctx.llm,
-                'model': ctx.model,
-                'byok_credential_id': ctx.byok_credential_id,
-                'turn_input': turn_input_payload,
-                'images': list(ctx.images),
-                'bohrium_required': ctx.bohrium_required,
-                'remote_workdir': ctx.remote_workdir,
-                'session_directory_source': ctx.session_directory_source,
-                'submitted_at': datetime.now(timezone.utc).isoformat(),
-            }
-            # 先设为 waiting 再入队，避免 Worker 接手后 set active 被此处覆盖（竞态）
-            self._sessions_service.set_session_status(sid, 'waiting')
-            get_redis_dao().set_session_run_queued(sid)
-            self._sessions_service.discard_session_run_from_this_pod(sid)
-            # 在入队之前发「任务进入排队」飞书通知，避免 Worker 先拿到任务先发「开始执行」导致顺序颠倒
-            try:
-                session_user_id = self._sessions_service.get_session_user_id(sid)
-                user_info = UserService.get_user_info_for_display(session_user_id)
-                user_info_display = f"{user_info['user_id']} | {user_info['nickname']} | {user_info['email']}"
-                env = (SERVICE_ENV or '').strip().lower()
-                session_url = f"https://matmaster{'' if not env or env == 'prod' else f'.{env}'}.bohrium.com/matmaster/chat-evo/{sid}"
-                queue_len = get_redis_dao().llen_agent_run_queue()
-                active_count = get_worker_registry_service().count_active_runs()
-                user_question = (user_prompt or '').strip()
-                if len(user_question) > 500:
-                    user_question = user_question[:500] + '…'
-                notify_post_async(
-                    '任务进入排队',
-                    [
-                        ('会话ID', sid),
-                        ('会话地址', session_url),
-                        ('用户', user_info_display),
-                        ('模型', format_llm_model_for_notify(ctx.llm, ctx.model)),
-                        ('用户问题', user_question or '-'),
-                        ('排队数', str(queue_len)),
-                        ('执行中', str(active_count)),
-                    ],
-                    template=CARD_TEMPLATE_ORANGE,
-                )
-            except Exception as e:
-                logger.warning('Feishu 进入排队通知发送失败 session_id=%s: %s', sid, e)
-            if not get_redis_dao().lpush_agent_run_job(job):
-                self._sessions_service.set_session_status(sid, 'idle')
-                get_redis_dao().delete_session_run_queued(sid)
+            if not self._enqueue_run(sid, ctx.job):
                 yield self.sse_format(
                     {
                         'source': 'System',

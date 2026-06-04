@@ -30,13 +30,12 @@ async def test_chat_stream_sends_raw_user_text_to_stream_service(
     stream_svc.prepare_send_message.return_value = MagicMock()
     stream_svc.generate_send_stream.return_value = iter(())
 
-    events_svc = MagicMock()
-    events_svc.get_session_user_query_events.side_effect = AssertionError(
-        "chat_stream should not build attachment manifests"
+    get_events_service = MagicMock(
+        side_effect=AssertionError(
+            "chat_stream should not resolve events service for attachment manifests"
+        )
     )
-    events_svc.get_session_events.side_effect = AssertionError(
-        "chat_stream should not load full session events for attachment manifest"
-    )
+    monkeypatch.setattr(chat_api, "get_events_service", get_events_service)
 
     await chat_stream(
         request=request,
@@ -46,11 +45,9 @@ async def test_chat_stream_sends_raw_user_text_to_stream_service(
         org_id=None,
         chat_svc=chat_svc,
         stream_svc=stream_svc,
-        events_svc=events_svc,
     )
 
-    events_svc.get_session_user_query_events.assert_not_called()
-    events_svc.get_session_events.assert_not_called()
+    get_events_service.assert_not_called()
     stream_svc.generate_send_stream.assert_called_once()
     user_prompt = stream_svc.generate_send_stream.call_args.args[1]
     assert user_prompt == "new turn"

@@ -1,9 +1,10 @@
+import hmac
 import json
 import logging
 from pathlib import Path as FsPath
 
-from fastapi import APIRouter, Body, Depends, Path, Request
-from fastapi.responses import StreamingResponse
+from fastapi import APIRouter, Body, Depends, Header, Path, Request
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from matmaster.config.loader import load_llm_config
 from src.base.base_res import BaseResponse
@@ -45,7 +46,7 @@ from src.services.stream_service import (
 )
 from src.services.user_service import UserService
 from src.services.worker_registry_service import get_worker_registry_service
-from src.utils.constant import REDIS_URL
+from src.utils.constant import INTERNAL_TRIGGER_TOKEN, REDIS_URL
 from src.utils.exceptions import (
     BaseErrorResponse,
     ConflictErrorResponse,
@@ -100,6 +101,62 @@ def _session_directory_error(exc: SessionDirectoryError) -> BaseErrorResponse:
         code=exc.http_status,
         msg=exc.message,
         data={"error_code": exc.error_code},
+    )
+
+
+async def _handle_internal_trigger(
+    sid: str,
+    req: ChatSendRequest | None,
+    chat_svc: ChatSessionsService,
+    stream_svc: ChatStreamService,
+):
+    """X-Internal-Token 通过后的内部发起：以 session owner 为计费/鉴权主体。"""
+    prompt = (req.content or "").strip() if req else ""
+    if not prompt:
+        raise BaseErrorResponse(
+            http_status=400, code=400, msg="内部触发需要非空 content"
+        )
+    owner = chat_svc.get_session_user_id(sid)
+    if not owner:
+        raise NotFoundErrorResponse(msg="会话不存在或无所有者，无法内部触发")
+    quota_status = await check_quota_status(owner)
+    if quota_status.is_exhausted:
+        raise ForbiddenErrorResponse(
+            msg=quota_status.exhausted_message("额度已用完，无法触发")
+        )
+    if not REDIS_URL:
+        raise BaseErrorResponse(
+            http_status=503, code=503, msg="队列服务不可用，请检查 REDIS_URL 配置"
+        )
+    result = stream_svc.trigger_run(
+        sid,
+        prompt,
+        origin=(req.origin or "external_tool"),
+        dedup_key=req.dedup_key,
+        delivery=req.delivery,
+        on_busy=(req.on_busy or "skip"),
+        mode=req.mode,
+        llm=req.llm,
+        model=req.model,
+    )
+    if result.status == "enqueued":
+        return StreamingResponse(
+            stream_svc.generate_subscribe_stream(sid),
+            media_type="text/event-stream",
+            headers=SSE_HEADERS,
+        )
+    return JSONResponse(
+        status_code=200,
+        content={
+            "code": 200,
+            "msg": result.status,
+            "data": {
+                "status": result.status,
+                "task_id": result.task_id,
+                "invocation_id": result.invocation_id,
+                "reason": result.reason,
+            },
+        },
     )
 
 
@@ -224,15 +281,25 @@ async def chat_stream(
     org_id: str | None = Depends(UserService.optional_org_id),
     chat_svc: ChatSessionsService = Depends(get_sessions_service),
     stream_svc: ChatStreamService = Depends(get_stream_service),
-    events_svc: ChatEventsService = Depends(get_events_service),
+    x_internal_token: str | None = Header(None, alias="X-Internal-Token"),
 ):
     """ag-ui：统一流接口。会话已分享时可不鉴权；未分享时需登录且为会话所有者。
 
     第二轮无推送排查：后端日志看是否有 stream 409（会话占用）、generate_send_stream: start（已开流）、
     run_agent 报错；前端需消费本次 POST 的 response body（SSE）并合并到 UI，不能只依赖「订阅」连接。"""
     sid = session_id.strip()
-    has_content = req is not None and bool((req.content or "").strip())
     is_share_route = request.url.path.startswith("/pubapi/")
+    internal_token = x_internal_token if isinstance(x_internal_token, str) else None
+    if internal_token:
+        if not INTERNAL_TRIGGER_TOKEN or not hmac.compare_digest(
+            internal_token, INTERNAL_TRIGGER_TOKEN
+        ):
+            raise ForbiddenErrorResponse(msg="内部触发 token 无效")
+        if is_share_route:
+            raise ForbiddenErrorResponse(msg="分享页仅支持只读订阅，不允许内部触发")
+        return await _handle_internal_trigger(sid, req, chat_svc, stream_svc)
+
+    has_content = req is not None and bool((req.content or "").strip())
     if is_share_route and has_content:
         raise ForbiddenErrorResponse(msg="分享页仅支持只读订阅，不允许发送消息")
     logger.info(

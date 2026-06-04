@@ -93,7 +93,7 @@ class TestAgentWorkerCancellationIntegration:
             },
         }
         redis_dao = MagicMock()
-        redis_dao.create_client.return_value = True
+        redis_dao.get_command_client.return_value = True
         redis_dao.blpop_agent_run_job.side_effect = [payload]
         redis_dao.llen_agent_run_queue.return_value = 0
 

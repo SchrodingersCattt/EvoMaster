@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** 新增一张轻量级 `bohrium_jobs` 作业状态表，作为 Bohrium 作业的事实源；让 `BohriumTool` 在 submit/poll/download/kill 后写入状态，让 agent 通过 session 维度读取实时作业状态，并提供一个可测的后台 poller 核心。
+**Goal:** 新增一张轻量级 `bohrium_jobs` 作业状态表，作为 Bohrium 作业的事实源；让 `BohriumTool` 在 submit/poll/kill 后写入状态、在处理完终态作业后标记交付（`handled`），让 agent 通过 session 维度读取实时作业状态（活跃 + 待交付），并提供一个可测的后台 poller 核心。
 
 **Architecture:** 分层落地，依赖方向严格为 `src/`（后端，可依赖 kernel）→ `matmaster/`（kernel，纯逻辑，**禁止** import `src/`）。
 - 数据层：`src/dao/bohrium_jobs_table.py` 用 raw SQL（PyMySQL，同步）封装全部状态不变量；建表用外部 SQL 脚本 `src/sql/create_bohrium_jobs_table.sql`（手动执行，**不内联自动建表/迁移逻辑**）。
@@ -15,22 +15,31 @@
 
 ---
 
+## 计划来源说明
+
+本 plan 是当前实现事实源。若 `docs/superpowers/specs/2026-06-01-bohrium-job-ledger-design.md` 与本 plan 冲突，以本 plan 为准；旧 spec 中的 `downloaded`、`task_id`、`last_error`、download 写 ledger、`recent_terminal_jobs` 等旧语义不在本轮实现范围。执行本 plan 前如需继续维护 spec，应先同步更新 spec，再开始写代码，避免执行者在两个文档之间来回取舍。
+
+---
+
 ## 关键架构决策（实现时必须遵守）
 
 1. **依赖方向**：`matmaster/`（kernel）**不得** import `src/`。归一化函数因此放在 kernel 的 `matmaster/bohrium/status.py`（`src/` 可反向 import）；DAO 只接收已归一化的 `status` 字符串与布尔标志，自身不 import kernel 的归一化、也不承载业务判断。
-2. **写 port 走构造器注入**（spec 明确）：`AgentRunService` 构造 `BohriumJobLedgerPort` 并闭包 `session_id`/`task_id`/`user_id`/`org_id` → 经 `AgentRunPorts.bohrium_job_ledger` → `Exp._init_builtin_tools()` 注入 `BohriumTool.__init__`。**不走 `runner_state`、不读 `run_meta`/`SESSIONS`/`HookExecutor`/临时 dict。**
+2. **写 port 走构造器注入**（spec 明确）：`AgentRunService` 构造 `BohriumJobLedgerPort` 并闭包 `session_id`/`invocation_id`/`user_id`/`org_id` → 经 `AgentRunPorts.bohrium_job_ledger` → `Exp._init_builtin_tools()` 注入 `BohriumTool.__init__`。**不走 `runner_state`、不读 `run_meta`/`SESSIONS`/`HookExecutor`/临时 dict。**（`spawn_id` 不在此闭包，见决策 10。）
 3. **读 port 闭包身份字段**（方案 A，对齐 `_RunSessionEventHistory`）：`SessionJobsPort` 实现闭包 `user_id`/`org_id`，`SessionJobsQuery` 维持只带 `session_id` 不扩展，`ContextAssembler._load_jobs_or_empty` 不改。
-4. **不变量集中在 DAO**：业务代码不得裸写 `status`/`next_poll_at`/`terminal_at`/`result_dir`。DAO 方法是唯一写入口，DB CHECK 约束是第二道防线。
+4. **不变量集中在 DAO**：业务代码不得裸写 `status`/`next_poll_at`/`terminal_at`/`handled_at`。DAO 方法是唯一写入口，DB CHECK 约束是第二道防线。
 5. **所有调度时间由 DB `NOW()` 计算**，不在 Python 侧用本地时间算 `next_poll_at`。时间列一律 `TIMESTAMP`（UTC 锚定）。
 6. **不落库平台原始返回**：表只存归一化后的 `status`，不存 `status_code` 与任何原始 JSON（submit 响应 / `get_job_detail` 返回）。排障时用 job row 的 `user_id`/`org_id`/`project_id`/`sandbox`/`job_id` 现查一次 `get_job_detail` 取当前权威状态。因此 DAO 不写 JSON 列、不需要 redaction 与大小截断逻辑。
 7. **禁止兼容/迁移内联**：表结构变更走 `src/sql/` 外部脚本；DTO（如 `SessionJobs`）直接改形状并同步所有消费者与测试，不保留旧字段兜底。
+8. **状态枚举七态，`downloaded` 不入 `status`**：平台终态只有 `finished`/`failed`/`stopped`，活跃态为 `submitted`/`running`/`terminating`/`unknown`。download 是 agent 的本地行为，**不作为状态、不写 ledger**（其 IO 成败不追踪）。`result_dir` 是作业**预期**下载位置、`input_dir` 是输入来源，二者皆为提交期固化的路径信息列，不带状态语义、不参与任何 CHECK。
+9. **`handled_at` 是交付确认维度，不可逆**：标记某终态作业的结果已被 agent 系统消费/交付给 LLM。仅终态可标记（`chk_handled_requires_terminal` + DAO `mark_handled` 的 `terminal_at IS NOT NULL` guard），`handled_at = COALESCE(handled_at, NOW())` 保证不可逆且幂等。由 **agent 的独立动作**触发（不是 download 的副产品），用于驱动"待交付队列"（终态且 `handled_at IS NULL`）读取并避免 agent 重复处理同一作业。
+10. **`spawn_id` 在 exp 装配层注入**：`spawn_id`（`NULL`=主 agent，非空=subagent，由 kernel 内部 `subagent_orchestrator` 生成 `uuid4().hex[:16]`）在 service 层拿不到，**不走决策 2 的 service 闭包路径**，须在 `Exp` 装配 `BohriumTool` 时注入（具体机制见文末"挂起项"）。
 
 ---
 
 ## File Structure
 
 **新建文件**
-- `src/sql/create_bohrium_jobs_table.sql` — `bohrium_jobs` 建表 DDL（spec 原样）。
+- `src/sql/create_bohrium_jobs_table.sql` — `bohrium_jobs` 建表 DDL（以本 plan 的 SQL 代码块为准）。
 - `src/dao/bohrium_jobs_table.py` — `BohriumJobsTable`（DAO，全部状态不变量）。
 - `src/services/bohrium_jobs_wiring.py` — `BohriumJobLedgerPort` 实现 + `SessionJobsPort` 实现 + 构造工厂。
 - `src/services/bohrium_poller.py` — `BohriumJobPoller` 可测核心（不接进程）。
@@ -47,21 +56,23 @@
 - `src/sql/README.md` — 新增 `create_bohrium_jobs_table.sql` 执行说明。
 - `src/base/base_table.py` — `__init__` 增加可选 `db_config` 注入点（可测性）。
 - `matmaster/bohrium/status.py` — 增加 `to_ledger_status` + `LedgerStatusDecision`。
-- `matmaster/context/ports.py` — 增加 `BohriumJobLedgerPort`；`SessionJobs` 增加 `recent_terminal_jobs`。
+- `matmaster/context/ports.py` — 增加 `BohriumJobLedgerPort`（含 `mark_handled`，无 `record_download`）；`SessionJobs` 增加 `pending_terminal_jobs`。
 - `matmaster/types/runtime_ports.py` — `AgentRunPorts` 增加 `bohrium_job_ledger` 与 `session_jobs` 字段。
-- `matmaster/context/sources/session_jobs.py` — renderer 同时渲染 active + recent terminal。
+- `matmaster/context/sources/session_jobs.py` — renderer 同时渲染 active + pending terminal。
 - `matmaster/core/runtime_context_assembly.py` — 用 `ctx.request.ports.session_jobs` 替代硬编码空实现。
 - `matmaster/core/exp.py` — `BohriumTool(...)` 注入 `job_ledger`。
-- `matmaster/tools/builtin/bohrium_tool/tool.py` — `__init__` 接收 `job_ledger`；`_submit/_poll/_download/_kill` 集成 ledger 写入。
+- `matmaster/tools/builtin/bohrium_tool/tool.py` — `__init__` 接收 `job_ledger`；`_submit/_poll/_kill` 集成 ledger 写入（`_download` 不写 ledger）。
 - `src/services/agent_run_service.py` — 构造并注入两个 port。
-- `tests/matmaster/context/sources/test_session_jobs.py` — 更新 renderer 测试覆盖 recent terminal。
+- `src/services/user_service.py` — 为后台 poller 增加只读 AK helper，不触发自动创建。
+- `tests/matmaster/context/sources/test_session_jobs.py` — 更新 renderer 测试覆盖 pending terminal。
+- `tests/matmaster/services/test_user_service.py` — 增加只读 AK helper 与 `create_if_missing=False` 覆盖。
 
 ---
 
 ## 开发与验证约定
 
 - **统一用 uv 环境**：所有命令用 `uv run ...`（例：`uv run pytest tests/dao/test_bohrium_jobs_table.py -v`）。不要用系统 `python`/`pytest`。
-- **真实库测试前置**：阶段 0/1/4 的 DB 测试需要本地 docker 起的 MySQL，连接来自 `.env.test`。运行前确保该 MySQL 已启动；未启动时这些测试会 `pytest.skip`（不是失败）。纯逻辑测试（归一化、renderer、port wiring mock）无需 MySQL。
+- **真实库测试前置**：阶段 0/1/4 的 DB 测试需要本地 docker 起的 MySQL，连接只允许来自 `.env.test`。运行前确保该 MySQL 已启动；未启动时这些测试会 `pytest.skip`（不是失败）。`.env.test` 指向的库名必须明显是测试库（如 `matmaster_test`、`matmaster_evo_test`、`*_test`、`test_*`），否则 fixture 直接 `pytest.fail`，因为测试会 `DROP/CREATE/TRUNCATE bohrium_jobs`。只有在明确需要临时库名时，才允许设置 `ALLOW_DESTRUCTIVE_BOHRIUM_JOBS_TESTS=1` 绕过库名保护；不得让普通 `MYSQL_*` shell 环境变量覆盖 `.env.test`。纯逻辑测试（归一化、renderer、port wiring mock）无需 MySQL。
 - **每个 Task 末尾 commit**；commit message 用 Conventional Commits（如 `feat(bohrium-ledger): ...`）。
 - **每次改完代码跑 pre-commit 关注点**：单文件 ≤ 1000 行、black/isort/flake8。`src/dao/bohrium_jobs_table.py` 若接近行数上限，可把查询 helper 拆到同目录新文件。
 
@@ -75,7 +86,7 @@
 - Create: `src/sql/create_bohrium_jobs_table.sql`
 - Modify: `src/sql/README.md`
 
-- [ ] **Step 1: 写建表 DDL**（spec 原样，单条 CREATE TABLE）
+- [ ] **Step 1: 写建表 DDL**（以本 plan 为准，单条 CREATE TABLE）
 
 `src/sql/create_bohrium_jobs_table.sql`：
 ```sql
@@ -85,7 +96,8 @@ CREATE TABLE `bohrium_jobs` (
     `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
 
     `session_id` VARCHAR(255) COLLATE utf8mb4_bin NOT NULL,
-    `task_id` VARCHAR(255) COLLATE utf8mb4_bin NOT NULL,
+    `invocation_id` VARCHAR(255) COLLATE utf8mb4_bin NULL,  -- 提交时的调用标识（来源可空）
+    `spawn_id` VARCHAR(64) COLLATE utf8mb4_bin NULL,        -- NULL=主 agent，非空=subagent
     `user_id` VARCHAR(255) COLLATE utf8mb4_bin NOT NULL,
     `org_id` VARCHAR(255) COLLATE utf8mb4_bin NOT NULL,
 
@@ -93,6 +105,9 @@ CREATE TABLE `bohrium_jobs` (
     `job_name` VARCHAR(255) NULL,
     `project_id` BIGINT UNSIGNED NOT NULL,
     `sandbox` TINYINT(1) NOT NULL DEFAULT 0,
+
+    `input_dir` VARCHAR(1024) NOT NULL,                     -- 输入来源（提交期固化）
+    `result_dir` VARCHAR(1024) NULL,                        -- 预期下载位置（提交期信息列，不进 CHECK）
 
     `status` VARCHAR(32) COLLATE utf8mb4_bin NOT NULL DEFAULT 'submitted',
 
@@ -102,10 +117,7 @@ CREATE TABLE `bohrium_jobs` (
 
     `submitted_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `terminal_at` TIMESTAMP NULL,
-    `result_dir` VARCHAR(1024) NULL,
-
-    `last_error` TEXT NULL,
-    `last_error_at` TIMESTAMP NULL,
+    `handled_at` TIMESTAMP NULL,                            -- 交付确认（不可逆，仅终态可标记）
 
     `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -113,24 +125,26 @@ CREATE TABLE `bohrium_jobs` (
     UNIQUE KEY `uk_owner_job_id` (`user_id`, `org_id`, `sandbox`, `job_id`),
     KEY `idx_poll_due` (`next_poll_at`, `id`),
     KEY `idx_session_active` (`user_id`, `org_id`, `session_id`, `submitted_at`),
-    KEY `idx_session_recent` (`user_id`, `org_id`, `session_id`, `terminal_at`, `submitted_at`),
+    KEY `idx_session_pending` (`user_id`, `org_id`, `session_id`, `handled_at`, `terminal_at`),
 
     CONSTRAINT `chk_sandbox` CHECK (`sandbox` IN (0, 1)),
     CONSTRAINT `chk_status` CHECK (`status` IN (
         'submitted', 'running', 'terminating', 'unknown',
-        'finished', 'failed', 'stopped', 'downloaded'
+        'finished', 'failed', 'stopped'
     )),
     CONSTRAINT `chk_active_poll` CHECK (
         (`status` IN ('submitted', 'running', 'terminating', 'unknown') AND `next_poll_at` IS NOT NULL)
         OR
-        (`status` IN ('finished', 'failed', 'stopped', 'downloaded') AND `next_poll_at` IS NULL)
+        (`status` IN ('finished', 'failed', 'stopped') AND `next_poll_at` IS NULL)
     ),
     CONSTRAINT `chk_terminal_at` CHECK (
         (`status` IN ('submitted', 'running', 'terminating', 'unknown') AND `terminal_at` IS NULL)
         OR
-        (`status` IN ('finished', 'failed', 'stopped', 'downloaded') AND `terminal_at` IS NOT NULL)
+        (`status` IN ('finished', 'failed', 'stopped') AND `terminal_at` IS NOT NULL)
     ),
-    CONSTRAINT `chk_downloaded_dir` CHECK (`status` <> 'downloaded' OR `result_dir` IS NOT NULL)
+    CONSTRAINT `chk_handled_requires_terminal` CHECK (
+        `handled_at` IS NULL OR `terminal_at` IS NOT NULL
+    )
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
 COMMENT='Bohrium 作业状态表';
 ```
@@ -146,14 +160,25 @@ COMMENT='Bohrium 作业状态表';
 
 Run（确保本地 docker MySQL 已起）：
 ```bash
+[ -f .env.test ] || { echo ".env.test is required for destructive DB verification"; exit 1; }
 set -a; source .env.test; set +a
 uv run python -c "
-import pymysql, pathlib
-cfg=dict(host=__import__('os').getenv('MYSQL_HOST'),port=int(__import__('os').getenv('MYSQL_PORT','3306')),user=__import__('os').getenv('MYSQL_USER'),password=__import__('os').getenv('MYSQL_PASSWORD'),database=__import__('os').getenv('MYSQL_DATABASE'))
+import os, pathlib, pymysql
+db = os.getenv('MYSQL_DATABASE') or ''
+allow = os.getenv('ALLOW_DESTRUCTIVE_BOHRIUM_JOBS_TESTS') == '1'
+is_test_db = db.endswith('_test') or db.startswith('test_') or db in {'matmaster_test', 'matmaster_evo_test'}
+if not db or (not is_test_db and not allow):
+    raise SystemExit(f'Refusing to DROP bohrium_jobs on non-test database: {db!r}')
+cfg=dict(host=os.getenv('MYSQL_HOST'),port=int(os.getenv('MYSQL_PORT','3306')),user=os.getenv('MYSQL_USER'),password=os.getenv('MYSQL_PASSWORD'),database=db)
 c=pymysql.connect(**cfg); cur=c.cursor()
+cur.execute('SELECT VERSION()')
+version = cur.fetchone()[0]
+print('mysql', version)
+parts = tuple(int(p) for p in version.split('-')[0].split('.')[:3])
+if parts < (8, 0, 16):
+    raise SystemExit(f'MySQL >= 8.0.16 required, got {version}')
 cur.execute('DROP TABLE IF EXISTS bohrium_jobs')
 cur.execute(pathlib.Path('src/sql/create_bohrium_jobs_table.sql').read_text().rstrip().rstrip(';'))
-cur.execute('SELECT VERSION()'); print('mysql', cur.fetchone())
 cur.execute('SHOW CREATE TABLE bohrium_jobs'); print('created OK')
 c.commit(); c.close()
 "
@@ -264,18 +289,37 @@ _SQL_FILE = _REPO_ROOT / "src" / "sql" / "create_bohrium_jobs_table.sql"
 
 
 def _test_db_config() -> dict[str, Any]:
-    """优先用进程环境变量，回退 .env.test。"""
-    values = dotenv_values(_REPO_ROOT / ".env.test")
+    """只读取 .env.test；本 fixture 会 DROP/CREATE，不允许普通 MYSQL_* 覆盖。"""
+    env_path = _REPO_ROOT / ".env.test"
+    if not env_path.exists():
+        pytest.skip("bohrium_jobs DAO tests require .env.test")
+    values = dotenv_values(env_path)
 
-    def pick(key: str, default: str) -> str:
-        return os.getenv(key) or values.get(key) or default
+    required = ("MYSQL_HOST", "MYSQL_PORT", "MYSQL_USER", "MYSQL_DATABASE")
+    missing = [key for key in required if not values.get(key)]
+    if missing:
+        pytest.skip(f".env.test missing required MySQL keys: {', '.join(missing)}")
+
+    database = str(values["MYSQL_DATABASE"])
+    allow = os.getenv("ALLOW_DESTRUCTIVE_BOHRIUM_JOBS_TESTS") == "1"
+    is_test_db = (
+        database.endswith("_test")
+        or database.startswith("test_")
+        or database in {"matmaster_test", "matmaster_evo_test"}
+    )
+    if not is_test_db and not allow:
+        pytest.fail(
+            "Refusing destructive bohrium_jobs tests against non-test database "
+            f"{database!r}; use a *_test/test_* database or set "
+            "ALLOW_DESTRUCTIVE_BOHRIUM_JOBS_TESTS=1 for a disposable DB."
+        )
 
     return {
-        "host": pick("MYSQL_HOST", "localhost"),
-        "port": int(pick("MYSQL_PORT", "3306")),
-        "user": pick("MYSQL_USER", "root"),
-        "password": pick("MYSQL_PASSWORD", "password"),
-        "database": pick("MYSQL_DATABASE", "matmaster"),
+        "host": values["MYSQL_HOST"],
+        "port": int(values["MYSQL_PORT"]),
+        "user": values["MYSQL_USER"],
+        "password": values.get("MYSQL_PASSWORD") or "",
+        "database": database,
         "charset": "utf8mb4",
         "cursorclass": pymysql.cursors.DictCursor,
         "autocommit": False,
@@ -295,15 +339,17 @@ def bohrium_jobs_db_config() -> dict[str, Any]:
         with conn.cursor() as cur:
             cur.execute("SELECT VERSION() AS v")
             version = str(cur.fetchone()["v"])
+            # 8.0.16+ 才强制 CHECK；低版本先 skip，绝不先 DROP。
+            major_minor_patch = tuple(
+                int(p) for p in version.split("-")[0].split(".")[:3]
+            )
+            if major_minor_patch < (8, 0, 16):
+                pytest.skip(f"bohrium_jobs needs MySQL >= 8.0.16, got {version}")
             cur.execute("DROP TABLE IF EXISTS `bohrium_jobs`")
             cur.execute(ddl)
         conn.commit()
     finally:
         conn.close()
-    # 8.0.16+ 才强制 CHECK；低版本直接 skip，避免假绿。
-    major_minor_patch = tuple(int(p) for p in version.split("-")[0].split(".")[:3])
-    if major_minor_patch < (8, 0, 16):
-        pytest.skip(f"bohrium_jobs needs MySQL >= 8.0.16, got {version}")
     return cfg
 
 
@@ -341,7 +387,7 @@ def test_fixture_creates_table(db_conn) -> None:
 ```
 
 Run（MySQL 已起）: `uv run pytest tests/dao/test_fixture_smoke.py -v`
-Expected: PASS（表存在且为空）。若 MySQL 未起：SKIPPED（不是 FAIL）。
+Expected: PASS（表存在且为空）。若 MySQL 未起：SKIPPED（不是 FAIL）。若 `.env.test` 指向非测试库：FAIL，且发生在任何 `DROP/CREATE/TRUNCATE` 之前。
 
 - [ ] **Step 3: 删除冒烟测试**
 
@@ -428,7 +474,7 @@ from dataclasses import dataclass
 class LedgerStatusDecision:
     """平台状态码归一化到 ledger 语义的结果。
 
-    status: ledger 活跃/平台终态字符串（不含 submitted/downloaded，那是动作产生的）。
+    status: ledger 活跃/平台终态字符串（不含 submitted，那是 insert 动作产生的）。
     is_terminal: True 表示平台计算终态（finished/failed/stopped），写 terminal_at 且停轮询。
     """
 
@@ -490,13 +536,15 @@ import pytest
 def _submit_kwargs(**over):
     base = dict(
         session_id="sess-1",
-        task_id="ws_task1",
+        invocation_id="inv-1",
+        spawn_id=None,
         user_id="user-1",
         org_id="org-1",
         job_id="12345",
         job_name="matmaster-job",
         project_id=42,
         sandbox=True,
+        input_dir="data/in",
     )
     base.update(over)
     return base
@@ -513,6 +561,9 @@ def test_insert_submitted_sets_active_invariants(jobs_table) -> None:
     assert row["next_poll_at"] == row["submitted_at"]  # 新作业即到期
     assert row["sandbox"] == 1
     assert row["project_id"] == 42
+    assert row["input_dir"] == "data/in"
+    assert row["invocation_id"] == "inv-1"
+    assert row["spawn_id"] is None
 
 
 def test_insert_submitted_rejects_sentinel_project_id(jobs_table) -> None:
@@ -564,9 +615,9 @@ Expected: FAIL（`ModuleNotFoundError: src.dao.bohrium_jobs_table`），或 MySQ
 
 本模块是 bohrium_jobs 的唯一写入口，集中封装 spec 的状态不变量：
 - 活跃态恒有 next_poll_at、terminal_at 为 NULL；终态反之。
-- 单调性：downloaded 不被平台 poll 回退。
+- 单调性：终态不被平台 poll 回退。
 - 所有调度时间用 DB NOW() 计算，不在 Python 侧算。
-业务代码不得裸写 status / next_poll_at / terminal_at / result_dir。
+业务代码不得裸写 status / next_poll_at / terminal_at / handled_at。
 """
 
 from __future__ import annotations
@@ -594,18 +645,21 @@ class BohriumJobsTable(BaseTable):
         self,
         *,
         session_id: str,
-        task_id: str,
+        invocation_id: str | None,
+        spawn_id: str | None,
         user_id: str,
         org_id: str,
         job_id: str,
         job_name: str | None,
         project_id: int,
         sandbox: bool,
+        input_dir: str,
     ) -> None:
         """job/add 成功后写入。next_poll_at = submitted_at（新作业即到期）。
 
         project_id 必须 > 0：BohriumCredentials 解析失败默认哨兵 -1，UNSIGNED 列
         无法写入，必须在此拒绝而非让 DB 静默截断。
+        result_dir 提交期不写（预期下载位置来源挂起，见文末挂起项），保持 NULL。
         """
         if project_id is None or int(project_id) <= 0:
             raise ValueError(
@@ -613,18 +667,20 @@ class BohriumJobsTable(BaseTable):
             )
         sql = f"""
             INSERT INTO {self.table_name}
-                (session_id, task_id, user_id, org_id, job_id, job_name,
-                 project_id, sandbox, status, poll_count,
-                 submitted_at, next_poll_at)
+                (session_id, invocation_id, spawn_id, user_id, org_id,
+                 job_id, job_name, project_id, sandbox, input_dir,
+                 status, poll_count, submitted_at, next_poll_at)
             VALUES
-                (%s, %s, %s, %s, %s, %s,
-                 %s, %s, 'submitted', 0,
-                 NOW(), NOW())
+                (%s, %s, %s, %s, %s,
+                 %s, %s, %s, %s, %s,
+                 'submitted', 0, NOW(), NOW())
             ON DUPLICATE KEY UPDATE
                 session_id = VALUES(session_id),
-                task_id = VALUES(task_id),
+                invocation_id = VALUES(invocation_id),
+                spawn_id = VALUES(spawn_id),
                 job_name = VALUES(job_name),
-                project_id = VALUES(project_id)
+                project_id = VALUES(project_id),
+                input_dir = VALUES(input_dir)
         """
         with self.get_connection() as conn:
             with conn.cursor() as cur:
@@ -632,13 +688,15 @@ class BohriumJobsTable(BaseTable):
                     sql,
                     (
                         session_id,
-                        task_id,
+                        invocation_id,
+                        spawn_id,
                         user_id,
                         org_id,
                         job_id,
                         job_name,
                         int(project_id),
                         1 if sandbox else 0,
+                        input_dir,
                     ),
                 )
             conn.commit()
@@ -737,26 +795,6 @@ def test_apply_poll_does_not_revert_terminal_to_active(jobs_table) -> None:
     assert row["next_poll_at"] is None
     assert row["terminal_at"] is not None
     assert row["poll_count"] == 2             # poll 事实仍计数
-
-
-def test_apply_poll_does_not_revert_downloaded(jobs_table) -> None:
-    jobs_table.insert_submitted(**_submit_kwargs())
-    jobs_table.apply_download(
-        user_id="user-1", org_id="org-1", sandbox=True, job_id="12345",
-        platform_status="finished", platform_is_terminal=True,
-        result_dir="results/run_12345",
-    )
-    # 旧 poll 结果（finished）到达，不得把 downloaded 写回 finished
-    jobs_table.apply_poll(
-        user_id="user-1", org_id="org-1", sandbox=True, job_id="12345",
-        status="finished", is_terminal=True, backoff_seconds=30,
-    )
-    row = jobs_table.get_by_owner_job(
-        user_id="user-1", org_id="org-1", sandbox=True, job_id="12345"
-    )
-    assert row["status"] == "downloaded"        # 单调，不回退
-    assert row["result_dir"] == "results/run_12345"
-    assert row["next_poll_at"] is None
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
@@ -764,7 +802,7 @@ def test_apply_poll_does_not_revert_downloaded(jobs_table) -> None:
 Run: `uv run pytest tests/dao/test_bohrium_jobs_table.py -k apply_poll -v`
 Expected: FAIL（`AttributeError: 'BohriumJobsTable' object has no attribute 'apply_poll'`）。
 
-- [ ] **Step 3: 实现 apply_poll**（spec 原子 CASE WHEN）
+- [ ] **Step 3: 实现 apply_poll**（原子 CASE WHEN；`status` 赋值必须最后）
 
 在 `BohriumJobsTable` 增加方法：
 ```python
@@ -779,30 +817,36 @@ Expected: FAIL（`AttributeError: 'BohriumJobsTable' object has no attribute 'ap
         is_terminal: bool,
         backoff_seconds: int,
     ) -> None:
-        """poll 写回。原子保护：downloaded/终态不被回退；终态停轮询、补 terminal_at。
+        """poll 写回。原子保护：终态不被回退；终态停轮询、补 terminal_at。
 
         status / is_terminal 由调用方经 to_ledger_status 归一化后传入。
         next_poll_at 用 DB NOW() + backoff 计算。
+
+        MySQL 单表 UPDATE 的 SET 表达式按顺序求值；terminal_at/next_poll_at
+        必须先基于旧 status 计算，最后再赋新 status。否则 active -> terminal
+        时可能先写 status='finished'，再让 terminal_at CASE 误以为旧状态已终态，
+        最终保持 NULL 并撞 chk_terminal_at。
         """
         sql = f"""
             UPDATE {self.table_name}
             SET
-                status = CASE
-                    WHEN status IN ('finished', 'failed', 'stopped', 'downloaded')
-                    THEN status ELSE %s END,
                 last_polled_at = NOW(),
                 poll_count = poll_count + 1,
                 terminal_at = CASE
-                    WHEN status IN ('finished', 'failed', 'stopped', 'downloaded')
+                    WHEN status IN ('finished', 'failed', 'stopped')
                     THEN terminal_at
                     WHEN %s THEN COALESCE(terminal_at, NOW())
                     ELSE terminal_at
                 END,
                 next_poll_at = CASE
-                    WHEN status IN ('finished', 'failed', 'stopped', 'downloaded')
+                    WHEN status IN ('finished', 'failed', 'stopped')
                     THEN NULL
                     WHEN %s THEN NULL
                     ELSE NOW() + INTERVAL %s SECOND
+                END,
+                status = CASE
+                    WHEN status IN ('finished', 'failed', 'stopped')
+                    THEN status ELSE %s
                 END
             WHERE user_id = %s AND org_id = %s AND sandbox = %s AND job_id = %s
         """
@@ -811,10 +855,10 @@ Expected: FAIL（`AttributeError: 'BohriumJobsTable' object has no attribute 'ap
                 cur.execute(
                     sql,
                     (
-                        status,
                         is_terminal,
                         is_terminal,
                         int(backoff_seconds),
+                        status,
                         user_id,
                         org_id,
                         1 if sandbox else 0,
@@ -826,8 +870,8 @@ Expected: FAIL（`AttributeError: 'BohriumJobsTable' object has no attribute 'ap
 
 - [ ] **Step 4: 跑测试确认通过**
 
-Run: `uv run pytest tests/dao/test_bohrium_jobs_table.py -k "apply_poll or downloaded or terminal_to_active" -v`
-Expected: PASS（注意此步依赖 Task 1.4 的 `apply_download`；若先做本任务，把 `test_apply_poll_does_not_revert_downloaded` 暂标 `@pytest.mark.skip(reason="needs apply_download (Task 1.4)")`，Task 1.4 完成后取消）。
+Run: `uv run pytest tests/dao/test_bohrium_jobs_table.py -k apply_poll -v`
+Expected: PASS（终态单调：旧 poll / 平台抖动不把终态写回活跃态）。
 
 - [ ] **Step 5: Commit**
 
@@ -838,7 +882,7 @@ git commit -m "feat(bohrium-ledger): apply_poll with monotonic terminal guards"
 
 ---
 
-### Task 1.4：`apply_download` 与 `apply_kill`
+### Task 1.4：`apply_kill` 与 `mark_handled`
 
 **Files:**
 - Modify: `src/dao/bohrium_jobs_table.py`
@@ -848,36 +892,52 @@ git commit -m "feat(bohrium-ledger): apply_poll with monotonic terminal guards"
 
 在 `tests/dao/test_bohrium_jobs_table.py` 追加：
 ```python
-def test_apply_download_finished_sets_downloaded(jobs_table) -> None:
+def test_mark_handled_sets_handled_at_on_terminal(jobs_table) -> None:
     jobs_table.insert_submitted(**_submit_kwargs())
-    jobs_table.apply_download(
+    jobs_table.apply_poll(
         user_id="user-1", org_id="org-1", sandbox=True, job_id="12345",
-        platform_status="finished", platform_is_terminal=True,
-        result_dir="results/run_12345",
+        status="finished", is_terminal=True, backoff_seconds=30,
+    )
+    jobs_table.mark_handled(
+        user_id="user-1", org_id="org-1", sandbox=True, job_id="12345"
     )
     row = jobs_table.get_by_owner_job(
         user_id="user-1", org_id="org-1", sandbox=True, job_id="12345"
     )
-    assert row["status"] == "downloaded"
-    assert row["result_dir"] == "results/run_12345"
-    assert row["next_poll_at"] is None
-    assert row["terminal_at"] is not None        # 首次确认终态时 COALESCE 补齐
+    assert row["handled_at"] is not None
 
 
-def test_apply_download_failed_keeps_failure_status(jobs_table) -> None:
+def test_mark_handled_is_irreversible_and_idempotent(jobs_table) -> None:
     jobs_table.insert_submitted(**_submit_kwargs())
-    jobs_table.apply_download(
+    jobs_table.apply_poll(
         user_id="user-1", org_id="org-1", sandbox=True, job_id="12345",
-        platform_status="failed", platform_is_terminal=True,
-        result_dir="results/run_12345",
+        status="finished", is_terminal=True, backoff_seconds=30,
+    )
+    jobs_table.mark_handled(
+        user_id="user-1", org_id="org-1", sandbox=True, job_id="12345"
+    )
+    first = jobs_table.get_by_owner_job(
+        user_id="user-1", org_id="org-1", sandbox=True, job_id="12345"
+    )["handled_at"]
+    jobs_table.mark_handled(
+        user_id="user-1", org_id="org-1", sandbox=True, job_id="12345"
+    )
+    again = jobs_table.get_by_owner_job(
+        user_id="user-1", org_id="org-1", sandbox=True, job_id="12345"
+    )["handled_at"]
+    assert again == first        # 不可逆 + 幂等：handled_at 不被刷新
+
+
+def test_mark_handled_noop_on_active_job(jobs_table) -> None:
+    jobs_table.insert_submitted(**_submit_kwargs())
+    # 活跃作业不可标记交付（DAO guard: terminal_at IS NOT NULL）
+    jobs_table.mark_handled(
+        user_id="user-1", org_id="org-1", sandbox=True, job_id="12345"
     )
     row = jobs_table.get_by_owner_job(
         user_id="user-1", org_id="org-1", sandbox=True, job_id="12345"
     )
-    assert row["status"] == "failed"             # 保留失败终态
-    assert row["result_dir"] == "results/run_12345"
-    assert row["terminal_at"] is not None
-    assert row["next_poll_at"] is None
+    assert row["handled_at"] is None
 
 
 def test_apply_kill_sets_terminating_keeps_polling(jobs_table) -> None:
@@ -895,70 +955,13 @@ def test_apply_kill_sets_terminating_keeps_polling(jobs_table) -> None:
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `uv run pytest tests/dao/test_bohrium_jobs_table.py -k "apply_download or apply_kill" -v`
-Expected: FAIL（缺 `apply_download` / `apply_kill`）。
+Run: `uv run pytest tests/dao/test_bohrium_jobs_table.py -k "apply_kill or mark_handled" -v`
+Expected: FAIL（缺 `apply_kill` / `mark_handled`）。
 
-- [ ] **Step 3: 实现 apply_download 与 apply_kill**
+- [ ] **Step 3: 实现 apply_kill 与 mark_handled**
 
 在 `BohriumJobsTable` 增加：
 ```python
-    def apply_download(
-        self,
-        *,
-        user_id: str,
-        org_id: str,
-        sandbox: bool,
-        job_id: str,
-        platform_status: str,
-        platform_is_terminal: bool,
-        result_dir: str,
-    ) -> None:
-        """download 成功后写回。
-
-        - finished job：status='downloaded'、result_dir、next_poll_at=NULL，
-          terminal_at = COALESCE(terminal_at, NOW())（首次确认终态时补齐）。
-        - failed/stopped job：只补 result_dir，保留原失败终态；若此次首次确认
-          平台终态，则一并补 terminal_at 并停轮询。
-        platform_status / platform_is_terminal 来自 to_ledger_status。
-        """
-        if platform_status == "finished":
-            new_status_sql = "'downloaded'"
-        else:
-            # 保留失败终态：若当前已是该失败态则不变，否则写平台终态。
-            new_status_sql = "%s"
-        sql = f"""
-            UPDATE {self.table_name}
-            SET
-                status = CASE WHEN status = 'downloaded' THEN status
-                              ELSE {new_status_sql} END,
-                last_polled_at = NOW(),
-                result_dir = %s,
-                terminal_at = CASE
-                    WHEN %s THEN COALESCE(terminal_at, NOW())
-                    ELSE terminal_at
-                END,
-                next_poll_at = CASE WHEN %s THEN NULL ELSE next_poll_at END
-            WHERE user_id = %s AND org_id = %s AND sandbox = %s AND job_id = %s
-        """
-        params: list[Any] = []
-        if platform_status != "finished":
-            params.append(platform_status)
-        params.extend(
-            [
-                result_dir,
-                platform_is_terminal,
-                platform_is_terminal,
-                user_id,
-                org_id,
-                1 if sandbox else 0,
-                job_id,
-            ]
-        )
-        with self.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(sql, tuple(params))
-            conn.commit()
-
     def apply_kill(
         self, *, user_id: str, org_id: str, sandbox: bool, job_id: str
     ) -> None:
@@ -966,10 +969,10 @@ Expected: FAIL（缺 `apply_download` / `apply_kill`）。
         sql = f"""
             UPDATE {self.table_name}
             SET status = CASE
-                    WHEN status IN ('finished', 'failed', 'stopped', 'downloaded')
+                    WHEN status IN ('finished', 'failed', 'stopped')
                     THEN status ELSE 'terminating' END,
                 next_poll_at = CASE
-                    WHEN status IN ('finished', 'failed', 'stopped', 'downloaded')
+                    WHEN status IN ('finished', 'failed', 'stopped')
                     THEN next_poll_at ELSE COALESCE(next_poll_at, NOW()) END
             WHERE user_id = %s AND org_id = %s AND sandbox = %s AND job_id = %s
         """
@@ -977,23 +980,43 @@ Expected: FAIL（缺 `apply_download` / `apply_kill`）。
             with conn.cursor() as cur:
                 cur.execute(sql, (user_id, org_id, 1 if sandbox else 0, job_id))
             conn.commit()
+
+    def mark_handled(
+        self, *, user_id: str, org_id: str, sandbox: bool, job_id: str
+    ) -> None:
+        """把终态作业标记为已交付（agent 处理完终态结果后调用）。
+
+        不可逆 + 幂等：handled_at = COALESCE(handled_at, NOW()) 只在首次写、
+        之后不刷新。仅终态可标记（terminal_at IS NOT NULL guard）；对活跃作业
+        调用命中 0 行（no-op），配合 DB chk_handled_requires_terminal 双保险。
+        """
+        sql = f"""
+            UPDATE {self.table_name}
+            SET handled_at = COALESCE(handled_at, NOW())
+            WHERE user_id = %s AND org_id = %s AND sandbox = %s AND job_id = %s
+              AND terminal_at IS NOT NULL
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (user_id, org_id, 1 if sandbox else 0, job_id))
+            conn.commit()
 ```
 
-- [ ] **Step 4: 跑测试确认通过**（含取消 Task 1.3 暂 skip 的用例）
+- [ ] **Step 4: 跑测试确认通过**
 
 Run: `uv run pytest tests/dao/test_bohrium_jobs_table.py -v`
-Expected: PASS（全部）。若 Task 1.3 标了 skip，现在删除该 `@pytest.mark.skip` 再跑。
+Expected: PASS（全部）。
 
 - [ ] **Step 5: Commit**
 
 ```bash
 git add src/dao/bohrium_jobs_table.py tests/dao/test_bohrium_jobs_table.py
-git commit -m "feat(bohrium-ledger): apply_download and apply_kill"
+git commit -m "feat(bohrium-ledger): apply_kill and mark_handled"
 ```
 
 ---
 
-### Task 1.5：session 维度查询（active + recent terminal）
+### Task 1.5：session 维度查询（active + pending terminal）
 
 **Files:**
 - Modify: `src/dao/bohrium_jobs_table.py`
@@ -1019,24 +1042,32 @@ def test_query_session_active_returns_active_only_sorted(jobs_table) -> None:
     j = active[0]
     assert set(j.keys()) == {
         "job_id", "job_name", "status", "sandbox",
-        "project_id", "submitted_at", "last_polled_at", "result_dir",
-        "last_error", "last_error_at",
+        "project_id", "input_dir", "submitted_at",
+        "last_polled_at", "result_dir",
     }
     assert j["sandbox"] is True
 
 
-def test_query_session_recent_terminal(jobs_table) -> None:
+def test_query_session_pending_terminal(jobs_table) -> None:
     for jid in ["t1", "t2", "t3"]:
         jobs_table.insert_submitted(**_submit_kwargs(job_id=jid))
         jobs_table.apply_poll(
             user_id="user-1", org_id="org-1", sandbox=True, job_id=jid,
             status="finished", is_terminal=True, backoff_seconds=30,
         )
-    recent = jobs_table.query_session_recent_terminal(
+    pending = jobs_table.query_session_pending_terminal(
         user_id="user-1", org_id="org-1", session_id="sess-1", limit=5
     )
-    assert len(recent) == 3
-    assert all(j["status"] in {"finished", "failed", "stopped", "downloaded"} for j in recent)
+    assert len(pending) == 3
+    assert all(j["status"] in {"finished", "failed", "stopped"} for j in pending)
+    # 标记交付后退出待交付队列（handled_at 非 NULL）
+    jobs_table.mark_handled(
+        user_id="user-1", org_id="org-1", sandbox=True, job_id="t1"
+    )
+    pending2 = jobs_table.query_session_pending_terminal(
+        user_id="user-1", org_id="org-1", session_id="sess-1", limit=5
+    )
+    assert {j["job_id"] for j in pending2} == {"t2", "t3"}
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
@@ -1048,10 +1079,10 @@ Expected: FAIL（缺方法）。
 
 在 `BohriumJobsTable` 增加 agent-facing 投影常量与两个查询：
 ```python
-    # agent-facing 固定字段投影（不含 user_id/org_id/原始 JSON）。
+    # agent-facing 固定字段投影（不含 user_id/org_id/invocation_id/spawn_id）。
     _AGENT_COLUMNS = (
-        "job_id, job_name, status, sandbox, project_id, "
-        "submitted_at, last_polled_at, result_dir, last_error, last_error_at"
+        "job_id, job_name, status, sandbox, project_id, input_dir, "
+        "submitted_at, last_polled_at, result_dir"
     )
 
     @staticmethod
@@ -1065,11 +1096,10 @@ Expected: FAIL（缺方法）。
             "status": row["status"],
             "sandbox": bool(row["sandbox"]),
             "project_id": int(row["project_id"]),
+            "input_dir": row["input_dir"],
             "submitted_at": _ts(row["submitted_at"]),
             "last_polled_at": _ts(row["last_polled_at"]),
             "result_dir": row["result_dir"],
-            "last_error": row["last_error"],
-            "last_error_at": _ts(row["last_error_at"]),
         }
 
     def query_session_active(
@@ -1086,14 +1116,18 @@ Expected: FAIL（缺方法）。
                 cur.execute(sql, (user_id, org_id, session_id))
                 return [self._to_agent_job(r) for r in cur.fetchall()]
 
-    def query_session_recent_terminal(
+    def query_session_pending_terminal(
         self, *, user_id: str, org_id: str, session_id: str, limit: int = 5
     ) -> list[dict[str, Any]]:
+        """待交付队列：终态已确认（terminal_at 非 NULL）且尚未 handled。
+
+        按 terminal_at ASC 返回（最早结束的先交付）。已 mark_handled 的退出队列。
+        """
         sql = f"""
             SELECT {self._AGENT_COLUMNS} FROM {self.table_name}
             WHERE user_id = %s AND org_id = %s AND session_id = %s
-              AND terminal_at IS NOT NULL
-            ORDER BY terminal_at DESC, submitted_at DESC
+              AND terminal_at IS NOT NULL AND handled_at IS NULL
+            ORDER BY terminal_at ASC, submitted_at ASC
             LIMIT %s
         """
         with self.get_connection() as conn:
@@ -1111,7 +1145,7 @@ Expected: PASS。
 
 ```bash
 git add src/dao/bohrium_jobs_table.py tests/dao/test_bohrium_jobs_table.py
-git commit -m "feat(bohrium-ledger): session active/recent-terminal queries"
+git commit -m "feat(bohrium-ledger): session active/pending-terminal queries"
 ```
 
 ---
@@ -1134,8 +1168,10 @@ import pymysql
 def _seed_active(jobs_table, n: int) -> None:
     for i in range(n):
         jobs_table.insert_submitted(
-            session_id="sess-1", task_id="ws_t", user_id="user-1", org_id="org-1",
+            session_id="sess-1", invocation_id="inv-1", spawn_id=None,
+            user_id="user-1", org_id="org-1",
             job_id=f"j{i}", job_name=None, project_id=42, sandbox=True,
+            input_dir="data/in",
         )
 
 
@@ -1273,9 +1309,9 @@ import pytest
 
 _INSERT = """
     INSERT INTO bohrium_jobs
-        (session_id, task_id, user_id, org_id, job_id, project_id, sandbox,
-         status, next_poll_at, terminal_at, result_dir)
-    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+        (session_id, invocation_id, user_id, org_id, job_id, project_id, sandbox,
+         input_dir, status, next_poll_at, terminal_at, result_dir, handled_at)
+    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
 """
 
 
@@ -1284,12 +1320,12 @@ def _insert(conn, **kw):
         cur.execute(
             _INSERT,
             (
-                kw.get("session_id", "s"), kw.get("task_id", "t"),
+                kw.get("session_id", "s"), kw.get("invocation_id", "inv"),
                 kw.get("user_id", "u"), kw.get("org_id", "o"),
                 kw.get("job_id", "j"), kw.get("project_id", 1),
-                kw.get("sandbox", 1), kw["status"],
-                kw.get("next_poll_at"), kw.get("terminal_at"),
-                kw.get("result_dir"),
+                kw.get("sandbox", 1), kw.get("input_dir", "in"),
+                kw["status"], kw.get("next_poll_at"), kw.get("terminal_at"),
+                kw.get("result_dir"), kw.get("handled_at"),
             ),
         )
     conn.commit()
@@ -1316,11 +1352,12 @@ def test_chk_terminal_requires_terminal_at(db_conn) -> None:
     db_conn.rollback()
 
 
-def test_chk_downloaded_requires_result_dir(db_conn) -> None:
+def test_chk_handled_requires_terminal(db_conn) -> None:
+    # 活跃态写 handled_at -> 违反 chk_handled_requires_terminal，拒绝
     with pytest.raises(pymysql.err.OperationalError):
         _insert(
-            db_conn, status="downloaded", next_poll_at=None,
-            terminal_at="2026-06-01 00:00:00", result_dir=None,
+            db_conn, status="running", next_poll_at="2026-06-01 00:00:00",
+            terminal_at=None, handled_at="2026-06-01 00:00:00",
         )
     db_conn.rollback()
 
@@ -1347,11 +1384,12 @@ def test_timestamp_utc_anchored_across_connection_timezones(bohrium_jobs_db_conf
             cur.execute(
                 """
                 INSERT INTO bohrium_jobs
-                    (session_id, task_id, user_id, org_id, job_id, project_id,
-                     sandbox, status, next_poll_at, terminal_at, result_dir)
+                    (session_id, invocation_id, user_id, org_id, job_id,
+                     project_id, sandbox, input_dir, status, next_poll_at,
+                     terminal_at, result_dir)
                 VALUES
-                    ('s', 't', 'u', 'o', 'tz1', 1,
-                     1, 'running', NOW() - INTERVAL 5 SECOND, NULL, NULL)
+                    ('s', 'inv', 'u', 'o', 'tz1', 1,
+                     1, 'in', 'running', NOW() - INTERVAL 5 SECOND, NULL, NULL)
                 """
             )
             # 直接用 DB NOW() 表达式写合法活跃行，避免 INSERT 阶段触发 chk_active_poll。
@@ -1407,18 +1445,19 @@ from typing import get_type_hints
 def test_bohrium_job_ledger_port_has_sync_record_methods() -> None:
     from matmaster.context.ports import BohriumJobLedgerPort
 
-    for name in ("record_submit", "record_poll", "record_download", "record_kill"):
+    for name in ("record_submit", "record_poll", "record_kill", "mark_handled"):
         assert hasattr(BohriumJobLedgerPort, name)
+    assert not hasattr(BohriumJobLedgerPort, "record_download")
 
 
-def test_session_jobs_has_recent_terminal_jobs_field() -> None:
+def test_session_jobs_has_pending_terminal_jobs_field() -> None:
     from matmaster.context.ports import SessionJobs
 
     sj = SessionJobs.empty()
     assert sj.active_jobs == ()
-    assert sj.recent_terminal_jobs == ()
+    assert sj.pending_terminal_jobs == ()
     hints = get_type_hints(SessionJobs)
-    assert "recent_terminal_jobs" in hints
+    assert "pending_terminal_jobs" in hints
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
@@ -1433,11 +1472,11 @@ Expected: FAIL（`ImportError: cannot import name 'BohriumJobLedgerPort'`）。
 @dataclass(frozen=True)
 class SessionJobs:
     active_jobs: tuple[JsonObject, ...] = ()
-    recent_terminal_jobs: tuple[JsonObject, ...] = ()
+    pending_terminal_jobs: tuple[JsonObject, ...] = ()
 
     @classmethod
     def empty(cls) -> SessionJobs:
-        return cls(active_jobs=(), recent_terminal_jobs=())
+        return cls(active_jobs=(), pending_terminal_jobs=())
 ```
 
 在 `SessionJobsPort`（当前 112-117 行）之后追加新 Protocol：
@@ -1445,9 +1484,11 @@ class SessionJobs:
 class BohriumJobLedgerPort(Protocol):
     """Sync write-side port: BohriumTool 把作业生命周期同步到 bohrium_jobs。
 
-    第一版同步接口（BohriumTool._submit/_poll/_download/_kill 是同步实现，
-    由 execute_with_context 放线程池）。实现由 service 层注入并闭包本轮
-    session_id/task_id/user_id/org_id；工具不感知这些身份字段。
+    第一版同步接口（BohriumTool._submit/_poll/_kill 是同步实现，由
+    execute_with_context 放线程池）。实现由 service 层注入并闭包本轮
+    session_id/invocation_id/user_id/org_id；工具不感知这些身份字段。
+    spawn_id 由 Exp 装配层注入（见文末挂起项）。download 行为不写 ledger。
+    mark_handled 由 agent 的独立动作调用，标记终态结果已交付（不可逆）。
     """
 
     def record_submit(
@@ -1457,6 +1498,7 @@ class BohriumJobLedgerPort(Protocol):
         job_name: str | None,
         project_id: int,
         sandbox: bool,
+        input_dir: str,
     ) -> None:
         raise NotImplementedError
 
@@ -1469,17 +1511,10 @@ class BohriumJobLedgerPort(Protocol):
     ) -> None:
         raise NotImplementedError
 
-    def record_download(
-        self,
-        *,
-        job_id: str,
-        sandbox: bool,
-        status_code: int,
-        result_dir: str,
-    ) -> None:
+    def record_kill(self, *, job_id: str, sandbox: bool) -> None:
         raise NotImplementedError
 
-    def record_kill(self, *, job_id: str, sandbox: bool) -> None:
+    def mark_handled(self, *, job_id: str, sandbox: bool) -> None:
         raise NotImplementedError
 ```
 
@@ -1497,7 +1532,7 @@ Expected: PASS（现有测试只构造 `SessionJobs(active_jobs=...)`，新增�
 
 ```bash
 git add matmaster/context/ports.py tests/matmaster/test_bohrium_ledger_injection.py
-git commit -m "feat(bohrium-ledger): BohriumJobLedgerPort + SessionJobs.recent_terminal_jobs"
+git commit -m "feat(bohrium-ledger): BohriumJobLedgerPort + SessionJobs.pending_terminal_jobs"
 ```
 
 ---
@@ -1586,37 +1621,59 @@ from src.services.bohrium_jobs_wiring import build_bohrium_jobs_ports
 def test_record_submit_passes_identity_snapshot() -> None:
     table = MagicMock()
     ledger, _ = build_bohrium_jobs_ports(
-        session_id="sess-1", task_id="ws_t", user_id="u1", org_id="o1", table=table
+        session_id="sess-1", invocation_id="inv-1", user_id="u1", org_id="o1",
+        spawn_id="sp-1", table=table,
     )
     ledger.record_submit(
         job_id="12345", job_name="j", project_id=42, sandbox=True,
+        input_dir="data/in",
     )
     table.insert_submitted.assert_called_once()
     kw = table.insert_submitted.call_args.kwargs
     assert kw["session_id"] == "sess-1"
-    assert kw["task_id"] == "ws_t"
+    assert kw["invocation_id"] == "inv-1"
+    assert kw["spawn_id"] == "sp-1"
     assert kw["user_id"] == "u1"
     assert kw["org_id"] == "o1"
     assert kw["job_id"] == "12345"
     assert kw["sandbox"] is True
+    assert kw["input_dir"] == "data/in"
 
 
 def test_record_submit_fails_when_identity_missing() -> None:
     table = MagicMock()
+    # invocation_id 可空不校验；session_id/user_id/org_id 缺失才拒绝
     ledger, _ = build_bohrium_jobs_ports(
-        session_id="sess-1", task_id="", user_id="u1", org_id="o1", table=table
+        session_id="sess-1", invocation_id="inv-1", user_id="", org_id="o1",
+        table=table,
     )
     with pytest.raises(ValueError):
         ledger.record_submit(
             job_id="1", job_name=None, project_id=1, sandbox=False,
+            input_dir="data/in",
         )
     table.insert_submitted.assert_not_called()   # 不写半截记录
+
+
+def test_record_submit_allows_null_invocation_id() -> None:
+    table = MagicMock()
+    # invocation_id=None 合法（来源可空），不阻断写入
+    ledger, _ = build_bohrium_jobs_ports(
+        session_id="sess-1", invocation_id=None, user_id="u1", org_id="o1",
+        table=table,
+    )
+    ledger.record_submit(
+        job_id="1", job_name=None, project_id=1, sandbox=False,
+        input_dir="data/in",
+    )
+    assert table.insert_submitted.call_args.kwargs["invocation_id"] is None
 
 
 def test_record_poll_fails_when_identity_missing() -> None:
     table = MagicMock()
     ledger, _ = build_bohrium_jobs_ports(
-        session_id="sess-1", task_id="ws_t", user_id="", org_id="o1", table=table
+        session_id="sess-1", invocation_id="inv-1", user_id="", org_id="o1",
+        table=table,
     )
     with pytest.raises(ValueError):
         ledger.record_poll(job_id="1", sandbox=False, status_code=2)
@@ -1626,7 +1683,7 @@ def test_record_poll_fails_when_identity_missing() -> None:
 def test_record_poll_normalizes_status_code() -> None:
     table = MagicMock()
     ledger, _ = build_bohrium_jobs_ports(
-        session_id="s", task_id="t", user_id="u", org_id="o", table=table
+        session_id="s", invocation_id="inv", user_id="u", org_id="o", table=table
     )
     ledger.record_poll(job_id="1", sandbox=False, status_code=2)
     kw = table.apply_poll.call_args.kwargs
@@ -1634,19 +1691,30 @@ def test_record_poll_normalizes_status_code() -> None:
     assert kw["is_terminal"] is True
 
 
+def test_mark_handled_delegates_to_dao() -> None:
+    table = MagicMock()
+    ledger, _ = build_bohrium_jobs_ports(
+        session_id="s", invocation_id="inv", user_id="u", org_id="o", table=table
+    )
+    ledger.mark_handled(job_id="1", sandbox=True)
+    kw = table.mark_handled.call_args.kwargs
+    assert kw["user_id"] == "u" and kw["org_id"] == "o"
+    assert kw["job_id"] == "1" and kw["sandbox"] is True
+
+
 @pytest.mark.asyncio
-async def test_session_jobs_port_loads_active_and_recent() -> None:
+async def test_session_jobs_port_loads_active_and_pending() -> None:
     table = MagicMock()
     table.query_session_active.return_value = [{"job_id": "a"}]
-    table.query_session_recent_terminal.return_value = [{"job_id": "t"}]
+    table.query_session_pending_terminal.return_value = [{"job_id": "t"}]
     _, jobs_port = build_bohrium_jobs_ports(
-        session_id="s", task_id="t", user_id="u", org_id="o", table=table
+        session_id="s", invocation_id="inv", user_id="u", org_id="o", table=table
     )
     from matmaster.context.ports import SessionJobsQuery
 
     result = await jobs_port.load_session_jobs(SessionJobsQuery(session_id="s"))
     assert result.active_jobs == ({"job_id": "a"},)
-    assert result.recent_terminal_jobs == ({"job_id": "t"},)
+    assert result.pending_terminal_jobs == ({"job_id": "t"},)
     # 用闭包的 user_id/org_id 查询
     assert table.query_session_active.call_args.kwargs["user_id"] == "u"
     assert table.query_session_active.call_args.kwargs["org_id"] == "o"
@@ -1688,22 +1756,24 @@ class _BohriumJobLedger:
         *,
         table: BohriumJobsTable,
         session_id: str,
-        task_id: str,
+        invocation_id: str | None,
         user_id: str,
         org_id: str,
+        spawn_id: str | None = None,
     ) -> None:
         self._table = table
         self._session_id = session_id
-        self._task_id = task_id
+        self._invocation_id = invocation_id
         self._user_id = user_id
         self._org_id = org_id
+        self._spawn_id = spawn_id
 
     def _require_identity(self) -> None:
+        # invocation_id / spawn_id 可空，不作必填校验。
         missing = [
             name
             for name, val in (
                 ("session_id", self._session_id),
-                ("task_id", self._task_id),
                 ("user_id", self._user_id),
                 ("org_id", self._org_id),
             )
@@ -1721,17 +1791,20 @@ class _BohriumJobLedger:
         job_name: str | None,
         project_id: int,
         sandbox: bool,
+        input_dir: str,
     ) -> None:
         self._require_identity()
         self._table.insert_submitted(
             session_id=self._session_id,
-            task_id=self._task_id,
+            invocation_id=self._invocation_id,
+            spawn_id=self._spawn_id,
             user_id=self._user_id,
             org_id=self._org_id,
             job_id=str(job_id),
             job_name=job_name,
             project_id=int(project_id),
             sandbox=bool(sandbox),
+            input_dir=str(input_dir),
         )
 
     def record_poll(
@@ -1753,29 +1826,18 @@ class _BohriumJobLedger:
             backoff_seconds=_FOREGROUND_POLL_BACKOFF_SECONDS,
         )
 
-    def record_download(
-        self,
-        *,
-        job_id: str,
-        sandbox: bool,
-        status_code: int,
-        result_dir: str,
-    ) -> None:
+    def record_kill(self, *, job_id: str, sandbox: bool) -> None:
         self._require_identity()
-        decision = to_ledger_status(int(status_code))
-        self._table.apply_download(
+        self._table.apply_kill(
             user_id=self._user_id,
             org_id=self._org_id,
             sandbox=bool(sandbox),
             job_id=str(job_id),
-            platform_status=decision.status,
-            platform_is_terminal=decision.is_terminal,
-            result_dir=result_dir,
         )
 
-    def record_kill(self, *, job_id: str, sandbox: bool) -> None:
+    def mark_handled(self, *, job_id: str, sandbox: bool) -> None:
         self._require_identity()
-        self._table.apply_kill(
+        self._table.mark_handled(
             user_id=self._user_id,
             org_id=self._org_id,
             sandbox=bool(sandbox),
@@ -1801,8 +1863,8 @@ class _RunSessionJobsPort:
                 org_id=self._org_id,
                 session_id=query.session_id,
             )
-            recent = await asyncio.to_thread(
-                self._table.query_session_recent_terminal,
+            pending = await asyncio.to_thread(
+                self._table.query_session_pending_terminal,
                 user_id=self._user_id,
                 org_id=self._org_id,
                 session_id=query.session_id,
@@ -1816,26 +1878,31 @@ class _RunSessionJobsPort:
             return SessionJobs.empty()
         return SessionJobs(
             active_jobs=tuple(active),
-            recent_terminal_jobs=tuple(recent),
+            pending_terminal_jobs=tuple(pending),
         )
 
 
 def build_bohrium_jobs_ports(
     *,
     session_id: str,
-    task_id: str,
+    invocation_id: str | None,
     user_id: str,
     org_id: str,
+    spawn_id: str | None = None,
     table: BohriumJobsTable | None = None,
 ) -> tuple[_BohriumJobLedger, _RunSessionJobsPort]:
-    """构造写 port 与读 port（共享一个 DAO 实例）。"""
+    """构造写 port 与读 port（共享一个 DAO 实例）。
+
+    spawn_id 默认 None（主 agent）；subagent 的 spawn_id 注入机制见文末挂起项。
+    """
     table = table if table is not None else BohriumJobsTable()
     ledger = _BohriumJobLedger(
         table=table,
         session_id=session_id,
-        task_id=task_id,
+        invocation_id=invocation_id,
         user_id=user_id,
         org_id=org_id,
+        spawn_id=spawn_id,
     )
     jobs = _RunSessionJobsPort(table=table, user_id=user_id, org_id=org_id)
     return ledger, jobs
@@ -1844,7 +1911,7 @@ def build_bohrium_jobs_ports(
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `uv run pytest tests/services/test_bohrium_jobs_wiring.py -v`
-Expected: PASS（5 passed；这些用例 mock DAO，不连库）。
+Expected: PASS（7 passed；这些用例 mock DAO，不连库）。
 
 - [ ] **Step 5: Commit**
 
@@ -1935,9 +2002,10 @@ def _resolve_session_identity(
         )
         bohrium_ledger_port, bohrium_jobs_port = build_bohrium_jobs_ports(
             session_id=session_id,
-            task_id=task_id,
+            invocation_id=invocation_id,
             user_id=_ledger_user_id,
             org_id=_org_id,
+            # spawn_id 默认 None（主 agent）；subagent 注入见文末挂起项
         )
 ```
 
@@ -2035,6 +2103,8 @@ Expected: FAIL（`TypeError: __init__() got an unexpected keyword argument 'job_
             ),
 ```
 
+> 注：这里注入的 `job_ledger` 闭包的是主 agent 身份（`spawn_id=None`）。subagent 运行时如何让其 ledger 带上自身 `spawn_id`（在 `Exp` 装配层重建/绑定 port）属于**挂起项**，本 Task 不实现。
+
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `uv run pytest tests/matmaster/test_bohrium_ledger_injection.py -k job_ledger -v`
@@ -2077,11 +2147,11 @@ class _FakeLedger:
     def record_poll(self, **kw):
         self.calls.append(("poll", kw))
 
-    def record_download(self, **kw):
-        self.calls.append(("download", kw))
-
     def record_kill(self, **kw):
         self.calls.append(("kill", kw))
+
+    def mark_handled(self, **kw):
+        self.calls.append(("handled", kw))
 
 
 def _ctx(sandbox: bool = True):
@@ -2109,6 +2179,7 @@ def test_submit_records_ledger_after_job_add(monkeypatch) -> None:
     assert kw["job_name"] == "jn"
     assert kw["project_id"] == 42
     assert kw["sandbox"] is True
+    assert kw["input_dir"] == "in"
 
 
 def test_submit_ledger_failure_does_not_break_tool(monkeypatch) -> None:
@@ -2159,6 +2230,7 @@ Expected: FAIL（`fake.calls` 为空，`_submit` 尚未写 ledger）。
                 job_name=str(job_name),
                 project_id=ctx.credentials.project_id,
                 sandbox=ctx.sandbox,
+                input_dir=str(input_dir),
             )
             return ToolResult(
                 status="success",
@@ -2245,126 +2317,15 @@ git commit -m "feat(bohrium-ledger): record poll into ledger"
 
 ---
 
-### Task 2.8：`_download` 集成 ledger 写入
+### Task 2.8：download 不写 ledger（说明，无代码）
 
-**Files:**
-- Modify: `matmaster/tools/builtin/bohrium_tool/tool.py:650-749`
-- Test: `tests/matmaster/tools/builtin/test_bohrium_tool_ledger.py`
+按关键架构决策 8，download 是 agent 的本地行为，**不写 ledger**，因此没有 `_download` 集成 Task，`BohriumJobLedgerPort` 也无 `record_download`：
 
-- [ ] **Step 1: 写失败测试**（finished → downloaded；failed → 保留失败 + result_dir）
+- `status` 不因 download 改变（平台终态只由 poll 写）。
+- `result_dir` 是提交期固化的预期下载位置（填充来源见文末挂起项），不由 download 回写。
+- download 的 IO 成败不入表——作业未交付即 `handled_at IS NULL`，天然留在待交付队列驱动重处理，无需额外列。
 
-追加：
-```python
-def test_download_finished_records_downloaded(monkeypatch) -> None:
-    fake = _FakeLedger()
-    bt = tmod.BohriumTool(session=None, workdir=Path("."), job_ledger=fake)
-    monkeypatch.setattr(bt, "_build_context", lambda **kw: _ctx(sandbox=True))
-    monkeypatch.setattr(bt, "_log_request_context", lambda **kw: None)
-    monkeypatch.setattr(tmod, "get_job_detail", lambda ctx, job_id: {"status": 2})
-    monkeypatch.setattr(
-        tmod, "resolve_download_target",
-        lambda **kw: SimpleNamespace(kind="local", staging_dir=Path("/tmp/x")),
-    )
-    monkeypatch.setattr(
-        tmod, "download_job_artifacts",
-        lambda **kw: (["log"], "tail"),
-    )
-    monkeypatch.setattr(tmod, "publish_download_target", lambda *a, **k: "results/run_12345")
-    res = bt._download({"job_id": "12345", "result_dir": "results/run_12345"})
-    assert res.status == "success"
-    dl = [c for c in fake.calls if c[0] == "download"]
-    assert dl and dl[0][1]["status_code"] == 2
-    assert dl[0][1]["result_dir"] == "results/run_12345"
-
-
-def test_download_failed_records_with_result_dir(monkeypatch) -> None:
-    fake = _FakeLedger()
-    bt = tmod.BohriumTool(session=None, workdir=Path("."), job_ledger=fake)
-    monkeypatch.setattr(bt, "_build_context", lambda **kw: _ctx(sandbox=True))
-    monkeypatch.setattr(bt, "_log_request_context", lambda **kw: None)
-    monkeypatch.setattr(tmod, "get_job_detail", lambda ctx, job_id: {"status": -1})
-    monkeypatch.setattr(
-        tmod, "resolve_download_target",
-        lambda **kw: SimpleNamespace(kind="local", staging_dir=Path("/tmp/x")),
-    )
-    monkeypatch.setattr(tmod, "download_job_artifacts", lambda **kw: (["log"], "tail"))
-    monkeypatch.setattr(tmod, "publish_download_target", lambda *a, **k: "results/run_12345")
-    res = bt._download({"job_id": "12345", "result_dir": "results/run_12345"})
-    assert res.status == "error"          # 平台失败态，工具返回 error
-    dl = [c for c in fake.calls if c[0] == "download"]
-    assert dl and dl[0][1]["status_code"] == -1
-    assert dl[0][1]["result_dir"] == "results/run_12345"
-```
-
-- [ ] **Step 2: 跑测试确认失败**
-
-Run: `uv run pytest tests/matmaster/tools/builtin/test_bohrium_tool_ledger.py -k download -v`
-Expected: FAIL（无 download 调用）。
-
-- [ ] **Step 3: 在 `_download` 两个终态分支写 ledger**
-
-在 `_download` 成功分支（`if code == SUCCESS_CODE:` 的 `return ToolResult(success...)` 之前）插入：
-```python
-        if code == SUCCESS_CODE:
-            self._safe_ledger(
-                "record_download",
-                job_id=str(job_id),
-                sandbox=sandbox,
-                status_code=int(code),
-                result_dir=report_dir,
-            )
-            return ToolResult(
-                status="success",
-                content=json.dumps(
-                    {
-                        "success": True,
-                        "job_id": job_id,
-                        "status": "Finished",
-                        "result_dir": report_dir,
-                        "files": files,
-                        "log_tail": log_tail,
-                    },
-                    ensure_ascii=False,
-                ),
-            )
-```
-在失败分支（最后的 `return ToolResult(status="error", content=json.dumps({...failure...}))` 之前）插入：
-```python
-        self._safe_ledger(
-            "record_download",
-            job_id=str(job_id),
-            sandbox=sandbox,
-            status_code=int(code),
-            result_dir=report_dir,
-        )
-        return ToolResult(
-            status="error",
-            content=json.dumps(
-                {
-                    "success": False,
-                    "job_id": job_id,
-                    "status": status_label,
-                    "result_dir": report_dir,
-                    "files": files,
-                    "log_tail": log_tail,
-                    "error": f"Job {status_label}.",
-                },
-                ensure_ascii=False,
-            ),
-        )
-```
-
-- [ ] **Step 4: 跑测试确认通过**
-
-Run: `uv run pytest tests/matmaster/tools/builtin/test_bohrium_tool_ledger.py -k download -v`
-Expected: PASS。
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add matmaster/tools/builtin/bohrium_tool/tool.py tests/matmaster/tools/builtin/test_bohrium_tool_ledger.py
-git commit -m "feat(bohrium-ledger): record download (downloaded / failed+result_dir)"
-```
+`_download` 保持原样，不插入任何 `_safe_ledger(...)` 调用。
 
 ---
 
@@ -2448,7 +2409,7 @@ Expected: FAIL（无 kill 调用）。
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `uv run pytest tests/matmaster/tools/builtin/test_bohrium_tool_ledger.py -v`
-Expected: PASS（submit/poll/download/kill 全部通过）。
+Expected: PASS（submit/poll/kill 全部通过）。
 
 - [ ] **Step 5: Commit**
 
@@ -2505,9 +2466,9 @@ git commit -m "test(bohrium-ledger): assert kernel does not import src DAO"
 
 ## Phase 3 — 读路径（renderer 扩展 + context assembly 接通）
 
-> 说明：`SessionJobs.recent_terminal_jobs`（Task 2.1）、`_RunSessionJobsPort`（Task 2.3）、`AgentRunPorts.session_jobs`（Task 2.2）与其注入（Task 2.4）已在 Phase 2 完成。本阶段补齐 renderer 呈现两类作业，并把 context assembly 从空实现切到真实 port。
+> 说明：`SessionJobs.pending_terminal_jobs`（Task 2.1）、`_RunSessionJobsPort`（Task 2.3）、`AgentRunPorts.session_jobs`（Task 2.2）与其注入（Task 2.4）已在 Phase 2 完成。本阶段补齐 renderer 呈现两类作业，并把 context assembly 从空实现切到真实 port。
 
-### Task 3.1：`SessionJobsSource` renderer 渲染 active + recent terminal
+### Task 3.1：`SessionJobsSource` renderer 渲染 active + pending terminal
 
 **Files:**
 - Modify: `matmaster/context/sources/session_jobs.py:21-28`
@@ -2528,13 +2489,13 @@ def test_session_jobs_empty_returns_no_sections() -> None:
     assert SessionJobsSource.from_jobs(SessionJobs.empty()).to_sections() == ()
 
 
-def test_session_jobs_renders_active_and_recent_terminal() -> None:
+def test_session_jobs_renders_active_and_pending_terminal() -> None:
     jobs = SessionJobs(
         active_jobs=(
             {"job_id": "a2", "status": "running"},
             {"job_id": "a1", "status": "submitted"},
         ),
-        recent_terminal_jobs=(
+        pending_terminal_jobs=(
             {"job_id": "t9", "status": "finished"},
         ),
     )
@@ -2548,7 +2509,7 @@ def test_session_jobs_renders_active_and_recent_terminal() -> None:
     assert section.content == (
         'active_job_1 {"job_id": "a2", "status": "running"}\n'
         'active_job_2 {"job_id": "a1", "status": "submitted"}\n'
-        'recent_terminal_job_1 {"job_id": "t9", "status": "finished"}'
+        'pending_terminal_job_1 {"job_id": "t9", "status": "finished"}'
     )
 
 
@@ -2558,16 +2519,16 @@ def test_session_jobs_only_active_renders_without_terminal_lines() -> None:
     assert section.content == 'active_job_1 {"job_id": "a1", "status": "running"}'
 
 
-def test_session_jobs_only_recent_terminal_renders() -> None:
-    jobs = SessionJobs(recent_terminal_jobs=({"job_id": "t1", "status": "failed"},))
+def test_session_jobs_only_pending_terminal_renders() -> None:
+    jobs = SessionJobs(pending_terminal_jobs=({"job_id": "t1", "status": "failed"},))
     section = SessionJobsSource.from_jobs(jobs).to_sections()[0]
-    assert section.content == 'recent_terminal_job_1 {"job_id": "t1", "status": "failed"}'
+    assert section.content == 'pending_terminal_job_1 {"job_id": "t1", "status": "failed"}'
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
 
 Run: `uv run pytest tests/matmaster/context/sources/test_session_jobs.py -v`
-Expected: FAIL（现 renderer 输出 `job_1 ...`，新断言要求 `active_job_1 ...` 且缺 recent terminal 行）。
+Expected: FAIL（现 renderer 输出 `job_1 ...`，新断言要求 `active_job_1 ...` 且缺 pending terminal 行）。
 
 - [ ] **Step 3: 扩展 renderer**
 
@@ -2580,12 +2541,12 @@ Expected: FAIL（现 renderer 输出 `job_1 ...`，新断言要求 `active_job_1
             f"{json.dumps(job, ensure_ascii=False, sort_keys=True)}"
             for index, job in enumerate(jobs.active_jobs, 1)
         )
-        recent = tuple(
-            f"recent_terminal_job_{index} "
+        pending = tuple(
+            f"pending_terminal_job_{index} "
             f"{json.dumps(job, ensure_ascii=False, sort_keys=True)}"
-            for index, job in enumerate(jobs.recent_terminal_jobs, 1)
+            for index, job in enumerate(jobs.pending_terminal_jobs, 1)
         )
-        return cls(lines=active + recent)
+        return cls(lines=active + pending)
 ```
 
 - [ ] **Step 4: 跑测试确认通过**
@@ -2597,7 +2558,7 @@ Expected: PASS（4 passed）。
 
 ```bash
 git add matmaster/context/sources/session_jobs.py tests/matmaster/context/sources/test_session_jobs.py
-git commit -m "feat(bohrium-ledger): render active + recent terminal session jobs"
+git commit -m "feat(bohrium-ledger): render active + pending terminal session jobs"
 ```
 
 ---
@@ -2728,14 +2689,12 @@ def test_mark_poll_error_marks_active_unknown(jobs_table) -> None:
     jobs_table.insert_submitted(**_submit_kwargs(job_id="e1"))
     jobs_table.mark_poll_error(
         user_id="user-1", org_id="org-1", sandbox=True, job_id="e1",
-        error="api down", backoff_seconds=45,
+        backoff_seconds=45,
     )
     row = jobs_table.get_by_owner_job(
         user_id="user-1", org_id="org-1", sandbox=True, job_id="e1"
     )
     assert row["status"] == "unknown"
-    assert row["last_error"] == "api down"
-    assert row["last_error_at"] is not None
     assert row["next_poll_at"] is not None      # 仍轮询
     assert row["terminal_at"] is None
 
@@ -2748,14 +2707,13 @@ def test_mark_poll_error_does_not_touch_terminal(jobs_table) -> None:
     )
     jobs_table.mark_poll_error(
         user_id="user-1", org_id="org-1", sandbox=True, job_id="e2",
-        error="late error", backoff_seconds=45,
+        backoff_seconds=45,
     )
     row = jobs_table.get_by_owner_job(
         user_id="user-1", org_id="org-1", sandbox=True, job_id="e2"
     )
     assert row["status"] == "finished"          # 终态不被改成 unknown
-    assert row["next_poll_at"] is None
-    assert row["last_error"] == "late error"     # 但 last_error 仍记录
+    assert row["next_poll_at"] is None           # 终态不被重新排程
 ```
 
 - [ ] **Step 2: 跑测试确认失败**
@@ -2774,16 +2732,13 @@ Expected: FAIL（`mark_poll_error` 不存在）。
         org_id: str,
         sandbox: bool,
         job_id: str,
-        error: str,
         backoff_seconds: int,
     ) -> None:
-        """poll/同步失败时记录错误。活跃作业标 unknown 并按 backoff 推进；
-        明确终态不动 status / next_poll_at，仅记 last_error。"""
+        """poll/同步失败时：活跃作业标 unknown 并按 backoff 推进；明确终态
+        不动 status / next_poll_at。失败细节记应用日志，不入表。"""
         sql = f"""
             UPDATE {self.table_name}
-            SET last_error = %s,
-                last_error_at = NOW(),
-                status = CASE
+            SET status = CASE
                     WHEN status IN ('submitted', 'running', 'terminating', 'unknown')
                     THEN 'unknown' ELSE status END,
                 next_poll_at = CASE
@@ -2796,7 +2751,6 @@ Expected: FAIL（`mark_poll_error` 不存在）。
                 cur.execute(
                     sql,
                     (
-                        str(error)[:2000],
                         int(backoff_seconds),
                         user_id,
                         org_id,
@@ -2824,10 +2778,67 @@ git commit -m "feat(bohrium-ledger): claim returns poll_count; add mark_poll_err
 ### Task 4.2：`compute_poll_backoff` + `BohriumJobPoller.run_once`
 
 **Files:**
+- Modify: `src/services/user_service.py`
+- Test: `tests/matmaster/services/test_user_service.py`
 - Create: `src/services/bohrium_poller.py`
 - Test: `tests/services/test_bohrium_poller.py`
 
 - [ ] **Step 1: 写失败测试**（真实 DAO + mock client / UserService）
+
+在 `tests/matmaster/services/test_user_service.py` 追加只读 AK 语义测试：
+```python
+def test_fetch_bohrium_access_key_can_skip_create_when_list_empty(monkeypatch):
+    scripted = [
+        _FakeResponse(200, {'code': 0, 'data': []}),
+    ]
+    monkeypatch.setattr(
+        'src.services.user_service.httpx.Client',
+        lambda *args, **kwargs: _FakeClient(scripted),
+    )
+
+    result = UserService.fetch_bohrium_access_key_result(
+        'u1', 'o1', retry_delays=(), create_if_missing=False
+    )
+
+    assert result.status == 'no_items'
+    assert result.access_key is None
+    assert result.attempts == 1
+    assert scripted == []          # 只 GET list，不再 POST ak/add
+
+
+def test_get_existing_bohrium_access_key_never_creates(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def _fake_fetch(
+        user_id: str | None,
+        org_id: str | None,
+        *,
+        timeout: float = 2.0,
+        retry_delays: tuple[float, ...] = (0.5, 1.0),
+        create_if_missing: bool = True,
+    ) -> BohriumAccessKeyFetchResult:
+        captured['user_id'] = user_id
+        captured['org_id'] = org_id
+        captured['timeout'] = timeout
+        captured['retry_delays'] = retry_delays
+        captured['create_if_missing'] = create_if_missing
+        return BohriumAccessKeyFetchResult(status='no_items', retryable=False)
+
+    monkeypatch.setattr(
+        UserService,
+        'fetch_bohrium_access_key_result',
+        staticmethod(_fake_fetch),
+    )
+
+    result = UserService.get_existing_bohrium_access_key('u1', 'o1')
+
+    assert result is None
+    assert captured['user_id'] == 'u1'
+    assert captured['org_id'] == 'o1'
+    assert captured['timeout'] == 15.0
+    assert captured['retry_delays'] == ()
+    assert captured['create_if_missing'] is False
+```
 
 `tests/services/test_bohrium_poller.py`：
 ```python
@@ -2838,8 +2849,10 @@ from src.services.bohrium_poller import BohriumJobPoller, compute_poll_backoff
 
 def _submit_kwargs(**over):
     base = dict(
-        session_id="sess-1", task_id="ws_t", user_id="user-1", org_id="org-1",
+        session_id="sess-1", invocation_id="inv-1", spawn_id=None,
+        user_id="user-1", org_id="org-1",
         job_id="p1", job_name=None, project_id=42, sandbox=False,
+        input_dir="data/in",
     )
     base.update(over)
     return base
@@ -2868,6 +2881,36 @@ def test_poller_polls_due_job_and_writes_running(jobs_table) -> None:
     assert row["status"] == "running"
     assert row["poll_count"] == 1
     assert row["next_poll_at"] is not None
+
+
+def test_poller_first_poll_uses_initial_backoff() -> None:
+    class _Table:
+        def __init__(self) -> None:
+            self.backoff_seconds: int | None = None
+
+        def claim_due_batch(self, *, limit: int, claim_timeout_seconds: int):
+            return [{
+                "session_id": "sess-1", "user_id": "user-1", "org_id": "org-1",
+                "project_id": 42, "job_id": "p1", "sandbox": False,
+                "status": "submitted", "poll_count": 0,
+            }]
+
+        def apply_poll(self, **kw):
+            self.backoff_seconds = kw["backoff_seconds"]
+
+        def mark_poll_error(self, **kw):
+            raise AssertionError(f"unexpected poll error: {kw}")
+
+    table = _Table()
+    poller = BohriumJobPoller(
+        table=table,
+        get_access_key=lambda uid, oid: "AK",
+        get_job_detail=lambda ctx, job_id: {"status": 1},
+        base_url="https://x",
+    )
+
+    assert poller.run_once() == {"claimed": 1, "polled": 1, "errors": 0}
+    assert table.backoff_seconds == 30
 
 
 def test_poller_writes_terminal_and_stops_polling(jobs_table) -> None:
@@ -2907,10 +2950,56 @@ def test_poller_skips_terminal_jobs(jobs_table) -> None:
 
 - [ ] **Step 2: 跑测试确认失败**
 
+Run: `uv run pytest tests/matmaster/services/test_user_service.py -k "existing_bohrium_access_key or skip_create" -v`
+Expected: FAIL（`TypeError: fetch_bohrium_access_key_result() got an unexpected keyword argument 'create_if_missing'` 或缺 `get_existing_bohrium_access_key`）。
+
 Run: `uv run pytest tests/services/test_bohrium_poller.py -v`
 Expected: FAIL（`ModuleNotFoundError: src.services.bohrium_poller`）；MySQL 未起时 DB 用例 SKIPPED、`compute_poll_backoff` 用例仍 FAIL（缺模块）。
 
-- [ ] **Step 3: 实现 poller 核心**
+- [ ] **Step 3: 实现只读 AK helper + poller 核心**
+
+先改 `src/services/user_service.py`，把 `fetch_bohrium_access_key_result` 签名扩展为：
+```python
+    def fetch_bohrium_access_key_result(
+        user_id: str | None,
+        org_id: str | None,
+        *,
+        timeout: float = 2.0,
+        retry_delays: tuple[float, ...] = (0.5, 1.0),
+        create_if_missing: bool = True,
+    ) -> BohriumAccessKeyFetchResult:
+```
+
+在该方法内部，把自动创建 AK 的分支从：
+```python
+                if result.status in {'no_items', 'no_valid_ak'} and (
+                    (user_id or '').strip() and (org_id or '').strip()
+                ):
+```
+改为：
+```python
+                if (
+                    create_if_missing
+                    and result.status in {'no_items', 'no_valid_ak'}
+                    and (user_id or '').strip()
+                    and (org_id or '').strip()
+                ):
+```
+
+然后在 `get_bohrium_access_key` 之后新增只读 helper（poller 专用，不触发 `/ak/add`）：
+```python
+    @staticmethod
+    def get_existing_bohrium_access_key(user_id: str, org_id: str) -> str | None:
+        """只读取已有 Bohrium access_key；后台 poller 不应替用户自动创建 AK。"""
+        result = UserService.fetch_bohrium_access_key_result(
+            user_id,
+            org_id,
+            timeout=15.0,
+            retry_delays=(),
+            create_if_missing=False,
+        )
+        return result.access_key
+```
 
 `src/services/bohrium_poller.py`：
 ```python
@@ -2920,7 +3009,7 @@ run_once 抢一批到期作业（DAO claim_due_batch 用 FOR UPDATE SKIP LOCKED�
 逐个用 job row 快照（user_id/org_id/project_id/sandbox）现查 access_key 并构造
 BohriumContext，调 get_job_detail，按 to_ledger_status 归一化后原子写回。
 不依赖进程内 JobRegistry、HTTP 请求或 evo_chat_sessions 当前值。
-整体 at-least-once：写回经 DAO 原子条件保护 downloaded / 终态不被旧结果回退。
+整体 at-least-once：写回经 DAO 原子条件保护终态不被旧结果回退。
 """
 
 from __future__ import annotations
@@ -2939,7 +3028,7 @@ _MAX_BACKOFF_SECONDS = 600
 
 
 def compute_poll_backoff(poll_count: int) -> int:
-    """指数退避带上限：30, 60, 120, ... 封顶 600 秒。"""
+    """按已完成 poll_count 计算退避：0->30, 1->60, 2->120, ... 封顶 600 秒。"""
     n = max(0, int(poll_count))
     return min(_BASE_BACKOFF_SECONDS * (2 ** min(n, 5)), _MAX_BACKOFF_SECONDS)
 
@@ -2957,7 +3046,7 @@ class BohriumJobPoller:
         if get_access_key is None:
             from src.services.user_service import UserService
 
-            get_access_key = UserService.get_bohrium_access_key
+            get_access_key = UserService.get_existing_bohrium_access_key
         if get_job_detail is None:
             from matmaster.bohrium.client import get_job_detail as _gjd
 
@@ -2993,7 +3082,7 @@ class BohriumJobPoller:
         org_id = str(job["org_id"])
         sandbox = bool(job["sandbox"])
         raw_job_id = str(job["job_id"])
-        backoff = compute_poll_backoff(int(job.get("poll_count", 0)) + 1)
+        backoff = compute_poll_backoff(int(job.get("poll_count", 0)))
 
         key = (user_id, org_id)
         if key not in ak_cache:
@@ -3007,9 +3096,13 @@ class BohriumJobPoller:
                 ak_cache[key] = None
         access_key = ak_cache[key]
         if not access_key:
+            logger.warning(
+                "poller access_key unavailable user=%s org=%s job_id=%s",
+                user_id, org_id, raw_job_id,
+            )
             self._table.mark_poll_error(
                 user_id=user_id, org_id=org_id, sandbox=sandbox, job_id=raw_job_id,
-                error="Bohrium access_key unavailable", backoff_seconds=backoff,
+                backoff_seconds=backoff,
             )
             return False
 
@@ -3019,10 +3112,12 @@ class BohriumJobPoller:
             detail = self._get_job_detail(ctx, job_id=job_id)
             code = detail.get("status") if isinstance(detail, dict) else None
             if code is None:
+                logger.warning(
+                    "poller detail missing status job_id=%s", raw_job_id,
+                )
                 self._table.mark_poll_error(
                     user_id=user_id, org_id=org_id, sandbox=sandbox,
-                    job_id=raw_job_id,
-                    error="Bohrium detail missing status", backoff_seconds=backoff,
+                    job_id=raw_job_id, backoff_seconds=backoff,
                 )
                 return False
             decision = to_ledger_status(int(code))
@@ -3040,7 +3135,7 @@ class BohriumJobPoller:
             )
             self._table.mark_poll_error(
                 user_id=user_id, org_id=org_id, sandbox=sandbox, job_id=raw_job_id,
-                error=f"poll failed: {exc}", backoff_seconds=backoff,
+                backoff_seconds=backoff,
             )
             return False
 
@@ -3061,13 +3156,17 @@ class BohriumJobPoller:
 
 - [ ] **Step 4: 跑测试确认通过**
 
+Run: `uv run pytest tests/matmaster/services/test_user_service.py -k "existing_bohrium_access_key or skip_create or get_bohrium_access_key" -v`
+Expected: PASS（新增只读 helper 不破坏 `get_bohrium_access_key` 的既有自动创建语义）。
+
 Run: `uv run pytest tests/services/test_bohrium_poller.py -v`
-Expected: PASS（`compute_poll_backoff` 用例无需 MySQL；DB 用例在 MySQL 已起时通过）。
+Expected: PASS（`compute_poll_backoff` 与首轮 backoff 用例无需 MySQL；DB 用例在 MySQL 已起时通过）。
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/services/bohrium_poller.py tests/services/test_bohrium_poller.py
+git add src/services/user_service.py src/services/bohrium_poller.py \
+  tests/matmaster/services/test_user_service.py tests/services/test_bohrium_poller.py
 git commit -m "feat(bohrium-ledger): BohriumJobPoller core (claim/normalize/write-back)"
 ```
 
@@ -3119,11 +3218,10 @@ def test_poller_marks_unknown_on_detail_exception(jobs_table) -> None:
         user_id="user-1", org_id="org-1", sandbox=False, job_id="q4"
     )
     assert row["status"] == "unknown"
-    assert row["last_error"] is not None
     assert row["next_poll_at"] is not None       # 仍按 backoff 轮询
 
 
-def test_poller_marks_error_when_access_key_missing(jobs_table) -> None:
+def test_poller_marks_unknown_when_access_key_missing(jobs_table) -> None:
     jobs_table.insert_submitted(**_submit_kwargs(job_id="q5"))
     detail_calls = []
     poller = BohriumJobPoller(
@@ -3136,7 +3234,8 @@ def test_poller_marks_error_when_access_key_missing(jobs_table) -> None:
     row = jobs_table.get_by_owner_job(
         user_id="user-1", org_id="org-1", sandbox=False, job_id="q5"
     )
-    assert row["last_error"] is not None
+    assert row["status"] == "unknown"            # 无 ak 也按错误处理标 unknown
+    assert row["next_poll_at"] is not None
     assert detail_calls == []                    # 无 ak 时不调 get_job_detail
 ```
 
@@ -3168,10 +3267,66 @@ uv run pytest \
   tests/matmaster/test_bohrium_ledger_injection.py \
   tests/matmaster/test_runtime_context_assembly_session_jobs.py \
   tests/matmaster/tools/builtin/test_bohrium_tool_ledger.py \
+  tests/matmaster/services/test_user_service.py \
   tests/services/test_bohrium_jobs_wiring.py \
   -v
 ```
 Expected: 全部 PASS。
+
+- [ ] **目标库 schema readiness（迁移/部署闸门，不在主代码内联建表）**
+
+Run（本地用 `.env.test`；部署时对目标 DB 执行等价检查）：
+```bash
+[ -f .env.test ] || { echo ".env.test is required for local schema readiness"; exit 1; }
+set -a; source .env.test; set +a
+uv run python -c "
+import os, pymysql
+required_constraints = {
+    'chk_sandbox',
+    'chk_status',
+    'chk_active_poll',
+    'chk_terminal_at',
+    'chk_handled_requires_terminal',
+}
+cfg = dict(
+    host=os.getenv('MYSQL_HOST'),
+    port=int(os.getenv('MYSQL_PORT', '3306')),
+    user=os.getenv('MYSQL_USER'),
+    password=os.getenv('MYSQL_PASSWORD'),
+    database=os.getenv('MYSQL_DATABASE'),
+    cursorclass=pymysql.cursors.DictCursor,
+)
+conn = pymysql.connect(**cfg)
+try:
+    with conn.cursor() as cur:
+        cur.execute(
+            '''
+            SELECT COUNT(*) AS n
+            FROM information_schema.tables
+            WHERE table_schema = %s AND table_name = 'bohrium_jobs'
+            ''',
+            (cfg['database'],),
+        )
+        assert cur.fetchone()['n'] == 1, 'bohrium_jobs table missing'
+        cur.execute(
+            '''
+            SELECT constraint_name
+            FROM information_schema.table_constraints
+            WHERE table_schema = %s
+              AND table_name = 'bohrium_jobs'
+              AND constraint_type = 'CHECK'
+            ''',
+            (cfg['database'],),
+        )
+        names = {row['constraint_name'] for row in cur.fetchall()}
+        missing = required_constraints - names
+        assert not missing, f'missing bohrium_jobs CHECK constraints: {sorted(missing)}'
+finally:
+    conn.close()
+print('bohrium_jobs schema ready')
+"
+```
+Expected: 打印 `bohrium_jobs schema ready`。如果表或 CHECK 约束缺失，必须先手动执行/修正 `src/sql/create_bohrium_jobs_table.sql`，不得靠运行时 `_safe_ledger` 日志发现。
 
 - [ ] **全量真实 MySQL 测试（先 docker 起 .env.test 的 MySQL）**
 
@@ -3209,7 +3364,7 @@ Run:
 uv run pre-commit run --files \
   src/sql/create_bohrium_jobs_table.sql src/sql/README.md \
   src/base/base_table.py src/dao/bohrium_jobs_table.py \
-  src/services/bohrium_jobs_wiring.py \
+  src/services/user_service.py src/services/bohrium_jobs_wiring.py \
   src/services/bohrium_poller.py matmaster/bohrium/status.py \
   matmaster/context/ports.py matmaster/types/runtime_ports.py \
   matmaster/context/sources/session_jobs.py \
@@ -3226,6 +3381,7 @@ uv run pre-commit run --files \
   tests/matmaster/test_bohrium_ledger_injection.py \
   tests/matmaster/test_runtime_context_assembly_session_jobs.py \
   tests/matmaster/tools/builtin/test_bohrium_tool_ledger.py \
+  tests/matmaster/services/test_user_service.py \
   tests/services/__init__.py tests/services/test_bohrium_jobs_wiring.py \
   tests/services/test_bohrium_poller.py
 ```
@@ -3235,8 +3391,23 @@ Expected: 全部通过；特别确认 `src/dao/bohrium_jobs_table.py` 与 `tool.
 
 ## 完成定义（Definition of Done）
 
-- `bohrium_jobs` 建表脚本可在 MySQL 8.0.16+ 执行；DAO 集中封装全部状态不变量，DB CHECK 为第二道防线。
-- `BohriumTool` 在 submit/poll/download/kill 成功后写 ledger，ledger 写失败不阻断工具；身份字段全部经构造器注入，工具不读 `run_meta`/`SESSIONS`/`HookExecutor`/临时 dict。
-- agent context 通过 `SessionJobsPort` 读到实时 active + recent terminal 作业，renderer 呈现两类作业，且不向 agent 暴露 `user_id`/`org_id`/原始 JSON。
-- `BohriumJobPoller.run_once()` 可在真实库上认领到期作业、归一化写回、保护 downloaded/终态单调性、按 backoff 重试；access_key 现查且一轮缓存复用。
-- kernel（`matmaster/`）不 import `src/`；spec Testing Plan 列出的不变量（CHECK/collation/TIMESTAMP UTC/SKIP LOCKED/单调性/binary collation/terminal_at）均有对应测试。
+- `bohrium_jobs` 建表脚本可在 MySQL 8.0.16+ 执行；DAO 集中封装全部状态不变量，DB CHECK 为第二道防线（含 `chk_handled_requires_terminal`）。
+- 本地/部署验证包含 schema readiness 闸门：`bohrium_jobs` 表与必需 CHECK 约束缺失时阻断执行/发版；不在主代码里自动建表或迁移，也不依赖运行时吞异常后再靠日志排查。
+- `BohriumTool` 在 submit/poll/kill 成功后写 ledger，ledger 写失败不阻断工具；身份字段（`session_id`/`invocation_id`/`user_id`/`org_id`）经构造器注入闭包，工具不读 `run_meta`/`SESSIONS`/`HookExecutor`/临时 dict；download 行为不写 ledger。
+- agent 处理完终态作业后经独立动作 `mark_handled` 标记交付（不可逆、仅终态可标记，`handled_at` 一旦写入不被刷新）。
+- agent context 通过 `SessionJobsPort` 读到实时 active + pending terminal（终态且未 handled）作业，renderer 呈现两类作业，且不向 agent 暴露 `user_id`/`org_id`/`invocation_id`/`spawn_id`。
+- `BohriumJobPoller.run_once()` 可在真实库上认领到期作业、归一化写回、保护终态单调性、按 backoff 重试；access_key 只读现查且一轮缓存复用，后台 poller 不会替用户自动创建 AK。
+- kernel（`matmaster/`）不 import `src/`；spec 列出的不变量（CHECK/collation/TIMESTAMP UTC/SKIP LOCKED/终态单调性/binary collation/terminal_at/handled_at 仅终态）均有对应测试。
+
+---
+
+## 挂起项（写路径阶段决定，不阻塞本表落地）
+
+以下决策牵涉 BohriumTool 重构 / 注入机制，本轮不实现，留待写路径阶段：
+
+1. **`result_dir` 的填充来源与时机**：`result_dir` 是作业预期下载位置，本轮 `insert_submitted` 不写（保持 NULL）。待定：由 `insert_submitted` 按约定（如 `results/run_{job_id}`）派生，还是由 submit 调用方显式提供；据此决定是否收紧为 `NOT NULL`。
+2. **`invocation_id` 是否收紧 `NOT NULL`**：当前 `NULL`（来源 `request.invocation_id` 可空）。若确认"只有带 invocation_id 的运行才会提交 Bohrium 作业"，可收紧为 `NOT NULL` 并在 `_require_identity` 加回校验。
+3. **`spawn_id` 注入机制**：`spawn_id` 在 service 层拿不到（主 agent 为 None，subagent 由 kernel 内部 `subagent_orchestrator` 生成）。须在 `Exp` 装配 `BohriumTool` 时把当前 agent 的 `spawn_id` 绑定到其 ledger port（重建或包装 `build_bohrium_jobs_ports` 的产物）。
+4. **读路径是否按 `spawn_id` 过滤**：subagent 提交的作业是只在该 subagent 的 context 呈现，还是主 agent 也能看到全部。若按 `spawn_id` 过滤，`query_session_active` / `query_session_pending_terminal` 与 `idx_session_active` / `idx_session_pending` 需纳入 `spawn_id`。
+5. **`mark_handled` 由哪个 agent 动作触发**：交付确认是 agent 的独立动作（新工具或某 action）。DAO/port 的 `mark_handled` 已就位，触发它的 agent 动作待写路径阶段设计。
+6. **submit/poll/kill 的 tool 集成**：本轮按现有 `_submit`/`_poll`/`_kill` 结构插入 ledger 写入；BohriumTool 整体重构后，写入点与职责分工需重新对齐。
