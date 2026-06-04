@@ -16,16 +16,18 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any
+from typing import Any, Literal
 
 import aiohttp
 
 from utils.env import MATMASTER_TOOLS_SERVER
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 _REQUEST_TIMEOUT_SECONDS = 5.0
+
+# tools-server 接受的计费模式：platform 扣额度；byok/eval 仅记账（eval 额外定价）。
+BillingMode = Literal["platform", "byok", "eval"]
 
 
 @dataclass(frozen=True)
@@ -66,7 +68,7 @@ class BillingService:
         call_index: int,
         spawn_id: str | None,
         usage: dict[str, Any] | None,
-        billing_mode: str,
+        billing_mode: BillingMode,
         session: aiohttp.ClientSession | None,
     ) -> dict[str, Any] | None:
         """POST 一次 usage 事件，返回响应 ``data``（含 ``recorded`` 与定价金额），失败返回 None。
@@ -130,7 +132,7 @@ class BillingService:
         call_index: int,
         spawn_id: str | None,
         usage: dict[str, Any] | None,
-        billing_mode: str = "platform",
+        billing_mode: BillingMode = "platform",
         session: aiohttp.ClientSession | None = None,
     ) -> bool:
         """上报一次 LLM 调用 usage 事件。成功记账返回 True，其余返回 False。
@@ -157,7 +159,7 @@ class BillingService:
         call_index: int,
         spawn_id: str | None,
         usage: dict[str, Any] | None,
-        billing_mode: str = "eval",
+        billing_mode: BillingMode = "eval",
         session: aiohttp.ClientSession | None = None,
     ) -> dict[str, Any] | None:
         """上报一次 usage 并返回当次定价结果（含 ``total_amount_micro`` 等），失败返回 None。
