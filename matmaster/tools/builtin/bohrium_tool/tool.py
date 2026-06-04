@@ -254,6 +254,21 @@ class BohriumTool(BuiltinTool):
     exposed_to_model: ClassVar[bool] = True
     max_result_chars: ClassVar[int] = 0
 
+    def __init__(
+        self,
+        *,
+        session: Any | None = None,
+        workdir: Any | None = None,
+        path_access_roots: Any = (),
+        job_ledger: Any | None = None,
+    ) -> None:
+        super().__init__(
+            session=session,
+            workdir=workdir,
+            path_access_roots=path_access_roots,
+        )
+        self._job_ledger = job_ledger
+
     # prompt() keeps workflow + cross-skill rules only. Per-software image/machine/cmd
     # belong in matmaster/skills/<name>/SKILL.md — do not paste full default tables here
     # (duplicates skills, drifts on tag bumps; see evaluation/AGENTS_evaluation.md DevShell).

@@ -32,3 +32,22 @@ def test_agent_run_ports_carry_bohrium_and_session_jobs_ports() -> None:
     p = AgentRunPorts()
     assert p.bohrium_job_ledger is None
     assert p.session_jobs is None
+
+
+def test_bohrium_tool_accepts_job_ledger() -> None:
+    from pathlib import Path
+
+    from matmaster.tools.builtin.bohrium_tool.tool import BohriumTool
+
+    sentinel = object()
+    bt = BohriumTool(session=None, workdir=Path("."), job_ledger=sentinel)
+    assert bt._job_ledger is sentinel
+
+
+def test_bohrium_tool_defaults_job_ledger_none() -> None:
+    from pathlib import Path
+
+    from matmaster.tools.builtin.bohrium_tool.tool import BohriumTool
+
+    bt = BohriumTool(session=None, workdir=Path("."))
+    assert bt._job_ledger is None

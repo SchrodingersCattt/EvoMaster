@@ -716,7 +716,11 @@ class Exp:
             TodoWriteTool(workdir=env.workdir),
             WebSearchTool(),
             WebFetchTool(workdir=env.workdir),
-            BohriumTool(session=env.session, workdir=env.workdir),
+            BohriumTool(
+                session=env.session,
+                workdir=env.workdir,
+                job_ledger=ctx.request.ports.bohrium_job_ledger,
+            ),
         ]
 
         interaction_bridge = (
