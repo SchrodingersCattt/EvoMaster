@@ -135,8 +135,8 @@ async def test_replay_is_idempotent_with_skill_tool(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_old_active_mcp_servers_field_is_ignored(tmp_path):
-    """The old active_mcp_servers field must not activate tools."""
+async def test_no_active_skills_does_not_activate_skill_mcp_tools(tmp_path):
+    """Skill-scoped MCP tools stay inactive until a skill is active."""
     env = _setup_skill_env(tmp_path)
     cfg = _build_cfg(env)
     exp = Exp(cfg)

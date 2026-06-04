@@ -133,7 +133,7 @@ class TestLoadExpConfig:
         exps_dir = tmp_path / "exps"
         exps_dir.mkdir()
         (exps_dir / "direct.toml").write_text(
-            'name = "direct"\nmode = "direct"\nmax_turns = 200\n'
+            'name = "direct"\nmax_turns = 200\n'
             'developer_instructions = "You are Mat Master."\n'
             "\n[tools]\nbuiltin = ['*']\nmcp = '*'\n",
             encoding="utf-8",

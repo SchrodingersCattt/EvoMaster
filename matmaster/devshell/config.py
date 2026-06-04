@@ -1,8 +1,4 @@
-"""DevConfig model and YAML loading for mm-devshell.
-
-LLM 连接由 ``config/llm_config.yaml`` + ``build_provider`` 解析（与线上一致），
-不在此文件中配置 api_key / base_url / model。
-"""
+"""DevConfig model and YAML loading for mm-devshell."""
 
 from __future__ import annotations
 
@@ -30,23 +26,10 @@ def _expand_env_vars(value: Any) -> Any:
     return value
 
 
-class LLMConfig(BaseModel):
-    """LLM connection settings."""
-
-    api_key: str = ""
-    base_url: str = "https://api.openai.com/v1"
-    model: str = "gpt-4o"
-    temperature: float = 0.7
-    max_tokens: int | None = None
-    timeout: float = 300.0
-    stream_timeout: float | None = None
-    stream_idle_timeout: float | None = None
-    max_retries: int = 3
-    retry_delay: float = 1.0
-
-
 class AgentConfig(BaseModel):
     """Agent behavior settings."""
+
+    model_config = ConfigDict(extra="forbid")
 
     name: str = "general"
     max_turns: int = 20
@@ -57,11 +40,15 @@ class AgentConfig(BaseModel):
 class SessionConfig(BaseModel):
     """Session type selection."""
 
+    model_config = ConfigDict(extra="forbid")
+
     type: str = "local"
 
 
 class ToolsConfig(BaseModel):
     """Tool registration settings."""
+
+    model_config = ConfigDict(extra="forbid")
 
     builtin: list[str] = Field(default_factory=lambda: ["*"])
 
@@ -69,14 +56,13 @@ class ToolsConfig(BaseModel):
 class DevConfig(BaseModel):
     """Top-level devshell configuration (agent / session / tools only)."""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
     agent: AgentConfig = Field(default_factory=AgentConfig)
     session: SessionConfig = Field(default_factory=SessionConfig)
     tools: ToolsConfig = Field(default_factory=ToolsConfig)
     skills: ExpSkillsConfig = Field(default_factory=ExpSkillsConfig)
     compaction: CompactionConfig = Field(default_factory=CompactionConfig)
-    llm: LLMConfig = Field(default_factory=LLMConfig)
 
 
 def load_dev_config(path: Path) -> DevConfig:

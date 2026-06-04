@@ -21,14 +21,6 @@ class TestDevConfig:
         cfg = DevConfig.model_validate(data)
         assert cfg.agent.max_turns == 5
 
-    def test_extra_keys_ignored(self) -> None:
-        from matmaster.devshell.config import DevConfig
-
-        cfg = DevConfig.model_validate(
-            {"llm": {"model": "x"}, "agent": {"max_turns": 3}}
-        )
-        assert cfg.agent.max_turns == 3
-
     def test_identity_optional(self) -> None:
         from matmaster.devshell.config import DevConfig
 

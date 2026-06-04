@@ -59,7 +59,7 @@ def make_compactor(*, boundary=lambda: 9) -> ContextCompactor:
         _session_section_builder_for_tests=session_sections,
     )
     return ContextCompactor(
-        config=CompactionConfig(context_limit=1000, trigger_ratio=0.9),
+        config=CompactionConfig(context_limit=1000),
         context_assembler=assembler,
         user_instructions=UserInstructions(text="Use SI units.", hash="sha256:abc"),
         session_id="sess-1",

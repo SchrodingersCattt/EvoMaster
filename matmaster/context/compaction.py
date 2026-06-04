@@ -393,10 +393,7 @@ class ContextCompactor:
         return next_count, f"{self._compaction_scope}:{next_count}"
 
     def _auto_threshold(self) -> int:
-        threshold = getattr(self._config, "auto_threshold", None)
-        if isinstance(threshold, int):
-            return threshold
-        return int(self._config.context_limit * self._config.trigger_ratio)
+        return self._config.auto_threshold
 
     def _plan_preflight_compaction(
         self,

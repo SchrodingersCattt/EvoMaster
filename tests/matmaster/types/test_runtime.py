@@ -94,12 +94,9 @@ class TestCompactionConfig:
         config = CompactionConfig()
         assert "enabled" not in CompactionConfig.model_fields
         assert config.context_limit == 200_000
-        assert config.trigger_ratio == 0.9
         assert config.strategy == "summary"
         assert config.reserved_summary_tokens == 8_000
         assert config.summary_safety_margin_tokens == 2_000
-        removed_field = "compaction" + "_llm"
-        assert not hasattr(config, removed_field)
 
     def test_frozen(self) -> None:
         config = CompactionConfig()
@@ -113,21 +110,6 @@ class TestCompactionConfig:
         )
         assert config.context_limit == 240_000
         assert config.strategy == "summary"
-
-
-class TestCompactionConfigUpdate:
-    def test_trigger_ratio_default_09(self) -> None:
-        cfg = CompactionConfig()
-        assert cfg.trigger_ratio == 0.9
-
-    def test_strategy_default_summary(self) -> None:
-        cfg = CompactionConfig()
-        assert cfg.strategy == "summary"
-
-    def test_frozen(self) -> None:
-        cfg = CompactionConfig()
-        with pytest.raises(Exception, match="frozen"):
-            cfg.trigger_ratio = 0.8
 
 
 # ── RunIdentity ─────────────────────────────────────────

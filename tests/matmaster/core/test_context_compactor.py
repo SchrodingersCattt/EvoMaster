@@ -219,7 +219,7 @@ class TestCompactorThreshold:
     async def test_skip_when_below_threshold(self) -> None:
         pass
 
-        config = CompactionConfig(context_limit=128000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=128000)
         provider = MockSummaryProvider()
         compactor = _make_compactor(config, provider)
         msgs = [SystemMessage(content="sys"), UserMessage(content="task")]
@@ -233,7 +233,7 @@ class TestCompactorThreshold:
     async def test_trigger_when_above_threshold(self) -> None:
         pass
 
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = MockSummaryProvider()
         msgs = _build_long_conversation(5)
         compactor = _make_compactor(config, provider)
@@ -249,7 +249,7 @@ class TestCompactorThreshold:
     async def test_cooldown_skips_consecutive_turn(self) -> None:
         pass
 
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = MockSummaryProvider()
         msgs = _build_long_conversation(5)
         compactor = _make_compactor(config, provider)
@@ -272,7 +272,7 @@ class TestCompactorPlanApply:
         from matmaster.types.runtime import CompactionConfig
 
         provider = DummySummaryProvider("summary text")
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         compactor = _make_compactor(
             config,
             provider,
@@ -298,7 +298,7 @@ class TestCompactorPlanApply:
         from matmaster.types.runtime import CompactionConfig
 
         provider = DummySummaryProvider(RuntimeError("summary down"))
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         compactor = _make_compactor(
             config,
             provider,
@@ -325,7 +325,7 @@ class TestCompactorPlanApply:
 
 class TestCompactorOutput:
     async def test_output_structure(self) -> None:
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = MockSummaryProvider(summary="Summarized content.")
         msgs = _build_long_conversation(10)
         compactor = _make_compactor(
@@ -351,7 +351,7 @@ class TestCompactorOutput:
         assert len(msgs) == 2
 
     async def test_apply_summary_outputs_system_plus_single_user_bundle(self) -> None:
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = MockSummaryProvider(summary="Summarized content.")
         msgs = _build_long_conversation(10)
         compactor = _make_compactor(
@@ -376,7 +376,7 @@ class TestCompactorOutput:
         assert "Analyze this data" not in (msgs[1].content or "")
 
     async def test_base_messages_contains_only_user_bundle(self) -> None:
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = MockSummaryProvider(summary="summary")
         msgs = _build_long_conversation(5)
         compactor = _make_compactor(config, provider)
@@ -391,7 +391,7 @@ class TestCompactorOutput:
     async def test_second_compact_compresses_first_bundle_without_special_case(
         self,
     ) -> None:
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = MockSummaryProvider(summary="second summary")
         first_bundle = "<compacted_history>\nfirst summary\n</compacted_history>"
         msgs = [
@@ -410,7 +410,7 @@ class TestCompactorOutput:
     async def test_fallback_on_summary_failure(self) -> None:
         pass
 
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = FailingSummaryProvider()
         msgs = _build_long_conversation(10)
         original_len = len(msgs)
@@ -451,7 +451,7 @@ class TestCompactorResultMetadata:
     async def test_apply_runtime_plan_reports_summary_result(self) -> None:
         pass
 
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = MockSummaryProvider()
         msgs = _build_long_conversation(5)
         compactor = _make_compactor(config, provider)
@@ -469,7 +469,7 @@ class TestCompactorResultMetadata:
     async def test_preflight_summary_returns_durable_result(self) -> None:
         pass
 
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = MockSummaryProvider()
         msgs = _build_long_conversation(5)
         compactor = _make_compactor(config, provider)
@@ -484,7 +484,7 @@ class TestCompactorResultMetadata:
     async def test_runtime_sliding_window_result_is_ephemeral(self) -> None:
         pass
 
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = FailingSummaryProvider()
         msgs = _build_long_conversation(10)
         compactor = _make_compactor(config, provider)
@@ -508,7 +508,7 @@ class TestCompactorResultMetadata:
     ) -> None:
         pass
 
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = FailingSummaryProvider()
         msgs = _build_long_conversation(5)
         compactor = _make_compactor(config, provider)
@@ -522,7 +522,7 @@ class TestCompactorResultMetadata:
     async def test_summary_input_contains_tool_name_and_call_id(self) -> None:
         pass
 
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = MockSummaryProvider()
         msgs = _build_long_conversation(5)
         compactor = _make_compactor(config, provider)
@@ -541,7 +541,7 @@ class TestPreflightCurrentInputSplit:
     async def test_compresses_previous_history_and_keeps_current_instruction(
         self,
     ) -> None:
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = MockSummaryProvider()
         rehydrated_with_current = (
             "<attachments>\n"
@@ -612,7 +612,7 @@ class TestPreflightCurrentInputSplit:
     async def test_missing_boundary_defaults_to_session_start_and_stays_durable(
         self,
     ) -> None:
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = MockSummaryProvider()
         compactor = _make_compactor(config, provider)
         ctx = TurnInput.from_values(
@@ -639,7 +639,7 @@ class TestPreflightCurrentInputSplit:
         assert result.base_messages is not None
 
     async def test_attachment_only_current_input_is_preserved(self) -> None:
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = MockSummaryProvider()
         compactor = _make_compactor(config, provider)
         ctx = TurnInput.from_values(
@@ -667,7 +667,7 @@ class TestPreflightCurrentInputSplit:
     async def test_apply_summary_succeeds_without_event_sink(self) -> None:
         pass
 
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = MockSummaryProvider()
         msgs = _build_long_conversation(5)
         compactor = _make_compactor(config, provider, event_sink=None)
@@ -688,7 +688,7 @@ class TestToolTruncationFallback:
     ) -> None:
         """Preflight uses the same summary-to-bundle path for any compact window."""
 
-        config = CompactionConfig(context_limit=500, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=500)
         provider = MockSummaryProvider()
         received: list = []
 
@@ -722,7 +722,7 @@ class TestToolTruncationFallback:
     async def test_compresses_when_no_compressible_turns(self) -> None:
         """1 turn with huge tool results -> summary bundle on success."""
 
-        config = CompactionConfig(context_limit=500, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=500)
         provider = MockSummaryProvider()
 
         # 1 turn: Assistant with 3 tool calls + 3 large ToolMessages
@@ -772,7 +772,7 @@ class TestToolTruncationFallback:
     ) -> None:
         """Small tool results (< 500 chars) are not truncated."""
 
-        config = CompactionConfig(context_limit=500, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=500)
         provider = FailingSummaryProvider()
 
         msgs = [
@@ -798,7 +798,7 @@ class TestToolTruncationFallback:
     async def test_fallback_preserves_complete_tool_turn(self) -> None:
         """Fallback keeps assistant tool calls with matching tool results."""
 
-        config = CompactionConfig(context_limit=200, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=200)
         provider = FailingSummaryProvider()
         original_content = "HEAD_MARKER_" + "x" * 2000 + "_TAIL_MARKER"
 
@@ -832,7 +832,7 @@ class TestCompactorCompatibility:
     async def test_no_event_when_no_sink(self) -> None:
         """Compactor with event_sink=None still works."""
 
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = MockSummaryProvider()
         msgs = _build_long_conversation(5)
         compactor = _make_compactor(config, provider, event_sink=None)

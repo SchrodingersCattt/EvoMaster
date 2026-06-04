@@ -20,7 +20,6 @@ from src.services.image_input_service import (
 
 
 def _service() -> ImageInputService:
-    # Host/path allowlist removed; default settings only retain HTTPS + private-IP guard.
     return ImageInputService(ImageInputSettings())
 
 

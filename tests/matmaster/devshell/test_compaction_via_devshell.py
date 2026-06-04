@@ -219,7 +219,7 @@ class TestDefaultDevshellPath:
 
     async def test_compactor_skips_when_below_threshold(self) -> None:
         """默认启用压缩时，低于阈值也应保持原消息不变。"""
-        config = CompactionConfig(context_limit=128_000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=128_000)
         provider = MockSummaryProvider()
         compactor = _make_compactor(config, provider)
 
@@ -243,7 +243,7 @@ class TestThresholdBehavior:
 
     async def test_trigger_above_threshold(self) -> None:
         """estimated tokens > threshold -> 触发压缩。"""
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = MockSummaryProvider()
         msgs = _build_conversation(5)
         compactor = _make_compactor(config, provider)
@@ -259,7 +259,7 @@ class TestThresholdBehavior:
 
     async def test_skip_below_threshold(self) -> None:
         """estimated tokens < threshold -> 不触发。"""
-        config = CompactionConfig(context_limit=128_000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=128_000)
         provider = MockSummaryProvider()
         msgs = _build_conversation(3)
         compactor = _make_compactor(config, provider)
@@ -274,7 +274,7 @@ class TestThresholdBehavior:
 
     async def test_threshold_boundary_exact(self) -> None:
         """低于自动 compact 阈值时不触发。"""
-        config = CompactionConfig(context_limit=34000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=34000)
         provider = MockSummaryProvider()
         # 只用 system + user, delta 极小
         msgs = [
@@ -298,7 +298,7 @@ class TestCooldown:
     """验证连续 turn 冷却: turn <= last_compaction_turn + 1 → 跳过。"""
 
     async def test_skip_consecutive_turn(self) -> None:
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = MockSummaryProvider()
         msgs = _build_conversation(5)
         compactor = _make_compactor(config, provider)
@@ -318,7 +318,7 @@ class TestCooldown:
         assert provider.call_count == 1, "冷却期不应再次触发"
 
     async def test_trigger_after_cooldown(self) -> None:
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = MockSummaryProvider()
         msgs = _build_conversation(8)
         compactor = _make_compactor(config, provider)
@@ -360,7 +360,7 @@ class TestSummaryStrategy:
     """验证 summary 策略的输出消息结构。"""
 
     async def test_output_structure(self) -> None:
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = MockSummaryProvider(summary="Concise summary of work done.")
         msgs = _build_conversation(10)
         compactor = _make_compactor(config, provider)
@@ -384,7 +384,7 @@ class TestSummaryStrategy:
 
     async def test_summary_call_path_records_request(self) -> None:
         """summary call 由编排层触发，并把结果交给 compactor 应用。"""
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = MockSummaryProvider()
         msgs = _build_conversation(6)
         compactor = _make_compactor(config, provider)
@@ -407,7 +407,7 @@ class TestSlidingWindowFallback:
     """验证 summary 失败时回退到 sliding_window。"""
 
     async def test_fallback_structure(self) -> None:
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = FailingSummaryProvider()
         msgs = _build_conversation(10)
         compactor = _make_compactor(config, provider)
@@ -432,7 +432,7 @@ class TestCompactionResults:
     """验证两阶段 compaction 结果的公共元数据。"""
 
     async def test_summary_result_metadata(self) -> None:
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = MockSummaryProvider()
         msgs = _build_conversation(5)
         compactor = _make_compactor(config, provider)
@@ -452,7 +452,7 @@ class TestCompactionResults:
 
     async def test_fallback_result_strategy(self) -> None:
         """回退策略的 result.strategy 字段为 sliding_window。"""
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = FailingSummaryProvider()
         msgs = _build_conversation(5)
         compactor = _make_compactor(config, provider)
@@ -474,7 +474,7 @@ class TestCompactionResults:
 
     async def test_no_event_without_bus(self) -> None:
         """无 event_sink 时仍能完成压缩。"""
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = MockSummaryProvider()
         msgs = _build_conversation(5)
         compactor = _make_compactor(config, provider, event_sink=None)
@@ -493,7 +493,7 @@ class TestMultipleCompactions:
     """验证压缩后继续积累可再次触发。"""
 
     async def test_second_compaction(self) -> None:
-        config = CompactionConfig(context_limit=1000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=1000)
         provider = MockSummaryProvider()
         msgs = _build_conversation(8)
         compactor = _make_compactor(config, provider)
@@ -545,7 +545,7 @@ class TestToolTruncationFallback:
 
     async def test_truncation_when_single_turn_exceeds_threshold(self) -> None:
         """1 个 turn 就超限 -> 无可压缩旧 turn -> 截断大 tool result。"""
-        config = CompactionConfig(context_limit=500, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=500)
         provider = FailingSummaryProvider()
 
         # 构造：1 turn with 3 大 tool results (每个 2000+ chars)
@@ -605,7 +605,7 @@ class TestToolTruncationFallback:
 
     async def test_no_truncation_below_threshold(self) -> None:
         """即使只有 1 turn，未超阈值不截断。"""
-        config = CompactionConfig(context_limit=128000, trigger_ratio=0.9)
+        config = CompactionConfig(context_limit=128000)
         provider = MockSummaryProvider()
         msgs = [
             SystemMessage(content="sys"),
