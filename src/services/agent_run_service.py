@@ -16,6 +16,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from clients.billing.client import BillingRunContext, get_billing_service
 from matmaster.config.loader import load_agents_general_llm
 from matmaster.context.sources.turn_input import TurnInput
 from matmaster.core.playground import PlaygroundManager
@@ -40,7 +41,6 @@ from src.dao.redis_dao import get_redis_dao
 from src.services.agent_run_bohrium_stage import run_bohrium_stage
 from src.services.agent_run_history_wiring import build_history_wiring
 from src.services.billing_llm_provider import BillingLLMProvider
-from src.services.billing_service import BillingRunContext, get_billing_service
 from src.services.bohrium_jobs_wiring import build_bohrium_jobs_ports
 from src.services.figure_coordinator import FigureCoordinator
 from src.services.history_checkpoint_service import HistoryCheckpointService
