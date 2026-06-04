@@ -19,3 +19,16 @@ def test_session_jobs_has_pending_terminal_jobs_field() -> None:
     assert sj.pending_terminal_jobs == ()
     hints = get_type_hints(SessionJobs)
     assert "pending_terminal_jobs" in hints
+
+
+def test_agent_run_ports_carry_bohrium_and_session_jobs_ports() -> None:
+    import dataclasses
+
+    from matmaster.types.runtime_ports import AgentRunPorts
+
+    fields = {f.name for f in dataclasses.fields(AgentRunPorts)}
+    assert "bohrium_job_ledger" in fields
+    assert "session_jobs" in fields
+    p = AgentRunPorts()
+    assert p.bohrium_job_ledger is None
+    assert p.session_jobs is None
