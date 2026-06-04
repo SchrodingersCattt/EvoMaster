@@ -1,173 +1,24 @@
-"""End-to-end MATTER v5 evaluation runner.
+"""MATTER v5 question-bank loading, filtering, and run-plan expansion.
 
-Current v5 runner behavior:
-- Uses BinaryEvaluator (was RubricEvaluator)
-- evaluate() returns EvalRunRecord directly (no raw dict intermediary)
-- load_question_banks() accepts only v5 question banks
-- _flatten_banks() no longer returns a rubric_map (Rubric class removed)
-- _apply_filters() uses slice filters (OR of capability[+domain]) and question IDs
-- expand_run_plan() no longer reads repeat_override from QuestionItem
+The end-to-end MATTER Core runner (``run_evaluation`` + Playground
+``run_mat_task``) has been removed. Evaluation now runs exclusively through the
+devshell path (``evaluation/scripts/devshell/run_devshell_eval.py``); scoring is
+done by ``score_devshell_tasks.py`` / ``score_baseline_tasks.py``, both built on
+``BinaryEvaluator``. This module retains the question-bank loaders, slice/ID
+filtering, data-file staging, and run-plan expansion that those paths (and the
+catalog-sync tooling) still share.
 """
 
 import logging
 import shutil
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from .aggregator import build_summary
-from .evaluator import BinaryEvaluator
-from .evaluator_wiring import token_usage_record_from_evidence
-from .evidence import EvidenceBundle, EvidenceExtractor
-from .mat_runner import run_mat_task
-from .reporter import append_raw_run, write_reports
-from .schemas import (
-    CapabilitySlice,
-    EvalConfig,
-    EvalRunRecord,
-    QuestionBank,
-    QuestionItem,
-)
-from .simulator import HumanSimulator
+from .schemas import CapabilitySlice, EvalConfig, QuestionBank, QuestionItem
 
 _runner_logger = logging.getLogger(__name__)
-_EVOMASTER_EVIDENCE_MAPPING_PATH = Path(__file__).parent / 'evidence_mapping.yaml'
-
-
-# ---------------------------------------------------------------------------
-# Public entry point
-# ---------------------------------------------------------------------------
-
-
-def run_evaluation(config: EvalConfig) -> dict[str, Any]:
-    """Run MATTER evaluation according to config."""
-    bank_dir = Path(_resolve_to_project_root(config.question_bank_dir))
-    question_banks = load_question_banks(bank_dir)
-    questions = _flatten_banks(question_banks)
-    questions = _apply_filters(questions, config)
-
-    output_dir = Path(_resolve_to_project_root(config.output_dir))
-    output_dir.mkdir(parents=True, exist_ok=True)
-    timestamp = datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')
-    run_dir = output_dir / f'{config.run_label}_{timestamp}'
-    run_dir.mkdir(parents=True, exist_ok=True)
-    mat_runs_dir = run_dir / 'mat_runs'
-    mat_runs_dir.mkdir(parents=True, exist_ok=True)
-
-    simulator = HumanSimulator(
-        llm_cfg=config.simulator_llm, use_seed_prompt=config.use_seed_prompt
-    )
-    evaluator = BinaryEvaluator(
-        llm_cfg=config.evaluator_llm,
-        axis_weights=dict(config.axis_weights),
-    )
-    # The core extractor is runtime-agnostic. EvoMaster-specific tool/event
-    # compatibility is injected here by the current runner.
-    evidence_extractor = EvidenceExtractor(
-        mapping_path=_EVOMASTER_EVIDENCE_MAPPING_PATH
-    )
-
-    records: list[EvalRunRecord] = []
-    mat_config_path = Path(_resolve_to_project_root(config.mat_config_path))
-    run_plan = expand_run_plan(questions=questions, config=config)
-
-    for plan_item in run_plan:
-        question: QuestionItem = plan_item['question']
-        mode: str = plan_item['mode']
-        repeat_idx: int = plan_item['repeat_idx']
-
-        task = simulator.formulate(question)
-        prompt = task.prompt
-        task_id = f'{question.id}_{mode}_r{repeat_idx}'
-        workspace_path = mat_runs_dir / 'workspaces' / task_id
-        workspace_path.mkdir(parents=True, exist_ok=True)
-        prompt = _stage_data_files(question, bank_dir, workspace_path, prompt)
-
-        mat_result = run_mat_task(
-            prompt=prompt,
-            mode=mode,
-            task_id=task_id,
-            run_dir=mat_runs_dir,
-            mat_config_path=mat_config_path,
-            empty_completion_max_retries=config.empty_completion_max_retries,
-            inject_bohrium_failure=(
-                question.inject_failure_message
-                if question.inject_bohrium_failure
-                else None
-            ),
-        )
-        answer = str(mat_result.get('answer', '') or '')
-        tool_calls: list[dict[str, Any]] = mat_result.get('tool_calls', [])
-        duration_ms = int(mat_result.get('duration_ms') or 0)
-        workspace_abs = str(workspace_path.resolve())
-
-        # Extract evidence bundle from trajectory
-        trajectory_path = mat_result.get('trajectory_path')
-        evidence = None
-        if trajectory_path:
-            try:
-                evidence = evidence_extractor.extract(
-                    trajectory_path=trajectory_path,
-                    task_id=task_id,
-                    final_answer=answer,
-                )
-            except Exception as exc:  # noqa: BLE001
-                _runner_logger.warning(
-                    'EvidenceExtractor failed for %s: %s', task_id, exc
-                )
-
-        if evidence is not None:
-            evidence = evidence.model_copy(
-                update={'duration_ms': duration_ms, 'workspace_dir': workspace_abs}
-            )
-        else:
-            evidence = EvidenceBundle(
-                task_id=task_id,
-                final_answer=answer,
-                duration_ms=duration_ms,
-                workspace_dir=workspace_abs,
-            )
-
-        token_usage = token_usage_record_from_evidence(evidence)
-
-        # BinaryEvaluator.evaluate() returns EvalRunRecord directly
-        record = evaluator.evaluate(
-            question=question,
-            answer=answer,
-            tool_calls=tool_calls,
-            evidence=evidence,
-            mode=mode,
-            repeat_idx=repeat_idx,
-            prompt=prompt,
-            run_status=str(mat_result.get('status', 'unknown')),
-            model_name=evidence.model_name,
-            token_usage=token_usage,
-            duration_ms=duration_ms,
-        )
-        # Attach raw result for debugging
-        record.raw_result = mat_result
-        per_call_usage = mat_result.get('per_call_usage')
-        if isinstance(per_call_usage, list):
-            record.per_call_usage = per_call_usage
-
-        records.append(record)
-        append_raw_run(output_dir=run_dir, record=record)
-
-    summary = build_summary(records)
-    report_paths = write_reports(output_dir=run_dir, records=records, summary=summary)
-    return {
-        'run_dir': str(run_dir),
-        'records': records,
-        'summary': summary,
-        'report_paths': report_paths,
-    }
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
 
 
 def _question_matches_slice(question: QuestionItem, sl: CapabilitySlice) -> bool:
