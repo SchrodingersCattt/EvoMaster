@@ -494,6 +494,20 @@ class BohriumTool(BuiltinTool):
                     f"list_images, list_machines.",
                 )
 
+    def _safe_ledger(self, method: str, /, **kwargs: Any) -> None:
+        """调用 ledger port，吞掉异常：ledger 写失败不阻断工具主流程。"""
+        if self._job_ledger is None:
+            return
+        try:
+            getattr(self._job_ledger, method)(**kwargs)
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "bohrium ledger %s failed job_id=%s",
+                method,
+                kwargs.get("job_id"),
+                exc_info=True,
+            )
+
     def _submit(self, args: dict[str, Any]) -> ToolResult:
         input_dir = args.get("input_dir", "")
         image = args.get("image", "")
@@ -527,6 +541,14 @@ class BohriumTool(BuiltinTool):
                 disk_size=disk_size,
                 workdir=self._workdir or Path("."),
                 session=self._session,
+            )
+            self._safe_ledger(
+                "record_submit",
+                job_id=str(submitted.job_id),
+                job_name=str(job_name),
+                project_id=ctx.credentials.project_id,
+                sandbox=ctx.sandbox,
+                input_dir=str(input_dir),
             )
             return ToolResult(
                 status="success",
