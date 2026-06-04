@@ -25,6 +25,10 @@ class BohriumJobsTable(BaseTable):
         "job_id, job_name, status, sandbox, project_id, input_dir, "
         "submitted_at, last_polled_at, result_dir"
     )
+    _CLAIM_COLUMNS = (
+        "id, session_id, user_id, org_id, project_id, job_id, sandbox, "
+        "status, poll_count"
+    )
 
     def init_table(self) -> None:
         # 建表走外部脚本 src/sql/create_bohrium_jobs_table.sql；这里仅检查存在性。
@@ -217,6 +221,44 @@ class BohriumJobsTable(BaseTable):
             with conn.cursor() as cur:
                 cur.execute(sql, (user_id, org_id, session_id, int(limit)))
                 return [self._to_agent_job(r) for r in cur.fetchall()]
+
+    def _select_due_for_update(self, conn, *, limit: int) -> list[dict[str, Any]]:
+        """在给定连接的事务内 SELECT ... FOR UPDATE SKIP LOCKED。不提交。"""
+        sql = f"""
+            SELECT {self._CLAIM_COLUMNS} FROM {self.table_name}
+            WHERE next_poll_at <= NOW()
+            ORDER BY next_poll_at ASC, id ASC
+            LIMIT %s
+            FOR UPDATE SKIP LOCKED
+        """
+        with conn.cursor() as cur:
+            cur.execute(sql, (int(limit),))
+            return list(cur.fetchall())
+
+    def claim_due_batch(
+        self, *, limit: int = 50, claim_timeout_seconds: int = 120
+    ) -> list[dict[str, Any]]:
+        """抢一批到期作业并把 next_poll_at 占位到未来，立即提交释放锁。"""
+        with self.get_connection() as conn:
+            try:
+                rows = self._select_due_for_update(conn, limit=limit)
+                if rows:
+                    ids = [r["id"] for r in rows]
+                    placeholders = ", ".join(["%s"] * len(ids))
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            f"""
+                            UPDATE {self.table_name}
+                            SET next_poll_at = NOW() + INTERVAL %s SECOND
+                            WHERE id IN ({placeholders})
+                            """,
+                            (int(claim_timeout_seconds), *ids),
+                        )
+                conn.commit()
+                return rows
+            except BaseException:
+                conn.rollback()
+                raise
 
     def get_by_owner_job(
         self, *, user_id: str, org_id: str, sandbox: bool, job_id: str
