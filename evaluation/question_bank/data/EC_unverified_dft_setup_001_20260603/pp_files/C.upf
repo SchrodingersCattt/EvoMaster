@@ -1,0 +1,45 @@
+<UPF version="2.0.1">
+  <PP_INFO>
+    Generated using "atomic" code by A. Dal Corso v.5.0.2 svn rev. 9656 (2022/03)
+    Author: ADC
+    Generation date: 11 03 2022
+    Pseudopotential type: NC
+    Element: C
+    Functional: SLA PZ NOGX NOGC
+
+    Suggested minimum cutoff for wavefunctions:  60. Ry
+    Suggested minimum cutoff for charge density: 240. Ry
+
+    The Pseudo was generated with a Non-Relativistic calculation (scalar-relativistic core).
+    Pseudopotential generated with the Troullier-Martins method.
+
+    Valence configuration:
+    nl pn  l   occ       Rcut    Rcut US   E pseu
+    2S  1  0  2.00      1.300      1.300    -1.005
+    2P  2  1  2.00      1.300      1.300    -0.399
+  </PP_INFO>
+  <PP_HEADER
+     generated="Generated using atomic code by A. Dal Corso v.5.0.2"
+     author="ADC"
+     date="11 03 2022"
+     comment=""
+     element="C "
+     pseudo_type="NC"
+     relativistic="scalar"
+     is_ultrasoft="F"
+     is_paw="F"
+     is_coulomb="F"
+     has_so="F"
+     has_wfc="F"
+     has_gipaw="F"
+     core_correction="F"
+     functional="SLA PZ NOGX NOGC"
+     z_valence="4.000000000000000E+000"
+     total_psenergy="-1.094230000000000E+001"
+     rho_cutoff="1.000000000000000E+001"
+     l_max="1"
+     l_local="-1"
+     mesh_size="1095"
+     number_of_wfc="2"
+     number_of_proj="2"/>
+</UPF>

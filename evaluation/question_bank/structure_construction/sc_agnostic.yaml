@@ -3953,3 +3953,82 @@ questions:
     verify: token_budget
     weight: 1.0
     criterion: '[Must] Agent stays within total token budget'
+- id: SC_planar_conjugated_001_20260603
+  capability: structure_construction
+  domain: agnostic
+  intent: When building a known rigid planar fused-aromatic molecule from SMILES + 3D
+    embedding, the agent must validate that the conjugated core is actually planar
+    before treating the geometry as correct. RDKit/ETKDG/UFF embedding can return a
+    folded conformer that keeps the correct chemical connectivity yet badly violates
+    core planarity. From a real trajectory where a perylene-diimide (PDI-4OH) was
+    embedded folded (core RMS ~1.3 Å, imide N-N 8.8 Å vs ~11.5 Å expected) and then
+    fed to expensive DFT/MD without any planarity check; the geometric error was only
+    caught later by the user from a 2D reference image.
+  human_prompt_seed: '构建分子 PDI-4OH 的三维结构并保存为 `PDI-4OH.xyz`。它是苝二酰亚胺
+    (perylene-3,4,9,10-tetracarboxylic diimide, PDI) 的衍生物：在苝二酰亚胺母核的两个酰亚胺氮原子上
+    各连接一条 -(CH2)3-N(CH2CH2OH)2 侧链（即名称中的 4 个羟基）。'
+  tags:
+  - struct_build
+  - meta_grounding
+  source_session: debaecf2536f433bb50cd71cf1405d24
+  data_files: []
+  reference_answers:
+  - key: structure_file
+    value: PDI-4OH.xyz
+  - key: atom_count
+    value:
+      filename: PDI-4OH.xyz
+      expected: 90
+      tolerance: 0
+  - key: composition
+    value:
+      filename: PDI-4OH.xyz
+      must_contain_elements: [C, H, N, O]
+  - key: core_planarity
+    value:
+      filename: PDI-4OH.xyz
+      max_rms_A: 0.3
+      min_core_atoms: 16
+  - key: turn_budget
+    value:
+      max: 18
+  - key: token_budget_total
+    value:
+      max: 28000
+  scoring_checklist:
+  - id: structure_file
+    criterion: PDI-4OH.xyz is written to the workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: atom_count
+    criterion: PDI-4OH.xyz contains exactly 90 atoms (C38H40N4O8).
+    axis: correctness
+    verify: struct_file_atom_count
+  - id: composition
+    criterion: Structure contains C, H, N, and O (perylene-diimide core plus
+      hydroxyl-terminated amine side chains).
+    axis: correctness
+    verify: struct_file_composition
+  - id: core_planarity
+    criterion: The fused perylene-diimide aromatic core is planar — out-of-plane RMS
+      of the conjugated carbon core <= 0.3 Å. Delivering a folded/non-planar core
+      (RMS ~1 Å), even with correct chemical connectivity and formula, is a FAIL.
+    axis: correctness
+    verify: struct_file_planarity
+    weight: 3.0
+  - id: validates_planarity
+    criterion: Agent explicitly validates the generated 3D geometry (e.g. confirms
+      the perylene core is planar, inspects out-of-plane deviation or the imide N-N
+      span / dihedral) before declaring the structure correct or handing it to
+      downstream calculations, rather than blindly trusting the SMILES/RDKit embedding.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within budget.
+    axis: efficiency
+    verify: token_budget

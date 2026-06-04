@@ -150,6 +150,23 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="MSG",
         help="Patch BohriumTool._submit to always return this error (eval-only)",
     )
+    run_p.add_argument(
+        "--billing-mode",
+        type=str,
+        default=None,
+        metavar="MODE",
+        help=(
+            "Enable per-call usage reporting to tools-server with this billing_mode "
+            "(e.g. 'eval'; 'eval'/'byok' do not debit credits). Omit to disable."
+        ),
+    )
+    run_p.add_argument(
+        "--invocation-id",
+        type=str,
+        default=None,
+        metavar="ID",
+        help="Stable invocation id used to correlate billing usage/cost for this run.",
+    )
 
     return parser
 
@@ -160,8 +177,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return build_parser().parse_args(argv)
 
 
-def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
-    """Load LLM config, build provider, return DevRunner and related objects."""
+def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any, Any]:
+    """Load LLM config, build provider, return DevRunner and related objects.
+
+    Also returns the ``UsageCollectingProvider`` wrapper so callers read
+    ``collected_calls`` directly instead of reflecting DevRunner internals.
+    """
     import os
 
     root = _project_root()
@@ -177,6 +198,7 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
 
     from matmaster.config.loader import load_llm_config
     from matmaster.providers.llm_factory import build_provider
+    from matmaster.providers.usage_collector import UsageCollectingProvider
 
     llm_config = load_llm_config(llm_yaml)
     agent_default_llm = load_agents_general_llm(main_yaml)
@@ -196,6 +218,34 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
     except KeyError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
+
+    # Collect per-call usage (root + subagent + compaction share this instance).
+    # When --billing-mode is set, also report each call to tools-server and
+    # back-fill per-call cost (eval/byok do not debit credits).
+    reporter = None
+    billing_mode = (getattr(args, "billing_mode", None) or "").strip() or None
+    if billing_mode:
+        from clients.billing import (
+            BillingRunContext,
+            BillingUsageReporter,
+            get_billing_service,
+        )
+
+        invocation_id = (getattr(args, "invocation_id", None) or "").strip() or None
+        reporter = BillingUsageReporter(
+            billing_service=get_billing_service(),
+            run_context=BillingRunContext(
+                session_id=invocation_id or "eval",
+                task_id=None,
+                invocation_id=invocation_id,
+            ),
+            billing_mode=billing_mode,
+        )
+    llm_provider = UsageCollectingProvider(
+        llm_provider,
+        model=getattr(resolved, "model", "") or "",
+        reporter=reporter,
+    )
 
     # Load .env files (same as main app in src/utils/constant.py)
     from dotenv import find_dotenv, load_dotenv
@@ -260,7 +310,7 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
         exclude_subagents=getattr(args, "exclude_subagents", None),
         inject_bohrium_failure=getattr(args, "inject_bohrium_failure", None),
     )
-    return runner, config, llm_config, resolved
+    return runner, config, llm_config, resolved, llm_provider
 
 
 def _run_with_event_log(runner: Any, prompt: str, log_dir: Path) -> tuple[Any, Path]:
@@ -320,6 +370,7 @@ def _run_single(
     args: argparse.Namespace,
     runner: Any,
     resolved: Any,
+    usage_provider: Any = None,
 ) -> int:
     """Execute one prompt; print JSON line to stdout; optional --json-out."""
     if getattr(args, "prompt", None) is not None:
@@ -357,6 +408,11 @@ def _run_single(
     vendor_turns = getattr(result, "usage_vendor_by_turn", ())
     if vendor_turns:
         summary["usage_vendor_by_turn"] = [dict(item) for item in vendor_turns]
+    collected = usage_provider.collected_calls if usage_provider is not None else None
+    if collected:
+        from matmaster.providers.usage_collector import per_call_usage_payload
+
+        summary["per_call_usage"] = per_call_usage_payload(collected)
     finish_detail = getattr(result, "finish_detail", None)
     if finish_detail is not None:
         if hasattr(finish_detail, "model_dump"):
@@ -384,10 +440,10 @@ def main(argv: list[str] | None = None) -> None:
             force=True,
         )
 
-    runner, config, _llm_config, resolved = _bootstrap_runner(args)
+    runner, config, _llm_config, resolved, usage_provider = _bootstrap_runner(args)
 
     if args.command == "run":
-        rc = _run_single(args, runner, resolved)
+        rc = _run_single(args, runner, resolved, usage_provider)
         raise SystemExit(rc)
 
     from matmaster.devshell.repl import run_repl

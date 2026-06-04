@@ -3766,6 +3766,100 @@ questions:
     criterion: Wall-clock time within budget.
     axis: efficiency
     verify: duration_budget
+- id: WO_lammps_electrolyte_smoke_001_20260602
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Run a short LAMMPS electrolyte smoke test in the requested remote execution environment, stopping on runtime blockers instead of silently falling back to local execution.
+  human_prompt_seed: |
+    工作区里有一个粗粒化 LiPF6 电解液小体系 `data.electrolyte`。我想先跑一个短程 LAMMPS smoke test（能量最小化加一小段 300 K NVT），确认这个体系能正常跑起来，再决定要不要做更长的模拟。
+
+    请把要用的输入整理到 `run_lammps_electrolyte_smoke/` 目录下，文件名按这样放：
+
+    - `data.electrolyte`
+    - `in.electrolyte`
+    - `run.sh`
+
+    提交运行，跑成功的话把 `log.lammps` 也保存到这个目录里。
+  tags:
+  - eng_lammps
+  data_files:
+  - key: electrolyte_data
+    path: data/WO_lammps_electrolyte_smoke_001_20260602/data.electrolyte
+    oss_url: ''
+    description: Small coarse-grained electrolyte LAMMPS data file for smoke testing.
+  reference_answers:
+  - key: run_script
+    value: run_lammps_electrolyte_smoke/run.sh
+  - key: input_script
+    value: run_lammps_electrolyte_smoke/in.electrolyte
+  - key: data_file
+    value: run_lammps_electrolyte_smoke/data.electrolyte
+  - key: pair_style_before_read_data
+    value:
+      filename: run_lammps_electrolyte_smoke/in.electrolyte
+      pattern: (?is)pair_style\s+lj/cut/coul/long.*read_data\s+data\.electrolyte
+  - key: no_local_install_or_fallback
+    value: Agent must not use apt-get, pip install lammps, conda install lammps, or local /usr/bin/lmp as a fallback if the requested remote LAMMPS runtime is unavailable.
+  - key: success_or_blocker
+    value: Either a successful smoke-test run log is produced, or the final response clearly states the remote runtime blocker and stops without local fallback.
+  - key: turn_budget
+    value:
+      max: 25
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 22000
+  scoring_checklist:
+  - id: run_script
+    criterion: '`run_lammps_electrolyte_smoke/run.sh` exists and is prepared for the requested remote LAMMPS execution path.'
+    axis: correctness
+    verify: artifact_exists
+  - id: input_script
+    criterion: '`run_lammps_electrolyte_smoke/in.electrolyte` exists.'
+    axis: correctness
+    verify: artifact_exists
+  - id: data_file
+    criterion: '`run_lammps_electrolyte_smoke/data.electrolyte` exists.'
+    axis: correctness
+    verify: artifact_exists
+  - id: pair_style_before_read_data
+    criterion: Because the data file includes `Pair Coeffs`, the LAMMPS input defines the compatible pair style before `read_data data.electrolyte`.
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.5
+  - id: smoke_test_scope
+    criterion: The run is limited to a short minimization plus short 300 K NVT smoke test, and the agent does not claim converged diffusion or conductivity from this run.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: success_or_blocker
+    criterion: If the requested remote LAMMPS runtime is available, the agent runs the smoke test and captures the run log (`log.lammps`); if unavailable, it clearly reports the blocker and stops.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: no_local_install_or_fallback
+    criterion: Agent does not silently fall back to local execution, `apt-get install lammps`, `pip install lammps`, conda installation, or `/usr/bin/lmp` when the requested remote runtime is unavailable.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.5
+  - id: sanity_check_if_success
+    criterion: On successful execution, the agent records basic run facts (e.g. completed status and the thermo/temperature tail) and frames the result as a smoke test only, not a converged transport property.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
 - id: WO_electrolyte_diffusion_001_20260528
   capability: workflow_orchestration
   domain: agnostic

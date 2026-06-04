@@ -1,8 +1,12 @@
-"""LLM 金额计费上报客户端。
+"""LLM 金额计费上报 HTTP 客户端（瘦客户端）。
 
-本仓库只负责在 Worker 完成 LLM 调用后，把一次调用的 usage 事件上报给
-matmaster-tools-server（POST /api/v1/billing/usage）。定价、用量流水、对账等
-权威逻辑都在 tools-server 侧，这里保持瘦客户端，不落本地账单表。
+只负责把一次 LLM 调用的 usage 事件 POST 给 matmaster-tools-server
+（POST /api/v1/billing/usage），并按需返回当次定价金额。定价、用量流水、对账等
+权威逻辑都在 tools-server 侧，这里不落本地账单表。
+
+本模块只依赖 aiohttp + utils.env，不依赖 matmaster / src 业务，放在与 src 并列的
+clients/ 顶层，供 src（线上 Worker）、matmaster.devshell、evaluation 共用，避免
+matmaster 反向 import src（见 tests/matmaster/test_import_audit.py）。
 """
 
 from __future__ import annotations
@@ -12,16 +16,18 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any
+from typing import Any, Literal
 
 import aiohttp
 
 from utils.env import MATMASTER_TOOLS_SERVER
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 _REQUEST_TIMEOUT_SECONDS = 5.0
+
+# tools-server 接受的计费模式：platform 扣额度；byok/eval 仅记账（eval 额外定价）。
+BillingMode = Literal["platform", "byok", "eval"]
 
 
 @dataclass(frozen=True)
@@ -54,7 +60,7 @@ class BillingService:
             async with aiohttp.ClientSession() as owned:
                 yield owned
 
-    async def report_llm_usage(
+    async def _post_usage(
         self,
         *,
         run_context: BillingRunContext,
@@ -62,17 +68,17 @@ class BillingService:
         call_index: int,
         spawn_id: str | None,
         usage: dict[str, Any] | None,
-        billing_mode: str = "platform",
-        session: aiohttp.ClientSession | None = None,
-    ) -> bool:
-        """上报一次 LLM 调用 usage 事件。成功记账返回 True，其余返回 False。
+        billing_mode: BillingMode,
+        session: aiohttp.ClientSession | None,
+    ) -> dict[str, Any] | None:
+        """POST 一次 usage 事件，返回响应 ``data``（含 ``recorded`` 与定价金额），失败返回 None。
 
-        ``session`` 用于在一次 run 内复用连接池；None 时临时新建。
-        ``billing_mode`` 为 'byok' 时 tools-server 仅记账不扣额度。
-        网络/服务异常在此吞掉并记 warning，避免影响用户请求主链路。
+        定价字段见 tools-server ``UsageIngestData``：``total_amount_micro`` /
+        ``total_amount_settle_micro`` / ``pricing_status`` 等。网络/服务异常在此吞掉
+        并记 warning，避免影响调用方主链路。
         """
         if not usage:
-            return False
+            return None
 
         payload: dict[str, Any] = {
             "session_id": run_context.session_id,
@@ -83,7 +89,7 @@ class BillingService:
             "model": model,
             "usage": usage,
         }
-        # 仅在非默认（byok）时显式带上；tools-server 缺省即 platform，保持 payload 向后兼容。
+        # 仅在非默认（platform）时显式带上；tools-server 缺省即 platform，保持向后兼容。
         if billing_mode and billing_mode != "platform":
             payload["billing_mode"] = billing_mode
         url = f"{self._base_url}/api/v1/billing/usage"
@@ -106,9 +112,9 @@ class BillingService:
                             call_index,
                             body[:500],
                         )
-                        return False
+                        return None
                     data = await resp.json()
-                    return bool((data or {}).get("data", {}).get("recorded"))
+                    return (data or {}).get("data") or None
         except Exception:
             logger.warning(
                 "billing usage ingest error session_id=%s call_index=%s",
@@ -116,7 +122,60 @@ class BillingService:
                 call_index,
                 exc_info=True,
             )
-            return False
+            return None
+
+    async def report_llm_usage(
+        self,
+        *,
+        run_context: BillingRunContext,
+        model: str,
+        call_index: int,
+        spawn_id: str | None,
+        usage: dict[str, Any] | None,
+        billing_mode: BillingMode = "platform",
+        session: aiohttp.ClientSession | None = None,
+    ) -> bool:
+        """上报一次 LLM 调用 usage 事件。成功记账返回 True，其余返回 False。
+
+        ``session`` 用于在一次 run 内复用连接池；None 时临时新建。
+        ``billing_mode`` 为 'byok' / 'eval' 时 tools-server 仅记账不扣额度。
+        """
+        data = await self._post_usage(
+            run_context=run_context,
+            model=model,
+            call_index=call_index,
+            spawn_id=spawn_id,
+            usage=usage,
+            billing_mode=billing_mode,
+            session=session,
+        )
+        return bool((data or {}).get("recorded"))
+
+    async def price_llm_usage(
+        self,
+        *,
+        run_context: BillingRunContext,
+        model: str,
+        call_index: int,
+        spawn_id: str | None,
+        usage: dict[str, Any] | None,
+        billing_mode: BillingMode = "eval",
+        session: aiohttp.ClientSession | None = None,
+    ) -> dict[str, Any] | None:
+        """上报一次 usage 并返回当次定价结果（含 ``total_amount_micro`` 等），失败返回 None。
+
+        与 :meth:`report_llm_usage` 共用 POST，但返回完整响应 ``data`` 而非布尔，
+        供评测侧按 call 攒成本明细。缺省 ``billing_mode='eval'``：记账并定价但不扣额度。
+        """
+        return await self._post_usage(
+            run_context=run_context,
+            model=model,
+            call_index=call_index,
+            spawn_id=spawn_id,
+            usage=usage,
+            billing_mode=billing_mode,
+            session=session,
+        )
 
     async def get_run_cost(
         self,
@@ -127,8 +186,7 @@ class BillingService:
     ) -> dict[str, Any] | None:
         """按 invocation_id 查本轮 run 全链路费用（best-effort）。
 
-        供飞书完成卡片展示费用用。失败/超时/无数据返回 None，绝不抛异常、
-        不拖慢完成卡片主链路。
+        失败/超时/无数据返回 None，绝不抛异常、不拖慢主链路。
         """
         if not invocation_id:
             return None

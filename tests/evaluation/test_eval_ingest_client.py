@@ -22,8 +22,6 @@ from evaluation.eval_ingest_client import (
     normalize_catalog_priority_for_sync,
     normalize_pending_item_for_submission,
     parse_score_summary_missing_question_ids,
-    post_eval_ingest,
-    post_question_catalog_sync,
     prompt_sha256,
     score_for_eval_ingest,
     upload_eval_task_artifacts_to_oss,
@@ -358,6 +356,207 @@ def test_build_ingest_item_usage_vendor_by_turn_in_extra() -> None:
     assert "num_turns" not in item["extra"]
 
 
+def test_build_ingest_item_per_call_usage_in_extra() -> None:
+    item = build_ingest_item(
+        question_id="Q1",
+        task_id="Q1_direct_r0",
+        mode="direct",
+        repeat_idx=0,
+        devshell_exit_code=0,
+        summary={
+            "status": "done",
+            "per_call_usage": [
+                {
+                    "call_index": 1,
+                    "spawn_id": None,
+                    "kind": "root",
+                    "model": "claude-sonnet-4-6",
+                    "usage": {
+                        "prompt_tokens": 100,
+                        "completion_tokens": 20,
+                        "total_tokens": 120,
+                        "cache_read_tokens": 40,
+                        "cache_write_tokens": 10,
+                        "reasoning_tokens": 8,
+                    },
+                },
+                {
+                    "call_index": 2,
+                    "spawn_id": "child-1",
+                    "kind": "subagent",
+                    "model": "claude-sonnet-4-6",
+                    "usage": {"prompt_tokens": 5, "total_tokens": 6},
+                },
+            ],
+        },
+        duration_ms=1,
+    )
+    per_call = item["extra"]["per_call_usage"]
+    assert len(per_call) == 2
+    assert per_call[0]["kind"] == "root"
+    assert per_call[0]["usage"]["cache_write_tokens"] == 10
+    assert per_call[0]["usage"]["reasoning_tokens"] == 8
+    assert per_call[1]["kind"] == "subagent"
+    assert per_call[1]["spawn_id"] == "child-1"
+
+
+def test_build_ingest_item_no_per_call_usage_when_absent() -> None:
+    item = build_ingest_item(
+        question_id="Q1",
+        task_id="Q1_direct_r0",
+        mode="direct",
+        repeat_idx=0,
+        devshell_exit_code=0,
+        summary={"status": "done"},
+        duration_ms=1,
+    )
+    assert "per_call_usage" not in item["extra"]
+
+
+def test_build_ingest_item_per_call_cost_summary_in_extra() -> None:
+    def _cost(micro: int) -> dict:
+        return {
+            "total_amount_micro": micro,
+            "total_amount_settle_micro": micro,
+            "pricing_status": "priced",
+            "currency": "CNY",
+            "settlement_currency": "CNY",
+        }
+
+    item = build_ingest_item(
+        question_id="Q1",
+        task_id="Q1_direct_r0",
+        mode="direct",
+        repeat_idx=0,
+        devshell_exit_code=0,
+        summary={
+            "status": "done",
+            "per_call_usage": [
+                {
+                    "call_index": 1,
+                    "spawn_id": None,
+                    "kind": "root",
+                    "model": "claude-sonnet-4-6",
+                    "usage": {"prompt_tokens": 100, "completion_tokens": 20},
+                    "cost": _cost(1000),
+                },
+                {
+                    "call_index": 2,
+                    "spawn_id": "child-1",
+                    "kind": "subagent",
+                    "model": "claude-sonnet-4-6",
+                    "usage": {"prompt_tokens": 5},
+                    "cost": _cost(500),
+                },
+            ],
+        },
+        duration_ms=1,
+    )
+    per_call = item["extra"]["per_call_usage"]
+    assert per_call[0]["cost"]["total_amount_micro"] == 1000
+    cost = item["extra"]["per_call_cost"]
+    assert cost["total_amount_micro"] == 1500
+    assert cost["total_amount_settle_micro"] == 1500
+    assert cost["priced_calls"] == 2
+    assert cost["missing_price_calls"] == 0
+    assert cost["call_count"] == 2
+    assert cost["currency"] == "CNY"
+
+
+def test_build_ingest_item_per_call_token_totals_in_extra() -> None:
+    item = build_ingest_item(
+        question_id="Q1",
+        task_id="Q1_direct_r0",
+        mode="direct",
+        repeat_idx=0,
+        devshell_exit_code=0,
+        summary={
+            "status": "done",
+            "per_call_usage": [
+                {
+                    "call_index": 1,
+                    "spawn_id": None,
+                    "kind": "root",
+                    "model": "m",
+                    "usage": {
+                        "prompt_tokens": 100,
+                        "completion_tokens": 20,
+                        "cache_read_tokens": 30,
+                        "cache_write_tokens": 10,
+                        "total_tokens": 120,
+                    },
+                },
+                {
+                    "call_index": 2,
+                    "spawn_id": "child-1",
+                    "kind": "subagent",
+                    "model": "m",
+                    "usage": {
+                        "prompt_tokens": 50,
+                        "completion_tokens": 5,
+                        "cache_read_tokens": 40,
+                        "total_tokens": 55,
+                    },
+                },
+            ],
+        },
+        duration_ms=1,
+    )
+    totals = item["extra"]["per_call_token_totals"]
+    assert totals["prompt_tokens"] == 150
+    assert totals["completion_tokens"] == 25
+    assert totals["cache_read_tokens"] == 70
+    assert totals["cache_write_tokens"] == 10
+    assert totals["total_tokens"] == 175
+    # uncached = prompt - cache_read - cache_write = 150 - 70 - 10 = 70
+    assert totals["uncached_input_tokens"] == 70
+    assert totals["call_count"] == 2
+
+
+def test_build_ingest_item_no_per_call_token_totals_when_usage_absent() -> None:
+    item = build_ingest_item(
+        question_id="Q1",
+        task_id="Q1_direct_r0",
+        mode="direct",
+        repeat_idx=0,
+        devshell_exit_code=0,
+        summary={
+            "status": "done",
+            "per_call_usage": [
+                {"call_index": 1, "spawn_id": None, "kind": "root", "model": "m"}
+            ],
+        },
+        duration_ms=1,
+    )
+    assert "per_call_usage" in item["extra"]
+    assert "per_call_token_totals" not in item["extra"]
+
+
+def test_build_ingest_item_no_per_call_cost_when_costless() -> None:
+    item = build_ingest_item(
+        question_id="Q1",
+        task_id="Q1_direct_r0",
+        mode="direct",
+        repeat_idx=0,
+        devshell_exit_code=0,
+        summary={
+            "status": "done",
+            "per_call_usage": [
+                {
+                    "call_index": 1,
+                    "spawn_id": None,
+                    "kind": "root",
+                    "model": "m",
+                    "usage": {"prompt_tokens": 1},
+                }
+            ],
+        },
+        duration_ms=1,
+    )
+    assert "per_call_usage" in item["extra"]
+    assert "per_call_cost" not in item["extra"]
+
+
 def test_build_ingest_item_repeat_idx_top_level() -> None:
     item = build_ingest_item(
         question_id="Q1",
@@ -638,172 +837,3 @@ def test_build_ingest_item_parse_error_summary() -> None:
     assert item["extra"]["error"] == "bad json"
     assert item["score"] == 0.0
     assert "duration_ms" not in item
-
-
-@patch("evaluation.eval_ingest_client.httpx.Client")
-@patch(
-    "evaluation.eval_ingest_client.utils.env.MATMASTER_TOOLS_EVALUATION_BEARER",
-    None,
-)
-def test_post_eval_ingest_success(mock_client_cls: MagicMock) -> None:
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.json.return_value = {"code": 0, "msg": "success", "data": {}}
-    mock_client = MagicMock()
-    mock_client.__enter__.return_value = mock_client
-    mock_client.__exit__.return_value = None
-    mock_client.post.return_value = mock_resp
-    mock_client_cls.return_value = mock_client
-
-    ok, msg = post_eval_ingest(
-        "http://example/ingest",
-        {"run_id": "r1", "items": [{"question_id": "q"}]},
-    )
-    assert ok
-    assert "success" in msg
-    call_kw = mock_client.post.call_args
-    assert call_kw[0][0] == "http://example/ingest"
-    assert call_kw[1]["headers"] == {"Content-Type": "application/json"}
-
-
-@patch("evaluation.eval_ingest_client.httpx.Client")
-@patch(
-    "evaluation.eval_ingest_client.utils.env.MATMASTER_TOOLS_EVALUATION_BEARER",
-    "svc-token",
-)
-def test_post_eval_ingest_sends_tools_server_auth_headers(
-    mock_client_cls: MagicMock,
-) -> None:
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.json.return_value = {"code": 0, "msg": "success", "data": {}}
-    mock_client = MagicMock()
-    mock_client.__enter__.return_value = mock_client
-    mock_client.__exit__.return_value = None
-    mock_client.post.return_value = mock_resp
-    mock_client_cls.return_value = mock_client
-
-    ok, msg = post_eval_ingest(
-        "http://example/ingest",
-        {"run_id": "r1", "items": [{"question_id": "q"}]},
-    )
-    assert ok
-    call_kw = mock_client.post.call_args
-    assert call_kw[1]["headers"] == {
-        "Content-Type": "application/json",
-        "Authorization": "Bearer svc-token",
-    }
-
-
-@patch("evaluation.eval_ingest_client.httpx.Client")
-def test_post_question_catalog_sync_success(mock_client_cls: MagicMock) -> None:
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.json.return_value = {
-        "code": 0,
-        "msg": "success",
-        "data": {"active_count": 2, "inactive_count": 0},
-    }
-    mock_client = MagicMock()
-    mock_client.__enter__.return_value = mock_client
-    mock_client.__exit__.return_value = None
-    mock_client.post.return_value = mock_resp
-    mock_client_cls.return_value = mock_client
-
-    ok, msg = post_question_catalog_sync(
-        "http://example/qcat/sync",
-        [
-            {"question_id": "Q1", "question_text": "题干一"},
-            {"question_id": "Q2", "question_text": "题干二"},
-        ],
-    )
-    assert ok
-    assert "active_count=2" in msg
-    call_kw = mock_client.post.call_args
-    assert call_kw[0][0] == "http://example/qcat/sync"
-    sent = call_kw[1]["json"]
-    assert sent["items"][0] == {
-        "question_id": "Q1",
-        "question_text": "题干一",
-        "priority": "",
-    }
-    assert sent["items"][1] == {
-        "question_id": "Q2",
-        "question_text": "题干二",
-        "priority": "",
-    }
-
-
-@patch("evaluation.eval_ingest_client.httpx.Client")
-def test_post_question_catalog_sync_sends_priority_p0(
-    mock_client_cls: MagicMock,
-) -> None:
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.json.return_value = {
-        "code": 0,
-        "msg": "success",
-        "data": {"active_count": 1, "inactive_count": 0},
-    }
-    mock_client = MagicMock()
-    mock_client.__enter__.return_value = mock_client
-    mock_client.__exit__.return_value = None
-    mock_client.post.return_value = mock_resp
-    mock_client_cls.return_value = mock_client
-
-    ok, msg = post_question_catalog_sync(
-        "http://example/qcat/sync",
-        [{"question_id": "Q1", "question_text": "题干", "priority": "P0"}],
-    )
-    assert ok
-    assert "active_count=1" in msg
-    sent = mock_client.post.call_args[1]["json"]
-    assert sent["items"][0]["priority"] == "P0"
-
-
-@patch("evaluation.eval_ingest_client.httpx.Client")
-def test_post_question_catalog_sync_rejects_invalid_priority(
-    mock_client_cls: MagicMock,
-) -> None:
-    ok, err = post_question_catalog_sync(
-        "http://x",
-        [{"question_id": "Q1", "question_text": "题干", "priority": "high"}],
-    )
-    assert not ok
-    assert "invalid priority" in err
-    mock_client_cls.assert_not_called()
-
-
-@patch("evaluation.eval_ingest_client.httpx.Client")
-def test_post_question_catalog_sync_rejects_missing_text(
-    mock_client_cls: MagicMock,
-) -> None:
-    ok, err = post_question_catalog_sync(
-        "http://x",
-        [{"question_id": "Q1"}],
-    )
-    assert not ok
-    assert "question_text" in err
-    mock_client_cls.assert_not_called()
-
-
-@patch("evaluation.eval_ingest_client.httpx.Client")
-@patch(
-    "evaluation.eval_ingest_client.utils.env.MATMASTER_TOOLS_EVALUATION_BEARER",
-    None,
-)
-def test_post_eval_ingest_business_error(mock_client_cls: MagicMock) -> None:
-    mock_resp = MagicMock()
-    mock_resp.status_code = 200
-    mock_resp.json.return_value = {"code": -1, "msg": "db fail"}
-    mock_client = MagicMock()
-    mock_client.__enter__.return_value = mock_client
-    mock_client.__exit__.return_value = None
-    mock_client.post.return_value = mock_resp
-    mock_client_cls.return_value = mock_client
-
-    ok, msg = post_eval_ingest(
-        "http://x", {"run_id": "r", "items": [{"question_id": "q"}]}
-    )
-    assert not ok
-    assert "db fail" in msg

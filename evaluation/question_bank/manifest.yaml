@@ -65,7 +65,7 @@ banks:
 - path: execution_contract/ec_agnostic.yaml
   capability: execution_contract
   domain: agnostic
-  questions: 13
+  questions: 18
 - path: input_generation/ig_battery.yaml
   capability: input_generation
   domain: battery
@@ -73,7 +73,7 @@ banks:
 - path: input_generation/ig_agnostic_vasp.yaml
   capability: input_generation
   domain: agnostic
-  questions: 23
+  questions: 26
 - path: input_generation/ig_agnostic_abacus.yaml
   capability: input_generation
   domain: agnostic
@@ -85,7 +85,7 @@ banks:
 - path: input_generation/ig_agnostic_lammps.yaml
   capability: input_generation
   domain: agnostic
-  questions: 5
+  questions: 6
 - path: input_generation/ig_agnostic_cp2k.yaml
   capability: input_generation
   domain: agnostic
@@ -93,7 +93,7 @@ banks:
 - path: input_generation/ig_agnostic_gromacs.yaml
   capability: input_generation
   domain: agnostic
-  questions: 5
+  questions: 6
 - path: input_generation/ig_agnostic_orca.yaml
   capability: input_generation
   domain: agnostic
@@ -125,7 +125,7 @@ banks:
 - path: structure_construction/sc_agnostic.yaml
   capability: structure_construction
   domain: agnostic
-  questions: 38
+  questions: 39
 - path: structure_construction/sc_catalysis.yaml
   capability: structure_construction
   domain: catalysis
@@ -149,7 +149,7 @@ banks:
 - path: workflow_orchestration/wo_agnostic.yaml
   capability: workflow_orchestration
   domain: agnostic
-  questions: 64
+  questions: 65
 - path: workflow_orchestration/wo_agnostic_gpumd_nep_clean.yaml
   capability: workflow_orchestration
   domain: agnostic
@@ -173,7 +173,7 @@ banks:
 - path: platform/wo_agnostic.yaml
   capability: workflow_orchestration
   domain: agnostic
-  questions: 12
+  questions: 13
 - path: platform/wo_catalysis.yaml
   capability: workflow_orchestration
   domain: catalysis

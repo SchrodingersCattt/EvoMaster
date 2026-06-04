@@ -1,0 +1,7 @@
+System: EAP energetic material, 232 atoms.
+Elements in LAMMPS data atom-type order: H C N O Cl
+Target: 2500 K NVT molecular dynamics with DeePMD potential.
+
+Model file: iter23_0.pb
+Model type_map: full periodic-table order:
+H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca ...

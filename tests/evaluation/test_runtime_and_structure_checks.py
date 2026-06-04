@@ -246,83 +246,6 @@ def test_sc005_formulas_implicit_count_1() -> None:
     assert 'C2H6NClO4' in tokens
 
 
-def test_mat_runner_includes_duration_ms(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Smoke: run_mat_task records monotonic wall time (playground mocked)."""
-    from evaluation.core import mat_runner
-
-    class _FakePlayground:
-        log_file_handler = None
-        _log_file_stream = None
-
-        def set_run_dir(self, *args, **kwargs) -> None:
-            return None
-
-        def set_mode(self, *args, **kwargs) -> None:
-            return None
-
-        def run(self, task_description: str = '') -> dict:
-            return {'status': 'completed', 'trajectory': None}
-
-    monkeypatch.setattr(
-        mat_runner,
-        'get_playground_class',
-        lambda name, config_path=None: _FakePlayground(),
-    )
-    out = mat_runner.run_mat_task(
-        prompt='hi',
-        mode='direct',
-        task_id='tid',
-        run_dir=tmp_path,
-        mat_config_path=Path('configs/mat_master/config.yaml'),
-        empty_completion_max_retries=0,
-    )
-    assert 'duration_ms' in out
-    assert isinstance(out['duration_ms'], int)
-    assert out['duration_ms'] >= 0
-
-
-def test_run_mat_task_empty_completion_retry_sums_duration(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Second attempt runs when first is completed/natural with no answer or tools."""
-    from evaluation.core import mat_runner
-
-    first = {
-        "task_id": "tid",
-        "mode": "direct",
-        "answer": "",
-        "tool_calls": [],
-        "result": {"status": "completed", "reason": "natural"},
-        "status": "completed",
-        "duration_ms": 10,
-        "trajectory_path": "",
-    }
-    second = {
-        **first,
-        "answer": "recovered",
-        "duration_ms": 20,
-    }
-    seq = iter([first, second])
-
-    def _fake_once(**kwargs: object) -> dict:
-        return next(seq)
-
-    monkeypatch.setattr(mat_runner, "_run_mat_task_once", _fake_once)
-    out = mat_runner.run_mat_task(
-        prompt="hi",
-        mode="direct",
-        task_id="tid",
-        run_dir=tmp_path,
-        mat_config_path=Path("configs/mat_master/config.yaml"),
-        empty_completion_max_retries=1,
-    )
-    assert out["answer"] == "recovered"
-    assert out["empty_completion_retry_count"] == 1
-    assert out["duration_ms"] == 30
-
-
 def test_eval_run_record_serializes_duration_ms() -> None:
     from evaluation.core.schemas import EvalRunRecord
 
@@ -720,6 +643,97 @@ def test_min_interatomic_distance_rejects_overlap(tmp_path: Path) -> None:
     )
     assert ok is False
     assert '0.5000' in reason
+
+
+def _write_xyz(path: Path, symbols: list[str], coords: list[tuple]) -> None:
+    lines = [str(len(symbols)), ""]
+    for s, (x, y, z) in zip(symbols, coords):
+        lines.append(f"{s} {x:.4f} {y:.4f} {z:.4f}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+
+def _honeycomb_carbon_patch(nx: int = 4, ny: int = 4, a: float = 1.42) -> list[tuple]:
+    """Planar (z=0) honeycomb carbon patch, all C-C ~1.42 Å."""
+    import math
+
+    dx = a * math.sqrt(3)
+    dy = a * 1.5
+    pts: list[tuple] = []
+    for i in range(nx):
+        for j in range(ny):
+            x0 = i * dx + (j % 2) * (dx / 2)
+            y0 = j * dy
+            pts.append((x0, y0, 0.0))
+            pts.append((x0, y0 + a, 0.0))
+    return pts
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec('pymatgen') is None,
+    reason='pymatgen optional; install with uv sync --extra calculation',
+)
+def test_planarity_accepts_flat_conjugated_core(tmp_path: Path) -> None:
+    """A flat fused-aromatic core (plus sp3 alkyl carbons) is reported planar."""
+    from evaluation.validators.structure_planarity import check_planarity
+
+    core = _honeycomb_carbon_patch()
+    # sp3 alkyl carbons at ~1.52 Å must be excluded from the aromatic core.
+    alkyl = [(core[0][0], core[0][1] - 1.52, 0.0), (core[0][0], core[0][1] - 3.04, 0.5)]
+    symbols = ['C'] * (len(core) + len(alkyl))
+    _write_xyz(tmp_path / 'planar.xyz', symbols, core + alkyl)
+
+    ok, reason = check_planarity(tmp_path, filename='planar.xyz', max_rms_A=0.3)
+    assert ok is True, reason
+    assert 'planar' in reason
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec('pymatgen') is None,
+    reason='pymatgen optional; install with uv sync --extra calculation',
+)
+def test_planarity_rejects_folded_core(tmp_path: Path) -> None:
+    """A hinge-folded core (bond lengths preserved) is reported non-planar.
+
+    Mirrors the real PDI-4OH failure: correct connectivity, folded geometry.
+    """
+    import math
+
+    from evaluation.validators.structure_planarity import check_planarity
+
+    core = _honeycomb_carbon_patch()
+    ys = [p[1] for p in core]
+    ymid = (max(ys) + min(ys)) / 2
+    theta = math.radians(60)
+    folded = []
+    for x, y, z in core:
+        if y >= ymid:
+            dy = y - ymid
+            folded.append((x, ymid + dy * math.cos(theta), dy * math.sin(theta)))
+        else:
+            folded.append((x, y, z))
+    _write_xyz(tmp_path / 'folded.xyz', ['C'] * len(folded), folded)
+
+    ok, reason = check_planarity(tmp_path, filename='folded.xyz', max_rms_A=0.3)
+    assert ok is False, reason
+    assert 'FOLDED' in reason or 'non-planar' in reason
+
+
+@pytest.mark.skipif(
+    importlib.util.find_spec('pymatgen') is None,
+    reason='pymatgen optional; install with uv sync --extra calculation',
+)
+def test_planarity_fails_when_no_aromatic_core(tmp_path: Path) -> None:
+    """A pure alkyl chain has no fused conjugated core -> fails clearly."""
+    from evaluation.validators.structure_planarity import check_planarity
+
+    _write_xyz(
+        tmp_path / 'alkyl.xyz',
+        ['C', 'C', 'C'],
+        [(0.0, 0.0, 0.0), (1.52, 0.0, 0.0), (3.04, 0.0, 0.3)],
+    )
+    ok, reason = check_planarity(tmp_path, filename='alkyl.xyz', max_rms_A=0.3)
+    assert ok is False
+    assert 'aromatic core' in reason
 
 
 def test_removed_slab_centered_verify_is_rejected() -> None:

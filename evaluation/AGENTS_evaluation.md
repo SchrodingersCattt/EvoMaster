@@ -123,12 +123,6 @@ uv run python -m evaluation.skill_trigger --skills your-skill-name --jobs 8
 默认正式评测 `k=3`，positive 要求每次都触发目标 Skill，negative 要求每次都不触发
 目标 Skill；结果写入 `runs/skill_trigger_eval/`。
 
-### `EvalConfig` 与 Agent 运行（`run_mat_task`）
-
-- **`empty_completion_max_retries`**（默认 `1`）：当单次运行结果为 `status=completed`、无工具调用、且无可见答案（含内核 `reason=natural` 或旧版 playground 无 `reason` 字段）时，视为「可能因网关/流式偶发空流」，**整题重跑**最多额外次数；`0` 表示关闭。`mat_result` 会附带 `empty_completion_retry_count`（实际执行的重试次数），`duration_ms` 为**多次尝试之和**。
-
----
-
 ## 字段必填 / 选填规则
 
 ### Bank 文件顶层（`QuestionBank`）
@@ -517,19 +511,22 @@ P0 题目是被标记为最高优先级的评测题。在 DevShell Agent 多轮�
 
 ## 运行入口
 
+评测统一走 **DevShell 路径**（`run_devshell_eval.py` 批量跑题 + `score_devshell_tasks.py` 判分入库）：
+
 ```bash
 # 指定切片（OR）或题目 ID 运行；切片语法：cap cap[dom] cap[d1,d2]（括号外空格分隔）
-uv run python -m evaluation.cli \
-  --eval-config evaluation/config.yaml \
+uv run python evaluation/scripts/devshell/run_devshell_eval.py \
   --slices 'batch_processing workflow_orchestration[polymer]' \
-  --questions DF_mech_001 WO_mech_001
+  --model 'global.anthropic.claude-opus-4-6-v1' \
+  --jobs 16 --k 3 \
+  --eval-ingest-pending-only
 
-# 后台运行（Linux）
-evaluation/scripts/matter_cli/run_mat_master_eval_bg.sh start
-
-# 后台运行（Windows）
-evaluation/scripts/matter_cli/run_matmaster_evaluation_bg.ps1
+# 判分并提交
+uv run python evaluation/scripts/devshell/score_devshell_tasks.py \
+  --run-dir "$(ls -dt results/devshell_eval_* | head -1)" --submit
 ```
+
+> 历史上的 MATTER Core 端到端 runner（`python -m evaluation` / `evaluation.cli` → `run_evaluation` + Playground `run_mat_task`）已下线。
 
 详细说明见 [`evaluation/README_CN.md`](README_CN.md)。
 
@@ -537,7 +534,7 @@ evaluation/scripts/matter_cli/run_matmaster_evaluation_bg.ps1
 
 ## 附录：若未来重构 taxonomy，三者如何更清晰、`--slices` 如何演进（规划）
 
-本节是**架构规划**，不是当前运行时的强制行为；落地时需同步改 `evaluation/core/schemas.py`、`slice_parser.py`、`runner._apply_filters`、CLI 与 DevShell 传参。
+本节是**架构规划**，不是当前运行时的强制行为；落地时需同步改 `evaluation/core/schemas.py`、`slice_parser.py`、`runner.apply_filters`、CLI 与 DevShell 传参。
 
 ### 当前模型的典型痛点
 

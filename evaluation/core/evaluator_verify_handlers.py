@@ -193,7 +193,15 @@ def _h_checkcif(ctx):
 check_vasp_incar_from_evidence = _make_domain_check_handler(
     "vasp_incar_check",
     check_vasp_incar,
-    cfg_keys=("param", "expected", "allowed", "min", "max", "atom_count", "species_index"),
+    cfg_keys=(
+        "param",
+        "expected",
+        "allowed",
+        "min",
+        "max",
+        "atom_count",
+        "species_index",
+    ),
 )
 
 check_gpumd_run_in_from_evidence = _make_domain_check_handler(
@@ -207,6 +215,26 @@ check_gromacs_top_from_evidence = _make_domain_check_handler(
     check_gromacs_top,
     cfg_keys=("expected", "allowed"),
 )
+
+
+def check_struct_file_planarity(*, evidence, ref):
+    """Conjugated-core planarity check (lives in its own validator module to
+    keep evaluator_wiring under the 1000-line file limit)."""
+    from evaluation.core.evaluator_wiring import _cfg, _get_workspace
+    from evaluation.validators.structure_planarity import check_planarity
+
+    ws, err = _get_workspace(evidence)
+    if err:
+        return False, err
+    cfg = _cfg(ref)
+    return check_planarity(
+        ws,
+        filename=cfg.get("filename", "*.xyz"),
+        max_rms_A=float(cfg.get("max_rms_A", 0.3)),
+        aromatic_cc_cutoff_A=float(cfg.get("aromatic_cc_cutoff_A", 1.46)),
+        min_core_atoms=int(cfg.get("min_core_atoms", 8)),
+        element=str(cfg.get("element", "C")),
+    )
 
 
 # Bulk-register (evidence, ref) handlers
@@ -228,6 +256,7 @@ for _name, _fn in [
     ("struct_file_charge_balance", check_struct_file_charge_balance),
     ("struct_file_coordination", check_struct_file_coordination),
     ("struct_file_layer_count", check_struct_file_layer_count),
+    ("struct_file_planarity", check_struct_file_planarity),
     ("struct_file_parsable", check_struct_file_parsable),
     ("struct_file_all_occupancy_one", check_struct_file_all_occupancy_one),
     ("struct_file_integer_stoichiometry", check_struct_file_integer_stoichiometry),

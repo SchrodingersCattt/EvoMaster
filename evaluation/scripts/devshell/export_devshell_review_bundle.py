@@ -57,14 +57,14 @@ def _load_question_seed(bank_dir: Path, question_id: str) -> str | None:
     """Return ``human_prompt_seed`` for ``question_id`` if found in v5 banks."""
     sys.path.insert(0, str(REPO_ROOT))
     try:
-        from evaluation.core.runner import _flatten_banks, load_question_banks
+        from evaluation.core.runner import flatten_banks, load_question_banks
     except ImportError:
         return None
     try:
         banks = load_question_banks(bank_dir)
     except (OSError, ValueError):
         return None
-    for q in _flatten_banks(banks):
+    for q in flatten_banks(banks):
         if q.id == question_id:
             return q.human_prompt_seed
     return None
@@ -99,7 +99,7 @@ def build_markdown(
     lines.append(
         "1. 在对话里 **@ 本文件** `claude_review.md`，必要时再 @ 下面各任务的 **Workspace** 目录。\n"
         "2. 说明你的目标（例如：按 MATTER checklist 判是否通过、写简短结论、找 bug）。\n"
-        "3. 本文件**不含** BinaryEvaluator 自动判分；需要严格对齐线上判分时请再走 `run_evaluation` 或人工对照题库。\n"
+        "3. 本文件**不含** BinaryEvaluator 自动判分；需要严格对齐线上判分时请再走 `score_devshell_tasks.py` 或人工对照题库。\n"
     )
 
     lines.append("## Run 元数据\n")
