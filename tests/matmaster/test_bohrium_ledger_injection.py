@@ -51,3 +51,15 @@ def test_bohrium_tool_defaults_job_ledger_none() -> None:
 
     bt = BohriumTool(session=None, workdir=Path("."))
     assert bt._job_ledger is None
+
+
+def test_kernel_does_not_import_bohrium_jobs_dao() -> None:
+    import pathlib
+
+    kernel_root = pathlib.Path(__file__).resolve().parents[2] / "matmaster"
+    offenders = []
+    for path in kernel_root.rglob("*.py"):
+        text = path.read_text(encoding="utf-8", errors="ignore")
+        if "src.dao" in text or "from src." in text or "import src" in text:
+            offenders.append(str(path))
+    assert offenders == [], f"kernel must not import src.*: {offenders}"
