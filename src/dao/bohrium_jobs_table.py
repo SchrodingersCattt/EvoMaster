@@ -133,6 +133,40 @@ class BohriumJobsTable(BaseTable):
                 )
             conn.commit()
 
+    def apply_kill(
+        self, *, user_id: str, org_id: str, sandbox: bool, job_id: str
+    ) -> None:
+        """sandbox kill 请求成功后写 terminating，保留 next_poll_at 以便确认。"""
+        sql = f"""
+            UPDATE {self.table_name}
+            SET status = CASE
+                    WHEN status IN ('finished', 'failed', 'stopped')
+                    THEN status ELSE 'terminating' END,
+                next_poll_at = CASE
+                    WHEN status IN ('finished', 'failed', 'stopped')
+                    THEN next_poll_at ELSE COALESCE(next_poll_at, NOW()) END
+            WHERE user_id = %s AND org_id = %s AND sandbox = %s AND job_id = %s
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (user_id, org_id, 1 if sandbox else 0, job_id))
+            conn.commit()
+
+    def mark_handled(
+        self, *, user_id: str, org_id: str, sandbox: bool, job_id: str
+    ) -> None:
+        """把终态作业标记为已交付；不可逆且幂等。"""
+        sql = f"""
+            UPDATE {self.table_name}
+            SET handled_at = COALESCE(handled_at, NOW())
+            WHERE user_id = %s AND org_id = %s AND sandbox = %s AND job_id = %s
+              AND terminal_at IS NOT NULL
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (user_id, org_id, 1 if sandbox else 0, job_id))
+            conn.commit()
+
     def get_by_owner_job(
         self, *, user_id: str, org_id: str, sandbox: bool, job_id: str
     ) -> dict[str, Any] | None:
