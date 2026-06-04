@@ -99,7 +99,7 @@ def build_markdown(
     lines.append(
         "1. 在对话里 **@ 本文件** `claude_review.md`，必要时再 @ 下面各任务的 **Workspace** 目录。\n"
         "2. 说明你的目标（例如：按 MATTER checklist 判是否通过、写简短结论、找 bug）。\n"
-        "3. 本文件**不含** BinaryEvaluator 自动判分；需要严格对齐线上判分时请再走 `run_evaluation` 或人工对照题库。\n"
+        "3. 本文件**不含** BinaryEvaluator 自动判分；需要严格对齐线上判分时请再走 `score_devshell_tasks.py` 或人工对照题库。\n"
     )
 
     lines.append("## Run 元数据\n")

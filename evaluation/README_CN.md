@@ -6,16 +6,14 @@ MATTER 是 `evaluation/` 下的独立评测模块，当前仅维护 **v5+** 题�
 
 | 路径 | 内容 |
 |------|------|
-| `core/` | Python 实现：题库模型、runner、判分、报告等 |
-| `scripts/devshell/` | DevShell / mm-devshell 批量跑题、`score_devshell_tasks`、`export_devshell_review_bundle` |
+| `core/` | Python 实现：题库模型（`schemas`）、题库加载与 run-plan（`runner`）、判分（`evaluator` + `evidence` + `validators`）、人类模拟器（`simulator`）等 |
+| `scripts/devshell/` | DevShell / mm-devshell 批量跑题（`run_devshell_eval`）、`score_devshell_tasks`、`export_devshell_review_bundle` |
 | `scripts/baseline/` | 外部 baseline（CC/Cursor/Codex 等）：`finalize_external_baseline_ingest`、`run_claude_cli_baseline_tasks`（仅 `claude` CLI） |
-| `scripts/matter_cli/` | **Core 评测**（`evaluation.core` + Playground `run_mat_task`）：后台跑 `python -m evaluation`、Windows 启动脚本、run 目录监控 |
 | `scripts/eval_ingest_submit_pending.py` | 共用：pending 入库（baseline / devshell 判分后上报） |
 | `docs/baseline/` | 外部 baseline 流程说明（含 Claude Code / Cursor / Codex 两阶段话术） |
 | `docs/devshell/` | DevShell 批量 + `score_devshell_tasks.py` 自动评分话术 |
 | `question_bank/` | v5+ 题库与 `data/` 输入文件 |
 | `config.yaml` | 默认评测配置 |
-| `cli.py` / `__main__.py` | 同上：命令行入口，转发到 `core.cli`（与 `matter_cli` 里后台命令是同一套评测） |
 
 v5+ 引入了 **显式权重机制** 和 **运行时解耦**，使评测更灵活、更可移植。
 
@@ -140,30 +138,26 @@ bundle = extractor.extract(trajectory_json_path)
 
 ## 运行入口
 
-CLI:
+评测统一走 **DevShell 路径**：用 `run_devshell_eval.py` 批量跑题（子进程调 `mm-devshell run`），再用 `score_devshell_tasks.py` 跑 **BinaryEvaluator** 判分并可一键 `--submit` 入库。
 
 ```bash
-uv run python -m evaluation.cli \
-  --eval-config evaluation/config.yaml \
+uv run python evaluation/scripts/devshell/run_devshell_eval.py \
   --slices 'batch_processing workflow_orchestration[polymer]' \
-  --questions DF_mech_001 WO_mech_001
+  --model 'global.anthropic.claude-opus-4-6-v1' \
+  --jobs 16 --k 3 \
+  --eval-ingest-pending-only
+
+uv run python evaluation/scripts/devshell/score_devshell_tasks.py \
+  --run-dir "$(ls -dt results/devshell_eval_* | head -1)" --submit
 ```
 
 常用参数：
 
 - `--slices`: OR-of-slices，语法 `cap`、`cap[dom]`、`cap[d1,d2]`、`cap@tag`、`cap[dom]@t1,t2`（**每个 slice 只有一个 `@`**；**括号外**空格分隔 slice，`[]` 与 `@` 后列表内禁止空格，逗号分隔；`@` 后多 tag 为 AND；与 `evaluation/config.yaml` 中 `include_slices` 一致）。
-- `--questions`: 按 v5 question id 过滤题目。
 - `--k`: 每题重复次数。
+- `--jobs`: 并行 worker 数。
 
-评测 Runner 固定以 **direct** 任务模式执行（不再提供 `--modes` 或题内 `mode_scope`）。
-
-与 DevShell / baseline **不同**：该路径会跑 **BinaryEvaluator** 与 Playground **`run_mat_task`**（见 `core/runner.py` + `core/mat_runner.py`）。长时间或无人值守时可选用：
-
-```bash
-evaluation/scripts/matter_cli/run_mat_master_eval_bg.sh start
-# Windows：evaluation/scripts/matter_cli/run_matmaster_evaluation_bg.ps1
-# 看产物：evaluation/scripts/matter_cli/monitor_matmaster_evaluation.ps1 -RunDir <run_dir>
-```
+> 历史上的 MATTER Core 端到端 runner（`python -m evaluation` / `evaluation.cli` → `run_evaluation` + Playground `run_mat_task`）已下线；`core/runner.py` 现仅保留题库加载、切片/ID 过滤、数据文件暂存与 run-plan 展开，供 DevShell / baseline / 题库同步复用。
 
 ## 约定
 
