@@ -122,3 +122,61 @@ def test_poller_skips_terminal_jobs(jobs_table) -> None:
     summary = poller.run_once()
     assert summary["claimed"] == 0
     assert calls == []
+
+
+def test_poller_caches_access_key_within_round(jobs_table) -> None:
+    for jid in ["201", "202", "203"]:
+        jobs_table.insert_submitted(**_submit_kwargs(job_id=jid))
+    ak_calls = []
+
+    def _get_ak(uid, oid):
+        ak_calls.append((uid, oid))
+        return "AK"
+
+    poller = BohriumJobPoller(
+        table=jobs_table,
+        get_access_key=_get_ak,
+        get_job_detail=lambda ctx, job_id: {"status": 1},
+        base_url="https://x",
+    )
+    poller.run_once()
+    assert ak_calls == [("user-1", "org-1")]
+
+
+def test_poller_marks_unknown_on_detail_exception(jobs_table) -> None:
+    jobs_table.insert_submitted(**_submit_kwargs(job_id="204"))
+
+    def _boom(ctx, job_id):
+        raise RuntimeError("api 500")
+
+    poller = BohriumJobPoller(
+        table=jobs_table,
+        get_access_key=lambda uid, oid: "AK",
+        get_job_detail=_boom,
+        base_url="https://x",
+    )
+    summary = poller.run_once()
+    assert summary["errors"] == 1
+    row = jobs_table.get_by_owner_job(
+        user_id="user-1", org_id="org-1", sandbox=False, job_id="204"
+    )
+    assert row["status"] == "unknown"
+    assert row["next_poll_at"] is not None
+
+
+def test_poller_marks_unknown_when_access_key_missing(jobs_table) -> None:
+    jobs_table.insert_submitted(**_submit_kwargs(job_id="205"))
+    detail_calls = []
+    poller = BohriumJobPoller(
+        table=jobs_table,
+        get_access_key=lambda uid, oid: None,
+        get_job_detail=lambda ctx, job_id: (detail_calls.append(1), {"status": 1})[1],
+        base_url="https://x",
+    )
+    poller.run_once()
+    row = jobs_table.get_by_owner_job(
+        user_id="user-1", org_id="org-1", sandbox=False, job_id="205"
+    )
+    assert row["status"] == "unknown"
+    assert row["next_poll_at"] is not None
+    assert detail_calls == []
