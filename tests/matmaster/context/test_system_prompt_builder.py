@@ -51,11 +51,12 @@ def test_build_with_identity_only(builder: SystemPromptBuilder) -> None:
 
 def test_section_order_fixed(builder: SystemPromptBuilder) -> None:
     """All sections enabled -- fixed order system_prompt < identity < skills
-    < tools < memory < task."""
+    < tools < environment < memory < task."""
     result = builder.build_system_prompt(
         system_prompt="Test system prompt",
         identity="Test identity",
         skill_registry=MockSkillRegistry(),
+        environment_context="Test environment",
         memory_context="some memory",
         task_context="some task",
     )
@@ -64,10 +65,19 @@ def test_section_order_fixed(builder: SystemPromptBuilder) -> None:
     idx_identity = result.index("# Identity")
     idx_skills = result.index("# Skills")
     idx_tools = result.index("# Tools")
+    idx_environment = result.index("# Environment")
     idx_memory = result.index("# Memory")
     idx_task = result.index("# Task Context")
 
-    assert idx_system < idx_identity < idx_skills < idx_tools < idx_memory < idx_task
+    assert (
+        idx_system
+        < idx_identity
+        < idx_skills
+        < idx_tools
+        < idx_environment
+        < idx_memory
+        < idx_task
+    )
 
 
 def test_disable_section(builder: SystemPromptBuilder) -> None:
@@ -126,6 +136,23 @@ def test_task_section_included_when_provided(builder: SystemPromptBuilder) -> No
     result = builder.build_system_prompt(task_context="User task details")
     assert "# Task Context" in result
     assert "User task details" in result
+
+
+def test_environment_section_included_when_provided(
+    builder: SystemPromptBuilder,
+) -> None:
+    """environment_context provided -- output contains the Environment section."""
+    result = builder.build_system_prompt(
+        environment_context="You have been invoked in the following environment:",
+    )
+    assert "# Environment" in result
+    assert "You have been invoked in the following environment:" in result
+
+
+def test_environment_omitted_when_empty(builder: SystemPromptBuilder) -> None:
+    """Empty environment_context (default) -- no Environment section."""
+    result = builder.build_system_prompt()
+    assert "# Environment" not in result
 
 
 def test_empty_optional_sections_omitted(builder: SystemPromptBuilder) -> None:

@@ -12,8 +12,10 @@ import logging
 from collections.abc import AsyncIterator, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, replace
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from zoneinfo import ZoneInfo
 
 from matmaster.config.exp import ExpConfig
 from matmaster.context.assembly import (
@@ -21,6 +23,7 @@ from matmaster.context.assembly import (
     ContextAssemblyIntent,
     TurnAssemblyRequest,
 )
+from matmaster.context.environment import build_environment_section
 from matmaster.context.ports import SkillResolver, UserInstructions
 from matmaster.context.sections import ContextView
 from matmaster.context.sources.turn_input import TurnInput
@@ -341,6 +344,10 @@ class Exp:
             system_prompt=self._config.system_prompt,
             identity=self._config.developer_instructions,
             skill_registry=self._skill_registry,
+            environment_context=build_environment_section(
+                execution_workdir=env.execution_workdir,
+                now=datetime.now(ZoneInfo("Asia/Shanghai")),
+            ),
         )
 
         from matmaster.core.runtime_context_assembly import (
