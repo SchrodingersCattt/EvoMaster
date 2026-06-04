@@ -805,6 +805,11 @@ class BohriumTool(BuiltinTool):
             self._log_request_context(action="kill", ctx=ctx, sandbox=sandbox)
             job_id: int | str = str(raw_job_id).strip() if sandbox else int(raw_job_id)
             response = terminate_job(ctx, job_id=job_id)
+            self._safe_ledger(
+                "record_kill",
+                job_id=str(job_id),
+                sandbox=sandbox,
+            )
             return ToolResult(
                 status="success",
                 content=json.dumps(

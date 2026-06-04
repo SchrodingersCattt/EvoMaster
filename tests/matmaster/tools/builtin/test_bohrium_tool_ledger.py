@@ -85,3 +85,33 @@ def test_poll_records_ledger_with_raw_code(monkeypatch) -> None:
     assert poll_calls and poll_calls[0][1]["status_code"] == 1
     assert poll_calls[0][1]["sandbox"] is True
     assert poll_calls[0][1]["job_id"] == "12345"
+
+
+def test_kill_sandbox_records_terminating(monkeypatch) -> None:
+    fake = _FakeLedger()
+    bt = tmod.BohriumTool(session=None, workdir=Path("."), job_ledger=fake)
+    monkeypatch.setattr(bt, "_build_context", lambda **kw: _ctx(sandbox=True))
+    monkeypatch.setattr(bt, "_log_request_context", lambda **kw: None)
+    monkeypatch.setattr(tmod, "terminate_job", lambda ctx, job_id: {})
+    res = bt._kill({"job_id": "12345"})
+    assert res.status == "success"
+    kills = [c for c in fake.calls if c[0] == "kill"]
+    assert kills and kills[0][1]["job_id"] == "12345"
+    assert kills[0][1]["sandbox"] is True
+
+
+def test_kill_non_sandbox_does_not_record(monkeypatch) -> None:
+    from matmaster.bohrium.errors import BohriumAPIError
+
+    fake = _FakeLedger()
+    bt = tmod.BohriumTool(session=None, workdir=Path("."), job_ledger=fake)
+    monkeypatch.setattr(bt, "_build_context", lambda **kw: _ctx(sandbox=False))
+    monkeypatch.setattr(bt, "_log_request_context", lambda **kw: None)
+
+    def _boom(ctx, job_id):
+        raise BohriumAPIError("kill is only supported in sandbox mode")
+
+    monkeypatch.setattr(tmod, "terminate_job", _boom)
+    res = bt._kill({"job_id": "12345"})
+    assert res.status == "error"
+    assert [c for c in fake.calls if c[0] == "kill"] == []
