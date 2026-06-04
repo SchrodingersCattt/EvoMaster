@@ -7,6 +7,7 @@ from fastapi import APIRouter, Body, Depends, Header, Path, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from matmaster.config.loader import load_llm_config
+from src.apis.sse_compression import gzip_sse_stream, should_gzip_sse
 from src.base.base_res import BaseResponse
 from src.dao.redis_dao import get_redis_dao
 from src.models.chat import (
@@ -71,6 +72,25 @@ SSE_HEADERS = {
     "Connection": "keep-alive",
     "X-Accel-Buffering": "no",
 }
+
+
+def _sse_streaming_response(request: Request, generator) -> StreamingResponse:
+    """构造 SSE StreamingResponse；客户端接受 gzip 时对事件流做流式压缩。
+
+    历史回放体量大（数 MB JSON 文本），gzip 通常可压缩 4~6 倍，是当前加载耗时的主因。
+    前端走浏览器透明解压，无需改动；可用 SSE_GZIP_ENABLED=0 快速回退。
+    """
+    headers = dict(SSE_HEADERS)
+    content = generator
+    if should_gzip_sse(request):
+        headers["Content-Encoding"] = "gzip"
+        headers["Vary"] = "Accept-Encoding"
+        content = gzip_sse_stream(generator)
+    return StreamingResponse(
+        content,
+        media_type="text/event-stream",
+        headers=headers,
+    )
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -322,10 +342,8 @@ async def chat_stream(
     subscribe_only = not user_prompt
 
     if subscribe_only:
-        return StreamingResponse(
-            stream_svc.generate_subscribe_stream(sid),
-            media_type="text/event-stream",
-            headers=SSE_HEADERS,
+        return _sse_streaming_response(
+            request, stream_svc.generate_subscribe_stream(sid)
         )
 
     # 发送消息前检查额度（计价化：金额额度 <= 0 则 403；模型级限制已并入金额额度）
@@ -427,10 +445,8 @@ async def chat_stream(
             msg="该会话已有任务在运行，请等待完成或先取消后再发新消息",
         )
     base_prompt = (req.content or "").strip()
-    return StreamingResponse(
-        stream_svc.generate_send_stream(sid, base_prompt, ctx),
-        media_type="text/event-stream",
-        headers=SSE_HEADERS,
+    return _sse_streaming_response(
+        request, stream_svc.generate_send_stream(sid, base_prompt, ctx)
     )
 
 
