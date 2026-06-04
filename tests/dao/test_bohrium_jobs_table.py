@@ -259,9 +259,7 @@ def test_query_session_pending_terminal(jobs_table) -> None:
     )
     assert len(pending) == 3
     assert all(j["status"] in {"finished", "failed", "stopped"} for j in pending)
-    jobs_table.mark_handled(
-        user_id="user-1", org_id="org-1", sandbox=True, job_id="t1"
-    )
+    jobs_table.mark_handled(user_id="user-1", org_id="org-1", sandbox=True, job_id="t1")
     pending2 = jobs_table.query_session_pending_terminal(
         user_id="user-1", org_id="org-1", session_id="sess-1", limit=5
     )

@@ -15,9 +15,7 @@ def test_session_jobs_renders_active_and_pending_terminal() -> None:
             {"job_id": "a2", "status": "running"},
             {"job_id": "a1", "status": "submitted"},
         ),
-        pending_terminal_jobs=(
-            {"job_id": "t9", "status": "finished"},
-        ),
+        pending_terminal_jobs=({"job_id": "t9", "status": "finished"},),
     )
 
     section = SessionJobsSource.from_jobs(jobs).to_sections()[0]

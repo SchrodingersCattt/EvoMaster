@@ -50,9 +50,7 @@ class BohriumJobsTable(BaseTable):
     ) -> None:
         """job/add 成功后写入。next_poll_at = submitted_at（新作业即到期）。"""
         if project_id is None or int(project_id) <= 0:
-            raise ValueError(
-                f"bohrium_jobs.project_id must be > 0, got {project_id!r}"
-            )
+            raise ValueError(f"bohrium_jobs.project_id must be > 0, got {project_id!r}")
         sql = f"""
             INSERT INTO {self.table_name}
                 (session_id, invocation_id, spawn_id, user_id, org_id,

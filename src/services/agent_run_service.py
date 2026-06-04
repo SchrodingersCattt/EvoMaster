@@ -35,8 +35,8 @@ from matmaster.types.events import (
 )
 from matmaster.types.run_metadata import RunMetadata
 from matmaster.types.runtime_ports import AgentRunPorts, FigureUploadPort
-from src.dao.chat_sessions_table import ChatSessionsTable
 from src.dao.chat_events_table import get_chat_events_table
+from src.dao.chat_sessions_table import ChatSessionsTable
 from src.dao.redis_dao import get_redis_dao
 from src.services.agent_run_bohrium_stage import run_bohrium_stage
 from src.services.agent_run_history_wiring import build_history_wiring

@@ -138,9 +138,7 @@ def test_session_identity_resolution_helper_uses_session_snapshot() -> None:
             captured["sid"] = sid
             return {"user_id": "user-from-db", "org_id": "org-from-db"}
 
-    user, org = ars._resolve_session_identity(
-        "sess-1", sessions_table=_FakeSessions()
-    )
+    user, org = ars._resolve_session_identity("sess-1", sessions_table=_FakeSessions())
     assert user == "user-from-db"
     assert org == "org-from-db"
     assert captured["sid"] == "sess-1"

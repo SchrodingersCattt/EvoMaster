@@ -1,10 +1,47 @@
 from __future__ import annotations
 
+import pymysql
+import pytest
+
 from src.services.bohrium_poller import BohriumJobPoller, compute_poll_backoff
-from tests.dao.conftest import (  # noqa: F401
-    bohrium_jobs_db_config as bohrium_jobs_db_config,
-    jobs_table as jobs_table,
-)
+from tests.dao.conftest import _SQL_FILE, _test_db_config
+
+
+@pytest.fixture(scope="session")
+def _poller_db_config():
+    cfg = _test_db_config()
+    try:
+        conn = pymysql.connect(**cfg)
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"bohrium_jobs poller tests require MySQL from .env.test: {exc}")
+    ddl = _SQL_FILE.read_text(encoding="utf-8").rstrip().rstrip(";")
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT VERSION() AS v")
+            version = str(cur.fetchone()["v"])
+            major_minor_patch = tuple(
+                int(p) for p in version.split("-")[0].split(".")[:3]
+            )
+            if major_minor_patch < (8, 0, 16):
+                pytest.skip(f"bohrium_jobs needs MySQL >= 8.0.16, got {version}")
+            cur.execute("DROP TABLE IF EXISTS `bohrium_jobs`")
+            cur.execute(ddl)
+        conn.commit()
+    finally:
+        conn.close()
+    return cfg
+
+
+@pytest.fixture()
+def jobs_table(_poller_db_config):
+    from src.dao.bohrium_jobs_table import BohriumJobsTable
+
+    table = BohriumJobsTable(db_config=_poller_db_config)
+    with table.get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("TRUNCATE TABLE `bohrium_jobs`")
+        conn.commit()
+    return table
 
 
 def _submit_kwargs(**over):

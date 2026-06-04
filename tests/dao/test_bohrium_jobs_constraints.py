@@ -89,8 +89,7 @@ def test_timestamp_utc_anchored_across_connection_timezones(
     try:
         with w.cursor() as cur:
             cur.execute("SET time_zone = '+00:00'")
-            cur.execute(
-                """
+            cur.execute("""
                 INSERT INTO bohrium_jobs
                     (session_id, invocation_id, user_id, org_id, job_id,
                      project_id, sandbox, input_dir, status, next_poll_at,
@@ -98,8 +97,7 @@ def test_timestamp_utc_anchored_across_connection_timezones(
                 VALUES
                     ('s', 'inv', 'u', 'o', 'tz1', 1,
                      1, 'in', 'running', NOW() - INTERVAL 5 SECOND, NULL, NULL)
-                """
-            )
+                """)
         w.commit()
     finally:
         w.close()
