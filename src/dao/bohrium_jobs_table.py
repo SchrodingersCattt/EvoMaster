@@ -81,6 +81,58 @@ class BohriumJobsTable(BaseTable):
                 )
             conn.commit()
 
+    def apply_poll(
+        self,
+        *,
+        user_id: str,
+        org_id: str,
+        sandbox: bool,
+        job_id: str,
+        status: str,
+        is_terminal: bool,
+        backoff_seconds: int,
+    ) -> None:
+        """poll 写回。原子保护：终态不被回退；终态停轮询、补 terminal_at。"""
+        sql = f"""
+            UPDATE {self.table_name}
+            SET
+                last_polled_at = NOW(),
+                poll_count = poll_count + 1,
+                terminal_at = CASE
+                    WHEN status IN ('finished', 'failed', 'stopped')
+                    THEN terminal_at
+                    WHEN %s THEN COALESCE(terminal_at, NOW())
+                    ELSE terminal_at
+                END,
+                next_poll_at = CASE
+                    WHEN status IN ('finished', 'failed', 'stopped')
+                    THEN NULL
+                    WHEN %s THEN NULL
+                    ELSE NOW() + INTERVAL %s SECOND
+                END,
+                status = CASE
+                    WHEN status IN ('finished', 'failed', 'stopped')
+                    THEN status ELSE %s
+                END
+            WHERE user_id = %s AND org_id = %s AND sandbox = %s AND job_id = %s
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    sql,
+                    (
+                        is_terminal,
+                        is_terminal,
+                        int(backoff_seconds),
+                        status,
+                        user_id,
+                        org_id,
+                        1 if sandbox else 0,
+                        job_id,
+                    ),
+                )
+            conn.commit()
+
     def get_by_owner_job(
         self, *, user_id: str, org_id: str, sandbox: bool, job_id: str
     ) -> dict[str, Any] | None:
