@@ -70,3 +70,18 @@ def test_submit_ledger_failure_does_not_break_tool(monkeypatch) -> None:
     )
     res = bt._submit({"input_dir": "in", "image": "img", "cmd": "run"})
     assert res.status == "success"
+
+
+def test_poll_records_ledger_with_raw_code(monkeypatch) -> None:
+    fake = _FakeLedger()
+    bt = tmod.BohriumTool(session=None, workdir=Path("."), job_ledger=fake)
+    monkeypatch.setattr(bt, "_build_context", lambda **kw: _ctx(sandbox=True))
+    monkeypatch.setattr(bt, "_log_request_context", lambda **kw: None)
+    monkeypatch.setattr(bt, "_fetch_log_tail", lambda *a, **k: "")
+    monkeypatch.setattr(tmod, "get_job_detail", lambda ctx, job_id: {"status": 1})
+    res = bt._poll({"job_id": "12345"})
+    assert res.status == "success"
+    poll_calls = [c for c in fake.calls if c[0] == "poll"]
+    assert poll_calls and poll_calls[0][1]["status_code"] == 1
+    assert poll_calls[0][1]["sandbox"] is True
+    assert poll_calls[0][1]["job_id"] == "12345"

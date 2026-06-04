@@ -610,6 +610,12 @@ class BohriumTool(BuiltinTool):
                 )
 
             status_label = status_name(code)
+            self._safe_ledger(
+                "record_poll",
+                job_id=str(job_id),
+                sandbox=sandbox,
+                status_code=int(code),
+            )
 
             if code in RUNNING_CODES:
                 message = (
