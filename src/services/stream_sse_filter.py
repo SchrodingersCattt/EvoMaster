@@ -13,6 +13,21 @@ from matmaster.integration.event_payloads import (
 )
 from matmaster.utils.event_source import normalize_event_source
 
+# 历史回放时一定会被丢弃、不推送给前端的事件类型。
+# 其中 history_checkpoint（整段模型上下文快照 base_messages）与 assistant_state
+# （完整 tool_calls）通常是单表里体积最大的行，回放时读出再丢弃纯属浪费 DB IO/CPU。
+# 该集合是单一来源：既用于回放后的最终守卫过滤，也用于 get_session_events 的 SQL 层裁剪。
+REPLAY_DISCARDED_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        'log_line',
+        'assistant_state',
+        'skill_hit',
+        'user_turn_context',
+        'compact_boundary',
+        'history_checkpoint',
+    }
+)
+
 
 def _should_emit_event_to_sse(event: dict) -> bool:
     """Filter persisted events for history replay SSE.
@@ -32,14 +47,7 @@ def _should_emit_event_to_sse(event: dict) -> bool:
     If exact parity is required in the future, the missing replay inputs
     (for example mode) must be persisted explicitly.
     """
-    t = event.get('type')
-    if t == 'log_line':
-        return False
-    if t in {'assistant_state', 'skill_hit', 'user_turn_context'}:
-        return False
-    if t in {'compact_boundary', 'history_checkpoint'}:
-        return False
-    return True
+    return event.get('type') not in REPLAY_DISCARDED_EVENT_TYPES
 
 
 def _normalize_replayed_event(event: dict) -> dict:

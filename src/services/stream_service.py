@@ -38,6 +38,7 @@ from src.services.session_directory_service import (
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
 from src.services.stream_reply_queue import RedisReplyQueue
 from src.services.stream_sse_filter import (
+    REPLAY_DISCARDED_EVENT_TYPES,
     _dedupe_replayed_terminal_events,
     _inject_elapsed_for_history,
     _normalize_replayed_compaction_events,
@@ -577,7 +578,9 @@ class ChatStreamService:
                     return
             else:
                 yield self.sse_format(payload)
-            events = self._events_service.get_session_events(sid, include_spawn=True)
+            events = self._events_service.get_session_events(
+                sid, include_spawn=True, exclude_types=REPLAY_DISCARDED_EVENT_TYPES
+            )
             if events:
                 events = _normalize_replayed_compaction_events(events)
                 events = _dedupe_replayed_terminal_events(events)
@@ -875,7 +878,12 @@ class ChatStreamService:
         payload['stream_started_at'] = start_time_ms
         payload['invocation_id'] = ctx.invocation_id
         yield self.sse_format(payload)
-        history = self._events_service.get_session_events(sid, include_spawn=True) or []
+        history = (
+            self._events_service.get_session_events(
+                sid, include_spawn=True, exclude_types=REPLAY_DISCARDED_EVENT_TYPES
+            )
+            or []
+        )
         history = ChatHistoryConverter.exclude_task_events(history, ctx.task_id)
         history = _normalize_replayed_compaction_events(history)
         history = _dedupe_replayed_terminal_events(history)

@@ -1,5 +1,6 @@
 import json
 import logging
+from collections.abc import Iterable
 from functools import lru_cache
 
 from src.base.base_table import BaseTable
@@ -326,25 +327,36 @@ class ChatEventsTable(BaseTable):
         session_id: str,
         limit: int | None = None,
         include_spawn: bool = False,
+        exclude_types: Iterable[str] | None = None,
     ) -> list[dict]:
         """
         获取会话历史事件列表。按 run（task_id）分组后再按时间排，避免两 pod 并发写时
         （旧 pod 优雅退出期间仍写第一轮、新 pod 写 run_interrupted/重跑）导致两轮事件按 created_at 交错。
 
         默认仅返回父级事件（spawn_id IS NULL）；include_spawn=True 时包含子 agent 行。
+
+        exclude_types：在 SQL 层用 `type NOT IN (...)` 过滤掉这些事件类型，避免读取/反序列化
+        注定会被丢弃的大体积行（如 history_checkpoint 的整段上下文快照）。仅回放路径使用。
         """
+        exclude_list = [t for t in exclude_types] if exclude_types else []
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
                 spawn_filter = "" if include_spawn else " AND spawn_id IS NULL"
+                type_filter = ""
+                params: list = [session_id]
+                if exclude_list:
+                    placeholders = ', '.join(['%s'] * len(exclude_list))
+                    type_filter = f" AND type NOT IN ({placeholders})"
+                    params.extend(exclude_list)
                 sql = f'''
                     SELECT id, session_id, source, type, content, task_id, invocation_id, spawn_id, created_at
                     FROM {self.table_name}
-                    WHERE session_id = %s{spawn_filter}
+                    WHERE session_id = %s{spawn_filter}{type_filter}
                     ORDER BY created_at ASC, id ASC
                 '''
                 if limit:
                     sql += f' LIMIT {limit}'
-                cursor.execute(sql, (session_id,))
+                cursor.execute(sql, tuple(params))
                 results = cursor.fetchall()
                 rows = list(results)
                 if not rows:
