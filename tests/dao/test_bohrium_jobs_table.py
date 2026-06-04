@@ -208,3 +208,61 @@ def test_apply_kill_sets_terminating_keeps_polling(jobs_table) -> None:
     assert row["status"] == "terminating"
     assert row["next_poll_at"] is not None
     assert row["terminal_at"] is None
+
+
+def test_query_session_active_returns_active_only_sorted(jobs_table) -> None:
+    jobs_table.insert_submitted(**_submit_kwargs(job_id="a1"))
+    jobs_table.insert_submitted(**_submit_kwargs(job_id="a2"))
+    jobs_table.apply_poll(
+        user_id="user-1",
+        org_id="org-1",
+        sandbox=True,
+        job_id="a2",
+        status="finished",
+        is_terminal=True,
+        backoff_seconds=30,
+    )
+    active = jobs_table.query_session_active(
+        user_id="user-1", org_id="org-1", session_id="sess-1"
+    )
+    ids = [j["job_id"] for j in active]
+    assert ids == ["a1"]
+    j = active[0]
+    assert set(j.keys()) == {
+        "job_id",
+        "job_name",
+        "status",
+        "sandbox",
+        "project_id",
+        "input_dir",
+        "submitted_at",
+        "last_polled_at",
+        "result_dir",
+    }
+    assert j["sandbox"] is True
+
+
+def test_query_session_pending_terminal(jobs_table) -> None:
+    for jid in ["t1", "t2", "t3"]:
+        jobs_table.insert_submitted(**_submit_kwargs(job_id=jid))
+        jobs_table.apply_poll(
+            user_id="user-1",
+            org_id="org-1",
+            sandbox=True,
+            job_id=jid,
+            status="finished",
+            is_terminal=True,
+            backoff_seconds=30,
+        )
+    pending = jobs_table.query_session_pending_terminal(
+        user_id="user-1", org_id="org-1", session_id="sess-1", limit=5
+    )
+    assert len(pending) == 3
+    assert all(j["status"] in {"finished", "failed", "stopped"} for j in pending)
+    jobs_table.mark_handled(
+        user_id="user-1", org_id="org-1", sandbox=True, job_id="t1"
+    )
+    pending2 = jobs_table.query_session_pending_terminal(
+        user_id="user-1", org_id="org-1", session_id="sess-1", limit=5
+    )
+    assert {j["job_id"] for j in pending2} == {"t2", "t3"}

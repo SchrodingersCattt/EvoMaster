@@ -21,6 +21,10 @@ class BohriumJobsTable(BaseTable):
     """bohrium_jobs DAO（raw SQL，同步 PyMySQL）。"""
 
     table_name = "bohrium_jobs"
+    _AGENT_COLUMNS = (
+        "job_id, job_name, status, sandbox, project_id, input_dir, "
+        "submitted_at, last_polled_at, result_dir"
+    )
 
     def init_table(self) -> None:
         # 建表走外部脚本 src/sql/create_bohrium_jobs_table.sql；这里仅检查存在性。
@@ -166,6 +170,53 @@ class BohriumJobsTable(BaseTable):
             with conn.cursor() as cur:
                 cur.execute(sql, (user_id, org_id, 1 if sandbox else 0, job_id))
             conn.commit()
+
+    @staticmethod
+    def _to_agent_job(row: dict[str, Any]) -> dict[str, Any]:
+        def _ts(v: Any) -> str | None:
+            return v.strftime("%Y-%m-%d %H:%M:%S") if v is not None else None
+
+        return {
+            "job_id": str(row["job_id"]),
+            "job_name": row["job_name"],
+            "status": row["status"],
+            "sandbox": bool(row["sandbox"]),
+            "project_id": int(row["project_id"]),
+            "input_dir": row["input_dir"],
+            "submitted_at": _ts(row["submitted_at"]),
+            "last_polled_at": _ts(row["last_polled_at"]),
+            "result_dir": row["result_dir"],
+        }
+
+    def query_session_active(
+        self, *, user_id: str, org_id: str, session_id: str
+    ) -> list[dict[str, Any]]:
+        sql = f"""
+            SELECT {self._AGENT_COLUMNS} FROM {self.table_name}
+            WHERE user_id = %s AND org_id = %s AND session_id = %s
+              AND status IN ('submitted', 'running', 'terminating', 'unknown')
+            ORDER BY submitted_at ASC
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (user_id, org_id, session_id))
+                return [self._to_agent_job(r) for r in cur.fetchall()]
+
+    def query_session_pending_terminal(
+        self, *, user_id: str, org_id: str, session_id: str, limit: int = 5
+    ) -> list[dict[str, Any]]:
+        """待交付队列：终态已确认且尚未 handled。"""
+        sql = f"""
+            SELECT {self._AGENT_COLUMNS} FROM {self.table_name}
+            WHERE user_id = %s AND org_id = %s AND session_id = %s
+              AND terminal_at IS NOT NULL AND handled_at IS NULL
+            ORDER BY terminal_at ASC, submitted_at ASC
+            LIMIT %s
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (user_id, org_id, session_id, int(limit)))
+                return [self._to_agent_job(r) for r in cur.fetchall()]
 
     def get_by_owner_job(
         self, *, user_id: str, org_id: str, sandbox: bool, job_id: str
