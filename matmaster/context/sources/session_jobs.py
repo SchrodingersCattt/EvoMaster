@@ -20,12 +20,17 @@ class SessionJobsSource:
 
     @classmethod
     def from_jobs(cls, jobs: SessionJobs) -> SessionJobsSource:
-        return cls(
-            lines=tuple(
-                f"job_{index} {json.dumps(job, ensure_ascii=False, sort_keys=True)}"
-                for index, job in enumerate(jobs.active_jobs, 1)
-            )
+        active = tuple(
+            f"active_job_{index} "
+            f"{json.dumps(job, ensure_ascii=False, sort_keys=True)}"
+            for index, job in enumerate(jobs.active_jobs, 1)
         )
+        pending = tuple(
+            f"pending_terminal_job_{index} "
+            f"{json.dumps(job, ensure_ascii=False, sort_keys=True)}"
+            for index, job in enumerate(jobs.pending_terminal_jobs, 1)
+        )
+        return cls(lines=active + pending)
 
     def to_sections(self) -> tuple[ContextSection, ...]:
         if not self.lines:

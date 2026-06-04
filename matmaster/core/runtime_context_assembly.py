@@ -97,7 +97,7 @@ def build_runtime_context_assembly(
     user_instructions = ctx.request.user_instructions or UserInstructions.empty()
     assembly_ports = ContextAssemblyPorts(
         session_events=history_port,
-        session_jobs=_EmptySessionJobsPort(),
+        session_jobs=ctx.request.ports.session_jobs or _EmptySessionJobsPort(),
     )
     context_assembler = ContextAssembler(
         ports=assembly_ports,

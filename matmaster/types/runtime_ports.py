@@ -11,7 +11,12 @@ from dataclasses import dataclass, field
 from typing import Any, Literal, NotRequired, Protocol, TypedDict, runtime_checkable
 
 from matmaster.bohrium.types import BohriumRuntimeSnapshot
-from matmaster.context.ports import SessionEvent, SessionEventQuery
+from matmaster.context.ports import (
+    BohriumJobLedgerPort,
+    SessionEvent,
+    SessionEventQuery,
+    SessionJobsPort,
+)
 from matmaster.types.events import BusEvent
 from matmaster.types.figures import FigureUploadConfig
 from matmaster.types.messages import Message
@@ -173,6 +178,8 @@ class AgentRunPorts:
     figure_upload: FigureUploadPort = field(default_factory=FigureUploadPort)
     interrupt_checker: InterruptChecker | None = None
     user_turn_context_writer: UserTurnContextWriter | None = None
+    bohrium_job_ledger: BohriumJobLedgerPort | None = None
+    session_jobs: SessionJobsPort | None = None
 
 
 @dataclass(frozen=True)

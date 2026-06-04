@@ -279,6 +279,18 @@ class UserService:
         return result.access_key
 
     @staticmethod
+    def get_existing_bohrium_access_key(user_id: str, org_id: str) -> str | None:
+        """只读取已有 Bohrium access_key；后台 poller 不替用户自动创建 AK。"""
+        result = UserService.fetch_bohrium_access_key_result(
+            user_id,
+            org_id,
+            timeout=15.0,
+            retry_delays=(),
+            create_if_missing=False,
+        )
+        return result.access_key
+
+    @staticmethod
     def _fetch_bohrium_access_key_once(
         user_id: str,
         org_id: str,
@@ -522,6 +534,7 @@ class UserService:
         *,
         timeout: float = 2.0,
         retry_delays: tuple[float, ...] = (0.5, 1.0),
+        create_if_missing: bool = True,
     ) -> BohriumAccessKeyFetchResult:
         attempts = 0
         result = BohriumAccessKeyFetchResult(status='missing_user_or_org')
@@ -535,8 +548,11 @@ class UserService:
             )
             result = replace(result, attempts=attempts)
             if not result.retryable or result.status == 'success':
-                if result.status in {'no_items', 'no_valid_ak'} and (
-                    (user_id or '').strip() and (org_id or '').strip()
+                if (
+                    create_if_missing
+                    and result.status in {'no_items', 'no_valid_ak'}
+                    and (user_id or '').strip()
+                    and (org_id or '').strip()
                 ):
                     create_res = UserService._create_bohrium_access_key_once(
                         str(user_id or ''),
