@@ -23,12 +23,12 @@ class BaseTable(ABC):  # noqa: B024
     # 子类必须定义此属性
     table_name: str = None
 
-    def __init__(self):
+    def __init__(self, db_config: dict | None = None):
         # 检查子类是否定义了 table_name
         if self.table_name is None:
             raise ValueError(f"{self.__class__.__name__} 必须定义类属性 'table_name'")
 
-        self.db_config = DB_CONFIG
+        self.db_config = db_config if db_config is not None else DB_CONFIG
         self.init_table()
 
     @contextmanager
