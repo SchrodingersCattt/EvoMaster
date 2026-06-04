@@ -35,12 +35,14 @@ from matmaster.types.events import (
 )
 from matmaster.types.run_metadata import RunMetadata
 from matmaster.types.runtime_ports import AgentRunPorts, FigureUploadPort
+from src.dao.chat_sessions_table import ChatSessionsTable
 from src.dao.chat_events_table import get_chat_events_table
 from src.dao.redis_dao import get_redis_dao
 from src.services.agent_run_bohrium_stage import run_bohrium_stage
 from src.services.agent_run_history_wiring import build_history_wiring
 from src.services.billing_llm_provider import BillingLLMProvider
 from src.services.billing_service import BillingRunContext, get_billing_service
+from src.services.bohrium_jobs_wiring import build_bohrium_jobs_ports
 from src.services.figure_coordinator import FigureCoordinator
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.image_input_service import get_image_input_service
@@ -68,6 +70,20 @@ _MATMASTER_CONFIG_DIR = _project_root / "config"
 def _get_agent_default_llm() -> str | None:
     """Cached read of ``agents.general.llm`` from ``config/config.yaml``."""
     return load_agents_general_llm(_MATMASTER_CONFIG_DIR / "config.yaml")
+
+
+def _resolve_session_identity(
+    session_id: str,
+    *,
+    user_id: str | None = None,
+    sessions_table=None,
+) -> tuple[str, str]:
+    """取提交时的 user_id/org_id 快照，供 bohrium_jobs 固化 owner。"""
+    table = sessions_table if sessions_table is not None else ChatSessionsTable()
+    row = table.get_session(session_id) or {}
+    resolved_user_id = str(user_id or row.get("user_id") or "")
+    resolved_org_id = str(row.get("org_id") or "")
+    return resolved_user_id, resolved_org_id
 
 
 _INVALID_FINISH_MESSAGES: dict[str, str] = {
@@ -490,6 +506,16 @@ class AgentRunService:
 
             # -- Compose the Exp input from the prepared environment and
             # service-owned runtime request.
+            _ledger_user_id, _ledger_org_id = _resolve_session_identity(
+                session_id,
+                user_id=user_id,
+            )
+            bohrium_ledger_port, bohrium_jobs_port = build_bohrium_jobs_ports(
+                session_id=session_id,
+                invocation_id=invocation_id,
+                user_id=_ledger_user_id,
+                org_id=_ledger_org_id,
+            )
             agent_run_ctx = AgentRunContext(
                 environment=environment,
                 request=AgentRunRequest(
@@ -513,6 +539,8 @@ class AgentRunService:
                             events_table=events_table,
                             session_id=session_id,
                         ),
+                        bohrium_job_ledger=bohrium_ledger_port,
+                        session_jobs=bohrium_jobs_port,
                     ),
                 ),
             )

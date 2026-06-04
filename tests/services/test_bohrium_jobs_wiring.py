@@ -126,3 +126,35 @@ async def test_session_jobs_port_loads_active_and_pending() -> None:
     assert result.pending_terminal_jobs == ({"job_id": "t"},)
     assert table.query_session_active.call_args.kwargs["user_id"] == "u"
     assert table.query_session_active.call_args.kwargs["org_id"] == "o"
+
+
+def test_session_identity_resolution_helper_uses_session_snapshot() -> None:
+    from src.services import agent_run_service as ars
+
+    captured = {}
+
+    class _FakeSessions:
+        def get_session(self, sid):
+            captured["sid"] = sid
+            return {"user_id": "user-from-db", "org_id": "org-from-db"}
+
+    user, org = ars._resolve_session_identity(
+        "sess-1", sessions_table=_FakeSessions()
+    )
+    assert user == "user-from-db"
+    assert org == "org-from-db"
+    assert captured["sid"] == "sess-1"
+
+
+def test_session_identity_resolution_prefers_explicit_run_user_id() -> None:
+    from src.services import agent_run_service as ars
+
+    class _FakeSessions:
+        def get_session(self, sid):
+            return {"user_id": "user-from-db", "org_id": "org-from-db"}
+
+    user, org = ars._resolve_session_identity(
+        "sess-1", user_id="user-from-run", sessions_table=_FakeSessions()
+    )
+    assert user == "user-from-run"
+    assert org == "org-from-db"

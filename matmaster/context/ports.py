@@ -4,7 +4,7 @@ import hashlib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Protocol, TypeAlias
+from typing import Literal, Protocol, TypeAlias, runtime_checkable
 
 JsonScalar: TypeAlias = str | int | float | bool | None
 JsonValue: TypeAlias = JsonScalar | tuple["JsonValue", ...] | Mapping[str, "JsonValue"]
@@ -110,6 +110,7 @@ class SessionJobsQuery:
     session_id: str
 
 
+@runtime_checkable
 class SessionJobsPort(Protocol):
     async def load_session_jobs(
         self,
@@ -118,6 +119,7 @@ class SessionJobsPort(Protocol):
         raise NotImplementedError
 
 
+@runtime_checkable
 class BohriumJobLedgerPort(Protocol):
     """Sync write-side port: BohriumTool 同步 Bohrium 作业生命周期到 ledger。"""
 
