@@ -11,9 +11,9 @@ from typing import Any
 
 import aiohttp
 
+from clients.billing.client import BillingRunContext, BillingService
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import LLMResponse, StreamChunk
-from src.services.billing_service import BillingRunContext, BillingService
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
