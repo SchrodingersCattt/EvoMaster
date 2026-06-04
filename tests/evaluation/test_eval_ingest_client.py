@@ -465,6 +465,75 @@ def test_build_ingest_item_per_call_cost_summary_in_extra() -> None:
     assert cost["currency"] == "CNY"
 
 
+def test_build_ingest_item_per_call_token_totals_in_extra() -> None:
+    item = build_ingest_item(
+        question_id="Q1",
+        task_id="Q1_direct_r0",
+        mode="direct",
+        repeat_idx=0,
+        devshell_exit_code=0,
+        summary={
+            "status": "done",
+            "per_call_usage": [
+                {
+                    "call_index": 1,
+                    "spawn_id": None,
+                    "kind": "root",
+                    "model": "m",
+                    "usage": {
+                        "prompt_tokens": 100,
+                        "completion_tokens": 20,
+                        "cache_read_tokens": 30,
+                        "cache_write_tokens": 10,
+                        "total_tokens": 120,
+                    },
+                },
+                {
+                    "call_index": 2,
+                    "spawn_id": "child-1",
+                    "kind": "subagent",
+                    "model": "m",
+                    "usage": {
+                        "prompt_tokens": 50,
+                        "completion_tokens": 5,
+                        "cache_read_tokens": 40,
+                        "total_tokens": 55,
+                    },
+                },
+            ],
+        },
+        duration_ms=1,
+    )
+    totals = item["extra"]["per_call_token_totals"]
+    assert totals["prompt_tokens"] == 150
+    assert totals["completion_tokens"] == 25
+    assert totals["cache_read_tokens"] == 70
+    assert totals["cache_write_tokens"] == 10
+    assert totals["total_tokens"] == 175
+    # uncached = prompt - cache_read - cache_write = 150 - 70 - 10 = 70
+    assert totals["uncached_input_tokens"] == 70
+    assert totals["call_count"] == 2
+
+
+def test_build_ingest_item_no_per_call_token_totals_when_usage_absent() -> None:
+    item = build_ingest_item(
+        question_id="Q1",
+        task_id="Q1_direct_r0",
+        mode="direct",
+        repeat_idx=0,
+        devshell_exit_code=0,
+        summary={
+            "status": "done",
+            "per_call_usage": [
+                {"call_index": 1, "spawn_id": None, "kind": "root", "model": "m"}
+            ],
+        },
+        duration_ms=1,
+    )
+    assert "per_call_usage" in item["extra"]
+    assert "per_call_token_totals" not in item["extra"]
+
+
 def test_build_ingest_item_no_per_call_cost_when_costless() -> None:
     item = build_ingest_item(
         question_id="Q1",
