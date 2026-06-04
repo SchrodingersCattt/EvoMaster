@@ -16,7 +16,7 @@ class _FakeProvider:
     def __init__(self) -> None:
         self.entered = False
 
-    async def __aenter__(self) -> "_FakeProvider":
+    async def __aenter__(self) -> _FakeProvider:
         self.entered = True
         return self
 
