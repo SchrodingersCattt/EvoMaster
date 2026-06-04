@@ -91,6 +91,7 @@ def _sse_streaming_response(request: Request, generator) -> StreamingResponse:
         headers=headers,
     )
 
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
