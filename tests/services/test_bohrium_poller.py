@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from src.services.bohrium_poller import BohriumJobPoller, compute_poll_backoff
-
-pytest_plugins = ("tests.dao.conftest",)
+from tests.dao.conftest import (  # noqa: F401
+    bohrium_jobs_db_config as bohrium_jobs_db_config,
+    jobs_table as jobs_table,
+)
 
 
 def _submit_kwargs(**over):
