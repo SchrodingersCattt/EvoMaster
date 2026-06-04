@@ -140,7 +140,9 @@ def test_events_service_get_session_events_passes_include_spawn() -> None:
     )
 
     table.reset_mock()
-    svc.get_session_events("sid-3", include_spawn=True, exclude_types=("history_checkpoint",))
+    svc.get_session_events(
+        "sid-3", include_spawn=True, exclude_types=("history_checkpoint",)
+    )
     table.get_session_events.assert_called_once_with(
         "sid-3", include_spawn=True, exclude_types=("history_checkpoint",)
     )

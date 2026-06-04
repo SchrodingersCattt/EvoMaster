@@ -68,7 +68,9 @@ async def test_gzip_sse_stream_skips_empty_chunks():
         yield "data: b\n\n"
 
     blob = b"".join([c async for c in gzip_sse_stream(src())])
-    assert zlib.decompress(blob, 16 + zlib.MAX_WBITS).decode() == "data: a\n\ndata: b\n\n"
+    assert (
+        zlib.decompress(blob, 16 + zlib.MAX_WBITS).decode() == "data: a\n\ndata: b\n\n"
+    )
 
 
 class _Req:
