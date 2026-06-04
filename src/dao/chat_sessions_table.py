@@ -443,6 +443,10 @@ class ChatSessionsTable(BaseTable):
         dk_sql = _dir_key_expr("s")
         with self.get_connection() as conn:
             with conn.cursor() as cursor:
+                # history_length / first_message 是打在大表 evo_chat_events 上的标量子查询。
+                # 必须放在 rn<=cap 过滤“之后”的外层 SELECT，否则会对该用户/项目下“全部会话”
+                # 逐个执行（含事件数巨大的会话），是会话列表 ~2s 的主因。挪到外层后，仅对每个
+                # 目录组实际返回的前 cap 条执行，次数从“总会话数”降到“目录数 × cap”。
                 sql = f"""
                     SELECT t.session_id,
                            t.project_id,
@@ -450,8 +454,16 @@ class ChatSessionsTable(BaseTable):
                            t.session_directory,
                            t.session_title,
                            t.updated_at,
-                           t.history_length,
-                           t.first_message,
+                           (SELECT COUNT(*)
+                            FROM evo_chat_events e_cnt
+                            WHERE e_cnt.session_id = t.session_id) AS history_length,
+                           (SELECT e2.content
+                            FROM evo_chat_events e2
+                            WHERE e2.session_id = t.session_id
+                              AND e2.source = 'User'
+                              AND e2.type = 'query'
+                            ORDER BY e2.created_at ASC
+                            LIMIT 1) AS first_message,
                            t.dk,
                            t.rn
                     FROM (
@@ -461,16 +473,6 @@ class ChatSessionsTable(BaseTable):
                                s.session_directory,
                                s.session_title,
                                s.updated_at,
-                               (SELECT COUNT(*)
-                                FROM evo_chat_events e_cnt
-                                WHERE e_cnt.session_id = s.session_id) AS history_length,
-                               (SELECT e2.content
-                                FROM evo_chat_events e2
-                                WHERE e2.session_id = s.session_id
-                                  AND e2.source = 'User'
-                                  AND e2.type = 'query'
-                                ORDER BY e2.created_at ASC
-                                LIMIT 1) AS first_message,
                                {dk_sql} AS dk,
                                ROW_NUMBER() OVER (
                                    PARTITION BY {dk_sql}

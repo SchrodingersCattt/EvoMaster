@@ -2,6 +2,8 @@ import asyncio
 import json
 from unittest.mock import MagicMock, patch
 
+from src.services.stream_sse_filter import REPLAY_DISCARDED_EVENT_TYPES
+
 
 def _decode_sse_payload(frame: str) -> dict:
     return json.loads(frame.split('data: ', 1)[1].strip())
@@ -56,7 +58,9 @@ def test_generate_subscribe_stream_normalizes_replayed_history_source():
     assert len(history_frames) == 1
     assert history_frames[0]['source'] == 'MatMaster'
     assert history_frames[0]['content'] == 'old answer'
-    events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
+    events_service.get_session_events.assert_called_with(
+        'sess-1', include_spawn=True, exclude_types=REPLAY_DISCARDED_EVENT_TYPES
+    )
 
 
 def test_generate_subscribe_stream_replay_prefers_run_result_over_response():
@@ -121,4 +125,72 @@ def test_generate_subscribe_stream_replay_prefers_run_result_over_response():
     assert [frame['type'] for frame in frames] == ['status', 'run_result']
     assert frames[1]['final_content'] == 'old answer'
     assert frames[1]['status'] == 'completed'
-    events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
+    events_service.get_session_events.assert_called_with(
+        'sess-1', include_spawn=True, exclude_types=REPLAY_DISCARDED_EVENT_TYPES
+    )
+
+
+def test_generate_subscribe_stream_replay_batches_frames_without_loss():
+    """大量历史事件回放时合并成更少的 yield，但帧顺序与内容应完全保留。"""
+    from src.services.stream_service import ChatStreamService
+
+    sessions_service = MagicMock()
+    sessions_service.get_session_status_payload.return_value = {
+        'source': 'System',
+        'type': 'status',
+        'content': '',
+        'session_id': 'sess-1',
+        'status': 'idle',
+    }
+    sessions_service.is_session_running_on_this_pod.return_value = False
+    sessions_service.is_session_run_on_another_pod.return_value = False
+
+    # 每条带 ~2KB content，>32 条即可越过 64KB 批阈值，确保产生多个合并块。
+    big = 'x' * 2048
+    history = [
+        {
+            'source': 'Planner',
+            'type': 'run_result',
+            'content': f'{i}-{big}',
+            'session_id': 'sess-1',
+            'task_id': f'task-{i}',
+        }
+        for i in range(80)
+    ]
+    events_service = MagicMock()
+    events_service.get_session_events.return_value = history
+
+    service = ChatStreamService(
+        sessions_service=sessions_service,
+        events_service=events_service,
+        agent_run_service=MagicMock(),
+        deploy_state_service=MagicMock(),
+    )
+
+    async def _collect_chunks() -> list[str]:
+        chunks = []
+        gen = service.generate_subscribe_stream('sess-1')
+        try:
+            async for chunk in gen:
+                chunks.append(chunk)
+        finally:
+            await gen.aclose()
+        return chunks
+
+    with patch('src.services.stream_service.REDIS_URL', None):
+        chunks = asyncio.run(_collect_chunks())
+
+    frames = [
+        _decode_sse_payload(part)
+        for chunk in chunks
+        for part in chunk.split('\n\n')
+        if part.strip()
+    ]
+    run_results = [f for f in frames if f['type'] == 'run_result']
+    # 80 条历史事件无损还原，且顺序保持。
+    assert len(run_results) == 80
+    assert [f['content'] for f in run_results] == [f'{i}-{big}' for i in range(80)]
+    # 关键：合并后 yield 次数远少于帧数（否则就没起到合并作用）。
+    assert len(chunks) < len(frames)
+    # 至少有一个 yield 块里塞了多条帧。
+    assert any(chunk.count('event: ') > 1 for chunk in chunks)
