@@ -57,14 +57,14 @@ def _load_question_seed(bank_dir: Path, question_id: str) -> str | None:
     """Return ``human_prompt_seed`` for ``question_id`` if found in v5 banks."""
     sys.path.insert(0, str(REPO_ROOT))
     try:
-        from evaluation.core.runner import _flatten_banks, load_question_banks
+        from evaluation.core.runner import flatten_banks, load_question_banks
     except ImportError:
         return None
     try:
         banks = load_question_banks(bank_dir)
     except (OSError, ValueError):
         return None
-    for q in _flatten_banks(banks):
+    for q in flatten_banks(banks):
         if q.id == question_id:
             return q.human_prompt_seed
     return None
