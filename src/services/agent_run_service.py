@@ -36,7 +36,6 @@ from matmaster.types.events import (
 from matmaster.types.run_metadata import RunMetadata
 from matmaster.types.runtime_ports import AgentRunPorts, FigureUploadPort
 from src.dao.chat_events_table import get_chat_events_table
-from src.dao.chat_sessions_table import ChatSessionsTable
 from src.dao.redis_dao import get_redis_dao
 from src.services.agent_run_bohrium_stage import run_bohrium_stage
 from src.services.agent_run_history_wiring import build_history_wiring
@@ -76,12 +75,16 @@ def _resolve_session_identity(
     session_id: str,
     *,
     user_id: str | None = None,
-    sessions_table=None,
+    sessions_source: Any,
 ) -> tuple[str, str]:
     """取提交时的 user_id/org_id 快照，供 bohrium_jobs 固化 owner。"""
-    table = sessions_table if sessions_table is not None else ChatSessionsTable()
-    row = table.get_session(session_id) or {}
-    resolved_user_id = str(user_id or row.get("user_id") or "")
+    row = sessions_source.get_session(session_id)
+    if not isinstance(row, dict):
+        row = {}
+    session_user_id = row.get("user_id")
+    if not session_user_id and hasattr(sessions_source, "get_session_user_id"):
+        session_user_id = sessions_source.get_session_user_id(session_id)
+    resolved_user_id = str(user_id or session_user_id or "")
     resolved_org_id = str(row.get("org_id") or "")
     return resolved_user_id, resolved_org_id
 
@@ -509,6 +512,7 @@ class AgentRunService:
             _ledger_user_id, _ledger_org_id = _resolve_session_identity(
                 session_id,
                 user_id=user_id,
+                sessions_source=self._sessions_service,
             )
             bohrium_ledger_port, bohrium_jobs_port = build_bohrium_jobs_ports(
                 session_id=session_id,

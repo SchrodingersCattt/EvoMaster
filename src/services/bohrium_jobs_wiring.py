@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 
 from matmaster.bohrium.status import to_ledger_status
 from matmaster.context.ports import SessionJobs, SessionJobsQuery
@@ -14,18 +15,34 @@ logger = logging.getLogger(__name__)
 _FOREGROUND_POLL_BACKOFF_SECONDS = 30
 
 
+class _BohriumJobsTableRef:
+    def __init__(
+        self,
+        *,
+        table: BohriumJobsTable | None,
+        table_factory: Callable[[], BohriumJobsTable],
+    ) -> None:
+        self._table = table
+        self._table_factory = table_factory
+
+    def get(self) -> BohriumJobsTable:
+        if self._table is None:
+            self._table = self._table_factory()
+        return self._table
+
+
 class _BohriumJobLedger:
     def __init__(
         self,
         *,
-        table: BohriumJobsTable,
+        table_ref: _BohriumJobsTableRef,
         session_id: str,
         invocation_id: str | None,
         user_id: str,
         org_id: str,
         spawn_id: str | None = None,
     ) -> None:
-        self._table = table
+        self._table_ref = table_ref
         self._session_id = session_id
         self._invocation_id = invocation_id
         self._user_id = user_id
@@ -57,7 +74,7 @@ class _BohriumJobLedger:
         input_dir: str,
     ) -> None:
         self._require_identity()
-        self._table.insert_submitted(
+        self._table_ref.get().insert_submitted(
             session_id=self._session_id,
             invocation_id=self._invocation_id,
             spawn_id=self._spawn_id,
@@ -79,7 +96,7 @@ class _BohriumJobLedger:
     ) -> None:
         self._require_identity()
         decision = to_ledger_status(int(status_code))
-        self._table.apply_poll(
+        self._table_ref.get().apply_poll(
             user_id=self._user_id,
             org_id=self._org_id,
             sandbox=bool(sandbox),
@@ -91,7 +108,7 @@ class _BohriumJobLedger:
 
     def record_kill(self, *, job_id: str, sandbox: bool) -> None:
         self._require_identity()
-        self._table.apply_kill(
+        self._table_ref.get().apply_kill(
             user_id=self._user_id,
             org_id=self._org_id,
             sandbox=bool(sandbox),
@@ -100,7 +117,7 @@ class _BohriumJobLedger:
 
     def mark_handled(self, *, job_id: str, sandbox: bool) -> None:
         self._require_identity()
-        self._table.mark_handled(
+        self._table_ref.get().mark_handled(
             user_id=self._user_id,
             org_id=self._org_id,
             sandbox=bool(sandbox),
@@ -109,8 +126,10 @@ class _BohriumJobLedger:
 
 
 class _RunSessionJobsPort:
-    def __init__(self, *, table: BohriumJobsTable, user_id: str, org_id: str) -> None:
-        self._table = table
+    def __init__(
+        self, *, table_ref: _BohriumJobsTableRef, user_id: str, org_id: str
+    ) -> None:
+        self._table_ref = table_ref
         self._user_id = user_id
         self._org_id = org_id
 
@@ -118,14 +137,15 @@ class _RunSessionJobsPort:
         if not (self._user_id and self._org_id):
             return SessionJobs.empty()
         try:
+            table = self._table_ref.get()
             active = await asyncio.to_thread(
-                self._table.query_session_active,
+                table.query_session_active,
                 user_id=self._user_id,
                 org_id=self._org_id,
                 session_id=query.session_id,
             )
             pending = await asyncio.to_thread(
-                self._table.query_session_pending_terminal,
+                table.query_session_pending_terminal,
                 user_id=self._user_id,
                 org_id=self._org_id,
                 session_id=query.session_id,
@@ -152,16 +172,17 @@ def build_bohrium_jobs_ports(
     org_id: str,
     spawn_id: str | None = None,
     table: BohriumJobsTable | None = None,
+    table_factory: Callable[[], BohriumJobsTable] = BohriumJobsTable,
 ) -> tuple[_BohriumJobLedger, _RunSessionJobsPort]:
     """构造写 port 与读 port（共享同一个 DAO 实例）。"""
-    table = table if table is not None else BohriumJobsTable()
+    table_ref = _BohriumJobsTableRef(table=table, table_factory=table_factory)
     ledger = _BohriumJobLedger(
-        table=table,
+        table_ref=table_ref,
         session_id=session_id,
         invocation_id=invocation_id,
         user_id=user_id,
         org_id=org_id,
         spawn_id=spawn_id,
     )
-    jobs = _RunSessionJobsPort(table=table, user_id=user_id, org_id=org_id)
+    jobs = _RunSessionJobsPort(table_ref=table_ref, user_id=user_id, org_id=org_id)
     return ledger, jobs

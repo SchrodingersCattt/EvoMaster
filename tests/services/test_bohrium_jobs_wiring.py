@@ -128,6 +128,28 @@ async def test_session_jobs_port_loads_active_and_pending() -> None:
     assert table.query_session_active.call_args.kwargs["org_id"] == "o"
 
 
+def test_ports_do_not_construct_table_until_identity_allows_use() -> None:
+    table_factory = MagicMock(side_effect=AssertionError("should stay lazy"))
+    ledger, _ = build_bohrium_jobs_ports(
+        session_id="s",
+        invocation_id="inv",
+        user_id="u",
+        org_id="",
+        table_factory=table_factory,
+    )
+
+    with pytest.raises(ValueError):
+        ledger.record_submit(
+            job_id="1",
+            job_name=None,
+            project_id=1,
+            sandbox=False,
+            input_dir="data/in",
+        )
+
+    assert table_factory.call_count == 0
+
+
 def test_session_identity_resolution_helper_uses_session_snapshot() -> None:
     from src.services import agent_run_service as ars
 
@@ -138,7 +160,7 @@ def test_session_identity_resolution_helper_uses_session_snapshot() -> None:
             captured["sid"] = sid
             return {"user_id": "user-from-db", "org_id": "org-from-db"}
 
-    user, org = ars._resolve_session_identity("sess-1", sessions_table=_FakeSessions())
+    user, org = ars._resolve_session_identity("sess-1", sessions_source=_FakeSessions())
     assert user == "user-from-db"
     assert org == "org-from-db"
     assert captured["sid"] == "sess-1"
@@ -152,7 +174,24 @@ def test_session_identity_resolution_prefers_explicit_run_user_id() -> None:
             return {"user_id": "user-from-db", "org_id": "org-from-db"}
 
     user, org = ars._resolve_session_identity(
-        "sess-1", user_id="user-from-run", sessions_table=_FakeSessions()
+        "sess-1", user_id="user-from-run", sessions_source=_FakeSessions()
     )
     assert user == "user-from-run"
     assert org == "org-from-db"
+
+
+def test_session_identity_resolution_uses_service_user_id_fallback() -> None:
+    from src.services import agent_run_service as ars
+
+    class _FakeSessionsService:
+        def get_session(self, sid):
+            return None
+
+        def get_session_user_id(self, sid):
+            return "user-from-service"
+
+    user, org = ars._resolve_session_identity(
+        "sess-1", sessions_source=_FakeSessionsService()
+    )
+    assert user == "user-from-service"
+    assert org == ""
