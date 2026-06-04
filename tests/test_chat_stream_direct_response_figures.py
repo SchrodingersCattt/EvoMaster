@@ -1,6 +1,7 @@
 import asyncio
 from unittest.mock import MagicMock, patch
 
+from src.services.stream_sse_filter import REPLAY_DISCARDED_EVENT_TYPES
 from tests.test_chat_stream_direct import _decode_sse_payload
 
 
@@ -99,7 +100,9 @@ def test_generate_send_stream_replay_keeps_response_figures_but_prefers_run_resu
     assert frames[1]['content']['figures'][0]['figure_id'] == 'band'
     assert frames[2]['final_content'] == 'old answer'
     assert frames[2]['status'] == 'completed'
-    events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
+    events_service.get_session_events.assert_called_with(
+        'sess-1', include_spawn=True, exclude_types=REPLAY_DISCARDED_EVENT_TYPES
+    )
 
 
 def test_generate_subscribe_stream_replay_keeps_response_figures_but_prefers_run_result():
@@ -184,4 +187,6 @@ def test_generate_subscribe_stream_replay_keeps_response_figures_but_prefers_run
     assert frames[1]['content']['figures'][0]['figure_id'] == 'band'
     assert frames[2]['final_content'] == 'old answer'
     assert frames[2]['status'] == 'completed'
-    events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
+    events_service.get_session_events.assert_called_with(
+        'sess-1', include_spawn=True, exclude_types=REPLAY_DISCARDED_EVENT_TYPES
+    )

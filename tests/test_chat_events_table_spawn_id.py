@@ -56,6 +56,37 @@ def test_get_session_events_include_spawn_true_omits_spawn_id_filter(
     assert "spawn_id IS NULL" not in sql
 
 
+def test_get_session_events_exclude_types_adds_not_in_filter(
+    chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
+) -> None:
+    table, cursor = chat_events_table_with_mocks
+    cursor.fetchall.return_value = []
+
+    table.get_session_events(
+        "sess-x",
+        include_spawn=True,
+        exclude_types=("history_checkpoint", "assistant_state"),
+    )
+
+    sql, params = cursor.execute.call_args[0]
+    assert "type NOT IN (%s, %s)" in sql
+    assert "history_checkpoint" in params
+    assert "assistant_state" in params
+    assert params[0] == "sess-x"
+
+
+def test_get_session_events_no_exclude_types_omits_not_in_filter(
+    chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
+) -> None:
+    table, cursor = chat_events_table_with_mocks
+    cursor.fetchall.return_value = []
+
+    table.get_session_events("sess-x")
+
+    sql = cursor.execute.call_args[0][0]
+    assert "type NOT IN" not in sql
+
+
 def test_get_session_events_row_dicts_include_spawn_id_key(
     chat_events_table_with_mocks: tuple[ChatEventsTable, Any],
 ) -> None:
@@ -98,11 +129,21 @@ def test_events_service_get_session_events_passes_include_spawn() -> None:
     svc = ChatEventsService(events_table=table, sessions_service=MagicMock())
 
     svc.get_session_events("sid-1")
-    table.get_session_events.assert_called_once_with("sid-1", include_spawn=False)
+    table.get_session_events.assert_called_once_with(
+        "sid-1", include_spawn=False, exclude_types=None
+    )
 
     table.reset_mock()
     svc.get_session_events("sid-2", include_spawn=True)
-    table.get_session_events.assert_called_once_with("sid-2", include_spawn=True)
+    table.get_session_events.assert_called_once_with(
+        "sid-2", include_spawn=True, exclude_types=None
+    )
+
+    table.reset_mock()
+    svc.get_session_events("sid-3", include_spawn=True, exclude_types=("history_checkpoint",))
+    table.get_session_events.assert_called_once_with(
+        "sid-3", include_spawn=True, exclude_types=("history_checkpoint",)
+    )
 
 
 def test_get_session_user_query_events_filters_parent_user_queries(

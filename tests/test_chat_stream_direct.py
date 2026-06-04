@@ -10,6 +10,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.services.stream_sse_filter import REPLAY_DISCARDED_EVENT_TYPES
+
 # 测试中屏蔽 DB：任何真实 BaseTable 触发的连接直接报错（应通过 get_*_table mock 避免走到这里）
 _DB_DISABLED_ERROR = RuntimeError('DB disabled in test (use mock tables only)')
 
@@ -256,7 +258,9 @@ def test_generate_send_stream_skips_current_task_in_history_replay():
     ]
     assert frames[4]['type'] == 'query'
     assert frames[4]['mode'] == 'direct'
-    events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
+    events_service.get_session_events.assert_called_with(
+        'sess-1', include_spawn=True, exclude_types=REPLAY_DISCARDED_EVENT_TYPES
+    )
 
 
 def test_prepare_send_message_marks_explicit_bohrium_requirement():
@@ -665,7 +669,9 @@ def test_generate_send_stream_normalizes_replayed_history_source():
     assert len(history_frames) == 1
     assert history_frames[0]['source'] == 'MatMaster'
     assert history_frames[0]['content'] == 'old answer'
-    events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
+    events_service.get_session_events.assert_called_with(
+        'sess-1', include_spawn=True, exclude_types=REPLAY_DISCARDED_EVENT_TYPES
+    )
 
 
 def test_generate_send_stream_replay_prefers_run_result_over_response():
@@ -755,7 +761,9 @@ def test_generate_send_stream_replay_prefers_run_result_over_response():
     assert frames[2]['final_content'] == 'old answer'
     assert frames[2]['status'] == 'completed'
     assert frames[3]['content'] == 'new question'
-    events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
+    events_service.get_session_events.assert_called_with(
+        'sess-1', include_spawn=True, exclude_types=REPLAY_DISCARDED_EVENT_TYPES
+    )
 
 
 def test_generate_send_stream_subscribes_before_enqueue():

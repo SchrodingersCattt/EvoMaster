@@ -1,6 +1,7 @@
 """会话事件服务：历史事件追加、按会话查询。"""
 
 import logging
+from collections.abc import Iterable
 from functools import lru_cache
 
 from matmaster.utils.event_source import normalize_event_source
@@ -78,9 +79,19 @@ class ChatEventsService:
             invocation_id=invocation_id,
         )
 
-    def get_session_events(self, session_id: str, include_spawn: bool = False) -> list:
-        """返回某会话的历史消息列表（从数据库读取）。默认仅父级事件；include_spawn 含子 agent 行。"""
-        return self.table.get_session_events(session_id, include_spawn=include_spawn)
+    def get_session_events(
+        self,
+        session_id: str,
+        include_spawn: bool = False,
+        exclude_types: Iterable[str] | None = None,
+    ) -> list:
+        """返回某会话的历史消息列表（从数据库读取）。默认仅父级事件；include_spawn 含子 agent 行。
+
+        exclude_types：在 SQL 层过滤掉这些事件类型，避免读取/解析注定会被丢弃的大体积行（回放路径用）。
+        """
+        return self.table.get_session_events(
+            session_id, include_spawn=include_spawn, exclude_types=exclude_types
+        )
 
     def get_session_user_query_events(self, session_id: str) -> list:
         """返回某会话的父级 User/query 历史事件（从数据库读取）。"""

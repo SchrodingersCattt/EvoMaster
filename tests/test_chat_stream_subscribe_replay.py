@@ -2,6 +2,8 @@ import asyncio
 import json
 from unittest.mock import MagicMock, patch
 
+from src.services.stream_sse_filter import REPLAY_DISCARDED_EVENT_TYPES
+
 
 def _decode_sse_payload(frame: str) -> dict:
     return json.loads(frame.split('data: ', 1)[1].strip())
@@ -56,7 +58,9 @@ def test_generate_subscribe_stream_normalizes_replayed_history_source():
     assert len(history_frames) == 1
     assert history_frames[0]['source'] == 'MatMaster'
     assert history_frames[0]['content'] == 'old answer'
-    events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
+    events_service.get_session_events.assert_called_with(
+        'sess-1', include_spawn=True, exclude_types=REPLAY_DISCARDED_EVENT_TYPES
+    )
 
 
 def test_generate_subscribe_stream_replay_prefers_run_result_over_response():
@@ -121,4 +125,6 @@ def test_generate_subscribe_stream_replay_prefers_run_result_over_response():
     assert [frame['type'] for frame in frames] == ['status', 'run_result']
     assert frames[1]['final_content'] == 'old answer'
     assert frames[1]['status'] == 'completed'
-    events_service.get_session_events.assert_called_with('sess-1', include_spawn=True)
+    events_service.get_session_events.assert_called_with(
+        'sess-1', include_spawn=True, exclude_types=REPLAY_DISCARDED_EVENT_TYPES
+    )
