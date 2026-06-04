@@ -173,6 +173,28 @@ class ChatStreamService:
             f"event: {AG_UI_EVENT}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
         )
 
+    # 历史回放（事件已全部已知）时，把多条 SSE 帧合并成较大块再发，减少逐帧
+    # yield / ASGI send / socket 写以及 gzip Z_SYNC_FLUSH 的次数。仅用于回放，
+    # 不影响实时流的逐事件低延迟推送。多帧拼接仍是合法 SSE（前端按 \\n\\n 切分）。
+    REPLAY_BATCH_MAX_BYTES = 64 * 1024
+
+    def _iter_replayed_sse_batches(self, events):
+        """过滤 + 规范化历史事件，并按 REPLAY_BATCH_MAX_BYTES 合并成 SSE 文本块逐块产出。"""
+        buf: list[str] = []
+        buf_len = 0
+        for event in events:
+            if not _should_emit_event_to_sse(event):
+                continue
+            frame = self.sse_format(_normalize_replayed_event(event))
+            buf.append(frame)
+            buf_len += len(frame)
+            if buf_len >= self.REPLAY_BATCH_MAX_BYTES:
+                yield ''.join(buf)
+                buf = []
+                buf_len = 0
+        if buf:
+            yield ''.join(buf)
+
     @staticmethod
     def _ping_payload(session_id: str) -> dict:
         return {
@@ -585,9 +607,8 @@ class ChatStreamService:
                 events = _normalize_replayed_compaction_events(events)
                 events = _dedupe_replayed_terminal_events(events)
                 events = _inject_elapsed_for_history(events)
-                for event in events:
-                    if _should_emit_event_to_sse(event):
-                        yield self.sse_format(_normalize_replayed_event(event))
+                for batch in self._iter_replayed_sse_batches(events):
+                    yield batch
 
             # 保持流打开直到 Worker 上的 run 结束，或「已入队未接手」结束；仅队列模式，run 不在 API 进程
             def _run_still_active() -> bool:
@@ -888,9 +909,8 @@ class ChatStreamService:
         history = _normalize_replayed_compaction_events(history)
         history = _dedupe_replayed_terminal_events(history)
         history = _inject_elapsed_for_history(history)
-        for event in history:
-            if _should_emit_event_to_sse(event):
-                yield self.sse_format(_normalize_replayed_event(event))
+        for batch in self._iter_replayed_sse_batches(history):
+            yield batch
         yield self.sse_format(ctx.user_msg)
 
         def send_cb(payload: dict):

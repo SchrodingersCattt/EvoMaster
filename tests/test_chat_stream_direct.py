@@ -99,6 +99,18 @@ def _send_stream_job(
     return job
 
 
+async def _collect_n_frames(gen, n: int) -> list[dict]:
+    """按帧取前 n 帧：历史回放会把多条 SSE 帧合并到一次 yield，这里按 \\n\\n 切回单帧。"""
+    frames: list[dict] = []
+    pending: list[str] = []
+    while len(frames) < n:
+        if not pending:
+            chunk = await gen.__anext__()
+            pending = [part for part in chunk.split('\n\n') if part.strip()]
+        frames.append(_decode_sse_payload(pending.pop(0)))
+    return frames
+
+
 def test_chat_stream_returns_503_when_redis_url_missing(tmp_path):
     """无 REDIS_URL 时 POST /stream 返回 503（仅 Worker 队列模式，发送需 Redis）。"""
     mock_sessions = _mock_sessions_table()
@@ -271,13 +283,7 @@ def test_generate_send_stream_skips_current_task_in_history_replay():
         )
         gen = service.generate_send_stream('sess-1', 'new question', ctx)
         try:
-            return [
-                _decode_sse_payload(await gen.__anext__()),
-                _decode_sse_payload(await gen.__anext__()),
-                _decode_sse_payload(await gen.__anext__()),
-                _decode_sse_payload(await gen.__anext__()),
-                _decode_sse_payload(await gen.__anext__()),
-            ]
+            return await _collect_n_frames(gen, 5)
         finally:
             await gen.aclose()
 
@@ -654,12 +660,7 @@ def test_generate_send_stream_replay_prefers_run_result_over_response():
         )
         gen = service.generate_send_stream('sess-1', 'new question', ctx)
         try:
-            return [
-                _decode_sse_payload(await gen.__anext__()),
-                _decode_sse_payload(await gen.__anext__()),
-                _decode_sse_payload(await gen.__anext__()),
-                _decode_sse_payload(await gen.__anext__()),
-            ]
+            return await _collect_n_frames(gen, 4)
         finally:
             await gen.aclose()
 
