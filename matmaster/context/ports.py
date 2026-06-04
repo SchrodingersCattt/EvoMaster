@@ -98,10 +98,11 @@ class SessionEventsPort(Protocol):
 @dataclass(frozen=True)
 class SessionJobs:
     active_jobs: tuple[JsonObject, ...] = ()
+    pending_terminal_jobs: tuple[JsonObject, ...] = ()
 
     @classmethod
     def empty(cls) -> SessionJobs:
-        return cls(active_jobs=())
+        return cls(active_jobs=(), pending_terminal_jobs=())
 
 
 @dataclass(frozen=True)
@@ -114,6 +115,36 @@ class SessionJobsPort(Protocol):
         self,
         query: SessionJobsQuery,
     ) -> SessionJobs:
+        raise NotImplementedError
+
+
+class BohriumJobLedgerPort(Protocol):
+    """Sync write-side port: BohriumTool 同步 Bohrium 作业生命周期到 ledger。"""
+
+    def record_submit(
+        self,
+        *,
+        job_id: str,
+        job_name: str | None,
+        project_id: int,
+        sandbox: bool,
+        input_dir: str,
+    ) -> None:
+        raise NotImplementedError
+
+    def record_poll(
+        self,
+        *,
+        job_id: str,
+        sandbox: bool,
+        status_code: int,
+    ) -> None:
+        raise NotImplementedError
+
+    def record_kill(self, *, job_id: str, sandbox: bool) -> None:
+        raise NotImplementedError
+
+    def mark_handled(self, *, job_id: str, sandbox: bool) -> None:
         raise NotImplementedError
 
 
