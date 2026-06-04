@@ -266,3 +266,45 @@ def test_query_session_pending_terminal(jobs_table) -> None:
         user_id="user-1", org_id="org-1", session_id="sess-1", limit=5
     )
     assert {j["job_id"] for j in pending2} == {"t2", "t3"}
+
+
+def test_mark_poll_error_marks_active_unknown(jobs_table) -> None:
+    jobs_table.insert_submitted(**_submit_kwargs(job_id="e1"))
+    jobs_table.mark_poll_error(
+        user_id="user-1",
+        org_id="org-1",
+        sandbox=True,
+        job_id="e1",
+        backoff_seconds=45,
+    )
+    row = jobs_table.get_by_owner_job(
+        user_id="user-1", org_id="org-1", sandbox=True, job_id="e1"
+    )
+    assert row["status"] == "unknown"
+    assert row["next_poll_at"] is not None
+    assert row["terminal_at"] is None
+
+
+def test_mark_poll_error_does_not_touch_terminal(jobs_table) -> None:
+    jobs_table.insert_submitted(**_submit_kwargs(job_id="e2"))
+    jobs_table.apply_poll(
+        user_id="user-1",
+        org_id="org-1",
+        sandbox=True,
+        job_id="e2",
+        status="finished",
+        is_terminal=True,
+        backoff_seconds=30,
+    )
+    jobs_table.mark_poll_error(
+        user_id="user-1",
+        org_id="org-1",
+        sandbox=True,
+        job_id="e2",
+        backoff_seconds=45,
+    )
+    row = jobs_table.get_by_owner_job(
+        user_id="user-1", org_id="org-1", sandbox=True, job_id="e2"
+    )
+    assert row["status"] == "finished"
+    assert row["next_poll_at"] is None

@@ -260,6 +260,40 @@ class BohriumJobsTable(BaseTable):
                 conn.rollback()
                 raise
 
+    def mark_poll_error(
+        self,
+        *,
+        user_id: str,
+        org_id: str,
+        sandbox: bool,
+        job_id: str,
+        backoff_seconds: int,
+    ) -> None:
+        """poll/同步失败时：活跃作业标 unknown 并按 backoff 推进。"""
+        sql = f"""
+            UPDATE {self.table_name}
+            SET status = CASE
+                    WHEN status IN ('submitted', 'running', 'terminating', 'unknown')
+                    THEN 'unknown' ELSE status END,
+                next_poll_at = CASE
+                    WHEN status IN ('submitted', 'running', 'terminating', 'unknown')
+                    THEN NOW() + INTERVAL %s SECOND ELSE next_poll_at END
+            WHERE user_id = %s AND org_id = %s AND sandbox = %s AND job_id = %s
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(
+                    sql,
+                    (
+                        int(backoff_seconds),
+                        user_id,
+                        org_id,
+                        1 if sandbox else 0,
+                        job_id,
+                    ),
+                )
+            conn.commit()
+
     def get_by_owner_job(
         self, *, user_id: str, org_id: str, sandbox: bool, job_id: str
     ) -> dict[str, Any] | None:
