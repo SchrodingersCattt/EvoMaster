@@ -65,6 +65,23 @@ class TestBuildByokProviderBundle:
             credential_id="cred-2",
         )
         assert bundle.provider._extra_kwargs == {}
+        assert bundle.context_limit == 200_000
+        assert bundle.context_limit_source == "byok_default"
+
+    def test_explicit_context_limit_comes_from_credential(self):
+        bundle = build_byok_provider_bundle(
+            model="qwen-max",
+            api_key="sk-user",
+            base_url=_BASE_URL,
+            credential_id="cred-3",
+            context_limit=1_000_000,
+            extra_body={"enable_thinking": True},
+        )
+        assert bundle.context_limit == 1_000_000
+        assert bundle.context_limit_source == "byok_credential"
+        assert bundle.provider._extra_kwargs == {
+            "extra_body": {"enable_thinking": True}
+        }
 
     def test_route_falls_back_to_profile_key_without_credential_id(self):
         bundle = build_byok_provider_bundle(

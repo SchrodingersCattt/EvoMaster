@@ -250,7 +250,7 @@ def test_range_get_rejects_unsupported_magic_bytes() -> None:
 
 def test_ensure_vision_supported_rejects_text_only_profile() -> None:
     config = LLMConfig(
-        profiles={"plain": LLMProfileConfig(model="plain")},
+        profiles={"plain": LLMProfileConfig(model="plain", context_limit=200_000)},
         default="plain",
     )
 
@@ -270,6 +270,7 @@ def test_ensure_vision_supported_returns_profile_for_vision_profile() -> None:
         profiles={
             "vision": LLMProfileConfig(
                 model="vision",
+                context_limit=200_000,
                 supports_vision=True,
                 vision_detail="high",
             )
@@ -289,7 +290,7 @@ def test_ensure_vision_supported_returns_profile_for_vision_profile() -> None:
 
 def test_resolve_image_detail_returns_none_without_images() -> None:
     config = LLMConfig(
-        profiles={"plain": LLMProfileConfig(model="plain")},
+        profiles={"plain": LLMProfileConfig(model="plain", context_limit=200_000)},
         default="plain",
     )
 
@@ -309,6 +310,7 @@ def test_resolve_image_detail_returns_profile_detail_for_images() -> None:
         profiles={
             "vision": LLMProfileConfig(
                 model="vision",
+                context_limit=200_000,
                 supports_vision=True,
                 vision_detail="high",
             )

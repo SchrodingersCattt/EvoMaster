@@ -22,6 +22,7 @@ def llm_config() -> LLMConfig:
             "opus": LLMProfileConfig(
                 provider="openai",
                 model="claude-opus-4-6",
+                context_limit=200_000,
                 model_family="claude-4.6",
                 api_key="sk-test-opus",
                 base_url="http://litellm-proxy",
@@ -44,6 +45,7 @@ def llm_config() -> LLMConfig:
             "sonnet": LLMProfileConfig(
                 provider="openai",
                 model="claude-sonnet-4-6",
+                context_limit=128_000,
                 model_family="claude-4.6",
                 api_key="sk-test-sonnet",
                 base_url="http://litellm-proxy",
@@ -99,6 +101,7 @@ class TestBuildProvider:
                 "opus_global": LLMProfileConfig(
                     provider="openai",
                     model="global.anthropic.claude-opus-4-6-v1",
+                    context_limit=200_000,
                     api_key="sk-test-opus",
                     base_url="http://litellm-proxy",
                     thinking_effort="max",
@@ -146,6 +149,7 @@ class TestBuildProvider:
                 "opus_bedrock": LLMProfileConfig(
                     provider="bedrock",
                     model="arn:aws:bedrock:us-east-1:123:inference-profile/global.anthropic.claude-opus-4-6-v1",
+                    context_limit=200_000,
                     bedrock_region="us-east-1",
                     prompt_cache={
                         "provider": "anthropic",
@@ -203,6 +207,8 @@ class TestBuildProvider:
         assert bundle.model_route == "claude-sonnet-4-6"
         assert bundle.provider_name == "openai"
         assert bundle.model_family == "claude-4.6"
+        assert bundle.context_limit == 128_000
+        assert bundle.context_limit_source == "profile"
 
     def test_stream_timeout_passed(self) -> None:
         """stream_timeout and stream_idle_timeout from profile are passed to provider."""
@@ -211,6 +217,7 @@ class TestBuildProvider:
                 "opus": LLMProfileConfig(
                     provider="openai",
                     model="claude-opus-4-6",
+                    context_limit=200_000,
                     model_family="claude-4.6",
                     api_key="sk-test-opus",
                     base_url="http://litellm-proxy",

@@ -166,6 +166,29 @@ async def test_run_agent_injects_figure_upload_via_runtime_ports():
 
 
 @pytest.mark.asyncio
+async def test_run_agent_carries_bundle_context_limit_into_request():
+    run_result = RunResultEvent(source='agent', status='completed', reason='natural')
+
+    async with _patched_service([run_result]) as (svc, _sse, _persist):
+        ok, _elapsed, _usage = await svc.run_agent(
+            session_id='sess-1',
+            user_prompt='hi',
+            send_cb=AsyncMock(),
+            cancel_token=_make_cancel_token(),
+            mode='direct',
+            task_id='task-context-limit',
+            invocation_id='inv-context-limit',
+        )
+
+    assert ok is True
+    request = svc._test_fake_exp.last_ctx.request
+    assert request.llm_model == "test-model"
+    assert request.llm_model_profile == "test-profile"
+    assert request.llm_model_route == "test-route"
+    assert request.context_limit == 345_000
+
+
+@pytest.mark.asyncio
 async def test_run_agent_injects_turn_input_into_request():
     from matmaster.context.sources.turn_input import TurnInput
 
@@ -836,6 +859,8 @@ async def test_exception_emits_error_and_closed():
                     model="test-model",
                     model_profile="test-profile",
                     model_route="test-route",
+                    context_limit=345_000,
+                    context_limit_source="profile",
                 ),
             ),
             patch('matmaster.core.exp.Exp', new=lambda config: error_exp),

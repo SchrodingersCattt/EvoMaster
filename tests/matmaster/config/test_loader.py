@@ -23,10 +23,12 @@ llm:
     opus:
       provider: "openai"
       model: "claude-opus-4-6"
+      context_limit: 200000
       temperature: 0.7
     sonnet:
       provider: "openai"
       model: "claude-sonnet-4-6"
+      context_limit: 128000
       temperature: 0.5
   default: "opus"
 
@@ -63,7 +65,7 @@ class TestLoadLlmConfig:
     def test_from_dict(self) -> None:
         raw = {
             "llm": {
-                "profiles": {"p1": {"model": "m1"}},
+                "profiles": {"p1": {"model": "m1", "context_limit": 200_000}},
                 "default": "p1",
             }
         }
@@ -83,6 +85,7 @@ class TestLoadLlmConfig:
             '  profiles:\n'
             '    p1:\n'
             '      model: "m1"\n'
+            '      context_limit: 200000\n'
             '      api_key: "${TEST_API_KEY}"\n'
             '  default: "p1"\n'
         )
@@ -102,6 +105,7 @@ profiles:
   p1:
     model: "test-model"
     api_key: "test-key"
+    context_limit: 200000
 routes:
   test-route:
     profile: "p1"

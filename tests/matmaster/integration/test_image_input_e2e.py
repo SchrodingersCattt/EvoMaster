@@ -130,6 +130,8 @@ async def test_images_flow_from_service_to_kernel_user_message(tmp_path: Path) -
                 model_route=None,
                 provider_name="openai",
                 model_family="vision",
+                context_limit=345_000,
+                context_limit_source="profile",
             ),
         ),
         patch(

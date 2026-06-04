@@ -299,6 +299,11 @@ class Exp:
         if skills or self._config.skills.enabled:
             self._init_skill_tools(ctx, registry, skills_config=skills, catalog=catalog)
         self._skill_resolver = SkillRegistryResolver(self._skill_registry)
+        compaction = self._config.compaction
+        if request.context_limit is not None:
+            compaction = compaction.model_copy(
+                update={"context_limit": request.context_limit}
+            )
 
         # When allow_spawn is False (child Exp), spawn_fn is None, which causes
         # AgentTool to set exposed_to_model=False (hidden from LLM but still
@@ -358,7 +363,7 @@ class Exp:
 
         runtime_context = build_runtime_context_assembly(
             llm_provider=request.llm_provider,
-            compaction=self._config.compaction,
+            compaction=compaction,
             ctx=ctx,
             skill_resolver=self._skill_resolver,
             spawn_id=spawn_id,
@@ -397,7 +402,7 @@ class Exp:
         kernel_spec = AgentKernelSpec(
             system_prompt=system_prompt,
             max_turns=self._config.max_turns,
-            compaction=self._config.compaction,
+            compaction=compaction,
             run_identity=self._build_run_identity(ctx, spawn_id=spawn_id),
             llm_model=request.llm_model,
             llm_model_profile=request.llm_model_profile,

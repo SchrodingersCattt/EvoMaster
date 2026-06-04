@@ -13,11 +13,28 @@ from matmaster.config.llm import (
 )
 
 
+def _profile(**kwargs) -> LLMProfileConfig:
+    kwargs.setdefault("context_limit", 200_000)
+    return LLMProfileConfig(**kwargs)
+
+
 class TestLLMProfileConfig:
     """LLMProfileConfig default values match previously hardcoded constants."""
 
+    def test_context_limit_is_required(self) -> None:
+        with pytest.raises(ValueError, match="context_limit"):
+            LLMProfileConfig(model="gpt-5")
+
+    def test_context_limit_must_be_positive(self) -> None:
+        with pytest.raises(ValueError):
+            _profile(model="gpt-5", context_limit=0)
+
+    def test_context_limit_from_profile(self) -> None:
+        p = _profile(model="qwen-max", context_limit=1_000_000)
+        assert p.context_limit == 1_000_000
+
     def test_defaults(self) -> None:
-        p = LLMProfileConfig()
+        p = _profile(context_limit=200_000)
         assert p.temperature == 0.7
         assert p.timeout == 300
         assert p.max_retries == 3
@@ -26,17 +43,17 @@ class TestLLMProfileConfig:
         assert p.model == ""
 
     def test_override_from_dict(self) -> None:
-        p = LLMProfileConfig(**{"model": "gpt-5", "temperature": 0.3})
+        p = _profile(**{"model": "gpt-5", "temperature": 0.3})
         assert p.model == "gpt-5"
         assert p.temperature == 0.3
 
     def test_defaults_to_no_vision_with_high_detail(self) -> None:
-        p = LLMProfileConfig()
+        p = _profile()
         assert p.supports_vision is False
         assert p.vision_detail == "high"
 
     def test_accepts_vision_detail_none_for_unsupported_provider_field(self) -> None:
-        p = LLMProfileConfig(
+        p = _profile(
             model="vision-model",
             supports_vision=True,
             vision_detail=None,
@@ -45,12 +62,12 @@ class TestLLMProfileConfig:
         assert p.vision_detail is None
 
     def test_prompt_cache_defaults_none(self) -> None:
-        p = LLMProfileConfig()
+        p = _profile()
         assert p.prompt_cache is None
         assert p.reasoning_summary is None
 
     def test_prompt_cache_field_from_dict(self) -> None:
-        p = LLMProfileConfig(
+        p = _profile(
             prompt_cache={
                 "provider": "anthropic",
                 "system_prompt_breakpoint": True,
@@ -124,69 +141,69 @@ class TestLLMProfileConfigMethods:
     # -- effective_family --
 
     def test_effective_family_explicit(self) -> None:
-        p = LLMProfileConfig(model_family="custom-family")
+        p = _profile(model_family="custom-family")
         assert p.effective_family() == "custom-family"
 
     def test_effective_family_inferred_from_model_sonnet(self) -> None:
-        p = LLMProfileConfig(model="claude-sonnet-4-6-20250514")
+        p = _profile(model="claude-sonnet-4-6-20250514")
         assert p.effective_family() == "claude-4.6"
 
     def test_effective_family_inferred_from_model_opus(self) -> None:
-        p = LLMProfileConfig(model="claude-opus-4-6-20250514")
+        p = _profile(model="claude-opus-4-6-20250514")
         assert p.effective_family() == "claude-4.6"
 
     def test_effective_family_inferred_haiku(self) -> None:
-        p = LLMProfileConfig(model="claude-haiku-4-5-20250401")
+        p = _profile(model="claude-haiku-4-5-20250401")
         assert p.effective_family() == "claude-haiku-4.5"
 
     def test_effective_family_inferred_gpt5(self) -> None:
-        p = LLMProfileConfig(model="gpt-5-turbo")
+        p = _profile(model="gpt-5-turbo")
         assert p.effective_family() == "gpt-5"
 
     def test_effective_family_inferred_deepseek(self) -> None:
-        p = LLMProfileConfig(model="deepseek-reasoner-v2")
+        p = _profile(model="deepseek-reasoner-v2")
         assert p.effective_family() == "deepseek-reasoner"
 
     def test_effective_family_inferred_gemini(self) -> None:
-        p = LLMProfileConfig(model="gemini-3-flash-preview-0501")
+        p = _profile(model="gemini-3-flash-preview-0501")
         assert p.effective_family() == "gemini-3-flash-preview"
 
     def test_effective_family_unknown_model(self) -> None:
-        p = LLMProfileConfig(model="some-unknown-model")
+        p = _profile(model="some-unknown-model")
         assert p.effective_family() is None
 
     def test_effective_family_explicit_overrides_inference(self) -> None:
-        p = LLMProfileConfig(model="claude-opus-4-6", model_family="override")
+        p = _profile(model="claude-opus-4-6", model_family="override")
         assert p.effective_family() == "override"
 
     # -- effective_temperature --
 
     def test_effective_temperature_default(self) -> None:
-        p = LLMProfileConfig(temperature=0.5)
+        p = _profile(temperature=0.5)
         assert p.effective_temperature() == 0.5
 
     def test_effective_temperature_force_one_explicit_policy(self) -> None:
-        p = LLMProfileConfig(
+        p = _profile(
             temperature=0.5, temperature_policy="force_one_when_reasoning"
         )
         assert p.effective_temperature() == 1.0
 
     def test_effective_temperature_force_one_from_family_default(self) -> None:
-        p = LLMProfileConfig(model="claude-sonnet-4-6-20250514", temperature=0.3)
+        p = _profile(model="claude-sonnet-4-6-20250514", temperature=0.3)
         assert p.effective_temperature() == 1.0
 
     def test_effective_temperature_no_force_for_gpt5(self) -> None:
-        p = LLMProfileConfig(model="gpt-5-turbo", temperature=0.5)
+        p = _profile(model="gpt-5-turbo", temperature=0.5)
         assert p.effective_temperature() == 0.5
 
     def test_effective_temperature_unknown_family(self) -> None:
-        p = LLMProfileConfig(model="unknown-model", temperature=0.8)
+        p = _profile(model="unknown-model", temperature=0.8)
         assert p.effective_temperature() == 0.8
 
     # -- build_extra_kwargs --
 
     def test_build_extra_kwargs_anthropic(self) -> None:
-        p = LLMProfileConfig(
+        p = _profile(
             reasoning_protocol="anthropic_adaptive_thinking",
             thinking_effort="high",
         )
@@ -199,7 +216,7 @@ class TestLLMProfileConfigMethods:
         }
 
     def test_build_extra_kwargs_openai(self) -> None:
-        p = LLMProfileConfig(
+        p = _profile(
             reasoning_protocol="openai_reasoning_effort",
             thinking_effort="medium",
         )
@@ -207,7 +224,7 @@ class TestLLMProfileConfigMethods:
         assert result == {"reasoning_effort": "medium"}
 
     def test_build_extra_kwargs_openai_reasoning_summary(self) -> None:
-        p = LLMProfileConfig(
+        p = _profile(
             reasoning_protocol="openai_reasoning_effort",
             thinking_effort="xhigh",
             reasoning_summary="detailed",
@@ -224,7 +241,7 @@ class TestLLMProfileConfigMethods:
         }
 
     def test_build_extra_kwargs_from_family_default(self) -> None:
-        p = LLMProfileConfig(model="claude-opus-4-6", thinking_effort="low")
+        p = _profile(model="claude-opus-4-6", thinking_effort="low")
         result = p.build_extra_kwargs()
         assert result == {
             "extra_body": {
@@ -236,7 +253,7 @@ class TestLLMProfileConfigMethods:
     def test_build_extra_kwargs_anthropic_prompt_cache_does_not_emit_cache_control(
         self,
     ) -> None:
-        p = LLMProfileConfig(
+        p = _profile(
             model="claude-opus-4-6",
             reasoning_protocol="anthropic_adaptive_thinking",
             thinking_effort="max",
@@ -260,7 +277,7 @@ class TestLLMProfileConfigMethods:
     def test_build_extra_kwargs_prompt_cache_without_thinking_effort_returns_none(
         self,
     ) -> None:
-        p = LLMProfileConfig(
+        p = _profile(
             model="claude-opus-4-6",
             prompt_cache={
                 "provider": "anthropic",
@@ -277,7 +294,7 @@ class TestLLMProfileConfigMethods:
     def test_build_extra_kwargs_prompt_cache_disabled_automatic(
         self,
     ) -> None:
-        p = LLMProfileConfig(
+        p = _profile(
             model="claude-opus-4-6",
             prompt_cache={
                 "provider": "anthropic",
@@ -289,15 +306,15 @@ class TestLLMProfileConfigMethods:
         assert p.build_extra_kwargs() is None
 
     def test_build_extra_kwargs_no_effort(self) -> None:
-        p = LLMProfileConfig(reasoning_protocol="anthropic_adaptive_thinking")
+        p = _profile(reasoning_protocol="anthropic_adaptive_thinking")
         assert p.build_extra_kwargs() is None
 
     def test_build_extra_kwargs_no_protocol_no_family(self) -> None:
-        p = LLMProfileConfig(model="unknown-model", thinking_effort="high")
+        p = _profile(model="unknown-model", thinking_effort="high")
         assert p.build_extra_kwargs() is None
 
     def test_build_extra_kwargs_unknown_protocol(self) -> None:
-        p = LLMProfileConfig(
+        p = _profile(
             reasoning_protocol="some_future_protocol", thinking_effort="high"
         )
         assert p.build_extra_kwargs() is None
@@ -318,7 +335,7 @@ class TestLLMConfigModelValidator:
 
     def test_already_normalized(self) -> None:
         raw = {
-            "profiles": {"p1": {"model": "m1"}},
+            "profiles": {"p1": {"model": "m1", "context_limit": 200_000}},
             "default": "p1",
         }
         cfg = LLMConfig.model_validate(raw)
@@ -350,8 +367,16 @@ class TestLLMConfigWithRoutes:
         return LLMConfig.model_validate(
             {
                 "profiles": {
-                    "opus": {"provider": "openai", "model": "claude-opus-4-6"},
-                    "sonnet": {"provider": "openai", "model": "claude-sonnet-4-6"},
+                    "opus": {
+                        "provider": "openai",
+                        "model": "claude-opus-4-6",
+                        "context_limit": 200_000,
+                    },
+                    "sonnet": {
+                        "provider": "openai",
+                        "model": "claude-sonnet-4-6",
+                        "context_limit": 128_000,
+                    },
                 },
                 "routes": {
                     "claude-opus-4-6": {"profile": "opus"},
@@ -424,8 +449,16 @@ class TestSonnetRouteRegression:
         cfg = LLMConfig.model_validate(
             {
                 "profiles": {
-                    "opus": {"provider": "openai", "model": "claude-opus-4-6"},
-                    "sonnet": {"provider": "openai", "model": "claude-sonnet-4-6"},
+                    "opus": {
+                        "provider": "openai",
+                        "model": "claude-opus-4-6",
+                        "context_limit": 200_000,
+                    },
+                    "sonnet": {
+                        "provider": "openai",
+                        "model": "claude-sonnet-4-6",
+                        "context_limit": 128_000,
+                    },
                 },
                 "routes": {
                     "claude-opus-4-6": {"profile": "opus"},
@@ -450,7 +483,7 @@ class TestLLMConfigValidation:
         with pytest.raises(ValueError, match="route.*references profile.*ghost"):
             LLMConfig.model_validate(
                 {
-                    "profiles": {"opus": {"model": "m1"}},
+                    "profiles": {"opus": {"model": "m1", "context_limit": 200_000}},
                     "routes": {"r1": {"profile": "ghost"}},
                     "default": "opus",
                 }
@@ -460,7 +493,7 @@ class TestLLMConfigValidation:
         with pytest.raises(ValueError, match="default profile.*missing"):
             LLMConfig.model_validate(
                 {
-                    "profiles": {"opus": {"model": "m1"}},
+                    "profiles": {"opus": {"model": "m1", "context_limit": 200_000}},
                     "default": "missing",
                 }
             )

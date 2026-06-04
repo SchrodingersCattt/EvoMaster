@@ -40,11 +40,15 @@ class TestInferModelFamily:
 
 class TestProfileEffectiveTemperature:
     def test_force_one_for_claude(self) -> None:
-        p = LLMProfileConfig(model_family="claude-4.6", temperature=0.7)
+        p = LLMProfileConfig(
+            model_family="claude-4.6", temperature=0.7, context_limit=200_000
+        )
         assert p.effective_temperature() == 1.0
 
     def test_no_force_for_gpt5(self) -> None:
-        p = LLMProfileConfig(model_family="gpt-5", temperature=0.5)
+        p = LLMProfileConfig(
+            model_family="gpt-5", temperature=0.5, context_limit=200_000
+        )
         assert p.effective_temperature() == 0.5
 
 
@@ -53,6 +57,7 @@ class TestProfileBuildExtraKwargs:
         p = LLMProfileConfig(
             reasoning_protocol="anthropic_adaptive_thinking",
             thinking_effort="high",
+            context_limit=200_000,
         )
         result = p.build_extra_kwargs()
         assert result is not None
@@ -62,11 +67,12 @@ class TestProfileBuildExtraKwargs:
         p = LLMProfileConfig(
             reasoning_protocol="openai_reasoning_effort",
             thinking_effort="medium",
+            context_limit=200_000,
         )
         assert p.build_extra_kwargs() == {"reasoning_effort": "medium"}
 
     def test_no_config_returns_none(self) -> None:
-        p = LLMProfileConfig()
+        p = LLMProfileConfig(context_limit=200_000)
         assert p.build_extra_kwargs() is None
 
 
@@ -86,6 +92,7 @@ class TestEndToEndRouteToProvider:
                         "reasoning_protocol": "anthropic_adaptive_thinking",
                         "temperature_policy": "force_one_when_reasoning",
                         "temperature": 0.7,
+                        "context_limit": 200_000,
                         "timeout": 300,
                         "max_retries": 3,
                     },
@@ -99,6 +106,7 @@ class TestEndToEndRouteToProvider:
                         "reasoning_protocol": "anthropic_adaptive_thinking",
                         "temperature_policy": "force_one_when_reasoning",
                         "temperature": 0.7,
+                        "context_limit": 128_000,
                     },
                 },
                 "routes": {
@@ -136,6 +144,7 @@ class TestEndToEndRouteToProvider:
                         "model": "custom",
                         "api_key": "k",
                         "provider": "openai",
+                        "context_limit": 200_000,
                     },
                 },
                 "default": "minimal",

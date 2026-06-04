@@ -205,6 +205,8 @@ def _run_agent(
                 model_route="test-route",
                 provider_name="test-provider",
                 model_family="test-family",
+                context_limit=345_000,
+                context_limit_source="profile",
             ),
         ),
         patch('matmaster.config.loader.load_llm_config', return_value=MagicMock()),

@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import os
 from dataclasses import dataclass
+from typing import Literal
 
 from matmaster.config.llm import LLMConfig, LLMProfileConfig
 from matmaster.providers.bedrock_provider import BedrockProvider
@@ -19,6 +20,7 @@ from matmaster.providers.openai_provider import (
 )
 
 BYOK_PROFILE_KEY = "byok"
+BYOK_DEFAULT_CONTEXT_LIMIT = 200_000
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +35,12 @@ class LLMProviderBundle:
     model_route: str | None
     provider_name: str
     model_family: str | None
+    context_limit: int
+    context_limit_source: Literal[
+        "profile",
+        "byok_credential",
+        "byok_default",
+    ]
 
 
 def build_provider(
@@ -123,6 +131,7 @@ def build_byok_provider_bundle(
     api_key: str,
     base_url: str,
     credential_id: str | None = None,
+    context_limit: int | None = None,
     extra_body: dict | None = None,
 ) -> LLMProviderBundle:
     """用用户自带 Key（BYOK）构造 OpenAI 兼容 Provider。
@@ -131,11 +140,18 @@ def build_byok_provider_bundle(
     extra_body 为凭证侧的黑盒透传参数（用户自填 JSON，如 enable_thinking/reasoning_effort/
     thinking_budget 等），原样合并进请求体；与族默认同名 key 时用户优先。内容正确性由用户负责。
     """
+    if context_limit is not None and context_limit <= 0:
+        raise ValueError("BYOK context_limit must be a positive integer")
+    effective_context_limit = context_limit or BYOK_DEFAULT_CONTEXT_LIMIT
+    context_limit_source = (
+        "byok_credential" if context_limit is not None else "byok_default"
+    )
     profile = LLMProfileConfig(
         provider="openai",
         model=model,
         api_key=api_key,
         base_url=base_url,
+        context_limit=effective_context_limit,
     )
     extra_kwargs = _merge_byok_extra_kwargs(profile.build_extra_kwargs(), extra_body)
     logger.info(
@@ -159,6 +175,8 @@ def build_byok_provider_bundle(
         model_route=f"byok:{credential_id}" if credential_id else BYOK_PROFILE_KEY,
         provider_name="openai",
         model_family=profile.effective_family(),
+        context_limit=effective_context_limit,
+        context_limit_source=context_limit_source,
     )
 
 
@@ -211,6 +229,8 @@ def build_provider_bundle(
             model_route=resolved.route_key,
             provider_name=profile.provider,
             model_family=profile.effective_family(),
+            context_limit=profile.context_limit,
+            context_limit_source="profile",
         )
 
     provider = _build_openai_provider(
@@ -227,4 +247,6 @@ def build_provider_bundle(
         model_route=resolved.route_key,
         provider_name=profile.provider,
         model_family=profile.effective_family(),
+        context_limit=profile.context_limit,
+        context_limit_source="profile",
     )

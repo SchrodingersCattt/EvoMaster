@@ -305,6 +305,14 @@ class TestCliRunMode:
             )
         )
         captured: dict[str, object] = {}
+        fake_bundle = SimpleNamespace(
+            provider=object(),
+            model="m",
+            model_profile="p",
+            model_route="r",
+            context_limit=200_000,
+            context_limit_source="profile",
+        )
 
         class FakeRunner:
             def __init__(self, **kwargs) -> None:
@@ -320,8 +328,8 @@ class TestCliRunMode:
                 return_value=fake_llm_config,
             ),
             patch(
-                "matmaster.providers.llm_factory.build_provider",
-                return_value=object(),
+                "matmaster.providers.llm_factory.build_provider_bundle",
+                return_value=fake_bundle,
             ),
             patch("matmaster.devshell.runner.DevRunner", FakeRunner),
         ):
@@ -329,6 +337,38 @@ class TestCliRunMode:
 
         stream_hook = captured["stream_hook"]
         assert stream_hook._out is not sys.stdout
+        assert captured["llm_bundle"] is fake_bundle
+
+
+class TestDevRunnerRequest:
+    def test_runner_carries_bundle_identity_and_context_limit(self, tmp_path: Path):
+        from matmaster.devshell.config import DevConfig
+        from matmaster.devshell.runner import DevRunner
+
+        bundle = SimpleNamespace(
+            provider=object(),
+            model="qwen-max",
+            model_profile="qwen-profile",
+            model_route="qwen-route",
+            context_limit=1_000_000,
+        )
+        runner = DevRunner(
+            config=DevConfig(),
+            workdir=tmp_path,
+            llm_provider=bundle.provider,
+            resolved_route=SimpleNamespace(
+                model="fallback-model",
+                profile_key="fallback-profile",
+                route_key="fallback-route",
+            ),
+            llm_bundle=bundle,
+        )
+
+        request = runner.build_run_context().request
+        assert request.llm_model == "qwen-max"
+        assert request.llm_model_profile == "qwen-profile"
+        assert request.llm_model_route == "qwen-route"
+        assert request.context_limit == 1_000_000
 
 
 class TestShowTools:

@@ -86,6 +86,7 @@ def test_build_provider_bedrock() -> None:
             "opus_br": LLMProfileConfig(
                 provider="bedrock",
                 model="anthropic.claude-3-opus-20240229-v1:0",
+                context_limit=200_000,
                 bedrock_region="us-west-2",
                 api_key="",
                 base_url=None,
@@ -114,6 +115,7 @@ def test_build_provider_bedrock_region_from_env(
             "b": LLMProfileConfig(
                 provider="bedrock",
                 model="m1",
+                context_limit=200_000,
                 api_key="",
             ),
         },

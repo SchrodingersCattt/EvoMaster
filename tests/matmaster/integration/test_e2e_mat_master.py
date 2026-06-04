@@ -76,6 +76,8 @@ def _provider_bundle(provider: Any) -> SimpleNamespace:
         model_route="test-route",
         provider_name="openai",
         model_family="test-family",
+        context_limit=345_000,
+        context_limit_source="profile",
     )
 
 

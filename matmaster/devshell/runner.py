@@ -63,6 +63,7 @@ class DevRunner:
         llm_provider: Any,
         llm_config: Any = None,
         resolved_route: Any = None,
+        llm_bundle: Any = None,
         stream_hook: DevStreamHook | None = None,
         exp_config: ExpConfig | None = None,
         exclude_subagents: list[str] | None = None,
@@ -73,6 +74,7 @@ class DevRunner:
         self._llm_provider = llm_provider
         self._llm_config = llm_config
         self._resolved_route = resolved_route
+        self._llm_bundle = llm_bundle
         self._stream_hook = stream_hook or DevStreamHook()
         self._exclude_subagents: frozenset[str] = frozenset(exclude_subagents or ())
         self._inject_bohrium_failure = inject_bohrium_failure
@@ -92,6 +94,20 @@ class DevRunner:
         self._request = AgentRunRequest(
             llm_provider=llm_provider,
             llm_config=llm_config,
+            llm_model=getattr(
+                llm_bundle, "model", getattr(resolved_route, "model", None)
+            ),
+            llm_model_profile=getattr(
+                llm_bundle,
+                "model_profile",
+                getattr(resolved_route, "profile_key", None),
+            ),
+            llm_model_route=getattr(
+                llm_bundle,
+                "model_route",
+                getattr(resolved_route, "route_key", None),
+            ),
+            context_limit=getattr(llm_bundle, "context_limit", None),
         )
         try_attach_local_bohrium_runtime_from_env(session)
 

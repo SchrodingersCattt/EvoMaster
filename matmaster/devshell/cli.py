@@ -176,7 +176,7 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
         sys.exit(1)
 
     from matmaster.config.loader import load_llm_config
-    from matmaster.providers.llm_factory import build_provider
+    from matmaster.providers.llm_factory import build_provider_bundle
 
     llm_config = load_llm_config(llm_yaml)
     agent_default_llm = load_agents_general_llm(main_yaml)
@@ -184,11 +184,12 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
     model_override = (args.model or "").strip() or None
 
     try:
-        llm_provider = build_provider(
+        llm_bundle = build_provider_bundle(
             llm_config,
             model_override=model_override,
             default_profile_key=agent_default_llm,
         )
+        llm_provider = llm_bundle.provider
         resolved = llm_config.resolve_route(
             model_override=model_override,
             default_key=agent_default_llm,
@@ -255,6 +256,7 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any]:
         llm_provider=llm_provider,
         llm_config=llm_config,
         resolved_route=resolved,
+        llm_bundle=llm_bundle,
         stream_hook=stream_hook,
         exp_config=exp_override,
         exclude_subagents=getattr(args, "exclude_subagents", None),

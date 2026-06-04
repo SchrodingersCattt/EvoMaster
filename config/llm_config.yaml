@@ -15,6 +15,7 @@ profiles:
     reasoning_protocol: "anthropic_adaptive_thinking"
     temperature_policy: "force_one_when_reasoning"
     temperature: 0.7
+    context_limit: 200000
     supports_vision: true
     timeout: 1200
     stream_timeout: 120
@@ -30,6 +31,7 @@ profiles:
     reasoning_protocol: "openai_reasoning_effort"
     thinking_effort: "high"
     temperature: 1.0
+    context_limit: 200000
     supports_vision: true
     timeout: 1200
     stream_timeout: 120
@@ -45,6 +47,7 @@ profiles:
     reasoning_protocol: "openai_reasoning_effort"
     thinking_effort: "xhigh"
     reasoning_summary: "detailed"
+    context_limit: 256000
     supports_vision: true
     timeout: 1200
     stream_timeout: 120
@@ -59,6 +62,7 @@ profiles:
     base_url: "${LITELLM_PROXY_API_BASE}"
     reasoning_protocol: "openai_reasoning_effort"
     thinking_effort: "high"
+    context_limit: 1000000
     supports_vision: true
     timeout: 1200
     stream_timeout: 120
@@ -73,6 +77,7 @@ profiles:
     base_url: "${LITELLM_PROXY_API_BASE}"
     reasoning_protocol: "openai_reasoning_effort"
     thinking_effort: "max"
+    context_limit: 200000
     timeout: 1200
     stream_timeout: 120
     stream_idle_timeout: 60
@@ -86,6 +91,7 @@ profiles:
     base_url: "${LITELLM_PROXY_API_BASE}"
     reasoning_protocol: "openai_reasoning_effort"
     thinking_effort: "max"
+    context_limit: 200000
     timeout: 1200
     stream_timeout: 120
     stream_idle_timeout: 60
@@ -101,6 +107,7 @@ profiles:
     reasoning_protocol: "anthropic_adaptive_thinking"
     temperature_policy: "force_one_when_reasoning"
     temperature: 0.7
+    context_limit: 300000
     supports_vision: true
     timeout: 1200
     stream_timeout: 120
@@ -133,6 +140,7 @@ profiles:
     reasoning_protocol: "anthropic_adaptive_thinking"
     temperature_policy: "force_one_when_reasoning"
     temperature: 0.7
+    context_limit: 200000
     supports_vision: true
     model_family: "claude-4.6"
     timeout: 1200

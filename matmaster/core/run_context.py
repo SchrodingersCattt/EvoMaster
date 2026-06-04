@@ -52,6 +52,7 @@ class AgentRunRequest(BaseModel):
     llm_model: str | None = None
     llm_model_profile: str | None = None
     llm_model_route: str | None = None
+    context_limit: int | None = Field(default=None, gt=0)
     invocation_id: str | None = None
     interaction_bridge: Any = Field(default=None, repr=False, exclude=True)
     turn_input: TurnInput | None = None

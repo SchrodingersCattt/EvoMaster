@@ -46,21 +46,22 @@ def main(prompt: str | None = None) -> None:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
 
     # LLM provider (same logic as cli._bootstrap_runner)
-    from matmaster.config.loader import load_llm_config
-    from matmaster.devshell.cli import _load_agents_general_llm, _project_root
-    from matmaster.providers.llm_factory import build_provider
+    from matmaster.config.loader import load_agents_general_llm, load_llm_config
+    from matmaster.devshell.cli import _project_root
+    from matmaster.providers.llm_factory import build_provider_bundle
 
     root = _project_root()
     llm_yaml = LLM_CONFIG or (root / "config" / "llm_config.yaml")
     main_yaml = root / "config" / "config.yaml"
 
     llm_config = load_llm_config(llm_yaml)
-    agent_default_llm = _load_agents_general_llm(main_yaml)
-    llm_provider = build_provider(
+    agent_default_llm = load_agents_general_llm(main_yaml)
+    llm_bundle = build_provider_bundle(
         llm_config,
         model_override=MODEL_OVERRIDE,
         default_profile_key=agent_default_llm,
     )
+    llm_provider = llm_bundle.provider
     resolved = llm_config.resolve_route(
         model_override=MODEL_OVERRIDE,
         default_key=agent_default_llm,
@@ -78,6 +79,7 @@ def main(prompt: str | None = None) -> None:
         llm_provider=llm_provider,
         llm_config=llm_config,
         resolved_route=resolved,
+        llm_bundle=llm_bundle,
         stream_hook=stream_hook,
         exp_config=exp_cfg,
     )

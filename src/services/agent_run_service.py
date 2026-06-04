@@ -394,6 +394,7 @@ class AgentRunService:
                     api_key=cred.api_key,
                     base_url=cred.base_url,
                     credential_id=byok_id,
+                    context_limit=cred.context_limit,
                     extra_body=cred.extra_body,
                 )
                 # BYOK 第一期不接入族级 vision 校验：有图片用默认 detail，无图为 None。
@@ -528,6 +529,7 @@ class AgentRunService:
                     llm_model=llm_bundle.model,
                     llm_model_profile=llm_bundle.model_profile,
                     llm_model_route=llm_bundle.model_route,
+                    context_limit=llm_bundle.context_limit,
                     invocation_id=invocation_id,
                     interaction_bridge=bridge,
                     turn_input=turn_input,

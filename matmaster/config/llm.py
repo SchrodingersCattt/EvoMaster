@@ -125,6 +125,7 @@ class LLMProfileConfig(BaseModel):
     temperature: float = 0.7
 
     # Limits
+    context_limit: int = Field(..., gt=0)
     max_tokens: int | None = None
 
     # Vision

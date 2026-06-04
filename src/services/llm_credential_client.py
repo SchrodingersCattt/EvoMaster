@@ -25,6 +25,7 @@ class ByokCredential:
     model: str
     base_url: str
     api_key: str
+    context_limit: int | None = None
     # 黑盒透传参数（来自 tools-server model_params），原样作为 extra_body 合并进请求体。
     extra_body: dict[str, Any] = field(default_factory=dict)
 
@@ -63,9 +64,20 @@ async def fetch_byok_credential(*, user_id: str, credential_id: str) -> ByokCred
     data = body["data"]
     params = data.get("model_params")
     extra_body = params if isinstance(params, dict) else {}
+    raw_context_limit = data.get("context_limit")
+    context_limit = None
+    if raw_context_limit is not None:
+        if (
+            isinstance(raw_context_limit, bool)
+            or not isinstance(raw_context_limit, int)
+            or raw_context_limit <= 0
+        ):
+            raise ByokCredentialError("凭证 context_limit 必须是正整数")
+        context_limit = raw_context_limit
     return ByokCredential(
         model=data.get("model") or "",
         base_url=data.get("base_url") or "",
         api_key=data.get("api_key") or "",
+        context_limit=context_limit,
         extra_body=extra_body,
     )
