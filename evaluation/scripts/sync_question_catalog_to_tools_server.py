@@ -111,16 +111,16 @@ def main() -> int:
     sys.path.insert(0, str(REPO_ROOT))
 
     from evaluation.core.runner import (
-        _flatten_banks,
-        _resolve_to_project_root,
+        flatten_banks,
         load_question_banks,
+        resolve_to_project_root,
     )
     from evaluation.eval_ingest_client import (
         QUESTION_CATALOG_SYNC_URL,
         post_question_catalog_sync,
     )
 
-    bank_dir = Path(_resolve_to_project_root(args.question_bank_dir))
+    bank_dir = Path(resolve_to_project_root(args.question_bank_dir))
     if not bank_dir.is_dir():
         print(f"question bank directory not found: {bank_dir}", file=sys.stderr)
         return 1
@@ -131,7 +131,7 @@ def main() -> int:
         print(str(e), file=sys.stderr)
         return 1
 
-    flat = _flatten_banks(banks)
+    flat = flatten_banks(banks)
     catalog_items, build_err = _stable_unique_catalog_items(flat)
     if build_err:
         print(build_err, file=sys.stderr)

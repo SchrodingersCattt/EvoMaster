@@ -40,7 +40,7 @@ def _question_matches_slice(question: QuestionItem, sl: CapabilitySlice) -> bool
     return True
 
 
-def _apply_filters(
+def apply_filters(
     questions: list[QuestionItem], config: EvalConfig
 ) -> list[QuestionItem]:
     """Filter questions by OR-of-slices and/or explicit IDs."""
@@ -117,7 +117,7 @@ def load_question_banks(bank_dir: Path) -> list[QuestionBank]:
     return banks
 
 
-def _flatten_banks(question_banks: list[QuestionBank]) -> list[QuestionItem]:
+def flatten_banks(question_banks: list[QuestionBank]) -> list[QuestionItem]:
     """Flatten all question banks into a single list of QuestionItems."""
     questions: list[QuestionItem] = []
     for bank in question_banks:
@@ -125,7 +125,7 @@ def _flatten_banks(question_banks: list[QuestionBank]) -> list[QuestionItem]:
     return questions
 
 
-def _stage_data_files(
+def stage_data_files(
     question: QuestionItem,
     bank_dir: Path,
     workspace: Path,
@@ -151,7 +151,7 @@ def _stage_data_files(
     return prompt
 
 
-def _resolve_to_project_root(path_str: str) -> str:
+def resolve_to_project_root(path_str: str) -> str:
     path = Path(path_str)
     if path.is_absolute():
         return str(path)

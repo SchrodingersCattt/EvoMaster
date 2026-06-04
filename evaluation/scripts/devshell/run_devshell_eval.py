@@ -163,22 +163,22 @@ def main() -> int:
 
     # Lazy imports after potential chdir
     from evaluation.core.runner import (
-        _apply_filters,
-        _flatten_banks,
-        _resolve_to_project_root,
-        _stage_data_files,
+        apply_filters,
         expand_run_plan,
+        flatten_banks,
         load_question_banks,
+        resolve_to_project_root,
+        stage_data_files,
     )
     from evaluation.core.schemas import EvalConfig
     from evaluation.core.simulator import HumanSimulator
 
     cfg = EvalConfig.model_validate(cfg_dict)
-    bank_dir = Path(_resolve_to_project_root(cfg.question_bank_dir))
+    bank_dir = Path(resolve_to_project_root(cfg.question_bank_dir))
 
     question_banks = load_question_banks(bank_dir)
-    questions = _flatten_banks(question_banks)
-    questions = _apply_filters(questions, cfg)
+    questions = flatten_banks(question_banks)
+    questions = apply_filters(questions, cfg)
     run_plan = expand_run_plan(questions=questions, config=cfg)
 
     if args.limit is not None:
@@ -327,7 +327,7 @@ def main() -> int:
         log_dir = run_dir / "logs" / task_id
         log_dir.mkdir(parents=True, exist_ok=True)
 
-        prompt = _stage_data_files(question, bank_dir, workspace_path, prompt)
+        prompt = stage_data_files(question, bank_dir, workspace_path, prompt)
 
         prompt_file = workspace_path / "_devshell_prompt.txt"
         prompt_file.write_text(prompt, encoding="utf-8")

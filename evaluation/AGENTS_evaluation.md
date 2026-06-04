@@ -534,7 +534,7 @@ uv run python evaluation/scripts/devshell/score_devshell_tasks.py \
 
 ## 附录：若未来重构 taxonomy，三者如何更清晰、`--slices` 如何演进（规划）
 
-本节是**架构规划**，不是当前运行时的强制行为；落地时需同步改 `evaluation/core/schemas.py`、`slice_parser.py`、`runner._apply_filters`、CLI 与 DevShell 传参。
+本节是**架构规划**，不是当前运行时的强制行为；落地时需同步改 `evaluation/core/schemas.py`、`slice_parser.py`、`runner.apply_filters`、CLI 与 DevShell 传参。
 
 ### 当前模型的典型痛点
 
