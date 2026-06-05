@@ -8,8 +8,6 @@ import threading
 import uuid
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from src.services.stream_sse_filter import REPLAY_DISCARDED_EVENT_TYPES
 
 # 测试中屏蔽 DB：任何真实 BaseTable 触发的连接直接报错（应通过 get_*_table mock 避免走到这里）
@@ -185,7 +183,6 @@ def test_prepare_send_message_captures_turn_input_before_user_event():
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=MagicMock(),
     )
     req = ChatSendRequest(
@@ -260,7 +257,6 @@ def test_generate_send_stream_skips_current_task_in_history_replay():
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=MagicMock(),
     )
 
@@ -278,7 +274,6 @@ def test_generate_send_stream_skips_current_task_in_history_replay():
                 'task_id': 'task-1',
                 'invocation_id': 'inv-1',
             },
-            request_event_queue=asyncio.Queue(),
             job=_send_stream_job(),
         )
         gen = service.generate_send_stream('sess-1', 'new question', ctx)
@@ -324,7 +319,6 @@ def test_prepare_send_message_marks_explicit_bohrium_requirement():
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=deploy_state_service,
     )
 
@@ -359,7 +353,6 @@ def test_prepare_send_message_persists_images_in_user_message():
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=deploy_state_service,
     )
 
@@ -550,7 +543,6 @@ def test_generate_send_stream_normalizes_replayed_history_source():
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=MagicMock(),
     )
 
@@ -568,7 +560,6 @@ def test_generate_send_stream_normalizes_replayed_history_source():
                 'task_id': 'task-1',
                 'invocation_id': 'inv-1',
             },
-            request_event_queue=asyncio.Queue(),
             job=_send_stream_job(),
         )
         gen = service.generate_send_stream('sess-1', 'new question', ctx)
@@ -637,7 +628,6 @@ def test_generate_send_stream_replay_prefers_run_result_over_response():
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=MagicMock(),
     )
 
@@ -655,7 +645,6 @@ def test_generate_send_stream_replay_prefers_run_result_over_response():
                 'task_id': 'task-1',
                 'invocation_id': 'inv-1',
             },
-            request_event_queue=asyncio.Queue(),
             job=_send_stream_job(),
         )
         gen = service.generate_send_stream('sess-1', 'new question', ctx)
@@ -697,7 +686,6 @@ def test_generate_send_stream_subscribes_before_enqueue():
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=MagicMock(),
     )
 
@@ -774,7 +762,6 @@ def test_generate_send_stream_subscribes_before_enqueue():
                 'task_id': 'task-1',
                 'invocation_id': 'inv-1',
             },
-            request_event_queue=asyncio.Queue(),
             job=_send_stream_job(),
         )
         gen = service.generate_send_stream('sess-1', 'new question', ctx)

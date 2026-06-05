@@ -7,7 +7,6 @@ SSE 流行为（complete thought 过滤）由 test_sse_handler_mode_filter.py �
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -30,7 +29,6 @@ def test_prepare_send_message_accepts_planner_mode() -> None:
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=deploy_state_service,
     )
 
@@ -69,7 +67,6 @@ def test_prepare_send_message_falls_back_unknown_mode_to_default() -> None:
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=deploy_state_service,
     )
 
@@ -108,7 +105,6 @@ async def test_planner_job_enqueues_with_planner_mode_field() -> None:
             )
         ),
         events_service=MagicMock(get_session_events=MagicMock(return_value=[])),
-        agent_run_service=MagicMock(),
         deploy_state_service=MagicMock(),
     )
 
@@ -122,7 +118,6 @@ async def test_planner_job_enqueues_with_planner_mode_field() -> None:
             'content': 'plan it',
             'mode': 'planner',
         },
-        request_event_queue=asyncio.Queue(),
         job=_send_stream_job(
             session_id='sess-planner',
             task_id='task-planner-1',

@@ -61,7 +61,6 @@ def test_generate_send_stream_replay_keeps_response_figures_but_prefers_run_resu
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=MagicMock(),
     )
 
@@ -79,7 +78,6 @@ def test_generate_send_stream_replay_keeps_response_figures_but_prefers_run_resu
                 'task_id': 'task-1',
                 'invocation_id': 'inv-1',
             },
-            request_event_queue=asyncio.Queue(),
             job=_send_stream_job(),
         )
         gen = service.generate_send_stream('sess-1', 'new question', ctx)
@@ -162,7 +160,6 @@ def test_generate_subscribe_stream_replay_keeps_response_figures_but_prefers_run
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=MagicMock(),
     )
 

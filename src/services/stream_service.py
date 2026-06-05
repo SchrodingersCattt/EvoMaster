@@ -1,5 +1,4 @@
-"""Chat 流式接口业务逻辑：SSE 队列管理、仅订阅流、发送消息流。
-交互回复队列：无 Redis 用进程内 queue；有 Redis 用 redis_dao 的 run_active + reply list，多 worker 可写。"""
+"""Chat 流式接口业务逻辑：仅订阅流、发送消息流、交互回复 Redis 发布。"""
 
 import asyncio
 import json
@@ -11,7 +10,6 @@ from collections.abc import AsyncGenerator, Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import lru_cache
-from typing import Protocol, runtime_checkable
 
 from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES
 from matmaster.context.sources.turn_input import TurnInput
@@ -21,10 +19,6 @@ from src.dao.redis_dao import (
     get_redis_dao,
 )
 from src.models.chat import ChatSendRequest, DeliverySpec
-from src.services.agent_run_service import (
-    AgentRunService,
-    get_agent_run_service,
-)
 from src.services.chat_history import ChatHistoryConverter
 from src.services.deploy_state_service import (
     DeployStateService,
@@ -58,54 +52,57 @@ from src.utils.worker_id import get_worker_id
 logger = logging.getLogger(__name__)
 
 
-@runtime_checkable
-class ReplyQueueLike(Protocol):
-    """Interaction reply queue abstraction used by stream/chat endpoints."""
+def _start_redis_stream_subscription(
+    session_id: str,
+    loop: asyncio.AbstractEventLoop,
+    *,
+    thread_name: str,
+    ready_on_subscribe: bool = False,
+) -> tuple[asyncio.Queue, threading.Event, threading.Event, threading.Thread]:
+    redis_queue: asyncio.Queue = asyncio.Queue()
+    shutdown_event = threading.Event()
+    subscribe_ready = threading.Event()
+    channel = STREAM_CHANNEL_PREFIX + session_id
 
-    def put_content(self, content: str) -> None: ...
-
-    def put_cancel(self) -> None: ...
-
-    def get(self, timeout: float | None = None) -> str | None: ...
-
-
-class StreamQueueManager:
-    """流式接口的队列管理：SSE 订阅队列的注册/注销与广播；当前 run 的交互回复队列（ask_question 共用）。"""
-
-    def __init__(self) -> None:
-        # session_id -> 该会话下所有 SSE 连接的队列，agent 事件会广播到这些队列
-        self._sse_queues: dict[str, list[asyncio.Queue]] = {}
-
-    def register_subscriber(self, session_id: str) -> asyncio.Queue:
-        """为会话注册一个 SSE 订阅队列，返回该队列。"""
-        sid = session_id.strip()
-        event_queue: asyncio.Queue = asyncio.Queue()
-        if sid not in self._sse_queues:
-            self._sse_queues[sid] = []
-        self._sse_queues[sid].append(event_queue)
-        return event_queue
-
-    def unregister_subscriber(
-        self, session_id: str, event_queue: asyncio.Queue
-    ) -> None:
-        """从会话中注销一个 SSE 订阅队列。"""
-        sid = session_id.strip()
-        if sid not in self._sse_queues:
+    def _redis_subscribe_loop() -> None:
+        client = get_redis_dao().create_client()
+        if not client:
+            subscribe_ready.set()
             return
+        pubsub = client.pubsub()
         try:
-            self._sse_queues[sid].remove(event_queue)
-        except ValueError:
-            pass
-        if not self._sse_queues[sid]:
-            del self._sse_queues[sid]
-
-    def broadcast(self, session_id: str, payload: dict) -> None:
-        """向该会话下所有订阅队列广播一条消息。"""
-        for q in self._sse_queues.get(session_id.strip()) or []:
+            pubsub.subscribe(channel)
+            while not shutdown_event.is_set():
+                msg = pubsub.get_message(timeout=1.0)
+                if not msg:
+                    continue
+                msg_type = msg.get('type')
+                if msg_type == 'subscribe':
+                    if ready_on_subscribe:
+                        subscribe_ready.set()
+                    continue
+                if msg_type != 'message':
+                    continue
+                try:
+                    data = json.loads(msg['data'])
+                    loop.call_soon_threadsafe(redis_queue.put_nowait, data)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        finally:
+            subscribe_ready.set()
             try:
-                q.put_nowait(payload)
+                pubsub.unsubscribe(channel)
+                pubsub.close()
             except Exception:
                 pass
+
+    sub_thread = threading.Thread(
+        target=_redis_subscribe_loop,
+        name=thread_name,
+        daemon=True,
+    )
+    sub_thread.start()
+    return redis_queue, shutdown_event, subscribe_ready, sub_thread
 
 
 @dataclass
@@ -114,7 +111,6 @@ class RunHandle:
 
     task_id: str
     invocation_id: str
-    turn_input: TurnInput
     job: dict
     event: dict  # 已落库的发起事件（User/query 或 System/trigger）
 
@@ -145,25 +141,20 @@ class SendStreamContext:
     invocation_id: str  # 本轮调用的唯一标识，前端用于区分第几轮
     mode: str
     user_msg: dict
-    request_event_queue: asyncio.Queue
     job: dict  # _prepare_run 组好的入队 job；由 generate_send_stream 经 _enqueue_run 入队
 
 
 class ChatStreamService:
-    """流式接口服务：仅订阅流、发送消息流。队列由 StreamQueueManager 管理。"""
+    """流式接口服务：仅订阅流、发送消息流。"""
 
     def __init__(
         self,
-        queue_manager: StreamQueueManager | None = None,
         sessions_service: ChatSessionsService | None = None,
         events_service: ChatEventsService | None = None,
-        agent_run_service: AgentRunService | None = None,
         deploy_state_service: DeployStateService | None = None,
     ) -> None:
-        self._queues = queue_manager or StreamQueueManager()
         self._sessions_service = sessions_service or get_sessions_service()
         self._events_service = events_service or get_events_service()
-        self._agent_run_service = agent_run_service or get_agent_run_service()
         self._deploy_state_service = deploy_state_service or get_deploy_state_service()
 
     @staticmethod
@@ -194,6 +185,23 @@ class ChatStreamService:
                 buf_len = 0
         if buf:
             yield ''.join(buf)
+
+    def _iter_history_replay_batches(
+        self, session_id: str, *, exclude_task_id: str | None = None
+    ):
+        events = (
+            self._events_service.get_session_events(
+                session_id,
+                include_spawn=True,
+                exclude_types=REPLAY_DISCARDED_EVENT_TYPES,
+            )
+            or []
+        )
+        if exclude_task_id:
+            events = ChatHistoryConverter.exclude_task_events(events, exclude_task_id)
+        events = _normalize_replayed_compaction_events(events)
+        events = _dedupe_replayed_terminal_events(events)
+        yield from self._iter_replayed_sse_batches(_inject_elapsed_for_history(events))
 
     @staticmethod
     def _ping_payload(session_id: str) -> dict:
@@ -298,7 +306,6 @@ class ChatStreamService:
         return RunHandle(
             task_id=task_id,
             invocation_id=invocation_id,
-            turn_input=turn_input,
             job=job,
             event=event,
         )
@@ -456,254 +463,203 @@ class ChatStreamService:
         则重置为 idle、推送 run_interrupted（原因：部署）；不自动重跑，由用户决定是否重新发送。
         """
         sid = session_id.strip()
-        event_queue = self._queues.register_subscriber(sid)
-        try:
+        payload = self._sessions_service.get_session_status_payload(sid)
+        # 部署/重启后：DB 仍为 active 但本进程没有该 session 的 run → 视为上一轮在别的 pod 上被中断
+        # 若 Redis 显示该 session 的 run 在别的 worker 上，则是「切会话后落到另一实例」，不是重启，不当作 stale
+        # 若任务已入队但 Worker 尚未接手（worker 满等情况），run_owner 可能仍为 API 进程且不刷新 worker_alive，此时也不应视为 stale
+        status = payload.get('status')
+        is_running_on_this_pod = self._sessions_service.is_session_running_on_this_pod(
+            sid
+        )
+        is_run_on_another_pod = self._sessions_service.is_session_run_on_another_pod(
+            sid
+        )
+        is_run_queued = bool(REDIS_URL and get_redis_dao().is_session_run_queued(sid))
+        is_stale = (
+            status == 'active'
+            and not is_running_on_this_pod
+            and not is_run_on_another_pod
+            and not is_run_queued
+        )
+        run_owner = (
+            get_worker_registry_service().get_session_run_owner(sid)
+            if status == 'active'
+            else None
+        )
+        owner_alive = (
+            get_worker_registry_service().is_worker_alive(run_owner)
+            if run_owner
+            else None
+        )
+        logger.info(
+            'subscribe: session_id=%s status=%s is_running_on_this_pod=%s '
+            'is_run_on_another_pod=%s is_run_queued=%s is_stale=%s run_owner=%s owner_alive=%s worker_id=%s',
+            sid,
+            status,
+            is_running_on_this_pod,
+            is_run_on_another_pod,
+            is_run_queued,
+            is_stale,
+            run_owner,
+            owner_alive,
+            get_worker_id(),
+        )
+        if is_stale:
+            # 先区分原因再设状态：reason=restart 或 deploy 时会话状态设为 failed，否则设为 idle
+            reason, reason_meta = self._deploy_state_service.classify_restart_reason(
+                sid
+            )
+            if reason in ('restart', 'deploy'):
+                self._sessions_service.set_session_status(sid, 'failed')
+            else:
+                self._sessions_service.reset_session_status_to_idle_in_db(sid)
             payload = self._sessions_service.get_session_status_payload(sid)
-            # 部署/重启后：DB 仍为 active 但本进程没有该 session 的 run → 视为上一轮在别的 pod 上被中断
-            # 若 Redis 显示该 session 的 run 在别的 worker 上，则是「切会话后落到另一实例」，不是重启，不当作 stale
-            # 若任务已入队但 Worker 尚未接手（worker 满等情况），run_owner 可能仍为 API 进程且不刷新 worker_alive，此时也不应视为 stale
-            status = payload.get('status')
-            is_running_on_this_pod = (
-                self._sessions_service.is_session_running_on_this_pod(sid)
-            )
-            is_run_on_another_pod = (
-                self._sessions_service.is_session_run_on_another_pod(sid)
-            )
-            is_run_queued = bool(
-                REDIS_URL and get_redis_dao().is_session_run_queued(sid)
-            )
-            is_stale = (
-                status == 'active'
-                and not is_running_on_this_pod
-                and not is_run_on_another_pod
-                and not is_run_queued
-            )
-            run_owner = (
-                get_worker_registry_service().get_session_run_owner(sid)
-                if status == 'active'
-                else None
-            )
-            owner_alive = (
-                get_worker_registry_service().is_worker_alive(run_owner)
-                if run_owner
-                else None
-            )
+            last_query = self._events_service.get_last_user_query(sid)
+            yield self.sse_format(payload)
+            current_version = reason_meta.get('current_version')
+            previous_version = reason_meta.get('previous_version')
             logger.info(
-                'subscribe: session_id=%s status=%s is_running_on_this_pod=%s '
-                'is_run_on_another_pod=%s is_run_queued=%s is_stale=%s run_owner=%s owner_alive=%s worker_id=%s',
+                'run_interrupted: stale session detected reason=%s '
+                'session_id=%s prev=%s curr=%s',
+                reason,
                 sid,
-                status,
-                is_running_on_this_pod,
-                is_run_on_another_pod,
-                is_run_queued,
-                is_stale,
-                run_owner,
-                owner_alive,
-                get_worker_id(),
+                previous_version,
+                current_version,
             )
-            if is_stale:
-                # 先区分原因再设状态：reason=restart 或 deploy 时会话状态设为 failed，否则设为 idle
-                reason, reason_meta = (
-                    self._deploy_state_service.classify_restart_reason(sid)
-                )
-                if reason in ('restart', 'deploy'):
-                    self._sessions_service.set_session_status(sid, 'failed')
-                else:
-                    self._sessions_service.reset_session_status_to_idle_in_db(sid)
-                payload = self._sessions_service.get_session_status_payload(sid)
-                last_query = self._events_service.get_last_user_query(sid)
-                yield self.sse_format(payload)
-                current_version = reason_meta.get('current_version')
-                previous_version = reason_meta.get('previous_version')
-                logger.info(
-                    'run_interrupted: stale session detected reason=%s '
-                    'session_id=%s prev=%s curr=%s',
-                    reason,
-                    sid,
-                    previous_version,
-                    current_version,
-                )
-                run_interrupted_content = self._build_run_interrupted_message(reason)
-                last_user_content = (last_query or {}).get('content', '')
-                # 共享的可选元数据字段，SSE payload 和入库内容都需要
-                _meta: dict = {}
-                if current_version:
-                    _meta['current_version'] = current_version
-                if previous_version:
-                    _meta['previous_version'] = previous_version
-                if reason_meta.get('note'):
-                    _meta['reason_note'] = reason_meta['note']
-                if reason in ('restart', 'deploy'):
-                    _meta['treat_as_failure'] = True
-                run_interrupted_payload = {
+            run_interrupted_content = self._build_run_interrupted_message(reason)
+            last_user_content = (last_query or {}).get('content', '')
+            # 共享的可选元数据字段，SSE payload 和入库内容都需要
+            _meta: dict = {}
+            if current_version:
+                _meta['current_version'] = current_version
+            if previous_version:
+                _meta['previous_version'] = previous_version
+            if reason_meta.get('note'):
+                _meta['reason_note'] = reason_meta['note']
+            if reason in ('restart', 'deploy'):
+                _meta['treat_as_failure'] = True
+            run_interrupted_payload = {
+                'source': 'System',
+                'type': 'run_interrupted',
+                'content': run_interrupted_content,
+                'session_id': sid,
+                'reason': reason,
+                'last_user_content': last_user_content,
+                **_meta,
+            }
+            yield self.sse_format(run_interrupted_payload)
+            # 入库，便于历史/导出（如 CSV）中有重启记录；task_id 指向被中断的那一轮
+            interrupted_task_id = payload.get('last_task_id')
+            history_content = {
+                'message': run_interrupted_content,
+                'reason': reason,
+                'last_user_content': last_user_content,
+                **_meta,
+            }
+            self._events_service.add_history_event(
+                sid,
+                {
                     'source': 'System',
                     'type': 'run_interrupted',
-                    'content': run_interrupted_content,
+                    'content': history_content,
                     'session_id': sid,
-                    'reason': reason,
-                    'last_user_content': last_user_content,
-                    **_meta,
-                }
-                yield self.sse_format(run_interrupted_payload)
-                # 入库，便于历史/导出（如 CSV）中有重启记录；task_id 指向被中断的那一轮
-                interrupted_task_id = payload.get('last_task_id')
-                history_content = {
-                    'message': run_interrupted_content,
-                    'reason': reason,
-                    'last_user_content': last_user_content,
-                    **_meta,
-                }
-                self._events_service.add_history_event(
-                    sid,
+                    'task_id': interrupted_task_id,
+                },
+                user_id=self._sessions_service.get_session_user_id(sid),
+            )
+            # reason=restart 或 deploy 时按失败处理：直接结束流并推送 stream_closed，不再等待
+            if reason in ('restart', 'deploy'):
+                end_reason = (
+                    'run_interrupted_restart'
+                    if reason == 'restart'
+                    else 'run_interrupted_deploy'
+                )
+                yield self.sse_format(
                     {
                         'source': 'System',
-                        'type': 'run_interrupted',
-                        'content': history_content,
+                        'type': 'stream_closed',
+                        'content': run_interrupted_content,
                         'session_id': sid,
-                        'task_id': interrupted_task_id,
-                    },
-                    user_id=self._sessions_service.get_session_user_id(sid),
+                        'end_reason': end_reason,
+                        'treat_as_failure': True,
+                    }
                 )
-                # reason=restart 或 deploy 时按失败处理：直接结束流并推送 stream_closed，不再等待
-                if reason in ('restart', 'deploy'):
-                    end_reason = (
-                        'run_interrupted_restart'
-                        if reason == 'restart'
-                        else 'run_interrupted_deploy'
-                    )
-                    yield self.sse_format(
-                        {
-                            'source': 'System',
-                            'type': 'stream_closed',
-                            'content': run_interrupted_content,
-                            'session_id': sid,
-                            'end_reason': end_reason,
-                            'treat_as_failure': True,
-                        }
-                    )
-                    return
-                # 不再自动重跑上次用户输入，由用户自行决定是否重新发送
-            elif status == 'waiting' and not is_run_queued:
-                # DB 为 waiting 且 Redis 无 queued：若已有 run_owner 且存活则视为 active 不重置、继续流，否则重置为 idle 并结束流
-                run_owner = get_worker_registry_service().get_session_run_owner(sid)
-                owner_alive = bool(
-                    run_owner
-                    and get_worker_registry_service().is_worker_alive(run_owner)
-                )
-                if owner_alive:
-                    payload = {**payload, 'status': 'active'}
-                    yield self.sse_format(payload)
-                else:
-                    self._sessions_service.reset_session_status_to_idle_in_db(sid)
-                    payload = self._sessions_service.get_session_status_payload(sid)
-                    yield self.sse_format(payload)
-                    return
-            else:
-                yield self.sse_format(payload)
-            events = self._events_service.get_session_events(
-                sid, include_spawn=True, exclude_types=REPLAY_DISCARDED_EVENT_TYPES
+                return
+            # 不再自动重跑上次用户输入，由用户自行决定是否重新发送
+        elif status == 'waiting' and not is_run_queued:
+            # DB 为 waiting 且 Redis 无 queued：若已有 run_owner 且存活则视为 active 不重置、继续流，否则重置为 idle 并结束流
+            run_owner = get_worker_registry_service().get_session_run_owner(sid)
+            owner_alive = bool(
+                run_owner and get_worker_registry_service().is_worker_alive(run_owner)
             )
-            if events:
-                events = _normalize_replayed_compaction_events(events)
-                events = _dedupe_replayed_terminal_events(events)
-                events = _inject_elapsed_for_history(events)
-                for batch in self._iter_replayed_sse_batches(events):
-                    yield batch
+            if owner_alive:
+                payload = {**payload, 'status': 'active'}
+                yield self.sse_format(payload)
+            else:
+                self._sessions_service.reset_session_status_to_idle_in_db(sid)
+                payload = self._sessions_service.get_session_status_payload(sid)
+                yield self.sse_format(payload)
+                return
+        else:
+            yield self.sse_format(payload)
+        for batch in self._iter_history_replay_batches(sid):
+            yield batch
 
-            # 保持流打开直到 Worker 上的 run 结束，或「已入队未接手」结束；仅队列模式，run 不在 API 进程
-            def _run_still_active() -> bool:
-                if self._sessions_service.is_session_run_on_another_pod(sid):
-                    return True
-                if REDIS_URL and get_redis_dao().is_session_run_queued(sid):
-                    return True
-                return False
+        # 保持流打开直到 Worker 上的 run 结束，或「已入队未接手」结束；仅队列模式，run 不在 API 进程
+        def _run_still_active() -> bool:
+            if self._sessions_service.is_session_run_on_another_pod(sid):
+                return True
+            if REDIS_URL and get_redis_dao().is_session_run_queued(sid):
+                return True
+            return False
 
-            while _run_still_active():
-                if self._sessions_service.is_session_run_on_another_pod(sid):
-                    # run 在别的 pod：有 Redis 时订阅 stream channel 收实时事件，否则轮询 + ping 保活
-                    if REDIS_URL:
-                        redis_queue = asyncio.Queue()
-                        shutdown_event = threading.Event()
-                        loop = asyncio.get_event_loop()
-                        channel = STREAM_CHANNEL_PREFIX + sid
-
-                        def _redis_subscribe_loop(
-                            _channel: str = channel,
-                            _shutdown_ev: threading.Event = shutdown_event,
-                            _ev_loop: asyncio.AbstractEventLoop = loop,
-                            _queue: asyncio.Queue = redis_queue,
-                        ) -> None:
-                            client = get_redis_dao().create_client()
-                            if not client:
-                                return
-                            pubsub = client.pubsub()
+        while _run_still_active():
+            if self._sessions_service.is_session_run_on_another_pod(sid):
+                # run 在别的 pod：有 Redis 时订阅 stream channel 收实时事件，否则轮询 + ping 保活
+                if REDIS_URL:
+                    loop = asyncio.get_event_loop()
+                    (
+                        redis_queue,
+                        shutdown_event,
+                        _subscribe_ready,
+                        sub_thread,
+                    ) = _start_redis_stream_subscription(
+                        sid,
+                        loop,
+                        thread_name=f"stream-sub-{sid[:8]}",
+                    )
+                    try:
+                        while self._sessions_service.is_session_run_on_another_pod(sid):
                             try:
-                                pubsub.subscribe(_channel)
-                                while not _shutdown_ev.is_set():
-                                    msg = pubsub.get_message(timeout=1.0)
-                                    if msg and msg.get('type') == 'message':
-                                        try:
-                                            data = json.loads(msg['data'])
-                                            _ev_loop.call_soon_threadsafe(
-                                                _queue.put_nowait, data
-                                            )
-                                        except (json.JSONDecodeError, TypeError):
-                                            pass
-                            finally:
-                                try:
-                                    pubsub.unsubscribe(_channel)
-                                    pubsub.close()
-                                except Exception:
-                                    pass
-
-                        sub_thread = threading.Thread(
-                            target=_redis_subscribe_loop,
-                            name=f'stream-sub-{sid[:8]}',
-                            daemon=True,
-                        )
-                        sub_thread.start()
-                        try:
-                            while self._sessions_service.is_session_run_on_another_pod(
-                                sid
-                            ):
-                                try:
-                                    payload = await asyncio.wait_for(
-                                        redis_queue.get(), timeout=30.0
-                                    )
-                                except TimeoutError:
-                                    yield self.sse_format(self._ping_payload(sid))
-                                    continue
-                                if payload.get('type') == 'stream_closed':
-                                    yield self.sse_format(payload)
-                                    break
-                                yield self.sse_format(payload)
-                            else:
-                                payload = (
-                                    self._sessions_service.get_session_status_payload(
-                                        sid
-                                    )
+                                payload = await asyncio.wait_for(
+                                    redis_queue.get(), timeout=30.0
                                 )
+                            except TimeoutError:
+                                yield self.sse_format(self._ping_payload(sid))
+                                continue
+                            if payload.get('type') == 'stream_closed':
                                 yield self.sse_format(payload)
-                        finally:
-                            shutdown_event.set()
-                            sub_thread.join(timeout=2.0)
-                    else:
-                        await asyncio.sleep(5.0)
-                        if not self._sessions_service.is_session_run_on_another_pod(
-                            sid
-                        ):
+                                break
+                            yield self.sse_format(payload)
+                        else:
                             payload = self._sessions_service.get_session_status_payload(
                                 sid
                             )
                             yield self.sse_format(payload)
-                            break
-                        yield self.sse_format(self._ping_payload(sid))
+                    finally:
+                        shutdown_event.set()
+                        sub_thread.join(timeout=2.0)
                 else:
-                    # 仅「已入队未接手」：ping 保活，等待 Worker 接手或 queued 超时
                     await asyncio.sleep(5.0)
+                    if not self._sessions_service.is_session_run_on_another_pod(sid):
+                        payload = self._sessions_service.get_session_status_payload(sid)
+                        yield self.sse_format(payload)
+                        break
                     yield self.sse_format(self._ping_payload(sid))
-        finally:
-            self._queues.unregister_subscriber(sid, event_queue)
+            else:
+                # 仅「已入队未接手」：ping 保活，等待 Worker 接手或 queued 超时
+                await asyncio.sleep(5.0)
+                yield self.sse_format(self._ping_payload(sid))
 
     def prepare_send_message(
         self,
@@ -830,18 +786,15 @@ class ChatStreamService:
 
         dao = get_redis_dao()
         dao.delete_interaction_reply_list(sid)
-        request_event_queue: asyncio.Queue = asyncio.Queue()
-
         return SendStreamContext(
             task_id=handle.task_id,
             invocation_id=handle.invocation_id,
             mode=mode,
             user_msg=handle.event,
-            request_event_queue=request_event_queue,
             job=handle.job,
         )
 
-    def get_reply_queue(self, session_id: str) -> ReplyQueueLike | None:
+    def get_reply_queue(self, session_id: str) -> RedisReplyQueue | None:
         """供 POST /ask_question_reply 写入使用；无活跃 run 时返回 None。仅 Worker 队列模式，由 Redis run_active 判定。"""
         if not REDIS_URL:
             return None
@@ -856,23 +809,10 @@ class ChatStreamService:
         return get_redis_dao().get_interaction_run_context(session_id)
 
     def publish_reply_event(self, session_id: str, payload: dict) -> None:
-        """Publish a user interaction reply to local subscribers and Redis stream."""
+        """Publish a user interaction reply to Redis stream."""
         sid = session_id.strip()
-        self._queues.broadcast(sid, payload)
         if REDIS_URL:
             get_redis_dao().publish_stream_event(sid, payload)
-
-    def _send_cb(
-        self,
-        session_id: str,
-        request_event_queue: asyncio.Queue,
-        payload: dict,
-    ) -> None:
-        """供 run_agent 的 send_cb 使用：写入本连接队列并广播到订阅队列；有 Redis 时同时发布到 stream channel 供其它 pod 的 subscribe 流消费。"""
-        request_event_queue.put_nowait(payload)
-        self._queues.broadcast(session_id, payload)
-        if REDIS_URL:
-            get_redis_dao().publish_stream_event(session_id, payload)
 
     async def generate_send_stream(
         self,
@@ -881,7 +821,7 @@ class ChatStreamService:
         ctx: SendStreamContext,
     ) -> AsyncGenerator[str, None]:
         """
-        发送消息流：先推送历史 + 用户消息 + 状态，再在后台跑 agent，本连接从 request_event_queue 收事件并 yield。
+        发送消息流：先推送历史 + 用户消息 + 状态，再订阅 Redis channel 推送 Worker 事件。
         """
         sid = session_id.strip()
         mode = ctx.mode
@@ -899,65 +839,23 @@ class ChatStreamService:
         payload['stream_started_at'] = start_time_ms
         payload['invocation_id'] = ctx.invocation_id
         yield self.sse_format(payload)
-        history = (
-            self._events_service.get_session_events(
-                sid, include_spawn=True, exclude_types=REPLAY_DISCARDED_EVENT_TYPES
-            )
-            or []
-        )
-        history = ChatHistoryConverter.exclude_task_events(history, ctx.task_id)
-        history = _normalize_replayed_compaction_events(history)
-        history = _dedupe_replayed_terminal_events(history)
-        history = _inject_elapsed_for_history(history)
-        for batch in self._iter_replayed_sse_batches(history):
+        for batch in self._iter_history_replay_batches(
+            sid, exclude_task_id=ctx.task_id
+        ):
             yield batch
         yield self.sse_format(ctx.user_msg)
 
-        def send_cb(payload: dict):
-            """同步回调：用 call_soon_threadsafe 把事件投递到 event loop，不等待。
-            避免因 SSE 写阻塞导致 run_coroutine_threadsafe 超时、事件已落库但未推送到前端。"""
-            loop.call_soon_threadsafe(
-                self._send_cb, sid, ctx.request_event_queue, payload
-            )
-
-        redis_queue = asyncio.Queue()
-        shutdown_event = threading.Event()
-        subscribe_ready = threading.Event()
-        channel = STREAM_CHANNEL_PREFIX + sid
-
-        def _redis_subscribe_loop() -> None:
-            client = get_redis_dao().create_client()
-            if not client:
-                subscribe_ready.set()
-                return
-            pubsub = client.pubsub()
-            try:
-                pubsub.subscribe(channel)
-                while not shutdown_event.is_set():
-                    msg = pubsub.get_message(timeout=1.0)
-                    if msg and msg.get('type') == 'subscribe':
-                        subscribe_ready.set()
-                        continue
-                    if msg and msg.get('type') == 'message':
-                        try:
-                            data = json.loads(msg['data'])
-                            loop.call_soon_threadsafe(redis_queue.put_nowait, data)
-                        except (json.JSONDecodeError, TypeError):
-                            pass
-            finally:
-                subscribe_ready.set()
-                try:
-                    pubsub.unsubscribe(channel)
-                    pubsub.close()
-                except Exception:
-                    pass
-
-        sub_thread = threading.Thread(
-            target=_redis_subscribe_loop,
-            name=f'send-stream-queue-{sid[:8]}',
-            daemon=True,
+        (
+            redis_queue,
+            shutdown_event,
+            subscribe_ready,
+            sub_thread,
+        ) = _start_redis_stream_subscription(
+            sid,
+            loop,
+            thread_name=f"send-stream-queue-{sid[:8]}",
+            ready_on_subscribe=True,
         )
-        sub_thread.start()
 
         try:
             if not await asyncio.to_thread(subscribe_ready.wait, 3.0):
@@ -986,32 +884,25 @@ class ChatStreamService:
                     }
                 )
                 return
-            try:
-                while True:
-                    try:
-                        payload = await asyncio.wait_for(
-                            redis_queue.get(), timeout=30.0
-                        )
-                    except TimeoutError:
-                        yield self.sse_format(self._ping_payload(sid))
-                        continue
-                    elapsed_ms = int(time.time() * 1000) - start_time_ms
-                    out = {
-                        **payload,
-                        'elapsed_ms': elapsed_ms,
-                        'stream_started_at': start_time_ms,
-                        'invocation_id': payload.get('invocation_id')
-                        or ctx.invocation_id,
-                    }
-                    yield self.sse_format(out)
-                    if payload.get('type') == 'stream_closed':
-                        break
-            finally:
-                shutdown_event.set()
-                sub_thread.join(timeout=2.0)
+            while True:
+                try:
+                    payload = await asyncio.wait_for(redis_queue.get(), timeout=30.0)
+                except TimeoutError:
+                    yield self.sse_format(self._ping_payload(sid))
+                    continue
+                elapsed_ms = int(time.time() * 1000) - start_time_ms
+                out = {
+                    **payload,
+                    'elapsed_ms': elapsed_ms,
+                    'stream_started_at': start_time_ms,
+                    'invocation_id': payload.get('invocation_id') or ctx.invocation_id,
+                }
+                yield self.sse_format(out)
+                if payload.get('type') == 'stream_closed':
+                    break
         finally:
-            # 不断开即不 put_cancel：仅用户显式点「停止」(POST /stop) 才取消，刷新/关 Tab 后可在新页继续回复
-            pass
+            shutdown_event.set()
+            sub_thread.join(timeout=2.0)
 
 
 @lru_cache
@@ -1019,6 +910,5 @@ def get_stream_service() -> ChatStreamService:
     return ChatStreamService(
         sessions_service=get_sessions_service(),
         events_service=get_events_service(),
-        agent_run_service=get_agent_run_service(),
         deploy_state_service=get_deploy_state_service(),
     )

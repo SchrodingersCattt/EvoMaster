@@ -18,7 +18,6 @@ def _service(session_directory=None):
         ChatStreamService(
             sessions_service=sessions_service,
             events_service=events_service,
-            agent_run_service=MagicMock(),
             deploy_state_service=deploy_state_service,
         ),
         sessions_service,

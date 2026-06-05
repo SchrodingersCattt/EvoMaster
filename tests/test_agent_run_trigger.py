@@ -86,14 +86,11 @@ def test_internal_trigger_token_constant_importable():
 
 
 def test_run_handle_and_busy_and_trigger_result_shapes():
-    from matmaster.context.sources.turn_input import TurnInput
     from src.services.stream_service import Busy, RunHandle, TriggerResult
 
-    ti = TurnInput.from_values(user_text="hi")
     handle = RunHandle(
         task_id="trig_x",
         invocation_id="inv_x",
-        turn_input=ti,
         job={"session_id": "s1"},
         event={"source": "System", "type": "trigger"},
     )
@@ -110,8 +107,6 @@ def test_run_handle_and_busy_and_trigger_result_shapes():
 
 
 def test_send_stream_context_has_job_field():
-    import asyncio
-
     from src.services.stream_service import SendStreamContext
 
     ctx = SendStreamContext(
@@ -119,7 +114,6 @@ def test_send_stream_context_has_job_field():
         invocation_id="i",
         mode="direct",
         user_msg={},
-        request_event_queue=asyncio.Queue(),
         job={"session_id": "s1"},
     )
     assert ctx.job == {"session_id": "s1"}
@@ -135,7 +129,6 @@ def _make_service():
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=MagicMock(),
     )
     return service, sessions_service, events_service
@@ -175,8 +168,8 @@ def test_prepare_run_snapshots_boundary_before_writing_event():
     assert call_order == ["snapshot", "write_event"]
     assert handle.task_id.startswith("trig_")
     assert handle.invocation_id.startswith("inv_")
-    assert handle.turn_input.pre_turn_history_event_id == 42
-    assert handle.turn_input.user_text == "作业完成"
+    assert handle.job["turn_input"]["pre_turn_history_event_id"] == 42
+    assert handle.job["turn_input"]["user_text"] == "作业完成"
     assert handle.job["origin"] == "hpc_job"
     assert handle.job["delivery"] == {"notify": True}
     assert handle.job["user_prompt"] == "作业完成"
@@ -292,7 +285,6 @@ def _make_trigger_service(owner="owner-1"):
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=MagicMock(),
     )
     return service, sessions_service, events_service
