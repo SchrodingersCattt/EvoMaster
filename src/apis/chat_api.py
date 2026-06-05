@@ -321,7 +321,7 @@ async def chat_stream(
             )
             raise ForbiddenErrorResponse(
                 msg=quota_status.exhausted_message(
-                    "免费额度已用完，请稍后再试或填写问卷申请额度。"
+                    "免费额度已用完，请稍后再试。"
                 ),
             )
 
