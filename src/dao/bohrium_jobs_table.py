@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import logging
+import posixpath
 from typing import Any
 
 from src.base.base_table import BaseTable
@@ -17,17 +18,35 @@ from src.base.base_table import BaseTable
 logger = logging.getLogger(__name__)
 
 
+def _require_workspace(workspace: str) -> str:
+    if not isinstance(workspace, str):
+        raise ValueError(f"bohrium_jobs.workspace must be a string, got {workspace!r}")
+    stripped = workspace.strip()
+    if not stripped:
+        raise ValueError("bohrium_jobs.workspace must not be empty")
+    if "\0" in stripped:
+        raise ValueError("bohrium_jobs.workspace contains invalid characters")
+    if not stripped.startswith("/"):
+        raise ValueError(f"bohrium_jobs.workspace must be absolute, got {workspace!r}")
+    normalized = posixpath.normpath(stripped)
+    if normalized != "/share" and not normalized.startswith("/share/"):
+        raise ValueError(
+            f"bohrium_jobs.workspace must be /share path, got {workspace!r}"
+        )
+    return normalized
+
+
 class BohriumJobsTable(BaseTable):
     """bohrium_jobs DAO（raw SQL，同步 PyMySQL）。"""
 
     table_name = "bohrium_jobs"
     _AGENT_COLUMNS = (
-        "job_id, job_name, status, sandbox, project_id, input_dir, "
+        "job_id, job_name, status, sandbox, project_id, input_dir, workspace, "
         "submitted_at, last_polled_at, result_dir"
     )
     _CLAIM_COLUMNS = (
         "id, session_id, user_id, org_id, project_id, job_id, sandbox, "
-        "status, poll_count"
+        "workspace, status, poll_count"
     )
 
     def init_table(self) -> None:
@@ -47,18 +66,20 @@ class BohriumJobsTable(BaseTable):
         project_id: int,
         sandbox: bool,
         input_dir: str,
+        workspace: str,
     ) -> None:
         """job/add 成功后写入。next_poll_at = submitted_at（新作业即到期）。"""
         if project_id is None or int(project_id) <= 0:
             raise ValueError(f"bohrium_jobs.project_id must be > 0, got {project_id!r}")
+        workspace_value = _require_workspace(workspace)
         sql = f"""
             INSERT INTO {self.table_name}
                 (session_id, invocation_id, spawn_id, user_id, org_id,
-                 job_id, job_name, project_id, sandbox, input_dir,
+                 job_id, job_name, project_id, sandbox, input_dir, workspace,
                  status, poll_count, submitted_at, next_poll_at)
             VALUES
                 (%s, %s, %s, %s, %s,
-                 %s, %s, %s, %s, %s,
+                 %s, %s, %s, %s, %s, %s,
                  'submitted', 0, NOW(), NOW())
             ON DUPLICATE KEY UPDATE
                 session_id = VALUES(session_id),
@@ -66,7 +87,8 @@ class BohriumJobsTable(BaseTable):
                 spawn_id = VALUES(spawn_id),
                 job_name = VALUES(job_name),
                 project_id = VALUES(project_id),
-                input_dir = VALUES(input_dir)
+                input_dir = VALUES(input_dir),
+                workspace = VALUES(workspace)
         """
         with self.get_connection() as conn:
             with conn.cursor() as cur:
@@ -83,6 +105,7 @@ class BohriumJobsTable(BaseTable):
                         int(project_id),
                         1 if sandbox else 0,
                         input_dir,
+                        workspace_value,
                     ),
                 )
             conn.commit()
@@ -185,6 +208,7 @@ class BohriumJobsTable(BaseTable):
             "sandbox": bool(row["sandbox"]),
             "project_id": int(row["project_id"]),
             "input_dir": row["input_dir"],
+            "workspace": row["workspace"],
             "submitted_at": _ts(row["submitted_at"]),
             "last_polled_at": _ts(row["last_polled_at"]),
             "result_dir": row["result_dir"],

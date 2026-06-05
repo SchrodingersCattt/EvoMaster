@@ -520,6 +520,7 @@ class AgentRunService:
                 invocation_id=invocation_id,
                 user_id=_ledger_user_id,
                 org_id=_ledger_org_id,
+                workspace=stage_result.workspace,
             )
             agent_run_ctx = AgentRunContext(
                 environment=environment,

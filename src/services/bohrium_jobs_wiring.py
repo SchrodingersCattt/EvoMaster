@@ -9,10 +9,23 @@ from collections.abc import Callable
 from matmaster.bohrium.status import to_ledger_status
 from matmaster.context.ports import SessionJobs, SessionJobsQuery
 from src.dao.bohrium_jobs_table import BohriumJobsTable
+from src.services.session_directory_service import (
+    SessionDirectoryError,
+    normalize_remote_share_path,
+)
 
 logger = logging.getLogger(__name__)
 
 _FOREGROUND_POLL_BACKOFF_SECONDS = 30
+
+
+def _normalize_ledger_workspace(workspace: str | None) -> str | None:
+    if workspace is None:
+        return None
+    try:
+        return normalize_remote_share_path(workspace)
+    except SessionDirectoryError as exc:
+        raise ValueError(f"bohrium ledger workspace invalid: {workspace!r}") from exc
 
 
 class _BohriumJobsTableRef:
@@ -40,6 +53,7 @@ class _BohriumJobLedger:
         invocation_id: str | None,
         user_id: str,
         org_id: str,
+        workspace: str,
         spawn_id: str | None = None,
     ) -> None:
         self._table_ref = table_ref
@@ -47,6 +61,7 @@ class _BohriumJobLedger:
         self._invocation_id = invocation_id
         self._user_id = user_id
         self._org_id = org_id
+        self._workspace = workspace
         self._spawn_id = spawn_id
 
     def _require_identity(self) -> None:
@@ -85,6 +100,7 @@ class _BohriumJobLedger:
             project_id=int(project_id),
             sandbox=bool(sandbox),
             input_dir=str(input_dir),
+            workspace=self._workspace,
         )
 
     def record_poll(
@@ -170,19 +186,26 @@ def build_bohrium_jobs_ports(
     invocation_id: str | None,
     user_id: str,
     org_id: str,
+    workspace: str | None,
     spawn_id: str | None = None,
     table: BohriumJobsTable | None = None,
     table_factory: Callable[[], BohriumJobsTable] = BohriumJobsTable,
-) -> tuple[_BohriumJobLedger, _RunSessionJobsPort]:
+) -> tuple[_BohriumJobLedger | None, _RunSessionJobsPort]:
     """构造写 port 与读 port（共享同一个 DAO 实例）。"""
     table_ref = _BohriumJobsTableRef(table=table, table_factory=table_factory)
-    ledger = _BohriumJobLedger(
-        table_ref=table_ref,
-        session_id=session_id,
-        invocation_id=invocation_id,
-        user_id=user_id,
-        org_id=org_id,
-        spawn_id=spawn_id,
+    normalized_workspace = _normalize_ledger_workspace(workspace)
+    ledger = (
+        _BohriumJobLedger(
+            table_ref=table_ref,
+            session_id=session_id,
+            invocation_id=invocation_id,
+            user_id=user_id,
+            org_id=org_id,
+            workspace=normalized_workspace,
+            spawn_id=spawn_id,
+        )
+        if normalized_workspace is not None
+        else None
     )
     jobs = _RunSessionJobsPort(table_ref=table_ref, user_id=user_id, org_id=org_id)
     return ledger, jobs

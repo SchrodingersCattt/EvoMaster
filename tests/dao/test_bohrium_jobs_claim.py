@@ -16,6 +16,7 @@ def _seed_active(jobs_table, n: int) -> None:
             project_id=42,
             sandbox=True,
             input_dir="data/in",
+            workspace="/share/project",
         )
 
 

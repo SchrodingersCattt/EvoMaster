@@ -15,6 +15,7 @@ CREATE TABLE `bohrium_jobs` (
     `sandbox` TINYINT(1) NOT NULL DEFAULT 0,
 
     `input_dir` VARCHAR(1024) NOT NULL,
+    `workspace` VARCHAR(1024) COLLATE utf8mb4_bin NOT NULL,
     `result_dir` VARCHAR(1024) NULL,
 
     `status` VARCHAR(32) COLLATE utf8mb4_bin NOT NULL DEFAULT 'submitted',
@@ -40,6 +41,9 @@ CREATE TABLE `bohrium_jobs` (
         'submitted', 'running', 'terminating', 'unknown',
         'finished', 'failed', 'stopped'
     )),
+    CONSTRAINT `chk_workspace_share_path` CHECK (
+        `workspace` = '/share' OR `workspace` LIKE '/share/%'
+    ),
     CONSTRAINT `chk_active_poll` CHECK (
         (`status` IN ('submitted', 'running', 'terminating', 'unknown') AND `next_poll_at` IS NOT NULL)
         OR

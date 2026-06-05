@@ -15,6 +15,7 @@ def _submit_kwargs(**over):
         project_id=42,
         sandbox=True,
         input_dir="data/in",
+        workspace="/share/project",
     )
     base.update(over)
     return base
@@ -32,6 +33,7 @@ def test_insert_submitted_sets_active_invariants(jobs_table) -> None:
     assert row["sandbox"] == 1
     assert row["project_id"] == 42
     assert row["input_dir"] == "data/in"
+    assert row["workspace"] == "/share/project"
     assert row["invocation_id"] == "inv-1"
     assert row["spawn_id"] is None
 
@@ -235,6 +237,7 @@ def test_query_session_active_returns_active_only_sorted(jobs_table) -> None:
         "sandbox",
         "project_id",
         "input_dir",
+        "workspace",
         "submitted_at",
         "last_polled_at",
         "result_dir",

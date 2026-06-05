@@ -56,6 +56,7 @@ def _submit_kwargs(**over):
         project_id=42,
         sandbox=False,
         input_dir="data/in",
+        workspace="/share/project",
     )
     base.update(over)
     return base
@@ -84,6 +85,7 @@ def test_poller_polls_due_job_and_writes_running(jobs_table) -> None:
     assert row["status"] == "running"
     assert row["poll_count"] == 1
     assert row["next_poll_at"] is not None
+    assert row["workspace"] == "/share/project"
 
 
 def test_poller_first_poll_uses_initial_backoff() -> None:
@@ -100,6 +102,7 @@ def test_poller_first_poll_uses_initial_backoff() -> None:
                     "project_id": 42,
                     "job_id": "101",
                     "sandbox": False,
+                    "workspace": "/share/project",
                     "status": "submitted",
                     "poll_count": 0,
                 }
@@ -138,6 +141,24 @@ def test_poller_writes_terminal_and_stops_polling(jobs_table) -> None:
     assert row["status"] == "finished"
     assert row["next_poll_at"] is None
     assert row["terminal_at"] is not None
+
+
+def test_claim_due_batch_returns_workspace(jobs_table) -> None:
+    jobs_table.insert_submitted(
+        **_submit_kwargs(job_id="301", workspace="/share/project/a")
+    )
+
+    rows = jobs_table.claim_due_batch(limit=10, claim_timeout_seconds=120)
+
+    assert rows[0]["job_id"] == "301"
+    assert rows[0]["workspace"] == "/share/project/a"
+
+
+def test_insert_submitted_rejects_workspace_outside_share(jobs_table) -> None:
+    with pytest.raises(ValueError, match="bohrium_jobs.workspace"):
+        jobs_table.insert_submitted(
+            **_submit_kwargs(job_id="302", workspace="/tmp/project")
+        )
 
 
 def test_poller_skips_terminal_jobs(jobs_table) -> None:

@@ -15,6 +15,7 @@ def test_record_submit_passes_identity_snapshot() -> None:
         user_id="u1",
         org_id="o1",
         spawn_id="sp-1",
+        workspace="/share/project/../project",
         table=table,
     )
     ledger.record_submit(
@@ -34,6 +35,7 @@ def test_record_submit_passes_identity_snapshot() -> None:
     assert kw["job_id"] == "12345"
     assert kw["sandbox"] is True
     assert kw["input_dir"] == "data/in"
+    assert kw["workspace"] == "/share/project"
 
 
 def test_record_submit_fails_when_identity_missing() -> None:
@@ -43,6 +45,7 @@ def test_record_submit_fails_when_identity_missing() -> None:
         invocation_id="inv-1",
         user_id="",
         org_id="o1",
+        workspace="/share/project",
         table=table,
     )
     with pytest.raises(ValueError):
@@ -63,6 +66,7 @@ def test_record_submit_allows_null_invocation_id() -> None:
         invocation_id=None,
         user_id="u1",
         org_id="o1",
+        workspace="/share/project",
         table=table,
     )
     ledger.record_submit(
@@ -75,6 +79,35 @@ def test_record_submit_allows_null_invocation_id() -> None:
     assert table.insert_submitted.call_args.kwargs["invocation_id"] is None
 
 
+def test_ledger_write_port_is_none_without_workspace() -> None:
+    table = MagicMock()
+    ledger, jobs = build_bohrium_jobs_ports(
+        session_id="sess-1",
+        invocation_id="inv-1",
+        user_id="u1",
+        org_id="o1",
+        workspace=None,
+        table=table,
+    )
+
+    assert ledger is None
+    assert jobs is not None
+    table.insert_submitted.assert_not_called()
+
+
+def test_ledger_workspace_must_be_share_path() -> None:
+    table = MagicMock()
+    with pytest.raises(ValueError, match="bohrium ledger workspace"):
+        build_bohrium_jobs_ports(
+            session_id="sess-1",
+            invocation_id="inv-1",
+            user_id="u1",
+            org_id="o1",
+            workspace="/tmp/project",
+            table=table,
+        )
+
+
 def test_record_poll_fails_when_identity_missing() -> None:
     table = MagicMock()
     ledger, _ = build_bohrium_jobs_ports(
@@ -82,6 +115,7 @@ def test_record_poll_fails_when_identity_missing() -> None:
         invocation_id="inv-1",
         user_id="",
         org_id="o1",
+        workspace="/share/project",
         table=table,
     )
     with pytest.raises(ValueError):
@@ -92,7 +126,12 @@ def test_record_poll_fails_when_identity_missing() -> None:
 def test_record_poll_normalizes_status_code() -> None:
     table = MagicMock()
     ledger, _ = build_bohrium_jobs_ports(
-        session_id="s", invocation_id="inv", user_id="u", org_id="o", table=table
+        session_id="s",
+        invocation_id="inv",
+        user_id="u",
+        org_id="o",
+        workspace="/share/project",
+        table=table,
     )
     ledger.record_poll(job_id="1", sandbox=False, status_code=2)
     kw = table.apply_poll.call_args.kwargs
@@ -103,7 +142,12 @@ def test_record_poll_normalizes_status_code() -> None:
 def test_mark_handled_delegates_to_dao() -> None:
     table = MagicMock()
     ledger, _ = build_bohrium_jobs_ports(
-        session_id="s", invocation_id="inv", user_id="u", org_id="o", table=table
+        session_id="s",
+        invocation_id="inv",
+        user_id="u",
+        org_id="o",
+        workspace="/share/project",
+        table=table,
     )
     ledger.mark_handled(job_id="1", sandbox=True)
     kw = table.mark_handled.call_args.kwargs
@@ -117,7 +161,12 @@ async def test_session_jobs_port_loads_active_and_pending() -> None:
     table.query_session_active.return_value = [{"job_id": "a"}]
     table.query_session_pending_terminal.return_value = [{"job_id": "t"}]
     _, jobs_port = build_bohrium_jobs_ports(
-        session_id="s", invocation_id="inv", user_id="u", org_id="o", table=table
+        session_id="s",
+        invocation_id="inv",
+        user_id="u",
+        org_id="o",
+        workspace=None,
+        table=table,
     )
     from matmaster.context.ports import SessionJobsQuery
 
@@ -135,6 +184,7 @@ def test_ports_do_not_construct_table_until_identity_allows_use() -> None:
         invocation_id="inv",
         user_id="u",
         org_id="",
+        workspace="/share/project",
         table_factory=table_factory,
     )
 
