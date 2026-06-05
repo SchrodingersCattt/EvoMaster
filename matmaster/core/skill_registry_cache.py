@@ -60,14 +60,6 @@ def build_cached_skill_registry(
         return None
 
     config_disabled_skill_names = _normalized_names(skills_cfg.disabled_skill_names)
-    disabled_skill_names = set(config_disabled_skill_names)
-    for root in roots:
-        disabled_skill_names.update(_disabled_skill_names_from_settings(root))
-    if remote_roots and session is not None:
-        for remote_root in remote_roots:
-            disabled_skill_names.update(
-                _disabled_skill_names_from_remote_settings(session, remote_root)
-            )
 
     key = skill_registry_cache_key(
         local_roots=roots,
@@ -76,6 +68,17 @@ def build_cached_skill_registry(
     )
 
     def build() -> SkillRegistry:
+        # Resolving disabled names reads .settings.json files; the remote reads
+        # are SSH round-trips. Keep this inside the memoized builder so repeated
+        # spawns within one query reuse it instead of re-reading on cache hits.
+        disabled_skill_names = set(config_disabled_skill_names)
+        for root in roots:
+            disabled_skill_names.update(_disabled_skill_names_from_settings(root))
+        if remote_roots and session is not None:
+            for remote_root in remote_roots:
+                disabled_skill_names.update(
+                    _disabled_skill_names_from_remote_settings(session, remote_root)
+                )
         registry = SkillRegistry(
             roots,
             remote_session=session if remote_roots else None,
