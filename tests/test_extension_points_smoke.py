@@ -77,3 +77,20 @@ def test_schedule_tick_can_drive_trigger_run():
     assert kwargs["origin"] == "cron"
     assert kwargs["dedup_key"] == "sched:7:1717459200"
     assert kwargs["workspace"] == "/share/case"
+
+
+def test_completion_dispatcher_can_pass_claimed_workspace_to_trigger_run():
+    stream_svc = MagicMock()
+    stream_svc.trigger_run.return_value = MagicMock(status="enqueued")
+    stream_svc.trigger_run(
+        "sess-1",
+        "Bohrium 作业 job-1 已完成，请读取结果并继续。",
+        origin="bohrium_job",
+        dedup_key="bohrium_job:sess-1:job-1:done",
+        delivery={"notify": False},
+        on_busy="skip",
+        workspace="/share/project",
+    )
+    kwargs = stream_svc.trigger_run.call_args.kwargs
+    assert kwargs["workspace"] == "/share/project"
+    assert kwargs["origin"] == "bohrium_job"
