@@ -320,9 +320,7 @@ async def chat_stream(
                 body_summary,
             )
             raise ForbiddenErrorResponse(
-                msg=quota_status.exhausted_message(
-                    "免费额度已用完，请稍后再试或填写问卷申请额度。"
-                ),
+                msg=quota_status.exhausted_message("免费额度已用完，请稍后再试。"),
             )
 
     # 仅 Worker 队列模式：发送消息需 REDIS_URL，否则返回 503
