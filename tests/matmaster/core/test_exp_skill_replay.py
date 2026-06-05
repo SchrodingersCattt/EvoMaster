@@ -11,6 +11,7 @@ import yaml as _yaml
 from matmaster.config.exp import ExpConfig
 from matmaster.core.exp import Exp
 from matmaster.core.run_context import AgentRunRequest
+from matmaster.skills.registry import SkillRegistryCache
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import normalize_tool_result
 
@@ -79,7 +80,7 @@ async def test_on_skill_hit_does_not_require_metadata_record_callback(tmp_path):
 
     ctx = _make_ctx(tmp_path)
 
-    exp._init_skill_tools(ctx, registry)
+    exp._init_skill_tools(ctx, registry, skill_cache=SkillRegistryCache())
 
     skill_tool = registry.get_raw("Skill")
     raw_result = await skill_tool.execute({"skill": "test-skill"})
@@ -100,7 +101,7 @@ async def test_init_skill_tools_replays_active_skills_into_registry(tmp_path):
     ctx = _make_ctx(tmp_path, active_skills=frozenset({"test-skill"}))
 
     # No Skill call -- replay must inject the lazy tool by itself.
-    exp._init_skill_tools(ctx, registry)
+    exp._init_skill_tools(ctx, registry, skill_cache=SkillRegistryCache())
 
     assert "mat_sg_build_bulk" in registry
 
@@ -120,7 +121,7 @@ async def test_replay_is_idempotent_with_skill_tool(tmp_path):
 
     ctx = _make_ctx(tmp_path, active_skills=frozenset({"test-skill"}))
 
-    exp._init_skill_tools(ctx, registry)
+    exp._init_skill_tools(ctx, registry, skill_cache=SkillRegistryCache())
     assert "mat_sg_build_bulk" in registry
 
     tool_before = registry.get_raw("mat_sg_build_bulk")
@@ -144,7 +145,7 @@ async def test_no_active_skills_does_not_activate_skill_mcp_tools(tmp_path):
 
     ctx = _make_ctx(tmp_path)
 
-    exp._init_skill_tools(ctx, registry)
+    exp._init_skill_tools(ctx, registry, skill_cache=SkillRegistryCache())
 
     assert "Skill" in registry
     assert "mat_sg_build_bulk" not in registry
@@ -160,7 +161,7 @@ async def test_replay_silently_skips_missing_skill(tmp_path):
 
     ctx = _make_ctx(tmp_path, active_skills=frozenset({"missing-skill"}))
 
-    exp._init_skill_tools(ctx, registry)
+    exp._init_skill_tools(ctx, registry, skill_cache=SkillRegistryCache())
 
     assert "Skill" in registry
     assert "mat_sg_build_bulk" not in registry

@@ -820,6 +820,50 @@ class TestBuildRuntimeCompactorEventSink:
         assert compactor._event_sink is None
 
 
+@pytest.mark.asyncio
+async def test_root_build_runtime_creates_fresh_skill_cache_per_query(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import matmaster.core.skill_registry_cache as cache_module
+    from matmaster.config.exp import ExpConfig
+    from matmaster.core.exp import Exp
+
+    observed_caches: list[object] = []
+
+    def record_cache(*, skills_cfg, session, skill_cache):
+        observed_caches.append(skill_cache)
+        return None
+
+    monkeypatch.setattr(
+        cache_module,
+        "build_cached_skill_registry",
+        record_cache,
+    )
+    cfg = ExpConfig.model_validate(
+        {
+            "name": "direct",
+            "skills": {"enabled": True},
+        }
+    )
+    exp = Exp(cfg)
+    ctx = AgentRunContext(
+        environment=ExecutionEnvironment(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+        ),
+        request=AgentRunRequest(llm_provider=_MockProvider()),
+    )
+
+    await exp.build_runtime(ctx)
+    await exp.build_runtime(ctx)
+
+    assert len(observed_caches) == 2
+    assert observed_caches[0] is not observed_caches[1]
+
+
 # ── Active planes with new CC tool names ─────────────────
 
 

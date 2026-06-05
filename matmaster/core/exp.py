@@ -37,14 +37,6 @@ from matmaster.context.user_turn_context import (
 from matmaster.core.hooks import HookExecutor
 from matmaster.core.path_access import derive_path_access_roots
 from matmaster.core.run_context import AgentRunContext
-from matmaster.skills.settings import (
-    disabled_skill_names_from_remote_settings as _disabled_skill_names_from_remote_settings,
-)
-from matmaster.skills.settings import (
-    disabled_skill_names_from_settings as _disabled_skill_names_from_settings,
-)
-from matmaster.skills.settings import local_user_skills_root as _local_user_skills_root
-from matmaster.skills.settings import remote_skill_roots as _remote_skill_roots
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.run_metadata import RunIdentity
@@ -62,6 +54,7 @@ from matmaster.types.runtime_ports import (
 )
 
 if TYPE_CHECKING:
+    from matmaster.skills.registry import SkillRegistryCache
     from matmaster.types.messages import Message
 
 
@@ -117,10 +110,12 @@ class Exp:
         *,
         allow_spawn: bool = True,
         exclude_subagents: frozenset[str] | None = None,
+        inherited_skill_cache: SkillRegistryCache | None = None,
     ) -> None:
         self._config = config
         self._allow_spawn = allow_spawn
         self._exclude_subagents: frozenset[str] = exclude_subagents or frozenset()
+        self._inherited_skill_cache = inherited_skill_cache
         self._cleanup_callbacks: list[Callable[[], Any]] = []
         # Core-layer registry serves SkillTool registration and the
         # registry-wide system prompt prefix. Service-layer resolver state is
@@ -163,7 +158,9 @@ class Exp:
         self._cleanup_callbacks.clear()
 
     def _make_child_run_factory(
-        self, ctx: AgentRunContext
+        self,
+        ctx: AgentRunContext,
+        skill_cache: SkillRegistryCache,
     ) -> Callable[..., AsyncIterator[Any]]:
         """Seam :class:`SubagentOrchestrator` uses to run one child agent.
 
@@ -182,7 +179,11 @@ class Exp:
         ) -> AsyncIterator[Any]:
             from matmaster.config.loader import load_exp_config
 
-            child_exp = Exp(load_exp_config(exp_name), allow_spawn=False)
+            child_exp = Exp(
+                load_exp_config(exp_name),
+                allow_spawn=False,
+                inherited_skill_cache=skill_cache,
+            )
             return child_exp.run_stream(
                 ctx,
                 task,
@@ -242,6 +243,9 @@ class Exp:
         """
         env = ctx.environment
         request = ctx.request
+        from matmaster.skills.registry import SkillRegistryCache
+
+        skill_cache = self._inherited_skill_cache or SkillRegistryCache()
 
         # Discard any registry from a prior run so a turn that turns skills off
         # cannot expose stale state to the prompt builder.
@@ -297,7 +301,13 @@ class Exp:
         hook_executor = HookExecutor()
 
         if skills or self._config.skills.enabled:
-            self._init_skill_tools(ctx, registry, skills_config=skills, catalog=catalog)
+            self._init_skill_tools(
+                ctx,
+                registry,
+                skills_config=skills,
+                catalog=catalog,
+                skill_cache=skill_cache,
+            )
         self._skill_resolver = SkillRegistryResolver(self._skill_registry)
         compaction = self._config.compaction
         if request.context_limit is not None:
@@ -318,7 +328,7 @@ class Exp:
                 from matmaster.core.subagent_orchestrator import SubagentOrchestrator
 
                 orchestrator = SubagentOrchestrator(
-                    child_run_factory=self._make_child_run_factory(ctx),
+                    child_run_factory=self._make_child_run_factory(ctx, skill_cache),
                     child_event_sink=request.ports.child_event_forward_sink,
                     hook_executor=hook_executor,
                     parent_session_id=env.session_id,
@@ -758,6 +768,8 @@ class Exp:
         registry: ToolRegistry,
         skills_config: dict[str, Any] | None = None,
         catalog: Any | None = None,
+        *,
+        skill_cache: SkillRegistryCache,
     ) -> None:
         """Initialize skill tools with lazy MCP schema injection.
 
@@ -771,22 +783,17 @@ class Exp:
 
         env = ctx.environment
 
-        from matmaster.skills.registry import SkillRegistry
+        from matmaster.core.skill_registry_cache import build_cached_skill_registry
         from matmaster.tools.builtin.skill_tool import SkillTool
         from matmaster.tools.lazy_mcp import LazyMCPConnector, LazyMCPTool
         from matmaster.tools.schema_cache import ToolSchemaCache
 
-        # Build root list from str | list[str]
-        roots_raw = skills_cfg.skills_root
-        if isinstance(roots_raw, list):
-            roots = [Path(r) for r in roots_raw if r]
-        else:
-            roots = [Path(roots_raw)] if roots_raw else []
-        local_user_skills_root = _local_user_skills_root(env.session)
-        if local_user_skills_root is not None:
-            roots.append(local_user_skills_root)
-        remote_roots = _remote_skill_roots(env.session)
-        if not roots and not remote_roots:
+        skill_registry = build_cached_skill_registry(
+            skills_cfg=skills_cfg,
+            session=env.session,
+            skill_cache=skill_cache,
+        )
+        if skill_registry is None:
             self.logger.warning(
                 "skills.enabled=true but no skill roots are available, skipping skill init"
             )
@@ -795,21 +802,6 @@ class Exp:
         # Core-layer registry is independent of the service-layer resolver
         # registry. Service registry serves ActiveSkill prompt rendering; this
         # registry serves SkillTool registration into ToolCatalog.
-        skill_registry = SkillRegistry(
-            roots,
-            remote_session=env.session if remote_roots else None,
-            remote_roots=remote_roots,
-        )
-        disabled_skill_names = set(skills_cfg.disabled_skill_names)
-        for root in roots:
-            disabled_skill_names.update(_disabled_skill_names_from_settings(root))
-        if remote_roots and env.session is not None:
-            for remote_root in remote_roots:
-                disabled_skill_names.update(
-                    _disabled_skill_names_from_remote_settings(env.session, remote_root)
-                )
-        if disabled_skill_names:
-            skill_registry.remove_skills(disabled_skill_names)
         schema_cache = ToolSchemaCache(Path(skills_cfg.cache_dir))
 
         # MCP runtime config: ALWAYS self-load from config_dir.
