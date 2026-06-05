@@ -17,7 +17,7 @@ The `_calculator.py` module supports four MLIP families via a unified `build_cal
 
 > †deepmd-kit reports `1.3.3.dev2445` via `git describe` (2445 commits after the ancient v1.3.3 tag). This **is** the v3.0.0+ PyTorch codebase — not a v1.x build.
 
-> DPA tasks should always use the DPA image (`dpa-calculator:5bdb7c53`). Switch to the multi-family image only when MACE/SevenNet/MatterSim is explicitly requested.
+> DPA tasks should always use the DPA image (`dpa-calculator:233df6e4`). Switch to the multi-family image only when MACE/SevenNet/MatterSim is explicitly requested.
 
 ## How `build_calculator()` resolves models
 
@@ -74,7 +74,7 @@ model_name_or_path
 
 | Image | Families | When to use |
 |-------|----------|-------------|
-| `registry.dp.tech/dptech/dpa-calculator:5bdb7c53` | **DP only** | **Default for DPA ASE tasks** |
+| `registry.dp.tech/dptech/dpa-calculator:233df6e4` | **DP only** | **Default for DPA ASE tasks** |
 | `registry.dp.tech/dptech/dp/native/prod-19853/mlips:dev-0421` | All four (DP, MACE, SevenNet, MatterSim) + lammps | Only when the user explicitly requests MACE/SevenNet/MatterSim. Use `base` env; ignore `fc`/`test` envs. |
 
 > If a package is missing, prepend `pip install <pkg> &&` before the script in `cmd`.

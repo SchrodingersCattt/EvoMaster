@@ -31,11 +31,11 @@ These are execution stop rules, not suggestions. User requests like "do not ask 
 
 | Model | Family | Image | Domain |
 |-------|--------|-------|--------|
-| **DPA4-Neo-OMat24** | DP | `registry.dp.tech/dptech/dpa-calculator:5bdb7c53` | General inorganic, OMat24, v20260528_rc |
-| **DPA4-Neo-OMat24-ZBL** | DP | `registry.dp.tech/dptech/dpa-calculator:5bdb7c53` | General inorganic, OMat24 + ZBL short-range repulsion, v20260528_rc |
-| **DPA3.1-3M** | DP | `registry.dp.tech/dptech/dpa-calculator:5bdb7c53` | General inorganic — **default**, 3M params |
-| **DPA3.2-5M** | DP | `registry.dp.tech/dptech/dpa-calculator:5bdb7c53` | General + charge/spin, supports `--charge`/`--spin` |
-| DPA2.4-7M | DP | `registry.dp.tech/dptech/dpa-calculator:5bdb7c53` | Legacy multi-head |
+| **DPA4-Neo-OMat24** | DP | `registry.dp.tech/dptech/dpa-calculator:233df6e4` | General inorganic, OMat24, v20260528_rc |
+| **DPA4-Neo-OMat24-ZBL** | DP | `registry.dp.tech/dptech/dpa-calculator:233df6e4` | General inorganic, OMat24 + ZBL short-range repulsion, v20260528_rc |
+| **DPA3.1-3M** | DP | `registry.dp.tech/dptech/dpa-calculator:233df6e4` | General inorganic — **default**, 3M params |
+| **DPA3.2-5M** | DP | `registry.dp.tech/dptech/dpa-calculator:233df6e4` | General + charge/spin, supports `--charge`/`--spin` |
+| DPA2.4-7M | DP | `registry.dp.tech/dptech/dpa-calculator:233df6e4` | Legacy multi-head |
 | **MACE-MP-0** | MACE | `registry.dp.tech/dptech/dp/native/prod-19853/mlips:dev-0421` | General inorganic foundation. **Prefer over MACE-MPA-0** (MPA-0 GitHub download times out in Bohrium) |
 | SevenNet-0 / 7net-mf-ompa | SevenNet | `registry.dp.tech/dptech/dp/native/prod-19853/mlips:dev-0421` | Graph NN |
 | MatterSim-v1-5M | MatterSim | `registry.dp.tech/dptech/dp/native/prod-19853/mlips:dev-0421` | General inorganic, 5M params |
