@@ -1,0 +1,88 @@
+from __future__ import annotations
+
+from collections.abc import Iterable
+from pathlib import Path
+from typing import Any
+
+from matmaster.config.exp import ExpSkillsConfig
+from matmaster.skills.registry import (
+    SkillRegistry,
+    SkillRegistryCache,
+    _normalize_remote_roots,
+)
+from matmaster.skills.settings import (
+    disabled_skill_names_from_remote_settings as _disabled_skill_names_from_remote_settings,
+)
+from matmaster.skills.settings import (
+    disabled_skill_names_from_settings as _disabled_skill_names_from_settings,
+)
+from matmaster.skills.settings import local_user_skills_root as _local_user_skills_root
+from matmaster.skills.settings import remote_skill_roots as _remote_skill_roots
+
+SkillRegistryCacheKey = tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]
+
+
+def _normalized_names(names: Iterable[str]) -> tuple[str, ...]:
+    return tuple(sorted(name.strip() for name in names if name.strip()))
+
+
+def skill_registry_cache_key(
+    *,
+    local_roots: list[Path],
+    remote_roots: list[str],
+    config_disabled_skill_names: Iterable[str],
+) -> SkillRegistryCacheKey:
+    return (
+        tuple(str(root) for root in local_roots),
+        tuple(_normalize_remote_roots(remote_roots)),
+        _normalized_names(config_disabled_skill_names),
+    )
+
+
+def build_cached_skill_registry(
+    *,
+    skills_cfg: ExpSkillsConfig,
+    session: Any | None,
+    skill_cache: SkillRegistryCache,
+) -> SkillRegistry | None:
+    roots_raw = skills_cfg.skills_root
+    if isinstance(roots_raw, list):
+        roots = [Path(root) for root in roots_raw if root]
+    else:
+        roots = [Path(roots_raw)] if roots_raw else []
+
+    local_user_skills_root = _local_user_skills_root(session)
+    if local_user_skills_root is not None:
+        roots.append(local_user_skills_root)
+
+    remote_roots = _remote_skill_roots(session)
+    if not roots and not remote_roots:
+        return None
+
+    config_disabled_skill_names = _normalized_names(skills_cfg.disabled_skill_names)
+    disabled_skill_names = set(config_disabled_skill_names)
+    for root in roots:
+        disabled_skill_names.update(_disabled_skill_names_from_settings(root))
+    if remote_roots and session is not None:
+        for remote_root in remote_roots:
+            disabled_skill_names.update(
+                _disabled_skill_names_from_remote_settings(session, remote_root)
+            )
+
+    key = skill_registry_cache_key(
+        local_roots=roots,
+        remote_roots=remote_roots,
+        config_disabled_skill_names=config_disabled_skill_names,
+    )
+
+    def build() -> SkillRegistry:
+        registry = SkillRegistry(
+            roots,
+            remote_session=session if remote_roots else None,
+            remote_roots=remote_roots,
+        )
+        if disabled_skill_names:
+            registry.remove_skills(disabled_skill_names)
+        return registry
+
+    return skill_cache.get_or_build(key, build)
