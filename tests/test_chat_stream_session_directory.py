@@ -36,8 +36,9 @@ def test_prepare_send_message_uses_request_directory_and_marks_bohrium_required(
         ctx = service.prepare_send_message("sess-1", req, user_id="user-1")
 
     assert ctx is not None
-    assert ctx.job["remote_workdir"] == "/share/case"
-    assert ctx.job["session_directory_source"] == "request"
+    assert ctx.job["workspace"] == "/share/case"
+    assert "remote_workdir" not in ctx.job
+    assert "session_directory_source" not in ctx.job
     assert ctx.job["bohrium_required"] is True
     assert ctx.user_msg["session_directory"] == "/share/case"
     assert ctx.user_msg["session_directory_source"] == "request"
@@ -59,8 +60,9 @@ def test_prepare_send_message_blank_request_falls_through_to_session_directory()
         ctx = service.prepare_send_message("sess-1", req, user_id="user-1")
 
     assert ctx is not None
-    assert ctx.job["remote_workdir"] == "/share/default"
-    assert ctx.job["session_directory_source"] == "session"
+    assert ctx.job["workspace"] == "/share/default"
+    assert "remote_workdir" not in ctx.job
+    assert "session_directory_source" not in ctx.job
     assert ctx.user_msg["session_directory"] == "/share/default"
     assert ctx.user_msg["session_directory_source"] == "session"
 
@@ -76,8 +78,9 @@ def test_prepare_send_message_without_directory_keeps_existing_no_bohrium_behavi
         ctx = service.prepare_send_message("sess-1", req, user_id="user-1")
 
     assert ctx is not None
-    assert ctx.job["remote_workdir"] is None
-    assert ctx.job["session_directory_source"] == "none"
+    assert ctx.job["workspace"] is None
+    assert "remote_workdir" not in ctx.job
+    assert "session_directory_source" not in ctx.job
     assert ctx.job["bohrium_required"] is False
     stored = events_service.add_history_event.call_args.args[1]
     assert "session_directory" not in stored

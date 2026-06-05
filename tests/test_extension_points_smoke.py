@@ -67,6 +67,7 @@ def test_schedule_tick_can_drive_trigger_run():
                 dedup_key=f"sched:{row['id']}:{row['fire_epoch']}",
                 delivery={"notify": True},
                 on_busy="skip",
+                workspace="/share/case",
             )
 
     schedule_tick()
@@ -75,3 +76,4 @@ def test_schedule_tick_can_drive_trigger_run():
     kwargs = stream_svc.trigger_run.call_args.kwargs
     assert kwargs["origin"] == "cron"
     assert kwargs["dedup_key"] == "sched:7:1717459200"
+    assert kwargs["workspace"] == "/share/case"

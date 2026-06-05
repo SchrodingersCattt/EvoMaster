@@ -27,7 +27,7 @@ from src.services.deploy_state_service import (
 from src.services.events_service import ChatEventsService, get_events_service
 from src.services.session_directory_service import (
     SessionDirectoryResolver,
-    SessionDirectorySource,
+    normalize_remote_share_path,
 )
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
 from src.services.stream_reply_queue import RedisReplyQueue
@@ -254,8 +254,7 @@ class ChatStreamService:
         model: str | None = None,
         byok_credential_id: str | None = None,
         bohrium_required: bool = False,
-        remote_workdir: str | None = None,
-        session_directory_source: SessionDirectorySource = "none",
+        workspace: str | None = None,
         origin: str | None = None,
         delivery: dict | None = None,
         pre_event_hook: Callable[[], None] | None = None,
@@ -266,6 +265,7 @@ class ChatStreamService:
         占锁失败时直接返回 Busy，由调用方决定后续策略。
         """
         sid = session_id.strip()
+        workspace_value = normalize_remote_share_path(workspace) if workspace else None
         self._sessions_service.ensure_session(sid, user_id=user_id)
         acquired_ok, reason = self._sessions_service.try_acquire_session_run(sid)
         if not acquired_ok:
@@ -296,9 +296,8 @@ class ChatStreamService:
             'byok_credential_id': byok_credential_id,
             'turn_input': turn_input.to_payload(),
             'images': list(images or []),
-            'bohrium_required': bohrium_required,
-            'remote_workdir': remote_workdir,
-            'session_directory_source': session_directory_source,
+            'bohrium_required': bool(bohrium_required or workspace_value),
+            'workspace': workspace_value,
             'origin': origin,
             'delivery': delivery,
             'submitted_at': datetime.now(timezone.utc).isoformat(),
@@ -369,6 +368,7 @@ class ChatStreamService:
         llm: str | None = None,
         model: str | None = None,
         dedup_ttl_sec: int = DEFAULT_DEDUP_TTL_SEC,
+        workspace: str | None = None,
     ) -> TriggerResult:
         """程序化触发一次 agent run。"""
         sid = session_id.strip()
@@ -421,9 +421,8 @@ class ChatStreamService:
             llm=llm_val,
             model=model_val,
             byok_credential_id=None,
-            bohrium_required=False,
-            remote_workdir=None,
-            session_directory_source="none",
+            bohrium_required=bool(workspace),
+            workspace=workspace,
             origin=origin,
             delivery=delivery_payload,
         )
@@ -775,8 +774,7 @@ class ChatStreamService:
             model=model,
             byok_credential_id=byok_credential_id,
             bohrium_required=bohrium_required,
-            remote_workdir=resolved_directory.remote_workdir,
-            session_directory_source=resolved_directory.source,
+            workspace=resolved_directory.remote_workdir,
             origin=None,
             delivery=None,
             pre_event_hook=_run_pre_event_hook,

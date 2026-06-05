@@ -2,6 +2,8 @@
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 
 def test_chat_send_request_trigger_fields_default():
     from src.models.chat import ChatSendRequest
@@ -342,6 +344,57 @@ def test_trigger_run_enqueues_and_writes_system_event():
     assert pushed["origin"] == "hpc_job"
     fake_redis.mark_dedup_key_nx.assert_called_once()
     assert fake_redis.mark_dedup_key_nx.call_args.args[0] == "job:123:done"
+
+
+def test_trigger_run_accepts_workspace_for_programmatic_wakeup():
+    service, _sessions_service, events_service = _make_trigger_service()
+    fake_redis = MagicMock()
+    fake_redis.dedup_key_exists.return_value = False
+    fake_redis.lpush_agent_run_job.return_value = True
+    p1, p2, p3, p4 = _trigger_patches(fake_redis)
+
+    with p1, p2, p3, p4:
+        res = service.trigger_run(
+            "s1",
+            "作业123已完成，请回到原 workspace 继续分析",
+            origin="hpc_job",
+            dedup_key="job:123:done",
+            workspace="/share/case/../case",
+            delivery=None,
+        )
+
+    assert res.status == "enqueued"
+    pushed = fake_redis.lpush_agent_run_job.call_args.args[0]
+    assert pushed["workspace"] == "/share/case"
+    assert pushed["bohrium_required"] is True
+    assert "remote_workdir" not in pushed
+    assert "session_directory_source" not in pushed
+
+    written = events_service.add_history_event.call_args.args[1]
+    assert written["content"] == {
+        "text": "作业123已完成，请回到原 workspace 继续分析",
+        "origin": "hpc_job",
+    }
+    assert "session_directory" not in written
+
+
+def test_trigger_run_rejects_workspace_outside_share_before_enqueue():
+    service, sessions_service, events_service = _make_trigger_service()
+    fake_redis = MagicMock()
+    p1, p2, p3, p4 = _trigger_patches(fake_redis)
+
+    with p1, p2, p3, p4, pytest.raises(Exception) as exc:
+        service.trigger_run(
+            "s1",
+            "x",
+            origin="hpc_job",
+            workspace="/tmp/case",
+        )
+
+    assert getattr(exc.value, "error_code", None) == "directory_outside_share"
+    sessions_service.try_acquire_session_run.assert_not_called()
+    events_service.add_history_event.assert_not_called()
+    fake_redis.lpush_agent_run_job.assert_not_called()
 
 
 def test_trigger_run_deduped_short_circuits():
