@@ -224,7 +224,7 @@ class BohriumSetupService:
         org_id: str,
         event_callback: Callable[..., None],
         run_started_at: float,
-        remote_workdir: str | None = None,
+        workspace: str | None = None,
     ) -> BohriumSetupResult:
         return _setup_bohrium_for_run(
             session_id=session_id,
@@ -234,7 +234,7 @@ class BohriumSetupService:
             org_id=org_id,
             event_callback=event_callback,
             run_started_at=run_started_at,
-            remote_workdir=remote_workdir,
+            workspace=workspace,
         )
 
     def _cleanup_bohrium_after_run(
@@ -327,7 +327,7 @@ class BohriumSetupService:
         playground: Any,
         run_started_at: float,
         bohrium_required: bool = False,
-        remote_workdir: str | None = None,
+        workspace: str | None = None,
     ) -> BohriumSetupResult:
         """Load credentials, bridge events, and run setup in the executor."""
         loop = asyncio.get_running_loop()
@@ -341,7 +341,7 @@ class BohriumSetupService:
                 event_callback=event_cb,
                 run_started_at=run_started_at,
                 bohrium_required=bohrium_required,
-                remote_workdir=remote_workdir,
+                workspace=workspace,
             ),
         )
 
@@ -353,7 +353,7 @@ class BohriumSetupService:
         event_callback: Callable[..., None],
         run_started_at: float,
         bohrium_required: bool = False,
-        remote_workdir: str | None = None,
+        workspace: str | None = None,
     ) -> BohriumSetupResult:
         run_creds, user_id_for_ak, org_id = self._load_run_credentials(session_id)
         access_key = str(run_creds.get('access_key') or '').strip()
@@ -419,7 +419,7 @@ class BohriumSetupService:
             org_id=org_id,
             event_callback=event_callback,
             run_started_at=run_started_at,
-            remote_workdir=remote_workdir,
+            workspace=workspace,
         )
 
     async def run_cleanup(
@@ -453,7 +453,7 @@ def _setup_bohrium_for_run(
     org_id: str,
     event_callback: Callable[..., None],
     run_started_at: float,
-    remote_workdir: str | None = None,
+    workspace: str | None = None,
 ) -> BohriumSetupResult:
     """Prepare Bohrium node and SSH session for the run when credentials exist."""
     if not run_creds:
@@ -683,9 +683,7 @@ def _setup_bohrium_for_run(
                 'Bohrium 节点已就绪',
                 ip=node_ip,
             )
-            ssh_workspace_path = (remote_workdir or remote_workspace_root).rstrip(
-                '/'
-            ) or '/'
+            ssh_workspace_path = (workspace or remote_workspace_root).rstrip('/') or '/'
             original_session = pg.session
             original_owns_session = pg._owns_session
             ssh_config = SSHSessionConfig(

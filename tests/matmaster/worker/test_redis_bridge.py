@@ -84,8 +84,7 @@ class TestAgentWorkerCancellationIntegration:
             "invocation_id": "inv-1",
             "user_prompt": "hello",
             "mode": "direct",
-            "remote_workdir": "/share/case",
-            "session_directory_source": "request",
+            "workspace": "/share/case",
             "bohrium_required": True,
             removed_context_key: {
                 "user_text": "legacy only",
@@ -160,7 +159,8 @@ class TestAgentWorkerCancellationIntegration:
         assert bridge_events["stopped"] is True
         assert mod._active_controller is None
         log_context.clear.assert_called()
-        assert observed["remote_workdir"] == "/share/case"
+        assert observed["workspace"] == "/share/case"
+        assert "remote_workdir" not in observed
         assert observed["bohrium_required"] is True
         assert observed["turn_input"] is None
 

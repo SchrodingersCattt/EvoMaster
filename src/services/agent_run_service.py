@@ -243,7 +243,7 @@ class AgentRunService:
         images: list[str] | None = None,
         turn_input: TurnInput | None = None,
         bohrium_required: bool = False,
-        remote_workdir: str | None = None,
+        workspace: str | None = None,
     ) -> tuple[bool | tuple[bool, str], int, dict[str, Any] | None]:
         """Execute agent pipeline using generator event stream with fanout dispatch.
 
@@ -343,7 +343,7 @@ class AgentRunService:
                 environment=environment,
                 run_started_at=run_started_at,
                 bohrium_required=bohrium_required,
-                remote_workdir=remote_workdir,
+                workspace=workspace,
             )
             bohrium_svc = stage_result.bohrium_svc
             if stage_result.abort_result is not None:

@@ -595,7 +595,7 @@ def test_execution_binding_before_build_runtime(
 @patch.object(arb, "_remote_session_workspace_root", return_value="/share")
 @patch("src.services.agent_run_bohrium.get_bohrium_nodes_table")
 @patch("src.services.agent_run_bohrium.get_bohrium_node_service")
-def test_setup_uses_remote_workdir_for_ssh_and_execution_context(
+def test_setup_uses_workspace_for_ssh_and_execution_context(
     mock_node_svc_factory: MagicMock,
     mock_nodes_table_factory: MagicMock,
     mock_remote_workspace_root: MagicMock,
@@ -629,7 +629,7 @@ def test_setup_uses_remote_workdir_for_ssh_and_execution_context(
             org_id="o1",
             event_callback=MagicMock(),
             run_started_at=0.0,
-            remote_workdir="/share/case",
+            workspace="/share/case",
         )
 
     cfg = mock_ssh_cls.call_args.args[0]
@@ -642,7 +642,7 @@ def test_setup_uses_remote_workdir_for_ssh_and_execution_context(
     mock_ssh.open.assert_called_once()
 
 
-def test_run_setup_forwards_remote_workdir_to_setup() -> None:
+def test_run_setup_forwards_workspace_to_setup() -> None:
     from src.services.user_service import BohriumAccessKeyFetchResult
 
     svc = _make_bohrium_service()
@@ -675,9 +675,10 @@ def test_run_setup_forwards_remote_workdir_to_setup() -> None:
                 playground=MagicMock(),
                 run_started_at=1.0,
                 bohrium_required=True,
-                remote_workdir="/share/case",
+                workspace="/share/case",
             )
         )
 
     assert result is expected
-    assert mock_setup.call_args.kwargs["remote_workdir"] == "/share/case"
+    assert mock_setup.call_args.kwargs["workspace"] == "/share/case"
+    assert "remote_workdir" not in mock_setup.call_args.kwargs

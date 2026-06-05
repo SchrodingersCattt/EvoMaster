@@ -340,10 +340,10 @@ def _run_worker_loop() -> None:
         )
         turn_input = TurnInput.from_payload(payload.get('turn_input'))
         bohrium_required = bool(payload.get('bohrium_required'))
-        raw_remote_workdir = payload.get('remote_workdir')
-        remote_workdir = (
-            raw_remote_workdir.strip() or None
-            if isinstance(raw_remote_workdir, str)
+        raw_workspace = payload.get('workspace')
+        workspace = (
+            raw_workspace.strip() or None
+            if isinstance(raw_workspace, str)
             else None
         )
         delivery = payload.get('delivery')
@@ -447,8 +447,8 @@ def _run_worker_loop() -> None:
                     "user_id": session_user_id,
                     "images": images,
                     "turn_input": turn_input,
-                    "remote_workdir": remote_workdir,
-                    "bohrium_required": bohrium_required,
+                    "workspace": workspace,
+                    "bohrium_required": bool(bohrium_required or workspace),
                 }
                 result = asyncio.run(agent_run_service.run_agent(**run_agent_kwargs))
                 run_result = result
