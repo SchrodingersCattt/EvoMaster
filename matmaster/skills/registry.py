@@ -239,8 +239,8 @@ class SkillRegistryCache:
     def get_or_build(
         self,
         key: tuple[tuple[str, ...], ...],
-        builder: Callable[[], "SkillRegistry"],
-    ) -> "SkillRegistry":
+        builder: Callable[[], SkillRegistry],
+    ) -> SkillRegistry:
         cached = self._by_key.get(key)
         if cached is None:
             cached = builder()

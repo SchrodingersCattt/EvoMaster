@@ -23,9 +23,9 @@ from matmaster.core.playground import ExecutionEnvironment
 from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.core.structural_validation import StructuralValidation
 from matmaster.core.subagent_orchestrator import SubagentOrchestrator
-from matmaster.skills.registry import SkillRegistryCache
 from matmaster.core.tool_runner import FullToolRunner
 from matmaster.core.tool_scheduler import ToolScheduler
+from matmaster.skills.registry import SkillRegistryCache
 from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
@@ -768,60 +768,6 @@ class TestSpawnGuardWiring:
         import matmaster.core.exp as exp_module
 
         created_allow_spawn: list[bool] = []
-        original_exp = exp_module.Exp
-
-        class RecordingExp(original_exp):
-            def __init__(
-                self,
-                config,
-                *,
-                allow_spawn: bool = True,
-                inherited_skill_cache=None,
-            ) -> None:
-                created_allow_spawn.append(allow_spawn)
-                super().__init__(
-                    config,
-                    allow_spawn=allow_spawn,
-                    inherited_skill_cache=inherited_skill_cache,
-                )
-
-            async def run_stream(self, *args, **kwargs):
-                if False:
-                    yield None
-
-        monkeypatch.setattr(exp_module, "Exp", RecordingExp)
-
-        ctx = AgentRunContext(
-            environment=ExecutionEnvironment(
-                workdir=tmp_path,
-                execution_workdir=str(tmp_path / "exec"),
-                session_type="local",
-                cache_area=tmp_path / "cache",
-                session_id="session-1",
-            ),
-            request=AgentRunRequest(llm_provider=MockLLMProvider()),
-        )
-
-        parent = original_exp(ExpConfig(name="parent"))
-        factory = parent._make_child_run_factory(ctx, SkillRegistryCache())
-
-        with patch(
-            "matmaster.config.loader.load_exp_config",
-            return_value=ExpConfig(name="direct"),
-        ):
-            child_stream = factory("direct", "summarize this task", spawn_id="x")
-
-        assert created_allow_spawn[-1] is False
-        await child_stream.aclose()
-
-    @pytest.mark.asyncio
-    async def test_child_run_factory_passes_inherited_skill_cache(
-        self,
-        tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        import matmaster.core.exp as exp_module
-
         captured_caches: list[object] = []
         original_exp = exp_module.Exp
 
@@ -833,6 +779,7 @@ class TestSpawnGuardWiring:
                 allow_spawn: bool = True,
                 inherited_skill_cache=None,
             ) -> None:
+                created_allow_spawn.append(allow_spawn)
                 captured_caches.append(inherited_skill_cache)
                 super().__init__(
                     config,
@@ -845,6 +792,7 @@ class TestSpawnGuardWiring:
                     yield None
 
         monkeypatch.setattr(exp_module, "Exp", RecordingExp)
+
         ctx = AgentRunContext(
             environment=ExecutionEnvironment(
                 workdir=tmp_path,
@@ -855,8 +803,9 @@ class TestSpawnGuardWiring:
             ),
             request=AgentRunRequest(llm_provider=MockLLMProvider()),
         )
-        cache = SkillRegistryCache()
+
         parent = original_exp(ExpConfig(name="parent"))
+        cache = SkillRegistryCache()
         factory = parent._make_child_run_factory(ctx, cache)
 
         with patch(
@@ -865,6 +814,7 @@ class TestSpawnGuardWiring:
         ):
             child_stream = factory("direct", "summarize this task", spawn_id="x")
 
+        assert created_allow_spawn[-1] is False
         assert captured_caches[-1] is cache
         await child_stream.aclose()
 

@@ -348,7 +348,9 @@ class TestExpMCPSelfLoad:
         import pytest as _pytest
 
         with _pytest.raises(FileNotFoundError, match='MCP runtime config not found'):
-            exp._init_skill_tools(MagicMock(), MagicMock(), skill_cache=SkillRegistryCache())
+            exp._init_skill_tools(
+                MagicMock(), MagicMock(), skill_cache=SkillRegistryCache()
+            )
 
 
 class TestLazyMCPTimeoutThreading:
