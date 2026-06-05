@@ -26,7 +26,7 @@ pair_style  deepmd frozen_model.pth
 pair_coeff  * *
 ```
 
-**Type-map alignment:** The frozen model keeps the full-element type_map by default. LAMMPS data file atom types must use the same element indices (e.g., Fe=26, Ni=28 — not compact 1,2). See `reference/dpa_models.md` § "Use in LAMMPS" for full details and the compact `--type-map` alternative.
+**Type-map alignment:** Freeze preserves the model's original type_map. LAMMPS data file atom types must use those same indices (e.g., Fe=26, Ni=28 — not compact 1,2). See `reference/dpa_models.md` § "Freezing DPA for LAMMPS" for DPA3/DPA4-specific details. `dp freeze` does not provide a `--type-map` flag to create compact mappings.
 
 **Inspecting type_map of a model file:** Use `dp --pt show <model.pt> type-map` to print the element ordering. For user-provided custom models, this is the correct way to determine what elements the model covers and their ordering — do NOT attempt `torch.load`, `zipfile`, or binary parsing of `.pt` files.
 
@@ -45,11 +45,13 @@ Use script like:
 ```text
 atom_modify map yes
 pair_style  deepmd dpa4_frozen.pt2
-pair_coeff  * * Si
+pair_coeff  * *
 ```
 
 `atom_modify map yes` is required for DPA4 `.pt2` in LAMMPS; without it, the
-model may load but atom-ID mapping fails. ONLY for DPA4 LAMMPS jobs, submit with:
+model may load but atom-ID mapping fails. DPA4 uses full-index atom types in the
+LAMMPS data file; do not pass element names after `pair_coeff * *`. ONLY for
+DPA4 LAMMPS jobs, submit with:
 
 ```text
 registry.dp.tech/dptech/dp/native/hub/custom_images/dpa4:260601-1780311840

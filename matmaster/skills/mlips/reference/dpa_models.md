@@ -45,7 +45,7 @@ Other DPA versions (2.4, 3.1) do **not** use fparam — passing charge/spin has 
 
 ## Freezing DPA for LAMMPS
 
-The ASE workflows in this skill load the multi-task `.pt` file directly and pick a head via `--head`. **LAMMPS cannot consume the raw multi-task `.pt`** — you must first freeze a single branch into a `.pth`. The procedure is identical for DPA2.4-7M, DPA3.1-3M, and DPA3.2-5M.
+The ASE workflows in this skill load the multi-task `.pt` file directly and pick a head via `--head`. **LAMMPS cannot consume the raw multi-task `.pt`** — you must first freeze a model-specific LAMMPS artifact. DPA2/DPA3 freeze a selected branch into `.pth`; DPA4-Neo freezes into `.pt2` and does not use `--model-branch`.
 
 Requirements: `deepmd-kit >= 3.1.0` (verify with `dp --version`; the `mlips:dev-0421` image reports `v1.3.3.dev2445` which **is** the v3.x codebase — the version string comes from `git describe` against an ancient tag).
 
@@ -77,6 +77,13 @@ dp --pt freeze -c DPA-3.2-5M.pt -o frozen_model.pth --head [head_name]
 
 Output `frozen_model.pth` is a **single-head** model usable in both LAMMPS and ASE.
 
+For DPA4-Neo, do **not** pass `--model-branch` or `--head`. Freeze directly to
+`.pt2`:
+
+```bash
+dp --pt freeze -c DPA4-Neo-OMat24.pt -o dpa4_frozen.pt2
+```
+
 ### 3. Use in LAMMPS
 
 ```
@@ -84,12 +91,19 @@ pair_style  deepmd frozen_model.pth
 pair_coeff  * *
 ```
 
-**Type-map alignment (critical):** The frozen model preserves the full-periodic-table type_map from pretraining (H=1, He=2, ..., Fe=26, ..., Ni=28, ...). The LAMMPS data file atom types MUST match these indices. Two valid approaches:
+**Type-map alignment (critical):** The frozen model preserves the model's
+original type_map (for pretrained DPA models, the full periodic-table ordering:
+H=1, He=2, ..., Fe=26, ..., Ni=28, ...). The LAMMPS data file atom types MUST
+match these indices.
 
-- **Full-index approach** (recommended): declare ≥N atom types in the data file (where N = max atomic number used), assign Fe to type 26 and Ni to type 28 in the Masses section. Types 1-25 and 27 are unused but must be declared.
-- **Compact approach** (advanced): freeze with `--type-map Fe Ni` to produce a model with only 2 types. Then Fe=1, Ni=2 in the data file. This overrides the default full type_map.
+- **Full-index approach**: declare ≥N atom types in the data file (where N =
+  max atomic number used), assign Fe to type 26 and Ni to type 28 in the Masses
+  section. Types 1-25 and 27 are unused but must be declared.
 
-If you use compact types (1, 2) but freeze without `--type-map`, LAMMPS will silently map type 1 to H and type 2 to He — producing garbage results.
+`dp freeze` does not provide a `--type-map` flag to create compact mappings.
+`dp show <model> type-map` only inspects the existing mapping. If you use compact
+types (1, 2) with a full-index frozen model, LAMMPS will silently map type 1 to H
+and type 2 to He — producing garbage results.
 
 Run via `$PREFIX/bin/lmp -in in.lmp` (use the `lmp` binary shipped with the deepmd environment, not a system LAMMPS).
 
@@ -105,6 +119,6 @@ Then freeze the resulting checkpoint as in step 2.
 
 ### Common pitfalls
 
-- **Missing `--model-branch` / `--head`**: freezing DPA3 without it fails (multi-task model needs a branch selection).
+- **Missing `--model-branch` / `--head`**: freezing DPA3 without it fails (multi-task model needs a branch selection). DPA4-Neo is single-head and does not use these flags.
 - **Using `dp < 3.1.0`**: older versions cannot freeze DPA3 checkpoints. Upgrade first.
-- **Loading unfrozen `.pt` in LAMMPS**: not supported; always freeze to `.pth` first.
+- **Loading unfrozen `.pt` in LAMMPS**: not supported. Freeze DPA2/DPA3 to `.pth`; freeze DPA4-Neo to `.pt2`.
