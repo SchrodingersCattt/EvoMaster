@@ -15,6 +15,7 @@ import json
 import logging
 import re
 import shlex
+from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
@@ -214,6 +215,39 @@ def _parse_remote_skill_scan_stdout(stdout: Any) -> list[tuple[PurePosixPath, st
     return records
 
 
+def _normalize_remote_roots(remote_roots: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for raw_root in remote_roots:
+        root_text = raw_root.strip()
+        if not root_text:
+            continue
+        normalized = str(PurePosixPath(root_text))
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(normalized)
+    return result
+
+
+class SkillRegistryCache:
+    """Per-query cache for fully built SkillRegistry instances."""
+
+    def __init__(self) -> None:
+        self._by_key: dict[tuple[tuple[str, ...], ...], SkillRegistry] = {}
+
+    def get_or_build(
+        self,
+        key: tuple[tuple[str, ...], ...],
+        builder: Callable[[], "SkillRegistry"],
+    ) -> "SkillRegistry":
+        cached = self._by_key.get(key)
+        if cached is None:
+            cached = builder()
+            self._by_key[key] = cached
+        return cached
+
+
 # ---------------------------------------------------------------------------
 # SkillRegistry
 # ---------------------------------------------------------------------------
@@ -242,12 +276,22 @@ class SkillRegistry:
             self._roots = list(skills_root)
 
         self._skills: dict[str, Skill | RemoteSkill] = {}
+        self._skill_sources: dict[str, Literal["local", "remote"]] = {}
+        self._stats = {
+            "local_loaded": 0,
+            "remote_loaded": 0,
+            "local_over_local": 0,
+            "remote_over_local": 0,
+            "remote_over_remote": 0,
+        }
+        normalized_remote_roots = _normalize_remote_roots(remote_roots or [])
         self._load_skills(skills)
         self._load_remote_skills(
             remote_session=remote_session,
-            remote_roots=remote_roots or [],
+            remote_roots=normalized_remote_roots,
             name_filter=skills,
         )
+        self._log_build_summary(normalized_remote_roots)
 
     # -- discovery ----------------------------------------------------------
 
@@ -284,12 +328,15 @@ class SkillRegistry:
                     continue
 
                 if skill.meta_info.name in self._skills:
+                    self._stats["local_over_local"] += 1
                     logger.warning(
                         "Skill %r overridden by %s",
                         skill.meta_info.name,
                         skill_dir,
                     )
                 self._skills[skill.meta_info.name] = skill
+                self._skill_sources[skill.meta_info.name] = "local"
+                self._stats["local_loaded"] += 1
                 skill_dirs.add(skill_dir)
 
     def _load_remote_skills(
@@ -355,13 +402,46 @@ class SkillRegistry:
                 if name_filter is not None and skill.meta_info.name not in name_filter:
                     continue
                 if skill.meta_info.name in self._skills:
-                    logger.warning(
-                        "Skill %r overridden by %s",
-                        skill.meta_info.name,
-                        skill_dir,
-                    )
+                    previous_source = self._skill_sources.get(skill.meta_info.name)
+                    if previous_source == "local":
+                        self._stats["remote_over_local"] += 1
+                        logger.debug(
+                            "Skill %r selected from remote root %s over local "
+                            "fallback %s",
+                            skill.meta_info.name,
+                            skill_dir,
+                            self._skills[skill.meta_info.name].skill_path,
+                        )
+                    else:
+                        self._stats["remote_over_remote"] += 1
+                        logger.warning(
+                            "Skill %r overridden by %s",
+                            skill.meta_info.name,
+                            skill_dir,
+                        )
                 self._skills[skill.meta_info.name] = skill
+                self._skill_sources[skill.meta_info.name] = "remote"
+                self._stats["remote_loaded"] += 1
                 skill_dirs.add(skill_dir)
+
+    def _log_build_summary(self, remote_roots: list[str]) -> None:
+        local_fallback = sum(
+            1 for source in self._skill_sources.values() if source == "local"
+        )
+        logger.info(
+            "Skill registry built: local_roots=%d remote_roots=%d final=%d "
+            "local_loaded=%d remote_loaded=%d remote_over_local=%d "
+            "local_over_local=%d remote_over_remote=%d local_fallback=%d",
+            len(self._roots),
+            len(remote_roots),
+            len(self._skills),
+            self._stats["local_loaded"],
+            self._stats["remote_loaded"],
+            self._stats["remote_over_local"],
+            self._stats["local_over_local"],
+            self._stats["remote_over_remote"],
+            local_fallback,
+        )
 
     @staticmethod
     def _has_underscore_ancestor(

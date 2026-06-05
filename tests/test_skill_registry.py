@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import logging
+import shlex
 from pathlib import Path, PurePosixPath
 
 import pytest
@@ -70,10 +72,12 @@ class FakeRemoteSkillSession:
 
     def exec_bash(self, command: str, timeout: int | None = None) -> dict[str, object]:
         self.exec_calls.append(command)
+        root = shlex.split(command)[-1].rstrip("/")
+        prefix = root + "/"
         payload = [
             {"path": path, "content": self._files[path]}
             for path in sorted(self._files)
-            if path.endswith("/SKILL.md")
+            if path.endswith("/SKILL.md") and path.startswith(prefix)
         ]
         return {"exit_code": 0, "stdout": json.dumps(payload)}
 
@@ -419,3 +423,173 @@ class TestSkillRegistry:
         )
         assert skill.get_full_info() == "Remote body"
         assert session.read_calls == []
+
+    def test_remote_skill_over_local_fallback_is_not_warning(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Remote skill replacing the local fallback is expected precedence."""
+        from matmaster.skills.registry import SkillRegistry
+
+        local_root = tmp_path / "local"
+        _write(
+            local_root / "calculator" / "SKILL.md",
+            "---\n"
+            "name: calculator\n"
+            "description: Local fallback calculator\n"
+            "---\n"
+            "Local body\n",
+        )
+        session = FakeRemoteSkillSession(
+            {
+                "/personal/.matmaster/skills/calculator/SKILL.md": (
+                    "---\n"
+                    "name: calculator\n"
+                    "description: Remote calculator\n"
+                    "---\n"
+                    "Remote body\n"
+                )
+            }
+        )
+
+        with caplog.at_level(logging.INFO, logger="matmaster.skills.registry"):
+            reg = SkillRegistry(
+                local_root,
+                remote_session=session,
+                remote_roots=["/personal/.matmaster/skills"],
+            )
+
+        calculator = reg.get_skill("calculator")
+        assert calculator is not None
+        assert calculator.meta_info.description == "Remote calculator"
+        assert not [
+            record
+            for record in caplog.records
+            if record.levelno >= logging.WARNING and "overridden" in record.message
+        ]
+        assert "Skill registry built:" in caplog.text
+        assert "remote_over_local=1" in caplog.text
+        assert "local_fallback=0" in caplog.text
+
+    def test_remote_roots_are_normalized_before_scan(self) -> None:
+        """Equivalent remote root spellings are scanned only once."""
+        from matmaster.skills.registry import SkillRegistry
+
+        session = FakeRemoteSkillSession(
+            {
+                "/personal/.matmaster/skills/user-skill/SKILL.md": (
+                    "---\n"
+                    "name: user-skill\n"
+                    "description: User remote skill\n"
+                    "---\n"
+                    "Remote body\n"
+                )
+            }
+        )
+
+        reg = SkillRegistry(
+            [],
+            remote_session=session,
+            remote_roots=[
+                "/personal/.matmaster/skills",
+                "/personal/.matmaster/skills/",
+            ],
+        )
+
+        assert reg.get_skill("user-skill") is not None
+        assert len(session.exec_calls) == 1
+
+
+class TestSkillRegistryCache:
+    def test_cache_hit_reuses_same_registry_instance(self, tmp_path: Path) -> None:
+        from matmaster.skills.registry import SkillRegistry, SkillRegistryCache
+
+        cache = SkillRegistryCache()
+        calls = 0
+
+        def build() -> SkillRegistry:
+            nonlocal calls
+            calls += 1
+            return SkillRegistry(tmp_path / "missing")
+
+        key = ((str(tmp_path / "missing"),), (), ())
+        first = cache.get_or_build(key, build)
+        second = cache.get_or_build(key, build)
+
+        assert first is second
+        assert calls == 1
+
+    def test_cache_key_isolates_different_signatures(self, tmp_path: Path) -> None:
+        from matmaster.skills.registry import SkillRegistry, SkillRegistryCache
+
+        cache = SkillRegistryCache()
+        first = cache.get_or_build(
+            ((str(tmp_path / "a"),), (), ()),
+            lambda: SkillRegistry(tmp_path / "a"),
+        )
+        second = cache.get_or_build(
+            ((str(tmp_path / "b"),), (), ()),
+            lambda: SkillRegistry(tmp_path / "b"),
+        )
+
+        assert first is not second
+
+    @pytest.mark.asyncio
+    async def test_skill_consumers_do_not_mutate_registry_membership(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from matmaster.context.ports import SessionEvent
+        from matmaster.context.skill_resolver import SkillRegistryResolver
+        from matmaster.tools.builtin.skill_tool import SkillTool
+
+        skill_dir = tmp_path / "stable-skill"
+        _write(
+            skill_dir / "SKILL.md",
+            "---\n"
+            "name: stable-skill\n"
+            "description: Stable skill\n"
+            "---\n"
+            "Stable body\n",
+        )
+
+        class GuardedRegistry:
+            def __init__(self) -> None:
+                from matmaster.skills.registry import Skill
+
+                self._skills = {"stable-skill": Skill(skill_dir)}
+                self.removed = False
+
+            def get_skill(self, name: str):
+                return self._skills.get(name)
+
+            def get_all_skills(self):
+                return list(self._skills.values())
+
+            def get_meta_info_context(self) -> str:
+                return "\n".join(
+                    f"[Skill: {skill.meta_info.name}] {skill.meta_info.description}"
+                    for skill in self._skills.values()
+                )
+
+            def remove_skills(self, names: set[str]) -> None:
+                self.removed = True
+                raise AssertionError("runtime consumer must not change membership")
+
+        registry = GuardedRegistry()
+        tool = SkillTool(skill_registry=registry)
+        result = await tool.execute({"skill": "stable-skill"})
+        assert "Stable body" in result
+
+        resolver = SkillRegistryResolver(registry)
+        resolved = resolver(
+            (
+                SessionEvent(
+                    id=1,
+                    event_type="skill_hit",
+                    source="agent",
+                    content={"skill_name": "stable-skill"},
+                ),
+            )
+        )
+        assert resolved[0].name == "stable-skill"
+        assert registry.removed is False
