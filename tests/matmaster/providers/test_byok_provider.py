@@ -5,6 +5,8 @@ Sync, no network. Verifies extra_body passthrough/merge and bundle identity.
 
 from __future__ import annotations
 
+from matmaster.config.llm import PROVIDER_TRANSPORT
+from matmaster.providers.chat_completions_provider import ChatCompletionsProvider
 from matmaster.providers.llm_factory import (
     BYOK_PROFILE_KEY,
     _merge_byok_extra_kwargs,
@@ -48,7 +50,7 @@ class TestBuildByokProviderBundle:
         assert bundle.model == "qwen-max"
         assert bundle.model_profile == BYOK_PROFILE_KEY
         assert bundle.model_route == "byok:cred-1"
-        assert bundle.provider_name == "openai"
+        assert bundle.provider_name == "byok"
         assert bundle.provider._model == "qwen-max"
         assert bundle.provider._api_key == "sk-user"
         assert bundle.provider._base_url == _BASE_URL
@@ -103,3 +105,15 @@ class TestBuildByokProviderBundle:
             "extra_body": {"enable_thinking": True}
         }
         assert bundle.model_family == "gpt-5"
+
+
+def test_byok_bundle_identity_is_byok() -> None:
+    bundle = build_byok_provider_bundle(
+        model="user-model",
+        api_key="sk-user",
+        base_url="https://user.example/v1",
+        credential_id="cred-1",
+    )
+    assert bundle.provider_name == "byok"
+    assert isinstance(bundle.provider, ChatCompletionsProvider)
+    assert PROVIDER_TRANSPORT["byok"] == "chat_completions"

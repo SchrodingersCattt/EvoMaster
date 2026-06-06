@@ -147,7 +147,7 @@ def build_byok_provider_bundle(
         "byok_credential" if context_limit is not None else "byok_default"
     )
     profile = LLMProfileConfig(
-        provider="openai",
+        provider="byok",
         model=model,
         api_key=api_key,
         base_url=base_url,
@@ -173,7 +173,7 @@ def build_byok_provider_bundle(
         model=model,
         model_profile=BYOK_PROFILE_KEY,
         model_route=f"byok:{credential_id}" if credential_id else BYOK_PROFILE_KEY,
-        provider_name="openai",
+        provider_name="byok",
         model_family=profile.effective_family(),
         context_limit=effective_context_limit,
         context_limit_source=context_limit_source,
