@@ -21,12 +21,12 @@ _YAML_CONTENT = """\
 llm:
   profiles:
     opus:
-      provider: "openai"
+      provider: "litellm"
       model: "claude-opus-4-6"
       context_limit: 200000
       temperature: 0.7
     sonnet:
-      provider: "openai"
+      provider: "litellm"
       model: "claude-sonnet-4-6"
       context_limit: 128000
       temperature: 0.5

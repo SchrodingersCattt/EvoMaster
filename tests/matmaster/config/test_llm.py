@@ -325,8 +325,8 @@ class TestLLMConfigModelValidator:
 
     def test_flat_yaml_dict_is_rejected(self) -> None:
         raw = {
-            "opus": {"provider": "openai", "model": "claude-opus-4-6"},
-            "sonnet": {"provider": "openai", "model": "claude-sonnet-4-6"},
+            "opus": {"provider": "litellm", "model": "claude-opus-4-6"},
+            "sonnet": {"provider": "litellm", "model": "claude-sonnet-4-6"},
             "default": "opus",
         }
 
@@ -368,12 +368,12 @@ class TestLLMConfigWithRoutes:
             {
                 "profiles": {
                     "opus": {
-                        "provider": "openai",
+                        "provider": "litellm",
                         "model": "claude-opus-4-6",
                         "context_limit": 200_000,
                     },
                     "sonnet": {
-                        "provider": "openai",
+                        "provider": "litellm",
                         "model": "claude-sonnet-4-6",
                         "context_limit": 128_000,
                     },
@@ -395,14 +395,14 @@ class TestLLMConfigWithRoutes:
         assert r == ResolvedLLMRoute(
             route_key="claude-opus-4-6",
             profile_key="opus",
-            provider="openai",
+            provider="litellm",
             model="claude-opus-4-6",
         )
 
     def test_resolve_route_sonnet(self, cfg: LLMConfig) -> None:
         r = cfg.resolve_route(model_override="claude-sonnet-4-6")
         assert r.profile_key == "sonnet"
-        assert r.provider == "openai"
+        assert r.provider == "litellm"
         assert r.model == "claude-sonnet-4-6"
 
     def test_resolve_route_unknown_raises(self, cfg: LLMConfig) -> None:
@@ -414,7 +414,7 @@ class TestLLMConfigWithRoutes:
         assert r == ResolvedLLMRoute(
             route_key=None,
             profile_key="sonnet",
-            provider="openai",
+            provider="litellm",
             model="claude-sonnet-4-6",
         )
 
@@ -450,12 +450,12 @@ class TestSonnetRouteRegression:
             {
                 "profiles": {
                     "opus": {
-                        "provider": "openai",
+                        "provider": "litellm",
                         "model": "claude-opus-4-6",
                         "context_limit": 200_000,
                     },
                     "sonnet": {
-                        "provider": "openai",
+                        "provider": "litellm",
                         "model": "claude-sonnet-4-6",
                         "context_limit": 128_000,
                     },
@@ -471,7 +471,7 @@ class TestSonnetRouteRegression:
         assert r == ResolvedLLMRoute(
             route_key="claude-sonnet-4-6",
             profile_key="sonnet",
-            provider="openai",
+            provider="litellm",
             model="claude-sonnet-4-6",
         )
 

@@ -83,7 +83,7 @@ class TestEndToEndRouteToProvider:
             {
                 "profiles": {
                     "opus": {
-                        "provider": "openai",
+                        "provider": "litellm",
                         "model": "claude-opus-4-6",
                         "model_family": "claude-4.6",
                         "api_key": "test-key",
@@ -97,7 +97,7 @@ class TestEndToEndRouteToProvider:
                         "max_retries": 3,
                     },
                     "sonnet": {
-                        "provider": "openai",
+                        "provider": "litellm",
                         "model": "claude-sonnet-4-6",
                         "model_family": "claude-4.6",
                         "api_key": "test-key",
@@ -143,7 +143,7 @@ class TestEndToEndRouteToProvider:
                     "minimal": {
                         "model": "custom",
                         "api_key": "k",
-                        "provider": "openai",
+                        "provider": "litellm",
                         "context_limit": 200_000,
                     },
                 },

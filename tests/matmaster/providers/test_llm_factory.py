@@ -20,7 +20,7 @@ def llm_config() -> LLMConfig:
     return LLMConfig(
         profiles={
             "opus": LLMProfileConfig(
-                provider="openai",
+                provider="litellm",
                 model="claude-opus-4-6",
                 context_limit=200_000,
                 model_family="claude-4.6",
@@ -43,7 +43,7 @@ def llm_config() -> LLMConfig:
                 },
             ),
             "sonnet": LLMProfileConfig(
-                provider="openai",
+                provider="litellm",
                 model="claude-sonnet-4-6",
                 context_limit=128_000,
                 model_family="claude-4.6",
@@ -99,7 +99,7 @@ class TestBuildProvider:
         config = LLMConfig(
             profiles={
                 "opus_global": LLMProfileConfig(
-                    provider="openai",
+                    provider="litellm",
                     model="global.anthropic.claude-opus-4-6-v1",
                     context_limit=200_000,
                     api_key="sk-test-opus",
@@ -205,7 +205,7 @@ class TestBuildProvider:
         assert bundle.model == "claude-sonnet-4-6"
         assert bundle.model_profile == "sonnet"
         assert bundle.model_route == "claude-sonnet-4-6"
-        assert bundle.provider_name == "openai"
+        assert bundle.provider_name == "litellm"
         assert bundle.model_family == "claude-4.6"
         assert bundle.context_limit == 128_000
         assert bundle.context_limit_source == "profile"
@@ -215,7 +215,7 @@ class TestBuildProvider:
         config = LLMConfig(
             profiles={
                 "opus": LLMProfileConfig(
-                    provider="openai",
+                    provider="litellm",
                     model="claude-opus-4-6",
                     context_limit=200_000,
                     model_family="claude-4.6",

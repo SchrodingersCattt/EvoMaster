@@ -7,7 +7,7 @@
 
 profiles:
   sonnet:
-    provider: "openai"
+    provider: "litellm"
     model: "claude-sonnet-4-6"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
@@ -24,7 +24,7 @@ profiles:
     retry_delay: 1.0
 
   gemini-pro:
-    provider: "openai"
+    provider: "litellm"
     model: "gemini-3.1-pro-preview"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
@@ -40,7 +40,7 @@ profiles:
     retry_delay: 1.0
 
   gpt55:
-    provider: "openai"
+    provider: "litellm"
     model: "matmaster/gpt-5.5"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
@@ -56,7 +56,7 @@ profiles:
     retry_delay: 1.0
 
   qwen_3_7_max:
-    provider: "openai"
+    provider: "litellm"
     model: "matmaster/qwen3.7-max"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
@@ -71,7 +71,7 @@ profiles:
     retry_delay: 1.0
 
   deepseek_v4_pro:
-    provider: "openai"
+    provider: "litellm"
     model: "aliyun/deepseek-v4-pro"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
@@ -85,7 +85,7 @@ profiles:
     retry_delay: 1.0
 
   deepseek_v4_pro_mm:
-    provider: "openai"
+    provider: "litellm"
     model: "matmaster/DeepSeek-v4-Pro"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
@@ -99,7 +99,7 @@ profiles:
     retry_delay: 1.0
 
   opus_global:
-    provider: "openai"
+    provider: "litellm"
     model: "global.anthropic.claude-opus-4-6-v1"
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
