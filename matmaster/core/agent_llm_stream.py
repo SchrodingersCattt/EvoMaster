@@ -260,11 +260,9 @@ async def call_llm_streaming(
 ) -> AsyncIterator[_KernelItem]:
     """Retry wrapper around _stream_llm_items with timeout-doubling retry on transient errors."""
     provider = kernel_resources.llm_provider
-    current_timeout = getattr(provider, "stream_timeout", None) or getattr(
-        provider, "_timeout", 300.0
-    )
-    max_retries = getattr(provider, "max_retries", 3)
-    retry_delay = getattr(provider, "retry_delay", 1.0)
+    current_timeout = provider.stream_timeout
+    max_retries = provider.max_retries
+    retry_delay = provider.retry_delay
 
     last_error: LLMError | None = None
     for attempt in range(max_retries):

@@ -17,6 +17,7 @@ from matmaster.types.events import (
 from matmaster.types.messages import LLMResponse, StreamChunk, ToolCallData
 
 from .agent_kernel_test_helpers import (
+    ProviderProtocolAttrs,
     StreamingProvider,
     _make_tool_registry,
     make_kernel_runtime,
@@ -26,7 +27,7 @@ from .agent_kernel_test_helpers import make_kernel_turn as turn
 MODEL_IDENTITY_FIELDS = {'model', 'model_profile', 'model_route'}
 
 
-class ReasoningThenContentProvider:
+class ReasoningThenContentProvider(ProviderProtocolAttrs):
     """Provider that streams reasoning chunks then content chunks."""
 
     def __init__(self) -> None:
@@ -52,7 +53,7 @@ class ReasoningThenContentProvider:
         )
 
 
-class ContentOnlyProvider:
+class ContentOnlyProvider(ProviderProtocolAttrs):
     """Provider that only streams content, no reasoning."""
 
     async def __aenter__(self):
@@ -82,7 +83,7 @@ class RecordingContentProvider(ContentOnlyProvider):
         yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 5})
 
 
-class ToolCallStreamProvider:
+class ToolCallStreamProvider(ProviderProtocolAttrs):
     """Provider that streams content then tool_calls, then finishes naturally."""
 
     def __init__(self) -> None:
@@ -117,7 +118,7 @@ class ToolCallStreamProvider:
             yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
 
 
-class SkillStreamProvider:
+class SkillStreamProvider(ProviderProtocolAttrs):
     """Provider that calls Skill tool then finishes."""
 
     def __init__(self) -> None:
@@ -151,7 +152,7 @@ class SkillStreamProvider:
             yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
 
 
-class TrivialToolPreambleProvider:
+class TrivialToolPreambleProvider(ProviderProtocolAttrs):
     """Provider that emits punctuation-only content before switching to tools."""
 
     def __init__(self) -> None:
@@ -186,7 +187,7 @@ class TrivialToolPreambleProvider:
             yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
 
 
-class EmptyStopProvider:
+class EmptyStopProvider(ProviderProtocolAttrs):
     """Provider that ends cleanly without content or tool calls."""
 
     stream_timeout = 10.0
@@ -216,7 +217,7 @@ class EmptyStopProvider:
         yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
 
 
-class EmptyThenContentProvider:
+class EmptyThenContentProvider(ProviderProtocolAttrs):
     """Provider that returns an empty stop once, then a valid answer."""
 
     stream_timeout = 10.0
