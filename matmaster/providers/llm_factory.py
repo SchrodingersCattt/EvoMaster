@@ -204,7 +204,16 @@ def build_provider_bundle(
         profile.provider,
     )
 
-    if profile.provider == "bedrock":
+    transport = resolved.transport
+    if transport == "chat_completions":
+        provider = _build_chat_completions_provider(
+            profile,
+            model=resolved.model,
+            api_key=profile.api_key,
+            base_url=profile.base_url,
+            extra_kwargs=profile.build_extra_kwargs(),
+        )
+    elif transport == "bedrock_converse":
         region = (
             (profile.bedrock_region or "").strip()
             or os.environ.get("AWS_REGION")
@@ -222,24 +231,9 @@ def build_provider_bundle(
             max_retries=profile.max_retries,
             retry_delay=profile.retry_delay,
         )
-        return LLMProviderBundle(
-            provider=provider,
-            model=resolved.model,
-            model_profile=resolved.profile_key,
-            model_route=resolved.route_key,
-            provider_name=profile.provider,
-            model_family=profile.effective_family(),
-            context_limit=profile.context_limit,
-            context_limit_source="profile",
-        )
+    else:
+        raise ValueError(f"unsupported transport: {transport!r}")
 
-    provider = _build_chat_completions_provider(
-        profile,
-        model=resolved.model,
-        api_key=profile.api_key,
-        base_url=profile.base_url,
-        extra_kwargs=profile.build_extra_kwargs(),
-    )
     return LLMProviderBundle(
         provider=provider,
         model=resolved.model,

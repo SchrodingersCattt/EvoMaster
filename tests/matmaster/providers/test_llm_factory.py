@@ -10,8 +10,12 @@ from __future__ import annotations
 import pytest
 
 from matmaster.config.llm import LLMConfig, LLMProfileConfig, LLMRouteConfig
+from matmaster.providers.bedrock_provider import BedrockProvider
+from matmaster.providers.chat_completions_provider import (
+    AnthropicPromptCacheOptions,
+    ChatCompletionsProvider,
+)
 from matmaster.providers.llm_factory import build_provider, build_provider_bundle
-from matmaster.providers.chat_completions_provider import AnthropicPromptCacheOptions
 
 
 @pytest.fixture()
@@ -238,3 +242,45 @@ class TestBuildProvider:
         assert provider.stream_timeout == 120.0
         assert provider.stream_idle_timeout == 60.0
         assert provider._client is None  # lazy init
+
+
+class TestTransportDispatch:
+    def test_litellm_route_builds_chat_completions(
+        self, llm_config: LLMConfig
+    ) -> None:
+        provider = build_provider(llm_config, model_override="claude-opus-4-6")
+        assert isinstance(provider, ChatCompletionsProvider)
+
+    def test_bedrock_transport_builds_bedrock(self) -> None:
+        cfg = LLMConfig(
+            profiles={
+                "bed": LLMProfileConfig(
+                    provider="bedrock",
+                    model="arn:aws:bedrock:us-east-1:0:inference-profile/x",
+                    context_limit=200_000,
+                ),
+            },
+            routes={"bedrock-x": LLMRouteConfig(profile="bed")},
+            default="bed",
+        )
+        provider = build_provider(cfg, model_override="bedrock-x")
+        assert isinstance(provider, BedrockProvider)
+
+    def test_dispatch_follows_transport_not_provider_name(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """判别性测试：临时改 litellm transport，factory 必须跟 transport 走。"""
+        from matmaster.config import llm as llm_mod
+
+        monkeypatch.setitem(llm_mod.PROVIDER_TRANSPORT, "litellm", "bedrock_converse")
+        cfg = LLMConfig(
+            profiles={
+                "p": LLMProfileConfig(
+                    provider="litellm", model="m", context_limit=200_000
+                ),
+            },
+            routes={"r": LLMRouteConfig(profile="p")},
+            default="p",
+        )
+        provider = build_provider(cfg, model_override="r")
+        assert isinstance(provider, BedrockProvider)
