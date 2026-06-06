@@ -12,7 +12,7 @@ from matmaster.config.loader import load_base_system_prompt
 from matmaster.core.exp import Exp
 from matmaster.core.playground import ExecutionEnvironment
 from matmaster.core.run_context import AgentRunContext, AgentRunRequest
-from matmaster.providers.openai_provider import OpenAIProvider
+from matmaster.providers.chat_completions_provider import ChatCompletionsProvider
 from matmaster.sessions.local import LocalSession
 from matmaster.types.run_metadata import RunMetadata
 
@@ -44,7 +44,7 @@ def test_devshell_mcp_only_struct_db_skill_and_lazy_mcp(
             metadata=RunMetadata(source="test"),
         ),
         request=AgentRunRequest(
-            llm_provider=OpenAIProvider(model="gpt-4o-mini", api_key="sk-test"),
+            llm_provider=ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test"),
             llm_config=None,
         ),
     )
@@ -111,7 +111,7 @@ def test_mcp_runtime_patch_limits_mat_sg_lazy_tools(
             metadata=RunMetadata(source="test"),
         ),
         request=AgentRunRequest(
-            llm_provider=OpenAIProvider(model="gpt-4o-mini", api_key="sk-test"),
+            llm_provider=ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test"),
             llm_config=None,
         ),
     )

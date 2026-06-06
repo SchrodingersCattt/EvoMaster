@@ -11,7 +11,7 @@ import pytest
 
 from matmaster.config.llm import LLMConfig, LLMProfileConfig, LLMRouteConfig
 from matmaster.providers.llm_factory import build_provider, build_provider_bundle
-from matmaster.providers.openai_provider import AnthropicPromptCacheOptions
+from matmaster.providers.chat_completions_provider import AnthropicPromptCacheOptions
 
 
 @pytest.fixture()
@@ -64,7 +64,7 @@ def llm_config() -> LLMConfig:
 
 
 class TestBuildProvider:
-    """build_provider resolves routes and constructs OpenAIProvider."""
+    """build_provider resolves routes and constructs ChatCompletionsProvider."""
 
     def test_default_path(self, llm_config: LLMConfig) -> None:
         """No overrides -> default profile, force_one temp, extra_body present."""

@@ -1,6 +1,6 @@
 """LLM Provider factory: config-driven provider construction.
 
-Thin factory layer: resolve_route -> OpenAIProvider or BedrockProvider.
+Thin factory layer: resolve_route -> ChatCompletionsProvider or BedrockProvider.
 All semantic resolution (family, temperature, reasoning) lives on
 LLMProfileConfig methods. This module only does the final mapping.
 """
@@ -14,9 +14,9 @@ from typing import Literal
 
 from matmaster.config.llm import LLMConfig, LLMProfileConfig
 from matmaster.providers.bedrock_provider import BedrockProvider
-from matmaster.providers.openai_provider import (
+from matmaster.providers.chat_completions_provider import (
     AnthropicPromptCacheOptions,
-    OpenAIProvider,
+    ChatCompletionsProvider,
 )
 
 BYOK_PROFILE_KEY = "byok"
@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 class LLMProviderBundle:
     """Provider plus the resolved model identity used for run persistence."""
 
-    provider: OpenAIProvider | BedrockProvider
+    provider: ChatCompletionsProvider | BedrockProvider
     model: str
     model_profile: str
     model_route: str | None
@@ -49,7 +49,7 @@ def build_provider(
     model_override: str | None = None,
     llm_override: str | None = None,
     default_profile_key: str | None = None,
-) -> OpenAIProvider | BedrockProvider:
+) -> ChatCompletionsProvider | BedrockProvider:
     """Resolve route and build an LLM provider backend.
 
     Args:
@@ -84,19 +84,19 @@ def _build_anthropic_prompt_cache_options(
     )
 
 
-def _build_openai_provider(
+def _build_chat_completions_provider(
     profile: LLMProfileConfig,
     *,
     model: str,
     api_key: str,
     base_url: str | None,
     extra_kwargs: dict | None,
-) -> OpenAIProvider:
-    """按 profile 的通用参数构造 OpenAIProvider；model/api_key/base_url/extra_kwargs 由调用方决定。
+) -> ChatCompletionsProvider:
+    """按 profile 的通用参数构造 ChatCompletionsProvider；model/api_key/base_url/extra_kwargs 由调用方决定。
 
     供标准路径与 BYOK 路径共用，避免两处重复一长串 timeout/retry/cache 等 kwargs。
     """
-    return OpenAIProvider(
+    return ChatCompletionsProvider(
         model=model,
         api_key=api_key,
         base_url=base_url,
@@ -161,7 +161,7 @@ def build_byok_provider_bundle(
         (base_url.split("//", 1)[-1].split("/", 1)[0] if base_url else ""),
         sorted((extra_body or {}).keys()),
     )
-    provider = _build_openai_provider(
+    provider = _build_chat_completions_provider(
         profile,
         model=model,
         api_key=api_key,
@@ -233,7 +233,7 @@ def build_provider_bundle(
             context_limit_source="profile",
         )
 
-    provider = _build_openai_provider(
+    provider = _build_chat_completions_provider(
         profile,
         model=resolved.model,
         api_key=profile.api_key,

@@ -179,7 +179,7 @@ class LLMProfileConfig(BaseModel):
         """Build provider-specific request parameters.
 
         Returns None when no extra request parameters are configured.
-        OpenAIProvider.__init__ converts None to {} via ``extra_kwargs or {}``.
+        ChatCompletionsProvider.__init__ converts None to {} via ``extra_kwargs or {}``.
         """
         family = self.effective_family()
         protocol = self.reasoning_protocol or MODEL_FAMILY_DEFAULTS.get(

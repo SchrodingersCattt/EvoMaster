@@ -1,6 +1,6 @@
-"""Tests for OpenAIProvider -- exception translation and error_category.
+"""Tests for ChatCompletionsProvider -- exception translation and error_category.
 
-Split from test_openai_provider.py to keep file under 1000 lines.
+Split from test_chat_completions_provider.py to keep file under 1000 lines.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock
 import openai
 import pytest
 
-from matmaster.providers.openai_provider import OpenAIProvider
+from matmaster.providers.chat_completions_provider import ChatCompletionsProvider
 from matmaster.types.errors import LLMError
 
 
@@ -42,8 +42,8 @@ def _make_stream_chunk(
 
 
 class TestChatStreamExceptionTranslation:
-    def _make_provider(self) -> tuple[OpenAIProvider, AsyncMock]:
-        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
+    def _make_provider(self) -> tuple[ChatCompletionsProvider, AsyncMock]:
+        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         provider._client = mock_client
         return provider, mock_client
@@ -182,8 +182,8 @@ class TestChatStreamExceptionTranslation:
 class TestChatStreamErrorCategory:
     """Verify chat_stream raises LLMError with correct error_category."""
 
-    def _make_provider(self) -> tuple[OpenAIProvider, AsyncMock]:
-        provider = OpenAIProvider(model="gpt-4o-mini", api_key="sk-test")
+    def _make_provider(self) -> tuple[ChatCompletionsProvider, AsyncMock]:
+        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         provider._client = mock_client
         return provider, mock_client

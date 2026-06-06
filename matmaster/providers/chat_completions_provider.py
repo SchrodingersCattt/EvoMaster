@@ -1,6 +1,6 @@
 """Concrete LLMProvider implementation using the OpenAI Python SDK.
 
-Provides OpenAIProvider that satisfies the LLMProvider Protocol, wrapping
+Provides ChatCompletionsProvider that satisfies the LLMProvider Protocol, wrapping
 the openai.AsyncOpenAI client for async chat and streaming calls.
 Client lifecycle is managed via async context manager: __aenter__ creates
 the AsyncOpenAI + httpx.AsyncClient, __aexit__ closes connections.
@@ -471,7 +471,7 @@ def _is_non_retryable_content_shape_bad_request(err_str: str) -> bool:
     )
 
 
-class OpenAIProvider:
+class ChatCompletionsProvider:
     """LLMProvider implementation backed by the OpenAI Python SDK.
 
     Satisfies the LLMProvider Protocol. Uses async context manager for
@@ -510,7 +510,7 @@ class OpenAIProvider:
         self._client: openai.AsyncOpenAI | None = None
         self._enter_count: int = 0
 
-    async def __aenter__(self) -> OpenAIProvider:
+    async def __aenter__(self) -> ChatCompletionsProvider:
         self._enter_count += 1
         if self._client is not None:
             return self
@@ -555,7 +555,7 @@ class OpenAIProvider:
     def _ensure_client(self) -> openai.AsyncOpenAI:
         if self._client is None:
             raise RuntimeError(
-                "OpenAIProvider must be used as async context manager: "
+                "ChatCompletionsProvider must be used as async context manager: "
                 "'async with provider:'"
             )
         return self._client

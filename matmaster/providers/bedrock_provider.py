@@ -4,7 +4,7 @@ Credentials use the default AWS chain (``AWS_ACCESS_KEY_ID`` / ``AWS_SECRET_ACCE
 ``AWS_REGION``, instance profile, etc.). ``api_key`` / ``base_url`` from YAML are ignored.
 
 Maps OpenAI-shaped ``messages`` / ``tools`` (from the kernel) to Bedrock Converse requests
-and streams deltas back as :class:`StreamChunk` compatible with :class:`OpenAIProvider`.
+and streams deltas back as :class:`StreamChunk` compatible with :class:`ChatCompletionsProvider`.
 """
 
 from __future__ import annotations
