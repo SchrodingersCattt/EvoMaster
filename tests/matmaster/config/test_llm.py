@@ -398,6 +398,7 @@ class TestLLMConfigWithRoutes:
             route_key="claude-opus-4-6",
             profile_key="opus",
             provider="litellm",
+            transport="chat_completions",
             model="claude-opus-4-6",
         )
 
@@ -417,6 +418,7 @@ class TestLLMConfigWithRoutes:
             route_key=None,
             profile_key="sonnet",
             provider="litellm",
+            transport="chat_completions",
             model="claude-sonnet-4-6",
         )
 
@@ -474,6 +476,7 @@ class TestSonnetRouteRegression:
             route_key="claude-sonnet-4-6",
             profile_key="sonnet",
             provider="litellm",
+            transport="chat_completions",
             model="claude-sonnet-4-6",
         )
 
@@ -534,3 +537,22 @@ class TestProviderTransport:
     def test_byok_excluded_from_platform_providers(self) -> None:
         assert "byok" in PROVIDER_TRANSPORT
         assert "byok" not in PLATFORM_PROVIDERS
+
+    def test_resolve_route_carries_transport(self) -> None:
+        cfg = LLMConfig(
+            profiles={
+                "lite": _profile(provider="litellm", model="m-lite"),
+                "bed": _profile(provider="bedrock", model="m-bed"),
+            },
+            routes={
+                "r-lite": LLMRouteConfig(profile="lite"),
+                "r-bed": LLMRouteConfig(profile="bed"),
+            },
+            default="lite",
+        )
+        assert cfg.resolve_route(model_override="r-lite").transport == (
+            "chat_completions"
+        )
+        assert cfg.resolve_route(model_override="r-bed").transport == (
+            "bedrock_converse"
+        )

@@ -229,6 +229,7 @@ class ResolvedLLMRoute:
     route_key: str | None
     profile_key: str
     provider: str
+    transport: str
     model: str
 
 
@@ -299,6 +300,7 @@ class LLMConfig(BaseModel):
                 route_key=model_override,
                 profile_key=route.profile,
                 provider=profile.provider,
+                transport=profile.effective_transport(),
                 model=route.model or profile.model,
             )
         profile_key = llm_override or effective_default
@@ -307,5 +309,6 @@ class LLMConfig(BaseModel):
             route_key=None,
             profile_key=profile_key,
             provider=profile.provider,
+            transport=profile.effective_transport(),
             model=profile.model,
         )
