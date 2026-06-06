@@ -23,6 +23,18 @@ class LLMProvider(Protocol):
     Retry logic lives in Kernel._call_llm_streaming(), not in the provider.
     """
 
+    @property
+    def stream_timeout(self) -> float: ...
+
+    @property
+    def stream_idle_timeout(self) -> float: ...
+
+    @property
+    def max_retries(self) -> int: ...
+
+    @property
+    def retry_delay(self) -> float: ...
+
     async def __aenter__(self) -> LLMProvider: ...
 
     async def __aexit__(

@@ -300,12 +300,20 @@ class BedrockProvider:
         return self._client
 
     @property
-    def stream_timeout(self) -> float | None:
-        return self._stream_timeout
+    def stream_timeout(self) -> float:
+        return (
+            self._stream_timeout
+            if self._stream_timeout is not None
+            else self._timeout
+        )
 
     @property
-    def stream_idle_timeout(self) -> float | None:
-        return self._stream_idle_timeout
+    def stream_idle_timeout(self) -> float:
+        return (
+            self._stream_idle_timeout
+            if self._stream_idle_timeout is not None
+            else self._timeout
+        )
 
     @property
     def max_retries(self) -> int:

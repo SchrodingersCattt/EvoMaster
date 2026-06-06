@@ -36,6 +36,11 @@ from matmaster.types.runtime_ports import KernelRuntimePorts
 class _MockLLMProvider:
     """LLMProvider Protocol-conforming mock for runtime resource tests."""
 
+    stream_timeout: float = 300.0
+    stream_idle_timeout: float = 300.0
+    max_retries: int = 3
+    retry_delay: float = 1.0
+
     async def __aenter__(self) -> _MockLLMProvider:
         return self
 
