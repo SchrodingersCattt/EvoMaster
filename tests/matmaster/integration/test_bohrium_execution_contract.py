@@ -512,11 +512,11 @@ def test_execution_binding_before_build_runtime(
         True,
         None,
         mock_exec,
-        '/remote/ws',
+        '/share/remote/ws',
         'ssh',
         BohriumRuntimeSnapshot(
             session_type='ssh',
-            execution_workdir='/remote/ws',
+            execution_workdir='/share/remote/ws',
             remote_workspace_root='/share',
             remote_project_root='/share/.matmaster',
             node_id=9,
@@ -582,7 +582,7 @@ def test_execution_binding_before_build_runtime(
     ctx_passed = captured_run_stream_args['ctx']
     assert ctx_passed.environment.session is mock_exec
     assert ctx_passed.environment.session_type == 'ssh'
-    assert ctx_passed.environment.execution_workdir == '/remote/ws'
+    assert ctx_passed.environment.execution_workdir == '/share/remote/ws'
     snapshot = ctx_passed.environment.bohrium.snapshot
     assert snapshot is not None
     assert snapshot.ssh_attached is True

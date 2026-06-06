@@ -84,7 +84,9 @@ class TestConstruction:
 
     def test_max_retries_stored(self) -> None:
         """max_retries stored as _max_retries."""
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test", max_retries=5)
+        provider = ChatCompletionsProvider(
+            model="gpt-4o-mini", api_key="sk-test", max_retries=5
+        )
         assert provider._max_retries == 5
 
     def test_retry_delay_stored(self) -> None:
@@ -111,13 +113,15 @@ class TestStreamTimeoutConstruction:
         assert provider.stream_timeout == 120.0
         assert provider.stream_idle_timeout == 60.0
 
-    def test_stream_timeout_defaults_none(self) -> None:
+    def test_stream_timeout_defaults_to_timeout(self) -> None:
         provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
-        assert provider.stream_timeout is None
-        assert provider.stream_idle_timeout is None
+        assert provider.stream_timeout == 300.0
+        assert provider.stream_idle_timeout == 300.0
 
     def test_max_retries_property(self) -> None:
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test", max_retries=5)
+        provider = ChatCompletionsProvider(
+            model="gpt-4o-mini", api_key="sk-test", max_retries=5
+        )
         assert provider.max_retries == 5
 
     def test_retry_delay_property(self) -> None:

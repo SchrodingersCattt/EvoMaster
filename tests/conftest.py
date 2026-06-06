@@ -19,13 +19,17 @@ _TEST_LOG_DIR.mkdir(parents=True, exist_ok=True)
 os.environ.setdefault("LOG_DIR", str(_TEST_LOG_DIR))
 
 
-class MockAsyncLLMProvider:
-    """Async mock satisfying LLMProvider Protocol for testing."""
+class ProviderProtocolAttrs:
+    """Default public provider attrs for lightweight LLM test doubles."""
 
     stream_timeout: float = 300.0
     stream_idle_timeout: float = 300.0
     max_retries: int = 3
     retry_delay: float = 1.0
+
+
+class MockAsyncLLMProvider(ProviderProtocolAttrs):
+    """Async mock satisfying LLMProvider Protocol for testing."""
 
     def __init__(
         self,

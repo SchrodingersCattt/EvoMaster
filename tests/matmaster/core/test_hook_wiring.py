@@ -40,7 +40,11 @@ from matmaster.types.run_metadata import RunIdentity, RunMetadata
 from matmaster.types.topology import ToolPlane
 from tests.conftest import MockAsyncTool
 
-from .agent_kernel_test_helpers import make_kernel_runtime, make_kernel_turn
+from .agent_kernel_test_helpers import (
+    ProviderProtocolAttrs,
+    make_kernel_runtime,
+    make_kernel_turn,
+)
 from .conftest import MockLLMProvider
 from .test_full_tool_runner import _make_ctx, _make_tc, _make_topology
 
@@ -55,7 +59,7 @@ def _stub_child_run_factory(exp_name, task, *, cancel_token=None, spawn_id=None)
     return _gen()
 
 
-class RecordingProvider:
+class RecordingProvider(ProviderProtocolAttrs):
     def __init__(self) -> None:
         self.seen_messages: list[list[dict[str, object]]] = []
 

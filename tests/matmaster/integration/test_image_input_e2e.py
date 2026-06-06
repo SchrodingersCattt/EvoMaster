@@ -15,9 +15,10 @@ from matmaster.sessions.local import LocalSession
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.messages import LLMResponse, StreamChunk
 from src.services.image_input_service import ImageInputService
+from tests.conftest import ProviderProtocolAttrs
 
 
-class RecordingVisionProvider:
+class RecordingVisionProvider(ProviderProtocolAttrs):
     stream_timeout = 10.0
     max_retries = 1
     retry_delay = 0.0
@@ -98,6 +99,7 @@ async def test_images_flow_from_service_to_kernel_user_message(tmp_path: Path) -
         abort_result=None,
         ssh_attached=False,
         user_instructions=UserInstructions(text="", hash="", truncated=False),
+        workspace=None,
     )
 
     svc = AgentRunService.__new__(AgentRunService)

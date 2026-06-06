@@ -5,11 +5,11 @@ from __future__ import annotations
 import pytest
 
 from matmaster.config.llm import (
+    PLATFORM_PROVIDERS,
+    PROVIDER_TRANSPORT,
     LLMConfig,
     LLMProfileConfig,
     LLMRouteConfig,
-    PLATFORM_PROVIDERS,
-    PROVIDER_TRANSPORT,
     PromptCacheConfig,
     ResolvedLLMRoute,
 )
@@ -185,9 +185,7 @@ class TestLLMProfileConfigMethods:
         assert p.effective_temperature() == 0.5
 
     def test_effective_temperature_force_one_explicit_policy(self) -> None:
-        p = _profile(
-            temperature=0.5, temperature_policy="force_one_when_reasoning"
-        )
+        p = _profile(temperature=0.5, temperature_policy="force_one_when_reasoning")
         assert p.effective_temperature() == 1.0
 
     def test_effective_temperature_force_one_from_family_default(self) -> None:
@@ -316,9 +314,7 @@ class TestLLMProfileConfigMethods:
         assert p.build_extra_kwargs() is None
 
     def test_build_extra_kwargs_unknown_protocol(self) -> None:
-        p = _profile(
-            reasoning_protocol="some_future_protocol", thinking_effort="high"
-        )
+        p = _profile(reasoning_protocol="some_future_protocol", thinking_effort="high")
         assert p.build_extra_kwargs() is None
 
 

@@ -29,11 +29,12 @@ from matmaster.types.run_metadata import RunMetadata
 from matmaster.types.runtime import AgentKernelTurnRequest
 from matmaster.types.tool_spec import ResourceClaim
 from matmaster.types.topology import ToolPlane
+from tests.conftest import ProviderProtocolAttrs
 
 # ── Mock LLM provider ────────────────────────────────
 
 
-class MockLLMProvider:
+class MockLLMProvider(ProviderProtocolAttrs):
     """Mock LLM that returns a natural finish after 1 turn (no tool calls).
 
     Streams a single chunk with content, then a finish chunk.
@@ -81,7 +82,7 @@ def _provider_bundle(provider: Any) -> SimpleNamespace:
     )
 
 
-class MockLLMProviderWithToolCall:
+class MockLLMProviderWithToolCall(ProviderProtocolAttrs):
     """Mock LLM: returns tool_call on first turn, finish on second.
 
     First call: streams a tool call delta for 'echo' tool.
@@ -122,7 +123,7 @@ class MockLLMProviderWithToolCall:
             yield StreamChunk(content="Done after tool.", finish_reason="stop")
 
 
-class MockLLMProviderCapturingMessages:
+class MockLLMProviderCapturingMessages(ProviderProtocolAttrs):
     """Mock LLM that captures messages passed to chat_stream for verification."""
 
     def __init__(self) -> None:

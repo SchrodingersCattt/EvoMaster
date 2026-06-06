@@ -603,9 +603,7 @@ class ChatCompletionsProvider:
     @property
     def stream_timeout(self) -> float:
         return (
-            self._stream_timeout
-            if self._stream_timeout is not None
-            else self._timeout
+            self._stream_timeout if self._stream_timeout is not None else self._timeout
         )
 
     @property

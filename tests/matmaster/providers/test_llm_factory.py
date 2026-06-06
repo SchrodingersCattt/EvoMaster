@@ -245,9 +245,7 @@ class TestBuildProvider:
 
 
 class TestTransportDispatch:
-    def test_litellm_route_builds_chat_completions(
-        self, llm_config: LLMConfig
-    ) -> None:
+    def test_litellm_route_builds_chat_completions(self, llm_config: LLMConfig) -> None:
         provider = build_provider(llm_config, model_override="claude-opus-4-6")
         assert isinstance(provider, ChatCompletionsProvider)
 
