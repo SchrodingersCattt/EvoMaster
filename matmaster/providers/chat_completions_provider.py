@@ -517,15 +517,7 @@ class ChatCompletionsProvider:
 
         import httpx
 
-        _first_token_t = (
-            self._stream_timeout if self._stream_timeout is not None else self._timeout
-        )
-        _idle_t = (
-            self._stream_idle_timeout
-            if self._stream_idle_timeout is not None
-            else self._timeout
-        )
-        _read_t = float(max(_idle_t, _first_token_t) + 10)
+        _read_t = float(max(self.stream_idle_timeout, self.stream_timeout) + 10)
 
         http_client = httpx.AsyncClient(
             timeout=httpx.Timeout(
