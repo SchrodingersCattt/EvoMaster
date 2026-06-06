@@ -8,7 +8,7 @@ YAML example::
     llm:
       profiles:
         opus:
-          provider: "openai"
+          provider: "litellm"
           model: "claude-opus-4-6"
           api_key: "${LITELLM_PROXY_API_KEY}"
           base_url: "${LITELLM_PROXY_API_BASE}"
@@ -51,6 +51,20 @@ MODEL_FAMILY_DEFAULTS: dict[str, dict[str, str]] = {
         "temperature_policy": "default",
     },
 }
+
+
+# ── Provider → transport 映射（阶段一轻量 registry）─────────────────────────────
+
+# (1) transport 查找表：所有真实 provider → 其 API 协议。含运行时 BYOK。
+PROVIDER_TRANSPORT: dict[str, str] = {
+    "litellm": "chat_completions",
+    "bedrock": "bedrock_converse",
+    "byok": "chat_completions",
+}
+
+# (2) 平台 YAML 白名单：允许出现在 llm_config.yaml profile 里的 provider。
+# 不含 byok，因为 byok 只能由运行时凭证路径构造。
+PLATFORM_PROVIDERS: frozenset[str] = frozenset({"litellm", "bedrock"})
 
 
 def _infer_model_family(model: str) -> str | None:
@@ -98,7 +112,7 @@ class PromptCacheConfig(BaseModel):
 class LLMProfileConfig(BaseModel):
     """Single LLM provider profile."""
 
-    provider: str = "openai"
+    provider: str = "litellm"
     model: str = ""
     model_family: str | None = None
 
@@ -146,6 +160,10 @@ class LLMProfileConfig(BaseModel):
     def effective_family(self) -> str | None:
         """Explicit model_family > infer from model name."""
         return self.model_family or _infer_model_family(self.model)
+
+    def effective_transport(self) -> str:
+        """Provider 决定 transport，provider 合法性由 LLMConfig 加载期校验保证。"""
+        return PROVIDER_TRANSPORT[self.provider]
 
     def effective_temperature(self) -> float:
         """Apply temperature_policy. claude-4.6 forces temperature=1.0."""
@@ -237,6 +255,12 @@ class LLMConfig(BaseModel):
                 raise ValueError(
                     f"route '{route_key}' references profile '{route.profile}' "
                     f"which does not exist, available: {list(self.profiles)}"
+                )
+        for profile_key, profile in self.profiles.items():
+            if profile.provider not in PLATFORM_PROVIDERS:
+                raise ValueError(
+                    f"profile '{profile_key}' has unknown provider "
+                    f"'{profile.provider}', allowed: {sorted(PLATFORM_PROVIDERS)}"
                 )
         return self
 

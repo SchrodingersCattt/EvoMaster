@@ -8,6 +8,8 @@ from matmaster.config.llm import (
     LLMConfig,
     LLMProfileConfig,
     LLMRouteConfig,
+    PLATFORM_PROVIDERS,
+    PROVIDER_TRANSPORT,
     PromptCacheConfig,
     ResolvedLLMRoute,
 )
@@ -39,7 +41,7 @@ class TestLLMProfileConfig:
         assert p.timeout == 300
         assert p.max_retries == 3
         assert p.retry_delay == 1.0
-        assert p.provider == "openai"
+        assert p.provider == "litellm"
         assert p.model == ""
 
     def test_override_from_dict(self) -> None:
@@ -497,3 +499,38 @@ class TestLLMConfigValidation:
                     "default": "missing",
                 }
             )
+
+
+class TestProviderTransport:
+    def test_effective_transport_litellm(self) -> None:
+        p = _profile(provider="litellm", model="m")
+        assert p.effective_transport() == "chat_completions"
+
+    def test_effective_transport_byok(self) -> None:
+        p = _profile(provider="byok", model="m")
+        assert p.effective_transport() == "chat_completions"
+
+    def test_effective_transport_bedrock(self) -> None:
+        p = _profile(provider="bedrock", model="m")
+        assert p.effective_transport() == "bedrock_converse"
+
+    def test_provider_default_is_litellm(self) -> None:
+        assert _profile(model="m").provider == "litellm"
+
+    def test_unknown_provider_in_config_fails_fast(self) -> None:
+        with pytest.raises(ValueError, match="unknown provider"):
+            LLMConfig(
+                profiles={"p": _profile(provider="nope", model="m")},
+                default="p",
+            )
+
+    def test_byok_provider_rejected_in_yaml_config(self) -> None:
+        with pytest.raises(ValueError, match="unknown provider"):
+            LLMConfig(
+                profiles={"p": _profile(provider="byok", model="m")},
+                default="p",
+            )
+
+    def test_byok_excluded_from_platform_providers(self) -> None:
+        assert "byok" in PROVIDER_TRANSPORT
+        assert "byok" not in PLATFORM_PROVIDERS
