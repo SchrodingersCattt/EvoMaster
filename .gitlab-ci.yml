@@ -1,6 +1,6 @@
 # 主流水线：build-remote-image + 按 tag/分支 trigger 子流水线
-# 打 tag 时：tag 含 _matmaster-evo-worker_ 只 trigger Worker 子流水线，含 _matmaster-evo_ 且不含 worker 只 trigger API 子流水线
-# 推 test 分支时：同时 trigger API + Worker 两条子流水线
+# 打 tag 时：tag 含 _matmaster-evo-worker_ 只 trigger Worker；含 _matmaster-monitor_ 只 trigger Monitor；含 _matmaster-evo_ 且不含 worker 只 trigger API
+# 推 test 分支时：同时 trigger API + Worker + Monitor 三条子流水线
 
 variables:
   RUNNER_ZJK_TAG: k8s-runner-zjk-svc
@@ -209,4 +209,16 @@ trigger-worker-deploy:
     - if: '($CI_COMMIT_BRANCH =~ /.*test$/) && $CI_COMMIT_TAG == null'
       when: on_success
     - if: '$CI_COMMIT_TAG =~ /_matmaster-evo-worker_/'
+      when: on_success
+
+# 打 tag 含 _matmaster-monitor_ 时自动 trigger Monitor 子流水线；test 分支 push 时也 trigger
+trigger-monitor-deploy:
+  stage: trigger
+  trigger:
+    include: ci/monitor-deploy.yml
+    strategy: depend
+  rules:
+    - if: '($CI_COMMIT_BRANCH =~ /.*test$/) && $CI_COMMIT_TAG == null'
+      when: on_success
+    - if: '$CI_COMMIT_TAG =~ /_matmaster-monitor_/'
       when: on_success
