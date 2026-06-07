@@ -87,7 +87,7 @@ ssh -p $PORT $USER@$HOST "ps aux | grep 'run_devshell_eval\|run_devshell_agent_l
 **2b.** Start recurring monitoring — run this command directly (replace `$PORT/$USER/$HOST` with actual values):
 
 ```
-/loop 10m Run: ssh -p $PORT $USER@$HOST "ps aux | grep 'run_devshell_eval\|run_devshell_agent_loop' | grep -v grep | wc -l && echo '---' && wc -l /root/matmaster-evo/results/devshell_eval_*/raw_runs.jsonl && echo '---' && tail -3 /tmp/eval_run.log". Extract PROCS (first line) and TASKS (number before raw_runs.jsonl). Then run: osascript -e "tell application \"System Events\" to display dialog \"已完成 TASKS 条，PROCS 个进程活跃中\" with title \"Eval Progress\" buttons {\"OK\"} default button \"OK\" giving up after 5". If PROCS=0, notify "Eval 已完成！共 TASKS 条结果" and run scoring: ssh -p $PORT $USER@$HOST "cd /root/matmaster-evo && export http_proxy='http://ga.xdptech.com:8118' && export https_proxy='http://ga.xdptech.com:8118' && uv run python evaluation/scripts/devshell/score_devshell_tasks.py --run-dir \$(ls -dt results/devshell_eval_* | head -1) --submit"
+/loop 10m Run: ssh -p $PORT $USER@$HOST "ps aux | grep 'run_devshell_eval\|run_devshell_agent_loop' | grep -v grep | wc -l && echo '---' && wc -l /root/matmaster-evo/results/devshell_eval_*/raw_runs.jsonl && echo '---' && tail -3 /tmp/eval_run.log". Extract PROCS (first line) and TASKS (number before raw_runs.jsonl). Then run: osascript -e "tell application \"System Events\" to display dialog \"已完成 TASKS 条，PROCS 个进程活跃中\" with title \"Eval Progress\" buttons {\"OK\"} default button \"OK\" giving up after 5". If PROCS=0, notify "Eval 已完成！共 TASKS 条结果" and run scoring: ssh -p $PORT $USER@$HOST "cd /root/matmaster-evo && set -a && . ./.env && set +a && export http_proxy='http://ga.xdptech.com:8118' && export https_proxy='http://ga.xdptech.com:8118' && uv run python evaluation/scripts/devshell/score_devshell_tasks.py --run-dir \$(ls -dt results/devshell_eval_* | head -1) --submit"
 ```
 
 Each tick: SSH check → macOS popup (auto-dismiss 5s) → if PROCS=0, auto-score and cancel loop.
@@ -100,12 +100,15 @@ Run only after process count = 0:
 
 ```bash
 ssh -p $PORT $USER@$HOST "cd /root/matmaster-evo && \
+  set -a && . ./.env && set +a && \
   export http_proxy='http://ga.xdptech.com:8118' && export https_proxy='http://ga.xdptech.com:8118' && \
   uv run python evaluation/scripts/devshell/score_devshell_tasks.py \
     --run-dir \$(ls -dt results/devshell_eval_* | head -1) --submit"
 ```
 
 Without this step, the frontend shows NO checklist-level pass/fail data. Same `.venv/bin/python` fallback applies.
+
+> **Must load `.env` before scoring** (`set -a && . ./.env && set +a`). The evaluator LLM in `evaluation/config.yaml` reads `LITELLM_PROXY_API_KEY` / `LITELLM_PROXY_API_BASE` straight from the environment, and neither the SKILL command nor `score_devshell_tasks.py` auto-loads `.env`. A non-interactive SSH shell does NOT export these. Skip this and every `llm_binary_judge` criterion silently falls back to fail (`no evaluator LLM configured`, only a single `warning:` line on stderr) → any question gated on an LLM-judge item scores 0. The eval run itself (Step 1) is unaffected because it shells out to `mm-devshell run`, which loads creds on its own.
 
 **Note**: Scoring 200+ tasks takes 2-5 minutes. Use a long timeout (300s) or run in background.
 
