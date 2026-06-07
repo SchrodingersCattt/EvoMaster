@@ -185,16 +185,14 @@ class ImageInputService:
         self,
         *,
         llm_config: LLMConfig,
-        llm_override: str | None,
         model_override: str | None,
         default_profile_key: str | None,
     ) -> LLMProfileConfig:
-        resolved = llm_config.resolve_route(
+        resolved = llm_config.resolve(
             model_override=model_override,
-            llm_override=llm_override,
             default_key=default_profile_key,
         )
-        profile = llm_config.get_profile(resolved.profile_key)
+        profile = resolved.profile
         if not profile.supports_vision:
             raise ImageInputError(
                 VISION_MODEL_NOT_SUPPORTED,
@@ -216,7 +214,6 @@ class ImageInputService:
         *,
         llm_config: LLMConfig,
         images: tuple[str, ...],
-        llm_override: str | None,
         model_override: str | None,
         default_profile_key: str | None,
     ) -> ImageDetail | None:
@@ -224,7 +221,6 @@ class ImageInputService:
             return None
         profile = self.ensure_vision_supported(
             llm_config=llm_config,
-            llm_override=llm_override,
             model_override=model_override,
             default_profile_key=default_profile_key,
         )
