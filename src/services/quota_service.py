@@ -4,6 +4,11 @@
   计价化后只读金额额度 ``credit_remaining``（元）与 ``credit_reset_at``
   （下次额度刷新日期）；旧的次数 ``remaining`` 字段已不再使用。
 
+  分层计费：tools-server 启用真实光子后，还会附带 ``photon_remaining``（光子余额）。
+  发送前闸口语义随之变为「免费额度耗尽 **且** 光子也耗尽才拦截」——免费额度用完后，
+  有光子的用户仍可继续（溢出由 tools-server 侧实时折算成光子扣减）。未启用光子时该字段
+  为 None，闸口退化为只看金额额度，行为与之前一致。
+
 扣费由 billing usage 上报在 tools-server 侧按金额实时完成，evo 不再做按次扣减
 （已移除 use_quota）；模型级次数限制并入金额额度（已移除 check_model_quota）。
 
@@ -30,15 +35,25 @@ class QuotaStatus:
 
     remaining_yuan: 剩余金额额度（元）。
     reset_at: 下次额度刷新日期（ISO，如 ``2026-06-09``），无则 None。
+    photon_remaining: 真实光子余额；tools-server 未启用光子或查询失败为 None。
     """
 
     remaining_yuan: float
     reset_at: str | None = None
+    photon_remaining: float | None = None
 
     @property
     def is_exhausted(self) -> bool:
-        """额度是否耗尽（<= 0 拦截发送）。"""
-        return self.remaining_yuan <= 0
+        """额度是否耗尽（拦截发送）。
+
+        分层闸口：免费金额额度 <= 0 时，若启用了光子且仍有光子余额（> 0），则不拦截
+        （溢出消费走光子）。未启用光子（photon_remaining 为 None）则退化为只看金额额度。
+        """
+        if self.remaining_yuan > 0:
+            return False
+        if self.photon_remaining is not None and self.photon_remaining > 0:
+            return False
+        return True
 
     def exhausted_message(self, fallback: str) -> str:
         """额度耗尽时的用户提示文案。
@@ -77,12 +92,19 @@ async def check_quota_status(user_id: str) -> QuotaStatus:
             remaining = max(0.0, credit) if credit is not None else 0.0
             reset_at = inner.get("credit_reset_at")
             reset_at = reset_at if isinstance(reset_at, str) and reset_at else None
+            # 光子余额为可选字段：缺失（未启用）保持 None，闸口退化为只看金额额度。
+            photon_remaining = _coerce_number(inner.get("photon_remaining"))
             logger.info(
                 "check_quota_status response: user_id=%s status=%s "
-                "remaining=%s reset_at=%s",
+                "remaining=%s reset_at=%s photon_remaining=%s",
                 user_id,
                 resp.status,
                 remaining,
                 reset_at,
+                photon_remaining,
             )
-            return QuotaStatus(remaining_yuan=remaining, reset_at=reset_at)
+            return QuotaStatus(
+                remaining_yuan=remaining,
+                reset_at=reset_at,
+                photon_remaining=photon_remaining,
+            )
