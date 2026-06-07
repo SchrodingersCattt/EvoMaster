@@ -374,18 +374,6 @@ def build_devshell_eval_arg_parser(
         ),
     )
     parser.add_argument(
-        "--eval-billing-mode",
-        type=str,
-        default=None,
-        metavar="MODE",
-        help=(
-            "Enable per-call usage reporting to tools-server with this billing_mode "
-            "(e.g. 'eval'). 'eval'/'byok' record + price but do NOT debit credits. "
-            "Per-call cost is back-filled into ingest extra.per_call_usage. "
-            "Omit to disable reporting."
-        ),
-    )
-    parser.add_argument(
         "--exp",
         type=str,
         default=None,

@@ -53,6 +53,16 @@ KNOWN_MODELS: dict[str, dict] = {
         "url": "https://dp-storage-test2.oss-cn-zhangjiakou.aliyuncs.com/bohrium-test/bohrium/feedback/attachment/01KF3BF3TX9GVTC96Q0PCV01H3/DPA-3.2-5M.pt",
         "default_head": "OMat24",
     },
+    "DPA4-Neo-OMat24": {
+        "family": "DP",
+        "url": "https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/mlips/dpa4/1780496518_DPA4-Neo-OMat24.pt",
+        "default_head": "OMat24",
+    },
+    "DPA4-Neo-OMat24-ZBL": {
+        "family": "DP",
+        "url": "https://matmaster-test.oss-cn-zhangjiakou.aliyuncs.com/evomaster/mlips/dpa4/1780496518_DPA4-Neo-OMat24-ZBL.pt",
+        "default_head": "OMat24",
+    },
     # ── MACE ──────────────────────────────────────────────────────────────
     "MACE-MP-0": {"family": "MACE", "model_id": "medium"},
     "MACE-MPA-0": {

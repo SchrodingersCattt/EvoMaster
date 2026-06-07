@@ -321,7 +321,7 @@ questions:
     criterion: Total token usage stays within budget.
     axis: efficiency
     verify: token_budget
-- id: IG_lammps_deepmd_typemap_001_20260528
+- id: IG_lammps_deepmd_typemap_001_20260607
   capability: input_generation
   domain: agnostic
   intent: Test whether agent correctly specifies element names in DeePMD pair_coeff
@@ -341,7 +341,7 @@ questions:
   - key: must_pair_coeff_elements
     value:
       filename: in.lammps
-      pattern: (?i)pair_coeff\s+\*\s+\*\s+\S+\s+H\s+C\s+N\s+O\s+Cl
+      pattern: (?i)pair_coeff\s+\*\s+\*\s+(deepmd\s+)?H\s+C\s+N\s+O\s+Cl
   - key: turn_budget
     value:
       max: 10
@@ -354,11 +354,13 @@ questions:
     axis: correctness
     verify: artifact_exists
   - id: must_pair_coeff_elements
-    criterion: '[Must] pair_coeff line explicitly lists element names after model
-      file (e.g., pair_coeff * * model.pb H C N O Cl). Without element names,
-      DeePMD maps type 1->H, 2->He, 3->Li... which is completely wrong for a
-      5-element system. The element order must match the atom type order in the
-      data file.'
+    criterion: '[Must] pair_coeff explicitly lists the element names after `* *`
+      (correct DeePMD syntax: pair_coeff * * H C N O Cl; the model file goes in
+      pair_style, NOT in pair_coeff. The hybrid form pair_coeff * * deepmd H C N
+      O Cl is also accepted). Without the element list DeePMD falls back to the
+      model''s type_map, mapping type 1->H, 2->He, 3->Li... which is completely
+      wrong for this 5-element system on a full periodic-table model. The element
+      order must match the atom type order in the data file.'
     axis: correctness
     verify: text_file_regex
     weight: 3.0
