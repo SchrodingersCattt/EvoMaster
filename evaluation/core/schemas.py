@@ -432,7 +432,7 @@ class LLMRuntimeConfig(BaseModel):
     api_key: str
     base_url: str | None = None
     temperature: float = 0.0
-    max_tokens: int | None = 4096
+    max_tokens: int | None = None
     timeout: int = 180
 
 
