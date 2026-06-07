@@ -402,13 +402,25 @@ class AgentKernel:
                             finish_detail=build_finish_detail(response),
                         )
                     return
-                state.messages.append(
-                    AssistantMessage(
-                        content=response.content,
-                        reasoning_content=response.reasoning_content,
-                        provider_state=response.provider_state,
-                    )
+                natural_msg = AssistantMessage(
+                    content=response.content,
+                    reasoning_content=response.reasoning_content,
+                    provider_state=response.provider_state,
                 )
+                state.messages.append(natural_msg)
+                if response.provider_state is not None:
+                    yield _KernelItem(
+                        event=AssistantStateEvent(
+                            source="agent",
+                            state=natural_msg.model_dump(mode="json"),
+                            turn_index=turn_index,
+                            turn_usage=dict(state.turn_usage),
+                            total_usage=dict(state.total_usage),
+                            model=state.llm_model,
+                            model_profile=state.llm_model_profile,
+                            model_route=state.llm_model_route,
+                        )
+                    )
                 yield self._terminal(state, "natural", final_content=response.content)
                 return
 
