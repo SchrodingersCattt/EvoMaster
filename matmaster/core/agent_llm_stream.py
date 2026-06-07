@@ -91,6 +91,7 @@ async def stream_llm_items(
     stream_id = f"turn-{len(api_messages)}"
     usage: dict[str, int] = {}
     usage_vendor: dict[str, Any] | None = None
+    captured_provider_state = None
     producing_reasoning = False
     producing_content = False
     pending_response_parts: list[str] = []
@@ -154,6 +155,8 @@ async def stream_llm_items(
                 usage = chunk.usage
             if chunk.usage_vendor is not None:
                 usage_vendor = chunk.usage_vendor
+            if chunk.provider_state is not None:
+                captured_provider_state = chunk.provider_state
             if chunk.tool_call_deltas:
                 # Segment transition: reasoning -> tool_calls
                 if producing_reasoning:
@@ -247,6 +250,7 @@ async def stream_llm_items(
             finish_reason=finish_reason,
             usage=usage,
             usage_vendor=usage_vendor,
+            provider_state=captured_provider_state,
         )
     )
 

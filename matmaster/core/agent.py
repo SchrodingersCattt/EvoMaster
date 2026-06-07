@@ -401,6 +401,7 @@ class AgentKernel:
                     AssistantMessage(
                         content=response.content,
                         reasoning_content=response.reasoning_content,
+                        provider_state=response.provider_state,
                     )
                 )
                 yield self._terminal(state, "natural", final_content=response.content)
@@ -410,6 +411,7 @@ class AgentKernel:
                 content=response.content,
                 tool_calls=response.tool_calls,
                 reasoning_content=response.reasoning_content,
+                provider_state=response.provider_state,
             )
             assistant_finish_detail = None
             if response.finish_reason == "length":
