@@ -119,10 +119,10 @@ def test_chat_stream_accepts_timeout_kwarg() -> None:
     assert param.kind == inspect.Parameter.KEYWORD_ONLY
 
 
-def test_chat_completions_provider_timeout_attrs_concrete() -> None:
-    from matmaster.providers.chat_completions_provider import ChatCompletionsProvider
+def test_chat_completions_transport_timeout_attrs_concrete() -> None:
+    from matmaster.providers.transports.chat_completions import ChatCompletionsTransport
 
-    p = ChatCompletionsProvider(model="m", api_key="k", base_url=None, timeout=300.0)
+    p = ChatCompletionsTransport(model="m", api_key="k", base_url=None, timeout=300.0)
     assert p.stream_timeout == 300.0
     assert p.stream_idle_timeout == 300.0
     assert isinstance(p.max_retries, int)

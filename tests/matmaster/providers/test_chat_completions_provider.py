@@ -1,4 +1,4 @@
-"""Tests for ChatCompletionsProvider -- concrete LLMProvider implementation.
+"""Tests for ChatCompletionsTransport -- concrete LLMProvider implementation.
 
 All tests use unittest.mock to mock the OpenAI client -- no real API
 calls are made. Tests verify Protocol conformance, construction, async
@@ -14,7 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from matmaster.providers.chat_completions_provider import ChatCompletionsProvider
+from matmaster.providers.transports.chat_completions import ChatCompletionsTransport
 from matmaster.types.errors import LLMError
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.messages import LLMResponse, StreamChunk
@@ -31,24 +31,24 @@ async def _async_iter(items):
 
 class TestProtocolConformance:
     def test_protocol_conformance(self) -> None:
-        """ChatCompletionsProvider satisfies LLMProvider Protocol."""
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        """ChatCompletionsTransport satisfies LLMProvider Protocol."""
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         assert isinstance(provider, LLMProvider)
 
     def test_has_chat_method(self) -> None:
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         assert hasattr(provider, "chat")
         assert callable(provider.chat)
 
     def test_has_chat_stream_method(self) -> None:
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         assert hasattr(provider, "chat_stream")
         assert callable(provider.chat_stream)
 
     def test_validate_async_protocol(self) -> None:
         from matmaster.validation import validate_async_protocol
 
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         errors = validate_async_protocol(provider, LLMProvider)
         assert errors == [], f"Protocol validation errors: {errors}"
 
@@ -58,14 +58,14 @@ class TestProtocolConformance:
 
 class TestConstruction:
     def test_construction(self) -> None:
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         assert provider._client is None
         assert provider._api_key == "sk-test"
         assert provider._base_url is None
         assert provider._timeout == 300.0
 
     def test_custom_base_url(self) -> None:
-        provider = ChatCompletionsProvider(
+        provider = ChatCompletionsTransport(
             model="gpt-4o-mini",
             api_key="sk-test",
             base_url="https://custom.api",
@@ -73,7 +73,7 @@ class TestConstruction:
         assert provider._base_url == "https://custom.api"
 
     def test_custom_config(self) -> None:
-        provider = ChatCompletionsProvider(
+        provider = ChatCompletionsTransport(
             model="gpt-4o-mini",
             api_key="sk-test",
             temperature=0.5,
@@ -84,14 +84,14 @@ class TestConstruction:
 
     def test_max_retries_stored(self) -> None:
         """max_retries stored as _max_retries."""
-        provider = ChatCompletionsProvider(
+        provider = ChatCompletionsTransport(
             model="gpt-4o-mini", api_key="sk-test", max_retries=5
         )
         assert provider._max_retries == 5
 
     def test_retry_delay_stored(self) -> None:
         """Custom retry_delay stored as _retry_delay."""
-        provider = ChatCompletionsProvider(
+        provider = ChatCompletionsTransport(
             model="gpt-4o-mini",
             api_key="sk-test",
             retry_delay=2.0,
@@ -104,7 +104,7 @@ class TestConstruction:
 
 class TestStreamTimeoutConstruction:
     def test_stream_timeout_stored(self) -> None:
-        provider = ChatCompletionsProvider(
+        provider = ChatCompletionsTransport(
             model="gpt-4o-mini",
             api_key="sk-test",
             stream_timeout=120.0,
@@ -114,25 +114,25 @@ class TestStreamTimeoutConstruction:
         assert provider.stream_idle_timeout == 60.0
 
     def test_stream_timeout_defaults_to_timeout(self) -> None:
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         assert provider.stream_timeout == 300.0
         assert provider.stream_idle_timeout == 300.0
 
     def test_max_retries_property(self) -> None:
-        provider = ChatCompletionsProvider(
+        provider = ChatCompletionsTransport(
             model="gpt-4o-mini", api_key="sk-test", max_retries=5
         )
         assert provider.max_retries == 5
 
     def test_retry_delay_property(self) -> None:
-        provider = ChatCompletionsProvider(
+        provider = ChatCompletionsTransport(
             model="gpt-4o-mini", api_key="sk-test", retry_delay=2.0
         )
         assert provider.retry_delay == 2.0
 
     async def test_custom_httpx_client_created(self) -> None:
         """When stream timeouts provided, custom httpx.AsyncClient is passed."""
-        provider = ChatCompletionsProvider(
+        provider = ChatCompletionsTransport(
             model="gpt-4o-mini",
             api_key="sk-test",
             timeout=1200.0,
@@ -140,7 +140,7 @@ class TestStreamTimeoutConstruction:
             stream_idle_timeout=60.0,
         )
         with patch(
-            "matmaster.providers.chat_completions_provider.openai.AsyncOpenAI"
+            "matmaster.providers.transports.chat_completions.openai.AsyncOpenAI"
         ) as mock_cls:
             mock_client = AsyncMock()
             mock_cls.return_value = mock_client
@@ -156,13 +156,13 @@ class TestStreamTimeoutConstruction:
 
     async def test_httpx_client_fallback_without_stream_timeouts(self) -> None:
         """Without stream timeouts, httpx client uses general timeout for read."""
-        provider = ChatCompletionsProvider(
+        provider = ChatCompletionsTransport(
             model="gpt-4o-mini",
             api_key="sk-test",
             timeout=300.0,
         )
         with patch(
-            "matmaster.providers.chat_completions_provider.openai.AsyncOpenAI"
+            "matmaster.providers.transports.chat_completions.openai.AsyncOpenAI"
         ) as mock_cls:
             mock_client = AsyncMock()
             mock_cls.return_value = mock_client
@@ -196,7 +196,7 @@ def _make_mock_completion(
 
 class TestChatContent:
     async def test_chat_content(self) -> None:
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = _make_mock_completion(
             content="Hello"
@@ -214,7 +214,7 @@ class TestChatContent:
         tc_mock.function.name = "get_weather"
         tc_mock.function.arguments = '{"city": "Beijing"}'
 
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = _make_mock_completion(
             content=None,
@@ -235,7 +235,7 @@ class TestChatContent:
         usage.completion_tokens = 5
         usage.total_tokens = 15
 
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = _make_mock_completion(
             usage=usage,
@@ -258,7 +258,7 @@ class TestChatContent:
         usage.total_tokens = 15
         usage.completion_tokens_details = details
 
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = _make_mock_completion(
             usage=usage,
@@ -284,7 +284,7 @@ class TestChatContent:
             cache_read_input_tokens = 45
             cache_creation = {"ephemeral_5m_input_tokens": 123}
 
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = _make_mock_completion(
             usage=Usage(),
@@ -312,7 +312,7 @@ class TestChatContent:
         }
 
     async def test_chat_finish_reason(self) -> None:
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = _make_mock_completion(
             finish_reason="stop"
@@ -364,7 +364,7 @@ def _make_tool_call_delta(
 
 class TestChatStreamContent:
     async def test_chat_stream_reasoning_content(self) -> None:
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = _async_iter(
             [
@@ -384,7 +384,7 @@ class TestChatStreamContent:
         assert chunks[1].finish_reason == "stop"
 
     async def test_chat_stream_content(self) -> None:
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = _async_iter(
             [
@@ -413,7 +413,7 @@ class TestChatStreamContent:
             arguments='{"a": 1}',
         )
 
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = _async_iter(
             [
@@ -435,7 +435,7 @@ class TestChatStreamContent:
         assert chunks[0].tool_call_deltas[0]["arguments"] == '{"a": 1}'
 
     async def test_chat_stream_rewrites_same_index_when_tool_name_changes(self) -> None:
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = _async_iter(
             [
@@ -487,7 +487,7 @@ class TestChatStreamContent:
         ]
 
     async def test_chat_stream_rewrites_same_index_when_id_changes(self) -> None:
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = _async_iter(
             [
@@ -541,7 +541,7 @@ class TestChatStreamContent:
     async def test_chat_stream_keeps_same_index_for_normal_argument_streaming(
         self,
     ) -> None:
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = _async_iter(
             [
@@ -591,7 +591,7 @@ class TestChatStreamContent:
     async def test_chat_stream_assigns_monotonic_indices_for_late_collision(
         self,
     ) -> None:
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = _async_iter(
             [
@@ -663,7 +663,7 @@ class TestChatStreamContent:
     async def test_chat_stream_drops_exact_duplicate_id_on_different_index(
         self,
     ) -> None:
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = _async_iter(
             [
@@ -710,7 +710,7 @@ class TestChatStreamContent:
     async def test_chat_stream_merges_duplicate_id_continuation_on_different_index(
         self,
     ) -> None:
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = _async_iter(
             [
@@ -760,7 +760,7 @@ class TestChatStreamContent:
         ]
 
     async def test_chat_stream_duplicate_id_with_conflicting_name_raises(self) -> None:
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = _async_iter(
             [
@@ -799,7 +799,7 @@ class TestChatStreamContent:
     async def test_chat_stream_duplicate_id_with_conflicting_arguments_raises(
         self,
     ) -> None:
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = _async_iter(
             [
@@ -840,7 +840,7 @@ class TestChatStreamContent:
         empty_chunk = MagicMock()
         empty_chunk.choices = []
 
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = _async_iter(
             [
@@ -858,7 +858,7 @@ class TestChatStreamContent:
         assert chunks[0].content == "ok"
 
     async def test_chat_stream_returns_async_iterator(self) -> None:
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = _async_iter(
             [

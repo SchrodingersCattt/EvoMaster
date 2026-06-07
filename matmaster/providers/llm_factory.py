@@ -1,23 +1,19 @@
-"""LLM Provider factory: config-driven provider construction.
-
-Thin factory layer: resolve_route -> ChatCompletionsProvider or BedrockProvider.
-All semantic resolution (family, temperature, reasoning) lives on
-LLMProfileConfig methods. This module only does the final mapping.
-"""
+"""LLM provider factory：dispatch 表驱动构造。"""
 
 from __future__ import annotations
 
 import logging
-import os
 from dataclasses import dataclass
-from typing import Literal
+from typing import Callable, Literal
 
-from matmaster.config.llm import LLMConfig, LLMProfileConfig
-from matmaster.providers.bedrock_provider import BedrockProvider
-from matmaster.providers.chat_completions_provider import (
-    AnthropicPromptCacheOptions,
-    ChatCompletionsProvider,
+from matmaster.config.llm import (
+    LLMConfig,
+    LLMProfileConfig,
+    ProviderConfig,
+    ResolvedModel,
 )
+from matmaster.providers.transports.chat_completions import ChatCompletionsTransport
+from matmaster.types.llm_provider import LLMProvider
 
 BYOK_PROFILE_KEY = "byok"
 BYOK_DEFAULT_CONTEXT_LIMIT = 200_000
@@ -27,102 +23,101 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class LLMProviderBundle:
-    """Provider plus the resolved model identity used for run persistence."""
+    """Provider 加上用于 run 持久化的解析模型身份。"""
 
-    provider: ChatCompletionsProvider | BedrockProvider
+    provider: LLMProvider
     model: str
     model_profile: str
     model_route: str | None
     provider_name: str
-    model_family: str | None
     context_limit: int
-    context_limit_source: Literal[
-        "profile",
-        "byok_credential",
-        "byok_default",
-    ]
+    context_limit_source: Literal["profile", "byok_credential", "byok_default"]
+
+
+def _build_chat_completions_transport(
+    profile: LLMProfileConfig,
+    provider: ProviderConfig,
+    *,
+    extra_body: dict | None = None,
+) -> ChatCompletionsTransport:
+    """profile 平铺字段 + provider 连接到 ChatCompletionsTransport。"""
+    return ChatCompletionsTransport(
+        model=profile.model,
+        api_key=provider.api_key,
+        base_url=provider.base_url,
+        temperature=profile.temperature,
+        max_tokens=profile.max_tokens,
+        reasoning_effort=profile.reasoning_effort,
+        reasoning_summary=profile.reasoning_summary,
+        extra_body=extra_body,
+        timeout=profile.timeout,
+        stream_timeout=profile.stream_timeout,
+        stream_idle_timeout=profile.stream_idle_timeout,
+        max_retries=profile.max_retries,
+        retry_delay=profile.retry_delay,
+    )
+
+
+_TRANSPORT_BUILDERS: dict[
+    str, Callable[[LLMProfileConfig, ProviderConfig], LLMProvider]
+] = {
+    "chat_completions": _build_chat_completions_transport,
+}
+
+
+def _dispatch(profile: LLMProfileConfig, provider: ProviderConfig) -> LLMProvider:
+    try:
+        builder = _TRANSPORT_BUILDERS[provider.transport]
+    except KeyError as exc:
+        raise ValueError(
+            f"unsupported transport: {provider.transport!r}, "
+            f"available: {list(_TRANSPORT_BUILDERS)}"
+        ) from exc
+    return builder(profile, provider)
 
 
 def build_provider(
     llm_config: LLMConfig,
     *,
     model_override: str | None = None,
-    llm_override: str | None = None,
     default_profile_key: str | None = None,
-) -> ChatCompletionsProvider | BedrockProvider:
-    """Resolve route and build an LLM provider backend.
-
-    Args:
-        llm_config: Loaded LLMConfig instance.
-        model_override: External route key from frontend.
-        llm_override: Legacy profile key (compat layer).
-        default_profile_key: Agent-level default profile key.
-    """
+) -> LLMProvider:
+    """解析并构造 LLM provider 后端。"""
     return build_provider_bundle(
         llm_config,
         model_override=model_override,
-        llm_override=llm_override,
         default_profile_key=default_profile_key,
     ).provider
 
 
-def _build_anthropic_prompt_cache_options(
-    profile,
-) -> AnthropicPromptCacheOptions | None:
-    prompt_cache = profile.prompt_cache
-    if prompt_cache is None or not prompt_cache.system_prompt_breakpoint:
-        return None
-    return AnthropicPromptCacheOptions(
-        system_prompt_breakpoint=prompt_cache.system_prompt_breakpoint,
-        cache_control=prompt_cache.cache_control(),
-        automatic=prompt_cache.automatic,
-        latest_user_breakpoint=prompt_cache.latest_user_breakpoint,
-        tool_result_breakpoint=prompt_cache.tool_result_breakpoint,
-        flexible_breakpoint=prompt_cache.flexible_breakpoint,
-        max_breakpoints=prompt_cache.max_breakpoints,
-        min_flexible_chars=prompt_cache.min_flexible_chars,
-    )
-
-
-def _build_chat_completions_provider(
-    profile: LLMProfileConfig,
+def build_provider_bundle(
+    llm_config: LLMConfig,
     *,
-    model: str,
-    api_key: str,
-    base_url: str | None,
-    extra_kwargs: dict | None,
-) -> ChatCompletionsProvider:
-    """按 profile 的通用参数构造 ChatCompletionsProvider；model/api_key/base_url/extra_kwargs 由调用方决定。
-
-    供标准路径与 BYOK 路径共用，避免两处重复一长串 timeout/retry/cache 等 kwargs。
-    """
-    return ChatCompletionsProvider(
-        model=model,
-        api_key=api_key,
-        base_url=base_url,
-        temperature=profile.effective_temperature(),
-        max_tokens=profile.max_tokens,
-        timeout=profile.timeout,
-        stream_timeout=profile.stream_timeout,
-        stream_idle_timeout=profile.stream_idle_timeout,
-        max_retries=profile.max_retries,
-        retry_delay=profile.retry_delay,
-        prompt_cache_options=_build_anthropic_prompt_cache_options(profile),
-        extra_kwargs=extra_kwargs,
+    model_override: str | None = None,
+    default_profile_key: str | None = None,
+) -> LLMProviderBundle:
+    """解析一个 profile 并同时构造 provider 与持久化身份。"""
+    resolved: ResolvedModel = llm_config.resolve(
+        model_override=model_override,
+        default_key=default_profile_key,
     )
-
-
-def _merge_byok_extra_kwargs(base: dict | None, extra_body: dict | None) -> dict | None:
-    """把凭证侧的黑盒 extra_body 叠加到族默认 extra_kwargs 上（同名 key 用户优先）。
-
-    SDK 侧 extra_body 与请求体浅合并、且 extra_body 覆盖同名 key，故这里直接覆盖即可。
-    """
-    if not extra_body:
-        return base
-    out = dict(base or {})
-    merged_body = {**(out.get("extra_body") or {}), **extra_body}
-    out["extra_body"] = merged_body
-    return out
+    logger.info(
+        "build_provider: profile=%s model=%s transport=%s provider=%s",
+        resolved.profile_key,
+        resolved.profile.model,
+        resolved.provider.transport,
+        resolved.profile.provider,
+    )
+    provider = _dispatch(resolved.profile, resolved.provider)
+    return LLMProviderBundle(
+        provider=provider,
+        model=resolved.profile.model,
+        model_profile=resolved.profile_key,
+        model_route=resolved.profile_key,
+        provider_name=resolved.profile.provider,
+        context_limit=resolved.profile.context_limit,
+        context_limit_source="profile",
+    )
 
 
 def build_byok_provider_bundle(
@@ -134,12 +129,7 @@ def build_byok_provider_bundle(
     context_limit: int | None = None,
     extra_body: dict | None = None,
 ) -> LLMProviderBundle:
-    """用用户自带 Key（BYOK）构造 OpenAI 兼容 Provider。
-
-    不读 llm_config / routes：model/api_key/base_url 全部来自 tools-server 下发的凭证。
-    extra_body 为凭证侧的黑盒透传参数（用户自填 JSON，如 enable_thinking/reasoning_effort/
-    thinking_budget 等），原样合并进请求体；与族默认同名 key 时用户优先。内容正确性由用户负责。
-    """
+    """用用户自带 Key（BYOK）构造 OpenAI 兼容 transport。"""
     if context_limit is not None and context_limit <= 0:
         raise ValueError("BYOK context_limit must be a positive integer")
     effective_context_limit = context_limit or BYOK_DEFAULT_CONTEXT_LIMIT
@@ -149,24 +139,23 @@ def build_byok_provider_bundle(
     profile = LLMProfileConfig(
         provider="byok",
         model=model,
-        api_key=api_key,
-        base_url=base_url,
         context_limit=effective_context_limit,
     )
-    extra_kwargs = _merge_byok_extra_kwargs(profile.build_extra_kwargs(), extra_body)
+    provider_conn = ProviderConfig(
+        transport="chat_completions",
+        api_key=api_key,
+        base_url=base_url,
+    )
     logger.info(
-        "build_byok_provider: model=%s family=%s base_url_host=%s extra_body_keys=%s",
+        "build_byok_provider: model=%s base_url_host=%s extra_body_keys=%s",
         model,
-        profile.effective_family(),
         (base_url.split("//", 1)[-1].split("/", 1)[0] if base_url else ""),
         sorted((extra_body or {}).keys()),
     )
-    provider = _build_chat_completions_provider(
+    provider = _build_chat_completions_transport(
         profile,
-        model=model,
-        api_key=api_key,
-        base_url=base_url,
-        extra_kwargs=extra_kwargs,
+        provider_conn,
+        extra_body=extra_body,
     )
     return LLMProviderBundle(
         provider=provider,
@@ -174,73 +163,6 @@ def build_byok_provider_bundle(
         model_profile=BYOK_PROFILE_KEY,
         model_route=f"byok:{credential_id}" if credential_id else BYOK_PROFILE_KEY,
         provider_name="byok",
-        model_family=profile.effective_family(),
         context_limit=effective_context_limit,
         context_limit_source=context_limit_source,
-    )
-
-
-def build_provider_bundle(
-    llm_config: LLMConfig,
-    *,
-    model_override: str | None = None,
-    llm_override: str | None = None,
-    default_profile_key: str | None = None,
-) -> LLMProviderBundle:
-    """Resolve one LLM route and build both provider and persistence identity."""
-    resolved = llm_config.resolve_route(
-        model_override=model_override,
-        llm_override=llm_override,
-        default_key=default_profile_key,
-    )
-    profile = llm_config.get_profile(resolved.profile_key)
-
-    logger.info(
-        "build_provider: route=%s profile=%s model=%s family=%s provider=%s",
-        resolved.route_key,
-        resolved.profile_key,
-        resolved.model,
-        profile.effective_family(),
-        profile.provider,
-    )
-
-    transport = resolved.transport
-    if transport == "chat_completions":
-        provider = _build_chat_completions_provider(
-            profile,
-            model=resolved.model,
-            api_key=profile.api_key,
-            base_url=profile.base_url,
-            extra_kwargs=profile.build_extra_kwargs(),
-        )
-    elif transport == "bedrock_converse":
-        region = (
-            (profile.bedrock_region or "").strip()
-            or os.environ.get("AWS_REGION")
-            or os.environ.get("AWS_DEFAULT_REGION")
-            or "us-east-1"
-        )
-        provider = BedrockProvider(
-            model_id=resolved.model,
-            region=region,
-            temperature=profile.effective_temperature(),
-            max_tokens=profile.max_tokens,
-            timeout=profile.timeout,
-            stream_timeout=profile.stream_timeout,
-            stream_idle_timeout=profile.stream_idle_timeout,
-            max_retries=profile.max_retries,
-            retry_delay=profile.retry_delay,
-        )
-    else:
-        raise ValueError(f"unsupported transport: {transport!r}")
-
-    return LLMProviderBundle(
-        provider=provider,
-        model=resolved.model,
-        model_profile=resolved.profile_key,
-        model_route=resolved.route_key,
-        provider_name=profile.provider,
-        model_family=profile.effective_family(),
-        context_limit=profile.context_limit,
-        context_limit_source="profile",
     )
