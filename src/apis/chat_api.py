@@ -157,7 +157,6 @@ async def _handle_internal_trigger(
         delivery=req.delivery,
         on_busy=(req.on_busy or "skip"),
         mode=req.mode,
-        llm=req.llm,
         model=req.model,
     )
     if result.status == "enqueued":
@@ -419,7 +418,6 @@ async def chat_stream(
             llm_config = load_llm_config(_PROJECT_ROOT / "config" / "llm_config.yaml")
             image_service.ensure_vision_supported(
                 llm_config=llm_config,
-                llm_override=(req.llm or "").strip() or None,
                 model_override=(req.model or "").strip() or None,
                 default_profile_key=_get_agent_default_llm(),
             )
