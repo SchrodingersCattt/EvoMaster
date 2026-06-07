@@ -250,7 +250,6 @@ class ChatStreamService:
         event_writer: Callable[[str, str], dict],
         id_prefix: str,
         mode: str,
-        llm: str | None = None,
         model: str | None = None,
         byok_credential_id: str | None = None,
         bohrium_required: bool = False,
@@ -291,7 +290,6 @@ class ChatStreamService:
             'invocation_id': invocation_id,
             'user_prompt': turn_input.user_text,
             'mode': mode,
-            'llm': llm,
             'model': model,
             'byok_credential_id': byok_credential_id,
             'turn_input': turn_input.to_payload(),
@@ -329,10 +327,7 @@ class ChatStreamService:
                     ('会话ID', sid),
                     ('会话地址', session_url),
                     ('用户', user_info_display),
-                    (
-                        '模型',
-                        format_llm_model_for_notify(job.get('llm'), job.get('model')),
-                    ),
+                    ('模型', format_llm_model_for_notify(job.get('model'))),
                     ('用户问题', user_question or '-'),
                     ('排队数', str(queue_len)),
                     ('执行中', str(active_count)),
@@ -365,7 +360,6 @@ class ChatStreamService:
         delivery: DeliverySpec | dict | None = None,
         on_busy: str = "skip",
         mode: str | None = None,
-        llm: str | None = None,
         model: str | None = None,
         dedup_ttl_sec: int = DEFAULT_DEDUP_TTL_SEC,
         workspace: str | None = None,
@@ -387,7 +381,6 @@ class ChatStreamService:
             return TriggerResult(status="deduped", dedup_key=dedup_key)
 
         resolved_mode = self._resolve_mode(mode)
-        llm_val = (llm or '').strip() or None
         model_val = (model or '').strip() or None
         if delivery is None:
             delivery_payload: dict | None = None
@@ -418,7 +411,6 @@ class ChatStreamService:
             event_writer=_system_event_writer,
             id_prefix='trig_',
             mode=resolved_mode,
-            llm=llm_val,
             model=model_val,
             byok_credential_id=None,
             bohrium_required=bool(workspace),
@@ -686,7 +678,6 @@ class ChatStreamService:
 
         mode = self._resolve_mode(req.mode)
 
-        llm = (req.llm or '').strip() or None
         model = (
             req.model or ''
         ).strip() or None  # 本轮模型名，如 matmaster/qwen3.7-max / claude-sonnet-4-6
@@ -744,8 +735,6 @@ class ChatStreamService:
                 'task_id': task_id,
                 'invocation_id': invocation_id,
             }
-            if llm:
-                user_msg['requested_llm'] = llm
             if model:
                 user_msg['requested_model'] = model
             if req.files:
@@ -770,7 +759,6 @@ class ChatStreamService:
             event_writer=_user_event_writer,
             id_prefix='sse_',
             mode=mode,
-            llm=llm,
             model=model,
             byok_credential_id=byok_credential_id,
             bohrium_required=bohrium_required,
