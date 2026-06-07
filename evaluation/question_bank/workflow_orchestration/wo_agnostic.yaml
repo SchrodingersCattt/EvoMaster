@@ -6645,3 +6645,293 @@ questions:
     verify: token_budget
     weight: 0.0
     criterion: '[Must] Agent uses fewer than 80000 tokens total'
+- id: WO_dpa4_neo_optimize_001_20260607
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Optimize rocksalt MgO with a DPA4 model and derive its bulk modulus via
+    an EOS fit. The prompt names only the model family (DPA4); the agent must resolve
+    a concrete current DPA4 checkpoint from the mlips skill model table and run it
+    on the dpa-calculator image, producing both a physical lattice constant and a
+    physical bulk modulus — the latter cannot be copied from the prompt and requires
+    actually running the model over several volumes.
+  human_prompt_seed: |
+    请使用 DPA4 机器学习势研究岩盐结构 MgO。
+
+    要求：
+    - 从数据库获取或构建 MgO 岩盐原胞（空间群 Fm-3m, a≈4.21 Å）
+    - 先做含晶格弛豫的全优化（原子坐标 + 晶格），力收敛判据 0.01 eV/Å
+    - 再在平衡体积附近取 5 个体积点做单点能计算，用状态方程(EOS, Birch-Murnaghan)拟合体模量 B0
+    - 将结果写入 `mgo_result.json`：
+      `{"lattice_a_A": ..., "energy_per_atom_eV": ..., "bulk_modulus_GPa": ..., "convergence_status": ...}`
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: output_artifact
+    value: mgo_result.json
+  - key: lattice_a_A
+    value:
+      filename: mgo_result.json
+      key: lattice_a_A
+      min: 4.06
+      max: 4.36
+  - key: bulk_modulus_GPa
+    value:
+      filename: mgo_result.json
+      key: bulk_modulus_GPa
+      min: 120.0
+      max: 220.0
+  - key: turn_budget
+    value:
+      max: 22
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `mgo_result.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: lattice_a_A
+    criterion: Optimized MgO lattice constant is within tolerance of the experimental/DPA
+      value (~4.21 Å).
+    axis: correctness
+    verify: json_file_numeric_range
+  - id: bulk_modulus_GPa
+    criterion: The fitted bulk modulus of MgO is in the physical range (~150-170 GPa
+      experimentally; 120-220 accepts the MLIP/DFT spread). This value is not given
+      in the prompt and can only be obtained by actually fitting the EOS — a value
+      outside the range indicates the EOS was not genuinely computed.
+    axis: correctness
+    verify: json_file_numeric_range
+    weight: 2.0
+  - id: model_is_dpa4
+    criterion: '[Must] The computation uses a DPA4-family model (a DPA4-Neo checkpoint
+      resolved from the mlips skill model table), not a DPA3/DPA2 fallback or a
+      different MLIP. Judge from the answer and the submitted command/model reference.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: grounding_source
+    criterion: The reported lattice constant, energy and bulk modulus are tied to
+      computation outputs stated in the answer, not textbook recall or invented
+      numbers. Judge solely from the final answer.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: no_retries
+    criterion: No repeated identical optimization submissions with the same parameters.
+    axis: efficiency
+    verify: no_retries
+  - id: turn_budget
+    criterion: Agent completes the task within the turn (step) budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock run duration does not exceed benchmark ceiling.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: WO_dpa4_lammps_freeze_pt2_001_20260607
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Prepare a DPA4 + LAMMPS run for fcc Cu. The prompt names only the DPA4
+    family. Tests the DPA4-specific LAMMPS handoff documented in the mlips skill —
+    freeze to a .pt2 artifact (no --model-branch/--head), add `atom_modify map yes`,
+    use full-index atom types, and submit with the dedicated dpa4 LAMMPS image (not
+    dpa-calculator).
+  human_prompt_seed: |
+    我想用 DPA4 模型配合 LAMMPS，对 fcc Cu（3×3×3 超胞）做结构优化。请帮我准备好提交所需的文件，不需要实际执行计算。
+
+    交付要求：
+    - 输入文件和执行脚本放在 `input/` 目录（`conf.lmp`、`in.lmp`、`run.sh`）。
+    - 另外给出提交到 Bohrium 所需的提交配置 `submit.json`。
+  tags:
+  - code_mlip
+  - eng_lammps
+  data_files: []
+  reference_answers:
+  - key: run_sh_exists
+    value: input/run.sh
+  - key: run_sh_freeze_pt2
+    value:
+      filename: input/run.sh
+      pattern: 'dp\s+--pt\s+freeze[^\n]*\.pt2'
+      flags: i
+  - key: run_sh_has_lammps
+    value:
+      filename: input/run.sh
+      pattern: 'lmp\s|lammps'
+      flags: i
+  - key: submit_json_exists
+    value: submit.json
+  - key: submit_dpa4_image
+    value:
+      filename: submit.json
+      pattern: 'dpa4:260601'
+      flags: i
+  - key: in_lmp_atom_modify
+    value:
+      filename: input/in.lmp
+      pattern: 'atom_modify\s+map\s+yes'
+      flags: i
+  - key: in_lmp_pair_style_pt2
+    value:
+      filename: input/in.lmp
+      pattern: 'pair_style\s+deepmd[^\n]*\.pt2'
+      flags: i
+  - key: turn_budget
+    value:
+      max: 18
+  - key: duration_budget
+    value:
+      max: 7200000
+  - key: token_budget_total
+    value:
+      max: 30000
+  scoring_checklist:
+  - id: run_sh_exists
+    criterion: Agent writes `input/run.sh` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: run_sh_freeze_pt2
+    criterion: '[Must] run.sh freezes the DPA4 checkpoint into a `.pt2` artifact via
+      `dp --pt freeze` (DPA4 LAMMPS artifact is .pt2, not .pth).'
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: run_sh_has_lammps
+    criterion: '[Must] run.sh invokes LAMMPS (lmp) after freezing the model.'
+    axis: correctness
+    verify: text_file_regex
+  - id: submit_json_exists
+    criterion: Agent writes `submit.json` (job submission config) to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: submit_dpa4_image
+    criterion: '[Must] submit.json `image` field references the dedicated DPA4 LAMMPS
+      image (custom_images/dpa4:260601-...), not the dpa-calculator ASE image.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: in_lmp_atom_modify
+    criterion: '[Must] in.lmp contains `atom_modify map yes`, which DPA4 .pt2 requires
+      in LAMMPS for correct atom-ID mapping.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: in_lmp_pair_style_pt2
+    criterion: '[Must] in.lmp uses `pair_style deepmd <model>.pt2` referencing the
+      frozen .pt2 artifact.'
+    axis: correctness
+    verify: text_file_regex
+  - id: no_model_branch
+    criterion: 'DPA4-Neo is single-head: the freeze command does NOT pass `--model-branch`
+      or `--head` (those apply only to multi-head DPA2/DPA3). Judge from run.sh.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: full_index_type_map
+    criterion: The conf.lmp atom types follow the model's full-index type_map (Cu=29,
+      i.e. ≥29 atom types declared with Cu placed at type 29), not a compact 1-type
+      mapping, and no element names are passed after `pair_coeff * *`.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
+- id: WO_dpa4_zbl_optimize_001_20260607
+  capability: workflow_orchestration
+  domain: agnostic
+  intent: Study Si under extreme compression using a DPA4 model. The prompt only
+    describes a physical regime (nearest-neighbour distance pushed far below the
+    equilibrium bond length, well outside the model's training distribution) — it
+    does NOT mention short-range repulsion or name a model. The agent must reason
+    from that regime that a short-range-repulsion-corrected potential is needed and
+    select the DPA4 ZBL variant from the mlips skill model table, then run it.
+  human_prompt_seed: |
+    我要研究金刚石结构 Si 在极端高压、晶胞被大幅压缩（远超常规弹性形变范围）下的能量学。请用 DPA4 系列的机器学习势完成计算。
+
+    要求：
+    - 构建金刚石 Si 原胞（a≈5.43 Å）
+    - 计算两个体积点的总能量：平衡体积，以及晶格常数压缩约 20% 的体积（此时最近邻间距远小于平衡键长）
+    - 报告每个体积点的总能量 (eV/atom)，并将结果写入 `compression_energy.json`：
+      `{"a_equilibrium": ..., "e_equilibrium_per_atom": ..., "e_compressed_per_atom": ..., "model_used": "..."}`
+  tags:
+  - code_mlip
+  data_files: []
+  reference_answers:
+  - key: output_artifact
+    value: compression_energy.json
+  - key: model_used_zbl
+    value:
+      filename: compression_energy.json
+      pattern: ZBL
+      flags: i
+  - key: turn_budget
+    value:
+      max: 15
+  - key: duration_budget
+    value:
+      max: 3600000
+  - key: token_budget_total
+    value:
+      max: 10000
+  scoring_checklist:
+  - id: output_artifact
+    criterion: Agent writes `compression_energy.json` to workspace.
+    axis: correctness
+    verify: artifact_exists
+  - id: model_used_zbl
+    criterion: '[Must] compression_energy.json `model_used` records a DPA4 ZBL variant (string
+      contains "ZBL").'
+    axis: correctness
+    verify: text_file_regex
+  - id: model_is_dpa4_zbl
+    criterion: '[Must] From the extreme-compression regime alone (nearest-neighbour
+      distance far below the equilibrium bond length, outside the training distribution),
+      the agent inferred that a short-range-repulsion-corrected potential is needed
+      and selected the DPA4 ZBL variant (DPA4-Neo-OMat24-ZBL) from the mlips skill
+      model table — NOT the plain non-ZBL DPA4 variant or another MLIP. The prompt
+      neither mentions repulsion nor names a model, so this tests physical reasoning
+      plus model selection. Judge from the answer and the submitted command/model
+      reference.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: compressed_higher_energy
+    criterion: The compressed-volume energy per atom is higher than the equilibrium-volume
+      energy per atom (compression raises energy), and both are finite physical
+      numbers — confirming the ZBL model ran without crashing.
+    axis: correctness
+    verify: llm_binary_judge
+  - id: grounding_source
+    criterion: The reported energies are tied to computation outputs stated in the
+      answer, not invented numbers. Judge solely from the final answer.
+    axis: grounding
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: duration_budget
+    criterion: Wall-clock time within budget.
+    axis: efficiency
+    verify: duration_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within benchmark ceiling.
+    axis: efficiency
+    verify: token_budget
