@@ -19,6 +19,11 @@ from matmaster.config.loader import (
 # Minimal YAML content for tests
 _YAML_CONTENT = """\
 llm:
+  providers:
+    litellm:
+      transport: "chat_completions"
+      api_key: "sk-test"
+      base_url: "http://litellm-proxy"
   profiles:
     opus:
       provider: "litellm"
@@ -65,7 +70,19 @@ class TestLoadLlmConfig:
     def test_from_dict(self) -> None:
         raw = {
             "llm": {
-                "profiles": {"p1": {"model": "m1", "context_limit": 200_000}},
+                "providers": {
+                    "litellm": {
+                        "transport": "chat_completions",
+                        "api_key": "sk-test",
+                    }
+                },
+                "profiles": {
+                    "p1": {
+                        "provider": "litellm",
+                        "model": "m1",
+                        "context_limit": 200_000,
+                    }
+                },
                 "default": "p1",
             }
         }
@@ -82,51 +99,55 @@ class TestLoadLlmConfig:
         monkeypatch.setenv("TEST_API_KEY", "sk-secret")
         yaml = (
             'llm:\n'
+            '  providers:\n'
+            '    litellm:\n'
+            '      transport: "chat_completions"\n'
+            '      api_key: "${TEST_API_KEY}"\n'
             '  profiles:\n'
             '    p1:\n'
+            '      provider: "litellm"\n'
             '      model: "m1"\n'
             '      context_limit: 200000\n'
-            '      api_key: "${TEST_API_KEY}"\n'
             '  default: "p1"\n'
         )
         f = tmp_path / "config.yaml"
         f.write_text(yaml)
         cfg = load_llm_config(f)
-        assert cfg.profiles["p1"].api_key == "sk-secret"
+        assert cfg.providers["litellm"].api_key == "sk-secret"
 
 
 class TestLoadLlmConfigNormalized:
-    """load_llm_config with normalized schema (profiles + routes)."""
+    """load_llm_config with normalized schema (providers + profiles)."""
 
     def test_load_normalized_yaml(self, tmp_path: Path) -> None:
         yaml_content = """
 default: "p1"
+providers:
+  litellm:
+    transport: "chat_completions"
+    api_key: "test-key"
 profiles:
   p1:
+    provider: "litellm"
     model: "test-model"
-    api_key: "test-key"
     context_limit: 200000
-routes:
-  test-route:
-    profile: "p1"
-    model: "test-model"
 """
         f = tmp_path / "llm_config.yaml"
         f.write_text(yaml_content)
         cfg = load_llm_config(f)
         assert "p1" in cfg.profiles
-        assert "test-route" in cfg.routes
-        assert cfg.routes["test-route"].profile == "p1"
+        assert "litellm" in cfg.providers
+        assert cfg.resolve(model_override="p1").profile.model == "test-model"
 
-    def test_repo_llm_config_routes_current_gpt55(self) -> None:
+    def test_repo_llm_config_profiles_current_gpt55(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
 
         cfg = load_llm_config(repo_root / "config" / "llm_config.yaml")
-        resolved = cfg.resolve_route(model_override="cds/GPT-5.5")
+        resolved = cfg.resolve(model_override="matmaster/gpt-5.5")
 
-        assert resolved.profile_key == "gpt55"
-        assert resolved.model == "matmaster/gpt-5.5"
-        assert all(not route_key.lower().endswith("5.4") for route_key in cfg.routes)
+        assert resolved.profile_key == "matmaster/gpt-5.5"
+        assert resolved.profile.model == "matmaster/gpt-5.5"
+        assert "bedrock-claude-opus" not in cfg.profiles
 
 
 class TestLoadExpConfig:
