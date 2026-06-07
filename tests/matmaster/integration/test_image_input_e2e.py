@@ -13,7 +13,7 @@ from matmaster.context.sources.turn_input import TurnInput
 from matmaster.core.playground import ExecutionEnvironment
 from matmaster.sessions.local import LocalSession
 from matmaster.types.cancellation import CancellationController
-from matmaster.types.messages import LLMResponse, StreamChunk
+from matmaster.types.messages import LLMResponse, StreamChunk, UserMessage
 from src.services.image_input_service import ImageInputService
 from tests.conftest import ProviderProtocolAttrs
 
@@ -168,11 +168,13 @@ async def test_images_flow_from_service_to_kernel_user_message(tmp_path: Path) -
 
     assert ok is True
     user_message = provider.seen_messages[-1][-1]
-    assert user_message["role"] == "user"
-    assert {
-        "type": "image_url",
-        "image_url": {
+    assert isinstance(user_message, UserMessage)
+    assert [
+        image.model_dump(mode="json") for image in user_message.images
+    ] == [
+        {
             "url": "https://oss.example.com/chat/a.png",
+            "mime_type": None,
             "detail": "high",
-        },
-    } in user_message["content"]
+        }
+    ]

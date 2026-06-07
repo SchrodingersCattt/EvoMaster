@@ -18,7 +18,12 @@ from matmaster.response_text import (
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.errors import LLMError
 from matmaster.types.events import ResponseEvent, ThoughtEvent
-from matmaster.types.messages import LLMResponse, ToolCallData, parse_tool_arguments
+from matmaster.types.messages import (
+    LLMResponse,
+    Message,
+    ToolCallData,
+    parse_tool_arguments,
+)
 
 if TYPE_CHECKING:
     from matmaster.types.runtime import AgentKernelResources
@@ -72,7 +77,7 @@ async def _sleep_backoff_with_cancel(
 
 async def stream_llm_items(
     kernel_resources: AgentKernelResources,
-    api_messages: list[dict[str, Any]],
+    canonical_messages: list[Message],
     tool_defs: list[dict[str, Any]] | None,
     *,
     timeout: float | None = None,
@@ -88,7 +93,7 @@ async def stream_llm_items(
     reasoning_parts: list[str] = []
     tool_calls_acc: dict[int, dict[str, str]] = {}
     finish_reason: str | None = None
-    stream_id = f"turn-{len(api_messages)}"
+    stream_id = f"turn-{len(canonical_messages)}"
     usage: dict[str, int] = {}
     usage_vendor: dict[str, Any] | None = None
     captured_provider_state = None
@@ -106,7 +111,7 @@ async def stream_llm_items(
     ttft_ms: float | None = None
     try:
         async for chunk in kernel_resources.llm_provider.chat_stream(
-            api_messages, tool_defs, timeout=timeout
+            canonical_messages, tool_defs, timeout=timeout
         ):
             if (
                 cancel_token
@@ -219,10 +224,10 @@ async def stream_llm_items(
     joined_content = "".join(content_parts)
     joined_reasoning = "".join(reasoning_parts)
     logger.info(
-        "LLM stream timing (generator): stream_id=%s api_messages=%d chunks=%d "
+        "LLM stream timing (generator): stream_id=%s canonical_messages=%d chunks=%d "
         "ttft_ms=%s total_ms=%.1f content_chars=%d reasoning_chars=%d has_tool_calls=%s",
         stream_id,
-        len(api_messages),
+        len(canonical_messages),
         chunk_idx,
         f"{ttft_ms:.1f}" if ttft_ms is not None else "n/a",
         total_stream_ms,
@@ -257,7 +262,7 @@ async def stream_llm_items(
 
 async def call_llm_streaming(
     kernel_resources: AgentKernelResources,
-    api_messages: list[dict[str, Any]],
+    canonical_messages: list[Message],
     tool_defs: list[dict[str, Any]] | None,
     *,
     cancel_token: CancellationToken | None = None,
@@ -278,7 +283,7 @@ async def call_llm_streaming(
             items: list[_KernelItem] = []
             async for item in stream_llm_items(
                 kernel_resources,
-                api_messages,
+                canonical_messages,
                 tool_defs,
                 timeout=current_timeout,
                 cancel_token=cancel_token,

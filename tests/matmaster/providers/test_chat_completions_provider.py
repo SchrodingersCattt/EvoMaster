@@ -17,7 +17,7 @@ import pytest
 from matmaster.providers.transports.chat_completions import ChatCompletionsTransport
 from matmaster.types.errors import LLMError
 from matmaster.types.llm_provider import LLMProvider
-from matmaster.types.messages import LLMResponse, StreamChunk
+from matmaster.types.messages import LLMResponse, StreamChunk, UserMessage
 
 
 async def _async_iter(items):
@@ -202,7 +202,7 @@ class TestChatContent:
             content="Hello"
         )
         provider._client = mock_client
-        result = await provider.chat([{"role": "user", "content": "Hi"}])
+        result = await provider.chat([UserMessage(content="Hi")])
 
         assert isinstance(result, LLMResponse)
         assert result.content == "Hello"
@@ -221,7 +221,7 @@ class TestChatContent:
             tool_calls=[tc_mock],
         )
         provider._client = mock_client
-        result = await provider.chat([{"role": "user", "content": "Weather?"}])
+        result = await provider.chat([UserMessage(content="Weather?")])
 
         assert result.tool_calls is not None
         assert len(result.tool_calls) == 1
@@ -241,7 +241,7 @@ class TestChatContent:
             usage=usage,
         )
         provider._client = mock_client
-        result = await provider.chat([{"role": "user", "content": "Hi"}])
+        result = await provider.chat([UserMessage(content="Hi")])
 
         assert result.usage == {
             "prompt_tokens": 10,
@@ -264,7 +264,7 @@ class TestChatContent:
             usage=usage,
         )
         provider._client = mock_client
-        result = await provider.chat([{"role": "user", "content": "Hi"}])
+        result = await provider.chat([UserMessage(content="Hi")])
 
         assert result.usage == {
             "prompt_tokens": 10,
@@ -291,7 +291,7 @@ class TestChatContent:
         )
         provider._client = mock_client
 
-        result = await provider.chat([{"role": "user", "content": "Hi"}])
+        result = await provider.chat([UserMessage(content="Hi")])
 
         assert result.usage == {
             "prompt_tokens": 10,
@@ -318,7 +318,7 @@ class TestChatContent:
             finish_reason="stop"
         )
         provider._client = mock_client
-        result = await provider.chat([{"role": "user", "content": "Hi"}])
+        result = await provider.chat([UserMessage(content="Hi")])
 
         assert result.finish_reason == "stop"
 
@@ -375,7 +375,7 @@ class TestChatStreamContent:
         provider._client = mock_client
         chunks = [
             chunk
-            async for chunk in provider.chat_stream([{"role": "user", "content": "Hi"}])
+            async for chunk in provider.chat_stream([UserMessage(content="Hi")])
         ]
 
         assert len(chunks) == 2
@@ -396,7 +396,7 @@ class TestChatStreamContent:
         provider._client = mock_client
         chunks = [
             chunk
-            async for chunk in provider.chat_stream([{"role": "user", "content": "Hi"}])
+            async for chunk in provider.chat_stream([UserMessage(content="Hi")])
         ]
 
         assert len(chunks) == 3
@@ -424,7 +424,7 @@ class TestChatStreamContent:
         provider._client = mock_client
         chunks = [
             chunk
-            async for chunk in provider.chat_stream([{"role": "user", "content": "Hi"}])
+            async for chunk in provider.chat_stream([UserMessage(content="Hi")])
         ]
 
         assert chunks[0].tool_call_deltas is not None
@@ -466,7 +466,7 @@ class TestChatStreamContent:
 
         chunks = [
             chunk
-            async for chunk in provider.chat_stream([{"role": "user", "content": "Hi"}])
+            async for chunk in provider.chat_stream([UserMessage(content="Hi")])
         ]
 
         assert chunks[0].tool_call_deltas == [
@@ -518,7 +518,7 @@ class TestChatStreamContent:
 
         chunks = [
             chunk
-            async for chunk in provider.chat_stream([{"role": "user", "content": "Hi"}])
+            async for chunk in provider.chat_stream([UserMessage(content="Hi")])
         ]
 
         assert chunks[0].tool_call_deltas == [
@@ -570,7 +570,7 @@ class TestChatStreamContent:
 
         chunks = [
             chunk
-            async for chunk in provider.chat_stream([{"role": "user", "content": "Hi"}])
+            async for chunk in provider.chat_stream([UserMessage(content="Hi")])
         ]
 
         assert chunks[0].tool_call_deltas == [
@@ -632,7 +632,7 @@ class TestChatStreamContent:
 
         chunks = [
             chunk
-            async for chunk in provider.chat_stream([{"role": "user", "content": "Hi"}])
+            async for chunk in provider.chat_stream([UserMessage(content="Hi")])
         ]
 
         assert chunks[0].tool_call_deltas == [
@@ -694,7 +694,7 @@ class TestChatStreamContent:
 
         chunks = [
             chunk
-            async for chunk in provider.chat_stream([{"role": "user", "content": "Hi"}])
+            async for chunk in provider.chat_stream([UserMessage(content="Hi")])
         ]
 
         assert chunks[0].tool_call_deltas == [
@@ -741,7 +741,7 @@ class TestChatStreamContent:
 
         chunks = [
             chunk
-            async for chunk in provider.chat_stream([{"role": "user", "content": "Hi"}])
+            async for chunk in provider.chat_stream([UserMessage(content="Hi")])
         ]
 
         assert chunks[0].tool_call_deltas == [
@@ -792,7 +792,7 @@ class TestChatStreamContent:
             _ = [
                 chunk
                 async for chunk in provider.chat_stream(
-                    [{"role": "user", "content": "Hi"}]
+                    [UserMessage(content="Hi")]
                 )
             ]
 
@@ -831,7 +831,7 @@ class TestChatStreamContent:
             _ = [
                 chunk
                 async for chunk in provider.chat_stream(
-                    [{"role": "user", "content": "Hi"}]
+                    [UserMessage(content="Hi")]
                 )
             ]
 
@@ -851,7 +851,7 @@ class TestChatStreamContent:
         provider._client = mock_client
         chunks = [
             chunk
-            async for chunk in provider.chat_stream([{"role": "user", "content": "Hi"}])
+            async for chunk in provider.chat_stream([UserMessage(content="Hi")])
         ]
 
         assert len(chunks) == 1
@@ -866,7 +866,7 @@ class TestChatStreamContent:
             ]
         )
         provider._client = mock_client
-        result = provider.chat_stream([{"role": "user", "content": "Hi"}])
+        result = provider.chat_stream([UserMessage(content="Hi")])
 
         # Verify it's an async iterable
         async for chunk in result:

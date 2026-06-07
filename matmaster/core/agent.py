@@ -59,6 +59,7 @@ if TYPE_CHECKING:
 
 from matmaster.core.hooks import HookEvent, RunContext, UserPromptContext
 from matmaster.response_text import is_trivial_response_text
+from matmaster.types.message_normalization import validate_tool_turn_sequence
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -325,12 +326,16 @@ class AgentKernel:
 
             tool_defs = tool_definitions
 
-            api_messages = state.pipeline.feed_tail(state.messages)
+            canonical_messages = state.pipeline.feed_tail(state.messages)
+            validate_tool_turn_sequence(canonical_messages)
 
             llm_response: LLMResponse | None = None
             try:
                 async for item in self._call_llm_streaming(
-                    kernel_resources, api_messages, tool_defs, cancel_token=cancel_token
+                    kernel_resources,
+                    canonical_messages,
+                    tool_defs,
+                    cancel_token=cancel_token,
                 ):
                     if item.llm_response is not None:
                         llm_response = item.llm_response
@@ -489,7 +494,7 @@ class AgentKernel:
     async def _call_llm_streaming(
         self,
         kernel_resources: AgentKernelResources,
-        api_messages: list[dict[str, Any]],
+        canonical_messages: list[Message],
         tool_defs: list[dict[str, Any]] | None,
         *,
         cancel_token: CancellationToken | None = None,
@@ -497,7 +502,7 @@ class AgentKernel:
         """Indirection point so tests can monkey-patch the streaming call."""
         async for item in call_llm_streaming(
             kernel_resources,
-            api_messages,
+            canonical_messages,
             tool_defs,
             cancel_token=cancel_token,
         ):

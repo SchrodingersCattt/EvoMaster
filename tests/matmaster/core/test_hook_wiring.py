@@ -634,7 +634,7 @@ class TestAgentKernelHookWiring:
             )
         ]
 
-        assert provider.seen_messages[0][-1]["content"] == "original rewritten"
+        assert provider.seen_messages[0][-1].content == "original rewritten"
         assert seen_prompts == ["original rewritten"]
 
     @pytest.mark.asyncio
@@ -670,7 +670,7 @@ class TestAgentKernelHookWiring:
             )
         ]
 
-        assert provider.seen_messages[0][-1]["content"] == "original"
+        assert provider.seen_messages[0][-1].content == "original"
         assert seen_prompts == ["original"]
 
     @pytest.mark.asyncio

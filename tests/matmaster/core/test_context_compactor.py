@@ -425,11 +425,9 @@ class TestCompactorOutput:
         assert len(msgs) < original_len
         assert isinstance(msgs[0], SystemMessage)
         assert "[Compacted Context]" not in (msgs[0].content or "")
-        from matmaster.types.message_normalization import (
-            normalize_and_validate_openai_messages,
-        )
+        from matmaster.types.message_normalization import validate_tool_turn_sequence
 
-        normalize_and_validate_openai_messages(msgs)
+        validate_tool_turn_sequence(msgs)
 
 
 class TestCompactorMessageCount:

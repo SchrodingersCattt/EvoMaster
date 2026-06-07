@@ -489,13 +489,13 @@ class TestMatMasterRunAgentE2E:
 
         assert len(mock_llm.captured_messages) == 1
         llm_messages = mock_llm.captured_messages[0]
-        assert [m["role"] for m in llm_messages] == [
+        assert [m.role.value for m in llm_messages] == [
             "system",
             "user",
             "assistant",
             "user",
         ]
-        assert [m["content"] for m in llm_messages[1:]] == [
+        assert [m.content for m in llm_messages[1:]] == [
             "old question",
             "old answer",
             "<current_instruction>\nnew question\n</current_instruction>",

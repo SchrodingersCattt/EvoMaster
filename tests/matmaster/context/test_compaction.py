@@ -11,7 +11,7 @@ from matmaster.context.compaction import (
 from matmaster.context.ports import ContextAssemblyPorts, SessionEvent, UserInstructions
 from matmaster.context.sections import ContextSection, ContextView, SectionOrder
 from matmaster.context.sources.turn_input import TurnInput
-from matmaster.types.message_normalization import normalize_and_validate_openai_messages
+from matmaster.types.message_normalization import validate_tool_turn_sequence
 from matmaster.types.messages import (
     AssistantMessage,
     SystemMessage,
@@ -383,7 +383,7 @@ async def test_apply_fallback_selects_tool_safe_tail() -> None:
     assert result.durability == "ephemeral"
     assert result.failure_reason == "summary failed"
     assert result.base_messages is None
-    normalize_and_validate_openai_messages(messages)
+    validate_tool_turn_sequence(messages)
 
 
 @pytest.mark.asyncio

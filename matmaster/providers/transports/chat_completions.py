@@ -12,14 +12,132 @@ import openai
 
 from matmaster.providers.transport import Transport
 from matmaster.types.errors import LLMError
+from matmaster.types.message_normalization import validate_tool_turn_sequence
 from matmaster.types.messages import (
+    AssistantMessage,
     LLMResponse,
+    Message,
     StreamChunk,
     ToolCallData,
+    ToolMessage,
+    UserMessage,
     parse_tool_arguments,
 )
 
 logger = logging.getLogger(__name__)
+
+_OPENAI_COMPATIBLE_ROLES = {"system", "user", "assistant", "tool"}
+
+
+def _user_message_to_dict(message: UserMessage) -> dict[str, Any]:
+    if not message.images:
+        return {"role": message.role.value, "content": message.content}
+    parts: list[dict[str, Any]] = []
+    if message.content:
+        parts.append({"type": "text", "text": message.content})
+    for image in message.images:
+        image_url: dict[str, Any] = {"url": image.url}
+        if image.detail is not None:
+            image_url["detail"] = image.detail
+        parts.append({"type": "image_url", "image_url": image_url})
+    return {"role": message.role.value, "content": parts}
+
+
+def _assistant_message_to_dict(message: AssistantMessage) -> dict[str, Any]:
+    payload: dict[str, Any] = {"role": message.role.value, "content": message.content}
+    if message.tool_calls is not None:
+        payload["tool_calls"] = [
+            {
+                "id": tc.id,
+                "type": "function",
+                "function": {"name": tc.name, "arguments": tc.arguments_json},
+            }
+            for tc in message.tool_calls
+        ]
+    return payload
+
+
+def _message_to_openai_dict(message: Message) -> dict[str, Any]:
+    if isinstance(message, UserMessage):
+        payload = _user_message_to_dict(message)
+    elif isinstance(message, AssistantMessage):
+        payload = _assistant_message_to_dict(message)
+    elif isinstance(message, ToolMessage):
+        payload = {
+            "role": message.role.value,
+            "content": message.content,
+            "tool_call_id": message.tool_call_id,
+        }
+    else:
+        payload = {"role": message.role.value, "content": message.content}
+    if payload.get("content") is None:
+        payload["content"] = ""
+    return payload
+
+
+def _validate_user_content(content: Any, idx: int) -> None:
+    if isinstance(content, str):
+        return
+    if not isinstance(content, list):
+        raise LLMError(
+            f"Outbound user message content must be string or content parts at index {idx}, "
+            f"got {type(content).__name__}",
+            retryable=False,
+            error_category="payload_validation",
+        )
+    for part_idx, part in enumerate(content):
+        if not isinstance(part, dict):
+            raise LLMError(
+                f"Outbound user content part must be dict at index {idx}.{part_idx}, "
+                f"got {type(part).__name__}",
+                retryable=False,
+                error_category="payload_validation",
+            )
+        part_type = part.get("type")
+        if part_type == "text":
+            if isinstance(part.get("text"), str):
+                continue
+            raise LLMError(
+                f"Outbound user text content part must include string text at index {idx}.{part_idx}",
+                retryable=False,
+                error_category="payload_validation",
+            )
+        if part_type == "image_url":
+            image_url = part.get("image_url")
+            if isinstance(image_url, dict) and isinstance(image_url.get("url"), str):
+                continue
+            raise LLMError(
+                f"Outbound user image content part must include image_url.url at index {idx}.{part_idx}",
+                retryable=False,
+                error_category="payload_validation",
+            )
+        raise LLMError(
+            f"Unsupported outbound user content part type at index {idx}.{part_idx}: {part_type!r}",
+            retryable=False,
+            error_category="payload_validation",
+        )
+
+
+def _validate_openai_messages(messages: list[dict[str, Any]]) -> None:
+    for idx, message in enumerate(messages):
+        role = message.get("role")
+        if role not in _OPENAI_COMPATIBLE_ROLES:
+            raise LLMError(
+                f"Unsupported outbound message role at index {idx}: {role!r}",
+                retryable=False,
+                error_category="payload_validation",
+            )
+        content = message.get("content")
+        if role == "user":
+            _validate_user_content(content, idx)
+            continue
+        if not isinstance(content, str):
+            raise LLMError(
+                f"Outbound message content must be string for {role} message "
+                f"at index {idx}, got {type(content).__name__}",
+                retryable=False,
+                error_category="payload_validation",
+            )
 
 
 @dataclass
@@ -329,12 +447,16 @@ class ChatCompletionsTransport(Transport):
     async def _close_client(self, client: openai.AsyncOpenAI) -> None:
         await client.close()
 
-    def convert_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
-        return messages
+    def convert_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
+        """canonical list[Message] -> OpenAI-compatible wire dicts."""
+        validate_tool_turn_sequence(messages)
+        wire = [_message_to_openai_dict(message) for message in messages]
+        _validate_openai_messages(wire)
+        return wire
 
     def build_kwargs(
         self,
-        messages: list[dict[str, Any]],
+        messages: list[Message],
         tools: list[dict[str, Any]] | None,
         *,
         tool_choice: str | dict | None = None,
@@ -553,7 +675,7 @@ class ChatCompletionsTransport(Transport):
 
     async def chat(
         self,
-        messages: list[dict[str, Any]],
+        messages: list[Message],
         tools: list[dict[str, Any]] | None = None,
         *,
         tool_choice: str | dict | None = None,
@@ -565,7 +687,7 @@ class ChatCompletionsTransport(Transport):
 
     async def chat_stream(
         self,
-        messages: list[dict[str, Any]],
+        messages: list[Message],
         tools: list[dict[str, Any]] | None = None,
         *,
         timeout: float | None = None,

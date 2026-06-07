@@ -7,6 +7,7 @@ import pytest
 from matmaster.config.llm import LLMConfig
 from matmaster.providers.llm_factory import build_provider, build_provider_bundle
 from matmaster.providers.transports.chat_completions import ChatCompletionsTransport
+from matmaster.types.messages import UserMessage
 
 
 @pytest.fixture()
@@ -86,7 +87,7 @@ def test_reasoning_fields_are_transport_request_concerns(
     assert isinstance(provider, ChatCompletionsTransport)
 
     kwargs = provider.build_kwargs(
-        [{"role": "user", "content": "hi"}],
+        [UserMessage(content="hi")],
         tools=None,
     )
     assert kwargs["reasoning_effort"] == "high"

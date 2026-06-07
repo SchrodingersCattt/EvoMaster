@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from matmaster.providers.transports.chat_completions import ChatCompletionsTransport
+from matmaster.types.messages import UserMessage
 
 
 def _t(**kw):
@@ -13,7 +14,7 @@ def _t(**kw):
 
 def test_minimal_kwargs() -> None:
     t = _t(temperature=0.7)
-    kw = t.build_kwargs([{"role": "user", "content": "hi"}], None)
+    kw = t.build_kwargs([UserMessage(content="hi")], None)
     assert kw["model"] == "m"
     assert kw["temperature"] == 0.7
     assert kw["messages"] == [{"role": "user", "content": "hi"}]
@@ -72,7 +73,7 @@ def test_byok_extra_body_passthrough_user_wins() -> None:
     assert kw["extra_body"]["enable_thinking"] is True
 
 
-def test_convert_messages_is_identity() -> None:
+def test_convert_messages_returns_openai_wire_dicts() -> None:
     t = _t()
-    msgs = [{"role": "user", "content": "hi"}]
-    assert t.convert_messages(msgs) is msgs
+    msgs = [UserMessage(content="hi")]
+    assert t.convert_messages(msgs) == [{"role": "user", "content": "hi"}]

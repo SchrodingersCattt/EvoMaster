@@ -13,6 +13,7 @@ import pytest
 
 from matmaster.providers.transports.chat_completions import ChatCompletionsTransport
 from matmaster.types.errors import LLMError
+from matmaster.types.messages import UserMessage
 
 
 async def _async_iter(items):
@@ -56,7 +57,7 @@ class TestChatStreamExceptionTranslation:
         with pytest.raises(LLMError) as exc_info:
             _ = [
                 c
-                async for c in provider.chat_stream([{"role": "user", "content": "Hi"}])
+                async for c in provider.chat_stream([UserMessage(content="Hi")])
             ]
         assert exc_info.value.retryable is True
         assert exc_info.value.__cause__ is not None
@@ -69,7 +70,7 @@ class TestChatStreamExceptionTranslation:
         with pytest.raises(LLMError) as exc_info:
             _ = [
                 c
-                async for c in provider.chat_stream([{"role": "user", "content": "Hi"}])
+                async for c in provider.chat_stream([UserMessage(content="Hi")])
             ]
         assert exc_info.value.retryable is True
 
@@ -83,7 +84,7 @@ class TestChatStreamExceptionTranslation:
         with pytest.raises(LLMError) as exc_info:
             _ = [
                 c
-                async for c in provider.chat_stream([{"role": "user", "content": "Hi"}])
+                async for c in provider.chat_stream([UserMessage(content="Hi")])
             ]
         assert exc_info.value.retryable is True
 
@@ -97,7 +98,7 @@ class TestChatStreamExceptionTranslation:
         with pytest.raises(LLMError) as exc_info:
             _ = [
                 c
-                async for c in provider.chat_stream([{"role": "user", "content": "Hi"}])
+                async for c in provider.chat_stream([UserMessage(content="Hi")])
             ]
         assert exc_info.value.retryable is True
 
@@ -111,7 +112,7 @@ class TestChatStreamExceptionTranslation:
         with pytest.raises(LLMError) as exc_info:
             _ = [
                 c
-                async for c in provider.chat_stream([{"role": "user", "content": "Hi"}])
+                async for c in provider.chat_stream([UserMessage(content="Hi")])
             ]
         assert exc_info.value.retryable is False
 
@@ -125,7 +126,7 @@ class TestChatStreamExceptionTranslation:
         with pytest.raises(LLMError) as exc_info:
             _ = [
                 c
-                async for c in provider.chat_stream([{"role": "user", "content": "Hi"}])
+                async for c in provider.chat_stream([UserMessage(content="Hi")])
             ]
         assert exc_info.value.retryable is False
 
@@ -139,7 +140,7 @@ class TestChatStreamExceptionTranslation:
         with pytest.raises(LLMError) as exc_info:
             _ = [
                 c
-                async for c in provider.chat_stream([{"role": "user", "content": "Hi"}])
+                async for c in provider.chat_stream([UserMessage(content="Hi")])
             ]
         assert exc_info.value.retryable is True
 
@@ -153,7 +154,7 @@ class TestChatStreamExceptionTranslation:
         with pytest.raises(LLMError) as exc_info:
             _ = [
                 c
-                async for c in provider.chat_stream([{"role": "user", "content": "Hi"}])
+                async for c in provider.chat_stream([UserMessage(content="Hi")])
             ]
         assert exc_info.value.retryable is True
 
@@ -168,7 +169,7 @@ class TestChatStreamExceptionTranslation:
         _ = [
             c
             async for c in provider.chat_stream(
-                [{"role": "user", "content": "Hi"}],
+                [UserMessage(content="Hi")],
                 timeout=600.0,
             )
         ]
@@ -196,7 +197,7 @@ class TestChatStreamErrorCategory:
         with pytest.raises(LLMError) as exc_info:
             _ = [
                 c
-                async for c in provider.chat_stream([{"role": "user", "content": "hi"}])
+                async for c in provider.chat_stream([UserMessage(content="hi")])
             ]
         assert exc_info.value.error_category == "timeout"
         assert exc_info.value.retryable is True
@@ -209,7 +210,7 @@ class TestChatStreamErrorCategory:
         with pytest.raises(LLMError) as exc_info:
             _ = [
                 c
-                async for c in provider.chat_stream([{"role": "user", "content": "hi"}])
+                async for c in provider.chat_stream([UserMessage(content="hi")])
             ]
         assert exc_info.value.error_category == "connection"
 
@@ -223,7 +224,7 @@ class TestChatStreamErrorCategory:
         with pytest.raises(LLMError) as exc_info:
             _ = [
                 c
-                async for c in provider.chat_stream([{"role": "user", "content": "hi"}])
+                async for c in provider.chat_stream([UserMessage(content="hi")])
             ]
         assert exc_info.value.error_category == "rate_limit"
 
@@ -237,7 +238,7 @@ class TestChatStreamErrorCategory:
         with pytest.raises(LLMError) as exc_info:
             _ = [
                 c
-                async for c in provider.chat_stream([{"role": "user", "content": "hi"}])
+                async for c in provider.chat_stream([UserMessage(content="hi")])
             ]
         assert exc_info.value.error_category == "server"
 
@@ -251,7 +252,7 @@ class TestChatStreamErrorCategory:
         with pytest.raises(LLMError) as exc_info:
             _ = [
                 c
-                async for c in provider.chat_stream([{"role": "user", "content": "hi"}])
+                async for c in provider.chat_stream([UserMessage(content="hi")])
             ]
         assert exc_info.value.error_category == "auth"
         assert exc_info.value.retryable is False
@@ -266,7 +267,7 @@ class TestChatStreamErrorCategory:
         with pytest.raises(LLMError) as exc_info:
             _ = [
                 c
-                async for c in provider.chat_stream([{"role": "user", "content": "hi"}])
+                async for c in provider.chat_stream([UserMessage(content="hi")])
             ]
         assert exc_info.value.error_category == "context_overflow"
         assert exc_info.value.retryable is False
@@ -281,7 +282,7 @@ class TestChatStreamErrorCategory:
         with pytest.raises(LLMError) as exc_info:
             _ = [
                 c
-                async for c in provider.chat_stream([{"role": "user", "content": "hi"}])
+                async for c in provider.chat_stream([UserMessage(content="hi")])
             ]
         assert exc_info.value.error_category == "bad_request"
         assert exc_info.value.retryable is True
@@ -301,7 +302,7 @@ class TestChatStreamErrorCategory:
         with pytest.raises(LLMError) as exc_info:
             _ = [
                 c
-                async for c in provider.chat_stream([{"role": "user", "content": "hi"}])
+                async for c in provider.chat_stream([UserMessage(content="hi")])
             ]
 
         assert exc_info.value.retryable is False
@@ -336,7 +337,7 @@ class TestChatStreamErrorCategory:
         with pytest.raises(LLMError) as exc_info:
             _ = [
                 c
-                async for c in provider.chat_stream([{"role": "user", "content": "hi"}])
+                async for c in provider.chat_stream([UserMessage(content="hi")])
             ]
         assert exc_info.value.retryable is False
         assert exc_info.value.error_category == category

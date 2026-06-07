@@ -11,7 +11,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
-from matmaster.types.messages import AssistantMessage, LLMResponse, StreamChunk
+from matmaster.types.messages import AssistantMessage, LLMResponse, Message, StreamChunk
 
 
 class Transport:
@@ -91,7 +91,7 @@ class Transport:
 
     def build_kwargs(
         self,
-        messages: list[dict[str, Any]],
+        messages: list[Message],
         tools: list[dict[str, Any]] | None,
         *,
         tool_choice: str | dict | None = None,
@@ -100,7 +100,7 @@ class Transport:
         """语义配置到该协议的请求 kwargs。"""
         raise NotImplementedError
 
-    def convert_messages(self, messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def convert_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
         """canonical 到 wire。"""
         raise NotImplementedError
 

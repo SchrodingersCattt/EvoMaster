@@ -8,7 +8,6 @@ truncation if summarization fails.
 from __future__ import annotations
 
 import functools
-import json
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -27,7 +26,6 @@ from matmaster.context.sources.turn_input import (
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.message_normalization import (
     canonicalize_messages_for_provider,
-    normalize_and_validate_openai_messages,
 )
 from matmaster.types.messages import (
     AssistantMessage,
@@ -111,12 +109,25 @@ def _get_encoder():
         return None
 
 
+def _message_size_text(msg: Message) -> str:
+    parts: list[str] = [msg.content or ""]
+    reasoning = getattr(msg, "reasoning_content", None)
+    if reasoning:
+        parts.append(reasoning)
+    tool_calls = getattr(msg, "tool_calls", None)
+    if tool_calls:
+        for tc in tool_calls:
+            parts.append(tc.name)
+            parts.append(tc.arguments_json)
+    return "\n".join(parts)
+
+
 def estimate_tokens(messages: list[Message], safety_margin: float = 1.0) -> int:
-    """Estimate token count for a list of messages."""
+    """Estimate token count for a list of messages (heuristic, protocol-neutral)."""
     total = 0
     enc = _get_encoder()
     for msg in messages:
-        text = json.dumps(msg.to_api_dict(), ensure_ascii=False)
+        text = _message_size_text(msg)
         if enc is not None:
             total += len(enc.encode(text))
         else:
@@ -337,11 +348,9 @@ async def call_summary_llm_response(
         safety_margin_tokens=safety_margin_tokens,
     )
     summary_messages = [*prep.messages, compact_request]
-    api_messages = normalize_and_validate_openai_messages(
-        canonicalize_messages_for_provider(summary_messages)
-    )
+    canonical_messages = canonicalize_messages_for_provider(summary_messages)
     return await llm_provider.chat(
-        api_messages,
+        canonical_messages,
         tools=tool_definitions,
         tool_choice="none",
     )

@@ -3,6 +3,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 from matmaster.providers.transports.chat_completions import ChatCompletionsTransport
+from matmaster.types.messages import UserMessage
 
 
 def _make_mock_completion(content: str = "summary") -> MagicMock:
@@ -23,7 +24,7 @@ async def test_chat_forwards_tool_choice() -> None:
     provider._client = mock_client
 
     result = await provider.chat(
-        [{"role": "user", "content": "Summarize"}],
+        [UserMessage(content="Summarize")],
         tools=[{"type": "function", "function": {"name": "paper_search"}}],
         tool_choice="none",
     )

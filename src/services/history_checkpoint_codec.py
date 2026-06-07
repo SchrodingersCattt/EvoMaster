@@ -4,7 +4,7 @@ from typing import Any
 
 from matmaster.types.errors import LLMError
 from matmaster.types.message_normalization import (
-    normalize_and_validate_openai_messages,
+    validate_tool_turn_sequence,
 )
 from matmaster.types.messages import (
     AssistantMessage,
@@ -71,7 +71,7 @@ def validate_base_messages(messages: list[Message]) -> None:
         raise ValueError("base_messages must not be empty")
 
     try:
-        normalize_and_validate_openai_messages(messages)
+        validate_tool_turn_sequence(messages)
     except LLMError as exc:
         # checkpoint callers only contract on ValueError; translate every
         # outbound-validation LLMError so nothing leaks across the boundary.

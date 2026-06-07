@@ -2,8 +2,7 @@
 
 Defines the message types (SystemMessage, UserMessage, AssistantMessage,
 ToolMessage) used in the kernel execution loop, plus LLMResponse and
-StreamChunk for LLM provider return values. All messages produce
-OpenAI-compatible dict format via to_api_dict().
+StreamChunk for LLM provider return values.
 """
 
 from __future__ import annotations
@@ -198,16 +197,11 @@ def parse_tool_arguments(raw: str) -> dict[str, Any]:
 class Message(BaseModel):
     """Base message in the conversation history.
 
-    Subclasses set role defaults. to_api_dict() produces OpenAI-compatible
-    dict format for sending to the LLM API.
+    Subclasses set role defaults. Wire serialization lives in transports.
     """
 
     role: Role
     content: str | None = None
-
-    def to_api_dict(self) -> dict[str, Any]:
-        """Convert to OpenAI API-compatible dict."""
-        return {"role": self.role.value, "content": self.content}
 
 
 class ImageContentPart(BaseModel):
@@ -228,27 +222,11 @@ class UserMessage(Message):
     role: Role = Role.USER
     images: list[ImageContentPart] = Field(default_factory=list)
 
-    def to_api_dict(self) -> dict[str, Any]:
-        """Convert to OpenAI API-compatible dict."""
-        if not self.images:
-            return {"role": self.role.value, "content": self.content}
-
-        parts: list[dict[str, Any]] = []
-        if self.content:
-            parts.append({"type": "text", "text": self.content})
-        for image in self.images:
-            image_url: dict[str, Any] = {"url": image.url}
-            if image.detail is not None:
-                image_url["detail"] = image.detail
-            parts.append({"type": "image_url", "image_url": image_url})
-        return {"role": self.role.value, "content": parts}
-
 
 class AssistantMessage(Message):
     """Assistant (LLM) response message.
 
     May include tool_calls when the LLM requests tool invocations.
-    to_api_dict() includes tool_calls only when present (not None).
     """
 
     role: Role = Role.ASSISTANT
@@ -256,47 +234,12 @@ class AssistantMessage(Message):
     reasoning_content: str | None = None
     provider_state: ProviderState | None = None
 
-    def to_api_dict(self) -> dict[str, Any]:
-        """Convert to OpenAI API-compatible dict.
-
-        Includes tool_calls only when self.tool_calls is not None.
-        Each tool call formatted as:
-        {"id": ..., "type": "function", "function": {"name": ..., "arguments": json_str}}
-        """
-        d: dict[str, Any] = {"role": self.role.value, "content": self.content}
-        if self.tool_calls is not None:
-            d["tool_calls"] = [
-                {
-                    "id": tc.id,
-                    "type": "function",
-                    "function": {
-                        "name": tc.name,
-                        "arguments": tc.arguments_json,
-                    },
-                }
-                for tc in self.tool_calls
-            ]
-        return d
-
-
 class ToolMessage(Message):
-    """Tool execution result message.
-
-    to_api_dict() includes tool_call_id but omits tool_name
-    (OpenAI API does not use it).
-    """
+    """Tool execution result message."""
 
     role: Role = Role.TOOL
     tool_call_id: str
     tool_name: str
-
-    def to_api_dict(self) -> dict[str, Any]:
-        """Convert to OpenAI API-compatible dict."""
-        return {
-            "role": self.role.value,
-            "content": self.content,
-            "tool_call_id": self.tool_call_id,
-        }
 
 
 class ProviderState(BaseModel):

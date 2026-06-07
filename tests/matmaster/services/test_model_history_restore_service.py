@@ -9,7 +9,7 @@ from matmaster.context.history_restore import (
     HistoryCheckpointCorruptedError,
     HistoryRestoreFailedError,
 )
-from matmaster.types.message_normalization import normalize_and_validate_openai_messages
+from matmaster.types.message_normalization import validate_tool_turn_sequence
 from matmaster.types.messages import (
     AssistantMessage,
     ImageContentPart,
@@ -393,7 +393,7 @@ def test_v1_restore_consumes_assistant_state_and_tool_result() -> None:
     assert tool.tool_call_id == "call-1"
     assert tool.tool_name == "search_materials"
     assert tool.content == '{"matches": 3}'
-    normalize_and_validate_openai_messages(history)
+    validate_tool_turn_sequence(history)
 
 
 def test_v1_restore_does_not_duplicate_response_and_run_result() -> None:
@@ -448,7 +448,7 @@ def test_v1_restore_pairs_tool_call_and_public_tool_result_payload() -> None:
     assert tool.tool_call_id == "call-1"
     assert tool.tool_name == "search_materials"
     assert tool.content == '{"matches": 3}'
-    normalize_and_validate_openai_messages(history)
+    validate_tool_turn_sequence(history)
 
 
 def test_v1_restore_skips_orphan_tool_result() -> None:
@@ -469,7 +469,7 @@ def test_v1_restore_skips_orphan_tool_result() -> None:
 
     assert [type(message) for message in history] == [UserMessage, AssistantMessage]
     assert [message.content for message in history] == ["find silicon", "done"]
-    normalize_and_validate_openai_messages(history)
+    validate_tool_turn_sequence(history)
 
 
 def test_hybrid_v1_skips_bad_assistant_state_and_continues() -> None:
@@ -723,9 +723,10 @@ def test_v1_restore_mixed_fixture_preserves_phase1_message_bytes() -> None:
                     "name": "search_materials",
                     "arguments": {"formula": "Si"},
                 }
-            ],
-            "reasoning_content": None,
-        },
+                ],
+                "reasoning_content": None,
+                "provider_state": None,
+            },
         {
             "role": "tool",
             "content": '{"matches": [3, 1]}',
@@ -734,8 +735,9 @@ def test_v1_restore_mixed_fixture_preserves_phase1_message_bytes() -> None:
         },
         {
             "role": "assistant",
-            "content": "found results",
-            "tool_calls": None,
-            "reasoning_content": None,
-        },
+                "content": "found results",
+                "tool_calls": None,
+                "reasoning_content": None,
+                "provider_state": None,
+            },
     ]
