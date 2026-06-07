@@ -9,6 +9,7 @@ from matmaster.types.message_normalization import restore_persisted_assistant_st
 from matmaster.types.messages import (
     AssistantMessage,
     ImageContentPart,
+    ProviderState,
     ToolCallData,
     ToolMessage,
     UserMessage,
@@ -678,6 +679,11 @@ class ChatHistoryConverter:
                         )
                         for tc in d["tool_calls"]
                     ]
+                provider_state = d.get("provider_state")
+                if provider_state is not None:
+                    msg_kwargs["provider_state"] = ProviderState.model_validate(
+                        provider_state
+                    )
                 messages.append(AssistantMessage(**msg_kwargs))
             elif role == "tool":
                 messages.append(
