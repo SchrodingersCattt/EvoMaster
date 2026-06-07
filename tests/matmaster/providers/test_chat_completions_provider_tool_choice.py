@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
 
-from matmaster.providers.chat_completions_provider import ChatCompletionsProvider
+from matmaster.providers.transports.chat_completions import ChatCompletionsTransport
 
 
 def _make_mock_completion(content: str = "summary") -> MagicMock:
@@ -17,7 +17,7 @@ def _make_mock_completion(content: str = "summary") -> MagicMock:
 
 
 async def test_chat_forwards_tool_choice() -> None:
-    provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+    provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
     mock_client = AsyncMock()
     mock_client.chat.completions.create.return_value = _make_mock_completion()
     provider._client = mock_client

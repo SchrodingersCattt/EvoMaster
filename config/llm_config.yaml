@@ -1,21 +1,21 @@
 # LLM 配置（独立文件）
-# profiles: 定义每个 LLM 后端的完整参数
-# routes: 前端 model_override 字符串 → 内部 profile 映射
+# providers: 后端连接（按 provider 去重，transport 在此声明）
+# profiles: 每个对外可选模型（profile key = 前端 model_override = 对外标识）
 # default: 未指定时使用的默认 profile key
-#
 # 鉴权凭据从 .env 读取，使用 ${VAR} 引用
 
-profiles:
-  sonnet:
-    provider: "litellm"
-    model: "claude-sonnet-4-6"
+providers:
+  litellm:
+    transport: chat_completions
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
-    thinking_effort: "high"
-    reasoning_protocol: "anthropic_adaptive_thinking"
-    temperature_policy: "force_one_when_reasoning"
-    temperature: 0.7
-    context_limit: 200000
+
+profiles:
+  matmaster/qwen3.7-max:
+    provider: litellm
+    model: matmaster/qwen3.7-max
+    reasoning_effort: high
+    context_limit: 1000000
     supports_vision: true
     timeout: 1200
     stream_timeout: 120
@@ -23,13 +23,10 @@ profiles:
     max_retries: 3
     retry_delay: 1.0
 
-  gemini-pro:
-    provider: "litellm"
-    model: "gemini-3.1-pro-preview"
-    api_key: "${LITELLM_PROXY_API_KEY}"
-    base_url: "${LITELLM_PROXY_API_BASE}"
-    reasoning_protocol: "openai_reasoning_effort"
-    thinking_effort: "high"
+  gemini-3.1-pro-preview:
+    provider: litellm
+    model: gemini-3.1-pro-preview
+    reasoning_effort: high
     temperature: 1.0
     context_limit: 200000
     supports_vision: true
@@ -39,14 +36,11 @@ profiles:
     max_retries: 3
     retry_delay: 1.0
 
-  gpt55:
-    provider: "litellm"
-    model: "matmaster/gpt-5.5"
-    api_key: "${LITELLM_PROXY_API_KEY}"
-    base_url: "${LITELLM_PROXY_API_BASE}"
-    reasoning_protocol: "openai_reasoning_effort"
-    thinking_effort: "xhigh"
-    reasoning_summary: "detailed"
+  matmaster/gpt-5.5:
+    provider: litellm
+    model: matmaster/gpt-5.5
+    reasoning_effort: xhigh
+    reasoning_summary: detailed
     context_limit: 256000
     supports_vision: true
     timeout: 1200
@@ -55,28 +49,10 @@ profiles:
     max_retries: 3
     retry_delay: 1.0
 
-  qwen_3_7_max:
-    provider: "litellm"
-    model: "matmaster/qwen3.7-max"
-    api_key: "${LITELLM_PROXY_API_KEY}"
-    base_url: "${LITELLM_PROXY_API_BASE}"
-    reasoning_protocol: "openai_reasoning_effort"
-    thinking_effort: "high"
-    context_limit: 1000000
-    supports_vision: true
-    timeout: 1200
-    stream_timeout: 120
-    stream_idle_timeout: 60
-    max_retries: 3
-    retry_delay: 1.0
-
-  deepseek_v4_pro:
-    provider: "litellm"
-    model: "aliyun/deepseek-v4-pro"
-    api_key: "${LITELLM_PROXY_API_KEY}"
-    base_url: "${LITELLM_PROXY_API_BASE}"
-    reasoning_protocol: "openai_reasoning_effort"
-    thinking_effort: "max"
+  matmaster/dsk-v4p:
+    provider: litellm
+    model: aliyun/deepseek-v4-pro
+    reasoning_effort: max
     context_limit: 200000
     timeout: 1200
     stream_timeout: 120
@@ -84,13 +60,10 @@ profiles:
     max_retries: 3
     retry_delay: 1.0
 
-  deepseek_v4_pro_mm:
-    provider: "litellm"
-    model: "matmaster/DeepSeek-v4-Pro"
-    api_key: "${LITELLM_PROXY_API_KEY}"
-    base_url: "${LITELLM_PROXY_API_BASE}"
-    reasoning_protocol: "openai_reasoning_effort"
-    thinking_effort: "max"
+  matmaster/DeepSeek-v4-Pro:
+    provider: litellm
+    model: matmaster/DeepSeek-v4-Pro
+    reasoning_effort: max
     context_limit: 200000
     timeout: 1200
     stream_timeout: 120
@@ -98,76 +71,4 @@ profiles:
     max_retries: 3
     retry_delay: 1.0
 
-  opus_global:
-    provider: "litellm"
-    model: "global.anthropic.claude-opus-4-6-v1"
-    api_key: "${LITELLM_PROXY_API_KEY}"
-    base_url: "${LITELLM_PROXY_API_BASE}"
-    thinking_effort: "max"
-    reasoning_protocol: "anthropic_adaptive_thinking"
-    temperature_policy: "force_one_when_reasoning"
-    temperature: 0.7
-    context_limit: 300000
-    supports_vision: true
-    timeout: 1200
-    stream_timeout: 120
-    stream_idle_timeout: 60
-    max_retries: 3
-    retry_delay: 1.0
-    prompt_cache:
-      provider: "anthropic"
-      system_prompt_breakpoint: true
-      automatic: true
-      latest_user_breakpoint: true
-      tool_result_breakpoint: true
-      flexible_breakpoint: true
-      max_breakpoints: 4
-      min_flexible_chars: 1000
-      ttl: "5m"
-
-  # Amazon Bedrock Converse（凭证：环境变量 AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY /
-  # AWS_REGION 等默认链；无需 LITELLM）
-  # model：填推理配置文件的 inferenceProfileId（或 ARN）。若报「invalid」：与当前 region 不符或 ID 抄错。
-  # 查本账号在 $AWS_REGION 下可用 ID：aws bedrock list-inference-profiles --region "$AWS_REGION"
-  # 在输出里找 Opus 对应条目的 inferenceProfileId，粘贴到下方（勿手猜 us....:0）。
-  opus_bedrock:
-    provider: "bedrock"
-    model: "arn:aws:bedrock:us-east-1:584751650650:inference-profile/global.anthropic.claude-opus-4-6-v1"
-    bedrock_region: "${AWS_REGION}"
-    api_key: ""
-    base_url: null
-    thinking_effort: "max"
-    reasoning_protocol: "anthropic_adaptive_thinking"
-    temperature_policy: "force_one_when_reasoning"
-    temperature: 0.7
-    context_limit: 200000
-    supports_vision: true
-    model_family: "claude-4.6"
-    timeout: 1200
-    stream_timeout: 120
-    stream_idle_timeout: 60
-    max_retries: 3
-    retry_delay: 1.0
-
-# 路由表：前端 model_override 字符串 → 内部 profile
-routes:
-  "claude-sonnet-4-6":
-    profile: sonnet
-  "gemini-3.1-pro-preview":
-    profile: gemini-pro
-  "cds/GPT-5.5":
-    profile: gpt55
-  "matmaster/gpt-5.5":
-    profile: gpt55
-  "matmaster/qwen3.7-max":
-    profile: qwen_3_7_max
-  "matmaster/dsk-v4p":
-    profile: deepseek_v4_pro
-  "matmaster/DeepSeek-v4-Pro":
-    profile: deepseek_v4_pro_mm
-  "global.anthropic.claude-opus-4-6-v1":
-    profile: opus_global
-  "bedrock-claude-opus":
-    profile: opus_bedrock
-
-default: "qwen_3_7_max"
+default: matmaster/qwen3.7-max

@@ -382,9 +382,6 @@ class ChatSendRequest(BaseModel):
         None  # 可选，工作区/个人路径列表，如 /personal/1.cif，与 files(OSS) 区分
     )
     mode: str = "direct"  # "direct" | "planner"
-    llm: str | None = (
-        None  # 可选，本轮使用的 LLM 配置块（如 opus/sonnet/gpt54），不传则用 agent 默认
-    )
     model: str | None = (
         None  # 可选，本轮使用的模型名（如 claude-sonnet-4-6、matmaster/qwen3.7-max），覆盖所选 LLM 配置里的 model
     )

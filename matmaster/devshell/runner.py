@@ -95,7 +95,9 @@ class DevRunner:
             llm_provider=llm_provider,
             llm_config=llm_config,
             llm_model=getattr(
-                llm_bundle, "model", getattr(resolved_route, "model", None)
+                llm_bundle,
+                "model",
+                getattr(getattr(resolved_route, "profile", None), "model", None),
             ),
             llm_model_profile=getattr(
                 llm_bundle,
@@ -105,7 +107,7 @@ class DevRunner:
             llm_model_route=getattr(
                 llm_bundle,
                 "model_route",
-                getattr(resolved_route, "route_key", None),
+                getattr(resolved_route, "profile_key", None),
             ),
             context_limit=getattr(llm_bundle, "context_limit", None),
         )

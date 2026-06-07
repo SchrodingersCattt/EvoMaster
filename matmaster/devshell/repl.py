@@ -76,7 +76,11 @@ def run_repl(
     event_logger = EventLogger(log_file, run_id="run-000")
 
     rr = runner._resolved_route
-    llm_model = getattr(rr, "model", "?") if rr is not None else "?"
+    llm_model = (
+        getattr(getattr(rr, "profile", None), "model", "?")
+        if rr is not None
+        else "?"
+    )
     llm_profile = getattr(rr, "profile_key", "?") if rr is not None else "?"
     print(
         format_banner(
@@ -191,10 +195,9 @@ def run_repl(
 def _show_config(config: DevConfig, runner: DevRunner) -> None:
     """Display current configuration."""
     rr = runner._resolved_route
-    if rr is not None and runner._llm_config is not None:
-        prof = runner._llm_config.get_profile(rr.profile_key)
-        bu = (prof.base_url or "").strip()
-        print(f"LLM: model={rr.model} profile={rr.profile_key} base_url={bu}")
+    if rr is not None:
+        bu = (rr.provider.base_url or "").strip()
+        print(f"LLM: model={rr.profile.model} profile={rr.profile_key} base_url={bu}")
     else:
         print("LLM: (unavailable)")
     print(f"Agent: name={config.agent.name}, max_turns={config.agent.max_turns}")

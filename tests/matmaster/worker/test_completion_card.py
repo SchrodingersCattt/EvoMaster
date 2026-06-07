@@ -21,7 +21,6 @@ def _card(**overrides: object) -> tuple[str, list[tuple[str, str]], str]:
         session_id="s1",
         session_url="http://session",
         user_info_display="user",
-        llm="llm-cfg",
         model="gpt",
         user_question="q",
         run_success=True,

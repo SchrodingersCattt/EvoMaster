@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from matmaster.config.llm import LLMConfig, LLMProfileConfig
+from matmaster.config.llm import LLMConfig, LLMProfileConfig, ProviderConfig
 from matmaster.context.sources.turn_input import TurnInput
 from src.services.image_input_service import (
     IMAGE_INPUT_DOMAIN_BLOCKED,
@@ -21,6 +21,16 @@ from src.services.image_input_service import (
 
 def _service() -> ImageInputService:
     return ImageInputService(ImageInputSettings())
+
+
+def _llm_config(profiles: dict[str, LLMProfileConfig], default: str) -> LLMConfig:
+    return LLMConfig(
+        providers={
+            "litellm": ProviderConfig(transport="chat_completions", api_key="sk-test")
+        },
+        profiles=profiles,
+        default=default,
+    )
 
 
 def _response(
@@ -249,15 +259,20 @@ def test_range_get_rejects_unsupported_magic_bytes() -> None:
 
 
 def test_ensure_vision_supported_rejects_text_only_profile() -> None:
-    config = LLMConfig(
-        profiles={"plain": LLMProfileConfig(model="plain", context_limit=200_000)},
+    config = _llm_config(
+        profiles={
+            "plain": LLMProfileConfig(
+                provider="litellm",
+                model="plain",
+                context_limit=200_000,
+            )
+        },
         default="plain",
     )
 
     with pytest.raises(ImageInputError) as exc:
         _service().ensure_vision_supported(
             llm_config=config,
-            llm_override=None,
             model_override=None,
             default_profile_key=None,
         )
@@ -266,9 +281,10 @@ def test_ensure_vision_supported_rejects_text_only_profile() -> None:
 
 
 def test_ensure_vision_supported_returns_profile_for_vision_profile() -> None:
-    config = LLMConfig(
+    config = _llm_config(
         profiles={
             "vision": LLMProfileConfig(
+                provider="litellm",
                 model="vision",
                 context_limit=200_000,
                 supports_vision=True,
@@ -280,7 +296,6 @@ def test_ensure_vision_supported_returns_profile_for_vision_profile() -> None:
 
     profile = _service().ensure_vision_supported(
         llm_config=config,
-        llm_override=None,
         model_override=None,
         default_profile_key=None,
     )
@@ -289,15 +304,20 @@ def test_ensure_vision_supported_returns_profile_for_vision_profile() -> None:
 
 
 def test_resolve_image_detail_returns_none_without_images() -> None:
-    config = LLMConfig(
-        profiles={"plain": LLMProfileConfig(model="plain", context_limit=200_000)},
+    config = _llm_config(
+        profiles={
+            "plain": LLMProfileConfig(
+                provider="litellm",
+                model="plain",
+                context_limit=200_000,
+            )
+        },
         default="plain",
     )
 
     result = _service().resolve_image_detail(
         llm_config=config,
         images=(),
-        llm_override=None,
         model_override=None,
         default_profile_key=None,
     )
@@ -306,9 +326,10 @@ def test_resolve_image_detail_returns_none_without_images() -> None:
 
 
 def test_resolve_image_detail_returns_profile_detail_for_images() -> None:
-    config = LLMConfig(
+    config = _llm_config(
         profiles={
             "vision": LLMProfileConfig(
+                provider="litellm",
                 model="vision",
                 context_limit=200_000,
                 supports_vision=True,
@@ -321,7 +342,6 @@ def test_resolve_image_detail_returns_profile_detail_for_images() -> None:
     result = _service().resolve_image_detail(
         llm_config=config,
         images=("https://oss.example.com/chat/a.png",),
-        llm_override=None,
         model_override=None,
         default_profile_key=None,
     )

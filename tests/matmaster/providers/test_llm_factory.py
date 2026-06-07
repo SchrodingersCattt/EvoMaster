@@ -1,284 +1,95 @@
-"""Tests for llm_factory.build_provider -- config-driven provider construction.
-
-build_provider() is sync and returns an uninitialized provider (no client).
-Tests verify route resolution and provider attribute mapping.
-Note: api_key is stored as _api_key since the async refactor.
-"""
+"""llm_factory：dispatch 表驱动 + providers 段解析 + bundle 身份。"""
 
 from __future__ import annotations
 
 import pytest
 
-from matmaster.config.llm import LLMConfig, LLMProfileConfig, LLMRouteConfig
-from matmaster.providers.bedrock_provider import BedrockProvider
-from matmaster.providers.chat_completions_provider import (
-    AnthropicPromptCacheOptions,
-    ChatCompletionsProvider,
+from matmaster.config.llm import LLMConfig, LLMProfileConfig, ProviderConfig
+from matmaster.providers.llm_factory import (
+    _TRANSPORT_BUILDERS,
+    build_provider,
+    build_provider_bundle,
 )
-from matmaster.providers.llm_factory import build_provider, build_provider_bundle
+from matmaster.providers.transports.chat_completions import ChatCompletionsTransport
 
 
 @pytest.fixture()
 def llm_config() -> LLMConfig:
-    """LLMConfig with 2 profiles and 2 routes for testing."""
     return LLMConfig(
+        providers={
+            "litellm": ProviderConfig(
+                transport="chat_completions",
+                api_key="sk-test",
+                base_url="http://litellm-proxy",
+            )
+        },
         profiles={
-            "opus": LLMProfileConfig(
+            "matmaster/qwen3.7-max": LLMProfileConfig(
                 provider="litellm",
-                model="claude-opus-4-6",
+                model="matmaster/qwen3.7-max",
+                reasoning_effort="high",
+                context_limit=1_000_000,
+                stream_timeout=120.0,
+                stream_idle_timeout=60.0,
+            ),
+            "matmaster/dsk-v4p": LLMProfileConfig(
+                provider="litellm",
+                model="aliyun/deepseek-v4-pro",
+                reasoning_effort="max",
                 context_limit=200_000,
-                model_family="claude-4.6",
-                api_key="sk-test-opus",
-                base_url="http://litellm-proxy",
-                thinking_effort="high",
-                reasoning_protocol="anthropic_adaptive_thinking",
-                temperature_policy="force_one_when_reasoning",
-                temperature=0.7,
-                prompt_cache={
-                    "provider": "anthropic",
-                    "system_prompt_breakpoint": True,
-                    "automatic": True,
-                    "latest_user_breakpoint": True,
-                    "tool_result_breakpoint": True,
-                    "flexible_breakpoint": True,
-                    "max_breakpoints": 4,
-                    "min_flexible_chars": 1000,
-                    "ttl": "5m",
-                },
-            ),
-            "sonnet": LLMProfileConfig(
-                provider="litellm",
-                model="claude-sonnet-4-6",
-                context_limit=128_000,
-                model_family="claude-4.6",
-                api_key="sk-test-sonnet",
-                base_url="http://litellm-proxy",
-                thinking_effort="high",
-                reasoning_protocol="anthropic_adaptive_thinking",
-                temperature_policy="force_one_when_reasoning",
-                temperature=0.7,
             ),
         },
-        routes={
-            "claude-opus-4-6": LLMRouteConfig(profile="opus"),
-            "claude-sonnet-4-6": LLMRouteConfig(profile="sonnet"),
-        },
-        default="opus",
+        default="matmaster/qwen3.7-max",
     )
 
 
 class TestBuildProvider:
-    """build_provider resolves routes and constructs ChatCompletionsProvider."""
-
     def test_default_path(self, llm_config: LLMConfig) -> None:
-        """No overrides -> default profile, force_one temp, extra_body present."""
-        provider = build_provider(llm_config)
-        assert provider._model == "claude-opus-4-6"
-        assert provider._temperature == 1.0  # force_one_when_reasoning
-        assert "extra_body" in provider._extra_kwargs
-        assert provider._client is None  # lazy init
+        p = build_provider(llm_config)
+        assert isinstance(p, ChatCompletionsTransport)
+        assert p._model == "matmaster/qwen3.7-max"
+        assert p._reasoning_effort == "high"
+        assert p._client is None
 
-    def test_prompt_cache_options_passed_for_opus(self, llm_config: LLMConfig) -> None:
-        provider = build_provider(llm_config)
+    def test_model_override_is_profile_key(self, llm_config: LLMConfig) -> None:
+        p = build_provider(llm_config, model_override="matmaster/dsk-v4p")
+        assert p._model == "aliyun/deepseek-v4-pro"
 
-        assert provider._prompt_cache_options == AnthropicPromptCacheOptions(
-            system_prompt_breakpoint=True,
-            cache_control={"type": "ephemeral"},
-            automatic=True,
-            latest_user_breakpoint=True,
-            tool_result_breakpoint=True,
-            flexible_breakpoint=True,
-            max_breakpoints=4,
-            min_flexible_chars=1000,
-        )
-
-    def test_prompt_cache_options_absent_for_unconfigured_profile(
-        self, llm_config: LLMConfig
-    ) -> None:
-        provider = build_provider(llm_config, model_override="claude-sonnet-4-6")
-
-        assert provider._prompt_cache_options is None
-
-    def test_prompt_cache_options_passed_for_opus_global(self) -> None:
-        config = LLMConfig(
-            profiles={
-                "opus_global": LLMProfileConfig(
-                    provider="litellm",
-                    model="global.anthropic.claude-opus-4-6-v1",
-                    context_limit=200_000,
-                    api_key="sk-test-opus",
-                    base_url="http://litellm-proxy",
-                    thinking_effort="max",
-                    reasoning_protocol="anthropic_adaptive_thinking",
-                    temperature_policy="force_one_when_reasoning",
-                    prompt_cache={
-                        "provider": "anthropic",
-                        "system_prompt_breakpoint": True,
-                        "automatic": True,
-                        "latest_user_breakpoint": True,
-                        "tool_result_breakpoint": True,
-                        "flexible_breakpoint": True,
-                        "max_breakpoints": 4,
-                        "min_flexible_chars": 1000,
-                        "ttl": "5m",
-                    },
-                ),
-            },
-            routes={
-                "global.anthropic.claude-opus-4-6-v1": LLMRouteConfig(
-                    profile="opus_global"
-                )
-            },
-            default="opus_global",
-        )
-
-        provider = build_provider(
-            config, model_override="global.anthropic.claude-opus-4-6-v1"
-        )
-
-        assert provider._prompt_cache_options == AnthropicPromptCacheOptions(
-            system_prompt_breakpoint=True,
-            cache_control={"type": "ephemeral"},
-            automatic=True,
-            latest_user_breakpoint=True,
-            tool_result_breakpoint=True,
-            flexible_breakpoint=True,
-            max_breakpoints=4,
-            min_flexible_chars=1000,
-        )
-
-    def test_bedrock_provider_does_not_receive_prompt_cache_options(self) -> None:
-        config = LLMConfig(
-            profiles={
-                "opus_bedrock": LLMProfileConfig(
-                    provider="bedrock",
-                    model="arn:aws:bedrock:us-east-1:123:inference-profile/global.anthropic.claude-opus-4-6-v1",
-                    context_limit=200_000,
-                    bedrock_region="us-east-1",
-                    prompt_cache={
-                        "provider": "anthropic",
-                        "system_prompt_breakpoint": True,
-                        "automatic": True,
-                    },
-                ),
-            },
-            routes={"bedrock-claude-opus": LLMRouteConfig(profile="opus_bedrock")},
-            default="opus_bedrock",
-        )
-
-        provider = build_provider(config)
-
-        assert not hasattr(provider, "_prompt_cache_options")
-
-    def test_route_hit(self, llm_config: LLMConfig) -> None:
-        """model_override exact match -> sonnet profile."""
-        provider = build_provider(llm_config, model_override="claude-sonnet-4-6")
-        assert provider._model == "claude-sonnet-4-6"
-        assert provider._client is None
-
-    def test_unknown_route_raises(self, llm_config: LLMConfig) -> None:
-        """Unknown model_override -> KeyError."""
-        with pytest.raises(KeyError, match="Unknown LLM route key"):
-            build_provider(llm_config, model_override="nonexistent-model")
+    def test_unknown_key_raises(self, llm_config: LLMConfig) -> None:
+        with pytest.raises(KeyError, match="not found"):
+            build_provider(llm_config, model_override="nonexistent")
 
     def test_custom_default_key(self, llm_config: LLMConfig) -> None:
-        """default_profile_key overrides config default."""
-        provider = build_provider(llm_config, default_profile_key="sonnet")
-        assert provider._model == "claude-sonnet-4-6"
+        p = build_provider(llm_config, default_profile_key="matmaster/dsk-v4p")
+        assert p._model == "aliyun/deepseek-v4-pro"
 
-    def test_model_override_precedence(self, llm_config: LLMConfig) -> None:
-        """model_override takes precedence over llm_override."""
-        provider = build_provider(
-            llm_config,
-            model_override="claude-sonnet-4-6",
-            llm_override="opus",
-        )
-        assert provider._model == "claude-sonnet-4-6"
+    def test_stream_timeout_passed(self, llm_config: LLMConfig) -> None:
+        p = build_provider(llm_config)
+        assert p.stream_timeout == 120.0
+        assert p.stream_idle_timeout == 60.0
 
-    def test_build_provider_bundle_exposes_resolved_model_identity(
-        self, llm_config: LLMConfig
-    ) -> None:
-        """Provider construction and persisted model identity share one route resolution."""
-        bundle = build_provider_bundle(
-            llm_config,
-            model_override="claude-sonnet-4-6",
-            llm_override="opus",
-        )
-
-        assert bundle.provider._model == "claude-sonnet-4-6"
-        assert bundle.model == "claude-sonnet-4-6"
-        assert bundle.model_profile == "sonnet"
-        assert bundle.model_route == "claude-sonnet-4-6"
-        assert bundle.provider_name == "litellm"
-        assert bundle.model_family == "claude-4.6"
-        assert bundle.context_limit == 128_000
-        assert bundle.context_limit_source == "profile"
-
-    def test_stream_timeout_passed(self) -> None:
-        """stream_timeout and stream_idle_timeout from profile are passed to provider."""
-        config = LLMConfig(
-            profiles={
-                "opus": LLMProfileConfig(
-                    provider="litellm",
-                    model="claude-opus-4-6",
-                    context_limit=200_000,
-                    model_family="claude-4.6",
-                    api_key="sk-test-opus",
-                    base_url="http://litellm-proxy",
-                    thinking_effort="high",
-                    reasoning_protocol="anthropic_adaptive_thinking",
-                    temperature_policy="force_one_when_reasoning",
-                    temperature=0.7,
-                    stream_timeout=120.0,
-                    stream_idle_timeout=60.0,
-                ),
-            },
-            routes={"claude-opus-4-6": LLMRouteConfig(profile="opus")},
-            default="opus",
-        )
-
-        provider = build_provider(config)
-
-        assert provider.stream_timeout == 120.0
-        assert provider.stream_idle_timeout == 60.0
-        assert provider._client is None  # lazy init
+    def test_bundle_identity(self, llm_config: LLMConfig) -> None:
+        b = build_provider_bundle(llm_config, model_override="matmaster/dsk-v4p")
+        assert b.provider._model == "aliyun/deepseek-v4-pro"
+        assert b.model == "aliyun/deepseek-v4-pro"
+        assert b.model_profile == "matmaster/dsk-v4p"
+        assert b.model_route == "matmaster/dsk-v4p"
+        assert b.provider_name == "litellm"
+        assert b.context_limit == 200_000
+        assert b.context_limit_source == "profile"
 
 
-class TestTransportDispatch:
-    def test_litellm_route_builds_chat_completions(self, llm_config: LLMConfig) -> None:
-        provider = build_provider(llm_config, model_override="claude-opus-4-6")
-        assert isinstance(provider, ChatCompletionsProvider)
+class TestDispatch:
+    def test_chat_completions_tag_hits_builder(self) -> None:
+        assert "chat_completions" in _TRANSPORT_BUILDERS
 
-    def test_bedrock_transport_builds_bedrock(self) -> None:
+    def test_unknown_transport_fail_fast(self) -> None:
         cfg = LLMConfig(
-            profiles={
-                "bed": LLMProfileConfig(
-                    provider="bedrock",
-                    model="arn:aws:bedrock:us-east-1:0:inference-profile/x",
-                    context_limit=200_000,
-                ),
+            providers={
+                "x": ProviderConfig(transport="anthropic_messages", api_key="k")
             },
-            routes={"bedrock-x": LLMRouteConfig(profile="bed")},
-            default="bed",
-        )
-        provider = build_provider(cfg, model_override="bedrock-x")
-        assert isinstance(provider, BedrockProvider)
-
-    def test_dispatch_follows_transport_not_provider_name(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """判别性测试：临时改 litellm transport，factory 必须跟 transport 走。"""
-        from matmaster.config import llm as llm_mod
-
-        monkeypatch.setitem(llm_mod.PROVIDER_TRANSPORT, "litellm", "bedrock_converse")
-        cfg = LLMConfig(
-            profiles={
-                "p": LLMProfileConfig(
-                    provider="litellm", model="m", context_limit=200_000
-                ),
-            },
-            routes={"r": LLMRouteConfig(profile="p")},
+            profiles={"p": LLMProfileConfig(provider="x", model="m", context_limit=1)},
             default="p",
         )
-        provider = build_provider(cfg, model_override="r")
-        assert isinstance(provider, BedrockProvider)
+        with pytest.raises(ValueError, match="unsupported transport"):
+            build_provider(cfg)

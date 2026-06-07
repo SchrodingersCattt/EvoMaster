@@ -210,9 +210,9 @@ class TestPublicContentForEvent:
             'type': 'thought',
             'source': 'Agent',
             'content': 'reasoning',
-            'model': 'claude-opus-4-6',
-            'model_profile': 'opus',
-            'model_route': 'bedrock-claude-opus',
+            'model': 'matmaster/qwen3.7-max',
+            'model_profile': 'matmaster/qwen3.7-max',
+            'model_route': 'matmaster/qwen3.7-max',
         }
 
         assert _public_content_for_event('thought', payload) == 'reasoning'
@@ -243,16 +243,16 @@ class TestPublicContentForEvent:
             'type': 'response',
             'source': 'Agent',
             'content': 'answer',
-            'model': 'claude-opus-4-6',
-            'model_profile': 'opus',
-            'model_route': 'bedrock-claude-opus',
+            'model': 'matmaster/qwen3.7-max',
+            'model_profile': 'matmaster/qwen3.7-max',
+            'model_route': 'matmaster/qwen3.7-max',
         }
 
         assert _public_content_for_event('response', payload) == {
             'content': 'answer',
-            'model': 'claude-opus-4-6',
-            'model_profile': 'opus',
-            'model_route': 'bedrock-claude-opus',
+            'model': 'matmaster/qwen3.7-max',
+            'model_profile': 'matmaster/qwen3.7-max',
+            'model_route': 'matmaster/qwen3.7-max',
         }
 
     def test_run_result_public_content_includes_usage(self) -> None:
@@ -278,9 +278,9 @@ class TestPublicContentForEvent:
             'status': 'completed',
             'reason': 'natural',
             'final_content': 'done',
-            'model': 'claude-opus-4-6',
-            'model_profile': 'opus',
-            'model_route': 'bedrock-claude-opus',
+            'model': 'matmaster/qwen3.7-max',
+            'model_profile': 'matmaster/qwen3.7-max',
+            'model_route': 'matmaster/qwen3.7-max',
         }
 
         assert _public_content_for_event('run_result', payload) == {
@@ -295,16 +295,16 @@ class TestPublicContentForEvent:
             'type': 'assistant_state',
             'source': 'Agent',
             'state': state,
-            'model': 'claude-opus-4-6',
-            'model_profile': 'opus',
-            'model_route': 'bedrock-claude-opus',
+            'model': 'matmaster/qwen3.7-max',
+            'model_profile': 'matmaster/qwen3.7-max',
+            'model_route': 'matmaster/qwen3.7-max',
         }
 
         assert _public_content_for_event('assistant_state', payload) == {
             'state': state,
-            'model': 'claude-opus-4-6',
-            'model_profile': 'opus',
-            'model_route': 'bedrock-claude-opus',
+            'model': 'matmaster/qwen3.7-max',
+            'model_profile': 'matmaster/qwen3.7-max',
+            'model_route': 'matmaster/qwen3.7-max',
         }
 
     def test_failed_run_result_preserves_usage_and_finish_detail(self) -> None:
@@ -379,9 +379,9 @@ class TestPublicContentForEvent:
             'type': 'thought',
             'content': {
                 'content': 'thinking',
-                'model': 'claude-opus-4-6',
-                'model_profile': 'opus',
-                'model_route': 'bedrock-claude-opus',
+                'model': 'matmaster/qwen3.7-max',
+                'model_profile': 'matmaster/qwen3.7-max',
+                'model_route': 'matmaster/qwen3.7-max',
             },
             'session_id': 'sess',
             'task_id': 'task',

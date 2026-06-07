@@ -85,7 +85,6 @@ def _build_completion_card(
     session_id: str,
     session_url: str,
     user_info_display: str,
-    llm: str | None,
     model: str | None,
     user_question: str,
     run_success: bool,
@@ -104,7 +103,7 @@ def _build_completion_card(
         ('会话ID', session_id),
         ('会话地址', session_url),
         ('用户', user_info_display),
-        ('模型', format_llm_model_for_notify(llm, model)),
+        ('模型', format_llm_model_for_notify(model)),
         ('用户问题', user_question or '-'),
         ('执行节点', get_worker_id()),
         (
@@ -329,7 +328,6 @@ def _run_worker_loop() -> None:
                 DEFAULT_MODE,
             )
             mode = DEFAULT_MODE
-        llm_override = (payload.get('llm') or '').strip() or None
         model_override = (payload.get('model') or '').strip() or None
         byok_credential_id = (payload.get('byok_credential_id') or '').strip() or None
         raw_images = payload.get('images') or []
@@ -419,7 +417,7 @@ def _run_worker_loop() -> None:
                     ('会话ID', session_id),
                     ('会话地址', session_url),
                     ('用户', user_info_display),
-                    ('模型', format_llm_model_for_notify(llm_override, model_override)),
+                    ('模型', format_llm_model_for_notify(model_override)),
                     ('模式', mode),
                     ('用户问题', user_question or '-'),
                     ('执行节点', get_worker_id()),
@@ -441,7 +439,6 @@ def _run_worker_loop() -> None:
                     "mode": mode,
                     "task_id": task_id,
                     "invocation_id": invocation_id,
-                    "llm_override": llm_override,
                     "model_override": model_override,
                     "byok_credential_id": byok_credential_id,
                     "user_id": session_user_id,
@@ -537,7 +534,6 @@ def _run_worker_loop() -> None:
                             session_id=session_id,
                             session_url=session_url,
                             user_info_display=user_info_display,
-                            llm=llm_override,
                             model=model_override,
                             user_question=user_question,
                             run_success=run_success,

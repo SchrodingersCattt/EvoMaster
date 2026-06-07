@@ -81,12 +81,9 @@ async def test_images_flow_from_service_to_kernel_user_message(tmp_path: Path) -
     sessions_service.get_session_user_id.return_value = "user-1"
 
     llm_config = MagicMock()
-    llm_config.resolve_route.return_value = SimpleNamespace(profile_key="vision")
-    vision_profile = SimpleNamespace(vision_detail="high")
-    llm_config.get_profile.return_value = vision_profile
 
     image_service = MagicMock()
-    image_service.resolve_image_detail.return_value = vision_profile.vision_detail
+    image_service.resolve_image_detail.return_value = "high"
     image_service.enrich_turn_input_images.side_effect = (
         ImageInputService().enrich_turn_input_images
     )
@@ -131,7 +128,6 @@ async def test_images_flow_from_service_to_kernel_user_message(tmp_path: Path) -
                 model_profile="vision",
                 model_route=None,
                 provider_name="openai",
-                model_family="vision",
                 context_limit=345_000,
                 context_limit_source="profile",
             ),

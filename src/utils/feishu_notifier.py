@@ -21,17 +21,10 @@ CARD_TEMPLATE_ORANGE = 'orange'
 CARD_TEMPLATE_RED = 'red'
 
 
-def format_llm_model_for_notify(llm: str | None, model: str | None) -> str:
-    """拼接本轮 LLM 配置块与模型名，供飞书卡片「模型」行展示。"""
+def format_llm_model_for_notify(model: str | None) -> str:
+    """渲染本轮模型名，供飞书卡片「模型」行展示。"""
     m = (model or '').strip()
-    llm_s = (llm or '').strip()
-    if m and llm_s:
-        return f'{m}（{llm_s}）'
-    if m:
-        return m
-    if llm_s:
-        return f'LLM: {llm_s}'
-    return '默认'
+    return m or '默认'
 
 
 def _fmt_tokens(n: int) -> str:

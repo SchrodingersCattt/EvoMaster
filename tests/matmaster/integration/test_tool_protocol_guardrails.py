@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from matmaster.core.agent import AgentKernel
-from matmaster.providers.chat_completions_provider import ChatCompletionsProvider
+from matmaster.providers.transports.chat_completions import ChatCompletionsTransport
 from matmaster.types.errors import LLMError
 from matmaster.types.messages import AssistantMessage, ToolMessage
 from src.services.chat_history import ChatHistoryConverter
@@ -76,7 +76,7 @@ class _NoCallProvider:
 class TestToolProtocolGuardrailsIntegration:
     @pytest.mark.asyncio
     async def test_duplicate_id_stream_executes_tool_once(self) -> None:
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         mock_client.chat.completions.create.side_effect = [
             _async_iter(
@@ -130,7 +130,7 @@ class TestToolProtocolGuardrailsIntegration:
     async def test_pure_tool_turn_sends_empty_string_content_on_second_call(
         self,
     ) -> None:
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         mock_client.chat.completions.create.side_effect = [
             _async_iter(
@@ -226,7 +226,7 @@ class TestToolProtocolGuardrailsIntegration:
     async def test_wrapped_assistant_state_history_normalizes_none_content_before_provider_call(
         self,
     ) -> None:
-        provider = ChatCompletionsProvider(model="gpt-4o-mini", api_key="sk-test")
+        provider = ChatCompletionsTransport(model="gpt-4o-mini", api_key="sk-test")
         mock_client = AsyncMock()
         mock_client.chat.completions.create.return_value = _async_iter(
             [

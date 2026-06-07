@@ -555,9 +555,9 @@ class TestRunItemsAssistantState:
         provider = ReasoningThenContentProvider()
         kernel_runtime = make_kernel_runtime(
             provider=provider,
-            llm_model="claude-opus-4-6",
-            llm_model_profile="opus",
-            llm_model_route="bedrock-claude-opus",
+            llm_model="matmaster/qwen3.7-max",
+            llm_model_profile="matmaster/qwen3.7-max",
+            llm_model_route="matmaster/qwen3.7-max",
         )
         kernel = AgentKernel()
 
@@ -578,9 +578,9 @@ class TestRunItemsAssistantState:
         )
 
         for event in (complete_response, run_result):
-            assert event.model == "claude-opus-4-6"
-            assert event.model_profile == "opus"
-            assert event.model_route == "bedrock-claude-opus"
+            assert event.model == "matmaster/qwen3.7-max"
+            assert event.model_profile == "matmaster/qwen3.7-max"
+            assert event.model_route == "matmaster/qwen3.7-max"
 
         assert MODEL_IDENTITY_FIELDS.isdisjoint(complete_thought.model_dump())
 
@@ -594,9 +594,9 @@ class TestRunItemsAssistantState:
         provider = ReasoningThenContentProvider()
         kernel_runtime = make_kernel_runtime(
             provider=provider,
-            llm_model="claude-opus-4-6",
-            llm_model_profile="opus",
-            llm_model_route="bedrock-claude-opus",
+            llm_model="matmaster/qwen3.7-max",
+            llm_model_profile="matmaster/qwen3.7-max",
+            llm_model_route="matmaster/qwen3.7-max",
         )
         kernel = AgentKernel()
 
@@ -625,9 +625,9 @@ class TestRunItemsAssistantState:
         kernel_runtime = make_kernel_runtime(
             provider=provider,
             tool_registry=registry,
-            llm_model="claude-opus-4-6",
-            llm_model_profile="opus",
-            llm_model_route="bedrock-claude-opus",
+            llm_model="matmaster/qwen3.7-max",
+            llm_model_profile="matmaster/qwen3.7-max",
+            llm_model_route="matmaster/qwen3.7-max",
         )
         kernel = AgentKernel()
 
@@ -637,9 +637,9 @@ class TestRunItemsAssistantState:
 
         assistant_state = next(e for e in events if isinstance(e, AssistantStateEvent))
 
-        assert assistant_state.model == "claude-opus-4-6"
-        assert assistant_state.model_profile == "opus"
-        assert assistant_state.model_route == "bedrock-claude-opus"
+        assert assistant_state.model == "matmaster/qwen3.7-max"
+        assert assistant_state.model_profile == "matmaster/qwen3.7-max"
+        assert assistant_state.model_route == "matmaster/qwen3.7-max"
 
     @pytest.mark.asyncio
     async def test_assistant_state_drops_trivial_tool_call_preamble_content(
