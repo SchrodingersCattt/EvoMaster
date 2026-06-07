@@ -276,6 +276,8 @@ def _is_non_retryable_content_shape_bad_request(err_str: str) -> bool:
 class ChatCompletionsTransport(Transport):
     """Pure OpenAI-compatible chat completions transport."""
 
+    transport_tag = "chat_completions"
+
     def __init__(
         self,
         *,

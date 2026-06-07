@@ -11,10 +11,12 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
-from matmaster.types.messages import LLMResponse, StreamChunk
+from matmaster.types.messages import AssistantMessage, LLMResponse, StreamChunk
 
 
 class Transport:
+    transport_tag: str = ""
+
     def __init__(
         self,
         *,
@@ -73,6 +75,13 @@ class Transport:
                 "'async with transport:'"
             )
         return self._client
+
+    def _claim_provider_state(self, msg: AssistantMessage) -> dict[str, Any] | None:
+        """tag 匹配则返回不透明 payload，否则 None（跨协议丢弃回放状态）。"""
+        state = msg.provider_state
+        if state is None or state.transport != self.transport_tag:
+            return None
+        return state.payload
 
     async def _open_client(self) -> Any:
         raise NotImplementedError
