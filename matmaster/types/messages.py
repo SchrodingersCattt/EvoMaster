@@ -254,6 +254,7 @@ class AssistantMessage(Message):
     role: Role = Role.ASSISTANT
     tool_calls: list[ToolCallData] | None = None
     reasoning_content: str | None = None
+    provider_state: ProviderState | None = None
 
     def to_api_dict(self) -> dict[str, Any]:
         """Convert to OpenAI API-compatible dict.
@@ -298,6 +299,20 @@ class ToolMessage(Message):
         }
 
 
+class ProviderState(BaseModel):
+    """Provider 回放状态：对 kernel 不透明、transport 私有、带 transport tag。
+
+    kernel 原样存取、不解读 payload；只有 tag 匹配的 transport 在 convert 时认领。
+    payload 必须只含 JSON-serializable 值（dict/list/str/int/float/bool/None）；
+    持久化统一走 model_dump(mode="json")，非 JSON 值会在持久化层炸。
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    transport: str
+    payload: dict[str, Any]
+
+
 class LLMResponse(BaseModel):
     """Non-streaming LLM response from LLMProvider.chat()."""
 
@@ -314,6 +329,7 @@ class LLMResponse(BaseModel):
         description="Provider-native usage snapshot (may include nested structs).",
     )
     degraded: bool = False
+    provider_state: ProviderState | None = None
 
 
 class StreamChunk(BaseModel):
@@ -331,3 +347,4 @@ class StreamChunk(BaseModel):
     stream_id: str | None = None
     usage: dict[str, int] | None = None
     usage_vendor: dict[str, Any] | None = None
+    provider_state: ProviderState | None = None
