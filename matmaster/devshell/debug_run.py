@@ -62,7 +62,7 @@ def main(prompt: str | None = None) -> None:
         default_profile_key=agent_default_llm,
     )
     llm_provider = llm_bundle.provider
-    resolved = llm_config.resolve_route(
+    resolved = llm_config.resolve(
         model_override=MODEL_OVERRIDE,
         default_key=agent_default_llm,
     )

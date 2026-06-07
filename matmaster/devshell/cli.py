@@ -212,7 +212,7 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any, Any
             default_profile_key=agent_default_llm,
         )
         llm_provider = llm_bundle.provider
-        resolved = llm_config.resolve_route(
+        resolved = llm_config.resolve(
             model_override=model_override,
             default_key=agent_default_llm,
         )
@@ -398,9 +398,9 @@ def _run_single(
         return 1
 
     summary: dict[str, Any] = {
-        "model": getattr(resolved, "model", None),
+        "model": getattr(getattr(resolved, "profile", None), "model", None),
         "profile_key": getattr(resolved, "profile_key", None),
-        "route_key": getattr(resolved, "route_key", None),
+        "route_key": getattr(resolved, "profile_key", None),
         "status": result.status,
         "reason": result.reason,
         "final_content": result.final_content,

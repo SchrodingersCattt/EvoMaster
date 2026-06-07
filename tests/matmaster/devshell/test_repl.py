@@ -211,7 +211,10 @@ class TestCliRunMode:
             usage={"total_tokens": 3},
             messages=[],
         )
-        resolved = SimpleNamespace(model="m", profile_key="p", route_key="r")
+        resolved = SimpleNamespace(
+            profile=SimpleNamespace(model="m"),
+            profile_key="p",
+        )
 
         with patch(
             "matmaster.devshell.cli._run_with_event_log",
@@ -224,7 +227,7 @@ class TestCliRunMode:
         assert json.loads(captured.out) == {
             "model": "m",
             "profile_key": "p",
-            "route_key": "r",
+            "route_key": "p",
             "status": "completed",
             "reason": "natural",
             "final_content": "OK",
@@ -263,7 +266,10 @@ class TestCliRunMode:
                 message="Model output was truncated by the provider output-token limit.",
             ),
         )
-        resolved = SimpleNamespace(model="m", profile_key="p", route_key="r")
+        resolved = SimpleNamespace(
+            profile=SimpleNamespace(model="m"),
+            profile_key="p",
+        )
 
         with patch(
             "matmaster.devshell.cli._run_with_event_log",
@@ -298,10 +304,10 @@ class TestCliRunMode:
             ]
         )
         fake_llm_config = SimpleNamespace(
-            resolve_route=lambda **_: SimpleNamespace(
-                model="m",
+            resolve=lambda **_: SimpleNamespace(
+                profile=SimpleNamespace(model="m"),
                 profile_key="p",
-                route_key="r",
+                provider=SimpleNamespace(base_url=""),
             )
         )
         captured: dict[str, object] = {}
@@ -357,9 +363,8 @@ class TestDevRunnerRequest:
             workdir=tmp_path,
             llm_provider=bundle.provider,
             resolved_route=SimpleNamespace(
-                model="fallback-model",
+                profile=SimpleNamespace(model="fallback-model"),
                 profile_key="fallback-profile",
-                route_key="fallback-route",
             ),
             llm_bundle=bundle,
         )
