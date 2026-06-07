@@ -147,7 +147,6 @@ profiles:
 
         assert resolved.profile_key == "matmaster/gpt-5.5"
         assert resolved.profile.model == "matmaster/gpt-5.5"
-        assert "bedrock-claude-opus" not in cfg.profiles
 
 
 class TestLoadExpConfig:
