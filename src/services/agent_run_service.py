@@ -236,7 +236,6 @@ class AgentRunService:
         mode: str,
         task_id: str,
         invocation_id: str | None = None,
-        llm_override: str | None = None,
         model_override: str | None = None,
         byok_credential_id: str | None = None,
         user_id: str | None = None,
@@ -404,14 +403,12 @@ class AgentRunService:
                 image_detail = image_service.resolve_image_detail(
                     llm_config=llm_config,
                     images=current_images,
-                    llm_override=llm_override,
                     model_override=model_override,
                     default_profile_key=agent_default_llm,
                 )
                 llm_bundle = build_provider_bundle(
                     llm_config,
                     model_override=model_override,
-                    llm_override=llm_override,
                     default_profile_key=agent_default_llm,
                 )
                 billing_mode = "platform"
