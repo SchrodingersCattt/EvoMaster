@@ -64,10 +64,13 @@ ssh -p $PORT $USER@$HOST "cd /root/matmaster-evo && \
 | Flag | Purpose |
 |------|---------|
 | `--slices '@tag'` | Filter by tag (`@eng_abacus`). Without `@` matches capability names |
+| `--questions ID [ID ...]` | Run only these question IDs (alternative to `--slices`; do NOT combine — they AND). Use full IDs, e.g. `WO_dpa4_neo_optimize_001_20260607` |
 | `--k N` | Repeats per question (NOT `--repeats`) |
 | `--jobs N` | Parallel workers. Default 16, dial back if 429s — see `references/monitoring_scripts.md` |
 | `--limit N` | Cap total tasks (for testing) |
 | `--no-clean-results` | Keep prior results dir |
+
+> **Per-call LLM usage is always reported** to tools-server (populates `llm_usage`, `billing_mode=eval`: record + price, no credit debit; per-call cost back-filled into ingest `extra.per_call_usage`). No flag needed; requires `MATMASTER_TOOLS_SERVER` reachable (defaults to `matmaster-tools-server.<env>.bohrium.com`).
 
 **Fallback**: if `uv run` fails (GitHub unreachable), replace with `.venv/bin/python`.
 
