@@ -10,14 +10,14 @@ Public API::
 """
 
 from .exp import ExpConfig, ExpToolsConfig
-from .llm import LLMConfig, LLMProfileConfig, LLMRouteConfig, ResolvedLLMRoute
+from .llm import LLMConfig, LLMProfileConfig, ProviderConfig, ResolvedModel
 from .loader import load_exp_config, load_llm_config
 
 __all__ = [
     "LLMConfig",
     "LLMProfileConfig",
-    "LLMRouteConfig",
-    "ResolvedLLMRoute",
+    "ProviderConfig",
+    "ResolvedModel",
     "ExpConfig",
     "ExpToolsConfig",
     "load_llm_config",

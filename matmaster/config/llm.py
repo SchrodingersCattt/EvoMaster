@@ -1,314 +1,86 @@
-"""LLM provider profile configurations.
-
-Maps to the ``llm`` section in config.yaml. Each profile defines a single
-LLM backend (provider, model, auth, reasoning, timeout, retry).
-
-YAML example::
-
-    llm:
-      profiles:
-        opus:
-          provider: "litellm"
-          model: "claude-opus-4-6"
-          api_key: "${LITELLM_PROXY_API_KEY}"
-          base_url: "${LITELLM_PROXY_API_BASE}"
-          thinking_effort: "high"
-          reasoning_protocol: "anthropic_adaptive_thinking"
-          ...
-      routes:
-        claude-opus-4-6:
-          profile: "opus"
-      default: "opus"
-"""
+"""LLM provider 配置（纯数据 schema）。"""
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Literal, NamedTuple
 
 from pydantic import BaseModel, Field, model_validator
 
-# ── Model family defaults ─────────────────────────────────────────────────────
 
-MODEL_FAMILY_DEFAULTS: dict[str, dict[str, str]] = {
-    "claude-4.6": {
-        "reasoning_protocol": "anthropic_adaptive_thinking",
-        "temperature_policy": "force_one_when_reasoning",
-    },
-    "gpt-5": {
-        "reasoning_protocol": "openai_reasoning_effort",
-        "temperature_policy": "default",
-    },
-    "deepseek-reasoner": {
-        "reasoning_protocol": "openai_reasoning_effort",
-        "temperature_policy": "default",
-    },
-    "gemini-3-flash-preview": {
-        "temperature_policy": "default",
-    },
-    "gemini-3.1-pro": {
-        "reasoning_protocol": "openai_reasoning_effort",
-        "temperature_policy": "default",
-    },
-}
+class ProviderConfig(BaseModel):
+    """一个后端连接：怎么连到 provider。"""
 
-
-# ── Provider → transport 映射（阶段一轻量 registry）─────────────────────────────
-
-# (1) transport 查找表：所有真实 provider → 其 API 协议。含运行时 BYOK。
-PROVIDER_TRANSPORT: dict[str, str] = {
-    "litellm": "chat_completions",
-    "bedrock": "bedrock_converse",
-    "byok": "chat_completions",
-}
-
-# (2) 平台 YAML 白名单：允许出现在 llm_config.yaml profile 里的 provider。
-# 不含 byok，因为 byok 只能由运行时凭证路径构造。
-PLATFORM_PROVIDERS: frozenset[str] = frozenset({"litellm", "bedrock"})
-
-
-def _infer_model_family(model: str) -> str | None:
-    """Infer model family from model name string."""
-    name = (model or "").strip().lower()
-    if "claude-sonnet-4-6" in name or "claude-opus-4-6" in name:
-        return "claude-4.6"
-    if "claude-haiku-4-5" in name:
-        return "claude-haiku-4.5"
-    if "gpt-5" in name:
-        return "gpt-5"
-    if "deepseek-reasoner" in name:
-        return "deepseek-reasoner"
-    if "gemini-3.1-pro" in name:
-        return "gemini-3.1-pro"
-    if "gemini-3-flash-preview" in name:
-        return "gemini-3-flash-preview"
-    return None
-
-
-# ── Profile config ─────────────────────────────────────────────────────────────
-
-
-class PromptCacheConfig(BaseModel):
-    """Prompt cache controls for provider-native prompt caching."""
-
-    provider: Literal["anthropic"] = "anthropic"
-    system_prompt_breakpoint: bool = False
-    automatic: bool = False
-    latest_user_breakpoint: bool = True
-    tool_result_breakpoint: bool = False
-    flexible_breakpoint: bool = False
-    max_breakpoints: int = Field(default=4, ge=1, le=4)
-    min_flexible_chars: int = Field(default=1000, ge=1)
-    ttl: Literal["5m", "1h"] = "5m"
-
-    def cache_control(self) -> dict[str, str]:
-        """Return Anthropic cache_control payload."""
-        payload = {"type": "ephemeral"}
-        if self.ttl == "1h":
-            payload["ttl"] = "1h"
-        return payload
+    transport: str
+    api_key: str
+    base_url: str | None = None
 
 
 class LLMProfileConfig(BaseModel):
-    """Single LLM provider profile."""
+    """一个对外可选模型（profile key = 对外标识）。纯数据。"""
 
-    provider: str = "litellm"
-    model: str = ""
-    model_family: str | None = None
-
-    # Auth
-    api_key: str = ""
-    base_url: str | None = None
-    api_version: str | None = None  # Azure only
-    # Bedrock (provider=bedrock): optional; defaults to AWS_REGION / AWS_DEFAULT_REGION
-    bedrock_region: str | None = None
-
-    # Reasoning
-    thinking_effort: str | None = None
-    reasoning_protocol: str | None = (
-        None  # "anthropic_adaptive_thinking" | "openai_reasoning_effort"
-    )
+    provider: str
+    model: str
+    reasoning_effort: str | None = None
     reasoning_summary: Literal["auto", "concise", "detailed"] | None = None
-    fallback_group: str | None = None
-
-    # Prompt cache
-    prompt_cache: PromptCacheConfig | None = None
-
-    # Temperature
-    temperature_policy: str | None = None  # "force_one_when_reasoning" | "default"
     temperature: float = 0.7
-
-    # Limits
-    context_limit: int = Field(..., gt=0)
     max_tokens: int | None = None
-
-    # Vision
+    context_limit: int = Field(..., gt=0)
     supports_vision: bool = False
     vision_detail: Literal["low", "high", "auto"] | None = "high"
-
-    # Timeout (seconds)
     timeout: float = 300
     stream_timeout: float | None = None
     stream_idle_timeout: float | None = None
-
-    # Retry
     max_retries: int = 3
     retry_delay: float = 1.0
 
-    # ── Semantic methods ───────────────────────────────────────────────────
 
-    def effective_family(self) -> str | None:
-        """Explicit model_family > infer from model name."""
-        return self.model_family or _infer_model_family(self.model)
+class ResolvedModel(NamedTuple):
+    """解析结果：键 + 两个源对象引用，零反规范化。"""
 
-    def effective_transport(self) -> str:
-        """Provider 决定 transport，provider 合法性由 LLMConfig 加载期校验保证。"""
-        return PROVIDER_TRANSPORT[self.provider]
-
-    def effective_temperature(self) -> float:
-        """Apply temperature_policy. claude-4.6 forces temperature=1.0."""
-        family = self.effective_family()
-        policy = self.temperature_policy or MODEL_FAMILY_DEFAULTS.get(
-            family or "", {}
-        ).get("temperature_policy")
-        if policy == "force_one_when_reasoning":
-            return 1.0
-        return self.temperature
-
-    def build_extra_kwargs(self) -> dict[str, Any] | None:
-        """Build provider-specific request parameters.
-
-        Returns None when no extra request parameters are configured.
-        ChatCompletionsProvider.__init__ converts None to {} via ``extra_kwargs or {}``.
-        """
-        family = self.effective_family()
-        protocol = self.reasoning_protocol or MODEL_FAMILY_DEFAULTS.get(
-            family or "", {}
-        ).get("reasoning_protocol")
-        effort = (self.thinking_effort or "").strip().lower()
-
-        out: dict[str, Any] = {}
-        extra_body: dict[str, Any] = {}
-
-        if protocol == "anthropic_adaptive_thinking" and effort:
-            extra_body.update(
-                {
-                    "thinking": {"type": "adaptive"},
-                    "output_config": {"effort": effort},
-                }
-            )
-        elif protocol == "openai_reasoning_effort":
-            if effort:
-                out["reasoning_effort"] = effort
-            if self.reasoning_summary:
-                reasoning: dict[str, str] = {"summary": self.reasoning_summary}
-                if effort:
-                    reasoning["effort"] = effort
-                extra_body["reasoning"] = reasoning
-
-        if extra_body:
-            out["extra_body"] = extra_body
-
-        return out or None
-
-
-# ── Route schema ───────────────────────────────────────────────────────────────
-
-
-class LLMRouteConfig(BaseModel):
-    """External route key -> internal profile mapping."""
-
-    profile: str
-    model: str | None = None
-
-
-@dataclass(frozen=True)
-class ResolvedLLMRoute:
-    """Runtime-resolved LLM routing result."""
-
-    route_key: str | None
     profile_key: str
-    provider: str
-    transport: str
-    model: str
-
-
-# ── Top-level LLM config ──────────────────────────────────────────────────────
+    profile: LLMProfileConfig
+    provider: ProviderConfig
 
 
 class LLMConfig(BaseModel):
-    """Top-level LLM configuration: profiles + routes + default."""
+    """顶层：连接池 + 模型表 + 默认。无 routes。"""
 
-    profiles: dict[str, LLMProfileConfig] = Field(default_factory=dict)
-    routes: dict[str, LLMRouteConfig] = Field(default_factory=dict)
-    default: str = "opus"
+    providers: dict[str, ProviderConfig]
+    profiles: dict[str, LLMProfileConfig]
+    default: str
 
     @model_validator(mode="after")
-    def _validate_internal_references(self) -> LLMConfig:
-        """Fail-fast: verify all internal references are valid."""
+    def _check_refs(self) -> "LLMConfig":
         if self.default not in self.profiles:
             raise ValueError(
                 f"default profile '{self.default}' not found, "
                 f"available: {list(self.profiles)}"
             )
-        for route_key, route in self.routes.items():
-            if route.profile not in self.profiles:
+        for key, profile in self.profiles.items():
+            if profile.provider not in self.providers:
                 raise ValueError(
-                    f"route '{route_key}' references profile '{route.profile}' "
-                    f"which does not exist, available: {list(self.profiles)}"
-                )
-        for profile_key, profile in self.profiles.items():
-            if profile.provider not in PLATFORM_PROVIDERS:
-                raise ValueError(
-                    f"profile '{profile_key}' has unknown provider "
-                    f"'{profile.provider}', allowed: {sorted(PLATFORM_PROVIDERS)}"
+                    f"profile '{key}' references provider '{profile.provider}' "
+                    f"which is not declared in providers, "
+                    f"available: {list(self.providers)}"
                 )
         return self
 
-    def get_profile(self, key: str | None = None) -> LLMProfileConfig:
-        """Return profile by key, falling back to self.default."""
-        k = key or self.default
-        if k not in self.profiles:
-            raise KeyError(
-                f"LLM profile '{k}' not found, available: {list(self.profiles)}"
-            )
-        return self.profiles[k]
-
-    def resolve_route(
+    def resolve(
         self,
         *,
         model_override: str | None = None,
-        llm_override: str | None = None,
         default_key: str | None = None,
-    ) -> ResolvedLLMRoute:
-        """Resolve external input to internal profile + model.
-        Resolution order:
-        1. model_override non-empty: exact route table lookup (fail on miss)
-        2. llm_override non-empty: treat as profile key (compat layer)
-        3. Both empty: use default_key or self.default
-        """
-        effective_default = default_key or self.default
-        if model_override:
-            route = self.routes.get(model_override)
-            if route is None:
-                raise KeyError(
-                    f"Unknown LLM route key: {model_override!r}, "
-                    f"available routes: {list(self.routes)}"
-                )
-            profile = self.get_profile(route.profile)
-            return ResolvedLLMRoute(
-                route_key=model_override,
-                profile_key=route.profile,
-                provider=profile.provider,
-                transport=profile.effective_transport(),
-                model=route.model or profile.model,
-            )
-        profile_key = llm_override or effective_default
-        profile = self.get_profile(profile_key)
-        return ResolvedLLMRoute(
-            route_key=None,
-            profile_key=profile_key,
-            provider=profile.provider,
-            transport=profile.effective_transport(),
-            model=profile.model,
+    ) -> ResolvedModel:
+        """对外标识（profile key）到 ResolvedModel。miss 时 fail-fast。"""
+        key = model_override or default_key or self.default
+        try:
+            profile = self.profiles[key]
+        except KeyError as exc:
+            raise KeyError(
+                f"LLM profile '{key}' not found, available: {list(self.profiles)}"
+            ) from exc
+        return ResolvedModel(
+            profile_key=key,
+            profile=profile,
+            provider=self.providers[profile.provider],
         )
