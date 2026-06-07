@@ -16,7 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SEARCH_DIRS = [REPO_ROOT / "matmaster", REPO_ROOT / "src"]
 
 ALLOWLIST_PREFIXES = [
-    "matmaster/providers/chat_completions_provider.py",
+    "matmaster/providers/transports/chat_completions.py",
 ]
 
 PROTECTED_NAMES = {"arguments", "effective_args", "args"}

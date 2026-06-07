@@ -400,7 +400,6 @@ def _run_single(
     summary: dict[str, Any] = {
         "model": getattr(getattr(resolved, "profile", None), "model", None),
         "profile_key": getattr(resolved, "profile_key", None),
-        "route_key": getattr(resolved, "profile_key", None),
         "status": result.status,
         "reason": result.reason,
         "final_content": result.final_content,

@@ -58,14 +58,17 @@ def _build_chat_completions_transport(
     )
 
 
-_TRANSPORT_BUILDERS: dict[
-    str, Callable[[LLMProfileConfig, ProviderConfig], LLMProvider]
-] = {
+_TRANSPORT_BUILDERS: dict[str, Callable[..., LLMProvider]] = {
     "chat_completions": _build_chat_completions_transport,
 }
 
 
-def _dispatch(profile: LLMProfileConfig, provider: ProviderConfig) -> LLMProvider:
+def _dispatch(
+    profile: LLMProfileConfig,
+    provider: ProviderConfig,
+    *,
+    extra_body: dict | None = None,
+) -> LLMProvider:
     try:
         builder = _TRANSPORT_BUILDERS[provider.transport]
     except KeyError as exc:
@@ -73,7 +76,7 @@ def _dispatch(profile: LLMProfileConfig, provider: ProviderConfig) -> LLMProvide
             f"unsupported transport: {provider.transport!r}, "
             f"available: {list(_TRANSPORT_BUILDERS)}"
         ) from exc
-    return builder(profile, provider)
+    return builder(profile, provider, extra_body=extra_body)
 
 
 def build_provider(
@@ -152,11 +155,7 @@ def build_byok_provider_bundle(
         (base_url.split("//", 1)[-1].split("/", 1)[0] if base_url else ""),
         sorted((extra_body or {}).keys()),
     )
-    provider = _build_chat_completions_transport(
-        profile,
-        provider_conn,
-        extra_body=extra_body,
-    )
+    provider = _dispatch(profile, provider_conn, extra_body=extra_body)
     return LLMProviderBundle(
         provider=provider,
         model=model,

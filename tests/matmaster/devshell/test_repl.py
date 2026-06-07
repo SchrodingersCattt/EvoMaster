@@ -227,7 +227,6 @@ class TestCliRunMode:
         assert json.loads(captured.out) == {
             "model": "m",
             "profile_key": "p",
-            "route_key": "p",
             "status": "completed",
             "reason": "natural",
             "final_content": "OK",
