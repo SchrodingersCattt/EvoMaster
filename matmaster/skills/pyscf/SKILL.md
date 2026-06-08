@@ -127,7 +127,7 @@ mf.mulliken_pop()
 2. Prepare structure file (XYZ preferred) if not embedding coordinates
 3. Place script + structure in one directory
 4. Submit: `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/dp/native/prod-19853/pyscf-geometric:dev-260305", cmd="python run_pyscf.py > log 2>&1")`
-5. Poll: `Bohrium(action="poll", job_id=<id>)`
+5. Query current status when needed: `Bohrium(action="query", job_id=<id>)`
 
 ## Reference
 

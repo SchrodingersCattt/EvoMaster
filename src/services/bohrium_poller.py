@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import Callable
 from typing import Any
 
@@ -155,3 +156,49 @@ class BohriumJobPoller:
         return BohriumContext.from_credentials(
             cred, sandbox=bool(job["sandbox"]), source="poller"
         )
+
+
+def _env_int(name: str, default: int) -> int:
+    """Read an int env var; missing or invalid values fall back to default."""
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        logger.warning("invalid int env %s=%r, using default %d", name, raw, default)
+        return default
+
+
+class BohriumMonitor:
+    """Single Bohrium monitor tick unit for the external monitor process."""
+
+    def __init__(
+        self,
+        *,
+        poller: BohriumJobPoller | None = None,
+        limit: int | None = None,
+        claim_timeout_seconds: int | None = None,
+    ) -> None:
+        self._poller = poller
+        self._limit = (
+            limit if limit is not None else _env_int("BOHRIUM_MONITOR_LIMIT", 50)
+        )
+        self._claim_timeout = (
+            claim_timeout_seconds
+            if claim_timeout_seconds is not None
+            else _env_int("BOHRIUM_MONITOR_CLAIM_TIMEOUT", 120)
+        )
+
+    def tick(self) -> dict[str, int]:
+        """Run one monitor round and never let poller errors escape the loop."""
+        try:
+            if self._poller is None:
+                self._poller = BohriumJobPoller()
+            return self._poller.run_once(
+                limit=self._limit,
+                claim_timeout_seconds=self._claim_timeout,
+            )
+        except Exception:  # noqa: BLE001
+            logger.warning("bohrium monitor tick failed", exc_info=True)
+            return {"claimed": 0, "polled": 0, "errors": 0, "tick_failed": 1}

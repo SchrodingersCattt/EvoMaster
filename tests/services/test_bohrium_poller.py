@@ -240,3 +240,91 @@ def test_poller_marks_unknown_when_access_key_missing(jobs_table) -> None:
     assert row["status"] == "unknown"
     assert row["next_poll_at"] is not None
     assert detail_calls == []
+
+
+class _StubPoller:
+    def __init__(self, summary=None, exc=None):
+        self._summary = summary or {"claimed": 0, "polled": 0, "errors": 0}
+        self._exc = exc
+        self.calls: list[dict] = []
+
+    def run_once(self, *, limit, claim_timeout_seconds):
+        self.calls.append(
+            {"limit": limit, "claim_timeout_seconds": claim_timeout_seconds}
+        )
+        if self._exc is not None:
+            raise self._exc
+        return self._summary
+
+
+def test_monitor_tick_passes_through_summary() -> None:
+    from src.services.bohrium_poller import BohriumMonitor
+
+    stub = _StubPoller(summary={"claimed": 3, "polled": 2, "errors": 1})
+    monitor = BohriumMonitor(poller=stub, limit=7, claim_timeout_seconds=99)
+
+    summary = monitor.tick()
+
+    assert summary == {"claimed": 3, "polled": 2, "errors": 1}
+    assert stub.calls == [{"limit": 7, "claim_timeout_seconds": 99}]
+
+
+def test_monitor_tick_swallows_injected_poller_exception() -> None:
+    from src.services.bohrium_poller import BohriumMonitor
+
+    stub = _StubPoller(exc=RuntimeError("db down"))
+    monitor = BohriumMonitor(poller=stub)
+
+    summary = monitor.tick()
+
+    assert summary == {"claimed": 0, "polled": 0, "errors": 0, "tick_failed": 1}
+
+
+def test_monitor_default_construct_is_db_free_and_lazy(monkeypatch) -> None:
+    """Default construction does not touch DB; tick lazily creates poller."""
+    import src.services.bohrium_poller as mod
+
+    class _BoomPoller:
+        def __init__(self):
+            raise RuntimeError("no DB at construct time")
+
+    monkeypatch.setattr(mod, "BohriumJobPoller", _BoomPoller)
+
+    monitor = mod.BohriumMonitor()
+    summary = monitor.tick()
+
+    assert summary == {"claimed": 0, "polled": 0, "errors": 0, "tick_failed": 1}
+
+
+def test_monitor_default_construct_reads_env_into_run_once(monkeypatch) -> None:
+    import src.services.bohrium_poller as mod
+
+    monkeypatch.setenv("BOHRIUM_MONITOR_LIMIT", "8")
+    monkeypatch.setenv("BOHRIUM_MONITOR_CLAIM_TIMEOUT", "33")
+    captured: dict[str, int] = {}
+
+    class _StubDefaultPoller:
+        def __init__(self):
+            pass
+
+        def run_once(self, *, limit, claim_timeout_seconds):
+            captured["limit"] = limit
+            captured["claim_timeout_seconds"] = claim_timeout_seconds
+            return {"claimed": 0, "polled": 0, "errors": 0}
+
+    monkeypatch.setattr(mod, "BohriumJobPoller", _StubDefaultPoller)
+
+    mod.BohriumMonitor().tick()
+
+    assert captured == {"limit": 8, "claim_timeout_seconds": 33}
+
+
+def test_env_int_missing_and_invalid_fall_back(monkeypatch) -> None:
+    from src.services.bohrium_poller import _env_int
+
+    monkeypatch.delenv("BOHRIUM_X", raising=False)
+    assert _env_int("BOHRIUM_X", 5) == 5
+    monkeypatch.setenv("BOHRIUM_X", "not-an-int")
+    assert _env_int("BOHRIUM_X", 5) == 5
+    monkeypatch.setenv("BOHRIUM_X", "12")
+    assert _env_int("BOHRIUM_X", 5) == 12

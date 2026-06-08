@@ -9,7 +9,7 @@ class TestBohriumToolDescriptionPromptRebalance:
     def test_description_is_capability_summary(self) -> None:
         assert "HPC platform operations" in BohriumTool.description
         assert 'action="submit"' not in BohriumTool.description
-        assert 'action="poll"' not in BohriumTool.description
+        assert 'action="query"' not in BohriumTool.description
         assert 'action="download"' not in BohriumTool.description
         assert len(BohriumTool.description) < 250
 
@@ -21,7 +21,7 @@ class TestBohriumToolDescriptionPromptRebalance:
         assert prompt is not None
         assert "Bohrium tool usage" in prompt
         assert "submit" in prompt
-        assert "poll" in prompt
+        assert "query" in prompt
         assert "download" in prompt
         assert "kill" in prompt
         assert "list_images" in prompt

@@ -90,12 +90,12 @@ class TestBohriumSessionCredentials:
         monkeypatch.setattr(bohrium_client_module, "_get", fake_get)
         monkeypatch.delenv("BOHRIUM_USE_SANDBOX", raising=False)
 
-        result = asyncio.run(tool.execute({"action": "poll", "job_id": "job-1"}))
+        result = asyncio.run(tool.execute({"action": "query", "job_id": "job-1"}))
         assert result.status == "success"
         assert get_calls[0][1] == "session-ak"  # Used session credential, not env
 
-    def test_poll_rejects_result_dir_parameter(self, tmp_path, monkeypatch):
-        """poll no longer accepts result_dir - directs to download action."""
+    def test_query_rejects_result_dir_parameter(self, tmp_path, monkeypatch):
+        """query no longer accepts result_dir - directs to download action."""
         monkeypatch.delenv("BOHRIUM_ACCESS_KEY", raising=False)
         monkeypatch.delenv("BOHRIUM_PROJECT_ID", raising=False)
 
@@ -104,7 +104,7 @@ class TestBohriumSessionCredentials:
 
         result = asyncio.run(
             tool.execute(
-                {"action": "poll", "job_id": "job-1", "result_dir": "/share/out"}
+                {"action": "query", "job_id": "job-1", "result_dir": "/share/out"}
             )
         )
         assert result.status == "error"
@@ -169,7 +169,7 @@ class TestBohriumSessionCredentials:
         monkeypatch.delenv("BOHRIUM_BASE_URL", raising=False)
 
         tool = BohriumTool(workdir=tmp_path)
-        result = asyncio.run(tool.execute({"action": "poll", "job_id": "job-1"}))
+        result = asyncio.run(tool.execute({"action": "query", "job_id": "job-1"}))
         assert result.status == "error"
         assert (
             "credential" in result.content.lower()
@@ -192,6 +192,6 @@ class TestBohriumSessionCredentials:
 
         monkeypatch.setattr(bohrium_client_module, "_get", fake_get)
 
-        result = asyncio.run(tool.execute({"action": "poll", "job_id": "job-1"}))
+        result = asyncio.run(tool.execute({"action": "query", "job_id": "job-1"}))
         assert result.status == "success"
         assert get_calls[0][1] == "env-ak"

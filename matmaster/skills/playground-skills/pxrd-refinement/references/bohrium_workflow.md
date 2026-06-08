@@ -138,10 +138,10 @@ Submit (returns `job_id`):
             machine="c64_m256_cpu",
             cmd="bash run.sh > log 2>&1")
 
-Poll (non-blocking, has built-in 60 s throttle):
+Query current status when needed (single-shot, no blocking wait):
 
-    Bohrium(action="poll", job_id=job_id)
-    # status=Running cached=true  -> do other work, poll again later
+    Bohrium(action="query", job_id=job_id)
+    # status=Running              -> do other work; background monitoring continues
     # status=Finished              -> download
     # status=Failed                -> download anyway, read log
 

@@ -99,7 +99,7 @@ Before submission, verify:
 3. Diagnose: `diagnose_input.py --software cp2k --input input.inp`
 4. Collect all files into one directory (input.inp + structure + any auxiliary files)
 5. Submit: `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/cp2k:2024.1", cmd="OMP_NUM_THREADS=1 mpirun -np 32 cp2k.popt -i input.inp > log 2>&1", machine="c64_m256_cpu")`
-6. Poll: `Bohrium(action="poll", job_id=<id>)`
+6. Query current status when needed: `Bohrium(action="query", job_id=<id>)`
 
 ## Reference
 

@@ -522,13 +522,13 @@ class TestBuildRuntimeFullToolRunner:
                                 "cached": False,
                             },
                             {
-                                "action": "poll",
+                                "action": "query",
                                 "job_id": "job-1",
                                 "status": "Running",
                                 "cached": False,
                             },
                             {
-                                "action": "poll",
+                                "action": "query",
                                 "job_id": "job-1",
                                 "status": "Running",
                                 "cached": True,
