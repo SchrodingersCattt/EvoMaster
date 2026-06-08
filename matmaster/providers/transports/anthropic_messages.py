@@ -38,6 +38,122 @@ class AnthropicPromptCacheOptions:
     min_flexible_chars: int = 1000
 
 
+@dataclass(frozen=True)
+class _CacheTarget:
+    section: str
+    index: int
+    content_index: int | None
+    priority: int
+
+
+def _message_text_size(message: dict[str, Any]) -> int:
+    content = message.get("content")
+    if isinstance(content, str):
+        return len(content.strip())
+    if isinstance(content, list):
+        return sum(
+            len(part["text"].strip())
+            for part in content
+            if isinstance(part, dict) and isinstance(part.get("text"), str)
+        )
+    return 0
+
+
+def _select_flexible_cache_target(
+    messages: list[dict[str, Any]],
+    used: set[int],
+    options: AnthropicPromptCacheOptions,
+) -> _CacheTarget | None:
+    candidates: list[tuple[int, int]] = []
+    for idx, message in enumerate(messages):
+        if idx in used:
+            continue
+        if message.get("role") != "user":
+            continue
+        size = _message_text_size(message)
+        if size >= options.min_flexible_chars:
+            candidates.append((size, idx))
+    if not candidates:
+        return None
+    _, idx = max(candidates)
+    return _CacheTarget("message", idx, None, 3)
+
+
+def _select_anthropic_cache_targets(
+    *,
+    has_system: bool,
+    messages: list[dict[str, Any]],
+    options: AnthropicPromptCacheOptions,
+) -> list[_CacheTarget]:
+    targets: list[_CacheTarget] = []
+    used_slots: set[tuple[int, int | None]] = set()
+    max_block_targets = options.max_breakpoints - (1 if options.automatic else 0)
+    max_block_targets = max(0, max_block_targets)
+
+    def append(target: _CacheTarget) -> None:
+        if len(targets) >= max_block_targets:
+            return
+        slot = (target.index, target.content_index)
+        if target.section == "message" and slot in used_slots:
+            return
+        targets.append(target)
+        if target.section == "message":
+            used_slots.add(slot)
+
+    if options.system_prompt_breakpoint and has_system:
+        append(_CacheTarget("system", 0, None, 0))
+    if options.automatic and options.latest_user_breakpoint:
+        for idx in range(len(messages) - 1, -1, -1):
+            if messages[idx].get("role") == "user":
+                append(_CacheTarget("message", idx, None, 1))
+                break
+    if options.automatic and options.tool_result_breakpoint:
+        for idx in range(len(messages) - 1, -1, -1):
+            blocks = messages[idx].get("content")
+            if messages[idx].get("role") != "user" or not isinstance(blocks, list):
+                continue
+            result_indexes = [
+                block_idx
+                for block_idx, block in enumerate(blocks)
+                if isinstance(block, dict) and block.get("type") == "tool_result"
+            ]
+            if result_indexes:
+                append(_CacheTarget("message", idx, result_indexes[-1], 2))
+                break
+    if options.automatic and options.flexible_breakpoint:
+        used_message_indexes = {
+            idx for idx, block_idx in used_slots if block_idx is None
+        }
+        flexible = _select_flexible_cache_target(messages, used_message_indexes, options)
+        if flexible is not None:
+            append(flexible)
+    return targets
+
+
+def _with_cache_control(
+    block: dict[str, Any], cache_control: dict[str, str]
+) -> dict[str, Any]:
+    out = dict(block)
+    out["cache_control"] = dict(cache_control)
+    return out
+
+
+def _mark_content_block(
+    message: dict[str, Any],
+    cache_control: dict[str, str],
+    content_index: int | None = None,
+) -> None:
+    content = message.get("content")
+    if isinstance(content, list) and content:
+        idx = content_index if content_index is not None else len(content) - 1
+        content[idx] = _with_cache_control(content[idx], cache_control)
+        return
+    if isinstance(content, str):
+        message["content"] = [
+            {"type": "text", "text": content, "cache_control": dict(cache_control)}
+        ]
+
+
 def _text_block(text: str | None) -> list[dict[str, Any]]:
     if not text:
         return []
@@ -224,15 +340,45 @@ class AnthropicMessagesTransport(Transport):
     ) -> dict[str, Any]:
         system_messages = [m for m in messages if isinstance(m, SystemMessage)]
         system_text = "\n\n".join(m.content or "" for m in system_messages).strip()
+        converted_messages = self.convert_messages(messages)
+        system_value: str | list[dict[str, Any]] | None = system_text or None
+        options = self._prompt_cache_options
+        if options is not None:
+            targets = _select_anthropic_cache_targets(
+                has_system=bool(system_value),
+                messages=converted_messages,
+                options=options,
+            )
+            for target in targets:
+                if target.section == "system" and isinstance(system_value, str):
+                    system_value = [
+                        {
+                            "type": "text",
+                            "text": system_value,
+                            "cache_control": dict(options.cache_control),
+                        }
+                    ]
+                elif target.section == "message":
+                    _mark_content_block(
+                        converted_messages[target.index],
+                        options.cache_control,
+                        target.content_index,
+                    )
+            if options.automatic:
+                kwargs_extra_body = {"cache_control": dict(options.cache_control)}
+            else:
+                kwargs_extra_body = {}
+        else:
+            kwargs_extra_body = {}
         converted_tools = _convert_tools(tools)
         mapped_tool_choice = _map_tool_choice(tool_choice)
         kwargs: dict[str, Any] = {
             "model": self._model,
-            "messages": self.convert_messages(messages),
+            "messages": converted_messages,
             "thinking": {"type": "adaptive", "display": "summarized"},
         }
-        if system_text:
-            kwargs["system"] = system_text
+        if system_value:
+            kwargs["system"] = system_value
         if self._reasoning_effort:
             kwargs["output_config"] = {"effort": self._reasoning_effort}
         if self._max_tokens is not None:
@@ -245,6 +391,8 @@ class AnthropicMessagesTransport(Transport):
             kwargs["tool_choice"] = {"type": "none"}
         if stream:
             kwargs["stream"] = True
+        if kwargs_extra_body:
+            kwargs["extra_body"] = kwargs_extra_body
         return kwargs
 
     def normalize_response(self, raw: Any) -> LLMResponse:
