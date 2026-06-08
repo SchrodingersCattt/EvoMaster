@@ -234,6 +234,7 @@ class AssistantMessage(Message):
     reasoning_content: str | None = None
     provider_state: ProviderState | None = None
 
+
 class ToolMessage(Message):
     """Tool execution result message."""
 

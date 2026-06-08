@@ -26,8 +26,6 @@ from matmaster.types.messages import (
 
 logger = logging.getLogger(__name__)
 
-_OPENAI_COMPATIBLE_ROLES = {"system", "user", "assistant", "tool"}
-
 
 def _user_message_to_dict(message: UserMessage) -> dict[str, Any]:
     if not message.images:
@@ -73,71 +71,6 @@ def _message_to_openai_dict(message: Message) -> dict[str, Any]:
     if payload.get("content") is None:
         payload["content"] = ""
     return payload
-
-
-def _validate_user_content(content: Any, idx: int) -> None:
-    if isinstance(content, str):
-        return
-    if not isinstance(content, list):
-        raise LLMError(
-            f"Outbound user message content must be string or content parts at index {idx}, "
-            f"got {type(content).__name__}",
-            retryable=False,
-            error_category="payload_validation",
-        )
-    for part_idx, part in enumerate(content):
-        if not isinstance(part, dict):
-            raise LLMError(
-                f"Outbound user content part must be dict at index {idx}.{part_idx}, "
-                f"got {type(part).__name__}",
-                retryable=False,
-                error_category="payload_validation",
-            )
-        part_type = part.get("type")
-        if part_type == "text":
-            if isinstance(part.get("text"), str):
-                continue
-            raise LLMError(
-                f"Outbound user text content part must include string text at index {idx}.{part_idx}",
-                retryable=False,
-                error_category="payload_validation",
-            )
-        if part_type == "image_url":
-            image_url = part.get("image_url")
-            if isinstance(image_url, dict) and isinstance(image_url.get("url"), str):
-                continue
-            raise LLMError(
-                f"Outbound user image content part must include image_url.url at index {idx}.{part_idx}",
-                retryable=False,
-                error_category="payload_validation",
-            )
-        raise LLMError(
-            f"Unsupported outbound user content part type at index {idx}.{part_idx}: {part_type!r}",
-            retryable=False,
-            error_category="payload_validation",
-        )
-
-
-def _validate_openai_messages(messages: list[dict[str, Any]]) -> None:
-    for idx, message in enumerate(messages):
-        role = message.get("role")
-        if role not in _OPENAI_COMPATIBLE_ROLES:
-            raise LLMError(
-                f"Unsupported outbound message role at index {idx}: {role!r}",
-                retryable=False,
-                error_category="payload_validation",
-            )
-        content = message.get("content")
-        if role == "user":
-            _validate_user_content(content, idx)
-            continue
-        if not isinstance(content, str):
-            raise LLMError(
-                f"Outbound message content must be string for {role} message "
-                f"at index {idx}, got {type(content).__name__}",
-                retryable=False,
-                error_category="payload_validation",
-            )
 
 
 @dataclass
@@ -450,9 +383,7 @@ class ChatCompletionsTransport(Transport):
     def convert_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
         """canonical list[Message] -> OpenAI-compatible wire dicts."""
         validate_tool_turn_sequence(messages)
-        wire = [_message_to_openai_dict(message) for message in messages]
-        _validate_openai_messages(wire)
-        return wire
+        return [_message_to_openai_dict(message) for message in messages]
 
     def build_kwargs(
         self,
