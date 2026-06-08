@@ -180,8 +180,7 @@ class AnthropicMessagesTransport(Transport):
         return {"role": "assistant", "content": blocks}
 
     def convert_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
-        if any(isinstance(message, ToolMessage) for message in messages):
-            validate_tool_turn_sequence(messages)
+        validate_tool_turn_sequence(messages)
         out: list[dict[str, Any]] = []
         idx = 0
         while idx < len(messages):

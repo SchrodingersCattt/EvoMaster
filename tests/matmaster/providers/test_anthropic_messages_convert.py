@@ -88,7 +88,9 @@ def test_assistant_replays_matching_thinking_before_tool_use() -> None:
         tool_calls=[ToolCallData(id="toolu_1", name="search", arguments={"q": "x"})],
     )
 
-    assert provider.convert_messages([msg]) == [
+    assert provider.convert_messages(
+        [msg, ToolMessage(content="result", tool_call_id="toolu_1", tool_name="search")]
+    ) == [
         {
             "role": "assistant",
             "content": [
@@ -100,7 +102,17 @@ def test_assistant_replays_matching_thinking_before_tool_use() -> None:
                     "input": {"q": "x"},
                 },
             ],
-        }
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "toolu_1",
+                    "content": "result",
+                }
+            ],
+        },
     ]
 
 
@@ -118,14 +130,26 @@ def test_mismatched_provider_state_is_discarded_but_content_and_tools_remain() -
         tool_calls=[ToolCallData(id="toolu_1", name="search", arguments={})],
     )
 
-    assert _provider().convert_messages([msg]) == [
+    assert _provider().convert_messages(
+        [msg, ToolMessage(content="result", tool_call_id="toolu_1", tool_name="search")]
+    ) == [
         {
             "role": "assistant",
             "content": [
                 {"type": "text", "text": "visible"},
                 {"type": "tool_use", "id": "toolu_1", "name": "search", "input": {}},
             ],
-        }
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "toolu_1",
+                    "content": "result",
+                }
+            ],
+        },
     ]
 
 
@@ -171,6 +195,62 @@ def test_tool_choice_forced_modes_fail_fast_under_thinking(tool_choice) -> None:
         _provider().build_kwargs(
             [UserMessage(content="hi")], tools=[], tool_choice=tool_choice
         )
+
+    assert exc_info.value.retryable is False
+    assert exc_info.value.error_category == "bad_request"
+
+
+def test_assistant_tool_call_without_tool_result_fails_fast() -> None:
+    with pytest.raises(LLMError) as exc_info:
+        _provider().convert_messages(
+            [
+                AssistantMessage(
+                    content="",
+                    tool_calls=[
+                        ToolCallData(id="toolu_1", name="search", arguments={})
+                    ],
+                )
+            ]
+        )
+
+    assert exc_info.value.retryable is False
+    assert exc_info.value.error_category == "bad_request"
+
+
+def test_duplicate_assistant_tool_call_ids_fail_fast() -> None:
+    with pytest.raises(LLMError) as exc_info:
+        _provider().convert_messages(
+            [
+                AssistantMessage(
+                    content="",
+                    tool_calls=[
+                        ToolCallData(id="toolu_1", name="search", arguments={}),
+                        ToolCallData(id="toolu_1", name="lookup", arguments={}),
+                    ],
+                )
+            ]
+        )
+
+    assert exc_info.value.retryable is False
+    assert exc_info.value.error_category == "bad_request"
+
+
+@pytest.mark.parametrize(
+    "messages",
+    [
+        [ToolMessage(content="orphan", tool_call_id="toolu_1", tool_name="search")],
+        [
+            AssistantMessage(
+                content="",
+                tool_calls=[ToolCallData(id="toolu_a", name="search", arguments={})],
+            ),
+            ToolMessage(content="mismatch", tool_call_id="toolu_b", tool_name="search"),
+        ],
+    ],
+)
+def test_orphan_or_mismatched_tool_result_fails_fast(messages) -> None:
+    with pytest.raises(LLMError) as exc_info:
+        _provider().convert_messages(messages)
 
     assert exc_info.value.retryable is False
     assert exc_info.value.error_category == "bad_request"
