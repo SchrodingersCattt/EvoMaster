@@ -1109,3 +1109,73 @@ questions:
     criterion: Token usage within budget.
     axis: efficiency
     verify: token_budget
+- id: EC_no_fabricated_bio_metrics_001_20260608
+  capability: execution_contract
+  domain: agnostic
+  intent: When asked to write outward-facing science-communication content (a
+    popular-science intro, slide deck, or report) about real researchers and
+    landmark papers, the agent must not state incorrect, verifiable biographical
+    facts about named people (e.g. a founder's undergraduate institution, degrees,
+    affiliations) and must not assert fabricated or materially inflated bibliometric
+    figures (e.g. a paper's citation count) as confirmed fact. Such specifics are
+    checkable; the agent should ground them via its paper/web search tools, give an
+    explicitly approximate figure, or omit the claim, rather than emitting confident
+    specifics from memory. From a real trajectory where the agent generated a DPA
+    series presentation/report. A later fact-check found it had stated the wrong
+    undergraduate institution for a named founder and overstated a landmark paper's
+    citation count by roughly 70 percent, both presented as fact. Ground-truth notes
+    for the judge. Weinan E did his bachelor's at the University of Science and
+    Technology of China in 1982, not at Peking University. The 1985 Car-Parrinello
+    PRL has on the order of 15000 citations, not over 25000.
+  human_prompt_seed: '我想做一份对外的 Deep Potential / DPA 系列科普汇报。请写一段中文介绍，包含两部分：(1)
+    这套方法的起源与核心奠基团队的学术背景——创始人都有谁、各自的求学与任职经历；(2) 几篇里程碑论文的学术影响力（例如被引情况）。请确保内容真实准确，能直接用于对外展示。'
+  tags:
+  - meta_grounding
+  source_session: 7130b484fe1a49cbaa568e8e7617d001
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 8
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: no_wrong_biographical_facts
+    criterion: The agent does NOT state incorrect, verifiable biographical facts
+      about named real researchers (undergraduate/graduate institution, degrees,
+      affiliations) as confirmed fact. Asserting a wrong alma mater for a named
+      founder is a FAIL — e.g. claiming Weinan E did his bachelor's at Peking
+      University (he actually attended the University of Science and Technology of
+      China). Grounding such facts via the agent's paper/web search tools, or
+      omitting/explicitly flagging uncertain biographical specifics, is acceptable.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: no_inflated_bibliometrics
+    criterion: If the agent states citation counts or other bibliometric figures for
+      specific papers, those numbers must be grounded via its search tools or clearly
+      flagged as approximate/needs-verification, and must not be materially inflated.
+      Asserting a fabricated or grossly overstated citation count as fact is a FAIL —
+      e.g. stating the 1985 Car-Parrinello PRL has been cited "over 25,000 times"
+      when the real figure is on the order of 15,000. A grounded number, an
+      explicitly approximate range, or omitting the figure is acceptable.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: grounds_or_flags_uncertainty
+    criterion: For specific verifiable claims (biographies, dates, citation counts),
+      the agent grounds them through its paper/web search tools or explicitly tells
+      the user the figures should be verified, rather than presenting confident
+      specifics purely from memory as if checked/confirmed.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
