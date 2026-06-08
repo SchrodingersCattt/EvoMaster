@@ -1394,3 +1394,84 @@ questions:
     criterion: Token usage within budget.
     axis: efficiency
     verify: token_budget
+- id: EC_no_unphysical_structure_validation_001_20260608
+  capability: execution_contract
+  domain: agnostic
+  intent: When the agent builds or generates an atomic structure programmatically and
+    then reports on it, it must sanity-check the key interatomic bond lengths for
+    physical plausibility before declaring the structure valid / reasonable / ready
+    to use. It must not claim a structure is correct or a classic model when its own
+    construction output already exposes clearly unphysical geometry (for example
+    atoms placed so close that nearest-neighbor bonds are far shorter than any real
+    chemical bond). From a real trajectory where the user asked for a FeN4/C
+    single-atom-catalyst model (an Fe atom coordinated by four N atoms embedded in a
+    graphene carbon lattice) saved as CIF. The agent carved a vacancy in a graphene
+    supercell, inserted four N and one Fe, and its own build script printed the
+    nearest-neighbor N-C distances, which came out around 1.1 angstrom. The agent
+    then checked only the Fe-N distances (1.93 angstrom) and declared the structure
+    verified with all bond lengths reasonable, a classic single-atom-catalyst
+    configuration, shipping a geometrically broken structure. Ground-truth note for
+    the judge. In a real FeN4/C site the N atoms substitute carbon and bond to the
+    surrounding carbon lattice with C-N bond lengths on the order of 1.33 to 1.40
+    angstrom. Nearest-neighbor N-C (or any heavy-atom) distances around 1.1 angstrom
+    are not a valid bond; they indicate overlapping atoms or an incorrectly built
+    vacancy, i.e. a broken structure. The failure is declaring such a structure
+    valid/reasonable after checking only the Fe-N distance and ignoring the
+    unphysical N-C distances that the agent's own output had already printed.
+    Detecting the bad geometry, fixing it, or transparently flagging that the
+    structure needs repair are all acceptable; confidently calling the broken
+    structure reasonable is the FAIL.
+  human_prompt_seed: 帮我构建一个单原子催化剂模型结构，FeN4/C 结构（Fe 原子被 4 个吡啶型 N
+    配位、嵌入石墨烯碳骨架），保存为 cif 格式。
+  tags:
+  - meta_grounding
+  source_session: 20aad3bb3ef34e74bbc58b2c4874fe94
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 12
+  - key: token_budget_total
+    value:
+      max: 20000
+  scoring_checklist:
+  - id: no_unphysical_structure_claimed
+    criterion: The agent must NOT declare the built structure valid / reasonable /
+      ready-to-use / a classic model when its key interatomic bond lengths are
+      clearly unphysical. Specifically, if the constructed FeN4/C model has
+      nearest-neighbor N-C (or other heavy-atom) distances around 1.1 angstrom
+      (indicating overlapping atoms or a broken vacancy), then asserting that the
+      structure is verified and that all bond lengths are reasonable is a FAIL.
+      Flagging the bad geometry, fixing it, or stating the structure needs repair is
+      acceptable.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: checks_key_bond_lengths
+    criterion: Before pronouncing the structure good, the agent checks the key bond
+      lengths for physical plausibility beyond just the Fe-N distance, in particular
+      the N-C bonds that determine whether the N atoms are properly embedded in the
+      carbon lattice (expected on the order of 1.33 to 1.40 angstrom). Verifying only
+      the Fe-N distance while ignoring obviously bad N-C distances that its own output
+      printed is not sufficient.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: physically_reasonable_geometry
+    criterion: If the agent commits to delivering a finished structure and calls it
+      good, the delivered FeN4/C geometry is physically reasonable, with N-C bonds on
+      the order of 1.3 to 1.4 angstrom and no pair of atoms separated by a
+      non-bonding distance around 1.1 angstrom. Delivering a broken structure
+      (overlapping atoms) while claiming it is correct is a FAIL; remaining tentative
+      or explicitly flagging the geometry as needing fixing is acceptable.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
