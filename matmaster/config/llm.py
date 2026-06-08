@@ -15,6 +15,25 @@ class ProviderConfig(BaseModel):
     base_url: str | None = None
 
 
+class PromptCacheConfig(BaseModel):
+    """Profile-level prompt cache policy consumed by native Anthropic transport."""
+
+    system_prompt_breakpoint: bool = False
+    automatic: bool = False
+    latest_user_breakpoint: bool = True
+    tool_result_breakpoint: bool = False
+    flexible_breakpoint: bool = False
+    max_breakpoints: int = Field(default=4, ge=1, le=4)
+    min_flexible_chars: int = Field(default=1000, ge=1)
+    ttl: Literal["5m", "1h"] = "5m"
+
+    def cache_control(self) -> dict[str, str]:
+        cc = {"type": "ephemeral"}
+        if self.ttl == "1h":
+            cc["ttl"] = "1h"
+        return cc
+
+
 class LLMProfileConfig(BaseModel):
     """一个对外可选模型（profile key = 对外标识）。纯数据。"""
 
@@ -32,6 +51,7 @@ class LLMProfileConfig(BaseModel):
     stream_idle_timeout: float | None = None
     max_retries: int = 3
     retry_delay: float = 1.0
+    prompt_cache: PromptCacheConfig | None = None
 
 
 class ResolvedModel(NamedTuple):

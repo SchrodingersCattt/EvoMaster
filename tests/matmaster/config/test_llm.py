@@ -7,6 +7,7 @@ import pytest
 from matmaster.config.llm import (
     LLMConfig,
     LLMProfileConfig,
+    PromptCacheConfig,
     ProviderConfig,
     ResolvedModel,
 )
@@ -107,3 +108,46 @@ class TestValidation:
                 },
                 default="a",
             )
+
+
+class TestPromptCacheConfig:
+    def test_defaults_match_anthropic_native_policy(self) -> None:
+        cfg = PromptCacheConfig()
+
+        assert cfg.system_prompt_breakpoint is False
+        assert cfg.automatic is False
+        assert cfg.latest_user_breakpoint is True
+        assert cfg.tool_result_breakpoint is False
+        assert cfg.flexible_breakpoint is False
+        assert cfg.max_breakpoints == 4
+        assert cfg.min_flexible_chars == 1000
+        assert cfg.ttl == "5m"
+        assert cfg.cache_control() == {"type": "ephemeral"}
+
+    def test_cache_control_includes_one_hour_ttl_only_when_requested(self) -> None:
+        cfg = PromptCacheConfig(ttl="1h")
+
+        assert cfg.cache_control() == {"type": "ephemeral", "ttl": "1h"}
+
+    def test_profile_accepts_prompt_cache(self) -> None:
+        profile = LLMProfileConfig(
+            provider="litellm-anthropic",
+            model="claude-opus-4-6",
+            context_limit=200_000,
+            prompt_cache={
+                "system_prompt_breakpoint": True,
+                "automatic": True,
+                "latest_user_breakpoint": True,
+                "tool_result_breakpoint": True,
+                "flexible_breakpoint": True,
+                "max_breakpoints": 4,
+                "min_flexible_chars": 1000,
+                "ttl": "1h",
+            },
+        )
+
+        assert isinstance(profile.prompt_cache, PromptCacheConfig)
+        assert profile.prompt_cache.cache_control() == {
+            "type": "ephemeral",
+            "ttl": "1h",
+        }
