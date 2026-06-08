@@ -55,6 +55,7 @@ class _StreamBlockState:
     thinking: str = ""
     signature: str | None = None
     arguments: str = ""
+    redacted_thinking: dict[str, Any] | None = None
 
 
 def _message_text_size(message: dict[str, Any]) -> int:
@@ -285,23 +286,29 @@ def _dump_model(value: Any) -> Any:
     return out
 
 
+def _usage_value(usage: Any, key: str) -> Any:
+    if isinstance(usage, dict):
+        return usage.get(key)
+    return getattr(usage, key, None)
+
+
 def _anthropic_usage_to_scalar_dict(usage: Any) -> dict[str, int]:
     if usage is None:
         return {}
-    prompt = int(getattr(usage, "input_tokens", 0) or 0)
-    completion = int(getattr(usage, "output_tokens", 0) or 0)
+    prompt = int(_usage_value(usage, "input_tokens") or 0)
+    completion = int(_usage_value(usage, "output_tokens") or 0)
     out = {
         "prompt_tokens": prompt,
         "completion_tokens": completion,
         "total_tokens": prompt + completion,
     }
-    cache_read = getattr(usage, "cache_read_input_tokens", None)
+    cache_read = _usage_value(usage, "cache_read_input_tokens")
     if isinstance(cache_read, int) and cache_read > 0:
         out["cache_read_tokens"] = cache_read
-    cache_write = getattr(usage, "cache_creation_input_tokens", None)
+    cache_write = _usage_value(usage, "cache_creation_input_tokens")
     if isinstance(cache_write, int) and cache_write > 0:
         out["cache_write_tokens"] = cache_write
-    details = getattr(usage, "output_tokens_details", None)
+    details = _usage_value(usage, "output_tokens_details")
     if isinstance(details, dict):
         reasoning = details.get("thinking_tokens")
     else:
@@ -536,15 +543,16 @@ class AnthropicMessagesTransport(Transport):
         blocks: dict[int, _StreamBlockState] = {}
         thinking_payload: list[dict[str, Any]] = []
         next_tool_call_index = 0
-        input_tokens = 0
-        output_tokens = 0
+        usage_snapshot: dict[str, Any] = {}
         finish_reason: str | None = None
 
         async for event in raw_iter:
             event_type = getattr(event, "type", None)
             if event_type == "message_start":
                 usage = getattr(getattr(event, "message", None), "usage", None)
-                input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+                dumped_usage = _dump_model(usage)
+                if isinstance(dumped_usage, dict):
+                    usage_snapshot.update(dumped_usage)
                 continue
             if event_type == "content_block_start":
                 block = getattr(event, "content_block", None)
@@ -557,6 +565,10 @@ class AnthropicMessagesTransport(Transport):
                 if block_type == "tool_use":
                     state.output_index = next_tool_call_index
                     next_tool_call_index += 1
+                elif block_type == "redacted_thinking":
+                    dumped = _dump_model(block)
+                    if isinstance(dumped, dict):
+                        state.redacted_thinking = dumped
                 blocks[int(getattr(event, "index", 0))] = state
                 if block_type == "tool_use":
                     yield StreamChunk(
@@ -604,13 +616,21 @@ class AnthropicMessagesTransport(Transport):
                     if state.signature:
                         payload["signature"] = state.signature
                     thinking_payload.append(payload)
+                elif (
+                    state is not None
+                    and state.type == "redacted_thinking"
+                    and state.redacted_thinking is not None
+                ):
+                    thinking_payload.append(state.redacted_thinking)
                 continue
             if event_type == "message_delta":
                 finish_reason = _map_stop_reason(
                     getattr(getattr(event, "delta", None), "stop_reason", None)
                 )
                 usage = getattr(event, "usage", None)
-                output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+                dumped_usage = _dump_model(usage)
+                if isinstance(dumped_usage, dict):
+                    usage_snapshot.update(dumped_usage)
                 if finish_reason:
                     yield StreamChunk(finish_reason=finish_reason)
 
@@ -623,13 +643,10 @@ class AnthropicMessagesTransport(Transport):
                     payload={"thinking": thinking_payload},
                 )
             )
-        if input_tokens or output_tokens:
+        if usage_snapshot:
             yield StreamChunk(
-                usage={
-                    "prompt_tokens": input_tokens,
-                    "completion_tokens": output_tokens,
-                    "total_tokens": input_tokens + output_tokens,
-                }
+                usage=_anthropic_usage_to_scalar_dict(usage_snapshot),
+                usage_vendor=usage_snapshot,
             )
 
     def classify_error(self, exc: Exception) -> LLMError | None:
@@ -658,7 +675,7 @@ class AnthropicMessagesTransport(Transport):
         timeout: float | None = None,
     ) -> AsyncIterator[StreamChunk]:
         client = self._ensure_client()
-        kwargs = self.build_kwargs(messages, tools, stream=True)
+        kwargs = self.build_kwargs(messages, tools)
         if timeout is not None:
             kwargs["timeout"] = timeout
         try:

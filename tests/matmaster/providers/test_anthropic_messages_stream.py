@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from matmaster.providers.transports.anthropic_messages import AnthropicMessagesTransport
-from matmaster.types.messages import ProviderState
+from matmaster.types.messages import ProviderState, UserMessage
 
 
 async def _aiter(items):
@@ -13,6 +13,36 @@ async def _aiter(items):
 
 def _event(event_type: str, **kwargs):
     return SimpleNamespace(type=event_type, **kwargs)
+
+
+class _FakeStream:
+    def __init__(self, items):
+        self._items = iter(items)
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return None
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        try:
+            return next(self._items)
+        except StopIteration:
+            raise StopAsyncIteration from None
+
+
+class _FakeMessages:
+    def __init__(self, items):
+        self._items = items
+        self.called_kwargs = None
+
+    def stream(self, **kwargs):
+        self.called_kwargs = kwargs
+        return _FakeStream(self._items)
 
 
 class TestNormalizeStream:
@@ -117,3 +147,109 @@ class TestNormalizeStream:
             "completion_tokens": 5,
             "total_tokens": 15,
         }
+
+    async def test_stream_preserves_redacted_thinking_provider_state(self) -> None:
+        provider = AnthropicMessagesTransport(
+            model="claude-opus-4-6",
+            api_key="sk-test",
+        )
+        events = [
+            _event(
+                "content_block_start",
+                index=0,
+                content_block=SimpleNamespace(
+                    type="redacted_thinking",
+                    redacted_data="sealed",
+                ),
+            ),
+            _event("content_block_stop", index=0),
+        ]
+
+        chunks = [chunk async for chunk in provider.normalize_stream(_aiter(events))]
+
+        assert chunks[-1].provider_state == ProviderState(
+            transport="anthropic_messages",
+            payload={
+                "thinking": [
+                    {"type": "redacted_thinking", "redacted_data": "sealed"}
+                ]
+            },
+        )
+
+    async def test_stream_usage_includes_vendor_and_extended_token_fields(
+        self,
+    ) -> None:
+        provider = AnthropicMessagesTransport(
+            model="claude-opus-4-6",
+            api_key="sk-test",
+        )
+        start_usage = SimpleNamespace(
+            input_tokens=10,
+            cache_read_input_tokens=2,
+            cache_creation_input_tokens=3,
+        )
+        delta_usage = {
+            "output_tokens": 5,
+            "output_tokens_details": {"thinking_tokens": 4},
+        }
+        events = [
+            _event(
+                "message_start",
+                message=SimpleNamespace(usage=start_usage),
+            ),
+            _event(
+                "message_delta",
+                delta=SimpleNamespace(stop_reason="end_turn"),
+                usage=delta_usage,
+            ),
+        ]
+
+        chunks = [chunk async for chunk in provider.normalize_stream(_aiter(events))]
+
+        assert chunks[-1].usage == {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+            "cache_read_tokens": 2,
+            "cache_write_tokens": 3,
+            "reasoning_tokens": 4,
+        }
+        assert chunks[-1].usage_vendor is not None
+        assert chunks[-1].usage_vendor["input_tokens"] == 10
+        assert chunks[-1].usage_vendor["output_tokens"] == 5
+        assert chunks[-1].usage_vendor["cache_read_input_tokens"] == 2
+        assert chunks[-1].usage_vendor["cache_creation_input_tokens"] == 3
+        assert chunks[-1].usage_vendor["output_tokens_details"] == {
+            "thinking_tokens": 4
+        }
+
+
+class TestChatStream:
+    async def test_chat_stream_uses_messages_stream_without_stream_kwarg(
+        self,
+    ) -> None:
+        provider = AnthropicMessagesTransport(
+            model="claude-opus-4-6",
+            api_key="sk-test",
+        )
+        messages = _FakeMessages(
+            [
+                _event(
+                    "message_delta",
+                    delta=SimpleNamespace(stop_reason="end_turn"),
+                )
+            ]
+        )
+        provider._client = SimpleNamespace(messages=messages)
+
+        chunks = [
+            chunk
+            async for chunk in provider.chat_stream(
+                [UserMessage(content="hello")],
+                timeout=12.5,
+            )
+        ]
+
+        assert chunks[-1].finish_reason == "stop"
+        assert "stream" not in messages.called_kwargs
+        assert messages.called_kwargs["timeout"] == 12.5
