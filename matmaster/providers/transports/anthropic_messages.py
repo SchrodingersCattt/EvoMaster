@@ -250,6 +250,64 @@ def _map_tool_choice(tool_choice: str | dict | None) -> dict[str, str] | None:
     )
 
 
+def _dump_model(value: Any) -> Any:
+    if value is None:
+        return None
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        try:
+            return model_dump(mode="json", exclude_none=True)
+        except TypeError:
+            return model_dump(exclude_none=True)
+    if isinstance(value, dict):
+        return dict(value)
+    out: dict[str, Any] = {}
+    for key in dir(value):
+        if key.startswith("_"):
+            continue
+        try:
+            item = getattr(value, key)
+        except Exception:
+            continue
+        if isinstance(item, (str, int, float, bool, type(None), dict, list)):
+            out[key] = item
+    return out
+
+
+def _anthropic_usage_to_scalar_dict(usage: Any) -> dict[str, int]:
+    if usage is None:
+        return {}
+    prompt = int(getattr(usage, "input_tokens", 0) or 0)
+    completion = int(getattr(usage, "output_tokens", 0) or 0)
+    out = {
+        "prompt_tokens": prompt,
+        "completion_tokens": completion,
+        "total_tokens": prompt + completion,
+    }
+    cache_read = getattr(usage, "cache_read_input_tokens", None)
+    if isinstance(cache_read, int) and cache_read > 0:
+        out["cache_read_tokens"] = cache_read
+    cache_write = getattr(usage, "cache_creation_input_tokens", None)
+    if isinstance(cache_write, int) and cache_write > 0:
+        out["cache_write_tokens"] = cache_write
+    details = getattr(usage, "output_tokens_details", None)
+    reasoning = getattr(details, "thinking_tokens", None) if details is not None else None
+    if isinstance(reasoning, int) and reasoning > 0:
+        out["reasoning_tokens"] = reasoning
+    return out
+
+
+def _map_stop_reason(stop_reason: str | None) -> str | None:
+    return {
+        "end_turn": "stop",
+        "stop_sequence": "stop",
+        "max_tokens": "length",
+        "tool_use": "tool_calls",
+        "refusal": "content_filter",
+        "pause_turn": "stop",
+    }.get(stop_reason, stop_reason)
+
+
 class AnthropicMessagesTransport(Transport):
     """Native Anthropic Messages API transport."""
 
@@ -410,7 +468,53 @@ class AnthropicMessagesTransport(Transport):
         return kwargs
 
     def normalize_response(self, raw: Any) -> LLMResponse:
-        raise NotImplementedError
+        text_parts: list[str] = []
+        reasoning_parts: list[str] = []
+        thinking_blocks: list[dict[str, Any]] = []
+        tool_calls: list[ToolCallData] = []
+        for block in getattr(raw, "content", []) or []:
+            block_type = getattr(block, "type", None)
+            if block_type == "thinking":
+                thinking = getattr(block, "thinking", "")
+                signature = getattr(block, "signature", None)
+                payload = {"type": "thinking", "thinking": thinking}
+                if signature:
+                    payload["signature"] = signature
+                thinking_blocks.append(payload)
+                if thinking:
+                    reasoning_parts.append(thinking)
+            elif block_type == "redacted_thinking":
+                dumped = _dump_model(block)
+                if isinstance(dumped, dict):
+                    thinking_blocks.append(dumped)
+            elif block_type == "text":
+                text_parts.append(getattr(block, "text", "") or "")
+            elif block_type == "tool_use":
+                tool_calls.append(
+                    ToolCallData(
+                        id=getattr(block, "id"),
+                        name=getattr(block, "name"),
+                        arguments=dict(getattr(block, "input", {}) or {}),
+                    )
+                )
+        provider_state = None
+        if thinking_blocks:
+            from matmaster.types.messages import ProviderState
+
+            provider_state = ProviderState(
+                transport=self.transport_tag,
+                payload={"thinking": thinking_blocks},
+            )
+        usage = getattr(raw, "usage", None)
+        return LLMResponse(
+            content="".join(text_parts) or None,
+            reasoning_content="".join(reasoning_parts) or None,
+            tool_calls=tool_calls or None,
+            finish_reason=_map_stop_reason(getattr(raw, "stop_reason", None)),
+            usage=_anthropic_usage_to_scalar_dict(usage),
+            usage_vendor=_dump_model(usage) if usage is not None else None,
+            provider_state=provider_state,
+        )
 
     async def normalize_stream(self, raw_iter: Any) -> AsyncIterator[StreamChunk]:
         raise NotImplementedError
@@ -428,7 +532,11 @@ class AnthropicMessagesTransport(Transport):
         *,
         tool_choice: str | dict | None = None,
     ) -> LLMResponse:
-        raise NotImplementedError
+        client = self._ensure_client()
+        kwargs = self.build_kwargs(messages, tools, tool_choice=tool_choice)
+        async with client.messages.stream(**kwargs) as stream:
+            final = await stream.get_final_message()
+        return self.normalize_response(final)
 
     async def chat_stream(
         self,
