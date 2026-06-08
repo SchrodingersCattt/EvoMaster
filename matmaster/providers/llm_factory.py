@@ -12,6 +12,10 @@ from matmaster.config.llm import (
     ProviderConfig,
     ResolvedModel,
 )
+from matmaster.providers.transports.anthropic_messages import (
+    AnthropicMessagesTransport,
+    AnthropicPromptCacheOptions,
+)
 from matmaster.providers.transports.chat_completions import ChatCompletionsTransport
 from matmaster.types.llm_provider import LLMProvider
 
@@ -58,8 +62,51 @@ def _build_chat_completions_transport(
     )
 
 
+def _build_anthropic_prompt_cache_options(
+    profile: LLMProfileConfig,
+) -> AnthropicPromptCacheOptions | None:
+    prompt_cache = profile.prompt_cache
+    if prompt_cache is None:
+        return None
+    return AnthropicPromptCacheOptions(
+        system_prompt_breakpoint=prompt_cache.system_prompt_breakpoint,
+        cache_control=prompt_cache.cache_control(),
+        automatic=prompt_cache.automatic,
+        latest_user_breakpoint=prompt_cache.latest_user_breakpoint,
+        tool_result_breakpoint=prompt_cache.tool_result_breakpoint,
+        flexible_breakpoint=prompt_cache.flexible_breakpoint,
+        max_breakpoints=prompt_cache.max_breakpoints,
+        min_flexible_chars=prompt_cache.min_flexible_chars,
+    )
+
+
+def _build_anthropic_messages_transport(
+    profile: LLMProfileConfig,
+    provider: ProviderConfig,
+    *,
+    extra_body: dict | None = None,
+) -> AnthropicMessagesTransport:
+    """profile 平铺字段 + provider 连接到 Anthropic Messages transport。"""
+    if extra_body is not None:
+        raise ValueError("anthropic_messages transport does not support extra_body")
+    return AnthropicMessagesTransport(
+        model=profile.model,
+        api_key=provider.api_key,
+        base_url=provider.base_url,
+        max_tokens=profile.max_tokens,
+        reasoning_effort=profile.reasoning_effort,
+        prompt_cache_options=_build_anthropic_prompt_cache_options(profile),
+        timeout=profile.timeout,
+        stream_timeout=profile.stream_timeout,
+        stream_idle_timeout=profile.stream_idle_timeout,
+        max_retries=profile.max_retries,
+        retry_delay=profile.retry_delay,
+    )
+
+
 _TRANSPORT_BUILDERS: dict[str, Callable[..., LLMProvider]] = {
     "chat_completions": _build_chat_completions_transport,
+    "anthropic_messages": _build_anthropic_messages_transport,
 }
 
 

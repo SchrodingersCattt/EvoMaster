@@ -10,6 +10,10 @@ from matmaster.providers.llm_factory import (
     build_provider,
     build_provider_bundle,
 )
+from matmaster.providers.transports.anthropic_messages import (
+    AnthropicMessagesTransport,
+    AnthropicPromptCacheOptions,
+)
 from matmaster.providers.transports.chat_completions import ChatCompletionsTransport
 
 
@@ -85,11 +89,67 @@ class TestDispatch:
 
     def test_unknown_transport_fail_fast(self) -> None:
         cfg = LLMConfig(
-            providers={
-                "x": ProviderConfig(transport="anthropic_messages", api_key="k")
-            },
+            providers={"x": ProviderConfig(transport="ghost_transport", api_key="k")},
             profiles={"p": LLMProfileConfig(provider="x", model="m", context_limit=1)},
             default="p",
         )
         with pytest.raises(ValueError, match="unsupported transport"):
             build_provider(cfg)
+
+    def test_anthropic_messages_tag_hits_builder(self) -> None:
+        assert "anthropic_messages" in _TRANSPORT_BUILDERS
+
+    def test_anthropic_messages_builder_receives_profile_and_cache(self) -> None:
+        cfg = LLMConfig(
+            providers={
+                "litellm-anthropic": ProviderConfig(
+                    transport="anthropic_messages",
+                    api_key="sk-proxy",
+                    base_url="https://proxy.example/anthropic",
+                )
+            },
+            profiles={
+                "global.anthropic.claude-opus-4-6-v1": LLMProfileConfig(
+                    provider="litellm-anthropic",
+                    model="claude-opus-4-6",
+                    reasoning_effort="max",
+                    context_limit=200_000,
+                    supports_vision=True,
+                    timeout=1200,
+                    stream_timeout=120,
+                    stream_idle_timeout=60,
+                    max_retries=3,
+                    retry_delay=1.0,
+                    prompt_cache={
+                        "system_prompt_breakpoint": True,
+                        "automatic": True,
+                        "latest_user_breakpoint": True,
+                        "tool_result_breakpoint": True,
+                        "flexible_breakpoint": True,
+                        "max_breakpoints": 4,
+                        "min_flexible_chars": 1000,
+                        "ttl": "5m",
+                    },
+                )
+            },
+            default="global.anthropic.claude-opus-4-6-v1",
+        )
+
+        provider = build_provider(cfg)
+
+        assert isinstance(provider, AnthropicMessagesTransport)
+        assert provider._model == "claude-opus-4-6"
+        assert provider._api_key == "sk-proxy"
+        assert provider._base_url == "https://proxy.example/anthropic"
+        assert provider._reasoning_effort == "max"
+        assert provider._max_tokens is None
+        assert provider._prompt_cache_options == AnthropicPromptCacheOptions(
+            system_prompt_breakpoint=True,
+            cache_control={"type": "ephemeral"},
+            automatic=True,
+            latest_user_breakpoint=True,
+            tool_result_breakpoint=True,
+            flexible_breakpoint=True,
+            max_breakpoints=4,
+            min_flexible_chars=1000,
+        )
