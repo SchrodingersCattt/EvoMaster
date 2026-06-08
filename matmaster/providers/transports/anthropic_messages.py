@@ -79,6 +79,17 @@ def _select_flexible_cache_target(
     return _CacheTarget("message", idx, None, 3)
 
 
+def _effective_message_cache_slot(
+    messages: list[dict[str, Any]], target: _CacheTarget
+) -> tuple[int, int | None]:
+    if target.content_index is not None:
+        return (target.index, target.content_index)
+    content = messages[target.index].get("content")
+    if isinstance(content, list) and content:
+        return (target.index, len(content) - 1)
+    return (target.index, None)
+
+
 def _select_anthropic_cache_targets(
     *,
     has_system: bool,
@@ -87,18 +98,22 @@ def _select_anthropic_cache_targets(
 ) -> list[_CacheTarget]:
     targets: list[_CacheTarget] = []
     used_slots: set[tuple[int, int | None]] = set()
+    used_whole_message_indexes: set[int] = set()
     max_block_targets = options.max_breakpoints - (1 if options.automatic else 0)
     max_block_targets = max(0, max_block_targets)
 
     def append(target: _CacheTarget) -> None:
         if len(targets) >= max_block_targets:
             return
-        slot = (target.index, target.content_index)
-        if target.section == "message" and slot in used_slots:
-            return
+        if target.section == "message":
+            slot = _effective_message_cache_slot(messages, target)
+            if slot in used_slots:
+                return
         targets.append(target)
         if target.section == "message":
             used_slots.add(slot)
+            if target.content_index is None:
+                used_whole_message_indexes.add(target.index)
 
     if options.system_prompt_breakpoint and has_system:
         append(_CacheTarget("system", 0, None, 0))
@@ -121,10 +136,9 @@ def _select_anthropic_cache_targets(
                 append(_CacheTarget("message", idx, result_indexes[-1], 2))
                 break
     if options.automatic and options.flexible_breakpoint:
-        used_message_indexes = {
-            idx for idx, block_idx in used_slots if block_idx is None
-        }
-        flexible = _select_flexible_cache_target(messages, used_message_indexes, options)
+        flexible = _select_flexible_cache_target(
+            messages, used_whole_message_indexes, options
+        )
         if flexible is not None:
             append(flexible)
     return targets

@@ -73,6 +73,42 @@ def test_cache_marks_system_latest_user_and_tool_result_with_automatic_slot() ->
     assert kwargs["extra_body"]["cache_control"] == {"type": "ephemeral"}
 
 
+def test_cache_dedupes_latest_user_and_tool_result_same_block() -> None:
+    provider = _provider()
+    kwargs = provider.build_kwargs(
+        [
+            SystemMessage(content="system prompt"),
+            UserMessage(content="older long user content"),
+            AssistantMessage(
+                content="",
+                tool_calls=[ToolCallData(id="toolu_1", name="search", arguments={})],
+            ),
+            ToolMessage(
+                content="tool result", tool_call_id="toolu_1", tool_name="search"
+            ),
+        ],
+        tools=[
+            {
+                "type": "function",
+                "function": {"name": "search", "parameters": {"type": "object"}},
+            }
+        ],
+    )
+
+    assert kwargs["system"][0]["cache_control"] == {"type": "ephemeral"}
+    assert kwargs["messages"][2]["content"] == [
+        {
+            "type": "tool_result",
+            "tool_use_id": "toolu_1",
+            "content": "tool result",
+            "cache_control": {"type": "ephemeral"},
+        }
+    ]
+    assert kwargs["messages"][0]["content"][0]["cache_control"] == {
+        "type": "ephemeral"
+    }
+
+
 def test_cache_uses_flexible_when_fixed_targets_leave_a_slot() -> None:
     provider = _provider(tool_result_breakpoint=False)
 
