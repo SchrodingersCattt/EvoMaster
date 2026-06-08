@@ -264,8 +264,14 @@ def _map_tool_choice(tool_choice: str | dict | None) -> dict[str, str] | None:
 
 def _is_context_overflow(text: str) -> bool:
     lowered = text.lower()
-    return "context" in lowered and (
+    if "context" in lowered and (
         "token" in lowered or "length" in lowered or "window" in lowered
+    ):
+        return True
+    return (
+        "prompt" in lowered
+        and "too long" in lowered
+        and ("token" in lowered or "maximum" in lowered)
     )
 
 

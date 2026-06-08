@@ -56,6 +56,15 @@ def test_context_overflow_bad_request_is_non_retryable() -> None:
     assert err.error_category == "context_overflow"
 
 
+def test_prompt_too_long_bad_request_is_context_overflow() -> None:
+    err = _provider().classify_error(
+        _bad_request("prompt is too long: 201543 tokens > 200000 maximum")
+    )
+    assert err is not None
+    assert err.retryable is False
+    assert err.error_category == "context_overflow"
+
+
 def test_signature_bad_request_is_non_retryable() -> None:
     err = _provider().classify_error(_bad_request("thinking signature is invalid"))
     assert err is not None
