@@ -262,6 +262,27 @@ def _map_tool_choice(tool_choice: str | dict | None) -> dict[str, str] | None:
     )
 
 
+def _is_context_overflow(text: str) -> bool:
+    lowered = text.lower()
+    return "context" in lowered and (
+        "token" in lowered or "length" in lowered or "window" in lowered
+    )
+
+
+def _is_non_retryable_anthropic_bad_request(text: str) -> bool:
+    lowered = text.lower()
+    patterns = (
+        "signature",
+        "thinking",
+        "cache_control",
+        "tool_result",
+        "tool_use",
+        "must be immediately after",
+        "input_schema",
+    )
+    return any(pattern in lowered for pattern in patterns)
+
+
 def _dump_model(value: Any) -> Any:
     if value is None:
         return None
@@ -652,6 +673,33 @@ class AnthropicMessagesTransport(Transport):
     def classify_error(self, exc: Exception) -> LLMError | None:
         if isinstance(exc, LLMError):
             return None
+        if isinstance(exc, anthropic.APITimeoutError):
+            return LLMError(str(exc), retryable=True, error_category="timeout")
+        if isinstance(exc, anthropic.APIConnectionError):
+            return LLMError(str(exc), retryable=True, error_category="connection")
+        if isinstance(exc, anthropic.RateLimitError):
+            return LLMError(str(exc), retryable=True, error_category="rate_limit")
+        overloaded_error = getattr(anthropic, "OverloadedError", None)
+        server_errors: tuple[type[BaseException], ...]
+        if isinstance(overloaded_error, type):
+            server_errors = (anthropic.InternalServerError, overloaded_error)
+        else:
+            server_errors = (anthropic.InternalServerError,)
+        if isinstance(exc, server_errors):
+            return LLMError(str(exc), retryable=True, error_category="server")
+        if isinstance(
+            exc, (anthropic.AuthenticationError, anthropic.PermissionDeniedError)
+        ):
+            return LLMError(str(exc), retryable=False, error_category="auth")
+        if isinstance(exc, anthropic.BadRequestError):
+            text = str(exc)
+            if _is_context_overflow(text):
+                return LLMError(
+                    text, retryable=False, error_category="context_overflow"
+                )
+            if _is_non_retryable_anthropic_bad_request(text):
+                return LLMError(text, retryable=False, error_category="bad_request")
+            return LLMError(text, retryable=True, error_category="bad_request")
         return None
 
     async def chat(
