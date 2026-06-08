@@ -1199,8 +1199,7 @@ questions:
     (e.g. property MAE/RMSE on log_kvrh), or flagging the mismatch and
     re-running, is acceptable.
   human_prompt_seed: '用 DeePMD-kit 在 Matbench 的 matbench_log_kvrh 数据集上对比
-    DPA4 与 DPA3 的训练效率和精度（该任务是从晶体结构预测标量 log10 体模量 K_VRH）。跑完后给我一份
-    benchmark 报告，包含数据集说明、精度指标和效率对比。'
+    DPA4 与 DPA3 的训练效率和精度。跑完后给我一份 benchmark 报告，包含数据集说明、精度指标和效率对比。'
   tags:
   - meta_grounding
   source_session: 38cc7d35ed924e55bdbdadcf8b8136ad
