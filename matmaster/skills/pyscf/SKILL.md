@@ -84,7 +84,7 @@ PySCF scripts are Python code; there is no `render_input.py` or `diagnose_input.
 | Parameter | Description | Typical Values |
 |-----------|-------------|----------------|
 | `basis` | Basis set | `'sto-3g'`, `'def2-SVP'`, `'def2-TZVP'`, `'cc-pVDZ'`, `'aug-cc-pVTZ'` |
-| `xc` | DFT functional | `'B3LYP'`, `'PBE'`, `'PBE0'`, `'wB97X-D3'`, `'r2SCAN'` |
+| `xc` | DFT functional | `'B3LYP'`, `'PBE'`, `'PBE0'`, `'wB97X'`, `'wB97X-D'`, `'r2SCAN'`, `'TPSS'`, `'M06'`, `'M06-2X'` |
 | `charge` | Total molecular charge | integer |
 | `spin` | 2S (number of unpaired electrons) | 0, 1, 2, ... |
 | `verbose` | Output level | 4 (normal), 5 (debug) |
