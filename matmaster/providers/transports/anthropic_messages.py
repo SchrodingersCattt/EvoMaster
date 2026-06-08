@@ -291,7 +291,12 @@ def _anthropic_usage_to_scalar_dict(usage: Any) -> dict[str, int]:
     if isinstance(cache_write, int) and cache_write > 0:
         out["cache_write_tokens"] = cache_write
     details = getattr(usage, "output_tokens_details", None)
-    reasoning = getattr(details, "thinking_tokens", None) if details is not None else None
+    if isinstance(details, dict):
+        reasoning = details.get("thinking_tokens")
+    else:
+        reasoning = (
+            getattr(details, "thinking_tokens", None) if details is not None else None
+        )
     if isinstance(reasoning, int) and reasoning > 0:
         out["reasoning_tokens"] = reasoning
     return out

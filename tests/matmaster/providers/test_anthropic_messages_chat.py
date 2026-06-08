@@ -99,6 +99,24 @@ class TestNormalizeResponse:
         )
         assert result.usage_vendor is not None
 
+    def test_extracts_reasoning_tokens_from_dict_output_details(self) -> None:
+        raw = SimpleNamespace(
+            content=[],
+            stop_reason="end_turn",
+            usage=_usage(
+                input_tokens=10,
+                output_tokens=5,
+                output_tokens_details={"thinking_tokens": 4},
+            ),
+        )
+
+        result = AnthropicMessagesTransport(
+            model="claude-opus-4-6",
+            api_key="sk-test",
+        ).normalize_response(raw)
+
+        assert result.usage["reasoning_tokens"] == 4
+
 
 class TestChat:
     async def test_chat_uses_stream_get_final_message(self) -> None:
