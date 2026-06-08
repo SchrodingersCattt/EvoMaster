@@ -148,6 +148,28 @@ profiles:
         assert resolved.profile_key == "matmaster/gpt-5.5"
         assert resolved.profile.model == "matmaster/gpt-5.5"
 
+    def test_repo_llm_config_includes_native_anthropic_opus(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+
+        cfg = load_llm_config(repo_root / "config" / "llm_config.yaml")
+        resolved = cfg.resolve(model_override="global.anthropic.claude-opus-4-6-v1")
+
+        assert resolved.provider.transport == "anthropic_messages"
+        # NOTE: Do not assert literal provider.api_key / base_url `${...}` placeholders:
+        # load_llm_config expands ${VAR} unconditionally (env value when set,
+        # empty string when missing), so placeholders are not preserved.
+        assert resolved.profile.model == "claude-opus-4-6"
+        assert resolved.profile.reasoning_effort == "max"
+        assert resolved.profile.supports_vision is True
+        assert resolved.profile.prompt_cache is not None
+        assert resolved.profile.prompt_cache.system_prompt_breakpoint is True
+        assert resolved.profile.prompt_cache.automatic is True
+        assert resolved.profile.prompt_cache.latest_user_breakpoint is True
+        assert resolved.profile.prompt_cache.tool_result_breakpoint is True
+        assert resolved.profile.prompt_cache.flexible_breakpoint is True
+        assert resolved.profile.prompt_cache.max_breakpoints == 4
+        assert resolved.profile.prompt_cache.min_flexible_chars == 1000
+
 
 class TestLoadExpConfig:
     """Tests for load_exp_config() -- toml-based loading."""

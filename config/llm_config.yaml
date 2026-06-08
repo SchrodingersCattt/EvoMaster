@@ -10,6 +10,15 @@ providers:
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
 
+  litellm-anthropic:
+    transport: anthropic_messages
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_ANTHROPIC_BASE}"
+
+  anthropic:
+    transport: anthropic_messages
+    api_key: "${ANTHROPIC_API_KEY}"
+
 profiles:
   matmaster/qwen3.7-max:
     provider: litellm
@@ -70,5 +79,26 @@ profiles:
     stream_idle_timeout: 60
     max_retries: 3
     retry_delay: 1.0
+
+  global.anthropic.claude-opus-4-6-v1:
+    provider: litellm-anthropic
+    model: claude-opus-4-6
+    reasoning_effort: max
+    context_limit: 200000
+    supports_vision: true
+    timeout: 1200
+    stream_timeout: 120
+    stream_idle_timeout: 60
+    max_retries: 3
+    retry_delay: 1.0
+    prompt_cache:
+      system_prompt_breakpoint: true
+      automatic: true
+      latest_user_breakpoint: true
+      tool_result_breakpoint: true
+      flexible_breakpoint: true
+      max_breakpoints: 4
+      min_flexible_chars: 1000
+      ttl: "5m"
 
 default: matmaster/qwen3.7-max
