@@ -1,11 +1,6 @@
 from matmaster.providers.transports.anthropic_messages import AnthropicMessagesTransport
 from matmaster.providers.transports.chat_completions import ChatCompletionsTransport
-from matmaster.types.messages import (
-    AssistantMessage,
-    ProviderState,
-    ToolCallData,
-    ToolMessage,
-)
+from matmaster.types.messages import AssistantMessage, ProviderState
 
 
 def _make_transport():
@@ -35,39 +30,27 @@ def test_claim_returns_none_when_no_state():
     assert t._claim_provider_state(AssistantMessage(content="x")) is None
 
 
-def test_anthropic_convert_discards_chat_completions_state() -> None:
-    t = AnthropicMessagesTransport(model="claude-opus-4-6", api_key="sk-test")
-    msg = AssistantMessage(
-        content="visible",
+def test_cross_transport_claim_discards_mismatched_state() -> None:
+    chat_transport = _make_transport()
+    anthropic_transport = AnthropicMessagesTransport(
+        model="claude-opus-4-6", api_key="sk-test"
+    )
+    chat_state_msg = AssistantMessage(
+        content="x",
         provider_state=ProviderState(
-            transport="chat_completions",
-            payload={
-                "thinking": [
-                    {"type": "thinking", "thinking": "wrong", "signature": "x"}
-                ]
-            },
+            transport="chat_completions", payload={"k": "chat"}
         ),
-        tool_calls=[ToolCallData(id="toolu_1", name="search", arguments={})],
+    )
+    anthropic_state_msg = AssistantMessage(
+        content="x",
+        provider_state=ProviderState(
+            transport="anthropic_messages", payload={"k": "anthropic"}
+        ),
     )
 
-    assert t.convert_messages(
-        [msg, ToolMessage(content="result", tool_call_id="toolu_1", tool_name="search")]
-    ) == [
-        {
-            "role": "assistant",
-            "content": [
-                {"type": "text", "text": "visible"},
-                {"type": "tool_use", "id": "toolu_1", "name": "search", "input": {}},
-            ],
-        },
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "tool_result",
-                    "tool_use_id": "toolu_1",
-                    "content": "result",
-                }
-            ],
-        },
-    ]
+    assert chat_transport._claim_provider_state(chat_state_msg) == {"k": "chat"}
+    assert anthropic_transport._claim_provider_state(chat_state_msg) is None
+    assert anthropic_transport._claim_provider_state(anthropic_state_msg) == {
+        "k": "anthropic"
+    }
+    assert chat_transport._claim_provider_state(anthropic_state_msg) is None
