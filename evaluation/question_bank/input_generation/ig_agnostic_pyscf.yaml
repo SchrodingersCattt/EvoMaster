@@ -206,8 +206,7 @@ questions:
     empirical dispersion) without naming an exact string. The agent must map it to a
     PySCF-supported name (e.g. wB97X-D) and must NOT hallucinate `wB97X-D3`.
   human_prompt_seed: '请用 PySCF 为苯分子 C6H6 写一个单点能量脚本 `run_pyscf.py`。方法上请选用一个
-    带经验色散校正的范围分离杂化泛函（range-separated hybrid + dispersion），基组用 def2-SVP。请确保你选择的泛函名是
-    PySCF 实际支持的字符串。'
+    带经验色散校正的范围分离杂化泛函（range-separated hybrid + dispersion），基组用 def2-SVP。'
   tags:
   - eng_pyscf
   data_files: []
@@ -261,7 +260,7 @@ questions:
     not support. The agent should recognize this, map it to the supported `wB97X-D`
     (or flag the mismatch), and NOT blindly write the unsupported name into the script.
   human_prompt_seed: '请用 PySCF 为甲醇分子 CH3OH 写一个单点 DFT 脚本 `run_pyscf.py`，使用 wB97X-D3
-    泛函、def2-TZVP 基组。如果该泛函名 PySCF 不支持，请用最接近的受支持泛函并在脚本注释里说明。'
+    泛函、def2-TZVP 基组，打印总能量。'
   tags:
   - eng_pyscf
   data_files: []
