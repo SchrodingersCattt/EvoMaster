@@ -77,14 +77,15 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_pyscf_002_20260608
+- id: IG_pyscf_002_20260609
   capability: input_generation
   domain: agnostic
   intent: Generate a PySCF single-point script using the r2SCAN meta-GGA functional,
     verifying the agent uses a PySCF-supported functional name from the corrected
-    skill docs.
+    skill docs. Script-only (no submission/execution) so the check stays deterministic
+    and is not gated on remote-queue latency.
   human_prompt_seed: '请用 PySCF 为甲烷分子 CH4 写一个单点能量计算脚本 `run_pyscf.py`，使用 r2SCAN
-    泛函（meta-GGA）和 def2-SVP 基组，打印总能量。分子坐标可自行给出合理值。'
+    泛函（meta-GGA）和 def2-SVP 基组，打印总能量。分子坐标可自行给出合理值。只需写出脚本本身，无需提交或运行。'
   tags:
   - eng_pyscf
   data_files: []
@@ -125,8 +126,9 @@ questions:
     axis: correctness
     verify: text_file_contains_all
   - id: valid_dft_driver
-    criterion: '[Must] Script correctly builds CH4 with `gto.M` and runs a DFT
-      single-point via `dft.RKS`, computing the total energy.'
+    criterion: '[Must] Based on the script alone (no execution required), it correctly
+      builds CH4 with `gto.M`, sets up a closed-shell DFT single-point via `dft.RKS`,
+      and prints the total energy after `kernel()`/`run()`.'
     axis: correctness
     verify: llm_binary_judge
   - id: turn_budget
@@ -138,13 +140,15 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_pyscf_003_20260608
+- id: IG_pyscf_003_20260609
   capability: input_generation
   domain: agnostic
   intent: Generate a PySCF script using the M06-2X functional, confirming the agent
     picks the PySCF-supported hybrid meta-GGA name listed in the corrected skill docs.
+    Script-only (no submission/execution) so the check stays deterministic and is not
+    gated on remote-queue latency.
   human_prompt_seed: '请用 PySCF 为乙烯分子 C2H4 写一个单点 DFT 脚本 `run_pyscf.py`，使用 M06-2X
-    泛函、cc-pVDZ 基组，打印总能量。坐标可自行给出合理值。'
+    泛函、cc-pVDZ 基组，打印总能量。坐标可自行给出合理值。只需写出脚本本身，无需提交或运行。'
   tags:
   - eng_pyscf
   data_files: []
@@ -185,8 +189,9 @@ questions:
     axis: correctness
     verify: text_file_contains_all
   - id: valid_dft_driver
-    criterion: '[Must] Script builds C2H4 and runs a closed-shell DFT single-point
-      correctly via `dft.RKS`.'
+    criterion: '[Must] Based on the script alone (no execution required), it correctly
+      builds C2H4 with `gto.M` and sets up a closed-shell DFT single-point via `dft.RKS`,
+      printing the total energy after `kernel()`/`run()`.'
     axis: correctness
     verify: llm_binary_judge
   - id: turn_budget
@@ -493,13 +498,15 @@ questions:
     axis: efficiency
     verify: token_budget
 
-- id: IG_pyscf_009_20260608
+- id: IG_pyscf_009_20260609
   capability: input_generation
   domain: agnostic
   intent: Property extraction — verify the agent uses the PySCF property API documented
-    in the skill (MO energies → HOMO/LUMO gap, dipole moment).
+    in the skill (MO energies → HOMO/LUMO gap, dipole moment). Script-only (no
+    submission/execution) so the check stays deterministic and is not gated on
+    remote-queue latency.
   human_prompt_seed: '请用 PySCF 为甲醛分子 CH2O 写一个脚本 `run_pyscf.py`，在 B3LYP/def2-SVP
-    级别做单点计算，并输出 HOMO-LUMO gap 和偶极矩。'
+    级别做单点计算，并输出 HOMO-LUMO gap 和偶极矩。只需写出脚本本身，无需提交或运行。'
   tags:
   - eng_pyscf
   data_files: []
@@ -531,9 +538,9 @@ questions:
     axis: correctness
     verify: text_file_contains_all
   - id: gap_logic_correct
-    criterion: '[Must] HOMO is the highest occupied MO energy and LUMO the lowest
-      unoccupied; the gap is computed as LUMO − HOMO using the occupation mask, not
-      arbitrary indices.'
+    criterion: '[Must] Based on the script alone (no execution required), HOMO is the
+      highest occupied MO energy and LUMO the lowest unoccupied; the gap is computed
+      as LUMO − HOMO using the occupation mask (`mf.mo_occ`), not arbitrary indices.'
     axis: correctness
     verify: llm_binary_judge
   - id: turn_budget
