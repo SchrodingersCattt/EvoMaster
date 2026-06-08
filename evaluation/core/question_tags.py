@@ -23,6 +23,7 @@ class QuestionTag(StrEnum):
     eng_qe = 'eng_qe'
     eng_gromacs = 'eng_gromacs'
     eng_orca = 'eng_orca'
+    eng_pyscf = 'eng_pyscf'
     # 代码库/工具链
     code_mlip = 'code_mlip'
     # 结构操作
