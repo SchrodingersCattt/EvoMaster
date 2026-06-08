@@ -150,6 +150,23 @@ class LoggingConfig:
             'json_format': os.getenv('LOG_JSON_FORMAT', 'false').lower() == 'true',
         }
 
+    @classmethod
+    def get_monitor_config(cls) -> dict[str, Any]:
+        """Get logging configuration for matmaster-monitor process."""
+        return {
+            'log_level': os.getenv('LOG_LEVEL', cls.DEFAULT_LOG_LEVEL),
+            'log_file': os.path.join(
+                os.getenv('LOG_DIR', cls.DEFAULT_LOG_DIR),
+                'matmaster-monitor.log',
+            ),
+            'max_bytes': int(os.getenv('LOG_MAX_BYTES', cls.DEFAULT_MAX_BYTES)),
+            'backup_count': int(
+                os.getenv('LOG_BACKUP_COUNT', cls.DEFAULT_BACKUP_COUNT)
+            ),
+            'console_output': os.getenv('LOG_CONSOLE', 'true').lower() == 'true',
+            'json_format': os.getenv('LOG_JSON_FORMAT', 'false').lower() == 'true',
+        }
+
 
 def setup_logging(
     log_level: str = None,

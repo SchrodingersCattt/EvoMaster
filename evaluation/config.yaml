@@ -34,9 +34,8 @@ axis_weights:
 
 evaluator_llm:
   provider: "openai"
-  model: "global.anthropic.claude-opus-4-6-v1"
+  model: "matmaster/DeepSeek-v4-Pro"
   api_key: "${LITELLM_PROXY_API_KEY}"
   base_url: "${LITELLM_PROXY_API_BASE}"
   temperature: 0.0
-  max_tokens: 2048
   timeout: 180

@@ -49,9 +49,12 @@ EXPOSE 80
 RUN echo '#!/bin/bash\nset -e\nsource .venv/bin/activate\nJEMALLOC=/usr/lib/$(uname -m)-linux-gnu/libjemalloc.so.2\nif [ -f "$JEMALLOC" ]; then export LD_PRELOAD="$JEMALLOC"; fi\nexec gunicorn app:app -w 1 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:80 --preload' > /app/start.sh && \
     chmod +x /app/start.sh
 
-# ---------- 多 target：API（默认）与 Worker ----------
+# ---------- 多 target：API（默认）、Worker 与 Monitor ----------
 FROM builder AS worker
 CMD ["python", "-m", "src.worker.agent_worker"]
+
+FROM builder AS monitor
+CMD ["python", "-m", "src.monitor.monitor_worker"]
 
 FROM builder AS api
 CMD ["/app/start.sh"]
