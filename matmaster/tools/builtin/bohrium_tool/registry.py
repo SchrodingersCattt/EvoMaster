@@ -138,7 +138,7 @@ class JobRegistry:
                 continue
             if action == "submit":
                 registry.register(job_id, job_name=str(ev.get("job_name") or ""))
-            elif action == "poll":
+            elif action == "query":
                 registry.update_poll(
                     job_id,
                     status=classify_poll_status(str(ev.get("status") or "")),

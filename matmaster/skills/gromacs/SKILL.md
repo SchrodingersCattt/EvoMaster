@@ -65,7 +65,7 @@ GMXTOP=$(find /usr/local -type d -name "top" -path "*/gromacs/*" 2>/dev/null | h
 2. Write `run.sh` (preamble + system building if needed + `grompp` + `mdrun`)
 3. Place all files in one directory
 4. `Bohrium(action="submit", input_dir="<dir>", image="<image from Config>", cmd="bash run.sh > log 2>&1")`
-5. `Bohrium(action="poll", job_id=<id>)` — repeat until Finished/Failed
+5. `Bohrium(action="query", job_id=<id>)` when current status is needed
 6. `Bohrium(action="download", job_id=<id>, result_dir="<output_dir>")`
 
 ## Ligand Parameterization

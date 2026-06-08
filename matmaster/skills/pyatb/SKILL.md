@@ -86,15 +86,15 @@ This is a two-step workflow (ABACUS → PyATB):
 **Step 1 — ABACUS LCAO calculation** (use `abacus` skill):
 1. Set `basis_type lcao` in INPUT
 2. Set `out_mat_hs2 1` to output HR.dat and SR.dat
-3. Submit via `Bohrium(action="submit", ...)` and wait for completion
-4. Download results via `Bohrium(action="poll", job_id=<id>)`
+3. Submit via `Bohrium(action="submit", ...)`
+4. Query current status when needed via `Bohrium(action="query", job_id=<id>)`, then download after terminal state
 
 **Step 2 — PyATB post-processing**:
 1. Write PyATB script (`run_pyatb.py`)
 2. Place script + HR.dat + SR.dat (+ rR.dat if needed) in one directory
 3. Query image: `Bohrium(action="list_images", keyword="pyatb")`
 4. Submit: `Bohrium(action="submit", input_dir="<dir>", image="<pyatb_image>", cmd="python run_pyatb.py > log 2>&1")`
-5. Poll: `Bohrium(action="poll", job_id=<id>)`
+5. Query current status when needed: `Bohrium(action="query", job_id=<id>)`
 
 ## Physical Checks
 

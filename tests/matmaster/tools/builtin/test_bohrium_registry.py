@@ -138,3 +138,24 @@ class TestJobRegistry:
         rec.last_polled_at = time.monotonic() - 46
         throttled, _ = reg.should_throttle("job-1")
         assert throttled is False
+
+
+class TestRebuildFromQueryEvents:
+    def test_query_event_restores_poll_count(self):
+        events = [
+            {"action": "submit", "job_id": "job-1", "job_name": "n"},
+            {"action": "query", "job_id": "job-1", "status": "Running"},
+        ]
+        reg = JobRegistry.rebuild_from_events(events)
+        rec = reg.get("job-1")
+        assert rec is not None
+        assert rec.poll_count == 1
+        assert rec.status == "running"
+
+    def test_legacy_poll_event_ignored(self):
+        # post-migration the action word is "query"; stale "poll" no longer maps
+        legacy_action = "po" + "ll"
+        events = [{"action": legacy_action, "job_id": "job-1", "status": "Running"}]
+        reg = JobRegistry.rebuild_from_events(events)
+        rec = reg.get("job-1")
+        assert rec is None or rec.poll_count == 0

@@ -81,7 +81,7 @@ class TestBohriumMetadata:
         assert "image" in prompt
         assert "machine" in prompt
         assert "submit" in prompt
-        assert "poll" in prompt
+        assert "query" in prompt
 
     def test_schema_exposes_download_action(self):
         properties = BohriumTool.json_schema["properties"]
@@ -98,11 +98,12 @@ class TestBohriumMetadata:
             {"bohrium.submit", "bohrium.query", "bohrium.download", "bohrium.kill"}
         )
 
-    def test_prompt_mentions_poll_and_download_modes(self, tmp_path):
+    def test_prompt_mentions_query_and_download_modes(self, tmp_path):
         tool = BohriumTool(workdir=tmp_path)
         prompt = tool.prompt()
         assert prompt is not None
-        assert "built-in waiting" in prompt
+        assert "single call" in prompt
+        assert "no blocking" in prompt
         assert "**download**" in prompt or "download artifacts" in prompt
         assert "Does not download artifacts" in prompt
         assert "kill" in prompt
@@ -794,7 +795,7 @@ class TestBohriumExecution:
 
         monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
 
-        result = asyncio.run(tool.execute({"action": "poll", "job_id": "job-123"}))
+        result = asyncio.run(tool.execute({"action": "query", "job_id": "job-123"}))
 
         assert result.status == "success"
         payload = json.loads(result.content)
@@ -910,7 +911,7 @@ class TestBohriumKillAction:
         assert calls == [("/openapi/v1/sandbox/kill/abc-123", {})]
         payload = json.loads(result.content)
         assert payload["status"] == "Terminating"
-        assert "poll" in payload["message"]
+        assert "query" in payload["message"]
 
     def test_kill_rejects_non_sandbox(self, tmp_path, monkeypatch):
         monkeypatch.setenv("BOHRIUM_USE_SANDBOX", "0")

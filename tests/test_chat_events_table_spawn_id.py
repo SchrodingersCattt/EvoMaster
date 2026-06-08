@@ -244,7 +244,7 @@ def test_get_bohrium_events_pairs_tool_call_and_result(
             "type": "tool_call",
             "content": (
                 '{"id":"c2","call_id":"c2","name":"Bohrium",'
-                '"args":{"action":"poll","job_id":"job-1"}}'
+                '"args":{"action":"query","job_id":"job-1"}}'
             ),
             "created_at": ts,
         },
@@ -282,7 +282,7 @@ def test_get_bohrium_events_pairs_tool_call_and_result(
             "cached": False,
         },
         {
-            "action": "poll",
+            "action": "query",
             "job_id": "job-1",
             "status": "Running",
             "job_name": "",

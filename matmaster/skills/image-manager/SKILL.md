@@ -125,7 +125,7 @@ python3 -c "import numpy; print(f'NumPy {numpy.__version__}')"
 # add other checks as needed
 ```
 
-Poll with `Bohrium(action="poll")`, then download and read log to confirm.
+Query with `Bohrium(action="query")`, then download and read log to confirm.
 
 ### Post-Verification
 
