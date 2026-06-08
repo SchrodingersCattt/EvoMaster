@@ -115,6 +115,7 @@ class TestDispatch:
                     reasoning_effort="max",
                     context_limit=200_000,
                     supports_vision=True,
+                    max_tokens=32_000,
                     timeout=1200,
                     stream_timeout=120,
                     stream_idle_timeout=60,
@@ -142,7 +143,7 @@ class TestDispatch:
         assert provider._api_key == "sk-proxy"
         assert provider._base_url == "https://proxy.example/anthropic"
         assert provider._reasoning_effort == "max"
-        assert provider._max_tokens is None
+        assert provider._max_tokens == 32_000
         assert provider._prompt_cache_options == AnthropicPromptCacheOptions(
             system_prompt_breakpoint=True,
             cache_control={"type": "ephemeral"},

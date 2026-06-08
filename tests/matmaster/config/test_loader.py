@@ -161,6 +161,7 @@ profiles:
         assert resolved.profile.model == "claude-opus-4-6"
         assert resolved.profile.reasoning_effort == "max"
         assert resolved.profile.supports_vision is True
+        assert resolved.profile.max_tokens == 32_000
         assert resolved.profile.prompt_cache is not None
         assert resolved.profile.prompt_cache.system_prompt_breakpoint is True
         assert resolved.profile.prompt_cache.automatic is True
