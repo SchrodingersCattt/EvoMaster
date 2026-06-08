@@ -46,6 +46,17 @@ class _CacheTarget:
     priority: int
 
 
+@dataclass
+class _StreamBlockState:
+    type: str
+    id: str | None = None
+    name: str | None = None
+    output_index: int | None = None
+    thinking: str = ""
+    signature: str | None = None
+    arguments: str = ""
+
+
 def _message_text_size(message: dict[str, Any]) -> int:
     content = message.get("content")
     if isinstance(content, str):
@@ -522,8 +533,104 @@ class AnthropicMessagesTransport(Transport):
         )
 
     async def normalize_stream(self, raw_iter: Any) -> AsyncIterator[StreamChunk]:
-        raise NotImplementedError
-        yield StreamChunk()
+        blocks: dict[int, _StreamBlockState] = {}
+        thinking_payload: list[dict[str, Any]] = []
+        next_tool_call_index = 0
+        input_tokens = 0
+        output_tokens = 0
+        finish_reason: str | None = None
+
+        async for event in raw_iter:
+            event_type = getattr(event, "type", None)
+            if event_type == "message_start":
+                usage = getattr(getattr(event, "message", None), "usage", None)
+                input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+                continue
+            if event_type == "content_block_start":
+                block = getattr(event, "content_block", None)
+                block_type = getattr(block, "type", "")
+                state = _StreamBlockState(
+                    type=block_type,
+                    id=getattr(block, "id", None),
+                    name=getattr(block, "name", None),
+                )
+                if block_type == "tool_use":
+                    state.output_index = next_tool_call_index
+                    next_tool_call_index += 1
+                blocks[int(getattr(event, "index", 0))] = state
+                if block_type == "tool_use":
+                    yield StreamChunk(
+                        tool_call_deltas=[
+                            {
+                                "index": state.output_index,
+                                "id": state.id,
+                                "name": state.name,
+                            }
+                        ]
+                    )
+                continue
+            if event_type == "content_block_delta":
+                idx = int(getattr(event, "index", 0))
+                state = blocks.setdefault(idx, _StreamBlockState(type=""))
+                delta = getattr(event, "delta", None)
+                delta_type = getattr(delta, "type", None)
+                if delta_type == "thinking_delta":
+                    text = getattr(delta, "thinking", "") or ""
+                    state.thinking += text
+                    yield StreamChunk(reasoning_content=text)
+                elif delta_type == "signature_delta":
+                    state.signature = getattr(delta, "signature", None)
+                elif delta_type == "text_delta":
+                    yield StreamChunk(content=getattr(delta, "text", "") or "")
+                elif delta_type == "input_json_delta":
+                    part = getattr(delta, "partial_json", "") or ""
+                    state.arguments += part
+                    yield StreamChunk(
+                        tool_call_deltas=[
+                            {
+                                "index": state.output_index
+                                if state.output_index is not None
+                                else idx,
+                                "arguments": part,
+                            }
+                        ]
+                    )
+                continue
+            if event_type == "content_block_stop":
+                idx = int(getattr(event, "index", 0))
+                state = blocks.get(idx)
+                if state is not None and state.type == "thinking":
+                    payload = {"type": "thinking", "thinking": state.thinking}
+                    if state.signature:
+                        payload["signature"] = state.signature
+                    thinking_payload.append(payload)
+                continue
+            if event_type == "message_delta":
+                finish_reason = _map_stop_reason(
+                    getattr(getattr(event, "delta", None), "stop_reason", None)
+                )
+                usage = getattr(event, "usage", None)
+                output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+                if finish_reason:
+                    yield StreamChunk(finish_reason=finish_reason)
+
+        if thinking_payload:
+            from matmaster.types.messages import ProviderState
+
+            yield StreamChunk(
+                provider_state=ProviderState(
+                    transport=self.transport_tag,
+                    payload={"thinking": thinking_payload},
+                )
+            )
+        if input_tokens or output_tokens:
+            yield StreamChunk(
+                usage={
+                    "prompt_tokens": input_tokens,
+                    "completion_tokens": output_tokens,
+                    "total_tokens": input_tokens + output_tokens,
+                }
+            )
 
     def classify_error(self, exc: Exception) -> LLMError | None:
         if isinstance(exc, LLMError):
@@ -550,5 +657,16 @@ class AnthropicMessagesTransport(Transport):
         *,
         timeout: float | None = None,
     ) -> AsyncIterator[StreamChunk]:
-        raise NotImplementedError
-        yield StreamChunk()
+        client = self._ensure_client()
+        kwargs = self.build_kwargs(messages, tools, stream=True)
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+        try:
+            async with client.messages.stream(**kwargs) as stream:
+                async for chunk in self.normalize_stream(stream):
+                    yield chunk
+        except Exception as exc:  # noqa: BLE001
+            err = self.classify_error(exc)
+            if err is not None:
+                raise err from exc
+            raise
