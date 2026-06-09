@@ -15,11 +15,13 @@ from matmaster.types.messages import (
     ImageContentPart,
     LLMResponse,
     Message,
+    ProviderState,
     StreamChunk,
     SystemMessage,
     ToolCallData,
     ToolMessage,
     UserMessage,
+    parse_tool_arguments,
 )
 
 
@@ -100,6 +102,94 @@ def _map_tool_choice(tool_choice: str | dict | None) -> str | dict:
         name = tool_choice.get("function", {}).get("name") or tool_choice.get("name")
         return {"type": "function", "name": name}
     return "auto"
+
+
+def _dump_model(value: Any) -> Any:
+    if value is None:
+        return None
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        try:
+            return model_dump(mode="json", exclude_none=True)
+        except TypeError:
+            return model_dump(exclude_none=True)
+    if isinstance(value, dict):
+        return dict(value)
+    out: dict[str, Any] = {}
+    for key in dir(value):
+        if key.startswith("_"):
+            continue
+        try:
+            item = getattr(value, key)
+        except Exception:
+            continue
+        if isinstance(item, (str, int, float, bool, type(None), dict, list)):
+            out[key] = item
+    return out
+
+
+def _reasoning_items_from_output(output: Any) -> list[dict[str, Any]]:
+    items: list[dict[str, Any]] = []
+    for item in output or []:
+        if getattr(item, "type", None) == "reasoning":
+            dumped = _dump_model(item)
+            if isinstance(dumped, dict):
+                items.append(dumped)
+    return items
+
+
+def _provider_state_from_reasoning(
+    items: list[dict[str, Any]],
+) -> ProviderState | None:
+    if not items:
+        return None
+    return ProviderState(transport="responses", payload={"reasoning": items})
+
+
+def _responses_usage_to_scalar_dict(usage: Any) -> dict[str, int]:
+    if usage is None:
+        return {}
+    prompt = int(getattr(usage, "input_tokens", 0) or 0)
+    completion = int(getattr(usage, "output_tokens", 0) or 0)
+    total = getattr(usage, "total_tokens", None)
+    out = {
+        "prompt_tokens": prompt,
+        "completion_tokens": completion,
+        "total_tokens": int(total) if isinstance(total, int) else prompt + completion,
+    }
+    input_details = getattr(usage, "input_tokens_details", None)
+    cached = getattr(input_details, "cached_tokens", None) if input_details else None
+    if isinstance(cached, int) and cached > 0:
+        out["cache_read_tokens"] = cached
+    output_details = getattr(usage, "output_tokens_details", None)
+    reasoning = getattr(output_details, "reasoning_tokens", None) if output_details else None
+    if isinstance(reasoning, int) and reasoning > 0:
+        out["reasoning_tokens"] = reasoning
+    return out
+
+
+def _finish_reason_from_response(response: Any) -> str | None:
+    output = getattr(response, "output", None) or []
+    has_function_call = any(
+        getattr(item, "type", None) == "function_call" for item in output
+    )
+    has_refusal = any(
+        getattr(part, "type", None) == "refusal"
+        for item in output
+        if getattr(item, "type", None) == "message"
+        for part in (getattr(item, "content", None) or [])
+    )
+    if has_function_call:
+        return "tool_calls"
+    if has_refusal:
+        return "content_filter"
+    if getattr(response, "status", None) == "incomplete":
+        details = getattr(response, "incomplete_details", None)
+        reason = getattr(details, "reason", None) if details is not None else None
+        if reason == "max_output_tokens":
+            return "length"
+        return reason or "stop"
+    return "stop"
 
 
 class ResponsesTransport(Transport):
@@ -219,7 +309,41 @@ class ResponsesTransport(Transport):
         return kwargs
 
     def normalize_response(self, raw: Any) -> LLMResponse:
-        raise NotImplementedError
+        text_parts: list[str] = []
+        reasoning_parts: list[str] = []
+        tool_calls: list[ToolCallData] = []
+        for item in getattr(raw, "output", None) or []:
+            item_type = getattr(item, "type", None)
+            if item_type == "reasoning":
+                for part in getattr(item, "summary", None) or []:
+                    text = getattr(part, "text", "") or ""
+                    if text:
+                        reasoning_parts.append(text)
+            elif item_type == "message":
+                for part in getattr(item, "content", None) or []:
+                    if getattr(part, "type", None) == "output_text":
+                        text_parts.append(getattr(part, "text", "") or "")
+            elif item_type == "function_call":
+                tool_calls.append(
+                    ToolCallData(
+                        id=getattr(item, "call_id"),
+                        name=getattr(item, "name"),
+                        arguments=parse_tool_arguments(
+                            getattr(item, "arguments", "") or ""
+                        ),
+                    )
+                )
+        reasoning_items = _reasoning_items_from_output(getattr(raw, "output", None))
+        usage = getattr(raw, "usage", None)
+        return LLMResponse(
+            content="".join(text_parts) or None,
+            reasoning_content="".join(reasoning_parts) or None,
+            tool_calls=tool_calls or None,
+            finish_reason=_finish_reason_from_response(raw),
+            usage=_responses_usage_to_scalar_dict(usage),
+            usage_vendor=_dump_model(usage) if usage is not None else None,
+            provider_state=_provider_state_from_reasoning(reasoning_items),
+        )
 
     async def normalize_stream(self, raw_iter: Any) -> AsyncIterator[StreamChunk]:
         raise NotImplementedError
@@ -237,7 +361,11 @@ class ResponsesTransport(Transport):
         *,
         tool_choice: str | dict | None = None,
     ) -> LLMResponse:
-        raise NotImplementedError
+        client = self._ensure_client()
+        kwargs = self.build_kwargs(messages, tools, tool_choice=tool_choice)
+        async with client.responses.stream(**kwargs) as stream:
+            final = await stream.get_final_response()
+        return self.normalize_response(final)
 
     async def chat_stream(
         self,
