@@ -461,8 +461,32 @@ class ResponsesTransport(Transport):
                 raise _llm_error_from_failed_response(response)
 
     def classify_error(self, exc: Exception) -> LLMError | None:
+        import httpx as _httpx
+
         if isinstance(exc, LLMError):
             return None
+        if isinstance(exc, openai.APITimeoutError):
+            return LLMError(str(exc), retryable=True, error_category="timeout")
+        if isinstance(exc, openai.APIConnectionError):
+            return LLMError(str(exc), retryable=True, error_category="connection")
+        if isinstance(exc, openai.RateLimitError):
+            return LLMError(str(exc), retryable=True, error_category="rate_limit")
+        if isinstance(exc, openai.InternalServerError):
+            return LLMError(str(exc), retryable=True, error_category="server")
+        if isinstance(exc, _httpx.ReadTimeout):
+            return LLMError(str(exc), retryable=True, error_category="timeout")
+        if isinstance(exc, (openai.AuthenticationError, openai.PermissionDeniedError)):
+            return LLMError(str(exc), retryable=False, error_category="auth")
+        if isinstance(exc, openai.BadRequestError):
+            err_str = str(exc)
+            err_text = err_str.lower()
+            if "context" in err_text and ("length" in err_text or "token" in err_text):
+                return LLMError(
+                    err_str, retryable=False, error_category="context_overflow"
+                )
+            if _is_non_retryable_responses_bad_request(err_text):
+                return LLMError(err_str, retryable=False, error_category="bad_request")
+            return LLMError(err_str, retryable=True, error_category="bad_request")
         return None
 
     async def chat(
