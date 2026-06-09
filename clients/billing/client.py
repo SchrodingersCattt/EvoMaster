@@ -124,33 +124,6 @@ class BillingService:
             )
             return None
 
-    async def report_llm_usage(
-        self,
-        *,
-        run_context: BillingRunContext,
-        model: str,
-        call_index: int,
-        spawn_id: str | None,
-        usage: dict[str, Any] | None,
-        billing_mode: BillingMode = "platform",
-        session: aiohttp.ClientSession | None = None,
-    ) -> bool:
-        """上报一次 LLM 调用 usage 事件。成功记账返回 True，其余返回 False。
-
-        ``session`` 用于在一次 run 内复用连接池；None 时临时新建。
-        ``billing_mode`` 为 'byok' / 'eval' 时 tools-server 仅记账不扣额度。
-        """
-        data = await self._post_usage(
-            run_context=run_context,
-            model=model,
-            call_index=call_index,
-            spawn_id=spawn_id,
-            usage=usage,
-            billing_mode=billing_mode,
-            session=session,
-        )
-        return bool((data or {}).get("recorded"))
-
     async def price_llm_usage(
         self,
         *,
@@ -164,8 +137,8 @@ class BillingService:
     ) -> dict[str, Any] | None:
         """上报一次 usage 并返回当次定价结果（含 ``total_amount_micro`` 等），失败返回 None。
 
-        与 :meth:`report_llm_usage` 共用 POST，但返回完整响应 ``data`` 而非布尔。
-        两类用途：① 评测侧（缺省 ``billing_mode='eval'``，记账并定价但不扣额度）按 call
+        统一上报入口（POST /billing/usage），返回完整响应 ``data``（含定价金额与
+        ``recorded``）。两类用途：① 评测侧（缺省 ``billing_mode='eval'``，记账并定价但不扣额度）按 call
         攒成本明细；② 线上 in-run 成本熔断（传 ``billing_mode='platform'``，照常扣费记账）
         据 ``total_amount_settle_micro`` 累加本次 run 已花成本。
         """
