@@ -172,6 +172,37 @@ profiles:
         assert resolved.profile.prompt_cache.min_flexible_chars == 1000
 
 
+class TestRealLlmConfigResponsesMigration:
+    def test_litellm_responses_provider_and_gpt_profile_migrated(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        cfg = load_llm_config(repo_root / "config" / "llm_config.yaml")
+
+        assert cfg.providers["litellm-responses"].transport == "responses"
+
+        gpt = cfg.profiles["matmaster/gpt-5.5"]
+        assert gpt.provider == "litellm-responses"
+        assert gpt.model == "matmaster/gpt-5.5"
+        assert gpt.reasoning_effort == "xhigh"
+        assert gpt.reasoning_summary == "detailed"
+
+        resolved = cfg.resolve(model_override="matmaster/gpt-5.5")
+        assert resolved.provider.transport == "responses"
+
+        assert cfg.default == "matmaster/qwen3.7-max"
+        assert cfg.profiles["matmaster/qwen3.7-max"].provider == "litellm"
+
+    def test_migrated_config_builds_responses_transport(self) -> None:
+        from matmaster.providers.llm_factory import build_provider
+        from matmaster.providers.transports.responses import ResponsesTransport
+
+        repo_root = Path(__file__).resolve().parents[3]
+        cfg = load_llm_config(repo_root / "config" / "llm_config.yaml")
+
+        provider = build_provider(cfg, model_override="matmaster/gpt-5.5")
+        assert isinstance(provider, ResponsesTransport)
+        assert provider._model == "matmaster/gpt-5.5"
+
+
 class TestLoadExpConfig:
     """Tests for load_exp_config() -- toml-based loading."""
 

@@ -19,6 +19,11 @@ providers:
     transport: anthropic_messages
     api_key: "${ANTHROPIC_API_KEY}"
 
+  litellm-responses:
+    transport: responses
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_RESPONSES_BASE}"
+
 profiles:
   matmaster/qwen3.7-max:
     provider: litellm
@@ -46,7 +51,7 @@ profiles:
     retry_delay: 1.0
 
   matmaster/gpt-5.5:
-    provider: litellm
+    provider: litellm-responses
     model: matmaster/gpt-5.5
     reasoning_effort: xhigh
     reasoning_summary: detailed
