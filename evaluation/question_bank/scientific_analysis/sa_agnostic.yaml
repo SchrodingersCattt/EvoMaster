@@ -8362,6 +8362,94 @@ questions:
     axis: efficiency
     verify: token_budget
     criterion: Completed within token budget
+- id: SA_citation_grounding_001_20260609
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Verify a questionable literature citation from limited retrieval evidence without overclaiming. The agent must distinguish a related-but-not-identical search hit from proof of the exact citation and must not confirm an unverified reference.
+  human_prompt_seed: |
+    我之前写论文时引用了下面这句话里的文献，但现在怎么都查不到这篇：
+
+    > Since NH3 adsorption on the WO3/La-CeO2(111) surface is dominated by chemisorption through covalent O-N bonds, van der Waals contributions would be trivial, and therefore no dispersion corrections (e.g., DFT-D3) were applied—consistent with analogous DFT studies on CeO2-based SCR catalysts (e.g., ACS Catal. 2023, 13, 15481–15492; Ind. Eng. Chem. Res. 2022, 61, 9636–9647.).
+
+    我针对 `Ind. Eng. Chem. Res. 2022, 61, 9636–9647` 这条引用做了下面三步检索，请你只基于这些检索实际返回的内容，帮我判断这条引用，并说明我接下来该怎么处理：
+
+    检索 A：在文献数据库里精确检索「期刊 = Ind. Eng. Chem. Res. + 年份 = 2022 + 卷 = 61 + 起始页 = 9636」，返回 0 条记录。
+    检索 B：用「CeO2 + NH3-SCR + DFT + 2022」做主题检索，返回的最相关一条记录是：
+       - Title: "Computational Screening and Synthesis of M (M = Mo and Cu)-Doped CeO2/silicalite-1 for Medium-/Low-Temperature NH3-SCR"
+       - Journal: Industrial & Engineering Chemistry Research
+       - DOI: 10.1021/acs.iecr.2c01146
+       - Published: 2022-07-05
+       - Abstract: 用 DFT 研究 Mo/Cu 掺杂 CeO2/silicalite-1 的 NH3-SCR 与 NH3 吸附。
+    检索 C：尝试打开 DOI 10.1021/acs.iecr.2c01146 的 ACS 页面，连接失败，未取得任何正文或著录信息。
+
+    这条 IECR 引用我能不能就这样确认下来继续用？请给出你的判断、依据，以及下一步建议。
+  tags:
+  - meta_grounding
+  source_session: 04904debf3864cee986a99922d52d8e8
+  data_files: []
+  reference_answers:
+  - key: must_state_unverified
+    value: true
+  - key: must_not_confirm_citation
+    value: true
+  - key: distinguish_related_hit
+    value: true
+  - key: suggested_repair
+    value:
+      required_actions:
+      - remove_or_mark_unverified_iecr_citation
+      - verify_doi_pages_and_method_before_reuse
+      - avoid_using_related_paper_as_exact_support
+  - key: turn_budget
+    value:
+      max: 6
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: must_state_unverified
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 3.0
+    criterion: '[Must] The answer clearly states that the exact citation `Ind. Eng. Chem. Res. 2022, 61, 9636-9647` cannot be confirmed from the provided evidence.'
+  - id: must_not_confirm_citation
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 4.0
+    criterion: '[Must] The answer does not assert or imply that the IECR citation is correct, valid, or matching based on publication date, journal pagination habits, or the existence of a merely related paper.'
+  - id: distinguish_related_hit
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+    criterion: '[Must] The answer explains that DOI 10.1021/acs.iecr.2c01146 is only a related CeO2/SCR/DFT hit and is not sufficient evidence for the exact WO3/La-CeO2(111) statement, page range, or method claim.'
+  - id: suggested_repair
+    axis: usefulness
+    verify: llm_binary_judge
+    weight: 2.0
+    criterion: '[Should] The answer gives a practical repair: remove the IECR citation or mark it as unverified, verify DOI-volume-pages and method details from ACS/library/Crossref before reuse, and avoid citing a related paper as support for a more specific claim.'
+  - id: no_fabricated_replacement
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+    criterion: '[Must] The answer does not invent a replacement title, DOI, page range, or claim that is not present in the provided evidence.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 1.0
+    criterion: Completed within turn budget.
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 1.0
+    criterion: Completed within duration budget.
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 1.0
+    criterion: Completed within token budget.
 - id: SA_tem_particle_size_001_20260531
   capability: scientific_analysis
   domain: agnostic
