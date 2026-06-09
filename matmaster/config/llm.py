@@ -13,6 +13,9 @@ class ProviderConfig(BaseModel):
     transport: str
     api_key: str
     base_url: str | None = None
+    prompt_cache_compat: Literal["anthropic_native", "bedrock_blocks"] = (
+        "anthropic_native"
+    )
 
 
 class PromptCacheConfig(BaseModel):

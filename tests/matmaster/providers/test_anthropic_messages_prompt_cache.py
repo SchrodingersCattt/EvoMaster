@@ -14,6 +14,7 @@ from matmaster.types.messages import (
 
 
 def _provider(**overrides) -> AnthropicMessagesTransport:
+    prompt_cache_compat = overrides.pop("prompt_cache_compat", "anthropic_native")
     values = {
         "system_prompt_breakpoint": True,
         "cache_control": {"type": "ephemeral"},
@@ -30,6 +31,7 @@ def _provider(**overrides) -> AnthropicMessagesTransport:
         model="claude-opus-4-6",
         api_key="sk-test",
         prompt_cache_options=options,
+        prompt_cache_compat=prompt_cache_compat,
     )
 
 
@@ -144,6 +146,26 @@ def test_cache_respects_max_breakpoints_after_automatic_slot() -> None:
 
     assert kwargs["system"][0]["cache_control"] == {"type": "ephemeral"}
     assert "cache_control" not in kwargs["messages"][-1]["content"][0]
+    assert "cache_control" not in kwargs["messages"][0]["content"][0]
+
+
+def test_bedrock_cache_compat_converts_automatic_to_block_checkpoint() -> None:
+    provider = _provider(prompt_cache_compat="bedrock_blocks", max_breakpoints=2)
+
+    kwargs = provider.build_kwargs(
+        [
+            SystemMessage(content="system prompt"),
+            UserMessage(content="older long user content"),
+            UserMessage(content="current"),
+        ],
+        tools=None,
+    )
+
+    assert "extra_body" not in kwargs
+    assert kwargs["system"][0]["cache_control"] == {"type": "ephemeral"}
+    assert kwargs["messages"][-1]["content"][0]["cache_control"] == {
+        "type": "ephemeral"
+    }
     assert "cache_control" not in kwargs["messages"][0]["content"][0]
 
 
