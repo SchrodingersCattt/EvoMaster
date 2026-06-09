@@ -35,6 +35,14 @@ class TestCostGuard:
         p._accumulate_cost({"total_amount_settle_micro": 600})
         assert ctrl.token.is_cancelled is True  # 累计 1200 > 1000
 
+    def test_trip_marks_cost_guard_cancel_reason(self):
+        ctrl = CancellationController()
+        p = _provider(100, ctrl)
+        p._accumulate_cost({"total_amount_settle_micro": 200})
+        assert ctrl.token.is_cancelled is True
+        # 取消带 cost_guard 原因，下游据此按「额度耗尽中止」而非「用户取消」呈现。
+        assert ctrl.token.cancel_reason == "cost_guard"
+
     def test_no_trip_within_budget(self):
         ctrl = CancellationController()
         p = _provider(1000, ctrl)

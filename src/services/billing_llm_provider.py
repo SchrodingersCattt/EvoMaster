@@ -19,6 +19,10 @@ from matmaster.types.messages import LLMResponse, StreamChunk
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+# 成本熔断触发取消时的原因标记：下游（run_agent 收尾）据此把本轮按「额度耗尽中止」
+# 而非「用户取消」对外呈现（语义/文案/运营指标都不同）。
+COST_GUARD_CANCEL_REASON = "cost_guard"
+
 
 class BillingLLMProvider:
     """Wrap an LLM provider and report one usage event per completed LLM call.
@@ -26,9 +30,11 @@ class BillingLLMProvider:
     In-run 成本熔断（防线二）：发送前闸口只在 run 启动时拦一次，单个长 run 内的连续
     LLM 调用若不设上界，post-paid 记账可累积出无界欠债。本包装器在每次上报拿回的
     ``total_amount_settle_micro`` 上累加本次 run 已花成本，一旦超过 ``budget_micro``
-    （= 启动时可用额度 + 宽限，由调用方算好）就触发 ``cancel_controller.cancel()``。
-    Exp 内核在每个 turn 开始 / stream chunk / 串行 tool 间检查 cancel_token，会在下一个
-    turn 前优雅收尾（reason='cancelled'），故单 run 欠债上界 ≈ 预算 + 一个 turn 成本。
+    （= 启动时可用额度 + 宽限，由调用方算好）就触发
+    ``cancel_controller.cancel(reason='cost_guard')``。Exp 内核在每个 turn 开始 / stream
+    chunk / 串行 tool 间检查 cancel_token，会在下一个 turn 前优雅收尾（reason='cancelled'），
+    故单 run 欠债上界 ≈ 预算 + 一个 turn 成本。取消带 ``cost_guard`` 原因，让 run_agent
+    收尾时把本轮按「额度耗尽中止」（失败语义）而非「用户取消」对外呈现。
 
     仅在同时注入 ``budget_micro`` 与 ``cancel_controller`` 时启用（platform 计费才传；
     byok/eval 不传 → 不熔断）。累加发生在 fire-and-forget 上报回调里，不阻塞主链路。
@@ -159,6 +165,7 @@ class BillingLLMProvider:
         if self._spent_micro <= self._budget_micro:
             return
         # 只触发一次：set event + fire callbacks，Exp 下个 turn 前见 cancel 优雅收尾。
+        # 带 cost_guard 原因，让 run_agent 把本轮按「额度耗尽中止」而非「用户取消」呈现。
         self._guard_tripped = True
         logger.warning(
             "in-run cost guard tripped session_id=%s spent_micro=%s budget_micro=%s, "
@@ -168,7 +175,7 @@ class BillingLLMProvider:
             self._budget_micro,
         )
         try:
-            self._cancel_controller.cancel()
+            self._cancel_controller.cancel(reason=COST_GUARD_CANCEL_REASON)
         except Exception:
             logger.warning(
                 "cost guard cancel failed session_id=%s",

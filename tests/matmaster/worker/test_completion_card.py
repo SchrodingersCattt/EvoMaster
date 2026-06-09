@@ -98,6 +98,22 @@ def test_card_cancelled() -> None:
     assert ("结果", "已取消") in rows
 
 
+def test_card_quota_exhausted_is_failure_with_friendly_reason() -> None:
+    # 主循环把 quota_exhausted 经 _FAIL_REASON_DISPLAY 映射成友好文案后传入；
+    # 成本熔断按「失败」（红卡）而非「用户取消」（橙卡）呈现。
+    from src.worker.agent_worker import _FAIL_REASON_DISPLAY
+
+    display = _FAIL_REASON_DISPLAY["quota_exhausted"]
+    assert display == "额度已用完，本轮已自动停止"
+    title, rows, template = _card(
+        run_success=False, fail_reason="quota_exhausted", fail_reason_str=display
+    )
+    assert title == "Worker 执行失败"
+    assert template == CARD_TEMPLATE_RED
+    assert rows[6] == ("结果", "失败")
+    assert rows[7] == ("失败原因", display)
+
+
 def test_card_inserts_usage_rows_after_runtime() -> None:
     summary = {
         "num_turns": 2,

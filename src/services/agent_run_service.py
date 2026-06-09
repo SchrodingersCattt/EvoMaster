@@ -40,7 +40,10 @@ from src.dao.chat_events_table import get_chat_events_table
 from src.dao.redis_dao import get_redis_dao
 from src.services.agent_run_bohrium_stage import run_bohrium_stage
 from src.services.agent_run_history_wiring import build_history_wiring
-from src.services.billing_llm_provider import BillingLLMProvider
+from src.services.billing_llm_provider import (
+    COST_GUARD_CANCEL_REASON,
+    BillingLLMProvider,
+)
 from src.services.figure_coordinator import FigureCoordinator
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.image_input_service import get_image_input_service
@@ -587,6 +590,15 @@ class AgentRunService:
             usage_summary = _build_run_usage_summary(run_result_event)
             usage_summary = await _attach_run_cost(usage_summary, invocation_id)
             if run_result_event.reason == "cancelled":
+                # 内核对一切 cancel 都产 reason='cancelled'，无法自辨成因；用 cancel_token
+                # 上的原因区分「成本熔断（额度耗尽止损）」与「用户主动取消」：前者是系统
+                # 被迫中止，按失败语义对外（error + treat_as_failure），不污染取消率。
+                if cancel_token.cancel_reason == COST_GUARD_CANCEL_REASON:
+                    await _emit_error_and_close_fanout(
+                        fanout,
+                        "额度已用完，本轮已自动停止。请充值或等待额度刷新后重试。",
+                    )
+                    return ((False, "quota_exhausted"), _elapsed_ms(), usage_summary)
                 await fanout.dispatch(
                     CancelledEvent(source="System", reason="Task cancelled by user.")
                 )
