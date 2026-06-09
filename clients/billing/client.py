@@ -164,8 +164,10 @@ class BillingService:
     ) -> dict[str, Any] | None:
         """上报一次 usage 并返回当次定价结果（含 ``total_amount_micro`` 等），失败返回 None。
 
-        与 :meth:`report_llm_usage` 共用 POST，但返回完整响应 ``data`` 而非布尔，
-        供评测侧按 call 攒成本明细。缺省 ``billing_mode='eval'``：记账并定价但不扣额度。
+        与 :meth:`report_llm_usage` 共用 POST，但返回完整响应 ``data`` 而非布尔。
+        两类用途：① 评测侧（缺省 ``billing_mode='eval'``，记账并定价但不扣额度）按 call
+        攒成本明细；② 线上 in-run 成本熔断（传 ``billing_mode='platform'``，照常扣费记账）
+        据 ``total_amount_settle_micro`` 累加本次 run 已花成本。
         """
         return await self._post_usage(
             run_context=run_context,

@@ -47,6 +47,12 @@ class QuotaStatus:
     reset_at: str | None = None
     photon_remaining: float | None = None
     photon_overflow_enabled: bool = False
+    available_micro: int | None = None
+    """可用额度（micro CNY）= 免费额度 +（仅开代扣）光子折算，与发送前闸口/实扣同口径。
+
+    仅供「一次 run 内成本熔断」取预算快照用，不参与发送前闸口判定（is_exhausted）。
+    旧 tools-server 不返回该字段时为 None（调用方据此关闭熔断、退化为只靠发送前闸口）。
+    """
 
     @property
     def is_exhausted(self) -> bool:
@@ -109,6 +115,11 @@ async def check_quota_status(user_id: str) -> QuotaStatus:
             photon_remaining = _coerce_number(inner.get("photon_remaining"))
             # 光子代扣偏好（opt-in，默认 False）：缺失/非法按 False，闸口不把光子计入放行。
             photon_overflow_enabled = bool(inner.get("photon_overflow_enabled"))
+            # 可用额度（micro）：旧 tools-server 不返回则为 None（关闭 in-run 熔断）。
+            available_raw = inner.get("available_micro")
+            available_micro = (
+                int(available_raw) if isinstance(available_raw, int) else None
+            )
             logger.info(
                 "check_quota_status response: user_id=%s status=%s "
                 "remaining=%s reset_at=%s photon_remaining=%s "
@@ -125,4 +136,5 @@ async def check_quota_status(user_id: str) -> QuotaStatus:
                 reset_at=reset_at,
                 photon_remaining=photon_remaining,
                 photon_overflow_enabled=photon_overflow_enabled,
+                available_micro=available_micro,
             )

@@ -430,6 +430,7 @@ def _run_worker_loop() -> None:
                     "user_prompt": user_prompt,
                     "send_cb": send_cb,
                     "cancel_token": controller.token,
+                    "cancel_controller": controller,
                     "mode": mode,
                     "task_id": task_id,
                     "invocation_id": invocation_id,

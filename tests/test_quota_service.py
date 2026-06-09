@@ -56,6 +56,14 @@ class TestIsExhausted:
             QuotaStatus(remaining_yuan=2.0, photon_remaining=0.0).is_exhausted is False
         )
 
+    def test_available_micro_defaults_none_and_not_in_gate(self):
+        # available_micro 仅供 in-run 成本熔断预算，不参与发送前闸口（is_exhausted）。
+        assert QuotaStatus(remaining_yuan=1.0).available_micro is None
+        assert (
+            QuotaStatus(remaining_yuan=0.0, available_micro=5_000_000).is_exhausted
+            is True
+        )
+
     def test_exhausted_message_with_reset(self):
         status = QuotaStatus(remaining_yuan=0.0, reset_at='2026-06-09')
         assert '2026-06-09' in status.exhausted_message('fallback')
