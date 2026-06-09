@@ -95,8 +95,12 @@ class TestNormalizeStream:
                     name="search",
                 ),
             ),
-            _event("response.function_call_arguments.delta", item_id="fc_1", delta='{"q"'),
-            _event("response.function_call_arguments.delta", item_id="fc_1", delta=':"x"}'),
+            _event(
+                "response.function_call_arguments.delta", item_id="fc_1", delta='{"q"'
+            ),
+            _event(
+                "response.function_call_arguments.delta", item_id="fc_1", delta=':"x"}'
+            ),
             _event("response.completed", response=completed_response),
         ]
 
@@ -167,7 +171,9 @@ class TestNormalizeStream:
 
     async def test_failed_event_raises_classified_server_error(self) -> None:
         provider = ResponsesTransport(model="matmaster/gpt-5.5", api_key="sk-test")
-        failed = SimpleNamespace(error=SimpleNamespace(code="server_error", message="boom"))
+        failed = SimpleNamespace(
+            error=SimpleNamespace(code="server_error", message="boom")
+        )
         events = [_event("response.failed", response=failed)]
 
         with pytest.raises(LLMError) as exc_info:

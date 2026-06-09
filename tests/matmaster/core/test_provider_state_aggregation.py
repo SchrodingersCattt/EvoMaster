@@ -83,7 +83,9 @@ async def test_anthropic_style_provider_state_overwrites_prior_none_chunks():
             )
 
     final = None
-    async for item in stream_llm_items(SimpleNamespace(llm_provider=_Provider()), [], None):
+    async for item in stream_llm_items(
+        SimpleNamespace(llm_provider=_Provider()), [], None
+    ):
         if item.llm_response is not None:
             final = item.llm_response
 
@@ -132,7 +134,9 @@ async def test_responses_style_provider_state_round_trips_through_aggregation():
             yield StreamChunk(finish_reason="stop")
 
     final = None
-    async for item in stream_llm_items(SimpleNamespace(llm_provider=_Provider()), [], None):
+    async for item in stream_llm_items(
+        SimpleNamespace(llm_provider=_Provider()), [], None
+    ):
         if item.llm_response is not None:
             final = item.llm_response
 

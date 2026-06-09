@@ -155,7 +155,9 @@ def test_mismatched_provider_state_is_discarded_but_content_and_tools_remain() -
         content="visible",
         provider_state=ProviderState(
             transport="anthropic_messages",
-            payload={"thinking": [{"type": "thinking", "thinking": "bad", "signature": "x"}]},
+            payload={
+                "thinking": [{"type": "thinking", "thinking": "bad", "signature": "x"}]
+            },
         ),
         tool_calls=[ToolCallData(id="call_1", name="search", arguments={})],
     )
@@ -164,7 +166,12 @@ def test_mismatched_provider_state_is_discarded_but_content_and_tools_remain() -
         [msg, ToolMessage(content="r", tool_call_id="call_1", tool_name="search")]
     ) == [
         {"role": "assistant", "content": "visible"},
-        {"type": "function_call", "call_id": "call_1", "name": "search", "arguments": "{}"},
+        {
+            "type": "function_call",
+            "call_id": "call_1",
+            "name": "search",
+            "arguments": "{}",
+        },
         {"type": "function_call_output", "call_id": "call_1", "output": "r"},
     ]
 

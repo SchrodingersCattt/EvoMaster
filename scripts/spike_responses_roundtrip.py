@@ -110,7 +110,9 @@ async def main() -> None:
         print(f"OK text replay: 方案 A 纯文本回放被接受, status={final_text2.status}")
     except openai.BadRequestError as exc:
         print(f"SPIKE FAIL text replay (BadRequest): {exc}")
-        print("-> 按 spec §7.4 降级方案 B（payload 存原始 output item 数组），先停下与设计者确认")
+        print(
+            "-> 按 spec §7.4 降级方案 B（payload 存原始 output item 数组），先停下与设计者确认"
+        )
         raise
 
     # --- tool round 1: 强制 function_call，避免模型选择行为污染 spike ---
@@ -179,7 +181,9 @@ async def main() -> None:
         print("SPIKE PASS -> 维持方案 A")
     except openai.BadRequestError as exc:
         print(f"SPIKE FAIL tool replay (BadRequest): {exc}")
-        print("-> 按 spec §7.4 降级方案 B（payload 存原始 output item 数组），先停下与设计者确认")
+        print(
+            "-> 按 spec §7.4 降级方案 B（payload 存原始 output item 数组），先停下与设计者确认"
+        )
         raise
     finally:
         await client.close()

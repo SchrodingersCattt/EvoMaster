@@ -162,7 +162,9 @@ def _responses_usage_to_scalar_dict(usage: Any) -> dict[str, int]:
     if isinstance(cached, int) and cached > 0:
         out["cache_read_tokens"] = cached
     output_details = getattr(usage, "output_tokens_details", None)
-    reasoning = getattr(output_details, "reasoning_tokens", None) if output_details else None
+    reasoning = (
+        getattr(output_details, "reasoning_tokens", None) if output_details else None
+    )
     if isinstance(reasoning, int) and reasoning > 0:
         out["reasoning_tokens"] = reasoning
     return out
@@ -361,8 +363,8 @@ class ResponsesTransport(Transport):
             elif item_type == "function_call":
                 tool_calls.append(
                     ToolCallData(
-                        id=getattr(item, "call_id"),
-                        name=getattr(item, "name"),
+                        id=item.call_id,
+                        name=item.name,
                         arguments=parse_tool_arguments(
                             getattr(item, "arguments", "") or ""
                         ),

@@ -62,9 +62,7 @@ class _FakeReasoning:
         return {
             "type": "reasoning",
             "id": self.id,
-            "summary": [
-                {"type": "summary_text", "text": p.text} for p in self.summary
-            ],
+            "summary": [{"type": "summary_text", "text": p.text} for p in self.summary],
             "encrypted_content": self.encrypted_content,
         }
 
