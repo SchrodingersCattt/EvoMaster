@@ -239,7 +239,10 @@ class TestBohriumExecution:
         assert any("base_url=https://openapi.test.dp.tech" in msg for msg in messages)
         assert any("sandbox=True" in msg for msg in messages)
         assert any("access_key=secr..." in msg for msg in messages)
-        assert not any("secret-access-key" in msg for msg in messages)
+        # The job/add curl log intentionally carries the real accessKey so it
+        # is directly copy-pasteable; every other log line must keep it masked.
+        non_curl_messages = [msg for msg in messages if "copyable curl" not in msg]
+        assert not any("secret-access-key" in msg for msg in non_curl_messages)
 
     def test_submit_remote_share_without_session_errors(self, tmp_path, monkeypatch):
         _patch_bridge(monkeypatch)
