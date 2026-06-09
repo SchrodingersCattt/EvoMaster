@@ -36,3 +36,17 @@ MATMASTER_TOOLS_EVALUATION_BEARER: str | None = _eval_bearer or None
 # ``require_byok_service_token`` 对齐（Nacos byok.service_api_keys）。
 _byok_bearer = os.getenv("MATMASTER_TOOLS_BYOK_BEARER", "").strip()
 MATMASTER_TOOLS_BYOK_BEARER: str | None = _byok_bearer or None
+
+
+def _parse_grace_ratio(raw: str) -> float:
+    """解析 in-run 成本熔断宽限比例；非法/负值回落默认 0.2。"""
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return 0.2
+    return value if value >= 0 else 0.2
+
+
+# in-run 成本熔断（防线二）宽限比例：单次 run 预算 = 启动时可用额度 ×(1+ratio)。
+# 留宽限避免 agent 干到一半因轻微超额被生硬掐断；超过则取消整个 run。设为负数无效。
+COST_GUARD_GRACE_RATIO = _parse_grace_ratio(os.getenv("COST_GUARD_GRACE_RATIO", "0.2"))

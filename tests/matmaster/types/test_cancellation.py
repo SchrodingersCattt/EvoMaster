@@ -49,6 +49,26 @@ class TestCancellationToken:
         with pytest.raises(CancelledError):
             ctrl.token.raise_if_cancelled()
 
+    def test_cancel_reason_none_before_cancel(self) -> None:
+        ctrl = CancellationController()
+        assert ctrl.token.cancel_reason is None
+
+    def test_cancel_reason_defaults_user(self) -> None:
+        ctrl = CancellationController()
+        ctrl.cancel()
+        assert ctrl.token.cancel_reason == "user"
+
+    def test_cancel_reason_custom(self) -> None:
+        ctrl = CancellationController()
+        ctrl.cancel(reason="cost_guard")
+        assert ctrl.token.cancel_reason == "cost_guard"
+
+    def test_cancel_reason_first_wins(self) -> None:
+        ctrl = CancellationController()
+        ctrl.cancel(reason="cost_guard")
+        ctrl.cancel(reason="user")
+        assert ctrl.token.cancel_reason == "cost_guard"
+
 
 class TestOnCancel:
     def test_callback_fires_on_cancel(self) -> None:
@@ -97,6 +117,12 @@ class TestChild:
         child.cancel()
         assert child.token.is_cancelled is True
         assert parent.token.is_cancelled is False
+
+    def test_child_inherits_parent_cancel_reason(self) -> None:
+        parent = CancellationController()
+        child = parent.child()
+        parent.cancel(reason="cost_guard")
+        assert child.token.cancel_reason == "cost_guard"
 
 
 class TestWaitAsync:
