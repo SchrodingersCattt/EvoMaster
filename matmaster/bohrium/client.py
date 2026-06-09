@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import logging
+import shlex
 import time
 from pathlib import Path
 from typing import Any
@@ -32,6 +34,26 @@ def _compact_log_text(text: str, *, max_chars: int = 200) -> str:
     if len(compact) <= max_chars:
         return compact
     return compact[: max_chars - 3] + "..."
+
+
+def _build_curl_command(
+    url: str,
+    headers: dict[str, str],
+    payload: dict[str, Any],
+) -> str:
+    """Build a copy-pasteable curl command for a JSON POST request.
+
+    The returned string is shell-escaped so it can be pasted directly into a
+    terminal to reproduce the request. The ``accessKey`` header carries the
+    caller's real credential, so callers should only log this where exposing
+    the credential is acceptable (e.g. debugging the job/add endpoint).
+    """
+    parts = ["curl", "-X", "POST", shlex.quote(url)]
+    for key, value in headers.items():
+        parts.extend(["-H", shlex.quote(f"{key}: {value}")])
+    body = json.dumps(payload, ensure_ascii=False)
+    parts.extend(["--data", shlex.quote(body)])
+    return " ".join(parts)
 
 
 def _log_http_error(method: str, url: str, response: Any) -> None:
@@ -160,6 +182,15 @@ def add_job(
             "logFiles": ["log"],
         }
         path = "/openapi/v2/job/add"
+    url = f"{ctx.credentials.base_url}{path}"
+    headers = {
+        "accessKey": ctx.credentials.access_key,
+        "Content-Type": "application/json",
+    }
+    logger.info(
+        "Bohrium job/add request (copyable curl):\n%s",
+        _build_curl_command(url, headers, payload),
+    )
     response = _post(
         ctx.credentials.base_url, path, ctx.credentials.access_key, payload
     )
