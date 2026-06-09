@@ -50,7 +50,7 @@ profiles:
     max_retries: 3
     retry_delay: 1.0
 
-  matmaster/gpt-5.5:
+  cds/GPT-5.5:
     provider: litellm-responses
     model: matmaster/gpt-5.5
     reasoning_effort: xhigh
@@ -87,7 +87,7 @@ profiles:
 
   global.anthropic.claude-opus-4-6-v1:
     provider: litellm-anthropic
-    model: claude-opus-4-6
+    model: global.anthropic.claude-opus-4-6-v1
     reasoning_effort: max
     context_limit: 200000
     supports_vision: true
@@ -105,6 +105,6 @@ profiles:
       flexible_breakpoint: true
       max_breakpoints: 4
       min_flexible_chars: 1000
-      ttl: "5m"
+      ttl: "1h"
 
 default: matmaster/qwen3.7-max
