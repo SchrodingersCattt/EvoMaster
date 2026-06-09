@@ -13,14 +13,42 @@ class TestIsExhausted:
         # 未启用光子（photon_remaining 默认 None）：退化为只看金额额度。
         assert QuotaStatus(remaining_yuan=0.0).is_exhausted is True
 
-    def test_free_zero_but_photon_available_not_exhausted(self):
+    def test_free_zero_photon_available_and_overflow_enabled_not_exhausted(self):
+        # 开了代扣且有光子余额：放行（溢出走光子）。
         assert (
-            QuotaStatus(remaining_yuan=0.0, photon_remaining=5.0).is_exhausted is False
+            QuotaStatus(
+                remaining_yuan=0.0,
+                photon_remaining=5.0,
+                photon_overflow_enabled=True,
+            ).is_exhausted
+            is False
+        )
+
+    def test_free_zero_photon_available_but_overflow_disabled_exhausted(self):
+        # 口子 A 核心用例：有光子余额但没开代扣 -> 实扣侧会 skip，闸口必须拦截。
+        assert (
+            QuotaStatus(
+                remaining_yuan=0.0,
+                photon_remaining=5.0,
+                photon_overflow_enabled=False,
+            ).is_exhausted
+            is True
+        )
+
+    def test_free_zero_photon_available_overflow_default_exhausted(self):
+        # 偏好字段缺省（默认 False）时不把光子计入放行。
+        assert (
+            QuotaStatus(remaining_yuan=0.0, photon_remaining=5.0).is_exhausted is True
         )
 
     def test_free_zero_and_photon_zero_exhausted(self):
         assert (
-            QuotaStatus(remaining_yuan=0.0, photon_remaining=0.0).is_exhausted is True
+            QuotaStatus(
+                remaining_yuan=0.0,
+                photon_remaining=0.0,
+                photon_overflow_enabled=True,
+            ).is_exhausted
+            is True
         )
 
     def test_free_available_photon_zero_not_exhausted(self):
