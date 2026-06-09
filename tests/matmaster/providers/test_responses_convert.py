@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import pytest
 
+from matmaster.providers.transports.anthropic_messages import AnthropicMessagesTransport
+from matmaster.providers.transports.chat_completions import ChatCompletionsTransport
 from matmaster.providers.transports.responses import ResponsesTransport
 from matmaster.types.errors import LLMError
 from matmaster.types.messages import (
@@ -278,3 +280,76 @@ def test_orphan_tool_result_fails_fast() -> None:
 
     assert exc_info.value.retryable is False
     assert exc_info.value.error_category == "bad_request"
+
+
+def test_responses_discards_chat_completions_tag_keeps_content_and_tools() -> None:
+    msg = AssistantMessage(
+        content="visible",
+        provider_state=ProviderState(transport="chat_completions", payload={"x": 1}),
+        tool_calls=[ToolCallData(id="call_1", name="s", arguments={})],
+    )
+
+    assert _provider().convert_messages(
+        [msg, ToolMessage(content="r", tool_call_id="call_1", tool_name="s")]
+    ) == [
+        {"role": "assistant", "content": "visible"},
+        {"type": "function_call", "call_id": "call_1", "name": "s", "arguments": "{}"},
+        {"type": "function_call_output", "call_id": "call_1", "output": "r"},
+    ]
+
+
+def test_responses_claims_only_its_own_tag() -> None:
+    own = AssistantMessage(
+        content="hi",
+        provider_state=ProviderState(
+            transport="responses",
+            payload={
+                "reasoning": [
+                    {
+                        "type": "reasoning",
+                        "id": "rs_1",
+                        "summary": [],
+                        "encrypted_content": "e",
+                    }
+                ]
+            },
+        ),
+    )
+    foreign = AssistantMessage(
+        content="hi",
+        provider_state=ProviderState(
+            transport="anthropic_messages",
+            payload={"thinking": [{"type": "thinking"}]},
+        ),
+    )
+
+    assert _provider()._claim_provider_state(own) == own.provider_state.payload
+    assert _provider()._claim_provider_state(foreign) is None
+
+
+def test_existing_transports_discard_responses_tag() -> None:
+    msg = AssistantMessage(
+        content="hi",
+        provider_state=ProviderState(
+            transport="responses",
+            payload={
+                "reasoning": [
+                    {
+                        "type": "reasoning",
+                        "id": "rs_1",
+                        "summary": [],
+                        "encrypted_content": "e",
+                    }
+                ]
+            },
+        ),
+    )
+
+    chat_transport = ChatCompletionsTransport(model="m", api_key="sk-test")
+    anthropic_transport = AnthropicMessagesTransport(
+        model="claude-opus-4-6",
+        api_key="sk-test",
+    )
+
+    assert chat_transport._claim_provider_state(msg) is None
+    assert anthropic_transport._claim_provider_state(msg) is None
