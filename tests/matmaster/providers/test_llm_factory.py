@@ -15,6 +15,7 @@ from matmaster.providers.transports.anthropic_messages import (
     AnthropicPromptCacheOptions,
 )
 from matmaster.providers.transports.chat_completions import ChatCompletionsTransport
+from matmaster.providers.transports.responses import ResponsesTransport
 
 
 @pytest.fixture()
@@ -154,3 +155,58 @@ class TestDispatch:
             max_breakpoints=4,
             min_flexible_chars=1000,
         )
+
+    def test_responses_tag_hits_builder(self) -> None:
+        assert "responses" in _TRANSPORT_BUILDERS
+
+    def test_responses_builder_receives_profile(self) -> None:
+        cfg = LLMConfig(
+            providers={
+                "litellm-responses": ProviderConfig(
+                    transport="responses",
+                    api_key="sk-proxy",
+                    base_url="https://proxy.example/v1",
+                )
+            },
+            profiles={
+                "matmaster/gpt-5.5": LLMProfileConfig(
+                    provider="litellm-responses",
+                    model="matmaster/gpt-5.5",
+                    reasoning_effort="xhigh",
+                    reasoning_summary="detailed",
+                    context_limit=256_000,
+                    supports_vision=True,
+                    timeout=1200,
+                    stream_timeout=120,
+                    stream_idle_timeout=60,
+                    max_retries=3,
+                    retry_delay=1.0,
+                )
+            },
+            default="matmaster/gpt-5.5",
+        )
+
+        provider = build_provider(cfg)
+
+        assert isinstance(provider, ResponsesTransport)
+        assert provider._model == "matmaster/gpt-5.5"
+        assert provider._api_key == "sk-proxy"
+        assert provider._base_url == "https://proxy.example/v1"
+        assert provider._reasoning_effort == "xhigh"
+        assert provider._reasoning_summary == "detailed"
+        assert provider._max_tokens is None
+
+    def test_responses_builder_rejects_extra_body(self) -> None:
+        from matmaster.config.llm import LLMProfileConfig, ProviderConfig
+        from matmaster.providers.llm_factory import _build_responses_transport
+
+        with pytest.raises(ValueError, match="does not support extra_body"):
+            _build_responses_transport(
+                LLMProfileConfig(
+                    provider="litellm-responses",
+                    model="matmaster/gpt-5.5",
+                    context_limit=256_000,
+                ),
+                ProviderConfig(transport="responses", api_key="k"),
+                extra_body={"x": 1},
+            )
