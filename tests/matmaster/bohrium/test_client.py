@@ -412,9 +412,7 @@ def test_post_logs_copyable_curl_when_enabled(
     messages = [record.getMessage() for record in caplog.records]
     assert any(client_module.CURL_LOG_PREFIX in msg for msg in messages)
     # The curl line is meant to be copy-pasteable, so it carries the real key.
-    assert any(
-        "curl -X POST" in msg and "secret-ak" in msg for msg in messages
-    )
+    assert any("curl -X POST" in msg and "secret-ak" in msg for msg in messages)
 
 
 def test_post_does_not_log_curl_by_default(

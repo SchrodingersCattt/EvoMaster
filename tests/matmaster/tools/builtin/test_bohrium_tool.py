@@ -242,9 +242,7 @@ class TestBohriumExecution:
         # The job/add curl log intentionally carries the real accessKey so it
         # is directly copy-pasteable; every other log line must keep it masked.
         non_curl_messages = [
-            msg
-            for msg in messages
-            if bohrium_client_module.CURL_LOG_PREFIX not in msg
+            msg for msg in messages if bohrium_client_module.CURL_LOG_PREFIX not in msg
         ]
         assert not any("secret-access-key" in msg for msg in non_curl_messages)
 
