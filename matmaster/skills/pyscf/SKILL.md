@@ -13,7 +13,7 @@ PySCF (Python-based Simulations of Chemistry Framework) is a Python library for 
 | Item | Default Value |
 |------|---------------|
 | image | `registry.dp.tech/dptech/dp/native/prod-19853/pyscf-geometric:dev-260608` |
-| machine | `c64_m256_cpu` (32 physical cores, 256 GB RAM) |
+| machine | `c32_m128_cpu` (16 physical cores, 128 GB RAM) |
 | cmd | `python {script_name} > log 2>&1` |
 
 > Replace `{script_name}` with the actual Python script name (e.g. `run_pyscf.py`).

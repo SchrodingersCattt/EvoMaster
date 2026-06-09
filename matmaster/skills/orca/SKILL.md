@@ -13,7 +13,7 @@ ORCA is an ab initio quantum chemistry program focused on molecular systems. It 
 | Item | Default Value |
 |------|---------------|
 | image | `registry.dp.tech/dptech/dp/native/prod-19853/orca:v6.1.1` |
-| machine | `c64_m256_cpu` (32 physical cores, 256 GB RAM) |
+| machine | `c32_m128_cpu` (16 physical cores, 128 GB RAM) |
 | cmd | `OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 OMPI_MCA_rmaps_base_oversubscribe=1 /opt/orca611_avx2/orca {input_file} > log 2>&1` |
 
 > ORCA is run via **absolute path** (`/opt/orca611_avx2/orca`), not through mpirun or PATH.
@@ -67,7 +67,7 @@ If the user provides a complete ORCA `.inp` file, skip preparation and submit di
 
 ## Physical Checks
 
-- **Parallelism**: set `%pal nprocs 32 end` to match physical core count (32 for c64_m256_cpu)
+- **Parallelism**: set `%pal nprocs 16 end` to match physical core count (16 for c32_m128_cpu)
 - **Basis set**: def2-SVP for quick tests, def2-TZVP for production, def2-QZVP for benchmark
 - **RI approximation**: RIJCOSX or RI-JK for DFT; RI for post-HF. Specify `/C` and `/JK` auxiliary basis sets when using RI explicitly
 - **Charge and multiplicity**: first two values after `*xyz`. Verify: total electrons = sum(Z) - charge; multiplicity = 2S+1
