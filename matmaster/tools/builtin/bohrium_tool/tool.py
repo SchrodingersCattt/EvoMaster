@@ -198,7 +198,7 @@ class BohriumTool(BuiltinTool):
             },
             "machine": {
                 "type": "string",
-                "description": "Bohrium machine type. Default: c64_m256_cpu. (submit)",
+                "description": "Bohrium machine type. Default: c32_m128_cpu. (submit)",
             },
             "job_name": {
                 "type": "string",
@@ -495,7 +495,7 @@ class BohriumTool(BuiltinTool):
         if not cmd:
             return ToolResult(status="error", content="Missing required parameter: cmd")
 
-        machine = args.get("machine", "c64_m256_cpu")
+        machine = args.get("machine", "c32_m128_cpu")
         job_name = args.get("job_name", "matmaster-job")
         disk_size = int(args.get("disk_size", 50))
 

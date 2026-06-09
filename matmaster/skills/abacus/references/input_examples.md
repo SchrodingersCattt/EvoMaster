@@ -371,10 +371,10 @@ Chain SCF and NSCF in a shell script:
 #!/bin/bash
 cp INPUT_scf INPUT
 cp KPT_scf KPT
-OMP_NUM_THREADS=1 mpirun -np 32 abacus
+OMP_NUM_THREADS=1 mpirun -np 16 abacus
 cp INPUT_nscf INPUT
 cp KPT_nscf KPT
-OMP_NUM_THREADS=1 mpirun -np 32 abacus
+OMP_NUM_THREADS=1 mpirun -np 16 abacus
 ```
 
 **Input directory must contain**: `INPUT_scf`, `INPUT_nscf`, `KPT_scf`, `KPT_nscf`, `STRU`, `.upf`, `.orb`, `run.sh`.
