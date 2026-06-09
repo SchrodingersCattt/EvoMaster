@@ -192,6 +192,41 @@ def _finish_reason_from_response(response: Any) -> str | None:
     return "stop"
 
 
+def _is_non_retryable_responses_bad_request(text: str) -> bool:
+    lowered = text.lower()
+    patterns = (
+        "reasoning",
+        "encrypted",
+        "without its required following item",
+        "previous_response_id",
+        "store",
+        "function_call",
+    )
+    return any(pattern in lowered for pattern in patterns)
+
+
+def _llm_error_from_failed_response(response: Any) -> LLMError:
+    error = getattr(response, "error", None)
+    code = str(getattr(error, "code", "") or "").lower()
+    message = getattr(error, "message", None) or "responses stream failed"
+    text = f"{code} {message}".lower()
+    if "context" in text and ("length" in text or "token" in text):
+        return LLMError(message, retryable=False, error_category="context_overflow")
+    if "rate" in code and "limit" in code:
+        return LLMError(message, retryable=True, error_category="rate_limit")
+    if code in ("authentication_error", "permission_denied", "auth_error"):
+        return LLMError(message, retryable=False, error_category="auth")
+    bad_request_like = code in ("bad_request", "invalid_request_error")
+    non_retryable_bad_request = _is_non_retryable_responses_bad_request(text)
+    if bad_request_like or non_retryable_bad_request:
+        return LLMError(
+            message,
+            retryable=not non_retryable_bad_request,
+            error_category="bad_request",
+        )
+    return LLMError(message, retryable=True, error_category="server")
+
+
 class ResponsesTransport(Transport):
     """Native OpenAI Responses API transport (stateless encrypted reasoning replay)."""
 
@@ -346,8 +381,84 @@ class ResponsesTransport(Transport):
         )
 
     async def normalize_stream(self, raw_iter: Any) -> AsyncIterator[StreamChunk]:
-        raise NotImplementedError
-        yield StreamChunk()
+        item_logical_index: dict[str, int] = {}
+        next_index = 0
+        buffered_reasoning: list[dict[str, Any]] = []
+
+        async for event in raw_iter:
+            event_type = getattr(event, "type", None)
+            if event_type == "response.output_text.delta":
+                yield StreamChunk(content=getattr(event, "delta", "") or "")
+                continue
+            if event_type in (
+                "response.reasoning_summary_text.delta",
+                "response.reasoning_text.delta",
+            ):
+                yield StreamChunk(reasoning_content=getattr(event, "delta", "") or "")
+                continue
+            if event_type == "response.refusal.delta":
+                yield StreamChunk(content=getattr(event, "delta", "") or "")
+                continue
+            if event_type == "response.output_item.added":
+                item = getattr(event, "item", None)
+                if getattr(item, "type", None) == "function_call":
+                    item_id = getattr(item, "id", None)
+                    if item_id not in item_logical_index:
+                        item_logical_index[item_id] = next_index
+                        next_index += 1
+                    yield StreamChunk(
+                        tool_call_deltas=[
+                            {
+                                "index": item_logical_index[item_id],
+                                "id": getattr(item, "call_id", None),
+                                "name": getattr(item, "name", None),
+                            }
+                        ]
+                    )
+                continue
+            if event_type == "response.function_call_arguments.delta":
+                item_id = getattr(event, "item_id", None)
+                if item_id not in item_logical_index:
+                    item_logical_index[item_id] = next_index
+                    next_index += 1
+                yield StreamChunk(
+                    tool_call_deltas=[
+                        {
+                            "index": item_logical_index[item_id],
+                            "arguments": getattr(event, "delta", "") or "",
+                        }
+                    ]
+                )
+                continue
+            if event_type == "response.output_item.done":
+                item = getattr(event, "item", None)
+                if getattr(item, "type", None) == "reasoning":
+                    dumped = _dump_model(item)
+                    if isinstance(dumped, dict):
+                        buffered_reasoning.append(dumped)
+                continue
+            if event_type in ("response.completed", "response.incomplete"):
+                response = getattr(event, "response", None)
+                reasoning_items = (
+                    _reasoning_items_from_output(getattr(response, "output", None))
+                    or buffered_reasoning
+                )
+                provider_state = _provider_state_from_reasoning(reasoning_items)
+                if provider_state is not None:
+                    yield StreamChunk(provider_state=provider_state)
+                finish_reason = _finish_reason_from_response(response)
+                if finish_reason:
+                    yield StreamChunk(finish_reason=finish_reason)
+                usage = getattr(response, "usage", None)
+                if usage is not None:
+                    yield StreamChunk(
+                        usage=_responses_usage_to_scalar_dict(usage),
+                        usage_vendor=_dump_model(usage),
+                    )
+                continue
+            if event_type == "response.failed":
+                response = getattr(event, "response", None)
+                raise _llm_error_from_failed_response(response)
 
     def classify_error(self, exc: Exception) -> LLMError | None:
         if isinstance(exc, LLMError):
@@ -374,5 +485,16 @@ class ResponsesTransport(Transport):
         *,
         timeout: float | None = None,
     ) -> AsyncIterator[StreamChunk]:
-        raise NotImplementedError
-        yield StreamChunk()
+        client = self._ensure_client()
+        kwargs = self.build_kwargs(messages, tools)
+        if timeout is not None:
+            kwargs["timeout"] = timeout
+        try:
+            async with client.responses.stream(**kwargs) as stream:
+                async for chunk in self.normalize_stream(stream):
+                    yield chunk
+        except Exception as exc:  # noqa: BLE001
+            err = self.classify_error(exc)
+            if err is not None:
+                raise err from exc
+            raise
