@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 
 import anthropic
 
@@ -36,9 +36,6 @@ class AnthropicPromptCacheOptions:
     flexible_breakpoint: bool = False
     max_breakpoints: int = 4
     min_flexible_chars: int = 1000
-
-
-PromptCacheCompat = Literal["anthropic_native", "bedrock_blocks"]
 
 
 @dataclass(frozen=True)
@@ -110,15 +107,11 @@ def _select_anthropic_cache_targets(
     has_system: bool,
     messages: list[dict[str, Any]],
     options: AnthropicPromptCacheOptions,
-    prompt_cache_compat: PromptCacheCompat = "anthropic_native",
 ) -> list[_CacheTarget]:
     targets: list[_CacheTarget] = []
     used_slots: set[tuple[int, int | None]] = set()
     used_whole_message_indexes: set[int] = set()
-    automatic_uses_top_level = (
-        options.automatic and prompt_cache_compat == "anthropic_native"
-    )
-    max_block_targets = options.max_breakpoints - (1 if automatic_uses_top_level else 0)
+    max_block_targets = options.max_breakpoints - (1 if options.automatic else 0)
     max_block_targets = max(0, max_block_targets)
 
     def append(target: _CacheTarget) -> None:
@@ -379,7 +372,6 @@ class AnthropicMessagesTransport(Transport):
         max_tokens: int | None = None,
         reasoning_effort: str | None = None,
         prompt_cache_options: AnthropicPromptCacheOptions | None = None,
-        prompt_cache_compat: PromptCacheCompat = "anthropic_native",
         timeout: float = 300.0,
         stream_timeout: float | None = None,
         stream_idle_timeout: float | None = None,
@@ -399,7 +391,6 @@ class AnthropicMessagesTransport(Transport):
         self._max_tokens = max_tokens
         self._reasoning_effort = reasoning_effort
         self._prompt_cache_options = prompt_cache_options
-        self._prompt_cache_compat = prompt_cache_compat
 
     async def _open_client(self) -> anthropic.AsyncAnthropic:
         import httpx
@@ -479,7 +470,6 @@ class AnthropicMessagesTransport(Transport):
                 has_system=bool(system_value),
                 messages=converted_messages,
                 options=options,
-                prompt_cache_compat=self._prompt_cache_compat,
             )
             for target in targets:
                 if target.section == "system" and isinstance(system_value, str):
@@ -496,10 +486,7 @@ class AnthropicMessagesTransport(Transport):
                         options.cache_control,
                         target.content_index,
                     )
-            if (
-                options.automatic
-                and self._prompt_cache_compat == "anthropic_native"
-            ):
+            if options.automatic:
                 kwargs_extra_body = {"cache_control": dict(options.cache_control)}
             else:
                 kwargs_extra_body = {}

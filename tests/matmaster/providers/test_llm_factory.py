@@ -107,7 +107,6 @@ class TestDispatch:
                     transport="anthropic_messages",
                     api_key="sk-proxy",
                     base_url="https://proxy.example/anthropic",
-                    prompt_cache_compat="bedrock_blocks",
                 )
             },
             profiles={
@@ -146,7 +145,6 @@ class TestDispatch:
         assert provider._base_url == "https://proxy.example/anthropic"
         assert provider._reasoning_effort == "max"
         assert provider._max_tokens == 32_000
-        assert provider._prompt_cache_compat == "bedrock_blocks"
         assert provider._prompt_cache_options == AnthropicPromptCacheOptions(
             system_prompt_breakpoint=True,
             cache_control={"type": "ephemeral"},

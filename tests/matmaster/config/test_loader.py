@@ -143,9 +143,9 @@ profiles:
         repo_root = Path(__file__).resolve().parents[3]
 
         cfg = load_llm_config(repo_root / "config" / "llm_config.yaml")
-        resolved = cfg.resolve(model_override="matmaster/gpt-5.5")
+        resolved = cfg.resolve(model_override="cds/GPT-5.5")
 
-        assert resolved.profile_key == "matmaster/gpt-5.5"
+        assert resolved.profile_key == "cds/GPT-5.5"
         assert resolved.profile.model == "matmaster/gpt-5.5"
 
     def test_repo_llm_config_includes_native_anthropic_opus(self) -> None:
@@ -158,7 +158,6 @@ profiles:
         # NOTE: Do not assert literal provider.api_key / base_url `${...}` placeholders:
         # load_llm_config expands ${VAR} unconditionally (env value when set,
         # empty string when missing), so placeholders are not preserved.
-        assert resolved.provider.prompt_cache_compat == "bedrock_blocks"
         assert resolved.profile.model == "global.anthropic.claude-opus-4-6-v1"
         assert resolved.profile.reasoning_effort == "max"
         assert resolved.profile.supports_vision is True
@@ -180,13 +179,13 @@ class TestRealLlmConfigResponsesMigration:
 
         assert cfg.providers["litellm-responses"].transport == "responses"
 
-        gpt = cfg.profiles["matmaster/gpt-5.5"]
+        gpt = cfg.profiles["cds/GPT-5.5"]
         assert gpt.provider == "litellm-responses"
         assert gpt.model == "matmaster/gpt-5.5"
         assert gpt.reasoning_effort == "xhigh"
         assert gpt.reasoning_summary == "detailed"
 
-        resolved = cfg.resolve(model_override="matmaster/gpt-5.5")
+        resolved = cfg.resolve(model_override="cds/GPT-5.5")
         assert resolved.provider.transport == "responses"
 
         assert cfg.default == "matmaster/qwen3.7-max"
@@ -199,7 +198,7 @@ class TestRealLlmConfigResponsesMigration:
         repo_root = Path(__file__).resolve().parents[3]
         cfg = load_llm_config(repo_root / "config" / "llm_config.yaml")
 
-        provider = build_provider(cfg, model_override="matmaster/gpt-5.5")
+        provider = build_provider(cfg, model_override="cds/GPT-5.5")
         assert isinstance(provider, ResponsesTransport)
         assert provider._model == "matmaster/gpt-5.5"
 

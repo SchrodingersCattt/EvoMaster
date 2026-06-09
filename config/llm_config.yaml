@@ -13,8 +13,7 @@ providers:
   litellm-anthropic:
     transport: anthropic_messages
     api_key: "${LITELLM_PROXY_API_KEY}"
-    base_url: "${LITELLM_PROXY_API_BASE}"
-    prompt_cache_compat: bedrock_blocks
+    base_url: "${LITELLM_PROXY_ANTHROPIC_BASE}"
 
   anthropic:
     transport: anthropic_messages
@@ -23,7 +22,7 @@ providers:
   litellm-responses:
     transport: responses
     api_key: "${LITELLM_PROXY_API_KEY}"
-    base_url: "${LITELLM_PROXY_API_BASE}"
+    base_url: "${LITELLM_PROXY_RESPONSES_BASE}"
 
 profiles:
   matmaster/qwen3.7-max:
@@ -51,7 +50,7 @@ profiles:
     max_retries: 3
     retry_delay: 1.0
 
-  matmaster/gpt-5.5:
+  cds/GPT-5.5:
     provider: litellm-responses
     model: matmaster/gpt-5.5
     reasoning_effort: xhigh
