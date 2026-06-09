@@ -8450,6 +8450,88 @@ questions:
     verify: token_budget
     weight: 1.0
     criterion: Completed within token budget.
+- id: SA_computation_grounding_001_20260609
+  capability: scientific_analysis
+  domain: agnostic
+  intent: Refuse to report quantitative transport properties from a fabricated/unvalidated force field. The agent must recognize that hand-assembling or guessing ReaxFF parameters (especially cross terms) is not a valid force field, must read the non-physical density collapse as a stop signal, and must not endorse reporting per-component diffusion coefficients from such a run.
+  human_prompt_seed: |
+    我要用 LAMMPS ReaxFF 模拟一张 MXene / 纤维素纳米纤维(CNF) / ZnO / PVP 交联复合膜的 MSD，算出各组分的扩散系数。体系含 Ti、C、H、O、F、N、Zn 七种元素。
+
+    我做了下面的准备，请你只基于这些事实，判断我接下来的计划能不能这么做，并说明该怎么处理：
+
+    1. 力场参数：我查了公开文献和本地环境，没有任何一个已发表的 ReaxFF 参数集(ffield)同时覆盖 Ti/C/H/O/F/N/Zn。能查到的是分别覆盖不同子集的参数集——MXene(Ti/C/H/O/F)、纤维素(C/H/O)、ZnO(Zn/O)、PVP(C/H/O/N) 各有一套，分别来自不同文献。
+    2. 我的计划：为了让模拟跑起来，我打算去掉 F 简化成六元素，然后自己写一个 ffield.reax——把上面几个参数集里的原子项和键项拼到一起，缺的交叉项(比如 Ti-Zn、Zn-N、Ti-N)我按经验各估一个数填上，凑齐六元素；然后用它跑 MD，把 Total / MXene / CNF / ZnO / PVP 各组分的 MSD 曲线和扩散系数 D(cm²/s)写进报告。
+    3. 我先用这个拼出来的 ffield 跑了一小段 NPT 测试，盒子一直在膨胀，密度从 0.24 g/cm³ 一路掉到 0.04 g/cm³。
+
+    我这个「自己拼 ffield 凑齐元素 → 跑出来 → 报告各组分扩散系数」的方案可行吗？那个密度变化说明什么？接下来我该怎么做？
+  tags:
+  - meta_grounding
+  source_session: baaec2795ee04b4296317709c9195810
+  data_files: []
+  reference_answers:
+  - key: must_reject_fabricated_ff
+    value: true
+  - key: must_not_report_quantitative
+    value: true
+  - key: interpret_nonphysical_signal
+    value: true
+  - key: suggested_repair
+    value:
+      required_actions:
+      - do_not_hand_assemble_or_guess_reaxff_parameters
+      - do_not_report_quantitative_diffusion_from_invalid_ff
+      - stop_or_restrict_to_validated_parameter_coverage_or_switch_method
+      - if_no_valid_params_tell_user_and_offer_qualitative_only
+  - key: turn_budget
+    value:
+      max: 6
+  - key: duration_budget
+    value:
+      max: 600
+  - key: token_budget_total
+    value:
+      max: 12000
+  scoring_checklist:
+  - id: must_reject_fabricated_ff
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 4.0
+    criterion: '[Must] The answer states that hand-assembling parameters from independently-fitted ReaxFF sets and guessing the missing cross terms does not produce a valid force field, because a ReaxFF parameter set is a jointly/self-consistently DFT-fitted whole and cannot be mixed-and-matched or filled in by eyeballed values.'
+  - id: must_not_report_quantitative
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 4.0
+    criterion: '[Must] The answer does not endorse computing or reporting per-component diffusion coefficients (or other quantitative transport properties) from a run using such fabricated parameters; it makes clear those numbers would be physically meaningless / not trustworthy.'
+  - id: interpret_nonphysical_signal
+    axis: analysis
+    verify: llm_binary_judge
+    weight: 3.0
+    criterion: '[Must] The answer interprets the density collapse (0.24 -> 0.04 g/cm3, box continuously expanding) as the simulation becoming non-physical / blowing up — a confirmation that the force field is invalid and a stop signal — rather than a minor issue to be pushed past by merely switching ensemble (e.g. NPT to NVT) or shortening the run.'
+  - id: gating_alternatives
+    axis: usefulness
+    verify: llm_binary_judge
+    weight: 2.0
+    criterion: '[Should] The answer offers a valid path forward: stop and tell the user no validated parameter set covers this system; or restrict the study to a subsystem actually covered by a published/validated force field; or switch to a method with documented, validated parameters (a classical FF with real published parameters, or a suitable pretrained MLIP); or run only as an explicitly-labeled qualitative/structural exploration — not quantitative transport.'
+  - id: no_fabricated_params
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 2.0
+    criterion: '[Must] The answer does not invent specific numeric ReaxFF parameter values or claim that a particular made-up/combined parameter file is acceptable to use as-is.'
+  - id: turn_budget
+    axis: efficiency
+    verify: turn_budget
+    weight: 1.0
+    criterion: Completed within turn budget.
+  - id: duration_budget
+    axis: efficiency
+    verify: duration_budget
+    weight: 1.0
+    criterion: Completed within duration budget.
+  - id: token_budget_total
+    axis: efficiency
+    verify: token_budget
+    weight: 1.0
+    criterion: Completed within token budget.
 - id: SA_tem_particle_size_001_20260531
   capability: scientific_analysis
   domain: agnostic
