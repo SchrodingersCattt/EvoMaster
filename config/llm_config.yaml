@@ -14,6 +14,7 @@ providers:
     transport: anthropic_messages
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_BASE}"
+    prompt_cache_compat: bedrock_blocks
 
   anthropic:
     transport: anthropic_messages
@@ -50,7 +51,7 @@ profiles:
     max_retries: 3
     retry_delay: 1.0
 
-  cds/GPT-5.5:
+  matmaster/gpt-5.5:
     provider: litellm-responses
     model: matmaster/gpt-5.5
     reasoning_effort: xhigh
