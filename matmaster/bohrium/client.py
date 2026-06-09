@@ -17,6 +17,10 @@ from .upload import UploadedArchive
 logger = logging.getLogger(__name__)
 _SANDBOX_CATALOG: dict[str, Any] | None = None
 
+# Log prefix for the copy-pasteable curl line emitted on job submission.
+# Kept as a module constant so tests can match it without hardcoding the text.
+CURL_LOG_PREFIX = "Bohrium POST request (copyable curl):"
+
 
 def mask_secret(secret: str) -> str:
     raw = (secret or "").strip()
@@ -93,15 +97,19 @@ def _post(
     payload: dict[str, Any],
     *,
     timeout: int = 30,
+    log_curl: bool = False,
 ) -> dict[str, Any]:
-    response = requests.post(
-        f"{base_url}{path}",
-        headers={"accessKey": access_key, "Content-Type": "application/json"},
-        json=payload,
-        timeout=timeout,
-    )
+    url = f"{base_url}{path}"
+    headers = {"accessKey": access_key, "Content-Type": "application/json"}
+    if log_curl:
+        logger.info(
+            "%s\n%s",
+            CURL_LOG_PREFIX,
+            _build_curl_command(url, headers, payload),
+        )
+    response = requests.post(url, headers=headers, json=payload, timeout=timeout)
     if not response.ok:
-        _log_http_error("POST", f"{base_url}{path}", response)
+        _log_http_error("POST", url, response)
     response.raise_for_status()
     return response.json()
 
@@ -183,17 +191,12 @@ def add_job(
             "logFiles": ["log"],
         }
         path = "/openapi/v2/job/add"
-    url = f"{ctx.credentials.base_url}{path}"
-    headers = {
-        "accessKey": ctx.credentials.access_key,
-        "Content-Type": "application/json",
-    }
-    logger.info(
-        "Bohrium job/add request (copyable curl):\n%s",
-        _build_curl_command(url, headers, payload),
-    )
     response = _post(
-        ctx.credentials.base_url, path, ctx.credentials.access_key, payload
+        ctx.credentials.base_url,
+        path,
+        ctx.credentials.access_key,
+        payload,
+        log_curl=True,
     )
     if response.get("code") != 0:
         raise BohriumAPIError(f"job/add failed: {response}")
