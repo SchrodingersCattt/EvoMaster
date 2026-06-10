@@ -104,7 +104,6 @@ async def dispatch_tool_calls(
     )
     runner_results = await tool_runner.execute_batch(tool_calls, exec_ctx)
 
-    turn_index = state.turn - 1
     for tc, tool_result in runner_results:
         state.messages.append(
             ToolMessage(
@@ -124,9 +123,6 @@ async def dispatch_tool_calls(
                 result=tool_result.content,
                 status=tool_result.status,
                 payload=tool_result.payload,
-                turn_index=turn_index,
-                turn_usage=dict(state.turn_usage),
-                total_usage=dict(state.total_usage),
             )
         )
         if tc.name == "Skill":

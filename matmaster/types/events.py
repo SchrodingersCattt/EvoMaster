@@ -87,7 +87,13 @@ class ToolCallEvent(EventBase):
 
 
 class ToolResultEvent(EventBase):
-    """Tool execution result event."""
+    """Tool execution result event.
+
+    Carries only the tool execution outcome. LLM token usage lives on the
+    model-output-side events (thought.complete / response.complete /
+    tool_call); tool payloads may still embed tool-specific evidence such
+    as ``payload["subagent_usage"]``.
+    """
 
     type: Literal["tool_result"] = "tool_result"
     call_id: str
@@ -95,9 +101,6 @@ class ToolResultEvent(EventBase):
     result: Any  # str | dict
     status: str = "success"
     payload: dict[str, Any] = Field(default_factory=dict)
-    turn_index: int | None = None
-    turn_usage: dict[str, int] = Field(default_factory=dict)
-    total_usage: dict[str, int] = Field(default_factory=dict)
 
 
 class FinishDetail(BaseModel):

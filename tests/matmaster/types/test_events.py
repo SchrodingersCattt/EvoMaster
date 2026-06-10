@@ -192,15 +192,10 @@ class TestToolResultEvent:
         assert evt.status == "success"
         assert evt.payload == {}
 
-
-def test_tool_result_turn_index_defaults_to_none() -> None:
-    evt = ToolResultEvent(
-        source="agent",
-        call_id="c1",
-        tool_name="bash",
-        result="output",
-    )
-    assert evt.turn_index is None
+    def test_tool_result_has_no_usage_fields(self) -> None:
+        assert "turn_index" not in ToolResultEvent.model_fields
+        assert "turn_usage" not in ToolResultEvent.model_fields
+        assert "total_usage" not in ToolResultEvent.model_fields
 
 
 class TestFinishDetail:

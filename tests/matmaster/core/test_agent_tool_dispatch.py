@@ -106,17 +106,16 @@ async def test_dispatch_tool_calls_accumulates_agent_usage_before_event() -> Non
 
     event = items[0].event
     assert isinstance(event, ToolResultEvent)
-    assert event.turn_usage == {"prompt_tokens": 5}
-    assert event.total_usage == {
+    assert "turn_usage" not in ToolResultEvent.model_fields
+    assert state.total_usage == {
         "prompt_tokens": 15,
         "completion_tokens": 2,
         "total_tokens": 12,
     }
-    assert state.total_usage == event.total_usage
 
 
 @pytest.mark.asyncio
-async def test_dispatch_tool_calls_usage_fields_are_snapshots() -> None:
+async def test_dispatch_tool_calls_accumulates_each_agent_usage() -> None:
     state = _KernelState(
         messages=[SystemMessage(content="sys")],
         turn=1,
@@ -154,9 +153,5 @@ async def test_dispatch_tool_calls_usage_fields_are_snapshots() -> None:
         if isinstance(item.event, ToolResultEvent)
     ]
 
-    assert events[0].total_usage == {"prompt_tokens": 15}
-    assert events[1].total_usage == {"prompt_tokens": 35}
-    state.total_usage["prompt_tokens"] = 999
-    state.turn_usage["prompt_tokens"] = 888
-    assert events[0].total_usage == {"prompt_tokens": 15}
-    assert events[0].turn_usage == {"prompt_tokens": 5}
+    assert len(events) == 2
+    assert state.total_usage == {"prompt_tokens": 35}
