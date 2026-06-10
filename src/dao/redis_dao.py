@@ -364,6 +364,22 @@ class RedisDao:
             logger.warning("Redis mark_dedup_key_nx failed key=%s: %s", dedup_key, e)
             return False
 
+    def try_reserve_nx(self, key: str, value: str, ttl_sec: int) -> bool | None:
+        """三态 SET NX EX 占位：True=占位成功 / False=已被占位 / None=无 client 或异常。
+
+        与 mark_dedup_key_nx 的区别：调用方需要区分「已被占位」与「Redis 不可用」
+        （后者按 fail-closed skip 并计数告警）。key 由调用方自带前缀，不加 DEDUP_KEY_PREFIX。
+        """
+        client = self.get_command_client()
+        if not client:
+            return None
+        try:
+            result = client.set(key, value, nx=True, ex=int(ttl_sec))
+        except Exception as e:
+            logger.warning("Redis try_reserve_nx failed key=%s: %s", key, e)
+            return None
+        return bool(result)
+
     def delete_session_run_queued(self, session_id: str) -> None:
         """Worker try_acquire 时删除，表示已接手。"""
         client = self.get_command_client()
