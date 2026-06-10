@@ -671,6 +671,24 @@ class TestRemotePluginAttribution:
         assert dup.meta_info.description == "Loose version"
         assert dup.plugin is None
 
+    def test_invalid_inner_plugin_shadows_valid_outer(self) -> None:
+        """无效内层 plugin.yaml 遮蔽有效外层：成员失败，不回退归属外层。"""
+        from matmaster.skills.registry import SkillRegistry
+
+        session = FakeRemoteSkillSession(
+            {
+                f"{self.ROOT}/outer/plugin.yaml": "name: outer-pack\n",
+                f"{self.ROOT}/outer/inner/plugin.yaml": "{ name: [unbalanced",
+                f"{self.ROOT}/outer/inner/skills/m/SKILL.md": (
+                    "---\nname: m-skill\ndescription: M\n---\nBody\n"
+                ),
+            }
+        )
+
+        reg = SkillRegistry([], remote_session=session, remote_roots=[self.ROOT])
+
+        assert reg.get_skill("m-skill") is None
+
     def test_meta_info_context_groups_remote_members(self) -> None:
         """提示词分组：远端成员归组在 [Plugin: ...] 名下。"""
         from matmaster.skills.registry import SkillRegistry
