@@ -281,7 +281,6 @@ def read_disabled_plugins(plugins_config_path: Path) -> set[str]:
     return {str(name).strip() for name in disabled if str(name).strip()}
 
 
-
 class SkillRegistryCache:
     """Per-query cache for fully built SkillRegistry instances."""
 
@@ -626,8 +625,7 @@ class SkillRegistry:
         removed = {
             name
             for name, skill in self._skills.items()
-            if skill.plugin is not None
-            and skill.plugin.name in disabled_plugin_names
+            if skill.plugin is not None and skill.plugin.name in disabled_plugin_names
         }
         for name in removed:
             del self._skills[name]

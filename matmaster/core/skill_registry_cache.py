@@ -102,9 +102,7 @@ def build_cached_skill_registry(
         if removed_members:
             for skill in registry.get_all_skills():
                 broken = [
-                    dep
-                    for dep in skill.meta_info.depends_on
-                    if dep in removed_members
+                    dep for dep in skill.meta_info.depends_on if dep in removed_members
                 ]
                 if broken:
                     logger.warning(

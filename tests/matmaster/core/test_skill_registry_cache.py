@@ -300,9 +300,7 @@ def test_disabled_plugin_warns_cross_boundary_depends_on(
         config_dir=str(config_dir),
     )
 
-    with caplog.at_level(
-        logging.WARNING, logger="matmaster.core.skill_registry_cache"
-    ):
+    with caplog.at_level(logging.WARNING, logger="matmaster.core.skill_registry_cache"):
         registry = build_cached_skill_registry(
             skills_cfg=skills_cfg,
             session=None,
