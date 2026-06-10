@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 import shlex
 from pathlib import Path
+
+import pytest
 
 from matmaster.config.exp import ExpSkillsConfig
 from matmaster.core.skill_registry_cache import (
@@ -83,17 +86,20 @@ def test_cache_key_preserves_local_root_order_and_normalizes_remote_roots(
         local_roots=[root_a, root_b],
         remote_roots=["/personal/.matmaster/skills", "/personal/.matmaster/skills/"],
         config_disabled_skill_names=["zeta", "alpha"],
+        disabled_plugins=["pack-b", "pack-a"],
     )
     key_ba = skill_registry_cache_key(
         local_roots=[root_b, root_a],
         remote_roots=["/personal/.matmaster/skills/"],
         config_disabled_skill_names=["alpha", "zeta"],
+        disabled_plugins=[],
     )
 
     assert key_ab[0] == (str(root_a), str(root_b))
     assert key_ab[1] == ("/personal/.matmaster/skills",)
     assert key_ab[2] == ("alpha", "zeta")
-    assert key_ba[0] == (str(root_b), str(root_a))
+    assert key_ab[3] == ("pack-a", "pack-b")
+    assert key_ba[3] == ()
     assert key_ab != key_ba
 
 
@@ -210,3 +216,134 @@ def test_new_query_cache_rebuilds_registry_after_remote_skill_change(
     assert old_registry.get_skill("remote-skill").meta_info.description == "Old Remote"
     assert new_registry.get_skill("remote-skill").meta_info.description == "New Remote"
     assert len(session.exec_calls) == 2
+
+
+def _plugin_tree(root: Path) -> None:
+    _write(root / "pack" / "plugin.yaml", "name: pack\n")
+    _write(
+        root / "pack" / "skills" / "member" / "SKILL.md",
+        _skill_body("member-skill", "Member"),
+    )
+    _write(root / "loose" / "SKILL.md", _skill_body("loose-skill", "Loose"))
+
+
+def test_disabled_plugin_filters_members_after_build(tmp_path: Path) -> None:
+    local_root = tmp_path / "plugins"
+    _plugin_tree(local_root)
+    config_dir = tmp_path / "config"
+    _write(config_dir / "plugins.yaml", "disabled_plugins:\n  - pack\n")
+    skills_cfg = ExpSkillsConfig(
+        enabled=True,
+        skills_root=[str(local_root)],
+        config_dir=str(config_dir),
+    )
+
+    registry = build_cached_skill_registry(
+        skills_cfg=skills_cfg,
+        session=None,
+        skill_cache=SkillRegistryCache(),
+    )
+
+    assert registry is not None
+    assert registry.get_skill("member-skill") is None
+    assert registry.get_skill("loose-skill") is not None
+
+
+def test_disabled_plugin_filters_remote_members(tmp_path: Path) -> None:
+    plugins_root = "/personal/.matmaster/plugins"
+    session = FakeRemoteSkillSession(
+        plugins_root,
+        {
+            f"{plugins_root}/pack/plugin.yaml": "name: pack\n",
+            f"{plugins_root}/pack/skills/member/SKILL.md": _skill_body(
+                "member-skill", "Member"
+            ),
+        },
+    )
+    config_dir = tmp_path / "config"
+    _write(config_dir / "plugins.yaml", "disabled_plugins:\n  - pack\n")
+    skills_cfg = ExpSkillsConfig(
+        enabled=True,
+        skills_root=[],
+        config_dir=str(config_dir),
+    )
+
+    registry = build_cached_skill_registry(
+        skills_cfg=skills_cfg,
+        session=session,
+        skill_cache=SkillRegistryCache(),
+    )
+
+    assert registry is not None
+    assert registry.get_skill("member-skill") is None
+
+
+def test_disabled_plugin_warns_cross_boundary_depends_on(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    local_root = tmp_path / "plugins"
+    _plugin_tree(local_root)
+    _write(
+        local_root / "dependent" / "SKILL.md",
+        "---\n"
+        "name: dependent-skill\n"
+        "description: Depends on member\n"
+        "depends_on: member-skill\n"
+        "---\n"
+        "Body\n",
+    )
+    config_dir = tmp_path / "config"
+    _write(config_dir / "plugins.yaml", "disabled_plugins:\n  - pack\n")
+    skills_cfg = ExpSkillsConfig(
+        enabled=True,
+        skills_root=[str(local_root)],
+        config_dir=str(config_dir),
+    )
+
+    with caplog.at_level(
+        logging.WARNING, logger="matmaster.core.skill_registry_cache"
+    ):
+        registry = build_cached_skill_registry(
+            skills_cfg=skills_cfg,
+            session=None,
+            skill_cache=SkillRegistryCache(),
+        )
+
+    assert registry is not None
+    assert "dependent-skill" in caplog.text
+    assert "member-skill" in caplog.text
+
+
+def test_cache_key_isolates_disabled_plugins(tmp_path: Path) -> None:
+    local_root = tmp_path / "plugins"
+    _plugin_tree(local_root)
+    enabled_dir = tmp_path / "cfg-enabled"
+    enabled_dir.mkdir()
+    disabled_dir = tmp_path / "cfg-disabled"
+    _write(disabled_dir / "plugins.yaml", "disabled_plugins:\n  - pack\n")
+    cache = SkillRegistryCache()
+
+    visible = build_cached_skill_registry(
+        skills_cfg=ExpSkillsConfig(
+            enabled=True,
+            skills_root=[str(local_root)],
+            config_dir=str(enabled_dir),
+        ),
+        session=None,
+        skill_cache=cache,
+    )
+    hidden = build_cached_skill_registry(
+        skills_cfg=ExpSkillsConfig(
+            enabled=True,
+            skills_root=[str(local_root)],
+            config_dir=str(disabled_dir),
+        ),
+        session=None,
+        skill_cache=cache,
+    )
+
+    assert visible is not None
+    assert hidden is not None
+    assert visible is not hidden
+    assert visible.get_skill("member-skill") is not None
+    assert hidden.get_skill("member-skill") is None

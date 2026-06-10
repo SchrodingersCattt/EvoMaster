@@ -281,26 +281,6 @@ def read_disabled_plugins(plugins_config_path: Path) -> set[str]:
     return {str(name).strip() for name in disabled if str(name).strip()}
 
 
-def expand_disabled_plugins(roots: list[Path], disabled_plugins: set[str]) -> set[str]:
-    """把被禁 plugin 展开为其成员 skill 名集合（灌入现有 disabled 通道）。"""
-    if not disabled_plugins:
-        return set()
-    member_names: set[str] = set()
-    for root in roots:
-        if not root.exists():
-            continue
-        for manifest_path in sorted(root.rglob("plugin.yaml")):
-            plugin_dir = manifest_path.parent
-            if _parse_plugin_info(manifest_path).name not in disabled_plugins:
-                continue
-            for md_path in sorted(plugin_dir.rglob("SKILL.md")):
-                meta = _parse_meta_info_from_content(
-                    md_path.read_text(encoding="utf-8"),
-                    fallback_name=md_path.parent.name,
-                )
-                member_names.add(meta.name)
-    return member_names
-
 
 class SkillRegistryCache:
     """Per-query cache for fully built SkillRegistry instances."""
