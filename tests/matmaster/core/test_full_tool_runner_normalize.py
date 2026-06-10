@@ -209,6 +209,34 @@ class TestNormalizeAndTruncation:
         assert disk_path.exists()
         assert disk_path.read_text() == long_content
 
+    def test_truncate_result_preserves_images(self, tmp_path: Path) -> None:
+        from matmaster.types.messages import ImageContentPart
+
+        image = ImageContentPart(
+            url="data:image/png;base64,aGVsbG8=",
+            mime_type="image/png",
+        )
+        topology_with_tmp = RuntimeTopology(
+            session_kind="local",
+            control_root=str(tmp_path),
+            workspace_root="/tmp/ws",
+            active_planes=frozenset(ToolPlane),
+        )
+        runner = _make_runner(
+            ToolCatalog(ToolRegistry()),
+            topology=topology_with_tmp,
+        )
+
+        truncated = runner._truncate_result(
+            ToolResult(content="A" * 20_000, images=[image]),
+            max_chars=12_000,
+            tool_call_id="call_img",
+        )
+
+        assert truncated.images == [image]
+        assert truncated.payload == {}
+        assert truncated.meta["truncated"] is True
+
     @pytest.mark.asyncio
     async def test_no_truncation_when_under_limit(self) -> None:
         """Content under max_result_chars is not truncated."""
