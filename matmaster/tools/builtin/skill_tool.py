@@ -90,6 +90,10 @@ class SkillTool(BuiltinTool):
             body = skill.get_full_info()
             skill_dir = self._render_skill_dir(skill)
             body = body.replace("${SKILL_DIR}", skill_dir)
+            if skill.plugin_dir is not None:
+                body = body.replace(
+                    "${PLUGIN_DIR}", self._render_local_dir(skill.plugin_dir)
+                )
 
             self._maybe_hit_mcp(skill)
             for dep_name in skill.meta_info.depends_on:
@@ -118,8 +122,10 @@ class SkillTool(BuiltinTool):
         skill_path = skill.skill_path
         if getattr(skill, "is_remote", False):
             return str(skill_path)
+        return self._render_local_dir(skill_path)
 
-        local_abs = skill_path if skill_path.is_absolute() else skill_path.resolve()
+    def _render_local_dir(self, path: Path) -> str:
+        local_abs = path if path.is_absolute() else path.resolve()
 
         session = self._session
         remote_project_root = getattr(session, "remote_project_root", None)
