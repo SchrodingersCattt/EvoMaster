@@ -207,6 +207,8 @@ def _run_agent(
                 provider_name="test-provider",
                 context_limit=345_000,
                 context_limit_source="profile",
+                supports_vision=False,
+                vision_detail=None,
             ),
         ),
         patch('matmaster.config.loader.load_llm_config', return_value=MagicMock()),

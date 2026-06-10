@@ -125,9 +125,7 @@ def test_mismatched_provider_state_is_discarded_but_content_and_tools_remain() -
         provider_state=ProviderState(
             transport="chat_completions",
             payload={
-                "thinking": [
-                    {"type": "thinking", "thinking": "bad", "signature": "x"}
-                ]
+                "thinking": [{"type": "thinking", "thinking": "bad", "signature": "x"}]
             },
         ),
         tool_calls=[ToolCallData(id="toolu_1", name="search", arguments={})],
@@ -156,7 +154,9 @@ def test_mismatched_provider_state_is_discarded_but_content_and_tools_remain() -
     ]
 
 
-def test_parallel_tool_results_are_merged_into_single_user_message_before_text() -> None:
+def test_parallel_tool_results_are_merged_into_single_user_message_before_text() -> (
+    None
+):
     messages = [
         AssistantMessage(
             content="",

@@ -742,10 +742,10 @@ def test_v1_restore_mixed_fixture_preserves_phase1_message_bytes() -> None:
                     "name": "search_materials",
                     "arguments": {"formula": "Si"},
                 }
-                ],
-                "reasoning_content": None,
-                "provider_state": None,
-            },
+            ],
+            "reasoning_content": None,
+            "provider_state": None,
+        },
         {
             "role": "tool",
             "content": '{"matches": [3, 1]}',
@@ -755,9 +755,9 @@ def test_v1_restore_mixed_fixture_preserves_phase1_message_bytes() -> None:
         },
         {
             "role": "assistant",
-                "content": "found results",
-                "tool_calls": None,
-                "reasoning_content": None,
-                "provider_state": None,
-            },
+            "content": "found results",
+            "tool_calls": None,
+            "reasoning_content": None,
+            "provider_state": None,
+        },
     ]

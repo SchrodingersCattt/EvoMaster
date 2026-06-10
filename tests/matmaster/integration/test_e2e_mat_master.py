@@ -78,6 +78,8 @@ def _provider_bundle(provider: Any) -> SimpleNamespace:
         provider_name="openai",
         context_limit=345_000,
         context_limit_source="profile",
+        supports_vision=False,
+        vision_detail=None,
     )
 
 

@@ -130,6 +130,8 @@ async def test_images_flow_from_service_to_kernel_user_message(tmp_path: Path) -
                 provider_name="openai",
                 context_limit=345_000,
                 context_limit_source="profile",
+                supports_vision=True,
+                vision_detail="high",
             ),
         ),
         patch(
@@ -169,9 +171,7 @@ async def test_images_flow_from_service_to_kernel_user_message(tmp_path: Path) -
     assert ok is True
     user_message = provider.seen_messages[-1][-1]
     assert isinstance(user_message, UserMessage)
-    assert [
-        image.model_dump(mode="json") for image in user_message.images
-    ] == [
+    assert [image.model_dump(mode="json") for image in user_message.images] == [
         {
             "url": "https://oss.example.com/chat/a.png",
             "mime_type": None,
