@@ -1,4 +1,4 @@
-"""Bohrium 后台轮询核心（可测；第一版不接独立进程）。"""
+"""Bohrium 后台轮询核心（monitor 进程的 tick 单元）。"""
 
 from __future__ import annotations
 
@@ -34,6 +34,7 @@ class BohriumJobPoller:
         get_access_key: Callable[[str, str], str | None] | None = None,
         get_job_detail: Callable[..., dict[str, Any]] | None = None,
         base_url: str | None = None,
+        lost_after_seconds: int | None = None,
     ) -> None:
         self._table = table if table is not None else BohriumJobsTable()
         if get_access_key is None:
@@ -51,6 +52,11 @@ class BohriumJobPoller:
         self._get_access_key = get_access_key
         self._get_job_detail = get_job_detail
         self._base_url = base_url
+        self._lost_after = (
+            lost_after_seconds
+            if lost_after_seconds is not None
+            else env_int("BOHRIUM_POLL_LOST_AFTER_SECONDS", 86400)
+        )
 
     def run_once(
         self, *, limit: int = 50, claim_timeout_seconds: int = 120
@@ -116,6 +122,7 @@ class BohriumJobPoller:
                 sandbox=sandbox,
                 job_id=raw_job_id,
                 backoff_seconds=backoff,
+                lost_after_seconds=self._lost_after,
             )
             return False
 
@@ -132,6 +139,7 @@ class BohriumJobPoller:
                     sandbox=sandbox,
                     job_id=raw_job_id,
                     backoff_seconds=backoff,
+                    lost_after_seconds=self._lost_after,
                 )
                 return False
             decision = to_ledger_status(int(code))
@@ -158,6 +166,7 @@ class BohriumJobPoller:
                 sandbox=sandbox,
                 job_id=raw_job_id,
                 backoff_seconds=backoff,
+                lost_after_seconds=self._lost_after,
             )
             return False
 

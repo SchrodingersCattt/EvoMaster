@@ -328,3 +328,55 @@ def test_env_int_missing_and_invalid_fall_back(monkeypatch) -> None:
     assert env_int("BOHRIUM_X", 5) == 5
     monkeypatch.setenv("BOHRIUM_X", "12")
     assert env_int("BOHRIUM_X", 5) == 12
+
+
+def _make_capture_table(captured: list[dict]):
+    class _Table:
+        def claim_due_batch(self, *, limit: int, claim_timeout_seconds: int):
+            return [
+                {
+                    "session_id": "sess-1",
+                    "user_id": "user-1",
+                    "org_id": "org-1",
+                    "project_id": 42,
+                    "job_id": "101",
+                    "sandbox": False,
+                    "workspace": "/share/project",
+                    "status": "submitted",
+                    "poll_count": 0,
+                }
+            ]
+
+        def apply_poll(self, **kw):
+            raise AssertionError(f"unexpected poll success: {kw}")
+
+        def mark_poll_error(self, **kw):
+            captured.append(kw)
+
+    return _Table()
+
+
+def test_poller_passes_lost_after_to_mark_error() -> None:
+    captured: list[dict] = []
+    poller = BohriumJobPoller(
+        table=_make_capture_table(captured),
+        get_access_key=lambda uid, oid: None,
+        get_job_detail=lambda ctx, job_id: {"status": 1},
+        base_url="https://x",
+        lost_after_seconds=1234,
+    )
+    poller.run_once()
+    assert captured[0]["lost_after_seconds"] == 1234
+
+
+def test_poller_lost_after_defaults_from_env(monkeypatch) -> None:
+    monkeypatch.setenv("BOHRIUM_POLL_LOST_AFTER_SECONDS", "555")
+    captured: list[dict] = []
+    poller = BohriumJobPoller(
+        table=_make_capture_table(captured),
+        get_access_key=lambda uid, oid: None,
+        get_job_detail=lambda ctx, job_id: {"status": 1},
+        base_url="https://x",
+    )
+    poller.run_once()
+    assert captured[0]["lost_after_seconds"] == 555
