@@ -175,16 +175,20 @@ class TestBohriumSetupServiceOrchestration:
 
     def test_configure_remote_user_skill_root_on_ssh_session(self):
         from src.services.agent_run_bohrium import (
+            _BOHRIUM_REMOTE_USER_PLUGINS_ROOT,
             _BOHRIUM_REMOTE_USER_SKILLS_ROOT,
             _configure_remote_user_skill_root,
         )
 
-        session = SimpleNamespace()
+        session = SimpleNamespace(remote_skill_roots=['/stale'])
 
         _configure_remote_user_skill_root(session)
 
         assert session.remote_user_skills_root == _BOHRIUM_REMOTE_USER_SKILLS_ROOT
-        assert session.remote_skill_roots == [_BOHRIUM_REMOTE_USER_SKILLS_ROOT]
+        assert session.remote_skill_roots == [
+            _BOHRIUM_REMOTE_USER_PLUGINS_ROOT,
+            _BOHRIUM_REMOTE_USER_SKILLS_ROOT,
+        ]
 
 
 class TestBohriumEventBridgeMapping:

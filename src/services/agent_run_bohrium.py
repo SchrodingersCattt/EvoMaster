@@ -38,6 +38,7 @@ from src.utils.constant import BOHRIUM_DEFAULT_IMAGE_ID, BOHRIUM_DEFAULT_IMAGE_N
 logger = logging.getLogger(__name__)
 
 _BOHRIUM_REMOTE_USER_SKILLS_ROOT = '/personal/.matmaster/skills'
+_BOHRIUM_REMOTE_USER_PLUGINS_ROOT = '/personal/.matmaster/plugins'
 
 
 # Bash snippet for root on Bohrium SSH nodes: wget/curl/git/pip + env.
@@ -131,12 +132,10 @@ def _restore_bohrium_runtime_state(session_id: str, pg: Any | None) -> None:
 
 def _configure_remote_user_skill_root(ssh_session: Any) -> None:
     ssh_session.remote_user_skills_root = _BOHRIUM_REMOTE_USER_SKILLS_ROOT
-    roots = getattr(ssh_session, 'remote_skill_roots', None)
-    if isinstance(roots, list):
-        if _BOHRIUM_REMOTE_USER_SKILLS_ROOT not in roots:
-            roots.append(_BOHRIUM_REMOTE_USER_SKILLS_ROOT)
-    else:
-        ssh_session.remote_skill_roots = [_BOHRIUM_REMOTE_USER_SKILLS_ROOT]
+    ssh_session.remote_skill_roots = [
+        _BOHRIUM_REMOTE_USER_PLUGINS_ROOT,
+        _BOHRIUM_REMOTE_USER_SKILLS_ROOT,
+    ]
 
 
 def _run_clear_remote_proxy(pg: Any, phase: str) -> None:
