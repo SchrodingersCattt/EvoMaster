@@ -62,6 +62,31 @@ class TestThoughtEvent:
         assert evt.stream_id == "s1"
 
 
+class TestThoughtEventUsage:
+    def test_thought_usage_fields(self) -> None:
+        evt = ThoughtEvent(
+            source="agent",
+            content="reasoning",
+            stream_state="complete",
+            turn_index=2,
+            turn_usage={"prompt_tokens": 10, "completion_tokens": 4},
+            total_usage={"prompt_tokens": 30, "completion_tokens": 9},
+            usage_vendor={"inputTokens": 10, "outputTokens": 4},
+        )
+
+        assert evt.turn_index == 2
+        assert evt.turn_usage == {"prompt_tokens": 10, "completion_tokens": 4}
+        assert evt.total_usage == {"prompt_tokens": 30, "completion_tokens": 9}
+        assert evt.usage_vendor == {"inputTokens": 10, "outputTokens": 4}
+
+    def test_thought_usage_defaults(self) -> None:
+        evt = ThoughtEvent(source="agent")
+        assert evt.turn_index is None
+        assert evt.turn_usage == {}
+        assert evt.total_usage == {}
+        assert evt.usage_vendor is None
+
+
 class TestResponseEvent:
     def test_instantiation(self) -> None:
         evt = ResponseEvent(source="agent", content="hello")
@@ -124,6 +149,34 @@ class TestToolCallEvent:
             arguments={"cmd": "ls"},
         )
         assert evt.spawn_id is None
+
+
+class TestToolCallEventUsage:
+    def test_tool_call_usage_fields(self) -> None:
+        evt = ToolCallEvent(
+            source="agent",
+            call_id="c1",
+            tool_name="bash",
+            arguments={"cmd": "ls"},
+            turn_index=0,
+            turn_usage={"prompt_tokens": 100, "completion_tokens": 20},
+            total_usage={"prompt_tokens": 100, "completion_tokens": 20},
+            usage_vendor={"inputTokens": 100, "outputTokens": 20},
+        )
+
+        assert evt.turn_index == 0
+        assert evt.turn_usage == {"prompt_tokens": 100, "completion_tokens": 20}
+        assert evt.total_usage == {"prompt_tokens": 100, "completion_tokens": 20}
+        assert evt.usage_vendor == {"inputTokens": 100, "outputTokens": 20}
+
+    def test_tool_call_usage_defaults(self) -> None:
+        evt = ToolCallEvent(
+            source="agent", call_id="c1", tool_name="bash", arguments={}
+        )
+        assert evt.turn_index is None
+        assert evt.turn_usage == {}
+        assert evt.total_usage == {}
+        assert evt.usage_vendor is None
 
 
 class TestToolResultEvent:

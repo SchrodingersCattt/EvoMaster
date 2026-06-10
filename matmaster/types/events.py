@@ -33,16 +33,22 @@ class ThoughtEvent(EventBase):
     """LLM thought/reasoning event.
 
     Streaming and non-streaming are unified; use ``stream_state`` to
-    distinguish: 'start' | 'streaming' | 'end' | 'complete' | None.
+    distinguish: 'start' | 'streaming' | 'segment_end' | 'end' | 'complete' | None.
+    'complete' is the accepted-turn reasoning audit event and may carry usage;
+    all other states are ephemeral streaming/segment markers without usage.
     """
 
     type: Literal["thought"] = "thought"
     content: str = ""
-    stream_state: str | None = None  # 'start' | 'streaming' | 'end' | 'complete' | None
+    stream_state: str | None = None  # 'start' | 'streaming' | 'segment_end' | 'end' | 'complete' | None
     stream_id: str | None = None
     token_count: int = 0
     context: str | None = None  # e.g. 'step_execution'
     reasoning_content: str | None = None
+    turn_index: int | None = None
+    turn_usage: dict[str, int] = Field(default_factory=dict)
+    total_usage: dict[str, int] = Field(default_factory=dict)
+    usage_vendor: dict[str, Any] | None = None
 
 
 class ResponseEvent(EventBase):
@@ -62,12 +68,22 @@ class ResponseEvent(EventBase):
 
 
 class ToolCallEvent(EventBase):
-    """Tool call event -- emitted when the LLM requests a tool invocation."""
+    """Tool call event -- emitted when the LLM requests a tool invocation.
+
+    Usage fields describe the accepted LLM turn that requested the calls,
+    not the tool execution itself. Multiple tool calls from one turn share
+    the same turn_index and identical usage snapshots; consumers must
+    deduplicate by turn_index.
+    """
 
     type: Literal["tool_call"] = "tool_call"
     call_id: str
     tool_name: str
     arguments: dict[str, Any]
+    turn_index: int | None = None
+    turn_usage: dict[str, int] = Field(default_factory=dict)
+    total_usage: dict[str, int] = Field(default_factory=dict)
+    usage_vendor: dict[str, Any] | None = None
 
 
 class ToolResultEvent(EventBase):
