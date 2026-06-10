@@ -381,6 +381,10 @@ class ChatCompletionsTransport(Transport):
             payload["content"] = ""
         return payload
 
+    def _vendor_request_fields(self) -> dict[str, Any]:
+        """vendor 子类的请求体附加字段（经 extra_body 平铺进请求顶层）。"""
+        return {}
+
     def convert_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
         """canonical list[Message] -> OpenAI-compatible wire dicts。"""
         validate_tool_turn_sequence(messages)
@@ -413,6 +417,7 @@ class ChatCompletionsTransport(Transport):
             if effort:
                 reasoning["effort"] = effort
             extra_body["reasoning"] = reasoning
+        extra_body.update(self._vendor_request_fields())
         if self._extra_body:
             extra_body.update(self._extra_body)
         if extra_body:
@@ -638,3 +643,24 @@ class ChatCompletionsTransport(Transport):
             if err is not None:
                 raise err from exc
             raise
+
+
+class _ReasoningReplayChatCompletions(ChatCompletionsTransport):
+    """中间基类：把前轮 reasoning_content 以同级字段回放进 assistant 消息。"""
+
+    def _assistant_to_wire(self, message: AssistantMessage) -> dict[str, Any]:
+        payload = super()._assistant_to_wire(message)
+        if message.reasoning_content is not None:
+            payload["reasoning_content"] = message.reasoning_content
+        return payload
+
+
+class DeepSeekChatCompletionsTransport(_ReasoningReplayChatCompletions):
+    """deepseek-v4 系：tool call 链之间必须回传 reasoning_content（缺失则 400）。"""
+
+
+class QwenChatCompletionsTransport(_ReasoningReplayChatCompletions):
+    """qwen3 系（百炼 OpenAI 兼容端点）：回放 + preserve_thinking 服务端拼接。"""
+
+    def _vendor_request_fields(self) -> dict[str, Any]:
+        return {"preserve_thinking": True}
