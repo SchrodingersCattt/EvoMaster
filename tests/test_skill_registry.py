@@ -60,27 +60,40 @@ SKILL_MD_NO_FRONTMATTER = "No frontmatter here."
 
 
 class FakeRemoteSkillSession:
-    def __init__(self, files: dict[str, str]) -> None:
+    def __init__(
+        self,
+        files: dict[str, str],
+        errors: dict[str, str] | None = None,
+    ) -> None:
         self._files = files
+        self._errors = errors or {}
         self.exec_calls: list[str] = []
         self.read_calls: list[str] = []
+
+    def _all_paths(self) -> list[str]:
+        return sorted([*self._files, *self._errors])
 
     def path_exists(self, path: str) -> bool:
         prefix = path.rstrip("/") + "/"
         return any(
             candidate == path or candidate.startswith(prefix)
-            for candidate in self._files
+            for candidate in self._all_paths()
         )
 
     def exec_bash(self, command: str, timeout: int | None = None) -> dict[str, object]:
         self.exec_calls.append(command)
         root = shlex.split(command)[-1].rstrip("/")
         prefix = root + "/"
-        payload = [
-            {"path": path, "content": self._files[path]}
-            for path in sorted(self._files)
-            if path.endswith("/SKILL.md") and path.startswith(prefix)
-        ]
+        payload: list[dict[str, str]] = []
+        for path in self._all_paths():
+            if not path.startswith(prefix):
+                continue
+            if not path.endswith(("/SKILL.md", "/plugin.yaml")):
+                continue
+            if path in self._errors:
+                payload.append({"path": path, "error": self._errors[path]})
+            else:
+                payload.append({"path": path, "content": self._files[path]})
         return {"exit_code": 0, "stdout": json.dumps(payload)}
 
     def read_file(self, path: str, encoding: str = "utf-8") -> str:
