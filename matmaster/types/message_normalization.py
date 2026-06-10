@@ -7,6 +7,10 @@ from matmaster.response_text import is_trivial_response_text
 from matmaster.types.errors import LLMError
 from matmaster.types.messages import AssistantMessage, Message, ToolMessage, UserMessage
 
+TOOL_IMAGE_BUDGET_MAX_COUNT = 4
+TOOL_IMAGE_BUDGET_MAX_BYTES = 16 * 1024 * 1024
+_IMAGE_PRUNED_MARKER = "\n[image pruned from context: re-Read the file if needed]"
+
 
 def _merge_user_messages(left: UserMessage, right: UserMessage) -> UserMessage:
     content_parts = [
@@ -32,6 +36,37 @@ def canonicalize_messages_for_provider(messages: Iterable[Message]) -> list[Mess
             continue
         canonical.append(message)
     return canonical
+
+
+def apply_tool_image_budget(
+    messages: list[Message],
+    *,
+    max_count: int = TOOL_IMAGE_BUDGET_MAX_COUNT,
+    max_bytes: int = TOOL_IMAGE_BUDGET_MAX_BYTES,
+) -> list[Message]:
+    """Apply newest-first in-flight budget for ToolMessage images."""
+    out = list(messages)
+    kept_count = 0
+    kept_bytes = 0
+    for idx in range(len(out) - 1, -1, -1):
+        msg = out[idx]
+        if not isinstance(msg, ToolMessage) or not msg.images:
+            continue
+        msg_bytes = sum(len(image.url) for image in msg.images)
+        if (
+            kept_count + len(msg.images) <= max_count
+            and kept_bytes + msg_bytes <= max_bytes
+        ):
+            kept_count += len(msg.images)
+            kept_bytes += msg_bytes
+            continue
+        out[idx] = msg.model_copy(
+            update={
+                "images": [],
+                "content": (msg.content or "") + _IMAGE_PRUNED_MARKER,
+            }
+        )
+    return out
 
 
 def _is_assistant_like_payload(raw: Any) -> bool:

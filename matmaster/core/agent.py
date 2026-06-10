@@ -60,7 +60,10 @@ if TYPE_CHECKING:
 
 from matmaster.core.hooks import HookEvent, RunContext, UserPromptContext
 from matmaster.response_text import is_trivial_response_text
-from matmaster.types.message_normalization import validate_tool_turn_sequence
+from matmaster.types.message_normalization import (
+    apply_tool_image_budget,
+    validate_tool_turn_sequence,
+)
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -328,6 +331,7 @@ class AgentKernel:
             tool_defs = tool_definitions
 
             canonical_messages = state.pipeline.feed_tail(state.messages)
+            canonical_messages = apply_tool_image_budget(canonical_messages)
             validate_tool_turn_sequence(canonical_messages)
 
             llm_response: LLMResponse | None = None
