@@ -110,6 +110,7 @@ async def dispatch_tool_calls(
                 tool_call_id=tc.id,
                 tool_name=tc.name,
                 content=tool_result.content,
+                images=tool_result.images,
             )
         )
         usage_delta = extract_tool_usage_delta(tc.name, tool_result)
@@ -123,6 +124,7 @@ async def dispatch_tool_calls(
                 result=tool_result.content,
                 status=tool_result.status,
                 payload=tool_result.payload,
+                images=tool_result.images,
             )
         )
         if tc.name == "Skill":

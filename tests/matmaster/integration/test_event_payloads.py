@@ -427,6 +427,35 @@ class TestPublicContentForEvent:
         )
         assert assistant['turn_index'] == 1
 
+    def test_tool_result_public_content_carries_images(self) -> None:
+        payload = {
+            "call_id": "tc1",
+            "tool_name": "Read",
+            "result": "Read image: a.png",
+            "status": "success",
+            "payload": {},
+            "images": [
+                {
+                    "url": "data:image/png;base64,aGVsbG8=",
+                    "mime_type": "image/png",
+                    "detail": None,
+                }
+            ],
+        }
+        out = _public_content_for_event("tool_result", payload)
+        assert out["images"][0]["url"] == "data:image/png;base64,aGVsbG8="
+
+    def test_tool_result_public_content_no_images_key_when_empty(self) -> None:
+        payload = {
+            "call_id": "tc1",
+            "tool_name": "Read",
+            "result": "ok",
+            "status": "success",
+            "payload": {},
+        }
+        out = _public_content_for_event("tool_result", payload)
+        assert "images" not in out
+
     def test_structured_response_content_is_unpacked_for_sse(self) -> None:
         payload = {
             'source': 'MatMaster',

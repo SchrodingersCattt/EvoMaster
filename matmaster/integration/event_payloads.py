@@ -259,7 +259,7 @@ def _public_content_for_event(
 
     if event_type == 'tool_result':
         call_id = payload.get('call_id')
-        return {
+        out: dict[str, Any] = {
             'id': call_id,
             'call_id': call_id,
             'name': payload.get('tool_name'),
@@ -267,6 +267,10 @@ def _public_content_for_event(
             'status': payload.get('status', 'success'),
             'info': payload.get('info') or payload.get('payload') or {},
         }
+        images = payload.get('images')
+        if images:
+            out['images'] = images
+        return out
 
     if event_type == 'error':
         return {
