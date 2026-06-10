@@ -19,6 +19,7 @@ from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 from typing import Any, Literal
 
+import yaml
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -97,6 +98,29 @@ class SkillMetaInfo(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# PluginInfo
+# ---------------------------------------------------------------------------
+
+
+class PluginInfo(BaseModel):
+    """Plugin 元信息，从 plugin.yaml 瘦清单解析。"""
+
+    name: str
+    category: str | None = None
+    description: str = ""
+
+
+def _parse_plugin_info(manifest_path: Path) -> PluginInfo:
+    raw = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    category = raw.get("category")
+    return PluginInfo(
+        name=str(raw.get("name") or manifest_path.parent.name),
+        category=str(category).strip() if category else None,
+        description=str(raw.get("description") or ""),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Skill
 # ---------------------------------------------------------------------------
 
@@ -109,8 +133,16 @@ class Skill:
     - SKILL.md body → full_info (延迟缓存)
     """
 
-    def __init__(self, skill_path: Path) -> None:
+    def __init__(
+        self,
+        skill_path: Path,
+        *,
+        plugin: PluginInfo | None = None,
+        plugin_dir: Path | None = None,
+    ) -> None:
         self.skill_path = skill_path
+        self.plugin = plugin
+        self.plugin_dir = plugin_dir
         self.meta_info = self._parse_meta_info()
         self._full_info_cache: str | None = None
 
@@ -142,6 +174,8 @@ class RemoteSkill:
     """Skill loaded from a session-backed remote root."""
 
     is_remote: bool = True
+    plugin: PluginInfo | None = None
+    plugin_dir: Path | None = None
 
     def __init__(self, skill_path: PurePosixPath, content: str) -> None:
         self.skill_path = skill_path
@@ -304,6 +338,7 @@ class SkillRegistry:
 
             # 预计算已知 skill 目录，用于判断嵌套
             skill_dirs: set[Path] = set()
+            plugin_cache: dict[Path, PluginInfo] = {}
 
             for md_path in skill_md_paths:
                 skill_dir = md_path.parent
@@ -317,7 +352,13 @@ class SkillRegistry:
                     continue
 
                 try:
-                    skill = Skill(skill_dir)
+                    plugin_dir = self._find_plugin_dir(skill_dir, root)
+                    if plugin_dir is not None and plugin_dir not in plugin_cache:
+                        plugin_cache[plugin_dir] = _parse_plugin_info(
+                            plugin_dir / "plugin.yaml"
+                        )
+                    plugin = plugin_cache[plugin_dir] if plugin_dir else None
+                    skill = Skill(skill_dir, plugin=plugin, plugin_dir=plugin_dir)
                 except Exception:
                     logger.error(
                         "Failed to load skill from %s", skill_dir, exc_info=True
@@ -444,6 +485,16 @@ class SkillRegistry:
         )
 
     @staticmethod
+    def _find_plugin_dir(skill_dir: Path, root: Path) -> Path | None:
+        """skill_dir 到 root 之间第一个含 plugin.yaml 的祖先目录。"""
+        current = skill_dir.parent
+        while current != root and current != current.parent:
+            if (current / "plugin.yaml").exists():
+                return current
+            current = current.parent
+        return None
+
+    @staticmethod
     def _has_underscore_ancestor(
         skill_dir: Path | PurePosixPath,
         root: Path | PurePosixPath,
@@ -483,10 +534,19 @@ class SkillRegistry:
             self._skills.pop(name, None)
 
     def get_meta_info_context(self) -> str:
-        """生成 [Skill: name] description 格式的汇总字符串。"""
-        lines: list[str] = []
+        """可用 skill 汇总：扁平 skill 逐条列出，plugin 成员归组在 plugin 名下。"""
+        flat_lines: list[str] = []
+        grouped: dict[str, tuple[PluginInfo, list[str]]] = {}
         for skill in self._skills.values():
-            lines.append(
-                f"[Skill: {skill.meta_info.name}] {skill.meta_info.description}"
-            )
+            line = f"[Skill: {skill.meta_info.name}] {skill.meta_info.description}"
+            plugin = skill.plugin
+            if plugin is None:
+                flat_lines.append(line)
+            else:
+                grouped.setdefault(plugin.name, (plugin, []))[1].append(line)
+
+        lines = flat_lines
+        for plugin, member_lines in grouped.values():
+            lines.append(f"[Plugin: {plugin.name}] {plugin.description}")
+            lines.extend(f"  {member}" for member in member_lines)
         return "\n".join(lines)
