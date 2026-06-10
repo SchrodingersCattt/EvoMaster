@@ -17,6 +17,7 @@ from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES
 from matmaster.context.sources.turn_input import TurnInput
 from matmaster.types.cancellation import CancellationController
 from src.dao.redis_dao import get_redis_dao
+from src.services import bohrium_delivery_ack
 from src.services.agent_run_service import get_agent_run_service
 from src.services.sessions_service import get_sessions_service
 from src.services.user_service import UserService
@@ -340,9 +341,7 @@ def _run_worker_loop() -> None:
         bohrium_required = bool(payload.get('bohrium_required'))
         raw_workspace = payload.get('workspace')
         workspace = (
-            raw_workspace.strip() or None
-            if isinstance(raw_workspace, str)
-            else None
+            raw_workspace.strip() or None if isinstance(raw_workspace, str) else None
         )
         delivery = payload.get('delivery')
 
@@ -376,6 +375,7 @@ def _run_worker_loop() -> None:
         bridge = RedisCancellationBridge(controller, session_id, task_id)
         bridge.start()
         acquired = False
+        delivery_snapshot = None
 
         try:
             acquired_ok, fail_reason = sessions_service.try_acquire_session_run(
@@ -404,6 +404,8 @@ def _run_worker_loop() -> None:
 
             acquired = True
             _current_session_id = session_id
+            # run 起点固化本轮交付边界；查询失败返回 None 不阻断 run
+            delivery_snapshot = bohrium_delivery_ack.snapshot(session_id)
             run_start_time = time.monotonic()
             queue_len = redis_dao.llen_agent_run_queue()
             active_count = get_worker_registry_service().count_active_runs()
@@ -446,6 +448,7 @@ def _run_worker_loop() -> None:
                     "turn_input": turn_input,
                     "workspace": workspace,
                     "bohrium_required": bool(bohrium_required or workspace),
+                    "delivery_snapshot": delivery_snapshot,
                 }
                 result = asyncio.run(agent_run_service.run_agent(**run_agent_kwargs))
                 run_result = result
@@ -510,6 +513,17 @@ def _run_worker_loop() -> None:
             redis_dao.delete_interaction_run_active(session_id)
             redis_dao.delete_stop_requested(session_id, task_id)
             if acquired:
+                if run_success and delivery_snapshot is not None:
+                    try:
+                        bohrium_delivery_ack.confirm(delivery_snapshot)
+                    except Exception:
+                        logger.warning(
+                            'Agent worker: bohrium delivery confirm failed '
+                            'session_id=%s task_id=%s',
+                            session_id,
+                            task_id,
+                            exc_info=True,
+                        )
                 sessions_service.release_session_run(
                     session_id, run_success=run_success
                 )

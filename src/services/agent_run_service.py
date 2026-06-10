@@ -41,6 +41,7 @@ from src.dao.redis_dao import get_redis_dao
 from src.services.agent_run_bohrium_stage import run_bohrium_stage
 from src.services.agent_run_history_wiring import build_history_wiring
 from src.services.billing_llm_provider import BillingLLMProvider
+from src.services.bohrium_delivery_ack import DeliverySnapshot
 from src.services.bohrium_jobs_wiring import build_bohrium_jobs_ports
 from src.services.figure_coordinator import FigureCoordinator
 from src.services.history_checkpoint_service import HistoryCheckpointService
@@ -243,6 +244,7 @@ class AgentRunService:
         turn_input: TurnInput | None = None,
         bohrium_required: bool = False,
         workspace: str | None = None,
+        delivery_snapshot: DeliverySnapshot | None = None,
     ) -> tuple[bool | tuple[bool, str], int, dict[str, Any] | None]:
         """Execute agent pipeline using generator event stream with fanout dispatch.
 
@@ -518,6 +520,7 @@ class AgentRunService:
                 user_id=_ledger_user_id,
                 org_id=_ledger_org_id,
                 workspace=stage_result.workspace,
+                delivery_snapshot=delivery_snapshot,
             )
             agent_run_ctx = AgentRunContext(
                 environment=environment,
