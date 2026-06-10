@@ -99,7 +99,7 @@ def _install_fake_tiefblue(monkeypatch, upload_calls: list[tuple[str, str, str]]
 def _fake_submit_post_factory(post_calls: list[tuple[str, dict, str]]):
     """Build a fake submit API handler recording payloads and credentials."""
 
-    def fake_post(base_url, path, access_key, payload, timeout=30):
+    def fake_post(base_url, path, access_key, payload, timeout=30, log_curl=False):
         post_calls.append((path, payload, access_key))
         if path == "/openapi/v1/sandbox/job/create":
             return {
