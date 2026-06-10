@@ -11,6 +11,7 @@ def _make_mock_completion(content: str = "summary") -> MagicMock:
     choice = MagicMock()
     choice.message.content = content
     choice.message.tool_calls = None
+    choice.message.reasoning_content = None
     choice.finish_reason = "stop"
     mock.choices = [choice]
     mock.usage = None

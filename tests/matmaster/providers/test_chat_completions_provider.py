@@ -188,6 +188,7 @@ def _make_mock_completion(
     choice = MagicMock()
     choice.message.content = content
     choice.message.tool_calls = tool_calls
+    choice.message.reasoning_content = None
     choice.finish_reason = finish_reason
     mock.choices = [choice]
     mock.usage = usage
@@ -374,8 +375,7 @@ class TestChatStreamContent:
         )
         provider._client = mock_client
         chunks = [
-            chunk
-            async for chunk in provider.chat_stream([UserMessage(content="Hi")])
+            chunk async for chunk in provider.chat_stream([UserMessage(content="Hi")])
         ]
 
         assert len(chunks) == 2
@@ -395,8 +395,7 @@ class TestChatStreamContent:
         )
         provider._client = mock_client
         chunks = [
-            chunk
-            async for chunk in provider.chat_stream([UserMessage(content="Hi")])
+            chunk async for chunk in provider.chat_stream([UserMessage(content="Hi")])
         ]
 
         assert len(chunks) == 3
@@ -423,8 +422,7 @@ class TestChatStreamContent:
         )
         provider._client = mock_client
         chunks = [
-            chunk
-            async for chunk in provider.chat_stream([UserMessage(content="Hi")])
+            chunk async for chunk in provider.chat_stream([UserMessage(content="Hi")])
         ]
 
         assert chunks[0].tool_call_deltas is not None
@@ -465,8 +463,7 @@ class TestChatStreamContent:
         provider._client = mock_client
 
         chunks = [
-            chunk
-            async for chunk in provider.chat_stream([UserMessage(content="Hi")])
+            chunk async for chunk in provider.chat_stream([UserMessage(content="Hi")])
         ]
 
         assert chunks[0].tool_call_deltas == [
@@ -517,8 +514,7 @@ class TestChatStreamContent:
         provider._client = mock_client
 
         chunks = [
-            chunk
-            async for chunk in provider.chat_stream([UserMessage(content="Hi")])
+            chunk async for chunk in provider.chat_stream([UserMessage(content="Hi")])
         ]
 
         assert chunks[0].tool_call_deltas == [
@@ -569,8 +565,7 @@ class TestChatStreamContent:
         provider._client = mock_client
 
         chunks = [
-            chunk
-            async for chunk in provider.chat_stream([UserMessage(content="Hi")])
+            chunk async for chunk in provider.chat_stream([UserMessage(content="Hi")])
         ]
 
         assert chunks[0].tool_call_deltas == [
@@ -631,8 +626,7 @@ class TestChatStreamContent:
         provider._client = mock_client
 
         chunks = [
-            chunk
-            async for chunk in provider.chat_stream([UserMessage(content="Hi")])
+            chunk async for chunk in provider.chat_stream([UserMessage(content="Hi")])
         ]
 
         assert chunks[0].tool_call_deltas == [
@@ -693,8 +687,7 @@ class TestChatStreamContent:
         provider._client = mock_client
 
         chunks = [
-            chunk
-            async for chunk in provider.chat_stream([UserMessage(content="Hi")])
+            chunk async for chunk in provider.chat_stream([UserMessage(content="Hi")])
         ]
 
         assert chunks[0].tool_call_deltas == [
@@ -740,8 +733,7 @@ class TestChatStreamContent:
         provider._client = mock_client
 
         chunks = [
-            chunk
-            async for chunk in provider.chat_stream([UserMessage(content="Hi")])
+            chunk async for chunk in provider.chat_stream([UserMessage(content="Hi")])
         ]
 
         assert chunks[0].tool_call_deltas == [
@@ -791,9 +783,7 @@ class TestChatStreamContent:
         with pytest.raises(LLMError, match="duplicate tool_call id"):
             _ = [
                 chunk
-                async for chunk in provider.chat_stream(
-                    [UserMessage(content="Hi")]
-                )
+                async for chunk in provider.chat_stream([UserMessage(content="Hi")])
             ]
 
     async def test_chat_stream_duplicate_id_with_conflicting_arguments_raises(
@@ -830,9 +820,7 @@ class TestChatStreamContent:
         with pytest.raises(LLMError, match="duplicate tool_call id"):
             _ = [
                 chunk
-                async for chunk in provider.chat_stream(
-                    [UserMessage(content="Hi")]
-                )
+                async for chunk in provider.chat_stream([UserMessage(content="Hi")])
             ]
 
     async def test_chat_stream_empty_choices(self) -> None:
@@ -850,8 +838,7 @@ class TestChatStreamContent:
         )
         provider._client = mock_client
         chunks = [
-            chunk
-            async for chunk in provider.chat_stream([UserMessage(content="Hi")])
+            chunk async for chunk in provider.chat_stream([UserMessage(content="Hi")])
         ]
 
         assert len(chunks) == 1

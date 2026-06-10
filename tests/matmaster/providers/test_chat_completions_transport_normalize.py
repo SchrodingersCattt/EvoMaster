@@ -70,6 +70,17 @@ def test_normalize_response_tool_calls() -> None:
     assert out.tool_calls[0].arguments == {"q": "x"}
 
 
+def test_normalize_response_extracts_reasoning_content() -> None:
+    message = SimpleNamespace(
+        content="answer", reasoning_content="thought", tool_calls=None
+    )
+    choice = SimpleNamespace(message=message, finish_reason="stop")
+    raw = SimpleNamespace(choices=[choice], usage=None)
+    out = _t().normalize_response(raw)
+    assert out.reasoning_content == "thought"
+    assert out.content == "answer"
+
+
 @pytest.mark.asyncio
 async def test_normalize_stream_yields_content_then_usage() -> None:
     delta = SimpleNamespace(content="hi", reasoning_content=None, tool_calls=None)

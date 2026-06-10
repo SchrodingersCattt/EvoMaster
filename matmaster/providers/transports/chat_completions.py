@@ -544,6 +544,7 @@ class ChatCompletionsTransport(Transport):
             usage_vendor = _openai_usage_to_vendor_dict(raw.usage)
         return LLMResponse(
             content=message.content,
+            reasoning_content=getattr(message, "reasoning_content", None),
             tool_calls=tool_calls,
             finish_reason=choice.finish_reason,
             usage=usage,
