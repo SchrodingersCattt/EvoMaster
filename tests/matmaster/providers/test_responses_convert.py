@@ -199,6 +199,72 @@ def test_parallel_tool_calls_and_outputs_map_in_order() -> None:
     ]
 
 
+def _tool_turn_with_image():
+    return [
+        UserMessage(content="看图"),
+        AssistantMessage(
+            content=None,
+            tool_calls=[ToolCallData(id="call_1", name="Read", arguments={})],
+        ),
+        ToolMessage(
+            tool_call_id="call_1",
+            tool_name="Read",
+            content="Read image: /a.png",
+            images=[
+                ImageContentPart(
+                    url="data:image/png;base64,aGVsbG8=",
+                    mime_type="image/png",
+                    detail="high",
+                )
+            ],
+        ),
+    ]
+
+
+def test_tool_images_are_relayed_as_user_input_item() -> None:
+    wire = _provider().convert_messages(_tool_turn_with_image())
+    assert wire[-2] == {
+        "type": "function_call_output",
+        "call_id": "call_1",
+        "output": "Read image: /a.png",
+    }
+    assert wire[-1] == {
+        "role": "user",
+        "content": [
+            {
+                "type": "input_text",
+                "text": "[Images from Read (tool_call call_1)]",
+            },
+            {
+                "type": "input_image",
+                "image_url": "data:image/png;base64,aGVsbG8=",
+                "detail": "high",
+            },
+        ],
+    }
+
+
+def test_tool_image_relay_merges_into_following_user_item() -> None:
+    wire = _provider().convert_messages(
+        _tool_turn_with_image() + [UserMessage(content="继续")]
+    )
+    assert wire[-1] == {
+        "role": "user",
+        "content": [
+            {
+                "type": "input_text",
+                "text": "[Images from Read (tool_call call_1)]",
+            },
+            {
+                "type": "input_image",
+                "image_url": "data:image/png;base64,aGVsbG8=",
+                "detail": "high",
+            },
+            {"type": "input_text", "text": "继续"},
+        ],
+    }
+
+
 def test_tools_convert_to_flat_function_with_strict_false() -> None:
     kwargs = _provider().build_kwargs(
         [UserMessage(content="hi")],

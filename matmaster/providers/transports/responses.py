@@ -61,6 +61,22 @@ def _function_call_output_item(message: ToolMessage) -> dict[str, Any]:
     }
 
 
+def _relay_content_for(message: ToolMessage) -> list[dict[str, Any]]:
+    if not message.images:
+        return []
+    content: list[dict[str, Any]] = [
+        {
+            "type": "input_text",
+            "text": (
+                f"[Images from {message.tool_name} "
+                f"(tool_call {message.tool_call_id})]"
+            ),
+        }
+    ]
+    content.extend(_input_image_part(image) for image in message.images)
+    return content
+
+
 def _reasoning_items_from_payload(
     payload: dict[str, Any] | None,
 ) -> list[dict[str, Any]]:
@@ -296,18 +312,31 @@ class ResponsesTransport(Transport):
     def convert_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
         validate_tool_turn_sequence(messages)
         out: list[dict[str, Any]] = []
+        pending_relay: list[dict[str, Any]] = []
         for message in messages:
             if isinstance(message, SystemMessage):
                 continue
+            if isinstance(message, ToolMessage):
+                out.append(_function_call_output_item(message))
+                pending_relay.extend(_relay_content_for(message))
+                continue
+            if pending_relay and isinstance(message, UserMessage):
+                user_item = _user_input_item(message)
+                user_item["content"] = pending_relay + user_item["content"]
+                out.append(user_item)
+                pending_relay = []
+                continue
+            if pending_relay:
+                out.append({"role": "user", "content": pending_relay})
+                pending_relay = []
             if isinstance(message, UserMessage):
                 out.append(_user_input_item(message))
                 continue
             if isinstance(message, AssistantMessage):
                 out.extend(self._assistant_to_items(message))
                 continue
-            if isinstance(message, ToolMessage):
-                out.append(_function_call_output_item(message))
-                continue
+        if pending_relay:
+            out.append({"role": "user", "content": pending_relay})
         return out
 
     def build_kwargs(
