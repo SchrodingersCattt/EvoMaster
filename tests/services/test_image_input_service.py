@@ -33,6 +33,29 @@ def _llm_config(profiles: dict[str, LLMProfileConfig], default: str) -> LLMConfi
     )
 
 
+def test_strip_all_history_images_both_directions() -> None:
+    from matmaster.types.messages import ImageContentPart, ToolMessage, UserMessage
+    from src.services.image_input_service import strip_all_history_images
+
+    data_uri = "data:image/png;base64,aGVsbG8="
+    messages = [
+        UserMessage(content="看", images=[ImageContentPart(url="https://oss/a.png")]),
+        ToolMessage(
+            tool_call_id="tc1",
+            tool_name="Read",
+            content="Read image: /a.png",
+            images=[ImageContentPart(url=data_uri)],
+        ),
+        ToolMessage(tool_call_id="tc2", tool_name="Bash", content="ok"),
+    ]
+    out = strip_all_history_images(messages)
+    assert out[0].images == [] and out[1].images == []
+    assert "[历史图片已移除：当前模型不支持图片输入]" in out[0].content
+    assert "[历史图片已移除：当前模型不支持图片输入]" in out[1].content
+    assert out[2] is messages[2]
+    assert messages[1].images
+
+
 def _response(
     status_code: int,
     *,

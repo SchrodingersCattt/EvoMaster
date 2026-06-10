@@ -490,6 +490,7 @@ class AgentRunService:
                 raw_history_limit=_DIALOG_HISTORY_MAX_EVENTS,
                 checkpoint_sink_factory=_checkpoint_sink_factory,
                 pre_compaction_barrier=fanout.flush_persistence_barrier,
+                supports_vision=llm_bundle.supports_vision,
             )
             history = wiring.history
             bohrium_rebuild_events = (

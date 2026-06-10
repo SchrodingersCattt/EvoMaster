@@ -313,7 +313,10 @@ async def test_run_agent_uses_model_history_restore_service_and_injects_spawn_aw
             )
 
         assert ok is True
-        restore_cls.assert_called_once_with(svc._test_events_table)
+        restore_cls.assert_called_once_with(
+            svc._test_events_table,
+            supports_vision=False,
+        )
         restore_inst.restore_history.assert_called_once_with(
             session_id='sess-1',
             spawn_id=None,

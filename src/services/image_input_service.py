@@ -516,3 +516,24 @@ def trim_history_images(
             output[idx] = message.model_copy(update={"images": keep_images})
 
     return output
+
+
+_NON_VISION_PLACEHOLDER = "[历史图片已移除：当前模型不支持图片输入]"
+
+
+def strip_all_history_images(messages: list[Message]) -> list[Message]:
+    """Strip all history images when the target model has no vision capability."""
+    out = list(messages)
+    for idx, message in enumerate(out):
+        images = getattr(message, "images", None)
+        if not images:
+            continue
+        text = message.content or ""
+        placeholders = "\n".join(_NON_VISION_PLACEHOLDER for _ in images)
+        out[idx] = message.model_copy(
+            update={
+                "content": "\n".join(item for item in (text, placeholders) if item),
+                "images": [],
+            }
+        )
+    return out

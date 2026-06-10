@@ -65,10 +65,14 @@ def build_history_wiring(
     raw_history_limit: int,
     checkpoint_sink_factory: Callable,
     pre_compaction_barrier: Callable,
+    supports_vision: bool = True,
 ) -> HistoryWiringResult:
     """Assemble history + compaction runtime capability for a single run."""
     history = (
-        ModelHistoryRestoreService(events_table).restore_history(
+        ModelHistoryRestoreService(
+            events_table,
+            supports_vision=supports_vision,
+        ).restore_history(
             session_id=session_id,
             spawn_id=None,
             task_id=task_id,

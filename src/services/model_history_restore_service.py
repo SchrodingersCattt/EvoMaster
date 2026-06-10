@@ -15,14 +15,18 @@ from src.services.history_checkpoint_codec import (
     deserialize_base_messages,
     validate_base_messages,
 )
-from src.services.image_input_service import trim_history_images
+from src.services.image_input_service import (
+    strip_all_history_images,
+    trim_history_images,
+)
 
 logger = logging.getLogger(__name__)
 
 
 class ModelHistoryRestoreService:
-    def __init__(self, events_table: Any) -> None:
+    def __init__(self, events_table: Any, *, supports_vision: bool = True) -> None:
         self.events_table = events_table
+        self._supports_vision = supports_vision
 
     def restore_history(
         self,
@@ -56,7 +60,7 @@ class ModelHistoryRestoreService:
                     task_id=task_id,
                     checkpoint=v1_checkpoint,
                 )
-                return trim_history_images(messages)
+                return self._finalize_history(messages)
             except HistoryCheckpointCorruptedError:
                 logger.warning(
                     "model_history_restore: v1 checkpoint has null boundary; aborting "
@@ -92,6 +96,11 @@ class ModelHistoryRestoreService:
             task_id=task_id,
             checkpoint=None,
         )
+        return self._finalize_history(messages)
+
+    def _finalize_history(self, messages: list[Message]) -> list[Message]:
+        if not self._supports_vision:
+            return strip_all_history_images(messages)
         return trim_history_images(messages)
 
     def _delegate_v1_restore(
