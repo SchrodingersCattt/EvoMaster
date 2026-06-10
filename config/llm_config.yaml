@@ -14,7 +14,7 @@ providers:
     transport: anthropic_messages
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_BASE}"
-    prompt_cache_compat: bedrock_blocks
+    vendor: bedrock
 
   anthropic:
     transport: anthropic_messages

@@ -16,6 +16,7 @@ from matmaster.config.llm import (
 from matmaster.providers.transports.anthropic_messages import (
     AnthropicMessagesTransport,
     AnthropicPromptCacheOptions,
+    BedrockAnthropicTransport,
 )
 from matmaster.providers.transports.chat_completions import (
     ChatCompletionsTransport,
@@ -39,6 +40,7 @@ _CHAT_COMPLETIONS_BY_VENDOR: dict[str | None, type[ChatCompletionsTransport]] = 
 }
 _ANTHROPIC_BY_VENDOR: dict[str | None, type[AnthropicMessagesTransport]] = {
     None: AnthropicMessagesTransport,
+    "bedrock": BedrockAnthropicTransport,
 }
 _RESPONSES_BY_VENDOR: dict[str | None, type[ResponsesTransport]] = {
     None: ResponsesTransport,
@@ -132,7 +134,6 @@ def _build_anthropic_messages_transport(
         max_tokens=profile.max_tokens,
         reasoning_effort=profile.reasoning_effort,
         prompt_cache_options=_build_anthropic_prompt_cache_options(profile),
-        prompt_cache_compat=provider.prompt_cache_compat,
         timeout=profile.timeout,
         stream_timeout=profile.stream_timeout,
         stream_idle_timeout=profile.stream_idle_timeout,

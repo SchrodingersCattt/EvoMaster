@@ -11,8 +11,8 @@ from matmaster.providers.llm_factory import (
     build_provider_bundle,
 )
 from matmaster.providers.transports.anthropic_messages import (
-    AnthropicMessagesTransport,
     AnthropicPromptCacheOptions,
+    BedrockAnthropicTransport,
 )
 from matmaster.providers.transports.chat_completions import (
     ChatCompletionsTransport,
@@ -111,7 +111,7 @@ class TestDispatch:
                     transport="anthropic_messages",
                     api_key="sk-proxy",
                     base_url="https://proxy.example/anthropic",
-                    prompt_cache_compat="bedrock_blocks",
+                    vendor="bedrock",
                 )
             },
             profiles={
@@ -144,13 +144,12 @@ class TestDispatch:
 
         provider = build_provider(cfg)
 
-        assert isinstance(provider, AnthropicMessagesTransport)
+        assert isinstance(provider, BedrockAnthropicTransport)
         assert provider._model == "claude-opus-4-6"
         assert provider._api_key == "sk-proxy"
         assert provider._base_url == "https://proxy.example/anthropic"
         assert provider._reasoning_effort == "max"
         assert provider._max_tokens == 32_000
-        assert provider._prompt_cache_compat == "bedrock_blocks"
         assert provider._prompt_cache_options == AnthropicPromptCacheOptions(
             system_prompt_breakpoint=True,
             cache_control={"type": "ephemeral"},

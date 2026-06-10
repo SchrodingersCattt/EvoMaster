@@ -158,7 +158,7 @@ profiles:
         # NOTE: Do not assert literal provider.api_key / base_url `${...}` placeholders:
         # load_llm_config expands ${VAR} unconditionally (env value when set,
         # empty string when missing), so placeholders are not preserved.
-        assert resolved.provider.prompt_cache_compat == "bedrock_blocks"
+        assert resolved.provider.vendor == "bedrock"
         assert resolved.profile.model == "global.anthropic.claude-opus-4-6-v1"
         assert resolved.profile.reasoning_effort == "max"
         assert resolved.profile.supports_vision is True

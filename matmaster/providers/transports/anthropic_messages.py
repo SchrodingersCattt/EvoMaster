@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any
 
 import anthropic
 
@@ -36,9 +36,6 @@ class AnthropicPromptCacheOptions:
     flexible_breakpoint: bool = False
     max_breakpoints: int = 4
     min_flexible_chars: int = 1000
-
-
-PromptCacheCompat = Literal["anthropic_native", "bedrock_blocks"]
 
 
 @dataclass(frozen=True)
@@ -110,14 +107,12 @@ def _select_anthropic_cache_targets(
     has_system: bool,
     messages: list[dict[str, Any]],
     options: AnthropicPromptCacheOptions,
-    prompt_cache_compat: PromptCacheCompat = "anthropic_native",
+    emit_top_level_auto: bool = True,
 ) -> list[_CacheTarget]:
     targets: list[_CacheTarget] = []
     used_slots: set[tuple[int, int | None]] = set()
     used_whole_message_indexes: set[int] = set()
-    automatic_uses_top_level = (
-        options.automatic and prompt_cache_compat == "anthropic_native"
-    )
+    automatic_uses_top_level = options.automatic and emit_top_level_auto
     max_block_targets = options.max_breakpoints - (1 if automatic_uses_top_level else 0)
     max_block_targets = max(0, max_block_targets)
 
@@ -231,7 +226,9 @@ def _tool_result_block(message: ToolMessage) -> dict[str, Any]:
     }
 
 
-def _thinking_blocks_from_payload(payload: dict[str, Any] | None) -> list[dict[str, Any]]:
+def _thinking_blocks_from_payload(
+    payload: dict[str, Any] | None,
+) -> list[dict[str, Any]]:
     if not payload:
         return []
     raw = payload.get("thinking")
@@ -379,7 +376,6 @@ class AnthropicMessagesTransport(Transport):
         max_tokens: int | None = None,
         reasoning_effort: str | None = None,
         prompt_cache_options: AnthropicPromptCacheOptions | None = None,
-        prompt_cache_compat: PromptCacheCompat = "anthropic_native",
         timeout: float = 300.0,
         stream_timeout: float | None = None,
         stream_idle_timeout: float | None = None,
@@ -399,7 +395,6 @@ class AnthropicMessagesTransport(Transport):
         self._max_tokens = max_tokens
         self._reasoning_effort = reasoning_effort
         self._prompt_cache_options = prompt_cache_options
-        self._prompt_cache_compat = prompt_cache_compat
 
     async def _open_client(self) -> anthropic.AsyncAnthropic:
         import httpx
@@ -419,9 +414,15 @@ class AnthropicMessagesTransport(Transport):
     async def _close_client(self, client: anthropic.AsyncAnthropic) -> None:
         await client.close()
 
+    def _emit_top_level_auto_cache(self) -> bool:
+        """automatic 时是否随请求发顶层 cache_control（native 默认发）。"""
+        return True
+
     def _assistant_to_wire(self, message: AssistantMessage) -> dict[str, Any]:
         blocks: list[dict[str, Any]] = []
-        blocks.extend(_thinking_blocks_from_payload(self._claim_provider_state(message)))
+        blocks.extend(
+            _thinking_blocks_from_payload(self._claim_provider_state(message))
+        )
         blocks.extend(_text_block(message.content))
         blocks.extend(_tool_use_blocks(message.tool_calls))
         return {"role": "assistant", "content": blocks}
@@ -475,11 +476,12 @@ class AnthropicMessagesTransport(Transport):
         system_value: str | list[dict[str, Any]] | None = system_text or None
         options = self._prompt_cache_options
         if options is not None:
+            emit_top_level_auto = self._emit_top_level_auto_cache()
             targets = _select_anthropic_cache_targets(
                 has_system=bool(system_value),
                 messages=converted_messages,
                 options=options,
-                prompt_cache_compat=self._prompt_cache_compat,
+                emit_top_level_auto=emit_top_level_auto,
             )
             for target in targets:
                 if target.section == "system" and isinstance(system_value, str):
@@ -496,10 +498,7 @@ class AnthropicMessagesTransport(Transport):
                         options.cache_control,
                         target.content_index,
                     )
-            if (
-                options.automatic
-                and self._prompt_cache_compat == "anthropic_native"
-            ):
+            if options.automatic and emit_top_level_auto:
                 kwargs_extra_body = {"cache_control": dict(options.cache_control)}
             else:
                 kwargs_extra_body = {}
@@ -640,9 +639,11 @@ class AnthropicMessagesTransport(Transport):
                     yield StreamChunk(
                         tool_call_deltas=[
                             {
-                                "index": state.output_index
-                                if state.output_index is not None
-                                else idx,
+                                "index": (
+                                    state.output_index
+                                    if state.output_index is not None
+                                    else idx
+                                ),
                                 "arguments": part,
                             }
                         ]
@@ -754,3 +755,10 @@ class AnthropicMessagesTransport(Transport):
             if err is not None:
                 raise err from exc
             raise
+
+
+class BedrockAnthropicTransport(AnthropicMessagesTransport):
+    """Bedrock 后端方言：不接受顶层 cache_control，automatic 全走块级断点。"""
+
+    def _emit_top_level_auto_cache(self) -> bool:
+        return False

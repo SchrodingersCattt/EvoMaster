@@ -3,6 +3,7 @@ from __future__ import annotations
 from matmaster.providers.transports.anthropic_messages import (
     AnthropicMessagesTransport,
     AnthropicPromptCacheOptions,
+    BedrockAnthropicTransport,
 )
 from matmaster.types.messages import (
     AssistantMessage,
@@ -13,8 +14,10 @@ from matmaster.types.messages import (
 )
 
 
-def _provider(**overrides) -> AnthropicMessagesTransport:
-    prompt_cache_compat = overrides.pop("prompt_cache_compat", "anthropic_native")
+def _provider(
+    transport_cls: type[AnthropicMessagesTransport] = AnthropicMessagesTransport,
+    **overrides,
+) -> AnthropicMessagesTransport:
     values = {
         "system_prompt_breakpoint": True,
         "cache_control": {"type": "ephemeral"},
@@ -27,11 +30,10 @@ def _provider(**overrides) -> AnthropicMessagesTransport:
     }
     values.update(overrides)
     options = AnthropicPromptCacheOptions(**values)
-    return AnthropicMessagesTransport(
+    return transport_cls(
         model="claude-opus-4-6",
         api_key="sk-test",
         prompt_cache_options=options,
-        prompt_cache_compat=prompt_cache_compat,
     )
 
 
@@ -66,12 +68,8 @@ def test_cache_marks_system_latest_user_and_tool_result_with_automatic_slot() ->
         }
     ]
     assert "cache_control" not in kwargs["messages"][0]["content"][0]
-    assert kwargs["messages"][2]["content"][0]["cache_control"] == {
-        "type": "ephemeral"
-    }
-    assert kwargs["messages"][2]["content"][1]["cache_control"] == {
-        "type": "ephemeral"
-    }
+    assert kwargs["messages"][2]["content"][0]["cache_control"] == {"type": "ephemeral"}
+    assert kwargs["messages"][2]["content"][1]["cache_control"] == {"type": "ephemeral"}
     assert kwargs["extra_body"]["cache_control"] == {"type": "ephemeral"}
 
 
@@ -106,9 +104,7 @@ def test_cache_dedupes_latest_user_and_tool_result_same_block() -> None:
             "cache_control": {"type": "ephemeral"},
         }
     ]
-    assert kwargs["messages"][0]["content"][0]["cache_control"] == {
-        "type": "ephemeral"
-    }
+    assert kwargs["messages"][0]["content"][0]["cache_control"] == {"type": "ephemeral"}
 
 
 def test_cache_uses_flexible_when_fixed_targets_leave_a_slot() -> None:
@@ -127,9 +123,7 @@ def test_cache_uses_flexible_when_fixed_targets_leave_a_slot() -> None:
     assert kwargs["messages"][-1]["content"][0]["cache_control"] == {
         "type": "ephemeral"
     }
-    assert kwargs["messages"][0]["content"][0]["cache_control"] == {
-        "type": "ephemeral"
-    }
+    assert kwargs["messages"][0]["content"][0]["cache_control"] == {"type": "ephemeral"}
 
 
 def test_cache_respects_max_breakpoints_after_automatic_slot() -> None:
@@ -149,8 +143,8 @@ def test_cache_respects_max_breakpoints_after_automatic_slot() -> None:
     assert "cache_control" not in kwargs["messages"][0]["content"][0]
 
 
-def test_bedrock_cache_compat_converts_automatic_to_block_checkpoint() -> None:
-    provider = _provider(prompt_cache_compat="bedrock_blocks", max_breakpoints=2)
+def test_bedrock_transport_converts_automatic_to_block_checkpoint() -> None:
+    provider = _provider(BedrockAnthropicTransport, max_breakpoints=2)
 
     kwargs = provider.build_kwargs(
         [
