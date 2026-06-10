@@ -35,6 +35,7 @@ from matmaster.types.events import (
     WorkspaceUploadErrorEvent,
 )
 from matmaster.types.figures import FigureDescriptor
+from matmaster.types.messages import ImageContentPart
 
 # ── Individual AgentEvent types ─────────────────────────
 
@@ -85,6 +86,24 @@ class TestThoughtEventUsage:
         assert evt.turn_usage == {}
         assert evt.total_usage == {}
         assert evt.usage_vendor is None
+
+
+def test_tool_result_event_images_roundtrip() -> None:
+    event = ToolResultEvent(
+        source="agent",
+        call_id="tc1",
+        tool_name="Read",
+        result="Read image: a.png",
+        images=[
+            ImageContentPart(
+                url="data:image/png;base64,aGVsbG8=", mime_type="image/png"
+            )
+        ],
+    )
+    dumped = event.model_dump(mode="json")
+    assert dumped["images"][0]["url"] == "data:image/png;base64,aGVsbG8="
+    restored = ToolResultEvent.model_validate(dumped)
+    assert restored.images[0].mime_type == "image/png"
 
 
 class TestResponseEvent:

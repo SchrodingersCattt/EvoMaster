@@ -45,3 +45,21 @@ def test_user_content_parts_without_text_are_valid() -> None:
     converted = _convert([message])
 
     assert converted[0]["content"][0]["image_url"]["url"].endswith("a.webp")
+
+
+def test_tool_message_images_roundtrip() -> None:
+    from matmaster.types.messages import ToolMessage
+
+    msg = ToolMessage(
+        tool_call_id="tc1",
+        tool_name="Read",
+        content="Read image: a.png",
+        images=[
+            ImageContentPart(
+                url="data:image/png;base64,aGVsbG8=", mime_type="image/png"
+            )
+        ],
+    )
+    restored = ToolMessage.model_validate(msg.model_dump(mode="json"))
+    assert restored.images[0].url == msg.images[0].url
+    assert ToolMessage(tool_call_id="tc2", tool_name="Read", content="x").images == []

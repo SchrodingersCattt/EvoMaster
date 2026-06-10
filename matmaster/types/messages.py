@@ -241,6 +241,7 @@ class ToolMessage(Message):
     role: Role = Role.TOOL
     tool_call_id: str
     tool_name: str
+    images: list[ImageContentPart] = Field(default_factory=list)
 
 
 class ProviderState(BaseModel):

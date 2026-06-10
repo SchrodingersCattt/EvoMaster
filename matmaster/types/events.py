@@ -16,6 +16,7 @@ from typing import Annotated, Any, Literal, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 from .figures import FigureDescriptor
+from .messages import ImageContentPart
 
 
 class EventBase(BaseModel):
@@ -103,6 +104,7 @@ class ToolResultEvent(EventBase):
     result: Any  # str | dict
     status: str = "success"
     payload: dict[str, Any] = Field(default_factory=dict)
+    images: list[ImageContentPart] = Field(default_factory=list)
 
 
 class FinishDetail(BaseModel):
