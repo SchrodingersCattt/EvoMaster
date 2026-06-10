@@ -709,6 +709,85 @@ class TestRemotePluginAttribution:
         assert "  [Skill: member-skill] Plugin member skill" in ctx
 
 
+class TestRemovePluginMembers:
+    def test_removes_local_and_remote_members(self, tmp_path: Path) -> None:
+        """按归属移除本地+远端成员并返回名集合；散装与他组 plugin 不动。"""
+        from matmaster.skills.registry import SkillRegistry
+
+        local_root = tmp_path / "plugins"
+        _write(local_root / "p1" / "plugin.yaml", "name: p1\n")
+        _write(
+            local_root / "p1" / "skills" / "alpha" / "SKILL.md",
+            "---\nname: alpha\ndescription: A\n---\nBody\n",
+        )
+        _write(
+            local_root / "beta" / "SKILL.md",
+            "---\nname: beta\ndescription: B\n---\nBody\n",
+        )
+        remote_root = "/personal/.matmaster/plugins"
+        session = FakeRemoteSkillSession(
+            {
+                f"{remote_root}/p1/plugin.yaml": "name: p1\n",
+                f"{remote_root}/p1/skills/gamma/SKILL.md": (
+                    "---\nname: gamma\ndescription: G\n---\nBody\n"
+                ),
+                f"{remote_root}/p2/plugin.yaml": "name: p2\n",
+                f"{remote_root}/p2/skills/delta/SKILL.md": (
+                    "---\nname: delta\ndescription: D\n---\nBody\n"
+                ),
+            }
+        )
+        reg = SkillRegistry(
+            local_root,
+            remote_session=session,
+            remote_roots=[remote_root],
+        )
+
+        removed = reg.remove_plugin_members({"p1"})
+
+        assert removed == {"alpha", "gamma"}
+        assert reg.get_skill("alpha") is None
+        assert reg.get_skill("gamma") is None
+        assert reg.get_skill("beta") is not None
+        assert reg.get_skill("delta") is not None
+
+    def test_same_name_override_survives(self) -> None:
+        """同名覆盖者按实际归属判定不误伤：散装覆盖者存活且不进返回集。"""
+        from matmaster.skills.registry import SkillRegistry
+
+        plugins_root = "/personal/.matmaster/plugins"
+        skills_root = "/personal/.matmaster/skills"
+        session = FakeRemoteSkillSession(
+            {
+                f"{plugins_root}/pack/plugin.yaml": "name: pack\n",
+                f"{plugins_root}/pack/skills/dup/SKILL.md": (
+                    "---\nname: dup-skill\ndescription: Member version\n---\nBody\n"
+                ),
+                f"{skills_root}/dup/SKILL.md": (
+                    "---\nname: dup-skill\ndescription: Loose version\n---\nBody\n"
+                ),
+            }
+        )
+        reg = SkillRegistry(
+            [],
+            remote_session=session,
+            remote_roots=[plugins_root, skills_root],
+        )
+
+        removed = reg.remove_plugin_members({"pack"})
+
+        assert removed == set()
+        dup = reg.get_skill("dup-skill")
+        assert dup is not None
+        assert dup.meta_info.description == "Loose version"
+
+    def test_empty_disabled_set_is_noop(self, tmp_path: Path) -> None:
+        from matmaster.skills.registry import SkillRegistry
+
+        reg = SkillRegistry(tmp_path / "missing")
+        assert reg.remove_plugin_members(set()) == set()
+
+
 class TestSkillRegistryCache:
     def test_cache_hit_reuses_same_registry_instance(self, tmp_path: Path) -> None:
         from matmaster.skills.registry import SkillRegistry, SkillRegistryCache

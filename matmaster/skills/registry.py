@@ -639,6 +639,20 @@ class SkillRegistry:
         for name in names:
             self._skills.pop(name, None)
 
+    def remove_plugin_members(self, disabled_plugin_names: set[str]) -> set[str]:
+        """移除归属于被禁 plugin 的 skill，返回被移除的 skill 名集合。"""
+        if not disabled_plugin_names:
+            return set()
+        removed = {
+            name
+            for name, skill in self._skills.items()
+            if skill.plugin is not None
+            and skill.plugin.name in disabled_plugin_names
+        }
+        for name in removed:
+            del self._skills[name]
+        return removed
+
     def get_meta_info_context(self) -> str:
         """可用 skill 汇总：扁平 skill 逐条列出，plugin 成员归组在 plugin 名下。"""
         flat_lines: list[str] = []
