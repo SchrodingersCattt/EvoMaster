@@ -861,6 +861,8 @@ async def test_exception_emits_error_and_closed():
                     model_route="test-route",
                     context_limit=345_000,
                     context_limit_source="profile",
+                    supports_vision=False,
+                    vision_detail=None,
                 ),
             ),
             patch('matmaster.core.exp.Exp', new=lambda config: error_exp),

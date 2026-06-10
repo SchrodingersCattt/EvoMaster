@@ -732,6 +732,7 @@ def test_v1_restore_mixed_fixture_preserves_phase1_message_bytes() -> None:
             "content": '{"matches": [3, 1]}',
             "tool_call_id": "call-1",
             "tool_name": "search_materials",
+            "images": [],
         },
         {
             "role": "assistant",

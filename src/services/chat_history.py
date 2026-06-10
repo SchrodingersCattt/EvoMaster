@@ -337,8 +337,8 @@ class ChatHistoryConverter:
         }
 
     @staticmethod
-    def _tool_result_from_event(ev: dict) -> tuple[str, str, Any] | None:
-        """从 type=tool_result 的事件 content 得到 (tool_call_id, name, content)。"""
+    def _tool_result_from_event(ev: dict) -> tuple[str, str, Any, list] | None:
+        """从 type=tool_result 的事件 content 得到 (tool_call_id, name, content, images)。"""
         c = ev.get('content')
         if not isinstance(c, dict):
             return None
@@ -347,7 +347,10 @@ class ChatHistoryConverter:
         result = c.get('result')
         if result is None:
             result = {}
-        return (call_id, name, result)
+        images = c.get('images')
+        if not isinstance(images, list):
+            images = []
+        return (call_id, name, result, images)
 
     @staticmethod
     def _repair_incomplete_tool_turns(messages: list[dict]) -> list[dict]:
@@ -572,7 +575,7 @@ class ChatHistoryConverter:
                 triple = cls._tool_result_from_event(ev)
                 if triple:
                     flush_tool_calls()
-                    call_id, name, content = triple
+                    call_id, name, content, images = triple
                     if (
                         call_id not in active_tool_turn_ids
                         and call_id not in assistant_state_tool_ids
@@ -589,6 +592,10 @@ class ChatHistoryConverter:
                             tool_call_id=call_id,
                             tool_name=name,
                             content=content,
+                            images=[
+                                ImageContentPart.model_validate(image)
+                                for image in images
+                            ],
                         ).model_dump()
                     )
                 continue
@@ -691,6 +698,10 @@ class ChatHistoryConverter:
                         content=d.get("content", ""),
                         tool_call_id=d.get("tool_call_id", ""),
                         tool_name=d.get("tool_name", ""),
+                        images=[
+                            ImageContentPart.model_validate(image)
+                            for image in d.get("images", [])
+                        ],
                     )
                 )
         return messages

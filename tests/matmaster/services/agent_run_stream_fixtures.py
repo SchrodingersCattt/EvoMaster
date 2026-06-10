@@ -270,6 +270,8 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
             provider_name="openai",
             context_limit=345_000,
             context_limit_source="profile",
+            supports_vision=False,
+            vision_detail=None,
         )
 
         with (
