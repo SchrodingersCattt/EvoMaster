@@ -99,6 +99,7 @@ class SessionEventsPort(Protocol):
 class SessionJobs:
     active_jobs: tuple[JsonObject, ...] = ()
     pending_terminal_jobs: tuple[JsonObject, ...] = ()
+    detail_limit: int | None = None
 
     @classmethod
     def empty(cls) -> SessionJobs:
