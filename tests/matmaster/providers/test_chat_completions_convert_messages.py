@@ -64,3 +64,62 @@ def test_content_none_normalized_to_empty_string():
 def test_invalid_tool_turn_raises():
     with pytest.raises(LLMError):
         _convert([ToolMessage(content="x", tool_call_id="c1", tool_name="f")])
+
+
+def _image(url="data:image/png;base64,aGVsbG8="):
+    return ImageContentPart(url=url, mime_type="image/png", detail="high")
+
+
+def _tool_turn(images_on=("tc1",)):
+    return [
+        UserMessage(content="看图"),
+        AssistantMessage(
+            content=None,
+            tool_calls=[
+                ToolCallData(id="tc1", name="Read", arguments={}),
+                ToolCallData(id="tc2", name="Read", arguments={}),
+            ],
+        ),
+        ToolMessage(
+            tool_call_id="tc1",
+            tool_name="Read",
+            content="Read image: /a.png",
+            images=[_image()] if "tc1" in images_on else [],
+        ),
+        ToolMessage(
+            tool_call_id="tc2",
+            tool_name="Read",
+            content="plain text result",
+            images=[_image()] if "tc2" in images_on else [],
+        ),
+    ]
+
+
+def test_relay_inserted_after_tool_group():
+    wire = _convert(_tool_turn(images_on=("tc1",)))
+    roles = [m["role"] for m in wire]
+    assert roles == ["user", "assistant", "tool", "tool", "user"]
+    relay = wire[-1]["content"]
+    assert relay[0] == {"type": "text", "text": "[Images from Read (tool_call tc1)]"}
+    assert relay[1]["type"] == "image_url"
+    assert relay[1]["image_url"] == {
+        "url": "data:image/png;base64,aGVsbG8=",
+        "detail": "high",
+    }
+
+
+def test_relay_merges_into_following_user_message():
+    messages = _tool_turn(images_on=("tc2",)) + [UserMessage(content="继续")]
+    wire = _convert(messages)
+    roles = [m["role"] for m in wire]
+    assert roles == ["user", "assistant", "tool", "tool", "user"]
+    merged = wire[-1]["content"]
+    assert merged[0]["text"] == "[Images from Read (tool_call tc2)]"
+    assert merged[1]["type"] == "image_url"
+    assert merged[-1] == {"type": "text", "text": "继续"}
+
+
+def test_no_images_keeps_wire_unchanged():
+    wire = _convert(_tool_turn(images_on=()))
+    assert [m["role"] for m in wire] == ["user", "assistant", "tool", "tool"]
+    assert all("image_url" not in str(m.get("content")) for m in wire)

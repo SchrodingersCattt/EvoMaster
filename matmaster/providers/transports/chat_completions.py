@@ -386,9 +386,60 @@ class ChatCompletionsTransport(Transport):
         return {}
 
     def convert_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
-        """canonical list[Message] -> OpenAI-compatible wire dicts。"""
+        """canonical list[Message] -> OpenAI-compatible wire dicts.
+
+        Tool protocol messages cannot carry images on this wire format. Images
+        attached to ToolMessage are relayed as user content parts after the
+        contiguous tool result group, or prepended to the following UserMessage.
+        """
         validate_tool_turn_sequence(messages)
-        return [self._message_to_wire(message) for message in messages]
+        out: list[dict[str, Any]] = []
+        pending_relay: list[dict[str, Any]] = []
+        for message in messages:
+            if isinstance(message, ToolMessage):
+                out.append(self._message_to_wire(message))
+                pending_relay.extend(self._relay_parts_for(message))
+                continue
+            if pending_relay and isinstance(message, UserMessage):
+                wire = _user_message_to_dict(message)
+                content = wire["content"]
+                if isinstance(content, str):
+                    content_parts: list[dict[str, Any]] = (
+                        [{"type": "text", "text": content}] if content else []
+                    )
+                else:
+                    content_parts = content
+                wire["content"] = pending_relay + content_parts
+                out.append(wire)
+                pending_relay = []
+                continue
+            if pending_relay:
+                out.append({"role": "user", "content": pending_relay})
+                pending_relay = []
+            out.append(self._message_to_wire(message))
+        if pending_relay:
+            out.append({"role": "user", "content": pending_relay})
+        return out
+
+    @staticmethod
+    def _relay_parts_for(message: ToolMessage) -> list[dict[str, Any]]:
+        if not message.images:
+            return []
+        parts: list[dict[str, Any]] = [
+            {
+                "type": "text",
+                "text": (
+                    f"[Images from {message.tool_name} "
+                    f"(tool_call {message.tool_call_id})]"
+                ),
+            }
+        ]
+        for image in message.images:
+            image_url: dict[str, Any] = {"url": image.url}
+            if image.detail is not None:
+                image_url["detail"] = image.detail
+            parts.append({"type": "image_url", "image_url": image_url})
+        return parts
 
     def build_kwargs(
         self,
