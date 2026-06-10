@@ -89,6 +89,7 @@ Output requirements:
 _TRUNCATE_HEAD_CHARS = 1200
 _TRUNCATE_TAIL_CHARS = 800
 _TRUNCATE_MIN_CONTENT_CHARS = 500
+_IMAGE_TOKEN_ESTIMATE = 2000
 
 CURRENT_INPUT_CONTINUATION_INSTRUCTION = (
     "不要向用户复述上述摘要，除非用户明确要求。"
@@ -133,7 +134,22 @@ def estimate_tokens(messages: list[Message], safety_margin: float = 1.0) -> int:
         else:
             total += max(len(text) // 4, 1)
         total += 4
+        images = getattr(msg, "images", None)
+        if images:
+            total += _IMAGE_TOKEN_ESTIMATE * len(images)
     return int(total * safety_margin)
+
+
+def _drop_images_for_summary(msg: Message) -> Message:
+    if not isinstance(msg, ToolMessage) or not msg.images:
+        return msg
+    return msg.model_copy(
+        update={
+            "images": [],
+            "content": (msg.content or "")
+            + f"\n[images omitted for summary: {len(msg.images)}]",
+        }
+    )
 
 
 def _truncate_tool_message_for_summary(msg: ToolMessage) -> ToolMessage:
@@ -264,6 +280,7 @@ def prepare_messages_for_summary_call(
         phase=phase,
         turn_input=turn_input,
     )
+    base_messages = [_drop_images_for_summary(msg) for msg in base_messages]
     request_tokens = estimate_tokens([compact_request], safety_margin=1.1)
     message_budget = context_limit - reserved_summary_tokens
     if message_budget <= 0:
