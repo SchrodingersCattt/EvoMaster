@@ -1,7 +1,6 @@
 ---
 name: data-analysis
 description: "Use when the user wants to read, summarize, or visualize artifacts an earlier run produced — engine logs, computed spectra, MD / DFT trajectories, screening tables, or arbitrary CSV / JSON — including DOS / PDOS, RDF / MSD, or band-structure arrays."
-skill_type: operator
 ---
 
 # Data Analysis Skill

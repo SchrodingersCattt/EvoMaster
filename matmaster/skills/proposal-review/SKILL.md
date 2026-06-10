@@ -1,7 +1,6 @@
 ---
 name: proposal-review
 description: "Review and evaluate research proposals or project plans. Produces structured scorecards, rationale documents, risk assessments, and funding recommendations. Load for any proposal/project evaluation task."
-skill_type: operator
 ---
 
 # Proposal Review Skill

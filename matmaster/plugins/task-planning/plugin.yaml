@@ -1,0 +1,3 @@
+name: task-planning
+category: workflow-system
+description: "task-planning plugin（成员: plan-writer, plan-checker, plan-executor, spec-writer, acceptance-writer, stack-checker；描述占位，待人工补全）"

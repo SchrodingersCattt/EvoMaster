@@ -9,7 +9,7 @@ def test_main_prompt_requires_skill_layering_rules() -> None:
     prompt = loop_prompts.SYSTEM_PROMPT_MAIN
 
     assert "candidate_layers" in prompt
-    assert "`playground-skills/` 计划废弃" in prompt
+    assert "matmaster/plugins/<plugin>/skills/<skill_id>/" in prompt
 
 
 def test_optimization_prompt_requires_skill_layering_rules() -> None:

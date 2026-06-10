@@ -18,7 +18,6 @@ _SCRIPTS_DIR = (
     _REPO_ROOT
     / "matmaster"
     / "skills"
-    / "playground-skills"
     / "pxrd-refinement"
     / "scripts"
 )

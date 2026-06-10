@@ -1,0 +1,3 @@
+name: atomic-structure-ops
+category: structure-modeling
+description: "atomic-structure-ops plugin（成员: atomic-structure, inspect-atomic-structure, build-crystal-from-params, transform-atomic-structure, assemble-atomic-structure, operate-molecular-crystal, sample-atomic-structures；描述占位，待人工补全）"

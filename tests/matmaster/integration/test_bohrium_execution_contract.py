@@ -43,7 +43,7 @@ def _make_pg(original_session: MagicMock) -> MagicMock:
     pg._owns_session = True
     pg.config = MagicMock()
     pg.config.model_dump.return_value = {
-        'skills': {'skills_root': 'matmaster/skills/lazymcp'},
+        'skills': {'skills_root': 'matmaster/skills'},
     }
     return pg
 
