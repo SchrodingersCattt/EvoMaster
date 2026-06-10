@@ -1,5 +1,6 @@
 # LLM 配置（独立文件）
 # providers: 后端连接（按 provider 去重，transport 在此声明）
+#   vendor: 协议内请求方言判别（chat_completions: qwen/deepseek；anthropic_messages: bedrock）
 # profiles: 每个对外可选模型（profile key = 前端 model_override = 对外标识）
 # default: 未指定时使用的默认 profile key
 # 鉴权凭据从 .env 读取，使用 ${VAR} 引用
@@ -7,6 +8,18 @@
 providers:
   litellm:
     transport: chat_completions
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+
+  litellm-qwen:
+    transport: chat_completions
+    vendor: qwen
+    api_key: "${LITELLM_PROXY_API_KEY}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
+
+  litellm-deepseek:
+    transport: chat_completions
+    vendor: deepseek
     api_key: "${LITELLM_PROXY_API_KEY}"
     base_url: "${LITELLM_PROXY_API_BASE}"
 
@@ -27,7 +40,7 @@ providers:
 
 profiles:
   matmaster/qwen3.7-max:
-    provider: litellm
+    provider: litellm-qwen
     model: matmaster/qwen3.7-max
     reasoning_effort: high
     context_limit: 1000000
@@ -65,7 +78,7 @@ profiles:
     retry_delay: 1.0
 
   matmaster/dsk-v4p:
-    provider: litellm
+    provider: litellm-deepseek
     model: aliyun/deepseek-v4-pro
     reasoning_effort: max
     context_limit: 200000
@@ -76,7 +89,7 @@ profiles:
     retry_delay: 1.0
 
   matmaster/DeepSeek-v4-Pro:
-    provider: litellm
+    provider: litellm-deepseek
     model: matmaster/DeepSeek-v4-Pro
     reasoning_effort: max
     context_limit: 200000

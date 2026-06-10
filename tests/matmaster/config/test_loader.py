@@ -190,7 +190,7 @@ class TestRealLlmConfigResponsesMigration:
         assert resolved.provider.transport == "responses"
 
         assert cfg.default == "matmaster/qwen3.7-max"
-        assert cfg.profiles["matmaster/qwen3.7-max"].provider == "litellm"
+        assert cfg.profiles["matmaster/qwen3.7-max"].provider == "litellm-qwen"
 
     def test_migrated_config_builds_responses_transport(self) -> None:
         from matmaster.providers.llm_factory import build_provider
@@ -202,6 +202,36 @@ class TestRealLlmConfigResponsesMigration:
         provider = build_provider(cfg, model_override="matmaster/gpt-5.5")
         assert isinstance(provider, ResponsesTransport)
         assert provider._model == "matmaster/gpt-5.5"
+
+
+class TestRealLlmConfigVendorWiring:
+    def test_vendor_providers_and_profile_pointing(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        cfg = load_llm_config(repo_root / "config" / "llm_config.yaml")
+
+        assert cfg.providers["litellm-qwen"].transport == "chat_completions"
+        assert cfg.providers["litellm-qwen"].vendor == "qwen"
+        assert cfg.providers["litellm-deepseek"].transport == "chat_completions"
+        assert cfg.providers["litellm-deepseek"].vendor == "deepseek"
+        assert cfg.providers["litellm"].vendor is None
+        assert cfg.providers["litellm-anthropic"].vendor == "bedrock"
+
+        assert cfg.profiles["matmaster/qwen3.7-max"].provider == "litellm-qwen"
+        assert cfg.profiles["matmaster/dsk-v4p"].provider == "litellm-deepseek"
+        assert cfg.profiles["matmaster/DeepSeek-v4-Pro"].provider == "litellm-deepseek"
+        assert cfg.profiles["gemini-3.1-pro-preview"].provider == "litellm"
+
+    def test_default_profile_builds_qwen_vendor_transport(self) -> None:
+        from matmaster.providers.llm_factory import build_provider
+        from matmaster.providers.transports.chat_completions import (
+            QwenChatCompletionsTransport,
+        )
+
+        repo_root = Path(__file__).resolve().parents[3]
+        cfg = load_llm_config(repo_root / "config" / "llm_config.yaml")
+
+        provider = build_provider(cfg)
+        assert isinstance(provider, QwenChatCompletionsTransport)
 
 
 class TestLoadExpConfig:
