@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, TypeVar
 
 from matmaster.config.llm import (
     LLMConfig,
@@ -17,7 +17,11 @@ from matmaster.providers.transports.anthropic_messages import (
     AnthropicMessagesTransport,
     AnthropicPromptCacheOptions,
 )
-from matmaster.providers.transports.chat_completions import ChatCompletionsTransport
+from matmaster.providers.transports.chat_completions import (
+    ChatCompletionsTransport,
+    DeepSeekChatCompletionsTransport,
+    QwenChatCompletionsTransport,
+)
 from matmaster.providers.transports.responses import ResponsesTransport
 from matmaster.types.llm_provider import LLMProvider
 
@@ -25,6 +29,34 @@ BYOK_PROFILE_KEY = "byok"
 BYOK_DEFAULT_CONTEXT_LIMIT = 200_000
 
 logger = logging.getLogger(__name__)
+
+_TransportClassT = TypeVar("_TransportClassT")
+
+_CHAT_COMPLETIONS_BY_VENDOR: dict[str | None, type[ChatCompletionsTransport]] = {
+    None: ChatCompletionsTransport,
+    "qwen": QwenChatCompletionsTransport,
+    "deepseek": DeepSeekChatCompletionsTransport,
+}
+_ANTHROPIC_BY_VENDOR: dict[str | None, type[AnthropicMessagesTransport]] = {
+    None: AnthropicMessagesTransport,
+}
+_RESPONSES_BY_VENDOR: dict[str | None, type[ResponsesTransport]] = {
+    None: ResponsesTransport,
+}
+
+
+def _vendor_class(
+    by_vendor: dict[str | None, type[_TransportClassT]],
+    provider: ProviderConfig,
+) -> type[_TransportClassT]:
+    """(transport, vendor) -> transport 类；未知 vendor 装配期 fail-fast。"""
+    try:
+        return by_vendor[provider.vendor]
+    except KeyError as exc:
+        raise ValueError(
+            f"unsupported vendor {provider.vendor!r} for transport "
+            f"{provider.transport!r}, available: {list(by_vendor)}"
+        ) from exc
 
 
 @dataclass(frozen=True)
@@ -46,8 +78,9 @@ def _build_chat_completions_transport(
     *,
     extra_body: dict | None = None,
 ) -> ChatCompletionsTransport:
-    """profile 平铺字段 + provider 连接到 ChatCompletionsTransport。"""
-    return ChatCompletionsTransport(
+    """profile 平铺字段 + provider 连接到 ChatCompletionsTransport（vendor 分发）。"""
+    cls = _vendor_class(_CHAT_COMPLETIONS_BY_VENDOR, provider)
+    return cls(
         model=profile.model,
         api_key=provider.api_key,
         base_url=provider.base_url,
@@ -88,10 +121,11 @@ def _build_anthropic_messages_transport(
     *,
     extra_body: dict | None = None,
 ) -> AnthropicMessagesTransport:
-    """profile 平铺字段 + provider 连接到 Anthropic Messages transport。"""
+    """profile 平铺字段 + provider 连接到 Anthropic Messages transport（vendor 分发）。"""
     if extra_body is not None:
         raise ValueError("anthropic_messages transport does not support extra_body")
-    return AnthropicMessagesTransport(
+    cls = _vendor_class(_ANTHROPIC_BY_VENDOR, provider)
+    return cls(
         model=profile.model,
         api_key=provider.api_key,
         base_url=provider.base_url,
@@ -113,10 +147,11 @@ def _build_responses_transport(
     *,
     extra_body: dict | None = None,
 ) -> ResponsesTransport:
-    """profile 平铺字段 + provider 连接到 Responses transport。"""
+    """profile 平铺字段 + provider 连接到 Responses transport（vendor 分发）。"""
     if extra_body is not None:
         raise ValueError("responses transport does not support extra_body")
-    return ResponsesTransport(
+    cls = _vendor_class(_RESPONSES_BY_VENDOR, provider)
+    return cls(
         model=profile.model,
         api_key=provider.api_key,
         base_url=provider.base_url,

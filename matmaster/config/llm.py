@@ -8,11 +8,16 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class ProviderConfig(BaseModel):
-    """一个后端连接：怎么连到 provider。"""
+    """一个后端连接：怎么连到 provider。
+
+    vendor 是协议内的请求方言判别（非厂商名）：chat_completions 认 qwen/deepseek，
+    anthropic_messages 认 bedrock；None = 协议基本实现。
+    """
 
     transport: str
     api_key: str
     base_url: str | None = None
+    vendor: str | None = None
     prompt_cache_compat: Literal["anthropic_native", "bedrock_blocks"] = (
         "anthropic_native"
     )
@@ -73,7 +78,7 @@ class LLMConfig(BaseModel):
     default: str
 
     @model_validator(mode="after")
-    def _check_refs(self) -> "LLMConfig":
+    def _check_refs(self) -> LLMConfig:
         if self.default not in self.profiles:
             raise ValueError(
                 f"default profile '{self.default}' not found, "

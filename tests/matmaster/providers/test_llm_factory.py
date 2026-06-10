@@ -14,7 +14,11 @@ from matmaster.providers.transports.anthropic_messages import (
     AnthropicMessagesTransport,
     AnthropicPromptCacheOptions,
 )
-from matmaster.providers.transports.chat_completions import ChatCompletionsTransport
+from matmaster.providers.transports.chat_completions import (
+    ChatCompletionsTransport,
+    DeepSeekChatCompletionsTransport,
+    QwenChatCompletionsTransport,
+)
 from matmaster.providers.transports.responses import ResponsesTransport
 
 
@@ -211,4 +215,75 @@ class TestDispatch:
                 ),
                 ProviderConfig(transport="responses", api_key="k"),
                 extra_body={"x": 1},
+            )
+
+
+class TestVendorDispatch:
+    def _cfg(self, provider: ProviderConfig) -> LLMConfig:
+        return LLMConfig(
+            providers={"p": provider},
+            profiles={"m": LLMProfileConfig(provider="p", model="m", context_limit=1)},
+            default="m",
+        )
+
+    def test_qwen_vendor_builds_qwen_transport(self) -> None:
+        provider = build_provider(
+            self._cfg(
+                ProviderConfig(transport="chat_completions", api_key="k", vendor="qwen")
+            )
+        )
+        assert isinstance(provider, QwenChatCompletionsTransport)
+
+    def test_deepseek_vendor_builds_deepseek_transport(self) -> None:
+        provider = build_provider(
+            self._cfg(
+                ProviderConfig(
+                    transport="chat_completions", api_key="k", vendor="deepseek"
+                )
+            )
+        )
+        assert isinstance(provider, DeepSeekChatCompletionsTransport)
+
+    def test_no_vendor_builds_protocol_base(self) -> None:
+        provider = build_provider(
+            self._cfg(ProviderConfig(transport="chat_completions", api_key="k"))
+        )
+        assert type(provider) is ChatCompletionsTransport
+
+    def test_unknown_vendor_fail_fast(self) -> None:
+        with pytest.raises(ValueError, match="unsupported vendor"):
+            build_provider(
+                self._cfg(
+                    ProviderConfig(
+                        transport="chat_completions", api_key="k", vendor="ghost"
+                    )
+                )
+            )
+
+    def test_vendor_transport_mismatch_fail_fast(self) -> None:
+        with pytest.raises(ValueError, match="unsupported vendor"):
+            build_provider(
+                self._cfg(
+                    ProviderConfig(
+                        transport="chat_completions", api_key="k", vendor="bedrock"
+                    )
+                )
+            )
+
+    def test_anthropic_vendor_namespace_isolated(self) -> None:
+        with pytest.raises(ValueError, match="unsupported vendor"):
+            build_provider(
+                self._cfg(
+                    ProviderConfig(
+                        transport="anthropic_messages", api_key="k", vendor="qwen"
+                    )
+                )
+            )
+
+    def test_responses_vendor_namespace_isolated(self) -> None:
+        with pytest.raises(ValueError, match="unsupported vendor"):
+            build_provider(
+                self._cfg(
+                    ProviderConfig(transport="responses", api_key="k", vendor="qwen")
+                )
             )
