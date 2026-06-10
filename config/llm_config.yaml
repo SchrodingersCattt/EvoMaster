@@ -26,7 +26,7 @@ providers:
   litellm-anthropic:
     transport: anthropic_messages
     api_key: "${LITELLM_PROXY_API_KEY}"
-    base_url: "${LITELLM_PROXY_BASE}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
     vendor: bedrock
 
   anthropic:
@@ -36,7 +36,7 @@ providers:
   litellm-responses:
     transport: responses
     api_key: "${LITELLM_PROXY_API_KEY}"
-    base_url: "${LITELLM_PROXY_BASE}"
+    base_url: "${LITELLM_PROXY_API_BASE}"
 
 profiles:
   matmaster/qwen3.7-max:
