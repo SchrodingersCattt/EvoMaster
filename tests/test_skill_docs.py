@@ -9,9 +9,7 @@ _SKILL_DOC_ROOTS = (Path("matmaster/skills"), Path("matmaster/plugins"))
 
 
 def _iter_skill_docs(pattern: str) -> chain[Path]:
-    return chain.from_iterable(
-        sorted(root.rglob(pattern)) for root in _SKILL_DOC_ROOTS
-    )
+    return chain.from_iterable(sorted(root.rglob(pattern)) for root in _SKILL_DOC_ROOTS)
 
 
 def test_skill_docs_do_not_reference_legacy_skill_dispatch_api() -> None:
