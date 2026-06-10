@@ -706,7 +706,12 @@ class Exp:
             session_tools = [
                 BashTool(session=env.session, workdir=exec_wd),
                 AttachFigure(session=env.session, workdir=exec_wd),
-                ReadTool(session=env.session, workdir=exec_wd),
+                ReadTool(
+                    session=env.session,
+                    workdir=exec_wd,
+                    vision_enabled=ctx.request.supports_vision,
+                    vision_detail=ctx.request.vision_detail,
+                ),
                 WriteTool(session=env.session, workdir=exec_wd),
                 EditTool(session=env.session, workdir=exec_wd),
                 GlobTool(

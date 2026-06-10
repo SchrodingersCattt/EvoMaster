@@ -72,6 +72,8 @@ class LLMProviderBundle:
     provider_name: str
     context_limit: int
     context_limit_source: Literal["profile", "byok_credential", "byok_default"]
+    supports_vision: bool = False
+    vision_detail: Literal["low", "high", "auto"] | None = None
 
 
 def _build_chat_completions_transport(
@@ -231,6 +233,8 @@ def build_provider_bundle(
         provider_name=resolved.profile.provider,
         context_limit=resolved.profile.context_limit,
         context_limit_source="profile",
+        supports_vision=resolved.profile.supports_vision,
+        vision_detail=resolved.profile.vision_detail,
     )
 
 
@@ -275,4 +279,6 @@ def build_byok_provider_bundle(
         provider_name="byok",
         context_limit=effective_context_limit,
         context_limit_source=context_limit_source,
+        supports_vision=profile.supports_vision,
+        vision_detail=profile.vision_detail,
     )

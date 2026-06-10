@@ -530,6 +530,8 @@ class AgentRunService:
                     llm_model=llm_bundle.model,
                     llm_model_profile=llm_bundle.model_profile,
                     llm_model_route=llm_bundle.model_route,
+                    supports_vision=llm_bundle.supports_vision,
+                    vision_detail=llm_bundle.vision_detail,
                     context_limit=llm_bundle.context_limit,
                     invocation_id=invocation_id,
                     interaction_bridge=bridge,

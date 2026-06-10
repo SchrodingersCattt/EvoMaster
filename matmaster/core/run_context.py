@@ -17,7 +17,7 @@ one ``AgentRunRequest`` and composes it with the environment exactly once.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -52,6 +52,8 @@ class AgentRunRequest(BaseModel):
     llm_model: str | None = None
     llm_model_profile: str | None = None
     llm_model_route: str | None = None
+    supports_vision: bool = False
+    vision_detail: Literal["low", "high", "auto"] | None = None
     context_limit: int | None = Field(default=None, gt=0)
     invocation_id: str | None = None
     interaction_bridge: Any = Field(default=None, repr=False, exclude=True)
