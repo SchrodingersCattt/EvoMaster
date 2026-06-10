@@ -39,9 +39,10 @@ class LedgerStatusDecision:
 
 
 # ledger status 词汇表的唯一定义点；DAO 的 SQL 谓词由此插值生成。
+# lost 不来自平台状态码映射：poller 连续失联超阈值时由 mark_poll_error 置位。
 LEDGER_ACTIVE_STATUSES = ("submitted", "running", "terminating", "unknown")
-LEDGER_TERMINAL_STATUSES = ("finished", "failed", "stopped")
-LEDGER_FAILURE_STATUSES = ("failed", "stopped")
+LEDGER_TERMINAL_STATUSES = ("finished", "failed", "stopped", "lost")
+LEDGER_FAILURE_STATUSES = ("failed", "stopped", "lost")
 
 _LEDGER_TERMINATING_CODES = frozenset({4, 6, 7})
 _LEDGER_STOPPED_CODES = frozenset({-2, 5})

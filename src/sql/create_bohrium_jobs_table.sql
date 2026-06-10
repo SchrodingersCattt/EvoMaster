@@ -41,7 +41,7 @@ CREATE TABLE `bohrium_jobs` (
     CONSTRAINT `chk_sandbox` CHECK (`sandbox` IN (0, 1)),
     CONSTRAINT `chk_status` CHECK (`status` IN (
         'submitted', 'running', 'terminating', 'unknown',
-        'finished', 'failed', 'stopped'
+        'finished', 'failed', 'stopped', 'lost'
     )),
     CONSTRAINT `chk_workspace_share_path` CHECK (
         `workspace` = '/share' OR `workspace` LIKE '/share/%'
@@ -49,12 +49,12 @@ CREATE TABLE `bohrium_jobs` (
     CONSTRAINT `chk_active_poll` CHECK (
         (`status` IN ('submitted', 'running', 'terminating', 'unknown') AND `next_poll_at` IS NOT NULL)
         OR
-        (`status` IN ('finished', 'failed', 'stopped') AND `next_poll_at` IS NULL)
+        (`status` IN ('finished', 'failed', 'stopped', 'lost') AND `next_poll_at` IS NULL)
     ),
     CONSTRAINT `chk_terminal_at` CHECK (
         (`status` IN ('submitted', 'running', 'terminating', 'unknown') AND `terminal_at` IS NULL)
         OR
-        (`status` IN ('finished', 'failed', 'stopped') AND `terminal_at` IS NOT NULL)
+        (`status` IN ('finished', 'failed', 'stopped', 'lost') AND `terminal_at` IS NOT NULL)
     ),
     CONSTRAINT `chk_handled_requires_terminal` CHECK (
         `handled_at` IS NULL OR `terminal_at` IS NOT NULL

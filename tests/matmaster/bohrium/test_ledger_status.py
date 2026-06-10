@@ -37,3 +37,23 @@ def test_to_ledger_status_maps_platform_codes(
 def test_terminating_and_unknown_keep_polling() -> None:
     assert to_ledger_status(7).is_terminal is False
     assert to_ledger_status(123).is_terminal is False
+
+
+def test_lost_is_terminal_failure_not_active() -> None:
+    from matmaster.bohrium.status import (
+        LEDGER_ACTIVE_STATUSES,
+        LEDGER_FAILURE_STATUSES,
+        LEDGER_TERMINAL_STATUSES,
+    )
+
+    assert "lost" in LEDGER_TERMINAL_STATUSES
+    assert "lost" in LEDGER_FAILURE_STATUSES
+    assert "lost" not in LEDGER_ACTIVE_STATUSES
+    assert set(LEDGER_FAILURE_STATUSES) <= set(LEDGER_TERMINAL_STATUSES)
+
+
+def test_to_ledger_status_never_emits_lost() -> None:
+    from matmaster.bohrium.status import STATUS_MAP
+
+    for code in [*STATUS_MAP, 999, -999]:
+        assert to_ledger_status(code).status != "lost"
