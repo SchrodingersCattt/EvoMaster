@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import posixpath
+from collections.abc import Sequence
 from typing import Any
 
 from src.base.base_table import BaseTable
@@ -34,6 +35,10 @@ def _require_workspace(workspace: str) -> str:
             f"bohrium_jobs.workspace must be /share path, got {workspace!r}"
         )
     return normalized
+
+
+def _format_ts(v: Any) -> str | None:
+    return v.strftime("%Y-%m-%d %H:%M:%S") if v is not None else None
 
 
 class BohriumJobsTable(BaseTable):
@@ -198,9 +203,6 @@ class BohriumJobsTable(BaseTable):
 
     @staticmethod
     def _to_agent_job(row: dict[str, Any]) -> dict[str, Any]:
-        def _ts(v: Any) -> str | None:
-            return v.strftime("%Y-%m-%d %H:%M:%S") if v is not None else None
-
         return {
             "job_id": str(row["job_id"]),
             "job_name": row["job_name"],
@@ -209,8 +211,8 @@ class BohriumJobsTable(BaseTable):
             "project_id": int(row["project_id"]),
             "input_dir": row["input_dir"],
             "workspace": row["workspace"],
-            "submitted_at": _ts(row["submitted_at"]),
-            "last_polled_at": _ts(row["last_polled_at"]),
+            "submitted_at": _format_ts(row["submitted_at"]),
+            "last_polled_at": _format_ts(row["last_polled_at"]),
             "result_dir": row["result_dir"],
         }
 
@@ -326,6 +328,157 @@ class BohriumJobsTable(BaseTable):
         with self.get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(sql, (user_id, org_id, 1 if sandbox else 0, job_id))
+                return cur.fetchone()
+
+    def scan_delivery_units(self, *, limit: int) -> list[dict[str, Any]]:
+        """交付聚合扫描：逐 (owner, session, invocation) 统计，仅含 pending>0 单元。
+
+        最老 pending 优先（防饥饿）；EXISTS 在 SQL 层滤掉 owner 与当前
+        session row 不一致的行（org 切换/脏数据），否则它们会永久占据队首。
+        """
+        sql = f"""
+            SELECT
+                user_id,
+                org_id,
+                session_id,
+                COALESCE(invocation_id, '')                          AS invocation_key,
+                MIN(workspace)                                       AS workspace,
+                COUNT(*)                                             AS total,
+                SUM(terminal_at IS NULL)                             AS active,
+                SUM(terminal_at IS NOT NULL AND handled_at IS NULL)  AS pending_terminal,
+                SUM(status IN ('failed','stopped'))                  AS failed_total,
+                SUM(status IN ('failed','stopped')
+                    AND handled_at IS NOT NULL)                      AS failed_handled,
+                SUM(status = 'finished')                             AS succeeded,
+                MAX(terminal_at)                                     AS max_terminal_at,
+                MAX(CASE WHEN terminal_at IS NOT NULL AND handled_at IS NULL
+                         THEN id END)                                AS max_pending_terminal_id,
+                MIN(CASE WHEN terminal_at IS NOT NULL AND handled_at IS NULL
+                         THEN terminal_at END)                       AS first_pending_terminal_at
+            FROM {self.table_name}
+            WHERE EXISTS (
+                SELECT 1 FROM evo_chat_sessions s
+                WHERE s.session_id = {self.table_name}.session_id
+                  AND s.user_id    = {self.table_name}.user_id
+                  AND s.org_id     = {self.table_name}.org_id
+            )
+            GROUP BY user_id, org_id, session_id, COALESCE(invocation_id, '')
+            HAVING pending_terminal > 0
+            ORDER BY first_pending_terminal_at ASC, user_id ASC, org_id ASC,
+                     session_id ASC, invocation_key ASC
+            LIMIT %s
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (int(limit),))
+                rows = cur.fetchall()
+        return [self._to_delivery_unit(r) for r in rows]
+
+    @staticmethod
+    def _to_delivery_unit(row: dict[str, Any]) -> dict[str, Any]:
+        # PyMySQL 下 SUM 返回 Decimal，统一转 int；HAVING 保证 max_id 非 NULL
+        return {
+            "user_id": str(row["user_id"]),
+            "org_id": str(row["org_id"]),
+            "session_id": str(row["session_id"]),
+            "invocation_key": str(row["invocation_key"]),
+            "workspace": row["workspace"],
+            "total": int(row["total"]),
+            "active": int(row["active"]),
+            "pending_terminal": int(row["pending_terminal"]),
+            "failed_total": int(row["failed_total"]),
+            "failed_handled": int(row["failed_handled"]),
+            "succeeded": int(row["succeeded"]),
+            "max_terminal_at": row["max_terminal_at"],
+            "max_pending_terminal_id": int(row["max_pending_terminal_id"]),
+            "first_pending_terminal_at": row["first_pending_terminal_at"],
+        }
+
+    def list_pending_terminal_snapshot(
+        self, *, user_id: str, org_id: str, session_id: str
+    ) -> list[dict[str, Any]]:
+        """本轮 delivery 的权威集合：全量 pending terminal 行，失败/停止优先。
+
+        无 limit——查询执行瞬间即交付边界；字段 = _AGENT_COLUMNS +
+        id/invocation_id/terminal_at，保证换源不造成字段回归。
+        """
+        sql = f"""
+            SELECT id, invocation_id, terminal_at, {self._AGENT_COLUMNS}
+            FROM {self.table_name}
+            WHERE user_id = %s AND org_id = %s AND session_id = %s
+              AND terminal_at IS NOT NULL AND handled_at IS NULL
+            ORDER BY
+                (status IN ('failed','stopped')) DESC,
+                terminal_at ASC, submitted_at ASC, id ASC
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (user_id, org_id, session_id))
+                rows = cur.fetchall()
+        return [self._to_snapshot_job(r) for r in rows]
+
+    @classmethod
+    def _to_snapshot_job(cls, row: dict[str, Any]) -> dict[str, Any]:
+        job = cls._to_agent_job(row)
+        job["id"] = int(row["id"])
+        job["invocation_id"] = row["invocation_id"]
+        job["terminal_at"] = _format_ts(row["terminal_at"])
+        return job
+
+    def mark_handled_by_ids(
+        self,
+        *,
+        user_id: str,
+        org_id: str,
+        session_id: str,
+        row_ids: Sequence[int],
+        chunk_size: int = 500,
+    ) -> int:
+        """按 snapshot row ids 批量 ack；幂等（handled_at IS NULL 谓词）。
+
+        返回实际更新行数；分块单事务提交。
+        """
+        ids = [int(i) for i in row_ids]
+        if not ids:
+            return 0
+        affected = 0
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                for start in range(0, len(ids), int(chunk_size)):
+                    chunk = ids[start : start + int(chunk_size)]
+                    placeholders = ", ".join(["%s"] * len(chunk))
+                    cur.execute(
+                        f"""
+                        UPDATE {self.table_name}
+                        SET handled_at = NOW()
+                        WHERE user_id = %s AND org_id = %s AND session_id = %s
+                          AND id IN ({placeholders})
+                          AND terminal_at IS NOT NULL
+                          AND handled_at IS NULL
+                        """,
+                        (user_id, org_id, session_id, *chunk),
+                    )
+                    affected += cur.rowcount
+            conn.commit()
+        return affected
+
+    def get_first_pending_failed(
+        self, *, user_id: str, org_id: str, session_id: str, invocation_key: str
+    ) -> dict[str, Any] | None:
+        """该 invocation 最早一个未交付失败作业（FIRST_FAILURE prompt 用）。"""
+        sql = f"""
+            SELECT job_id, job_name, status
+            FROM {self.table_name}
+            WHERE user_id = %s AND org_id = %s AND session_id = %s
+              AND COALESCE(invocation_id, '') = %s
+              AND status IN ('failed','stopped')
+              AND handled_at IS NULL
+            ORDER BY terminal_at ASC, id ASC
+            LIMIT 1
+        """
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(sql, (user_id, org_id, session_id, invocation_key))
                 return cur.fetchone()
 
     def list_all_for_test(self) -> list[dict[str, Any]]:
