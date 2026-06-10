@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 _SKILLS_ROOT = Path(__file__).resolve().parents[2] / "matmaster" / "skills"
+_PLUGINS_ROOT = Path(__file__).resolve().parents[2] / "matmaster" / "plugins"
 _CACHE_DIR = Path(__file__).resolve().parents[2] / "matmaster" / "cache"
 _TAGS_FILE = _SKILLS_ROOT / "builtin_tags.yaml"
 
@@ -154,60 +155,85 @@ def _upload_zip_to_tools_server(
         return None
 
 
+def _build_skill_item(
+    skill_dir: Path,
+    *,
+    category: str | None,
+    tags: list[str] | None,
+) -> dict[str, Any] | None:
+    """解析单个 skill 目录：frontmatter 提取 + zip 打包。无 frontmatter 返回 None。"""
+    content = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
+    fm_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
+    if not fm_match:
+        return None
+
+    data: dict[str, str] = {}
+    for line in fm_match.group(1).split("\n"):
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        if ":" in line:
+            key, value = line.split(":", 1)
+            data[key.strip()] = value.strip().strip('"').strip("'")
+
+    name = data.get("name", skill_dir.name)
+    zip_bytes, sha256, byte_size, file_count = _zip_skill_dir(skill_dir)
+    tools = _load_tools_from_cache(data.get("mcp_server"))
+
+    item: dict[str, Any] = {
+        "name": name,
+        "description": data.get("description", ""),
+        "category": category,
+        "tags": tags,
+        "skill_dir": skill_dir,
+        "zip_bytes": zip_bytes,
+        "content_sha256": sha256,
+        "byte_size": byte_size,
+        "file_count": file_count,
+    }
+    if tools is not None:
+        item["tools"] = tools
+    return item
+
+
 def _scan_builtin_skills(
     tags_config: dict[str, Any],
 ) -> list[dict[str, Any]]:
-    """扫描 _SKILLS_ROOT 下的 SKILL.md，提取元信息 + 打包 zip。"""
+    """扫描双根：扁平轨 category/tags 取自 builtin_tags，plugin 成员取自 plugin.yaml。"""
     skill_tags_map: dict[str, list[str]] = tags_config.get("skills", {}) or {}
     skill_category_map: dict[str, str] = tags_config.get("skill_categories", {}) or {}
     results: list[dict[str, Any]] = []
 
-    if not _SKILLS_ROOT.exists():
-        return results
-
-    for md_path in sorted(_SKILLS_ROOT.rglob("SKILL.md")):
-        skill_dir = md_path.parent
-        rel = skill_dir.relative_to(_SKILLS_ROOT)
-        if any(p.startswith("_") for p in rel.parts):
-            continue
-
-        content = md_path.read_text(encoding="utf-8")
-        fm_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
-        if not fm_match:
-            continue
-
-        data: dict[str, str] = {}
-        for line in fm_match.group(1).split("\n"):
-            line = line.strip()
-            if not line or line.startswith("#"):
+    if _SKILLS_ROOT.exists():
+        for md_path in sorted(_SKILLS_ROOT.rglob("SKILL.md")):
+            skill_dir = md_path.parent
+            rel = skill_dir.relative_to(_SKILLS_ROOT)
+            if any(p.startswith("_") for p in rel.parts):
                 continue
-            if ":" in line:
-                key, value = line.split(":", 1)
-                data[key.strip()] = value.strip().strip('"').strip("'")
+            item = _build_skill_item(skill_dir, category=None, tags=None)
+            if item is None:
+                continue
+            item["category"] = skill_category_map.get(item["name"])
+            item["tags"] = skill_tags_map.get(item["name"])
+            results.append(item)
 
-        name = data.get("name", skill_dir.name)
-        description = data.get("description", "")
-        tags = skill_tags_map.get(name)
-        mcp_server = data.get("mcp_server")
-
-        zip_bytes, sha256, byte_size, file_count = _zip_skill_dir(skill_dir)
-
-        tools = _load_tools_from_cache(mcp_server)
-
-        result_item: dict[str, Any] = {
-            "name": name,
-            "description": description,
-            "category": skill_category_map.get(name),
-            "tags": tags,
-            "skill_dir": skill_dir,
-            "zip_bytes": zip_bytes,
-            "content_sha256": sha256,
-            "byte_size": byte_size,
-            "file_count": file_count,
-        }
-        if tools is not None:
-            result_item["tools"] = tools
-        results.append(result_item)
+    if _PLUGINS_ROOT.exists():
+        for manifest_path in sorted(_PLUGINS_ROOT.rglob("plugin.yaml")):
+            plugin_dir = manifest_path.parent
+            manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+            plugin_name = str(manifest.get("name") or plugin_dir.name)
+            raw_category = manifest.get("category")
+            category = str(raw_category).strip() if raw_category else None
+            for md_path in sorted(plugin_dir.rglob("SKILL.md")):
+                skill_dir = md_path.parent
+                rel = skill_dir.relative_to(_PLUGINS_ROOT)
+                if any(p.startswith("_") for p in rel.parts):
+                    continue
+                item = _build_skill_item(
+                    skill_dir, category=category, tags=[plugin_name]
+                )
+                if item is not None:
+                    results.append(item)
 
     return results
 
