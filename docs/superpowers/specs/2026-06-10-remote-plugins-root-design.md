@@ -53,9 +53,18 @@
 `matmaster/skills/registry.py`：
 
 - `_parse_plugin_info` 拆出 `_parse_plugin_info_from_content(content, fallback_name)`，本地版读文件后委托。两侧解析完全一致：name 缺省回退目录名、category strip、description 默认空串。
-- `_load_remote_skills` 按文件名分流：先把 plugin.yaml 条目解析成 `{plugin_dir: PluginInfo}` 映射；再对每个 SKILL.md 沿祖先目录向上（不越过 root）找最近的 plugin 目录，构造 `RemoteSkill(skill_dir, content, plugin=, plugin_dir=)`。祖先查找语义镜像本地 `_find_plugin_dir`，只是在映射上查而非访问文件系统。
+- **解析层合同变更**：`_parse_remote_skill_scan_stdout` 不再丢弃 error 条目，返回带 `(path, content | None, error | None)` 的 typed record（kind 由文件名导出，不设显式字段）。现有"warning 后丢弃"的行为删除——该函数唯一消费方就是 `_load_remote_skills`，合同整体迁移。若不做这一步，读失败的 plugin.yaml 在分流前就消失，成员会静默降级成散装 skill，§4 的失败语义无法落地。
+- `_load_remote_skills` 按文件名分流，维护两个集合：
+  - plugin.yaml 条目：content 解析成功 → 有效映射 `{plugin_dir: PluginInfo}`；error 条目或坏 YAML → `invalid_plugin_dirs` 集合（记 warning）。
+  - SKILL.md 条目：error 条目沿用现状 warning 跳过；正常条目在**有效与无效清单目录的并集**上沿祖先向上（不越过 root）找最近 plugin 目录——命中无效目录则该成员加载失败记 error 并跳过，命中有效目录则构造 `RemoteSkill(skill_dir, content, plugin=, plugin_dir=)`，无命中则散装注册。祖先查找语义镜像本地 `_find_plugin_dir`，只是在集合上查而非访问文件系统。
 - `RemoteSkill` 的 `plugin` / `plugin_dir` 从类属性改为构造参数，`plugin_dir` 类型 `PurePosixPath`。
 - 下划线跳过规则不变：成员 skill 在 `_` 目录链下时本就被跳过，plugin.yaml 在 `_` 目录下时其成员同样因目录链被跳过。
+
+**远端目录合同**（镜像本地归属机制，实现不为远端单独造规则）：
+
+- plugin.yaml 所在目录即 plugin 根；成员 SKILL.md 必须位于 plugin 根的**真子目录**（任意深度，推荐镜像内置惯例 `<plugin>/skills/<skill>/SKILL.md`）。
+- 与 plugin.yaml **同目录**的 SKILL.md 不构成成员：归属查找从 skill 目录父级开始（`registry.py:500` 现状）。该目录会注册成一个散装 skill，并因嵌套跳过规则吞掉其子目录里本应成为成员的 SKILL.md——属用户布局错误，行为与本地一致，不做特殊救护。
+- 远端根自身不作为 plugin 根（查找循环 `while current != root`）：`/personal/.matmaster/plugins/plugin.yaml` 直接放根下无效。
 
 ### 3.4 plugin 禁用：构建后过滤
 
@@ -89,7 +98,7 @@
 | 远端根不存在 | `path_exists` 检查后跳过该根 | 现有 |
 | 扫描脚本失败/超时/坏 payload | warning 后跳过该根 | 现有 |
 | SKILL.md 读取失败（error 条目） | warning 后跳过该 skill | 现有 |
-| plugin.yaml 异常（读取失败的 error 条目，或坏 YAML 解析失败） | 对齐本地语义：该 plugin 成员 skill 加载失败，记 error 日志。本地 `_load_skills` 中两种故障同样都落进 try 块导致成员跳过 | 新增 |
+| plugin.yaml 异常（读取失败的 error 条目，或坏 YAML 解析失败） | 对齐本地语义：清单目录进 `invalid_plugin_dirs`，命中它的成员 skill 加载失败记 error（§3.3）。本地 `_load_skills` 中两种故障同样都落进 try 块导致成员跳过 | 新增 |
 | SKILL.md 无 frontmatter | error 后跳过该 skill | 现有 |
 
 ## 5. 范围外
@@ -103,5 +112,7 @@
 ## 6. 测试与代码量约束
 
 - 不新增测试文件，测试加在现有文件：`tests/test_skill_registry.py`（远端挂载、祖先匹配、根顺序覆盖、`remove_plugin_members`）、`tests/matmaster/core/test_skill_registry_cache.py`（cache key 4 元组、构建后过滤、depends_on 警告）、skill_tool 现有测试处（远端 `${PLUGIN_DIR}` 渲染）。实现计划阶段精确定位。
+- **fake session 必须随扫描合同同步**：两份 `FakeRemoteSkillSession`（`tests/test_skill_registry.py:77`、`tests/matmaster/core/test_skill_registry_cache.py:50`）现在只放行 `path.endswith("/SKILL.md")` 且无法产出 error 条目——若不同步，plugin.yaml 根本进不了被测逻辑，远端 plugin 用例会假绿。改为：payload 收录 SKILL.md 与 plugin.yaml 两种文件，并支持注入 error 条目。
+- **扫描脚本本体用真脚本验证**：fake 模拟的是脚本的输出合同，脚本自身的收集行为（含 plugin.yaml、error 条目格式）用本地 `python3 -c` 对 tmp 目录树执行真实 `_REMOTE_SKILL_SCAN_SCRIPT` 字符串断言，避免 fake 与脚本形成双真相源漂移。
 - 覆盖点：扫描脚本收集 plugin.yaml；远端成员挂载 PluginInfo/plugin_dir 与最近祖先匹配；root 边界（plugin.yaml 在 root 外的祖先不生效）；plugins→skills 根同名覆盖顺序；`remove_plugin_members` 移除本地+远端成员、返回名集合、同名覆盖者不误伤；plugin.yaml 异常（读失败/坏 YAML）时成员加载失败；提示词分组含远端成员。
 - 净代码量：删除 `expand_disabled_plugins`（约 19 行）与其调用、预展开 cache key 逻辑，抵消远端挂载与分流的新增；预期接近持平。
