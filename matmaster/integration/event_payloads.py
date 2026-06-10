@@ -50,7 +50,9 @@ def _flatten_bohrium_content(raw_payload: object) -> object:
 
 
 _CONTENT_META_KEYS = frozenset({'type', 'source', 'timestamp'})
-_RESPONSE_USAGE_KEYS = (
+# Shared usage keys projected into structured content for the
+# model-output-side carriers (response / thought / tool_call).
+_USAGE_KEYS = (
     'turn_index',
     'stream_id',
     'turn_usage',
@@ -100,7 +102,7 @@ def _response_public_content(payload: dict[str, Any]) -> object | None:
         return content
 
     out: dict[str, Any] = {'content': content or ''}
-    _copy_nonempty_keys(out, payload, _RESPONSE_USAGE_KEYS)
+    _copy_nonempty_keys(out, payload, _USAGE_KEYS)
     _copy_nonempty_keys(out, payload, _MODEL_IDENTITY_KEYS)
     return out
 
@@ -116,10 +118,14 @@ def normalize_response_sse_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
     normalized = dict(payload)
     normalized['content'] = str(content.get('content') or '')
-    if event_type == 'response':
-        for key in (*_RESPONSE_USAGE_KEYS, *_MODEL_IDENTITY_KEYS):
-            if key in content and content.get(key) is not None:
-                normalized[key] = content[key]
+    lift_keys = (
+        (*_USAGE_KEYS, *_MODEL_IDENTITY_KEYS)
+        if event_type == 'response'
+        else _USAGE_KEYS
+    )
+    for key in lift_keys:
+        if key in content and content.get(key) is not None:
+            normalized[key] = content[key]
     return normalized
 
 
@@ -233,20 +239,27 @@ def _public_content_for_event(
         return _response_public_content(payload)
 
     if event_type == 'thought':
-        return payload.get('content')
+        content = payload.get('content')
+        if not (payload.get('turn_usage') or payload.get('total_usage')):
+            return content
+        out: dict[str, Any] = {'content': content or ''}
+        _copy_nonempty_keys(out, payload, _USAGE_KEYS)
+        return out
 
     if event_type == 'tool_call':
         call_id = payload.get('call_id')
-        return {
+        out: dict[str, Any] = {
             'id': call_id,
             'call_id': call_id,
             'name': payload.get('tool_name'),
             'args': payload.get('arguments') or {},
         }
+        _copy_nonempty_keys(out, payload, _USAGE_KEYS)
+        return out
 
     if event_type == 'tool_result':
         call_id = payload.get('call_id')
-        out: dict[str, Any] = {
+        return {
             'id': call_id,
             'call_id': call_id,
             'name': payload.get('tool_name'),
@@ -254,12 +267,6 @@ def _public_content_for_event(
             'status': payload.get('status', 'success'),
             'info': payload.get('info') or payload.get('payload') or {},
         }
-        if payload.get('turn_usage'):
-            if payload.get('turn_index') is not None:
-                out['turn_index'] = payload['turn_index']
-            out['turn_usage'] = payload['turn_usage']
-            out['total_usage'] = payload.get('total_usage', {})
-        return out
 
     if event_type == 'error':
         return {
