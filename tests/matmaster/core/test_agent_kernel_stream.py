@@ -286,8 +286,8 @@ class TestStreamLlmItems:
         assert len(streaming_responses) >= 1, "Should yield streaming ResponseEvents"
 
     @pytest.mark.asyncio
-    async def test_segment_complete_on_reasoning_to_content(self) -> None:
-        """ThoughtEvent(complete) emitted when transitioning from reasoning to content."""
+    async def test_segment_end_on_reasoning_to_content(self) -> None:
+        """ThoughtEvent(segment_end) emitted when transitioning from reasoning to content."""
         from matmaster.core.kernel_items import _KernelItem
 
         provider = ReasoningThenContentProvider()
@@ -300,7 +300,6 @@ class TestStreamLlmItems:
         ):
             items.append(item)
 
-        # Find thought-complete event
         thought_completes = [
             i
             for i in items
@@ -308,11 +307,16 @@ class TestStreamLlmItems:
             and isinstance(i.event, ThoughtEvent)
             and i.event.stream_state == "complete"
         ]
-        assert (
-            len(thought_completes) >= 1
-        ), "Should yield ThoughtEvent(complete) on transition"
-        # The complete event should contain the full reasoning
-        assert "thinking part 1" in thought_completes[0].event.content
+        thought_segment_ends = [
+            i
+            for i in items
+            if i.event
+            and isinstance(i.event, ThoughtEvent)
+            and i.event.stream_state == "segment_end"
+        ]
+        assert thought_completes == []
+        assert len(thought_segment_ends) >= 1
+        assert "thinking part 1" in thought_segment_ends[0].event.content
 
     @pytest.mark.asyncio
     async def test_response_segment_end_at_stream_end(self) -> None:

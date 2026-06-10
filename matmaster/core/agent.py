@@ -46,6 +46,7 @@ from matmaster.types.events import (
     CheckpointEvent,
     FinishDetail,
     ResponseEvent,
+    ThoughtEvent,
     ToolCallEvent,
 )
 
@@ -360,6 +361,22 @@ class AgentKernel:
                 dict(response.usage_vendor) if response.usage_vendor else {}
             )
             turn_index = state.turn - 1
+            turn_usage_snapshot = dict(state.turn_usage)
+            total_usage_snapshot = dict(state.total_usage)
+            usage_vendor_snapshot = response.usage_vendor or None
+            if response.reasoning_content:
+                yield _KernelItem(
+                    event=ThoughtEvent(
+                        source="agent",
+                        content=response.reasoning_content,
+                        stream_state="complete",
+                        reasoning_content=response.reasoning_content,
+                        turn_index=turn_index,
+                        turn_usage=turn_usage_snapshot,
+                        total_usage=total_usage_snapshot,
+                        usage_vendor=usage_vendor_snapshot,
+                    )
+                )
             is_root_run = kernel_spec.run_identity.spawn_id is None
             if (
                 is_root_run
@@ -373,9 +390,9 @@ class AgentKernel:
                         content=response.content,
                         stream_state="complete",
                         turn_index=turn_index,
-                        turn_usage=dict(state.turn_usage),
-                        total_usage=dict(state.total_usage),
-                        usage_vendor=response.usage_vendor or None,
+                        turn_usage=turn_usage_snapshot,
+                        total_usage=total_usage_snapshot,
+                        usage_vendor=usage_vendor_snapshot,
                         model=state.llm_model,
                         model_profile=state.llm_model_profile,
                         model_route=state.llm_model_route,
@@ -467,6 +484,10 @@ class AgentKernel:
                         call_id=tc.id,
                         tool_name=tc.name,
                         arguments=tc.arguments,
+                        turn_index=turn_index,
+                        turn_usage=turn_usage_snapshot,
+                        total_usage=total_usage_snapshot,
+                        usage_vendor=usage_vendor_snapshot,
                     )
                 )
 
