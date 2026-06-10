@@ -17,7 +17,6 @@ class TestSkillMetaInfoExtras:
         info = SkillMetaInfo(name="test", description="desc")
         assert info.extras == {}
         assert info.mcp_server is None
-        assert info.skill_type is None
         assert info.depends_on == []
 
     def test_parse_frontmatter_extras(self, tmp_path):

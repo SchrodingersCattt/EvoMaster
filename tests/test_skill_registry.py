@@ -173,12 +173,6 @@ class TestSkill:
         assert skill.meta_info.mcp_server == "calc-server"
         assert "mcp_server" not in skill.meta_info.extras
 
-    def test_parse_frontmatter_skill_type(self, skill_tree: dict[str, Path]) -> None:
-        from matmaster.skills.registry import Skill
-
-        skill = Skill(skill_tree["root1"] / "calculator")
-        assert skill.meta_info.skill_type is None
-
     def test_parse_frontmatter_depends_on(self, tmp_path: Path) -> None:
         from matmaster.skills.registry import Skill
 
@@ -203,22 +197,6 @@ class TestSkill:
 
         skill = Skill(skill_tree["root1"] / "search")
         assert skill.meta_info.depends_on == []
-
-    def test_parse_frontmatter_skill_type_operator(self, tmp_path: Path) -> None:
-        from matmaster.skills.registry import Skill
-
-        skill_dir = tmp_path / "operator-skill"
-        _write(
-            skill_dir / "SKILL.md",
-            "---\n"
-            "name: operator-skill\n"
-            "description: An operator skill\n"
-            "skill_type: operator\n"
-            "---\n"
-            "Body.\n",
-        )
-        skill = Skill(skill_dir)
-        assert skill.meta_info.skill_type == "operator"
 
     def test_get_full_info_returns_body(self, skill_tree: dict[str, Path]) -> None:
         """get_full_info() returns the markdown body after the frontmatter block."""

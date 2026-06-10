@@ -65,22 +65,6 @@ def _parse_depends_on_list(raw: str | None) -> list[str]:
     return [p.strip() for p in raw.split(",") if p.strip()]
 
 
-SkillTypeLiteral = Literal["operator", "mcp-loader", "orchestrator"]
-
-
-def _parse_skill_type(raw: str | None) -> SkillTypeLiteral | None:
-    s = _optional_strip(raw)
-    if s is None:
-        return None
-    if s == "operator":
-        return "operator"
-    if s == "mcp-loader":
-        return "mcp-loader"
-    if s == "orchestrator":
-        return "orchestrator"
-    raise ValueError(f"Invalid skill_type: {s!r}")
-
-
 # ---------------------------------------------------------------------------
 # SkillMetaInfo
 # ---------------------------------------------------------------------------
@@ -91,7 +75,6 @@ class SkillMetaInfo(BaseModel):
 
     name: str = Field(description="技能名称")
     description: str = Field(description="技能描述")
-    skill_type: SkillTypeLiteral | None = None
     mcp_server: str | None = None
     depends_on: list[str] = Field(default_factory=list)
     extras: dict[str, Any] = Field(default_factory=dict, description="扩展字段")
@@ -194,7 +177,7 @@ def _parse_meta_info_from_content(content: str, *, fallback_name: str) -> SkillM
     if not fm_match:
         raise ValueError("Invalid SKILL.md: no frontmatter")
 
-    known_keys = {"name", "description", "skill_type", "mcp_server", "depends_on"}
+    known_keys = {"name", "description", "mcp_server", "depends_on"}
     data: dict[str, str] = {}
     for line in fm_match.group(1).split("\n"):
         line = line.strip()
@@ -209,7 +192,6 @@ def _parse_meta_info_from_content(content: str, *, fallback_name: str) -> SkillM
     return SkillMetaInfo(
         name=data.get("name", fallback_name),
         description=data.get("description", ""),
-        skill_type=_parse_skill_type(data.get("skill_type")),
         mcp_server=_optional_strip(data.get("mcp_server")),
         depends_on=_parse_depends_on_list(data.get("depends_on")),
         extras=extras,
