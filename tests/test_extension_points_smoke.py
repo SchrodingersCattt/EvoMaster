@@ -24,7 +24,6 @@ def test_loop_run_end_handler_can_drive_trigger_run():
                 origin="loop",
                 dedup_key=f"loop:{ctx.session_id}:{st['turn']}",
                 delivery={"notify": False},
-                on_busy="skip",
             )
 
     ctx = RunContext(task_id="t1", session_id="sess-1", reason="natural")
@@ -34,7 +33,6 @@ def test_loop_run_end_handler_can_drive_trigger_run():
     kwargs = stream_svc.trigger_run.call_args.kwargs
     assert kwargs["origin"] == "loop"
     assert kwargs["dedup_key"] == "loop:sess-1:3"
-    assert kwargs["on_busy"] == "skip"
 
 
 def test_loop_handler_registers_on_run_end():
@@ -66,7 +64,6 @@ def test_schedule_tick_can_drive_trigger_run():
                 origin="cron",
                 dedup_key=f"sched:{row['id']}:{row['fire_epoch']}",
                 delivery={"notify": True},
-                on_busy="skip",
                 workspace="/share/case",
             )
 
@@ -88,7 +85,6 @@ def test_completion_dispatcher_can_pass_claimed_workspace_to_trigger_run():
         origin="bohrium_job",
         dedup_key="bohrium_job:sess-1:job-1:done",
         delivery={"notify": False},
-        on_busy="skip",
         workspace="/share/project",
     )
     kwargs = stream_svc.trigger_run.call_args.kwargs

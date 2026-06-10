@@ -1,5 +1,5 @@
-"""DeliverySnapshot 的构造与 confirm 范围：snapshot 持全量 row/job ids 与行，
-confirm 只 ack snapshot.row_ids（交付边界 = 查询执行瞬间）。"""
+"""DeliverySnapshot 的构造与 confirm 范围：snapshot 持全量行，
+confirm 只 ack snapshot rows 的 id（交付边界 = 查询执行瞬间）。"""
 
 from __future__ import annotations
 
@@ -35,7 +35,7 @@ def _sessions(user="u1", org="o1"):
     return svc
 
 
-def test_snapshot_holds_full_ids_rows_and_counts():
+def test_snapshot_holds_full_rows():
     rows = [
         _row(11, "f1", status="failed"),
         _row(12, "t1"),
@@ -50,12 +50,8 @@ def test_snapshot_holds_full_ids_rows_and_counts():
 
     assert snap.user_id == "u1" and snap.org_id == "o1"
     assert snap.session_id == "sess-1"
-    assert snap.row_ids == (11, 12, 13)  # DAO 失败优先序原样保持
-    assert snap.job_ids == ("f1", "t1", "t2")
-    assert snap.rows == tuple(rows)
+    assert snap.rows == tuple(rows)  # DAO 失败优先序原样保持
     assert snap.rows[0]["result_dir"] == "/share/project/out/f1"  # 取结果字段在场
-    assert snap.status_counts == {"failed": 1, "finished": 2}
-    assert snap.invocation_counts == {"inv-1": 2, "": 1}
     kw = table.list_pending_terminal_snapshot.call_args.kwargs
     assert kw == {"user_id": "u1", "org_id": "o1", "session_id": "sess-1"}
 
@@ -129,11 +125,7 @@ def test_confirm_propagates_failure_to_caller():
         user_id="u1",
         org_id="o1",
         session_id="s",
-        row_ids=(1,),
-        job_ids=("a",),
         rows=(_row(1, "a"),),
-        status_counts={"finished": 1},
-        invocation_counts={"inv-1": 1},
         detail_limit=20,
     )
     with pytest.raises(RuntimeError):

@@ -49,5 +49,5 @@ async def test_chat_stream_sends_raw_user_text_to_stream_service(
 
     get_events_service.assert_not_called()
     stream_svc.generate_send_stream.assert_called_once()
-    user_prompt = stream_svc.generate_send_stream.call_args.args[1]
-    assert user_prompt == "new turn"
+    sent_req = stream_svc.prepare_send_message.call_args.args[1]
+    assert sent_req.content == "new turn"

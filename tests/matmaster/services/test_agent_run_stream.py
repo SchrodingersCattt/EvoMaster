@@ -10,7 +10,6 @@ all tests exercise run_agent() exclusively.
 
 from __future__ import annotations
 
-import asyncio
 import inspect
 from types import SimpleNamespace
 from typing import Any
@@ -342,42 +341,6 @@ async def test_run_agent_uses_model_history_restore_service_and_injects_spawn_aw
             spawn_id='spawn-child-1',
         )
         assert built_sink is checkpoint_sink
-
-
-def test_run_agent_injects_bohrium_rebuild_events_into_request():
-    run_result = RunResultEvent(source='agent', status='completed', reason='natural')
-    rebuild_events = [
-        {
-            'action': 'submit',
-            'job_id': 'job-1',
-            'job_name': 'alpha',
-            'status': 'Submitted',
-            'cached': False,
-        }
-    ]
-
-    async def _run() -> tuple[Any, Any]:
-        async with _patched_service([run_result]) as (svc, _sse, _persist):
-            svc._test_events_table.get_bohrium_events.return_value = rebuild_events
-
-            ok, _elapsed, _usage = await svc.run_agent(
-                session_id='sess-1',
-                user_prompt='hello',
-                send_cb=AsyncMock(),
-                cancel_token=_make_cancel_token(),
-                mode='direct',
-                task_id='task-1',
-                invocation_id='inv-bohrium-rebuild',
-            )
-            return svc, ok
-
-    svc, ok = asyncio.run(_run())
-
-    assert ok is True
-    svc._test_events_table.get_bohrium_events.assert_called_once_with('sess-1')
-    assert svc._test_fake_exp.last_ctx.request.bohrium_rebuild_events == tuple(
-        rebuild_events
-    )
 
 
 @pytest.mark.asyncio
@@ -847,7 +810,6 @@ async def test_exception_emits_error_and_closed():
         events_table.add_event.return_value = True
         events_table.get_session_user_query_events.return_value = []
         events_table.query_context_events.return_value = []
-        events_table.get_bohrium_events.return_value = []
         events_table_fn.return_value = events_table
 
         error_exp = _ErrorExp([])

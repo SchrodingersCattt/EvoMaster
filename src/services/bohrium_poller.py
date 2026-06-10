@@ -3,18 +3,21 @@
 from __future__ import annotations
 
 import logging
-import os
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
 from matmaster.bohrium.status import to_ledger_status
 from matmaster.bohrium.types import BohriumContext, BohriumCredentials
 from src.dao.bohrium_jobs_table import BohriumJobsTable
+from src.utils.constant import env_int
 
 logger = logging.getLogger(__name__)
 
 _BASE_BACKOFF_SECONDS = 30
 _MAX_BACKOFF_SECONDS = 600
+# 单 tick 内作业查询并发度；DAO 每调用独立连接，线程间无共享可变状态
+_POLL_CONCURRENCY = 8
 
 
 def compute_poll_backoff(poll_count: int) -> int:
@@ -55,15 +58,40 @@ class BohriumJobPoller:
         claimed = self._table.claim_due_batch(
             limit=limit, claim_timeout_seconds=claim_timeout_seconds
         )
+        if not claimed:
+            return {"claimed": 0, "polled": 0, "errors": 0}
+        ak_cache = self._prefetch_access_keys(claimed)
+        with ThreadPoolExecutor(
+            max_workers=min(_POLL_CONCURRENCY, len(claimed))
+        ) as pool:
+            outcomes = list(
+                pool.map(lambda job: self._poll_one(job, ak_cache), claimed)
+            )
+        polled = sum(outcomes)
+        return {
+            "claimed": len(claimed),
+            "polled": polled,
+            "errors": len(outcomes) - polled,
+        }
+
+    def _prefetch_access_keys(
+        self, claimed: list[dict[str, Any]]
+    ) -> dict[tuple[str, str], str | None]:
         ak_cache: dict[tuple[str, str], str | None] = {}
-        polled = 0
-        errors = 0
         for job in claimed:
-            if self._poll_one(job, ak_cache):
-                polled += 1
-            else:
-                errors += 1
-        return {"claimed": len(claimed), "polled": polled, "errors": errors}
+            key = (str(job["user_id"]), str(job["org_id"]))
+            if key in ak_cache:
+                continue
+            try:
+                ak_cache[key] = self._get_access_key(*key)
+            except Exception:  # noqa: BLE001
+                logger.warning(
+                    "poller get_access_key failed user=%s org=%s",
+                    *key,
+                    exc_info=True,
+                )
+                ak_cache[key] = None
+        return ak_cache
 
     def _poll_one(
         self, job: dict[str, Any], ak_cache: dict[tuple[str, str], str | None]
@@ -74,19 +102,7 @@ class BohriumJobPoller:
         raw_job_id = str(job["job_id"])
         backoff = compute_poll_backoff(int(job.get("poll_count", 0)))
 
-        key = (user_id, org_id)
-        if key not in ak_cache:
-            try:
-                ak_cache[key] = self._get_access_key(user_id, org_id)
-            except Exception:  # noqa: BLE001
-                logger.warning(
-                    "poller get_access_key failed user=%s org=%s",
-                    user_id,
-                    org_id,
-                    exc_info=True,
-                )
-                ak_cache[key] = None
-        access_key = ak_cache[key]
+        access_key = ak_cache.get((user_id, org_id))
         if not access_key:
             logger.warning(
                 "poller access_key unavailable user=%s org=%s job_id=%s",
@@ -158,18 +174,6 @@ class BohriumJobPoller:
         )
 
 
-def _env_int(name: str, default: int) -> int:
-    """Read an int env var; missing or invalid values fall back to default."""
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
-    try:
-        return int(raw)
-    except (TypeError, ValueError):
-        logger.warning("invalid int env %s=%r, using default %d", name, raw, default)
-        return default
-
-
 class BohriumMonitor:
     """Single Bohrium monitor tick unit for the external monitor process."""
 
@@ -182,12 +186,12 @@ class BohriumMonitor:
     ) -> None:
         self._poller = poller
         self._limit = (
-            limit if limit is not None else _env_int("BOHRIUM_MONITOR_LIMIT", 50)
+            limit if limit is not None else env_int("BOHRIUM_MONITOR_LIMIT", 50)
         )
         self._claim_timeout = (
             claim_timeout_seconds
             if claim_timeout_seconds is not None
-            else _env_int("BOHRIUM_MONITOR_CLAIM_TIMEOUT", 120)
+            else env_int("BOHRIUM_MONITOR_CLAIM_TIMEOUT", 120)
         )
 
     def tick(self) -> dict[str, int]:

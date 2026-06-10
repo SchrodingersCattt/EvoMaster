@@ -38,23 +38,28 @@ class LedgerStatusDecision:
     is_terminal: bool
 
 
-_LEDGER_RUNNING_CODES = frozenset({-10, 0, 1, 3, 8, 9})
+# ledger status 词汇表的唯一定义点；DAO 的 SQL 谓词由此插值生成。
+LEDGER_ACTIVE_STATUSES = ("submitted", "running", "terminating", "unknown")
+LEDGER_TERMINAL_STATUSES = ("finished", "failed", "stopped")
+LEDGER_FAILURE_STATUSES = ("failed", "stopped")
+
 _LEDGER_TERMINATING_CODES = frozenset({4, 6, 7})
 _LEDGER_STOPPED_CODES = frozenset({-2, 5})
-_LEDGER_FINISHED_CODE = 2
 _LEDGER_FAILED_CODE = -1
 
 
 def to_ledger_status(code: int) -> LedgerStatusDecision:
     """把 Bohrium 平台状态码映射为 ledger status。"""
-    if code in _LEDGER_RUNNING_CODES:
-        return LedgerStatusDecision("running", False)
-    if code in _LEDGER_TERMINATING_CODES:
-        return LedgerStatusDecision("terminating", False)
-    if code == _LEDGER_FINISHED_CODE:
-        return LedgerStatusDecision("finished", True)
-    if code == _LEDGER_FAILED_CODE:
-        return LedgerStatusDecision("failed", True)
-    if code in _LEDGER_STOPPED_CODES:
-        return LedgerStatusDecision("stopped", True)
-    return LedgerStatusDecision("unknown", False)
+    if code in RUNNING_CODES:
+        status = "running"
+    elif code in _LEDGER_TERMINATING_CODES:
+        status = "terminating"
+    elif code == SUCCESS_CODE:
+        status = "finished"
+    elif code == _LEDGER_FAILED_CODE:
+        status = "failed"
+    elif code in _LEDGER_STOPPED_CODES:
+        status = "stopped"
+    else:
+        status = "unknown"
+    return LedgerStatusDecision(status, status in LEDGER_TERMINAL_STATUSES)

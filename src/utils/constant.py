@@ -1,8 +1,24 @@
+import logging
 import os
 
 import pymysql
 
 from utils.env import SERVICE_ENV, URL_PART  # noqa: E402
+
+logger = logging.getLogger(__name__)
+
+
+def env_int(name: str, default: int) -> int:
+    """读 int 环境变量；缺失或非法回退默认值。"""
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        logger.warning("invalid int env %s=%r, using default %d", name, raw, default)
+        return default
+
 
 AG_UI_EVENT = "ag-ui"
 BUILD_TRIGGER = "20260512-verify-skill-sync-2"

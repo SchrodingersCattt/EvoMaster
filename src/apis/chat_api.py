@@ -1,3 +1,4 @@
+import asyncio
 import hmac
 import json
 import logging
@@ -126,6 +127,7 @@ def _session_directory_error(exc: SessionDirectoryError) -> BaseErrorResponse:
 
 
 async def _handle_internal_trigger(
+    request: Request,
     sid: str,
     req: ChatSendRequest | None,
     chat_svc: ChatSessionsService,
@@ -149,21 +151,20 @@ async def _handle_internal_trigger(
         raise BaseErrorResponse(
             http_status=503, code=503, msg="队列服务不可用，请检查 REDIS_URL 配置"
         )
-    result = stream_svc.trigger_run(
+    # trigger_run 是同步函数（多次 DB/Redis 往返 + 阻塞通知），放线程池避免卡事件循环
+    result = await asyncio.to_thread(
+        stream_svc.trigger_run,
         sid,
         prompt,
         origin=(req.origin or "external_tool"),
         dedup_key=req.dedup_key,
         delivery=req.delivery,
-        on_busy=(req.on_busy or "skip"),
         mode=req.mode,
         model=req.model,
     )
     if result.status == "enqueued":
-        return StreamingResponse(
-            stream_svc.generate_subscribe_stream(sid),
-            media_type="text/event-stream",
-            headers=SSE_HEADERS,
+        return _sse_streaming_response(
+            request, stream_svc.generate_subscribe_stream(sid)
         )
     return JSONResponse(
         status_code=200,
@@ -317,7 +318,7 @@ async def chat_stream(
             raise ForbiddenErrorResponse(msg="内部触发 token 无效")
         if is_share_route:
             raise ForbiddenErrorResponse(msg="分享页仅支持只读订阅，不允许内部触发")
-        return await _handle_internal_trigger(sid, req, chat_svc, stream_svc)
+        return await _handle_internal_trigger(request, sid, req, chat_svc, stream_svc)
 
     has_content = req is not None and bool((req.content or "").strip())
     if is_share_route and has_content:
@@ -441,10 +442,7 @@ async def chat_stream(
         raise ConflictErrorResponse(
             msg="该会话已有任务在运行，请等待完成或先取消后再发新消息",
         )
-    base_prompt = (req.content or "").strip()
-    return _sse_streaming_response(
-        request, stream_svc.generate_send_stream(sid, base_prompt, ctx)
-    )
+    return _sse_streaming_response(request, stream_svc.generate_send_stream(sid, ctx))
 
 
 @router.post(

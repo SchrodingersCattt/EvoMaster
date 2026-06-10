@@ -1052,7 +1052,11 @@ def check_bond_range(
             d = struct.get_distance(ai, bi)
             dists.append(d)
         dists.sort()
-        nn = dists[:n_neighbors] if n_neighbors > 0 else [d for d in dists if d <= max_distance * 1.5]
+        nn = (
+            dists[:n_neighbors]
+            if n_neighbors > 0
+            else [d for d in dists if d <= max_distance * 1.5]
+        )
         all_nn_dists.extend(nn)
         for d in nn:
             if d < min_distance or d > max_distance:

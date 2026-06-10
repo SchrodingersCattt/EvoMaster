@@ -311,7 +311,7 @@ class ChatSessionsService:
         """
         return self.table.reset_all_active_to_idle()
 
-    def _reconcile_waiting_status(self, session_id: str, raw_status: object) -> str:
+    def reconcile_waiting_status(self, session_id: str, raw_status: object) -> str:
         """归一化会话状态，并校正 waiting。
 
         DB=waiting 但 Redis 已无 queued 标记时：若存在存活的 run_owner（worker 已接手）
@@ -342,7 +342,7 @@ class ChatSessionsService:
         row = self.table.get_session(session_id)
         if not row:
             return "idle"
-        return self._reconcile_waiting_status(session_id, row.get("status"))
+        return self.reconcile_waiting_status(session_id, row.get("status"))
 
     def get_session_status_payload(self, session_id: str) -> dict:
         """
@@ -355,7 +355,7 @@ class ChatSessionsService:
         status = "idle"
         last_task_id = None
         if row:
-            status = self._reconcile_waiting_status(session_id, row.get("status"))
+            status = self.reconcile_waiting_status(session_id, row.get("status"))
             lt = row.get("last_task_id")
             if lt is not None and str(lt).strip():
                 last_task_id = str(lt).strip()

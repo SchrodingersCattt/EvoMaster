@@ -17,7 +17,7 @@ import re
 import shlex
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
-from typing import Any, Literal, NamedTuple
+from typing import Any, NamedTuple
 
 import yaml
 from pydantic import BaseModel, Field
@@ -103,7 +103,7 @@ def _parse_plugin_info_from_content(content: str, *, fallback_name: str) -> Plug
     )
 
 
-def _parse_plugin_info(manifest_path: Path) -> PluginInfo:
+def parse_plugin_info(manifest_path: Path) -> PluginInfo:
     return _parse_plugin_info_from_content(
         manifest_path.read_text(encoding="utf-8"),
         fallback_name=manifest_path.parent.name,
@@ -144,9 +144,7 @@ class Skill:
             raise FileNotFoundError(f"SKILL.md not found in {self.skill_path}")
 
         content = skill_md.read_text(encoding="utf-8")
-        return _parse_meta_info_from_content(
-            content, fallback_name=self.skill_path.name
-        )
+        return parse_skill_meta_info(content, fallback_name=self.skill_path.name)
 
     # -- full_info ----------------------------------------------------------
 
@@ -176,7 +174,7 @@ class RemoteSkill:
         self.skill_path = skill_path
         self.plugin = plugin
         self.plugin_dir = plugin_dir
-        self.meta_info = _parse_meta_info_from_content(
+        self.meta_info = parse_skill_meta_info(
             content,
             fallback_name=skill_path.name,
         )
@@ -186,7 +184,7 @@ class RemoteSkill:
         return self._full_info_cache
 
 
-def _parse_meta_info_from_content(content: str, *, fallback_name: str) -> SkillMetaInfo:
+def parse_skill_meta_info(content: str, *, fallback_name: str) -> SkillMetaInfo:
     fm_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
     if not fm_match:
         raise ValueError("Invalid SKILL.md: no frontmatter")
@@ -327,7 +325,6 @@ class SkillRegistry:
             self._roots = list(skills_root)
 
         self._skills: dict[str, Skill | RemoteSkill] = {}
-        self._skill_sources: dict[str, Literal["local", "remote"]] = {}
         self._stats = {
             "local_loaded": 0,
             "remote_loaded": 0,
@@ -371,7 +368,7 @@ class SkillRegistry:
                 try:
                     plugin_dir = self._find_plugin_dir(skill_dir, root)
                     if plugin_dir is not None and plugin_dir not in plugin_cache:
-                        plugin_cache[plugin_dir] = _parse_plugin_info(
+                        plugin_cache[plugin_dir] = parse_plugin_info(
                             plugin_dir / "plugin.yaml"
                         )
                     plugin = plugin_cache[plugin_dir] if plugin_dir else None
@@ -393,7 +390,6 @@ class SkillRegistry:
                         skill_dir,
                     )
                 self._skills[skill.meta_info.name] = skill
-                self._skill_sources[skill.meta_info.name] = "local"
                 self._stats["local_loaded"] += 1
                 skill_dirs.add(skill_dir)
 
@@ -514,8 +510,8 @@ class SkillRegistry:
                 if name_filter is not None and skill.meta_info.name not in name_filter:
                     continue
                 if skill.meta_info.name in self._skills:
-                    previous_source = self._skill_sources.get(skill.meta_info.name)
-                    if previous_source == "local":
+                    previous = self._skills[skill.meta_info.name]
+                    if not getattr(previous, "is_remote", False):
                         self._stats["remote_over_local"] += 1
                         logger.debug(
                             "Skill %r selected from remote root %s over local "
@@ -532,13 +528,14 @@ class SkillRegistry:
                             skill_dir,
                         )
                 self._skills[skill.meta_info.name] = skill
-                self._skill_sources[skill.meta_info.name] = "remote"
                 self._stats["remote_loaded"] += 1
                 skill_dirs.add(skill_dir)
 
     def _log_build_summary(self, remote_roots: list[str]) -> None:
         local_fallback = sum(
-            1 for source in self._skill_sources.values() if source == "local"
+            1
+            for skill in self._skills.values()
+            if not getattr(skill, "is_remote", False)
         )
         logger.info(
             "Skill registry built: local_roots=%d remote_roots=%d final=%d "

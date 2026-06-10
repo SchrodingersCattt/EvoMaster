@@ -140,7 +140,7 @@ class TestStreamTimeoutConstruction:
             stream_idle_timeout=60.0,
         )
         with patch(
-            "matmaster.providers.transports.chat_completions.openai.AsyncOpenAI"
+            "matmaster.providers.transports.openai_common.openai.AsyncOpenAI"
         ) as mock_cls:
             mock_client = AsyncMock()
             mock_cls.return_value = mock_client
@@ -162,7 +162,7 @@ class TestStreamTimeoutConstruction:
             timeout=300.0,
         )
         with patch(
-            "matmaster.providers.transports.chat_completions.openai.AsyncOpenAI"
+            "matmaster.providers.transports.openai_common.openai.AsyncOpenAI"
         ) as mock_cls:
             mock_client = AsyncMock()
             mock_cls.return_value = mock_client

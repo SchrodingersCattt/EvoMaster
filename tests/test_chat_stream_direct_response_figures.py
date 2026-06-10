@@ -80,7 +80,7 @@ def test_generate_send_stream_replay_keeps_response_figures_but_prefers_run_resu
             },
             job=_send_stream_job(),
         )
-        gen = service.generate_send_stream('sess-1', 'new question', ctx)
+        gen = service.generate_send_stream('sess-1', ctx)
         try:
             return await _collect_n_frames(gen, 4)
         finally:

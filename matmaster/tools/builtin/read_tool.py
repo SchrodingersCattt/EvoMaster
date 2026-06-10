@@ -15,9 +15,9 @@ from typing import Any, ClassVar, Literal
 
 from matmaster.tools.filesystem_semantics.image_resolution import (
     IMAGE_EXTENSIONS,
-    MAX_IMAGE_BYTES,
     ImageValidationError,
     build_image_payload,
+    ensure_image_size_within_limit,
     sniff_image_media_type,
 )
 from matmaster.tools.filesystem_semantics.snapshots import (
@@ -150,16 +150,11 @@ class ReadTool(BuiltinTool):
 
         suffix = posixpath.splitext(file_path)[1].lower()
         if suffix in IMAGE_EXTENSIONS:
-            pre_size = session.stat_file(file_path).size
-            if pre_size > MAX_IMAGE_BYTES:
-                return ToolResult(
-                    status="error",
-                    content=(
-                        f"Error: image file is {pre_size / (1024 * 1024):.1f} MiB, "
-                        "exceeds the 3 MiB limit; compress it first "
-                        "(e.g. via Bash) and re-Read"
-                    ),
-                )
+            # 下载前按 stat 预检，避免拉取超限大图；限值与文案单源于 image_resolution
+            try:
+                ensure_image_size_within_limit(session.stat_file(file_path).size)
+            except ImageValidationError as e:
+                return ToolResult(status="error", content=f"Error: {e}")
 
         raw = session.download(file_path)
         if sniff_image_media_type(raw) is not None:

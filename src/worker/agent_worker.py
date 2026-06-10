@@ -17,6 +17,7 @@ from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES
 from matmaster.context.sources.turn_input import TurnInput
 from matmaster.types.cancellation import CancellationController
 from src.dao.redis_dao import get_redis_dao
+from src.models.chat import DeliverySpec
 from src.services import bohrium_delivery_ack
 from src.services.agent_run_service import get_agent_run_service
 from src.services.sessions_service import get_sessions_service
@@ -75,10 +76,11 @@ def _format_run_duration(duration_sec: float) -> str:
 
 
 def _should_notify_completion(delivery: dict | None) -> bool:
-    """job.delivery 控制完成通知；缺省或缺 notify 键时保持原有发通知语义。"""
-    if not isinstance(delivery, dict):
+    """job.delivery 控制完成通知；缺省语义唯一来源是 DeliverySpec 的字段默认值。"""
+    try:
+        return DeliverySpec.model_validate(delivery or {}).notify
+    except Exception:  # noqa: BLE001
         return True
-    return bool(delivery.get("notify", True))
 
 
 def _build_completion_card(
@@ -376,6 +378,7 @@ def _run_worker_loop() -> None:
         bridge.start()
         acquired = False
         delivery_snapshot = None
+        run_success = False
 
         try:
             acquired_ok, fail_reason = sessions_service.try_acquire_session_run(
@@ -447,7 +450,7 @@ def _run_worker_loop() -> None:
                     "images": images,
                     "turn_input": turn_input,
                     "workspace": workspace,
-                    "bohrium_required": bool(bohrium_required or workspace),
+                    "bohrium_required": bohrium_required,
                     "delivery_snapshot": delivery_snapshot,
                 }
                 result = asyncio.run(agent_run_service.run_agent(**run_agent_kwargs))

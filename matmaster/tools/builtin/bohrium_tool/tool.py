@@ -45,11 +45,7 @@ from matmaster.bohrium.status import (
 from matmaster.bohrium.types import BohriumContext
 from matmaster.bohrium.upload import upload_input_archive
 from matmaster.tools.builtin.base import BuiltinTool
-from matmaster.tools.builtin.bohrium_tool.registry import (
-    JobRegistry,
-    classify_poll_status,
-)
-from matmaster.tools.tool_result import ToolResult, normalize_tool_result
+from matmaster.tools.tool_result import ToolResult
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.tool_spec import ResourceClaim
 from matmaster.types.topology import ToolPlane
@@ -317,76 +313,6 @@ class BohriumTool(BuiltinTool):
             session=self._session,
             require_project=require_project,
         )
-
-    async def execute_with_context(
-        self,
-        arguments: dict[str, Any],
-        exec_ctx: Any,
-    ) -> str | ToolResult:
-        """Registry-aware execution; query/submit/download/kill share one path."""
-        import asyncio
-
-        action = arguments.get("action")
-        registry: JobRegistry | None = None
-        if exec_ctx is not None and hasattr(exec_ctx, "runner_state"):
-            runner_state = exec_ctx.runner_state
-            if runner_state is not None and hasattr(runner_state, "get"):
-                registry = runner_state.get("bohrium_job_registry")
-
-        try:
-            result = await asyncio.to_thread(self._execute, arguments)
-        except Exception as exc:
-            self.logger.error("Tool %s failed: %s", self.name, exc, exc_info=True)
-            return f"Error: {exc}"
-
-        normalized = normalize_tool_result(result)
-        if registry is not None and action in ("submit", "query", "download", "kill"):
-            normalized = self._update_registry(
-                registry,
-                action,
-                arguments,
-                normalized,
-            )
-
-        return normalized
-
-    def _update_registry(
-        self,
-        registry: JobRegistry,
-        action: str,
-        arguments: dict[str, Any],
-        result: ToolResult,
-    ) -> ToolResult:
-        """Update the in-memory registry after a successful tool call."""
-        if result.status == "error":
-            return result
-
-        try:
-            data = json.loads(result.content)
-        except (json.JSONDecodeError, TypeError):
-            return result
-
-        job_id = str(data.get("job_id", arguments.get("job_id", "")))
-        if not job_id:
-            return result
-
-        if action == "submit":
-            registry.register(job_id, job_name=str(arguments.get("job_name", "")))
-            return result
-
-        if action == "download":
-            registry.update_download(job_id)
-            return result
-
-        if action == "kill":
-            registry.update_kill(job_id)
-            return result
-
-        if action == "query":
-            reg_status = classify_poll_status(str(data.get("status", "unknown")))
-            registry.update_poll(job_id, status=reg_status, result=result.content)
-
-        return result
 
     def _log_request_context(
         self,

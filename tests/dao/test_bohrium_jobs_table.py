@@ -142,63 +142,6 @@ def test_apply_poll_does_not_revert_terminal_to_active(jobs_table) -> None:
     assert row["poll_count"] == 2
 
 
-def test_mark_handled_sets_handled_at_on_terminal(jobs_table) -> None:
-    jobs_table.insert_submitted(**_submit_kwargs())
-    jobs_table.apply_poll(
-        user_id="user-1",
-        org_id="org-1",
-        sandbox=True,
-        job_id="12345",
-        status="finished",
-        is_terminal=True,
-        backoff_seconds=30,
-    )
-    jobs_table.mark_handled(
-        user_id="user-1", org_id="org-1", sandbox=True, job_id="12345"
-    )
-    row = jobs_table.get_by_owner_job(
-        user_id="user-1", org_id="org-1", sandbox=True, job_id="12345"
-    )
-    assert row["handled_at"] is not None
-
-
-def test_mark_handled_is_irreversible_and_idempotent(jobs_table) -> None:
-    jobs_table.insert_submitted(**_submit_kwargs())
-    jobs_table.apply_poll(
-        user_id="user-1",
-        org_id="org-1",
-        sandbox=True,
-        job_id="12345",
-        status="finished",
-        is_terminal=True,
-        backoff_seconds=30,
-    )
-    jobs_table.mark_handled(
-        user_id="user-1", org_id="org-1", sandbox=True, job_id="12345"
-    )
-    first = jobs_table.get_by_owner_job(
-        user_id="user-1", org_id="org-1", sandbox=True, job_id="12345"
-    )["handled_at"]
-    jobs_table.mark_handled(
-        user_id="user-1", org_id="org-1", sandbox=True, job_id="12345"
-    )
-    again = jobs_table.get_by_owner_job(
-        user_id="user-1", org_id="org-1", sandbox=True, job_id="12345"
-    )["handled_at"]
-    assert again == first
-
-
-def test_mark_handled_noop_on_active_job(jobs_table) -> None:
-    jobs_table.insert_submitted(**_submit_kwargs())
-    jobs_table.mark_handled(
-        user_id="user-1", org_id="org-1", sandbox=True, job_id="12345"
-    )
-    row = jobs_table.get_by_owner_job(
-        user_id="user-1", org_id="org-1", sandbox=True, job_id="12345"
-    )
-    assert row["handled_at"] is None
-
-
 def test_apply_kill_sets_terminating_keeps_polling(jobs_table) -> None:
     jobs_table.insert_submitted(**_submit_kwargs())
     jobs_table.apply_kill(
@@ -262,7 +205,12 @@ def test_query_session_pending_terminal(jobs_table) -> None:
     )
     assert len(pending) == 3
     assert all(j["status"] in {"finished", "failed", "stopped"} for j in pending)
-    jobs_table.mark_handled(user_id="user-1", org_id="org-1", sandbox=True, job_id="t1")
+    with jobs_table.get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE bohrium_jobs SET handled_at = NOW() WHERE job_id = 't1'"
+            )
+        conn.commit()
     pending2 = jobs_table.query_session_pending_terminal(
         user_id="user-1", org_id="org-1", session_id="sess-1", limit=5
     )

@@ -10,31 +10,27 @@
 from __future__ import annotations
 
 import logging
-import posixpath
 from collections.abc import Sequence
+from functools import lru_cache
 from typing import Any
 
+from matmaster.bohrium.status import (
+    LEDGER_ACTIVE_STATUSES,
+    LEDGER_FAILURE_STATUSES,
+    LEDGER_TERMINAL_STATUSES,
+)
 from src.base.base_table import BaseTable
 
 logger = logging.getLogger(__name__)
 
 
-def _require_workspace(workspace: str) -> str:
-    if not isinstance(workspace, str):
-        raise ValueError(f"bohrium_jobs.workspace must be a string, got {workspace!r}")
-    stripped = workspace.strip()
-    if not stripped:
-        raise ValueError("bohrium_jobs.workspace must not be empty")
-    if "\0" in stripped:
-        raise ValueError("bohrium_jobs.workspace contains invalid characters")
-    if not stripped.startswith("/"):
-        raise ValueError(f"bohrium_jobs.workspace must be absolute, got {workspace!r}")
-    normalized = posixpath.normpath(stripped)
-    if normalized != "/share" and not normalized.startswith("/share/"):
-        raise ValueError(
-            f"bohrium_jobs.workspace must be /share path, got {workspace!r}"
-        )
-    return normalized
+def _sql_status_set(statuses: Sequence[str]) -> str:
+    return ", ".join(f"'{s}'" for s in statuses)
+
+
+_SQL_TERMINAL = _sql_status_set(LEDGER_TERMINAL_STATUSES)
+_SQL_ACTIVE = _sql_status_set(LEDGER_ACTIVE_STATUSES)
+_SQL_FAILURE = _sql_status_set(LEDGER_FAILURE_STATUSES)
 
 
 def _format_ts(v: Any) -> str | None:
@@ -42,7 +38,10 @@ def _format_ts(v: Any) -> str | None:
 
 
 class BohriumJobsTable(BaseTable):
-    """bohrium_jobs DAO（raw SQL，同步 PyMySQL）。"""
+    """bohrium_jobs DAO（raw SQL，同步 PyMySQL）。
+
+    建表走外部脚本 src/sql/create_bohrium_jobs_table.sql；init_table 仅检查存在性。
+    """
 
     table_name = "bohrium_jobs"
     _AGENT_COLUMNS = (
@@ -53,10 +52,6 @@ class BohriumJobsTable(BaseTable):
         "id, session_id, user_id, org_id, project_id, job_id, sandbox, "
         "workspace, status, poll_count"
     )
-
-    def init_table(self) -> None:
-        # 建表走外部脚本 src/sql/create_bohrium_jobs_table.sql；这里仅检查存在性。
-        super().init_table()
 
     def insert_submitted(
         self,
@@ -73,10 +68,12 @@ class BohriumJobsTable(BaseTable):
         input_dir: str,
         workspace: str,
     ) -> None:
-        """job/add 成功后写入。next_poll_at = submitted_at（新作业即到期）。"""
+        """job/add 成功后写入。next_poll_at = submitted_at（新作业即到期）。
+
+        workspace 由唯一调用方 bohrium_jobs_wiring 归一化，DB CHECK 兜底。
+        """
         if project_id is None or int(project_id) <= 0:
             raise ValueError(f"bohrium_jobs.project_id must be > 0, got {project_id!r}")
-        workspace_value = _require_workspace(workspace)
         sql = f"""
             INSERT INTO {self.table_name}
                 (session_id, invocation_id, spawn_id, user_id, org_id,
@@ -110,7 +107,7 @@ class BohriumJobsTable(BaseTable):
                         int(project_id),
                         1 if sandbox else 0,
                         input_dir,
-                        workspace_value,
+                        workspace,
                     ),
                 )
             conn.commit()
@@ -133,19 +130,19 @@ class BohriumJobsTable(BaseTable):
                 last_polled_at = NOW(),
                 poll_count = poll_count + 1,
                 terminal_at = CASE
-                    WHEN status IN ('finished', 'failed', 'stopped')
+                    WHEN status IN ({_SQL_TERMINAL})
                     THEN terminal_at
                     WHEN %s THEN COALESCE(terminal_at, NOW())
                     ELSE terminal_at
                 END,
                 next_poll_at = CASE
-                    WHEN status IN ('finished', 'failed', 'stopped')
+                    WHEN status IN ({_SQL_TERMINAL})
                     THEN NULL
                     WHEN %s THEN NULL
                     ELSE NOW() + INTERVAL %s SECOND
                 END,
                 status = CASE
-                    WHEN status IN ('finished', 'failed', 'stopped')
+                    WHEN status IN ({_SQL_TERMINAL})
                     THEN status ELSE %s
                 END
             WHERE user_id = %s AND org_id = %s AND sandbox = %s AND job_id = %s
@@ -174,27 +171,12 @@ class BohriumJobsTable(BaseTable):
         sql = f"""
             UPDATE {self.table_name}
             SET status = CASE
-                    WHEN status IN ('finished', 'failed', 'stopped')
+                    WHEN status IN ({_SQL_TERMINAL})
                     THEN status ELSE 'terminating' END,
                 next_poll_at = CASE
-                    WHEN status IN ('finished', 'failed', 'stopped')
+                    WHEN status IN ({_SQL_TERMINAL})
                     THEN next_poll_at ELSE COALESCE(next_poll_at, NOW()) END
             WHERE user_id = %s AND org_id = %s AND sandbox = %s AND job_id = %s
-        """
-        with self.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(sql, (user_id, org_id, 1 if sandbox else 0, job_id))
-            conn.commit()
-
-    def mark_handled(
-        self, *, user_id: str, org_id: str, sandbox: bool, job_id: str
-    ) -> None:
-        """把终态作业标记为已交付；不可逆且幂等。"""
-        sql = f"""
-            UPDATE {self.table_name}
-            SET handled_at = COALESCE(handled_at, NOW())
-            WHERE user_id = %s AND org_id = %s AND sandbox = %s AND job_id = %s
-              AND terminal_at IS NOT NULL
         """
         with self.get_connection() as conn:
             with conn.cursor() as cur:
@@ -222,7 +204,7 @@ class BohriumJobsTable(BaseTable):
         sql = f"""
             SELECT {self._AGENT_COLUMNS} FROM {self.table_name}
             WHERE user_id = %s AND org_id = %s AND session_id = %s
-              AND status IN ('submitted', 'running', 'terminating', 'unknown')
+              AND status IN ({_SQL_ACTIVE})
             ORDER BY submitted_at ASC
         """
         with self.get_connection() as conn:
@@ -297,10 +279,10 @@ class BohriumJobsTable(BaseTable):
         sql = f"""
             UPDATE {self.table_name}
             SET status = CASE
-                    WHEN status IN ('submitted', 'running', 'terminating', 'unknown')
+                    WHEN status IN ({_SQL_ACTIVE})
                     THEN 'unknown' ELSE status END,
                 next_poll_at = CASE
-                    WHEN status IN ('submitted', 'running', 'terminating', 'unknown')
+                    WHEN status IN ({_SQL_ACTIVE})
                     THEN NOW() + INTERVAL %s SECOND ELSE next_poll_at END
             WHERE user_id = %s AND org_id = %s AND sandbox = %s AND job_id = %s
         """
@@ -333,39 +315,52 @@ class BohriumJobsTable(BaseTable):
     def scan_delivery_units(self, *, limit: int) -> list[dict[str, Any]]:
         """交付聚合扫描：逐 (owner, session, invocation) 统计，仅含 pending>0 单元。
 
-        最老 pending 优先（防饥饿）；EXISTS 在 SQL 层滤掉 owner 与当前
-        session row 不一致的行（org 切换/脏数据），否则它们会永久占据队首。
+        最老 pending 优先（防饥饿）；半连接先锁定有 pending 行的单元，聚合与
+        sessions EXISTS 只跑这些单元的行（表只增不删，全表聚合成本无上界）。
+        EXISTS 在 SQL 层滤掉 owner 与当前 session row 不一致的行（org 切换/
+        脏数据），否则它们会永久占据队首。
         """
         sql = f"""
             SELECT
-                user_id,
-                org_id,
-                session_id,
-                COALESCE(invocation_id, '')                          AS invocation_key,
-                MIN(workspace)                                       AS workspace,
+                t.user_id,
+                t.org_id,
+                t.session_id,
+                COALESCE(t.invocation_id, '')                        AS invocation_key,
+                MIN(t.workspace)                                     AS workspace,
                 COUNT(*)                                             AS total,
-                SUM(terminal_at IS NULL)                             AS active,
-                SUM(terminal_at IS NOT NULL AND handled_at IS NULL)  AS pending_terminal,
-                SUM(status IN ('failed','stopped'))                  AS failed_total,
-                SUM(status IN ('failed','stopped')
-                    AND handled_at IS NOT NULL)                      AS failed_handled,
-                SUM(status = 'finished')                             AS succeeded,
-                MAX(terminal_at)                                     AS max_terminal_at,
-                MAX(CASE WHEN terminal_at IS NOT NULL AND handled_at IS NULL
-                         THEN id END)                                AS max_pending_terminal_id,
-                MIN(CASE WHEN terminal_at IS NOT NULL AND handled_at IS NULL
-                         THEN terminal_at END)                       AS first_pending_terminal_at
-            FROM {self.table_name}
+                SUM(t.terminal_at IS NULL)                           AS active,
+                SUM(t.terminal_at IS NOT NULL
+                    AND t.handled_at IS NULL)                        AS pending_terminal,
+                SUM(t.status IN ({_SQL_FAILURE}))                    AS failed_total,
+                SUM(t.status IN ({_SQL_FAILURE})
+                    AND t.handled_at IS NOT NULL)                    AS failed_handled,
+                SUM(t.status = 'finished')                           AS succeeded,
+                MAX(t.terminal_at)                                   AS max_terminal_at,
+                MAX(CASE WHEN t.terminal_at IS NOT NULL AND t.handled_at IS NULL
+                         THEN t.id END)                              AS max_pending_terminal_id,
+                MIN(CASE WHEN t.terminal_at IS NOT NULL AND t.handled_at IS NULL
+                         THEN t.terminal_at END)                     AS first_pending_terminal_at
+            FROM {self.table_name} t
+            JOIN (
+                SELECT DISTINCT user_id, org_id, session_id,
+                       COALESCE(invocation_id, '') AS invocation_key
+                FROM {self.table_name}
+                WHERE terminal_at IS NOT NULL AND handled_at IS NULL
+            ) pending
+              ON pending.user_id        = t.user_id
+             AND pending.org_id         = t.org_id
+             AND pending.session_id     = t.session_id
+             AND pending.invocation_key = COALESCE(t.invocation_id, '')
             WHERE EXISTS (
                 SELECT 1 FROM evo_chat_sessions s
-                WHERE s.session_id = {self.table_name}.session_id
-                  AND s.user_id    = {self.table_name}.user_id
-                  AND s.org_id     = {self.table_name}.org_id
+                WHERE s.session_id = t.session_id
+                  AND s.user_id    = t.user_id
+                  AND s.org_id     = t.org_id
             )
-            GROUP BY user_id, org_id, session_id, COALESCE(invocation_id, '')
+            GROUP BY t.user_id, t.org_id, t.session_id, COALESCE(t.invocation_id, '')
             HAVING pending_terminal > 0
-            ORDER BY first_pending_terminal_at ASC, user_id ASC, org_id ASC,
-                     session_id ASC, invocation_key ASC
+            ORDER BY first_pending_terminal_at ASC, t.user_id ASC, t.org_id ASC,
+                     t.session_id ASC, invocation_key ASC
             LIMIT %s
         """
         with self.get_connection() as conn:
@@ -408,7 +403,7 @@ class BohriumJobsTable(BaseTable):
             WHERE user_id = %s AND org_id = %s AND session_id = %s
               AND terminal_at IS NOT NULL AND handled_at IS NULL
             ORDER BY
-                (status IN ('failed','stopped')) DESC,
+                (status IN ({_SQL_FAILURE})) DESC,
                 terminal_at ASC, submitted_at ASC, id ASC
         """
         with self.get_connection() as conn:
@@ -471,7 +466,7 @@ class BohriumJobsTable(BaseTable):
             FROM {self.table_name}
             WHERE user_id = %s AND org_id = %s AND session_id = %s
               AND COALESCE(invocation_id, '') = %s
-              AND status IN ('failed','stopped')
+              AND status IN ({_SQL_FAILURE})
               AND handled_at IS NULL
             ORDER BY terminal_at ASC, id ASC
             LIMIT 1
@@ -487,3 +482,9 @@ class BohriumJobsTable(BaseTable):
             with conn.cursor() as cur:
                 cur.execute(f"SELECT * FROM {self.table_name} ORDER BY id ASC")
                 return list(cur.fetchall())
+
+
+@lru_cache(maxsize=1)
+def get_bohrium_jobs_table() -> BohriumJobsTable:
+    """进程级单例；构造即触发 init_table 的存在性检查，复用避免重复连库。"""
+    return BohriumJobsTable()

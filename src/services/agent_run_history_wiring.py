@@ -28,7 +28,6 @@ class HistoryWiringResult:
 
     history: list
     compaction: PlaygroundCompactionPort
-    bohrium_rebuild_events: list[dict]
 
 
 def _safe_event_call(
@@ -188,18 +187,7 @@ def build_history_wiring(
         pre_compaction_barrier=pre_compaction_barrier,
     )
 
-    bohrium_rebuild_events = _safe_event_call(
-        events_table,
-        "get_bohrium_events",
-        [],
-        session_id,
-        _log_extra="for registry rebuild",
-    )
-    if not isinstance(bohrium_rebuild_events, list):
-        bohrium_rebuild_events = []
-
     return HistoryWiringResult(
         history=history,
         compaction=compaction,
-        bohrium_rebuild_events=bohrium_rebuild_events,
     )

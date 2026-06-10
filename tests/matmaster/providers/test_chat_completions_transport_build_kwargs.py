@@ -34,9 +34,7 @@ def test_reasoning_summary_goes_extra_body_with_effort() -> None:
     t = _t(reasoning_effort="xhigh", reasoning_summary="detailed")
     kw = t.build_kwargs([], None)
     assert kw["reasoning_effort"] == "xhigh"
-    assert kw["extra_body"] == {
-        "reasoning": {"summary": "detailed", "effort": "xhigh"}
-    }
+    assert kw["extra_body"] == {"reasoning": {"summary": "detailed", "effort": "xhigh"}}
 
 
 def test_reasoning_summary_without_effort() -> None:

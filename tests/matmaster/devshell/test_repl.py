@@ -361,10 +361,6 @@ class TestDevRunnerRequest:
             config=DevConfig(),
             workdir=tmp_path,
             llm_provider=bundle.provider,
-            resolved_route=SimpleNamespace(
-                profile=SimpleNamespace(model="fallback-model"),
-                profile_key="fallback-profile",
-            ),
             llm_bundle=bundle,
         )
 

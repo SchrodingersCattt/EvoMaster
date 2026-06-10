@@ -184,12 +184,9 @@ async def _run_agent_and_reply_feishu(
 
     reaction_id = add_reaction(message_id, "OnIt", tenant_token=tenant_token)
 
-    base_prompt = user_prompt.strip()
     parts: list[str] = []
     try:
-        async for sse_piece in stream_svc.generate_send_stream(
-            session_id, base_prompt, ctx
-        ):
+        async for sse_piece in stream_svc.generate_send_stream(session_id, ctx):
             parts.extend(_collect_current_response_chunks(sse_piece, ctx.invocation_id))
     except Exception:
         logger.exception("feishu generate_send_stream failed session_id=%s", session_id)

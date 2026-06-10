@@ -13,7 +13,6 @@ import hashlib
 import io
 import json
 import logging
-import re
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -21,6 +20,7 @@ from typing import Any
 import httpx
 import yaml
 
+from matmaster.skills.registry import parse_plugin_info, parse_skill_meta_info
 from utils.env import MATMASTER_TOOLS_SERVER
 
 logger = logging.getLogger(__name__)
@@ -163,26 +163,17 @@ def _build_skill_item(
 ) -> dict[str, Any] | None:
     """解析单个 skill 目录：frontmatter 提取 + zip 打包。无 frontmatter 返回 None。"""
     content = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
-    fm_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
-    if not fm_match:
+    try:
+        meta = parse_skill_meta_info(content, fallback_name=skill_dir.name)
+    except ValueError:
         return None
 
-    data: dict[str, str] = {}
-    for line in fm_match.group(1).split("\n"):
-        line = line.strip()
-        if not line or line.startswith("#"):
-            continue
-        if ":" in line:
-            key, value = line.split(":", 1)
-            data[key.strip()] = value.strip().strip('"').strip("'")
-
-    name = data.get("name", skill_dir.name)
     zip_bytes, sha256, byte_size, file_count = _zip_skill_dir(skill_dir)
-    tools = _load_tools_from_cache(data.get("mcp_server"))
+    tools = _load_tools_from_cache(meta.mcp_server)
 
     item: dict[str, Any] = {
-        "name": name,
-        "description": data.get("description", ""),
+        "name": meta.name,
+        "description": meta.description,
         "category": category,
         "tags": tags,
         "skill_dir": skill_dir,
@@ -220,17 +211,14 @@ def _scan_builtin_skills(
     if _PLUGINS_ROOT.exists():
         for manifest_path in sorted(_PLUGINS_ROOT.rglob("plugin.yaml")):
             plugin_dir = manifest_path.parent
-            manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
-            plugin_name = str(manifest.get("name") or plugin_dir.name)
-            raw_category = manifest.get("category")
-            category = str(raw_category).strip() if raw_category else None
+            plugin = parse_plugin_info(manifest_path)
             for md_path in sorted(plugin_dir.rglob("SKILL.md")):
                 skill_dir = md_path.parent
                 rel = skill_dir.relative_to(_PLUGINS_ROOT)
                 if any(p.startswith("_") for p in rel.parts):
                     continue
                 item = _build_skill_item(
-                    skill_dir, category=category, tags=[plugin_name]
+                    skill_dir, category=plugin.category, tags=[plugin.name]
                 )
                 if item is not None:
                     results.append(item)

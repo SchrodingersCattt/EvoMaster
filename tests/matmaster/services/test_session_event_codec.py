@@ -93,9 +93,10 @@ def test_coerce_event_id_rejects_bool() -> None:
 
 def test_coerce_created_at_ms_accepts_created_at_ms_and_datetime() -> None:
     assert coerce_created_at_ms({"created_at_ms": "42"}) == 42
-    assert coerce_created_at_ms(
-        {"created_at": datetime(2026, 1, 1, tzinfo=UTC)}
-    ) == 1767225600000
+    assert (
+        coerce_created_at_ms({"created_at": datetime(2026, 1, 1, tzinfo=UTC)})
+        == 1767225600000
+    )
 
 
 def test_coerce_created_at_ms_ignores_invalid_values() -> None:

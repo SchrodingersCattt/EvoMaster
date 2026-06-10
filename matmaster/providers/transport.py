@@ -11,7 +11,44 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
-from matmaster.types.messages import AssistantMessage, LLMResponse, Message, StreamChunk
+from matmaster.types.messages import (
+    AssistantMessage,
+    LLMResponse,
+    Message,
+    StreamChunk,
+    ToolMessage,
+)
+
+
+def dump_model_to_jsonable(value: Any) -> Any:
+    """SDK 对象尽力转 JSON 可序列化 dict：pydantic model_dump 优先，dict 复制，
+    其余扫描简单属性。"""
+    if value is None:
+        return None
+    model_dump = getattr(value, "model_dump", None)
+    if callable(model_dump):
+        try:
+            return model_dump(mode="json", exclude_none=True)
+        except TypeError:
+            return model_dump(exclude_none=True)
+    if isinstance(value, dict):
+        return dict(value)
+    out: dict[str, Any] = {}
+    for key in dir(value):
+        if key.startswith("_"):
+            continue
+        try:
+            item = getattr(value, key)
+        except Exception:
+            continue
+        if isinstance(item, (str, int, float, bool, type(None), dict, list)):
+            out[key] = item
+    return out
+
+
+def tool_image_relay_label(message: ToolMessage) -> str:
+    """工具图片中继为 user 内容时的前导标签（各 wire 协议共用同一文案）。"""
+    return f"[Images from {message.tool_name} (tool_call {message.tool_call_id})]"
 
 
 class Transport:
@@ -36,7 +73,9 @@ class Transport:
 
     @property
     def stream_timeout(self) -> float:
-        return self._stream_timeout if self._stream_timeout is not None else self._timeout
+        return (
+            self._stream_timeout if self._stream_timeout is not None else self._timeout
+        )
 
     @property
     def stream_idle_timeout(self) -> float:
@@ -54,7 +93,7 @@ class Transport:
     def retry_delay(self) -> float:
         return self._retry_delay
 
-    async def __aenter__(self) -> "Transport":
+    async def __aenter__(self) -> Transport:
         self._enter_count += 1
         if self._client is None:
             self._client = await self._open_client()
@@ -75,6 +114,15 @@ class Transport:
                 "'async with transport:'"
             )
         return self._client
+
+    def _build_http_client(self) -> Any:
+        """各 SDK client 共用的 httpx.AsyncClient（read 超时随流式 idle 放宽）。"""
+        import httpx
+
+        read_t = float(max(self.stream_idle_timeout, self.stream_timeout) + 10)
+        return httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=15.0, read=read_t, write=30.0, pool=15.0)
+        )
 
     def _claim_provider_state(self, msg: AssistantMessage) -> dict[str, Any] | None:
         """tag 匹配则返回不透明 payload，否则 None（跨协议丢弃回放状态）。"""

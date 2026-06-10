@@ -77,9 +77,7 @@ def run_repl(
 
     rr = runner._resolved_route
     llm_model = (
-        getattr(getattr(rr, "profile", None), "model", "?")
-        if rr is not None
-        else "?"
+        getattr(getattr(rr, "profile", None), "model", "?") if rr is not None else "?"
     )
     llm_profile = getattr(rr, "profile_key", "?") if rr is not None else "?"
     print(

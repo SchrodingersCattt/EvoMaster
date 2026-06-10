@@ -8,13 +8,16 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from typing import Any
 
-import openai
-
-from matmaster.providers.transport import Transport
+from matmaster.providers.transport import (
+    dump_model_to_jsonable,
+    tool_image_relay_label,
+)
+from matmaster.providers.transports.openai_common import OpenAISDKTransport
 from matmaster.types.errors import LLMError
 from matmaster.types.message_normalization import validate_tool_turn_sequence
 from matmaster.types.messages import (
     AssistantMessage,
+    ImageContentPart,
     LLMResponse,
     Message,
     StreamChunk,
@@ -27,17 +30,20 @@ from matmaster.types.messages import (
 logger = logging.getLogger(__name__)
 
 
+def _image_url_part(image: ImageContentPart) -> dict[str, Any]:
+    image_url: dict[str, Any] = {"url": image.url}
+    if image.detail is not None:
+        image_url["detail"] = image.detail
+    return {"type": "image_url", "image_url": image_url}
+
+
 def _user_message_to_dict(message: UserMessage) -> dict[str, Any]:
     if not message.images:
         return {"role": message.role.value, "content": message.content}
     parts: list[dict[str, Any]] = []
     if message.content:
         parts.append({"type": "text", "text": message.content})
-    for image in message.images:
-        image_url: dict[str, Any] = {"url": image.url}
-        if image.detail is not None:
-            image_url["detail"] = image.detail
-        parts.append({"type": "image_url", "image_url": image_url})
+    parts.extend(_image_url_part(image) for image in message.images)
     return {"role": message.role.value, "content": parts}
 
 
@@ -147,23 +153,6 @@ def _should_split_stream_tool_call(
     return False
 
 
-def _dump_usage_detail(value: Any) -> Any:
-    if value is None:
-        return None
-    model_dump = getattr(value, "model_dump", None)
-    if callable(model_dump):
-        try:
-            return model_dump(mode="json", exclude_none=True)
-        except TypeError:
-            return model_dump(exclude_none=True)
-    if isinstance(value, dict):
-        return dict(value)
-    cached = getattr(value, "cached_tokens", None)
-    if cached is not None:
-        return {"cached_tokens": cached}
-    return value
-
-
 def _openai_usage_to_vendor_dict(usage: Any) -> dict[str, Any]:
     """Serialize provider-native usage while preserving nested detail fields."""
     if usage is None:
@@ -196,13 +185,9 @@ def _openai_usage_to_vendor_dict(usage: Any) -> dict[str, Any]:
         "completion_tokens_details",
         "cache_creation",
     ):
-        detail = _dump_usage_detail(getattr(usage, detail_key, None))
-        if detail is None:
-            continue
-        if detail_key in ("prompt_tokens_details", "completion_tokens_details"):
+        detail = dump_model_to_jsonable(getattr(usage, detail_key, None))
+        if detail is not None:
             out[detail_key] = detail
-            continue
-        out[detail_key] = detail
 
     return out
 
@@ -225,7 +210,7 @@ def _extract_cache_write_tokens(usage: Any) -> int:
     val = getattr(usage, "cache_creation_input_tokens", None)
     if isinstance(val, int) and val > 0:
         return val
-    cache_creation = _dump_usage_detail(getattr(usage, "cache_creation", None))
+    cache_creation = dump_model_to_jsonable(getattr(usage, "cache_creation", None))
     if isinstance(cache_creation, dict):
         total = 0
         for value in cache_creation.values():
@@ -292,7 +277,7 @@ def _is_non_retryable_content_shape_bad_request(err_str: str) -> bool:
     )
 
 
-class ChatCompletionsTransport(Transport):
+class ChatCompletionsTransport(OpenAISDKTransport):
     """Pure OpenAI-compatible chat completions transport."""
 
     transport_tag = "chat_completions"
@@ -329,24 +314,6 @@ class ChatCompletionsTransport(Transport):
         self._reasoning_effort = reasoning_effort
         self._reasoning_summary = reasoning_summary
         self._extra_body = extra_body
-
-    async def _open_client(self) -> openai.AsyncOpenAI:
-        import httpx
-
-        read_t = float(max(self.stream_idle_timeout, self.stream_timeout) + 10)
-        http_client = httpx.AsyncClient(
-            timeout=httpx.Timeout(connect=15.0, read=read_t, write=30.0, pool=15.0)
-        )
-        return openai.AsyncOpenAI(
-            api_key=self._api_key,
-            base_url=self._base_url,
-            timeout=self._timeout,
-            max_retries=0,
-            http_client=http_client,
-        )
-
-    async def _close_client(self, client: openai.AsyncOpenAI) -> None:
-        await client.close()
 
     def _assistant_to_wire(self, message: AssistantMessage) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -426,19 +393,9 @@ class ChatCompletionsTransport(Transport):
         if not message.images:
             return []
         parts: list[dict[str, Any]] = [
-            {
-                "type": "text",
-                "text": (
-                    f"[Images from {message.tool_name} "
-                    f"(tool_call {message.tool_call_id})]"
-                ),
-            }
+            {"type": "text", "text": tool_image_relay_label(message)}
         ]
-        for image in message.images:
-            image_url: dict[str, Any] = {"url": image.url}
-            if image.detail is not None:
-                image_url["detail"] = image.detail
-            parts.append({"type": "image_url", "image_url": image_url})
+        parts.extend(_image_url_part(image) for image in message.images)
         return parts
 
     def build_kwargs(
@@ -481,36 +438,10 @@ class ChatCompletionsTransport(Transport):
             kwargs["tool_choice"] = tool_choice
         return kwargs
 
-    def classify_error(self, exc: Exception) -> LLMError | None:
-        import httpx as _httpx
-
-        if isinstance(exc, LLMError):
-            return None
-        if isinstance(exc, openai.APITimeoutError):
-            return LLMError(str(exc), retryable=True, error_category="timeout")
-        if isinstance(exc, openai.APIConnectionError):
-            return LLMError(str(exc), retryable=True, error_category="connection")
-        if isinstance(exc, openai.RateLimitError):
-            return LLMError(str(exc), retryable=True, error_category="rate_limit")
-        if isinstance(exc, openai.InternalServerError):
-            return LLMError(str(exc), retryable=True, error_category="server")
-        if isinstance(exc, _httpx.ReadTimeout):
-            return LLMError(str(exc), retryable=True, error_category="timeout")
-        if isinstance(exc, (openai.AuthenticationError, openai.PermissionDeniedError)):
-            return LLMError(str(exc), retryable=False, error_category="auth")
-        if isinstance(exc, openai.BadRequestError):
-            err_str = str(exc)
-            err_text = err_str.lower()
-            if "context" in err_text and ("length" in err_text or "token" in err_text):
-                return LLMError(
-                    str(exc), retryable=False, error_category="context_overflow"
-                )
-            if _is_non_retryable_tool_protocol_bad_request(
-                err_str
-            ) or _is_non_retryable_content_shape_bad_request(err_str):
-                return LLMError(str(exc), retryable=False, error_category="bad_request")
-            return LLMError(str(exc), retryable=True, error_category="bad_request")
-        return None
+    def _is_non_retryable_bad_request(self, err_str: str) -> bool:
+        return _is_non_retryable_tool_protocol_bad_request(
+            err_str
+        ) or _is_non_retryable_content_shape_bad_request(err_str)
 
     @staticmethod
     def _normalize_stream_tool_call_deltas(

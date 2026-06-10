@@ -8,7 +8,7 @@ from typing import Any
 
 import anthropic
 
-from matmaster.providers.transport import Transport
+from matmaster.providers.transport import Transport, dump_model_to_jsonable
 from matmaster.types.errors import LLMError
 from matmaster.types.message_normalization import validate_tool_turn_sequence
 from matmaster.types.messages import (
@@ -303,30 +303,6 @@ def _is_non_retryable_anthropic_bad_request(text: str) -> bool:
     return any(pattern in lowered for pattern in patterns)
 
 
-def _dump_model(value: Any) -> Any:
-    if value is None:
-        return None
-    model_dump = getattr(value, "model_dump", None)
-    if callable(model_dump):
-        try:
-            return model_dump(mode="json", exclude_none=True)
-        except TypeError:
-            return model_dump(exclude_none=True)
-    if isinstance(value, dict):
-        return dict(value)
-    out: dict[str, Any] = {}
-    for key in dir(value):
-        if key.startswith("_"):
-            continue
-        try:
-            item = getattr(value, key)
-        except Exception:
-            continue
-        if isinstance(item, (str, int, float, bool, type(None), dict, list)):
-            out[key] = item
-    return out
-
-
 def _usage_value(usage: Any, key: str) -> Any:
     if isinstance(usage, dict):
         return usage.get(key)
@@ -407,18 +383,12 @@ class AnthropicMessagesTransport(Transport):
         self._prompt_cache_options = prompt_cache_options
 
     async def _open_client(self) -> anthropic.AsyncAnthropic:
-        import httpx
-
-        read_t = float(max(self.stream_idle_timeout, self.stream_timeout) + 10)
-        http_client = httpx.AsyncClient(
-            timeout=httpx.Timeout(connect=15.0, read=read_t, write=30.0, pool=15.0)
-        )
         return anthropic.AsyncAnthropic(
             api_key=self._api_key,
             base_url=self._base_url,
             timeout=self._timeout,
             max_retries=0,
-            http_client=http_client,
+            http_client=self._build_http_client(),
         )
 
     async def _close_client(self, client: anthropic.AsyncAnthropic) -> None:
@@ -556,7 +526,7 @@ class AnthropicMessagesTransport(Transport):
                 if thinking:
                     reasoning_parts.append(thinking)
             elif block_type == "redacted_thinking":
-                dumped = _dump_model(block)
+                dumped = dump_model_to_jsonable(block)
                 if isinstance(dumped, dict):
                     thinking_blocks.append(dumped)
             elif block_type == "text":
@@ -584,7 +554,7 @@ class AnthropicMessagesTransport(Transport):
             tool_calls=tool_calls or None,
             finish_reason=_map_stop_reason(getattr(raw, "stop_reason", None)),
             usage=_anthropic_usage_to_scalar_dict(usage),
-            usage_vendor=_dump_model(usage) if usage is not None else None,
+            usage_vendor=dump_model_to_jsonable(usage) if usage is not None else None,
             provider_state=provider_state,
         )
 
@@ -599,7 +569,7 @@ class AnthropicMessagesTransport(Transport):
             event_type = getattr(event, "type", None)
             if event_type == "message_start":
                 usage = getattr(getattr(event, "message", None), "usage", None)
-                dumped_usage = _dump_model(usage)
+                dumped_usage = dump_model_to_jsonable(usage)
                 if isinstance(dumped_usage, dict):
                     usage_snapshot.update(dumped_usage)
                 continue
@@ -615,7 +585,7 @@ class AnthropicMessagesTransport(Transport):
                     state.output_index = next_tool_call_index
                     next_tool_call_index += 1
                 elif block_type == "redacted_thinking":
-                    dumped = _dump_model(block)
+                    dumped = dump_model_to_jsonable(block)
                     if isinstance(dumped, dict):
                         state.redacted_thinking = dumped
                 blocks[int(getattr(event, "index", 0))] = state
@@ -679,7 +649,7 @@ class AnthropicMessagesTransport(Transport):
                     getattr(getattr(event, "delta", None), "stop_reason", None)
                 )
                 usage = getattr(event, "usage", None)
-                dumped_usage = _dump_model(usage)
+                dumped_usage = dump_model_to_jsonable(usage)
                 if isinstance(dumped_usage, dict):
                     usage_snapshot.update(dumped_usage)
                 if finish_reason:

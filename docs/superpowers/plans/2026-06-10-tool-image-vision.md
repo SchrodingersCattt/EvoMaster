@@ -4,12 +4,12 @@
 
 **Goal:** 让 agent 能通过 Read 工具读取 session 文件系统中的图片并送入模型上下文，且带图历史在体积、token、模型能力三个维度上受四道防线约束。
 
-**Architecture:** ToolResult/ToolMessage/ToolResultEvent 一等公民图片字段（base64 data URI）；Read 工具 magic bytes 判定 + vision 门控；Anthropic 原生 tool_result image block，OpenAI 风格 wire 层 relay；四道防线（工具入口校验 → kernel 请求前在途预算 → compaction 估算与摘要剥图 → 恢复层按模型能力剥图）。规格见 `docs/superpowers/specs/2026-06-10-tool-image-vision-design.md`（rev2，commit c2003dea）。
+**Architecture:** ToolResult/ToolMessage/ToolResultEvent 一等公民图片字段（base64 data URI）；Read 工具 magic bytes 判定 + vision 门控；Anthropic 原生 tool_result image block，ChatCompletions / Responses 风格 wire 层 relay；四道防线（工具入口校验 → kernel 请求前在途预算 → compaction 估算与摘要剥图 → 恢复层按模型能力剥图）。规格见 `docs/superpowers/specs/2026-06-10-tool-image-vision-design.md`（rev2，commit c2003dea）。
 
 **Tech Stack:** Python 3.11+、pydantic v2、pytest。无新增第三方依赖（PNG 尺寸用 struct 手解）。
 
 **全局约定：**
-- 仓库根目录运行所有命令；用工作区 venv 的 `python -m pytest`。
+- 仓库根目录运行所有命令；用工作区 venv 的 `uv run pytest`。
 - 每个 Task 一次 commit；commit message 风格沿用仓库（`feat(scope): ...` / `test(scope): ...`）。
 - `ImageContentPart` 是现有类型（`matmaster/types/messages.py:207`），本计划不改它。
 - data URI 测试样例统一用：`"data:image/png;base64,aGVsbG8="`。
@@ -86,7 +86,7 @@ def test_tool_result_event_images_roundtrip():
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `python -m pytest tests/matmaster/tools/test_tool_result.py::test_tool_result_images_roundtrip tests/matmaster/types/test_image_messages.py::test_tool_message_images_roundtrip tests/matmaster/types/test_events.py::test_tool_result_event_images_roundtrip -v`
+Run: `uv run pytest tests/matmaster/tools/test_tool_result.py::test_tool_result_images_roundtrip tests/matmaster/types/test_image_messages.py::test_tool_message_images_roundtrip tests/matmaster/types/test_events.py::test_tool_result_event_images_roundtrip -v`
 Expected: 3 个 FAIL，报 `images` 字段不存在（pydantic ValidationError 或 extra="forbid" 拒绝）。
 
 - [ ] **Step 3: 加字段**
@@ -127,7 +127,7 @@ from matmaster.types.messages import ImageContentPart
 
 - [ ] **Step 4: 跑测试确认通过 + 全量类型测试回归**
 
-Run: `python -m pytest tests/matmaster/tools/test_tool_result.py tests/matmaster/types/ -q`
+Run: `uv run pytest tests/matmaster/tools/test_tool_result.py tests/matmaster/types/ -q`
 Expected: 全 PASS。
 
 - [ ] **Step 5: Commit**
@@ -213,7 +213,7 @@ async def test_dispatch_propagates_tool_result_images() -> None:
 
 - [ ] **Step 3: 跑测试确认失败**
 
-Run: `python -m pytest tests/matmaster/core/test_agent_tool_dispatch.py tests/matmaster/integration/ -q -k "images"`
+Run: `uv run pytest tests/matmaster/core/test_agent_tool_dispatch.py tests/matmaster/integration/ -q -k "images"`
 Expected: FAIL（ToolMessage.images 为空 / content dict 无 images 键）。
 
 - [ ] **Step 4: 实现**
@@ -245,7 +245,7 @@ Expected: FAIL（ToolMessage.images 为空 / content dict 无 images 键）。
 
 - [ ] **Step 5: 跑测试确认通过 + 回归**
 
-Run: `python -m pytest tests/matmaster/core/test_agent_tool_dispatch.py tests/matmaster/integration/ -q`
+Run: `uv run pytest tests/matmaster/core/test_agent_tool_dispatch.py tests/matmaster/integration/ -q`
 Expected: 全 PASS。
 
 - [ ] **Step 6: Commit**
@@ -253,6 +253,81 @@ Expected: 全 PASS。
 ```bash
 git add matmaster/core/agent_tool_dispatch.py matmaster/integration/event_payloads.py tests/
 git commit -m "feat(core): propagate tool result images into ToolMessage and persisted events"
+```
+
+---
+
+### Task 2b: ToolRunner 截断路径保留 images
+
+**Files:**
+- Modify: `matmaster/core/tool_runner.py`（`FullToolRunner._truncate_result`）
+- Test: `tests/matmaster/core/test_full_tool_runner_normalize.py`（追加）
+
+- [ ] **Step 1: 写失败测试**
+
+在 `tests/matmaster/core/test_full_tool_runner_normalize.py` 的 truncation 测试附近追加：
+
+```python
+def test_truncate_result_preserves_images(self, tmp_path: Path) -> None:
+    from matmaster.types.messages import ImageContentPart
+
+    image = ImageContentPart(
+        url="data:image/png;base64,aGVsbG8=",
+        mime_type="image/png",
+    )
+    topology_with_tmp = RuntimeTopology(
+        session_kind="local",
+        control_root=str(tmp_path),
+        workspace_root="/tmp/ws",
+        active_planes=frozenset(ToolPlane),
+    )
+    runner = _make_runner(
+        ToolCatalog(ToolRegistry()),
+        topology=topology_with_tmp,
+    )
+
+    truncated = runner._truncate_result(
+        ToolResult(content="A" * 20_000, images=[image]),
+        max_chars=12_000,
+        tool_call_id="call_img",
+    )
+
+    assert truncated.images == [image]
+    assert truncated.payload == {}
+    assert truncated.meta["truncated"] is True
+```
+
+- [ ] **Step 2: 跑测试确认失败**
+
+Run: `uv run pytest tests/matmaster/core/test_full_tool_runner_normalize.py -q -k truncate_result_preserves_images`
+Expected: FAIL（`ToolResult` 增加 images 后，`_truncate_result` 重建对象时未透传 images）。
+
+- [ ] **Step 3: 实现**
+
+`matmaster/core/tool_runner.py`，`_truncate_result` 的返回值增加 `images=tr.images,`：
+
+```python
+        return ToolResult(
+            status=tr.status,
+            content=truncated_content,
+            payload=tr.payload,
+            meta=new_meta,
+            images=tr.images,
+        )
+```
+
+说明：Task 1 新增 `ToolResult.images` 后，截断仍只作用于文本 `content`；图片字段是结构化模型上下文，不属于长文本截断对象。
+
+- [ ] **Step 4: 跑测试确认通过 + ToolRunner 回归**
+
+Run: `uv run pytest tests/matmaster/core/test_full_tool_runner_normalize.py tests/matmaster/core/test_tool_runner_error_wrap.py -q`
+Expected: 全 PASS。
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add matmaster/core/tool_runner.py tests/matmaster/core/test_full_tool_runner_normalize.py
+git commit -m "feat(core): preserve tool result images during text truncation"
 ```
 
 ---
@@ -357,7 +432,7 @@ def test_build_payload_rejects_non_image():
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `python -m pytest tests/matmaster/tools/test_image_resolution.py -v`
+Run: `uv run pytest tests/matmaster/tools/filesystem_semantics/test_image_resolution.py -v`
 Expected: FAIL，`ModuleNotFoundError: ... image_resolution`。
 
 - [ ] **Step 3: 实现模块**
@@ -447,13 +522,13 @@ def build_image_payload(raw: bytes) -> ImagePayload:
 
 - [ ] **Step 4: 跑测试确认通过**
 
-Run: `python -m pytest tests/matmaster/tools/test_image_resolution.py -v`
+Run: `uv run pytest tests/matmaster/tools/filesystem_semantics/test_image_resolution.py -v`
 Expected: 全 PASS。
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add matmaster/tools/filesystem_semantics/image_resolution.py tests/matmaster/tools/test_image_resolution.py
+git add matmaster/tools/filesystem_semantics/image_resolution.py tests/matmaster/tools/filesystem_semantics/test_image_resolution.py
 git commit -m "feat(tools): image_resolution module — magic sniff, PNG dims, data URI payload"
 ```
 
@@ -467,13 +542,13 @@ git commit -m "feat(tools): image_resolution module — magic sniff, PNG dims, d
 
 - [ ] **Step 1: 写失败测试**
 
-在 `tests/matmaster/tools/builtin/test_read_tool.py` 追加。**复用该文件现有的 fake session 构造方式**（若无现成可复用的，用下面的最小 FakeSession）。测试用 Task 3 的 `make_png` helper（从 `tests/matmaster/tools/test_image_resolution.py` import，或本文件内复制同款 helper——以文件内既有约定为准，无约定则 import）：
+在 `tests/matmaster/tools/builtin/test_read_tool.py` 追加。**复用该文件现有的 fake session 构造方式**（若无现成可复用的，用下面的最小 FakeSession）。测试用 Task 3 的 `make_png` helper（从 `tests/matmaster/tools/filesystem_semantics/test_image_resolution.py` import，或本文件内复制同款 helper——以文件内既有约定为准，无约定则 import）：
 
 ```python
 import dataclasses
 
 from matmaster.tools.builtin.read_tool import ReadTool
-from tests.matmaster.tools.test_image_resolution import make_png, make_png_header_only
+from tests.matmaster.tools.filesystem_semantics.test_image_resolution import make_png, make_png_header_only
 
 
 @dataclasses.dataclass
@@ -560,7 +635,7 @@ def test_read_gif_falls_through_to_text_path():
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `python -m pytest tests/matmaster/tools/builtin/test_read_tool.py -q -k "image or gif"`
+Run: `uv run pytest tests/matmaster/tools/builtin/test_read_tool.py -q -k "image or gif"`
 Expected: FAIL（`__init__` 不接受 vision_enabled / 图片走文本路径报解码错误）。
 
 - [ ] **Step 3: 实现**
@@ -661,7 +736,7 @@ from matmaster.types.messages import ImageContentPart
 
 - [ ] **Step 4: 跑测试确认通过 + ReadTool 全量回归**
 
-Run: `python -m pytest tests/matmaster/tools/builtin/test_read_tool.py -q`
+Run: `uv run pytest tests/matmaster/tools/builtin/test_read_tool.py -q`
 Expected: 全 PASS（含原有文本路径测试）。
 
 - [ ] **Step 5: Commit**
@@ -743,7 +818,7 @@ git commit -m "feat(tools): ReadTool image branch — magic sniff, vision gate, 
 
 - [ ] **Step 5: 回归（providers + exp 相关测试）**
 
-Run: `python -m pytest tests/matmaster/providers tests/matmaster/core -q`
+Run: `uv run pytest tests/matmaster/providers tests/matmaster/core -q`
 Expected: 全 PASS（纯增量字段，现有构造不受影响）。若有测试以位置参数构造 `LLMProviderBundle` 而失败，按新字段补默认值修复该测试。
 
 - [ ] **Step 6: Commit**
@@ -817,7 +892,7 @@ def test_tool_result_without_images_stays_string():
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `python -m pytest tests/matmaster/providers/test_anthropic_messages_convert.py -q -k images`
+Run: `uv run pytest tests/matmaster/providers/test_anthropic_messages_convert.py -q -k images`
 Expected: FAIL（content 仍是字符串）。
 
 - [ ] **Step 3: 实现**
@@ -845,7 +920,7 @@ def _tool_result_block(message: ToolMessage) -> dict[str, Any]:
 
 - [ ] **Step 4: 跑测试确认通过 + transport 回归**
 
-Run: `python -m pytest tests/matmaster/providers/test_anthropic_messages_convert.py tests/matmaster/providers/test_anthropic_messages_prompt_cache.py -q`
+Run: `uv run pytest tests/matmaster/providers/test_anthropic_messages_convert.py tests/matmaster/providers/test_anthropic_messages_prompt_cache.py -q`
 Expected: 全 PASS（含 prompt cache 测试——`_mark_content_block`/`_message_text_size` 对 list content 的既有处理是回归重点）。
 
 - [ ] **Step 5: Commit**
@@ -944,7 +1019,7 @@ def test_no_images_keeps_wire_unchanged():
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `python -m pytest tests/matmaster/providers/test_chat_completions_convert_messages.py -q -k relay`
+Run: `uv run pytest tests/matmaster/providers/test_chat_completions_convert_messages.py -q -k relay`
 Expected: FAIL（无 relay 条目）。
 
 - [ ] **Step 3: 实现**
@@ -1010,7 +1085,7 @@ Expected: FAIL（无 relay 条目）。
 
 - [ ] **Step 4: 跑测试确认通过 + vendor transport 回归**
 
-Run: `python -m pytest tests/matmaster/providers/test_chat_completions_convert_messages.py tests/matmaster/providers/test_chat_completions_vendor_transports.py -q`
+Run: `uv run pytest tests/matmaster/providers/test_chat_completions_convert_messages.py tests/matmaster/providers/test_chat_completions_vendor_transports.py -q`
 Expected: 全 PASS（qwen/deepseek 子类继承基类 convert_messages，回归确认 reasoning replay 不受影响）。
 
 - [ ] **Step 5: Commit**
@@ -1018,6 +1093,162 @@ Expected: 全 PASS（qwen/deepseek 子类继承基类 convert_messages，回归�
 ```bash
 git add matmaster/providers/transports/chat_completions.py tests/matmaster/providers/test_chat_completions_convert_messages.py
 git commit -m "feat(providers): chat_completions relays tool images via user message parts"
+```
+
+---
+
+### Task 7b: Responses transport — relay 注入
+
+**Files:**
+- Modify: `matmaster/providers/transports/responses.py`（`convert_messages`；新增 `_relay_content_for` helper）
+- Test: `tests/matmaster/providers/test_responses_convert.py`（追加）
+
+背景：`config/llm_config.yaml` 中 `matmaster/gpt-5.5` 使用 `responses` transport 且 `supports_vision: true`。Task 5 会允许 ReadTool 为该 profile 产出图片；如果 Responses transport 不处理 `ToolMessage.images`，会出现工具成功读图但模型实际没收到图的半成功状态。
+
+- [ ] **Step 1: 写失败测试**
+
+在 `tests/matmaster/providers/test_responses_convert.py` 追加：
+
+```python
+def _tool_turn_with_image():
+    return [
+        UserMessage(content="看图"),
+        AssistantMessage(
+            content=None,
+            tool_calls=[ToolCallData(id="call_1", name="Read", arguments={})],
+        ),
+        ToolMessage(
+            tool_call_id="call_1",
+            tool_name="Read",
+            content="Read image: /a.png",
+            images=[
+                ImageContentPart(
+                    url="data:image/png;base64,aGVsbG8=",
+                    mime_type="image/png",
+                    detail="high",
+                )
+            ],
+        ),
+    ]
+```
+
+```python
+def test_tool_images_are_relayed_as_user_input_item() -> None:
+    wire = _provider().convert_messages(_tool_turn_with_image())
+    assert wire[-2] == {
+        "type": "function_call_output",
+        "call_id": "call_1",
+        "output": "Read image: /a.png",
+    }
+    assert wire[-1] == {
+        "role": "user",
+        "content": [
+            {
+                "type": "input_text",
+                "text": "[Images from Read (tool_call call_1)]",
+            },
+            {
+                "type": "input_image",
+                "image_url": "data:image/png;base64,aGVsbG8=",
+                "detail": "high",
+            },
+        ],
+    }
+
+
+def test_tool_image_relay_merges_into_following_user_item() -> None:
+    wire = _provider().convert_messages(
+        _tool_turn_with_image() + [UserMessage(content="继续")]
+    )
+    assert wire[-1] == {
+        "role": "user",
+        "content": [
+            {
+                "type": "input_text",
+                "text": "[Images from Read (tool_call call_1)]",
+            },
+            {
+                "type": "input_image",
+                "image_url": "data:image/png;base64,aGVsbG8=",
+                "detail": "high",
+            },
+            {"type": "input_text", "text": "继续"},
+        ],
+    }
+```
+
+- [ ] **Step 2: 跑测试确认失败**
+
+Run: `uv run pytest tests/matmaster/providers/test_responses_convert.py -q -k "tool_images or relay_merges"`
+Expected: FAIL（当前 `_function_call_output_item` 只保留文本 output，`ToolMessage.images` 没有任何 wire 表达）。
+
+- [ ] **Step 3: 实现**
+
+`matmaster/providers/transports/responses.py`，新增 helper：
+
+```python
+def _relay_content_for(message: ToolMessage) -> list[dict[str, Any]]:
+    if not message.images:
+        return []
+    content: list[dict[str, Any]] = [
+        {
+            "type": "input_text",
+            "text": (
+                f"[Images from {message.tool_name} "
+                f"(tool_call {message.tool_call_id})]"
+            ),
+        }
+    ]
+    content.extend(_input_image_part(image) for image in message.images)
+    return content
+```
+
+`ResponsesTransport.convert_messages` 改为带 pending relay 的遍历：
+
+```python
+    def convert_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
+        validate_tool_turn_sequence(messages)
+        out: list[dict[str, Any]] = []
+        pending_relay: list[dict[str, Any]] = []
+        for message in messages:
+            if isinstance(message, SystemMessage):
+                continue
+            if pending_relay and isinstance(message, UserMessage):
+                user_item = _user_input_item(message)
+                user_item["content"] = pending_relay + user_item["content"]
+                out.append(user_item)
+                pending_relay = []
+                continue
+            if pending_relay:
+                out.append({"role": "user", "content": pending_relay})
+                pending_relay = []
+            if isinstance(message, UserMessage):
+                out.append(_user_input_item(message))
+                continue
+            if isinstance(message, AssistantMessage):
+                out.extend(self._assistant_to_items(message))
+                continue
+            if isinstance(message, ToolMessage):
+                out.append(_function_call_output_item(message))
+                pending_relay.extend(_relay_content_for(message))
+                continue
+        if pending_relay:
+            out.append({"role": "user", "content": pending_relay})
+        return out
+```
+
+语义与 ChatCompletions relay 对齐：kernel `Message` 列表不插入假 user，只在 wire 层把工具图片转成模型可见的用户输入图片 item。
+
+- [ ] **Step 4: 跑测试确认通过 + Responses 回归**
+
+Run: `uv run pytest tests/matmaster/providers/test_responses_convert.py -q`
+Expected: 全 PASS。
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add matmaster/providers/transports/responses.py tests/matmaster/providers/test_responses_convert.py
+git commit -m "feat(providers): responses relays tool images via user input items"
 ```
 
 ---
@@ -1090,7 +1321,7 @@ def test_summary_prep_strips_images_even_within_budget():
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `python -m pytest tests/matmaster/context/test_compaction.py -q -k "images or summary_prep"`
+Run: `uv run pytest tests/matmaster/context/test_compaction.py -q -k "images or summary_prep"`
 Expected: FAIL（无常数 / early-return 原样返回带图消息）。
 
 - [ ] **Step 3: 实现**
@@ -1133,7 +1364,7 @@ def _drop_images_for_summary(msg: Message) -> Message:
 
 - [ ] **Step 4: 跑测试确认通过 + compaction 全量回归**
 
-Run: `python -m pytest tests/matmaster/context/test_compaction.py tests/matmaster/core/test_agent_compaction.py tests/matmaster/core/test_agent_kernel_compaction.py -q`
+Run: `uv run pytest tests/matmaster/context/test_compaction.py tests/matmaster/core/test_agent_compaction.py tests/matmaster/core/test_agent_kernel_compaction.py -q`
 Expected: 全 PASS。
 
 - [ ] **Step 5: Commit**
@@ -1201,7 +1432,7 @@ def test_budget_noop_within_limits():
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `python -m pytest tests/matmaster/types/test_message_normalization.py -q -k budget`
+Run: `uv run pytest tests/matmaster/types/test_message_normalization.py -q -k budget`
 Expected: FAIL，`ImportError: apply_tool_image_budget`。
 
 - [ ] **Step 3: 实现**
@@ -1260,7 +1491,7 @@ def apply_tool_image_budget(
 
 - [ ] **Step 4: 跑测试确认通过 + kernel 回归**
 
-Run: `python -m pytest tests/matmaster/types/test_message_normalization.py tests/matmaster/core -q`
+Run: `uv run pytest tests/matmaster/types/test_message_normalization.py tests/matmaster/core -q`
 Expected: 全 PASS。
 
 - [ ] **Step 5: Commit**
@@ -1333,7 +1564,7 @@ def test_events_without_images_restore_empty_list():
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `python -m pytest tests/services/test_chat_history_images.py -v`
+Run: `uv run pytest tests/services/test_chat_history_images.py -v`
 Expected: `test_events_to_messages_restores_tool_images` FAIL（images 为空）。
 
 - [ ] **Step 3: 实现三位点**
@@ -1414,7 +1645,7 @@ Expected: `test_events_to_messages_restores_tool_images` FAIL（images 为空）
 
 - [ ] **Step 4: 跑测试确认通过 + 相关服务回归**
 
-Run: `python -m pytest tests/services -q && python -m pytest tests/matmaster/services tests/matmaster/context/test_history_restore.py -q`
+Run: `uv run pytest tests/services -q && uv run pytest tests/matmaster/services tests/matmaster/context/test_history_restore.py -q`
 Expected: 全 PASS。
 
 - [ ] **Step 5: Commit**
@@ -1495,7 +1726,7 @@ def test_finalize_history_strips_images_when_vision_unsupported() -> None:
 
 - [ ] **Step 3: 跑测试确认失败**
 
-Run: `python -m pytest tests/services/test_image_input_service.py tests/matmaster/services/test_model_history_restore_service.py -q -k "strip or vision"`
+Run: `uv run pytest tests/services/test_image_input_service.py tests/matmaster/services/test_model_history_restore_service.py -q -k "strip or vision"`
 Expected: FAIL（函数不存在 / 构造参数不存在）。
 
 - [ ] **Step 4: 实现**
@@ -1580,7 +1811,7 @@ def build_history_wiring(
 
 - [ ] **Step 5: 跑测试确认通过 + 服务层回归**
 
-Run: `python -m pytest tests/services tests/matmaster/services -q`
+Run: `uv run pytest tests/services tests/matmaster/services -q`
 Expected: 全 PASS。
 
 - [ ] **Step 6: Commit**
@@ -1630,22 +1861,22 @@ def test_checkpoint_roundtrip_preserves_tool_images():
 
 - [ ] **Step 2: 跑该测试**
 
-Run: `python -m pytest tests/services/test_history_checkpoint_codec_images.py -v`
+Run: `uv run pytest tests/services/test_history_checkpoint_codec_images.py -v`
 Expected: PASS（若 FAIL，说明 codec 对未知字段有过滤，按报错修复——但按 `serialize_base_messages` 的 `model_dump(mode="json")` 实现不应发生）。
 
 - [ ] **Step 3: 全量测试回归**
 
-Run: `python -m pytest tests/matmaster tests/services -q`
+Run: `uv run pytest tests/matmaster tests/services -q`
 Expected: 全 PASS。任何失败先判断是否本计划改动引入；与本计划无关的预存失败记录后跳过，不顺手修。
 
 - [ ] **Step 3b: 确认事件存储容量（spec §9 持久化体积）**
 
 Run: `grep -n "content" src/sql/create_chat_tables.sql | head -5`
-Expected: `content` 列为 `JSON` 类型（调研已确认）。在最终汇报中注明部署要求：MySQL `max_allowed_packet` 需 ≥ 16M（单图 base64 后约 4 MiB，checkpoint 行上界为防线 2 预算量级）；这是部署配置项，不改代码。
+Expected: `content` 列为 `JSON` 类型（调研已确认）。在最终汇报中注明部署要求：MySQL `max_allowed_packet` 建议 ≥ 64M（单图 base64 后约 4 MiB，checkpoint 行上界为防线 2 的 16 MiB 图片预算量级，另有 JSON envelope / SQL packet 开销；若部署侧不能保证该阈值，应下调 `TOOL_IMAGE_BUDGET_MAX_BYTES` 后再发布）；这是部署配置项，不改代码。
 
 - [ ] **Step 4: 静态检查**
 
-Run: `pre-commit run --all-files`
+Run: `uv run --extra dev pre-commit run --all-files`
 Expected: 全过（ruff/格式钩子按仓库 .pre-commit 配置执行）。失败项逐一修复后重跑。
 
 - [ ] **Step 5: Commit**
@@ -1662,6 +1893,7 @@ git commit -m "test(services): checkpoint codec roundtrip anchor for tool images
 | 规格条目 | 任务 |
 |---|---|
 | §5.1-4 types 三字段 + dispatch + 事件 | Task 1、2 |
+| `ToolResult.images` 在 ToolRunner 截断路径不丢失 | Task 2b |
 | §5.5 事件恢复三位点 | Task 10 |
 | §5.6 checkpoint 零改动（回归锚） | Task 12 |
 | §5.7 SSE 携带 images（与 DB 同源映射） | Task 2 |
@@ -1669,6 +1901,7 @@ git commit -m "test(services): checkpoint codec roundtrip anchor for tool images
 | §6 vision 门控注入链 | Task 5 |
 | §7 Anthropic tool_result block | Task 6 |
 | §8 relay（含按消息归属、并入后继 user） | Task 7 |
+| Responses transport 的 vision profile 工具图 relay | Task 7b |
 | §9 防线 1 | Task 3、4 |
 | §9 防线 2（4 张/16 MiB） | Task 9 |
 | §9 防线 3（2000 常数 + 无条件剥图） | Task 8 |

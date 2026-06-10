@@ -11,7 +11,6 @@ def test_chat_send_request_trigger_fields_default():
     req = ChatSendRequest(content="hi")
     assert req.origin is None
     assert req.dedup_key is None
-    assert req.on_busy == "skip"
     assert req.delivery is None
 
 
@@ -22,7 +21,6 @@ def test_chat_send_request_accepts_delivery_spec():
         content="作业123已完成",
         origin="hpc_job",
         dedup_key="job:123:done",
-        on_busy="skip",
         delivery={"notify": True},
     )
     assert req.origin == "hpc_job"
@@ -366,7 +364,8 @@ def test_trigger_run_accepts_workspace_for_programmatic_wakeup():
     assert res.status == "enqueued"
     pushed = fake_redis.lpush_agent_run_job.call_args.args[0]
     assert pushed["workspace"] == "/share/case"
-    assert pushed["bohrium_required"] is True
+    # 载荷只承载用户/会话意图；workspace ⇒ Bohrium 的推导统一在 run_bohrium_stage
+    assert pushed["bohrium_required"] is False
     assert "remote_workdir" not in pushed
     assert "session_directory_source" not in pushed
 

@@ -275,7 +275,7 @@ def test_generate_send_stream_skips_current_task_in_history_replay():
             },
             job=_send_stream_job(),
         )
-        gen = service.generate_send_stream('sess-1', 'new question', ctx)
+        gen = service.generate_send_stream('sess-1', ctx)
         try:
             return await _collect_n_frames(gen, 5)
         finally:
@@ -561,7 +561,7 @@ def test_generate_send_stream_normalizes_replayed_history_source():
             },
             job=_send_stream_job(),
         )
-        gen = service.generate_send_stream('sess-1', 'new question', ctx)
+        gen = service.generate_send_stream('sess-1', ctx)
         try:
             return [
                 _decode_sse_payload(await gen.__anext__()),
@@ -646,7 +646,7 @@ def test_generate_send_stream_replay_prefers_run_result_over_response():
             },
             job=_send_stream_job(),
         )
-        gen = service.generate_send_stream('sess-1', 'new question', ctx)
+        gen = service.generate_send_stream('sess-1', ctx)
         try:
             return await _collect_n_frames(gen, 4)
         finally:
@@ -763,7 +763,7 @@ def test_generate_send_stream_subscribes_before_enqueue():
             },
             job=_send_stream_job(),
         )
-        gen = service.generate_send_stream('sess-1', 'new question', ctx)
+        gen = service.generate_send_stream('sess-1', ctx)
         try:
             return [
                 _decode_sse_payload(await gen.__anext__()),

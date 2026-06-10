@@ -71,7 +71,9 @@ def test_anchor_composition_includes_instructions_session_turn_and_jobs() -> Non
     assert context.images[0].url == "https://example.com/a.png"
 
 
-def test_continuation_composition_excludes_user_instructions_and_session_sections() -> None:
+def test_continuation_composition_excludes_user_instructions_and_session_sections() -> (
+    None
+):
     context = CONTINUATION_COMPOSITION.apply(
         ContextCompositionInputs(
             user_instructions_text="Use SI units.",

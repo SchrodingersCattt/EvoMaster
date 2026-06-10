@@ -55,7 +55,9 @@ def _step_user_instructions(
 def _step_compacted_history(
     inputs: ContextCompositionInputs,
 ) -> tuple[ContextSection, ...]:
-    return CompactedHistorySource(summary=inputs.compacted_history_summary).to_sections()
+    return CompactedHistorySource(
+        summary=inputs.compacted_history_summary
+    ).to_sections()
 
 
 def _step_session_sections(

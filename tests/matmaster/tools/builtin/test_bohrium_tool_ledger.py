@@ -19,9 +19,6 @@ class _FakeLedger:
     def record_kill(self, **kw):
         self.calls.append(("kill", kw))
 
-    def mark_handled(self, **kw):
-        self.calls.append(("handled", kw))
-
 
 def _ctx(sandbox: bool = True):
     return SimpleNamespace(

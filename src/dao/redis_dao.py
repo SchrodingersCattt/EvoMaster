@@ -352,17 +352,11 @@ class RedisDao:
     def mark_dedup_key_nx(
         self, dedup_key: str, value: str, ttl_sec: int = DEFAULT_DEDUP_TTL_SEC
     ) -> bool:
-        """成功入队后标记 dedup_key（SET NX EX）。返回是否首次设置成功。"""
-        client = self.get_command_client()
-        if not client:
-            return False
-        try:
-            return bool(
-                client.set(DEDUP_KEY_PREFIX + dedup_key, value, nx=True, ex=ttl_sec)
-            )
-        except Exception as e:
-            logger.warning("Redis mark_dedup_key_nx failed key=%s: %s", dedup_key, e)
-            return False
+        """成功入队后标记 dedup_key（SET NX EX）。返回是否首次设置成功。
+
+        不区分「已被占位」与「Redis 不可用」，两者都按未标记成功处理。
+        """
+        return bool(self.try_reserve_nx(DEDUP_KEY_PREFIX + dedup_key, value, ttl_sec))
 
     def try_reserve_nx(self, key: str, value: str, ttl_sec: int) -> bool | None:
         """三态 SET NX EX 占位：True=占位成功 / False=已被占位 / None=无 client 或异常。

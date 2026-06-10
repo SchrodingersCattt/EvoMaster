@@ -82,10 +82,7 @@ def _resolve_session_identity(
     row = sessions_source.get_session(session_id)
     if not isinstance(row, dict):
         row = {}
-    session_user_id = row.get("user_id")
-    if not session_user_id and hasattr(sessions_source, "get_session_user_id"):
-        session_user_id = sessions_source.get_session_user_id(session_id)
-    resolved_user_id = str(user_id or session_user_id or "")
+    resolved_user_id = str(user_id or row.get("user_id") or "")
     resolved_org_id = str(row.get("org_id") or "")
     return resolved_user_id, resolved_org_id
 
@@ -493,11 +490,6 @@ class AgentRunService:
                 supports_vision=llm_bundle.supports_vision,
             )
             history = wiring.history
-            bohrium_rebuild_events = (
-                tuple(wiring.bohrium_rebuild_events)
-                if wiring.bohrium_rebuild_events
-                else ()
-            )
             from src.services.interrupt_service import RedisInterruptChecker
 
             # -- Stage 5b: Turn input enrichment --
@@ -539,7 +531,6 @@ class AgentRunService:
                     turn_input=turn_input,
                     user_instructions=user_instructions,
                     active_skills=frozenset(),
-                    bohrium_rebuild_events=bohrium_rebuild_events,
                     ports=AgentRunPorts(
                         child_event_forward_sink=figure_coordinator.child_event_sink,
                         compaction=wiring.compaction,

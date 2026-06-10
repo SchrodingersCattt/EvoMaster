@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
@@ -502,55 +501,6 @@ class TestBuildRuntimeFullToolRunner:
         assert grep_tool is not None
         assert "/personal/.matmaster/skills" in glob_tool._path_access_roots
         assert "/personal/.matmaster/skills" in grep_tool._path_access_roots
-
-    def test_build_runtime_seeds_bohrium_registry_from_metadata(self) -> None:
-        from matmaster.core.exp import Exp
-
-        config = _make_exp_config()
-        exp = Exp(config)
-        base = _make_playground_context()
-        ctx = base.model_copy(
-            update={
-                "request": base.request.model_copy(
-                    update={
-                        "bohrium_rebuild_events": (
-                            {
-                                "action": "submit",
-                                "job_id": "job-1",
-                                "job_name": "alpha",
-                                "status": "Submitted",
-                                "cached": False,
-                            },
-                            {
-                                "action": "query",
-                                "job_id": "job-1",
-                                "status": "Running",
-                                "cached": False,
-                            },
-                            {
-                                "action": "query",
-                                "job_id": "job-1",
-                                "status": "Running",
-                                "cached": True,
-                            },
-                        )
-                    }
-                ),
-            }
-        )
-
-        runtime = asyncio.run(exp.build_runtime(ctx))
-
-        registry = runtime.kernel_runtime.resources.tool_runner.state.get(
-            "bohrium_job_registry"
-        )
-        assert registry is not None
-        rec = registry.get("job-1")
-        assert rec is not None
-        assert rec.job_name == "alpha"
-        assert rec.status == "running"
-        assert rec.poll_count == 1
-        assert rec.last_polled_at == 0.0
 
     @pytest.mark.asyncio
     async def test_build_runtime_preserves_figure_upload_config_in_runner_state(

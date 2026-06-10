@@ -305,7 +305,6 @@ def _bootstrap_runner(args: argparse.Namespace) -> tuple[Any, Any, Any, Any, Any
         workdir=args.workdir,
         llm_provider=llm_provider,
         llm_config=llm_config,
-        resolved_route=resolved,
         llm_bundle=llm_bundle,
         stream_hook=stream_hook,
         exp_config=exp_override,

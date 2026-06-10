@@ -139,22 +139,6 @@ def test_record_poll_normalizes_status_code() -> None:
     assert kw["is_terminal"] is True
 
 
-def test_mark_handled_delegates_to_dao() -> None:
-    table = MagicMock()
-    ledger, _ = build_bohrium_jobs_ports(
-        session_id="s",
-        invocation_id="inv",
-        user_id="u",
-        org_id="o",
-        workspace="/share/project",
-        table=table,
-    )
-    ledger.mark_handled(job_id="1", sandbox=True)
-    kw = table.mark_handled.call_args.kwargs
-    assert kw["user_id"] == "u" and kw["org_id"] == "o"
-    assert kw["job_id"] == "1" and kw["sandbox"] is True
-
-
 @pytest.mark.asyncio
 async def test_session_jobs_port_loads_active_and_pending() -> None:
     table = MagicMock()
@@ -230,23 +214,6 @@ def test_session_identity_resolution_prefers_explicit_run_user_id() -> None:
     assert org == "org-from-db"
 
 
-def test_session_identity_resolution_uses_service_user_id_fallback() -> None:
-    from src.services import agent_run_service as ars
-
-    class _FakeSessionsService:
-        def get_session(self, sid):
-            return None
-
-        def get_session_user_id(self, sid):
-            return "user-from-service"
-
-    user, org = ars._resolve_session_identity(
-        "sess-1", sessions_source=_FakeSessionsService()
-    )
-    assert user == "user-from-service"
-    assert org == ""
-
-
 def _snapshot(rows):
     from src.services.bohrium_delivery_ack import DeliverySnapshot
 
@@ -254,11 +221,7 @@ def _snapshot(rows):
         user_id="u",
         org_id="o",
         session_id="s",
-        row_ids=tuple(r["id"] for r in rows),
-        job_ids=tuple(r["job_id"] for r in rows),
         rows=tuple(rows),
-        status_counts={},
-        invocation_counts={},
         detail_limit=20,
     )
 

@@ -170,9 +170,7 @@ class TestNormalizeStream:
         assert chunks[-1].provider_state == ProviderState(
             transport="anthropic_messages",
             payload={
-                "thinking": [
-                    {"type": "redacted_thinking", "redacted_data": "sealed"}
-                ]
+                "thinking": [{"type": "redacted_thinking", "redacted_data": "sealed"}]
             },
         )
 

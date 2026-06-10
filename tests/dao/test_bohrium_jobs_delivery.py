@@ -50,7 +50,6 @@ def _seed_job(
     job_id="101",
     sandbox=False,
     status=None,
-    handled=False,
 ):
     """插入一行；status 传 'finished'/'failed'/'stopped' 时推进到终态。"""
     jobs_table.insert_submitted(
@@ -75,10 +74,6 @@ def _seed_job(
             status=status,
             is_terminal=True,
             backoff_seconds=30,
-        )
-    if handled:
-        jobs_table.mark_handled(
-            user_id=user, org_id=org, sandbox=sandbox, job_id=job_id
         )
 
 
@@ -230,7 +225,12 @@ def test_get_first_pending_failed_returns_earliest_unhandled(
     jobs_table, sessions_shadow
 ):
     _register_session(sessions_shadow)
-    _seed_job(jobs_table, job_id="101", status="failed", handled=True)
+    _seed_job(jobs_table, job_id="101", status="failed")
+    with sessions_shadow.cursor() as cur:
+        cur.execute(
+            "UPDATE bohrium_jobs SET handled_at = NOW() WHERE job_id = %s", ("101",)
+        )
+    sessions_shadow.commit()
     _seed_job(jobs_table, job_id="102", status="stopped")
     _seed_job(jobs_table, job_id="103", status="failed")
     _shift_terminal_at(sessions_shadow, job_id="102", seconds_ago=300)

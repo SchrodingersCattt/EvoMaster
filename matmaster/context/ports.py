@@ -147,9 +147,6 @@ class BohriumJobLedgerPort(Protocol):
     def record_kill(self, *, job_id: str, sandbox: bool) -> None:
         raise NotImplementedError
 
-    def mark_handled(self, *, job_id: str, sandbox: bool) -> None:
-        raise NotImplementedError
-
 
 @dataclass(frozen=True)
 class ContextAssemblyPorts:

@@ -410,10 +410,6 @@ class ChatSendRequest(BaseModel):
         default=None,
         description="内部发起幂等键；命中已存在则不触发。仅成功入队后标记，busy/error 不标记",
     )
-    on_busy: str = Field(
-        default="skip",
-        description="会话运行锁被占时的策略；第一版仅 skip（放弃本次触发，返回 busy 可重试）",
-    )
     delivery: DeliverySpec | None = Field(
         default=None,
         description="内部发起的完成通知控制；缺省时按 origin 约定默认（用户发送路径恒为 None=保持现状）",

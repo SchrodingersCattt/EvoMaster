@@ -368,7 +368,6 @@ class Exp:
         from matmaster.core.runtime_context_assembly import (
             build_runtime_context_assembly,
         )
-        from matmaster.tools.builtin.bohrium_tool.registry import JobRegistry
         from matmaster.types.tool_runner_state import ToolRunnerState
 
         runtime_context = build_runtime_context_assembly(
@@ -384,10 +383,6 @@ class Exp:
         capability_policy = DefaultCapabilityPolicy()
         scheduler = ToolScheduler()
         runner_state = ToolRunnerState()
-        bohrium_registry = JobRegistry.rebuild_from_events(
-            request.bohrium_rebuild_events
-        )
-        runner_state.set("bohrium_job_registry", bohrium_registry)
         figure_upload_config = request.ports.figure_upload.config
         if figure_upload_config is not None:
             runner_state.set("figure_upload_config", figure_upload_config)

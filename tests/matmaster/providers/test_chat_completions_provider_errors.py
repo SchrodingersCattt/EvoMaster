@@ -55,10 +55,7 @@ class TestChatStreamExceptionTranslation:
             request=MagicMock()
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [
-                c
-                async for c in provider.chat_stream([UserMessage(content="Hi")])
-            ]
+            _ = [c async for c in provider.chat_stream([UserMessage(content="Hi")])]
         assert exc_info.value.retryable is True
         assert exc_info.value.__cause__ is not None
 
@@ -68,10 +65,7 @@ class TestChatStreamExceptionTranslation:
             request=MagicMock()
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [
-                c
-                async for c in provider.chat_stream([UserMessage(content="Hi")])
-            ]
+            _ = [c async for c in provider.chat_stream([UserMessage(content="Hi")])]
         assert exc_info.value.retryable is True
 
     async def test_rate_limit_raises_retryable(self) -> None:
@@ -82,10 +76,7 @@ class TestChatStreamExceptionTranslation:
             message="rate limited",
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [
-                c
-                async for c in provider.chat_stream([UserMessage(content="Hi")])
-            ]
+            _ = [c async for c in provider.chat_stream([UserMessage(content="Hi")])]
         assert exc_info.value.retryable is True
 
     async def test_internal_server_error_raises_retryable(self) -> None:
@@ -96,10 +87,7 @@ class TestChatStreamExceptionTranslation:
             message="server error",
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [
-                c
-                async for c in provider.chat_stream([UserMessage(content="Hi")])
-            ]
+            _ = [c async for c in provider.chat_stream([UserMessage(content="Hi")])]
         assert exc_info.value.retryable is True
 
     async def test_auth_error_raises_non_retryable(self) -> None:
@@ -110,10 +98,7 @@ class TestChatStreamExceptionTranslation:
             message="invalid key",
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [
-                c
-                async for c in provider.chat_stream([UserMessage(content="Hi")])
-            ]
+            _ = [c async for c in provider.chat_stream([UserMessage(content="Hi")])]
         assert exc_info.value.retryable is False
 
     async def test_context_length_raises_non_retryable(self) -> None:
@@ -124,10 +109,7 @@ class TestChatStreamExceptionTranslation:
             message="context length exceeded",
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [
-                c
-                async for c in provider.chat_stream([UserMessage(content="Hi")])
-            ]
+            _ = [c async for c in provider.chat_stream([UserMessage(content="Hi")])]
         assert exc_info.value.retryable is False
 
     async def test_generic_bad_request_raises_retryable(self) -> None:
@@ -138,10 +120,7 @@ class TestChatStreamExceptionTranslation:
             message="something went wrong",
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [
-                c
-                async for c in provider.chat_stream([UserMessage(content="Hi")])
-            ]
+            _ = [c async for c in provider.chat_stream([UserMessage(content="Hi")])]
         assert exc_info.value.retryable is True
 
     async def test_httpx_read_timeout_raises_retryable(self) -> None:
@@ -152,10 +131,7 @@ class TestChatStreamExceptionTranslation:
             "read timed out"
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [
-                c
-                async for c in provider.chat_stream([UserMessage(content="Hi")])
-            ]
+            _ = [c async for c in provider.chat_stream([UserMessage(content="Hi")])]
         assert exc_info.value.retryable is True
 
     async def test_chat_stream_accepts_timeout_override(self) -> None:
@@ -195,10 +171,7 @@ class TestChatStreamErrorCategory:
             request=MagicMock()
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [
-                c
-                async for c in provider.chat_stream([UserMessage(content="hi")])
-            ]
+            _ = [c async for c in provider.chat_stream([UserMessage(content="hi")])]
         assert exc_info.value.error_category == "timeout"
         assert exc_info.value.retryable is True
 
@@ -208,10 +181,7 @@ class TestChatStreamErrorCategory:
             request=MagicMock()
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [
-                c
-                async for c in provider.chat_stream([UserMessage(content="hi")])
-            ]
+            _ = [c async for c in provider.chat_stream([UserMessage(content="hi")])]
         assert exc_info.value.error_category == "connection"
 
     async def test_rate_limit_category(self) -> None:
@@ -222,10 +192,7 @@ class TestChatStreamErrorCategory:
             message="rate limited",
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [
-                c
-                async for c in provider.chat_stream([UserMessage(content="hi")])
-            ]
+            _ = [c async for c in provider.chat_stream([UserMessage(content="hi")])]
         assert exc_info.value.error_category == "rate_limit"
 
     async def test_server_category(self) -> None:
@@ -236,10 +203,7 @@ class TestChatStreamErrorCategory:
             message="server error",
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [
-                c
-                async for c in provider.chat_stream([UserMessage(content="hi")])
-            ]
+            _ = [c async for c in provider.chat_stream([UserMessage(content="hi")])]
         assert exc_info.value.error_category == "server"
 
     async def test_auth_category(self) -> None:
@@ -250,10 +214,7 @@ class TestChatStreamErrorCategory:
             message="invalid key",
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [
-                c
-                async for c in provider.chat_stream([UserMessage(content="hi")])
-            ]
+            _ = [c async for c in provider.chat_stream([UserMessage(content="hi")])]
         assert exc_info.value.error_category == "auth"
         assert exc_info.value.retryable is False
 
@@ -265,10 +226,7 @@ class TestChatStreamErrorCategory:
             message="This model's maximum context length is 8192 tokens",
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [
-                c
-                async for c in provider.chat_stream([UserMessage(content="hi")])
-            ]
+            _ = [c async for c in provider.chat_stream([UserMessage(content="hi")])]
         assert exc_info.value.error_category == "context_overflow"
         assert exc_info.value.retryable is False
 
@@ -280,10 +238,7 @@ class TestChatStreamErrorCategory:
             message="invalid parameter",
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [
-                c
-                async for c in provider.chat_stream([UserMessage(content="hi")])
-            ]
+            _ = [c async for c in provider.chat_stream([UserMessage(content="hi")])]
         assert exc_info.value.error_category == "bad_request"
         assert exc_info.value.retryable is True
 
@@ -300,10 +255,7 @@ class TestChatStreamErrorCategory:
         )
 
         with pytest.raises(LLMError) as exc_info:
-            _ = [
-                c
-                async for c in provider.chat_stream([UserMessage(content="hi")])
-            ]
+            _ = [c async for c in provider.chat_stream([UserMessage(content="hi")])]
 
         assert exc_info.value.retryable is False
         assert exc_info.value.error_category == "bad_request"
@@ -335,9 +287,6 @@ class TestChatStreamErrorCategory:
             message=message,
         )
         with pytest.raises(LLMError) as exc_info:
-            _ = [
-                c
-                async for c in provider.chat_stream([UserMessage(content="hi")])
-            ]
+            _ = [c async for c in provider.chat_stream([UserMessage(content="hi")])]
         assert exc_info.value.retryable is False
         assert exc_info.value.error_category == category

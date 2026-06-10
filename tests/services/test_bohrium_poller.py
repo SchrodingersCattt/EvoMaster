@@ -320,11 +320,11 @@ def test_monitor_default_construct_reads_env_into_run_once(monkeypatch) -> None:
 
 
 def test_env_int_missing_and_invalid_fall_back(monkeypatch) -> None:
-    from src.services.bohrium_poller import _env_int
+    from src.utils.constant import env_int
 
     monkeypatch.delenv("BOHRIUM_X", raising=False)
-    assert _env_int("BOHRIUM_X", 5) == 5
+    assert env_int("BOHRIUM_X", 5) == 5
     monkeypatch.setenv("BOHRIUM_X", "not-an-int")
-    assert _env_int("BOHRIUM_X", 5) == 5
+    assert env_int("BOHRIUM_X", 5) == 5
     monkeypatch.setenv("BOHRIUM_X", "12")
-    assert _env_int("BOHRIUM_X", 5) == 12
+    assert env_int("BOHRIUM_X", 5) == 12

@@ -258,7 +258,6 @@ async def _patched_service(events: list[Any], *, send_cb: Any = None):
         events_table.add_event.return_value = True
         events_table.get_session_user_query_events.return_value = []
         events_table.query_context_events.return_value = []
-        events_table.get_bohrium_events.return_value = []
         events_table_fn.return_value = events_table
 
         fake_exp = _FakeExp(events)

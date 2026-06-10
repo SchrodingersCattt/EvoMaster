@@ -17,7 +17,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from src.services.bohrium_poller import _env_int
+from src.models.chat import DeliverySpec
+from src.utils.constant import env_int
 
 logger = logging.getLogger(__name__)
 
@@ -46,9 +47,9 @@ class SchedulerConfig:
     @classmethod
     def from_env(cls) -> SchedulerConfig:
         return cls(
-            progress_segments=_env_int("BOHRIUM_DELIVERY_PROGRESS_SEGMENTS", 3),
-            reservation_ttl=_env_int("BOHRIUM_DELIVERY_RESERVATION_TTL", 60),
-            scan_limit=_env_int("BOHRIUM_DELIVERY_SCAN_LIMIT", 200),
+            progress_segments=env_int("BOHRIUM_DELIVERY_PROGRESS_SEGMENTS", 3),
+            reservation_ttl=env_int("BOHRIUM_DELIVERY_RESERVATION_TTL", 60),
+            scan_limit=env_int("BOHRIUM_DELIVERY_SCAN_LIMIT", 200),
         )
 
 
@@ -124,9 +125,9 @@ class BohriumCompletionScheduler:
 
     def _ensure_deps(self) -> None:
         if self._jobs_table is None:
-            from src.dao.bohrium_jobs_table import BohriumJobsTable
+            from src.dao.bohrium_jobs_table import get_bohrium_jobs_table
 
-            self._jobs_table = BohriumJobsTable()
+            self._jobs_table = get_bohrium_jobs_table()
         if self._sessions_service is None:
             from src.services.sessions_service import get_sessions_service
 
@@ -228,8 +229,11 @@ class BohriumCompletionScheduler:
             summary["skipped_identity"] += 1
             return
 
-        # (b) status 门：仅 idle 放行（跨进程互斥的主门，DB 状态跨进程可见）
-        status = self._sessions_service.get_session_status(session_id)
+        # (b) status 门：仅 idle 放行（跨进程互斥的主门，DB 状态跨进程可见）；
+        # 复用 (a) 已取的行，避免二次查库
+        status = self._sessions_service.reconcile_waiting_status(
+            session_id, session.get("status")
+        )
         if status == "failed":
             summary["skipped_failed"] += 1
             failed_sessions.append(session_id)
@@ -277,7 +281,7 @@ class BohriumCompletionScheduler:
             prompt,
             origin="bohrium_completion",
             workspace=primary_unit["workspace"],
-            delivery={"notify": primary_reason is Reason.FINAL},
+            delivery=DeliverySpec(notify=primary_reason is Reason.FINAL),
         )
         if res.status == "enqueued":
             # 不记录任何状态：progress 是否「已发」由 worker ack 隐式表达

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from types import SimpleNamespace
 
+from src.models.chat import DeliverySpec
 from src.services.bohrium_completion_scheduler import (
     BohriumCompletionScheduler,
     Reason,
@@ -178,7 +179,7 @@ class _FakeSessions:
     def get_session(self, sid):
         return self.session
 
-    def get_session_status(self, sid):
+    def reconcile_waiting_status(self, sid, raw_status):
         return self.status
 
 
@@ -229,7 +230,7 @@ def test_tick_triggers_final_with_notify_and_no_persistent_state():
     assert call["session_id"] == "s1"
     assert call["origin"] == "bohrium_completion"
     assert call["workspace"] == "/share/p"
-    assert call["delivery"] == {"notify": True}
+    assert call["delivery"] == DeliverySpec(notify=True)
     assert "dedup_key" not in call  # 占位已由 NX 接管
     assert redis.calls[0]["ttl_sec"] == 60
 
@@ -262,7 +263,7 @@ def test_tick_merges_session_units_single_trigger_with_primary_reason():
     assert redis.calls[0]["key"] == "bohrium_delivery:u1:o1:s1:12"
     # primary = FINAL：文案 + notify
     assert "全部 Bohrium 作业已结束" in stream.calls[0]["prompt"]
-    assert stream.calls[0]["delivery"] == {"notify": True}
+    assert stream.calls[0]["delivery"] == DeliverySpec(notify=True)
 
 
 def test_tick_first_failure_fetches_job_info_into_prompt():
@@ -283,7 +284,7 @@ def test_tick_first_failure_fetches_job_info_into_prompt():
         }
     ]
     assert "j-9" in stream.calls[0]["prompt"]
-    assert stream.calls[0]["delivery"] == {"notify": False}
+    assert stream.calls[0]["delivery"] == DeliverySpec(notify=False)
 
 
 def test_tick_null_invocation_sentinel_unit_flows_through():

@@ -230,7 +230,6 @@ async def test_exception_emits_error_and_closed():
         events_table.query_user_turn_context_by_invocation.return_value = None
         events_table.add_event.return_value = True
         events_table.get_session_user_query_events.return_value = []
-        events_table.get_bohrium_events.return_value = []
         events_table_fn.return_value = events_table
 
         error_exp = _ErrorExp([])

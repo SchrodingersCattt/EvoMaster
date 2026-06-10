@@ -59,7 +59,7 @@ def test_finalize_history_strips_images_when_vision_unsupported() -> None:
     no_vision = ModelHistoryRestoreService(None, supports_vision=False)
     stripped = no_vision._finalize_history(history)
     assert stripped[0].images == []
-    assert "[历史图片已移除：当前模型不支持图片输入]" in stripped[0].content
+    assert "[历史图片已移除（当前模型不支持图片输入）" in stripped[0].content
 
     with_vision = ModelHistoryRestoreService(None, supports_vision=True)
     kept = with_vision._finalize_history(history)

@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import logging
 
-from matmaster.types.message_normalization import _merge_user_messages
-from matmaster.types.messages import Message, UserMessage
+from matmaster.types.message_normalization import canonicalize_messages_for_provider
+from matmaster.types.messages import Message
 
 logger = logging.getLogger(__name__)
 
@@ -64,17 +64,11 @@ class IncrementalMessagePipeline:
         if not tail:
             return list(self._canonical_cache)
 
-        for msg in tail:
-            if (
-                self._canonical_cache
-                and isinstance(self._canonical_cache[-1], UserMessage)
-                and isinstance(msg, UserMessage)
-            ):
-                self._canonical_cache[-1] = _merge_user_messages(
-                    self._canonical_cache[-1], msg
-                )
-                continue
-            self._canonical_cache.append(msg)
+        # 合并规则单源于 canonicalize：把缓存尾元素与新尾巴一起折叠后拼回，
+        # 缓存前缀不重算，增量性不变。
+        self._canonical_cache[-1:] = canonicalize_messages_for_provider(
+            [*self._canonical_cache[-1:], *tail]
+        )
 
         self._source_len = len(messages)
         self._prefix_fingerprint = (

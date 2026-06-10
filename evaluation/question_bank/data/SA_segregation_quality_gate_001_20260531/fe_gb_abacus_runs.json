@@ -1,70 +1,70 @@
 {
+  "lab_context": [
+    "For size-mismatched substitutional solutes, local relaxation is normally part of the comparison before interpreting energy differences.",
+    "A collaborator expects a short screening memo, not a full rerun plan."
+  ],
   "project_note": "Fe grain-boundary segregation screening with the same 80-atom GB model. Energies below are total energies from the latest ABACUS work directories collected by a collaborator.",
-  "segregation_formula": "For each solute X, use E_seg(X) = E(GB:X) - E(bulk-like:X). Negative E_seg means GB preference.",
   "runs": [
     {
-      "label": "mn_bulk_like",
-      "solute": "Mn",
-      "site": "bulk-like",
-      "workdir": "runs/2026-05-02/mn_bulk_relax_scf",
-      "input_stru_sha1": "9f1b-mn-bulk-relaxed",
-      "final_stru_sha1": "9f1b-mn-bulk-relaxed",
-      "energy_eV": -524.180,
       "OUT_scf_tail": [
         "charge density convergence is achieved",
         "final etot is -524.180 eV",
         "largest gradient after relaxation: 0.018 eV/Angstrom"
       ],
-      "run_note": "relax job copied to final_scf after ionic optimization"
+      "energy_eV": -524.18,
+      "final_stru_sha1": "9f1b-mn-bulk-relaxed",
+      "input_stru_sha1": "9f1b-mn-bulk-relaxed",
+      "label": "mn_bulk_like",
+      "run_note": "relax job copied to final_scf after ionic optimization",
+      "site": "bulk-like",
+      "solute": "Mn",
+      "workdir": "runs/2026-05-02/mn_bulk_relax_scf"
     },
     {
-      "label": "mn_gb",
-      "solute": "Mn",
-      "site": "grain-boundary",
-      "workdir": "runs/2026-05-02/mn_gb_relax_scf",
-      "input_stru_sha1": "c7a4-mn-gb-relaxed",
-      "final_stru_sha1": "c7a4-mn-gb-relaxed",
-      "energy_eV": -524.630,
       "OUT_scf_tail": [
         "charge density convergence is achieved",
         "final etot is -524.630 eV",
         "largest gradient after relaxation: 0.021 eV/Angstrom"
       ],
-      "run_note": "relax job copied to final_scf after ionic optimization"
+      "energy_eV": -524.63,
+      "final_stru_sha1": "c7a4-mn-gb-relaxed",
+      "input_stru_sha1": "c7a4-mn-gb-relaxed",
+      "label": "mn_gb",
+      "run_note": "relax job copied to final_scf after ionic optimization",
+      "site": "grain-boundary",
+      "solute": "Mn",
+      "workdir": "runs/2026-05-02/mn_gb_relax_scf"
     },
     {
-      "label": "sn_bulk_like",
-      "solute": "Sn",
-      "site": "bulk-like",
-      "workdir": "runs/2026-05-03/sn_bulk_static_try1",
-      "input_stru_sha1": "56aa-sn-bulk-initial",
-      "final_stru_sha1": "56aa-sn-bulk-initial",
-      "energy_eV": -519.910,
       "OUT_scf_tail": [
         "WARNING: electronic iteration reaches NITER",
         "final etot is -519.910 eV",
         "largest force estimated from last density: 1.38 eV/Angstrom"
       ],
-      "run_note": "quick static check before local relaxation; large solute displacement seen in viewer"
+      "energy_eV": -519.91,
+      "final_stru_sha1": "56aa-sn-bulk-initial",
+      "input_stru_sha1": "56aa-sn-bulk-initial",
+      "label": "sn_bulk_like",
+      "run_note": "quick static check before local relaxation; large solute displacement seen in viewer",
+      "site": "bulk-like",
+      "solute": "Sn",
+      "workdir": "runs/2026-05-03/sn_bulk_static_try1"
     },
     {
-      "label": "sn_gb",
-      "solute": "Sn",
-      "site": "grain-boundary",
-      "workdir": "runs/2026-05-03/sn_gb_static_try1",
-      "input_stru_sha1": "c7a4-mn-gb-relaxed",
-      "final_stru_sha1": "c7a4-mn-gb-relaxed",
-      "energy_eV": -520.060,
       "OUT_scf_tail": [
         "charge density convergence is achieved",
         "final etot is -520.060 eV",
         "largest force estimated from single point: 0.94 eV/Angstrom"
       ],
-      "run_note": "directory was prepared by copying a previous GB setup; filename says Sn but the STRU checksum equals the Mn GB run"
+      "energy_eV": -520.06,
+      "final_stru_sha1": "c7a4-mn-gb-relaxed",
+      "input_stru_sha1": "c7a4-mn-gb-relaxed",
+      "label": "sn_gb",
+      "run_note": "directory was prepared by copying a previous GB setup; filename says Sn but the STRU checksum equals the Mn GB run",
+      "site": "grain-boundary",
+      "solute": "Sn",
+      "workdir": "runs/2026-05-03/sn_gb_static_try1"
     }
   ],
-  "lab_context": [
-    "For size-mismatched substitutional solutes, local relaxation is normally part of the comparison before interpreting energy differences.",
-    "A collaborator expects a short screening memo, not a full rerun plan."
-  ]
+  "segregation_formula": "For each solute X, use E_seg(X) = E(GB:X) - E(bulk-like:X). Negative E_seg means GB preference."
 }

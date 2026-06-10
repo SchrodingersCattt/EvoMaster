@@ -153,7 +153,7 @@ async def test_planner_job_enqueues_with_planner_mode_field() -> None:
             side_effect=_stream_closed_immediately,
         ),
     ):
-        gen = service.generate_send_stream('sess-planner', 'plan it', ctx)
+        gen = service.generate_send_stream('sess-planner', ctx)
         await gen.__anext__()
         await gen.__anext__()
         await gen.__anext__()

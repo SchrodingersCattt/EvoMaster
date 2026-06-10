@@ -125,4 +125,3 @@ sufficient. For ordered Wyckoff targeting or multiple doping rules, use
 - Structure validated before and after (dimensionality, formula, min distance).
 - Formula, atom count, and lattice change match the requested transformation.
 - For stochastic operations, the seed and selected site summary are reported.
-

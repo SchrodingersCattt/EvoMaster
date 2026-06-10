@@ -14,7 +14,6 @@ from functools import lru_cache
 from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES
 from matmaster.context.sources.turn_input import TurnInput
 from src.dao.redis_dao import (
-    DEFAULT_DEDUP_TTL_SEC,
     STREAM_CHANNEL_PREFIX,
     get_redis_dao,
 )
@@ -57,7 +56,6 @@ def _start_redis_stream_subscription(
     loop: asyncio.AbstractEventLoop,
     *,
     thread_name: str,
-    ready_on_subscribe: bool = False,
 ) -> tuple[asyncio.Queue, threading.Event, threading.Event, threading.Thread]:
     redis_queue: asyncio.Queue = asyncio.Queue()
     shutdown_event = threading.Event()
@@ -78,8 +76,7 @@ def _start_redis_stream_subscription(
                     continue
                 msg_type = msg.get('type')
                 if msg_type == 'subscribe':
-                    if ready_on_subscribe:
-                        subscribe_ready.set()
+                    subscribe_ready.set()
                     continue
                 if msg_type != 'message':
                     continue
@@ -294,7 +291,8 @@ class ChatStreamService:
             'byok_credential_id': byok_credential_id,
             'turn_input': turn_input.to_payload(),
             'images': list(images or []),
-            'bohrium_required': bool(bohrium_required or workspace_value),
+            # 纯用户/会话意图；workspace ⇒ 必须上 Bohrium 的推导统一在 run_bohrium_stage
+            'bohrium_required': bool(bohrium_required),
             'workspace': workspace_value,
             'origin': origin,
             'delivery': delivery,
@@ -357,11 +355,9 @@ class ChatStreamService:
         *,
         origin: str,
         dedup_key: str | None = None,
-        delivery: DeliverySpec | dict | None = None,
-        on_busy: str = "skip",
+        delivery: DeliverySpec | None = None,
         mode: str | None = None,
         model: str | None = None,
-        dedup_ttl_sec: int = DEFAULT_DEDUP_TTL_SEC,
         workspace: str | None = None,
     ) -> TriggerResult:
         """程序化触发一次 agent run。"""
@@ -382,12 +378,7 @@ class ChatStreamService:
 
         resolved_mode = self._resolve_mode(mode)
         model_val = (model or '').strip() or None
-        if delivery is None:
-            delivery_payload: dict | None = None
-        elif hasattr(delivery, "model_dump"):
-            delivery_payload = delivery.model_dump()
-        else:
-            delivery_payload = dict(delivery)
+        delivery_payload = delivery.model_dump() if delivery is not None else None
 
         def _system_event_writer(task_id: str, invocation_id: str) -> dict:
             event = {
@@ -413,7 +404,6 @@ class ChatStreamService:
             mode=resolved_mode,
             model=model_val,
             byok_credential_id=None,
-            bohrium_required=bool(workspace),
             workspace=workspace,
             origin=origin,
             delivery=delivery_payload,
@@ -426,9 +416,7 @@ class ChatStreamService:
             return TriggerResult(status="error", reason="enqueue_failed")
 
         if dedup_key:
-            get_redis_dao().mark_dedup_key_nx(
-                dedup_key, handle.task_id, ttl_sec=dedup_ttl_sec
-            )
+            get_redis_dao().mark_dedup_key_nx(dedup_key, handle.task_id)
         logger.info(
             "trigger_run enqueued session_id=%s task_id=%s origin=%s",
             sid,
@@ -803,7 +791,6 @@ class ChatStreamService:
     async def generate_send_stream(
         self,
         session_id: str,
-        user_prompt: str,
         ctx: SendStreamContext,
     ) -> AsyncGenerator[str, None]:
         """
@@ -840,7 +827,6 @@ class ChatStreamService:
             sid,
             loop,
             thread_name=f"send-stream-queue-{sid[:8]}",
-            ready_on_subscribe=True,
         )
 
         try:

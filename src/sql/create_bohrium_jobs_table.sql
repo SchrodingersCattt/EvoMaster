@@ -35,6 +35,8 @@ CREATE TABLE `bohrium_jobs` (
     KEY `idx_poll_due` (`next_poll_at`, `id`),
     KEY `idx_session_active` (`user_id`, `org_id`, `session_id`, `submitted_at`),
     KEY `idx_session_pending` (`user_id`, `org_id`, `session_id`, `handled_at`, `terminal_at`),
+    -- scan_delivery_units 半连接内层扫描：未 handled 行远少于历史行
+    KEY `idx_pending_scan` (`handled_at`, `terminal_at`),
 
     CONSTRAINT `chk_sandbox` CHECK (`sandbox` IN (0, 1)),
     CONSTRAINT `chk_status` CHECK (`status` IN (

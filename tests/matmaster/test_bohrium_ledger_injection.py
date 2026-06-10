@@ -6,7 +6,7 @@ from typing import get_type_hints
 def test_bohrium_job_ledger_port_has_sync_record_methods() -> None:
     from matmaster.context.ports import BohriumJobLedgerPort
 
-    for name in ("record_submit", "record_poll", "record_kill", "mark_handled"):
+    for name in ("record_submit", "record_poll", "record_kill"):
         assert hasattr(BohriumJobLedgerPort, name)
     assert not hasattr(BohriumJobLedgerPort, "record_download")
 

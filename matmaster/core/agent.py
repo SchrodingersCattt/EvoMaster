@@ -332,6 +332,8 @@ class AgentKernel:
 
             canonical_messages = state.pipeline.feed_tail(state.messages)
             canonical_messages = apply_tool_image_budget(canonical_messages)
+            # 有意与 transport.convert_messages 双重校验：内核边界保证对任意
+            # provider 实现都在发起调用前 fail-fast（test_tool_protocol_guardrails）
             validate_tool_turn_sequence(canonical_messages)
 
             llm_response: LLMResponse | None = None

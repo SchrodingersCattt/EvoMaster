@@ -5,9 +5,11 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any
 
-import openai
-
-from matmaster.providers.transport import Transport
+from matmaster.providers.transport import (
+    dump_model_to_jsonable,
+    tool_image_relay_label,
+)
+from matmaster.providers.transports.openai_common import OpenAISDKTransport
 from matmaster.types.errors import LLMError
 from matmaster.types.message_normalization import validate_tool_turn_sequence
 from matmaster.types.messages import (
@@ -65,13 +67,7 @@ def _relay_content_for(message: ToolMessage) -> list[dict[str, Any]]:
     if not message.images:
         return []
     content: list[dict[str, Any]] = [
-        {
-            "type": "input_text",
-            "text": (
-                f"[Images from {message.tool_name} "
-                f"(tool_call {message.tool_call_id})]"
-            ),
-        }
+        {"type": "input_text", "text": tool_image_relay_label(message)}
     ]
     content.extend(_input_image_part(image) for image in message.images)
     return content
@@ -120,35 +116,11 @@ def _map_tool_choice(tool_choice: str | dict | None) -> str | dict:
     return "auto"
 
 
-def _dump_model(value: Any) -> Any:
-    if value is None:
-        return None
-    model_dump = getattr(value, "model_dump", None)
-    if callable(model_dump):
-        try:
-            return model_dump(mode="json", exclude_none=True)
-        except TypeError:
-            return model_dump(exclude_none=True)
-    if isinstance(value, dict):
-        return dict(value)
-    out: dict[str, Any] = {}
-    for key in dir(value):
-        if key.startswith("_"):
-            continue
-        try:
-            item = getattr(value, key)
-        except Exception:
-            continue
-        if isinstance(item, (str, int, float, bool, type(None), dict, list)):
-            out[key] = item
-    return out
-
-
 def _reasoning_items_from_output(output: Any) -> list[dict[str, Any]]:
     items: list[dict[str, Any]] = []
     for item in output or []:
         if getattr(item, "type", None) == "reasoning":
-            dumped = _dump_model(item)
+            dumped = dump_model_to_jsonable(item)
             if isinstance(dumped, dict):
                 items.append(dumped)
     return items
@@ -245,7 +217,7 @@ def _llm_error_from_failed_response(response: Any) -> LLMError:
     return LLMError(message, retryable=True, error_category="server")
 
 
-class ResponsesTransport(Transport):
+class ResponsesTransport(OpenAISDKTransport):
     """Native OpenAI Responses API transport (stateless encrypted reasoning replay)."""
 
     transport_tag = "responses"
@@ -278,24 +250,6 @@ class ResponsesTransport(Transport):
         self._max_tokens = max_tokens
         self._reasoning_effort = reasoning_effort
         self._reasoning_summary = reasoning_summary
-
-    async def _open_client(self) -> openai.AsyncOpenAI:
-        import httpx
-
-        read_t = float(max(self.stream_idle_timeout, self.stream_timeout) + 10)
-        http_client = httpx.AsyncClient(
-            timeout=httpx.Timeout(connect=15.0, read=read_t, write=30.0, pool=15.0)
-        )
-        return openai.AsyncOpenAI(
-            api_key=self._api_key,
-            base_url=self._base_url,
-            timeout=self._timeout,
-            max_retries=0,
-            http_client=http_client,
-        )
-
-    async def _close_client(self, client: openai.AsyncOpenAI) -> None:
-        await client.close()
 
     def _assistant_to_items(self, message: AssistantMessage) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
@@ -407,7 +361,7 @@ class ResponsesTransport(Transport):
             tool_calls=tool_calls or None,
             finish_reason=_finish_reason_from_response(raw),
             usage=_responses_usage_to_scalar_dict(usage),
-            usage_vendor=_dump_model(usage) if usage is not None else None,
+            usage_vendor=dump_model_to_jsonable(usage) if usage is not None else None,
             provider_state=_provider_state_from_reasoning(reasoning_items),
         )
 
@@ -464,7 +418,7 @@ class ResponsesTransport(Transport):
             if event_type == "response.output_item.done":
                 item = getattr(event, "item", None)
                 if getattr(item, "type", None) == "reasoning":
-                    dumped = _dump_model(item)
+                    dumped = dump_model_to_jsonable(item)
                     if isinstance(dumped, dict):
                         buffered_reasoning.append(dumped)
                 continue
@@ -484,41 +438,15 @@ class ResponsesTransport(Transport):
                 if usage is not None:
                     yield StreamChunk(
                         usage=_responses_usage_to_scalar_dict(usage),
-                        usage_vendor=_dump_model(usage),
+                        usage_vendor=dump_model_to_jsonable(usage),
                     )
                 continue
             if event_type == "response.failed":
                 response = getattr(event, "response", None)
                 raise _llm_error_from_failed_response(response)
 
-    def classify_error(self, exc: Exception) -> LLMError | None:
-        import httpx as _httpx
-
-        if isinstance(exc, LLMError):
-            return None
-        if isinstance(exc, openai.APITimeoutError):
-            return LLMError(str(exc), retryable=True, error_category="timeout")
-        if isinstance(exc, openai.APIConnectionError):
-            return LLMError(str(exc), retryable=True, error_category="connection")
-        if isinstance(exc, openai.RateLimitError):
-            return LLMError(str(exc), retryable=True, error_category="rate_limit")
-        if isinstance(exc, openai.InternalServerError):
-            return LLMError(str(exc), retryable=True, error_category="server")
-        if isinstance(exc, _httpx.ReadTimeout):
-            return LLMError(str(exc), retryable=True, error_category="timeout")
-        if isinstance(exc, (openai.AuthenticationError, openai.PermissionDeniedError)):
-            return LLMError(str(exc), retryable=False, error_category="auth")
-        if isinstance(exc, openai.BadRequestError):
-            err_str = str(exc)
-            err_text = err_str.lower()
-            if "context" in err_text and ("length" in err_text or "token" in err_text):
-                return LLMError(
-                    err_str, retryable=False, error_category="context_overflow"
-                )
-            if _is_non_retryable_responses_bad_request(err_text):
-                return LLMError(err_str, retryable=False, error_category="bad_request")
-            return LLMError(err_str, retryable=True, error_category="bad_request")
-        return None
+    def _is_non_retryable_bad_request(self, err_str: str) -> bool:
+        return _is_non_retryable_responses_bad_request(err_str)
 
     async def chat(
         self,

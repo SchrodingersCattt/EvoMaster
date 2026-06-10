@@ -50,8 +50,8 @@ def test_strip_all_history_images_both_directions() -> None:
     ]
     out = strip_all_history_images(messages)
     assert out[0].images == [] and out[1].images == []
-    assert "[历史图片已移除：当前模型不支持图片输入]" in out[0].content
-    assert "[历史图片已移除：当前模型不支持图片输入]" in out[1].content
+    assert "[历史图片已移除（当前模型不支持图片输入）" in out[0].content
+    assert "[历史图片已移除（当前模型不支持图片输入）" in out[1].content
     assert out[2] is messages[2]
     assert messages[1].images
 

@@ -118,12 +118,11 @@ class LoggingConfig:
     DEFAULT_JSON_FORMAT = False
 
     @classmethod
-    def get_main_app_config(cls) -> dict[str, Any]:
-        """Get logging configuration for main application."""
+    def _config(cls, log_filename: str) -> dict[str, Any]:
         return {
             'log_level': os.getenv('LOG_LEVEL', cls.DEFAULT_LOG_LEVEL),
             'log_file': os.path.join(
-                os.getenv('LOG_DIR', cls.DEFAULT_LOG_DIR), 'matmaster-evo.log'
+                os.getenv('LOG_DIR', cls.DEFAULT_LOG_DIR), log_filename
             ),
             'max_bytes': int(os.getenv('LOG_MAX_BYTES', cls.DEFAULT_MAX_BYTES)),
             'backup_count': int(
@@ -132,40 +131,21 @@ class LoggingConfig:
             'console_output': os.getenv('LOG_CONSOLE', 'true').lower() == 'true',
             'json_format': os.getenv('LOG_JSON_FORMAT', 'false').lower() == 'true',
         }
+
+    @classmethod
+    def get_main_app_config(cls) -> dict[str, Any]:
+        """Get logging configuration for main application."""
+        return cls._config('matmaster-evo.log')
 
     @classmethod
     def get_worker_config(cls) -> dict[str, Any]:
         """Get logging configuration for agent worker."""
-        return {
-            'log_level': os.getenv('LOG_LEVEL', cls.DEFAULT_LOG_LEVEL),
-            'log_file': os.path.join(
-                os.getenv('LOG_DIR', cls.DEFAULT_LOG_DIR),
-                'matmaster-evo-worker.log',
-            ),
-            'max_bytes': int(os.getenv('LOG_MAX_BYTES', cls.DEFAULT_MAX_BYTES)),
-            'backup_count': int(
-                os.getenv('LOG_BACKUP_COUNT', cls.DEFAULT_BACKUP_COUNT)
-            ),
-            'console_output': os.getenv('LOG_CONSOLE', 'true').lower() == 'true',
-            'json_format': os.getenv('LOG_JSON_FORMAT', 'false').lower() == 'true',
-        }
+        return cls._config('matmaster-evo-worker.log')
 
     @classmethod
     def get_monitor_config(cls) -> dict[str, Any]:
         """Get logging configuration for matmaster-monitor process."""
-        return {
-            'log_level': os.getenv('LOG_LEVEL', cls.DEFAULT_LOG_LEVEL),
-            'log_file': os.path.join(
-                os.getenv('LOG_DIR', cls.DEFAULT_LOG_DIR),
-                'matmaster-monitor.log',
-            ),
-            'max_bytes': int(os.getenv('LOG_MAX_BYTES', cls.DEFAULT_MAX_BYTES)),
-            'backup_count': int(
-                os.getenv('LOG_BACKUP_COUNT', cls.DEFAULT_BACKUP_COUNT)
-            ),
-            'console_output': os.getenv('LOG_CONSOLE', 'true').lower() == 'true',
-            'json_format': os.getenv('LOG_JSON_FORMAT', 'false').lower() == 'true',
-        }
+        return cls._config('matmaster-monitor.log')
 
 
 def setup_logging(

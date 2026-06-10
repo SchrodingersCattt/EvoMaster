@@ -2,8 +2,8 @@
 
 - snapshot：run 起点（acquire 成功后、run_agent 前）查询全量 pending terminal
   rows；查询执行瞬间即本轮交付边界，run 中途新终态的行留待下轮（at-least-once）。
-- confirm：run 成功收尾、release_session_run 之前，按 snapshot.row_ids 批量
-  mark_handled——ack 范围 = agent 看到范围。
+- confirm：run 成功收尾、release_session_run 之前，按 snapshot rows 批量
+  mark_handled_by_ids——ack 范围 = agent 看到范围。
 handled_at 的唯一写入点在这里；poller 与 trigger enqueued 均不得 ack。
 """
 
@@ -13,7 +13,7 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from src.services.bohrium_poller import _env_int
+from src.utils.constant import env_int
 
 logger = logging.getLogger(__name__)
 
@@ -28,11 +28,7 @@ class DeliverySnapshot:
     user_id: str
     org_id: str
     session_id: str
-    row_ids: tuple[int, ...]
-    job_ids: tuple[str, ...]
     rows: tuple[dict[str, Any], ...]
-    status_counts: dict[str, int]
-    invocation_counts: dict[str, int]
     detail_limit: int
 
 
@@ -58,31 +54,20 @@ def snapshot(
             return None
         table = jobs_table
         if table is None:
-            from src.dao.bohrium_jobs_table import BohriumJobsTable
+            from src.dao.bohrium_jobs_table import get_bohrium_jobs_table
 
-            table = BohriumJobsTable()
+            table = get_bohrium_jobs_table()
         rows = table.list_pending_terminal_snapshot(
             user_id=user_id, org_id=org_id, session_id=session_id
         )
         if not rows:
             return None
-        status_counts: dict[str, int] = {}
-        invocation_counts: dict[str, int] = {}
-        for job in rows:
-            status = str(job["status"])
-            status_counts[status] = status_counts.get(status, 0) + 1
-            inv = str(job.get("invocation_id") or "")
-            invocation_counts[inv] = invocation_counts.get(inv, 0) + 1
         return DeliverySnapshot(
             user_id=user_id,
             org_id=org_id,
             session_id=session_id,
-            row_ids=tuple(int(j["id"]) for j in rows),
-            job_ids=tuple(str(j["job_id"]) for j in rows),
             rows=tuple(rows),
-            status_counts=status_counts,
-            invocation_counts=invocation_counts,
-            detail_limit=_env_int("BOHRIUM_DELIVERY_DETAIL_LIMIT", 20),
+            detail_limit=env_int("BOHRIUM_DELIVERY_DETAIL_LIMIT", 20),
         )
     except Exception:  # noqa: BLE001
         logger.warning(
@@ -94,15 +79,15 @@ def snapshot(
 
 
 def confirm(snap: DeliverySnapshot, *, jobs_table: Any | None = None) -> int:
-    """按 snapshot.row_ids 批量 mark_handled；异常向上抛，由调用方决定善后。"""
+    """按 snapshot rows 批量 mark_handled_by_ids；异常向上抛，由调用方决定善后。"""
     table = jobs_table
     if table is None:
-        from src.dao.bohrium_jobs_table import BohriumJobsTable
+        from src.dao.bohrium_jobs_table import get_bohrium_jobs_table
 
-        table = BohriumJobsTable()
+        table = get_bohrium_jobs_table()
     return table.mark_handled_by_ids(
         user_id=snap.user_id,
         org_id=snap.org_id,
         session_id=snap.session_id,
-        row_ids=snap.row_ids,
+        row_ids=tuple(int(j["id"]) for j in snap.rows),
     )

@@ -8,7 +8,7 @@ from collections.abc import Callable
 
 from matmaster.bohrium.status import to_ledger_status
 from matmaster.context.ports import SessionJobs, SessionJobsQuery
-from src.dao.bohrium_jobs_table import BohriumJobsTable
+from src.dao.bohrium_jobs_table import BohriumJobsTable, get_bohrium_jobs_table
 from src.services.bohrium_delivery_ack import DeliverySnapshot
 from src.services.session_directory_service import (
     SessionDirectoryError,
@@ -132,15 +132,6 @@ class _BohriumJobLedger:
             job_id=str(job_id),
         )
 
-    def mark_handled(self, *, job_id: str, sandbox: bool) -> None:
-        self._require_identity()
-        self._table_ref.get().mark_handled(
-            user_id=self._user_id,
-            org_id=self._org_id,
-            sandbox=bool(sandbox),
-            job_id=str(job_id),
-        )
-
 
 class _RunSessionJobsPort:
     def __init__(
@@ -161,7 +152,7 @@ class _RunSessionJobsPort:
             return SessionJobs.empty()
         try:
             table = self._table_ref.get()
-            active = await asyncio.to_thread(
+            active_call = asyncio.to_thread(
                 table.query_session_active,
                 user_id=self._user_id,
                 org_id=self._org_id,
@@ -169,15 +160,19 @@ class _RunSessionJobsPort:
             )
             if self._snapshot is not None:
                 # 本轮交付边界固定：compaction 再调时返回同一 snapshot 的 pending
+                active = await active_call
                 pending = self._snapshot.rows
                 detail_limit: int | None = self._snapshot.detail_limit
             else:
-                rows = await asyncio.to_thread(
-                    table.query_session_pending_terminal,
-                    user_id=self._user_id,
-                    org_id=self._org_id,
-                    session_id=query.session_id,
-                    limit=5,
+                active, rows = await asyncio.gather(
+                    active_call,
+                    asyncio.to_thread(
+                        table.query_session_pending_terminal,
+                        user_id=self._user_id,
+                        org_id=self._org_id,
+                        session_id=query.session_id,
+                        limit=5,
+                    ),
                 )
                 pending = tuple(rows)
                 detail_limit = None
@@ -205,7 +200,7 @@ def build_bohrium_jobs_ports(
     spawn_id: str | None = None,
     delivery_snapshot: DeliverySnapshot | None = None,
     table: BohriumJobsTable | None = None,
-    table_factory: Callable[[], BohriumJobsTable] = BohriumJobsTable,
+    table_factory: Callable[[], BohriumJobsTable] = get_bohrium_jobs_table,
 ) -> tuple[_BohriumJobLedger | None, _RunSessionJobsPort]:
     """构造写 port 与读 port（共享同一个 DAO 实例）。"""
     table_ref = _BohriumJobsTableRef(table=table, table_factory=table_factory)

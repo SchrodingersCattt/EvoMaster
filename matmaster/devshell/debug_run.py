@@ -62,10 +62,6 @@ def main(prompt: str | None = None) -> None:
         default_profile_key=agent_default_llm,
     )
     llm_provider = llm_bundle.provider
-    resolved = llm_config.resolve(
-        model_override=MODEL_OVERRIDE,
-        default_key=agent_default_llm,
-    )
 
     # Runner
     from matmaster.devshell.event_observer import DevEventObserver
@@ -78,7 +74,6 @@ def main(prompt: str | None = None) -> None:
         workdir=WORKDIR,
         llm_provider=llm_provider,
         llm_config=llm_config,
-        resolved_route=resolved,
         llm_bundle=llm_bundle,
         stream_hook=stream_hook,
         exp_config=exp_cfg,

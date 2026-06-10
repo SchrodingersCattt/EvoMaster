@@ -46,15 +46,19 @@ def png_dimensions(raw: bytes) -> tuple[int, int] | None:
     return width, height
 
 
+def ensure_image_size_within_limit(nbytes: int) -> None:
+    if nbytes > MAX_IMAGE_BYTES:
+        raise ImageValidationError(
+            f"image is {nbytes / (1024 * 1024):.1f} MiB, exceeds the 3 MiB limit; "
+            "compress it first (e.g. via Bash) and re-Read"
+        )
+
+
 def build_image_payload(raw: bytes) -> ImagePayload:
     media_type = sniff_image_media_type(raw)
     if media_type is None:
         raise ValueError("not a supported image; sniff before calling")
-    if len(raw) > MAX_IMAGE_BYTES:
-        raise ImageValidationError(
-            f"image is {len(raw) / (1024 * 1024):.1f} MiB, exceeds the 3 MiB limit; "
-            "compress it first (e.g. via Bash) and re-Read"
-        )
+    ensure_image_size_within_limit(len(raw))
     width: int | None = None
     height: int | None = None
     if media_type == "image/png":

@@ -48,7 +48,6 @@ def _make_events_table() -> MagicMock:
     table.add_event.return_value = True
     table.get_session_user_query_events.return_value = []
     table.query_context_events.return_value = []
-    table.get_bohrium_events.return_value = []
     table.get_latest_scope_event_id.return_value = 0
     table.get_history_checkpoints.return_value = []
     table.get_session_events.return_value = []

@@ -43,7 +43,11 @@ def main():
     errors, warnings = validate_incar(
         tags,
         task_type=args.task_type,
-        system_info={"is_metal": args.is_metal, "enmax": args.enmax, "elements": elements},
+        system_info={
+            "is_metal": args.is_metal,
+            "enmax": args.enmax,
+            "elements": elements,
+        },
     )
 
     if errors:
