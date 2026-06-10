@@ -1,3 +1,3 @@
 name: mlips
 category: simulation
-description: "mlips plugin（成员: mlips, aissq-explorer；描述占位，待人工补全）"
+description: "Machine-learning interatomic potential calculations (DPA, MACE, SevenNet, MatterSim): optimization, MD, phonon, elastic, NEB via ASE drivers, plus AIS Square search for public checkpoints and DFT-labeled datasets."

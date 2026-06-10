@@ -1,3 +1,3 @@
 name: task-planning
 category: workflow-system
-description: "task-planning plugin（成员: plan-writer, plan-checker, plan-executor, spec-writer, acceptance-writer, stack-checker；描述占位，待人工补全）"
+description: "Planning-unit artifact stack for long multi-step materials-computation campaigns: write and check SPEC / ACCEPTANCE / PLAN documents, audit cross-file consistency, and execute planned phases under state-write discipline."

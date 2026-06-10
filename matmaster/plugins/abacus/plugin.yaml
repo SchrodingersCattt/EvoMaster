@@ -1,3 +1,3 @@
 name: abacus
 category: simulation
-description: "abacus plugin（成员: abacus, pyatb；描述占位，待人工补全）"
+description: "ABACUS DFT stack: prepare and run ABACUS calculations (SCF, relax, band/DOS, MD, phonon), with PyATB tight-binding post-processing of LCAO output (band unfolding, Berry phase, topological invariants)."
