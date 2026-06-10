@@ -554,8 +554,8 @@ class AnthropicMessagesTransport(Transport):
             elif block_type == "tool_use":
                 tool_calls.append(
                     ToolCallData(
-                        id=getattr(block, "id"),
-                        name=getattr(block, "name"),
+                        id=block.id,
+                        name=block.name,
                         arguments=dict(getattr(block, "input", {}) or {}),
                     )
                 )
