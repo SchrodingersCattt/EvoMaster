@@ -58,6 +58,14 @@ Nested body.
 
 SKILL_MD_NO_FRONTMATTER = "No frontmatter here."
 
+SKILL_MD_MEMBER = """\
+---
+name: member-skill
+description: Plugin member skill
+---
+Member body.
+"""
+
 
 class FakeRemoteSkillSession:
     def __init__(
@@ -521,6 +529,166 @@ class TestSkillRegistry:
 
         assert reg.get_skill("user-skill") is not None
         assert len(session.exec_calls) == 1
+
+
+class TestRemotePluginAttribution:
+    """远端 plugin.yaml 归属：挂载、祖先匹配、root 边界、失败语义、覆盖顺序。"""
+
+    ROOT = "/personal/.matmaster/plugins"
+
+    def test_remote_member_mounts_nearest_plugin(self) -> None:
+        """成员挂最近祖先 PluginInfo；name 缺省回退目录名；散装不受影响。"""
+        from matmaster.skills.registry import SkillRegistry
+
+        session = FakeRemoteSkillSession(
+            {
+                f"{self.ROOT}/outer/plugin.yaml": "description: Outer pack\n",
+                f"{self.ROOT}/outer/inner/plugin.yaml": (
+                    "name: inner-pack\ndescription: Inner\n"
+                ),
+                f"{self.ROOT}/outer/inner/skills/member/SKILL.md": SKILL_MD_MEMBER,
+                f"{self.ROOT}/outer/skills/outer-member/SKILL.md": (
+                    "---\nname: outer-member\ndescription: Outer member\n---\nBody\n"
+                ),
+                f"{self.ROOT}/loose/SKILL.md": (
+                    "---\nname: loose-skill\ndescription: Loose\n---\nBody\n"
+                ),
+            }
+        )
+
+        reg = SkillRegistry([], remote_session=session, remote_roots=[self.ROOT])
+
+        member = reg.get_skill("member-skill")
+        assert member is not None
+        assert member.plugin is not None
+        assert member.plugin.name == "inner-pack"
+        assert member.plugin.description == "Inner"
+        assert member.plugin_dir == PurePosixPath(f"{self.ROOT}/outer/inner")
+        outer_member = reg.get_skill("outer-member")
+        assert outer_member is not None
+        assert outer_member.plugin is not None
+        assert outer_member.plugin.name == "outer"
+        assert outer_member.plugin.description == "Outer pack"
+        loose = reg.get_skill("loose-skill")
+        assert loose is not None
+        assert loose.plugin is None
+        assert loose.plugin_dir is None
+
+    def test_plugin_yaml_at_root_is_ignored(self) -> None:
+        """远端根自身不作 plugin 根：根下 plugin.yaml 不产生归属。"""
+        from matmaster.skills.registry import SkillRegistry
+
+        session = FakeRemoteSkillSession(
+            {
+                f"{self.ROOT}/plugin.yaml": "name: root-pack\n",
+                f"{self.ROOT}/some-skill/SKILL.md": (
+                    "---\nname: some-skill\ndescription: S\n---\nBody\n"
+                ),
+            }
+        )
+
+        reg = SkillRegistry([], remote_session=session, remote_roots=[self.ROOT])
+
+        skill = reg.get_skill("some-skill")
+        assert skill is not None
+        assert skill.plugin is None
+
+    def test_invalid_plugin_manifest_fails_members(self) -> None:
+        """plugin.yaml 读失败或坏 YAML：成员加载失败；他组不受影响。"""
+        from matmaster.skills.registry import SkillRegistry
+
+        session = FakeRemoteSkillSession(
+            {
+                f"{self.ROOT}/bad-yaml/plugin.yaml": "{ name: [unbalanced",
+                f"{self.ROOT}/bad-yaml/skills/y/SKILL.md": (
+                    "---\nname: y-skill\ndescription: Y\n---\nBody\n"
+                ),
+                f"{self.ROOT}/unreadable/skills/z/SKILL.md": (
+                    "---\nname: z-skill\ndescription: Z\n---\nBody\n"
+                ),
+                f"{self.ROOT}/ok/plugin.yaml": "name: ok-pack\n",
+                f"{self.ROOT}/ok/skills/w/SKILL.md": (
+                    "---\nname: w-skill\ndescription: W\n---\nBody\n"
+                ),
+            },
+            errors={
+                f"{self.ROOT}/unreadable/plugin.yaml": "Permission denied",
+            },
+        )
+
+        reg = SkillRegistry([], remote_session=session, remote_roots=[self.ROOT])
+
+        assert reg.get_skill("y-skill") is None
+        assert reg.get_skill("z-skill") is None
+        assert reg.get_skill("w-skill") is not None
+
+    def test_skill_error_entry_skipped(self) -> None:
+        """SKILL.md error 条目：跳过该 skill，不影响同根其余条目。"""
+        from matmaster.skills.registry import SkillRegistry
+
+        session = FakeRemoteSkillSession(
+            {
+                f"{self.ROOT}/ok/plugin.yaml": "name: ok-pack\n",
+                f"{self.ROOT}/ok/skills/good/SKILL.md": (
+                    "---\nname: good-skill\ndescription: G\n---\nBody\n"
+                ),
+            },
+            errors={
+                f"{self.ROOT}/ok/skills/broken/SKILL.md": "I/O error",
+            },
+        )
+
+        reg = SkillRegistry([], remote_session=session, remote_roots=[self.ROOT])
+
+        names = {s.meta_info.name for s in reg.get_all_skills()}
+        assert names == {"good-skill"}
+
+    def test_skills_root_overrides_plugins_root_member(self) -> None:
+        """根顺序覆盖：散装个人 skill（skills 根，后扫描）覆盖同名 plugin 成员。"""
+        from matmaster.skills.registry import SkillRegistry
+
+        skills_root = "/personal/.matmaster/skills"
+        session = FakeRemoteSkillSession(
+            {
+                f"{self.ROOT}/pack/plugin.yaml": "name: pack\n",
+                f"{self.ROOT}/pack/skills/dup/SKILL.md": (
+                    "---\nname: dup-skill\ndescription: Member version\n---\nBody\n"
+                ),
+                f"{skills_root}/dup/SKILL.md": (
+                    "---\nname: dup-skill\ndescription: Loose version\n---\nBody\n"
+                ),
+            }
+        )
+
+        reg = SkillRegistry(
+            [],
+            remote_session=session,
+            remote_roots=[self.ROOT, skills_root],
+        )
+
+        dup = reg.get_skill("dup-skill")
+        assert dup is not None
+        assert dup.meta_info.description == "Loose version"
+        assert dup.plugin is None
+
+    def test_meta_info_context_groups_remote_members(self) -> None:
+        """提示词分组：远端成员归组在 [Plugin: ...] 名下。"""
+        from matmaster.skills.registry import SkillRegistry
+
+        session = FakeRemoteSkillSession(
+            {
+                f"{self.ROOT}/chem-pack/plugin.yaml": (
+                    "name: chem-pack\ndescription: Chemistry toolkit\n"
+                ),
+                f"{self.ROOT}/chem-pack/skills/member/SKILL.md": SKILL_MD_MEMBER,
+            }
+        )
+
+        reg = SkillRegistry([], remote_session=session, remote_roots=[self.ROOT])
+        ctx = reg.get_meta_info_context()
+
+        assert "[Plugin: chem-pack] Chemistry toolkit" in ctx
+        assert "  [Skill: member-skill] Plugin member skill" in ctx
 
 
 class TestSkillRegistryCache:
