@@ -6,7 +6,7 @@
 
 **Architecture:** Transport 基类保持协议骨架 + seam 设计。chat_completions 把 assistant 序列化从模块函数提升为实例 seam `_assistant_to_wire`，回放经单继承中间基类 `_ReasoningReplayChatCompletions` 复用（不用 mixin）；vendor 请求字段经 `_vendor_request_fields()` seam 注入 extra_body（vendor 缺省在前、显式配置在后可覆盖）。anthropic 顶层 cache_control 差异由 `_emit_top_level_auto_cache()` seam 表达，bedrock 子类 override 为 False。`ProviderConfig.vendor` 是协议内请求方言判别（非厂商名），factory 每协议一张 vendor→class 表，未知 vendor 装配期 fail-fast。
 
-**Tech Stack:** Python 3.13、pydantic v2、openai/anthropic SDK、pytest（`.venv/bin/pytest`，asyncio_mode=auto）、pre-commit（black/isort/flake8/autoflake）。
+**Tech Stack:** Python 3.13（uv 管理，AGENTS.md 约定 `uv run`）、pydantic v2、openai/anthropic SDK、pytest（`uv run --extra dev pytest`，asyncio_mode=auto）、pre-commit（black/isort/flake8/autoflake）。
 
 **Spec:** `docs/superpowers/specs/2026-06-10-provider-vendor-subclass-unification-design.md`（含二轮评审修订）
 
@@ -15,7 +15,8 @@
 - 不在主代码写任何 vendor 自动检测/兜底；BYOK 路径不动（恒 vendor=None）。
 - Task 5 是兼容位移除任务：只迁移既有测试、不新增测试，主代码净量不增。
 - 所有命令在仓库根目录 `/Users/kealdoom/Developer/dp/matmaster/matmaster-evo` 执行。
-- 当前分支 `codex/provider-stage1`，每个 Task 一个 commit，提交点必须全绿。
+- 命令约定（AGENTS.md）：测试用 `uv run --extra dev pytest ...`、风格用 `uv run --extra dev pre-commit run ...`，不要用系统 python/pytest 或裸 `.venv/bin/...`（pytest 在 optional `dev` 组，需 `--extra dev`）。
+- 当前分支 `codex/provider-stage1`，每个 Task 一个 commit，提交点必须全绿。本仓库未安装 `.git/hooks/pre-commit`，风格检查不会随 commit 自动触发——所以每个 Task 的 Commit 步骤都先对改动文件跑 changed-files pre-commit；若格式器改写文件，复跑本 Task 的测试命令确认绿后再 add + commit。
 
 ---
 
@@ -100,12 +101,14 @@ def _message_to_openai_dict(message: Message) -> dict[str, Any]:
 
 - [ ] **Step 3: 跑 providers 测试确认重构无行为变化**
 
-Run: `.venv/bin/pytest tests/matmaster/providers -q`
+Run: `uv run --extra dev pytest tests/matmaster/providers -q`
 Expected: 全部 PASS（纯重构，现有 convert/build_kwargs/normalize/provider 测试不变）
 
 - [ ] **Step 4: Commit**
 
 ```bash
+uv run --extra dev pre-commit run --files matmaster/providers/transports/chat_completions.py
+# 若有自动改写：复跑 Step 3 测试确认绿，再继续
 git add matmaster/providers/transports/chat_completions.py
 git commit -m "refactor(providers): lift chat_completions assistant serialization to instance seam
 
@@ -138,7 +141,7 @@ def test_normalize_response_extracts_reasoning_content() -> None:
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `.venv/bin/pytest tests/matmaster/providers/test_chat_completions_transport_normalize.py -q`
+Run: `uv run --extra dev pytest tests/matmaster/providers/test_chat_completions_transport_normalize.py -q`
 Expected: 新测试 FAIL（`out.reasoning_content` 为 None ≠ "thought"），其余 PASS
 
 - [ ] **Step 3: 实现**
@@ -160,12 +163,14 @@ Expected: 新测试 FAIL（`out.reasoning_content` 为 None ≠ "thought"），�
 
 - [ ] **Step 4: 跑测试确认通过**
 
-Run: `.venv/bin/pytest tests/matmaster/providers/test_chat_completions_transport_normalize.py -q`
+Run: `uv run --extra dev pytest tests/matmaster/providers/test_chat_completions_transport_normalize.py -q`
 Expected: 全部 PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
+uv run --extra dev pre-commit run --files tests/matmaster/providers/test_chat_completions_transport_normalize.py matmaster/providers/transports/chat_completions.py
+# 若有自动改写：复跑 Step 4 测试确认绿，再继续
 git add tests/matmaster/providers/test_chat_completions_transport_normalize.py matmaster/providers/transports/chat_completions.py
 git commit -m "feat(providers): extract reasoning_content in chat_completions normalize_response
 
@@ -267,7 +272,7 @@ def test_explicit_extra_body_overrides_vendor_fields() -> None:
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `.venv/bin/pytest tests/matmaster/providers/test_chat_completions_vendor_transports.py -q`
+Run: `uv run --extra dev pytest tests/matmaster/providers/test_chat_completions_vendor_transports.py -q`
 Expected: 收集即 FAIL（ImportError：`DeepSeekChatCompletionsTransport` 不存在）
 
 - [ ] **Step 3: 实现 seam 与子类**
@@ -325,12 +330,14 @@ class QwenChatCompletionsTransport(_ReasoningReplayChatCompletions):
 
 - [ ] **Step 4: 跑测试确认通过**
 
-Run: `.venv/bin/pytest tests/matmaster/providers -q`
+Run: `uv run --extra dev pytest tests/matmaster/providers -q`
 Expected: 全部 PASS（含新文件 7 个测试）
 
 - [ ] **Step 5: Commit**
 
 ```bash
+uv run --extra dev pre-commit run --files tests/matmaster/providers/test_chat_completions_vendor_transports.py matmaster/providers/transports/chat_completions.py
+# 若有自动改写：复跑 Step 4 测试确认绿，再继续
 git add tests/matmaster/providers/test_chat_completions_vendor_transports.py matmaster/providers/transports/chat_completions.py
 git commit -m "feat(providers): add qwen/deepseek reasoning replay vendor transports
 
@@ -417,12 +424,34 @@ class TestVendorDispatch:
                     )
                 )
             )
+
+    def test_anthropic_vendor_namespace_isolated(self) -> None:
+        with pytest.raises(ValueError, match="unsupported vendor"):
+            build_provider(
+                self._cfg(
+                    ProviderConfig(
+                        transport="anthropic_messages", api_key="k", vendor="qwen"
+                    )
+                )
+            )
+
+    def test_responses_vendor_namespace_isolated(self) -> None:
+        with pytest.raises(ValueError, match="unsupported vendor"):
+            build_provider(
+                self._cfg(
+                    ProviderConfig(
+                        transport="responses", api_key="k", vendor="qwen"
+                    )
+                )
+            )
 ```
+
+（后两个测试钉住 anthropic/responses builder 也必须走 `_vendor_class` 分发——漏改任一 builder 时 vendor 会被静默忽略而非 fail-fast，这两条会红。）
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `.venv/bin/pytest tests/matmaster/providers/test_llm_factory.py -q`
-Expected: TestVendorDispatch 5 个中 4 个 FAIL——注意 pydantic v2 默认忽略未知字段，vendor 入参不会报 ValidationError，失败形态是 isinstance 断言不成立、`pytest.raises` 报 DID NOT RAISE；`test_no_vendor_builds_protocol_base` 从一开始就 PASS（行为钉子）。其余既有测试 PASS
+Run: `uv run --extra dev pytest tests/matmaster/providers/test_llm_factory.py -q`
+Expected: TestVendorDispatch 7 个中 6 个 FAIL——注意 pydantic v2 默认忽略未知字段，vendor 入参不会报 ValidationError，失败形态是 isinstance 断言不成立、`pytest.raises` 报 DID NOT RAISE；`test_no_vendor_builds_protocol_base` 从一开始就 PASS（行为钉子）。其余既有测试 PASS
 
 - [ ] **Step 3: `config/llm.py` 加 vendor 字段**
 
@@ -528,12 +557,14 @@ def _build_chat_completions_transport(
 
 - [ ] **Step 5: 跑测试确认通过**
 
-Run: `.venv/bin/pytest tests/matmaster/providers tests/matmaster/config tests/matmaster/integration -q`
+Run: `uv run --extra dev pytest tests/matmaster/providers tests/matmaster/config tests/matmaster/integration -q`
 Expected: 全部 PASS（BYOK 构造 ProviderConfig 不带 vendor → None → 基类，既有测试不受影响）
 
 - [ ] **Step 6: Commit**
 
 ```bash
+uv run --extra dev pre-commit run --files matmaster/config/llm.py matmaster/providers/llm_factory.py tests/matmaster/providers/test_llm_factory.py
+# 若有自动改写：复跑 Step 5 测试确认绿，再继续
 git add matmaster/config/llm.py matmaster/providers/llm_factory.py tests/matmaster/providers/test_llm_factory.py
 git commit -m "feat(providers): add ProviderConfig.vendor and factory vendor dispatch
 
@@ -768,7 +799,7 @@ _ANTHROPIC_BY_VENDOR: dict[str | None, type[AnthropicMessagesTransport]] = {
 
 - [ ] **Step 8: 全绿确认**
 
-Run: `.venv/bin/pytest tests/matmaster/providers tests/matmaster/config tests/matmaster/integration -q`
+Run: `uv run --extra dev pytest tests/matmaster/providers tests/matmaster/config tests/matmaster/integration -q`
 Expected: 全部 PASS。另跑残留检查：
 
 Run: `grep -rn 'prompt_cache_compat\|PromptCacheCompat' --include='*.py' --include='*.yaml' matmaster/ config/ tests/`
@@ -777,6 +808,8 @@ Expected: 无输出（枚举痕迹清零）
 - [ ] **Step 9: Commit**
 
 ```bash
+uv run --extra dev pre-commit run --files matmaster/providers/transports/anthropic_messages.py matmaster/providers/llm_factory.py matmaster/config/llm.py config/llm_config.yaml tests/matmaster/providers/test_anthropic_messages_prompt_cache.py tests/matmaster/providers/test_llm_factory.py tests/matmaster/config/test_loader.py
+# 若有自动改写：复跑 Step 8 测试确认绿，再继续
 git add matmaster/providers/transports/anthropic_messages.py matmaster/providers/llm_factory.py matmaster/config/llm.py config/llm_config.yaml tests/matmaster/providers/test_anthropic_messages_prompt_cache.py tests/matmaster/providers/test_llm_factory.py tests/matmaster/config/test_loader.py
 git commit -m "refactor(providers): replace prompt_cache_compat enum with BedrockAnthropicTransport
 
@@ -842,8 +875,8 @@ class TestRealLlmConfigVendorWiring:
 
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `.venv/bin/pytest tests/matmaster/config/test_loader.py -q`
-Expected: 上述三处 FAIL（litellm-qwen 不存在），其余 PASS
+Run: `uv run --extra dev pytest tests/matmaster/config/test_loader.py -q`
+Expected: 三处 FAIL 且形态各异——1a 改写的 qwen 指向断言是 AssertionError（实际值仍为 `litellm`）；`test_vendor_providers_and_profile_pointing` 是 KeyError（providers 字典无 `litellm-qwen`）；`test_default_profile_builds_qwen_vendor_transport` 是 isinstance 断言不成立（默认 profile 仍构造基类 `ChatCompletionsTransport`）。其余 PASS
 
 - [ ] **Step 3: 改 `config/llm_config.yaml`**
 
@@ -876,12 +909,14 @@ providers:
 
 - [ ] **Step 4: 跑测试确认通过**
 
-Run: `.venv/bin/pytest tests/matmaster/config -q`
+Run: `uv run --extra dev pytest tests/matmaster/config -q`
 Expected: 全部 PASS
 
 - [ ] **Step 5: Commit**
 
 ```bash
+uv run --extra dev pre-commit run --files config/llm_config.yaml tests/matmaster/config/test_loader.py
+# 若有自动改写：复跑 Step 4 测试确认绿，再继续
 git add config/llm_config.yaml tests/matmaster/config/test_loader.py
 git commit -m "feat(config): wire qwen/deepseek profiles to vendor providers
 
@@ -894,15 +929,19 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 **Files:** 无新改动（只验证）
 
-- [ ] **Step 1: 全量测试**
+- [ ] **Step 1: 全量测试（注意 tests/dao 的 destructive guard）**
 
-Run: `.venv/bin/pytest tests -q`
-Expected: 全部 PASS（无 skip 之外的非绿项）
+Run: `uv run --extra dev pytest tests -q`
+
+`tests/dao/conftest.py` 只读 `.env.test` 且会对目标库 DROP/CREATE，按本机环境有三种合法结果：
+- 无 `.env.test` → dao 测试整体 skip，其余全 PASS ✅
+- `.env.test` 指向 `*_test` / `test_*` / allowlist 库且 MySQL ≥ 8.0.16 可连 → dao 真实跑库，全 PASS ✅
+- `.env.test` 指向非测试库 → guard `pytest.fail` ⚠️（当前本机即此状态：`MYSQL_DATABASE='matmaster'`）。这是**环境 blocker，不是本计划的回归**——改跑 `uv run --extra dev pytest tests --ignore=tests/dao -q` 确认其余全绿，并在最终汇报中如实注明 dao 因环境被排除。**严禁**为凑绿设置 `ALLOW_DESTRUCTIVE_BOHRIUM_JOBS_TESTS=1`（会对非测试命名的库执行破坏性 DDL）。
 
 - [ ] **Step 2: 风格检查**
 
-Run: `.venv/bin/python -m pre_commit run --all-files`（若 venv 无 pre-commit 则 `pre-commit run --all-files`）
-Expected: black/isort/flake8/autoflake 全过；若 black/isort 自动改写了文件，复跑 Step 1 后用 `git commit -a -m "style: format provider vendor changes"` 收尾（消息同样附 Co-Authored-By 行）
+Run: `uv run --extra dev pre-commit run --all-files`
+Expected: 全过（T1-T6 已逐 Task 对改动文件跑过 changed-files pre-commit，此处是最终全库扫尾）；若仍有自动改写，复跑 Step 1 后用 `git commit -a -m "style: format provider vendor changes"` 收尾（消息同样附 Co-Authored-By 行）
 
 - [ ] **Step 3: 行为对照自查（对 spec §7 净效果）**
 
