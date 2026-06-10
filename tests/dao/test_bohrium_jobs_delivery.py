@@ -241,3 +241,66 @@ def test_get_first_pending_failed_returns_earliest_unhandled(
     )
 
     assert row == {"job_id": "102", "job_name": "name-102", "status": "stopped"}
+
+
+def _force_lost(jobs_table, *, job_id):
+    """把活跃行拨老后经 mark_poll_error 置 lost（唯一合法写入路径）。"""
+    with jobs_table.get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE bohrium_jobs SET submitted_at = NOW() - INTERVAL 7200 SECOND "
+                "WHERE job_id = %s",
+                (job_id,),
+            )
+        conn.commit()
+    jobs_table.mark_poll_error(
+        user_id="u1",
+        org_id="o1",
+        sandbox=False,
+        job_id=job_id,
+        backoff_seconds=30,
+        lost_after_seconds=3600,
+    )
+
+
+def test_scan_lost_only_unit_has_final_shape(jobs_table, sessions_shadow):
+    # 全部作业失联：active 归零、pending_terminal 计入 → decide 判 FINAL。
+    # 锚定本方案要修的核心病灶：失联作业不再以 active>0 永久压制 FINAL。
+    _register_session(sessions_shadow)
+    _seed_job(jobs_table, inv="inv-1", job_id="401")
+    _force_lost(jobs_table, job_id="401")
+
+    units = jobs_table.scan_delivery_units(limit=10)
+
+    assert len(units) == 1
+    unit = units[0]
+    assert unit["pending_terminal"] == 1
+    assert unit["active"] == 0
+    assert unit["failed_total"] == 1
+    assert unit["failed_handled"] == 0
+    assert unit["succeeded"] == 0
+
+
+def test_scan_lost_with_active_has_first_failure_shape(jobs_table, sessions_shadow):
+    # 1 lost + 1 仍在跑：failed_total>0 且 failed_handled==0、active>0
+    # → decide 判 FIRST_FAILURE；get_first_pending_failed 取到 lost 行供文案。
+    _register_session(sessions_shadow)
+    _seed_job(jobs_table, inv="inv-1", job_id="402")
+    _seed_job(jobs_table, inv="inv-1", job_id="403")
+    _force_lost(jobs_table, job_id="402")
+
+    units = jobs_table.scan_delivery_units(limit=10)
+
+    assert len(units) == 1
+    unit = units[0]
+    assert unit["total"] == 2
+    assert unit["pending_terminal"] == 1
+    assert unit["active"] == 1
+    assert unit["failed_total"] == 1
+    assert unit["failed_handled"] == 0
+
+    first = jobs_table.get_first_pending_failed(
+        user_id="u1", org_id="o1", session_id="sess-1", invocation_key="inv-1"
+    )
+    assert first is not None
+    assert first["status"] == "lost"
