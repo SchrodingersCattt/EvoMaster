@@ -40,7 +40,9 @@ class ThoughtEvent(EventBase):
 
     type: Literal["thought"] = "thought"
     content: str = ""
-    stream_state: str | None = None  # 'start' | 'streaming' | 'segment_end' | 'end' | 'complete' | None
+    stream_state: str | None = (
+        None  # 'start' | 'streaming' | 'segment_end' | 'end' | 'complete' | None
+    )
     stream_id: str | None = None
     token_count: int = 0
     context: str | None = None  # e.g. 'step_execution'

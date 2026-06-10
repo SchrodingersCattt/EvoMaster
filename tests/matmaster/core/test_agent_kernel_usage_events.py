@@ -327,8 +327,7 @@ async def test_tool_call_events_carry_parent_turn_usage() -> None:
         async def execute_batch(self, tool_calls, ctx, *, on_result=None):
             del ctx, on_result
             return [
-                (tc, ToolResult(status="success", content="ok"))
-                for tc in tool_calls
+                (tc, ToolResult(status="success", content="ok")) for tc in tool_calls
             ]
 
     class TwoToolCallProvider(ToolCallingProvider):
@@ -389,8 +388,7 @@ async def test_reasoning_then_tool_call_thought_and_tool_call_share_turn() -> No
         async def execute_batch(self, tool_calls, ctx, *, on_result=None):
             del ctx, on_result
             return [
-                (tc, ToolResult(status="success", content="ok"))
-                for tc in tool_calls
+                (tc, ToolResult(status="success", content="ok")) for tc in tool_calls
             ]
 
     class ReasoningToolProvider(ToolCallingProvider):
@@ -474,9 +472,7 @@ async def test_retry_discarded_attempt_does_not_emit_usage_thought_complete() ->
             else:
                 yield StreamChunk(reasoning_content="kept reasoning")
                 yield StreamChunk(content="answer")
-                yield StreamChunk(
-                    finish_reason="stop", usage={"prompt_tokens": 10}
-                )
+                yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
 
     provider = ReasoningRetryProvider()
     events: list[Any] = []
