@@ -1,7 +1,7 @@
 # Provider vendor 子类统一：chat_completions reasoning 多轮回放 + anthropic prompt cache 子类化（详细设计）
 
 - 日期：2026-06-10
-- 状态：brainstorming 逐段确认完成（vendor 子类方向收敛），待落实施
+- 状态：brainstorming 逐段确认完成（vendor 子类方向收敛）；同日二轮设计评审修订（回放契约显式化、mixin 改中间基类、BYOK 缺口记录、R1 不作约束），待落实施
 - 上游：
   - `docs/superpowers/specs/2026-06-06-provider-aggregation-design.md`（三阶段总方向；第 4 节硬约束，尤其 #6 provider/transport 双层、#9 静态 capability 声明不建 matrix、#12 测试文化）
   - `docs/superpowers/specs/2026-06-08-provider-aggregation-stage3b-design.md`（native `anthropic_messages` transport）
@@ -22,7 +22,7 @@
 - **deepseek-v4 / v4-pro**：tool call 之间的 assistant `reasoning_content` **必须**回传（否则 400），非 tool call 轮回传则被忽略；无需额外开关。
 - **deepseek-reasoner (R1)**：输入带 `reasoning_content` 直接 **400**，必须丢弃。
 
-同协议、同一套 OpenAI wire，仅因 vendor 不同而「思考如何回传」不同——这正是 spec §7 预留的 vendor 维度在 `chat_completions` 上的首个落点。与之同源的 anthropic 侧 bedrock 顶层 cache_control 差异，本次一并收编为同一套 vendor 子类机制。
+同协议、同一套 OpenAI wire，仅因 vendor 不同而「思考如何回传」不同——这正是前案 §7 预留的 vendor 维度在 `chat_completions` 上的首个落点。与之同源的 anthropic 侧 bedrock 顶层 cache_control 差异，本次一并收编为同一套 vendor 子类机制。
 
 ---
 
@@ -74,8 +74,9 @@
 ## 4. 设计原则与决策对齐
 
 - **vendor 子类（继承）而非配置位**：transport 定协议骨架与 seam，vendor 差异用子类 override 表达。三条理由：(1) vendor 特化「就是」对协议方法（`build_kwargs`/`convert_messages`）的局部 override，是继承的本职；(2) `chat_stream`/`chat` 编排里调 `self.build_kwargs()`/`self.convert_messages()`，**多态自动织入**子类特化，零注入机制；(3) reasoning 回放的 wire 格式随协议绑定（chat_completions 的同级字段 ≠ anthropic 的 thinking block），vendor×协议是正确粒度，不存在可跨协议复用的「纯 vendor 逻辑」，组合的复用优势在此为空。
-- **兑现 spec §7 的 vendor 判别字段**：§7 原文预告「未来加 `vendor`/`flavor` 判别字段，由 transport 的 `_open_client` 与 model-id 解析消费」。本设计加 `ProviderConfig.vendor`，消费点扩到 `build_kwargs`/`convert_messages`（与 `_open_client` 同源）。
-- **能力轴随差异源（对 §7 的有意延伸）**：前案把能力挂 `ProviderConfig` 因 prompt cache 差异源是 base_url 指向的后端（native vs bedrock，两个 provider）。reasoning 差异源是 **model/vendor**，且 qwen/deepseek 当前共用同一 litellm proxy——故按 vendor 拆 provider、用 vendor 子类承载，是正确粒度。
+- **reasoning_content 契约修订（对母文档 §7.2 的有意变更）**：母文档三类内容表把 `reasoning_content` 定为展示用、明文、不回传 API（直到未来回传 PR）——本设计即该回传 PR：回放子类把展示字段直接序列化回 wire，**不经 provider_state**。代价是放弃 §7.3 的 transport tag 保护：会话中途手动跨协议切模型时（如 anthropic → deepseek），上一协议聚合的 reasoning 明文会被回放子类带给新 vendor。**已确认接受**：纯文本对各家无害、对推理连续性可能有益；为此把同一段文本再打包进 provider_state（双份存储 + tag 机制）属过度设计。
+- **兑现前案 §7 的 vendor 判别字段**：前案 §7 原文预告「未来加 `vendor`/`flavor` 判别字段，由 transport 的 `_open_client` 与 model-id 解析消费」。本设计加 `ProviderConfig.vendor`，消费点扩到 `build_kwargs`/`convert_messages`（与 `_open_client` 同源）。
+- **能力轴随差异源（对前案 §7 的有意延伸）**：前案把能力挂 `ProviderConfig` 因 prompt cache 差异源是 base_url 指向的后端（native vs bedrock，两个 provider）。reasoning 差异源是 **model/vendor**，且 qwen/deepseek 当前共用同一 litellm proxy——故按 vendor 拆 provider、用 vendor 子类承载，是正确粒度。
 - **对齐决策 #9**：`vendor` 是静态声明；未知 vendor 在 factory 装配时 fail-fast；不做运行时探测、不建 capability matrix。
 - **对齐决策 #12**：迁移已落地的 prompt_cache_compat 测试；新 vendor 子类补纯函数单测。
 - **clean migration、零兜底**：不在主代码写「检测到 deepseek-r1 就剥 reasoning_content」之类内联兜底——默认基类不回放即对 R1 安全；要回放的 vendor 用子类显式声明。
@@ -90,8 +91,9 @@ ProviderConfig:  transport(协议) + vendor(特化判别·新增) + api_key/base
        ▼
 Transport(协议骨架 + seam；满足 LLMProvider Protocol 的是具体子类)
   ├─ ChatCompletionsTransport            (chat_completions 协议基本实现)
-  │    ├─ QwenChatCompletionsTransport       回放 reasoning_content + 请求注 preserve_thinking
-  │    └─ DeepSeekChatCompletionsTransport   回放 reasoning_content
+  │    └─ _ReasoningReplayChatCompletions    中间基类：回放 reasoning_content
+  │         ├─ QwenChatCompletionsTransport      + 请求注 preserve_thinking
+  │         └─ DeepSeekChatCompletionsTransport  纯回放
   └─ AnthropicMessagesTransport          (anthropic_messages 协议基本实现 = native 行为)
        └─ BedrockAnthropicTransport          抑制顶层 cache_control（取代 prompt_cache_compat 枚举）
 ```
@@ -136,24 +138,27 @@ def convert_messages(self, messages):
 
 def _vendor_request_fields(self) -> dict[str, Any]:
     return {}                            # 基类：无 vendor 字段
-# build_kwargs 现有 extra_body 注入处（:415 区）追加：extra_body.update(self._vendor_request_fields())
+# build_kwargs extra_body 注入处（:415 区）：先 extra_body.update(self._vendor_request_fields())，
+# 再并入 self._extra_body——vendor 缺省值在前、显式配置在后可覆盖。当前 profile 路径传不进
+# extra_body 实际无碰撞，纯属定死惯例：代码缺省值可被配置覆盖。
 ```
 
 非流式补全（协议级，对所有 chat_completions vendor 适用，对 R1 安全因默认不回放）：`normalize_response` 的 `LLMResponse(...)` 增 `reasoning_content=getattr(message, "reasoning_content", None)`。
 
-回放复用 + vendor 子类：
+回放复用 + vendor 子类（二轮修订：单继承中间基类，原 mixin 方案废弃）：
 ```python
-class _ReasoningReplayMixin:
+class _ReasoningReplayChatCompletions(ChatCompletionsTransport):
+    """中间基类：OpenAI 兼容同级字段回放。"""
     def _assistant_to_wire(self, message):
-        payload = super()._assistant_to_wire(message)   # MRO 接力到协议基类
+        payload = super()._assistant_to_wire(message)
         if message.reasoning_content is not None:
             payload["reasoning_content"] = message.reasoning_content
         return payload
 
-class DeepSeekChatCompletionsTransport(_ReasoningReplayMixin, ChatCompletionsTransport):
+class DeepSeekChatCompletionsTransport(_ReasoningReplayChatCompletions):
     pass                                 # 纯回放
 
-class QwenChatCompletionsTransport(_ReasoningReplayMixin, ChatCompletionsTransport):
+class QwenChatCompletionsTransport(_ReasoningReplayChatCompletions):
     def _vendor_request_fields(self):
         return {"preserve_thinking": True}
 ```
@@ -204,6 +209,8 @@ _ANTHROPIC_BY_VENDOR = {
     "bedrock": BedrockAnthropicTransport,
 }
 # builder 取 cls = _<...>_BY_VENDOR[provider.vendor]（KeyError 包成 ValueError 列可用 vendor）
+# vendor 合法性仅在 factory 装配时校验（与未知 transport 的现行为一致），不在 config 加载期——
+# 避免把 factory 的 vendor 表反向耦合进 config/llm.py 纯数据 schema
 # 删 _build_anthropic_messages_transport 里 prompt_cache_compat=provider.prompt_cache_compat 一行
 ```
 
@@ -248,9 +255,9 @@ litellm-anthropic:
 ## 8. 取舍与未来扩展
 
 - **子类 vs 配置位/组合/独立 provider 层**：选子类。配置位（前案）把 vendor 知识摊成数据再散落 if，用户评价别扭；组合（VendorDialect 策略对象）多一层抽象且无法靠多态自动织入编排；独立 Provider 行为层与现有 `LLMProvider` Protocol（已是抽象面）+ transport 子类（已是实现）职责重叠，是无独立职责的中间层。子类贴现有继承轴、靠多态零成本织入、命中 §7 缝。
-- **回放复用用 mixin**：qwen/deepseek 的回放是同一段 OpenAI 兼容逻辑，`_ReasoningReplayMixin` 避免两子类重复；将来第三个回放 vendor 直接复用。
+- **回放复用用单继承中间基类（二轮修订，原 mixin 方案废弃）**：qwen/deepseek 的回放是同一段 OpenAI 兼容逻辑，由 `_ReasoningReplayChatCompletions(ChatCompletionsTransport)` 承载，两子类继承之。不用 mixin 的理由：回放 wire 格式绑协议（§4 已论证无跨协议复用），mixin 相对中间基类的唯一优势——跨继承链横向复用——为空集；且裸 mixin 调 `super()._assistant_to_wire()` 需协作式多继承心智 + mypy 额外标注。将来第三个回放 vendor 直接继承该中间基类。
 - **不做 `enable_thinking`/`thinking_budget`**：YAGNI。qwen3.7-max（max 系列、`reasoning_effort: high`）大概率默认开思考；若实测 `preserve_thinking` 须配 `enable_thinking` 才生效，再在 `QwenChatCompletionsTransport._vendor_request_fields` 平铺加一项。
-- **不专门处理 deepseek-r1**：当前无 R1 profile；默认基类不回放已对其 400 约束安全。将来接 R1 直接用基类 `ChatCompletionsTransport`（vendor=None）即可。
+- **不专门处理 deepseek-r1**：R1 已基本淘汰，不作为设计约束（二轮评审确认）；当前无 R1 profile。§3 矩阵保留其行仅作「默认不回放天然安全」的佐证——真要接，用基类 `ChatCompletionsTransport`（vendor=None）即可。由此也明确：`vendor` 的真实语义是**请求方言**而非厂商（同厂商不同模型可属不同方言）。
 - **未来同源扩展**：spec §7 的另一维度——直连 Bedrock/Vertex 的 client 构造方言（`AnthropicBedrock`/`AnthropicVertex` + SigV4/OAuth + region/ARN model-id）——同样由 `ProviderConfig.vendor` 驱动，在对应 vendor 子类 override `_open_client` 与 model-id 解析。与本次 reasoning/cache 子类同一套机制，本次不实现，仅确认落点同源。
 
 ---
@@ -262,4 +269,5 @@ litellm-anthropic:
 - 不做 `enable_thinking`/`thinking_budget`、不专门处理 deepseek-r1、不实现直连 Bedrock/Vertex client 构造方言。
 - 不建 capability matrix / preflight 子系统，不做运行时 capability 探测。
 - 不在主代码写「检测到某 vendor 自动剥/补字段」之类内联兜底——回放与请求字段由 vendor 子类显式承载。
+- 不动 BYOK 路径：`build_byok_provider_bundle` 构造的 ProviderConfig 恒为 vendor=None（基类）。自带 deepseek key 跑 v4 + tools 的多轮 400 是**已知缺口**（现状即坏，非本次回归）；凭证侧引入 vendor 概念留待后续。
 - 不解决 litellm proxy strip reasoning_content（#26395）的外部依赖——需确认 proxy 版本，非本仓库代码范畴。
