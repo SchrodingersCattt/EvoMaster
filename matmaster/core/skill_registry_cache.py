@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
@@ -9,6 +10,8 @@ from matmaster.skills.registry import (
     SkillRegistry,
     SkillRegistryCache,
     _normalize_remote_roots,
+    expand_disabled_plugins,
+    read_disabled_plugins,
 )
 from matmaster.skills.settings import (
     disabled_skill_names_from_remote_settings as _disabled_skill_names_from_remote_settings,
@@ -18,6 +21,8 @@ from matmaster.skills.settings import (
 )
 from matmaster.skills.settings import local_user_skills_root as _local_user_skills_root
 from matmaster.skills.settings import remote_skill_roots as _remote_skill_roots
+
+logger = logging.getLogger(__name__)
 
 SkillRegistryCacheKey = tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]
 
@@ -59,7 +64,13 @@ def build_cached_skill_registry(
     if not roots and not remote_roots:
         return None
 
-    config_disabled_skill_names = _normalized_names(skills_cfg.disabled_skill_names)
+    plugin_disabled = expand_disabled_plugins(
+        roots,
+        read_disabled_plugins(Path(skills_cfg.config_dir) / "plugins.yaml"),
+    )
+    config_disabled_skill_names = _normalized_names(
+        [*skills_cfg.disabled_skill_names, *plugin_disabled]
+    )
 
     key = skill_registry_cache_key(
         local_roots=roots,
@@ -86,6 +97,17 @@ def build_cached_skill_registry(
         )
         if disabled_skill_names:
             registry.remove_skills(disabled_skill_names)
+        if plugin_disabled:
+            for skill in registry.get_all_skills():
+                broken = [
+                    dep for dep in skill.meta_info.depends_on if dep in plugin_disabled
+                ]
+                if broken:
+                    logger.warning(
+                        "Skill %r depends_on member(s) of disabled plugin(s): %s",
+                        skill.meta_info.name,
+                        ", ".join(broken),
+                    )
         return registry
 
     return skill_cache.get_or_build(key, build)
