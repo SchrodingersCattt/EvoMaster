@@ -41,38 +41,6 @@ def _user_message_to_dict(message: UserMessage) -> dict[str, Any]:
     return {"role": message.role.value, "content": parts}
 
 
-def _assistant_message_to_dict(message: AssistantMessage) -> dict[str, Any]:
-    payload: dict[str, Any] = {"role": message.role.value, "content": message.content}
-    if message.tool_calls is not None:
-        payload["tool_calls"] = [
-            {
-                "id": tc.id,
-                "type": "function",
-                "function": {"name": tc.name, "arguments": tc.arguments_json},
-            }
-            for tc in message.tool_calls
-        ]
-    return payload
-
-
-def _message_to_openai_dict(message: Message) -> dict[str, Any]:
-    if isinstance(message, UserMessage):
-        payload = _user_message_to_dict(message)
-    elif isinstance(message, AssistantMessage):
-        payload = _assistant_message_to_dict(message)
-    elif isinstance(message, ToolMessage):
-        payload = {
-            "role": message.role.value,
-            "content": message.content,
-            "tool_call_id": message.tool_call_id,
-        }
-    else:
-        payload = {"role": message.role.value, "content": message.content}
-    if payload.get("content") is None:
-        payload["content"] = ""
-    return payload
-
-
 @dataclass
 class _StreamToolCallState:
     """Provider-local state for one logical streaming tool call."""
@@ -380,10 +348,43 @@ class ChatCompletionsTransport(Transport):
     async def _close_client(self, client: openai.AsyncOpenAI) -> None:
         await client.close()
 
+    def _assistant_to_wire(self, message: AssistantMessage) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "role": message.role.value,
+            "content": message.content,
+        }
+        if message.tool_calls is not None:
+            payload["tool_calls"] = [
+                {
+                    "id": tc.id,
+                    "type": "function",
+                    "function": {"name": tc.name, "arguments": tc.arguments_json},
+                }
+                for tc in message.tool_calls
+            ]
+        return payload
+
+    def _message_to_wire(self, message: Message) -> dict[str, Any]:
+        if isinstance(message, AssistantMessage):
+            payload = self._assistant_to_wire(message)
+        elif isinstance(message, UserMessage):
+            payload = _user_message_to_dict(message)
+        elif isinstance(message, ToolMessage):
+            payload = {
+                "role": message.role.value,
+                "content": message.content,
+                "tool_call_id": message.tool_call_id,
+            }
+        else:
+            payload = {"role": message.role.value, "content": message.content}
+        if payload.get("content") is None:
+            payload["content"] = ""
+        return payload
+
     def convert_messages(self, messages: list[Message]) -> list[dict[str, Any]]:
-        """canonical list[Message] -> OpenAI-compatible wire dicts."""
+        """canonical list[Message] -> OpenAI-compatible wire dicts。"""
         validate_tool_turn_sequence(messages)
-        return [_message_to_openai_dict(message) for message in messages]
+        return [self._message_to_wire(message) for message in messages]
 
     def build_kwargs(
         self,
