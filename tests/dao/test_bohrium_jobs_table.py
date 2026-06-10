@@ -225,6 +225,7 @@ def test_mark_poll_error_marks_active_unknown(jobs_table) -> None:
         sandbox=True,
         job_id="e1",
         backoff_seconds=45,
+        lost_after_seconds=86400,
     )
     row = jobs_table.get_by_owner_job(
         user_id="user-1", org_id="org-1", sandbox=True, job_id="e1"
@@ -251,9 +252,172 @@ def test_mark_poll_error_does_not_touch_terminal(jobs_table) -> None:
         sandbox=True,
         job_id="e2",
         backoff_seconds=45,
+        lost_after_seconds=86400,
     )
     row = jobs_table.get_by_owner_job(
         user_id="user-1", org_id="org-1", sandbox=True, job_id="e2"
     )
     assert row["status"] == "finished"
+    assert row["next_poll_at"] is None
+
+
+def _age_job_silence(jobs_table, job_id: str, *, seconds: int) -> None:
+    """把失联基准（submitted_at 与 last_polled_at，若有）拨老 seconds 秒。"""
+    with jobs_table.get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE bohrium_jobs SET "
+                "submitted_at = NOW() - INTERVAL %s SECOND, "
+                "last_polled_at = IF(last_polled_at IS NULL, NULL, "
+                "NOW() - INTERVAL %s SECOND) "
+                "WHERE job_id = %s",
+                (int(seconds), int(seconds), job_id),
+            )
+        conn.commit()
+
+
+def test_mark_poll_error_lost_after_continuous_silence(jobs_table) -> None:
+    jobs_table.insert_submitted(**_submit_kwargs(job_id="e3"))
+    _age_job_silence(jobs_table, "e3", seconds=7200)
+    jobs_table.mark_poll_error(
+        user_id="user-1",
+        org_id="org-1",
+        sandbox=True,
+        job_id="e3",
+        backoff_seconds=45,
+        lost_after_seconds=3600,
+    )
+    row = jobs_table.get_by_owner_job(
+        user_id="user-1", org_id="org-1", sandbox=True, job_id="e3"
+    )
+    assert row["status"] == "lost"
+    assert row["terminal_at"] is not None
+    assert row["next_poll_at"] is None
+    assert row["poll_count"] == 1
+
+
+def test_mark_poll_error_recent_success_blocks_lost(jobs_table) -> None:
+    jobs_table.insert_submitted(**_submit_kwargs(job_id="e4"))
+    jobs_table.apply_poll(
+        user_id="user-1",
+        org_id="org-1",
+        sandbox=True,
+        job_id="e4",
+        status="running",
+        is_terminal=False,
+        backoff_seconds=30,
+    )
+    # submitted_at 久远但 last_polled_at 刚刷新：基准取 last_polled_at，不触发
+    with jobs_table.get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute(
+                "UPDATE bohrium_jobs SET submitted_at = NOW() - INTERVAL 7200 SECOND "
+                "WHERE job_id = 'e4'"
+            )
+        conn.commit()
+    jobs_table.mark_poll_error(
+        user_id="user-1",
+        org_id="org-1",
+        sandbox=True,
+        job_id="e4",
+        backoff_seconds=45,
+        lost_after_seconds=3600,
+    )
+    row = jobs_table.get_by_owner_job(
+        user_id="user-1", org_id="org-1", sandbox=True, job_id="e4"
+    )
+    assert row["status"] == "unknown"
+    assert row["next_poll_at"] is not None
+    assert row["terminal_at"] is None
+    assert row["poll_count"] == 2  # apply_poll 1 次 + 本次错误 1 次
+
+
+def test_mark_poll_error_lost_when_last_success_is_old(jobs_table) -> None:
+    jobs_table.insert_submitted(**_submit_kwargs(job_id="e5"))
+    jobs_table.apply_poll(
+        user_id="user-1",
+        org_id="org-1",
+        sandbox=True,
+        job_id="e5",
+        status="running",
+        is_terminal=False,
+        backoff_seconds=30,
+    )
+    _age_job_silence(jobs_table, "e5", seconds=7200)
+    jobs_table.mark_poll_error(
+        user_id="user-1",
+        org_id="org-1",
+        sandbox=True,
+        job_id="e5",
+        backoff_seconds=45,
+        lost_after_seconds=3600,
+    )
+    row = jobs_table.get_by_owner_job(
+        user_id="user-1", org_id="org-1", sandbox=True, job_id="e5"
+    )
+    assert row["status"] == "lost"
+    assert row["next_poll_at"] is None
+
+
+def test_mark_poll_error_increments_poll_count(jobs_table) -> None:
+    jobs_table.insert_submitted(**_submit_kwargs(job_id="e6"))
+    for _ in range(2):
+        jobs_table.mark_poll_error(
+            user_id="user-1",
+            org_id="org-1",
+            sandbox=True,
+            job_id="e6",
+            backoff_seconds=45,
+            lost_after_seconds=86400,
+        )
+    row = jobs_table.get_by_owner_job(
+        user_id="user-1", org_id="org-1", sandbox=True, job_id="e6"
+    )
+    assert row["poll_count"] == 2
+    assert row["status"] == "unknown"
+
+
+def test_lost_job_enters_pending_terminal_queue(jobs_table) -> None:
+    jobs_table.insert_submitted(**_submit_kwargs(job_id="e7"))
+    _age_job_silence(jobs_table, "e7", seconds=7200)
+    jobs_table.mark_poll_error(
+        user_id="user-1",
+        org_id="org-1",
+        sandbox=True,
+        job_id="e7",
+        backoff_seconds=45,
+        lost_after_seconds=3600,
+    )
+    pending = jobs_table.query_session_pending_terminal(
+        user_id="user-1", org_id="org-1", session_id="sess-1", limit=5
+    )
+    assert [j["job_id"] for j in pending] == ["e7"]
+    assert pending[0]["status"] == "lost"
+
+
+def test_apply_poll_does_not_revert_lost(jobs_table) -> None:
+    # 置 lost 后，迟到的前台 poll 不得把它拉回活跃态（终态单调性）
+    jobs_table.insert_submitted(**_submit_kwargs(job_id="e8"))
+    _age_job_silence(jobs_table, "e8", seconds=7200)
+    jobs_table.mark_poll_error(
+        user_id="user-1",
+        org_id="org-1",
+        sandbox=True,
+        job_id="e8",
+        backoff_seconds=45,
+        lost_after_seconds=3600,
+    )
+    jobs_table.apply_poll(
+        user_id="user-1",
+        org_id="org-1",
+        sandbox=True,
+        job_id="e8",
+        status="running",
+        is_terminal=False,
+        backoff_seconds=30,
+    )
+    row = jobs_table.get_by_owner_job(
+        user_id="user-1", org_id="org-1", sandbox=True, job_id="e8"
+    )
+    assert row["status"] == "lost"
     assert row["next_poll_at"] is None

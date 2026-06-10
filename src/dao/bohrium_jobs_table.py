@@ -274,16 +274,43 @@ class BohriumJobsTable(BaseTable):
         sandbox: bool,
         job_id: str,
         backoff_seconds: int,
+        lost_after_seconds: int,
     ) -> None:
-        """poll/同步失败时：活跃作业标 unknown 并按 backoff 推进。"""
+        """poll/同步失败时：活跃作业标 unknown、计数并按 backoff 推进；连续失联
+        （自上次成功 poll，无则自提交）超过 lost_after_seconds 的活跃作业原子置
+        终态 lost——停表、补 terminal_at、进入交付队列。
+
+        MySQL 的 UPDATE SET 从左到右生效：status 赋值必须放最后，前列的 CASE
+        才能读到旧 status（与 apply_poll 同一模式）。
+        """
         sql = f"""
             UPDATE {self.table_name}
-            SET status = CASE
+            SET
+                poll_count = CASE
                     WHEN status IN ({_SQL_ACTIVE})
-                    THEN 'unknown' ELSE status END,
+                    THEN poll_count + 1 ELSE poll_count END,
+                terminal_at = CASE
+                    WHEN status IN ({_SQL_ACTIVE})
+                         AND NOW() > COALESCE(last_polled_at, submitted_at)
+                             + INTERVAL %s SECOND
+                    THEN COALESCE(terminal_at, NOW())
+                    ELSE terminal_at END,
                 next_poll_at = CASE
                     WHEN status IN ({_SQL_ACTIVE})
-                    THEN NOW() + INTERVAL %s SECOND ELSE next_poll_at END
+                         AND NOW() > COALESCE(last_polled_at, submitted_at)
+                             + INTERVAL %s SECOND
+                    THEN NULL
+                    WHEN status IN ({_SQL_ACTIVE})
+                    THEN NOW() + INTERVAL %s SECOND
+                    ELSE next_poll_at END,
+                status = CASE
+                    WHEN status IN ({_SQL_ACTIVE})
+                         AND NOW() > COALESCE(last_polled_at, submitted_at)
+                             + INTERVAL %s SECOND
+                    THEN 'lost'
+                    WHEN status IN ({_SQL_ACTIVE})
+                    THEN 'unknown'
+                    ELSE status END
             WHERE user_id = %s AND org_id = %s AND sandbox = %s AND job_id = %s
         """
         with self.get_connection() as conn:
@@ -291,7 +318,10 @@ class BohriumJobsTable(BaseTable):
                 cur.execute(
                     sql,
                     (
+                        int(lost_after_seconds),
+                        int(lost_after_seconds),
                         int(backoff_seconds),
+                        int(lost_after_seconds),
                         user_id,
                         org_id,
                         1 if sandbox else 0,
