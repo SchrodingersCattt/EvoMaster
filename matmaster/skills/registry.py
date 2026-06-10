@@ -34,7 +34,7 @@ items = []
 for current, dirs, files in os.walk(root):
     dirs[:] = sorted(dirs)
     for filename in sorted(files):
-        if filename != "SKILL.md":
+        if filename not in {"SKILL.md", "plugin.yaml"}:
             continue
         path = os.path.join(current, filename)
         try:

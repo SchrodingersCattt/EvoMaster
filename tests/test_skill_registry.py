@@ -5,6 +5,8 @@ from __future__ import annotations
 import json
 import logging
 import shlex
+import subprocess
+import sys
 from pathlib import Path, PurePosixPath
 
 import pytest
@@ -144,6 +146,37 @@ def skill_tree(tmp_path: Path) -> dict[str, Path]:
     _write(root2 / "calculator" / "SKILL.md", SKILL_MD_OVERRIDE)
 
     return {"root1": root1, "root2": root2, "tmp": tmp_path}
+
+
+def test_remote_scan_script_collects_skills_plugins_and_errors(
+    tmp_path: Path,
+) -> None:
+    """真实扫描脚本：收集 SKILL.md 与 plugin.yaml，读失败产出 error 条目。"""
+    from matmaster.skills.registry import _REMOTE_SKILL_SCAN_SCRIPT
+
+    root = tmp_path / "plugins"
+    _write(root / "chem-pack" / "plugin.yaml", "name: chem-pack\n")
+    _write(root / "chem-pack" / "skills" / "calc" / "SKILL.md", SKILL_MD_CALC)
+    _write(root / "notes" / "README.md", "ignored")
+    broken = root / "broken" / "SKILL.md"
+    broken.parent.mkdir(parents=True)
+    broken.symlink_to(tmp_path / "missing-target")
+
+    result = subprocess.run(
+        [sys.executable, "-c", _REMOTE_SKILL_SCAN_SCRIPT, str(root)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    items = {item["path"]: item for item in json.loads(result.stdout)}
+
+    manifest = str(root / "chem-pack" / "plugin.yaml")
+    skill_md = str(root / "chem-pack" / "skills" / "calc" / "SKILL.md")
+    assert set(items) == {manifest, skill_md, str(broken)}
+    assert items[manifest]["content"] == "name: chem-pack\n"
+    assert "full body of the calculator skill" in items[skill_md]["content"]
+    assert items[str(broken)]["error"]
+    assert "content" not in items[str(broken)]
 
 
 # ===========================================================================
