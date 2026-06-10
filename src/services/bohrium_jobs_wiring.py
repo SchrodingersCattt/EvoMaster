@@ -9,6 +9,7 @@ from collections.abc import Callable
 from matmaster.bohrium.status import to_ledger_status
 from matmaster.context.ports import SessionJobs, SessionJobsQuery
 from src.dao.bohrium_jobs_table import BohriumJobsTable
+from src.services.bohrium_delivery_ack import DeliverySnapshot
 from src.services.session_directory_service import (
     SessionDirectoryError,
     normalize_remote_share_path,
@@ -143,11 +144,17 @@ class _BohriumJobLedger:
 
 class _RunSessionJobsPort:
     def __init__(
-        self, *, table_ref: _BohriumJobsTableRef, user_id: str, org_id: str
+        self,
+        *,
+        table_ref: _BohriumJobsTableRef,
+        user_id: str,
+        org_id: str,
+        snapshot: DeliverySnapshot | None = None,
     ) -> None:
         self._table_ref = table_ref
         self._user_id = user_id
         self._org_id = org_id
+        self._snapshot = snapshot
 
     async def load_session_jobs(self, query: SessionJobsQuery) -> SessionJobs:
         if not (self._user_id and self._org_id):
@@ -160,13 +167,20 @@ class _RunSessionJobsPort:
                 org_id=self._org_id,
                 session_id=query.session_id,
             )
-            pending = await asyncio.to_thread(
-                table.query_session_pending_terminal,
-                user_id=self._user_id,
-                org_id=self._org_id,
-                session_id=query.session_id,
-                limit=5,
-            )
+            if self._snapshot is not None:
+                # 本轮交付边界固定：compaction 再调时返回同一 snapshot 的 pending
+                pending = self._snapshot.rows
+                detail_limit: int | None = self._snapshot.detail_limit
+            else:
+                rows = await asyncio.to_thread(
+                    table.query_session_pending_terminal,
+                    user_id=self._user_id,
+                    org_id=self._org_id,
+                    session_id=query.session_id,
+                    limit=5,
+                )
+                pending = tuple(rows)
+                detail_limit = None
         except Exception:  # noqa: BLE001
             logger.warning(
                 "load_session_jobs failed session_id=%s",
@@ -177,6 +191,7 @@ class _RunSessionJobsPort:
         return SessionJobs(
             active_jobs=tuple(active),
             pending_terminal_jobs=tuple(pending),
+            detail_limit=detail_limit,
         )
 
 
@@ -188,6 +203,7 @@ def build_bohrium_jobs_ports(
     org_id: str,
     workspace: str | None,
     spawn_id: str | None = None,
+    delivery_snapshot: DeliverySnapshot | None = None,
     table: BohriumJobsTable | None = None,
     table_factory: Callable[[], BohriumJobsTable] = BohriumJobsTable,
 ) -> tuple[_BohriumJobLedger | None, _RunSessionJobsPort]:
@@ -207,5 +223,10 @@ def build_bohrium_jobs_ports(
         if normalized_workspace is not None
         else None
     )
-    jobs = _RunSessionJobsPort(table_ref=table_ref, user_id=user_id, org_id=org_id)
+    jobs = _RunSessionJobsPort(
+        table_ref=table_ref,
+        user_id=user_id,
+        org_id=org_id,
+        snapshot=delivery_snapshot,
+    )
     return ledger, jobs

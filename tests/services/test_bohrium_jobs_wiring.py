@@ -245,3 +245,71 @@ def test_session_identity_resolution_uses_service_user_id_fallback() -> None:
     )
     assert user == "user-from-service"
     assert org == ""
+
+
+def _snapshot(rows):
+    from src.services.bohrium_delivery_ack import DeliverySnapshot
+
+    return DeliverySnapshot(
+        user_id="u",
+        org_id="o",
+        session_id="s",
+        row_ids=tuple(r["id"] for r in rows),
+        job_ids=tuple(r["job_id"] for r in rows),
+        rows=tuple(rows),
+        status_counts={},
+        invocation_counts={},
+        detail_limit=20,
+    )
+
+
+@pytest.mark.asyncio
+async def test_jobs_port_serves_pending_from_snapshot_with_detail_limit() -> None:
+    table = MagicMock()
+    table.query_session_active.return_value = [{"job_id": "a"}]
+    snap_rows = [
+        {"id": 2, "job_id": "f1", "status": "failed"},
+        {"id": 1, "job_id": "t1", "status": "finished"},
+    ]
+    _, jobs_port = build_bohrium_jobs_ports(
+        session_id="s",
+        invocation_id="inv",
+        user_id="u",
+        org_id="o",
+        workspace=None,
+        table=table,
+        delivery_snapshot=_snapshot(snap_rows),
+    )
+    from matmaster.context.ports import SessionJobsQuery
+
+    result = await jobs_port.load_session_jobs(SessionJobsQuery(session_id="s"))
+
+    # pending 据 snapshot.rows（失败优先序原样），不再裸查 limit=5 定交付集合
+    assert result.pending_terminal_jobs == tuple(snap_rows)
+    assert result.detail_limit == 20
+    table.query_session_pending_terminal.assert_not_called()
+    # active 仍走实时查询（snapshot 只钉死 pending）
+    assert result.active_jobs == ({"job_id": "a"},)
+    table.query_session_active.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_jobs_port_without_snapshot_keeps_legacy_read_path() -> None:
+    table = MagicMock()
+    table.query_session_active.return_value = []
+    table.query_session_pending_terminal.return_value = [{"job_id": "t"}]
+    _, jobs_port = build_bohrium_jobs_ports(
+        session_id="s",
+        invocation_id="inv",
+        user_id="u",
+        org_id="o",
+        workspace=None,
+        table=table,
+    )
+    from matmaster.context.ports import SessionJobsQuery
+
+    result = await jobs_port.load_session_jobs(SessionJobsQuery(session_id="s"))
+
+    assert result.pending_terminal_jobs == ({"job_id": "t"},)
+    assert result.detail_limit is None
+    assert table.query_session_pending_terminal.call_args.kwargs["limit"] == 5
