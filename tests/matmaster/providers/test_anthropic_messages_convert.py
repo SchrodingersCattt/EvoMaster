@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import pytest
 
-from matmaster.providers.transports.anthropic_messages import AnthropicMessagesTransport
+from matmaster.providers.transports.anthropic_messages import (
+    AnthropicMessagesTransport,
+    _tool_result_block,
+)
 from matmaster.types.errors import LLMError
 from matmaster.types.messages import (
     AssistantMessage,
@@ -184,6 +187,50 @@ def test_parallel_tool_results_are_merged_into_single_user_message_before_text()
             ],
         },
     ]
+
+
+def test_tool_result_with_images_becomes_block_array() -> None:
+    transport = AnthropicMessagesTransport(model="m", api_key="k")
+    messages = [
+        UserMessage(content="看一下图"),
+        AssistantMessage(
+            content=None,
+            tool_calls=[
+                ToolCallData(id="tc1", name="Read", arguments={"file_path": "/a.png"})
+            ],
+        ),
+        ToolMessage(
+            tool_call_id="tc1",
+            tool_name="Read",
+            content="Read image: /a.png (image/png, 1 KB)",
+            images=[
+                ImageContentPart(
+                    url="data:image/png;base64,aGVsbG8=", mime_type="image/png"
+                )
+            ],
+        ),
+    ]
+    wire = transport.convert_messages(messages)
+    result_block = wire[-1]["content"][0]
+    assert result_block["type"] == "tool_result"
+    blocks = result_block["content"]
+    assert blocks[0] == {
+        "type": "text",
+        "text": "Read image: /a.png (image/png, 1 KB)",
+    }
+    assert blocks[1]["type"] == "image"
+    assert blocks[1]["source"] == {
+        "type": "base64",
+        "media_type": "image/png",
+        "data": "aGVsbG8=",
+    }
+
+
+def test_tool_result_without_images_stays_string() -> None:
+    block = _tool_result_block(
+        ToolMessage(tool_call_id="tc1", tool_name="Read", content="plain")
+    )
+    assert block["content"] == "plain"
 
 
 @pytest.mark.parametrize(

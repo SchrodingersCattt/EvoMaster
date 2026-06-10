@@ -219,6 +219,16 @@ def _tool_use_blocks(tool_calls: list[ToolCallData] | None) -> list[dict[str, An
 
 
 def _tool_result_block(message: ToolMessage) -> dict[str, Any]:
+    if message.images:
+        blocks: list[dict[str, Any]] = []
+        if message.content:
+            blocks.append({"type": "text", "text": message.content})
+        blocks.extend(_image_block(image) for image in message.images)
+        return {
+            "type": "tool_result",
+            "tool_use_id": message.tool_call_id,
+            "content": blocks,
+        }
     return {
         "type": "tool_result",
         "tool_use_id": message.tool_call_id,
