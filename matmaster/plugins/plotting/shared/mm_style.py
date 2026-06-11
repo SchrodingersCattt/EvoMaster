@@ -142,6 +142,28 @@ def hbar_figsize(n_bars: int, width: float = 8.0) -> tuple[float, float]:
     return (width, n_bars * 0.4 + 1.2)
 
 
+def restyle(ax, width: float = 8.0, height: float = 5.0):
+    """Re-impose contract text sizes on an Axes that a plotter restyled.
+
+    pymatgen plotters route through pretty_plot, which overrides rcParams
+    with 30-48pt text and its own figure size after apply() ran. Call this
+    on the returned Axes, recolor lines as needed, then save_figure.
+    """
+    fig = ax.figure
+    fig.set_size_inches(width, height)
+    ax.title.set_size(14.0)
+    for axis_label in (ax.xaxis.label, ax.yaxis.label):
+        axis_label.set_size(14.0)
+    ax.tick_params(axis="both", which="both", labelsize=12.0)
+    legend = ax.get_legend()
+    if legend is not None:
+        for text in legend.get_texts():
+            text.set_size(12.0)
+    for text in ax.texts:
+        text.set_size(12.0)
+    return ax
+
+
 def apply() -> None:
     """Apply the plugin rcParams: CJK-capable fonts, sizes, palette, grid."""
     rc = matplotlib.rcParams
