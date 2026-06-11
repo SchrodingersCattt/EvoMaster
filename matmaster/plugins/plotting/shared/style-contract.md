@@ -64,9 +64,10 @@ figure. Skills add domain rules on top; nothing below is repeated there.
   pressure, energy), which may use warm/cool ramps freely.
 - Never separate series by color alone: pair every color with a second cue
   (linestyle, marker, or hatch) and show both in the legend.
-- Two text sizes only: 14 for axis/node labels and titles, 12 for secondary
-  text (ticks, legends, annotations, subtitles). Sentence case for
-  Latin-script text. No emoji.
+- Two label text sizes only: 14 for axis/node labels and titles, 12 for
+  secondary text (ticks, legends, annotations, subtitles). Headline numbers
+  on metric cards are data marks, not labels, and may go larger. Sentence
+  case for Latin-script text. No emoji.
 - Display numbers at context precision: counts as integers, percentages with
   1-2 decimals. The minus sign precedes any currency/unit symbol
   (−$5, not $−5).

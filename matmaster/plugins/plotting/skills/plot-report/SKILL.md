@@ -16,7 +16,9 @@ Do not produce or attach any figure without having read it in this session.
 Compose one multi-panel figure when the panels answer a single question at a
 glance — final summary, side-by-side comparison, paper-style figure. Keep
 separate figures with prose between when the answer walks through steps
-(contract narrative rules). ≤6 panels per figure; more → split.
+(contract narrative rules). ≤6 panels per figure; more → split. Faceted
+small multiples of one chart type (same axes, split by a condition) are
+plot-chart's facet case, not a report figure.
 
 ## Layout recipe
 
@@ -46,7 +48,10 @@ fig, axs = plt.subplot_mosaic(
 - The mosaic spec mirrors the visual layout: metric cards across the top row,
   the main chart spanning columns below, side panels beside it. Adapt names,
   spans and `height_ratios` to the content; keep cards on top.
-- Metric cards — computed headline numbers only, borderless:
+- Metric cards — computed headline numbers only, borderless. Cards show
+  independent quantities, not a categorical grouping, so each card may take
+  its own ramp without counting against the ≤2-ramp budget; reuse a chart
+  panel's ramp when the card shows the same quantity:
 
 ```python
 def metric_card(ax, value, label, ramp="purple"):
@@ -68,12 +73,13 @@ ax.text(0.02, 0.98, "(a)", transform=ax.transAxes, fontsize=14,
   (14, medium — mm_style default); panel titles use
   `ax.set_title(..., fontsize=12)`; axis labels stay at 14.
 - Alignment: share axes (`sharex`/`sharey`) wherever panels show the same
-  quantity; call `fig.align_labels()` before saving.
+  quantity; the constrained layout engine aligns labels automatically.
 - One color mapping across all panels: the same series or quantity keeps the
   same ramp everywhere in the figure.
 
 ## Deliver
 
-Save with `mm_style.save_figure(fig, path)` and attach. The caption walks the
-panels in order — "(a) …, (b) …, (c) …" — at most one sentence per panel,
-self-contained, in the user's language (contract rules).
+Save with `mm_style.save_figure(fig, path)` and attach. The caption is one
+self-contained sentence summarizing the whole figure (contract rule); walk
+the panels — "(a) …, (b) …, (c) …" — in the answer body prose right after
+the [[fig:<figure_id>]] reference.
