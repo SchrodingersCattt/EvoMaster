@@ -47,6 +47,8 @@ Save every figure with `mm_style.save_figure(fig, "/abs/workspace/name.png")`
 
 - Bars, areas and histogram patches use the trio: `facecolor=mm_style.fill(r)`,
   `edgecolor=mm_style.stroke(r)`, `linewidth=0.8`.
+- Sort horizontal bars by value (largest on top) unless the category order
+  itself carries meaning (time, sequence, a ranking the user gave).
 - ≤4 series per panel — the full `CATEGORY_ORDER`, one ramp each; more →
   facet into small multiples or several figures.
 - The default prop cycle pairs each `CATEGORY_ORDER` color with a distinct
