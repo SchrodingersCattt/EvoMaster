@@ -4,9 +4,9 @@
 
 **Goal:** 把 Imagine 可视化指南的可移植部分落成 matmaster 的 plotting plugin（4 个 skill + 共享资产），让 agent 经 Bash 产图 → AttachFigure 发布 → `[[fig:id]]` 引用的现有通道稳定产出合规科研图。
 
-**Architecture:** 单 plugin 多 skill（参照 `matmaster/plugins/atomic-structure-ops/` 先例）。样式与交付规则单源于 `shared/style-contract.md`；matplotlib 资产 `shared/mm_style.py` 沙箱内 `sys.path` 导入；手写 SVG 经 `shared/svg2png.py`（pymupdf）栅格化为 PNG。`${PLUGIN_DIR}`/`${SKILL_DIR}` 由 SkillTool 取回时替换为（远端映射后的）绝对路径（`matmaster/tools/builtin/skill_tool.py:92-96`）。
+**Architecture:** 单 plugin 多 skill（参照 `matmaster/plugins/atomic-structure-ops/` 先例）。样式与交付规则单源于 `shared/style-contract.md`；matplotlib 资产 `shared/mm_style.py` 沙箱内 `sys.path` 导入；手写 SVG 经 `shared/svg2png.py`（cairosvg）栅格化为 PNG。`${PLUGIN_DIR}`/`${SKILL_DIR}` 由 SkillTool 取回时替换为（远端映射后的）绝对路径（`matmaster/tools/builtin/skill_tool.py:92-96`）。
 
-**Tech Stack:** SKILL.md + plugin.yaml（`matmaster/skills/registry.py` 自动发现）、matplotlib 3.10.8、pymupdf ≥1.24、pymatgen plotter、fonts-noto-cjk。
+**Tech Stack:** SKILL.md + plugin.yaml（`matmaster/skills/registry.py` 自动发现）、matplotlib 3.10.8、cairosvg ≥2.7、pymatgen plotter、fonts-noto-cjk。
 
 **Spec:** `docs/superpowers/specs/2026-06-11-plotting-plugin-design.md`（含 Imagine 指南参考文本，§10 第 161 行 JSON 转义）。
 
@@ -603,8 +603,9 @@ coordinate rule. Then decide:
 ## Step 2 — write the SVG
 
 - Start from `${PLUGIN_DIR}/shared/svg_prelude.txt`: copy it into the
-  workspace as `<name>.svg`, replace both REPLACE_HEIGHT tokens with the
-  computed height, and delete the example block.
+  workspace as `<name>.svg`, replace all three REPLACE_HEIGHT tokens with
+  the computed height, and delete the example block (keep the closing
+  </svg>).
 - Inline presentation attributes only — every element carries its own
   font-family/font-size/fill/stroke. No class, no <style>, no CSS: the
   rasterizer supports a narrow SVG subset and silently drops styling it does
@@ -644,7 +645,7 @@ plus a "↻ returns to …" note — never a ring layout (discipline §6).
 # SVG discipline — coordinate rules for hand-written diagrams
 
 Ported from the Imagine visual-creation guide, adapted to this channel:
-static PNG via `svg2png.py` (PyMuPDF), white opaque background, inline
+static PNG via `svg2png.py` (cairosvg), white opaque background, inline
 presentation attributes only. No CSS classes, no `<style>` blocks, no
 interactivity, no animation, no dark mode. Read fully before writing any SVG.
 
