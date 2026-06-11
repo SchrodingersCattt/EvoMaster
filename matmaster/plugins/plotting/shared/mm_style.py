@@ -148,8 +148,6 @@ def apply() -> None:
     rc["font.family"] = "sans-serif"
     rc["font.sans-serif"] = CJK_FONT_STACK
     rc["axes.unicode_minus"] = False
-    # Log-axis exponents go through mathtext; DejaVu always has U+2212.
-    rc["mathtext.fontset"] = "dejavusans"
     rc["font.size"] = 12.0
     rc["axes.titlesize"] = 14.0
     rc["axes.titleweight"] = "medium"
