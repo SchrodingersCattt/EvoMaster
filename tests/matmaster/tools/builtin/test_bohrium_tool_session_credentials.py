@@ -128,7 +128,7 @@ class TestBohriumSessionCredentials:
         post_calls = []
         upload_calls = []
 
-        def fake_post(base_url, path, access_key, payload, timeout=30):
+        def fake_post(base_url, path, access_key, payload, timeout=30, log_curl=False):
             post_calls.append((path, access_key))
             if "create" in path:
                 return {

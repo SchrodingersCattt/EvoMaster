@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import logging
+
 import pytest
 
+import matmaster.bohrium.client as client_module
 from matmaster.bohrium.client import (
     add_job,
     confirm_terminal_status,
@@ -352,8 +355,8 @@ def test_list_machines_sandbox_falls_back_when_catalog_empty(
 def test_add_job_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[dict] = []
 
-    def fake_post(base_url, path, access_key, payload, *, timeout=30):
-        del base_url, access_key, timeout
+    def fake_post(base_url, path, access_key, payload, *, timeout=30, log_curl=False):
+        del base_url, access_key, timeout, log_curl
         assert path == "/openapi/v1/sandbox/job/add"
         calls.append(payload)
         return {"code": 0, "data": {"jobId": "job-2", "bohrJobId": "bohr-2"}}
@@ -373,6 +376,65 @@ def test_add_job_sandbox(monkeypatch: pytest.MonkeyPatch) -> None:
         disk_size=50,
     )
     assert calls[0]["ossPath"] == ["https://store.example.com/input.zip?token=abc"]
+    assert calls[0]["projectId"] == 42
+
+
+class _FakeResponse:
+    ok = True
+    status_code = 200
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> dict:
+        return {"code": 0, "data": {}}
+
+
+def test_post_logs_copyable_curl_when_enabled(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def fake_requests_post(url, *, headers, json, timeout):
+        del url, headers, json, timeout
+        return _FakeResponse()
+
+    monkeypatch.setattr(client_module.requests, "post", fake_requests_post)
+
+    with caplog.at_level(logging.INFO, logger=client_module.logger.name):
+        client_module._post(
+            "https://openapi.test.dp.tech",
+            "/openapi/v1/sandbox/job/add",
+            "secret-ak",
+            {"jobId": "job-1", "cmd": "echo hi"},
+            log_curl=True,
+        )
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any(client_module.CURL_LOG_PREFIX in msg for msg in messages)
+    # The curl line is meant to be copy-pasteable, so it carries the real key.
+    assert any("curl -X POST" in msg and "secret-ak" in msg for msg in messages)
+
+
+def test_post_does_not_log_curl_by_default(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    def fake_requests_post(url, *, headers, json, timeout):
+        del url, headers, json, timeout
+        return _FakeResponse()
+
+    monkeypatch.setattr(client_module.requests, "post", fake_requests_post)
+
+    with caplog.at_level(logging.INFO, logger=client_module.logger.name):
+        client_module._post(
+            "https://openapi.test.dp.tech",
+            "/openapi/v1/sandbox/job/create",
+            "secret-ak",
+            {"name": "demo"},
+        )
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert not any(client_module.CURL_LOG_PREFIX in msg for msg in messages)
 
 
 def test_confirm_terminal_status_retries_failed_codes(

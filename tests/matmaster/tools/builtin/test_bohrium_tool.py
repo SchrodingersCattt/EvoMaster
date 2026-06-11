@@ -239,7 +239,12 @@ class TestBohriumExecution:
         assert any("base_url=https://openapi.test.dp.tech" in msg for msg in messages)
         assert any("sandbox=True" in msg for msg in messages)
         assert any("access_key=secr..." in msg for msg in messages)
-        assert not any("secret-access-key" in msg for msg in messages)
+        # The job/add curl log intentionally carries the real accessKey so it
+        # is directly copy-pasteable; every other log line must keep it masked.
+        non_curl_messages = [
+            msg for msg in messages if bohrium_client_module.CURL_LOG_PREFIX not in msg
+        ]
+        assert not any("secret-access-key" in msg for msg in non_curl_messages)
 
     def test_submit_remote_share_without_session_errors(self, tmp_path, monkeypatch):
         _patch_bridge(monkeypatch)
@@ -633,7 +638,7 @@ class TestBohriumExecution:
         post_calls: list[tuple[str, dict]] = []
         upload_calls: list[tuple[str, str, dict]] = []
 
-        def fake_post(base_url, path, access_key, payload, timeout=30):
+        def fake_post(base_url, path, access_key, payload, timeout=30, log_curl=False):
             post_calls.append((path, payload))
             if path == "/openapi/v1/sandbox/job/create":
                 return {
@@ -704,7 +709,7 @@ class TestBohriumExecution:
         post_calls: list[tuple[str, dict]] = []
         upload_calls: list[tuple[str, str, dict]] = []
 
-        def fake_post(base_url, path, access_key, payload, timeout=30):
+        def fake_post(base_url, path, access_key, payload, timeout=30, log_curl=False):
             del base_url, access_key, timeout
             post_calls.append((path, payload))
             if path == "/openapi/v1/sandbox/job/create":
@@ -759,7 +764,7 @@ class TestBohriumExecution:
             assert path == "/openapi/v1/sandbox/job/job-123"
             return {"data": {"status": 1}}
 
-        def fake_post(base_url, path, access_key, payload, timeout=30):
+        def fake_post(base_url, path, access_key, payload, timeout=30, log_curl=False):
             del base_url, access_key, timeout
             assert path == "/openapi/v1/sandbox/job/file/token"
             calls.append(payload)
