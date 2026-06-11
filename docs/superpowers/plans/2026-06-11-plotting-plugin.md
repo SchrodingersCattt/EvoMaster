@@ -16,7 +16,7 @@
 
 - 基分支：`codex/provider-stage1`（spec 仅存在于此分支）。新建分支 `plotting-plugin`。
 - worktree 中跑 Python 验证前先软链 venv：`ln -s /Users/kealdoom/Developer/dp/matmaster/matmaster-evo/.venv .venv`。
-- 本地 venv 已有 pymupdf 1.27.1 + matplotlib 3.10.8（与沙箱镜像同版本），spike 可全部本地完成。pymupdf 不读系统字体、只用 wheel 内置字体，因此本地 macOS 的 SVG 栅格化结果与 Linux 沙箱一致（代表性成立）；matplotlib 的 CJK 在本地经 PingFang 回退验证、沙箱经 Noto 命中。
+- 本地 venv 已有 matplotlib 3.10.8（与沙箱镜像同版本）+ cairosvg（spike 时装入）。**2026-06-11 spike 结论：pymupdf 1.27.1 的 SVG 管线不渲染 `<marker>`、忽略 `stroke-dasharray`、不支持 `dominant-baseline`、不从 viewBox 推断页高——按 spec §8.4 预授权路径切换 cairosvg。** cairosvg 的几何特性（marker/虚线/圆角/viewBox 尺寸推断）已本地验证通过；SVG 内 CJK 字形的最终核对依赖 Linux fontconfig + fonts-noto-cjk，属沙箱 E2E 验收项（本地 macOS quartz 后端无 Noto CJK，豆腐块为环境局限而非缺陷）。matplotlib 的 CJK 在本地经 PingFang 回退验证、沙箱经 Noto 命中。
 - pre-commit 钩子会跑 black（88 列）/isort/flake8/pyupgrade/end-of-file-fixer/trailing-whitespace/check-yaml。若钩子自动改文件，`git add -u` 后重新提交即可。py 文件 ≤1000 行（远低于）。不给 `mm_style.py`/`svg2png.py` 加 shebang 或可执行位（避开 shebang 钩子）。
 - 全程**不新增任何自动化测试**（spec §9），验证一律用一次性命令 + Read 工具肉眼核对图片。
 
@@ -24,12 +24,12 @@
 
 | 文件 | 职责 |
 |---|---|
-| `Dockerfile.remote` | 修改：apt 增加 `fonts-noto-cjk`（唯一镜像改动） |
+| `Dockerfile.remote` | 修改：apt 增加 `fonts-noto-cjk`、`libcairo2`，pip 增加 `cairosvg`（spike 后扩展，spec §8.4） |
 | `matmaster/plugins/plotting/plugin.yaml` | 瘦清单：name/category/description |
 | `matmaster/plugins/plotting/shared/style-contract.md` | 全局交付+样式契约，唯一权威源（~65 行），四个 skill 第一节强制先读 |
 | `matmaster/plugins/plotting/shared/mm_style.py` | 九坡道色板常量、rcParams 一键应用（含 CJK 字体链）、白底 savefig 封装、横条图高度公式 |
 | `matmaster/plugins/plotting/shared/svg_prelude.txt` | SVG 起手模板：白底 rect + 三色箭头 marker defs + 全内联属性示例块（示例块兼作 spike 素材） |
-| `matmaster/plugins/plotting/shared/svg2png.py` | pymupdf 栅格化命令行（SVG → 不透明 PNG，定 DPI） |
+| `matmaster/plugins/plotting/shared/svg2png.py` | cairosvg 栅格化命令行（SVG → 不透明 PNG，定 DPI） |
 | `matmaster/plugins/plotting/skills/plot-diagram/SKILL.md` | 流程/结构/示意图 skill：路由、预算、管线 |
 | `matmaster/plugins/plotting/skills/plot-diagram/references/svg-discipline.md` | Imagine 坐标纪律移植全文（内联属性化适配） |
 | `matmaster/plugins/plotting/skills/plot-chart/SKILL.md` | 通用数据图表 skill |
@@ -84,12 +84,24 @@ git commit -m "chore(remote-image): add fonts-noto-cjk for figure CJK text"
 
 ### Task 2: Plugin 清单 + 栅格化管线资产 + spike（风险闸门）
 
-spec §8 规定的最大技术风险验证：pymupdf 渲染「中文标签 + 坡道色 + 箭头 marker + 全内联属性」SVG 的质量。prelude 的示例块本身就是 spike 素材。
+spec §8 规定的最大技术风险验证：渲染「中文标签 + 坡道色 + 箭头 marker + 全内联属性」SVG 的质量。prelude 的示例块本身就是 spike 素材。
+
+> **2026-06-11 第一轮 spike 记录**：pymupdf 1.27.1 不渲染 `<marker>`（管线未实现）、忽略 `stroke-dasharray`、不支持 `dominant-baseline`（文字上浮 ~5px）、根 svg 无 height 时回落 US Letter 页高；中文与坡道色正常。按 spec §8.4 预授权切换 cairosvg（apt `libcairo2` + pip `cairosvg`），本任务以下内容为 cairosvg 版。
 
 **Files:**
+- Modify: `Dockerfile.remote`（apt 加 `libcairo2`，pip 列表加 `cairosvg`）
 - Create: `matmaster/plugins/plotting/plugin.yaml`
 - Create: `matmaster/plugins/plotting/shared/svg2png.py`
 - Create: `matmaster/plugins/plotting/shared/svg_prelude.txt`
+
+- [ ] **Step 0: Dockerfile.remote 加 cairosvg 依赖并单独提交**
+
+apt 列表 `fonts-noto-cjk \` 后加一行 `    libcairo2 \`；pip install 列表（`"pint>=0.24"` 前）加一行 `    "cairosvg>=2.7" \`。
+
+```bash
+git add Dockerfile.remote
+git commit -m "chore(remote-image): add cairosvg deps for svg rasterization"
+```
 
 - [ ] **Step 1: 写 plugin.yaml**
 
@@ -102,20 +114,21 @@ description: "Publication-quality answer figures over the Bash + AttachFigure ch
 - [ ] **Step 2: 写 shared/svg2png.py**
 
 ```python
-"""Rasterize a hand-written SVG to an opaque PNG via PyMuPDF.
+"""Rasterize a hand-written SVG to an opaque PNG via cairosvg.
 
 Usage: python3 svg2png.py input.svg output.png [dpi]
 
-Fixed-DPI rasterization for the plotting plugin's diagram pipeline. The SVG
-must carry its own opaque background rect (svg_prelude.txt does); alpha=False
-flattens anything left transparent onto white.
+Fixed-DPI rasterization for the plotting plugin's diagram pipeline. SVG user
+units are CSS px (96/inch), so scale = dpi/96. background_color flattens
+anything left transparent onto white on top of the prelude's background rect.
 """
 
 from __future__ import annotations
 
 import sys
 
-import pymupdf
+import cairosvg
+from PIL import Image
 
 DEFAULT_DPI = 200
 
@@ -126,12 +139,15 @@ def main(argv: list[str]) -> int:
         return 2
     src, dst = argv[1], argv[2]
     dpi = int(argv[3]) if len(argv) == 4 else DEFAULT_DPI
-    doc = pymupdf.open(src)
-    page = doc[0]
-    zoom = dpi / 72
-    pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False)
-    pix.save(dst)
-    print(f"wrote {dst} ({pix.width}x{pix.height} px at {dpi} dpi)")
+    cairosvg.svg2png(
+        url=src,
+        write_to=dst,
+        scale=dpi / 96,
+        background_color="white",
+    )
+    with Image.open(dst) as im:
+        width, height = im.size
+    print(f"wrote {dst} ({width}x{height} px at {dpi} dpi)")
     return 0
 
 
@@ -141,10 +157,10 @@ if __name__ == "__main__":
 
 - [ ] **Step 3: 写 shared/svg_prelude.txt**
 
-两处 `REPLACE_HEIGHT` 占位；示例块覆盖：双行节点（紫坡道三件套 + 中文标题）、单行中性节点（灰）、直连箭头、虚线 leader + 特殊字符标签、L 弯绕行箭头。marker 用固定颜色（MuPDF 不支持 SVG2 的 context-stroke），orient 用 `auto`（只用 marker-end，够用且稳）。
+三处 `REPLACE_HEIGHT` 占位（根 height、viewBox、底色 rect——显式 height 让任何渲染器都不必从 viewBox 推断画布尺寸）；示例块覆盖：双行节点（紫坡道三件套 + 中文标题）、单行中性节点（灰）、直连箭头、虚线 leader + 特殊字符标签、L 弯绕行箭头。marker 用固定颜色（cairosvg 是 SVG 1.1 渲染器，不支持 SVG2 的 context-stroke），orient 用 `auto`（只用 marker-end，够用且稳）。字体族首选 Noto Sans CJK SC（沙箱 fontconfig 直接命中），逗号回退 sans-serif。
 
 ```
-<svg width="680" viewBox="0 0 680 REPLACE_HEIGHT" xmlns="http://www.w3.org/2000/svg">
+<svg width="680" height="REPLACE_HEIGHT" viewBox="0 0 680 REPLACE_HEIGHT" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <marker id="arrow-gray" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto">
       <path d="M2 1L8 5L2 9" fill="none" stroke="#5F5E5A" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
@@ -161,19 +177,19 @@ if __name__ == "__main__":
   <!-- Two-line node, purple trio: 50 fill / 600 stroke / 800 title / 600 subtitle -->
   <g>
     <rect x="60" y="40" width="200" height="56" rx="4" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
-    <text x="160" y="58" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="14" font-weight="500" fill="#3C3489">数据预处理</text>
-    <text x="160" y="78" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="12" fill="#534AB7">Clean and normalize</text>
+    <text x="160" y="58" text-anchor="middle" dominant-baseline="central" font-family="Noto Sans CJK SC, sans-serif" font-size="14" font-weight="500" fill="#3C3489">数据预处理</text>
+    <text x="160" y="78" text-anchor="middle" dominant-baseline="central" font-family="Noto Sans CJK SC, sans-serif" font-size="12" fill="#534AB7">Clean and normalize</text>
   </g>
   <!-- Single-line neutral node, gray trio -->
   <g>
     <rect x="380" y="46" width="160" height="44" rx="4" fill="#F1EFE8" stroke="#5F5E5A" stroke-width="0.5"/>
-    <text x="460" y="68" text-anchor="middle" dominant-baseline="central" font-family="sans-serif" font-size="14" font-weight="500" fill="#444441">Model fit</text>
+    <text x="460" y="68" text-anchor="middle" dominant-baseline="central" font-family="Noto Sans CJK SC, sans-serif" font-size="14" font-weight="500" fill="#444441">Model fit</text>
   </g>
   <!-- Straight connector, head stops 10px before the target edge -->
   <line x1="260" y1="68" x2="370" y2="68" stroke="#5F5E5A" stroke-width="1" fill="none" marker-end="url(#arrow-gray)"/>
   <!-- Dashed leader line + margin label with special glyphs -->
   <line x1="540" y1="68" x2="566" y2="116" stroke="#888780" stroke-width="0.5" stroke-dasharray="3 3" fill="none"/>
-  <text x="572" y="120" font-family="sans-serif" font-size="12" fill="#5F5E5A">R² = 0.98</text>
+  <text x="572" y="120" font-family="Noto Sans CJK SC, sans-serif" font-size="12" fill="#5F5E5A">R² = 0.98</text>
   <!-- L-bend detour connector -->
   <path d="M160 96 L160 150 L460 150 L460 100" stroke="#534AB7" stroke-width="1" fill="none" marker-end="url(#arrow-purple)"/>
 </svg>
