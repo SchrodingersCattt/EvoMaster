@@ -456,24 +456,24 @@ CREATE TABLE IF NOT EXISTS user_plugins (
 
 > 必须在 E3 DROP 列之前合入并上线（写入侧先停）。
 
-- [ ] **E2.1** `models/user_skill.py`：删 `UserSkillOut.category/tags`、`SyncBuiltinSkillItem.category/tags`、`SkillToggleRequest.tag`、`SkillToggleItem` 不变。
-- [ ] **E2.2** `services/user_skill_service.py`：`_row_to_out` 去 category/tags；`sync_builtin` 的 rows 去 category/tags；`toggle` 删 by-tag 分支（仅留 items）；`list_for_user` 删 `tag` 参。
-- [ ] **E2.3** `apis/user_skill_api.py`：`GET /skills` 删 `tag` query；`PATCH /skills/toggle` 删 tag 校验分支。
-- [ ] **E2.4** dao `user_skill_db.py`：`list_for_user_with_settings` 去 `tag` 过滤。
-- [ ] **E2.5** 跑该仓测试（改相关用例）+ Commit。
+- [x] **E2.1** `models/user_skill.py`：删 `UserSkillOut.category/tags`、`SyncBuiltinSkillItem.category/tags`、`SkillToggleRequest.tag`；`SkillToggleItem` 不变。
+- [x] **E2.2** `services/user_skill_service.py`：`_row_to_out` 去 category/tags；`sync_builtin` 的 rows 去 category/tags；`toggle` 删 by-tag 分支（仅留 items）；`list_for_user` 删 `tag` 参。
+- [x] **E2.3** `apis/user_skill_api.py`：`GET /skills` 删 `tag` query；`PATCH /skills/toggle` 删 tag 校验分支。
+- [x] **E2.4** dao `user_skill_db.py`：删 `_tags_*` 辅助，所有 SQL（insert/get_one/list_by_user/list_for_user_with_settings/batch_insert/replace_all_builtin）去 category/tags 列，`list_for_user_with_settings` 去 `tag` 过滤与参数（为 E3 DROP 列做准备）。
+- [x] **E2.5** 跑该仓测试（20 passed）+ pre-commit + Commit。
 
 ### Task E3: tools-server — DROP 列迁移（仓库：matmaster-tools-server）
 
 > **仅在 E1+E2 全部上线、确认无写入方再发 category/tags 后执行。**
 
-- [ ] **E3.1** 新建 `migrations/drop_user_skills_category_tags.sql`：`ALTER TABLE user_skills DROP COLUMN category, DROP COLUMN tags;` + `DROP INDEX idx_user_skills_category`。
-- [ ] **E3.2** 执行迁移；冒烟 list/toggle/sync-builtin 仍正常。
-- [ ] **E3.3** Commit。
+- [x] **E3.1** 新建 `migrations/drop_user_skills_category_tags.sql`：`DROP INDEX idx_user_skills_category` + `ALTER TABLE user_skills DROP COLUMN category, DROP COLUMN tags`（已随 E2 一并 commit）。
+- [ ] **E3.2** 【部署门控，未执行】待 E1+E2 上线、确认无写入方再发 category/tags 后执行迁移；冒烟 list/toggle/sync-builtin 仍正常。
+- [ ] **E3.3** 【部署门控】迁移执行记录归档（如有需要）。
 
 ### Task E4: 前端 — 去 category/tags UI（仓库：scimaster-bohr-chat）
 
-- [ ] **E4.1** `api/user-skill.ts` `UserSkillOut` 去 category/tags；skills 页去掉"按分类筛选 / 按 tag 切换"UI，散装 skill 列表扁平。
-- [ ] **E4.2** 联调 + Commit。
+- [x] **E4.1** `api/user-skill.ts` `UserSkillOut` 去 category/tags、`getUserSkillsList` 去 `tag` query、`SkillToggleRequest` 去 `tag`；`builtin-skills-section.tsx` 去掉按分类/按 tag 导航，改为扁平 skill 列表 + 逐项开关。
+- [x] **E4.2** tsc + eslint 通过 + Commit。
 
 ---
 
