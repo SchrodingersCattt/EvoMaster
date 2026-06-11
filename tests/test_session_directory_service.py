@@ -18,9 +18,13 @@ from src.services.session_directory_service import (
         ("/share/foo/./bar/", "/share/foo/bar"),
         ("/share/foo/../bar", "/share/bar"),
         ("  /share/run-1  ", "/share/run-1"),
+        ("/personal", "/personal"),
+        ("/personal/sub", "/personal/sub"),
+        ("/personal/foo/../bar/", "/personal/bar"),
+        ("  /personal/run-1  ", "/personal/run-1"),
     ],
 )
-def test_normalize_remote_share_path_accepts_share_descendants(raw, expected):
+def test_normalize_remote_share_path_accepts_dual_root_descendants(raw, expected):
     assert normalize_remote_share_path(raw) == expected
 
 
@@ -29,10 +33,14 @@ def test_normalize_remote_share_path_accepts_share_descendants(raw, expected):
     [
         (123, "directory_invalid_type"),
         ("relative/path", "directory_must_be_absolute"),
-        ("/tmp/foo", "directory_outside_share"),
-        ("/share2/foo", "directory_outside_share"),
-        ("/share/../root", "directory_outside_share"),
-        ("/share/foo/../../root", "directory_outside_share"),
+        ("/tmp/foo", "directory_outside_roots"),
+        ("/share2/foo", "directory_outside_roots"),
+        ("/personalx", "directory_outside_roots"),
+        ("/personalx/foo", "directory_outside_roots"),
+        ("/", "directory_outside_roots"),
+        ("/share/../root", "directory_outside_roots"),
+        ("/share/foo/../../root", "directory_outside_roots"),
+        ("/personal/../root", "directory_outside_roots"),
         pytest.param("/share/bad\0path", "directory_invalid_chars", id="null-byte"),
     ],
 )
@@ -54,10 +62,14 @@ def test_normalize_session_directory_for_storage_normalizes_and_rejects():
     assert (
         normalize_session_directory_for_storage(" /share/foo/../bar/ ") == "/share/bar"
     )
+    assert (
+        normalize_session_directory_for_storage(" /personal/foo/../bar/ ")
+        == "/personal/bar"
+    )
 
     with pytest.raises(SessionDirectoryError) as exc:
         normalize_session_directory_for_storage("/tmp/bad")
-    assert exc.value.error_code == "directory_outside_share"
+    assert exc.value.error_code == "directory_outside_roots"
 
 
 def _sessions_service(session_directory):
@@ -76,6 +88,20 @@ def test_resolver_uses_request_directory_before_session_default():
     )
 
     assert result.remote_workdir == "/share/run"
+    assert result.source == "request"
+    assert result.bohrium_required is True
+
+
+def test_resolver_accepts_personal_request_directory():
+    resolver = SessionDirectoryResolver(_sessions_service("/share/default"))
+
+    result = resolver.resolve(
+        session_id="sess-1",
+        request_directory="/personal/run/../keep",
+        request_directory_provided=True,
+    )
+
+    assert result.remote_workdir == "/personal/keep"
     assert result.source == "request"
     assert result.bohrium_required is True
 

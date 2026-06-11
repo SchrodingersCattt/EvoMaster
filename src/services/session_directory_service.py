@@ -10,6 +10,11 @@ from src.services.sessions_service import ChatSessionsService
 
 SessionDirectorySource = Literal["request", "session", "none"]
 
+# Bohrium 远端 SSH 节点同时挂载 /share 与 /personal，二者均可作为会话工作目录。
+# 仅放开会话目录校验；不改变 agent 运行时对两个根的可写性（workspace 落在哪个根
+# 即以该根为工作区）。与 create_bohrium_jobs_table.sql 的 workspace CHECK 约束保持同步。
+_REMOTE_WORKSPACE_ROOTS: tuple[str, ...] = ("/share", "/personal")
+
 
 class SessionDirectoryError(Exception):
     def __init__(
@@ -39,6 +44,14 @@ def _blank_to_none(raw: str | None) -> str | None:
     return stripped or None
 
 
+def _is_within_remote_root(normalized: str) -> bool:
+    # 精确匹配根，或根加 `/` 的后代；防 `/personalx`、`/share2` 等前缀混淆。
+    return any(
+        normalized == root or normalized.startswith(root + "/")
+        for root in _REMOTE_WORKSPACE_ROOTS
+    )
+
+
 def normalize_remote_share_path(raw: object) -> str:
     if not isinstance(raw, str):
         raise SessionDirectoryError(
@@ -59,10 +72,11 @@ def normalize_remote_share_path(raw: object) -> str:
         )
 
     normalized = posixpath.normpath(stripped)
-    if normalized != "/share" and not normalized.startswith("/share/"):
+    if not _is_within_remote_root(normalized):
+        allowed = " or ".join(_REMOTE_WORKSPACE_ROOTS)
         raise SessionDirectoryError(
-            "directory must be /share or a descendant of /share",
-            error_code="directory_outside_share",
+            f"directory must be one of {allowed} or a descendant",
+            error_code="directory_outside_roots",
         )
     return normalized
 

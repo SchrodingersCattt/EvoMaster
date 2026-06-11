@@ -43,8 +43,11 @@ CREATE TABLE `bohrium_jobs` (
         'submitted', 'running', 'terminating', 'unknown',
         'finished', 'failed', 'stopped', 'lost'
     )),
-    CONSTRAINT `chk_workspace_share_path` CHECK (
+    -- 工作区双根 /share + /personal：与 session_directory_service 的
+    -- _REMOTE_WORKSPACE_ROOTS 保持同步（SQL 无法引用 Python 常量，改一处须同步另一处）。
+    CONSTRAINT `chk_workspace_root_path` CHECK (
         `workspace` = '/share' OR `workspace` LIKE '/share/%'
+        OR `workspace` = '/personal' OR `workspace` LIKE '/personal/%'
     ),
     CONSTRAINT `chk_active_poll` CHECK (
         (`status` IN ('submitted', 'running', 'terminating', 'unknown') AND `next_poll_at` IS NOT NULL)
