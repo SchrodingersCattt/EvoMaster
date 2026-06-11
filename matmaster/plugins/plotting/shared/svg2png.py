@@ -9,6 +9,7 @@ anything left transparent onto white on top of the prelude's background rect.
 
 from __future__ import annotations
 
+import os
 import sys
 
 import cairosvg
@@ -22,6 +23,9 @@ def main(argv: list[str]) -> int:
         print("usage: python3 svg2png.py input.svg output.png [dpi]")
         return 2
     src, dst = argv[1], argv[2]
+    if not os.path.exists(src):
+        print(f"input not found: {src}")
+        return 2
     dpi = int(argv[3]) if len(argv) == 4 else DEFAULT_DPI
     cairosvg.svg2png(
         url=src,

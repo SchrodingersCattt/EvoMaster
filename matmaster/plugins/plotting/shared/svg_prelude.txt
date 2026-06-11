@@ -11,7 +11,7 @@
     </marker>
   </defs>
   <rect x="0" y="0" width="680" height="REPLACE_HEIGHT" fill="#FFFFFF"/>
-  <!-- EXAMPLE BLOCK: delete everything below this line before drawing your own diagram. -->
+  <!-- EXAMPLE BLOCK: delete the example elements below this comment before drawing your own diagram, but keep the closing </svg> on the last line. -->
   <!-- Two-line node, purple trio: 50 fill / 600 stroke / 800 title / 600 subtitle -->
   <g>
     <rect x="60" y="40" width="200" height="56" rx="4" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
