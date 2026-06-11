@@ -49,9 +49,11 @@ python3 ${PLUGIN_DIR}/shared/svg2png.py /abs/workspace/<name>.svg /abs/workspace
 ```
 
 View the PNG with the Read tool before attaching. Fix the SVG and re-rasterize
-if any of these appear: missing glyphs (tofu boxes), text overflowing a box or
-touching a stroke, absent or misrotated arrowheads, content clipped at an
-edge. Iterate until clean — never attach an unchecked figure.
+if any of these appear: missing glyphs (tofu boxes — usually the declared font
+lacks that glyph; swap it for a supported character or plain text), text
+overflowing a box or touching a stroke, absent or misrotated arrowheads,
+content clipped at an edge. Iterate until clean — never attach an unchecked
+figure.
 
 ## Step 4 — deliver
 

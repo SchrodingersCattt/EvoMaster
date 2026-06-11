@@ -69,8 +69,8 @@ interactivity, no animation, no dark mode. Read fully before writing any SVG.
 - Vertical centering: give every in-box `<text>` the attribute
   `dominant-baseline="central"` with y at the CENTER of the slot it occupies.
   Two-line 56px box with top edge y0: title y = y0+18, subtitle y = y0+38.
-- 24px inner padding; ≥12px between text and box edge; ≥60px between boxes;
-  sentence case; no emoji; subtitles ≤5 words.
+- 24px inner padding; ≥12px between text and box edge; ≥60px edge-to-edge
+  between boxes; sentence case; no emoji; subtitles ≤5 words.
 
 ## 6. Connectors and arrows
 
@@ -88,8 +88,10 @@ interactivity, no animation, no dark mode. Read fully before writing any SVG.
 - Arrow labels are a last resort — prefer the source/target box subtitle or
   the answer prose. A necessary label sits in clear space ≥8px from strokes.
 - One flow direction per figure: all top-down or all left-right.
-- Cycles are never drawn as rings: lay the stages in a line and close the
-  loop with a text note "↻ returns to <first stage>" near the last stage.
+- Cycles are never drawn as rings: lay the stages in a line — stacked
+  top-down when the labels exceed the horizontal row budget (§4) — and close
+  the loop with a text note "↻ returns to <first stage>" near the last stage
+  (if ↻ renders as tofu in the PNG, drop the glyph; the words alone suffice).
   Cyclic processes with per-stage detail become several figures delivered
   with connecting prose (contract narrative rules).
 
