@@ -306,10 +306,11 @@ figure. Skills add domain rules on top; nothing below is repeated there.
 - Never separate series by color alone: pair every color with a second cue
   (linestyle, marker, or hatch) and show both in the legend.
 - Two text sizes only: 14 for axis/node labels and titles, 12 for secondary
-  text (ticks, legends, annotations, subtitles). Sentence case everywhere.
-  No emoji.
+  text (ticks, legends, annotations, subtitles). Sentence case for
+  Latin-script text. No emoji.
 - Display numbers at context precision: counts as integers, percentages with
-  1-2 decimals. The minus sign goes before any currency/unit symbol.
+  1-2 decimals. The minus sign precedes any currency/unit symbol
+  (−$5, not $−5).
 - In-figure text language follows the user's language. CJK works via
   `mm_style.apply()` (matplotlib) or the prelude's font setup (SVG).
 ````
@@ -317,7 +318,7 @@ figure. Skills add domain rules on top; nothing below is repeated there.
 - [ ] **Step 2: 验证行数与表完整性**
 
 Run: `wc -l matmaster/plugins/plotting/shared/style-contract.md && grep -c "^| " matmaster/plugins/plotting/shared/style-contract.md`
-Expected: 总行数 ~75（含表 11 行：表头 2 + 九坡道 9）；grep 计数 11。
+Expected: 总行数 ~72（表 11 行 = 表头 1 + 分隔 1 + 九坡道 9）；`^| ` 计数 10（分隔行 `|---|` 不匹配该模式）。
 
 - [ ] **Step 3: Commit**
 
@@ -913,7 +914,8 @@ Save every figure with `mm_style.save_figure(fig, "/abs/workspace/name.png")`
 
 - Bars, areas and histogram patches use the trio: `facecolor=mm_style.fill(r)`,
   `edgecolor=mm_style.stroke(r)`, `linewidth=0.8`.
-- ≤6 series per panel; more → facet into small multiples or several figures.
+- ≤4 series per panel — the full `CATEGORY_ORDER`, one ramp each; more →
+  facet into small multiples or several figures.
 - The default prop cycle pairs each `CATEGORY_ORDER` color with a distinct
   linestyle — keep both cues; never distinguish series by color alone.
 
