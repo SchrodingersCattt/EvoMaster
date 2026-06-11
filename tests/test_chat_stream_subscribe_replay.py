@@ -37,7 +37,6 @@ def test_generate_subscribe_stream_normalizes_replayed_history_source():
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=MagicMock(),
     )
 
@@ -105,7 +104,6 @@ def test_generate_subscribe_stream_replay_prefers_run_result_over_response():
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=MagicMock(),
     )
 
@@ -163,7 +161,6 @@ def test_generate_subscribe_stream_replay_batches_frames_without_loss():
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=MagicMock(),
     )
 

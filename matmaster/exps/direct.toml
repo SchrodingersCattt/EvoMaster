@@ -88,7 +88,7 @@ mcp = "*"
 
 [skills]
 enabled = true
-skills_root = ["matmaster/skills"]
+skills_root = ["matmaster/skills", "matmaster/plugins"]
 cache_dir = "matmaster/cache"
 config_dir = "config"
 mcp_config_file = "mcp_config.json"

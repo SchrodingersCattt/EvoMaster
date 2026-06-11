@@ -1,4 +1,4 @@
-"""Tests for LLM config: profile methods, route schema, and resolve_route."""
+"""LLMConfig 新 schema：providers/profiles/default + resolve（无 routes）。"""
 
 from __future__ import annotations
 
@@ -7,88 +7,111 @@ import pytest
 from matmaster.config.llm import (
     LLMConfig,
     LLMProfileConfig,
-    LLMRouteConfig,
     PromptCacheConfig,
-    ResolvedLLMRoute,
+    ProviderConfig,
+    ResolvedModel,
 )
 
 
-class TestLLMProfileConfig:
-    """LLMProfileConfig default values match previously hardcoded constants."""
+def _cfg() -> LLMConfig:
+    return LLMConfig(
+        providers={
+            "litellm": ProviderConfig(
+                transport="chat_completions",
+                api_key="sk-test",
+                base_url="http://litellm-proxy",
+            )
+        },
+        profiles={
+            "matmaster/qwen3.7-max": LLMProfileConfig(
+                provider="litellm",
+                model="matmaster/qwen3.7-max",
+                reasoning_effort="high",
+                context_limit=1_000_000,
+                supports_vision=True,
+            ),
+            "matmaster/dsk-v4p": LLMProfileConfig(
+                provider="litellm",
+                model="aliyun/deepseek-v4-pro",
+                reasoning_effort="max",
+                context_limit=200_000,
+            ),
+        },
+        default="matmaster/qwen3.7-max",
+    )
 
-    def test_defaults(self) -> None:
-        p = LLMProfileConfig()
-        assert p.temperature == 0.7
-        assert p.timeout == 300
-        assert p.max_retries == 3
-        assert p.retry_delay == 1.0
-        assert p.provider == "openai"
-        assert p.model == ""
 
-    def test_override_from_dict(self) -> None:
-        p = LLMProfileConfig(**{"model": "gpt-5", "temperature": 0.3})
-        assert p.model == "gpt-5"
-        assert p.temperature == 0.3
+class TestResolve:
+    def test_default_path(self) -> None:
+        r = _cfg().resolve()
+        assert isinstance(r, ResolvedModel)
+        assert r.profile_key == "matmaster/qwen3.7-max"
+        assert r.profile.model == "matmaster/qwen3.7-max"
+        assert r.provider.transport == "chat_completions"
 
-    def test_defaults_to_no_vision_with_high_detail(self) -> None:
-        p = LLMProfileConfig()
-        assert p.supports_vision is False
-        assert p.vision_detail == "high"
+    def test_model_override_is_profile_key(self) -> None:
+        r = _cfg().resolve(model_override="matmaster/dsk-v4p")
+        assert r.profile_key == "matmaster/dsk-v4p"
+        assert r.profile.model == "aliyun/deepseek-v4-pro"
 
-    def test_accepts_vision_detail_none_for_unsupported_provider_field(self) -> None:
-        p = LLMProfileConfig(
-            model="vision-model",
-            supports_vision=True,
-            vision_detail=None,
+    def test_default_key_used_when_no_override(self) -> None:
+        r = _cfg().resolve(default_key="matmaster/dsk-v4p")
+        assert r.profile_key == "matmaster/dsk-v4p"
+
+    def test_override_beats_default_key(self) -> None:
+        r = _cfg().resolve(
+            model_override="matmaster/qwen3.7-max",
+            default_key="matmaster/dsk-v4p",
         )
-        assert p.supports_vision is True
-        assert p.vision_detail is None
+        assert r.profile_key == "matmaster/qwen3.7-max"
 
-    def test_prompt_cache_defaults_none(self) -> None:
-        p = LLMProfileConfig()
-        assert p.prompt_cache is None
-        assert p.reasoning_summary is None
+    def test_unknown_key_fail_fast(self) -> None:
+        with pytest.raises(KeyError, match="not found"):
+            _cfg().resolve(model_override="nope")
 
-    def test_prompt_cache_field_from_dict(self) -> None:
-        p = LLMProfileConfig(
-            prompt_cache={
-                "provider": "anthropic",
-                "system_prompt_breakpoint": True,
-                "automatic": True,
-                "latest_user_breakpoint": True,
-                "tool_result_breakpoint": True,
-                "flexible_breakpoint": True,
-                "max_breakpoints": 4,
-                "min_flexible_chars": 1000,
-                "ttl": "1h",
-            }
-        )
 
-        assert p.prompt_cache == PromptCacheConfig(
-            provider="anthropic",
-            system_prompt_breakpoint=True,
-            automatic=True,
-            latest_user_breakpoint=True,
-            tool_result_breakpoint=True,
-            flexible_breakpoint=True,
-            max_breakpoints=4,
-            min_flexible_chars=1000,
-            ttl="1h",
-        )
+class TestValidation:
+    def test_default_must_exist(self) -> None:
+        with pytest.raises(ValueError, match="default profile"):
+            LLMConfig(
+                providers={
+                    "litellm": ProviderConfig(
+                        transport="chat_completions",
+                        api_key="k",
+                    )
+                },
+                profiles={
+                    "a": LLMProfileConfig(
+                        provider="litellm",
+                        model="m",
+                        context_limit=1,
+                    )
+                },
+                default="missing",
+            )
+
+    def test_profile_provider_must_be_declared(self) -> None:
+        with pytest.raises(ValueError, match="not declared in providers"):
+            LLMConfig(
+                providers={
+                    "litellm": ProviderConfig(
+                        transport="chat_completions",
+                        api_key="k",
+                    )
+                },
+                profiles={
+                    "a": LLMProfileConfig(
+                        provider="ghost",
+                        model="m",
+                        context_limit=1,
+                    )
+                },
+                default="a",
+            )
 
 
 class TestPromptCacheConfig:
-    """Prompt cache config produces Anthropic cache_control payloads."""
-
-    def test_default_cache_control(self) -> None:
-        cfg = PromptCacheConfig()
-        assert cfg.cache_control() == {"type": "ephemeral"}
-
-    def test_one_hour_cache_control(self) -> None:
-        cfg = PromptCacheConfig(ttl="1h")
-        assert cfg.cache_control() == {"type": "ephemeral", "ttl": "1h"}
-
-    def test_strategy_defaults(self) -> None:
+    def test_defaults_match_anthropic_native_policy(self) -> None:
         cfg = PromptCacheConfig()
 
         assert cfg.system_prompt_breakpoint is False
@@ -98,369 +121,33 @@ class TestPromptCacheConfig:
         assert cfg.flexible_breakpoint is False
         assert cfg.max_breakpoints == 4
         assert cfg.min_flexible_chars == 1000
+        assert cfg.ttl == "5m"
+        assert cfg.cache_control() == {"type": "ephemeral"}
 
-    def test_strategy_fields_from_dict(self) -> None:
-        cfg = PromptCacheConfig(
-            system_prompt_breakpoint=True,
-            automatic=True,
-            latest_user_breakpoint=True,
-            tool_result_breakpoint=True,
-            flexible_breakpoint=True,
-            max_breakpoints=4,
-            min_flexible_chars=1200,
-            ttl="5m",
-        )
+    def test_cache_control_includes_one_hour_ttl_only_when_requested(self) -> None:
+        cfg = PromptCacheConfig(ttl="1h")
 
-        assert cfg.latest_user_breakpoint is True
-        assert cfg.tool_result_breakpoint is True
-        assert cfg.flexible_breakpoint is True
-        assert cfg.max_breakpoints == 4
-        assert cfg.min_flexible_chars == 1200
+        assert cfg.cache_control() == {"type": "ephemeral", "ttl": "1h"}
 
-
-class TestLLMProfileConfigMethods:
-    """Task 1: effective_family, effective_temperature, build_extra_kwargs."""
-
-    # -- effective_family --
-
-    def test_effective_family_explicit(self) -> None:
-        p = LLMProfileConfig(model_family="custom-family")
-        assert p.effective_family() == "custom-family"
-
-    def test_effective_family_inferred_from_model_sonnet(self) -> None:
-        p = LLMProfileConfig(model="claude-sonnet-4-6-20250514")
-        assert p.effective_family() == "claude-4.6"
-
-    def test_effective_family_inferred_from_model_opus(self) -> None:
-        p = LLMProfileConfig(model="claude-opus-4-6-20250514")
-        assert p.effective_family() == "claude-4.6"
-
-    def test_effective_family_inferred_haiku(self) -> None:
-        p = LLMProfileConfig(model="claude-haiku-4-5-20250401")
-        assert p.effective_family() == "claude-haiku-4.5"
-
-    def test_effective_family_inferred_gpt5(self) -> None:
-        p = LLMProfileConfig(model="gpt-5-turbo")
-        assert p.effective_family() == "gpt-5"
-
-    def test_effective_family_inferred_deepseek(self) -> None:
-        p = LLMProfileConfig(model="deepseek-reasoner-v2")
-        assert p.effective_family() == "deepseek-reasoner"
-
-    def test_effective_family_inferred_gemini(self) -> None:
-        p = LLMProfileConfig(model="gemini-3-flash-preview-0501")
-        assert p.effective_family() == "gemini-3-flash-preview"
-
-    def test_effective_family_unknown_model(self) -> None:
-        p = LLMProfileConfig(model="some-unknown-model")
-        assert p.effective_family() is None
-
-    def test_effective_family_explicit_overrides_inference(self) -> None:
-        p = LLMProfileConfig(model="claude-opus-4-6", model_family="override")
-        assert p.effective_family() == "override"
-
-    # -- effective_temperature --
-
-    def test_effective_temperature_default(self) -> None:
-        p = LLMProfileConfig(temperature=0.5)
-        assert p.effective_temperature() == 0.5
-
-    def test_effective_temperature_force_one_explicit_policy(self) -> None:
-        p = LLMProfileConfig(
-            temperature=0.5, temperature_policy="force_one_when_reasoning"
-        )
-        assert p.effective_temperature() == 1.0
-
-    def test_effective_temperature_force_one_from_family_default(self) -> None:
-        p = LLMProfileConfig(model="claude-sonnet-4-6-20250514", temperature=0.3)
-        assert p.effective_temperature() == 1.0
-
-    def test_effective_temperature_no_force_for_gpt5(self) -> None:
-        p = LLMProfileConfig(model="gpt-5-turbo", temperature=0.5)
-        assert p.effective_temperature() == 0.5
-
-    def test_effective_temperature_unknown_family(self) -> None:
-        p = LLMProfileConfig(model="unknown-model", temperature=0.8)
-        assert p.effective_temperature() == 0.8
-
-    # -- build_extra_kwargs --
-
-    def test_build_extra_kwargs_anthropic(self) -> None:
-        p = LLMProfileConfig(
-            reasoning_protocol="anthropic_adaptive_thinking",
-            thinking_effort="high",
-        )
-        result = p.build_extra_kwargs()
-        assert result == {
-            "extra_body": {
-                "thinking": {"type": "adaptive"},
-                "output_config": {"effort": "high"},
-            },
-        }
-
-    def test_build_extra_kwargs_openai(self) -> None:
-        p = LLMProfileConfig(
-            reasoning_protocol="openai_reasoning_effort",
-            thinking_effort="medium",
-        )
-        result = p.build_extra_kwargs()
-        assert result == {"reasoning_effort": "medium"}
-
-    def test_build_extra_kwargs_openai_reasoning_summary(self) -> None:
-        p = LLMProfileConfig(
-            reasoning_protocol="openai_reasoning_effort",
-            thinking_effort="xhigh",
-            reasoning_summary="detailed",
-        )
-        result = p.build_extra_kwargs()
-        assert result == {
-            "reasoning_effort": "xhigh",
-            "extra_body": {
-                "reasoning": {
-                    "effort": "xhigh",
-                    "summary": "detailed",
-                },
-            },
-        }
-
-    def test_build_extra_kwargs_from_family_default(self) -> None:
-        p = LLMProfileConfig(model="claude-opus-4-6", thinking_effort="low")
-        result = p.build_extra_kwargs()
-        assert result == {
-            "extra_body": {
-                "thinking": {"type": "adaptive"},
-                "output_config": {"effort": "low"},
-            },
-        }
-
-    def test_build_extra_kwargs_anthropic_prompt_cache_does_not_emit_cache_control(
-        self,
-    ) -> None:
-        p = LLMProfileConfig(
+    def test_profile_accepts_prompt_cache(self) -> None:
+        profile = LLMProfileConfig(
+            provider="litellm-anthropic",
             model="claude-opus-4-6",
-            reasoning_protocol="anthropic_adaptive_thinking",
-            thinking_effort="max",
+            context_limit=200_000,
             prompt_cache={
-                "provider": "anthropic",
                 "system_prompt_breakpoint": True,
                 "automatic": True,
-                "ttl": "5m",
-            },
-        )
-
-        result = p.build_extra_kwargs()
-
-        assert result == {
-            "extra_body": {
-                "thinking": {"type": "adaptive"},
-                "output_config": {"effort": "max"},
-            },
-        }
-
-    def test_build_extra_kwargs_prompt_cache_without_thinking_effort_returns_none(
-        self,
-    ) -> None:
-        p = LLMProfileConfig(
-            model="claude-opus-4-6",
-            prompt_cache={
-                "provider": "anthropic",
-                "system_prompt_breakpoint": True,
-                "automatic": True,
+                "latest_user_breakpoint": True,
+                "tool_result_breakpoint": True,
+                "flexible_breakpoint": True,
+                "max_breakpoints": 4,
+                "min_flexible_chars": 1000,
                 "ttl": "1h",
             },
         )
 
-        result = p.build_extra_kwargs()
-
-        assert result is None
-
-    def test_build_extra_kwargs_prompt_cache_disabled_automatic(
-        self,
-    ) -> None:
-        p = LLMProfileConfig(
-            model="claude-opus-4-6",
-            prompt_cache={
-                "provider": "anthropic",
-                "system_prompt_breakpoint": True,
-                "automatic": False,
-            },
-        )
-
-        assert p.build_extra_kwargs() is None
-
-    def test_build_extra_kwargs_no_effort(self) -> None:
-        p = LLMProfileConfig(reasoning_protocol="anthropic_adaptive_thinking")
-        assert p.build_extra_kwargs() is None
-
-    def test_build_extra_kwargs_no_protocol_no_family(self) -> None:
-        p = LLMProfileConfig(model="unknown-model", thinking_effort="high")
-        assert p.build_extra_kwargs() is None
-
-    def test_build_extra_kwargs_unknown_protocol(self) -> None:
-        p = LLMProfileConfig(
-            reasoning_protocol="some_future_protocol", thinking_effort="high"
-        )
-        assert p.build_extra_kwargs() is None
-
-
-class TestLLMConfigModelValidator:
-    """model_validator accepts only the normalized profile schema."""
-
-    def test_flat_yaml_dict_is_rejected(self) -> None:
-        raw = {
-            "opus": {"provider": "openai", "model": "claude-opus-4-6"},
-            "sonnet": {"provider": "openai", "model": "claude-sonnet-4-6"},
-            "default": "opus",
+        assert isinstance(profile.prompt_cache, PromptCacheConfig)
+        assert profile.prompt_cache.cache_control() == {
+            "type": "ephemeral",
+            "ttl": "1h",
         }
-
-        with pytest.raises(ValueError, match="default profile 'opus' not found"):
-            LLMConfig.model_validate(raw)
-
-    def test_already_normalized(self) -> None:
-        raw = {
-            "profiles": {"p1": {"model": "m1"}},
-            "default": "p1",
-        }
-        cfg = LLMConfig.model_validate(raw)
-        assert cfg.profiles["p1"].model == "m1"
-
-
-# ── Task 2: Route schema + resolve_route ──────────────────────────────────────
-
-
-class TestLLMRouteConfig:
-    """LLMRouteConfig basic schema."""
-
-    def test_route_with_model(self) -> None:
-        r = LLMRouteConfig(profile="opus", model="claude-sonnet-4-6")
-        assert r.profile == "opus"
-        assert r.model == "claude-sonnet-4-6"
-
-    def test_route_without_model(self) -> None:
-        r = LLMRouteConfig(profile="opus")
-        assert r.profile == "opus"
-        assert r.model is None
-
-
-class TestLLMConfigWithRoutes:
-    """resolve_route with route table."""
-
-    @pytest.fixture()
-    def cfg(self) -> LLMConfig:
-        return LLMConfig.model_validate(
-            {
-                "profiles": {
-                    "opus": {"provider": "openai", "model": "claude-opus-4-6"},
-                    "sonnet": {"provider": "openai", "model": "claude-sonnet-4-6"},
-                },
-                "routes": {
-                    "claude-opus-4-6": {"profile": "opus"},
-                    "claude-sonnet-4-6": {"profile": "sonnet"},
-                },
-                "default": "opus",
-            }
-        )
-
-    def test_routes_parsed(self, cfg: LLMConfig) -> None:
-        assert len(cfg.routes) == 2
-        assert cfg.routes["claude-opus-4-6"].profile == "opus"
-
-    def test_resolve_route_hit(self, cfg: LLMConfig) -> None:
-        r = cfg.resolve_route(model_override="claude-opus-4-6")
-        assert r == ResolvedLLMRoute(
-            route_key="claude-opus-4-6",
-            profile_key="opus",
-            provider="openai",
-            model="claude-opus-4-6",
-        )
-
-    def test_resolve_route_sonnet(self, cfg: LLMConfig) -> None:
-        r = cfg.resolve_route(model_override="claude-sonnet-4-6")
-        assert r.profile_key == "sonnet"
-        assert r.provider == "openai"
-        assert r.model == "claude-sonnet-4-6"
-
-    def test_resolve_route_unknown_raises(self, cfg: LLMConfig) -> None:
-        with pytest.raises(KeyError, match="Unknown LLM route key"):
-            cfg.resolve_route(model_override="nonexistent-model")
-
-    def test_resolve_route_llm_override_as_profile_key(self, cfg: LLMConfig) -> None:
-        r = cfg.resolve_route(llm_override="sonnet")
-        assert r == ResolvedLLMRoute(
-            route_key=None,
-            profile_key="sonnet",
-            provider="openai",
-            model="claude-sonnet-4-6",
-        )
-
-    def test_resolve_route_default_path(self, cfg: LLMConfig) -> None:
-        r = cfg.resolve_route()
-        assert r.profile_key == "opus"
-        assert r.route_key is None
-
-    def test_resolve_route_custom_default_key(self, cfg: LLMConfig) -> None:
-        r = cfg.resolve_route(default_key="sonnet")
-        assert r.profile_key == "sonnet"
-        assert r.model == "claude-sonnet-4-6"
-
-    def test_resolve_route_model_override_takes_precedence(
-        self, cfg: LLMConfig
-    ) -> None:
-        r = cfg.resolve_route(model_override="claude-sonnet-4-6", llm_override="opus")
-        assert r.route_key == "claude-sonnet-4-6"
-        assert r.profile_key == "sonnet"
-
-    def test_resolve_route_route_without_model_uses_profile_model(
-        self, cfg: LLMConfig
-    ) -> None:
-        r = cfg.resolve_route(model_override="claude-opus-4-6")
-        assert r.model == "claude-opus-4-6"
-
-
-class TestSonnetRouteRegression:
-    """Regression: claude-sonnet-4-6 must resolve without error."""
-
-    def test_sonnet_route_resolves(self) -> None:
-        cfg = LLMConfig.model_validate(
-            {
-                "profiles": {
-                    "opus": {"provider": "openai", "model": "claude-opus-4-6"},
-                    "sonnet": {"provider": "openai", "model": "claude-sonnet-4-6"},
-                },
-                "routes": {
-                    "claude-opus-4-6": {"profile": "opus"},
-                    "claude-sonnet-4-6": {"profile": "sonnet"},
-                },
-                "default": "opus",
-            }
-        )
-        r = cfg.resolve_route(model_override="claude-sonnet-4-6")
-        assert r == ResolvedLLMRoute(
-            route_key="claude-sonnet-4-6",
-            profile_key="sonnet",
-            provider="openai",
-            model="claude-sonnet-4-6",
-        )
-
-
-class TestLLMConfigValidation:
-    """Fail-fast validation of internal references."""
-
-    def test_route_references_nonexistent_profile(self) -> None:
-        with pytest.raises(ValueError, match="route.*references profile.*ghost"):
-            LLMConfig.model_validate(
-                {
-                    "profiles": {"opus": {"model": "m1"}},
-                    "routes": {"r1": {"profile": "ghost"}},
-                    "default": "opus",
-                }
-            )
-
-    def test_default_references_nonexistent_profile(self) -> None:
-        with pytest.raises(ValueError, match="default profile.*missing"):
-            LLMConfig.model_validate(
-                {
-                    "profiles": {"opus": {"model": "m1"}},
-                    "default": "missing",
-                }
-            )

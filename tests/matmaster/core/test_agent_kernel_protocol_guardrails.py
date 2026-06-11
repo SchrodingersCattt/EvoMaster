@@ -9,13 +9,14 @@ from matmaster.types.errors import LLMError
 from matmaster.types.messages import StreamChunk
 
 from .agent_kernel_test_helpers import (
+    ProviderProtocolAttrs,
     _make_tool_registry,
     make_kernel_runtime,
     make_kernel_turn,
 )
 
 
-class _DuplicateIdProvider:
+class _DuplicateIdProvider(ProviderProtocolAttrs):
     async def __aenter__(self):
         return self
 

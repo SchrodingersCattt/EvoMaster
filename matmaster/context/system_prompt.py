@@ -18,6 +18,7 @@ _GENERIC_TOOLS_TEXT = (
 _TEXT_SECTION_HEADINGS: dict[str, str] = {
     "system_prompt": "System",
     "identity": "Identity",
+    "environment": "Environment",
     "memory": "Memory",
     "task": "Task Context",
 }
@@ -40,6 +41,7 @@ class SystemPromptBuilder:
         "identity",
         "skills",
         "tools",
+        "environment",
         "memory",
         "task",
     )
@@ -51,6 +53,7 @@ class SystemPromptBuilder:
         system_prompt: str = "",
         identity: str = "",
         skill_registry: Any = None,
+        environment_context: str = "",
         memory_context: str | None = None,
         task_context: str | None = None,
         disabled_sections: set[str] | None = None,
@@ -59,6 +62,7 @@ class SystemPromptBuilder:
         text_values: dict[str, str | None] = {
             "system_prompt": system_prompt,
             "identity": identity,
+            "environment": environment_context,
             "memory": memory_context,
             "task": task_context,
         }

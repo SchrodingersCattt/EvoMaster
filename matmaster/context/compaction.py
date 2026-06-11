@@ -8,7 +8,6 @@ truncation if summarization fails.
 from __future__ import annotations
 
 import functools
-import json
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -27,7 +26,6 @@ from matmaster.context.sources.turn_input import (
 from matmaster.types.llm_provider import LLMProvider
 from matmaster.types.message_normalization import (
     canonicalize_messages_for_provider,
-    normalize_and_validate_openai_messages,
 )
 from matmaster.types.messages import (
     AssistantMessage,
@@ -91,6 +89,7 @@ Output requirements:
 _TRUNCATE_HEAD_CHARS = 1200
 _TRUNCATE_TAIL_CHARS = 800
 _TRUNCATE_MIN_CONTENT_CHARS = 500
+_IMAGE_TOKEN_ESTIMATE = 2000
 
 CURRENT_INPUT_CONTINUATION_INSTRUCTION = (
     "不要向用户复述上述摘要，除非用户明确要求。"
@@ -111,18 +110,46 @@ def _get_encoder():
         return None
 
 
+def _message_size_text(msg: Message) -> str:
+    parts: list[str] = [msg.content or ""]
+    reasoning = getattr(msg, "reasoning_content", None)
+    if reasoning:
+        parts.append(reasoning)
+    tool_calls = getattr(msg, "tool_calls", None)
+    if tool_calls:
+        for tc in tool_calls:
+            parts.append(tc.name)
+            parts.append(tc.arguments_json)
+    return "\n".join(parts)
+
+
 def estimate_tokens(messages: list[Message], safety_margin: float = 1.0) -> int:
-    """Estimate token count for a list of messages."""
+    """Estimate token count for a list of messages (heuristic, protocol-neutral)."""
     total = 0
     enc = _get_encoder()
     for msg in messages:
-        text = json.dumps(msg.to_api_dict(), ensure_ascii=False)
+        text = _message_size_text(msg)
         if enc is not None:
             total += len(enc.encode(text))
         else:
             total += max(len(text) // 4, 1)
         total += 4
+        images = getattr(msg, "images", None)
+        if images:
+            total += _IMAGE_TOKEN_ESTIMATE * len(images)
     return int(total * safety_margin)
+
+
+def _drop_images_for_summary(msg: Message) -> Message:
+    if not isinstance(msg, ToolMessage) or not msg.images:
+        return msg
+    return msg.model_copy(
+        update={
+            "images": [],
+            "content": (msg.content or "")
+            + f"\n[images omitted for summary: {len(msg.images)}]",
+        }
+    )
 
 
 def _truncate_tool_message_for_summary(msg: ToolMessage) -> ToolMessage:
@@ -253,9 +280,9 @@ def prepare_messages_for_summary_call(
         phase=phase,
         turn_input=turn_input,
     )
-    input_budget = context_limit - reserved_summary_tokens - safety_margin_tokens
+    base_messages = [_drop_images_for_summary(msg) for msg in base_messages]
     request_tokens = estimate_tokens([compact_request], safety_margin=1.1)
-    message_budget = input_budget - request_tokens
+    message_budget = context_limit - reserved_summary_tokens
     if message_budget <= 0:
         raise ValueError("summary message budget non-positive")
 
@@ -338,11 +365,9 @@ async def call_summary_llm_response(
         safety_margin_tokens=safety_margin_tokens,
     )
     summary_messages = [*prep.messages, compact_request]
-    api_messages = normalize_and_validate_openai_messages(
-        canonicalize_messages_for_provider(summary_messages)
-    )
+    canonical_messages = canonicalize_messages_for_provider(summary_messages)
     return await llm_provider.chat(
-        api_messages,
+        canonical_messages,
         tools=tool_definitions,
         tool_choice="none",
     )
@@ -393,10 +418,7 @@ class ContextCompactor:
         return next_count, f"{self._compaction_scope}:{next_count}"
 
     def _auto_threshold(self) -> int:
-        threshold = getattr(self._config, "auto_threshold", None)
-        if isinstance(threshold, int):
-            return threshold
-        return int(self._config.context_limit * self._config.trigger_ratio)
+        return self._config.auto_threshold
 
     def _plan_preflight_compaction(
         self,

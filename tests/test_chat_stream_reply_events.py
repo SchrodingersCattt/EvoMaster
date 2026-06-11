@@ -1,18 +1,14 @@
 from unittest.mock import MagicMock, patch
 
 
-def test_publish_reply_event_broadcasts_locally_and_publishes_redis() -> None:
-    from src.services.stream_service import ChatStreamService, StreamQueueManager
+def test_publish_reply_event_publishes_redis() -> None:
+    from src.services.stream_service import ChatStreamService
 
-    queue_manager = StreamQueueManager()
     service = ChatStreamService(
         sessions_service=MagicMock(),
         events_service=MagicMock(),
-        agent_run_service=MagicMock(),
         deploy_state_service=MagicMock(),
-        queue_manager=queue_manager,
     )
-    subscriber = queue_manager.register_subscriber("sess-1")
     fake_redis = MagicMock()
 
     payload = {
@@ -28,7 +24,6 @@ def test_publish_reply_event_broadcasts_locally_and_publishes_redis() -> None:
     ):
         service.publish_reply_event("sess-1", payload)
 
-    assert subscriber.get_nowait() == payload
     fake_redis.publish_stream_event.assert_called_once_with("sess-1", payload)
 
 
@@ -40,7 +35,6 @@ def test_send_stream_context_does_not_carry_unused_reply_queue() -> None:
     field_names = {field.name for field in fields(SendStreamContext)}
 
     assert "reply_queue" not in field_names
-    assert "turn_input" in field_names
     assert "invocation_id" in field_names
 
 

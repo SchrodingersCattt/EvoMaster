@@ -21,11 +21,12 @@ from matmaster.devshell.stream_hook import DevStreamHook
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.messages import StreamChunk
 from matmaster.types.session import Session
+from tests.conftest import ProviderProtocolAttrs
 
 # -- Mock Providers --
 
 
-class SimpleProvider:
+class SimpleProvider(ProviderProtocolAttrs):
     """Mock that always returns a text reply (no tool calls)."""
 
     async def __aenter__(self):
@@ -47,7 +48,7 @@ class SimpleProvider:
         )
 
 
-class ToolCallingProvider:
+class ToolCallingProvider(ProviderProtocolAttrs):
     """Mock that calls a tool on first turn, then finishes with text."""
 
     def __init__(self) -> None:

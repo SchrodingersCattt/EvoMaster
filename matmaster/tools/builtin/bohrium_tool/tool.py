@@ -1,15 +1,15 @@
 """Bohrium builtin tool orchestration.
 
 Single tool with action-based dispatch for Bohrium HPC operations.
-This tool handles pure communication: submit, poll (short-polling loop),
+This tool handles pure communication: submit, query (single-shot status),
 download, kill, list_images, list_machines. All software-specific knowledge
 lives in software skills.
 
 Design decisions:
-- poll uses an internal short-polling loop (up to 60s, ~8s interval) so
-  the agent never needs to sleep between polls
+- query returns the job's current status in a single call; long-running
+  monitoring lives in the separate monitor process, not in the agent
 - submit auto-appends "> log 2>&1" if missing
-- kill is asynchronous; callers must poll to confirm terminal state
+- kill is asynchronous; callers must query to confirm terminal state
 - Credentials resolved via runtime bridge (session > env fallback)
 - Remote /share paths require active session with upload_directory
 """
@@ -45,11 +45,7 @@ from matmaster.bohrium.status import (
 from matmaster.bohrium.types import BohriumContext
 from matmaster.bohrium.upload import upload_input_archive
 from matmaster.tools.builtin.base import BuiltinTool
-from matmaster.tools.builtin.bohrium_tool.registry import (
-    JobRegistry,
-    classify_poll_status,
-)
-from matmaster.tools.tool_result import ToolResult, normalize_tool_result
+from matmaster.tools.tool_result import ToolResult
 from matmaster.types.tool_desc_ctx import ToolDescriptionContext
 from matmaster.types.tool_spec import ResourceClaim
 from matmaster.types.topology import ToolPlane
@@ -164,7 +160,7 @@ class BohriumTool(BuiltinTool):
 
     name: ClassVar[str] = "Bohrium"
     description: ClassVar[str] = (
-        "Bohrium HPC platform operations: submit / poll / download / kill "
+        "Bohrium HPC platform operations: submit / query / download / kill "
         "jobs, list available images / machines."
     )
 
@@ -175,7 +171,7 @@ class BohriumTool(BuiltinTool):
                 "type": "string",
                 "enum": [
                     "submit",
-                    "poll",
+                    "query",
                     "download",
                     "kill",
                     "list_images",
@@ -208,10 +204,10 @@ class BohriumTool(BuiltinTool):
                 "type": "integer",
                 "description": "Disk size in GB. Default: 50. (submit)",
             },
-            # --- poll ---
+            # --- query ---
             "job_id": {
                 "type": ["integer", "string"],
-                "description": "Job ID returned by submit. (poll, download, kill)",
+                "description": "Job ID returned by submit. (query, download, kill)",
             },
             "result_dir": {
                 "type": "string",
@@ -254,6 +250,21 @@ class BohriumTool(BuiltinTool):
     exposed_to_model: ClassVar[bool] = True
     max_result_chars: ClassVar[int] = 0
 
+    def __init__(
+        self,
+        *,
+        session: Any | None = None,
+        workdir: Any | None = None,
+        path_access_roots: Any = (),
+        job_ledger: Any | None = None,
+    ) -> None:
+        super().__init__(
+            session=session,
+            workdir=workdir,
+            path_access_roots=path_access_roots,
+        )
+        self._job_ledger = job_ledger
+
     # prompt() keeps workflow + cross-skill rules only. Per-software image/machine/cmd
     # belong in matmaster/skills/<name>/SKILL.md — do not paste full default tables here
     # (duplicates skills, drifts on tag bumps; see evaluation/AGENTS_evaluation.md DevShell).
@@ -279,17 +290,19 @@ class BohriumTool(BuiltinTool):
             'cmd runs in the directory where input files are unpacked — do NOT '
             'prepend "cd <path> &&" or any directory change. '
             'cmd MUST end with "> log 2>&1" (auto-appended if missing).\n'
-            '- **poll**: check job status with built-in waiting (up to ~60s). '
-            'Internally polls the API every few seconds and returns as soon '
-            'as the job finishes or fails. If still running after ~60s, '
-            'returns the latest status. Call poll again to continue waiting. '
-            'Does not download artifacts.\n'
+            '- **query**: query a job\'s current status in a single call and '
+            'return immediately - no blocking, no internal waiting. After '
+            'submitting a job you do NOT need to repeatedly query and wait: '
+            'long-running monitoring happens automatically in the background, '
+            'and a job\'s completion will be surfaced in later context. Only '
+            'call query when you actively need to confirm one job\'s current '
+            'status, by single job_id. Does not download artifacts.\n'
             '- **download**: download artifacts for a finished or failed job into result_dir. '
-            'Use only after poll reports Finished or Failed. Requires result_dir; '
+            'Use only after query reports Finished or Failed. Requires result_dir; '
             'retrieves logs and artifacts for analysis.\n'
             '- **kill**: request termination of a previously submitted job. Use only when '
             'the user explicitly wants to stop a running job. The call is '
-            'asynchronous; follow up with poll to confirm terminal state.\n'
+            'asynchronous; follow up with query to confirm terminal state.\n'
             '- **list_images**: list the user\'s own private Docker images (filtered by keyword).\n'
             '- **list_machines**: query available machine types (cpu / gpu).\n'
             '\n'
@@ -300,142 +313,6 @@ class BohriumTool(BuiltinTool):
             session=self._session,
             require_project=require_project,
         )
-
-    # Short-polling constants
-    _POLL_INTERVAL: ClassVar[int] = 5  # seconds between API checks
-    _POLL_MAX_WAIT: ClassVar[int] = 60  # max seconds to block per poll call
-
-    async def execute_with_context(
-        self,
-        arguments: dict[str, Any],
-        exec_ctx: Any,
-    ) -> str | ToolResult:
-        """Registry-aware execution with internal short-polling for poll action."""
-        import asyncio
-
-        action = arguments.get("action")
-        registry: JobRegistry | None = None
-        if exec_ctx is not None and hasattr(exec_ctx, "runner_state"):
-            runner_state = exec_ctx.runner_state
-            if runner_state is not None and hasattr(runner_state, "get"):
-                registry = runner_state.get("bohrium_job_registry")
-
-        if action == "poll":
-            return await self._poll_with_short_loop(arguments, registry)
-
-        try:
-            result = await asyncio.to_thread(self._execute, arguments)
-        except Exception as exc:
-            self.logger.error("Tool %s failed: %s", self.name, exc, exc_info=True)
-            return f"Error: {exc}"
-
-        normalized = normalize_tool_result(result)
-        if registry is not None and action in ("submit", "download", "kill"):
-            normalized = self._update_registry(
-                registry,
-                action,
-                arguments,
-                normalized,
-            )
-
-        return normalized
-
-    async def _poll_with_short_loop(
-        self,
-        arguments: dict[str, Any],
-        registry: JobRegistry | None,
-    ) -> str | ToolResult:
-        """Internal short-polling loop.
-
-        Queries the API every _POLL_INTERVAL seconds, up to _POLL_MAX_WAIT.
-        Returns as soon as the job reaches a non-running state, or after
-        the max wait window expires (returning the latest Running status).
-        """
-        import asyncio
-        import time as _time
-
-        deadline = _time.monotonic() + self._POLL_MAX_WAIT
-        last_result: str | ToolResult = ToolResult(
-            status="error", content="Poll did not execute"
-        )
-
-        while True:
-            try:
-                result = await asyncio.to_thread(self._execute, arguments)
-            except Exception as exc:
-                self.logger.error(
-                    "Tool %s poll failed: %s", self.name, exc, exc_info=True
-                )
-                return f"Error: {exc}"
-
-            normalized = normalize_tool_result(result)
-            if registry is not None:
-                normalized = self._update_registry(
-                    registry, "poll", arguments, normalized
-                )
-            last_result = normalized
-
-            # Check if job left running state
-            try:
-                data = json.loads(normalized.content)
-            except (json.JSONDecodeError, TypeError):
-                return normalized
-            status_str = str(data.get("status", "")).strip().lower()
-            if status_str not in (
-                "running",
-                "submitted",
-                "pending",
-                "prepared",
-                "scheduling",
-                "uploading",
-                "wait",
-            ):
-                return normalized
-
-            # Still running — sleep and retry if within window
-            if _time.monotonic() + self._POLL_INTERVAL >= deadline:
-                break
-            await asyncio.sleep(self._POLL_INTERVAL)
-
-        return last_result
-
-    def _update_registry(
-        self,
-        registry: JobRegistry,
-        action: str,
-        arguments: dict[str, Any],
-        result: ToolResult,
-    ) -> ToolResult:
-        """Update the in-memory registry after a successful tool call."""
-        if result.status == "error":
-            return result
-
-        try:
-            data = json.loads(result.content)
-        except (json.JSONDecodeError, TypeError):
-            return result
-
-        job_id = str(data.get("job_id", arguments.get("job_id", "")))
-        if not job_id:
-            return result
-
-        if action == "submit":
-            registry.register(job_id, job_name=str(arguments.get("job_name", "")))
-            return result
-
-        if action == "download":
-            registry.update_download(job_id)
-            return result
-
-        if action == "kill":
-            registry.update_kill(job_id)
-            return result
-
-        if action == "poll":
-            reg_status = classify_poll_status(str(data.get("status", "unknown")))
-            registry.update_poll(job_id, status=reg_status, result=result.content)
-
-        return result
 
     def _log_request_context(
         self,
@@ -461,8 +338,8 @@ class BohriumTool(BuiltinTool):
         match action:
             case "submit":
                 return self._submit(arguments)
-            case "poll":
-                return self._poll(arguments)
+            case "query":
+                return self._query(arguments)
             case "download":
                 return self._download(arguments)
             case "kill":
@@ -475,9 +352,23 @@ class BohriumTool(BuiltinTool):
                 return ToolResult(
                     status="error",
                     content=f"Unknown action: {action!r}. "
-                    f"Must be one of: submit, poll, download, kill, "
+                    f"Must be one of: submit, query, download, kill, "
                     f"list_images, list_machines.",
                 )
+
+    def _safe_ledger(self, method: str, /, **kwargs: Any) -> None:
+        """调用 ledger port，吞掉异常：ledger 写失败不阻断工具主流程。"""
+        if self._job_ledger is None:
+            return
+        try:
+            getattr(self._job_ledger, method)(**kwargs)
+        except Exception:  # noqa: BLE001
+            logger.warning(
+                "bohrium ledger %s failed job_id=%s",
+                method,
+                kwargs.get("job_id"),
+                exc_info=True,
+            )
 
     def _submit(self, args: dict[str, Any]) -> ToolResult:
         input_dir = args.get("input_dir", "")
@@ -513,6 +404,14 @@ class BohriumTool(BuiltinTool):
                 workdir=self._workdir or Path("."),
                 session=self._session,
             )
+            self._safe_ledger(
+                "record_submit",
+                job_id=str(submitted.job_id),
+                job_name=str(job_name),
+                project_id=ctx.credentials.project_id,
+                sandbox=ctx.sandbox,
+                input_dir=str(input_dir),
+            )
             return ToolResult(
                 status="success",
                 content=json.dumps(
@@ -537,7 +436,7 @@ class BohriumTool(BuiltinTool):
             )
             return ToolResult(status="error", content=f"Submit failed: {exc}")
 
-    def _poll(self, args: dict[str, Any]) -> ToolResult:
+    def _query(self, args: dict[str, Any]) -> ToolResult:
         raw_job_id = args.get("job_id")
         if raw_job_id is None:
             return ToolResult(
@@ -548,7 +447,7 @@ class BohriumTool(BuiltinTool):
             return ToolResult(
                 status="error",
                 content=(
-                    "poll no longer downloads artifacts. "
+                    "query no longer downloads artifacts. "
                     f'Use Bohrium(action="download", job_id={raw_job_id!r}, '
                     f'result_dir="results/run_{raw_job_id}") instead.'
                 ),
@@ -558,7 +457,7 @@ class BohriumTool(BuiltinTool):
         try:
             ctx = self._build_context()
             sandbox = ctx.sandbox
-            self._log_request_context(action="poll", ctx=ctx, sandbox=sandbox)
+            self._log_request_context(action="query", ctx=ctx, sandbox=sandbox)
             job_id: int | str = str(raw_job_id).strip() if sandbox else int(raw_job_id)
             detail_data = get_job_detail(ctx, job_id=job_id)
             code = detail_data.get("status", 0)
@@ -573,6 +472,12 @@ class BohriumTool(BuiltinTool):
                 )
 
             status_label = status_name(code)
+            self._safe_ledger(
+                "record_poll",
+                job_id=str(job_id),
+                sandbox=sandbox,
+                status_code=int(code),
+            )
 
             if code in RUNNING_CODES:
                 message = (
@@ -594,7 +499,7 @@ class BohriumTool(BuiltinTool):
                     "to retrieve logs and artifacts."
                 )
             else:
-                message = f"Unexpected status code {code}. Retry poll or check Bohrium console."
+                message = f"Unexpected status code {code}. Retry query or check Bohrium console."
 
             # Attempt to fetch live log tail for running/terminal jobs
             log_tail = ""
@@ -620,13 +525,13 @@ class BohriumTool(BuiltinTool):
 
         except Exception as exc:
             logger.error(
-                "bohrium poll failed action=poll base_url=%s sandbox=%s error=%s",
+                "bohrium query failed action=query base_url=%s sandbox=%s error=%s",
                 ctx.credentials.base_url if ctx is not None else "",
                 ctx.sandbox if ctx is not None else "n/a",
                 exc,
                 exc_info=True,
             )
-            return ToolResult(status="error", content=f"Poll failed: {exc}")
+            return ToolResult(status="error", content=f"Query failed: {exc}")
 
     def _fetch_log_tail(
         self, ctx: BohriumContext, job_id: str, max_lines: int = 15
@@ -762,6 +667,11 @@ class BohriumTool(BuiltinTool):
             self._log_request_context(action="kill", ctx=ctx, sandbox=sandbox)
             job_id: int | str = str(raw_job_id).strip() if sandbox else int(raw_job_id)
             response = terminate_job(ctx, job_id=job_id)
+            self._safe_ledger(
+                "record_kill",
+                job_id=str(job_id),
+                sandbox=sandbox,
+            )
             return ToolResult(
                 status="success",
                 content=json.dumps(
@@ -772,7 +682,7 @@ class BohriumTool(BuiltinTool):
                         "message": (
                             "Kill requested. The Bohrium kill RPC is "
                             "asynchronous — call "
-                            f'Bohrium(action="poll", job_id={job_id!r}) '
+                            f'Bohrium(action="query", job_id={job_id!r}) '
                             "to confirm the job reaches a terminal state "
                             "(Stopped/Failed/Finished)."
                         ),

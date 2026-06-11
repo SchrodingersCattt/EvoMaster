@@ -9,7 +9,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import Any, Protocol, runtime_checkable
 
-from matmaster.types.messages import LLMResponse, StreamChunk
+from matmaster.types.messages import LLMResponse, Message, StreamChunk
 
 
 @runtime_checkable
@@ -23,6 +23,18 @@ class LLMProvider(Protocol):
     Retry logic lives in Kernel._call_llm_streaming(), not in the provider.
     """
 
+    @property
+    def stream_timeout(self) -> float: ...
+
+    @property
+    def stream_idle_timeout(self) -> float: ...
+
+    @property
+    def max_retries(self) -> int: ...
+
+    @property
+    def retry_delay(self) -> float: ...
+
     async def __aenter__(self) -> LLMProvider: ...
 
     async def __aexit__(
@@ -34,7 +46,7 @@ class LLMProvider(Protocol):
 
     async def chat(
         self,
-        messages: list[dict[str, Any]],
+        messages: list[Message],
         tools: list[dict[str, Any]] | None = None,
         *,
         tool_choice: str | dict | None = None,
@@ -42,7 +54,7 @@ class LLMProvider(Protocol):
 
     async def chat_stream(
         self,
-        messages: list[dict[str, Any]],
+        messages: list[Message],
         tools: list[dict[str, Any]] | None = None,
         *,
         timeout: float | None = None,

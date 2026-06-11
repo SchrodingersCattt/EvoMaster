@@ -13,6 +13,9 @@ from src.utils.constant import REDIS_URL
 
 logger = logging.getLogger(__name__)
 
+# 命令客户端连接 stale 时透明重连：redis-py 在连接空闲超过该秒数后、复用前先 PING 校验
+REDIS_HEALTH_CHECK_INTERVAL_SEC = 30
+
 # interaction reply 多 worker：Redis key 与取消占位值
 INTERACTION_RUN_ACTIVE_KEY = "chat:run_active:{session_id}"
 INTERACTION_RUN_CONTEXT_KEY = "chat:run_context:{session_id}"
@@ -27,6 +30,8 @@ STREAM_CHANNEL_PREFIX = "chat:stream:"
 AGENT_RUN_QUEUE_KEY = "chat:agent_run_queue"
 AGENT_STOP_KEY_PREFIX = "chat:stop:"
 AGENT_STOP_TTL_SEC = 3600
+DEDUP_KEY_PREFIX = "chat:trigger:dedup:"
+DEFAULT_DEDUP_TTL_SEC = 86400  # 24h，程序化触发幂等窗口默认值
 
 # 队列模式：API 入队后、Worker 接手前，subscribe 流用此标记保持打开，避免误判为「本进程在跑」导致流不关
 SESSION_RUN_QUEUED_KEY_PREFIX = "matmaster_chat:session_run_queued:"
@@ -72,6 +77,7 @@ class RedisDao:
 
     def __init__(self) -> None:
         self._publish_client: Any | None = None
+        self._command_client: Any | None = None
 
     def get_publish_client(self) -> Any | None:
         """进程内单例，用于 publish。"""
@@ -81,8 +87,21 @@ class RedisDao:
             self._publish_client = self._make_client()
         return self._publish_client
 
+    def get_command_client(self) -> Any | None:
+        """进程内单例，供非阻塞一次性命令复用（set/get/exists/lpush/llen 等）。
+
+        复用 redis-py 连接池：池线程安全、断连后自动取新连接重建，配合 _make_client
+        的 health_check_interval 在连接 stale 时复用前透明重连。订阅线程与阻塞 BLPOP
+        仍用 create_client 取独立连接。
+        """
+        if not REDIS_URL:
+            return None
+        if self._command_client is None:
+            self._command_client = self._make_client()
+        return self._command_client
+
     def create_client(self) -> Any | None:
-        """每次新建连接（供订阅线程等独立连接使用）。"""
+        """每次新建连接（供订阅线程、阻塞 BLPOP 等需独立连接的场景使用）。"""
         return self._make_client()
 
     def publish(self, channel: str, message: str) -> bool:
@@ -116,7 +135,11 @@ class RedisDao:
         if not REDIS_URL:
             return None
         try:
-            return redis.from_url(REDIS_URL, decode_responses=True)
+            return redis.from_url(
+                REDIS_URL,
+                decode_responses=True,
+                health_check_interval=REDIS_HEALTH_CHECK_INTERVAL_SEC,
+            )
         except Exception as e:
             logger.warning("Redis client init failed: %s", e)
             return None
@@ -125,7 +148,7 @@ class RedisDao:
 
     def set_interaction_run_active(self, session_id: str) -> bool:
         """标记该会话当前有活跃 run。未配置 Redis 或失败返回 False。"""
-        client = self.create_client()
+        client = self.get_command_client()
         if not client:
             return False
         try:
@@ -143,7 +166,7 @@ class RedisDao:
 
     def delete_interaction_run_active(self, session_id: str) -> None:
         """清除 run 活跃标记与 run_context。"""
-        client = self.create_client()
+        client = self.get_command_client()
         if not client:
             return
         try:
@@ -160,7 +183,7 @@ class RedisDao:
         self, session_id: str, task_id: str, invocation_id: str
     ) -> bool:
         """写入当前 run 的 task_id / invocation_id，供 broadcast_reply 跨 worker 使用。"""
-        client = self.create_client()
+        client = self.get_command_client()
         if not client:
             return False
         try:
@@ -181,7 +204,7 @@ class RedisDao:
 
     def get_interaction_run_context(self, session_id: str) -> dict | None:
         """读取当前 run 的 task_id / invocation_id，无或失败返回 None。"""
-        client = self.create_client()
+        client = self.get_command_client()
         if not client:
             return None
         try:
@@ -197,7 +220,7 @@ class RedisDao:
 
     def is_interaction_run_active(self, session_id: str) -> bool:
         """是否配置了 Redis 且该会话在 Redis 中有活跃 run。"""
-        client = self.create_client()
+        client = self.get_command_client()
         if not client:
             return False
         try:
@@ -207,7 +230,7 @@ class RedisDao:
 
     def delete_interaction_reply_list(self, session_id: str) -> None:
         """清空该会话的回复列表（新 run 开始时调用）。"""
-        client = self.create_client()
+        client = self.get_command_client()
         if not client:
             return
         try:
@@ -219,7 +242,7 @@ class RedisDao:
 
     def rpush_interaction_reply(self, session_id: str, value: str) -> None:
         """向该会话回复列表尾部推入一条（内容或取消占位）。"""
-        client = self.create_client()
+        client = self.get_command_client()
         if not client:
             return
         try:
@@ -254,7 +277,7 @@ class RedisDao:
 
     def lpush_agent_run_job(self, payload: dict) -> bool:
         """将一次 run 任务入队。未配置 Redis 或失败返回 False。"""
-        client = self.create_client()
+        client = self.get_command_client()
         if not client:
             return False
         try:
@@ -286,7 +309,7 @@ class RedisDao:
 
     def llen_agent_run_queue(self) -> int:
         """当前 agent run 队列中等待的任务数（供飞书通知等使用）。未配置 Redis 或失败返回 0。"""
-        client = self.create_client()
+        client = self.get_command_client()
         if not client:
             return 0
         try:
@@ -297,7 +320,7 @@ class RedisDao:
 
     def set_session_run_queued(self, session_id: str) -> bool:
         """队列模式：API 入队后设置，供 subscribe 流判断「任务已排队未接手」保持打开。Worker 接手时删除。"""
-        client = self.create_client()
+        client = self.get_command_client()
         if not client:
             return False
         try:
@@ -315,9 +338,45 @@ class RedisDao:
             )
             return False
 
+    def dedup_key_exists(self, dedup_key: str) -> bool:
+        """预检：dedup_key 是否已标记。无 Redis 或异常时按未命中处理。"""
+        client = self.get_command_client()
+        if not client:
+            return False
+        try:
+            return bool(client.exists(DEDUP_KEY_PREFIX + dedup_key))
+        except Exception as e:
+            logger.warning("Redis dedup_key_exists failed key=%s: %s", dedup_key, e)
+            return False
+
+    def mark_dedup_key_nx(
+        self, dedup_key: str, value: str, ttl_sec: int = DEFAULT_DEDUP_TTL_SEC
+    ) -> bool:
+        """成功入队后标记 dedup_key（SET NX EX）。返回是否首次设置成功。
+
+        不区分「已被占位」与「Redis 不可用」，两者都按未标记成功处理。
+        """
+        return bool(self.try_reserve_nx(DEDUP_KEY_PREFIX + dedup_key, value, ttl_sec))
+
+    def try_reserve_nx(self, key: str, value: str, ttl_sec: int) -> bool | None:
+        """三态 SET NX EX 占位：True=占位成功 / False=已被占位 / None=无 client 或异常。
+
+        与 mark_dedup_key_nx 的区别：调用方需要区分「已被占位」与「Redis 不可用」
+        （后者按 fail-closed skip 并计数告警）。key 由调用方自带前缀，不加 DEDUP_KEY_PREFIX。
+        """
+        client = self.get_command_client()
+        if not client:
+            return None
+        try:
+            result = client.set(key, value, nx=True, ex=int(ttl_sec))
+        except Exception as e:
+            logger.warning("Redis try_reserve_nx failed key=%s: %s", key, e)
+            return None
+        return bool(result)
+
     def delete_session_run_queued(self, session_id: str) -> None:
         """Worker try_acquire 时删除，表示已接手。"""
-        client = self.create_client()
+        client = self.get_command_client()
         if not client:
             return
         try:
@@ -331,7 +390,7 @@ class RedisDao:
 
     def is_session_run_queued(self, session_id: str) -> bool:
         """该会话是否处于「已入队、Worker 尚未接手」状态。"""
-        client = self.create_client()
+        client = self.get_command_client()
         if not client:
             return False
         try:
@@ -350,7 +409,7 @@ class RedisDao:
         """标记用户请求停止该 run。Worker 轮询 is_stop_requested。
         同时写入 session 级 key（task_id 为空），便于 ctx 尚未就绪时 stop 仍能生效。
         """
-        client = self.create_client()
+        client = self.get_command_client()
         if not client:
             return False
         try:
@@ -372,7 +431,7 @@ class RedisDao:
 
     def is_stop_requested(self, session_id: str, task_id: str) -> bool:
         """是否已请求停止该 run。同时检查 task 级 key 与 session 级 key（ctx 未就绪时仅写 session 级）。"""
-        client = self.create_client()
+        client = self.get_command_client()
         if not client:
             return False
         try:
@@ -386,10 +445,10 @@ class RedisDao:
 
     def delete_stop_requested(self, session_id: str, task_id: str) -> None:
         """清除停止标记（run 结束后）。同时删除 task 级与 session 级 key。
-        优先使用 get_publish_client（与 Worker publish 同连接），避免 create_client 在部分环境不可用导致未删。
+        优先使用 get_publish_client（与 Worker publish 同连接），回退到复用的命令连接，避免每次新建连接。
         单次 delete 多 key，避免只删掉一个 key 而 session 级残留。
         """
-        client = self.get_publish_client() or self.create_client()
+        client = self.get_publish_client() or self.get_command_client()
         if not client:
             logger.warning(
                 "Redis delete_stop_requested: no client (session_id=%s task_id=%s), skip",
@@ -421,7 +480,7 @@ class RedisDao:
 
     def set_interrupt_hint(self, session_id: str) -> bool:
         """前端有排队消息时设置 hint，Worker checkpoint 处检查。"""
-        client = self.create_client()
+        client = self.get_command_client()
         if not client:
             return False
         try:
@@ -439,7 +498,7 @@ class RedisDao:
 
     def delete_interrupt_hint(self, session_id: str) -> None:
         """前端队列清空时删除 hint。"""
-        client = self.create_client()
+        client = self.get_command_client()
         if not client:
             return
         try:
@@ -451,7 +510,7 @@ class RedisDao:
 
     def has_interrupt_hint(self, session_id: str) -> bool:
         """检查是否存在 interrupt hint。"""
-        client = self.create_client()
+        client = self.get_command_client()
         if not client:
             return False
         try:
@@ -461,7 +520,7 @@ class RedisDao:
 
     def set_interrupt_confirm(self, session_id: str) -> bool:
         """前端收到 checkpoint 后确认中断。"""
-        client = self.create_client()
+        client = self.get_command_client()
         if not client:
             return False
         try:
@@ -479,7 +538,7 @@ class RedisDao:
 
     def has_interrupt_confirm(self, session_id: str) -> bool:
         """检查是否已确认中断。"""
-        client = self.create_client()
+        client = self.get_command_client()
         if not client:
             return False
         try:
@@ -489,7 +548,7 @@ class RedisDao:
 
     def delete_interrupt_confirm(self, session_id: str) -> None:
         """清除中断确认（checkpoint 流程结束后）。"""
-        client = self.create_client()
+        client = self.get_command_client()
         if not client:
             return
         try:
@@ -503,7 +562,7 @@ class RedisDao:
 
     def cleanup_interrupt_keys(self, session_id: str) -> None:
         """清除该会话所有 interrupt 相关 key（run 结束时调用）。"""
-        client = self.create_client()
+        client = self.get_command_client()
         if not client:
             return
         try:

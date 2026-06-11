@@ -19,7 +19,9 @@ class DeployStateService:
         self._current_version = get_build_version()
 
     def _get_client(self):
-        return self._redis_dao.get_publish_client() or self._redis_dao.create_client()
+        return (
+            self._redis_dao.get_publish_client() or self._redis_dao.get_command_client()
+        )
 
     def get_current_version(self) -> str:
         return self._current_version

@@ -1,13 +1,19 @@
 from __future__ import annotations
 
+from itertools import chain
 from pathlib import Path
 
 import yaml
 
+_SKILL_DOC_ROOTS = (Path("matmaster/skills"), Path("matmaster/plugins"))
+
+
+def _iter_skill_docs(pattern: str) -> chain[Path]:
+    return chain.from_iterable(sorted(root.rglob(pattern)) for root in _SKILL_DOC_ROOTS)
+
 
 def test_skill_docs_do_not_reference_legacy_skill_dispatch_api() -> None:
     """Skill docs should not tell models to call removed Skill action helpers."""
-    skills_root = Path("matmaster/skills")
     legacy_markers = (
         "Skill action=",
         "Skill run_script",
@@ -18,7 +24,7 @@ def test_skill_docs_do_not_reference_legacy_skill_dispatch_api() -> None:
         "script_args",
     )
     offenders: list[str] = []
-    for path in sorted(skills_root.rglob("*.md")):
+    for path in _iter_skill_docs("*.md"):
         text = path.read_text(encoding="utf-8")
         for marker in legacy_markers:
             if marker in text:
@@ -31,9 +37,8 @@ _MAX_DESCRIPTION_LENGTH = 300
 
 def test_skill_description_length_limit() -> None:
     """Skill descriptions must be at most 300 characters to keep routing prompts lean."""
-    skills_root = Path("matmaster/skills")
     offenders: list[str] = []
-    for path in sorted(skills_root.rglob("SKILL.md")):
+    for path in _iter_skill_docs("SKILL.md"):
         if any(part.startswith("_") for part in path.parts):
             continue
         text = path.read_text(encoding="utf-8")

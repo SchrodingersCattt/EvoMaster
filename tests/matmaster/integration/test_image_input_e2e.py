@@ -13,11 +13,12 @@ from matmaster.context.sources.turn_input import TurnInput
 from matmaster.core.playground import ExecutionEnvironment
 from matmaster.sessions.local import LocalSession
 from matmaster.types.cancellation import CancellationController
-from matmaster.types.messages import LLMResponse, StreamChunk
+from matmaster.types.messages import LLMResponse, StreamChunk, UserMessage
 from src.services.image_input_service import ImageInputService
+from tests.conftest import ProviderProtocolAttrs
 
 
-class RecordingVisionProvider:
+class RecordingVisionProvider(ProviderProtocolAttrs):
     stream_timeout = 10.0
     max_retries = 1
     retry_delay = 0.0
@@ -47,7 +48,6 @@ def _make_events_table() -> MagicMock:
     table.add_event.return_value = True
     table.get_session_user_query_events.return_value = []
     table.query_context_events.return_value = []
-    table.get_bohrium_events.return_value = []
     table.get_latest_scope_event_id.return_value = 0
     table.get_history_checkpoints.return_value = []
     table.get_session_events.return_value = []
@@ -80,12 +80,9 @@ async def test_images_flow_from_service_to_kernel_user_message(tmp_path: Path) -
     sessions_service.get_session_user_id.return_value = "user-1"
 
     llm_config = MagicMock()
-    llm_config.resolve_route.return_value = SimpleNamespace(profile_key="vision")
-    vision_profile = SimpleNamespace(vision_detail="high")
-    llm_config.get_profile.return_value = vision_profile
 
     image_service = MagicMock()
-    image_service.resolve_image_detail.return_value = vision_profile.vision_detail
+    image_service.resolve_image_detail.return_value = "high"
     image_service.enrich_turn_input_images.side_effect = (
         ImageInputService().enrich_turn_input_images
     )
@@ -98,6 +95,7 @@ async def test_images_flow_from_service_to_kernel_user_message(tmp_path: Path) -
         abort_result=None,
         ssh_attached=False,
         user_instructions=UserInstructions(text="", hash="", truncated=False),
+        workspace=None,
     )
 
     svc = AgentRunService.__new__(AgentRunService)
@@ -129,7 +127,10 @@ async def test_images_flow_from_service_to_kernel_user_message(tmp_path: Path) -
                 model_profile="vision",
                 model_route=None,
                 provider_name="openai",
-                model_family="vision",
+                context_limit=345_000,
+                context_limit_source="profile",
+                supports_vision=True,
+                vision_detail="high",
             ),
         ),
         patch(
@@ -168,11 +169,11 @@ async def test_images_flow_from_service_to_kernel_user_message(tmp_path: Path) -
 
     assert ok is True
     user_message = provider.seen_messages[-1][-1]
-    assert user_message["role"] == "user"
-    assert {
-        "type": "image_url",
-        "image_url": {
+    assert isinstance(user_message, UserMessage)
+    assert [image.model_dump(mode="json") for image in user_message.images] == [
+        {
             "url": "https://oss.example.com/chat/a.png",
+            "mime_type": None,
             "detail": "high",
-        },
-    } in user_message["content"]
+        }
+    ]

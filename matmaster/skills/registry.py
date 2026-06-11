@@ -15,9 +15,11 @@ import json
 import logging
 import re
 import shlex
+from collections.abc import Callable
 from pathlib import Path, PurePosixPath
-from typing import Any, Literal
+from typing import Any, NamedTuple
 
+import yaml
 from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
@@ -32,7 +34,7 @@ items = []
 for current, dirs, files in os.walk(root):
     dirs[:] = sorted(dirs)
     for filename in sorted(files):
-        if filename != "SKILL.md":
+        if filename not in {"SKILL.md", "plugin.yaml"}:
             continue
         path = os.path.join(current, filename)
         try:
@@ -63,22 +65,6 @@ def _parse_depends_on_list(raw: str | None) -> list[str]:
     return [p.strip() for p in raw.split(",") if p.strip()]
 
 
-SkillTypeLiteral = Literal["operator", "mcp-loader", "orchestrator"]
-
-
-def _parse_skill_type(raw: str | None) -> SkillTypeLiteral | None:
-    s = _optional_strip(raw)
-    if s is None:
-        return None
-    if s == "operator":
-        return "operator"
-    if s == "mcp-loader":
-        return "mcp-loader"
-    if s == "orchestrator":
-        return "orchestrator"
-    raise ValueError(f"Invalid skill_type: {s!r}")
-
-
 # ---------------------------------------------------------------------------
 # SkillMetaInfo
 # ---------------------------------------------------------------------------
@@ -89,10 +75,39 @@ class SkillMetaInfo(BaseModel):
 
     name: str = Field(description="技能名称")
     description: str = Field(description="技能描述")
-    skill_type: SkillTypeLiteral | None = None
     mcp_server: str | None = None
     depends_on: list[str] = Field(default_factory=list)
     extras: dict[str, Any] = Field(default_factory=dict, description="扩展字段")
+
+
+# ---------------------------------------------------------------------------
+# PluginInfo
+# ---------------------------------------------------------------------------
+
+
+class PluginInfo(BaseModel):
+    """Plugin 元信息，从 plugin.yaml 瘦清单解析。"""
+
+    name: str
+    category: str | None = None
+    description: str = ""
+
+
+def _parse_plugin_info_from_content(content: str, *, fallback_name: str) -> PluginInfo:
+    raw = yaml.safe_load(content) or {}
+    category = raw.get("category")
+    return PluginInfo(
+        name=str(raw.get("name") or fallback_name),
+        category=str(category).strip() if category else None,
+        description=str(raw.get("description") or ""),
+    )
+
+
+def parse_plugin_info(manifest_path: Path) -> PluginInfo:
+    return _parse_plugin_info_from_content(
+        manifest_path.read_text(encoding="utf-8"),
+        fallback_name=manifest_path.parent.name,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -108,8 +123,16 @@ class Skill:
     - SKILL.md body → full_info (延迟缓存)
     """
 
-    def __init__(self, skill_path: Path) -> None:
+    def __init__(
+        self,
+        skill_path: Path,
+        *,
+        plugin: PluginInfo | None = None,
+        plugin_dir: Path | None = None,
+    ) -> None:
         self.skill_path = skill_path
+        self.plugin = plugin
+        self.plugin_dir = plugin_dir
         self.meta_info = self._parse_meta_info()
         self._full_info_cache: str | None = None
 
@@ -121,9 +144,7 @@ class Skill:
             raise FileNotFoundError(f"SKILL.md not found in {self.skill_path}")
 
         content = skill_md.read_text(encoding="utf-8")
-        return _parse_meta_info_from_content(
-            content, fallback_name=self.skill_path.name
-        )
+        return parse_skill_meta_info(content, fallback_name=self.skill_path.name)
 
     # -- full_info ----------------------------------------------------------
 
@@ -142,9 +163,18 @@ class RemoteSkill:
 
     is_remote: bool = True
 
-    def __init__(self, skill_path: PurePosixPath, content: str) -> None:
+    def __init__(
+        self,
+        skill_path: PurePosixPath,
+        content: str,
+        *,
+        plugin: PluginInfo | None = None,
+        plugin_dir: PurePosixPath | None = None,
+    ) -> None:
         self.skill_path = skill_path
-        self.meta_info = _parse_meta_info_from_content(
+        self.plugin = plugin
+        self.plugin_dir = plugin_dir
+        self.meta_info = parse_skill_meta_info(
             content,
             fallback_name=skill_path.name,
         )
@@ -154,12 +184,12 @@ class RemoteSkill:
         return self._full_info_cache
 
 
-def _parse_meta_info_from_content(content: str, *, fallback_name: str) -> SkillMetaInfo:
+def parse_skill_meta_info(content: str, *, fallback_name: str) -> SkillMetaInfo:
     fm_match = re.match(r"^---\s*\n(.*?)\n---\s*\n", content, re.DOTALL)
     if not fm_match:
         raise ValueError("Invalid SKILL.md: no frontmatter")
 
-    known_keys = {"name", "description", "skill_type", "mcp_server", "depends_on"}
+    known_keys = {"name", "description", "mcp_server", "depends_on"}
     data: dict[str, str] = {}
     for line in fm_match.group(1).split("\n"):
         line = line.strip()
@@ -174,7 +204,6 @@ def _parse_meta_info_from_content(content: str, *, fallback_name: str) -> SkillM
     return SkillMetaInfo(
         name=data.get("name", fallback_name),
         description=data.get("description", ""),
-        skill_type=_parse_skill_type(data.get("skill_type")),
         mcp_server=_optional_strip(data.get("mcp_server")),
         depends_on=_parse_depends_on_list(data.get("depends_on")),
         extras=extras,
@@ -194,24 +223,78 @@ def _remote_skill_scan_command(root: PurePosixPath) -> str:
     )
 
 
-def _parse_remote_skill_scan_stdout(stdout: Any) -> list[tuple[PurePosixPath, str]]:
+class _RemoteScanRecord(NamedTuple):
+    """远端扫描脚本的单条输出：content 与 error 二选一，kind 由文件名导出。"""
+
+    path: PurePosixPath
+    content: str | None
+    error: str | None
+
+
+def _parse_remote_skill_scan_stdout(stdout: Any) -> list[_RemoteScanRecord]:
     payload = json.loads(str(stdout or "[]"))
     if not isinstance(payload, list):
         raise ValueError("remote skill scan payload must be a list")
 
-    records: list[tuple[PurePosixPath, str]] = []
+    records: list[_RemoteScanRecord] = []
     for item in payload:
         if not isinstance(item, dict):
             continue
         path = item.get("path")
-        content = item.get("content")
+        if not isinstance(path, str):
+            continue
         if item.get("error"):
-            logger.warning("Remote skill scan skipped %s: %s", path, item["error"])
+            records.append(
+                _RemoteScanRecord(PurePosixPath(path), None, str(item["error"]))
+            )
             continue
-        if not isinstance(path, str) or not isinstance(content, str):
+        content = item.get("content")
+        if not isinstance(content, str):
             continue
-        records.append((PurePosixPath(path), content))
+        records.append(_RemoteScanRecord(PurePosixPath(path), content, None))
     return records
+
+
+def _normalize_remote_roots(remote_roots: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for raw_root in remote_roots:
+        root_text = raw_root.strip()
+        if not root_text:
+            continue
+        normalized = str(PurePosixPath(root_text))
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(normalized)
+    return result
+
+
+def read_disabled_plugins(plugins_config_path: Path) -> set[str]:
+    """读取 plugins.yaml 的 disabled_plugins 名单；文件缺失等价于留空（全部启用）。"""
+    if not plugins_config_path.is_file():
+        return set()
+    raw = yaml.safe_load(plugins_config_path.read_text(encoding="utf-8")) or {}
+    disabled = raw.get("disabled_plugins") or []
+    return {str(name).strip() for name in disabled if str(name).strip()}
+
+
+class SkillRegistryCache:
+    """Per-query cache for fully built SkillRegistry instances."""
+
+    def __init__(self) -> None:
+        self._by_key: dict[tuple[tuple[str, ...], ...], SkillRegistry] = {}
+
+    def get_or_build(
+        self,
+        key: tuple[tuple[str, ...], ...],
+        builder: Callable[[], SkillRegistry],
+    ) -> SkillRegistry:
+        cached = self._by_key.get(key)
+        if cached is None:
+            cached = builder()
+            self._by_key[key] = cached
+        return cached
 
 
 # ---------------------------------------------------------------------------
@@ -242,12 +325,21 @@ class SkillRegistry:
             self._roots = list(skills_root)
 
         self._skills: dict[str, Skill | RemoteSkill] = {}
+        self._stats = {
+            "local_loaded": 0,
+            "remote_loaded": 0,
+            "local_over_local": 0,
+            "remote_over_local": 0,
+            "remote_over_remote": 0,
+        }
+        normalized_remote_roots = _normalize_remote_roots(remote_roots or [])
         self._load_skills(skills)
         self._load_remote_skills(
             remote_session=remote_session,
-            remote_roots=remote_roots or [],
+            remote_roots=normalized_remote_roots,
             name_filter=skills,
         )
+        self._log_build_summary(normalized_remote_roots)
 
     # -- discovery ----------------------------------------------------------
 
@@ -260,6 +352,7 @@ class SkillRegistry:
 
             # 预计算已知 skill 目录，用于判断嵌套
             skill_dirs: set[Path] = set()
+            plugin_cache: dict[Path, PluginInfo] = {}
 
             for md_path in skill_md_paths:
                 skill_dir = md_path.parent
@@ -273,7 +366,13 @@ class SkillRegistry:
                     continue
 
                 try:
-                    skill = Skill(skill_dir)
+                    plugin_dir = self._find_plugin_dir(skill_dir, root)
+                    if plugin_dir is not None and plugin_dir not in plugin_cache:
+                        plugin_cache[plugin_dir] = parse_plugin_info(
+                            plugin_dir / "plugin.yaml"
+                        )
+                    plugin = plugin_cache[plugin_dir] if plugin_dir else None
+                    skill = Skill(skill_dir, plugin=plugin, plugin_dir=plugin_dir)
                 except Exception:
                     logger.error(
                         "Failed to load skill from %s", skill_dir, exc_info=True
@@ -284,12 +383,14 @@ class SkillRegistry:
                     continue
 
                 if skill.meta_info.name in self._skills:
+                    self._stats["local_over_local"] += 1
                     logger.warning(
                         "Skill %r overridden by %s",
                         skill.meta_info.name,
                         skill_dir,
                     )
                 self._skills[skill.meta_info.name] = skill
+                self._stats["local_loaded"] += 1
                 skill_dirs.add(skill_dir)
 
     def _load_remote_skills(
@@ -326,7 +427,6 @@ class SkillRegistry:
                 )
                 continue
 
-            skill_dirs: set[PurePosixPath] = set()
             try:
                 remote_records = _parse_remote_skill_scan_stdout(result.get("stdout"))
             except Exception:
@@ -337,14 +437,69 @@ class SkillRegistry:
                 )
                 continue
 
-            for md_path, content in remote_records:
-                skill_dir = md_path.parent
+            plugin_infos: dict[PurePosixPath, PluginInfo] = {}
+            invalid_plugin_dirs: set[PurePosixPath] = set()
+            skill_records: list[_RemoteScanRecord] = []
+            for record in remote_records:
+                if record.path.name != "plugin.yaml":
+                    skill_records.append(record)
+                    continue
+                plugin_dir = record.path.parent
+                if record.error is not None:
+                    logger.warning(
+                        "Remote plugin manifest unreadable %s: %s",
+                        record.path,
+                        record.error,
+                    )
+                    invalid_plugin_dirs.add(plugin_dir)
+                    continue
+                try:
+                    plugin_infos[plugin_dir] = _parse_plugin_info_from_content(
+                        record.content or "",
+                        fallback_name=plugin_dir.name,
+                    )
+                except Exception:
+                    logger.warning(
+                        "Remote plugin manifest invalid %s",
+                        record.path,
+                        exc_info=True,
+                    )
+                    invalid_plugin_dirs.add(plugin_dir)
+            known_plugin_dirs = set(plugin_infos) | invalid_plugin_dirs
+
+            skill_dirs: set[PurePosixPath] = set()
+            for record in skill_records:
+                if record.error is not None:
+                    logger.warning(
+                        "Remote skill scan skipped %s: %s",
+                        record.path,
+                        record.error,
+                    )
+                    continue
+                skill_dir = record.path.parent
                 if self._has_underscore_ancestor(skill_dir, root):
                     continue
                 if self._is_nested_under(skill_dir, skill_dirs):
                     continue
+                plugin_dir = self._find_remote_plugin_dir(
+                    skill_dir, root, known_plugin_dirs
+                )
+                if plugin_dir is not None and plugin_dir in invalid_plugin_dirs:
+                    logger.error(
+                        "Failed to load remote skill from %s: "
+                        "invalid plugin manifest %s",
+                        skill_dir,
+                        plugin_dir / "plugin.yaml",
+                    )
+                    continue
+                plugin = plugin_infos[plugin_dir] if plugin_dir is not None else None
                 try:
-                    skill = RemoteSkill(skill_dir, content)
+                    skill = RemoteSkill(
+                        skill_dir,
+                        record.content or "",
+                        plugin=plugin,
+                        plugin_dir=plugin_dir,
+                    )
                 except Exception:
                     logger.error(
                         "Failed to load remote skill from %s",
@@ -355,13 +510,71 @@ class SkillRegistry:
                 if name_filter is not None and skill.meta_info.name not in name_filter:
                     continue
                 if skill.meta_info.name in self._skills:
-                    logger.warning(
-                        "Skill %r overridden by %s",
-                        skill.meta_info.name,
-                        skill_dir,
-                    )
+                    previous = self._skills[skill.meta_info.name]
+                    if not getattr(previous, "is_remote", False):
+                        self._stats["remote_over_local"] += 1
+                        logger.debug(
+                            "Skill %r selected from remote root %s over local "
+                            "fallback %s",
+                            skill.meta_info.name,
+                            skill_dir,
+                            self._skills[skill.meta_info.name].skill_path,
+                        )
+                    else:
+                        self._stats["remote_over_remote"] += 1
+                        logger.warning(
+                            "Skill %r overridden by %s",
+                            skill.meta_info.name,
+                            skill_dir,
+                        )
                 self._skills[skill.meta_info.name] = skill
+                self._stats["remote_loaded"] += 1
                 skill_dirs.add(skill_dir)
+
+    def _log_build_summary(self, remote_roots: list[str]) -> None:
+        local_fallback = sum(
+            1
+            for skill in self._skills.values()
+            if not getattr(skill, "is_remote", False)
+        )
+        logger.info(
+            "Skill registry built: local_roots=%d remote_roots=%d final=%d "
+            "local_loaded=%d remote_loaded=%d remote_over_local=%d "
+            "local_over_local=%d remote_over_remote=%d local_fallback=%d",
+            len(self._roots),
+            len(remote_roots),
+            len(self._skills),
+            self._stats["local_loaded"],
+            self._stats["remote_loaded"],
+            self._stats["remote_over_local"],
+            self._stats["local_over_local"],
+            self._stats["remote_over_remote"],
+            local_fallback,
+        )
+
+    @staticmethod
+    def _find_plugin_dir(skill_dir: Path, root: Path) -> Path | None:
+        """skill_dir 到 root 之间第一个含 plugin.yaml 的祖先目录。"""
+        current = skill_dir.parent
+        while current != root and current != current.parent:
+            if (current / "plugin.yaml").exists():
+                return current
+            current = current.parent
+        return None
+
+    @staticmethod
+    def _find_remote_plugin_dir(
+        skill_dir: PurePosixPath,
+        root: PurePosixPath,
+        plugin_dirs: set[PurePosixPath],
+    ) -> PurePosixPath | None:
+        """skill_dir 到 root 之间最近的已知 plugin 目录（镜像 _find_plugin_dir）。"""
+        current = skill_dir.parent
+        while current != root and current != current.parent:
+            if current in plugin_dirs:
+                return current
+            current = current.parent
+        return None
 
     @staticmethod
     def _has_underscore_ancestor(
@@ -402,11 +615,33 @@ class SkillRegistry:
         for name in names:
             self._skills.pop(name, None)
 
+    def remove_plugin_members(self, disabled_plugin_names: set[str]) -> set[str]:
+        """移除归属于被禁 plugin 的 skill，返回被移除的 skill 名集合。"""
+        if not disabled_plugin_names:
+            return set()
+        removed = {
+            name
+            for name, skill in self._skills.items()
+            if skill.plugin is not None and skill.plugin.name in disabled_plugin_names
+        }
+        for name in removed:
+            del self._skills[name]
+        return removed
+
     def get_meta_info_context(self) -> str:
-        """生成 [Skill: name] description 格式的汇总字符串。"""
-        lines: list[str] = []
+        """可用 skill 汇总：扁平 skill 逐条列出，plugin 成员归组在 plugin 名下。"""
+        flat_lines: list[str] = []
+        grouped: dict[str, tuple[PluginInfo, list[str]]] = {}
         for skill in self._skills.values():
-            lines.append(
-                f"[Skill: {skill.meta_info.name}] {skill.meta_info.description}"
-            )
+            line = f"[Skill: {skill.meta_info.name}] {skill.meta_info.description}"
+            plugin = skill.plugin
+            if plugin is None:
+                flat_lines.append(line)
+            else:
+                grouped.setdefault(plugin.name, (plugin, []))[1].append(line)
+
+        lines = flat_lines
+        for plugin, member_lines in grouped.values():
+            lines.append(f"[Plugin: {plugin.name}] {plugin.description}")
+            lines.extend(f"  {member}" for member in member_lines)
         return "\n".join(lines)

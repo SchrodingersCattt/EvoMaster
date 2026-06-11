@@ -8,8 +8,6 @@ import threading
 import uuid
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from src.services.stream_sse_filter import REPLAY_DISCARDED_EVENT_TYPES
 
 # 测试中屏蔽 DB：任何真实 BaseTable 触发的连接直接报错（应通过 get_*_table mock 避免走到这里）
@@ -59,6 +57,43 @@ async def _check_quota_noop(user_id: str):
 
 def _decode_sse_payload(frame: str) -> dict:
     return json.loads(frame.split('data: ', 1)[1].strip())
+
+
+def _send_stream_job(
+    *,
+    session_id: str = 'sess-1',
+    task_id: str = 'task-1',
+    invocation_id: str = 'inv-1',
+    prompt: str = 'new question',
+    mode: str = 'direct',
+    **overrides,
+) -> dict:
+    job = {
+        'session_id': session_id,
+        'task_id': task_id,
+        'invocation_id': invocation_id,
+        'user_prompt': prompt,
+        'mode': mode,
+        'llm': None,
+        'model': None,
+        'byok_credential_id': None,
+        'turn_input': {
+            'user_text': prompt,
+            'files': [],
+            'images': [],
+            'image_detail': None,
+            'workspace_paths': [],
+            'pre_turn_history_event_id': 0,
+        },
+        'images': [],
+        'bohrium_required': False,
+        'workspace': None,
+        'origin': None,
+        'delivery': None,
+        'submitted_at': '2026-06-04T00:00:00+00:00',
+    }
+    job.update(overrides)
+    return job
 
 
 async def _collect_n_frames(gen, n: int) -> list[dict]:
@@ -147,7 +182,6 @@ def test_prepare_send_message_captures_turn_input_before_user_event():
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=MagicMock(),
     )
     req = ChatSendRequest(
@@ -163,11 +197,13 @@ def test_prepare_send_message_captures_turn_input_before_user_event():
     ):
         ctx = service.prepare_send_message("sess-1", req, user_id="user-1")
 
-    assert ctx.turn_input.user_text == "analyze current"
-    assert ctx.turn_input.files == ("https://oss.example.com/chat/new.cif",)
-    assert ctx.turn_input.images == ("https://oss.example.com/chat/current.png",)
-    assert ctx.turn_input.workspace_paths == ("/share/current/POSCAR",)
-    assert ctx.turn_input.pre_turn_history_event_id == 77
+    assert ctx.job["turn_input"]["user_text"] == "analyze current"
+    assert ctx.job["turn_input"]["files"] == ["https://oss.example.com/chat/new.cif"]
+    assert ctx.job["turn_input"]["images"] == [
+        "https://oss.example.com/chat/current.png"
+    ]
+    assert ctx.job["turn_input"]["workspace_paths"] == ["/share/current/POSCAR"]
+    assert ctx.job["turn_input"]["pre_turn_history_event_id"] == 77
     assert ctx.user_msg["content"] == "analyze current"
     assert "schema_version" not in ctx.user_msg
     events_service.get_latest_scope_event_id.assert_called_once_with("sess-1", None)
@@ -220,7 +256,6 @@ def test_generate_send_stream_skips_current_task_in_history_replay():
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=MagicMock(),
     )
 
@@ -238,9 +273,9 @@ def test_generate_send_stream_skips_current_task_in_history_replay():
                 'task_id': 'task-1',
                 'invocation_id': 'inv-1',
             },
-            request_event_queue=asyncio.Queue(),
+            job=_send_stream_job(),
         )
-        gen = service.generate_send_stream('sess-1', 'new question', ctx)
+        gen = service.generate_send_stream('sess-1', ctx)
         try:
             return await _collect_n_frames(gen, 5)
         finally:
@@ -283,7 +318,6 @@ def test_prepare_send_message_marks_explicit_bohrium_requirement():
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=deploy_state_service,
     )
 
@@ -301,7 +335,7 @@ def test_prepare_send_message_marks_explicit_bohrium_requirement():
         )
 
     assert ctx is not None
-    assert ctx.bohrium_required is True
+    assert ctx.job['bohrium_required'] is True
 
 
 def test_prepare_send_message_persists_images_in_user_message():
@@ -318,7 +352,6 @@ def test_prepare_send_message_persists_images_in_user_message():
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=deploy_state_service,
     )
 
@@ -335,139 +368,10 @@ def test_prepare_send_message_persists_images_in_user_message():
 
     assert ctx is not None
     assert ctx.user_msg['images'] == ['https://oss.example.com/chat/a.png']
+    assert ctx.job['images'] == ['https://oss.example.com/chat/a.png']
     assert events_service.add_history_event.call_args.args[1]['images'] == [
         'https://oss.example.com/chat/a.png'
     ]
-
-
-@pytest.mark.asyncio
-async def test_generate_send_stream_enqueues_bohrium_required_flag():
-    from src.services.stream_service import ChatStreamService, SendStreamContext
-
-    service = ChatStreamService(
-        sessions_service=MagicMock(
-            get_session_status_payload=MagicMock(
-                return_value={
-                    'source': 'System',
-                    'type': 'status',
-                    'content': '',
-                    'session_id': 'sess-1',
-                }
-            )
-        ),
-        events_service=MagicMock(get_session_events=MagicMock(return_value=[])),
-        agent_run_service=MagicMock(),
-        deploy_state_service=MagicMock(),
-    )
-
-    ctx = SendStreamContext(
-        task_id='task-1',
-        invocation_id='inv-1',
-        mode='direct',
-        user_msg={'source': 'User', 'type': 'query', 'content': 'run'},
-        request_event_queue=asyncio.Queue(),
-        bohrium_required=True,
-    )
-
-    fake_redis = MagicMock()
-    fake_redis.create_client.return_value = None
-    fake_redis.set_session_run_queued.return_value = True
-    fake_redis.llen_agent_run_queue.return_value = 0
-    fake_redis.lpush_agent_run_job.side_effect = lambda job: True
-
-    async def _stream_closed_immediately(awaitable, timeout):
-        close = getattr(awaitable, 'close', None)
-        if callable(close):
-            close()
-        return {
-            'source': 'System',
-            'type': 'stream_closed',
-            'content': '',
-            'session_id': 'sess-1',
-        }
-
-    with (
-        patch('src.services.stream_service.REDIS_URL', 'redis://test'),
-        patch('src.services.stream_service.get_redis_dao', return_value=fake_redis),
-        patch('src.services.stream_service.notify_post_async'),
-        patch(
-            'src.services.stream_service.asyncio.wait_for',
-            side_effect=_stream_closed_immediately,
-        ),
-    ):
-        gen = service.generate_send_stream('sess-1', 'run', ctx)
-        await gen.__anext__()
-        await gen.__anext__()
-        await gen.__anext__()
-        await gen.aclose()
-
-    pushed_job = fake_redis.lpush_agent_run_job.call_args.args[0]
-    assert pushed_job['bohrium_required'] is True
-
-
-@pytest.mark.asyncio
-async def test_generate_send_stream_enqueues_images():
-    from src.services.stream_service import ChatStreamService, SendStreamContext
-
-    service = ChatStreamService(
-        sessions_service=MagicMock(
-            get_session_status_payload=MagicMock(
-                return_value={
-                    'source': 'System',
-                    'type': 'status',
-                    'content': '',
-                    'session_id': 'sess-1',
-                }
-            )
-        ),
-        events_service=MagicMock(get_session_events=MagicMock(return_value=[])),
-        agent_run_service=MagicMock(),
-        deploy_state_service=MagicMock(),
-    )
-
-    ctx = SendStreamContext(
-        task_id='task-1',
-        invocation_id='inv-1',
-        mode='direct',
-        user_msg={'source': 'User', 'type': 'query', 'content': 'run'},
-        request_event_queue=asyncio.Queue(),
-        images=['https://oss.example.com/chat/a.png'],
-    )
-
-    fake_redis = MagicMock()
-    fake_redis.create_client.return_value = None
-    fake_redis.set_session_run_queued.return_value = True
-    fake_redis.llen_agent_run_queue.return_value = 0
-    fake_redis.lpush_agent_run_job.side_effect = lambda job: True
-
-    async def _stream_closed_immediately(awaitable, timeout):
-        close = getattr(awaitable, 'close', None)
-        if callable(close):
-            close()
-        return {
-            'source': 'System',
-            'type': 'stream_closed',
-            'content': '',
-            'session_id': 'sess-1',
-        }
-
-    with (
-        patch('src.services.stream_service.REDIS_URL', 'redis://test'),
-        patch('src.services.stream_service.get_redis_dao', return_value=fake_redis),
-        patch('src.services.stream_service.notify_post_async'),
-        patch(
-            'src.services.stream_service.asyncio.wait_for',
-            side_effect=_stream_closed_immediately,
-        ),
-    ):
-        gen = service.generate_send_stream('sess-1', 'run', ctx)
-        await gen.__anext__()
-        await gen.__anext__()
-        await gen.__anext__()
-        await gen.aclose()
-
-    pushed_job = fake_redis.lpush_agent_run_job.call_args.args[0]
-    assert pushed_job['images'] == ['https://oss.example.com/chat/a.png']
 
 
 async def test_sse_frames_match_frontend_contract_without_mysql():
@@ -638,7 +542,6 @@ def test_generate_send_stream_normalizes_replayed_history_source():
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=MagicMock(),
     )
 
@@ -656,9 +559,9 @@ def test_generate_send_stream_normalizes_replayed_history_source():
                 'task_id': 'task-1',
                 'invocation_id': 'inv-1',
             },
-            request_event_queue=asyncio.Queue(),
+            job=_send_stream_job(),
         )
-        gen = service.generate_send_stream('sess-1', 'new question', ctx)
+        gen = service.generate_send_stream('sess-1', ctx)
         try:
             return [
                 _decode_sse_payload(await gen.__anext__()),
@@ -724,7 +627,6 @@ def test_generate_send_stream_replay_prefers_run_result_over_response():
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=MagicMock(),
     )
 
@@ -742,9 +644,9 @@ def test_generate_send_stream_replay_prefers_run_result_over_response():
                 'task_id': 'task-1',
                 'invocation_id': 'inv-1',
             },
-            request_event_queue=asyncio.Queue(),
+            job=_send_stream_job(),
         )
-        gen = service.generate_send_stream('sess-1', 'new question', ctx)
+        gen = service.generate_send_stream('sess-1', ctx)
         try:
             return await _collect_n_frames(gen, 4)
         finally:
@@ -767,6 +669,119 @@ def test_generate_send_stream_replay_prefers_run_result_over_response():
     )
 
 
+def test_generate_send_stream_replay_keeps_intermediate_response():
+    """终态去重只隐藏最终答案副本：tool_call 前的中间 response 在刷新回放中保留。"""
+    from src.services.stream_service import ChatStreamService, SendStreamContext
+
+    sessions_service = MagicMock()
+    sessions_service.get_session_status_payload.return_value = {
+        'source': 'System',
+        'type': 'status',
+        'content': '',
+        'session_id': 'sess-1',
+    }
+    events_service = MagicMock()
+    events_service.get_session_events.return_value = [
+        {
+            'source': 'User',
+            'type': 'query',
+            'content': 'old question',
+            'session_id': 'sess-1',
+            'task_id': 'task-0',
+        },
+        {
+            'source': 'MatMaster',
+            'type': 'response',
+            'content': {'content': 'let me check the files', 'turn_index': 0},
+            'session_id': 'sess-1',
+            'task_id': 'task-0',
+        },
+        {
+            'source': 'MatMaster',
+            'type': 'tool_call',
+            'content': {'id': 'c1', 'call_id': 'c1', 'name': 'bash', 'args': {}},
+            'session_id': 'sess-1',
+            'task_id': 'task-0',
+        },
+        {
+            'source': 'MatMaster',
+            'type': 'tool_result',
+            'content': {
+                'id': 'c1',
+                'call_id': 'c1',
+                'name': 'bash',
+                'result': 'ok',
+                'status': 'success',
+                'info': {},
+            },
+            'session_id': 'sess-1',
+            'task_id': 'task-0',
+        },
+        {
+            'source': 'MatMaster',
+            'type': 'response',
+            'content': {'content': 'old answer', 'turn_index': 1},
+            'session_id': 'sess-1',
+            'task_id': 'task-0',
+        },
+        {
+            'source': 'MatMaster',
+            'type': 'run_result',
+            'content': {
+                'content': 'old answer',
+                'status': 'completed',
+                'reason': 'natural',
+                'num_turns': 2,
+            },
+            'session_id': 'sess-1',
+            'task_id': 'task-0',
+        },
+    ]
+    service = ChatStreamService(
+        sessions_service=sessions_service,
+        events_service=events_service,
+        deploy_state_service=MagicMock(),
+    )
+
+    async def _collect_first_seven_frames() -> list[dict]:
+        ctx = SendStreamContext(
+            task_id='task-1',
+            invocation_id='inv-1',
+            mode='direct',
+            user_msg={
+                'source': 'User',
+                'type': 'query',
+                'content': 'new question',
+                'mode': 'direct',
+                'session_id': 'sess-1',
+                'task_id': 'task-1',
+                'invocation_id': 'inv-1',
+            },
+            job=_send_stream_job(),
+        )
+        gen = service.generate_send_stream('sess-1', ctx)
+        try:
+            return await _collect_n_frames(gen, 7)
+        finally:
+            await gen.aclose()
+
+    with patch('src.services.stream_service.notify_post_async'):
+        frames = asyncio.run(_collect_first_seven_frames())
+
+    assert [frame['type'] for frame in frames] == [
+        'status',
+        'query',
+        'response',
+        'tool_call',
+        'tool_result',
+        'run_result',
+        'query',
+    ]
+    assert frames[2]['content'] == 'let me check the files'
+    assert frames[5]['final_content'] == 'old answer'
+    assert frames[6]['content'] == 'new question'
+
+
 def test_generate_send_stream_subscribes_before_enqueue():
     from src.services.stream_service import ChatStreamService, SendStreamContext
 
@@ -783,7 +798,6 @@ def test_generate_send_stream_subscribes_before_enqueue():
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=MagicMock(),
     )
 
@@ -860,9 +874,9 @@ def test_generate_send_stream_subscribes_before_enqueue():
                 'task_id': 'task-1',
                 'invocation_id': 'inv-1',
             },
-            request_event_queue=asyncio.Queue(),
+            job=_send_stream_job(),
         )
-        gen = service.generate_send_stream('sess-1', 'new question', ctx)
+        gen = service.generate_send_stream('sess-1', ctx)
         try:
             return [
                 _decode_sse_payload(await gen.__anext__()),

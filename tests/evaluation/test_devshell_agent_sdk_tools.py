@@ -294,7 +294,7 @@ def test_delegate_optimization_records_round_and_payload(tmp_path: Path) -> None
                 "symptom": "Low score due to missing deliverable structure.",
                 "suggested_focus": ["matmaster/skills"],
                 "candidate_layers": ["skill"],
-                "allowed_evidence_paths": ["matmaster/skills/result-analysis/SKILL.md"],
+                "allowed_evidence_paths": ["matmaster/skills/data-analysis/SKILL.md"],
                 "notes": "Do not expose raw rubric text.",
             }
         )
@@ -312,7 +312,7 @@ def test_delegate_optimization_records_round_and_payload(tmp_path: Path) -> None
             "execution_track": "proposal_only",
             "failure_buckets": [],
             "capabilities_affected": [],
-            "allowed_evidence_paths": ["matmaster/skills/result-analysis/SKILL.md"],
+            "allowed_evidence_paths": ["matmaster/skills/data-analysis/SKILL.md"],
             "notes": "Do not expose raw rubric text.",
         }
     ]
@@ -607,7 +607,7 @@ def test_checklist_path_guard_blocks_product_writes(tmp_path: Path) -> None:
 
     try:
         toolkit._resolve_agent_path(
-            "matmaster/skills/result-analysis/SKILL.md",
+            "matmaster/skills/data-analysis/SKILL.md",
             role="checklist",
             write=True,
         )

@@ -281,7 +281,7 @@ class TestBohriumToolAndRemoteShare:
         assert helper_payload["token"] == "t"
         assert post_calls[1]["payload"]["cmd"].endswith("> log 2>&1")
 
-    def test_bohrium_tool_poll_with_remote_share_and_no_session_errors(
+    def test_bohrium_tool_query_with_remote_share_and_no_session_errors(
         self, tmp_path, monkeypatch
     ):
         monkeypatch.delenv("BOHRIUM_ACCESS_KEY", raising=False)
@@ -289,7 +289,7 @@ class TestBohriumToolAndRemoteShare:
         result = asyncio.run(
             tool.execute(
                 {
-                    "action": "poll",
+                    "action": "query",
                     "job_id": "j1",
                     "result_dir": "/share/results",
                 }

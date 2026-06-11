@@ -11,14 +11,22 @@ import asyncio
 import hashlib
 import posixpath
 from time import monotonic_ns
-from typing import Any, ClassVar
+from typing import Any, ClassVar, Literal
 
+from matmaster.tools.filesystem_semantics.image_resolution import (
+    IMAGE_EXTENSIONS,
+    ImageValidationError,
+    build_image_payload,
+    ensure_image_size_within_limit,
+    sniff_image_media_type,
+)
 from matmaster.tools.filesystem_semantics.snapshots import (
     put_snapshot,
     snapshot_from_seed,
 )
 from matmaster.tools.filesystem_semantics.text_resolution import resolve_text_bytes
 from matmaster.tools.tool_result import ToolResult
+from matmaster.types.messages import ImageContentPart
 from matmaster.types.tool_spec import ResourceClaim, ToolExecutionContext
 from matmaster.types.topology import ToolPlane
 
@@ -36,7 +44,7 @@ class ReadTool(BuiltinTool):
     """
 
     name: ClassVar[str] = "Read"
-    description: ClassVar[str] = "Read a file from the local filesystem."
+    description: ClassVar[str] = "Read a file or figure from the local filesystem."
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
         "properties": {
@@ -73,6 +81,21 @@ class ReadTool(BuiltinTool):
     fast_path_eligible: ClassVar[bool] = True
     max_result_chars: ClassVar[int] = 12_000
     plane: ClassVar[ToolPlane] = ToolPlane.SESSION_FS
+
+    def __init__(
+        self,
+        *,
+        session: Any | None = None,
+        workdir: Any = None,
+        path_access_roots: Any = (),
+        vision_enabled: bool = False,
+        vision_detail: Literal["low", "high", "auto"] | None = None,
+    ) -> None:
+        super().__init__(
+            session=session, workdir=workdir, path_access_roots=path_access_roots
+        )
+        self._vision_enabled = vision_enabled
+        self._vision_detail = vision_detail
 
     def prompt(self, ctx=None) -> str:
         return (
@@ -125,7 +148,17 @@ class ReadTool(BuiltinTool):
                 content=f"Error: {file_path} is not a file or does not exist",
             )
 
+        suffix = posixpath.splitext(file_path)[1].lower()
+        if suffix in IMAGE_EXTENSIONS:
+            # 下载前按 stat 预检，避免拉取超限大图；限值与文案单源于 image_resolution
+            try:
+                ensure_image_size_within_limit(session.stat_file(file_path).size)
+            except ImageValidationError as e:
+                return ToolResult(status="error", content=f"Error: {e}")
+
         raw = session.download(file_path)
+        if sniff_image_media_type(raw) is not None:
+            return self._image_read(file_path, raw)
         file_stat = session.stat_file(file_path)
         resolution = resolve_text_bytes(raw, explicit_encoding=explicit_encoding)
 
@@ -167,6 +200,36 @@ class ReadTool(BuiltinTool):
             "encoding_source": resolution.encoding_source,
         }
         return result
+
+    def _image_read(self, file_path: str, raw: bytes) -> ToolResult:
+        if not self._vision_enabled:
+            return ToolResult(
+                status="error",
+                content=(
+                    "Error: current model profile does not support image input; "
+                    f"cannot view {file_path}"
+                ),
+            )
+        try:
+            payload = build_image_payload(raw)
+        except ImageValidationError as e:
+            return ToolResult(status="error", content=f"Error: {e}")
+        dims = (
+            f", {payload.width}x{payload.height}" if payload.width is not None else ""
+        )
+        return ToolResult(
+            content=(
+                f"Read image: {file_path} "
+                f"({payload.media_type}{dims}, {payload.raw_size / 1024:.0f} KB)"
+            ),
+            images=[
+                ImageContentPart(
+                    url=payload.data_uri,
+                    mime_type=payload.media_type,
+                    detail=self._vision_detail,
+                )
+            ],
+        )
 
     # -- Full-read mode --
 

@@ -1,7 +1,7 @@
 """tests/matmaster/tools/builtin/test_skill_tool.py"""
 
 import asyncio
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from unittest.mock import MagicMock
 
 from matmaster.tools.builtin.skill_tool import SkillTool
@@ -101,3 +101,19 @@ class TestSkillExecution:
         tool = SkillTool(skill_registry=None)
         result = asyncio.run(tool.execute({"skill": "test-skill"}))
         assert "error" in result.lower()
+
+    def test_remote_plugin_dir_not_remapped_through_project_root(self):
+        """远端 skill 的 plugin_dir 原样直出，不走 remote_project_root 本地映射。"""
+        from matmaster.tools.builtin.skill_tool import _PROJECT_ROOT
+
+        remote_plugin_dir = PurePosixPath(_PROJECT_ROOT.as_posix()) / "plugins/pack"
+        session = MagicMock()
+        session.remote_project_root = "/remote/proj"
+        skill = make_skill(body="Plugin root: ${PLUGIN_DIR}")
+        skill.is_remote = True
+        skill.skill_path = remote_plugin_dir / "skills/member"
+        skill.plugin_dir = remote_plugin_dir
+        tool = SkillTool(session=session, skill_registry=make_registry(skill=skill))
+        result = asyncio.run(tool.execute({"skill": "member"}))
+        assert f"Plugin root: {remote_plugin_dir}" in result
+        assert "/remote/proj" not in result.split("Plugin root: ")[1]

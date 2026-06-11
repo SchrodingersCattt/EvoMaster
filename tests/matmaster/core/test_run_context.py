@@ -183,7 +183,6 @@ class TestAgentRunRequest:
         assert request.turn_input is None
         assert request.user_instructions is None
         assert request.active_skills == frozenset()
-        assert request.bohrium_rebuild_events == ()
         assert isinstance(request.ports, AgentRunPorts)
 
     def test_frozen_rejects_assignment(self) -> None:
@@ -198,12 +197,10 @@ class TestAgentRunRequest:
             llm_provider=provider,
             interaction_bridge=bridge,
             active_skills=frozenset({"alpha"}),
-            bohrium_rebuild_events=({"k": "v"},),
         )
         assert request.llm_provider is provider
         assert request.interaction_bridge is bridge
         assert request.active_skills == frozenset({"alpha"})
-        assert request.bohrium_rebuild_events == ({"k": "v"},)
 
     def test_interaction_bridge_excluded_from_dump(self) -> None:
         request = AgentRunRequest(interaction_bridge=object())

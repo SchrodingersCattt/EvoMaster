@@ -4,7 +4,7 @@
 
 ## LLM 从哪里来
 
-与 **`AgentRunService` 一致**：读取仓库根目录 **`config/llm_config.yaml`**，用 **`build_provider`** 构造 `OpenAIProvider`；默认 profile 来自 **`config/config.yaml`** 的 **`agents.general.llm`**（若缺省则用 `llm_config.yaml` 的 `default`）。
+与 **`AgentRunService` 一致**：读取仓库根目录 **`config/llm_config.yaml`**，用 **`build_provider`** 经 dispatch 表构造 `ChatCompletionsTransport`；默认 profile 来自 **`config/config.yaml`** 的 **`agents.general.llm`**（若缺省则用 `llm_config.yaml` 的 `default`）。
 
 鉴权与环境变量写在 **`.env`**（或已 export 的环境变量）中，由 **`llm_config.yaml` 里 `${LITELLM_PROXY_API_KEY}` 等** 在加载时展开 —— 与线上一致，无需在 devshell 里再配一套 Key/Base URL。
 
@@ -19,10 +19,10 @@
 # LITELLM_PROXY_API_KEY=...
 # LITELLM_PROXY_API_BASE=...
 
-# --model 为 llm_config.yaml 里 routes 的 key（例如 claude-sonnet-4-6）
-mm-devshell --workdir ./workspace --log-dir ./logs --model claude-sonnet-4-6
+# --model 为 llm_config.yaml 里的 profile key（例如 matmaster/qwen3.7-max）
+mm-devshell --workdir ./workspace --log-dir ./logs --model matmaster/qwen3.7-max
 # 等价于
-mm-devshell repl --workdir ./workspace --log-dir ./logs --model claude-sonnet-4-6
+mm-devshell repl --workdir ./workspace --log-dir ./logs --model matmaster/qwen3.7-max
 ```
 
 省略 **`--model`** 时，使用 `config.yaml` 的 `agents.general.llm` 指向的 profile，或 `llm_config.yaml` 顶层的 **`default`**。
@@ -30,7 +30,7 @@ mm-devshell repl --workdir ./workspace --log-dir ./logs --model claude-sonnet-4-
 可选 **`--config`**：仅覆盖 agent / session / tools（见 `matmaster/devshell/dev.yaml.example`），**不包含** LLM 连接信息。
 
 ```bash
-uv run python -m matmaster.devshell --workdir ./workspace --log-dir ./logs --model claude-sonnet-4-6
+uv run python -m matmaster.devshell --workdir ./workspace --log-dir ./logs --model matmaster/qwen3.7-max
 ```
 
 ### 单轮非交互 `run`
@@ -55,7 +55,7 @@ mm-devshell run --workdir ./ws --log-dir ./logs -p "hi" --json-out ./summary.jso
 ```bash
 # 仓库根目录；建议与 uv 环境一致
 uv run python evaluation/scripts/devshell/run_devshell_eval.py --dry-run --limit 5
-uv run python evaluation/scripts/devshell/run_devshell_eval.py --model claude-sonnet-4-6 --limit 3
+uv run python evaluation/scripts/devshell/run_devshell_eval.py --model matmaster/qwen3.7-max --limit 3
 ```
 
 筛选与 **`evaluation/config.yaml`** 一致（`--eval-config`、`--slices`、`--questions` 等）；详见脚本 **`--help`**。
@@ -86,7 +86,7 @@ uv run python evaluation/scripts/devshell/export_devshell_review_bundle.py --run
 | `--workdir` | 是 | 工作区目录（持久化） |
 | `--log-dir` | 是 | 事件日志目录（REPL 下为 JSONL；`run` 仍需要有效路径） |
 | `--config` | 否 | 可选 devshell YAML（仅 agent/session/tools） |
-| `--model` | 否 | `llm_config.yaml` 中 **routes** 的路由 key；省略则用默认 profile |
+| `--model` | 否 | `llm_config.yaml` 中的 profile key；省略则用默认 profile |
 | `--session` | 否 | Session 类型：`local` / `docker` / `ssh` |
 | `--verbose` | 否 | 详细输出 |
 

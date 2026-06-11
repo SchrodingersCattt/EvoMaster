@@ -18,12 +18,16 @@ from matmaster.types.messages import (
 from matmaster.types.run_metadata import RunIdentity, RunMetadata
 from matmaster.types.runtime_ports import KernelRuntimePorts
 
-from .agent_kernel_test_helpers import make_kernel_runtime, make_kernel_turn
+from .agent_kernel_test_helpers import (
+    ProviderProtocolAttrs,
+    make_kernel_runtime,
+    make_kernel_turn,
+)
 
 # ── Providers ────────────────────────────────────────────────
 
 
-class ContentOnlyProvider:
+class ContentOnlyProvider(ProviderProtocolAttrs):
     """Provider that only streams content, no reasoning."""
 
     async def __aenter__(self):

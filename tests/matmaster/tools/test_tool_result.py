@@ -39,3 +39,20 @@ class TestToolResult:
         assert result is raw
         assert result.status == "success"
         assert result.payload == {"source": "explicit"}
+
+
+def test_tool_result_images_roundtrip() -> None:
+    from matmaster.types.messages import ImageContentPart
+
+    tr = ToolResult(
+        content="Read image: a.png",
+        images=[
+            ImageContentPart(
+                url="data:image/png;base64,aGVsbG8=", mime_type="image/png"
+            )
+        ],
+    )
+    restored = ToolResult.model_validate(tr.model_dump(mode="json"))
+    assert restored.images[0].url == "data:image/png;base64,aGVsbG8="
+    assert restored.images[0].mime_type == "image/png"
+    assert ToolResult(content="no images").images == []

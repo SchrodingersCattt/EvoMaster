@@ -46,6 +46,7 @@ from matmaster.types.events import (
     CheckpointEvent,
     FinishDetail,
     ResponseEvent,
+    ThoughtEvent,
     ToolCallEvent,
 )
 
@@ -59,6 +60,10 @@ if TYPE_CHECKING:
 
 from matmaster.core.hooks import HookEvent, RunContext, UserPromptContext
 from matmaster.response_text import is_trivial_response_text
+from matmaster.types.message_normalization import (
+    apply_tool_image_budget,
+    validate_tool_turn_sequence,
+)
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -325,12 +330,19 @@ class AgentKernel:
 
             tool_defs = tool_definitions
 
-            api_messages = state.pipeline.feed_tail(state.messages)
+            canonical_messages = state.pipeline.feed_tail(state.messages)
+            canonical_messages = apply_tool_image_budget(canonical_messages)
+            # 有意与 transport.convert_messages 双重校验：内核边界保证对任意
+            # provider 实现都在发起调用前 fail-fast（test_tool_protocol_guardrails）
+            validate_tool_turn_sequence(canonical_messages)
 
             llm_response: LLMResponse | None = None
             try:
                 async for item in self._call_llm_streaming(
-                    kernel_resources, api_messages, tool_defs, cancel_token=cancel_token
+                    kernel_resources,
+                    canonical_messages,
+                    tool_defs,
+                    cancel_token=cancel_token,
                 ):
                     if item.llm_response is not None:
                         llm_response = item.llm_response
@@ -355,6 +367,22 @@ class AgentKernel:
                 dict(response.usage_vendor) if response.usage_vendor else {}
             )
             turn_index = state.turn - 1
+            turn_usage_snapshot = dict(state.turn_usage)
+            total_usage_snapshot = dict(state.total_usage)
+            usage_vendor_snapshot = response.usage_vendor or None
+            if response.reasoning_content:
+                yield _KernelItem(
+                    event=ThoughtEvent(
+                        source="agent",
+                        content=response.reasoning_content,
+                        stream_state="complete",
+                        reasoning_content=response.reasoning_content,
+                        turn_index=turn_index,
+                        turn_usage=turn_usage_snapshot,
+                        total_usage=total_usage_snapshot,
+                        usage_vendor=usage_vendor_snapshot,
+                    )
+                )
             is_root_run = kernel_spec.run_identity.spawn_id is None
             if (
                 is_root_run
@@ -368,9 +396,9 @@ class AgentKernel:
                         content=response.content,
                         stream_state="complete",
                         turn_index=turn_index,
-                        turn_usage=dict(state.turn_usage),
-                        total_usage=dict(state.total_usage),
-                        usage_vendor=response.usage_vendor or None,
+                        turn_usage=turn_usage_snapshot,
+                        total_usage=total_usage_snapshot,
+                        usage_vendor=usage_vendor_snapshot,
                         model=state.llm_model,
                         model_profile=state.llm_model_profile,
                         model_route=state.llm_model_route,
@@ -397,12 +425,25 @@ class AgentKernel:
                             finish_detail=build_finish_detail(response),
                         )
                     return
-                state.messages.append(
-                    AssistantMessage(
-                        content=response.content,
-                        reasoning_content=response.reasoning_content,
-                    )
+                natural_msg = AssistantMessage(
+                    content=response.content,
+                    reasoning_content=response.reasoning_content,
+                    provider_state=response.provider_state,
                 )
+                state.messages.append(natural_msg)
+                if response.provider_state is not None:
+                    yield _KernelItem(
+                        event=AssistantStateEvent(
+                            source="agent",
+                            state=natural_msg.model_dump(mode="json"),
+                            turn_index=turn_index,
+                            turn_usage=dict(state.turn_usage),
+                            total_usage=dict(state.total_usage),
+                            model=state.llm_model,
+                            model_profile=state.llm_model_profile,
+                            model_route=state.llm_model_route,
+                        )
+                    )
                 yield self._terminal(state, "natural", final_content=response.content)
                 return
 
@@ -410,6 +451,7 @@ class AgentKernel:
                 content=response.content,
                 tool_calls=response.tool_calls,
                 reasoning_content=response.reasoning_content,
+                provider_state=response.provider_state,
             )
             assistant_finish_detail = None
             if response.finish_reason == "length":
@@ -448,6 +490,10 @@ class AgentKernel:
                         call_id=tc.id,
                         tool_name=tc.name,
                         arguments=tc.arguments,
+                        turn_index=turn_index,
+                        turn_usage=turn_usage_snapshot,
+                        total_usage=total_usage_snapshot,
+                        usage_vendor=usage_vendor_snapshot,
                     )
                 )
 
@@ -487,7 +533,7 @@ class AgentKernel:
     async def _call_llm_streaming(
         self,
         kernel_resources: AgentKernelResources,
-        api_messages: list[dict[str, Any]],
+        canonical_messages: list[Message],
         tool_defs: list[dict[str, Any]] | None,
         *,
         cancel_token: CancellationToken | None = None,
@@ -495,7 +541,7 @@ class AgentKernel:
         """Indirection point so tests can monkey-patch the streaming call."""
         async for item in call_llm_streaming(
             kernel_resources,
-            api_messages,
+            canonical_messages,
             tool_defs,
             cancel_token=cancel_token,
         ):

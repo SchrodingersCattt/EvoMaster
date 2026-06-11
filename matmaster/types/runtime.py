@@ -37,10 +37,9 @@ from .runtime_ports import KernelRuntimePorts
 class CompactionConfig(BaseModel):
     """Context compaction configuration."""
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     context_limit: int = 200_000
-    trigger_ratio: float = 0.9
     strategy: str = "summary"  # 'sliding_window' | 'summary' | 'latest_half'
     reserved_summary_tokens: int = 8_000
     summary_safety_margin_tokens: int = 2_000

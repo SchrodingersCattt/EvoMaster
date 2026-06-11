@@ -10,7 +10,7 @@ from matmaster.core.agent_tool_dispatch import (
 from matmaster.core.kernel_items import _KernelState
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.events import ToolResultEvent
-from matmaster.types.messages import SystemMessage, ToolCallData
+from matmaster.types.messages import ImageContentPart, SystemMessage, ToolCallData
 
 
 def test_extract_tool_usage_delta_ignores_non_agent_tools() -> None:
@@ -106,17 +106,16 @@ async def test_dispatch_tool_calls_accumulates_agent_usage_before_event() -> Non
 
     event = items[0].event
     assert isinstance(event, ToolResultEvent)
-    assert event.turn_usage == {"prompt_tokens": 5}
-    assert event.total_usage == {
+    assert "turn_usage" not in ToolResultEvent.model_fields
+    assert state.total_usage == {
         "prompt_tokens": 15,
         "completion_tokens": 2,
         "total_tokens": 12,
     }
-    assert state.total_usage == event.total_usage
 
 
 @pytest.mark.asyncio
-async def test_dispatch_tool_calls_usage_fields_are_snapshots() -> None:
+async def test_dispatch_tool_calls_accumulates_each_agent_usage() -> None:
     state = _KernelState(
         messages=[SystemMessage(content="sys")],
         turn=1,
@@ -154,9 +153,34 @@ async def test_dispatch_tool_calls_usage_fields_are_snapshots() -> None:
         if isinstance(item.event, ToolResultEvent)
     ]
 
-    assert events[0].total_usage == {"prompt_tokens": 15}
-    assert events[1].total_usage == {"prompt_tokens": 35}
-    state.total_usage["prompt_tokens"] = 999
-    state.turn_usage["prompt_tokens"] = 888
-    assert events[0].total_usage == {"prompt_tokens": 15}
-    assert events[0].turn_usage == {"prompt_tokens": 5}
+    assert len(events) == 2
+    assert state.total_usage == {"prompt_tokens": 35}
+
+
+@pytest.mark.asyncio
+async def test_dispatch_propagates_tool_result_images() -> None:
+    image = ImageContentPart(
+        url="data:image/png;base64,aGVsbG8=", mime_type="image/png"
+    )
+    state = _KernelState(messages=[SystemMessage(content="sys")], turn=1)
+    tool_call = ToolCallData(id="tc1", name="Read", arguments={"file_path": "/a.png"})
+    runner = StaticRunner(
+        [ToolResult(status="success", content="Read image: /a.png", images=[image])]
+    )
+
+    items = [
+        item
+        async for item in dispatch_tool_calls(
+            tool_calls=[tool_call],
+            tool_runner=runner,
+            max_turns=10,
+            state=state,
+            cancel_token=None,
+        )
+    ]
+
+    tool_msg = state.messages[-1]
+    assert tool_msg.images == [image]
+    event = items[0].event
+    assert isinstance(event, ToolResultEvent)
+    assert event.images == [image]

@@ -1,7 +1,6 @@
 ---
 name: image-manager
 description: "Build and verify private container images on Bohrium. Use when: user wants to list private images, build a new image from Dockerfile, or spin up a debug node to verify a newly built image. NOT for: job submission, public image browsing, or general node management."
-skill_type: operator
 ---
 
 # Image Manager
@@ -125,7 +124,7 @@ python3 -c "import numpy; print(f'NumPy {numpy.__version__}')"
 # add other checks as needed
 ```
 
-Poll with `Bohrium(action="poll")`, then download and read log to confirm.
+Query with `Bohrium(action="query")`, then download and read log to confirm.
 
 ### Post-Verification
 

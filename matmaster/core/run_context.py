@@ -17,7 +17,7 @@ one ``AgentRunRequest`` and composes it with the environment exactly once.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -25,9 +25,6 @@ from matmaster.context.ports import UserInstructions
 from matmaster.context.sources.turn_input import TurnInput
 from matmaster.core.playground import ExecutionEnvironment
 from matmaster.types.runtime_ports import AgentRunPorts
-
-# Opaque per-event payload replayed to rebuild the Bohrium job registry.
-BohriumRebuildEvent = dict[str, Any]
 
 
 class AgentRunRequest(BaseModel):
@@ -52,14 +49,14 @@ class AgentRunRequest(BaseModel):
     llm_model: str | None = None
     llm_model_profile: str | None = None
     llm_model_route: str | None = None
+    supports_vision: bool = False
+    vision_detail: Literal["low", "high", "auto"] | None = None
+    context_limit: int | None = Field(default=None, gt=0)
     invocation_id: str | None = None
     interaction_bridge: Any = Field(default=None, repr=False, exclude=True)
     turn_input: TurnInput | None = None
     user_instructions: UserInstructions | None = None
     active_skills: frozenset[str] = Field(default_factory=frozenset)
-    bohrium_rebuild_events: tuple[BohriumRebuildEvent, ...] = Field(
-        default_factory=tuple
-    )
     ports: AgentRunPorts = Field(
         default_factory=AgentRunPorts,
         repr=False,

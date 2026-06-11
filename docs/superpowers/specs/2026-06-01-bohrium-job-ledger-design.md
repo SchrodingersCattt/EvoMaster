@@ -52,7 +52,6 @@ CREATE TABLE `bohrium_jobs` (
     `sandbox` TINYINT(1) NOT NULL DEFAULT 0,
 
     `status` VARCHAR(32) COLLATE utf8mb4_bin NOT NULL DEFAULT 'submitted',
-    `status_code` INT NULL,
 
     `poll_count` INT UNSIGNED NOT NULL DEFAULT 0,
     `next_poll_at` TIMESTAMP NULL,
@@ -62,8 +61,6 @@ CREATE TABLE `bohrium_jobs` (
     `terminal_at` TIMESTAMP NULL,
     `result_dir` VARCHAR(1024) NULL,
 
-    `submit_response_json` JSON NULL,
-    `last_detail_json` JSON NULL,
     `last_error` TEXT NULL,
     `last_error_at` TIMESTAMP NULL,
 
@@ -169,7 +166,7 @@ context，不能读取 session 当前 project。
 是否为 sandbox 作业，提交时取 `ctx.sandbox` 快照。这是后台 poller 的必读判别位：
 poll、download、kill 都按它分支（sandbox 与非 sandbox 走不同端点、`job_id` 强转
 方式也不同）。它同时是 `(user_id, org_id, sandbox, job_id)` 唯一键的一维，因此提升为
-独立列，而不是只留在 `submit_response_json` 里。
+独立列参与索引与判别。
 
 `status`
 
@@ -186,11 +183,6 @@ MatMaster 归一化后的作业状态。第一版只保留一个状态字段，�
 - `terminating`: 已请求 kill，或 Bohrium 返回停止中 / 终止中 / killing，但尚未确认终态。
 - `downloaded`: 计算已完成，且 MatMaster 已成功下载结果。
 - `unknown`: 查询失败或 Bohrium 返回无法识别状态。
-
-`status_code`
-
-Bohrium 原始状态码。业务代码读取 `status`，排障和兼容 Bohrium API 变化时读取
-`status_code` 和 `last_detail_json`。
 
 `poll_count`
 
@@ -248,29 +240,6 @@ poller 实际认领时在此基础上加 `FOR UPDATE SKIP LOCKED` 做并发隔�
 failed / stopped job 若只下载了日志或失败产物，也可写入 `result_dir`，但 `status`
 保留失败终态。
 
-`submit_response_json`
-
-submit 成功时的原始响应快照，仅用于排障，不要求常规消费者解析。`sandbox` 等主流程
-判别位已提升为独立列，这里保留完整原始返回以便对照。
-写入前必须做 redaction，不允许保存 access_key、token、临时下载凭证或其他敏感字段。
-
-示例：
-
-```json
-{
-  "success": true,
-  "job_id": "12345",
-  "status": "Submitted",
-  "use_sandbox": true
-}
-```
-
-`last_detail_json`
-
-最近一次 `get_job_detail` 的原始返回。它是排障黑匣子，不要求常规消费者理解其
-完整结构。写入前必须做 redaction，并限制大小，例如序列化后不超过 64KB；超限时
-截断并记录 `truncated=true` 之类的标记，避免主表行无限膨胀。
-
 `last_error`
 
 最近一次 poll、download、kill 或数据库同步失败的错误文本。它表示 MatMaster 侧
@@ -299,7 +268,7 @@ submit 成功时的原始响应快照，仅用于排障，不要求常规消费�
 - 终态为 `finished`、`failed`、`stopped`、`downloaded`，必须把 `next_poll_at`
   置为 NULL，且 `terminal_at` 非空。
 - `downloaded` 是 MatMaster 侧产物状态，一旦写入，后续 poll 只允许更新
-  `status_code`、`last_detail_json`、`last_polled_at`、`last_error`，不得把
+  `last_polled_at`、`last_error`，不得把
   `status` 写回 `finished` / `failed` / `stopped`。
 - `terminal_at` 表示平台计算进入终态的时间。download 不覆盖已有 `terminal_at`，但当
   download 自己首次确认平台终态、而 `terminal_at` 仍为空时，必须 `COALESCE(terminal_at,
@@ -327,8 +296,8 @@ submit 成功时的原始响应快照，仅用于排障，不要求常规消费�
 具体写入规则：
 
 - submit 成功后插入记录，`status = 'submitted'`，`next_poll_at = submitted_at`。
-- poller 或工具 poll 发现活跃状态时，按上表写 `status`，更新 `status_code`、
-  `poll_count`、`last_polled_at`、`last_detail_json`，并按 backoff 推进
+- poller 或工具 poll 发现活跃状态时，按上表写 `status`，更新
+  `poll_count`、`last_polled_at`，并按 backoff 推进
   `next_poll_at`。
 - poller 或工具 poll 发现平台终态时，若当前 `status != 'downloaded'`，按上表写
   `status`、`terminal_at`，并置 `next_poll_at = NULL`；若当前已是 `downloaded`，
@@ -384,8 +353,8 @@ submit 成功时的原始响应快照，仅用于排障，不要求常规消费�
 
 `BohriumTool._poll`
 
-直接 poll 时同步更新 `status`、`status_code`、`poll_count`、`last_polled_at`、
-`next_poll_at`、`last_detail_json` 和 `last_error`。状态归一化必须走 Status Rules
+直接 poll 时同步更新 `status`、`poll_count`、`last_polled_at`、
+`next_poll_at` 和 `last_error`。状态归一化必须走 Status Rules
 中的映射表，且不得把 `downloaded` 覆盖回平台状态。
 
 `BohriumTool._download`
@@ -453,8 +422,6 @@ SET
         WHEN `status` = 'downloaded' THEN `status`
         ELSE <normalized_status>
     END,
-    `status_code` = <status_code>,
-    `last_detail_json` = <redacted_detail_json>,
     `last_polled_at` = NOW(),
     `poll_count` = `poll_count` + 1,
     `terminal_at` = CASE
@@ -485,7 +452,6 @@ renderer 与测试，避免字段名和语义不一致。
   "job_id": "12345",
   "job_name": "matmaster-job",
   "status": "running",
-  "status_code": 1,
   "sandbox": true,
   "project_id": 42,
   "submitted_at": "2026-06-01 12:00:00",
@@ -513,9 +479,8 @@ renderer 与测试，避免字段名和语义不一致。
   `idx_session_recent (user_id, org_id, session_id, terminal_at, submitted_at)` 的
   `terminal_at` 列可同时用于过滤与排序，配合 `LIMIT 5` 是有序索引范围扫 + 提前结束，无需
   回表判 `status`、无 filesort。这里不用 `updated_at` 排序，因为后续补写 `result_dir`、
-  `last_error` 或 `last_detail_json` 都会刷新 `updated_at`，但不代表作业最近结束。
-- 不向 agent 暴露 `user_id`、`org_id`、`submit_response_json`、`last_detail_json`。
-  原始 JSON 只用于排障和日志。
+  `last_error` 都会刷新 `updated_at`，但不代表作业最近结束。
+- 不向 agent 暴露 `user_id`、`org_id`。
 
 ## Rationale
 
@@ -538,6 +503,14 @@ job_id 已在工具层统一为单一 canonical ID：sandbox 与非 sandbox 都�
 第一版不保存 `input_dir`、`image`、`machine`、`cmd`、`disk_size`。这些字段对复现
 和审计有价值，但不是 agent 实时读取作业状态的必要条件。后续如果要做作业详情页、
 重跑或成本统计，可以通过迁移补充。
+
+同理，第一版不保存 Bohrium 原始状态码 `status_code`，也不保存原始响应快照（submit
+响应与 `get_job_detail` 返回）。它们都是可现查信息：排障或核对平台行为时，用 job row
+上的 `user_id`、`org_id`、`project_id`、`sandbox`、`job_id` 现查一次 `get_job_detail`
+即可拿到当前权威状态，无需在主表常驻一份会过期的镜像。表只保留归一化后的 `status`——
+它是 agent 展示与 poller 调度（活跃 / 终态划分）直接消费的派生结论，且是本地独有、无法
+从平台现查的信息。把原始码与原始 JSON 移出表的同时也免除了写库前的脱敏负担：本表不再
+写入任何 JSON 原始返回，因此 DAO 不需要 redaction 与 64KB 截断逻辑。
 
 第一版不拆分 `bohrium_status`、`artifact_status`、`lifecycle_status`。单字段
 `status` 已能覆盖当前需求，但必须用单调规则约束 `downloaded`，否则后台 poller 会把

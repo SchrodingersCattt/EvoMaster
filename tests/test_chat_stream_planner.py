@@ -7,10 +7,11 @@ SSE 流行为（complete thought 过滤）由 test_sse_handler_mode_filter.py �
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+from tests.test_chat_stream_direct import _send_stream_job
 
 
 def test_prepare_send_message_accepts_planner_mode() -> None:
@@ -28,7 +29,6 @@ def test_prepare_send_message_accepts_planner_mode() -> None:
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=deploy_state_service,
     )
 
@@ -67,7 +67,6 @@ def test_prepare_send_message_falls_back_unknown_mode_to_default() -> None:
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=deploy_state_service,
     )
 
@@ -106,7 +105,6 @@ async def test_planner_job_enqueues_with_planner_mode_field() -> None:
             )
         ),
         events_service=MagicMock(get_session_events=MagicMock(return_value=[])),
-        agent_run_service=MagicMock(),
         deploy_state_service=MagicMock(),
     )
 
@@ -120,7 +118,13 @@ async def test_planner_job_enqueues_with_planner_mode_field() -> None:
             'content': 'plan it',
             'mode': 'planner',
         },
-        request_event_queue=asyncio.Queue(),
+        job=_send_stream_job(
+            session_id='sess-planner',
+            task_id='task-planner-1',
+            invocation_id='inv-planner-1',
+            prompt='plan it',
+            mode='planner',
+        ),
     )
 
     fake_redis = MagicMock()
@@ -149,7 +153,7 @@ async def test_planner_job_enqueues_with_planner_mode_field() -> None:
             side_effect=_stream_closed_immediately,
         ),
     ):
-        gen = service.generate_send_stream('sess-planner', 'plan it', ctx)
+        gen = service.generate_send_stream('sess-planner', ctx)
         await gen.__anext__()
         await gen.__anext__()
         await gen.__anext__()

@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from matmaster.types.llm_provider import LLMProvider
-from matmaster.types.messages import LLMResponse, StreamChunk
+from matmaster.types.messages import LLMResponse, Message, StreamChunk
 from matmaster.types.usage_reporter import UsageReporter
 
 logger = logging.getLogger(__name__)
@@ -201,7 +201,7 @@ class UsageCollectingProvider:
 
     async def chat(
         self,
-        messages: list[dict[str, Any]],
+        messages: list[Message],
         tools: list[dict[str, Any]] | None = None,
         *,
         tool_choice: str | dict | None = None,
@@ -212,7 +212,7 @@ class UsageCollectingProvider:
 
     async def chat_stream(
         self,
-        messages: list[dict[str, Any]],
+        messages: list[Message],
         tools: list[dict[str, Any]] | None = None,
         *,
         timeout: float | None = None,

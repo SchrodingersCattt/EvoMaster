@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgfortran5 \
     libquadmath0 \
     file \
+    fonts-noto-cjk \
+    libcairo2 \
     openbabel \
     nodejs \
     npm \
@@ -45,6 +47,7 @@ RUN pip install --no-cache-dir \
     "lightgbm==4.6.0" \
     "mendeleev==1.1.0" \
     "matminer==0.10.0" \
+    "cairosvg>=2.7" \
     "pint>=0.24"
 
 # MolCrysKit is published on PyPI; pull the latest release (unpinned, auto-updates on rebuild).

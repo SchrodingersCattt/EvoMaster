@@ -15,8 +15,8 @@ class SkillHitRecord:
 
 def _skill_name_from_content(content: JsonValue) -> str:
     if isinstance(content, Mapping):
-        raw = content.get("skill_name") or content.get("value") or content.get(
-            "content"
+        raw = (
+            content.get("skill_name") or content.get("value") or content.get("content")
         )
         return str(raw or "").strip()
     if isinstance(content, str):

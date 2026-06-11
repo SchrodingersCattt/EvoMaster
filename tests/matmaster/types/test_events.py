@@ -35,6 +35,7 @@ from matmaster.types.events import (
     WorkspaceUploadErrorEvent,
 )
 from matmaster.types.figures import FigureDescriptor
+from matmaster.types.messages import ImageContentPart
 
 # ── Individual AgentEvent types ─────────────────────────
 
@@ -60,6 +61,49 @@ class TestThoughtEvent:
         evt = ThoughtEvent(source="agent", stream_state="start", stream_id="s1")
         assert evt.stream_state == "start"
         assert evt.stream_id == "s1"
+
+
+class TestThoughtEventUsage:
+    def test_thought_usage_fields(self) -> None:
+        evt = ThoughtEvent(
+            source="agent",
+            content="reasoning",
+            stream_state="complete",
+            turn_index=2,
+            turn_usage={"prompt_tokens": 10, "completion_tokens": 4},
+            total_usage={"prompt_tokens": 30, "completion_tokens": 9},
+            usage_vendor={"inputTokens": 10, "outputTokens": 4},
+        )
+
+        assert evt.turn_index == 2
+        assert evt.turn_usage == {"prompt_tokens": 10, "completion_tokens": 4}
+        assert evt.total_usage == {"prompt_tokens": 30, "completion_tokens": 9}
+        assert evt.usage_vendor == {"inputTokens": 10, "outputTokens": 4}
+
+    def test_thought_usage_defaults(self) -> None:
+        evt = ThoughtEvent(source="agent")
+        assert evt.turn_index is None
+        assert evt.turn_usage == {}
+        assert evt.total_usage == {}
+        assert evt.usage_vendor is None
+
+
+def test_tool_result_event_images_roundtrip() -> None:
+    event = ToolResultEvent(
+        source="agent",
+        call_id="tc1",
+        tool_name="Read",
+        result="Read image: a.png",
+        images=[
+            ImageContentPart(
+                url="data:image/png;base64,aGVsbG8=", mime_type="image/png"
+            )
+        ],
+    )
+    dumped = event.model_dump(mode="json")
+    assert dumped["images"][0]["url"] == "data:image/png;base64,aGVsbG8="
+    restored = ToolResultEvent.model_validate(dumped)
+    assert restored.images[0].mime_type == "image/png"
 
 
 class TestResponseEvent:
@@ -126,6 +170,34 @@ class TestToolCallEvent:
         assert evt.spawn_id is None
 
 
+class TestToolCallEventUsage:
+    def test_tool_call_usage_fields(self) -> None:
+        evt = ToolCallEvent(
+            source="agent",
+            call_id="c1",
+            tool_name="bash",
+            arguments={"cmd": "ls"},
+            turn_index=0,
+            turn_usage={"prompt_tokens": 100, "completion_tokens": 20},
+            total_usage={"prompt_tokens": 100, "completion_tokens": 20},
+            usage_vendor={"inputTokens": 100, "outputTokens": 20},
+        )
+
+        assert evt.turn_index == 0
+        assert evt.turn_usage == {"prompt_tokens": 100, "completion_tokens": 20}
+        assert evt.total_usage == {"prompt_tokens": 100, "completion_tokens": 20}
+        assert evt.usage_vendor == {"inputTokens": 100, "outputTokens": 20}
+
+    def test_tool_call_usage_defaults(self) -> None:
+        evt = ToolCallEvent(
+            source="agent", call_id="c1", tool_name="bash", arguments={}
+        )
+        assert evt.turn_index is None
+        assert evt.turn_usage == {}
+        assert evt.total_usage == {}
+        assert evt.usage_vendor is None
+
+
 class TestToolResultEvent:
     def test_instantiation(self) -> None:
         evt = ToolResultEvent(
@@ -139,15 +211,10 @@ class TestToolResultEvent:
         assert evt.status == "success"
         assert evt.payload == {}
 
-
-def test_tool_result_turn_index_defaults_to_none() -> None:
-    evt = ToolResultEvent(
-        source="agent",
-        call_id="c1",
-        tool_name="bash",
-        result="output",
-    )
-    assert evt.turn_index is None
+    def test_tool_result_has_no_usage_fields(self) -> None:
+        assert "turn_index" not in ToolResultEvent.model_fields
+        assert "turn_usage" not in ToolResultEvent.model_fields
+        assert "total_usage" not in ToolResultEvent.model_fields
 
 
 class TestFinishDetail:

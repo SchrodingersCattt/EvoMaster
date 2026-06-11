@@ -18,9 +18,10 @@ from matmaster.core.run_context import AgentRunContext, AgentRunRequest
 from matmaster.types.events import ResponseEvent, RunResultEvent
 from matmaster.types.messages import LLMResponse, StreamChunk
 from matmaster.types.runtime import AgentKernelTurnRequest
+from tests.conftest import ProviderProtocolAttrs
 
 
-class MinimalMockLLMProvider:
+class MinimalMockLLMProvider(ProviderProtocolAttrs):
     """Minimal mock LLM: single-turn natural finish."""
 
     async def __aenter__(self) -> MinimalMockLLMProvider:

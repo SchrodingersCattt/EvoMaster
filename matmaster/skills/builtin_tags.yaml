@@ -1,71 +1,9 @@
 categories:
-  structure-modeling:
-    groups:
-      atomic-structure-ops:
-        skills:
-          - atomic-structure
-          - inspect-atomic-structure
-          - build-crystal-from-params
-          - transform-atomic-structure
-          - assemble-atomic-structure
-          - operate-molecular-crystal
-          - sample-atomic-structures
-          - tasker-polar-surface
-      structure-search:
-        skills:
-          - mcp-mat-struct-db
-          - retrieve-structure
-      polymer-modeling:
-        skills:
-          - poly-generator
-
-  simulation:
-    groups:
-      abacus:
-        skills:
-          - abacus
-          - pyatb
-      vasp:
-        skills:
-          - vasp
-          - vaspkit-postprocess
-      cp2k:
-        skills:
-          - cp2k
-      quantum-espresso:
-        skills:
-          - quantum_espresso
-      abinit:
-        skills:
-          - abinit
-      pyscf:
-        skills:
-          - pyscf
-      orca:
-        skills:
-          - orca
-      lammps:
-        skills:
-          - lammps
-      gromacs:
-        skills:
-          - gromacs
-          - md-analysis
-          - poly-forcefield
-      gpumd:
-        skills:
-          - gpumd
-      mlips:
-        skills:
-          - mlips
-          - aissq-explorer
-
   analysis:
     groups:
       general-data-analysis:
         skills:
           - data-analysis
-          - result-analysis
       characterization:
         skills:
           - pxrd-refinement
@@ -73,36 +11,20 @@ categories:
           - mcp-mat-xrd
           - mcp-mat-nmr
           - mcp-mat-electron-microscope
-      data-mining:
-        skills:
-          - mcp-mat-compdart
-          - composition-optimization
 
   research-writing:
     groups:
       literature:
         skills:
           - mcp-mat-doc
-          - deep-survey
-          - lit-data-organizer
       academic-writing:
         skills:
-          - manuscript-scribe
           - proposal-review
 
   workflow-system:
     groups:
-      task-planning:
-        skills:
-          - plan-writer
-          - plan-checker
-          - plan-executor
-          - spec-writer
-          - acceptance-writer
-          - stack-checker
       system-tools:
         skills:
           - skill-manager
           - image-manager
           - session-analyzer
-          - compliance-guardian

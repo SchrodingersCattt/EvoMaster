@@ -117,8 +117,7 @@ def _resolve_covered_until(
     if request.turn_input is not None:
         return request.turn_input.pre_turn_history_event_id
     raise ValueError(
-        "PREFLIGHT_COMPACTION requires turn_input or explicit "
-        "covered_until_event_id"
+        "PREFLIGHT_COMPACTION requires turn_input or explicit " "covered_until_event_id"
     )
 
 

@@ -9,7 +9,7 @@ from matmaster.context.history_restore import (
     HistoryCheckpointCorruptedError,
     HistoryRestoreFailedError,
 )
-from matmaster.types.message_normalization import normalize_and_validate_openai_messages
+from matmaster.types.message_normalization import validate_tool_turn_sequence
 from matmaster.types.messages import (
     AssistantMessage,
     ImageContentPart,
@@ -45,6 +45,25 @@ def _utc(
         "invocation_id": invocation_id,
         "spawn_id": None,
     }
+
+
+def test_finalize_history_strips_images_when_vision_unsupported() -> None:
+    history = [
+        ToolMessage(
+            tool_call_id="tc1",
+            tool_name="Read",
+            content="Read image: /a.png",
+            images=[ImageContentPart(url="data:image/png;base64,aGVsbG8=")],
+        )
+    ]
+    no_vision = ModelHistoryRestoreService(None, supports_vision=False)
+    stripped = no_vision._finalize_history(history)
+    assert stripped[0].images == []
+    assert "[历史图片已移除（当前模型不支持图片输入）" in stripped[0].content
+
+    with_vision = ModelHistoryRestoreService(None, supports_vision=True)
+    kept = with_vision._finalize_history(history)
+    assert kept[0].images == history[0].images
 
 
 def _assistant_state(
@@ -393,7 +412,7 @@ def test_v1_restore_consumes_assistant_state_and_tool_result() -> None:
     assert tool.tool_call_id == "call-1"
     assert tool.tool_name == "search_materials"
     assert tool.content == '{"matches": 3}'
-    normalize_and_validate_openai_messages(history)
+    validate_tool_turn_sequence(history)
 
 
 def test_v1_restore_does_not_duplicate_response_and_run_result() -> None:
@@ -448,7 +467,7 @@ def test_v1_restore_pairs_tool_call_and_public_tool_result_payload() -> None:
     assert tool.tool_call_id == "call-1"
     assert tool.tool_name == "search_materials"
     assert tool.content == '{"matches": 3}'
-    normalize_and_validate_openai_messages(history)
+    validate_tool_turn_sequence(history)
 
 
 def test_v1_restore_skips_orphan_tool_result() -> None:
@@ -469,7 +488,7 @@ def test_v1_restore_skips_orphan_tool_result() -> None:
 
     assert [type(message) for message in history] == [UserMessage, AssistantMessage]
     assert [message.content for message in history] == ["find silicon", "done"]
-    normalize_and_validate_openai_messages(history)
+    validate_tool_turn_sequence(history)
 
 
 def test_hybrid_v1_skips_bad_assistant_state_and_continues() -> None:
@@ -725,17 +744,20 @@ def test_v1_restore_mixed_fixture_preserves_phase1_message_bytes() -> None:
                 }
             ],
             "reasoning_content": None,
+            "provider_state": None,
         },
         {
             "role": "tool",
             "content": '{"matches": [3, 1]}',
             "tool_call_id": "call-1",
             "tool_name": "search_materials",
+            "images": [],
         },
         {
             "role": "assistant",
             "content": "found results",
             "tool_calls": None,
             "reasoning_content": None,
+            "provider_state": None,
         },
     ]

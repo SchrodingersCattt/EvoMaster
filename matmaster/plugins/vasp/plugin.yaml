@@ -1,0 +1,3 @@
+name: vasp
+category: simulation
+description: "VASP calculations: SCF, relaxation, band/DOS, MD, hybrid DFT, SOC, magnetism, DFT+U, optical, NEB — from INCAR/KPOINTS/POSCAR generation through Bohrium submission and parsing."

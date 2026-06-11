@@ -103,7 +103,7 @@ Case 文件为 `evaluation/skill_trigger/cases.yaml`，每个 Skill 一段：
   可以使用。
 - case 以"应然正确"为目标：先保证意图清晰、科学语义合理、边界可区分，再考虑运行
   评测。若 runtime 结果不稳定，通常说明 `description` 触发信号不足。
-- 若某个 `skill_type: orchestrator` 父 Skill 通过决策树串起多个并列 leaf
+- 若某个编排型（orchestrator）父 Skill 通过决策树串起多个并列 leaf
   skill，触发率 cases 必须为每个 leaf 单独写一段；父 Skill 的 cases
   仅用于用户提问模糊、多步、或没明确指向某 leaf 的兜底场景。
 
@@ -171,7 +171,7 @@ uv run python -m evaluation.skill_trigger --skills your-skill-name --jobs 8
 - 优先写**主题 / 工具链 / 方法族**；若只是想表达“这是个多步流程题”，应由 `capability=workflow_orchestration` 表达，而不是再写 `workflow` tag。
 - **受控词表 + 前缀语义**：合法 tag 为数十个粗粒度值，例如 `meta_userlog`、`wf_batch`、`abacus`、`vasp`、`phy_surface`、`chem_co2rr`、`mat_hea` 等（完整列表见 `question_tags.py`）。**不要在 tags 里堆材料实例名**（如单个化学式、Miller 指数），以免与 `capability`/`domain` 信息重复且难以维护。
 - **命名风格**：仅使用词表内 `lower_snake_case` 字符串；材料名、化学式类 **legacy** 别名仍由 `schemas.CANONICAL_TAG_ALIASES` 拒绝并提示 canonical（归一化后进入上述词表）。
-- **优先对应 `matmaster` skill**：新增 tag 时**尽量让其对应一个真实 skill**（`matmaster/skills/**/SKILL.md`），以便后续做「按 skill 覆盖率 / 触发率」分析；而不是新造一个泛主题词。例如 `struct_inspect`（对应 inspect-atomic-structure，纯解析不改结构）、`analysis_data`（对应 data-analysis，筛选表/相图/文献提数/可视化）、`analysis_post_md`（对应 md-analysis）。确无对应 skill 的稳定主题/工具线（如 `meta_database`、`char_electrochem`）才用主题族前缀。
+- **优先对应 `matmaster` skill**：新增 tag 时**尽量让其对应一个真实 skill**（`matmaster/skills/**/SKILL.md`），以便后续做「按 skill 覆盖率 / 触发率」分析；而不是新造一个泛主题词。例如 `struct_inspect`（对应 inspect-atomic-structure，纯解析不改结构）、`analysis_data`（对应 data-analysis，筛选表/相图/文献提数/可视化）。确无对应 skill 的稳定主题/工具线（如 `meta_database`、`char_electrochem`）才用主题族前缀。
 
 **与 `--slices` 的关系**：Runner 当前仅按 **`capability` + `domain`** 过滤；**需要稳定用 CLI 切分的维度**应落在二者之一（或专题 capability），不要**只**写在 `tags` 里（除非已实现 tags 筛选，见下文「运行筛选」）。
 

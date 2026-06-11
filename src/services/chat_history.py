@@ -9,6 +9,7 @@ from matmaster.types.message_normalization import restore_persisted_assistant_st
 from matmaster.types.messages import (
     AssistantMessage,
     ImageContentPart,
+    ProviderState,
     ToolCallData,
     ToolMessage,
     UserMessage,
@@ -257,6 +258,14 @@ class ChatHistoryConverter:
         return str(c) if c is not None else ''
 
     @staticmethod
+    def _system_trigger_text(ev: dict) -> str:
+        """从 System/trigger 事件取注入文本。content 形如 {'text': str, 'origin': str}。"""
+        c = ev.get('content')
+        if isinstance(c, dict):
+            return str(c.get('text') or '')
+        return str(c) if c is not None else ''
+
+    @staticmethod
     def _user_images(ev: dict) -> list[ImageContentPart]:
         """从 User/query 事件中取出图片 URL 列表。"""
         raw_images = ev.get('images')
@@ -328,8 +337,8 @@ class ChatHistoryConverter:
         }
 
     @staticmethod
-    def _tool_result_from_event(ev: dict) -> tuple[str, str, Any] | None:
-        """从 type=tool_result 的事件 content 得到 (tool_call_id, name, content)。"""
+    def _tool_result_from_event(ev: dict) -> tuple[str, str, Any, list] | None:
+        """从 type=tool_result 的事件 content 得到 (tool_call_id, name, content, images)。"""
         c = ev.get('content')
         if not isinstance(c, dict):
             return None
@@ -338,7 +347,10 @@ class ChatHistoryConverter:
         result = c.get('result')
         if result is None:
             result = {}
-        return (call_id, name, result)
+        images = c.get('images')
+        if not isinstance(images, list):
+            images = []
+        return (call_id, name, result, images)
 
     @staticmethod
     def _repair_incomplete_tool_turns(messages: list[dict]) -> list[dict]:
@@ -435,27 +447,40 @@ class ChatHistoryConverter:
             pending_tool_calls.clear()
             pending_tool_call_ids.clear()
 
+        def begin_user_turn(user_message: dict) -> None:
+            """User/query 与 System/trigger 共用的轮次起点：清空助手侧累积态后追加一条用户消息。"""
+            nonlocal pending_reasoning, last_assistant_text_idx, response_seen_in_turn
+            if pending_reasoning:
+                out.append(
+                    AssistantMessage(
+                        content='',
+                        reasoning_content=pending_reasoning,
+                    ).model_dump()
+                )
+                pending_reasoning = None
+            flush_tool_calls()
+            last_assistant_text_idx = None
+            assistant_state_tool_ids.clear()
+            active_tool_turn_ids.clear()
+            response_seen_in_turn = False
+            out.append(user_message)
+
         for ev in events:
             source = normalize_event_source(ev.get('source'))
             typ = (ev.get('type') or '').strip()
 
             if source == 'User' and typ == 'query':
-                if pending_reasoning:
-                    out.append(
-                        AssistantMessage(
-                            content='',
-                            reasoning_content=pending_reasoning,
-                        ).model_dump()
-                    )
-                    pending_reasoning = None
-                flush_tool_calls()
-                last_assistant_text_idx = None
-                assistant_state_tool_ids.clear()
-                active_tool_turn_ids.clear()
-                response_seen_in_turn = False
-                text = cls._user_content(ev)
-                out.append(
-                    UserMessage(content=text, images=cls._user_images(ev)).model_dump()
+                begin_user_turn(
+                    UserMessage(
+                        content=cls._user_content(ev),
+                        images=cls._user_images(ev),
+                    ).model_dump()
+                )
+                continue
+
+            if source == 'System' and typ == 'trigger':
+                begin_user_turn(
+                    UserMessage(content=cls._system_trigger_text(ev)).model_dump()
                 )
                 continue
 
@@ -550,7 +575,7 @@ class ChatHistoryConverter:
                 triple = cls._tool_result_from_event(ev)
                 if triple:
                     flush_tool_calls()
-                    call_id, name, content = triple
+                    call_id, name, content, images = triple
                     if (
                         call_id not in active_tool_turn_ids
                         and call_id not in assistant_state_tool_ids
@@ -567,6 +592,10 @@ class ChatHistoryConverter:
                             tool_call_id=call_id,
                             tool_name=name,
                             content=content,
+                            images=[
+                                ImageContentPart.model_validate(image)
+                                for image in images
+                            ],
                         ).model_dump()
                     )
                 continue
@@ -657,6 +686,11 @@ class ChatHistoryConverter:
                         )
                         for tc in d["tool_calls"]
                     ]
+                provider_state = d.get("provider_state")
+                if provider_state is not None:
+                    msg_kwargs["provider_state"] = ProviderState.model_validate(
+                        provider_state
+                    )
                 messages.append(AssistantMessage(**msg_kwargs))
             elif role == "tool":
                 messages.append(
@@ -664,6 +698,10 @@ class ChatHistoryConverter:
                         content=d.get("content", ""),
                         tool_call_id=d.get("tool_call_id", ""),
                         tool_name=d.get("tool_name", ""),
+                        images=[
+                            ImageContentPart.model_validate(image)
+                            for image in d.get("images", [])
+                        ],
                     )
                 )
         return messages

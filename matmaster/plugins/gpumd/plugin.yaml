@@ -1,0 +1,3 @@
+name: gpumd
+category: simulation
+description: "GPUMD/NEP molecular dynamics: MD runs, EMD/HNEMD/NEMD thermal conductivity, diffusion/MSD, SHC, NEP training and prediction."

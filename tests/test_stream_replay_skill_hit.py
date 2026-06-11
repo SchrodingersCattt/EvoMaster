@@ -121,6 +121,7 @@ class TestReplayDedupeSpawnId:
     """Replay dedupe must key by (task_id, spawn_id) so child and parent terminal streams stay independent."""
 
     def test_child_response_does_not_suppress_parent_run_result(self) -> None:
+        """Child text equals parent final text: isolation must come from spawn grouping."""
         from src.services.stream_service import _dedupe_replayed_terminal_events
 
         events = [
@@ -129,14 +130,18 @@ class TestReplayDedupeSpawnId:
                 "spawn_id": "sub-1",
                 "type": "response",
                 "source": "MatMaster",
-                "content": "child answer",
+                "content": "same final text",
             },
             {
                 "task_id": "t1",
                 "spawn_id": None,
                 "type": "run_result",
                 "source": "MatMaster",
-                "content": "parent final",
+                "content": {
+                    "content": "same final text",
+                    "status": "completed",
+                    "reason": "natural",
+                },
             },
         ]
         out = _dedupe_replayed_terminal_events(events)
@@ -160,7 +165,11 @@ class TestReplayDedupeSpawnId:
                 "spawn_id": None,
                 "type": "run_result",
                 "source": "MatMaster",
-                "content": "dup",
+                "content": {
+                    "content": "final",
+                    "status": "completed",
+                    "reason": "natural",
+                },
             },
         ]
         out = _dedupe_replayed_terminal_events(events)
@@ -199,7 +208,11 @@ class TestReplayDedupeSpawnId:
                 "spawn_id": None,
                 "type": "run_result",
                 "source": "MatMaster",
-                "content": "answer",
+                "content": {
+                    "content": "answer",
+                    "status": "completed",
+                    "reason": "natural",
+                },
             },
         ]
 
@@ -239,7 +252,11 @@ class TestReplayDedupeSpawnId:
                 "spawn_id": None,
                 "type": "run_result",
                 "source": "MatMaster",
-                "content": "answer with [[fig:band]]",
+                "content": {
+                    "content": "answer with [[fig:band]]",
+                    "status": "completed",
+                    "reason": "natural",
+                },
             },
         ]
 
@@ -299,16 +316,319 @@ class TestReplayDedupeSpawnId:
                 "spawn_id": None,
                 "type": "run_result",
                 "source": "MatMaster",
-                "content": "duplicate final answer",
+                "content": {
+                    "content": "duplicate final answer",
+                    "status": "completed",
+                    "reason": "natural",
+                },
             },
         ]
 
         out = _dedupe_replayed_terminal_events(events)
         assert [e["type"] for e in out] == [
             "response_figures",
+            "response",
             "response_figures",
             "run_result",
         ]
+
+
+class TestReplayDedupeFinalAnswer:
+    """Replay dedupe removes only the run_result's final-answer response copy."""
+
+    def test_final_response_with_matching_text_is_removed(self) -> None:
+        """Spec 8.1: the equivalent final answer copy stays hidden behind run_result."""
+        from src.services.stream_service import _dedupe_replayed_terminal_events
+
+        events = [
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "response",
+                "source": "MatMaster",
+                "content": {"content": "final", "turn_index": 0},
+            },
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "run_result",
+                "source": "MatMaster",
+                "content": {
+                    "content": "final",
+                    "status": "completed",
+                    "reason": "natural",
+                    "num_turns": 1,
+                },
+            },
+        ]
+
+        out = _dedupe_replayed_terminal_events(events)
+        assert [e["type"] for e in out] == ["run_result"]
+
+    def test_intermediate_response_before_tool_call_is_kept(self) -> None:
+        """Spec 8.2: intermediate visible text must survive replay after the run ends."""
+        from src.services.stream_service import _dedupe_replayed_terminal_events
+
+        events = [
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "response",
+                "source": "MatMaster",
+                "content": {"content": "I will inspect files.", "turn_index": 0},
+            },
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "tool_call",
+                "source": "MatMaster",
+                "content": {"name": "bash"},
+            },
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "tool_result",
+                "source": "MatMaster",
+                "content": {"result": "ok"},
+            },
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "response",
+                "source": "MatMaster",
+                "content": {"content": "final", "turn_index": 1},
+            },
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "run_result",
+                "source": "MatMaster",
+                "content": {
+                    "content": "final",
+                    "status": "completed",
+                    "reason": "natural",
+                    "num_turns": 2,
+                },
+            },
+        ]
+
+        out = _dedupe_replayed_terminal_events(events)
+        assert [e["type"] for e in out] == [
+            "response",
+            "tool_call",
+            "tool_result",
+            "run_result",
+        ]
+        assert out[0]["content"]["content"] == "I will inspect files."
+
+    def test_response_with_different_text_is_kept(self) -> None:
+        """Spec 6.3: only the equivalent final-answer copy is removed."""
+        from src.services.stream_service import _dedupe_replayed_terminal_events
+
+        events = [
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "response",
+                "source": "MatMaster",
+                "content": {"content": "partial draft", "turn_index": 1},
+            },
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "run_result",
+                "source": "MatMaster",
+                "content": {
+                    "content": "final conclusion",
+                    "status": "completed",
+                    "reason": "natural",
+                    "num_turns": 2,
+                },
+            },
+        ]
+
+        out = _dedupe_replayed_terminal_events(events)
+        assert [e["type"] for e in out] == ["response", "run_result"]
+
+    def test_rescued_finish_removes_earlier_turn_final_copy(self) -> None:
+        """Spec 6.5: final_content may come from an earlier turn (rescued natural finish)."""
+        from src.services.stream_service import _dedupe_replayed_terminal_events
+
+        events = [
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "response",
+                "source": "MatMaster",
+                "content": {"content": "conclusion X", "turn_index": 0},
+            },
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "tool_call",
+                "source": "MatMaster",
+                "content": {"name": "bash"},
+            },
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "tool_result",
+                "source": "MatMaster",
+                "content": {"result": "ok"},
+            },
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "run_result",
+                "source": "MatMaster",
+                "content": {
+                    "content": "conclusion X",
+                    "status": "completed",
+                    "reason": "natural",
+                    "num_turns": 2,
+                },
+            },
+        ]
+
+        out = _dedupe_replayed_terminal_events(events)
+        assert [e["type"] for e in out] == ["tool_call", "tool_result", "run_result"]
+
+    def test_empty_terminal_text_removes_nothing(self) -> None:
+        """Spec 6.6: cancelled-style run_result persists '' and must not hide drafts."""
+        from src.services.stream_service import _dedupe_replayed_terminal_events
+
+        events = [
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "response",
+                "source": "MatMaster",
+                "content": {"content": "partial draft", "turn_index": 0},
+            },
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "run_result",
+                "source": "MatMaster",
+                "content": {
+                    "content": "",
+                    "status": "failed",
+                    "reason": "cancelled",
+                },
+            },
+        ]
+
+        out = _dedupe_replayed_terminal_events(events)
+        assert [e["type"] for e in out] == ["response", "run_result"]
+
+    def test_str_form_response_content_participates_in_text_match(self) -> None:
+        """Spec 5.4: plain-str response content is a legal persisted shape, not legacy."""
+        from src.services.stream_service import _dedupe_replayed_terminal_events
+
+        events = [
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "response",
+                "source": "MatMaster",
+                "content": "final",
+            },
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "run_result",
+                "source": "MatMaster",
+                "content": {
+                    "content": "final",
+                    "status": "completed",
+                    "reason": "natural",
+                },
+            },
+        ]
+
+        out = _dedupe_replayed_terminal_events(events)
+        assert [e["type"] for e in out] == ["run_result"]
+
+    def test_each_run_result_removes_at_most_one_response(self) -> None:
+        """Spec 9.3: anomalous duplicate writes must not be over-deleted."""
+        from src.services.stream_service import _dedupe_replayed_terminal_events
+
+        events = [
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "response",
+                "source": "MatMaster",
+                "content": "final",
+            },
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "response",
+                "source": "MatMaster",
+                "content": "final",
+            },
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "run_result",
+                "source": "MatMaster",
+                "content": {
+                    "content": "final",
+                    "status": "completed",
+                    "reason": "natural",
+                },
+            },
+        ]
+
+        out = _dedupe_replayed_terminal_events(events)
+        assert [e["type"] for e in out] == ["response", "run_result"]
+
+    def test_multiple_run_results_each_remove_one_copy(self) -> None:
+        """Spec 9.3: with N terminals, at most N matching copies disappear."""
+        from src.services.stream_service import _dedupe_replayed_terminal_events
+
+        events = [
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "response",
+                "source": "MatMaster",
+                "content": "final",
+            },
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "response",
+                "source": "MatMaster",
+                "content": "final",
+            },
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "run_result",
+                "source": "MatMaster",
+                "content": {
+                    "content": "final",
+                    "status": "completed",
+                    "reason": "natural",
+                },
+            },
+            {
+                "task_id": "t1",
+                "spawn_id": None,
+                "type": "run_result",
+                "source": "MatMaster",
+                "content": {
+                    "content": "final",
+                    "status": "completed",
+                    "reason": "natural",
+                },
+            },
+        ]
+
+        out = _dedupe_replayed_terminal_events(events)
+        assert [e["type"] for e in out] == ["run_result", "run_result"]
 
 
 class TestReplayCompactionNormalization:

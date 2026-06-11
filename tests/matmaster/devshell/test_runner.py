@@ -11,9 +11,10 @@ from matmaster.core.exp import Exp
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.messages import StreamChunk
 from matmaster.types.session import Session
+from tests.conftest import ProviderProtocolAttrs
 
 
-class MockProvider:
+class MockProvider(ProviderProtocolAttrs):
     async def __aenter__(self):
         return self
 

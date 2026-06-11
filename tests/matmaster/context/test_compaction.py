@@ -11,9 +11,10 @@ from matmaster.context.compaction import (
 from matmaster.context.ports import ContextAssemblyPorts, SessionEvent, UserInstructions
 from matmaster.context.sections import ContextSection, ContextView, SectionOrder
 from matmaster.context.sources.turn_input import TurnInput
-from matmaster.types.message_normalization import normalize_and_validate_openai_messages
+from matmaster.types.message_normalization import validate_tool_turn_sequence
 from matmaster.types.messages import (
     AssistantMessage,
+    ImageContentPart,
     SystemMessage,
     ToolCallData,
     ToolMessage,
@@ -59,13 +60,58 @@ def make_compactor(*, boundary=lambda: 9) -> ContextCompactor:
         _session_section_builder_for_tests=session_sections,
     )
     return ContextCompactor(
-        config=CompactionConfig(context_limit=1000, trigger_ratio=0.9),
+        config=CompactionConfig(context_limit=1000),
         context_assembler=assembler,
         user_instructions=UserInstructions(text="Use SI units.", hash="sha256:abc"),
         session_id="sess-1",
         spawn_id=None,
         runtime_covered_until_provider=boundary,
     )
+
+
+def test_estimate_tokens_counts_images() -> None:
+    from matmaster.context.compaction import _IMAGE_TOKEN_ESTIMATE, estimate_tokens
+
+    bare = ToolMessage(tool_call_id="tc1", tool_name="Read", content="x")
+    with_images = bare.model_copy(
+        update={
+            "images": [
+                ImageContentPart(url="data:image/png;base64,aGVsbG8="),
+                ImageContentPart(url="data:image/png;base64,aGVsbG8="),
+            ]
+        }
+    )
+    delta = estimate_tokens([with_images]) - estimate_tokens([bare])
+    assert delta == 2 * _IMAGE_TOKEN_ESTIMATE
+
+
+def test_summary_prep_strips_images_even_within_budget() -> None:
+    messages = [
+        SystemMessage(content="sys"),
+        UserMessage(content="看图"),
+        AssistantMessage(
+            content=None,
+            tool_calls=[ToolCallData(id="tc1", name="Read", arguments={})],
+        ),
+        ToolMessage(
+            tool_call_id="tc1",
+            tool_name="Read",
+            content="Read image: /a.png",
+            images=[ImageContentPart(url="data:image/png;base64,aGVsbG8=")],
+        ),
+        AssistantMessage(content="done"),
+    ]
+    prep = prepare_messages_for_summary_call(
+        full_messages=messages,
+        phase="runtime",
+        turn_input=None,
+        compact_request=UserMessage(content="summarize"),
+        context_limit=1_000_000,
+        reserved_summary_tokens=1_000,
+    )
+    tool_msgs = [m for m in prep.messages if getattr(m, "tool_call_id", None) == "tc1"]
+    assert tool_msgs[0].images == []
+    assert "[images omitted for summary: 1]" in tool_msgs[0].content
 
 
 @pytest.mark.asyncio
@@ -383,7 +429,7 @@ async def test_apply_fallback_selects_tool_safe_tail() -> None:
     assert result.durability == "ephemeral"
     assert result.failure_reason == "summary failed"
     assert result.base_messages is None
-    normalize_and_validate_openai_messages(messages)
+    validate_tool_turn_sequence(messages)
 
 
 @pytest.mark.asyncio

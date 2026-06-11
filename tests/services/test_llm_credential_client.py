@@ -67,11 +67,18 @@ async def test_success_parses_model_params_into_extra_body(monkeypatch):
     _patch_env(monkeypatch)
     captured = _patch_client(
         monkeypatch,
-        resp=_FakeResp(200, _ok_payload(model_params={"enable_thinking": True})),
+        resp=_FakeResp(
+            200,
+            _ok_payload(
+                context_limit=1_000_000,
+                model_params={"enable_thinking": True},
+            ),
+        ),
     )
     cred = await fetch_byok_credential(user_id="u1", credential_id="c1")
     assert cred.model == "qwen-max"
     assert cred.api_key == "sk-plain"
+    assert cred.context_limit == 1_000_000
     assert cred.extra_body == {"enable_thinking": True}
     # 校验请求构造正确
     assert captured["url"].endswith("/api/v1/internal/llm-credentials/c1")
@@ -91,6 +98,13 @@ async def test_model_params_non_dict_degrades_to_empty(monkeypatch):
     _patch_client(monkeypatch, resp=_FakeResp(200, _ok_payload(model_params=["bad"])))
     cred = await fetch_byok_credential(user_id="u1", credential_id="c1")
     assert cred.extra_body == {}
+
+
+async def test_invalid_context_limit_raises(monkeypatch):
+    _patch_env(monkeypatch)
+    _patch_client(monkeypatch, resp=_FakeResp(200, _ok_payload(context_limit=0)))
+    with pytest.raises(ByokCredentialError, match="context_limit"):
+        await fetch_byok_credential(user_id="u1", credential_id="c1")
 
 
 async def test_missing_bearer_raises(monkeypatch):

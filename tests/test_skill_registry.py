@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import json
+import logging
+import shlex
+import subprocess
+import sys
 from pathlib import Path, PurePosixPath
 
 import pytest
@@ -54,27 +58,50 @@ Nested body.
 
 SKILL_MD_NO_FRONTMATTER = "No frontmatter here."
 
+SKILL_MD_MEMBER = """\
+---
+name: member-skill
+description: Plugin member skill
+---
+Member body.
+"""
+
 
 class FakeRemoteSkillSession:
-    def __init__(self, files: dict[str, str]) -> None:
+    def __init__(
+        self,
+        files: dict[str, str],
+        errors: dict[str, str] | None = None,
+    ) -> None:
         self._files = files
+        self._errors = errors or {}
         self.exec_calls: list[str] = []
         self.read_calls: list[str] = []
+
+    def _all_paths(self) -> list[str]:
+        return sorted([*self._files, *self._errors])
 
     def path_exists(self, path: str) -> bool:
         prefix = path.rstrip("/") + "/"
         return any(
             candidate == path or candidate.startswith(prefix)
-            for candidate in self._files
+            for candidate in self._all_paths()
         )
 
     def exec_bash(self, command: str, timeout: int | None = None) -> dict[str, object]:
         self.exec_calls.append(command)
-        payload = [
-            {"path": path, "content": self._files[path]}
-            for path in sorted(self._files)
-            if path.endswith("/SKILL.md")
-        ]
+        root = shlex.split(command)[-1].rstrip("/")
+        prefix = root + "/"
+        payload: list[dict[str, str]] = []
+        for path in self._all_paths():
+            if not path.startswith(prefix):
+                continue
+            if not path.endswith(("/SKILL.md", "/plugin.yaml")):
+                continue
+            if path in self._errors:
+                payload.append({"path": path, "error": self._errors[path]})
+            else:
+                payload.append({"path": path, "content": self._files[path]})
         return {"exit_code": 0, "stdout": json.dumps(payload)}
 
     def read_file(self, path: str, encoding: str = "utf-8") -> str:
@@ -142,6 +169,37 @@ def skill_tree(tmp_path: Path) -> dict[str, Path]:
     return {"root1": root1, "root2": root2, "tmp": tmp_path}
 
 
+def test_remote_scan_script_collects_skills_plugins_and_errors(
+    tmp_path: Path,
+) -> None:
+    """真实扫描脚本：收集 SKILL.md 与 plugin.yaml，读失败产出 error 条目。"""
+    from matmaster.skills.registry import _REMOTE_SKILL_SCAN_SCRIPT
+
+    root = tmp_path / "plugins"
+    _write(root / "chem-pack" / "plugin.yaml", "name: chem-pack\n")
+    _write(root / "chem-pack" / "skills" / "calc" / "SKILL.md", SKILL_MD_CALC)
+    _write(root / "notes" / "README.md", "ignored")
+    broken = root / "broken" / "SKILL.md"
+    broken.parent.mkdir(parents=True)
+    broken.symlink_to(tmp_path / "missing-target")
+
+    result = subprocess.run(
+        [sys.executable, "-c", _REMOTE_SKILL_SCAN_SCRIPT, str(root)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    items = {item["path"]: item for item in json.loads(result.stdout)}
+
+    manifest = str(root / "chem-pack" / "plugin.yaml")
+    skill_md = str(root / "chem-pack" / "skills" / "calc" / "SKILL.md")
+    assert set(items) == {manifest, skill_md, str(broken)}
+    assert items[manifest]["content"] == "name: chem-pack\n"
+    assert "full body of the calculator skill" in items[skill_md]["content"]
+    assert items[str(broken)]["error"]
+    assert "content" not in items[str(broken)]
+
+
 # ===========================================================================
 # Skill tests
 # ===========================================================================
@@ -169,12 +227,6 @@ class TestSkill:
         assert skill.meta_info.mcp_server == "calc-server"
         assert "mcp_server" not in skill.meta_info.extras
 
-    def test_parse_frontmatter_skill_type(self, skill_tree: dict[str, Path]) -> None:
-        from matmaster.skills.registry import Skill
-
-        skill = Skill(skill_tree["root1"] / "calculator")
-        assert skill.meta_info.skill_type is None
-
     def test_parse_frontmatter_depends_on(self, tmp_path: Path) -> None:
         from matmaster.skills.registry import Skill
 
@@ -199,22 +251,6 @@ class TestSkill:
 
         skill = Skill(skill_tree["root1"] / "search")
         assert skill.meta_info.depends_on == []
-
-    def test_parse_frontmatter_skill_type_operator(self, tmp_path: Path) -> None:
-        from matmaster.skills.registry import Skill
-
-        skill_dir = tmp_path / "operator-skill"
-        _write(
-            skill_dir / "SKILL.md",
-            "---\n"
-            "name: operator-skill\n"
-            "description: An operator skill\n"
-            "skill_type: operator\n"
-            "---\n"
-            "Body.\n",
-        )
-        skill = Skill(skill_dir)
-        assert skill.meta_info.skill_type == "operator"
 
     def test_get_full_info_returns_body(self, skill_tree: dict[str, Path]) -> None:
         """get_full_info() returns the markdown body after the frontmatter block."""
@@ -419,3 +455,430 @@ class TestSkillRegistry:
         )
         assert skill.get_full_info() == "Remote body"
         assert session.read_calls == []
+
+    def test_remote_skill_over_local_fallback_is_not_warning(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Remote skill replacing the local fallback is expected precedence."""
+        from matmaster.skills.registry import SkillRegistry
+
+        local_root = tmp_path / "local"
+        _write(
+            local_root / "calculator" / "SKILL.md",
+            "---\n"
+            "name: calculator\n"
+            "description: Local fallback calculator\n"
+            "---\n"
+            "Local body\n",
+        )
+        session = FakeRemoteSkillSession(
+            {
+                "/personal/.matmaster/skills/calculator/SKILL.md": (
+                    "---\n"
+                    "name: calculator\n"
+                    "description: Remote calculator\n"
+                    "---\n"
+                    "Remote body\n"
+                )
+            }
+        )
+
+        with caplog.at_level(logging.INFO, logger="matmaster.skills.registry"):
+            reg = SkillRegistry(
+                local_root,
+                remote_session=session,
+                remote_roots=["/personal/.matmaster/skills"],
+            )
+
+        calculator = reg.get_skill("calculator")
+        assert calculator is not None
+        assert calculator.meta_info.description == "Remote calculator"
+        assert not [
+            record
+            for record in caplog.records
+            if record.levelno >= logging.WARNING and "overridden" in record.message
+        ]
+        assert "Skill registry built:" in caplog.text
+        assert "remote_over_local=1" in caplog.text
+        assert "local_fallback=0" in caplog.text
+
+    def test_remote_roots_are_normalized_before_scan(self) -> None:
+        """Equivalent remote root spellings are scanned only once."""
+        from matmaster.skills.registry import SkillRegistry
+
+        session = FakeRemoteSkillSession(
+            {
+                "/personal/.matmaster/skills/user-skill/SKILL.md": (
+                    "---\n"
+                    "name: user-skill\n"
+                    "description: User remote skill\n"
+                    "---\n"
+                    "Remote body\n"
+                )
+            }
+        )
+
+        reg = SkillRegistry(
+            [],
+            remote_session=session,
+            remote_roots=[
+                "/personal/.matmaster/skills",
+                "/personal/.matmaster/skills/",
+            ],
+        )
+
+        assert reg.get_skill("user-skill") is not None
+        assert len(session.exec_calls) == 1
+
+
+class TestRemotePluginAttribution:
+    """远端 plugin.yaml 归属：挂载、祖先匹配、root 边界、失败语义、覆盖顺序。"""
+
+    ROOT = "/personal/.matmaster/plugins"
+
+    def test_remote_member_mounts_nearest_plugin(self) -> None:
+        """成员挂最近祖先 PluginInfo；name 缺省回退目录名；散装不受影响。"""
+        from matmaster.skills.registry import SkillRegistry
+
+        session = FakeRemoteSkillSession(
+            {
+                f"{self.ROOT}/outer/plugin.yaml": "description: Outer pack\n",
+                f"{self.ROOT}/outer/inner/plugin.yaml": (
+                    "name: inner-pack\ndescription: Inner\n"
+                ),
+                f"{self.ROOT}/outer/inner/skills/member/SKILL.md": SKILL_MD_MEMBER,
+                f"{self.ROOT}/outer/skills/outer-member/SKILL.md": (
+                    "---\nname: outer-member\ndescription: Outer member\n---\nBody\n"
+                ),
+                f"{self.ROOT}/loose/SKILL.md": (
+                    "---\nname: loose-skill\ndescription: Loose\n---\nBody\n"
+                ),
+            }
+        )
+
+        reg = SkillRegistry([], remote_session=session, remote_roots=[self.ROOT])
+
+        member = reg.get_skill("member-skill")
+        assert member is not None
+        assert member.plugin is not None
+        assert member.plugin.name == "inner-pack"
+        assert member.plugin.description == "Inner"
+        assert member.plugin_dir == PurePosixPath(f"{self.ROOT}/outer/inner")
+        outer_member = reg.get_skill("outer-member")
+        assert outer_member is not None
+        assert outer_member.plugin is not None
+        assert outer_member.plugin.name == "outer"
+        assert outer_member.plugin.description == "Outer pack"
+        loose = reg.get_skill("loose-skill")
+        assert loose is not None
+        assert loose.plugin is None
+        assert loose.plugin_dir is None
+
+    def test_plugin_yaml_at_root_is_ignored(self) -> None:
+        """远端根自身不作 plugin 根：根下 plugin.yaml 不产生归属。"""
+        from matmaster.skills.registry import SkillRegistry
+
+        session = FakeRemoteSkillSession(
+            {
+                f"{self.ROOT}/plugin.yaml": "name: root-pack\n",
+                f"{self.ROOT}/some-skill/SKILL.md": (
+                    "---\nname: some-skill\ndescription: S\n---\nBody\n"
+                ),
+            }
+        )
+
+        reg = SkillRegistry([], remote_session=session, remote_roots=[self.ROOT])
+
+        skill = reg.get_skill("some-skill")
+        assert skill is not None
+        assert skill.plugin is None
+
+    def test_invalid_plugin_manifest_fails_members(self) -> None:
+        """plugin.yaml 读失败或坏 YAML：成员加载失败；他组不受影响。"""
+        from matmaster.skills.registry import SkillRegistry
+
+        session = FakeRemoteSkillSession(
+            {
+                f"{self.ROOT}/bad-yaml/plugin.yaml": "{ name: [unbalanced",
+                f"{self.ROOT}/bad-yaml/skills/y/SKILL.md": (
+                    "---\nname: y-skill\ndescription: Y\n---\nBody\n"
+                ),
+                f"{self.ROOT}/unreadable/skills/z/SKILL.md": (
+                    "---\nname: z-skill\ndescription: Z\n---\nBody\n"
+                ),
+                f"{self.ROOT}/ok/plugin.yaml": "name: ok-pack\n",
+                f"{self.ROOT}/ok/skills/w/SKILL.md": (
+                    "---\nname: w-skill\ndescription: W\n---\nBody\n"
+                ),
+            },
+            errors={
+                f"{self.ROOT}/unreadable/plugin.yaml": "Permission denied",
+            },
+        )
+
+        reg = SkillRegistry([], remote_session=session, remote_roots=[self.ROOT])
+
+        assert reg.get_skill("y-skill") is None
+        assert reg.get_skill("z-skill") is None
+        assert reg.get_skill("w-skill") is not None
+
+    def test_skill_error_entry_skipped(self) -> None:
+        """SKILL.md error 条目：跳过该 skill，不影响同根其余条目。"""
+        from matmaster.skills.registry import SkillRegistry
+
+        session = FakeRemoteSkillSession(
+            {
+                f"{self.ROOT}/ok/plugin.yaml": "name: ok-pack\n",
+                f"{self.ROOT}/ok/skills/good/SKILL.md": (
+                    "---\nname: good-skill\ndescription: G\n---\nBody\n"
+                ),
+            },
+            errors={
+                f"{self.ROOT}/ok/skills/broken/SKILL.md": "I/O error",
+            },
+        )
+
+        reg = SkillRegistry([], remote_session=session, remote_roots=[self.ROOT])
+
+        names = {s.meta_info.name for s in reg.get_all_skills()}
+        assert names == {"good-skill"}
+
+    def test_skills_root_overrides_plugins_root_member(self) -> None:
+        """根顺序覆盖：散装个人 skill（skills 根，后扫描）覆盖同名 plugin 成员。"""
+        from matmaster.skills.registry import SkillRegistry
+
+        skills_root = "/personal/.matmaster/skills"
+        session = FakeRemoteSkillSession(
+            {
+                f"{self.ROOT}/pack/plugin.yaml": "name: pack\n",
+                f"{self.ROOT}/pack/skills/dup/SKILL.md": (
+                    "---\nname: dup-skill\ndescription: Member version\n---\nBody\n"
+                ),
+                f"{skills_root}/dup/SKILL.md": (
+                    "---\nname: dup-skill\ndescription: Loose version\n---\nBody\n"
+                ),
+            }
+        )
+
+        reg = SkillRegistry(
+            [],
+            remote_session=session,
+            remote_roots=[self.ROOT, skills_root],
+        )
+
+        dup = reg.get_skill("dup-skill")
+        assert dup is not None
+        assert dup.meta_info.description == "Loose version"
+        assert dup.plugin is None
+
+    def test_invalid_inner_plugin_shadows_valid_outer(self) -> None:
+        """无效内层 plugin.yaml 遮蔽有效外层：成员失败，不回退归属外层。"""
+        from matmaster.skills.registry import SkillRegistry
+
+        session = FakeRemoteSkillSession(
+            {
+                f"{self.ROOT}/outer/plugin.yaml": "name: outer-pack\n",
+                f"{self.ROOT}/outer/inner/plugin.yaml": "{ name: [unbalanced",
+                f"{self.ROOT}/outer/inner/skills/m/SKILL.md": (
+                    "---\nname: m-skill\ndescription: M\n---\nBody\n"
+                ),
+            }
+        )
+
+        reg = SkillRegistry([], remote_session=session, remote_roots=[self.ROOT])
+
+        assert reg.get_skill("m-skill") is None
+
+    def test_meta_info_context_groups_remote_members(self) -> None:
+        """提示词分组：远端成员归组在 [Plugin: ...] 名下。"""
+        from matmaster.skills.registry import SkillRegistry
+
+        session = FakeRemoteSkillSession(
+            {
+                f"{self.ROOT}/chem-pack/plugin.yaml": (
+                    "name: chem-pack\ndescription: Chemistry toolkit\n"
+                ),
+                f"{self.ROOT}/chem-pack/skills/member/SKILL.md": SKILL_MD_MEMBER,
+            }
+        )
+
+        reg = SkillRegistry([], remote_session=session, remote_roots=[self.ROOT])
+        ctx = reg.get_meta_info_context()
+
+        assert "[Plugin: chem-pack] Chemistry toolkit" in ctx
+        assert "  [Skill: member-skill] Plugin member skill" in ctx
+
+
+class TestRemovePluginMembers:
+    def test_removes_local_and_remote_members(self, tmp_path: Path) -> None:
+        """按归属移除本地+远端成员并返回名集合；散装与他组 plugin 不动。"""
+        from matmaster.skills.registry import SkillRegistry
+
+        local_root = tmp_path / "plugins"
+        _write(local_root / "p1" / "plugin.yaml", "name: p1\n")
+        _write(
+            local_root / "p1" / "skills" / "alpha" / "SKILL.md",
+            "---\nname: alpha\ndescription: A\n---\nBody\n",
+        )
+        _write(
+            local_root / "beta" / "SKILL.md",
+            "---\nname: beta\ndescription: B\n---\nBody\n",
+        )
+        remote_root = "/personal/.matmaster/plugins"
+        session = FakeRemoteSkillSession(
+            {
+                f"{remote_root}/p1/plugin.yaml": "name: p1\n",
+                f"{remote_root}/p1/skills/gamma/SKILL.md": (
+                    "---\nname: gamma\ndescription: G\n---\nBody\n"
+                ),
+                f"{remote_root}/p2/plugin.yaml": "name: p2\n",
+                f"{remote_root}/p2/skills/delta/SKILL.md": (
+                    "---\nname: delta\ndescription: D\n---\nBody\n"
+                ),
+            }
+        )
+        reg = SkillRegistry(
+            local_root,
+            remote_session=session,
+            remote_roots=[remote_root],
+        )
+
+        removed = reg.remove_plugin_members({"p1"})
+
+        assert removed == {"alpha", "gamma"}
+        assert reg.get_skill("alpha") is None
+        assert reg.get_skill("gamma") is None
+        assert reg.get_skill("beta") is not None
+        assert reg.get_skill("delta") is not None
+
+    def test_same_name_override_survives(self) -> None:
+        """同名覆盖者按实际归属判定不误伤：散装覆盖者存活且不进返回集。"""
+        from matmaster.skills.registry import SkillRegistry
+
+        plugins_root = "/personal/.matmaster/plugins"
+        skills_root = "/personal/.matmaster/skills"
+        session = FakeRemoteSkillSession(
+            {
+                f"{plugins_root}/pack/plugin.yaml": "name: pack\n",
+                f"{plugins_root}/pack/skills/dup/SKILL.md": (
+                    "---\nname: dup-skill\ndescription: Member version\n---\nBody\n"
+                ),
+                f"{skills_root}/dup/SKILL.md": (
+                    "---\nname: dup-skill\ndescription: Loose version\n---\nBody\n"
+                ),
+            }
+        )
+        reg = SkillRegistry(
+            [],
+            remote_session=session,
+            remote_roots=[plugins_root, skills_root],
+        )
+
+        removed = reg.remove_plugin_members({"pack"})
+
+        assert removed == set()
+        dup = reg.get_skill("dup-skill")
+        assert dup is not None
+        assert dup.meta_info.description == "Loose version"
+
+    def test_empty_disabled_set_is_noop(self, tmp_path: Path) -> None:
+        from matmaster.skills.registry import SkillRegistry
+
+        reg = SkillRegistry(tmp_path / "missing")
+        assert reg.remove_plugin_members(set()) == set()
+
+
+class TestSkillRegistryCache:
+    def test_cache_hit_reuses_same_registry_instance(self, tmp_path: Path) -> None:
+        from matmaster.skills.registry import SkillRegistry, SkillRegistryCache
+
+        cache = SkillRegistryCache()
+        calls = 0
+
+        def build() -> SkillRegistry:
+            nonlocal calls
+            calls += 1
+            return SkillRegistry(tmp_path / "missing")
+
+        key = ((str(tmp_path / "missing"),), (), ())
+        first = cache.get_or_build(key, build)
+        second = cache.get_or_build(key, build)
+
+        assert first is second
+        assert calls == 1
+
+    def test_cache_key_isolates_different_signatures(self, tmp_path: Path) -> None:
+        from matmaster.skills.registry import SkillRegistry, SkillRegistryCache
+
+        cache = SkillRegistryCache()
+        first = cache.get_or_build(
+            ((str(tmp_path / "a"),), (), ()),
+            lambda: SkillRegistry(tmp_path / "a"),
+        )
+        second = cache.get_or_build(
+            ((str(tmp_path / "b"),), (), ()),
+            lambda: SkillRegistry(tmp_path / "b"),
+        )
+
+        assert first is not second
+
+    @pytest.mark.asyncio
+    async def test_skill_consumers_do_not_mutate_registry_membership(
+        self,
+        tmp_path: Path,
+    ) -> None:
+        from matmaster.context.ports import SessionEvent
+        from matmaster.context.skill_resolver import SkillRegistryResolver
+        from matmaster.tools.builtin.skill_tool import SkillTool
+
+        skill_dir = tmp_path / "stable-skill"
+        _write(
+            skill_dir / "SKILL.md",
+            "---\n"
+            "name: stable-skill\n"
+            "description: Stable skill\n"
+            "---\n"
+            "Stable body\n",
+        )
+
+        class GuardedRegistry:
+            def __init__(self) -> None:
+                from matmaster.skills.registry import Skill
+
+                self._skills = {"stable-skill": Skill(skill_dir)}
+                self.removed = False
+
+            def get_skill(self, name: str):
+                return self._skills.get(name)
+
+            def get_all_skills(self):
+                return list(self._skills.values())
+
+            def get_meta_info_context(self) -> str:
+                return "\n".join(
+                    f"[Skill: {skill.meta_info.name}] {skill.meta_info.description}"
+                    for skill in self._skills.values()
+                )
+
+            def remove_skills(self, names: set[str]) -> None:
+                self.removed = True
+                raise AssertionError("runtime consumer must not change membership")
+
+        registry = GuardedRegistry()
+        tool = SkillTool(skill_registry=registry)
+        result = await tool.execute({"skill": "stable-skill"})
+        assert "Stable body" in result
+
+        resolver = SkillRegistryResolver(registry)
+        resolved = resolver(
+            (
+                SessionEvent(
+                    id=1,
+                    event_type="skill_hit",
+                    source="agent",
+                    content={"skill_name": "stable-skill"},
+                ),
+            )
+        )
+        assert resolved[0].name == "stable-skill"
+        assert registry.removed is False

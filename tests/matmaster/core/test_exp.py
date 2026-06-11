@@ -726,6 +726,28 @@ class TestExpCompaction:
         removed_attr = "_summary" + "_provider"
         assert not hasattr(compactor, removed_attr)
 
+    async def test_build_runtime_uses_request_context_limit_for_compaction(
+        self,
+    ) -> None:
+        exp = Exp(ExpConfig(name="test", tools=ExpToolsConfig(builtin=[])))
+        env = _make_ctx(with_llm=True).environment
+        ctx = AgentRunContext(
+            environment=env,
+            request=AgentRunRequest(
+                llm_provider=MockLLMProvider(),
+                context_limit=1_000_000,
+            ),
+        )
+
+        with patch("matmaster.core.agent.AgentKernel"):
+            runtime = await exp.build_runtime(ctx)
+
+        spec_compaction = runtime.kernel_runtime.spec.compaction
+        compactor = runtime.kernel_runtime.resources.compactor
+        assert spec_compaction.context_limit == 1_000_000
+        assert compactor is not None
+        assert compactor._config.context_limit == 1_000_000
+
 
 # ── TestSessionlessBuiltins ────────────────────────────
 

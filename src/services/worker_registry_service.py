@@ -36,7 +36,7 @@ class WorkerRegistryService:
     def _set_session_run_owner_impl(
         self, session_id: str, worker_id: str, *, log: bool = True
     ) -> bool:
-        client = get_redis_dao().create_client()
+        client = get_redis_dao().get_command_client()
         if not client:
             return False
         sid = (session_id or '').strip()
@@ -62,7 +62,7 @@ class WorkerRegistryService:
 
     def get_session_run_owner(self, session_id: str) -> str | None:
         """返回该会话当前 run 所在 worker_id，无或失败返回 None。"""
-        client = get_redis_dao().create_client()
+        client = get_redis_dao().get_command_client()
         if not client:
             return None
         sid = (session_id or '').strip()
@@ -77,7 +77,7 @@ class WorkerRegistryService:
 
     def delete_session_run_owner(self, session_id: str) -> None:
         """清除该会话的 run owner。release 时调用。"""
-        client = get_redis_dao().create_client()
+        client = get_redis_dao().get_command_client()
         if not client:
             return
         sid = (session_id or '').strip()
@@ -91,7 +91,7 @@ class WorkerRegistryService:
 
     def count_active_runs(self) -> int:
         """当前正在执行的 run 总数（即 session_run_owner key 数量）。未配置 Redis 或失败返回 0。"""
-        client = get_redis_dao().create_client()
+        client = get_redis_dao().get_command_client()
         if not client:
             return 0
         try:
@@ -107,7 +107,7 @@ class WorkerRegistryService:
 
     def set_worker_alive(self, worker_id: str) -> bool:
         """刷新本进程存活标记（lifespan 里周期调用）。TTL 较短，重启后旧进程不再刷新即失效。"""
-        client = get_redis_dao().create_client()
+        client = get_redis_dao().get_command_client()
         if not client:
             return False
         wid = (worker_id or '').strip()
@@ -126,7 +126,7 @@ class WorkerRegistryService:
 
     def is_worker_alive(self, worker_id: str) -> bool:
         """该 worker 的存活 key 是否仍存在（未过期）。用于区分「别的 pod 在跑」与「已重启的旧 pid」。"""
-        client = get_redis_dao().create_client()
+        client = get_redis_dao().get_command_client()
         if not client:
             return False
         wid = (worker_id or '').strip()

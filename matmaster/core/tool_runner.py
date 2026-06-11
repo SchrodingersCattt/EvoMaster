@@ -132,6 +132,7 @@ class FullToolRunner:
             content=truncated_content,
             payload=tr.payload,
             meta=new_meta,
+            images=tr.images,
         )
 
     async def execute_batch(

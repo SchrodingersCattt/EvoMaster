@@ -88,8 +88,12 @@ class SkillTool(BuiltinTool):
                 return f"Error: Skill '{skill_name}' not found"
 
             body = skill.get_full_info()
-            skill_dir = self._render_skill_dir(skill)
+            skill_dir = self._render_dir(skill, skill.skill_path)
             body = body.replace("${SKILL_DIR}", skill_dir)
+            if skill.plugin_dir is not None:
+                body = body.replace(
+                    "${PLUGIN_DIR}", self._render_dir(skill, skill.plugin_dir)
+                )
 
             self._maybe_hit_mcp(skill)
             for dep_name in skill.meta_info.depends_on:
@@ -114,12 +118,13 @@ class SkillTool(BuiltinTool):
         if mcp_server and self._on_skill_hit:
             self._on_skill_hit(mcp_server)
 
-    def _render_skill_dir(self, skill: Skill) -> str:
-        skill_path = skill.skill_path
+    def _render_dir(self, skill: Skill, path: Path | PurePosixPath) -> str:
         if getattr(skill, "is_remote", False):
-            return str(skill_path)
+            return str(path)
+        return self._render_local_dir(path)
 
-        local_abs = skill_path if skill_path.is_absolute() else skill_path.resolve()
+    def _render_local_dir(self, path: Path) -> str:
+        local_abs = path if path.is_absolute() else path.resolve()
 
         session = self._session
         remote_project_root = getattr(session, "remote_project_root", None)

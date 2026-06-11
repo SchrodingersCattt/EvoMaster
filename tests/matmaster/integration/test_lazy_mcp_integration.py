@@ -17,6 +17,7 @@ from matmaster.config.exp import ExpConfig, ExpSkillsConfig
 from matmaster.core.exp import Exp
 from matmaster.core.playground import ExecutionEnvironment
 from matmaster.core.run_context import AgentRunContext, AgentRunRequest
+from matmaster.skills.registry import SkillRegistryCache
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import normalize_tool_result
 
@@ -120,7 +121,7 @@ class TestLazyMCPIntegration:
         ctx = _run_context(execution_workdir=str(tmp_path))
 
         # Initialize skill tools
-        exp._init_skill_tools(ctx, registry)
+        exp._init_skill_tools(ctx, registry, skill_cache=SkillRegistryCache())
 
         # Skill tool should be registered
         assert 'Skill' in registry
@@ -172,7 +173,7 @@ class TestLazyMCPIntegration:
         registry = ToolRegistry()
         ctx = _run_context(execution_workdir=str(tmp_path))
 
-        exp._init_skill_tools(ctx, registry)
+        exp._init_skill_tools(ctx, registry, skill_cache=SkillRegistryCache())
 
         # Trigger first skill
         await _execute_skill(registry, skill_name="test-skill")
@@ -209,7 +210,7 @@ class TestLazyMCPIntegration:
             execution_workdir=str(tmp_path),
             active_skills=frozenset(active_skills),
         )
-        exp1._init_skill_tools(ctx1, registry1)
+        exp1._init_skill_tools(ctx1, registry1, skill_cache=SkillRegistryCache())
         assert "mat_sg_build_bulk" not in registry1
         result = await _execute_skill(registry1, skill_name="test-skill")
         assert result.status == "success"
@@ -223,7 +224,7 @@ class TestLazyMCPIntegration:
             execution_workdir=str(tmp_path),
             active_skills=frozenset(active_skills),
         )
-        exp2._init_skill_tools(ctx2, registry2)
+        exp2._init_skill_tools(ctx2, registry2, skill_cache=SkillRegistryCache())
 
         # No Skill call this turn; replay must have already injected it.
         assert "mat_sg_build_bulk" in registry2
@@ -265,7 +266,7 @@ class TestLazyMCPIntegration:
         registry = ToolRegistry()
         ctx = _run_context(execution_workdir=str(tmp_path))
 
-        exp._init_skill_tools(ctx, registry)
+        exp._init_skill_tools(ctx, registry, skill_cache=SkillRegistryCache())
 
         # Trigger skill with uncached server
         result = await _execute_skill(registry, skill_name="uncached-skill")
@@ -319,7 +320,7 @@ class TestExpMCPSelfLoad:
         ctx = _run_context(execution_workdir=str(tmp_path))
 
         # Run _init_skill_tools -- should self-load mcp.yaml
-        exp._init_skill_tools(ctx, registry)
+        exp._init_skill_tools(ctx, registry, skill_cache=SkillRegistryCache())
 
         # Skill tool registered means the full path worked
         assert 'Skill' in registry
@@ -347,7 +348,9 @@ class TestExpMCPSelfLoad:
         import pytest as _pytest
 
         with _pytest.raises(FileNotFoundError, match='MCP runtime config not found'):
-            exp._init_skill_tools(MagicMock(), MagicMock())
+            exp._init_skill_tools(
+                MagicMock(), MagicMock(), skill_cache=SkillRegistryCache()
+            )
 
 
 class TestLazyMCPTimeoutThreading:
@@ -391,7 +394,7 @@ class TestLazyMCPTimeoutThreading:
         registry = ToolRegistry()
         ctx = _run_context(execution_workdir=str(tmp_path))
 
-        exp._init_skill_tools(ctx, registry)
+        exp._init_skill_tools(ctx, registry, skill_cache=SkillRegistryCache())
         await _execute_skill(registry, skill_name="test-skill")
 
         from matmaster.tools.lazy_mcp import LazyMCPTool
@@ -439,7 +442,7 @@ class TestLazyMCPTimeoutThreading:
         registry = ToolRegistry()
         ctx = _run_context(execution_workdir=str(tmp_path))
 
-        exp._init_skill_tools(ctx, registry)
+        exp._init_skill_tools(ctx, registry, skill_cache=SkillRegistryCache())
         await _execute_skill(registry, skill_name="test-skill")
 
         from matmaster.tools.lazy_mcp import (

@@ -62,7 +62,7 @@ class DevRunner:
         workdir: Path,
         llm_provider: Any,
         llm_config: Any = None,
-        resolved_route: Any = None,
+        llm_bundle: Any = None,
         stream_hook: DevStreamHook | None = None,
         exp_config: ExpConfig | None = None,
         exclude_subagents: list[str] | None = None,
@@ -72,7 +72,6 @@ class DevRunner:
         self._workdir = workdir
         self._llm_provider = llm_provider
         self._llm_config = llm_config
-        self._resolved_route = resolved_route
         self._stream_hook = stream_hook or DevStreamHook()
         self._exclude_subagents: frozenset[str] = frozenset(exclude_subagents or ())
         self._inject_bohrium_failure = inject_bohrium_failure
@@ -89,9 +88,14 @@ class DevRunner:
             session=session,
             metadata=RunMetadata(source="devshell"),
         )
+        # 模型身份单源于 llm_bundle；不提供 bundle 的（测试）场景一律为 None
         self._request = AgentRunRequest(
             llm_provider=llm_provider,
             llm_config=llm_config,
+            llm_model=getattr(llm_bundle, "model", None),
+            llm_model_profile=getattr(llm_bundle, "model_profile", None),
+            llm_model_route=getattr(llm_bundle, "model_route", None),
+            context_limit=getattr(llm_bundle, "context_limit", None),
         )
         try_attach_local_bohrium_runtime_from_env(session)
 
