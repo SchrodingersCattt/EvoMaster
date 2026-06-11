@@ -98,9 +98,32 @@ def disabled_skill_names_from_remote_settings(
     return _extract_disabled_names(payload)
 
 
+def disabled_plugins_from_remote_settings(session: Any, remote_root: str) -> set[str]:
+    """Read disabled plugin names from a remote .settings.json via session SFTP."""
+    settings_path = remote_root.rstrip("/") + "/.settings.json"
+    try:
+        if not session.path_exists(settings_path):
+            return set()
+        content = session.read_file(settings_path)
+        payload = json.loads(content)
+    except Exception:
+        logger.warning(
+            "Failed to read remote plugin settings: %s",
+            settings_path,
+            exc_info=True,
+        )
+        return set()
+    return _extract_str_list(payload, "disabled_plugins")
+
+
 def _extract_disabled_names(payload: Any) -> set[str]:
     """Extract the 'disabled' list from a parsed .settings.json payload."""
-    disabled = payload.get("disabled") if isinstance(payload, dict) else None
-    if not isinstance(disabled, list):
+    return _extract_str_list(payload, "disabled")
+
+
+def _extract_str_list(payload: Any, key: str) -> set[str]:
+    """Extract a list of non-empty strings under `key` from a JSON payload."""
+    values = payload.get(key) if isinstance(payload, dict) else None
+    if not isinstance(values, list):
         return set()
-    return {name.strip() for name in disabled if isinstance(name, str) and name.strip()}
+    return {v.strip() for v in values if isinstance(v, str) and v.strip()}

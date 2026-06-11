@@ -13,6 +13,9 @@ from matmaster.skills.registry import (
     read_disabled_plugins,
 )
 from matmaster.skills.settings import (
+    disabled_plugins_from_remote_settings as _disabled_plugins_from_remote_settings,
+)
+from matmaster.skills.settings import (
     disabled_skill_names_from_remote_settings as _disabled_skill_names_from_remote_settings,
 )
 from matmaster.skills.settings import (
@@ -84,6 +87,7 @@ def build_cached_skill_registry(
         # are SSH round-trips. Keep this inside the memoized builder so repeated
         # spawns within one query reuse it instead of re-reading on cache hits.
         disabled_skill_names = set(config_disabled_skill_names)
+        effective_disabled_plugins = set(disabled_plugins)
         for root in roots:
             disabled_skill_names.update(_disabled_skill_names_from_settings(root))
         if remote_roots and session is not None:
@@ -91,12 +95,15 @@ def build_cached_skill_registry(
                 disabled_skill_names.update(
                     _disabled_skill_names_from_remote_settings(session, remote_root)
                 )
+                effective_disabled_plugins.update(
+                    _disabled_plugins_from_remote_settings(session, remote_root)
+                )
         registry = SkillRegistry(
             roots,
             remote_session=session if remote_roots else None,
             remote_roots=remote_roots,
         )
-        removed_members = registry.remove_plugin_members(disabled_plugins)
+        removed_members = registry.remove_plugin_members(effective_disabled_plugins)
         if disabled_skill_names:
             registry.remove_skills(disabled_skill_names)
         if removed_members:
