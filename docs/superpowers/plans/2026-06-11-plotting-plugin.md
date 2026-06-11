@@ -125,6 +125,7 @@ anything left transparent onto white on top of the prelude's background rect.
 
 from __future__ import annotations
 
+import os
 import sys
 
 import cairosvg
@@ -138,6 +139,9 @@ def main(argv: list[str]) -> int:
         print("usage: python3 svg2png.py input.svg output.png [dpi]")
         return 2
     src, dst = argv[1], argv[2]
+    if not os.path.exists(src):
+        print(f"input not found: {src}")
+        return 2
     dpi = int(argv[3]) if len(argv) == 4 else DEFAULT_DPI
     cairosvg.svg2png(
         url=src,
@@ -173,7 +177,7 @@ if __name__ == "__main__":
     </marker>
   </defs>
   <rect x="0" y="0" width="680" height="REPLACE_HEIGHT" fill="#FFFFFF"/>
-  <!-- EXAMPLE BLOCK: delete everything below this line before drawing your own diagram. -->
+  <!-- EXAMPLE BLOCK: delete the example elements below this comment before drawing your own diagram, but keep the closing </svg> on the last line. -->
   <!-- Two-line node, purple trio: 50 fill / 600 stroke / 800 title / 600 subtitle -->
   <g>
     <rect x="60" y="40" width="200" height="56" rx="4" fill="#EEEDFE" stroke="#534AB7" stroke-width="0.5"/>
@@ -202,22 +206,23 @@ sed 's/REPLACE_HEIGHT/200/g' matmaster/plugins/plotting/shared/svg_prelude.txt >
 .venv/bin/python matmaster/plugins/plotting/shared/svg2png.py /tmp/plot_spike.svg /tmp/plot_spike.png
 ```
 
-Expected: `wrote /tmp/plot_spike.png (1889x556 px at 200 dpi)`（680×200 @ 200dpi）。
+Expected: `wrote /tmp/plot_spike.png (1417x417 px at 200 dpi)`（680×200 CSS px × 200/96，向上取整）。
 
 - [ ] **Step 5: Read 工具查看 /tmp/plot_spike.png，逐项肉眼核对**
 
 1. 背景白色不透明；
-2. 中文「数据预处理」字形正常（无豆腐块）；
+2. 文字布局正确：中文「数据预处理」在本地 macOS 预期为豆腐块（quartz 后端无 Noto CJK，环境局限不算失败），但占位与行位置须正常；沙箱 Linux 经 fontconfig 命中 Noto，字形核对属 E2E 验收项；
 3. `R²` 上标字符正常；
 4. 两个箭头都有箭头头、方向正确（一个向右、一个向上）；
 5. leader 虚线成段；
 6. 圆角 rx=4 可见；
 7. 节点标题/副标题在框内垂直居中（不上浮贴顶）；
-8. 颜色与坡道值一致（紫 50 填充紫 600 描边等）。
+8. 颜色与坡道值一致（紫 50 填充紫 600 描边等，建议程序化取像素核对）。
 
-**闸门规则：**
-- 第 2/3 项失败（字形缺失）或第 4 项失败（marker 不渲染）→ **停止执行**，向用户报告 spike 失败，按 spec §8.4 提议换 cairosvg（镜像加 `libcairo2` + pip `cairosvg`，spec 其余不变），等用户决定。
+**闸门规则（cairosvg 版）：**
+- 第 4 项失败（marker 不渲染）或第 5 项失败（虚线不渲染）→ **停止执行**，报告用户（此后没有进一步预授权后备）。
 - 仅第 7 项失败（dominant-baseline 不被支持，文字整体上浮约 4-5px）→ 不停止：删除 prelude 示例中三处 `dominant-baseline="central"`，把三个 `<text>` 的 y 改为槽位中心+5（58→63、78→83、68→73），重跑 Step 4-5 确认居中；并记录此结果，Task 5 的 svg-discipline.md §5 须采用「替代文案 B」（任务内已给出两版文案）。
+- **2026-06-11 实测：8 项全过，spike 结论=文案 A**（dominant-baseline 偏移 -1.8px，属无降部字串固有偏移，非失败模式）。
 
 - [ ] **Step 6: Commit**
 
