@@ -1,3 +1,2 @@
-name: data-mining
 category: analysis
 description: "Multi-component composition search and optimization: composition-optimization orchestrates seed design, literature evidence and composition-to-structure conversion around DART GA runs backed by mcp-mat-compdart tools."

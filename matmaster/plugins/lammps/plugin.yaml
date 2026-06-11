@@ -1,3 +1,2 @@
-name: lammps
 category: simulation
 description: "LAMMPS classical molecular dynamics: equilibrium and non-equilibrium MD, Monte Carlo/GCMC, shock MSST, MLIP-driven dynamics via DeePMD/MACE/SevenNet plugins."

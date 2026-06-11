@@ -1,3 +1,2 @@
-name: cp2k
 category: simulation
 description: "CP2K calculations: SCF, geometry/cell optimization, band structure, AIMD, DFT+U, ADMM hybrid functionals, meta-GGA."

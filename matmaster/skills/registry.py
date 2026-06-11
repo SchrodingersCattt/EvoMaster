@@ -93,11 +93,12 @@ class PluginInfo(BaseModel):
     description: str = ""
 
 
-def _parse_plugin_info_from_content(content: str, *, fallback_name: str) -> PluginInfo:
+def _parse_plugin_info_from_content(content: str, *, dir_name: str) -> PluginInfo:
+    # 身份恒取目录名（D18）：plugin.yaml 的 name 不再被读取，目录名是唯一来源。
     raw = yaml.safe_load(content) or {}
     category = raw.get("category")
     return PluginInfo(
-        name=str(raw.get("name") or fallback_name),
+        name=dir_name,
         category=str(category).strip() if category else None,
         description=str(raw.get("description") or ""),
     )
@@ -106,7 +107,7 @@ def _parse_plugin_info_from_content(content: str, *, fallback_name: str) -> Plug
 def parse_plugin_info(manifest_path: Path) -> PluginInfo:
     return _parse_plugin_info_from_content(
         manifest_path.read_text(encoding="utf-8"),
-        fallback_name=manifest_path.parent.name,
+        dir_name=manifest_path.parent.name,
     )
 
 
@@ -456,7 +457,7 @@ class SkillRegistry:
                 try:
                     plugin_infos[plugin_dir] = _parse_plugin_info_from_content(
                         record.content or "",
-                        fallback_name=plugin_dir.name,
+                        dir_name=plugin_dir.name,
                     )
                 except Exception:
                     logger.warning(

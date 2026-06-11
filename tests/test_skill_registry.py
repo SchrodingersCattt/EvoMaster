@@ -531,6 +531,30 @@ class TestSkillRegistry:
         assert len(session.exec_calls) == 1
 
 
+def test_plugin_name_always_from_dir_ignoring_yaml_name() -> None:
+    """D18：PluginInfo.name 恒取目录名，yaml 的 name 被忽略。"""
+    from matmaster.skills.registry import _parse_plugin_info_from_content
+
+    info = _parse_plugin_info_from_content(
+        "name: yaml-name\ncategory: simulation\ndescription: Desc\n",
+        dir_name="dir-name",
+    )
+    assert info.name == "dir-name"
+    assert info.category == "simulation"
+    assert info.description == "Desc"
+
+
+def test_plugin_name_equals_dir_for_all_builtin() -> None:
+    """所有 builtin plugin 的 PluginInfo.name 等于目录名（与 tools-server 取名口径一致）。"""
+    from matmaster.skills.registry import parse_plugin_info
+
+    manifests = sorted(Path("matmaster/plugins").glob("*/plugin.yaml"))
+    assert manifests, "expected builtin plugin manifests on disk"
+    for manifest in manifests:
+        info = parse_plugin_info(manifest)
+        assert info.name == manifest.parent.name
+
+
 class TestRemotePluginAttribution:
     """远端 plugin.yaml 归属：挂载、祖先匹配、root 边界、失败语义、覆盖顺序。"""
 
@@ -543,9 +567,7 @@ class TestRemotePluginAttribution:
         session = FakeRemoteSkillSession(
             {
                 f"{self.ROOT}/outer/plugin.yaml": "description: Outer pack\n",
-                f"{self.ROOT}/outer/inner/plugin.yaml": (
-                    "name: inner-pack\ndescription: Inner\n"
-                ),
+                f"{self.ROOT}/outer/inner/plugin.yaml": ("description: Inner\n"),
                 f"{self.ROOT}/outer/inner/skills/member/SKILL.md": SKILL_MD_MEMBER,
                 f"{self.ROOT}/outer/skills/outer-member/SKILL.md": (
                     "---\nname: outer-member\ndescription: Outer member\n---\nBody\n"
@@ -561,7 +583,7 @@ class TestRemotePluginAttribution:
         member = reg.get_skill("member-skill")
         assert member is not None
         assert member.plugin is not None
-        assert member.plugin.name == "inner-pack"
+        assert member.plugin.name == "inner"
         assert member.plugin.description == "Inner"
         assert member.plugin_dir == PurePosixPath(f"{self.ROOT}/outer/inner")
         outer_member = reg.get_skill("outer-member")

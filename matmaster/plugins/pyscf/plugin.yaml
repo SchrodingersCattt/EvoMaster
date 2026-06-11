@@ -1,3 +1,2 @@
-name: pyscf
 category: simulation
 description: "PySCF Python-scripted quantum chemistry: DFT, HF, MP2, CCSD(T), TDDFT, geomeTRIC geometry optimization, property calculations."
