@@ -52,13 +52,17 @@ async def lifespan(app: FastAPI):
         )
     except Exception as e:
         logger.warning('MatMaster chat playground init skipped in lifespan: %s', e)
-    # 内置技能元信息同步到 tools-server（非阻塞，失败不影响启动）
+    # 内置技能 / 插件元信息同步到 tools-server（非阻塞，失败不影响启动）
     try:
-        from src.services.builtin_skills_sync import sync_builtin_skills_to_tools_server
+        from src.services.builtin_skills_sync import (
+            sync_builtin_plugins_to_tools_server,
+            sync_builtin_skills_to_tools_server,
+        )
 
         await asyncio.to_thread(sync_builtin_skills_to_tools_server)
+        await asyncio.to_thread(sync_builtin_plugins_to_tools_server)
     except Exception as e:
-        logger.warning('Builtin skills sync skipped in lifespan: %s', e)
+        logger.warning('Builtin skills/plugins sync skipped in lifespan: %s', e)
     # 多 worker 时：Redis 订阅线程，使任意 worker 收到的 stop 能通知到跑 run 的 worker
     try:
         if get_sessions_service().start_redis_stop_subscriber():

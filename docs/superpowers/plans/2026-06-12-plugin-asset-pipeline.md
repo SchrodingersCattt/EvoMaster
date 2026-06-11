@@ -433,12 +433,12 @@ CREATE TABLE IF NOT EXISTS user_plugins (
 - Modify: `src/services/builtin_skills_sync.py`
 - Test: 现有 sync 测试文件（搜 `builtin_skills_sync` 的测试）
 
-- [ ] **D1.1** `_zip_skill_dir` 泛化为可打任意根（或新增 `_zip_plugin_dir(plugin_dir)` 复用同一固定时间戳 + `_ZIP_EXCLUDE` 逻辑，按整个 plugin 根 `rglob("*")` 打包，含 `plugin.yaml`/`skills/`/`shared/`）。
-- [ ] **D1.2** `_scan_builtin_skills` 的 plugin 轨（行 211-224）**停止**把成员压成 `tags=[plugin.name]` 的散装 skill。改为产出 plugin 整包条目：每个 `matmaster/plugins/<p>/` → `{name: 目录名, description, category, member_skills:[{name,description,dir}], zip_bytes, content_sha256, byte_size, file_count}`（`member_skills` 按 D14 递归枚举）。扁平轨（`matmaster/skills/`）保持发 `/skills` 不变。
-- [ ] **D1.3** 新增 `sync_builtin_plugins_to_tools_server()`（镜像 `sync_builtin_skills_to_tools_server`）：整包 zip 走 `POST /users/__builtin__/plugins/upload-zip` 拿 object_key → 组 payload → `POST /api/v1/plugins/sync-builtin`（带 version/build_seq/plugins）。
-- [ ] **D1.4** 启动时调用点：在调用 skill sync 处并列调用 plugin sync（两者独立，互不阻塞）。
-- [ ] **D1.5** 测试：plugin 轨产出整包条目（不再有 `tags=[plugin.name]` 的散装项发往 `/skills`）；扁平轨不变。
-- [ ] **D1.6** 跑 evo 全量测试 + 格式化 + Commit。
+- [x] **D1.1** 新增 `_zip_plugin_dir(plugin_dir)`：抽出 `_zip_tree(root, arc_prefix)` 复用固定时间戳 + `_ZIP_EXCLUDE` 逻辑，plugin 包以 `<plugin名>/` 为顶层前缀（契合 tools-server「单一顶层目录」与前端 NAS 解包路径）；`_zip_skill_dir` 改为 `_zip_tree(skill_dir)` 行为不变。
+- [x] **D1.2** `_scan_builtin_skills` 的 plugin 轨**已移除**，扁平轨保持发 `/skills`；新增 `_scan_builtin_plugins()` 产出 plugin 整包条目 `{name: 目录名, description, category, member_skills:[{name,description,dir}], zip_bytes, content_sha256, byte_size, file_count}`，`member_skills` 经 `_enumerate_plugin_members` 按 D14 递归枚举（跳 `_` 前缀、空 plugin 跳过）。
+- [x] **D1.3** 新增 `sync_builtin_plugins_to_tools_server()`：整包 zip 走 `POST /users/__builtin__/plugins/upload-zip`（`_upload_zip_to_tools_server` 加 `path_segment` 参数）拿 object_key → 组 payload → `POST /api/v1/plugins/sync-builtin`（带 version/build_seq/plugins）。
+- [x] **D1.4** `app.py` 启动 lifespan 在 skill sync 后并列 `await asyncio.to_thread(sync_builtin_plugins_to_tools_server)`（独立、失败不阻塞启动）。
+- [x] **D1.5** 测试 `tests/services/test_builtin_skills_sync.py`：扁平轨不含 plugin 成员、无 tags；plugin 轨整包条目（zip 保留 `<name>/` 顶层）、成员 dir、空 plugin 跳过、`_` 前缀跳过、D18 真实根锚点。
+- [x] **D1.6** 跑 evo 相关测试（52 passed）+ pre-commit 通过 + Commit。
 
 ---
 
