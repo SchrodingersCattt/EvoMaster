@@ -6,14 +6,10 @@ import posixpath
 from dataclasses import dataclass
 from typing import Literal
 
+from matmaster.types.session import REMOTE_ACCESS_ROOTS
 from src.services.sessions_service import ChatSessionsService
 
 SessionDirectorySource = Literal["request", "session", "none"]
-
-# Bohrium 远端 SSH 节点同时挂载 /share 与 /personal，二者均可作为会话工作目录。
-# 仅放开会话目录校验；不改变 agent 运行时对两个根的可写性（workspace 落在哪个根
-# 即以该根为工作区）。与 create_bohrium_jobs_table.sql 的 workspace CHECK 约束保持同步。
-_REMOTE_WORKSPACE_ROOTS: tuple[str, ...] = ("/share", "/personal")
 
 
 class SessionDirectoryError(Exception):
@@ -48,11 +44,11 @@ def _is_within_remote_root(normalized: str) -> bool:
     # 精确匹配根，或根加 `/` 的后代；防 `/personalx`、`/share2` 等前缀混淆。
     return any(
         normalized == root or normalized.startswith(root + "/")
-        for root in _REMOTE_WORKSPACE_ROOTS
+        for root in REMOTE_ACCESS_ROOTS
     )
 
 
-def normalize_remote_share_path(raw: object) -> str:
+def normalize_remote_workspace_path(raw: object) -> str:
     if not isinstance(raw, str):
         raise SessionDirectoryError(
             "directory must be a string",
@@ -73,7 +69,7 @@ def normalize_remote_share_path(raw: object) -> str:
 
     normalized = posixpath.normpath(stripped)
     if not _is_within_remote_root(normalized):
-        allowed = " or ".join(_REMOTE_WORKSPACE_ROOTS)
+        allowed = " or ".join(REMOTE_ACCESS_ROOTS)
         raise SessionDirectoryError(
             f"directory must be one of {allowed} or a descendant",
             error_code="directory_outside_roots",
@@ -85,7 +81,7 @@ def normalize_session_directory_for_storage(raw: str | None) -> str | None:
     selected = _blank_to_none(raw)
     if selected is None:
         return None
-    return normalize_remote_share_path(selected)
+    return normalize_remote_workspace_path(selected)
 
 
 class SessionDirectoryResolver:
@@ -103,7 +99,7 @@ class SessionDirectoryResolver:
             selected_request = _blank_to_none(request_directory)
             if selected_request is not None:
                 return ResolvedSessionDirectory(
-                    remote_workdir=normalize_remote_share_path(selected_request),
+                    remote_workdir=normalize_remote_workspace_path(selected_request),
                     source="request",
                     bohrium_required=True,
                 )
@@ -120,7 +116,7 @@ class SessionDirectoryResolver:
             )
 
         try:
-            remote_workdir = normalize_remote_share_path(session_directory)
+            remote_workdir = normalize_remote_workspace_path(session_directory)
         except SessionDirectoryError as exc:
             raise SessionDirectoryError(
                 "persistent session directory is invalid",

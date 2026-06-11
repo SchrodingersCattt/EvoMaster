@@ -12,7 +12,7 @@ from src.dao.bohrium_jobs_table import BohriumJobsTable, get_bohrium_jobs_table
 from src.services.bohrium_delivery_ack import DeliverySnapshot
 from src.services.session_directory_service import (
     SessionDirectoryError,
-    normalize_remote_share_path,
+    normalize_remote_workspace_path,
 )
 
 logger = logging.getLogger(__name__)
@@ -24,7 +24,7 @@ def _normalize_ledger_workspace(workspace: str | None) -> str | None:
     if workspace is None:
         return None
     try:
-        return normalize_remote_share_path(workspace)
+        return normalize_remote_workspace_path(workspace)
     except SessionDirectoryError as exc:
         raise ValueError(f"bohrium ledger workspace invalid: {workspace!r}") from exc
 

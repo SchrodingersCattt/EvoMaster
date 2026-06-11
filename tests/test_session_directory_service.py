@@ -5,7 +5,7 @@ import pytest
 from src.services.session_directory_service import (
     SessionDirectoryError,
     SessionDirectoryResolver,
-    normalize_remote_share_path,
+    normalize_remote_workspace_path,
     normalize_session_directory_for_storage,
 )
 
@@ -24,8 +24,8 @@ from src.services.session_directory_service import (
         ("  /personal/run-1  ", "/personal/run-1"),
     ],
 )
-def test_normalize_remote_share_path_accepts_dual_root_descendants(raw, expected):
-    assert normalize_remote_share_path(raw) == expected
+def test_normalize_remote_workspace_path_accepts_dual_root_descendants(raw, expected):
+    assert normalize_remote_workspace_path(raw) == expected
 
 
 @pytest.mark.parametrize(
@@ -44,9 +44,9 @@ def test_normalize_remote_share_path_accepts_dual_root_descendants(raw, expected
         pytest.param("/share/bad\0path", "directory_invalid_chars", id="null-byte"),
     ],
 )
-def test_normalize_remote_share_path_rejects_invalid_inputs(raw, error_code):
+def test_normalize_remote_workspace_path_rejects_invalid_inputs(raw, error_code):
     with pytest.raises(SessionDirectoryError) as exc:
-        normalize_remote_share_path(raw)
+        normalize_remote_workspace_path(raw)
 
     assert exc.value.error_code == error_code
     assert exc.value.http_status == 400

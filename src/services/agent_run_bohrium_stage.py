@@ -19,7 +19,7 @@ from matmaster.integration.workspace_handler import WorkspaceHandler
 from matmaster.types.figures import FigureUploadConfig
 from src.dao.oss_io import upload_bytes_to_oss
 from src.services.agent_run_bohrium import BohriumSetupService
-from src.services.session_directory_service import normalize_remote_share_path
+from src.services.session_directory_service import normalize_remote_workspace_path
 from src.services.user_turn_context_service import (
     load_user_instructions_from_session,
 )
@@ -121,7 +121,7 @@ async def run_bohrium_stage(
             execution_workdir=execution_workdir,
         )
         if ssh_attached:
-            stage_workspace = normalize_remote_share_path(execution_workdir)
+            stage_workspace = normalize_remote_workspace_path(execution_workdir)
     _ui_session = (
         bohrium_result.execution_session if bohrium_result else None
     ) or environment.session

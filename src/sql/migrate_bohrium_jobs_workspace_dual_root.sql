@@ -1,6 +1,6 @@
 -- 放开 bohrium_jobs.workspace 约束，从单根 /share 扩展到双根 /share + /personal。
 -- 外部/手动迁移脚本：在已有 bohrium_jobs 表上执行；运行代码不内联本迁移逻辑。
--- 与 session_directory_service 的 _REMOTE_WORKSPACE_ROOTS 保持同步。
+-- 与 matmaster.types.session.REMOTE_ACCESS_ROOTS 保持同步。
 --
 -- 需要 MySQL 8.0.16+（CHECK 约束强制执行）。
 -- Operator flow:
