@@ -1,4 +1,5 @@
 import pytest
+from pydantic import ValidationError
 
 from matmaster.types.messages import (
     AssistantMessage,
@@ -10,14 +11,19 @@ from matmaster.types.messages import (
 
 def test_provider_state_is_frozen():
     state = ProviderState(transport="fake", payload={"k": "v"})
-    with pytest.raises(Exception):
+    with pytest.raises(ValidationError):
         state.transport = "other"
 
 
 def test_provider_state_json_round_trip():
-    state = ProviderState(transport="anthropic_messages", payload={"sig": "abc", "n": 1})
+    state = ProviderState(
+        transport="anthropic_messages", payload={"sig": "abc", "n": 1}
+    )
     dumped = state.model_dump(mode="json")
-    assert dumped == {"transport": "anthropic_messages", "payload": {"sig": "abc", "n": 1}}
+    assert dumped == {
+        "transport": "anthropic_messages",
+        "payload": {"sig": "abc", "n": 1},
+    }
     assert ProviderState.model_validate(dumped) == state
 
 
