@@ -44,7 +44,7 @@ class ReadTool(BuiltinTool):
     """
 
     name: ClassVar[str] = "Read"
-    description: ClassVar[str] = "Read a file from the local filesystem."
+    description: ClassVar[str] = "Read a file or figure from the local filesystem."
     json_schema: ClassVar[dict[str, Any]] = {
         "type": "object",
         "properties": {

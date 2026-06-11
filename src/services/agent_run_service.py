@@ -25,7 +25,7 @@ from matmaster.integration.event_payloads import _normalize_public_source
 from matmaster.integration.fanout import RunEventFanout
 from matmaster.integration.persistence_handler import PersistenceHandler
 from matmaster.integration.sse_handler import SSEHandler
-from matmaster.types.cancellation import CancellationToken
+from matmaster.types.cancellation import CancellationController, CancellationToken
 from matmaster.types.events import (
     BusEvent,
     CancelledEvent,
@@ -40,17 +40,22 @@ from src.dao.chat_events_table import get_chat_events_table
 from src.dao.redis_dao import get_redis_dao
 from src.services.agent_run_bohrium_stage import run_bohrium_stage
 from src.services.agent_run_history_wiring import build_history_wiring
-from src.services.billing_llm_provider import BillingLLMProvider
+from src.services.billing_llm_provider import (
+    COST_GUARD_CANCEL_REASON,
+    BillingLLMProvider,
+)
 from src.services.bohrium_delivery_ack import DeliverySnapshot
 from src.services.bohrium_jobs_wiring import build_bohrium_jobs_ports
 from src.services.figure_coordinator import FigureCoordinator
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.image_input_service import get_image_input_service
+from src.services.quota_service import check_quota_status
 from src.services.sessions_service import get_sessions_service
 from src.services.stream_reply_queue import RedisReplyQueue
 from src.services.user_turn_context_service import (
     write_user_turn_context_event as _persist_utc_event,
 )
+from utils.env import COST_GUARD_GRACE_RATIO
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -62,6 +67,24 @@ _DIALOG_HISTORY_MAX_EVENTS = int(
 
 _project_root = Path(__file__).resolve().parent.parent.parent
 RUN_ID_WEB = "mat_master_web"
+
+
+async def _resolve_run_budget_micro(user_id: str) -> int | None:
+    """查启动时可用额度作 in-run 成本熔断预算（含宽限）；不可用返回 None（不熔断）。
+
+    预算 = available_micro ×(1 + COST_GUARD_GRACE_RATIO)。available_micro 为 None
+    （旧 tools-server / 查询失败）或查询抛错时返回 None：熔断退化关闭，仍由发送前闸口
+    兜底，绝不因预算查询失败阻断 run。
+    """
+    try:
+        status = await check_quota_status(user_id)
+    except Exception:
+        logger.warning("resolve run budget failed user_id=%s", user_id, exc_info=True)
+        return None
+    if status.available_micro is None:
+        return None
+    return int(status.available_micro * (1 + COST_GUARD_GRACE_RATIO))
+
 
 _MATMASTER_CONFIG_DIR = _project_root / "config"
 
@@ -242,6 +265,7 @@ class AgentRunService:
         bohrium_required: bool = False,
         workspace: str | None = None,
         delivery_snapshot: DeliverySnapshot | None = None,
+        cancel_controller: CancellationController | None = None,
     ) -> tuple[bool | tuple[bool, str], int, dict[str, Any] | None]:
         """Execute agent pipeline using generator event stream with fanout dispatch.
 
@@ -412,6 +436,12 @@ class AgentRunService:
                 )
                 billing_mode = "platform"
             llm_provider = llm_bundle.provider
+            # in-run 成本熔断预算（防线二）：仅 platform 计费且有取消句柄时启用。
+            # 预算查询失败/旧 tools-server 不返回 available_micro -> None（不熔断，
+            # 退化为只靠发送前闸口），绝不阻断 run。
+            budget_micro = None
+            if billing_mode == "platform" and cancel_controller is not None and user_id:
+                budget_micro = await _resolve_run_budget_micro(user_id)
             try:
                 llm_provider = BillingLLMProvider(
                     llm_provider,
@@ -423,6 +453,8 @@ class AgentRunService:
                     model=llm_bundle.model,
                     billing_service=get_billing_service(),
                     billing_mode=billing_mode,
+                    budget_micro=budget_micro,
+                    cancel_controller=cancel_controller,
                 )
             except Exception:
                 logger.warning(
@@ -587,6 +619,15 @@ class AgentRunService:
             usage_summary = _build_run_usage_summary(run_result_event)
             usage_summary = await _attach_run_cost(usage_summary, invocation_id)
             if run_result_event.reason == "cancelled":
+                # 内核对一切 cancel 都产 reason='cancelled'，无法自辨成因；用 cancel_token
+                # 上的原因区分「成本熔断（额度耗尽止损）」与「用户主动取消」：前者是系统
+                # 被迫中止，按失败语义对外（error + treat_as_failure），不污染取消率。
+                if cancel_token.cancel_reason == COST_GUARD_CANCEL_REASON:
+                    await _emit_error_and_close_fanout(
+                        fanout,
+                        "额度已用完，本轮已自动停止。请充值或等待额度刷新后重试。",
+                    )
+                    return ((False, "quota_exhausted"), _elapsed_ms(), usage_summary)
                 await fanout.dispatch(
                     CancelledEvent(source="System", reason="Task cancelled by user.")
                 )

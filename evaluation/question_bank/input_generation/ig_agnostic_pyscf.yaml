@@ -1,0 +1,620 @@
+version: v5
+capability: input_generation
+domain: agnostic
+questions:
+- id: IG_pyscf_001_20260608
+  capability: input_generation
+  domain: agnostic
+  intent: Generate a PySCF single-point DFT script using the wB97X-D functional. The
+    agent must emit a PySCF-supported functional name and must NOT use the non-existent
+    `wB97X-D3` name (removed from the skill docs because PySCF does not support it).
+  human_prompt_seed: '请用 PySCF 为水分子（H 0 0 0; H 0 0 0.96; O 居中，可用合理坐标或直接用
+    `O 0 0 0; H 0 0 0.96; H 0.93 0 -0.24`）写一个单点 DFT 计算脚本 `run_pyscf.py`，使用 wB97X-D
+    泛函、def2-TZVP 基组，打印总能量。'
+  tags:
+  - eng_pyscf
+  data_files: []
+  reference_answers:
+  - key: artifact_script
+    value: run_pyscf.py
+  - key: functional_present
+    value:
+      filename: run_pyscf.py
+      flags:
+      - CASE_INSENSITIVE
+      tokens:
+      - wB97X-D
+  - key: no_invalid_wb97xd3
+    value:
+      filename: run_pyscf.py
+      pattern: wB97X-D3
+      flags: i
+      expect: absent
+  - key: basis_present
+    value:
+      filename: run_pyscf.py
+      flags:
+      - CASE_INSENSITIVE
+      tokens:
+      - def2-TZVP
+  - key: turn_budget
+    value:
+      max: 12
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: artifact_script
+    criterion: '[Must] Agent writes `run_pyscf.py` to the workspace.'
+    axis: correctness
+    verify: artifact_exists
+  - id: functional_present
+    criterion: '[Must] Script sets the DFT functional to the PySCF-supported `wB97X-D`
+      (e.g. `mf.xc = ''wB97X-D''`).'
+    axis: correctness
+    verify: text_file_contains_all
+  - id: no_invalid_wb97xd3
+    criterion: '[Must] Script does NOT use the non-existent `wB97X-D3` functional name.
+      PySCF supports `wB97X-D` but not `wB97X-D3`.'
+    axis: correctness
+    verify: text_file_regex_absent
+    weight: 2.0
+  - id: basis_present
+    criterion: '[Must] Script uses the def2-TZVP basis set.'
+    axis: correctness
+    verify: text_file_contains_all
+  - id: valid_dft_driver
+    criterion: '[Must] Script builds a molecule with `gto.M`, runs a DFT calculation
+      via `dft.RKS` (closed-shell), and prints/saves the total energy after `kernel()`.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within ceiling.
+    axis: efficiency
+    verify: token_budget
+
+- id: IG_pyscf_002_20260609
+  capability: input_generation
+  domain: agnostic
+  intent: Generate a PySCF single-point script using the r2SCAN meta-GGA functional,
+    verifying the agent uses a PySCF-supported functional name from the corrected
+    skill docs. Script-only (no submission/execution) so the check stays deterministic
+    and is not gated on remote-queue latency.
+  human_prompt_seed: '请用 PySCF 为甲烷分子 CH4 写一个单点能量计算脚本 `run_pyscf.py`，使用 r2SCAN
+    泛函（meta-GGA）和 def2-SVP 基组，打印总能量。分子坐标可自行给出合理值。只需写出脚本本身，无需提交或运行。'
+  tags:
+  - eng_pyscf
+  data_files: []
+  reference_answers:
+  - key: artifact_script
+    value: run_pyscf.py
+  - key: functional_present
+    value:
+      filename: run_pyscf.py
+      flags:
+      - CASE_INSENSITIVE
+      tokens:
+      - r2SCAN
+  - key: basis_present
+    value:
+      filename: run_pyscf.py
+      flags:
+      - CASE_INSENSITIVE
+      tokens:
+      - def2-SVP
+  - key: turn_budget
+    value:
+      max: 12
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: artifact_script
+    criterion: '[Must] Agent writes `run_pyscf.py` to the workspace.'
+    axis: correctness
+    verify: artifact_exists
+  - id: functional_present
+    criterion: '[Must] Script sets the functional to `r2SCAN`.'
+    axis: correctness
+    verify: text_file_contains_all
+  - id: basis_present
+    criterion: '[Must] Script uses the def2-SVP basis set.'
+    axis: correctness
+    verify: text_file_contains_all
+  - id: valid_dft_driver
+    criterion: '[Must] Based on the script alone (no execution required), it correctly
+      builds CH4 with `gto.M`, sets up a closed-shell DFT single-point via `dft.RKS`,
+      and prints the total energy after `kernel()`/`run()`.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within ceiling.
+    axis: efficiency
+    verify: token_budget
+
+- id: IG_pyscf_003_20260609
+  capability: input_generation
+  domain: agnostic
+  intent: Generate a PySCF script using the M06-2X functional, confirming the agent
+    picks the PySCF-supported hybrid meta-GGA name listed in the corrected skill docs.
+    Script-only (no submission/execution) so the check stays deterministic and is not
+    gated on remote-queue latency.
+  human_prompt_seed: '请用 PySCF 为乙烯分子 C2H4 写一个单点 DFT 脚本 `run_pyscf.py`，使用 M06-2X
+    泛函、cc-pVDZ 基组，打印总能量。坐标可自行给出合理值。只需写出脚本本身，无需提交或运行。'
+  tags:
+  - eng_pyscf
+  data_files: []
+  reference_answers:
+  - key: artifact_script
+    value: run_pyscf.py
+  - key: functional_present
+    value:
+      filename: run_pyscf.py
+      flags:
+      - CASE_INSENSITIVE
+      tokens:
+      - M06-2X
+  - key: basis_present
+    value:
+      filename: run_pyscf.py
+      flags:
+      - CASE_INSENSITIVE
+      tokens:
+      - cc-pVDZ
+  - key: turn_budget
+    value:
+      max: 12
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: artifact_script
+    criterion: '[Must] Agent writes `run_pyscf.py` to the workspace.'
+    axis: correctness
+    verify: artifact_exists
+  - id: functional_present
+    criterion: '[Must] Script sets the functional to `M06-2X`.'
+    axis: correctness
+    verify: text_file_contains_all
+  - id: basis_present
+    criterion: '[Must] Script uses the cc-pVDZ basis set.'
+    axis: correctness
+    verify: text_file_contains_all
+  - id: valid_dft_driver
+    criterion: '[Must] Based on the script alone (no execution required), it correctly
+      builds C2H4 with `gto.M` and sets up a closed-shell DFT single-point via `dft.RKS`,
+      printing the total energy after `kernel()`/`run()`.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within ceiling.
+    axis: efficiency
+    verify: token_budget
+
+- id: IG_pyscf_004_20260609
+  capability: input_generation
+  domain: agnostic
+  scope: knowledge
+  intent: The prompt describes a functional family (range-separated hybrid with
+    empirical dispersion) without naming an exact string. The agent must realize it
+    with a PySCF-supported approach — either a built-in dispersion-inclusive name
+    (e.g. wB97X-D) or a range-separated hybrid plus `mf.disp` (e.g. wB97X + d3bj) —
+    and must NOT hallucinate the unsupported `wB97X-D3`.
+  human_prompt_seed: '请用 PySCF 为苯分子 C6H6 写一个单点能量脚本 `run_pyscf.py`。方法上请选用一个
+    带经验色散校正的范围分离杂化泛函（range-separated hybrid + dispersion），基组用 def2-SVP。'
+  tags:
+  - eng_pyscf
+  data_files: []
+  reference_answers:
+  - key: artifact_script
+    value: run_pyscf.py
+  - key: no_invalid_wb97xd3
+    value:
+      filename: run_pyscf.py
+      pattern: wB97X-D3
+      flags: i
+      expect: absent
+  - key: turn_budget
+    value:
+      max: 12
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: artifact_script
+    criterion: '[Must] Agent writes `run_pyscf.py` to the workspace.'
+    axis: correctness
+    verify: artifact_exists
+  - id: no_invalid_wb97xd3
+    criterion: '[Must] Script does NOT use the non-existent `wB97X-D3` name.'
+    axis: correctness
+    verify: text_file_regex_absent
+    weight: 2.0
+  - id: functional_supported
+    criterion: '[Must] The script realizes a real PySCF-supported range-separated
+      hybrid with empirical dispersion. Acceptable approaches: (a) a built-in
+      dispersion-inclusive functional name such as `wB97X-D`, `wB97X-V`, or `wB97M-V`;
+      or (b) a range-separated hybrid (e.g. `wB97X`) plus PySCF native dispersion via
+      `mf.disp` set to `d3bj`/`d3zero`/`d4`. The agent must NOT invent an unsupported
+      xc string such as `wB97X-D3` or a Gaussian-only label.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within ceiling.
+    axis: efficiency
+    verify: token_budget
+
+- id: IG_pyscf_005_20260608
+  capability: input_generation
+  domain: agnostic
+  scope: knowledge
+  intent: Trap question — the user explicitly asks for `wB97X-D3`, which PySCF does
+    not support. The agent should recognize this, map it to the supported `wB97X-D`
+    (or flag the mismatch), and NOT blindly write the unsupported name into the script.
+  human_prompt_seed: '请用 PySCF 为甲醇分子 CH3OH 写一个单点 DFT 脚本 `run_pyscf.py`，使用 wB97X-D3
+    泛函、def2-TZVP 基组，打印总能量。'
+  tags:
+  - eng_pyscf
+  data_files: []
+  reference_answers:
+  - key: artifact_script
+    value: run_pyscf.py
+  - key: no_invalid_wb97xd3
+    value:
+      filename: run_pyscf.py
+      pattern: xc\s*=\s*['\"]?\s*wB97X-D3
+      flags: i
+      expect: absent
+  - key: turn_budget
+    value:
+      max: 12
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: artifact_script
+    criterion: '[Must] Agent writes `run_pyscf.py` to the workspace.'
+    axis: correctness
+    verify: artifact_exists
+  - id: no_invalid_wb97xd3
+    criterion: '[Must] The script does NOT assign `xc = wB97X-D3` — that name is not a
+      valid PySCF functional. The agent must substitute the supported `wB97X-D`.'
+    axis: correctness
+    verify: text_file_regex_absent
+    weight: 3.0
+  - id: recognized_unsupported
+    criterion: '[Must] Agent recognizes that PySCF does not support the exact name
+      `wB97X-D3`, and either maps it to the supported `wB97X-D` or clearly tells the
+      user the requested name is unavailable. It does NOT silently submit an invalid
+      functional.'
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within ceiling.
+    axis: efficiency
+    verify: token_budget
+
+- id: IG_pyscf_006_20260608
+  capability: input_generation
+  domain: agnostic
+  intent: Open-shell radical — verify the agent follows the PySCF skill spin convention
+    (`spin` = number of unpaired electrons = 2S, NOT 2S+1) and uses an unrestricted
+    driver for the methyl radical doublet.
+  human_prompt_seed: '请用 PySCF 为甲基自由基 CH3（doublet，单重态以外的开壳层体系）写一个单点 DFT 脚本
+    `run_pyscf.py`，使用 PBE 泛函、def2-SVP 基组。注意正确设置自旋。'
+  tags:
+  - eng_pyscf
+  data_files: []
+  reference_answers:
+  - key: artifact_script
+    value: run_pyscf.py
+  - key: unrestricted_driver
+    value:
+      filename: run_pyscf.py
+      pattern: \b(UKS|UHF|ROKS|ROHF)\b
+      flags: ''
+  - key: spin_one
+    value:
+      filename: run_pyscf.py
+      pattern: spin\s*=\s*1\b
+      flags: ''
+  - key: not_spin_two
+    value:
+      filename: run_pyscf.py
+      pattern: spin\s*=\s*2\b
+      flags: ''
+      expect: absent
+  - key: turn_budget
+    value:
+      max: 12
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: artifact_script
+    criterion: '[Must] Agent writes `run_pyscf.py` to the workspace.'
+    axis: correctness
+    verify: artifact_exists
+  - id: unrestricted_driver
+    criterion: '[Must] Script uses an open-shell driver (`UKS`/`UHF`/`ROKS`/`ROHF`)
+      for the radical, not a closed-shell `RKS`/`RHF`.'
+    axis: correctness
+    verify: text_file_regex
+  - id: spin_one
+    criterion: '[Must] Script sets `spin=1` (one unpaired electron = 2S), per the PySCF
+      convention that `spin` is 2S, not 2S+1.'
+    axis: correctness
+    verify: text_file_regex
+    weight: 2.0
+  - id: not_spin_two
+    criterion: '[Must] Script does NOT set `spin=2`, which would wrongly use the
+      multiplicity (2S+1) value instead of 2S.'
+    axis: correctness
+    verify: text_file_regex_absent
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within ceiling.
+    axis: efficiency
+    verify: token_budget
+
+- id: IG_pyscf_007_20260608
+  capability: input_generation
+  domain: agnostic
+  intent: Geometry optimization — verify the agent uses the geomeTRIC optimizer
+    bundled in the pyscf-geometric image via `pyscf.geomopt.geometric_solver`.
+  human_prompt_seed: '请用 PySCF 为水分子写一个几何优化脚本 `run_pyscf.py`，在 PBE/def2-SVP
+    级别下用 geomeTRIC 优化器优化结构，并打印优化后的总能量。'
+  tags:
+  - eng_pyscf
+  data_files: []
+  reference_answers:
+  - key: artifact_script
+    value: run_pyscf.py
+  - key: uses_geometric_solver
+    value:
+      filename: run_pyscf.py
+      flags:
+      - CASE_INSENSITIVE
+      tokens:
+      - geometric_solver
+      - optimize
+  - key: turn_budget
+    value:
+      max: 12
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: artifact_script
+    criterion: '[Must] Agent writes `run_pyscf.py` to the workspace.'
+    axis: correctness
+    verify: artifact_exists
+  - id: uses_geometric_solver
+    criterion: '[Must] Script imports and calls the geomeTRIC optimizer, e.g.
+      `from pyscf.geomopt.geometric_solver import optimize` then `optimize(mf)`.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+  - id: opt_workflow_sound
+    criterion: '[Must] The optimization workflow is correct: build molecule, set up
+      a DFT mean-field object (PBE), pass it to the geomeTRIC `optimize`, then report
+      the optimized-geometry energy.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within ceiling.
+    axis: efficiency
+    verify: token_budget
+
+- id: IG_pyscf_008_20260608
+  capability: input_generation
+  domain: agnostic
+  intent: Verify the agent grounds the Bohrium submission in the PySCF skill's
+    documented runtime image (`pyscf-geometric:dev-260608`) and command, rather than
+    inventing an image tag.
+  human_prompt_seed: '请用 PySCF 准备一个苯分子单点 B3LYP/def2-SVP 计算：写出 `run_pyscf.py`，
+    并把可直接执行的 Bohrium 提交命令（含正确的镜像和 cmd）写入 `submit_cmd.txt`。'
+  tags:
+  - eng_pyscf
+  data_files: []
+  reference_answers:
+  - key: artifact_script
+    value: run_pyscf.py
+  - key: submit_cmd_file
+    value: submit_cmd.txt
+  - key: correct_image
+    value:
+      filename: submit_cmd.txt
+      pattern: pyscf-geometric:dev-260608
+      flags: ''
+  - key: run_cmd_present
+    value:
+      filename: submit_cmd.txt
+      flags:
+      - CASE_INSENSITIVE
+      tokens:
+      - python
+      - run_pyscf.py
+      - log
+  - key: turn_budget
+    value:
+      max: 12
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: artifact_script
+    criterion: '[Must] Agent writes `run_pyscf.py` to the workspace.'
+    axis: correctness
+    verify: artifact_exists
+  - id: submit_cmd_file
+    criterion: '[Must] Agent writes `submit_cmd.txt` containing the Bohrium submission
+      command.'
+    axis: correctness
+    verify: artifact_exists
+  - id: correct_image
+    criterion: '[Must] The submission command references the skill-documented runtime
+      image `pyscf-geometric:dev-260608`, not an outdated or invented tag.'
+    axis: grounding
+    verify: text_file_regex
+    weight: 2.0
+  - id: run_cmd_present
+    criterion: '[Must] The command runs the script with `python run_pyscf.py > log 2>&1`
+      (or equivalent redirect to a log file).'
+    axis: correctness
+    verify: text_file_contains_all
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within ceiling.
+    axis: efficiency
+    verify: token_budget
+
+- id: IG_pyscf_009_20260609
+  capability: input_generation
+  domain: agnostic
+  intent: Property extraction — verify the agent uses the PySCF property API documented
+    in the skill (MO energies → HOMO/LUMO gap, dipole moment). Script-only (no
+    submission/execution) so the check stays deterministic and is not gated on
+    remote-queue latency.
+  human_prompt_seed: '请用 PySCF 为甲醛分子 CH2O 写一个脚本 `run_pyscf.py`，在 B3LYP/def2-SVP
+    级别做单点计算，并输出 HOMO-LUMO gap 和偶极矩。只需写出脚本本身，无需提交或运行。'
+  tags:
+  - eng_pyscf
+  data_files: []
+  reference_answers:
+  - key: artifact_script
+    value: run_pyscf.py
+  - key: property_api
+    value:
+      filename: run_pyscf.py
+      flags:
+      - CASE_INSENSITIVE
+      tokens:
+      - mo_energy
+      - dip_moment
+  - key: turn_budget
+    value:
+      max: 12
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: artifact_script
+    criterion: '[Must] Agent writes `run_pyscf.py` to the workspace.'
+    axis: correctness
+    verify: artifact_exists
+  - id: property_api
+    criterion: '[Must] Script reads `mf.mo_energy` (with `mf.mo_occ`) to compute the
+      HOMO-LUMO gap and calls `mf.dip_moment()` for the dipole.'
+    axis: correctness
+    verify: text_file_contains_all
+  - id: gap_logic_correct
+    criterion: '[Must] Based on the script alone (no execution required), HOMO is the
+      highest occupied MO energy and LUMO the lowest unoccupied; the gap is computed
+      as LUMO − HOMO using the occupation mask (`mf.mo_occ`), not arbitrary indices.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within ceiling.
+    axis: efficiency
+    verify: token_budget
+
+- id: IG_pyscf_010_20260608
+  capability: input_generation
+  domain: agnostic
+  intent: Higher-level correlated method — verify the agent follows the skill's task
+    table for CCSD(T) (run SCF, then `cc.CCSD(mf)`, then the perturbative triples).
+  human_prompt_seed: '请用 PySCF 为 N2 分子写一个 CCSD(T) 单点能量脚本 `run_pyscf.py`，使用
+    cc-pVDZ 基组，打印 CCSD(T) 总能量。'
+  tags:
+  - eng_pyscf
+  data_files: []
+  reference_answers:
+  - key: artifact_script
+    value: run_pyscf.py
+  - key: ccsdt_api
+    value:
+      filename: run_pyscf.py
+      flags:
+      - CASE_INSENSITIVE
+      tokens:
+      - CCSD
+      - ccsd_t
+  - key: basis_present
+    value:
+      filename: run_pyscf.py
+      flags:
+      - CASE_INSENSITIVE
+      tokens:
+      - cc-pVDZ
+  - key: turn_budget
+    value:
+      max: 12
+  - key: token_budget_total
+    value:
+      max: 9000
+  scoring_checklist:
+  - id: artifact_script
+    criterion: '[Must] Agent writes `run_pyscf.py` to the workspace.'
+    axis: correctness
+    verify: artifact_exists
+  - id: ccsdt_api
+    criterion: '[Must] Script runs a reference SCF, builds `cc.CCSD(mf)`, runs it, and
+      adds the perturbative triples via `.ccsd_t()`.'
+    axis: correctness
+    verify: text_file_contains_all
+    weight: 2.0
+  - id: basis_present
+    criterion: '[Must] Script uses the cc-pVDZ basis set.'
+    axis: correctness
+    verify: text_file_contains_all
+  - id: ccsdt_workflow_sound
+    criterion: '[Must] The CCSD(T) total energy is reported as E(SCF) + E(CCSD corr)
+      + E(triples), i.e. the agent adds `ccsd_t()` to the CCSD energy correctly.'
+    axis: correctness
+    verify: llm_binary_judge
+  - id: turn_budget
+    criterion: Agent completes within turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Total token usage stays within ceiling.
+    axis: efficiency
+    verify: token_budget

@@ -12,7 +12,7 @@ PyATB (Python Ab initio Tight-Binding) is a post-processing tool that reads Hami
 | Item | Default Value |
 |------|---------------|
 | image | *(query first: `Bohrium(action="list_images", keyword="pyatb")`)* |
-| machine | `c64_m256_cpu` (32 physical cores, 256 GB RAM) |
+| machine | `c32_m128_cpu` (16 physical cores, 128 GB RAM) |
 | cmd | `python run_pyatb.py > log 2>&1` |
 
 > **Always query the image before submitting**: `Bohrium(action="list_images", keyword="pyatb")`. Do not assume a default image address; PyATB images may change frequently.

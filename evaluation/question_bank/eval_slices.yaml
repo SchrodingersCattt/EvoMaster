@@ -121,6 +121,12 @@ slices:
       - "@eng_orca"
     count: 2
 
+  - target: "Skill: pyscf"
+    type: skill
+    slices:
+      - "@eng_pyscf"
+    count: 10
+
   # ── Tools ───────────────────────────────────────────────────────────
 
   - target: "Tool: mcp-mat-struct-db"

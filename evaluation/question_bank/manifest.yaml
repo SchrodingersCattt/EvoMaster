@@ -65,7 +65,7 @@ banks:
 - path: execution_contract/ec_agnostic.yaml
   capability: execution_contract
   domain: agnostic
-  questions: 18
+  questions: 23
 - path: input_generation/ig_battery.yaml
   capability: input_generation
   domain: battery
@@ -98,6 +98,10 @@ banks:
   capability: input_generation
   domain: agnostic
   questions: 3
+- path: input_generation/ig_agnostic_pyscf.yaml
+  capability: input_generation
+  domain: agnostic
+  questions: 10
 - path: safety_refusal/sf_agnostic.yaml
   capability: safety_refusal
   domain: agnostic

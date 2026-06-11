@@ -11,8 +11,8 @@ PySCF (Python-based Simulations of Chemistry Framework) is a Python library for 
 
 | Item | Default Value |
 |------|---------------|
-| image | `registry.dp.tech/dptech/dp/native/prod-19853/pyscf-geometric:dev-260305` |
-| machine | `c64_m256_cpu` (32 physical cores, 256 GB RAM) |
+| image | `registry.dp.tech/dptech/dp/native/prod-19853/pyscf-geometric:dev-260608` |
+| machine | `c32_m128_cpu` (16 physical cores, 128 GB RAM) |
 | cmd | `python {script_name} > log 2>&1` |
 
 > Replace `{script_name}` with the actual Python script name (e.g. `run_pyscf.py`).
@@ -83,7 +83,7 @@ PySCF scripts are Python code; there is no `render_input.py` or `diagnose_input.
 | Parameter | Description | Typical Values |
 |-----------|-------------|----------------|
 | `basis` | Basis set | `'sto-3g'`, `'def2-SVP'`, `'def2-TZVP'`, `'cc-pVDZ'`, `'aug-cc-pVTZ'` |
-| `xc` | DFT functional | `'B3LYP'`, `'PBE'`, `'PBE0'`, `'wB97X-D3'`, `'r2SCAN'` |
+| `xc` | DFT functional | `'B3LYP'`, `'PBE'`, `'PBE0'`, `'wB97X'`, `'wB97X-D'`, `'r2SCAN'`, `'TPSS'`, `'M06'`, `'M06-2X'` |
 | `charge` | Total molecular charge | integer |
 | `spin` | 2S (number of unpaired electrons) | 0, 1, 2, ... |
 | `verbose` | Output level | 4 (normal), 5 (debug) |
@@ -125,7 +125,7 @@ mf.mulliken_pop()
 1. Write Python script (e.g. `run_pyscf.py`)
 2. Prepare structure file (XYZ preferred) if not embedding coordinates
 3. Place script + structure in one directory
-4. Submit: `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/dp/native/prod-19853/pyscf-geometric:dev-260305", cmd="python run_pyscf.py > log 2>&1")`
+4. Submit: `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/dp/native/prod-19853/pyscf-geometric:dev-260608", cmd="python run_pyscf.py > log 2>&1")`
 5. Query current status when needed: `Bohrium(action="query", job_id=<id>)`
 
 ## Reference

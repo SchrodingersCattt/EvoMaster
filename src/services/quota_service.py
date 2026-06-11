@@ -4,6 +4,13 @@
   计价化后只读金额额度 ``credit_remaining``（元）与 ``credit_reset_at``
   （下次额度刷新日期）；旧的次数 ``remaining`` 字段已不再使用。
 
+  分层计费：tools-server 启用真实光子后，还会附带 ``photon_remaining``（光子余额）
+  与 ``photon_overflow_enabled``（用户光子代扣偏好，opt-in）。发送前闸口语义为「免费
+  额度耗尽，且（用户没开光子代扣 或 光子也耗尽）才拦截」——免费额度用完后，只有
+  **开启了代扣且仍有光子余额**的用户才继续（溢出走光子）。光子代扣是 opt-in：没开代扣
+  时实扣侧会 skip，故闸口必须同时看 overflow 偏好，否则会把这类用户误放行导致漏扣。
+  未启用光子时 photon_remaining 为 None，闸口退化为只看金额额度，行为与之前一致。
+
 扣费由 billing usage 上报在 tools-server 侧按金额实时完成，evo 不再做按次扣减
 （已移除 use_quota）；模型级次数限制并入金额额度（已移除 check_model_quota）。
 
@@ -30,15 +37,42 @@ class QuotaStatus:
 
     remaining_yuan: 剩余金额额度（元）。
     reset_at: 下次额度刷新日期（ISO，如 ``2026-06-09``），无则 None。
+    photon_remaining: 真实光子余额；tools-server 未启用光子或查询失败为 None。
+    photon_overflow_enabled: 用户是否开启「免费额度耗尽后扣光子」代扣偏好（opt-in，
+        默认 False）。仅当为 True 时光子余额才计入放行——与 tools-server 实扣侧
+        （PhotonSource 未开偏好则 skip）口径一致，避免「有光子但没开代扣」被误放行后漏扣。
     """
 
     remaining_yuan: float
     reset_at: str | None = None
+    photon_remaining: float | None = None
+    photon_overflow_enabled: bool = False
+    available_micro: int | None = None
+    """可用额度（micro CNY）= 免费额度 +（仅开代扣）光子折算，与发送前闸口/实扣同口径。
+
+    仅供「一次 run 内成本熔断」取预算快照用，不参与发送前闸口判定（is_exhausted）。
+    旧 tools-server 不返回该字段时为 None（调用方据此关闭熔断、退化为只靠发送前闸口）。
+    """
 
     @property
     def is_exhausted(self) -> bool:
-        """额度是否耗尽（<= 0 拦截发送）。"""
-        return self.remaining_yuan <= 0
+        """额度是否耗尽（拦截发送）。
+
+        分层闸口：免费金额额度 <= 0 时，仅当「用户开启了光子代扣偏好 **且** 仍有光子
+        余额（> 0）」才不拦截（溢出走光子）。光子代扣是 opt-in：平台虽启用光子、账上
+        也有余额，但用户没开代扣时实扣侧会 skip，闸口若只看 photon_remaining 放行就会
+        漏扣，故必须同时要求 photon_overflow_enabled。未启用光子 / 没开代扣 / 余额为 0
+        时退化为只看金额额度。
+        """
+        if self.remaining_yuan > 0:
+            return False
+        if (
+            self.photon_overflow_enabled
+            and self.photon_remaining is not None
+            and self.photon_remaining > 0
+        ):
+            return False
+        return True
 
     def exhausted_message(self, fallback: str) -> str:
         """额度耗尽时的用户提示文案。
@@ -77,12 +111,30 @@ async def check_quota_status(user_id: str) -> QuotaStatus:
             remaining = max(0.0, credit) if credit is not None else 0.0
             reset_at = inner.get("credit_reset_at")
             reset_at = reset_at if isinstance(reset_at, str) and reset_at else None
+            # 光子余额为可选字段：缺失（未启用）保持 None，闸口退化为只看金额额度。
+            photon_remaining = _coerce_number(inner.get("photon_remaining"))
+            # 光子代扣偏好（opt-in，默认 False）：缺失/非法按 False，闸口不把光子计入放行。
+            photon_overflow_enabled = bool(inner.get("photon_overflow_enabled"))
+            # 可用额度（micro）：旧 tools-server 不返回则为 None（关闭 in-run 熔断）。
+            available_raw = inner.get("available_micro")
+            available_micro = (
+                int(available_raw) if isinstance(available_raw, int) else None
+            )
             logger.info(
                 "check_quota_status response: user_id=%s status=%s "
-                "remaining=%s reset_at=%s",
+                "remaining=%s reset_at=%s photon_remaining=%s "
+                "photon_overflow_enabled=%s",
                 user_id,
                 resp.status,
                 remaining,
                 reset_at,
+                photon_remaining,
+                photon_overflow_enabled,
             )
-            return QuotaStatus(remaining_yuan=remaining, reset_at=reset_at)
+            return QuotaStatus(
+                remaining_yuan=remaining,
+                reset_at=reset_at,
+                photon_remaining=photon_remaining,
+                photon_overflow_enabled=photon_overflow_enabled,
+                available_micro=available_micro,
+            )

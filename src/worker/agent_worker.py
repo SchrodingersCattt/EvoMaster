@@ -41,6 +41,12 @@ from src.utils.worker_id import get_worker_id
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+# 失败原因 code -> 运营/用户可读文案（飞书卡片、完成邮件复用）。未命中的 code 原样展示。
+_FAIL_REASON_DISPLAY: dict[str, str] = {
+    # in-run 成本熔断：额度耗尽被系统止损中止，区别于「用户取消」。
+    "quota_exhausted": "额度已用完，本轮已自动停止",
+}
+
 # BLPOP 超时（秒），超时后继续循环，便于进程能响应 SIGTERM
 _BLPOP_TIMEOUT = int(os.environ.get('AGENT_WORKER_BLPOP_TIMEOUT', '30'))
 # 存活心跳间隔（秒），需小于 Redis WORKER_ALIVE_TTL_SEC(30)，否则 API 会误判本进程已死
@@ -441,6 +447,7 @@ def _run_worker_loop() -> None:
                     "user_prompt": user_prompt,
                     "send_cb": send_cb,
                     "cancel_token": controller.token,
+                    "cancel_controller": controller,
                     "mode": mode,
                     "task_id": task_id,
                     "invocation_id": invocation_id,
@@ -545,6 +552,9 @@ def _run_worker_loop() -> None:
                     duration_str = _format_run_duration(duration_sec)
                     fail_reason_str = (
                         str(fail_reason).strip() if fail_reason is not None else ''
+                    )
+                    fail_reason_str = _FAIL_REASON_DISPLAY.get(
+                        fail_reason_str, fail_reason_str
                     )
                     if _should_notify_completion(delivery):
                         title, rows, template = _build_completion_card(

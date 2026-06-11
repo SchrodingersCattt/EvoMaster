@@ -78,7 +78,7 @@ If the user provides a complete LAMMPS script, skip preparation and submit direc
 6. Submit: `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/lammps-agent:03810da8", cmd="lmp -in lammps.in > log 2>&1", machine="c16_m64_1 * NVIDIA 4090")`
 7. Query current status when needed: `Bohrium(action="query", job_id=<id>)`
 
-> For CPU-only runs (non-GPU pair styles), use `machine="c64_m256_cpu"` and adjust image accordingly.
+> For CPU-only runs (non-GPU pair styles), use `machine="c32_m128_cpu"` and adjust image accordingly.
 
 ## Reference
 

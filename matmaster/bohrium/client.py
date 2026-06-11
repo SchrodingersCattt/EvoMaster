@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import logging
+import shlex
 import time
 from pathlib import Path
 from typing import Any
@@ -14,6 +16,10 @@ from .upload import UploadedArchive
 
 logger = logging.getLogger(__name__)
 _SANDBOX_CATALOG: dict[str, Any] | None = None
+
+# Log prefix for the copy-pasteable curl line emitted on job submission.
+# Kept as a module constant so tests can match it without hardcoding the text.
+CURL_LOG_PREFIX = "Bohrium POST request (copyable curl):"
 
 
 def mask_secret(secret: str) -> str:
@@ -32,6 +38,26 @@ def _compact_log_text(text: str, *, max_chars: int = 200) -> str:
     if len(compact) <= max_chars:
         return compact
     return compact[: max_chars - 3] + "..."
+
+
+def _build_curl_command(
+    url: str,
+    headers: dict[str, str],
+    payload: dict[str, Any],
+) -> str:
+    """Build a copy-pasteable curl command for a JSON POST request.
+
+    The returned string is shell-escaped so it can be pasted directly into a
+    terminal to reproduce the request. The ``accessKey`` header carries the
+    caller's real credential, so callers should only log this where exposing
+    the credential is acceptable (e.g. debugging the job/add endpoint).
+    """
+    parts = ["curl", "-X", "POST", shlex.quote(url)]
+    for key, value in headers.items():
+        parts.extend(["-H", shlex.quote(f"{key}: {value}")])
+    body = json.dumps(payload, ensure_ascii=False)
+    parts.extend(["--data", shlex.quote(body)])
+    return " ".join(parts)
 
 
 def _log_http_error(method: str, url: str, response: Any) -> None:
@@ -71,15 +97,19 @@ def _post(
     payload: dict[str, Any],
     *,
     timeout: int = 30,
+    log_curl: bool = False,
 ) -> dict[str, Any]:
-    response = requests.post(
-        f"{base_url}{path}",
-        headers={"accessKey": access_key, "Content-Type": "application/json"},
-        json=payload,
-        timeout=timeout,
-    )
+    url = f"{base_url}{path}"
+    headers = {"accessKey": access_key, "Content-Type": "application/json"}
+    if log_curl:
+        logger.info(
+            "%s\n%s",
+            CURL_LOG_PREFIX,
+            _build_curl_command(url, headers, payload),
+        )
+    response = requests.post(url, headers=headers, json=payload, timeout=timeout)
     if not response.ok:
-        _log_http_error("POST", f"{base_url}{path}", response)
+        _log_http_error("POST", url, response)
     response.raise_for_status()
     return response.json()
 
@@ -143,6 +173,7 @@ def add_job(
             "cmd": cmd,
             "jobId": str(create_data["jobId"]).strip(),
             "ossPath": [upload.download_url],
+            "projectId": ctx.credentials.project_id,
         }
         path = "/openapi/v1/sandbox/job/add"
     else:
@@ -161,7 +192,11 @@ def add_job(
         }
         path = "/openapi/v2/job/add"
     response = _post(
-        ctx.credentials.base_url, path, ctx.credentials.access_key, payload
+        ctx.credentials.base_url,
+        path,
+        ctx.credentials.access_key,
+        payload,
+        log_curl=True,
     )
     if response.get("code") != 0:
         raise BohriumAPIError(f"job/add failed: {response}")

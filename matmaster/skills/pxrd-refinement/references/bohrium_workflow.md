@@ -10,7 +10,7 @@ tool, which submits to a Docker image with GSAS-II pre-installed.
 | image | `registry.dp.tech/dptech/dp/native/prod-19853/xrd-app:dev-260119` |
 | GSAS-II install | `/root/g2full/GSAS-II/GSASII` (the script default) |
 | machine (single Pawley, basic Rietveld) | `c8_m32_cpu` |
-| machine (directory batch >= 5 patterns, full Rietveld) | `c64_m256_cpu` |
+| machine (directory batch >= 5 patterns, full Rietveld) | `c32_m128_cpu` |
 
 Wall-time guidance: single-pattern Pawley 1-2 min; 8-pattern batch 5-10 min;
 Rietveld standard 3-5 min; auto-index up to `--timeout` per Bravais family
@@ -70,7 +70,7 @@ and returns merged `results` plus `merge_audit` (with `table` and `warnings`) /
 `forward_results` / `reverse_results`. The `warnings` list flags any pattern that is
 high-wR (>10%) in both directions AND > 1% off `reference_volume` in both — those
 patterns are at risk of being a wrong-basin solution even after merge.
-Bump machine to `c64_m256_cpu` whenever `--multi-start ≥ 5` or the directory has > 5
+Bump machine to `c32_m128_cpu` whenever `--multi-start ≥ 5` or the directory has > 5
 patterns.
 
 `--self-heal-chain` is enabled by default for chained runs. It scans the merged
@@ -135,7 +135,7 @@ Submit (returns `job_id`):
     Bohrium(action="submit",
             input_dir="input_dir",
             image="registry.dp.tech/dptech/dp/native/prod-19853/xrd-app:dev-260119",
-            machine="c64_m256_cpu",
+            machine="c32_m128_cpu",
             cmd="bash run.sh > log 2>&1")
 
 Query current status when needed (single-shot, no blocking wait):

@@ -14,11 +14,11 @@ These parameters are passed directly to the `Bohrium` tool's `submit` action.
 | Item | Default Value |
 |------|---------------|
 | image | `registry.dp.tech/dptech/cp2k:2024.1` |
-| machine | `c64_m256_cpu` (32 physical cores, 256 GB RAM) |
-| cmd | `OMP_NUM_THREADS=1 mpirun -np 32 cp2k.popt -i {input_file} > log 2>&1` |
+| machine | `c32_m128_cpu` (16 physical cores, 128 GB RAM) |
+| cmd | `OMP_NUM_THREADS=1 mpirun -np 16 cp2k.popt -i {input_file} > log 2>&1` |
 
 > Replace `{input_file}` with the actual input filename in the directory (e.g. `input.inp`).
-> Match `-np` to the machine's physical core count: 32 for `c64_m256_cpu`.
+> Match `-np` to the machine's physical core count: 16 for `c32_m128_cpu`.
 > For a different CP2K version, query `Bohrium(action="list_images", keyword="cp2k")` first.
 
 ## Input Preparation
@@ -97,7 +97,7 @@ Before submission, verify:
 2. Generate input: `render_input.py --software cp2k --task scf --structure struct.cif --output input.inp`
 3. Diagnose: `diagnose_input.py --software cp2k --input input.inp`
 4. Collect all files into one directory (input.inp + structure + any auxiliary files)
-5. Submit: `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/cp2k:2024.1", cmd="OMP_NUM_THREADS=1 mpirun -np 32 cp2k.popt -i input.inp > log 2>&1", machine="c64_m256_cpu")`
+5. Submit: `Bohrium(action="submit", input_dir="<dir>", image="registry.dp.tech/dptech/cp2k:2024.1", cmd="OMP_NUM_THREADS=1 mpirun -np 16 cp2k.popt -i input.inp > log 2>&1", machine="c32_m128_cpu")`
 6. Query current status when needed: `Bohrium(action="query", job_id=<id>)`
 
 ## Reference
