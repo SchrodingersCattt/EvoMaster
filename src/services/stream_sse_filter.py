@@ -11,6 +11,7 @@ from matmaster.integration.event_payloads import (
     normalize_replayed_terminal_payload,
     normalize_response_sse_payload,
 )
+from matmaster.response_text import normalize_visible_response_text
 from matmaster.utils.event_source import normalize_event_source
 
 # 历史回放时一定会被丢弃、不推送给前端的事件类型。
@@ -33,7 +34,7 @@ def _should_emit_event_to_sse(event: dict) -> bool:
     """Filter persisted events for history replay SSE.
 
     NOTE: This filter is intentionally simpler than
-    matmaster.integration.event_router.SSEHandler._should_skip().
+    matmaster.integration.sse_handler.SSEHandler._should_skip().
     The live SSE path knows the run mode and stream_state; replay only sees
     persisted event rows.
 
@@ -117,13 +118,47 @@ def _replay_terminal_dedupe_key(event: dict) -> tuple[str, str | None] | None:
     return (str(task_id), spawn_id)
 
 
-def _dedupe_replayed_terminal_events(events: list[dict]) -> list[dict]:
-    """Hide replayed response when the same task has a replayable terminal event.
+def _replayed_response_text(event: dict) -> str | None:
+    """Visible text of a persisted replayed response, or None when absent.
 
-    `run_result` is the canonical business terminal event, so replay should use
-    it as the final answer carrier when it exists. Persisted complete
-    `response` segments are hidden for the same `(task_id, spawn_id)` stream to
-    avoid duplicating the final answer after reconnect.
+    Persisted response content is either a dict with a ``content`` key (usage /
+    model identity present) or the raw text itself.
+    """
+    content = event.get('content')
+    raw = content.get('content') if isinstance(content, dict) else content
+    if raw is None or isinstance(raw, (dict, list)):
+        return None
+    return normalize_visible_response_text(str(raw))
+
+
+def _replayed_run_result_text(event: dict) -> str | None:
+    """Final text of a persisted replayed run_result, or None when absent.
+
+    Cancelled / max_turns terminals persist ``content: ''``; the empty string
+    normalizes to None so such terminals never match any response.
+    """
+    content = event.get('content')
+    if not isinstance(content, dict):
+        return None
+    raw = content.get('content')
+    if raw is None or isinstance(raw, (dict, list)):
+        return None
+    return normalize_visible_response_text(str(raw))
+
+
+def _dedupe_replayed_terminal_events(events: list[dict]) -> list[dict]:
+    """Hide the replayed response that duplicates a run_result's final answer.
+
+    `run_result` is the canonical business terminal event, so replay uses it as
+    the final answer carrier. Within the same `(task_id, spawn_id)` stream, the
+    `response` whose visible text equals the terminal's final text is the
+    duplicated final-answer copy and is hidden; earlier intermediate responses
+    (e.g. text emitted alongside tool calls) are kept.
+
+    Matching is by normalized text only — not turn index — because the rescued
+    natural-finish path carries `final_content` from an earlier turn. Each
+    terminal removes at most the last matching response so anomalous duplicate
+    writes are not over-deleted.
 
     `response_figures` is replayable answer metadata. It may appear before the
     hidden response, between response chunks, or before the terminal event. It is
@@ -132,33 +167,44 @@ def _dedupe_replayed_terminal_events(events: list[dict]) -> list[dict]:
     Dedupe is keyed by (task_id, spawn_id) so a sub-agent `response` does not
     get suppressed by the parent stream's `run_result`.
     """
-    terminal_keys: set[tuple[str, str | None]] = set()
+    final_texts: dict[tuple[str, str | None], list[str]] = {}
     for event in events:
         dedupe_key = _replay_terminal_dedupe_key(event)
-        event_type = str(event.get('type') or '')
         if (
-            dedupe_key is not None
-            and event_type == 'run_result'
-            and _should_emit_event_to_sse(event)
-        ):
-            terminal_keys.add(dedupe_key)
-
-    deduped: list[dict] = []
-
-    for event in events:
-        dedupe_key = _replay_terminal_dedupe_key(event)
-        event_type = str(event.get('type') or '')
-        if (
-            dedupe_key is not None
-            and event_type == 'response'
-            and dedupe_key in terminal_keys
-            and _should_emit_event_to_sse(event)
+            dedupe_key is None
+            or str(event.get('type') or '') != 'run_result'
+            or not _should_emit_event_to_sse(event)
         ):
             continue
+        final_text = _replayed_run_result_text(event)
+        if final_text is not None:
+            final_texts.setdefault(dedupe_key, []).append(final_text)
 
-        deduped.append(event)
+    response_candidates: dict[tuple[str, str | None], list[tuple[int, str | None]]] = {}
+    for index, event in enumerate(events):
+        dedupe_key = _replay_terminal_dedupe_key(event)
+        if (
+            dedupe_key is None
+            or dedupe_key not in final_texts
+            or str(event.get('type') or '') != 'response'
+            or not _should_emit_event_to_sse(event)
+        ):
+            continue
+        response_candidates.setdefault(dedupe_key, []).append(
+            (index, _replayed_response_text(event))
+        )
 
-    return deduped
+    removed: set[int] = set()
+    for dedupe_key, texts in final_texts.items():
+        candidates = response_candidates.get(dedupe_key, [])
+        for final_text in texts:
+            for index, response_text in reversed(candidates):
+                if index in removed or response_text != final_text:
+                    continue
+                removed.add(index)
+                break
+
+    return [event for index, event in enumerate(events) if index not in removed]
 
 
 def _inject_elapsed_for_history(events: list[dict]) -> list[dict]:

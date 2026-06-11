@@ -669,6 +669,119 @@ def test_generate_send_stream_replay_prefers_run_result_over_response():
     )
 
 
+def test_generate_send_stream_replay_keeps_intermediate_response():
+    """终态去重只隐藏最终答案副本：tool_call 前的中间 response 在刷新回放中保留。"""
+    from src.services.stream_service import ChatStreamService, SendStreamContext
+
+    sessions_service = MagicMock()
+    sessions_service.get_session_status_payload.return_value = {
+        'source': 'System',
+        'type': 'status',
+        'content': '',
+        'session_id': 'sess-1',
+    }
+    events_service = MagicMock()
+    events_service.get_session_events.return_value = [
+        {
+            'source': 'User',
+            'type': 'query',
+            'content': 'old question',
+            'session_id': 'sess-1',
+            'task_id': 'task-0',
+        },
+        {
+            'source': 'MatMaster',
+            'type': 'response',
+            'content': {'content': 'let me check the files', 'turn_index': 0},
+            'session_id': 'sess-1',
+            'task_id': 'task-0',
+        },
+        {
+            'source': 'MatMaster',
+            'type': 'tool_call',
+            'content': {'id': 'c1', 'call_id': 'c1', 'name': 'bash', 'args': {}},
+            'session_id': 'sess-1',
+            'task_id': 'task-0',
+        },
+        {
+            'source': 'MatMaster',
+            'type': 'tool_result',
+            'content': {
+                'id': 'c1',
+                'call_id': 'c1',
+                'name': 'bash',
+                'result': 'ok',
+                'status': 'success',
+                'info': {},
+            },
+            'session_id': 'sess-1',
+            'task_id': 'task-0',
+        },
+        {
+            'source': 'MatMaster',
+            'type': 'response',
+            'content': {'content': 'old answer', 'turn_index': 1},
+            'session_id': 'sess-1',
+            'task_id': 'task-0',
+        },
+        {
+            'source': 'MatMaster',
+            'type': 'run_result',
+            'content': {
+                'content': 'old answer',
+                'status': 'completed',
+                'reason': 'natural',
+                'num_turns': 2,
+            },
+            'session_id': 'sess-1',
+            'task_id': 'task-0',
+        },
+    ]
+    service = ChatStreamService(
+        sessions_service=sessions_service,
+        events_service=events_service,
+        deploy_state_service=MagicMock(),
+    )
+
+    async def _collect_first_seven_frames() -> list[dict]:
+        ctx = SendStreamContext(
+            task_id='task-1',
+            invocation_id='inv-1',
+            mode='direct',
+            user_msg={
+                'source': 'User',
+                'type': 'query',
+                'content': 'new question',
+                'mode': 'direct',
+                'session_id': 'sess-1',
+                'task_id': 'task-1',
+                'invocation_id': 'inv-1',
+            },
+            job=_send_stream_job(),
+        )
+        gen = service.generate_send_stream('sess-1', ctx)
+        try:
+            return await _collect_n_frames(gen, 7)
+        finally:
+            await gen.aclose()
+
+    with patch('src.services.stream_service.notify_post_async'):
+        frames = asyncio.run(_collect_first_seven_frames())
+
+    assert [frame['type'] for frame in frames] == [
+        'status',
+        'query',
+        'response',
+        'tool_call',
+        'tool_result',
+        'run_result',
+        'query',
+    ]
+    assert frames[2]['content'] == 'let me check the files'
+    assert frames[5]['final_content'] == 'old answer'
+    assert frames[6]['content'] == 'new question'
+
+
 def test_generate_send_stream_subscribes_before_enqueue():
     from src.services.stream_service import ChatStreamService, SendStreamContext
 
