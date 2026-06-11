@@ -63,9 +63,10 @@ figure. Skills add domain rules on top; nothing below is repeated there.
 - Never separate series by color alone: pair every color with a second cue
   (linestyle, marker, or hatch) and show both in the legend.
 - Two text sizes only: 14 for axis/node labels and titles, 12 for secondary
-  text (ticks, legends, annotations, subtitles). Sentence case everywhere.
-  No emoji.
+  text (ticks, legends, annotations, subtitles). Sentence case for
+  Latin-script text. No emoji.
 - Display numbers at context precision: counts as integers, percentages with
-  1-2 decimals. The minus sign goes before any currency/unit symbol.
+  1-2 decimals. The minus sign precedes any currency/unit symbol
+  (−$5, not $−5).
 - In-figure text language follows the user's language. CJK works via
   `mm_style.apply()` (matplotlib) or the prelude's font setup (SVG).
