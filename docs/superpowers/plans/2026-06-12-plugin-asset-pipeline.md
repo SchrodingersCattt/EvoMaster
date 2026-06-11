@@ -448,9 +448,9 @@ CREATE TABLE IF NOT EXISTS user_plugins (
 
 ### Task E1: evo — 删 builtin_tags.yaml 依赖（仓库：matmaster-evo）
 
-- [ ] **E1.1** `src/services/builtin_skills_sync.py`：删 `_load_tags_config`、`_TAGS_FILE`；`_build_skill_item` 去掉 category/tags 注入（散装 skill 以 `category=None, tags=None` 上传，`.get` 不崩）；`sync_builtin_skills_to_tools_server` 的 item 不再塞 category/tags。
-- [ ] **E1.2** 删 `matmaster/skills/builtin_tags.yaml`；清理 `scripts/migrate_to_plugins.py` 对它/对 tags 的依赖。
-- [ ] **E1.3** 跑测试 + 格式化 + Commit。
+- [x] **E1.1** `src/services/builtin_skills_sync.py`：删 `_load_tags_config`、`_TAGS_FILE` 及 `yaml` 导入；`_build_skill_item` 去掉 category/tags 字段；`_scan_builtin_skills` 去掉 `tags_config` 参；`sync_builtin_skills_to_tools_server` 的 item 不再塞 category/tags。
+- [x] **E1.2** 删 `matmaster/skills/builtin_tags.yaml`；删一次性脚本 `scripts/migrate_to_plugins.py`（已执行、`assert not PLUGINS.exists()` 无法再跑，且会写 builtin_tags.yaml / plugin.yaml `name:`，与 D18/Phase E 冲突）。
+- [x] **E1.3** 跑测试（6 passed）+ pre-commit 通过 + Commit。
 
 ### Task E2: tools-server — 停写 category/tags + 删 by-tag 链路（仓库：matmaster-tools-server）
 

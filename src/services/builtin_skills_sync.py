@@ -1,9 +1,9 @@
-"""应用启动时将仓库内置技能同步到 matmaster-tools-server。
+"""应用启动时将仓库内置技能 / 插件同步到 matmaster-tools-server。
 
-流程：扫描本地 skills 目录 + 读 builtin_tags.yaml →
-  1. 每个技能目录打 zip → 算 sha256
-  2. 上传 zip 到 tools-server（POST /skills/upload-zip，复用用户技能上传通道）
-  3. 调 POST /api/v1/skills/sync-builtin，带上 object_key 等信息
+流程：扫描本地 skills / plugins 目录 →
+  1. 每个技能目录 / plugin 整包打 zip → 算 sha256
+  2. 上传 zip 到 tools-server（复用对应 __builtin__ upload-zip 通道）
+  3. 调 sync-builtin，带上 object_key 等信息
   4. tools-server 侧 materialize zip → 填充 artifact_id / bundle_object_key 等字段
 """
 
@@ -18,7 +18,6 @@ from pathlib import Path
 from typing import Any
 
 import httpx
-import yaml
 
 from matmaster.skills.registry import parse_plugin_info, parse_skill_meta_info
 from utils.env import MATMASTER_TOOLS_SERVER
@@ -29,44 +28,10 @@ logger.setLevel(logging.INFO)
 _SKILLS_ROOT = Path(__file__).resolve().parents[2] / "matmaster" / "skills"
 _PLUGINS_ROOT = Path(__file__).resolve().parents[2] / "matmaster" / "plugins"
 _CACHE_DIR = Path(__file__).resolve().parents[2] / "matmaster" / "cache"
-_TAGS_FILE = _SKILLS_ROOT / "builtin_tags.yaml"
 
 _ZIP_EXCLUDE = frozenset(
     {"__pycache__", ".git", "node_modules", ".mypy_cache", ".pytest_cache", ".DS_Store"}
 )
-
-
-def _load_tags_config() -> dict[str, Any]:
-    """Load and normalize builtin_tags.yaml into a flat structure for downstream use.
-
-    The YAML uses a 3-level hierarchy: category → group → skill.
-    This function flattens it into:
-      - "skills": {skill_name: [group_id, ...], ...}
-      - "skill_categories": {skill_name: category_id, ...}
-    """
-    if not _TAGS_FILE.exists():
-        logger.warning("builtin_tags.yaml not found at %s", _TAGS_FILE)
-        return {}
-    raw = yaml.safe_load(_TAGS_FILE.read_text(encoding="utf-8")) or {}
-
-    categories = raw.get("categories")
-    if not categories:
-        return raw
-
-    skills_map: dict[str, list[str]] = {}
-    skill_category_map: dict[str, str] = {}
-
-    for cat_id, cat in categories.items():
-        groups = cat.get("groups", {})
-        for group_id, group in groups.items():
-            for skill_name in group.get("skills", []):
-                skills_map.setdefault(skill_name, []).append(group_id)
-                skill_category_map.setdefault(skill_name, cat_id)
-
-    return {
-        "skills": skills_map,
-        "skill_categories": skill_category_map,
-    }
 
 
 def _get_version() -> str:
@@ -176,12 +141,7 @@ def _upload_zip_to_tools_server(
         return None
 
 
-def _build_skill_item(
-    skill_dir: Path,
-    *,
-    category: str | None,
-    tags: list[str] | None,
-) -> dict[str, Any] | None:
+def _build_skill_item(skill_dir: Path) -> dict[str, Any] | None:
     """解析单个 skill 目录：frontmatter 提取 + zip 打包。无 frontmatter 返回 None。"""
     content = (skill_dir / "SKILL.md").read_text(encoding="utf-8")
     try:
@@ -195,8 +155,6 @@ def _build_skill_item(
     item: dict[str, Any] = {
         "name": meta.name,
         "description": meta.description,
-        "category": category,
-        "tags": tags,
         "skill_dir": skill_dir,
         "zip_bytes": zip_bytes,
         "content_sha256": sha256,
@@ -208,16 +166,12 @@ def _build_skill_item(
     return item
 
 
-def _scan_builtin_skills(
-    tags_config: dict[str, Any],
-) -> list[dict[str, Any]]:
-    """扫描扁平轨 `matmaster/skills/`：category/tags 取自 builtin_tags。
+def _scan_builtin_skills() -> list[dict[str, Any]]:
+    """扫描扁平轨 `matmaster/skills/`，散装 skill 无 category/tags（E1）。
 
     Plugin 轨不再压平进 /skills（D6 翻转）：plugin 成员改由
     ``_scan_builtin_plugins`` 整包发往 /plugins。
     """
-    skill_tags_map: dict[str, list[str]] = tags_config.get("skills", {}) or {}
-    skill_category_map: dict[str, str] = tags_config.get("skill_categories", {}) or {}
     results: list[dict[str, Any]] = []
 
     if _SKILLS_ROOT.exists():
@@ -226,11 +180,9 @@ def _scan_builtin_skills(
             rel = skill_dir.relative_to(_SKILLS_ROOT)
             if any(p.startswith("_") for p in rel.parts):
                 continue
-            item = _build_skill_item(skill_dir, category=None, tags=None)
+            item = _build_skill_item(skill_dir)
             if item is None:
                 continue
-            item["category"] = skill_category_map.get(item["name"])
-            item["tags"] = skill_tags_map.get(item["name"])
             results.append(item)
 
     return results
@@ -299,8 +251,7 @@ def sync_builtin_skills_to_tools_server() -> bool:
         logger.warning("MATMASTER_TOOLS_SERVER empty, skip builtin skills sync")
         return False
 
-    tags_config = _load_tags_config()
-    skills = _scan_builtin_skills(tags_config)
+    skills = _scan_builtin_skills()
     if not skills:
         logger.warning("No builtin skills found, skip sync")
         return False
@@ -317,8 +268,6 @@ def sync_builtin_skills_to_tools_server() -> bool:
             item: dict[str, Any] = {
                 "name": skill["name"],
                 "description": skill["description"],
-                "category": skill.get("category"),
-                "tags": skill.get("tags"),
                 "content_sha256": skill["content_sha256"],
                 "byte_size": skill["byte_size"],
                 "file_count": skill["file_count"],

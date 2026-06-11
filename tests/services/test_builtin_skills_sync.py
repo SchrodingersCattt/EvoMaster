@@ -46,12 +46,13 @@ def test_scan_skills_excludes_plugin_members(tmp_path, monkeypatch):
     monkeypatch.setattr(sync, "_SKILLS_ROOT", skills_root)
     monkeypatch.setattr(sync, "_PLUGINS_ROOT", plugins_root)
 
-    skills = sync._scan_builtin_skills({})
+    skills = sync._scan_builtin_skills()
     names = {s["name"] for s in skills}
 
     assert names == {"flat-one"}
     for s in skills:
-        assert s.get("tags") is None
+        assert "tags" not in s
+        assert "category" not in s
 
 
 def test_scan_plugins_whole_package(tmp_path, monkeypatch):
