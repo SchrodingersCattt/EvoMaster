@@ -1,6 +1,6 @@
 ---
 name: plot-diagram
-description: "Hand-draw flowcharts, architecture/structure diagrams, and mechanism schematics as SVG, rasterize to PNG, and attach as answer figures. Use when the user asks to draw, sketch or illustrate a workflow, process, pipeline, architecture, containment structure, or how a mechanism works — figures built from shapes and labels rather than plotted data arrays. Numeric data plots go to plot-chart; canonical materials plots go to plot-materials."
+description: "Hand-draw flowcharts, architecture and structure diagrams, and mechanism schematics as SVG rasterized to PNG answer figures. Use when the user asks to draw or illustrate a workflow, process, pipeline, architecture, containment, or how a mechanism works — shapes and labels, not plotted data arrays."
 ---
 
 # Plot Diagram

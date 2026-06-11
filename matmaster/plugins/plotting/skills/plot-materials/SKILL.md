@@ -1,6 +1,6 @@
 ---
 name: plot-materials
-description: "Plot standard materials-science figures with their domain conventions and attach them as answer figures: band structures, DOS/PDOS, XRD patterns, radial distribution functions g(r), MSD, and phase diagrams, from computed results (pymatgen/ASE objects or parsed output files). Use when the requested figure is one of these canonical materials plots; generic numeric charts go to plot-chart."
+description: "Plot standard materials-science figures with their domain conventions as answer figures: band structures, DOS/PDOS, XRD patterns, RDF g(r), MSD, and phase diagrams from computed results (pymatgen/ASE objects or parsed outputs). Generic numeric charts go to plot-chart."
 ---
 
 # Plot Materials

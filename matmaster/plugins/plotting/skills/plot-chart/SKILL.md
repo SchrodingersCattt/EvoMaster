@@ -1,6 +1,6 @@
 ---
 name: plot-chart
-description: "Plot general-purpose data charts with matplotlib and attach them as answer figures: trends and series over a variable, convergence curves, spectra and signals, scatter/correlation, categorical bar comparisons, histograms and distributions, heatmaps. Use when the user wants computed or provided numeric data visualized and no materials-domain convention applies — band structure, DOS, XRD, RDF, phase diagrams go to plot-materials; multi-panel report compositions go to plot-report; shape-and-label diagrams go to plot-diagram."
+description: "Plot general data charts with matplotlib as answer figures: trends, convergence curves, spectra, scatter/correlation, bar comparisons, histograms, heatmaps. Use for numeric data with no materials convention — band/DOS/XRD/RDF/phase diagrams go to plot-materials; multi-panel reports to plot-report."
 ---
 
 # Plot Chart

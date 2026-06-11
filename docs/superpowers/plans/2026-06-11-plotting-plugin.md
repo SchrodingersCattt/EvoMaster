@@ -597,7 +597,7 @@ git commit -m "feat(plugins): add mm_style matplotlib assets"
 ````markdown
 ---
 name: plot-diagram
-description: "Hand-draw flowcharts, architecture/structure diagrams, and mechanism schematics as SVG, rasterize to PNG, and attach as answer figures. Use when the user asks to draw, sketch or illustrate a workflow, process, pipeline, architecture, containment structure, or how a mechanism works — figures built from shapes and labels rather than plotted data arrays. Numeric data plots go to plot-chart; canonical materials plots go to plot-materials."
+description: "Hand-draw flowcharts, architecture and structure diagrams, and mechanism schematics as SVG rasterized to PNG answer figures. Use when the user asks to draw or illustrate a workflow, process, pipeline, architecture, containment, or how a mechanism works — shapes and labels, not plotted data arrays."
 ---
 
 # Plot Diagram
@@ -897,7 +897,7 @@ git commit -m "feat(plugins): add plot-diagram skill with svg discipline referen
 ````markdown
 ---
 name: plot-chart
-description: "Plot general-purpose data charts with matplotlib and attach them as answer figures: trends and series over a variable, convergence curves, spectra and signals, scatter/correlation, categorical bar comparisons, histograms and distributions, heatmaps. Use when the user wants computed or provided numeric data visualized and no materials-domain convention applies — band structure, DOS, XRD, RDF, phase diagrams go to plot-materials; multi-panel report compositions go to plot-report; shape-and-label diagrams go to plot-diagram."
+description: "Plot general data charts with matplotlib as answer figures: trends, convergence curves, spectra, scatter/correlation, bar comparisons, histograms, heatmaps. Use for numeric data with no materials convention — band/DOS/XRD/RDF/phase diagrams go to plot-materials; multi-panel reports to plot-report."
 ---
 
 # Plot Chart
@@ -1015,7 +1015,7 @@ git commit -m "feat(plugins): add plot-chart skill"
 ````markdown
 ---
 name: plot-materials
-description: "Plot standard materials-science figures with their domain conventions and attach them as answer figures: band structures, DOS/PDOS, XRD patterns, radial distribution functions g(r), MSD, and phase diagrams, from computed results (pymatgen/ASE objects or parsed output files). Use when the requested figure is one of these canonical materials plots; generic numeric charts go to plot-chart."
+description: "Plot standard materials-science figures with their domain conventions as answer figures: band structures, DOS/PDOS, XRD patterns, RDF g(r), MSD, and phase diagrams from computed results (pymatgen/ASE objects or parsed outputs). Generic numeric charts go to plot-chart."
 ---
 
 # Plot Materials
@@ -1144,7 +1144,7 @@ git commit -m "feat(plugins): add plot-materials skill"
 ````markdown
 ---
 name: plot-report
-description: "Compose a multi-panel summary figure with matplotlib subplot_mosaic and attach it as an answer figure: headline metric cards on top, aligned supporting charts below, (a)(b)(c) panel labels. Use when the user asks for a combined overview, summary board, report figure, or a publication-style multi-panel figure assembling several computed results into one image; single charts go to plot-chart or plot-materials."
+description: "Compose a multi-panel summary figure with matplotlib subplot_mosaic: headline metric cards on top, aligned supporting charts below, (a)(b)(c) panel labels. Use for a combined overview, summary board, or publication-style multi-panel figure; single charts go to plot-chart or plot-materials."
 ---
 
 # Plot Report

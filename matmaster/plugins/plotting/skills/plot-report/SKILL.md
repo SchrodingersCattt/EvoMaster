@@ -1,6 +1,6 @@
 ---
 name: plot-report
-description: "Compose a multi-panel summary figure with matplotlib subplot_mosaic and attach it as an answer figure: headline metric cards on top, aligned supporting charts below, (a)(b)(c) panel labels. Use when the user asks for a combined overview, summary board, report figure, or a publication-style multi-panel figure assembling several computed results into one image; single charts go to plot-chart or plot-materials."
+description: "Compose a multi-panel summary figure with matplotlib subplot_mosaic: headline metric cards on top, aligned supporting charts below, (a)(b)(c) panel labels. Use for a combined overview, summary board, or publication-style multi-panel figure; single charts go to plot-chart or plot-materials."
 ---
 
 # Plot Report
