@@ -483,6 +483,28 @@ def hbar_figsize(n_bars: int, width: float = 8.0) -> tuple[float, float]:
     return (width, n_bars * 0.4 + 1.2)
 
 
+def restyle(ax, width: float = 8.0, height: float = 5.0):
+    """Re-impose contract text sizes on an Axes that a plotter restyled.
+
+    pymatgen plotters route through pretty_plot, which overrides rcParams
+    with 30-48pt text and its own figure size after apply() ran. Call this
+    on the returned Axes, recolor lines as needed, then save_figure.
+    """
+    fig = ax.figure
+    fig.set_size_inches(width, height)
+    ax.title.set_size(14.0)
+    for axis_label in (ax.xaxis.label, ax.yaxis.label):
+        axis_label.set_size(14.0)
+    ax.tick_params(axis="both", which="both", labelsize=12.0)
+    legend = ax.get_legend()
+    if legend is not None:
+        for text in legend.get_texts():
+            text.set_size(12.0)
+    for text in ax.texts:
+        text.set_size(12.0)
+    return ax
+
+
 def apply() -> None:
     """Apply the plugin rcParams: CJK-capable fonts, sizes, palette, grid."""
     rc = matplotlib.rcParams
@@ -1005,8 +1027,7 @@ Do not produce or attach any figure without having read it in this session.
 
 ## Setup
 
-Same as plot-chart — apply the shared style BEFORE any plotter is built, so
-rcParams (fonts, sizes, white background) take effect on plotter output:
+Same as plot-chart — apply the shared style before plotting:
 
 ```python
 import sys
@@ -1022,6 +1043,12 @@ import mm_style
 mm_style.apply()
 ```
 
+`apply()` covers fonts (CJK), the white background, and axes you create
+yourself. pymatgen plotters do NOT inherit it: they route through
+`pretty_plot`, which re-imposes 30-48pt text, its own figure size, and a
+Set1 palette after `apply()` ran. Every plotter-returned Axes therefore goes
+through `mm_style.restyle(ax)` and a recolor pass before saving.
+
 ## Plotter-first policy
 
 Prefer pymatgen's plotters over hand-drawn axes — they already implement the
@@ -1034,34 +1061,42 @@ domain conventions (k-path labels, Fermi alignment, hull construction):
 | XRD pattern | `pymatgen.analysis.diffraction.xrd.XRDCalculator().get_plot(structure)` |
 | phase diagram | `pymatgen.analysis.phase_diagram.PDPlotter(pd, backend="matplotlib").get_plot()` |
 
-- `get_plot` returns a matplotlib Axes; finish with
-  `mm_style.save_figure(ax.figure, path)`.
+- `get_plot` returns a matplotlib Axes; finish with `mm_style.restyle(ax)`,
+  a recolor pass, then `mm_style.save_figure(ax.figure, path)`.
 - The sandbox has no plotly — always pass `backend="matplotlib"` to PDPlotter.
-- Recolor plotter output to palette colors (`mm_style.stroke("purple")`, …)
-  when its defaults clash with the contract.
+- Recolor plotter output to palette colors (`mm_style.stroke("purple")`, …):
+  pymatgen's own defaults (Set1 palette, black hull and stems) clash with the
+  contract.
 - Hand-draw with plot-chart techniques only when no plotter covers the figure
   (RDF, MSD, custom parsed outputs).
 
 ## Domain conventions per figure
 
-- Band structure: y axis "E − E_F (eV)"; Fermi level as gray dashed hline at
-  0; x axis the high-symmetry path with Γ, X, … labels (BSPlotter provides
-  them); default window [−4, +4] eV unless asked otherwise; spin channels by
-  linestyle, named in the legend.
-- DOS / PDOS: energy axis as E − E_F (eV) with the Fermi line at 0; spin-down
-  as a negated mirror; PDOS overlaid per element/orbital with a legend; y
-  axis "DOS (states/eV)". Paired beside a band structure, energy goes on the
-  shared y axis.
-- XRD: x axis "2θ (degree)" over the computed range (typically 10–90 for Cu
-  Kα); intensities normalized to 100; vertical stems; hkl labels on the ~5
-  strongest reflections; state the wavelength in the caption.
+Plotter defaults are marked (default); everything else is your restyle work.
+
+- Band structure: high-symmetry path labels Γ, X, … (default); spin channels
+  by linestyle — solid up, dashed down (default); y axis "E − E_F (eV)";
+  the Fermi line arrives colored dash-dot — restyle it gray dashed at 0; set
+  the window to [−4, +4] eV via `ax.set_ylim` unless asked otherwise; name
+  spin channels in the legend yourself when spin-polarized.
+- DOS / PDOS: energy lands on the x axis with the Fermi line black dashed at
+  0 and spin-down mirrored negative (defaults); gray the Fermi line; y axis
+  "DOS (states/eV)"; PDOS overlaid per element/orbital with a legend. Paired
+  beside a band structure, pass `get_plot(invert_axes=True)` so energy goes
+  on the shared y axis.
+- XRD: x axis 2θ in degrees, vertical stems, intensities normalized to 100
+  (defaults); the default annotates every reflection — pass
+  `annotate_peaks=False` and label only the ~5 strongest yourself; recolor
+  the black stems to a palette stroke; state the wavelength in the caption
+  (Cu Kα unless you chose otherwise).
 - RDF: x "r (Å)", y "g(r)"; gray hline at g = 1; annotate the first-shell
-  peak position from the data.
+  peak position from the data. (Hand-drawn — plot-chart techniques.)
 - MSD: x "t (ps)", y "MSD (Å²)"; when a diffusion coefficient was computed,
-  draw the fitted line and put D in the legend.
-- Phase diagram: hull lines gray; stable entries marked and labelled with
-  reduced formulas; put e_above_hull values in the caption when conclusions
-  depend on them.
+  draw the fitted line and put D in the legend. (Hand-drawn.)
+- Phase diagram: stable entries arrive labelled with reduced formulas
+  (default); the hull arrives black with Set1 markers — restyle hull lines
+  gray and markers to a palette stroke; put e_above_hull values in the
+  caption when conclusions depend on them.
 - k-mesh / cutoff convergence: use the convergence idiom from plot-chart.
 
 ## Data honesty
