@@ -390,7 +390,7 @@ def test_trigger_run_rejects_workspace_outside_share_before_enqueue():
             workspace="/tmp/case",
         )
 
-    assert getattr(exc.value, "error_code", None) == "directory_outside_share"
+    assert getattr(exc.value, "error_code", None) == "directory_outside_roots"
     sessions_service.try_acquire_session_run.assert_not_called()
     events_service.add_history_event.assert_not_called()
     fake_redis.lpush_agent_run_job.assert_not_called()

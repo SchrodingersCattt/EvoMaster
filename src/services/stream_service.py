@@ -26,7 +26,7 @@ from src.services.deploy_state_service import (
 from src.services.events_service import ChatEventsService, get_events_service
 from src.services.session_directory_service import (
     SessionDirectoryResolver,
-    normalize_remote_share_path,
+    normalize_remote_workspace_path,
 )
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
 from src.services.stream_reply_queue import RedisReplyQueue
@@ -261,7 +261,9 @@ class ChatStreamService:
         占锁失败时直接返回 Busy，由调用方决定后续策略。
         """
         sid = session_id.strip()
-        workspace_value = normalize_remote_share_path(workspace) if workspace else None
+        workspace_value = (
+            normalize_remote_workspace_path(workspace) if workspace else None
+        )
         self._sessions_service.ensure_session(sid, user_id=user_id)
         acquired_ok, reason = self._sessions_service.try_acquire_session_run(sid)
         if not acquired_ok:

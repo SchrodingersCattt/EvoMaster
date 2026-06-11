@@ -242,7 +242,7 @@ class SessionDirectoryData(BaseModel):
 
     directory: str | None = Field(
         default=None,
-        description="该会话绑定的工作区目录路径（如远端 /share/...）；未设置时为 null",
+        description="该会话绑定的工作区目录路径（如远端 /share/... 或 /personal/...）；未设置时为 null",
     )
     mode: Literal["direct", "planner"] | None = Field(
         default=None,
@@ -273,7 +273,7 @@ class SessionDirectorySetRequest(BaseModel):
     directory: str | None = Field(
         default=None,
         max_length=2048,
-        description="绑定 Bohrium 远端 /share 工作目录；传 null 或空字符串表示清除",
+        description="绑定 Bohrium 远端工作目录（/share 或 /personal 下）；传 null 或空字符串表示清除",
     )
     mode: Literal["direct", "planner"] | None = Field(
         default=None,
@@ -395,7 +395,7 @@ class ChatSendRequest(BaseModel):
     directory: str | None = Field(
         default=None,
         max_length=2048,
-        description="可选，前端传入的本轮 Bohrium 远端 /share 工作目录，随 query 写入历史事件；持久化请用 PUT …/session-directory",
+        description="可选，前端传入的本轮 Bohrium 远端工作目录（/share 或 /personal 下），随 query 写入历史事件；持久化请用 PUT …/session-directory",
     )
     replace_last_turn: bool = Field(
         default=False,

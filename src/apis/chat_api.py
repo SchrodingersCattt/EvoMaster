@@ -266,7 +266,7 @@ def get_run_status():
     " `content` 非空时，发送消息并返回本次运行的 SSE 流。"
     " 可选 `directory`：随用户 query 写入历史事件；会话目录持久化请使用 PUT …/session-directory。"
     "\n\n目录相关错误码：directory_invalid_type, directory_invalid_chars, directory_must_be_absolute,"
-    " directory_outside_share, session_directory_invalid",
+    " directory_outside_roots, session_directory_invalid",
     operation_id="streamChatSession",
     responses={
         401: COMMON_ERROR_RESPONSES[401],
@@ -634,7 +634,7 @@ def get_session_directory(
     description="仅会话所有者可写；可只更新 directory、只更新 mode，或两者同时更新；"
     " 未出现在请求体中的字段保持不变。发送消息时也会自动持久化本轮 mode。"
     "\n\n目录相关错误码：directory_invalid_type, directory_invalid_chars, directory_must_be_absolute,"
-    " directory_outside_share, session_directory_invalid",
+    " directory_outside_roots, session_directory_invalid",
     operation_id="setChatSessionDirectory",
     responses={
         401: COMMON_ERROR_RESPONSES[401],

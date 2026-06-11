@@ -18,6 +18,14 @@ from pydantic import BaseModel, ConfigDict, Field
 from matmaster.types.cancellation import CancellationToken
 from matmaster.types.topology import SessionCapabilities
 
+# Bohrium 远端 SSH 节点同时挂载 /share 与 /personal，二者均可作为会话工作目录。
+# 这是双根工作目录的单一权威定义：会话目录校验与 bohrium_tool 远端路径识别均从此派生，
+# 避免各处独立硬编码漂移。SQL CHECK 约束无法引用 Python 常量，靠
+# create_bohrium_jobs_table.sql / 迁移脚本处的注释与此互指维持同步。
+# 注意：本常量仅表达"哪些根可作为工作目录/远端路径"，不改变 agent 运行时对两个根的
+# 可写性（workspace 落在哪个根即以该根为工作区）。
+REMOTE_ACCESS_ROOTS: tuple[str, ...] = ("/share", "/personal")
+
 
 @dataclass(frozen=True)
 class SessionFileStat:

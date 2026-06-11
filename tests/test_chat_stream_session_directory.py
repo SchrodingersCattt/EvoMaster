@@ -98,7 +98,7 @@ def test_prepare_send_message_invalid_request_directory_does_not_acquire_run():
         with pytest.raises(Exception) as exc:
             service.prepare_send_message("sess-1", req, user_id="user-1")
 
-    assert exc.value.error_code == "directory_outside_share"
+    assert exc.value.error_code == "directory_outside_roots"
     sessions_service.try_acquire_session_run.assert_not_called()
     events_service.add_history_event.assert_not_called()
 
