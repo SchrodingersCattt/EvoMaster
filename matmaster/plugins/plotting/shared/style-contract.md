@@ -36,8 +36,9 @@ figure. Skills add domain rules on top; nothing below is repeated there.
 - All color comes from the nine-ramp palette (constants in `mm_style.py`).
   Light-theme trio per ramp: 50 fill / 600 stroke and lines / 800 title text /
   600 secondary text. The text stops govern text on or labeling that ramp's
-  colored elements; default chart text (titles, axis labels, ticks) stays
-  matplotlib's near-black.
+  colored elements; default chart text uses the neutral gray tiers — gray-800
+  titles, gray-600 secondary (axis labels, ticks, legends) — wired as
+  rcParams by `mm_style.apply()`.
 
 | Ramp | 50 | 100 | 200 | 400 | 600 | 800 | 900 |
 |---|---|---|---|---|---|---|---|

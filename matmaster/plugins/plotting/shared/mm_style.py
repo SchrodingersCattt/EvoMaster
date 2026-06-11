@@ -179,6 +179,12 @@ def apply() -> None:
     rc["legend.fontsize"] = 12.0
     rc["figure.titlesize"] = 14.0
     rc["figure.titleweight"] = "medium"
+    rc["text.color"] = title_color("gray")
+    rc["axes.titlecolor"] = title_color("gray")
+    rc["axes.labelcolor"] = stroke("gray")
+    rc["xtick.color"] = stroke("gray")
+    rc["ytick.color"] = stroke("gray")
+    rc["legend.labelcolor"] = stroke("gray")
     rc["axes.prop_cycle"] = cycler(
         color=[stroke(ramp) for ramp in CATEGORY_ORDER]
     ) + cycler(linestyle=list(_LINESTYLES))

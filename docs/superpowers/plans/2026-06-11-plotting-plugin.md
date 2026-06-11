@@ -16,7 +16,7 @@
 
 - 基分支：`codex/provider-stage1`（spec 仅存在于此分支）。新建分支 `plotting-plugin`。
 - worktree 中跑 Python 验证前先软链 venv：`ln -s /Users/kealdoom/Developer/dp/matmaster/matmaster-evo/.venv .venv`。
-- 本地 venv 已有 matplotlib 3.10.8（与沙箱镜像同版本）+ cairosvg（spike 时装入）。**2026-06-11 spike 结论：pymupdf 1.27.1 的 SVG 管线不渲染 `<marker>`、忽略 `stroke-dasharray`、不支持 `dominant-baseline`、不从 viewBox 推断页高——按 spec §8.4 预授权路径切换 cairosvg。** cairosvg 的几何特性（marker/虚线/圆角/viewBox 尺寸推断）已本地验证通过；SVG 内 CJK 字形的最终核对依赖 Linux fontconfig + fonts-noto-cjk，属沙箱 E2E 验收项（本地 macOS quartz 后端无 Noto CJK，豆腐块为环境局限而非缺陷）。matplotlib 的 CJK 在本地经 PingFang 回退验证、沙箱经 Noto 命中。对数轴指数（mathtext `\mathdefault`）只取字体链首个字体且不逐字形回退：沙箱 Noto Sans CJK SC 自带 U+2212 故正确；本地 PingFang 链首会把指数负号渲染成占位符，与 SVG CJK 同属本地环境局限（实测 DejaVu 置首可修负号但 CJK 变豆腐块，不可兼得，故不改链序）。
+- 本地 venv 已有 matplotlib 3.10.8（与沙箱镜像同版本）+ cairosvg（spike 时装入）。**2026-06-11 spike 结论：pymupdf 1.27.1 的 SVG 管线不渲染 `<marker>`、忽略 `stroke-dasharray`、不支持 `dominant-baseline`、不从 viewBox 推断页高——按 spec §8.4 预授权路径切换 cairosvg。** cairosvg 的几何特性（marker/虚线/圆角/viewBox 尺寸推断）已本地验证通过；SVG 内 CJK 字形的最终核对依赖 Linux fontconfig + fonts-noto-cjk，属沙箱 E2E 验收项（本地 macOS quartz 后端无 Noto CJK，豆腐块为环境局限而非缺陷）。matplotlib 的 CJK 在本地经 PingFang 回退验证、沙箱经 Noto 命中。对数轴指数（mathtext `\mathdefault`）只取字体链首个字体且不逐字形回退：沙箱 Noto Sans CJK SC 自带 U+2212 故正确；本地 PingFang 链首会把指数负号渲染成占位符，与 SVG CJK 同属本地环境局限（实测 DejaVu 置首可修负号但 CJK 变豆腐块，不可兼得，故不改链序）。2026-06-11 复核：显式 rc["mathtext.fontset"]="dejavusans"（本就是生效默认值）与 mathtext.fallback="stixsans" 均与基线逐字节同图（sha256 相等）——`\mathdefault` 固定路由到正文字体链首字体，负号豆腐块无 rcParams 解，维持环境局限结论，不引入该配置。
 - pre-commit 钩子会跑 black（88 列）/isort/flake8/pyupgrade/end-of-file-fixer/trailing-whitespace/check-yaml。若钩子自动改文件，`git add -u` 后重新提交即可。py 文件 ≤1000 行（远低于）。不给 `mm_style.py`/`svg2png.py` 加 shebang 或可执行位（避开 shebang 钩子）。
 - 全程**不新增任何自动化测试**（spec §9），验证一律用一次性命令 + Read 工具肉眼核对图片。
 
@@ -279,8 +279,9 @@ figure. Skills add domain rules on top; nothing below is repeated there.
 - All color comes from the nine-ramp palette (constants in `mm_style.py`).
   Light-theme trio per ramp: 50 fill / 600 stroke and lines / 800 title text /
   600 secondary text. The text stops govern text on or labeling that ramp's
-  colored elements; default chart text (titles, axis labels, ticks) stays
-  matplotlib's near-black.
+  colored elements; default chart text uses the neutral gray tiers — gray-800
+  titles, gray-600 secondary (axis labels, ticks, legends) — wired as
+  rcParams by `mm_style.apply()`.
 
 | Ramp | 50 | 100 | 200 | 400 | 600 | 800 | 900 |
 |---|---|---|---|---|---|---|---|
@@ -521,6 +522,12 @@ def apply() -> None:
     rc["legend.fontsize"] = 12.0
     rc["figure.titlesize"] = 14.0
     rc["figure.titleweight"] = "medium"
+    rc["text.color"] = title_color("gray")
+    rc["axes.titlecolor"] = title_color("gray")
+    rc["axes.labelcolor"] = stroke("gray")
+    rc["xtick.color"] = stroke("gray")
+    rc["ytick.color"] = stroke("gray")
+    rc["legend.labelcolor"] = stroke("gray")
     rc["axes.prop_cycle"] = cycler(
         color=[stroke(ramp) for ramp in CATEGORY_ORDER]
     ) + cycler(linestyle=list(_LINESTYLES))
