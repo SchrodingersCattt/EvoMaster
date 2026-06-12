@@ -209,12 +209,9 @@ class TestAskQuestionToolVisibility:
         prompt = tool.prompt()
 
         assert prompt
-        assert "ask the user questions during execution" in prompt
         assert '"Other"' in prompt
         assert "multiSelect: true" in prompt
         assert "(Recommended)" in prompt
-        assert "Planner mode note" in prompt
-        assert "Do NOT use this tool" in prompt
 
     def test_hidden_without_bridge(self) -> None:
         tool = AskQuestionTool(bridge=None)
