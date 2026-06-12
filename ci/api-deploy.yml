@@ -27,6 +27,7 @@ stages:
   - build
   - lint
   - test
+  - sync-builtin
   - deploy-test
   - manual-uat
   - deploy-uat
@@ -145,6 +146,51 @@ test:
     - k8s-runner-ack
   rules:
     - if: '$CI_COMMIT_BRANCH =~ /.*test$/'
+      when: on_success
+
+# 内置技能 / 插件同步到 tools-server：用刚构建的镜像跑一次性命令（照搬 sync-question-catalog 模式）。
+# 部署前跑、天然单例，替代原 app.py 启动钩子里的全量同步（不再多 pod 并发打爆 tools-server）。
+# 失败以非零退出码标红 pipeline。tools-server 地址由 MATMASTER_TOOLS_SERVER / SERVICE_ENV 决定。
+# 当前仅在 test 分支自动同步；tag/prod 场景需先确认 MATMASTER_TOOLS_SERVER 按环境注入后再放开 rules。
+sync-builtin-assets:
+  stage: sync-builtin
+  image: $REGISTRY/public/ubuntu:gitlab-docker
+  variables:
+    DOCKER_HOST: tcp://docker-build-service:32375
+  needs:
+    - job: docker-build
+      artifacts: true
+  before_script:
+    - |
+      cat > /root/.docker/config.json <<EOF
+      {
+      "auths": {
+        "registry.dp.tech": {
+          "auth": "`echo -n $REGISTRY_USERNAME:$REGISTRY_PASSWORD | base64`"
+        },
+        "dp-harbor-registry.cn-zhangjiakou.cr.aliyuncs.com": {
+          "auth": "`echo -n $REGISTRY_USERNAME:$REGISTRY_PASSWORD | base64`"
+        }
+      }
+      }
+      EOF
+    - |
+      test -n "${DYNAMIC_IMAGE:-}" || (echo "sync-builtin: 缺少 DYNAMIC_IMAGE（需 docker-build 产出 build.env）" && exit 1)
+    - docker pull ${DYNAMIC_IMAGE}
+  script:
+    - docker rm -f builtin-sync || true
+    - |
+      docker create --name builtin-sync \
+        -e MATMASTER_TOOLS_SERVER \
+        -e SERVICE_ENV \
+        ${DYNAMIC_IMAGE} \
+        sh -c "cd /app && . .venv/bin/activate && python -m src.services.builtin_skills_sync"
+    - docker start -a builtin-sync
+    - docker rm builtin-sync
+  tags:
+    - k8s-runner-ack
+  rules:
+    - if: '($CI_COMMIT_BRANCH =~ /.*test$/) && $CI_COMMIT_TAG == null'
       when: on_success
 
 deploy-test:

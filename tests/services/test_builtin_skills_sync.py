@@ -130,60 +130,8 @@ def test_builtin_plugins_name_equals_dir(tmp_path, monkeypatch):
         assert (real_plugins_root / p["name"] / "plugin.yaml").exists()
 
 
-class _FakeRedisDao:
-    def __init__(self, reserve_result):
-        self._reserve_result = reserve_result
-        self.calls = []
-
-    def try_reserve_nx(self, key, value, ttl_sec):
-        self.calls.append((key, value, ttl_sec))
-        return self._reserve_result
-
-
-def _patch_redis(monkeypatch, reserve_result):
-    import src.dao.redis_dao as redis_dao
-
-    fake = _FakeRedisDao(reserve_result)
-    monkeypatch.setattr(redis_dao, "get_redis_dao", lambda: fake)
-    return fake
-
-
-def test_acquire_lock_won_when_reserve_true(monkeypatch):
-    fake = _patch_redis(monkeypatch, True)
-    assert sync._acquire_builtin_sync_lock("v1") is True
-    assert fake.calls and fake.calls[0][0].endswith("v1")
-
-
-def test_acquire_lock_skip_when_reserve_false(monkeypatch):
-    _patch_redis(monkeypatch, False)
-    assert sync._acquire_builtin_sync_lock("v1") is False
-
-
-def test_acquire_lock_failopen_when_redis_unavailable(monkeypatch):
-    """Redis 未配置/不可用（try_reserve_nx 返回 None）时 fail-open，仍执行同步。"""
-    _patch_redis(monkeypatch, None)
-    assert sync._acquire_builtin_sync_lock("v1") is True
-
-
-def test_run_once_skips_sync_when_lock_lost(monkeypatch):
-    monkeypatch.setattr(sync, "_acquire_builtin_sync_lock", lambda v: False)
-    called = []
-    monkeypatch.setattr(
-        sync,
-        "sync_builtin_skills_to_tools_server",
-        lambda: called.append("skills") or True,
-    )
-    monkeypatch.setattr(
-        sync,
-        "sync_builtin_plugins_to_tools_server",
-        lambda: called.append("plugins") or True,
-    )
-    assert sync.run_builtin_sync_once() is False
-    assert called == []
-
-
-def test_run_once_runs_both_when_lock_won(monkeypatch):
-    monkeypatch.setattr(sync, "_acquire_builtin_sync_lock", lambda v: True)
+def test_run_once_runs_skills_then_plugins(monkeypatch):
+    """run_builtin_sync_once 顺序执行 skills + plugins，二者都成功才返回 True。"""
     called = []
     monkeypatch.setattr(
         sync,
@@ -197,3 +145,9 @@ def test_run_once_runs_both_when_lock_won(monkeypatch):
     )
     assert sync.run_builtin_sync_once() is True
     assert called == ["skills", "plugins"]
+
+
+def test_run_once_returns_false_when_any_fails(monkeypatch):
+    monkeypatch.setattr(sync, "sync_builtin_skills_to_tools_server", lambda: True)
+    monkeypatch.setattr(sync, "sync_builtin_plugins_to_tools_server", lambda: False)
+    assert sync.run_builtin_sync_once() is False
