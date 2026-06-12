@@ -374,6 +374,54 @@ def sync_builtin_skills_to_tools_server() -> bool:
     )
 
 
+# 多 pod/worker 启动同步用：同一 version 只放一个进程进来跑全量同步。
+# TTL 覆盖一次发布的滚动窗口即可；过期后同 version 的重启会再同步一次（可接受）。
+_BUILTIN_SYNC_LOCK_KEY = "matmaster:builtin_sync:lock:{version}"
+_BUILTIN_SYNC_LOCK_TTL_SEC = 600
+
+
+def _acquire_builtin_sync_lock(version: str) -> bool:
+    """抢内置同步锁（SET NX EX）。
+
+    True  = 抢到锁，本进程执行同步；
+    True  = Redis 未配置 / 不可用时 fail-open，保证单实例与 dev 仍能同步；
+    False = 同 version 已有别的进程在同步，本进程跳过。
+    """
+    try:
+        import os
+        import socket
+
+        from src.dao.redis_dao import get_redis_dao
+
+        holder = f"{socket.gethostname()}:{os.getpid()}"
+        key = _BUILTIN_SYNC_LOCK_KEY.format(version=version)
+        result = get_redis_dao().try_reserve_nx(key, holder, _BUILTIN_SYNC_LOCK_TTL_SEC)
+    except Exception as e:
+        logger.warning("builtin sync lock acquire error, run anyway: %s", e)
+        return True
+    if result is None:
+        return True
+    return bool(result)
+
+
+def run_builtin_sync_once() -> bool:
+    """启动时执行内置技能 + 插件同步，多 pod/worker 下用 Redis 锁去重。
+
+    抢到锁（或 Redis 不可用 fail-open）才执行；否则跳过，避免 N 个 pod 同时
+    全量重传 zip + 触发 tools-server replace_all_builtin 把其打爆。
+    """
+    version = _get_version()
+    if not _acquire_builtin_sync_lock(version):
+        logger.info(
+            "builtin sync skipped: another process holds lock (version=%s)",
+            version,
+        )
+        return False
+    ok_skills = sync_builtin_skills_to_tools_server()
+    ok_plugins = sync_builtin_plugins_to_tools_server()
+    return ok_skills and ok_plugins
+
+
 def sync_builtin_plugins_to_tools_server() -> bool:
     """同步内置 plugin 到 tools-server（整包 zip 上传 + /plugins/sync-builtin）。
 
