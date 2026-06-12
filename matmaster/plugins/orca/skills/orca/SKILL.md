@@ -11,7 +11,7 @@ ORCA is an ab initio quantum chemistry program focused on molecular systems. It 
 
 | Item | Default Value |
 |------|---------------|
-| image | `registry.dp.tech/dptech/dp/native/prod-19853/orca:v6.1.1` |
+| image | `registry.dp.tech/dptech/prod-13629/orca-xtb:6.0.0_6.7.1` |
 | machine | `c32_m128_cpu` (16 physical cores, 128 GB RAM) |
 | cmd | `OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 OMPI_MCA_rmaps_base_oversubscribe=1 /opt/orca611_avx2/orca {input_file} > log 2>&1` |
 
