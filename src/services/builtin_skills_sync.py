@@ -1,4 +1,9 @@
-"""应用启动时将仓库内置技能 / 插件同步到 matmaster-tools-server。
+"""将仓库内置技能 / 插件同步到 matmaster-tools-server。
+
+触发方式：由 CI/CD 部署流水线中一个一次性 Job 调用
+``python -m src.services.builtin_skills_sync``（见 ci/api-deploy.yml 的
+sync-builtin-assets）。每次发布跑一次、天然单例；不再寄生于运行时进程的
+启动钩子，避免多 pod/worker 启动时并发全量重传把 tools-server 打爆。
 
 流程：扫描本地 skills / plugins 目录 →
   1. 每个技能目录 / plugin 整包打 zip → 算 sha256
@@ -24,7 +29,6 @@ from matmaster.skills.registry import parse_plugin_info, parse_skill_meta_info
 from utils.env import MATMASTER_TOOLS_SERVER
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 _SKILLS_ROOT = Path(__file__).resolve().parents[2] / "matmaster" / "skills"
 _PLUGINS_ROOT = Path(__file__).resolve().parents[2] / "matmaster" / "plugins"
