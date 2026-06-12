@@ -1,3 +1,2 @@
-name: task-planning
 category: workflow-system
 description: "Planning-unit artifact stack for long multi-step materials-computation campaigns: write and check SPEC / ACCEPTANCE / PLAN documents, audit cross-file consistency, and execute planned phases under state-write discipline."

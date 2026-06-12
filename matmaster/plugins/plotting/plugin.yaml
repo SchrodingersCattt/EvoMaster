@@ -1,3 +1,2 @@
-name: plotting
 category: reporting
 description: "Publication-quality answer figures over the Bash + AttachFigure channel: general data charts (plot-chart), materials-convention plots (plot-materials), hand-written SVG diagrams rasterized to PNG (plot-diagram), and multi-panel report compositions (plot-report). Shared style contract and matplotlib/SVG assets live in shared/."

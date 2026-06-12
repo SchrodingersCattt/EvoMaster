@@ -1,3 +1,2 @@
-name: gromacs
 category: simulation
 description: "GROMACS biomolecular/soft-matter molecular dynamics: NVT/NPT, energy minimization, FEP, enhanced sampling, solvation and ion setup."

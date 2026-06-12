@@ -278,6 +278,34 @@ def test_disabled_plugin_filters_remote_members(tmp_path: Path) -> None:
     assert registry.get_skill("member-skill") is None
 
 
+def test_remote_disabled_plugins_filters_members(tmp_path: Path) -> None:
+    plugins_root = "/personal/.matmaster/plugins"
+    session = FakeRemoteSkillSession(
+        plugins_root,
+        {
+            f"{plugins_root}/.settings.json": json.dumps(
+                {"disabled_plugins": ["pack"]}
+            ),
+            f"{plugins_root}/pack/plugin.yaml": "category: simulation\n",
+            f"{plugins_root}/pack/skills/member/SKILL.md": _skill_body(
+                "member-skill", "Member"
+            ),
+            f"{plugins_root}/loose/SKILL.md": _skill_body("loose-skill", "Loose"),
+        },
+    )
+    skills_cfg = ExpSkillsConfig(enabled=True, skills_root=[])
+
+    registry = build_cached_skill_registry(
+        skills_cfg=skills_cfg,
+        session=session,
+        skill_cache=SkillRegistryCache(),
+    )
+
+    assert registry is not None
+    assert registry.get_skill("member-skill") is None
+    assert registry.get_skill("loose-skill") is not None
+
+
 def test_disabled_plugin_warns_cross_boundary_depends_on(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:

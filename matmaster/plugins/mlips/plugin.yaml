@@ -1,3 +1,2 @@
-name: mlips
 category: simulation
 description: "Machine-learning interatomic potential calculations (DPA, MACE, SevenNet, MatterSim): optimization, MD, phonon, elastic, NEB via ASE drivers, plus AIS Square search for public checkpoints and DFT-labeled datasets."

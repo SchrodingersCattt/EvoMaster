@@ -52,13 +52,9 @@ async def lifespan(app: FastAPI):
         )
     except Exception as e:
         logger.warning('MatMaster chat playground init skipped in lifespan: %s', e)
-    # 内置技能元信息同步到 tools-server（非阻塞，失败不影响启动）
-    try:
-        from src.services.builtin_skills_sync import sync_builtin_skills_to_tools_server
-
-        await asyncio.to_thread(sync_builtin_skills_to_tools_server)
-    except Exception as e:
-        logger.warning('Builtin skills sync skipped in lifespan: %s', e)
+    # 内置技能 / 插件同步已从运行时进程启动钩子移出：改由 CI/CD 部署流水线的一次性
+    # Job 执行（ci/api-deploy.yml 的 sync-builtin-assets，每次发布跑一次、天然单例），
+    # 避免多 pod/worker 启动时全量重传把 tools-server 打爆。
     # 多 worker 时：Redis 订阅线程，使任意 worker 收到的 stop 能通知到跑 run 的 worker
     try:
         if get_sessions_service().start_redis_stop_subscriber():
