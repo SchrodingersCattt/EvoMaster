@@ -13,7 +13,7 @@ ORCA is an ab initio quantum chemistry program focused on molecular systems. It 
 |------|---------------|
 | image | `registry.dp.tech/dptech/prod-13629/orca-xtb:6.0.0_6.7.1` |
 | machine | `c32_m128_cpu` (16 physical cores, 128 GB RAM) |
-| cmd | `OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 OMPI_MCA_rmaps_base_oversubscribe=1 /opt/orca611_avx2/orca {input_file} > log 2>&1` |
+| cmd | `OMPI_ALLOW_RUN_AS_ROOT=1 OMPI_ALLOW_RUN_AS_ROOT_CONFIRM=1 OMPI_MCA_rmaps_base_oversubscribe=1 /root/orca600/orca {input_file} > log 2>&1` |
 
 > ORCA is run via **absolute path** (`/opt/orca611_avx2/orca`), not through mpirun or PATH.
 > ORCA handles its own MPI parallelism internally via `%pal nprocs N end` in the input file.
