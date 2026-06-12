@@ -78,42 +78,41 @@ def disabled_skill_names_from_settings(root: Path) -> set[str]:
     return _extract_disabled_names(payload)
 
 
+def _disabled_from_remote_settings(
+    session: Any, remote_root: str, *, key: str, label: str
+) -> set[str]:
+    """Read a disabled-name list under `key` from a remote .settings.json via SFTP."""
+    settings_path = remote_root.rstrip("/") + "/.settings.json"
+    try:
+        if not session.path_exists(settings_path):
+            return set()
+        content = session.read_file(settings_path)
+        payload = json.loads(content)
+    except Exception:
+        logger.warning(
+            "Failed to read remote %s settings: %s",
+            label,
+            settings_path,
+            exc_info=True,
+        )
+        return set()
+    return _extract_str_list(payload, key)
+
+
 def disabled_skill_names_from_remote_settings(
     session: Any, remote_root: str
 ) -> set[str]:
     """Read disabled skill names from a remote .settings.json via session SFTP."""
-    settings_path = remote_root.rstrip("/") + "/.settings.json"
-    try:
-        if not session.path_exists(settings_path):
-            return set()
-        content = session.read_file(settings_path)
-        payload = json.loads(content)
-    except Exception:
-        logger.warning(
-            "Failed to read remote skill settings: %s",
-            settings_path,
-            exc_info=True,
-        )
-        return set()
-    return _extract_disabled_names(payload)
+    return _disabled_from_remote_settings(
+        session, remote_root, key="disabled", label="skill"
+    )
 
 
 def disabled_plugins_from_remote_settings(session: Any, remote_root: str) -> set[str]:
     """Read disabled plugin names from a remote .settings.json via session SFTP."""
-    settings_path = remote_root.rstrip("/") + "/.settings.json"
-    try:
-        if not session.path_exists(settings_path):
-            return set()
-        content = session.read_file(settings_path)
-        payload = json.loads(content)
-    except Exception:
-        logger.warning(
-            "Failed to read remote plugin settings: %s",
-            settings_path,
-            exc_info=True,
-        )
-        return set()
-    return _extract_str_list(payload, "disabled_plugins")
+    return _disabled_from_remote_settings(
+        session, remote_root, key="disabled_plugins", label="plugin"
+    )
 
 
 def _extract_disabled_names(payload: Any) -> set[str]:

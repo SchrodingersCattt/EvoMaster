@@ -14,6 +14,7 @@ import io
 import json
 import logging
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -244,16 +245,31 @@ def _scan_builtin_plugins() -> list[dict[str, Any]]:
     return results
 
 
-def sync_builtin_skills_to_tools_server() -> bool:
-    """同步内置技能到 tools-server（含 zip 上传）。返回是否成功。"""
+def _sync_assets_to_tools_server(
+    *,
+    asset_label: str,
+    scan_fn: Callable[[], list[dict[str, Any]]],
+    path_segment: str,
+    endpoint_path: str,
+    payload_key: str,
+    build_sync_item: Callable[[dict[str, Any], str | None], dict[str, Any]],
+) -> bool:
+    """skill / plugin 内置同步的通用骨架：扫描 → 上传 zip → POST sync-builtin。
+
+    asset_label 用于日志；scan_fn 产出资产列表（每项含 name/zip_bytes/sha 等）；
+    path_segment / endpoint_path / payload_key 区分 skills 与 plugins 通道；
+    build_sync_item(asset, object_key) 拼出各自的 sync item 形状。
+    """
     base = (MATMASTER_TOOLS_SERVER or "").strip().rstrip("/")
     if not base:
-        logger.warning("MATMASTER_TOOLS_SERVER empty, skip builtin skills sync")
+        logger.warning(
+            "MATMASTER_TOOLS_SERVER empty, skip builtin %s sync", asset_label
+        )
         return False
 
-    skills = _scan_builtin_skills()
-    if not skills:
-        logger.warning("No builtin skills found, skip sync")
+    assets = scan_fn()
+    if not assets:
+        logger.warning("No builtin %s found, skip sync", asset_label)
         return False
 
     version = _get_version()
@@ -261,60 +277,101 @@ def sync_builtin_skills_to_tools_server() -> bool:
 
     sync_items: list[dict[str, Any]] = []
     with httpx.Client(timeout=httpx.Timeout(120.0, connect=15.0)) as client:
-        for skill in skills:
+        for asset in assets:
             object_key = _upload_zip_to_tools_server(
-                client, base, skill["zip_bytes"], skill["name"]
+                client,
+                base,
+                asset["zip_bytes"],
+                asset["name"],
+                path_segment=path_segment,
             )
-            item: dict[str, Any] = {
-                "name": skill["name"],
-                "description": skill["description"],
-                "content_sha256": skill["content_sha256"],
-                "byte_size": skill["byte_size"],
-                "file_count": skill["file_count"],
-            }
-            if object_key:
-                item["bundle_object_key"] = object_key
-            if skill.get("tools"):
-                item["tools"] = skill["tools"]
-            sync_items.append(item)
+            sync_items.append(build_sync_item(asset, object_key))
             logger.info(
-                "builtin skill packed: name=%s sha256=%s size=%d files=%d key=%s",
-                skill["name"],
-                skill["content_sha256"][:12],
-                skill["byte_size"],
-                skill["file_count"],
+                "builtin %s packed: name=%s sha256=%s size=%d files=%d key=%s",
+                asset_label,
+                asset["name"],
+                asset["content_sha256"][:12],
+                asset["byte_size"],
+                asset["file_count"],
                 object_key or "(upload failed)",
             )
 
     payload: dict[str, Any] = {
         "version": version,
         "build_seq": build_seq,
-        "skills": sync_items,
+        payload_key: sync_items,
     }
 
-    url = f"{base}/api/v1/skills/sync-builtin"
+    url = f"{base}{endpoint_path}"
     try:
         with httpx.Client(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
             r = client.post(url, json=payload)
             r.raise_for_status()
             body = r.json()
     except Exception as e:
-        logger.warning("builtin skills sync failed: %s", e, exc_info=True)
+        logger.warning("builtin %s sync failed: %s", asset_label, e, exc_info=True)
         return False
 
     if not isinstance(body, dict) or body.get("code") != 0:
-        logger.warning("builtin skills sync bad response: %s", body)
+        logger.warning("builtin %s sync bad response: %s", asset_label, body)
         return False
 
     data = body.get("data", {})
     logger.info(
-        "builtin skills synced: version=%s count=%d deleted=%s inserted=%s",
+        "builtin %s synced: version=%s count=%d deleted=%s inserted=%s",
+        asset_label,
         version,
-        len(skills),
+        len(assets),
         data.get("deleted"),
         data.get("inserted"),
     )
     return True
+
+
+def _build_skill_sync_item(
+    skill: dict[str, Any], object_key: str | None
+) -> dict[str, Any]:
+    item: dict[str, Any] = {
+        "name": skill["name"],
+        "description": skill["description"],
+        "content_sha256": skill["content_sha256"],
+        "byte_size": skill["byte_size"],
+        "file_count": skill["file_count"],
+    }
+    if object_key:
+        item["bundle_object_key"] = object_key
+    if skill.get("tools"):
+        item["tools"] = skill["tools"]
+    return item
+
+
+def _build_plugin_sync_item(
+    plugin: dict[str, Any], object_key: str | None
+) -> dict[str, Any]:
+    item: dict[str, Any] = {
+        "name": plugin["name"],
+        "description": plugin["description"],
+        "category": plugin.get("category"),
+        "member_skills": plugin["member_skills"],
+        "content_sha256": plugin["content_sha256"],
+        "byte_size": plugin["byte_size"],
+        "file_count": plugin["file_count"],
+    }
+    if object_key:
+        item["bundle_object_key"] = object_key
+    return item
+
+
+def sync_builtin_skills_to_tools_server() -> bool:
+    """同步内置技能到 tools-server（含 zip 上传）。返回是否成功。"""
+    return _sync_assets_to_tools_server(
+        asset_label="skills",
+        scan_fn=_scan_builtin_skills,
+        path_segment="skills",
+        endpoint_path="/api/v1/skills/sync-builtin",
+        payload_key="skills",
+        build_sync_item=_build_skill_sync_item,
+    )
 
 
 def sync_builtin_plugins_to_tools_server() -> bool:
@@ -322,76 +379,11 @@ def sync_builtin_plugins_to_tools_server() -> bool:
 
     与 skill 同步独立、互不阻塞；plugin 成员不再压平进 /skills（D6 翻转）。
     """
-    base = (MATMASTER_TOOLS_SERVER or "").strip().rstrip("/")
-    if not base:
-        logger.warning("MATMASTER_TOOLS_SERVER empty, skip builtin plugins sync")
-        return False
-
-    plugins = _scan_builtin_plugins()
-    if not plugins:
-        logger.warning("No builtin plugins found, skip sync")
-        return False
-
-    version = _get_version()
-    build_seq = _get_build_seq()
-
-    sync_items: list[dict[str, Any]] = []
-    with httpx.Client(timeout=httpx.Timeout(120.0, connect=15.0)) as client:
-        for plugin in plugins:
-            object_key = _upload_zip_to_tools_server(
-                client,
-                base,
-                plugin["zip_bytes"],
-                plugin["name"],
-                path_segment="plugins",
-            )
-            item: dict[str, Any] = {
-                "name": plugin["name"],
-                "description": plugin["description"],
-                "category": plugin.get("category"),
-                "member_skills": plugin["member_skills"],
-                "content_sha256": plugin["content_sha256"],
-                "byte_size": plugin["byte_size"],
-                "file_count": plugin["file_count"],
-            }
-            if object_key:
-                item["bundle_object_key"] = object_key
-            sync_items.append(item)
-            logger.info(
-                "builtin plugin packed: name=%s members=%d sha256=%s size=%d key=%s",
-                plugin["name"],
-                len(plugin["member_skills"]),
-                plugin["content_sha256"][:12],
-                plugin["byte_size"],
-                object_key or "(upload failed)",
-            )
-
-    payload: dict[str, Any] = {
-        "version": version,
-        "build_seq": build_seq,
-        "plugins": sync_items,
-    }
-
-    url = f"{base}/api/v1/plugins/sync-builtin"
-    try:
-        with httpx.Client(timeout=httpx.Timeout(30.0, connect=10.0)) as client:
-            r = client.post(url, json=payload)
-            r.raise_for_status()
-            body = r.json()
-    except Exception as e:
-        logger.warning("builtin plugins sync failed: %s", e, exc_info=True)
-        return False
-
-    if not isinstance(body, dict) or body.get("code") != 0:
-        logger.warning("builtin plugins sync bad response: %s", body)
-        return False
-
-    data = body.get("data", {})
-    logger.info(
-        "builtin plugins synced: version=%s count=%d deleted=%s inserted=%s",
-        version,
-        len(plugins),
-        data.get("deleted"),
-        data.get("inserted"),
+    return _sync_assets_to_tools_server(
+        asset_label="plugins",
+        scan_fn=_scan_builtin_plugins,
+        path_segment="plugins",
+        endpoint_path="/api/v1/plugins/sync-builtin",
+        payload_key="plugins",
+        build_sync_item=_build_plugin_sync_item,
     )
-    return True
