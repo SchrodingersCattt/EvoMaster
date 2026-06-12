@@ -191,10 +191,15 @@ test:
   tags:
     - k8s-runner-ack
 
-# test：push test 分支自动同步到 test tools-server
+# test：push test 分支，单测通过后再同步到 test tools-server
+# needs 覆盖 base：显式等 docker-build + test，避免 DAG 只凭 docker-build 完成就插队、绕过单测。
 sync-builtin-assets:
   extends: .sync-builtin-base
   stage: sync-builtin
+  needs:
+    - job: docker-build
+      artifacts: true
+    - job: test
   variables:
     SYNC_TOOLS_SERVER: "https://matmaster-tools-server.test.bohrium.com"
     SYNC_SERVICE_ENV: "test"
