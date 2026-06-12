@@ -31,8 +31,10 @@ stages:
   - deploy-test
   - manual-uat
   - deploy-uat
+  - sync-builtin-uat
   - check
   - manual-online
+  - sync-builtin-prod
 
 .curl: &curl
   >-
@@ -149,11 +151,10 @@ test:
       when: on_success
 
 # 内置技能 / 插件同步到 tools-server：用刚构建的镜像跑一次性命令（照搬 sync-question-catalog 模式）。
-# 部署前跑、天然单例，替代原 app.py 启动钩子里的全量同步（不再多 pod 并发打爆 tools-server）。
-# 失败以非零退出码标红 pipeline。tools-server 地址由 MATMASTER_TOOLS_SERVER / SERVICE_ENV 决定。
-# 当前仅在 test 分支自动同步；tag/prod 场景需先确认 MATMASTER_TOOLS_SERVER 按环境注入后再放开 rules。
-sync-builtin-assets:
-  stage: sync-builtin
+# 天然单例，替代原 app.py 启动钩子里的全量同步（不再多 pod 并发打爆 tools-server）。
+# 失败以非零退出码标红 pipeline。各环境通过 SYNC_TOOLS_SERVER / SYNC_SERVICE_ENV 显式指定
+# 对应 tools-server 域名，不依赖 runner 透传变量，避免误推到错误环境。
+.sync-builtin-base:
   image: $REGISTRY/public/ubuntu:gitlab-docker
   variables:
     DOCKER_HOST: tcp://docker-build-service:32375
@@ -178,20 +179,50 @@ sync-builtin-assets:
       test -n "${DYNAMIC_IMAGE:-}" || (echo "sync-builtin: 缺少 DYNAMIC_IMAGE（需 docker-build 产出 build.env）" && exit 1)
     - docker pull ${DYNAMIC_IMAGE}
   script:
-    - docker rm -f builtin-sync || true
+    - docker rm -f "builtin-sync-${CI_JOB_ID}" || true
     - |
-      docker create --name builtin-sync \
-        -e MATMASTER_TOOLS_SERVER \
-        -e SERVICE_ENV \
+      docker create --name "builtin-sync-${CI_JOB_ID}" \
+        -e MATMASTER_TOOLS_SERVER="${SYNC_TOOLS_SERVER}" \
+        -e SERVICE_ENV="${SYNC_SERVICE_ENV}" \
         ${DYNAMIC_IMAGE} \
         sh -c "cd /app && . .venv/bin/activate && python -m src.services.builtin_skills_sync"
-    - docker start -a builtin-sync
-    - docker rm builtin-sync
+    - docker start -a "builtin-sync-${CI_JOB_ID}"
+    - docker rm "builtin-sync-${CI_JOB_ID}"
   tags:
     - k8s-runner-ack
+
+# test：push test 分支自动同步到 test tools-server
+sync-builtin-assets:
+  extends: .sync-builtin-base
+  stage: sync-builtin
+  variables:
+    SYNC_TOOLS_SERVER: "https://matmaster-tools-server.test.bohrium.com"
+    SYNC_SERVICE_ENV: "test"
   rules:
     - if: '($CI_COMMIT_BRANCH =~ /.*test$/) && $CI_COMMIT_TAG == null'
       when: on_success
+
+# uat：打 tag 时自动同步到 uat tools-server（uat 域名）
+sync-builtin-uat:
+  extends: .sync-builtin-base
+  stage: sync-builtin-uat
+  variables:
+    SYNC_TOOLS_SERVER: "https://matmaster-tools-server.uat.bohrium.com"
+    SYNC_SERVICE_ENV: "uat"
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: on_success
+
+# prod：打 tag 时手动触发同步到 prod tools-server（prod 域名），与 manual-online 一样谨慎
+sync-builtin-prod:
+  extends: .sync-builtin-base
+  stage: sync-builtin-prod
+  variables:
+    SYNC_TOOLS_SERVER: "https://matmaster-tools-server.bohrium.com"
+    SYNC_SERVICE_ENV: "prod"
+  rules:
+    - if: '$CI_COMMIT_TAG'
+      when: manual
 
 deploy-test:
   stage: deploy-test
