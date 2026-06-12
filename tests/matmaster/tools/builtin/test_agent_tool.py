@@ -6,6 +6,7 @@ from matmaster.config.exp import ExpSubagentMeta
 from matmaster.tools.builtin.agent_tool import AgentTool
 from matmaster.tools.tool_result import ToolResult
 from matmaster.types.stream_drain import DrainResult
+from matmaster.types.tool_spec import ToolExecutionContext
 
 
 def _meta(**overrides):
@@ -113,7 +114,9 @@ class TestAgentValidation:
         assert decision.decision == "deny"
 
     def test_execute_returns_tool_result_payload(self):
-        async def fake_spawn(exp_name, task, cancel_token=None):
+        async def fake_spawn(
+            exp_name, task, cancel_token=None, *, parent_call_id=None, task_summary=""
+        ):
             return DrainResult(
                 status="completed",
                 reason="natural",
@@ -138,7 +141,9 @@ class TestAgentValidation:
         assert result.payload["task_summary"] == "trace parser flow"
 
     def test_execute_maps_completed_drain_result_to_tool_result_payload(self):
-        async def fake_spawn(exp_name, task, cancel_token=None):
+        async def fake_spawn(
+            exp_name, task, cancel_token=None, *, parent_call_id=None, task_summary=""
+        ):
             return DrainResult(
                 status="completed",
                 reason="natural",
@@ -151,6 +156,7 @@ class TestAgentValidation:
                     "cache_read_tokens": 40,
                 },
                 messages=[],
+                spawn_id="feedface00000001",
             )
 
         tool = AgentTool(spawn_fn=fake_spawn, available_exps=[_meta()])
@@ -181,9 +187,12 @@ class TestAgentValidation:
         assert result.payload["subagent_status"] == "completed"
         assert result.payload["subagent_reason"] == "natural"
         assert result.payload["subagent_num_turns"] == 2
+        assert result.payload["spawn_id"] == "feedface00000001"
 
     def test_execute_maps_noncompleted_drain_result_to_status_content(self):
-        async def fake_spawn(exp_name, task, cancel_token=None):
+        async def fake_spawn(
+            exp_name, task, cancel_token=None, *, parent_call_id=None, task_summary=""
+        ):
             return DrainResult(
                 status="cancelled",
                 reason="user_stop",
@@ -216,3 +225,68 @@ class TestAgentValidation:
         assert result.payload["subagent_status"] == "cancelled"
         assert result.payload["subagent_reason"] == "user_stop"
         assert result.payload["subagent_num_turns"] == 1
+
+    def test_execute_with_context_passes_tool_call_id_as_parent_call_id(self):
+        captured: dict[str, object] = {}
+
+        async def fake_spawn(
+            exp_name, task, cancel_token=None, *, parent_call_id=None, task_summary=""
+        ):
+            captured["parent_call_id"] = parent_call_id
+            captured["task_summary"] = task_summary
+            return DrainResult(
+                status="completed",
+                reason="natural",
+                final_content="ok",
+                num_turns=1,
+                usage={},
+                messages=[],
+                spawn_id="feedface00000001",
+            )
+
+        tool = AgentTool(spawn_fn=fake_spawn, available_exps=[_meta()])
+        result = asyncio.run(
+            tool.execute_with_context(
+                {
+                    "exp_name": "explore",
+                    "task_summary": "trace parser flow",
+                    "prompt": "Inspect the parser stack.",
+                },
+                ToolExecutionContext(tool_call_id="call_7"),
+            )
+        )
+
+        assert captured["parent_call_id"] == "call_7"
+        assert captured["task_summary"] == "trace parser flow"
+        assert isinstance(result, ToolResult)
+        assert result.payload["spawn_id"] == "feedface00000001"
+
+    def test_execute_without_exec_ctx_passes_none_parent_call_id(self):
+        captured: dict[str, object] = {}
+
+        async def fake_spawn(
+            exp_name, task, cancel_token=None, *, parent_call_id=None, task_summary=""
+        ):
+            captured["parent_call_id"] = parent_call_id
+            return DrainResult(
+                status="completed",
+                reason="natural",
+                final_content="ok",
+                num_turns=1,
+                usage={},
+                messages=[],
+            )
+
+        tool = AgentTool(spawn_fn=fake_spawn, available_exps=[_meta()])
+        result = asyncio.run(
+            tool.execute(
+                {
+                    "exp_name": "explore",
+                    "prompt": "Inspect the parser stack.",
+                }
+            )
+        )
+
+        assert captured["parent_call_id"] is None
+        assert isinstance(result, ToolResult)
+        assert result.payload["spawn_id"] is None
