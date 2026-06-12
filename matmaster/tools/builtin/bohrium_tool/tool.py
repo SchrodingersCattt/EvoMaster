@@ -296,7 +296,7 @@ class BohriumTool(BuiltinTool):
             'long-running monitoring happens automatically in the background, '
             'and a job\'s completion will be surfaced in later context. Only '
             'call query when you actively need to confirm one job\'s current '
-            'status, by single job_id. Does not download artifacts.\n'
+            'status, by single job_id.\n'
             '- **download**: download artifacts for a finished or failed job into result_dir. '
             'Use only after query reports Finished or Failed. Requires result_dir; '
             'retrieves logs and artifacts for analysis.\n'
