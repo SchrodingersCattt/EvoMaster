@@ -393,6 +393,13 @@ def _public_content_for_event(
     if event_type == 'exp_run':
         return {'exp_name': payload.get('exp_name')}
 
+    if event_type == 'subagent_spawn':
+        return {
+            'parent_call_id': payload.get('parent_call_id'),
+            'exp_name': payload.get('exp_name'),
+            'task_summary': payload.get('task_summary', ''),
+        }
+
     raw_content = payload.get('content')
     if raw_content is not None:
         return raw_content
