@@ -83,3 +83,25 @@ async def test_drain_run_stream_copies_finish_detail() -> None:
     result = await drain_run_stream(stream())
 
     assert result.finish_detail is detail
+
+
+@pytest.mark.asyncio
+async def test_drain_run_stream_forward_terminal_forwards_run_result_last() -> None:
+    seen: list[str] = []
+
+    async def stream():
+        yield ResponseEvent(source="agent", content="child")
+        yield RunResultEvent(
+            source="agent",
+            status="completed",
+            reason="natural",
+            final_content="done",
+        )
+
+    async def on_event(event) -> None:
+        seen.append(type(event).__name__)
+
+    result = await drain_run_stream(stream(), on_event=on_event, forward_terminal=True)
+
+    assert seen == ["ResponseEvent", "RunResultEvent"]
+    assert result.final_content == "done"
