@@ -1,7 +1,9 @@
 """Tests for the runtime environment section builder.
 
-Covers: all fields rendered, date rendered to the day only, tz label derived
-from now's tzinfo, and pure-function behaviour (output follows the now arg).
+Covers: workdir and date rendered, date rendered to the day only, tz label
+derived from now's tzinfo, and pure-function behaviour (output follows the
+now arg). Static image properties (OS/shell/preinstalled software) live in
+``_base.toml``, not here.
 """
 
 from __future__ import annotations
@@ -9,12 +11,7 @@ from __future__ import annotations
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from matmaster.context.environment import (
-    EXECUTION_OS,
-    EXECUTION_PLATFORM,
-    EXECUTION_SHELL,
-    build_environment_section,
-)
+from matmaster.context.environment import build_environment_section
 
 SHANGHAI = ZoneInfo("Asia/Shanghai")
 
@@ -26,9 +23,6 @@ def test_section_contains_all_fields() -> None:
     )
     assert "You have been invoked in the following environment:" in section
     assert " - Working directory: /share/projects/run1" in section
-    assert f" - Platform: {EXECUTION_PLATFORM}" in section
-    assert f" - Shell: {EXECUTION_SHELL}" in section
-    assert f" - OS Version: {EXECUTION_OS}" in section
 
 
 def test_date_rendered_to_the_day_with_tz_label() -> None:

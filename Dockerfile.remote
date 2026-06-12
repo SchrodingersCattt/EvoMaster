@@ -1,5 +1,6 @@
 # Remote 节点镜像
 # 构建: docker build -f Dockerfile.remote -t remote-node .
+# 注意: 预装清单变更时, 同步更新 matmaster/exps/_base.toml 的 Preinstalled environment 段
 FROM registry.dp.tech/dptech/ubuntu:ubuntu24.04-py3.12
 
 ENV DEBIAN_FRONTEND=noninteractive
