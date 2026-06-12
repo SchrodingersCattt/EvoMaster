@@ -16,6 +16,7 @@ from matmaster.types.events import (
     BohriumNodeEvent,
     BusEvent,
     CancelledEvent,
+    CheckpointEvent,
     CompactionEvent,
     ErrorEvent,
     ExpRunEvent,
@@ -27,6 +28,7 @@ from matmaster.types.events import (
     RunResultEvent,
     SkillHitEvent,
     StreamClosedEvent,
+    SubagentSpawnEvent,
     SystemEvent,
     ThoughtEvent,
     ToolCallEvent,
@@ -522,6 +524,28 @@ class TestSystemEvents:
         assert evt.type == "ask_question_timeout"
 
 
+class TestSubagentSpawnEvent:
+    def test_instantiation(self) -> None:
+        evt = SubagentSpawnEvent(
+            source="MatMaster:direct",
+            spawn_id="ab12cd34ef56ab12",
+            parent_call_id="call_1",
+            exp_name="direct",
+            task_summary="trace parser flow",
+        )
+        assert evt.type == "subagent_spawn"
+        assert evt.spawn_id == "ab12cd34ef56ab12"
+        assert evt.parent_call_id == "call_1"
+        assert evt.exp_name == "direct"
+        assert evt.task_summary == "trace parser flow"
+
+    def test_defaults_allow_missing_binding(self) -> None:
+        evt = SubagentSpawnEvent(source="MatMaster:direct", exp_name="direct")
+        assert evt.parent_call_id is None
+        assert evt.task_summary == ""
+        assert evt.spawn_id is None
+
+
 # ── Discriminated union tests ───────────────────────────
 
 
@@ -571,6 +595,7 @@ class TestAgentEventDiscriminator:
                 "call_id": "c",
                 "tool_name": "t",
             },
+            {"type": "checkpoint", "source": "a"},
         ]
         expected_types = [
             ThoughtEvent,
@@ -582,6 +607,7 @@ class TestAgentEventDiscriminator:
             AssistantStateEvent,
             SkillHitEvent,
             ToolProgressEvent,
+            CheckpointEvent,
         ]
         for payload, expected in zip(payloads, expected_types):
             result = _agent_event_adapter.validate_python(payload)
@@ -643,6 +669,7 @@ class TestSystemEventDiscriminator:
             {"type": "mcp_server_status", "source": "s", "server_name": "n"},
             {"type": "mcp_connect", "source": "s"},
             {"type": "response_figures", "source": "s", "figures": []},
+            {"type": "subagent_spawn", "source": "s", "exp_name": "e"},
         ]
         expected_types = [
             AskQuestionEvent,
@@ -657,6 +684,7 @@ class TestSystemEventDiscriminator:
             McpServerStatusEvent,
             McpConnectEvent,
             ResponseFiguresEvent,
+            SubagentSpawnEvent,
         ]
         for payload, expected in zip(payloads, expected_types):
             result = _system_event_adapter.validate_python(payload)
@@ -666,10 +694,10 @@ class TestSystemEventDiscriminator:
 
 
 class TestBusEventUnion:
-    def test_validates_all_21_types(self) -> None:
-        """BusEvent union can validate all 21 event types."""
+    def test_validates_all_23_types(self) -> None:
+        """BusEvent union can validate all 23 event types."""
         payloads = [
-            # 9 AgentEvent types
+            # 10 AgentEvent types
             {"type": "thought", "source": "a"},
             {"type": "response", "source": "a", "content": "hello"},
             {
@@ -696,7 +724,8 @@ class TestBusEventUnion:
                 "call_id": "c",
                 "tool_name": "t",
             },
-            # 12 SystemEvent types
+            {"type": "checkpoint", "source": "a"},
+            # 13 SystemEvent types
             {
                 "type": "ask_question",
                 "source": "s",
@@ -730,6 +759,7 @@ class TestBusEventUnion:
             {"type": "mcp_server_status", "source": "s", "server_name": "n"},
             {"type": "mcp_connect", "source": "s"},
             {"type": "response_figures", "source": "s", "figures": []},
+            {"type": "subagent_spawn", "source": "s", "exp_name": "e"},
         ]
         for payload in payloads:
             result = _bus_event_adapter.validate_python(payload)
@@ -780,6 +810,7 @@ class TestEventSerializationRoundtrip:
             AssistantStateEvent(source="a", state={"k": "v"}),
             SkillHitEvent(source="a", skill_name="s"),
             ToolProgressEvent(source="a", call_id="c1", tool_name="t1"),
+            CheckpointEvent(source="a"),
             AskQuestionEvent(source="s", request_id="aq_1", questions=[]),
             AskQuestionReplyEvent(source="s", request_id="aq_1", answers={}),
             AskQuestionTimeoutEvent(source="s", request_id="aq_1", questions=[]),
@@ -797,6 +828,12 @@ class TestEventSerializationRoundtrip:
             McpServerStatusEvent(source="s", server_name="n"),
             McpConnectEvent(source="s"),
             ResponseFiguresEvent(source="s", figures=[]),
+            SubagentSpawnEvent(
+                source="MatMaster:direct",
+                spawn_id="ab12cd34ef56ab12",
+                parent_call_id="call_1",
+                exp_name="direct",
+            ),
         ]
         for event in events:
             data = event.model_dump()
@@ -807,8 +844,8 @@ class TestEventSerializationRoundtrip:
 
 
 class TestNoTypeCollision:
-    def test_all_21_type_literals_are_unique(self) -> None:
-        """All 21 type literals must be globally unique strings."""
+    def test_all_23_type_literals_are_unique(self) -> None:
+        """All 23 type literals must be globally unique strings."""
         type_values = [
             "thought",
             "response",
@@ -817,6 +854,7 @@ class TestNoTypeCollision:
             "run_result",
             "error",
             "assistant_state",
+            "checkpoint",
             "skill_hit",
             "tool_progress",
             "ask_question",
@@ -831,9 +869,10 @@ class TestNoTypeCollision:
             "mcp_server_status",
             "mcp_connect",
             "response_figures",
+            "subagent_spawn",
         ]
-        assert len(type_values) == 21
-        assert len(set(type_values)) == 21
+        assert len(type_values) == 23
+        assert len(set(type_values)) == 23
 
 
 # ── Edge case tests (QUAL-01) ─────────────────────────
@@ -847,6 +886,7 @@ _ALL_EVENT_CLASSES = [
     RunResultEvent,
     ErrorEvent,
     AssistantStateEvent,
+    CheckpointEvent,
     SkillHitEvent,
     ToolProgressEvent,
     AskQuestionEvent,
@@ -861,6 +901,7 @@ _ALL_EVENT_CLASSES = [
     McpServerStatusEvent,
     McpConnectEvent,
     ResponseFiguresEvent,
+    SubagentSpawnEvent,
 ]
 
 
@@ -883,6 +924,7 @@ def _make_event_instance(cls):
             "trigger_tokens": 950,
         },
         ExpRunEvent: {"exp_name": "mat_master"},
+        SubagentSpawnEvent: {"exp_name": "direct"},
         WorkspaceUploadErrorEvent: {"message": "upload failed"},
         McpServerStatusEvent: {"server_name": "code-server"},
         ResponseFiguresEvent: {"figures": []},
