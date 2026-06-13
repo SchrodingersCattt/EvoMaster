@@ -304,3 +304,58 @@ def test_scan_lost_with_active_has_first_failure_shape(jobs_table, sessions_shad
     )
     assert first is not None
     assert first["status"] == "lost"
+
+
+def test_mark_handled_by_job_keys_idempotent_and_session_scoped(
+    jobs_table, sessions_shadow
+):
+    _register_session(sessions_shadow)
+    _seed_job(jobs_table, job_id="301", status="finished")
+    _seed_job(jobs_table, job_id="302")
+    _register_session(sessions_shadow, session="sess-2")
+    _seed_job(jobs_table, session="sess-2", job_id="303", status="finished")
+
+    assert (
+        jobs_table.mark_handled_by_job_keys(
+            user_id="u1",
+            org_id="o1",
+            session_id="sess-1",
+            job_keys=[(True, "301")],
+        )
+        == 0
+    )
+
+    affected = jobs_table.mark_handled_by_job_keys(
+        user_id="u1",
+        org_id="o1",
+        session_id="sess-1",
+        job_keys=[(False, "301"), (False, "302"), (False, "303")],
+    )
+
+    assert affected == 1
+    assert (
+        jobs_table.list_pending_terminal_snapshot(
+            user_id="u1", org_id="o1", session_id="sess-1"
+        )
+        == []
+    )
+    other = jobs_table.list_pending_terminal_snapshot(
+        user_id="u1", org_id="o1", session_id="sess-2"
+    )
+    assert [r["job_id"] for r in other] == ["303"]
+
+    assert (
+        jobs_table.mark_handled_by_job_keys(
+            user_id="u1",
+            org_id="o1",
+            session_id="sess-1",
+            job_keys=[(False, "301")],
+        )
+        == 0
+    )
+    assert (
+        jobs_table.mark_handled_by_job_keys(
+            user_id="u1", org_id="o1", session_id="sess-1", job_keys=[]
+        )
+        == 0
+    )

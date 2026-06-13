@@ -487,6 +487,46 @@ class BohriumJobsTable(BaseTable):
             conn.commit()
         return affected
 
+    def mark_handled_by_job_keys(
+        self,
+        *,
+        user_id: str,
+        org_id: str,
+        session_id: str,
+        job_keys: Sequence[tuple[bool, str]],
+        chunk_size: int = 500,
+    ) -> int:
+        """按 run 内前台观察到的 (sandbox, job_id) 批量 ack；幂等。
+
+        session_id 约束是安全闸：apply_poll 按 owner+job_id 定位、不带 session，
+        跨会话查询写终态到他会话的行，但 ack 只清本会话行，他会话应得的唤醒
+        一个不少。返回实际更新行数；分块单事务提交。
+        """
+        keys = [(1 if sandbox else 0, str(job_id)) for sandbox, job_id in job_keys]
+        if not keys:
+            return 0
+        affected = 0
+        with self.get_connection() as conn:
+            with conn.cursor() as cur:
+                for start in range(0, len(keys), int(chunk_size)):
+                    chunk = keys[start : start + int(chunk_size)]
+                    placeholders = ", ".join(["(%s, %s)"] * len(chunk))
+                    flat = [v for pair in chunk for v in pair]
+                    cur.execute(
+                        f"""
+                        UPDATE {self.table_name}
+                        SET handled_at = NOW()
+                        WHERE user_id = %s AND org_id = %s AND session_id = %s
+                          AND (sandbox, job_id) IN ({placeholders})
+                          AND terminal_at IS NOT NULL
+                          AND handled_at IS NULL
+                        """,
+                        (user_id, org_id, session_id, *flat),
+                    )
+                    affected += cur.rowcount
+            conn.commit()
+        return affected
+
     def get_first_pending_failed(
         self, *, user_id: str, org_id: str, session_id: str, invocation_key: str
     ) -> dict[str, Any] | None:
