@@ -1487,14 +1487,22 @@ questions:
     error, the agent confidently told the user to `pip install deepmd-kit-cu12`
     (no such PyPI package), to run `dp run lmp` / `dp --pt freeze -m ...`
     (non-existent command/flag), and `pip install lammps-dp`, only admitting each
-    was wrong after the user tried it and reported failure.
+    was wrong after the user tried it and reported failure. In a second trajectory,
+    while freezing a fine-tuned DPA-3 model that hit `border_op is not available ...
+    customized PyTorch OP library is not built when freezing the model`, the agent
+    confidently prescribed `dp --pt freeze --no-border` (a flag the installed tool
+    version does not support) plus an unverified `export DP_ENABLE_NATIVE_OPTIMIZATION=0`
+    workaround, again only conceding the flag did not exist after the user ran it and
+    reported the error.
   human_prompt_seed: '我在 GPU 服务器上用 pip 装了 deepmd-kit[torch,lmp]，想用微调好的
     DPA3（.pth）在 LAMMPS 里跑 MD，结果一加载模型就报 "PyTorch backend is not built"。
     我确认是在同一个 conda 环境里一起装的。这要怎么解决？'
   tags:
   - meta_grounding
   - eng_lammps
+  - eng_deepmd
   source_session: 80d132aab8ee4383bbaaf7d722a2bf04
+  # additional negative trajectory (dp freeze --no-border): 5acf3721a0fa426ca1e480d03294520d
   data_files: []
   reference_answers:
   - key: turn_budget
@@ -1515,10 +1523,11 @@ questions:
     weight: 3.0
   - id: no_fabricated_commands_or_flags
     criterion: The agent does NOT invent non-existent CLI commands/subcommands/flags
-      and assert they work (e.g. `dp run lmp`, `dp --pt run lmp`, or a `dp --pt
-      freeze -m <ckpt>` flag that the tool version does not support). Grounded
-      commands, or ones explicitly offered for the user to confirm against
-      `--help`/docs, are acceptable; a confident invented command is a FAIL.
+      and assert they work (e.g. `dp run lmp`, `dp --pt run lmp`, a `dp --pt
+      freeze -m <ckpt>` flag, or a `dp --pt freeze --no-border` flag that the tool
+      version does not support). Grounded commands, or ones explicitly offered for
+      the user to confirm against `--help`/docs, are acceptable; a confident invented
+      command is a FAIL.
     axis: grounding
     verify: llm_binary_judge
     weight: 3.0
