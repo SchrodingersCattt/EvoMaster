@@ -28,6 +28,8 @@ def _unit(**over):
         failed_total=0,
         failed_handled=0,
         succeeded=1,
+        unknown_count=0,
+        oldest_pending_age_seconds=0,
         max_pending_terminal_id=10,
     )
     base.update(over)
@@ -104,6 +106,66 @@ def test_progress_count_bounded_by_segments_total_1000():
     assert progress_hits <= CFG.progress_segments
 
 
+def test_decide_stalled_when_all_actives_unknown_and_pending_aged():
+    unit = _unit(
+        total=10,
+        active=7,
+        pending_terminal=3,
+        unknown_count=7,
+        oldest_pending_age_seconds=900,
+    )
+    assert decide(unit, CFG) is Reason.STALLED
+
+
+def test_decide_no_stalled_when_some_active_still_running():
+    unit = _unit(
+        total=10,
+        active=7,
+        pending_terminal=3,
+        unknown_count=6,
+        oldest_pending_age_seconds=3600,
+    )
+    assert decide(unit, CFG) is None
+
+
+def test_decide_no_stalled_before_age_threshold():
+    unit = _unit(
+        total=10,
+        active=7,
+        pending_terminal=3,
+        unknown_count=7,
+        oldest_pending_age_seconds=899,
+    )
+    assert decide(unit, CFG) is None
+
+
+def test_decide_progress_preempts_stalled_at_threshold():
+    unit = _unit(
+        total=10,
+        active=6,
+        pending_terminal=4,
+        unknown_count=6,
+        oldest_pending_age_seconds=3600,
+    )
+    assert decide(unit, CFG) is Reason.PROGRESS
+
+
+def test_decide_first_failure_preempts_stalled():
+    unit = _unit(
+        total=10,
+        active=7,
+        pending_terminal=3,
+        failed_total=1,
+        unknown_count=7,
+        oldest_pending_age_seconds=3600,
+    )
+    assert decide(unit, CFG) is Reason.FIRST_FAILURE
+
+
+def test_reason_priority_order_for_session_merge():
+    assert Reason.PROGRESS < Reason.STALLED < Reason.FIRST_FAILURE < Reason.FINAL
+
+
 # ---------- render_prompt ----------
 
 _SUFFIX = "本轮交付为 session 级"
@@ -144,6 +206,17 @@ def test_render_progress_prompt_has_terminal_ratio_and_suffix():
         {"total": 9, "active": 3, "succeeded": 6, "failed_total": 0},
     )
     assert "已终态 6/9" in prompt and "仍在运行 3" in prompt
+    assert _SUFFIX in prompt
+
+
+def test_render_stalled_prompt_states_unqueryable_jobs():
+    prompt = render_prompt(
+        Reason.STALLED,
+        {"total": 10, "active": 7, "succeeded": 3, "failed_total": 0, "unknown": 7},
+    )
+    assert "3/10" in prompt
+    assert "7 个作业状态长时间无法查询" in prompt
+    assert "仍在运行" not in prompt
     assert _SUFFIX in prompt
 
 
@@ -284,6 +357,26 @@ def test_tick_first_failure_fetches_job_info_into_prompt():
         }
     ]
     assert "j-9" in stream.calls[0]["prompt"]
+    assert stream.calls[0]["delivery"] == DeliverySpec(notify=False)
+
+
+def test_tick_stalled_unit_triggers_without_notify():
+    units = [
+        _unit(
+            total=10,
+            active=7,
+            pending_terminal=3,
+            succeeded=3,
+            unknown_count=7,
+            oldest_pending_age_seconds=900,
+        )
+    ]
+    sched, _, _, _, stream = _scheduler(units)
+
+    summary = sched.tick()
+
+    assert summary["triggered"] == 1
+    assert "无法查询" in stream.calls[0]["prompt"]
     assert stream.calls[0]["delivery"] == DeliverySpec(notify=False)
 
 

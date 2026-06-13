@@ -7,7 +7,9 @@ bohrium_jobs 当前聚合快照推导（无 now、无持久调度态、enqueued 
 
 非 final 自动唤醒上界（per-invocation）= 1(first_failure) + N(progress_segments)，
 与作业数无关：progress 阈值 step=ceil(total/N) 随 total 缩放，每次成功 progress
-经 worker ack 至少消化 step 个 pending。
+经 worker ack 至少消化 step 个 pending。STALLED 是常态上界外的异常态兜底：仅当
+剩余活跃作业全部失联（unknown）且最老 pending 熟化超阈值时触发，每次触发须有
+新终态出现并再次熟化，病态接口间歇恢复下至多每作业一次、间隔 ≥ 阈值。
 """
 
 from __future__ import annotations
@@ -34,8 +36,9 @@ class Reason(enum.IntEnum):
     """唤醒原因；数值即优先级，session 合并时取最高。"""
 
     PROGRESS = 1
-    FIRST_FAILURE = 2
-    FINAL = 3
+    STALLED = 2
+    FIRST_FAILURE = 3
+    FINAL = 4
 
 
 @dataclass(frozen=True)
@@ -43,6 +46,7 @@ class SchedulerConfig:
     progress_segments: int = 3
     reservation_ttl: int = 60
     scan_limit: int = 200
+    stalled_after_seconds: int = 900
 
     @classmethod
     def from_env(cls) -> SchedulerConfig:
@@ -50,15 +54,20 @@ class SchedulerConfig:
             progress_segments=env_int("BOHRIUM_DELIVERY_PROGRESS_SEGMENTS", 3),
             reservation_ttl=env_int("BOHRIUM_DELIVERY_RESERVATION_TTL", 60),
             scan_limit=env_int("BOHRIUM_DELIVERY_SCAN_LIMIT", 200),
+            stalled_after_seconds=env_int(
+                "BOHRIUM_DELIVERY_STALLED_AFTER_SECONDS", 900
+            ),
         )
 
 
 def decide(unit: dict[str, Any], cfg: SchedulerConfig) -> Reason | None:
-    """无状态判定单个 (session, invocation) 聚合单元，三条全 ledger 推导。
+    """无状态判定单个 (session, invocation) 聚合单元，全部从 ledger 推导。
 
-    优先级 final > first_failure > progress；不重复发无需记账：final 经 ack
-    pending→0、first_failure 经 ack failed_handled>0、progress 经 ack 回落到
-    step 之下。
+    优先级 final > first_failure > progress > stalled；不重复发无需记账：final
+    经 ack pending→0、first_failure 经 ack failed_handled>0、progress 经 ack
+    回落到 step 之下、stalled 经 ack pending→0 且再触发须新终态重新熟化。
+    STALLED 取全部失联（unknown_count==active）而非存在失联：还有作业真实
+    运行时等 step/FINAL 是批量节奏的设计本意。
     """
     if unit["pending_terminal"] == 0:
         return None
@@ -69,6 +78,11 @@ def decide(unit: dict[str, Any], cfg: SchedulerConfig) -> Reason | None:
     step = (unit["total"] + cfg.progress_segments - 1) // cfg.progress_segments
     if unit["pending_terminal"] >= step:
         return Reason.PROGRESS
+    if (
+        unit["unknown_count"] == unit["active"]
+        and unit["oldest_pending_age_seconds"] >= cfg.stalled_after_seconds
+    ):
+        return Reason.STALLED
     return None
 
 
@@ -93,6 +107,13 @@ def render_prompt(
         body = (
             f"Bohrium 作业 {job_id}（{job_name}）首次失败（{status}），"
             f"另有 {counts['active']} 个作业仍在运行。"
+        )
+    elif reason is Reason.STALLED:
+        terminal = counts["total"] - counts["active"]
+        body = (
+            f"本会话有 {terminal}/{counts['total']} 个 Bohrium 作业已结束、"
+            f"结果待处理；另有 {counts['unknown']} 个作业状态长时间无法查询"
+            "（可能已被平台清理或接口持续异常）。请处理已有结果并检查这些作业。"
         )
     else:
         terminal = counts["total"] - counts["active"]
@@ -264,6 +285,7 @@ class BohriumCompletionScheduler:
             "active": sum(u["active"] for u in session_units),
             "succeeded": sum(u["succeeded"] for u in session_units),
             "failed_total": sum(u["failed_total"] for u in session_units),
+            "unknown": sum(u["unknown_count"] for u in session_units),
         }
         first_failed = None
         if primary_reason is Reason.FIRST_FAILURE:
