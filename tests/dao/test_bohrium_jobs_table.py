@@ -188,35 +188,6 @@ def test_query_session_active_returns_active_only_sorted(jobs_table) -> None:
     assert j["sandbox"] is True
 
 
-def test_query_session_pending_terminal(jobs_table) -> None:
-    for jid in ["t1", "t2", "t3"]:
-        jobs_table.insert_submitted(**_submit_kwargs(job_id=jid))
-        jobs_table.apply_poll(
-            user_id="user-1",
-            org_id="org-1",
-            sandbox=True,
-            job_id=jid,
-            status="finished",
-            is_terminal=True,
-            backoff_seconds=30,
-        )
-    pending = jobs_table.query_session_pending_terminal(
-        user_id="user-1", org_id="org-1", session_id="sess-1", limit=5
-    )
-    assert len(pending) == 3
-    assert all(j["status"] in {"finished", "failed", "stopped"} for j in pending)
-    with jobs_table.get_connection() as conn:
-        with conn.cursor() as cur:
-            cur.execute(
-                "UPDATE bohrium_jobs SET handled_at = NOW() WHERE job_id = 't1'"
-            )
-        conn.commit()
-    pending2 = jobs_table.query_session_pending_terminal(
-        user_id="user-1", org_id="org-1", session_id="sess-1", limit=5
-    )
-    assert {j["job_id"] for j in pending2} == {"t2", "t3"}
-
-
 def test_mark_poll_error_marks_active_unknown(jobs_table) -> None:
     jobs_table.insert_submitted(**_submit_kwargs(job_id="e1"))
     jobs_table.mark_poll_error(
@@ -388,8 +359,8 @@ def test_lost_job_enters_pending_terminal_queue(jobs_table) -> None:
         backoff_seconds=45,
         lost_after_seconds=3600,
     )
-    pending = jobs_table.query_session_pending_terminal(
-        user_id="user-1", org_id="org-1", session_id="sess-1", limit=5
+    pending = jobs_table.list_pending_terminal_snapshot(
+        user_id="user-1", org_id="org-1", session_id="sess-1"
     )
     assert [j["job_id"] for j in pending] == ["e7"]
     assert pending[0]["status"] == "lost"

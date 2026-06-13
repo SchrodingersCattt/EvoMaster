@@ -212,22 +212,6 @@ class BohriumJobsTable(BaseTable):
                 cur.execute(sql, (user_id, org_id, session_id))
                 return [self._to_agent_job(r) for r in cur.fetchall()]
 
-    def query_session_pending_terminal(
-        self, *, user_id: str, org_id: str, session_id: str, limit: int = 5
-    ) -> list[dict[str, Any]]:
-        """待交付队列：终态已确认且尚未 handled。"""
-        sql = f"""
-            SELECT {self._AGENT_COLUMNS} FROM {self.table_name}
-            WHERE user_id = %s AND org_id = %s AND session_id = %s
-              AND terminal_at IS NOT NULL AND handled_at IS NULL
-            ORDER BY terminal_at ASC, submitted_at ASC
-            LIMIT %s
-        """
-        with self.get_connection() as conn:
-            with conn.cursor() as cur:
-                cur.execute(sql, (user_id, org_id, session_id, int(limit)))
-                return [self._to_agent_job(r) for r in cur.fetchall()]
-
     def _select_due_for_update(self, conn, *, limit: int) -> list[dict[str, Any]]:
         """在给定连接的事务内 SELECT ... FOR UPDATE SKIP LOCKED。不提交。"""
         sql = f"""
