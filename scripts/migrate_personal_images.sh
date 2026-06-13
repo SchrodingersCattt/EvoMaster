@@ -13,10 +13,10 @@
 #   bash scripts/migrate_personal_images.sh
 #
 #   # 2) SOP：别人给一个镜像，临时转一个（推荐日常用法）
-#   #    只给源 -> 目标默认 dptech/matmaster/<原名:原tag>
+#   #    只给源 -> 目标默认 dptech/matmaster:<原名>-<原tag>
 #   bash scripts/migrate_personal_images.sh registry.dp.tech/dptech/dp/native/prod-20000/foo:bar
 #   #    给源 + 目标 -> 可顺手改名（源/目标都可省略 registry.dp.tech/ 前缀）
-#   bash scripts/migrate_personal_images.sh prod-20000/a1:bar dptech/matmaster/gromacs:bar
+#   bash scripts/migrate_personal_images.sh prod-20000/a1:bar dptech/matmaster:gromacs-bar
 #
 #   # 任意用法前加 DRY_RUN=1 只打印将执行的命令（凭证已脱敏）
 #   DRY_RUN=1 bash scripts/migrate_personal_images.sh ...
@@ -47,22 +47,22 @@ if [ "$DRY_RUN" != "1" ]; then
     REGISTRY_AUTH_FILE="$(mktemp)"
     export REGISTRY_AUTH_FILE
     trap 'rm -f "$REGISTRY_AUTH_FILE"' EXIT
+    # mktemp 产生空文件，skopeo login 会先读取该 auth 文件，需初始化为合法空 JSON
+    printf '{}' >"$REGISTRY_AUTH_FILE"
     printf '%s' "$REGISTRY_PASSWORD" |
         skopeo login -u "$REGISTRY_USERNAME" --password-stdin "$REGISTRY"
 fi
 
-# 内置默认清单，格式：源相对路径|目标相对路径（均相对 ${REGISTRY}，保留各自 tag）
-# 目标统一收敛到 dptech/matmaster，并规范化名字
-DEFAULT_MIGRATIONS=(
-    "dptech/dp/native/prod-19853/orca:v6.1.1|dptech/matmaster/orca:v6.1.1"
-    "dptech/dp/native/prod-19853/pyscf-geometric:dev-260608|dptech/matmaster/pyscf-geometric:dev-260608"
-    "dptech/dp/native/prod-19853/mlips:dev-0421|dptech/matmaster/mlips:dev-0421"
-    "dptech/dp/native/prod-19853/abinit:v9.10.3_pp|dptech/matmaster/abinit:v9.10.3_pp"
-    "dptech/dp/native/prod-19853/xrd-app:dev-260119|dptech/matmaster/xrd-app:dev-260119"
-    "dptech/dp/native/hub/mrdic2/abacusp:1.0.3-1778742780|dptech/matmaster/abacus:1.0.3-1778742780"
-    "dptech/dp/native/hub/mrdic2/a1:1.0.1-1779698340|dptech/matmaster/gromacs:1.0.1-1779698340"
-    "dptech/dp/native/hub/mrdic2/gpumd:1.0.2-1777991160|dptech/matmaster/gpumd:1.0.2-1777991160"
-)
+# 内置默认清单从共享映射文件读取（与 CI 迁移 job 同源，避免两处维护）
+# 文件格式：源相对路径|目标相对路径（均相对 ${REGISTRY}），# 开头为注释
+MIGRATIONS_FILE="${ROOT}/ci/personal_image_migrations.tsv"
+DEFAULT_MIGRATIONS=()
+if [ -f "$MIGRATIONS_FILE" ]; then
+    while IFS= read -r line; do
+        case "$line" in '' | \#*) continue ;; esac
+        DEFAULT_MIGRATIONS+=("$line")
+    done <"$MIGRATIONS_FILE"
+fi
 
 # 去掉 docker:// 与 registry 前缀，返回相对路径
 normalize_ref() {
@@ -78,8 +78,9 @@ if [ "$#" -ge 1 ]; then
     if [ "$#" -ge 2 ]; then
         dst_rel="$(normalize_ref "$2")"
     else
-        # 目标默认 dptech/matmaster/<源镜像最后一段 name:tag>
-        dst_rel="dptech/matmaster/${src_rel##*/}"
+        # 目标默认 dptech/matmaster:<原名>-<原tag>（单 repository + tag，name:tag 的冒号转连字符）
+        last="${src_rel##*/}"
+        dst_rel="dptech/matmaster:${last/:/-}"
     fi
     MIGRATIONS=("${src_rel}|${dst_rel}")
 else

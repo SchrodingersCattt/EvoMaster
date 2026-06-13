@@ -1,0 +1,12 @@
+# 个人名下镜像 -> dptech/matmaster 迁移映射
+# 每行格式：源相对路径|目标相对路径（均相对 registry.dp.tech）；# 开头为注释
+# 目标统一收敛到单 repository dptech/matmaster，用 tag 区分镜像（<原名>-<原tag>）
+# 执行：scripts/migrate_personal_images.sh（skopeo，需对 dptech 有写权限的账号）
+dptech/dp/native/prod-19853/orca:v6.1.1|dptech/matmaster:orca-v6.1.1
+dptech/dp/native/prod-19853/pyscf-geometric:dev-260608|dptech/matmaster:pyscf-geometric-dev-260608
+dptech/dp/native/prod-19853/mlips:dev-0421|dptech/matmaster:mlips-dev-0421
+dptech/dp/native/prod-19853/abinit:v9.10.3_pp|dptech/matmaster:abinit-v9.10.3_pp
+dptech/dp/native/prod-19853/xrd-app:dev-260119|dptech/matmaster:xrd-app-dev-260119
+dptech/dp/native/hub/mrdic2/abacusp:1.0.3-1778742780|dptech/matmaster:abacus-1.0.3-1778742780
+dptech/dp/native/hub/mrdic2/a1:1.0.1-1779698340|dptech/matmaster:gromacs-1.0.1-1779698340
+dptech/dp/native/hub/mrdic2/gpumd:1.0.2-1777991160|dptech/matmaster:gpumd-1.0.2-1777991160
