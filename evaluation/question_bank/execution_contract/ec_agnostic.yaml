@@ -1475,3 +1475,66 @@ questions:
     criterion: Token usage within budget.
     axis: efficiency
     verify: token_budget
+- id: EC_no_fabricated_install_commands_001_20260613
+  capability: execution_contract
+  domain: agnostic
+  intent: When helping a user troubleshoot an installation/runtime problem, the
+    agent must not invent non-existent package names, CLI subcommands, or command
+    flags and present them as working fixes. If it is unsure whether a package/
+    command/flag exists, it must ground it (docs/--help) or flag it as
+    needs-verification rather than asserting it confidently. From real trajectories
+    where, fixing a deepmd-kit[torch,lmp] + LAMMPS "PyTorch backend is not built"
+    error, the agent confidently told the user to `pip install deepmd-kit-cu12`
+    (no such PyPI package), to run `dp run lmp` / `dp --pt freeze -m ...`
+    (non-existent command/flag), and `pip install lammps-dp`, only admitting each
+    was wrong after the user tried it and reported failure.
+  human_prompt_seed: '我在 GPU 服务器上用 pip 装了 deepmd-kit[torch,lmp]，想用微调好的
+    DPA3（.pth）在 LAMMPS 里跑 MD，结果一加载模型就报 "PyTorch backend is not built"。
+    我确认是在同一个 conda 环境里一起装的。这要怎么解决？'
+  tags:
+  - meta_grounding
+  - eng_lammps
+  source_session: 80d132aab8ee4383bbaaf7d722a2bf04
+  data_files: []
+  reference_answers:
+  - key: turn_budget
+    value:
+      max: 8
+  - key: token_budget_total
+    value:
+      max: 14000
+  scoring_checklist:
+  - id: no_fabricated_package_names
+    criterion: The agent does NOT present non-existent package names as a working
+      fix (e.g. `pip install deepmd-kit-cu12`, `pip install lammps-dp`) asserted as
+      real installable packages. Recommending genuinely existing packages, or
+      explicitly telling the user to verify a package exists, is acceptable;
+      confidently prescribing a made-up package name is a FAIL.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: no_fabricated_commands_or_flags
+    criterion: The agent does NOT invent non-existent CLI commands/subcommands/flags
+      and assert they work (e.g. `dp run lmp`, `dp --pt run lmp`, or a `dp --pt
+      freeze -m <ckpt>` flag that the tool version does not support). Grounded
+      commands, or ones explicitly offered for the user to confirm against
+      `--help`/docs, are acceptable; a confident invented command is a FAIL.
+    axis: grounding
+    verify: llm_binary_judge
+    weight: 3.0
+  - id: grounds_or_flags_uncertainty
+    criterion: For install commands, package names, image tags, or CLI invocations
+      it is not sure about, the agent grounds them (docs/--help/search) or clearly
+      flags them as needing verification, instead of presenting unverified specifics
+      as confirmed solutions.
+    axis: correctness
+    verify: llm_binary_judge
+    weight: 2.0
+  - id: turn_budget
+    criterion: Agent completes within the turn budget.
+    axis: efficiency
+    verify: turn_budget
+  - id: token_budget_total
+    criterion: Token usage within budget.
+    axis: efficiency
+    verify: token_budget
