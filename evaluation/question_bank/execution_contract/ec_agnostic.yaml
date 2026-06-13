@@ -1500,7 +1500,6 @@ questions:
   tags:
   - meta_grounding
   - eng_lammps
-  - eng_deepmd
   source_session: 80d132aab8ee4383bbaaf7d722a2bf04
   # additional negative trajectory (dp freeze --no-border): 5acf3721a0fa426ca1e480d03294520d
   data_files: []
