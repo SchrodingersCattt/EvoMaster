@@ -19,14 +19,21 @@ from matmaster.config.loader import (
 # Minimal YAML content for tests
 _YAML_CONTENT = """\
 llm:
+  providers:
+    litellm:
+      transport: "chat_completions"
+      api_key: "sk-test"
+      base_url: "http://litellm-proxy"
   profiles:
     opus:
-      provider: "openai"
+      provider: "litellm"
       model: "claude-opus-4-6"
+      context_limit: 200000
       temperature: 0.7
     sonnet:
-      provider: "openai"
+      provider: "litellm"
       model: "claude-sonnet-4-6"
+      context_limit: 128000
       temperature: 0.5
   default: "opus"
 
@@ -63,7 +70,19 @@ class TestLoadLlmConfig:
     def test_from_dict(self) -> None:
         raw = {
             "llm": {
-                "profiles": {"p1": {"model": "m1"}},
+                "providers": {
+                    "litellm": {
+                        "transport": "chat_completions",
+                        "api_key": "sk-test",
+                    }
+                },
+                "profiles": {
+                    "p1": {
+                        "provider": "litellm",
+                        "model": "m1",
+                        "context_limit": 200_000,
+                    }
+                },
                 "default": "p1",
             }
         }
@@ -80,49 +99,139 @@ class TestLoadLlmConfig:
         monkeypatch.setenv("TEST_API_KEY", "sk-secret")
         yaml = (
             'llm:\n'
+            '  providers:\n'
+            '    litellm:\n'
+            '      transport: "chat_completions"\n'
+            '      api_key: "${TEST_API_KEY}"\n'
             '  profiles:\n'
             '    p1:\n'
+            '      provider: "litellm"\n'
             '      model: "m1"\n'
-            '      api_key: "${TEST_API_KEY}"\n'
+            '      context_limit: 200000\n'
             '  default: "p1"\n'
         )
         f = tmp_path / "config.yaml"
         f.write_text(yaml)
         cfg = load_llm_config(f)
-        assert cfg.profiles["p1"].api_key == "sk-secret"
+        assert cfg.providers["litellm"].api_key == "sk-secret"
 
 
 class TestLoadLlmConfigNormalized:
-    """load_llm_config with normalized schema (profiles + routes)."""
+    """load_llm_config with normalized schema (providers + profiles)."""
 
     def test_load_normalized_yaml(self, tmp_path: Path) -> None:
         yaml_content = """
 default: "p1"
+providers:
+  litellm:
+    transport: "chat_completions"
+    api_key: "test-key"
 profiles:
   p1:
+    provider: "litellm"
     model: "test-model"
-    api_key: "test-key"
-routes:
-  test-route:
-    profile: "p1"
-    model: "test-model"
+    context_limit: 200000
 """
         f = tmp_path / "llm_config.yaml"
         f.write_text(yaml_content)
         cfg = load_llm_config(f)
         assert "p1" in cfg.profiles
-        assert "test-route" in cfg.routes
-        assert cfg.routes["test-route"].profile == "p1"
+        assert "litellm" in cfg.providers
+        assert cfg.resolve(model_override="p1").profile.model == "test-model"
 
-    def test_repo_llm_config_routes_current_gpt55(self) -> None:
+    def test_repo_llm_config_profiles_current_gpt55(self) -> None:
         repo_root = Path(__file__).resolve().parents[3]
 
         cfg = load_llm_config(repo_root / "config" / "llm_config.yaml")
-        resolved = cfg.resolve_route(model_override="cds/GPT-5.5")
+        resolved = cfg.resolve(model_override="matmaster/gpt-5.5")
 
-        assert resolved.profile_key == "gpt55"
-        assert resolved.model == "matmaster/gpt-5.5"
-        assert all(not route_key.lower().endswith("5.4") for route_key in cfg.routes)
+        assert resolved.profile_key == "matmaster/gpt-5.5"
+        assert resolved.profile.model == "matmaster/gpt-5.5"
+
+    def test_repo_llm_config_includes_native_anthropic_opus(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+
+        cfg = load_llm_config(repo_root / "config" / "llm_config.yaml")
+        resolved = cfg.resolve(model_override="global.anthropic.claude-opus-4-6-v1")
+
+        assert resolved.provider.transport == "anthropic_messages"
+        # NOTE: Do not assert literal provider.api_key / base_url `${...}` placeholders:
+        # load_llm_config expands ${VAR} unconditionally (env value when set,
+        # empty string when missing), so placeholders are not preserved.
+        assert resolved.provider.vendor == "bedrock"
+        assert resolved.profile.model == "global.anthropic.claude-opus-4-6-v1"
+        assert resolved.profile.reasoning_effort == "max"
+        assert resolved.profile.supports_vision is True
+        assert resolved.profile.max_tokens == 32_000
+        assert resolved.profile.prompt_cache is not None
+        assert resolved.profile.prompt_cache.system_prompt_breakpoint is True
+        assert resolved.profile.prompt_cache.automatic is True
+        assert resolved.profile.prompt_cache.latest_user_breakpoint is True
+        assert resolved.profile.prompt_cache.tool_result_breakpoint is True
+        assert resolved.profile.prompt_cache.flexible_breakpoint is True
+        assert resolved.profile.prompt_cache.max_breakpoints == 4
+        assert resolved.profile.prompt_cache.min_flexible_chars == 1000
+
+
+class TestRealLlmConfigResponsesMigration:
+    def test_litellm_responses_provider_and_gpt_profile_migrated(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        cfg = load_llm_config(repo_root / "config" / "llm_config.yaml")
+
+        assert cfg.providers["litellm-responses"].transport == "responses"
+
+        gpt = cfg.profiles["matmaster/gpt-5.5"]
+        assert gpt.provider == "litellm-responses"
+        assert gpt.model == "matmaster/gpt-5.5"
+        assert gpt.reasoning_effort == "xhigh"
+        assert gpt.reasoning_summary == "detailed"
+
+        resolved = cfg.resolve(model_override="matmaster/gpt-5.5")
+        assert resolved.provider.transport == "responses"
+
+        assert cfg.default == "matmaster/qwen3.7-max"
+        assert cfg.profiles["matmaster/qwen3.7-max"].provider == "litellm-qwen"
+
+    def test_migrated_config_builds_responses_transport(self) -> None:
+        from matmaster.providers.llm_factory import build_provider
+        from matmaster.providers.transports.responses import ResponsesTransport
+
+        repo_root = Path(__file__).resolve().parents[3]
+        cfg = load_llm_config(repo_root / "config" / "llm_config.yaml")
+
+        provider = build_provider(cfg, model_override="matmaster/gpt-5.5")
+        assert isinstance(provider, ResponsesTransport)
+        assert provider._model == "matmaster/gpt-5.5"
+
+
+class TestRealLlmConfigVendorWiring:
+    def test_vendor_providers_and_profile_pointing(self) -> None:
+        repo_root = Path(__file__).resolve().parents[3]
+        cfg = load_llm_config(repo_root / "config" / "llm_config.yaml")
+
+        assert cfg.providers["litellm-qwen"].transport == "chat_completions"
+        assert cfg.providers["litellm-qwen"].vendor == "qwen"
+        assert cfg.providers["litellm-deepseek"].transport == "chat_completions"
+        assert cfg.providers["litellm-deepseek"].vendor == "deepseek"
+        assert cfg.providers["litellm"].vendor is None
+        assert cfg.providers["litellm-anthropic"].vendor == "bedrock"
+
+        assert cfg.profiles["matmaster/qwen3.7-max"].provider == "litellm-qwen"
+        assert cfg.profiles["matmaster/dsk-v4p"].provider == "litellm-deepseek"
+        assert cfg.profiles["matmaster/DeepSeek-v4-Pro"].provider == "litellm-deepseek"
+        assert cfg.profiles["gemini-3.1-pro-preview"].provider == "litellm"
+
+    def test_default_profile_builds_qwen_vendor_transport(self) -> None:
+        from matmaster.providers.llm_factory import build_provider
+        from matmaster.providers.transports.chat_completions import (
+            QwenChatCompletionsTransport,
+        )
+
+        repo_root = Path(__file__).resolve().parents[3]
+        cfg = load_llm_config(repo_root / "config" / "llm_config.yaml")
+
+        provider = build_provider(cfg)
+        assert isinstance(provider, QwenChatCompletionsTransport)
 
 
 class TestLoadExpConfig:
@@ -133,7 +242,7 @@ class TestLoadExpConfig:
         exps_dir = tmp_path / "exps"
         exps_dir.mkdir()
         (exps_dir / "direct.toml").write_text(
-            'name = "direct"\nmode = "direct"\nmax_turns = 200\n'
+            'name = "direct"\nmax_turns = 200\n'
             'developer_instructions = "You are Mat Master."\n'
             "\n[tools]\nbuiltin = ['*']\nmcp = '*'\n",
             encoding="utf-8",

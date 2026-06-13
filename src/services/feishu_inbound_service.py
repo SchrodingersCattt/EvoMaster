@@ -184,12 +184,9 @@ async def _run_agent_and_reply_feishu(
 
     reaction_id = add_reaction(message_id, "OnIt", tenant_token=tenant_token)
 
-    base_prompt = user_prompt.strip()
     parts: list[str] = []
     try:
-        async for sse_piece in stream_svc.generate_send_stream(
-            session_id, base_prompt, ctx
-        ):
+        async for sse_piece in stream_svc.generate_send_stream(session_id, ctx):
             parts.extend(_collect_current_response_chunks(sse_piece, ctx.invocation_id))
     except Exception:
         logger.exception("feishu generate_send_stream failed session_id=%s", session_id)
@@ -218,7 +215,7 @@ async def _run_agent_and_reply_feishu(
 def _session_id_for_chat(chat_id: str, open_id: str) -> str:
     if not REDIS_URL:
         return f"feishu_{uuid.uuid4().hex}"
-    client = get_redis_dao().create_client()
+    client = get_redis_dao().get_command_client()
     if not client:
         return f"feishu_{uuid.uuid4().hex}"
     key = f"{_FEISHU_SESS_PREFIX}{chat_id}:{open_id}"
@@ -237,7 +234,7 @@ def _session_id_for_chat(chat_id: str, open_id: str) -> str:
 def _event_dedup_once(message_id: str) -> bool:
     if not REDIS_URL or not message_id:
         return True
-    client = get_redis_dao().create_client()
+    client = get_redis_dao().get_command_client()
     if not client:
         return True
     key = _FEISHU_DEDUP_PREFIX + message_id

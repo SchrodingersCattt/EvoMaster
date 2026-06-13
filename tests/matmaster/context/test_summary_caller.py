@@ -10,9 +10,7 @@ from matmaster.context.compaction import (
     validate_summary_response,
 )
 from matmaster.context.sources.turn_input import TurnInput
-from matmaster.types.message_normalization import (
-    normalize_and_validate_openai_messages,
-)
+from matmaster.types.message_normalization import validate_tool_turn_sequence
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -48,7 +46,7 @@ def test_select_tool_safe_tail_keeps_complete_assistant_tool_pair() -> None:
     selected = _select_tool_safe_tail(messages, n=3)
 
     assert selected == messages[1:]
-    normalize_and_validate_openai_messages([m.to_api_dict() for m in selected])
+    validate_tool_turn_sequence(selected)
 
 
 def test_select_tool_safe_tail_expands_backward_to_owner() -> None:
@@ -63,7 +61,7 @@ def test_select_tool_safe_tail_expands_backward_to_owner() -> None:
     selected = _select_tool_safe_tail(messages, n=3)
 
     assert selected == messages[1:]
-    normalize_and_validate_openai_messages([m.to_api_dict() for m in selected])
+    validate_tool_turn_sequence(selected)
 
 
 def test_select_tool_safe_tail_excludes_orphan_tool_messages() -> None:
@@ -76,7 +74,7 @@ def test_select_tool_safe_tail_excludes_orphan_tool_messages() -> None:
     selected = _select_tool_safe_tail(messages, n=2)
 
     assert selected == [AssistantMessage(content="safe")]
-    normalize_and_validate_openai_messages([m.to_api_dict() for m in selected])
+    validate_tool_turn_sequence(selected)
 
 
 def test_select_tool_safe_tail_returns_empty_for_all_orphans() -> None:
@@ -96,7 +94,7 @@ def test_select_tool_safe_tail_expands_to_large_parallel_tool_turn() -> None:
     selected = _select_tool_safe_tail(messages, n=3)
 
     assert selected == messages[1:]
-    normalize_and_validate_openai_messages([m.to_api_dict() for m in selected])
+    validate_tool_turn_sequence(selected)
 
 
 def test_prepare_messages_common_case_preserves_message_identity() -> None:
@@ -179,8 +177,37 @@ def test_prepare_messages_non_positive_budget_raises() -> None:
             turn_input=None,
             compact_request=compact_request,
             context_limit=1_000,
-            reserved_summary_tokens=900,
+            reserved_summary_tokens=1_000,
         )
+
+
+def test_prepare_messages_budget_uses_context_limit_minus_reserved(
+    monkeypatch,
+) -> None:
+    from matmaster.context import compaction
+
+    compact_request = UserMessage(content=SUMMARY_USER_REQUEST_TEMPLATE)
+    full_messages = [SystemMessage(content="sys"), UserMessage(content="old")]
+
+    def fake_estimate(messages, safety_margin=1.0):
+        if len(messages) == 1 and messages[0] is compact_request:
+            return 9_000
+        return 100
+
+    monkeypatch.setattr(compaction, "estimate_tokens", fake_estimate)
+
+    prep = prepare_messages_for_summary_call(
+        full_messages=full_messages,
+        phase="runtime",
+        turn_input=None,
+        compact_request=compact_request,
+        context_limit=20_000,
+        reserved_summary_tokens=1_000,
+        safety_margin_tokens=8_000,
+    )
+
+    assert prep.request_tokens == 9_000
+    assert prep.message_budget == 19_000
 
 
 @pytest.mark.asyncio
@@ -241,7 +268,7 @@ def test_prepare_messages_truncates_only_largest_tool_results_needed_to_fit() ->
         phase="runtime",
         turn_input=None,
         compact_request=compact_request,
-        context_limit=7_000,
+        context_limit=6_000,
         reserved_summary_tokens=1_000,
         safety_margin_tokens=500,
     )
@@ -318,10 +345,10 @@ async def test_call_summary_llm_uses_real_messages_tools_and_tool_choice_none() 
     call = provider.calls[0]
     assert call["tools"] is tools
     assert call["tool_choice"] == "none"
-    roles = [msg["role"] for msg in call["messages"]]
+    roles = [msg.role.value for msg in call["messages"]]
     assert roles == ["system", "user", "assistant", "user"]
-    assert call["messages"][0]["content"] == "main system"
-    assert "<compact_request>" in call["messages"][-1]["content"]
+    assert call["messages"][0].content == "main system"
+    assert "<compact_request>" in (call["messages"][-1].content or "")
 
 
 @pytest.mark.asyncio

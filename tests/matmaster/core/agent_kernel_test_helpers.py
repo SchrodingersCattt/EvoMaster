@@ -27,6 +27,15 @@ from matmaster.types.topology import ToolPlane
 from .conftest import MockLLMProvider
 
 
+class ProviderProtocolAttrs:
+    """Default public provider attrs used by lightweight kernel test providers."""
+
+    stream_timeout: float = 10.0
+    stream_idle_timeout: float = 10.0
+    max_retries: int = 3
+    retry_delay: float = 1.0
+
+
 class _CatchAllTool:
     """Tool that accepts any name and records calls for test assertions."""
 
@@ -93,7 +102,7 @@ def _make_tool_registry(
     return registry, tools
 
 
-class StreamingProvider:
+class StreamingProvider(ProviderProtocolAttrs):
     """Mock provider that yields specific StreamChunk sequences."""
 
     def __init__(self, chunks: list[StreamChunk]) -> None:
@@ -123,7 +132,7 @@ class StreamingProvider:
             yield chunk
 
 
-class ToolCallingProvider:
+class ToolCallingProvider(ProviderProtocolAttrs):
     """Provider that returns tool_calls for N turns, then natural finish."""
 
     def __init__(
@@ -294,7 +303,7 @@ def make_kernel_runtime(
     return AgentKernelRuntime(spec=kernel_spec, resources=kernel_resources)
 
 
-class ErrorThenSuccessProvider:
+class ErrorThenSuccessProvider(ProviderProtocolAttrs):
     """Provider that raises LLMError N times, then succeeds."""
 
     def __init__(self, fail_count: int, error: LLMError) -> None:

@@ -41,19 +41,10 @@ class TestExpConfig:
         assert cfg.max_turns == 200
         assert cfg.developer_instructions == "You are Mat Master."
 
-    def test_extra_fields_ignored(self):
-        """Unknown fields from toml are silently ignored."""
-        data = {"name": "test", "unknown_field": "value", "another": 123}
-        cfg = ExpConfig.model_validate(data)
-        assert cfg.name == "test"
-        assert not hasattr(cfg, "unknown_field")
-
-    def test_skills_and_compaction_accepted_mcp_ignored(self):
-        """skills and compaction are real fields; mcp is silently ignored."""
+    def test_skills_and_compaction_accepted(self):
         data = {
             "name": "test",
             "skills": {"enabled": True},
-            "mcp": {"servers": []},
             "compaction": {"context_limit": 64000},
         }
         cfg = ExpConfig.model_validate(data)
@@ -61,10 +52,6 @@ class TestExpConfig:
         assert cfg.skills.enabled is True
         assert "enabled" not in type(cfg.compaction).model_fields
         assert cfg.compaction.context_limit == 64000
-        # mcp is still ignored
-        assert not hasattr(cfg, "mcp") or not isinstance(
-            getattr(cfg, "mcp", None), dict
-        )
 
     def test_system_prompt_default(self):
         cfg = ExpConfig()
@@ -77,12 +64,6 @@ class TestExpConfig:
         }
         cfg = ExpConfig.model_validate(data)
         assert cfg.system_prompt == "You are Mat Master."
-
-    def test_mode_contract_rejected(self):
-        """mode_contract field is ignored (extra='ignore')."""
-        data = {"name": "direct", "mode_contract": "Execute directly."}
-        cfg = ExpConfig.model_validate(data)
-        assert not hasattr(cfg, "mode_contract")
 
     def test_developer_instructions_multiline(self):
         """Multiline strings from toml are preserved."""

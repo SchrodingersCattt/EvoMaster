@@ -25,6 +25,7 @@ from matmaster.core.structural_validation import StructuralValidation
 from matmaster.core.subagent_orchestrator import SubagentOrchestrator
 from matmaster.core.tool_runner import FullToolRunner
 from matmaster.core.tool_scheduler import ToolScheduler
+from matmaster.skills.registry import SkillRegistryCache
 from matmaster.tools.tool_catalog import ToolCatalog
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.tools.tool_result import ToolResult
@@ -39,7 +40,11 @@ from matmaster.types.run_metadata import RunIdentity, RunMetadata
 from matmaster.types.topology import ToolPlane
 from tests.conftest import MockAsyncTool
 
-from .agent_kernel_test_helpers import make_kernel_runtime, make_kernel_turn
+from .agent_kernel_test_helpers import (
+    ProviderProtocolAttrs,
+    make_kernel_runtime,
+    make_kernel_turn,
+)
 from .conftest import MockLLMProvider
 from .test_full_tool_runner import _make_ctx, _make_tc, _make_topology
 
@@ -54,7 +59,7 @@ def _stub_child_run_factory(exp_name, task, *, cancel_token=None, spawn_id=None)
     return _gen()
 
 
-class RecordingProvider:
+class RecordingProvider(ProviderProtocolAttrs):
     def __init__(self) -> None:
         self.seen_messages: list[list[dict[str, object]]] = []
 
@@ -629,7 +634,7 @@ class TestAgentKernelHookWiring:
             )
         ]
 
-        assert provider.seen_messages[0][-1]["content"] == "original rewritten"
+        assert provider.seen_messages[0][-1].content == "original rewritten"
         assert seen_prompts == ["original rewritten"]
 
     @pytest.mark.asyncio
@@ -665,7 +670,7 @@ class TestAgentKernelHookWiring:
             )
         ]
 
-        assert provider.seen_messages[0][-1]["content"] == "original"
+        assert provider.seen_messages[0][-1].content == "original"
         assert seen_prompts == ["original"]
 
     @pytest.mark.asyncio
@@ -767,12 +772,24 @@ class TestSpawnGuardWiring:
         import matmaster.core.exp as exp_module
 
         created_allow_spawn: list[bool] = []
+        captured_caches: list[object] = []
         original_exp = exp_module.Exp
 
         class RecordingExp(original_exp):
-            def __init__(self, config, *, allow_spawn: bool = True) -> None:
+            def __init__(
+                self,
+                config,
+                *,
+                allow_spawn: bool = True,
+                inherited_skill_cache=None,
+            ) -> None:
                 created_allow_spawn.append(allow_spawn)
-                super().__init__(config, allow_spawn=allow_spawn)
+                captured_caches.append(inherited_skill_cache)
+                super().__init__(
+                    config,
+                    allow_spawn=allow_spawn,
+                    inherited_skill_cache=inherited_skill_cache,
+                )
 
             async def run_stream(self, *args, **kwargs):
                 if False:
@@ -792,7 +809,8 @@ class TestSpawnGuardWiring:
         )
 
         parent = original_exp(ExpConfig(name="parent"))
-        factory = parent._make_child_run_factory(ctx)
+        cache = SkillRegistryCache()
+        factory = parent._make_child_run_factory(ctx, cache)
 
         with patch(
             "matmaster.config.loader.load_exp_config",
@@ -801,6 +819,7 @@ class TestSpawnGuardWiring:
             child_stream = factory("direct", "summarize this task", spawn_id="x")
 
         assert created_allow_spawn[-1] is False
+        assert captured_caches[-1] is cache
         await child_stream.aclose()
 
     @pytest.mark.asyncio
@@ -815,9 +834,16 @@ class TestSpawnGuardWiring:
         original_exp = exp_module.Exp
 
         class RecordingExp:
-            def __init__(self, config, *, allow_spawn: bool = True) -> None:
+            def __init__(
+                self,
+                config,
+                *,
+                allow_spawn: bool = True,
+                inherited_skill_cache=None,
+            ) -> None:
                 self.config = config
                 self.allow_spawn = allow_spawn
+                self.inherited_skill_cache = inherited_skill_cache
 
             def run_stream(self, ctx, task, **kwargs):
                 captured_kwargs.update(kwargs)
@@ -842,7 +868,7 @@ class TestSpawnGuardWiring:
         )
 
         parent = original_exp(ExpConfig(name="parent"))
-        factory = parent._make_child_run_factory(ctx)
+        factory = parent._make_child_run_factory(ctx, SkillRegistryCache())
 
         with patch(
             "matmaster.config.loader.load_exp_config",
@@ -872,9 +898,16 @@ class TestSpawnGuardWiring:
         received: dict[str, object] = {}
 
         class RecordingExp:
-            def __init__(self, config, *, allow_spawn: bool = True) -> None:
+            def __init__(
+                self,
+                config,
+                *,
+                allow_spawn: bool = True,
+                inherited_skill_cache=None,
+            ) -> None:
                 self.config = config
                 self.allow_spawn = allow_spawn
+                self.inherited_skill_cache = inherited_skill_cache
 
             def run_stream(
                 self,
@@ -922,7 +955,7 @@ class TestSpawnGuardWiring:
 
         parent = original_exp(ExpConfig(name="parent"))
         orchestrator = SubagentOrchestrator(
-            child_run_factory=parent._make_child_run_factory(ctx),
+            child_run_factory=parent._make_child_run_factory(ctx, SkillRegistryCache()),
             child_event_sink=sink,
             hook_executor=HookExecutor(),
             parent_session_id="session-1",

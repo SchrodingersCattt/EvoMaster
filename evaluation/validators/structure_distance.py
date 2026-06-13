@@ -83,3 +83,72 @@ def check_min_interatomic_distance(
         f"{fpath.name}: min interatomic distance = {min_dist:.4f} Å ({pair_msg}), "
         f"expected >= {min_distance_A} Å",
     )
+
+
+def check_bond_range(
+    workspace_dir: str | Path,
+    *,
+    filename: str,
+    element_a: str,
+    element_b: str,
+    min_distance: float = 0.0,
+    max_distance: float = 5.0,
+    n_neighbors: int = 0,
+) -> tuple[bool, str]:
+    """Verify nearest-neighbor distances for an element pair are within range."""
+    from evaluation.validators.structure_general import _load_structure, _resolve_file
+
+    if not _PMG_AVAILABLE:
+        return False, _IMPORT_MSG
+    if not _NP_AVAILABLE:
+        return False, "numpy not installed"
+    root = Path(workspace_dir)
+    fpath = _resolve_file(root, filename)
+    if fpath is None:
+        return False, f"no file matching {filename!r} in {root}"
+    try:
+        struct = _load_structure(fpath)
+    except Exception as exc:
+        return False, f"could not parse {fpath.name}: {exc}"
+
+    sites = struct.sites
+    a_indices = [i for i, s in enumerate(sites) if s.species_string == element_a]
+    b_indices = [i for i, s in enumerate(sites) if s.species_string == element_b]
+    if not a_indices:
+        return False, f"{fpath.name}: element {element_a!r} not found"
+    if not b_indices:
+        return False, f"{fpath.name}: element {element_b!r} not found"
+
+    violations = []
+    all_nn_dists: list[float] = []
+    for ai in a_indices:
+        dists = []
+        for bi in b_indices:
+            if ai == bi:
+                continue
+            d = struct.get_distance(ai, bi)
+            dists.append(d)
+        dists.sort()
+        nn = (
+            dists[:n_neighbors]
+            if n_neighbors > 0
+            else [d for d in dists if d <= max_distance * 1.5]
+        )
+        all_nn_dists.extend(nn)
+        for d in nn:
+            if d < min_distance or d > max_distance:
+                violations.append(d)
+
+    if not all_nn_dists:
+        return False, f"{fpath.name}: no {element_a}-{element_b} distances found"
+    mean_d = float(np.mean(all_nn_dists))
+    if violations:
+        return False, (
+            f"{fpath.name}: {len(violations)} {element_a}-{element_b} distances "
+            f"outside [{min_distance}, {max_distance}] Å "
+            f"(mean={mean_d:.3f} Å, worst={min(violations):.3f}/{max(violations):.3f} Å)"
+        )
+    return True, (
+        f"{fpath.name}: all {len(all_nn_dists)} {element_a}-{element_b} nearest-neighbor "
+        f"distances in [{min_distance}, {max_distance}] Å (mean={mean_d:.3f} Å)"
+    )

@@ -55,7 +55,7 @@ def test_put_session_directory_rejects_outside_share_without_writing():
 
     assert response.status_code == 400, response.text
     body = response.json()
-    assert body["data"]["error_code"] == "directory_outside_share"
+    assert body["data"]["error_code"] == "directory_outside_roots"
     mock_svc.set_session_directory.assert_not_called()
 
 

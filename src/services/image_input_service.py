@@ -23,8 +23,6 @@ IMAGE_INPUT_INVALID_SCHEME = "IMAGE_INPUT_INVALID_SCHEME"
 # (the remaining SSRF guard) still raises it.
 IMAGE_INPUT_DOMAIN_BLOCKED = "IMAGE_INPUT_DOMAIN_BLOCKED"
 IMAGE_INPUT_DUPLICATE_ATTACHMENT = "IMAGE_INPUT_DUPLICATE_ATTACHMENT"
-# Path allowlist removed; constant kept only for backward-compat imports.
-IMAGE_INPUT_PATH_BLOCKED = "IMAGE_INPUT_PATH_BLOCKED"
 IMAGE_INPUT_UNREACHABLE = "IMAGE_INPUT_UNREACHABLE"
 IMAGE_INPUT_UNSUPPORTED_MIME = "IMAGE_INPUT_UNSUPPORTED_MIME"
 IMAGE_INPUT_SIZE_UNKNOWN = "IMAGE_INPUT_SIZE_UNKNOWN"
@@ -57,10 +55,10 @@ class ImageInputError(Exception):
 class ImageInputSettings:
     """Image input runtime knobs.
 
-    Host/path allowlists were removed. The only remaining URL gate is HTTPS
-    plus the private/loopback IP block (see `_is_ip_address_blocked`). Dev
-    environments may opt in to HTTP for specific hosts via
-    `IMAGE_INPUT_ALLOW_INSECURE_HOSTS`; this is force-cleared in production.
+    The only URL gate is HTTPS plus the private/loopback IP block (see
+    `_is_ip_address_blocked`). Dev environments may opt in to HTTP for specific
+    hosts via `IMAGE_INPUT_ALLOW_INSECURE_HOSTS`; this is force-cleared in
+    production.
     """
 
     allow_insecure_hosts: frozenset[str] = frozenset()
@@ -187,16 +185,14 @@ class ImageInputService:
         self,
         *,
         llm_config: LLMConfig,
-        llm_override: str | None,
         model_override: str | None,
         default_profile_key: str | None,
     ) -> LLMProfileConfig:
-        resolved = llm_config.resolve_route(
+        resolved = llm_config.resolve(
             model_override=model_override,
-            llm_override=llm_override,
             default_key=default_profile_key,
         )
-        profile = llm_config.get_profile(resolved.profile_key)
+        profile = resolved.profile
         if not profile.supports_vision:
             raise ImageInputError(
                 VISION_MODEL_NOT_SUPPORTED,
@@ -218,7 +214,6 @@ class ImageInputService:
         *,
         llm_config: LLMConfig,
         images: tuple[str, ...],
-        llm_override: str | None,
         model_override: str | None,
         default_profile_key: str | None,
     ) -> ImageDetail | None:
@@ -226,7 +221,6 @@ class ImageInputService:
             return None
         profile = self.ensure_vision_supported(
             llm_config=llm_config,
-            llm_override=llm_override,
             model_override=model_override,
             default_profile_key=default_profile_key,
         )
@@ -522,3 +516,23 @@ def trim_history_images(
             output[idx] = message.model_copy(update={"images": keep_images})
 
     return output
+
+
+def strip_all_history_images(messages: list[Message]) -> list[Message]:
+    """Strip all history images when the target model has no vision capability."""
+    out = list(messages)
+    for idx, message in enumerate(out):
+        images = getattr(message, "images", None)
+        if not images:
+            continue
+        out[idx] = message.model_copy(
+            update={
+                "content": _append_image_placeholders(
+                    message.content,
+                    images,
+                    reason="已移除（当前模型不支持图片输入）",
+                ),
+                "images": [],
+            }
+        )
+    return out

@@ -1,0 +1,2 @@
+category: structure-modeling
+description: "Build, inspect, transform, assemble and sample atomistic structures: file parsing, prototype crystals, supercells/strain/doping/defects, slabs/interfaces/adsorbates/boxes, molecular-crystal edits, CALYPSO/CrystalFormer sampling; atomic-structure is the entry orchestrator."

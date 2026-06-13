@@ -4,7 +4,7 @@ import hashlib
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Protocol, TypeAlias
+from typing import Literal, Protocol, TypeAlias, runtime_checkable
 
 JsonScalar: TypeAlias = str | int | float | bool | None
 JsonValue: TypeAlias = JsonScalar | tuple["JsonValue", ...] | Mapping[str, "JsonValue"]
@@ -98,10 +98,12 @@ class SessionEventsPort(Protocol):
 @dataclass(frozen=True)
 class SessionJobs:
     active_jobs: tuple[JsonObject, ...] = ()
+    pending_terminal_jobs: tuple[JsonObject, ...] = ()
+    detail_limit: int | None = None
 
     @classmethod
     def empty(cls) -> SessionJobs:
-        return cls(active_jobs=())
+        return cls(active_jobs=(), pending_terminal_jobs=())
 
 
 @dataclass(frozen=True)
@@ -109,11 +111,40 @@ class SessionJobsQuery:
     session_id: str
 
 
+@runtime_checkable
 class SessionJobsPort(Protocol):
     async def load_session_jobs(
         self,
         query: SessionJobsQuery,
     ) -> SessionJobs:
+        raise NotImplementedError
+
+
+@runtime_checkable
+class BohriumJobLedgerPort(Protocol):
+    """Sync write-side port: BohriumTool 同步 Bohrium 作业生命周期到 ledger。"""
+
+    def record_submit(
+        self,
+        *,
+        job_id: str,
+        job_name: str | None,
+        project_id: int,
+        sandbox: bool,
+        input_dir: str,
+    ) -> None:
+        raise NotImplementedError
+
+    def record_poll(
+        self,
+        *,
+        job_id: str,
+        sandbox: bool,
+        status_code: int,
+    ) -> None:
+        raise NotImplementedError
+
+    def record_kill(self, *, job_id: str, sandbox: bool) -> None:
         raise NotImplementedError
 
 

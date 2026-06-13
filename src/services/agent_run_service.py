@@ -44,6 +44,8 @@ from src.services.billing_llm_provider import (
     COST_GUARD_CANCEL_REASON,
     BillingLLMProvider,
 )
+from src.services.bohrium_delivery_ack import DeliverySnapshot
+from src.services.bohrium_jobs_wiring import build_bohrium_jobs_ports
 from src.services.figure_coordinator import FigureCoordinator
 from src.services.history_checkpoint_service import HistoryCheckpointService
 from src.services.image_input_service import get_image_input_service
@@ -91,6 +93,21 @@ _MATMASTER_CONFIG_DIR = _project_root / "config"
 def _get_agent_default_llm() -> str | None:
     """Cached read of ``agents.general.llm`` from ``config/config.yaml``."""
     return load_agents_general_llm(_MATMASTER_CONFIG_DIR / "config.yaml")
+
+
+def _resolve_session_identity(
+    session_id: str,
+    *,
+    user_id: str | None = None,
+    sessions_source: Any,
+) -> tuple[str, str]:
+    """取提交时的 user_id/org_id 快照，供 bohrium_jobs 固化 owner。"""
+    row = sessions_source.get_session(session_id)
+    if not isinstance(row, dict):
+        row = {}
+    resolved_user_id = str(user_id or row.get("user_id") or "")
+    resolved_org_id = str(row.get("org_id") or "")
+    return resolved_user_id, resolved_org_id
 
 
 _INVALID_FINISH_MESSAGES: dict[str, str] = {
@@ -240,14 +257,14 @@ class AgentRunService:
         mode: str,
         task_id: str,
         invocation_id: str | None = None,
-        llm_override: str | None = None,
         model_override: str | None = None,
         byok_credential_id: str | None = None,
         user_id: str | None = None,
         images: list[str] | None = None,
         turn_input: TurnInput | None = None,
         bohrium_required: bool = False,
-        remote_workdir: str | None = None,
+        workspace: str | None = None,
+        delivery_snapshot: DeliverySnapshot | None = None,
         cancel_controller: CancellationController | None = None,
     ) -> tuple[bool | tuple[bool, str], int, dict[str, Any] | None]:
         """Execute agent pipeline using generator event stream with fanout dispatch.
@@ -348,7 +365,7 @@ class AgentRunService:
                 environment=environment,
                 run_started_at=run_started_at,
                 bohrium_required=bohrium_required,
-                remote_workdir=remote_workdir,
+                workspace=workspace,
             )
             bohrium_svc = stage_result.bohrium_svc
             if stage_result.abort_result is not None:
@@ -399,6 +416,7 @@ class AgentRunService:
                     api_key=cred.api_key,
                     base_url=cred.base_url,
                     credential_id=byok_id,
+                    context_limit=cred.context_limit,
                     extra_body=cred.extra_body,
                 )
                 # BYOK 第一期不接入族级 vision 校验：有图片用默认 detail，无图为 None。
@@ -408,14 +426,12 @@ class AgentRunService:
                 image_detail = image_service.resolve_image_detail(
                     llm_config=llm_config,
                     images=current_images,
-                    llm_override=llm_override,
                     model_override=model_override,
                     default_profile_key=agent_default_llm,
                 )
                 llm_bundle = build_provider_bundle(
                     llm_config,
                     model_override=model_override,
-                    llm_override=llm_override,
                     default_profile_key=agent_default_llm,
                 )
                 billing_mode = "platform"
@@ -503,13 +519,9 @@ class AgentRunService:
                 raw_history_limit=_DIALOG_HISTORY_MAX_EVENTS,
                 checkpoint_sink_factory=_checkpoint_sink_factory,
                 pre_compaction_barrier=fanout.flush_persistence_barrier,
+                supports_vision=llm_bundle.supports_vision,
             )
             history = wiring.history
-            bohrium_rebuild_events = (
-                tuple(wiring.bohrium_rebuild_events)
-                if wiring.bohrium_rebuild_events
-                else ()
-            )
             from src.services.interrupt_service import RedisInterruptChecker
 
             # -- Stage 5b: Turn input enrichment --
@@ -522,6 +534,19 @@ class AgentRunService:
 
             # -- Compose the Exp input from the prepared environment and
             # service-owned runtime request.
+            _ledger_user_id, _ledger_org_id = _resolve_session_identity(
+                session_id,
+                user_id=user_id,
+                sessions_source=self._sessions_service,
+            )
+            bohrium_ledger_port, bohrium_jobs_port = build_bohrium_jobs_ports(
+                session_id=session_id,
+                invocation_id=invocation_id,
+                user_id=_ledger_user_id,
+                org_id=_ledger_org_id,
+                workspace=stage_result.workspace,
+                delivery_snapshot=delivery_snapshot,
+            )
             agent_run_ctx = AgentRunContext(
                 environment=environment,
                 request=AgentRunRequest(
@@ -530,12 +555,14 @@ class AgentRunService:
                     llm_model=llm_bundle.model,
                     llm_model_profile=llm_bundle.model_profile,
                     llm_model_route=llm_bundle.model_route,
+                    supports_vision=llm_bundle.supports_vision,
+                    vision_detail=llm_bundle.vision_detail,
+                    context_limit=llm_bundle.context_limit,
                     invocation_id=invocation_id,
                     interaction_bridge=bridge,
                     turn_input=turn_input,
                     user_instructions=user_instructions,
                     active_skills=frozenset(),
-                    bohrium_rebuild_events=bohrium_rebuild_events,
                     ports=AgentRunPorts(
                         child_event_forward_sink=figure_coordinator.child_event_sink,
                         compaction=wiring.compaction,
@@ -545,6 +572,8 @@ class AgentRunService:
                             events_table=events_table,
                             session_id=session_id,
                         ),
+                        bohrium_job_ledger=bohrium_ledger_port,
+                        session_jobs=bohrium_jobs_port,
                     ),
                 ),
             )

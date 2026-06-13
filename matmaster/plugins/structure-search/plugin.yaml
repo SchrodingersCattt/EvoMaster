@@ -1,0 +1,2 @@
+category: structure-modeling
+description: "Find known crystal structures instead of building by hand: database retrieval by formula/composition/ID/prototype (mcp-mat-struct-db) and validated CIF/POSCAR acquisition via the retrieve-structure workflow."

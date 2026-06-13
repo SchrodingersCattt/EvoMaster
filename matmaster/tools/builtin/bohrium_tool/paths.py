@@ -3,16 +3,16 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from matmaster.types.session import REMOTE_ACCESS_ROOTS
+
 from .errors import BohriumPathError
 from .models import BohriumDownloadTarget, BohriumInputSource
 
-_REMOTE_SHARE_PREFIXES = ("/share/", "/personal/")
-
 
 def _is_remote_share(path: str) -> bool:
+    # 远端双根（/share、/personal）：精确匹配根，或根加 `/` 的后代。
     return any(
-        path.startswith(prefix) or path == prefix.rstrip("/")
-        for prefix in _REMOTE_SHARE_PREFIXES
+        path == root or path.startswith(root + "/") for root in REMOTE_ACCESS_ROOTS
     )
 
 

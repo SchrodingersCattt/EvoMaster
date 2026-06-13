@@ -13,7 +13,7 @@ from tests.matmaster.services.agent_run_stream_fixtures import (
 
 
 @pytest.mark.asyncio
-async def test_run_agent_passes_remote_workdir_to_bohrium_setup():
+async def test_run_agent_passes_workspace_to_bohrium_setup():
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
 
     async with _patched_service([run_result]) as (svc, _sse, _persist):
@@ -25,13 +25,14 @@ async def test_run_agent_passes_remote_workdir_to_bohrium_setup():
             mode="direct",
             task_id="task-1",
             invocation_id="inv-remote-workdir",
-            remote_workdir="/share/case",
+            workspace="/share/case",
         )
 
         bohrium_svc = svc._test_bohrium_svc
         call_kwargs = bohrium_svc.run_setup.call_args.kwargs
 
-    assert call_kwargs["remote_workdir"] == "/share/case"
+    assert call_kwargs["workspace"] == "/share/case"
+    assert "remote_workdir" not in call_kwargs
     assert call_kwargs["bohrium_required"] is True
 
 

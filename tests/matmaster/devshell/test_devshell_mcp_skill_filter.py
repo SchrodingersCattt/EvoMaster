@@ -12,7 +12,7 @@ from matmaster.config.loader import load_base_system_prompt
 from matmaster.core.exp import Exp
 from matmaster.core.playground import ExecutionEnvironment
 from matmaster.core.run_context import AgentRunContext, AgentRunRequest
-from matmaster.providers.openai_provider import OpenAIProvider
+from matmaster.providers.transports.chat_completions import ChatCompletionsTransport
 from matmaster.sessions.local import LocalSession
 from matmaster.types.run_metadata import RunMetadata
 
@@ -44,7 +44,9 @@ def test_devshell_mcp_only_struct_db_skill_and_lazy_mcp(
             metadata=RunMetadata(source="test"),
         ),
         request=AgentRunRequest(
-            llm_provider=OpenAIProvider(model="gpt-4o-mini", api_key="sk-test"),
+            llm_provider=ChatCompletionsTransport(
+                model="gpt-4o-mini", api_key="sk-test"
+            ),
             llm_config=None,
         ),
     )
@@ -53,7 +55,7 @@ def test_devshell_mcp_only_struct_db_skill_and_lazy_mcp(
         tools=ExpToolsConfig(builtin=["Bash"]),
         skills=ExpSkillsConfig(
             enabled=True,
-            skills_root=["matmaster/skills/lazymcp/mcp-mat-struct-db"],
+            skills_root=["matmaster/plugins/structure-search/skills/mcp-mat-struct-db"],
             cache_dir="matmaster/cache",
             config_dir="config",
             mcp_config_file="mcp_config.json",
@@ -63,7 +65,9 @@ def test_devshell_mcp_only_struct_db_skill_and_lazy_mcp(
     )
     assert exp_cfg.skills.enabled is True
     assert exp_cfg.skills.skill_names == []
-    assert exp_cfg.skills.skills_root == ["matmaster/skills/lazymcp/mcp-mat-struct-db"]
+    assert exp_cfg.skills.skills_root == [
+        "matmaster/plugins/structure-search/skills/mcp-mat-struct-db"
+    ]
 
     async def _run() -> None:
         exp = Exp(exp_cfg)
@@ -111,7 +115,9 @@ def test_mcp_runtime_patch_limits_mat_sg_lazy_tools(
             metadata=RunMetadata(source="test"),
         ),
         request=AgentRunRequest(
-            llm_provider=OpenAIProvider(model="gpt-4o-mini", api_key="sk-test"),
+            llm_provider=ChatCompletionsTransport(
+                model="gpt-4o-mini", api_key="sk-test"
+            ),
             llm_config=None,
         ),
     )
@@ -123,7 +129,9 @@ def test_mcp_runtime_patch_limits_mat_sg_lazy_tools(
         tools=ExpToolsConfig(builtin=["Bash"]),
         skills=ExpSkillsConfig(
             enabled=True,
-            skills_root=["matmaster/skills/sample-atomic-structures"],
+            skills_root=[
+                "matmaster/plugins/atomic-structure-ops/skills/sample-atomic-structures"
+            ],
             mcp_runtime_patch={
                 "tool_include_only": {
                     "mat_sg": ["submit_generate_calypso_structures"],

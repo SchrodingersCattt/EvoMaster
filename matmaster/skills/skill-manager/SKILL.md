@@ -1,7 +1,6 @@
 ---
 name: skill-manager
 description: "List and upload user skills to the MatMaster skill library. Use this when the user wants to save a workflow as a reusable skill or check what skills they already have."
-skill_type: operator
 ---
 
 # Skill Manager

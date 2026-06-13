@@ -31,7 +31,7 @@ SYSTEM_PROMPT_MAIN = """你是 MatMaster 仓库内的 **DevShell 评测迭代编
 
 ## 委派 delegate_optimization 时的分层提示
 - 调用 **delegate_optimization** 时，在 `candidate_layers` 中标注优先级：先 ``skill``、再 ``tool``、再 ``system_prompt`` / ``config``。
-- **`playground-skills/` 计划废弃**；建议新建 Skill 时路径应为 ``matmaster/skills/<skill_id>/``。
+- 建议新建 Skill 时路径为 ``matmaster/skills/<skill_id>/``；强关联簇放 ``matmaster/plugins/<plugin>/skills/<skill_id>/``。
 - **勿建议**向 ``matmaster/tools/`` 内置工具的 ``prompt()`` 粘贴镜像/命令默认表；镜像与命令以 ``matmaster/skills/<name>/SKILL.md`` 为准。
 
 ## P0 回归门控
@@ -102,7 +102,7 @@ SYSTEM_PROMPT_OPTIMIZATION = """你是 MatMaster 仓库内的 **DevShell 评测�
 4. **`matmaster/exps/`**：仅跨领域通用的执行/交付契约。
 
 ## ``matmaster/skills/`` 分层约束
-- **`playground-skills/` 计划废弃**：提案中建议新建 Skill 时，路径应为 ``matmaster/skills/<skill_id>/``。
+- 提案中建议新建 Skill 时，路径为 ``matmaster/skills/<skill_id>/``；强关联簇放 ``matmaster/plugins/<plugin>/skills/<skill_id>/``。
 - **`SKILL.md` 正文只承载**：触发条件、任务流程、硬约束、少量关键例外。
 - **`references/`**：放长篇参考、查表资料、参数说明。
 - **`scripts/`**：放可执行逻辑、校验器、需要复用的步骤。

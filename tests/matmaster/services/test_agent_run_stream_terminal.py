@@ -230,7 +230,6 @@ async def test_exception_emits_error_and_closed():
         events_table.query_user_turn_context_by_invocation.return_value = None
         events_table.add_event.return_value = True
         events_table.get_session_user_query_events.return_value = []
-        events_table.get_bohrium_events.return_value = []
         events_table_fn.return_value = events_table
 
         error_exp = _ErrorExp([])
@@ -245,6 +244,10 @@ async def test_exception_emits_error_and_closed():
                     model="test-model",
                     model_profile="test-profile",
                     model_route="test-route",
+                    context_limit=345_000,
+                    context_limit_source="profile",
+                    supports_vision=False,
+                    vision_detail=None,
                 ),
             ),
             patch('matmaster.core.exp.Exp', new=lambda config: error_exp),
@@ -368,7 +371,7 @@ async def test_persistence_receives_events():
 
 
 @pytest.mark.asyncio
-async def test_run_agent_passes_remote_workdir_to_bohrium_setup():
+async def test_run_agent_passes_workspace_to_bohrium_setup():
     run_result = RunResultEvent(source="agent", status="completed", reason="natural")
 
     async with _patched_service([run_result]) as (svc, _sse, _persist):
@@ -380,13 +383,14 @@ async def test_run_agent_passes_remote_workdir_to_bohrium_setup():
             mode="direct",
             task_id="task-1",
             invocation_id="inv-remote-workdir",
-            remote_workdir="/share/case",
+            workspace="/share/case",
         )
 
         bohrium_svc = svc._test_bohrium_svc
         call_kwargs = bohrium_svc.run_setup.call_args.kwargs
 
-    assert call_kwargs["remote_workdir"] == "/share/case"
+    assert call_kwargs["workspace"] == "/share/case"
+    assert "remote_workdir" not in call_kwargs
     assert call_kwargs["bohrium_required"] is True
 
 

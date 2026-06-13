@@ -5,7 +5,6 @@ import pytest
 from matmaster.context.ports import ActiveSkill, SessionEvent
 from matmaster.context.session import SessionContextBuilder
 
-
 _BASE_EVENTS = [
     {
         "id": 10,

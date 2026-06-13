@@ -19,6 +19,7 @@ from matmaster.integration.workspace_handler import WorkspaceHandler
 from matmaster.types.figures import FigureUploadConfig
 from src.dao.oss_io import upload_bytes_to_oss
 from src.services.agent_run_bohrium import BohriumSetupService
+from src.services.session_directory_service import normalize_remote_workspace_path
 from src.services.user_turn_context_service import (
     load_user_instructions_from_session,
 )
@@ -33,6 +34,7 @@ class BohriumStageResult:
     environment: ExecutionEnvironment
     ssh_attached: bool
     user_instructions: UserInstructions
+    workspace: str | None = None
 
 
 def _build_workspace_upload_fn(
@@ -77,7 +79,7 @@ async def run_bohrium_stage(
     environment: ExecutionEnvironment,
     run_started_at: float,
     bohrium_required: bool,
-    remote_workdir: str | None,
+    workspace: str | None,
 ) -> BohriumStageResult:
     """Run Bohrium setup and physically rebind the execution environment.
 
@@ -89,13 +91,13 @@ async def run_bohrium_stage(
         sessions_service,
         event_sink=dispatch_from_thread,
     )
-    effective_bohrium_required = bool(bohrium_required or remote_workdir)
+    effective_bohrium_required = bool(bohrium_required or workspace)
     bohrium_result = await bohrium_svc.run_setup(
         session_id=session_id,
         playground=playground,
         run_started_at=run_started_at,
         bohrium_required=effective_bohrium_required,
-        remote_workdir=remote_workdir,
+        workspace=workspace,
     )
     ssh_attached = bohrium_result.ssh_attached
     if bohrium_result.abort_result is not None:
@@ -105,9 +107,11 @@ async def run_bohrium_stage(
             environment=environment,
             ssh_attached=ssh_attached,
             user_instructions=load_user_instructions_from_session(None),
+            workspace=None,
         )
     if bohrium_result.runtime_snapshot is not None:
         environment = environment.with_bohrium(bohrium_result.runtime_snapshot)
+    stage_workspace: str | None = None
     if bohrium_result.execution_session is not None:
         execution_workdir = bohrium_result.execution_workdir or ''
         session_type = bohrium_result.session_type or 'ssh'
@@ -116,6 +120,8 @@ async def run_bohrium_stage(
             session_type=session_type,
             execution_workdir=execution_workdir,
         )
+        if ssh_attached:
+            stage_workspace = normalize_remote_workspace_path(execution_workdir)
     _ui_session = (
         bohrium_result.execution_session if bohrium_result else None
     ) or environment.session
@@ -137,4 +143,5 @@ async def run_bohrium_stage(
         environment=environment,
         ssh_attached=ssh_attached,
         user_instructions=user_instructions,
+        workspace=stage_workspace,
     )

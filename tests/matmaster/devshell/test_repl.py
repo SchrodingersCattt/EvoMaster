@@ -211,7 +211,10 @@ class TestCliRunMode:
             usage={"total_tokens": 3},
             messages=[],
         )
-        resolved = SimpleNamespace(model="m", profile_key="p", route_key="r")
+        resolved = SimpleNamespace(
+            profile=SimpleNamespace(model="m"),
+            profile_key="p",
+        )
 
         with patch(
             "matmaster.devshell.cli._run_with_event_log",
@@ -224,7 +227,6 @@ class TestCliRunMode:
         assert json.loads(captured.out) == {
             "model": "m",
             "profile_key": "p",
-            "route_key": "r",
             "status": "completed",
             "reason": "natural",
             "final_content": "OK",
@@ -263,7 +265,10 @@ class TestCliRunMode:
                 message="Model output was truncated by the provider output-token limit.",
             ),
         )
-        resolved = SimpleNamespace(model="m", profile_key="p", route_key="r")
+        resolved = SimpleNamespace(
+            profile=SimpleNamespace(model="m"),
+            profile_key="p",
+        )
 
         with patch(
             "matmaster.devshell.cli._run_with_event_log",
@@ -298,13 +303,21 @@ class TestCliRunMode:
             ]
         )
         fake_llm_config = SimpleNamespace(
-            resolve_route=lambda **_: SimpleNamespace(
-                model="m",
+            resolve=lambda **_: SimpleNamespace(
+                profile=SimpleNamespace(model="m"),
                 profile_key="p",
-                route_key="r",
+                provider=SimpleNamespace(base_url=""),
             )
         )
         captured: dict[str, object] = {}
+        fake_bundle = SimpleNamespace(
+            provider=object(),
+            model="m",
+            model_profile="p",
+            model_route="r",
+            context_limit=200_000,
+            context_limit_source="profile",
+        )
 
         class FakeRunner:
             def __init__(self, **kwargs) -> None:
@@ -320,8 +333,8 @@ class TestCliRunMode:
                 return_value=fake_llm_config,
             ),
             patch(
-                "matmaster.providers.llm_factory.build_provider",
-                return_value=object(),
+                "matmaster.providers.llm_factory.build_provider_bundle",
+                return_value=fake_bundle,
             ),
             patch("matmaster.devshell.runner.DevRunner", FakeRunner),
         ):
@@ -329,6 +342,33 @@ class TestCliRunMode:
 
         stream_hook = captured["stream_hook"]
         assert stream_hook._out is not sys.stdout
+        assert captured["llm_bundle"] is fake_bundle
+
+
+class TestDevRunnerRequest:
+    def test_runner_carries_bundle_identity_and_context_limit(self, tmp_path: Path):
+        from matmaster.devshell.config import DevConfig
+        from matmaster.devshell.runner import DevRunner
+
+        bundle = SimpleNamespace(
+            provider=object(),
+            model="qwen-max",
+            model_profile="qwen-profile",
+            model_route="qwen-route",
+            context_limit=1_000_000,
+        )
+        runner = DevRunner(
+            config=DevConfig(),
+            workdir=tmp_path,
+            llm_provider=bundle.provider,
+            llm_bundle=bundle,
+        )
+
+        request = runner.build_run_context().request
+        assert request.llm_model == "qwen-max"
+        assert request.llm_model_profile == "qwen-profile"
+        assert request.llm_model_route == "qwen-route"
+        assert request.context_limit == 1_000_000
 
 
 class TestShowTools:

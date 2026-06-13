@@ -210,12 +210,99 @@ class TestPublicContentForEvent:
             'type': 'thought',
             'source': 'Agent',
             'content': 'reasoning',
-            'model': 'claude-opus-4-6',
-            'model_profile': 'opus',
-            'model_route': 'bedrock-claude-opus',
+            'model': 'matmaster/qwen3.7-max',
+            'model_profile': 'matmaster/qwen3.7-max',
+            'model_route': 'matmaster/qwen3.7-max',
         }
 
         assert _public_content_for_event('thought', payload) == 'reasoning'
+
+    def test_thought_without_usage_keeps_plain_content(self) -> None:
+        payload = {'type': 'thought', 'source': 'Agent', 'content': 'delta'}
+
+        assert _public_content_for_event('thought', payload) == 'delta'
+
+    def test_thought_with_usage_returns_structured_content(self) -> None:
+        payload = {
+            'type': 'thought',
+            'source': 'Agent',
+            'content': 'reasoning text',
+            'stream_state': 'complete',
+            'turn_index': 0,
+            'turn_usage': {'prompt_tokens': 100, 'completion_tokens': 20},
+            'total_usage': {'prompt_tokens': 100, 'completion_tokens': 20},
+            'usage_vendor': {'inputTokens': 100, 'outputTokens': 20},
+        }
+        assert _public_content_for_event('thought', payload) == {
+            'content': 'reasoning text',
+            'turn_index': 0,
+            'turn_usage': {'prompt_tokens': 100, 'completion_tokens': 20},
+            'total_usage': {'prompt_tokens': 100, 'completion_tokens': 20},
+            'usage_vendor': {'inputTokens': 100, 'outputTokens': 20},
+        }
+
+    def test_tool_call_with_usage_projects_usage_fields(self) -> None:
+        payload = {
+            'type': 'tool_call',
+            'source': 'Agent',
+            'call_id': 'call_1',
+            'tool_name': 'Bash',
+            'arguments': {'cmd': 'ls'},
+            'turn_index': 0,
+            'turn_usage': {'prompt_tokens': 100, 'completion_tokens': 20},
+            'total_usage': {'prompt_tokens': 100, 'completion_tokens': 20},
+            'usage_vendor': {'inputTokens': 100, 'outputTokens': 20},
+        }
+        assert _public_content_for_event('tool_call', payload) == {
+            'id': 'call_1',
+            'call_id': 'call_1',
+            'name': 'Bash',
+            'args': {'cmd': 'ls'},
+            'turn_index': 0,
+            'turn_usage': {'prompt_tokens': 100, 'completion_tokens': 20},
+            'total_usage': {'prompt_tokens': 100, 'completion_tokens': 20},
+            'usage_vendor': {'inputTokens': 100, 'outputTokens': 20},
+        }
+
+    def test_tool_call_without_usage_keeps_minimal_shape(self) -> None:
+        payload = {
+            'type': 'tool_call',
+            'source': 'Agent',
+            'call_id': 'call_1',
+            'tool_name': 'Bash',
+            'arguments': {'cmd': 'ls'},
+            'turn_index': None,
+            'turn_usage': {},
+            'total_usage': {},
+            'usage_vendor': None,
+        }
+        assert _public_content_for_event('tool_call', payload) == {
+            'id': 'call_1',
+            'call_id': 'call_1',
+            'name': 'Bash',
+            'args': {'cmd': 'ls'},
+        }
+
+    def test_tool_result_does_not_project_usage(self) -> None:
+        payload = {
+            'type': 'tool_result',
+            'source': 'Agent',
+            'call_id': 'call-6',
+            'tool_name': 'bash',
+            'result': 'output',
+            'status': 'success',
+            'turn_index': 1,
+            'turn_usage': {'prompt_tokens': 10},
+            'total_usage': {'prompt_tokens': 10},
+        }
+        assert _public_content_for_event('tool_result', payload) == {
+            'id': 'call-6',
+            'call_id': 'call-6',
+            'name': 'bash',
+            'result': 'output',
+            'status': 'success',
+            'info': {},
+        }
 
     def test_response_with_usage_returns_structured_content(self) -> None:
         payload = {
@@ -243,16 +330,16 @@ class TestPublicContentForEvent:
             'type': 'response',
             'source': 'Agent',
             'content': 'answer',
-            'model': 'claude-opus-4-6',
-            'model_profile': 'opus',
-            'model_route': 'bedrock-claude-opus',
+            'model': 'matmaster/qwen3.7-max',
+            'model_profile': 'matmaster/qwen3.7-max',
+            'model_route': 'matmaster/qwen3.7-max',
         }
 
         assert _public_content_for_event('response', payload) == {
             'content': 'answer',
-            'model': 'claude-opus-4-6',
-            'model_profile': 'opus',
-            'model_route': 'bedrock-claude-opus',
+            'model': 'matmaster/qwen3.7-max',
+            'model_profile': 'matmaster/qwen3.7-max',
+            'model_route': 'matmaster/qwen3.7-max',
         }
 
     def test_run_result_public_content_includes_usage(self) -> None:
@@ -278,9 +365,9 @@ class TestPublicContentForEvent:
             'status': 'completed',
             'reason': 'natural',
             'final_content': 'done',
-            'model': 'claude-opus-4-6',
-            'model_profile': 'opus',
-            'model_route': 'bedrock-claude-opus',
+            'model': 'matmaster/qwen3.7-max',
+            'model_profile': 'matmaster/qwen3.7-max',
+            'model_route': 'matmaster/qwen3.7-max',
         }
 
         assert _public_content_for_event('run_result', payload) == {
@@ -295,16 +382,16 @@ class TestPublicContentForEvent:
             'type': 'assistant_state',
             'source': 'Agent',
             'state': state,
-            'model': 'claude-opus-4-6',
-            'model_profile': 'opus',
-            'model_route': 'bedrock-claude-opus',
+            'model': 'matmaster/qwen3.7-max',
+            'model_profile': 'matmaster/qwen3.7-max',
+            'model_route': 'matmaster/qwen3.7-max',
         }
 
         assert _public_content_for_event('assistant_state', payload) == {
             'state': state,
-            'model': 'claude-opus-4-6',
-            'model_profile': 'opus',
-            'model_route': 'bedrock-claude-opus',
+            'model': 'matmaster/qwen3.7-max',
+            'model_profile': 'matmaster/qwen3.7-max',
+            'model_route': 'matmaster/qwen3.7-max',
         }
 
     def test_failed_run_result_preserves_usage_and_finish_detail(self) -> None:
@@ -327,7 +414,7 @@ class TestPublicContentForEvent:
         assert content['usage'] == {'prompt_tokens': 10, 'completion_tokens': 2}
         assert content['finish_detail'] == detail
 
-    def test_usage_event_mappings_preserve_turn_index(self) -> None:
+    def test_assistant_state_mapping_preserves_turn_index(self) -> None:
         state = {'role': 'assistant', 'content': None, 'tool_calls': []}
         assistant = _public_content_for_event(
             'assistant_state',
@@ -338,20 +425,36 @@ class TestPublicContentForEvent:
                 'total_usage': {'prompt_tokens': 10},
             },
         )
-        tool = _public_content_for_event(
-            'tool_result',
-            {
-                'call_id': 'call-6',
-                'tool_name': 'bash',
-                'result': 'output',
-                'status': 'success',
-                'turn_index': 1,
-                'turn_usage': {'prompt_tokens': 10},
-                'total_usage': {'prompt_tokens': 10},
-            },
-        )
         assert assistant['turn_index'] == 1
-        assert tool['turn_index'] == 1
+
+    def test_tool_result_public_content_carries_images(self) -> None:
+        payload = {
+            "call_id": "tc1",
+            "tool_name": "Read",
+            "result": "Read image: a.png",
+            "status": "success",
+            "payload": {},
+            "images": [
+                {
+                    "url": "data:image/png;base64,aGVsbG8=",
+                    "mime_type": "image/png",
+                    "detail": None,
+                }
+            ],
+        }
+        out = _public_content_for_event("tool_result", payload)
+        assert out["images"][0]["url"] == "data:image/png;base64,aGVsbG8="
+
+    def test_tool_result_public_content_no_images_key_when_empty(self) -> None:
+        payload = {
+            "call_id": "tc1",
+            "tool_name": "Read",
+            "result": "ok",
+            "status": "success",
+            "payload": {},
+        }
+        out = _public_content_for_event("tool_result", payload)
+        assert "images" not in out
 
     def test_structured_response_content_is_unpacked_for_sse(self) -> None:
         payload = {
@@ -379,9 +482,9 @@ class TestPublicContentForEvent:
             'type': 'thought',
             'content': {
                 'content': 'thinking',
-                'model': 'claude-opus-4-6',
-                'model_profile': 'opus',
-                'model_route': 'bedrock-claude-opus',
+                'model': 'matmaster/qwen3.7-max',
+                'model_profile': 'matmaster/qwen3.7-max',
+                'model_route': 'matmaster/qwen3.7-max',
             },
             'session_id': 'sess',
             'task_id': 'task',
@@ -394,6 +497,27 @@ class TestPublicContentForEvent:
         assert 'model' not in normalized
         assert 'model_profile' not in normalized
         assert 'model_route' not in normalized
+
+    def test_structured_thought_content_is_unpacked_for_sse(self) -> None:
+        payload = {
+            'source': 'MatMaster',
+            'type': 'thought',
+            'content': {
+                'content': 'reasoning text',
+                'turn_index': 3,
+                'turn_usage': {'total_tokens': 12},
+                'total_usage': {'total_tokens': 30},
+                'usage_vendor': {'inputTokens': 10, 'outputTokens': 2},
+            },
+            'session_id': 'sess',
+            'task_id': 'task',
+            'spawn_id': None,
+        }
+        normalized = normalize_response_sse_payload(payload)
+        assert normalized['content'] == 'reasoning text'
+        assert normalized['turn_index'] == 3
+        assert normalized['turn_usage'] == {'total_tokens': 12}
+        assert normalized['total_usage'] == {'total_tokens': 30}
 
     def test_response_figures_payload_maps_to_public_content(self) -> None:
         payload = {
@@ -639,7 +763,9 @@ class TestBuildPublicSsePayloadDedup:
         out = self._build(raw)
         # Structured payload lives in content.
         assert out['content']['result'] == 'big output'
-        assert out['content']['total_usage'] == {'total_tokens': 20}
+        assert 'turn_index' not in out['content']
+        assert 'turn_usage' not in out['content']
+        assert 'total_usage' not in out['content']
         # No business field is duplicated at the top level.
         for key in (
             'result',

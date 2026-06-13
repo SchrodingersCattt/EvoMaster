@@ -14,9 +14,10 @@ from matmaster.types.events import (
     SkillHitEvent,
     ThoughtEvent,
 )
-from matmaster.types.messages import LLMResponse, StreamChunk, ToolCallData
+from matmaster.types.messages import LLMResponse, StreamChunk, ToolCallData, UserMessage
 
 from .agent_kernel_test_helpers import (
+    ProviderProtocolAttrs,
     StreamingProvider,
     _make_tool_registry,
     make_kernel_runtime,
@@ -26,7 +27,7 @@ from .agent_kernel_test_helpers import make_kernel_turn as turn
 MODEL_IDENTITY_FIELDS = {'model', 'model_profile', 'model_route'}
 
 
-class ReasoningThenContentProvider:
+class ReasoningThenContentProvider(ProviderProtocolAttrs):
     """Provider that streams reasoning chunks then content chunks."""
 
     def __init__(self) -> None:
@@ -52,7 +53,7 @@ class ReasoningThenContentProvider:
         )
 
 
-class ContentOnlyProvider:
+class ContentOnlyProvider(ProviderProtocolAttrs):
     """Provider that only streams content, no reasoning."""
 
     async def __aenter__(self):
@@ -82,7 +83,7 @@ class RecordingContentProvider(ContentOnlyProvider):
         yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 5})
 
 
-class ToolCallStreamProvider:
+class ToolCallStreamProvider(ProviderProtocolAttrs):
     """Provider that streams content then tool_calls, then finishes naturally."""
 
     def __init__(self) -> None:
@@ -117,7 +118,7 @@ class ToolCallStreamProvider:
             yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
 
 
-class SkillStreamProvider:
+class SkillStreamProvider(ProviderProtocolAttrs):
     """Provider that calls Skill tool then finishes."""
 
     def __init__(self) -> None:
@@ -151,7 +152,7 @@ class SkillStreamProvider:
             yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
 
 
-class TrivialToolPreambleProvider:
+class TrivialToolPreambleProvider(ProviderProtocolAttrs):
     """Provider that emits punctuation-only content before switching to tools."""
 
     def __init__(self) -> None:
@@ -186,7 +187,7 @@ class TrivialToolPreambleProvider:
             yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
 
 
-class EmptyStopProvider:
+class EmptyStopProvider(ProviderProtocolAttrs):
     """Provider that ends cleanly without content or tool calls."""
 
     stream_timeout = 10.0
@@ -216,7 +217,7 @@ class EmptyStopProvider:
         yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
 
 
-class EmptyThenContentProvider:
+class EmptyThenContentProvider(ProviderProtocolAttrs):
     """Provider that returns an empty stop once, then a valid answer."""
 
     stream_timeout = 10.0
@@ -285,8 +286,8 @@ class TestStreamLlmItems:
         assert len(streaming_responses) >= 1, "Should yield streaming ResponseEvents"
 
     @pytest.mark.asyncio
-    async def test_segment_complete_on_reasoning_to_content(self) -> None:
-        """ThoughtEvent(complete) emitted when transitioning from reasoning to content."""
+    async def test_segment_end_on_reasoning_to_content(self) -> None:
+        """ThoughtEvent(segment_end) emitted when transitioning from reasoning to content."""
         from matmaster.core.kernel_items import _KernelItem
 
         provider = ReasoningThenContentProvider()
@@ -299,7 +300,6 @@ class TestStreamLlmItems:
         ):
             items.append(item)
 
-        # Find thought-complete event
         thought_completes = [
             i
             for i in items
@@ -307,11 +307,16 @@ class TestStreamLlmItems:
             and isinstance(i.event, ThoughtEvent)
             and i.event.stream_state == "complete"
         ]
-        assert (
-            len(thought_completes) >= 1
-        ), "Should yield ThoughtEvent(complete) on transition"
-        # The complete event should contain the full reasoning
-        assert "thinking part 1" in thought_completes[0].event.content
+        thought_segment_ends = [
+            i
+            for i in items
+            if i.event
+            and isinstance(i.event, ThoughtEvent)
+            and i.event.stream_state == "segment_end"
+        ]
+        assert thought_completes == []
+        assert len(thought_segment_ends) >= 1
+        assert "thinking part 1" in thought_segment_ends[0].event.content
 
     @pytest.mark.asyncio
     async def test_response_segment_end_at_stream_end(self) -> None:
@@ -483,10 +488,10 @@ class TestRunItemsAssistantState:
         user_messages = [
             message
             for message in provider.seen_messages[0]
-            if message.get("role") == "user"
+            if isinstance(message, UserMessage)
         ]
-        assert user_messages[-1]["content"] == task
-        assert "ATTACHMENT-SHOULD-BE-IGNORED" not in user_messages[-1]["content"]
+        assert user_messages[-1].content == task
+        assert "ATTACHMENT-SHOULD-BE-IGNORED" not in (user_messages[-1].content or "")
 
     @pytest.mark.asyncio
     async def test_turn_input_images_are_sent_as_content_parts(self) -> None:
@@ -510,16 +515,14 @@ class TestRunItemsAssistantState:
             events.append(event)
 
         user_message = provider.seen_messages[0][-1]
-        assert user_message["role"] == "user"
-        assert user_message["content"] == [
-            {"type": "text", "text": "看图"},
+        assert isinstance(user_message, UserMessage)
+        assert user_message.content == "看图"
+        assert [image.model_dump(mode="json") for image in user_message.images] == [
             {
-                "type": "image_url",
-                "image_url": {
-                    "url": "https://oss.example.com/chat/a.png",
-                    "detail": "high",
-                },
-            },
+                "url": "https://oss.example.com/chat/a.png",
+                "mime_type": None,
+                "detail": "high",
+            }
         ]
 
     @pytest.mark.asyncio
@@ -554,9 +557,9 @@ class TestRunItemsAssistantState:
         provider = ReasoningThenContentProvider()
         kernel_runtime = make_kernel_runtime(
             provider=provider,
-            llm_model="claude-opus-4-6",
-            llm_model_profile="opus",
-            llm_model_route="bedrock-claude-opus",
+            llm_model="matmaster/qwen3.7-max",
+            llm_model_profile="matmaster/qwen3.7-max",
+            llm_model_route="matmaster/qwen3.7-max",
         )
         kernel = AgentKernel()
 
@@ -577,9 +580,9 @@ class TestRunItemsAssistantState:
         )
 
         for event in (complete_response, run_result):
-            assert event.model == "claude-opus-4-6"
-            assert event.model_profile == "opus"
-            assert event.model_route == "bedrock-claude-opus"
+            assert event.model == "matmaster/qwen3.7-max"
+            assert event.model_profile == "matmaster/qwen3.7-max"
+            assert event.model_route == "matmaster/qwen3.7-max"
 
         assert MODEL_IDENTITY_FIELDS.isdisjoint(complete_thought.model_dump())
 
@@ -593,9 +596,9 @@ class TestRunItemsAssistantState:
         provider = ReasoningThenContentProvider()
         kernel_runtime = make_kernel_runtime(
             provider=provider,
-            llm_model="claude-opus-4-6",
-            llm_model_profile="opus",
-            llm_model_route="bedrock-claude-opus",
+            llm_model="matmaster/qwen3.7-max",
+            llm_model_profile="matmaster/qwen3.7-max",
+            llm_model_route="matmaster/qwen3.7-max",
         )
         kernel = AgentKernel()
 
@@ -624,9 +627,9 @@ class TestRunItemsAssistantState:
         kernel_runtime = make_kernel_runtime(
             provider=provider,
             tool_registry=registry,
-            llm_model="claude-opus-4-6",
-            llm_model_profile="opus",
-            llm_model_route="bedrock-claude-opus",
+            llm_model="matmaster/qwen3.7-max",
+            llm_model_profile="matmaster/qwen3.7-max",
+            llm_model_route="matmaster/qwen3.7-max",
         )
         kernel = AgentKernel()
 
@@ -636,9 +639,9 @@ class TestRunItemsAssistantState:
 
         assistant_state = next(e for e in events if isinstance(e, AssistantStateEvent))
 
-        assert assistant_state.model == "claude-opus-4-6"
-        assert assistant_state.model_profile == "opus"
-        assert assistant_state.model_route == "bedrock-claude-opus"
+        assert assistant_state.model == "matmaster/qwen3.7-max"
+        assert assistant_state.model_profile == "matmaster/qwen3.7-max"
+        assert assistant_state.model_route == "matmaster/qwen3.7-max"
 
     @pytest.mark.asyncio
     async def test_assistant_state_drops_trivial_tool_call_preamble_content(

@@ -1,7 +1,6 @@
 """matmaster.providers -- Concrete LLM provider implementations."""
 
-from .bedrock_provider import BedrockProvider
 from .llm_factory import build_provider
-from .openai_provider import OpenAIProvider
+from .transports.chat_completions import ChatCompletionsTransport
 
-__all__ = ["BedrockProvider", "OpenAIProvider", "build_provider"]
+__all__ = ["ChatCompletionsTransport", "build_provider"]

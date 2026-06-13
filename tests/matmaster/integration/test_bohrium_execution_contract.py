@@ -43,7 +43,7 @@ def _make_pg(original_session: MagicMock) -> MagicMock:
     pg._owns_session = True
     pg.config = MagicMock()
     pg.config.model_dump.return_value = {
-        'skills': {'skills_root': 'matmaster/skills/lazymcp'},
+        'skills': {'skills_root': 'matmaster/skills'},
     }
     return pg
 
@@ -384,7 +384,10 @@ def _provider_bundle(provider: Any) -> SimpleNamespace:
         model_profile="test-profile",
         model_route="test-route",
         provider_name="openai",
-        model_family="test-family",
+        context_limit=345_000,
+        context_limit_source="profile",
+        supports_vision=False,
+        vision_detail=None,
     )
 
 
@@ -510,11 +513,11 @@ def test_execution_binding_before_build_runtime(
         True,
         None,
         mock_exec,
-        '/remote/ws',
+        '/share/remote/ws',
         'ssh',
         BohriumRuntimeSnapshot(
             session_type='ssh',
-            execution_workdir='/remote/ws',
+            execution_workdir='/share/remote/ws',
             remote_workspace_root='/share',
             remote_project_root='/share/.matmaster',
             node_id=9,
@@ -580,7 +583,7 @@ def test_execution_binding_before_build_runtime(
     ctx_passed = captured_run_stream_args['ctx']
     assert ctx_passed.environment.session is mock_exec
     assert ctx_passed.environment.session_type == 'ssh'
-    assert ctx_passed.environment.execution_workdir == '/remote/ws'
+    assert ctx_passed.environment.execution_workdir == '/share/remote/ws'
     snapshot = ctx_passed.environment.bohrium.snapshot
     assert snapshot is not None
     assert snapshot.ssh_attached is True
@@ -593,7 +596,7 @@ def test_execution_binding_before_build_runtime(
 @patch.object(arb, "_remote_session_workspace_root", return_value="/share")
 @patch("src.services.agent_run_bohrium.get_bohrium_nodes_table")
 @patch("src.services.agent_run_bohrium.get_bohrium_node_service")
-def test_setup_uses_remote_workdir_for_ssh_and_execution_context(
+def test_setup_uses_workspace_for_ssh_and_execution_context(
     mock_node_svc_factory: MagicMock,
     mock_nodes_table_factory: MagicMock,
     mock_remote_workspace_root: MagicMock,
@@ -627,7 +630,7 @@ def test_setup_uses_remote_workdir_for_ssh_and_execution_context(
             org_id="o1",
             event_callback=MagicMock(),
             run_started_at=0.0,
-            remote_workdir="/share/case",
+            workspace="/share/case",
         )
 
     cfg = mock_ssh_cls.call_args.args[0]
@@ -640,7 +643,7 @@ def test_setup_uses_remote_workdir_for_ssh_and_execution_context(
     mock_ssh.open.assert_called_once()
 
 
-def test_run_setup_forwards_remote_workdir_to_setup() -> None:
+def test_run_setup_forwards_workspace_to_setup() -> None:
     from src.services.user_service import BohriumAccessKeyFetchResult
 
     svc = _make_bohrium_service()
@@ -673,9 +676,10 @@ def test_run_setup_forwards_remote_workdir_to_setup() -> None:
                 playground=MagicMock(),
                 run_started_at=1.0,
                 bohrium_required=True,
-                remote_workdir="/share/case",
+                workspace="/share/case",
             )
         )
 
     assert result is expected
-    assert mock_setup.call_args.kwargs["remote_workdir"] == "/share/case"
+    assert mock_setup.call_args.kwargs["workspace"] == "/share/case"
+    assert "remote_workdir" not in mock_setup.call_args.kwargs

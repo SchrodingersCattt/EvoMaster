@@ -17,6 +17,8 @@ from matmaster.config.exp import DEFAULT_MODE, SUPPORTED_MODES
 from matmaster.context.sources.turn_input import TurnInput
 from matmaster.types.cancellation import CancellationController
 from src.dao.redis_dao import get_redis_dao
+from src.models.chat import DeliverySpec
+from src.services import bohrium_delivery_ack
 from src.services.agent_run_service import get_agent_run_service
 from src.services.sessions_service import get_sessions_service
 from src.services.user_service import UserService
@@ -79,12 +81,19 @@ def _format_run_duration(duration_sec: float) -> str:
     return f'{h} 小时 {m} 分'
 
 
+def _should_notify_completion(delivery: dict | None) -> bool:
+    """job.delivery 控制完成通知；缺省语义唯一来源是 DeliverySpec 的字段默认值。"""
+    try:
+        return DeliverySpec.model_validate(delivery or {}).notify
+    except Exception:  # noqa: BLE001
+        return True
+
+
 def _build_completion_card(
     *,
     session_id: str,
     session_url: str,
     user_info_display: str,
-    llm: str | None,
     model: str | None,
     user_question: str,
     run_success: bool,
@@ -103,7 +112,7 @@ def _build_completion_card(
         ('会话ID', session_id),
         ('会话地址', session_url),
         ('用户', user_info_display),
-        ('模型', format_llm_model_for_notify(llm, model)),
+        ('模型', format_llm_model_for_notify(model)),
         ('用户问题', user_question or '-'),
         ('执行节点', get_worker_id()),
         (
@@ -294,7 +303,7 @@ def _worker_heartbeat_loop(stop_ev: threading.Event) -> None:
 def _run_worker_loop() -> None:
     global _current_session_id, _active_controller
     redis_dao = get_redis_dao()
-    if not redis_dao.create_client():
+    if not redis_dao.get_command_client():
         logger.error(
             'Agent worker: REDIS_URL not configured or Redis unreachable. Exit.'
         )
@@ -328,7 +337,6 @@ def _run_worker_loop() -> None:
                 DEFAULT_MODE,
             )
             mode = DEFAULT_MODE
-        llm_override = (payload.get('llm') or '').strip() or None
         model_override = (payload.get('model') or '').strip() or None
         byok_credential_id = (payload.get('byok_credential_id') or '').strip() or None
         raw_images = payload.get('images') or []
@@ -339,12 +347,11 @@ def _run_worker_loop() -> None:
         )
         turn_input = TurnInput.from_payload(payload.get('turn_input'))
         bohrium_required = bool(payload.get('bohrium_required'))
-        raw_remote_workdir = payload.get('remote_workdir')
-        remote_workdir = (
-            raw_remote_workdir.strip() or None
-            if isinstance(raw_remote_workdir, str)
-            else None
+        raw_workspace = payload.get('workspace')
+        workspace = (
+            raw_workspace.strip() or None if isinstance(raw_workspace, str) else None
         )
+        delivery = payload.get('delivery')
 
         if not session_id:
             logger.warning('Agent worker: skip job with empty session_id')
@@ -376,6 +383,8 @@ def _run_worker_loop() -> None:
         bridge = RedisCancellationBridge(controller, session_id, task_id)
         bridge.start()
         acquired = False
+        delivery_snapshot = None
+        run_success = False
 
         try:
             acquired_ok, fail_reason = sessions_service.try_acquire_session_run(
@@ -404,6 +413,8 @@ def _run_worker_loop() -> None:
 
             acquired = True
             _current_session_id = session_id
+            # run 起点固化本轮交付边界；查询失败返回 None 不阻断 run
+            delivery_snapshot = bohrium_delivery_ack.snapshot(session_id)
             run_start_time = time.monotonic()
             queue_len = redis_dao.llen_agent_run_queue()
             active_count = get_worker_registry_service().count_active_runs()
@@ -417,7 +428,7 @@ def _run_worker_loop() -> None:
                     ('会话ID', session_id),
                     ('会话地址', session_url),
                     ('用户', user_info_display),
-                    ('模型', format_llm_model_for_notify(llm_override, model_override)),
+                    ('模型', format_llm_model_for_notify(model_override)),
                     ('模式', mode),
                     ('用户问题', user_question or '-'),
                     ('执行节点', get_worker_id()),
@@ -440,14 +451,14 @@ def _run_worker_loop() -> None:
                     "mode": mode,
                     "task_id": task_id,
                     "invocation_id": invocation_id,
-                    "llm_override": llm_override,
                     "model_override": model_override,
                     "byok_credential_id": byok_credential_id,
                     "user_id": session_user_id,
                     "images": images,
                     "turn_input": turn_input,
-                    "remote_workdir": remote_workdir,
+                    "workspace": workspace,
                     "bohrium_required": bohrium_required,
+                    "delivery_snapshot": delivery_snapshot,
                 }
                 result = asyncio.run(agent_run_service.run_agent(**run_agent_kwargs))
                 run_result = result
@@ -512,6 +523,17 @@ def _run_worker_loop() -> None:
             redis_dao.delete_interaction_run_active(session_id)
             redis_dao.delete_stop_requested(session_id, task_id)
             if acquired:
+                if run_success and delivery_snapshot is not None:
+                    try:
+                        bohrium_delivery_ack.confirm(delivery_snapshot)
+                    except Exception:
+                        logger.warning(
+                            'Agent worker: bohrium delivery confirm failed '
+                            'session_id=%s task_id=%s',
+                            session_id,
+                            task_id,
+                            exc_info=True,
+                        )
                 sessions_service.release_session_run(
                     session_id, run_success=run_success
                 )
@@ -534,39 +556,44 @@ def _run_worker_loop() -> None:
                     fail_reason_str = _FAIL_REASON_DISPLAY.get(
                         fail_reason_str, fail_reason_str
                     )
-                    title, rows, template = _build_completion_card(
-                        session_id=session_id,
-                        session_url=session_url,
-                        user_info_display=user_info_display,
-                        llm=llm_override,
-                        model=model_override,
-                        user_question=user_question,
-                        run_success=run_success,
-                        fail_reason=fail_reason,
-                        fail_reason_str=fail_reason_str,
-                        duration_str=duration_str,
-                        active_count=active_count,
-                        queue_len=queue_len,
-                        usage_summary=usage_summary,
-                    )
-                    notify_post_async(title, rows, template=template)
-                    logger.info(
-                        'Agent worker: Feishu completion card queued session_id=%s title=%s',
-                        session_id,
-                        title,
-                    )
-                    # 会话完成/失败时给用户发邮件（模板：会话已执行完成+链接），与飞书通知并行
-                    _send_completion_email(
-                        session_user_id=session_user_id,
-                        user_info=user_info,
-                        payload=payload,
-                        session_url=session_url,
-                        user_question=user_question,
-                        duration_str=duration_str,
-                        run_success=run_success,
-                        fail_reason=fail_reason,
-                        fail_reason_str=fail_reason_str,
-                    )
+                    if _should_notify_completion(delivery):
+                        title, rows, template = _build_completion_card(
+                            session_id=session_id,
+                            session_url=session_url,
+                            user_info_display=user_info_display,
+                            model=model_override,
+                            user_question=user_question,
+                            run_success=run_success,
+                            fail_reason=fail_reason,
+                            fail_reason_str=fail_reason_str,
+                            duration_str=duration_str,
+                            active_count=active_count,
+                            queue_len=queue_len,
+                            usage_summary=usage_summary,
+                        )
+                        notify_post_async(title, rows, template=template)
+                        logger.info(
+                            'Agent worker: Feishu completion card queued session_id=%s title=%s',
+                            session_id,
+                            title,
+                        )
+                        # 会话完成/失败时给用户发邮件（模板：会话已执行完成+链接），与飞书通知并行
+                        _send_completion_email(
+                            session_user_id=session_user_id,
+                            user_info=user_info,
+                            payload=payload,
+                            session_url=session_url,
+                            user_question=user_question,
+                            duration_str=duration_str,
+                            run_success=run_success,
+                            fail_reason=fail_reason,
+                            fail_reason_str=fail_reason_str,
+                        )
+                    else:
+                        logger.info(
+                            'Agent worker: completion notify suppressed by delivery session_id=%s',
+                            session_id,
+                        )
                 except Exception:
                     logger.exception(
                         'Agent worker: completion notify block failed session_id=%s task_id=%s',

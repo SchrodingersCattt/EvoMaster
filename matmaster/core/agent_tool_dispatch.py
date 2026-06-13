@@ -104,13 +104,13 @@ async def dispatch_tool_calls(
     )
     runner_results = await tool_runner.execute_batch(tool_calls, exec_ctx)
 
-    turn_index = state.turn - 1
     for tc, tool_result in runner_results:
         state.messages.append(
             ToolMessage(
                 tool_call_id=tc.id,
                 tool_name=tc.name,
                 content=tool_result.content,
+                images=tool_result.images,
             )
         )
         usage_delta = extract_tool_usage_delta(tc.name, tool_result)
@@ -124,9 +124,7 @@ async def dispatch_tool_calls(
                 result=tool_result.content,
                 status=tool_result.status,
                 payload=tool_result.payload,
-                turn_index=turn_index,
-                turn_usage=dict(state.turn_usage),
-                total_usage=dict(state.total_usage),
+                images=tool_result.images,
             )
         )
         if tc.name == "Skill":

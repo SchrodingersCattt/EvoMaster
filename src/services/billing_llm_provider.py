@@ -14,7 +14,7 @@ import aiohttp
 from clients.billing.client import BillingRunContext, BillingService
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.llm_provider import LLMProvider
-from matmaster.types.messages import LLMResponse, StreamChunk
+from matmaster.types.messages import LLMResponse, Message, StreamChunk
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -204,7 +204,7 @@ class BillingLLMProvider:
 
     async def chat(
         self,
-        messages: list[dict[str, Any]],
+        messages: list[Message],
         tools: list[dict[str, Any]] | None = None,
         *,
         tool_choice: str | dict | None = None,
@@ -223,7 +223,7 @@ class BillingLLMProvider:
 
     async def chat_stream(
         self,
-        messages: list[dict[str, Any]],
+        messages: list[Message],
         tools: list[dict[str, Any]] | None = None,
         *,
         timeout: float | None = None,

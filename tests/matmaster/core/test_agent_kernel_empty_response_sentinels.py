@@ -10,13 +10,14 @@ from matmaster.types.events import AssistantStateEvent, ResponseEvent, RunResult
 from matmaster.types.messages import LLMResponse, StreamChunk
 
 from .agent_kernel_test_helpers import (
+    ProviderProtocolAttrs,
     _make_tool_registry,
     make_kernel_runtime,
     make_kernel_turn,
 )
 
 
-class EmptyStopProvider:
+class EmptyStopProvider(ProviderProtocolAttrs):
     """Provider that ends cleanly with configurable assistant content."""
 
     stream_timeout = 10.0
@@ -43,7 +44,7 @@ class EmptyStopProvider:
         yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
 
 
-class SentinelToolPreambleProvider:
+class SentinelToolPreambleProvider(ProviderProtocolAttrs):
     """Provider that emits an empty-value sentinel before switching to tools."""
 
     def __init__(self) -> None:

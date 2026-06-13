@@ -29,11 +29,12 @@ from matmaster.types.run_metadata import RunMetadata
 from matmaster.types.runtime import AgentKernelTurnRequest
 from matmaster.types.tool_spec import ResourceClaim
 from matmaster.types.topology import ToolPlane
+from tests.conftest import ProviderProtocolAttrs
 
 # ── Mock LLM provider ────────────────────────────────
 
 
-class MockLLMProvider:
+class MockLLMProvider(ProviderProtocolAttrs):
     """Mock LLM that returns a natural finish after 1 turn (no tool calls).
 
     Streams a single chunk with content, then a finish chunk.
@@ -75,11 +76,14 @@ def _provider_bundle(provider: Any) -> SimpleNamespace:
         model_profile="test-profile",
         model_route="test-route",
         provider_name="openai",
-        model_family="test-family",
+        context_limit=345_000,
+        context_limit_source="profile",
+        supports_vision=False,
+        vision_detail=None,
     )
 
 
-class MockLLMProviderWithToolCall:
+class MockLLMProviderWithToolCall(ProviderProtocolAttrs):
     """Mock LLM: returns tool_call on first turn, finish on second.
 
     First call: streams a tool call delta for 'echo' tool.
@@ -120,7 +124,7 @@ class MockLLMProviderWithToolCall:
             yield StreamChunk(content="Done after tool.", finish_reason="stop")
 
 
-class MockLLMProviderCapturingMessages:
+class MockLLMProviderCapturingMessages(ProviderProtocolAttrs):
     """Mock LLM that captures messages passed to chat_stream for verification."""
 
     def __init__(self) -> None:
@@ -487,13 +491,13 @@ class TestMatMasterRunAgentE2E:
 
         assert len(mock_llm.captured_messages) == 1
         llm_messages = mock_llm.captured_messages[0]
-        assert [m["role"] for m in llm_messages] == [
+        assert [m.role.value for m in llm_messages] == [
             "system",
             "user",
             "assistant",
             "user",
         ]
-        assert [m["content"] for m in llm_messages[1:]] == [
+        assert [m.content for m in llm_messages[1:]] == [
             "old question",
             "old answer",
             "<current_instruction>\nnew question\n</current_instruction>",

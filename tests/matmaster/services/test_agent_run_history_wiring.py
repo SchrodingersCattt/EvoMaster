@@ -39,9 +39,6 @@ def test_history_wiring_none_scope_boundary_stays_missing() -> None:
         def get_latest_scope_event_id(self, session_id, spawn_id):
             return None
 
-        def get_bohrium_events(self, session_id):
-            return []
-
     with patch(
         "src.services.agent_run_history_wiring.ModelHistoryRestoreService"
     ) as restore_cls:
@@ -73,9 +70,6 @@ async def test_history_wiring_load_events_returns_typed_session_events() -> None
 
         def get_latest_scope_event_id(self, session_id, spawn_id):
             return 3
-
-        def get_bohrium_events(self, session_id):
-            return []
 
     table = EventsTable()
 

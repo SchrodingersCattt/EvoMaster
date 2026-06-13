@@ -22,11 +22,12 @@ from matmaster.core.playground import ExecutionEnvironment
 from matmaster.types.cancellation import CancellationController
 from matmaster.types.messages import LLMResponse, StreamChunk
 from matmaster.types.run_metadata import RunMetadata
+from tests.conftest import ProviderProtocolAttrs
 
 # ── Mock LLM providers for different outcomes ────────
 
 
-class _SuccessLLM:
+class _SuccessLLM(ProviderProtocolAttrs):
     """Mock LLM: natural finish."""
 
     async def __aenter__(self) -> _SuccessLLM:
@@ -44,7 +45,7 @@ class _SuccessLLM:
         yield StreamChunk(content='success', finish_reason='stop')
 
 
-class _InvalidFinishLLM:
+class _InvalidFinishLLM(ProviderProtocolAttrs):
     """Mock LLM: streams content but ends with a non-committable finish reason."""
 
     async def __aenter__(self) -> _InvalidFinishLLM:
@@ -63,7 +64,7 @@ class _InvalidFinishLLM:
         yield StreamChunk(finish_reason='length')
 
 
-class _EmptyStopLLM:
+class _EmptyStopLLM(ProviderProtocolAttrs):
     """Mock LLM: clean stop with no user-visible content or tool calls."""
 
     stream_timeout = 10.0
@@ -85,7 +86,7 @@ class _EmptyStopLLM:
         yield StreamChunk(finish_reason='stop')
 
 
-class _SentinelStopLLM:
+class _SentinelStopLLM(ProviderProtocolAttrs):
     """Mock LLM: returns an empty-value sentinel as the whole answer."""
 
     stream_timeout = 10.0
@@ -108,7 +109,7 @@ class _SentinelStopLLM:
         yield StreamChunk(finish_reason='stop')
 
 
-class _ErrorLLM:
+class _ErrorLLM(ProviderProtocolAttrs):
     """Mock LLM: raises exception."""
 
     async def __aenter__(self) -> _ErrorLLM:
@@ -204,7 +205,10 @@ def _run_agent(
                 model_profile="test-profile",
                 model_route="test-route",
                 provider_name="test-provider",
-                model_family="test-family",
+                context_limit=345_000,
+                context_limit_source="profile",
+                supports_vision=False,
+                vision_detail=None,
             ),
         ),
         patch('matmaster.config.loader.load_llm_config', return_value=MagicMock()),

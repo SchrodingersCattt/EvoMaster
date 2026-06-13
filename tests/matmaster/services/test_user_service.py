@@ -145,3 +145,56 @@ def test_get_bohrium_access_key_keeps_cleanup_single_attempt_semantics(monkeypat
     assert captured['org_id'] == 'o1'
     assert captured['timeout'] == 15.0
     assert captured['retry_delays'] == ()
+
+
+def test_fetch_bohrium_access_key_can_skip_create_when_list_empty(monkeypatch):
+    scripted = [
+        _FakeResponse(200, {'code': 0, 'data': []}),
+    ]
+    monkeypatch.setattr(
+        'src.services.user_service.httpx.Client',
+        lambda *args, **kwargs: _FakeClient(scripted),
+    )
+
+    result = UserService.fetch_bohrium_access_key_result(
+        'u1', 'o1', retry_delays=(), create_if_missing=False
+    )
+
+    assert result.status == 'no_items'
+    assert result.access_key is None
+    assert result.attempts == 1
+    assert scripted == []
+
+
+def test_get_existing_bohrium_access_key_never_creates(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def _fake_fetch(
+        user_id: str | None,
+        org_id: str | None,
+        *,
+        timeout: float = 2.0,
+        retry_delays: tuple[float, ...] = (0.5, 1.0),
+        create_if_missing: bool = True,
+    ) -> BohriumAccessKeyFetchResult:
+        captured['user_id'] = user_id
+        captured['org_id'] = org_id
+        captured['timeout'] = timeout
+        captured['retry_delays'] = retry_delays
+        captured['create_if_missing'] = create_if_missing
+        return BohriumAccessKeyFetchResult(status='no_items', retryable=False)
+
+    monkeypatch.setattr(
+        UserService,
+        'fetch_bohrium_access_key_result',
+        staticmethod(_fake_fetch),
+    )
+
+    result = UserService.get_existing_bohrium_access_key('u1', 'o1')
+
+    assert result is None
+    assert captured['user_id'] == 'u1'
+    assert captured['org_id'] == 'o1'
+    assert captured['timeout'] == 15.0
+    assert captured['retry_delays'] == ()
+    assert captured['create_if_missing'] is False

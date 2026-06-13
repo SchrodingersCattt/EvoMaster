@@ -2,168 +2,49 @@ from __future__ import annotations
 
 import pytest
 
-from matmaster.types.errors import LLMError
-from matmaster.types.message_normalization import (
-    normalize_and_validate_openai_messages,
-    normalize_messages_for_openai,
-    restore_persisted_assistant_state,
-    validate_openai_messages,
-    validate_openai_tool_turn_sequence,
-)
-from matmaster.types.messages import AssistantMessage, ToolCallData, UserMessage
+from matmaster.types.message_normalization import restore_persisted_assistant_state
 
 
-class TestNormalizeMessagesForOpenAI:
-    def test_assistant_tool_turn_none_content_becomes_empty_string(self) -> None:
-        tc = ToolCallData(id="tc-1", name="bash", arguments={"cmd": "pwd"})
-        messages = [
-            UserMessage(content="run"),
-            AssistantMessage(content=None, tool_calls=[tc]),
-        ]
+def _tool_msg(call_id: str, n_images: int = 1, byte_size: int = 100):
+    from matmaster.types.messages import ImageContentPart, ToolMessage
 
-        normalized = normalize_messages_for_openai(messages)
-
-        assert normalized[0] == {"role": "user", "content": "run"}
-        assert normalized[1]["role"] == "assistant"
-        assert normalized[1]["content"] == ""
-        assert normalized[1]["tool_calls"][0]["id"] == "tc-1"
-
-    def test_plain_assistant_text_survives_normalization(self) -> None:
-        messages = [AssistantMessage(content="done")]
-
-        normalized = normalize_messages_for_openai(messages)
-
-        assert normalized == [{"role": "assistant", "content": "done"}]
-
-    def test_dict_message_without_content_key_gets_empty_string(self) -> None:
-        normalized = normalize_messages_for_openai(
-            [{"role": "assistant", "tool_calls": []}]
-        )
-
-        assert normalized == [{"role": "assistant", "tool_calls": [], "content": ""}]
-
-    def test_validation_rejects_non_string_content(self) -> None:
-        messages = [{"role": "assistant", "content": {"bad": "shape"}}]
-
-        with pytest.raises(LLMError) as exc_info:
-            validate_openai_messages(messages)
-
-        assert exc_info.value.retryable is False
-        assert exc_info.value.error_category == "payload_validation"
+    payload = "x" * byte_size
+    return ToolMessage(
+        tool_call_id=call_id,
+        tool_name="Read",
+        content=f"Read image: /{call_id}.png",
+        images=[
+            ImageContentPart(url=f"data:image/png;base64,{payload}")
+            for _ in range(n_images)
+        ],
+    )
 
 
-class TestNormalizeAndValidateOpenAIMessages:
-    def test_valid_messages_are_normalized_before_return(self) -> None:
-        tc = ToolCallData(id="tc-1", name="bash", arguments={"cmd": "pwd"})
-        messages = [
-            UserMessage(content="run"),
-            AssistantMessage(content=None, tool_calls=[tc]),
-            {"role": "tool", "tool_call_id": "tc-1", "content": "ok"},
-        ]
+def test_budget_keeps_newest_strips_oldest_by_count() -> None:
+    from matmaster.types.message_normalization import apply_tool_image_budget
 
-        normalized = normalize_and_validate_openai_messages(messages)
-
-        assert normalized[0] == {"role": "user", "content": "run"}
-        assert normalized[1]["role"] == "assistant"
-        assert normalized[1]["content"] == ""
-        assert normalized[1]["tool_calls"][0]["id"] == "tc-1"
-        assert normalized[2] == {
-            "role": "tool",
-            "tool_call_id": "tc-1",
-            "content": "ok",
-        }
-
-    def test_invalid_messages_raise_during_combined_validation(self) -> None:
-        with pytest.raises(LLMError, match="Outbound message content must be string"):
-            normalize_and_validate_openai_messages(
-                [{"role": "assistant", "content": {"bad": "shape"}}]
-            )
-
-    def test_missing_tool_result_raises_during_combined_validation(self) -> None:
-        with pytest.raises(LLMError, match="missing tool_result ids"):
-            normalize_and_validate_openai_messages(
-                [
-                    {
-                        "role": "assistant",
-                        "content": None,
-                        "tool_calls": [
-                            {
-                                "id": "tc-1",
-                                "type": "function",
-                                "function": {
-                                    "name": "test_tool",
-                                    "arguments": '{"x": 1}',
-                                },
-                            },
-                            {
-                                "id": "tc-2",
-                                "type": "function",
-                                "function": {
-                                    "name": "test_tool",
-                                    "arguments": '{"x": 2}',
-                                },
-                            },
-                        ],
-                    },
-                    {"role": "tool", "tool_call_id": "tc-1", "content": "ok-1"},
-                ]
-            )
+    messages = [_tool_msg(f"tc{i}") for i in range(6)]
+    out = apply_tool_image_budget(messages, max_count=4, max_bytes=10**9)
+    assert [bool(m.images) for m in out] == [False, False, True, True, True, True]
+    assert "[image pruned from context" in out[0].content
+    assert "[image pruned from context" not in out[2].content
+    assert messages[0].images
 
 
-class TestValidateOpenAIToolTurnSequence:
-    def test_rejects_orphan_tool_message(self) -> None:
-        messages = [
-            {"role": "system", "content": "sys"},
-            {"role": "assistant", "content": "plain text"},
-            {"role": "tool", "tool_call_id": "tc-orphan", "content": "oops"},
-        ]
+def test_budget_strips_by_bytes() -> None:
+    from matmaster.types.message_normalization import apply_tool_image_budget
 
-        with pytest.raises(LLMError, match="orphan tool message"):
-            validate_openai_tool_turn_sequence(messages)
+    messages = [_tool_msg(f"tc{i}", byte_size=600) for i in range(3)]
+    out = apply_tool_image_budget(messages, max_count=10, max_bytes=1300)
+    assert [bool(m.images) for m in out] == [False, True, True]
 
-    def test_rejects_duplicate_tool_results(self) -> None:
-        messages = [
-            {
-                "role": "assistant",
-                "content": "",
-                "tool_calls": [
-                    {
-                        "id": "tc-1",
-                        "type": "function",
-                        "function": {"name": "test_tool", "arguments": '{"x": 1}'},
-                    }
-                ],
-            },
-            {"role": "tool", "tool_call_id": "tc-1", "content": "ok"},
-            {"role": "tool", "tool_call_id": "tc-1", "content": "duplicate"},
-        ]
 
-        with pytest.raises(LLMError, match="duplicate tool_result ids"):
-            validate_openai_tool_turn_sequence(messages)
+def test_budget_noop_within_limits() -> None:
+    from matmaster.types.message_normalization import apply_tool_image_budget
 
-    def test_accepts_matching_tool_messages(self) -> None:
-        messages = [
-            {
-                "role": "assistant",
-                "content": "",
-                "tool_calls": [
-                    {
-                        "id": "tc-1",
-                        "type": "function",
-                        "function": {"name": "test_tool", "arguments": '{"x": 1}'},
-                    },
-                    {
-                        "id": "tc-2",
-                        "type": "function",
-                        "function": {"name": "test_tool", "arguments": '{"x": 2}'},
-                    },
-                ],
-            },
-            {"role": "tool", "tool_call_id": "tc-1", "content": "ok-1"},
-            {"role": "tool", "tool_call_id": "tc-2", "content": "ok-2"},
-        ]
-
-        validate_openai_tool_turn_sequence(messages)
+    messages = [_tool_msg("tc0"), _tool_msg("tc1")]
+    out = apply_tool_image_budget(messages)
+    assert out[0] is messages[0] and out[1] is messages[1]
 
 
 class TestRestorePersistedAssistantState:

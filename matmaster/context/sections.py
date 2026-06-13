@@ -36,7 +36,10 @@ class ContextSection:
     views: frozenset[ContextView]
 
     def __post_init__(self) -> None:
-        if ContextView.CHECKPOINT in self.views and ContextView.RUNTIME not in self.views:
+        if (
+            ContextView.CHECKPOINT in self.views
+            and ContextView.RUNTIME not in self.views
+        ):
             raise ValueError(
                 f"Section {self.key!r}: CHECKPOINT view requires RUNTIME view "
                 "(invariant RUNTIME >= CHECKPOINT)"

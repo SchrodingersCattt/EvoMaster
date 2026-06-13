@@ -25,6 +25,8 @@ ExpResultStyle = Literal["summary", "findings", "completion"]
 class ExpToolsConfig(BaseModel):
     """Tool registration settings for Exp."""
 
+    model_config = ConfigDict(extra="forbid")
+
     # Default "*" means "all tools". Explicit list of tool names also supported.
     builtin: list[str] = Field(default_factory=lambda: ["*"])
     mcp: str = "*"
@@ -32,6 +34,8 @@ class ExpToolsConfig(BaseModel):
 
 class ExpSkillsConfig(BaseModel):
     """Skill registration and lazy MCP loading settings."""
+
+    model_config = ConfigDict(extra="forbid")
 
     enabled: bool = False
     skills_root: str | list[str] = ""
@@ -59,7 +63,7 @@ class ExpSubagentMeta(BaseModel):
     result_style: ExpResultStyle = "summary"
     tools_summary: str = ""
 
-    model_config = ConfigDict(extra="ignore", frozen=True)
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
 
 class ExpConfig(BaseModel):
@@ -68,8 +72,8 @@ class ExpConfig(BaseModel):
     Loaded from ``matmaster/exps/{name}.toml``. Default values are fallbacks
     when fields are absent from the toml file.
 
-    ``extra="ignore"`` allows forward-compatible loading when toml files
-    contain fields not yet modeled.
+    Unknown fields are rejected so stale exp TOML does not silently change
+    runtime behavior.
     """
 
     name: str = "direct"
@@ -86,7 +90,7 @@ class ExpConfig(BaseModel):
     system_prompt: str = ""
     developer_instructions: str = ""
 
-    model_config = ConfigDict(extra="ignore")
+    model_config = ConfigDict(extra="forbid")
 
 
 # UI-level mode whitelist. `POST /chat/.../stream` 的 ChatSendRequest.mode 必须

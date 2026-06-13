@@ -8,13 +8,14 @@ from matmaster.types.events import AssistantStateEvent, RunResultEvent
 from matmaster.types.messages import LLMResponse, StreamChunk
 
 from .agent_kernel_test_helpers import (
+    ProviderProtocolAttrs,
     _make_tool_registry,
     make_kernel_runtime,
     make_kernel_turn,
 )
 
 
-class ContentOnlyProvider:
+class ContentOnlyProvider(ProviderProtocolAttrs):
     async def __aenter__(self):
         return self
 
@@ -30,7 +31,7 @@ class ContentOnlyProvider:
         yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 5})
 
 
-class EmptyStopProvider:
+class EmptyStopProvider(ProviderProtocolAttrs):
     stream_timeout = 10.0
     max_retries = 1
     retry_delay = 0.0
@@ -77,7 +78,7 @@ class NonStopFinishProvider(ContentOnlyProvider):
         yield StreamChunk(finish_reason="guardrail_intervened")
 
 
-class ToolCallLengthProvider:
+class ToolCallLengthProvider(ProviderProtocolAttrs):
     def __init__(self) -> None:
         self.call_count = 0
 
@@ -113,7 +114,7 @@ class ToolCallLengthProvider:
             yield StreamChunk(finish_reason="stop", usage={"prompt_tokens": 10})
 
 
-class ToolCallsFinishWithoutPayloadProvider:
+class ToolCallsFinishWithoutPayloadProvider(ProviderProtocolAttrs):
     stream_timeout = 10.0
     max_retries = 2
     retry_delay = 0.0

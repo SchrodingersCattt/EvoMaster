@@ -256,7 +256,9 @@ def load_yaml(path: Path) -> Any:
         return yaml.safe_load(fh)
 
 
-def normalise_tags(raw: Any, capability: str, domain: str) -> tuple[list[str], list[str]]:
+def normalise_tags(
+    raw: Any, capability: str, domain: str
+) -> tuple[list[str], list[str]]:
     """Return (kept_canonical_tags, dropped_raw_tags)."""
     kept: list[str] = []
     dropped: list[str] = []
@@ -357,8 +359,7 @@ def clean_checklist(checklist: Any) -> list[dict]:
 def convert_question(raw: dict, src_file: str) -> tuple[dict, dict]:
     capability = raw.get("capability")
     text = " ".join(
-        str(raw.get(k) or "")
-        for k in ("id", "intent", "human_prompt_seed")
+        str(raw.get(k) or "") for k in ("id", "intent", "human_prompt_seed")
     )
     text += " " + " ".join(str(t) for t in (raw.get("tags") or []))
     domain, hits = detect_domain(text)
@@ -465,7 +466,11 @@ def main() -> int:
 
     src_zip = Path(args.src_zip).expanduser()
     pack_name = args.pack_name or src_zip.stem
-    out_dir = Path(args.out) if args.out else REPO_ROOT / "evaluation/migration_candidates" / pack_name
+    out_dir = (
+        Path(args.out)
+        if args.out
+        else REPO_ROOT / "evaluation/migration_candidates" / pack_name
+    )
     out_dir.mkdir(parents=True, exist_ok=True)
 
     cur_ids, cur_seeds = collect_current_bank(Path(args.bank_dir))
@@ -574,7 +579,9 @@ def main() -> int:
         writer.writerows(review_rows)
 
     cap_dom = collections.Counter(
-        (r["capability"], r["assigned_domain"]) for r in review_rows if r["status"] == "ok"
+        (r["capability"], r["assigned_domain"])
+        for r in review_rows
+        if r["status"] == "ok"
     )
     md = io.StringIO()
     md.write(f"# Legacy {pack_name} -> MATTER v5 migration candidates\n\n")
@@ -583,7 +590,9 @@ def main() -> int:
     md.write(f"- converted OK (validated against QuestionItem): **{stats['ok']}**\n")
     md.write(f"- skipped (dup id): **{stats['skip']}**\n")
     md.write(f"- invalid after conversion: **{stats['invalid']}**\n")
-    md.write(f"- near-duplicate flagged (sim >= {args.dup_threshold}): **{stats['near_dup_flagged']}**\n")
+    md.write(
+        f"- near-duplicate flagged (sim >= {args.dup_threshold}): **{stats['near_dup_flagged']}**\n"
+    )
     n_with_data = sum(1 for r in review_rows if r["data_file_refs"])
     n_data_refs = sum(r["data_file_refs"] for r in review_rows)
     md.write(
@@ -621,7 +630,9 @@ def main() -> int:
             {
                 "pack": pack_name,
                 "stats": dict(stats),
-                "by_capability_domain": {f"{c}/{d}": n for (c, d), n in cap_dom.items()},
+                "by_capability_domain": {
+                    f"{c}/{d}": n for (c, d), n in cap_dom.items()
+                },
                 "written_files": written_files,
             },
             fh,

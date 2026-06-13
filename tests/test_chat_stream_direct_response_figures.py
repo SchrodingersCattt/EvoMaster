@@ -2,7 +2,11 @@ import asyncio
 from unittest.mock import MagicMock, patch
 
 from src.services.stream_sse_filter import REPLAY_DISCARDED_EVENT_TYPES
-from tests.test_chat_stream_direct import _collect_n_frames, _decode_sse_payload
+from tests.test_chat_stream_direct import (
+    _collect_n_frames,
+    _decode_sse_payload,
+    _send_stream_job,
+)
 
 
 def test_generate_send_stream_replay_keeps_response_figures_but_prefers_run_result():
@@ -57,7 +61,6 @@ def test_generate_send_stream_replay_keeps_response_figures_but_prefers_run_resu
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=MagicMock(),
     )
 
@@ -75,9 +78,9 @@ def test_generate_send_stream_replay_keeps_response_figures_but_prefers_run_resu
                 'task_id': 'task-1',
                 'invocation_id': 'inv-1',
             },
-            request_event_queue=asyncio.Queue(),
+            job=_send_stream_job(),
         )
-        gen = service.generate_send_stream('sess-1', 'new question', ctx)
+        gen = service.generate_send_stream('sess-1', ctx)
         try:
             return await _collect_n_frames(gen, 4)
         finally:
@@ -157,7 +160,6 @@ def test_generate_subscribe_stream_replay_keeps_response_figures_but_prefers_run
     service = ChatStreamService(
         sessions_service=sessions_service,
         events_service=events_service,
-        agent_run_service=MagicMock(),
         deploy_state_service=MagicMock(),
     )
 

@@ -28,7 +28,6 @@ class HistoryWiringResult:
 
     history: list
     compaction: PlaygroundCompactionPort
-    bohrium_rebuild_events: list[dict]
 
 
 def _safe_event_call(
@@ -65,10 +64,14 @@ def build_history_wiring(
     raw_history_limit: int,
     checkpoint_sink_factory: Callable,
     pre_compaction_barrier: Callable,
+    supports_vision: bool = True,
 ) -> HistoryWiringResult:
     """Assemble history + compaction runtime capability for a single run."""
     history = (
-        ModelHistoryRestoreService(events_table).restore_history(
+        ModelHistoryRestoreService(
+            events_table,
+            supports_vision=supports_vision,
+        ).restore_history(
             session_id=session_id,
             spawn_id=None,
             task_id=task_id,
@@ -184,18 +187,7 @@ def build_history_wiring(
         pre_compaction_barrier=pre_compaction_barrier,
     )
 
-    bohrium_rebuild_events = _safe_event_call(
-        events_table,
-        "get_bohrium_events",
-        [],
-        session_id,
-        _log_extra="for registry rebuild",
-    )
-    if not isinstance(bohrium_rebuild_events, list):
-        bohrium_rebuild_events = []
-
     return HistoryWiringResult(
         history=history,
         compaction=compaction,
-        bohrium_rebuild_events=bohrium_rebuild_events,
     )

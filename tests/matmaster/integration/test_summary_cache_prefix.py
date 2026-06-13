@@ -18,7 +18,9 @@ from matmaster.types.messages import (
 
 
 def _api_bytes(messages) -> bytes:
-    payload = [m.to_api_dict() for m in canonicalize_messages_for_provider(messages)]
+    payload = [
+        m.model_dump(mode="json") for m in canonicalize_messages_for_provider(messages)
+    ]
     return json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
 
 

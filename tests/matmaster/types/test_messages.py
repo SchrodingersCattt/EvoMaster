@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-
 from matmaster.types.messages import (
     AssistantMessage,
     LLMResponse,
@@ -81,53 +79,6 @@ class TestToolMessage:
         assert msg.tool_call_id == "tc1"
         assert msg.tool_name == "fn"
         assert msg.content == "result"
-
-
-# ── to_api_dict ───────────────────────────────────────
-
-
-class TestToApiDict:
-    def test_system_message_to_api_dict(self) -> None:
-        msg = SystemMessage(content="sys")
-        assert msg.to_api_dict() == {"role": "system", "content": "sys"}
-
-    def test_user_message_to_api_dict(self) -> None:
-        msg = UserMessage(content="ask")
-        assert msg.to_api_dict() == {"role": "user", "content": "ask"}
-
-    def test_assistant_message_with_tool_calls_to_api_dict(self) -> None:
-        tc = ToolCallData(id="tc1", name="fn", arguments={"a": 1})
-        msg = AssistantMessage(content="ok", tool_calls=[tc])
-        d = msg.to_api_dict()
-        assert d["role"] == "assistant"
-        assert d["content"] == "ok"
-        assert "tool_calls" in d
-        assert len(d["tool_calls"]) == 1
-        tc_dict = d["tool_calls"][0]
-        assert tc_dict["id"] == "tc1"
-        assert tc_dict["type"] == "function"
-        assert tc_dict["function"]["name"] == "fn"
-        assert json.loads(tc_dict["function"]["arguments"]) == {"a": 1}
-
-    def test_assistant_message_without_tool_calls_to_api_dict(self) -> None:
-        msg = AssistantMessage(content="ok")
-        d = msg.to_api_dict()
-        assert d["role"] == "assistant"
-        assert d["content"] == "ok"
-        assert "tool_calls" not in d
-
-    def test_assistant_message_content_none_with_tool_calls(self) -> None:
-        tc = ToolCallData(id="tc1", name="fn", arguments={"a": 1})
-        msg = AssistantMessage(content=None, tool_calls=[tc])
-        d = msg.to_api_dict()
-        assert d["content"] is None
-
-    def test_tool_message_to_api_dict(self) -> None:
-        msg = ToolMessage(tool_call_id="tc1", tool_name="fn", content="result")
-        d = msg.to_api_dict()
-        assert d == {"role": "tool", "content": "result", "tool_call_id": "tc1"}
-        # tool_name should NOT be in the API dict
-        assert "tool_name" not in d
 
 
 # ── ToolCallData ──────────────────────────────────────

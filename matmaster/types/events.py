@@ -16,6 +16,7 @@ from typing import Annotated, Any, Literal, Union
 from pydantic import BaseModel, ConfigDict, Field
 
 from .figures import FigureDescriptor
+from .messages import ImageContentPart
 
 
 class EventBase(BaseModel):
@@ -29,40 +30,57 @@ class EventBase(BaseModel):
 # ── AgentEvent: kernel-layer events ─────────────────────
 
 
-class ThoughtEvent(EventBase):
+class TurnUsageCarrierEvent(EventBase):
+    """模型输出侧事件共享的 accepted-turn usage 载体字段。
+
+    同一 accepted turn 的多个事件携带相同 turn_index 与相同 usage 快照；
+    消费方须按 turn_index 去重。
+    """
+
+    turn_index: int | None = None
+    turn_usage: dict[str, int] = Field(default_factory=dict)
+    total_usage: dict[str, int] = Field(default_factory=dict)
+    usage_vendor: dict[str, Any] | None = None
+
+
+class ThoughtEvent(TurnUsageCarrierEvent):
     """LLM thought/reasoning event.
 
     Streaming and non-streaming are unified; use ``stream_state`` to
-    distinguish: 'start' | 'streaming' | 'end' | 'complete' | None.
+    distinguish: 'start' | 'streaming' | 'segment_end' | 'end' | 'complete' | None.
+    'complete' is the accepted-turn reasoning audit event and may carry usage;
+    all other states are ephemeral streaming/segment markers without usage.
     """
 
     type: Literal["thought"] = "thought"
     content: str = ""
-    stream_state: str | None = None  # 'start' | 'streaming' | 'end' | 'complete' | None
+    stream_state: str | None = (
+        None  # 'start' | 'streaming' | 'segment_end' | 'end' | 'complete' | None
+    )
     stream_id: str | None = None
     token_count: int = 0
     context: str | None = None  # e.g. 'step_execution'
     reasoning_content: str | None = None
 
 
-class ResponseEvent(EventBase):
+class ResponseEvent(TurnUsageCarrierEvent):
     """Visible assistant response event."""
 
     type: Literal["response"] = "response"
     content: str = ""
     stream_state: str | None = None  # 'start' | 'streaming' | 'end' | 'complete' | None
     stream_id: str | None = None
-    turn_index: int | None = None
-    turn_usage: dict[str, int] = Field(default_factory=dict)
-    total_usage: dict[str, int] = Field(default_factory=dict)
-    usage_vendor: dict[str, Any] | None = None
     model: str | None = None
     model_profile: str | None = None
     model_route: str | None = None
 
 
-class ToolCallEvent(EventBase):
-    """Tool call event -- emitted when the LLM requests a tool invocation."""
+class ToolCallEvent(TurnUsageCarrierEvent):
+    """Tool call event -- emitted when the LLM requests a tool invocation.
+
+    Usage fields describe the accepted LLM turn that requested the calls,
+    not the tool execution itself.
+    """
 
     type: Literal["tool_call"] = "tool_call"
     call_id: str
@@ -71,7 +89,13 @@ class ToolCallEvent(EventBase):
 
 
 class ToolResultEvent(EventBase):
-    """Tool execution result event."""
+    """Tool execution result event.
+
+    Carries only the tool execution outcome. LLM token usage lives on the
+    model-output-side events (thought.complete / response.complete /
+    tool_call); tool payloads may still embed tool-specific evidence such
+    as ``payload["subagent_usage"]``.
+    """
 
     type: Literal["tool_result"] = "tool_result"
     call_id: str
@@ -79,9 +103,7 @@ class ToolResultEvent(EventBase):
     result: Any  # str | dict
     status: str = "success"
     payload: dict[str, Any] = Field(default_factory=dict)
-    turn_index: int | None = None
-    turn_usage: dict[str, int] = Field(default_factory=dict)
-    total_usage: dict[str, int] = Field(default_factory=dict)
+    images: list[ImageContentPart] = Field(default_factory=list)
 
 
 class FinishDetail(BaseModel):

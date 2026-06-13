@@ -14,6 +14,11 @@ from matmaster.types.messages import LLMResponse, StreamChunk
 class CompleteLLMProvider:
     """Mock that satisfies the async LLMProvider Protocol."""
 
+    stream_timeout: float = 300.0
+    stream_idle_timeout: float = 300.0
+    max_retries: int = 3
+    retry_delay: float = 1.0
+
     async def __aenter__(self) -> CompleteLLMProvider:
         return self
 
@@ -112,3 +117,18 @@ def test_chat_stream_accepts_timeout_kwarg() -> None:
     param = sig.parameters["timeout"]
     assert param.default is None
     assert param.kind == inspect.Parameter.KEYWORD_ONLY
+
+
+def test_chat_completions_transport_timeout_attrs_concrete() -> None:
+    from matmaster.providers.transports.chat_completions import ChatCompletionsTransport
+
+    p = ChatCompletionsTransport(model="m", api_key="k", base_url=None, timeout=300.0)
+    assert p.stream_timeout == 300.0
+    assert p.stream_idle_timeout == 300.0
+    assert isinstance(p.max_retries, int)
+    assert isinstance(p.retry_delay, float)
+    assert isinstance(p, LLMProvider)
+
+
+def test_complete_mock_still_satisfies_protocol() -> None:
+    assert isinstance(CompleteLLMProvider(), LLMProvider)

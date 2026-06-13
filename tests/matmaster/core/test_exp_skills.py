@@ -10,6 +10,7 @@ from matmaster.config.exp import ExpConfig
 from matmaster.core.exp import Exp
 from matmaster.core.playground import ExecutionEnvironment
 from matmaster.core.run_context import AgentRunContext, AgentRunRequest
+from matmaster.skills.registry import SkillRegistryCache
 from matmaster.tools.tool_registry import ToolRegistry
 from matmaster.types.session import Session
 
@@ -123,7 +124,7 @@ class TestExpInitSkillTools:
             execution_workdir=str(tmp_path),
         )
 
-        exp._init_skill_tools(ctx, registry)
+        exp._init_skill_tools(ctx, registry, skill_cache=SkillRegistryCache())
 
         assert "Skill" in registry
         assert "use_skill" not in registry
@@ -144,7 +145,7 @@ class TestExpInitSkillTools:
         registry = ToolRegistry()
         ctx = _make_ctx()
 
-        exp._init_skill_tools(ctx, registry)
+        exp._init_skill_tools(ctx, registry, skill_cache=SkillRegistryCache())
 
         assert "Skill" not in registry
 
@@ -175,7 +176,7 @@ class TestExpInitSkillTools:
             execution_workdir=str(tmp_path),
         )
 
-        exp._init_skill_tools(ctx, registry)
+        exp._init_skill_tools(ctx, registry, skill_cache=SkillRegistryCache())
 
         # Before skill trigger: no MCP tools
         assert "mat_sg_build_bulk" not in registry
@@ -248,7 +249,7 @@ class TestExpInitSkillTools:
             execution_workdir=str(tmp_path),
         )
 
-        exp._init_skill_tools(ctx, registry)
+        exp._init_skill_tools(ctx, registry, skill_cache=SkillRegistryCache())
 
         # Trigger skill hit to inject MCP tools
         skill_tool = registry._tools["Skill"]
@@ -297,7 +298,7 @@ class TestExpInitSkillTools:
         ctx = _make_ctx(session=session, execution_workdir="/workspace/session-1")
 
         with patch("matmaster.tools.lazy_mcp.LazyMCPConnector") as mock_connector:
-            exp._init_skill_tools(ctx, registry)
+            exp._init_skill_tools(ctx, registry, skill_cache=SkillRegistryCache())
 
         mock_connector.assert_called_once_with(
             mcp_server_config={},
@@ -343,7 +344,7 @@ class TestExpInitSkillTools:
         session.remote_project_root = None
         ctx = _make_ctx(session=session, execution_workdir=str(tmp_path))
 
-        exp._init_skill_tools(ctx, registry)
+        exp._init_skill_tools(ctx, registry, skill_cache=SkillRegistryCache())
 
         skill_tool = registry._tools["Skill"]
         result = await skill_tool.execute({"skill": "user-skill"})
@@ -388,7 +389,7 @@ class TestExpInitSkillTools:
         registry = ToolRegistry()
         ctx = _make_ctx(session=session, execution_workdir=str(tmp_path))
 
-        exp._init_skill_tools(ctx, registry)
+        exp._init_skill_tools(ctx, registry, skill_cache=SkillRegistryCache())
 
         skill_tool = registry._tools["Skill"]
         result = await skill_tool.execute({"skill": "remote-skill"})
@@ -426,7 +427,7 @@ class TestExpInitSkillTools:
         session.local_user_skills_root = None
         ctx = _make_ctx(session=session, execution_workdir=str(tmp_path))
 
-        exp._init_skill_tools(ctx, registry)
+        exp._init_skill_tools(ctx, registry, skill_cache=SkillRegistryCache())
 
         skill_tool = registry._tools["Skill"]
         result = await skill_tool.execute({"skill": "test-skill"})

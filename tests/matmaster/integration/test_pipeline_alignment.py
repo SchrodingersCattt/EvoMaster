@@ -20,9 +20,10 @@ from matmaster.types.messages import LLMResponse, StreamChunk
 from matmaster.types.runtime import AgentKernelTurnRequest
 from matmaster.types.tool_spec import ResourceClaim
 from matmaster.types.topology import ToolPlane
+from tests.conftest import ProviderProtocolAttrs
 
 
-class _ToolCallThenFinishLLM:
+class _ToolCallThenFinishLLM(ProviderProtocolAttrs):
     """Mock LLM: tool call on first turn, natural finish on second."""
 
     def __init__(self) -> None:

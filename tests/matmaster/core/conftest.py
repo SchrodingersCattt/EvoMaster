@@ -39,6 +39,11 @@ class MockLLMProvider:
     chat_stream() yields a single StreamChunk with content="hello".
     """
 
+    stream_timeout: float = 10.0
+    stream_idle_timeout: float = 10.0
+    max_retries: int = 3
+    retry_delay: float = 1.0
+
     async def __aenter__(self):
         return self
 

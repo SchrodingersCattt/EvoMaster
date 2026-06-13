@@ -78,10 +78,10 @@ def disabled_skill_names_from_settings(root: Path) -> set[str]:
     return _extract_disabled_names(payload)
 
 
-def disabled_skill_names_from_remote_settings(
-    session: Any, remote_root: str
+def _disabled_from_remote_settings(
+    session: Any, remote_root: str, *, key: str, label: str
 ) -> set[str]:
-    """Read disabled skill names from a remote .settings.json via session SFTP."""
+    """Read a disabled-name list under `key` from a remote .settings.json via SFTP."""
     settings_path = remote_root.rstrip("/") + "/.settings.json"
     try:
         if not session.path_exists(settings_path):
@@ -90,17 +90,39 @@ def disabled_skill_names_from_remote_settings(
         payload = json.loads(content)
     except Exception:
         logger.warning(
-            "Failed to read remote skill settings: %s",
+            "Failed to read remote %s settings: %s",
+            label,
             settings_path,
             exc_info=True,
         )
         return set()
-    return _extract_disabled_names(payload)
+    return _extract_str_list(payload, key)
+
+
+def disabled_skill_names_from_remote_settings(
+    session: Any, remote_root: str
+) -> set[str]:
+    """Read disabled skill names from a remote .settings.json via session SFTP."""
+    return _disabled_from_remote_settings(
+        session, remote_root, key="disabled", label="skill"
+    )
+
+
+def disabled_plugins_from_remote_settings(session: Any, remote_root: str) -> set[str]:
+    """Read disabled plugin names from a remote .settings.json via session SFTP."""
+    return _disabled_from_remote_settings(
+        session, remote_root, key="disabled_plugins", label="plugin"
+    )
 
 
 def _extract_disabled_names(payload: Any) -> set[str]:
     """Extract the 'disabled' list from a parsed .settings.json payload."""
-    disabled = payload.get("disabled") if isinstance(payload, dict) else None
-    if not isinstance(disabled, list):
+    return _extract_str_list(payload, "disabled")
+
+
+def _extract_str_list(payload: Any, key: str) -> set[str]:
+    """Extract a list of non-empty strings under `key` from a JSON payload."""
+    values = payload.get(key) if isinstance(payload, dict) else None
+    if not isinstance(values, list):
         return set()
-    return {name.strip() for name in disabled if isinstance(name, str) and name.strip()}
+    return {v.strip() for v in values if isinstance(v, str) and v.strip()}

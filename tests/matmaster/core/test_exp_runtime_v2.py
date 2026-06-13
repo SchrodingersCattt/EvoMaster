@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
@@ -503,55 +502,6 @@ class TestBuildRuntimeFullToolRunner:
         assert "/personal/.matmaster/skills" in glob_tool._path_access_roots
         assert "/personal/.matmaster/skills" in grep_tool._path_access_roots
 
-    def test_build_runtime_seeds_bohrium_registry_from_metadata(self) -> None:
-        from matmaster.core.exp import Exp
-
-        config = _make_exp_config()
-        exp = Exp(config)
-        base = _make_playground_context()
-        ctx = base.model_copy(
-            update={
-                "request": base.request.model_copy(
-                    update={
-                        "bohrium_rebuild_events": (
-                            {
-                                "action": "submit",
-                                "job_id": "job-1",
-                                "job_name": "alpha",
-                                "status": "Submitted",
-                                "cached": False,
-                            },
-                            {
-                                "action": "poll",
-                                "job_id": "job-1",
-                                "status": "Running",
-                                "cached": False,
-                            },
-                            {
-                                "action": "poll",
-                                "job_id": "job-1",
-                                "status": "Running",
-                                "cached": True,
-                            },
-                        )
-                    }
-                ),
-            }
-        )
-
-        runtime = asyncio.run(exp.build_runtime(ctx))
-
-        registry = runtime.kernel_runtime.resources.tool_runner.state.get(
-            "bohrium_job_registry"
-        )
-        assert registry is not None
-        rec = registry.get("job-1")
-        assert rec is not None
-        assert rec.job_name == "alpha"
-        assert rec.status == "running"
-        assert rec.poll_count == 1
-        assert rec.last_polled_at == 0.0
-
     @pytest.mark.asyncio
     async def test_build_runtime_preserves_figure_upload_config_in_runner_state(
         self,
@@ -818,6 +768,50 @@ class TestBuildRuntimeCompactorEventSink:
         assert hasattr(compactor, "_event_sink")
         # event_sink should be None (set later by _run_items)
         assert compactor._event_sink is None
+
+
+@pytest.mark.asyncio
+async def test_root_build_runtime_creates_fresh_skill_cache_per_query(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import matmaster.core.skill_registry_cache as cache_module
+    from matmaster.config.exp import ExpConfig
+    from matmaster.core.exp import Exp
+
+    observed_caches: list[object] = []
+
+    def record_cache(*, skills_cfg, session, skill_cache):
+        observed_caches.append(skill_cache)
+        return None
+
+    monkeypatch.setattr(
+        cache_module,
+        "build_cached_skill_registry",
+        record_cache,
+    )
+    cfg = ExpConfig.model_validate(
+        {
+            "name": "direct",
+            "skills": {"enabled": True},
+        }
+    )
+    exp = Exp(cfg)
+    ctx = AgentRunContext(
+        environment=ExecutionEnvironment(
+            workdir=tmp_path,
+            execution_workdir=str(tmp_path),
+            session_type="local",
+            cache_area=tmp_path / "cache",
+        ),
+        request=AgentRunRequest(llm_provider=_MockProvider()),
+    )
+
+    await exp.build_runtime(ctx)
+    await exp.build_runtime(ctx)
+
+    assert len(observed_caches) == 2
+    assert observed_caches[0] is not observed_caches[1]
 
 
 # ── Active planes with new CC tool names ─────────────────

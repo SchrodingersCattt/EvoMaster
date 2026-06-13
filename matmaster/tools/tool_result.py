@@ -6,6 +6,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from matmaster.types.messages import ImageContentPart
+
 
 class ToolResult(BaseModel):
     """Structured tool execution result consumed by the kernel and SSE layer.
@@ -19,6 +21,7 @@ class ToolResult(BaseModel):
     content: str = ""
     payload: dict[str, Any] = Field(default_factory=dict)
     meta: dict[str, Any] = Field(default_factory=dict)
+    images: list[ImageContentPart] = Field(default_factory=list)
 
     @classmethod
     def from_error(cls, tool_name: str, error: BaseException) -> ToolResult:

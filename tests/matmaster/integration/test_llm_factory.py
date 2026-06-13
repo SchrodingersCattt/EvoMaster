@@ -1,145 +1,97 @@
-"""Integration tests for LLM factory: route resolution -> provider construction."""
+"""Integration tests for LLM factory: providers/profiles -> transport."""
 
 from __future__ import annotations
 
 import pytest
 
-from matmaster.config.llm import (
-    LLMConfig,
-    LLMProfileConfig,
-    _infer_model_family,
-)
-from matmaster.providers.llm_factory import build_provider
+from matmaster.config.llm import LLMConfig
+from matmaster.providers.llm_factory import build_provider, build_provider_bundle
+from matmaster.providers.transports.chat_completions import ChatCompletionsTransport
+from matmaster.types.messages import UserMessage
 
 
-class TestInferModelFamily:
-    def test_claude_opus(self) -> None:
-        assert _infer_model_family("claude-opus-4-6") == "claude-4.6"
-
-    def test_claude_sonnet(self) -> None:
-        assert _infer_model_family("claude-sonnet-4-6") == "claude-4.6"
-
-    def test_claude_haiku(self) -> None:
-        assert _infer_model_family("claude-haiku-4-5") == "claude-haiku-4.5"
-
-    def test_gpt5(self) -> None:
-        assert _infer_model_family("gpt-5") == "gpt-5"
-
-    def test_deepseek(self) -> None:
-        assert _infer_model_family("deepseek-reasoner") == "deepseek-reasoner"
-
-    def test_gemini(self) -> None:
-        assert _infer_model_family("gemini-3-flash-preview") == "gemini-3-flash-preview"
-
-    def test_unknown(self) -> None:
-        assert _infer_model_family("custom-model") is None
-
-    def test_empty(self) -> None:
-        assert _infer_model_family("") is None
-
-
-class TestProfileEffectiveTemperature:
-    def test_force_one_for_claude(self) -> None:
-        p = LLMProfileConfig(model_family="claude-4.6", temperature=0.7)
-        assert p.effective_temperature() == 1.0
-
-    def test_no_force_for_gpt5(self) -> None:
-        p = LLMProfileConfig(model_family="gpt-5", temperature=0.5)
-        assert p.effective_temperature() == 0.5
-
-
-class TestProfileBuildExtraKwargs:
-    def test_anthropic_adaptive(self) -> None:
-        p = LLMProfileConfig(
-            reasoning_protocol="anthropic_adaptive_thinking",
-            thinking_effort="high",
-        )
-        result = p.build_extra_kwargs()
-        assert result is not None
-        assert result["extra_body"]["thinking"]["type"] == "adaptive"
-
-    def test_openai_reasoning_effort(self) -> None:
-        p = LLMProfileConfig(
-            reasoning_protocol="openai_reasoning_effort",
-            thinking_effort="medium",
-        )
-        assert p.build_extra_kwargs() == {"reasoning_effort": "medium"}
-
-    def test_no_config_returns_none(self) -> None:
-        p = LLMProfileConfig()
-        assert p.build_extra_kwargs() is None
-
-
-class TestEndToEndRouteToProvider:
-    @pytest.fixture()
-    def config(self) -> LLMConfig:
-        return LLMConfig.model_validate(
-            {
-                "profiles": {
-                    "opus": {
-                        "provider": "openai",
-                        "model": "claude-opus-4-6",
-                        "model_family": "claude-4.6",
-                        "api_key": "test-key",
-                        "base_url": "https://test.example.com",
-                        "thinking_effort": "high",
-                        "reasoning_protocol": "anthropic_adaptive_thinking",
-                        "temperature_policy": "force_one_when_reasoning",
-                        "temperature": 0.7,
-                        "timeout": 300,
-                        "max_retries": 3,
-                    },
-                    "sonnet": {
-                        "provider": "openai",
-                        "model": "claude-sonnet-4-6",
-                        "model_family": "claude-4.6",
-                        "api_key": "test-key",
-                        "base_url": "https://test.example.com",
-                        "thinking_effort": "high",
-                        "reasoning_protocol": "anthropic_adaptive_thinking",
-                        "temperature_policy": "force_one_when_reasoning",
-                        "temperature": 0.7,
-                    },
+@pytest.fixture()
+def config() -> LLMConfig:
+    return LLMConfig.model_validate(
+        {
+            "providers": {
+                "litellm": {
+                    "transport": "chat_completions",
+                    "api_key": "test-key",
+                    "base_url": "https://test.example.com",
+                }
+            },
+            "profiles": {
+                "opus": {
+                    "provider": "litellm",
+                    "model": "claude-opus-4-6",
+                    "reasoning_effort": "high",
+                    "reasoning_summary": "auto",
+                    "temperature": 0.7,
+                    "context_limit": 200_000,
+                    "timeout": 300,
+                    "max_retries": 3,
                 },
-                "routes": {
-                    "claude-opus-4-6": {"profile": "opus"},
-                    "claude-sonnet-4-6": {"profile": "sonnet"},
+                "sonnet": {
+                    "provider": "litellm",
+                    "model": "claude-sonnet-4-6",
+                    "temperature": 0.5,
+                    "context_limit": 128_000,
                 },
-                "default": "opus",
-            }
-        )
+            },
+            "default": "opus",
+        }
+    )
 
-    def test_route_sonnet(self, config: LLMConfig) -> None:
-        provider = build_provider(config, model_override="claude-sonnet-4-6")
-        assert provider._model == "claude-sonnet-4-6"
-        assert provider._temperature == 1.0  # force_one_when_reasoning
 
-    def test_route_claude(self, config: LLMConfig) -> None:
-        provider = build_provider(config, model_override="claude-opus-4-6")
-        assert provider._model == "claude-opus-4-6"
-        assert provider._temperature == 1.0
-        assert provider._extra_kwargs is not None
+def test_default_profile_builds_chat_completions_transport(
+    config: LLMConfig,
+) -> None:
+    provider = build_provider(config)
+    assert isinstance(provider, ChatCompletionsTransport)
+    assert provider._model == "claude-opus-4-6"
+    assert provider._base_url == "https://test.example.com"
+    assert provider._temperature == 0.7
+    assert provider._reasoning_effort == "high"
+    assert provider._reasoning_summary == "auto"
 
-    def test_default_provider(self, config: LLMConfig) -> None:
-        provider = build_provider(config)
-        assert provider._model == "claude-opus-4-6"
 
-    def test_unknown_route_errors(self, config: LLMConfig) -> None:
-        with pytest.raises(KeyError):
-            build_provider(config, model_override="nonexistent")
+def test_model_override_is_profile_key(config: LLMConfig) -> None:
+    provider = build_provider(config, model_override="sonnet")
+    assert isinstance(provider, ChatCompletionsTransport)
+    assert provider._model == "claude-sonnet-4-6"
+    assert provider._temperature == 0.5
+    assert provider._reasoning_effort is None
 
-    def test_extra_kwargs_none_becomes_empty(self, config: LLMConfig) -> None:
-        cfg = LLMConfig.model_validate(
-            {
-                "profiles": {
-                    "minimal": {
-                        "model": "custom",
-                        "api_key": "k",
-                        "provider": "openai",
-                    },
-                },
-                "default": "minimal",
-            }
-        )
-        provider = build_provider(cfg)
-        assert provider._extra_kwargs == {}
+
+def test_bundle_identity_uses_profile_key(config: LLMConfig) -> None:
+    bundle = build_provider_bundle(config, model_override="sonnet")
+    assert bundle.provider._model == "claude-sonnet-4-6"
+    assert bundle.model == "claude-sonnet-4-6"
+    assert bundle.model_profile == "sonnet"
+    assert bundle.model_route == "sonnet"
+    assert bundle.provider_name == "litellm"
+    assert bundle.context_limit == 128_000
+    assert bundle.context_limit_source == "profile"
+
+
+def test_unknown_profile_errors(config: LLMConfig) -> None:
+    with pytest.raises(KeyError, match="not found"):
+        build_provider(config, model_override="nonexistent")
+
+
+def test_reasoning_fields_are_transport_request_concerns(
+    config: LLMConfig,
+) -> None:
+    provider = build_provider(config)
+    assert isinstance(provider, ChatCompletionsTransport)
+
+    kwargs = provider.build_kwargs(
+        [UserMessage(content="hi")],
+        tools=None,
+    )
+    assert kwargs["reasoning_effort"] == "high"
+    assert kwargs["extra_body"]["reasoning"] == {
+        "summary": "auto",
+        "effort": "high",
+    }

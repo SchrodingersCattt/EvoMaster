@@ -1,0 +1,3 @@
+# Plugin 注册门控：列出的 plugin 整体禁用（其成员 skill 不注册）。
+# 留空即全部启用。示例：disabled_plugins: [gpumd]
+disabled_plugins: []

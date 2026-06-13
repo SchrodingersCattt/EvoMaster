@@ -15,13 +15,14 @@ logger = logging.getLogger(__name__)
 class RedisInterruptChecker:
     """Checks Redis for interrupt hint/confirm signals.
 
-    Caches a single Redis client for the lifetime of the checker
-    to avoid creating ~60 connections during the 3s polling window.
+    Reuses the process-wide shared command client (get_command_client) for the
+    non-blocking exists() polling, so the ~60 polls in the 3s window add no new
+    connections.
     """
 
     def __init__(self, session_id: str) -> None:
         self._session_id = session_id
-        self._client = get_redis_dao().create_client()
+        self._client = get_redis_dao().get_command_client()
 
     def has_hint(self) -> bool:
         if not self._client:

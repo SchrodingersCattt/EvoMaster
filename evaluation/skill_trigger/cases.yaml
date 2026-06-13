@@ -200,8 +200,6 @@ cases:
       - "用 CALYPSO 搜 Mg-Si-O 的候选晶体结构"                  # → sample-atomic-structures
       - "SMILES CCC=O 转成带 3D 坐标的 SDF"                    # → agent direct RDKit
       - "枚举碳酸乙烯酯的氟代衍生物并生成 3D 构象"              # → agent direct RDKit
-      - "搭一个 20 mer 的 PVA 链"                               # → poly-generator
-      - "Generate a 15-mer polypropylene chain for downstream MD" # → poly-generator
       - "从文献 CIF 链接构建 NaNO3"                             # → retrieve-structure
       - "用参数直接搭 CaCO3 / K2SO4 这种多原子离子晶体"          # → retrieve-structure
       - "构建RDX的分子晶体结构"                               # → retrieve-structure
@@ -245,7 +243,6 @@ cases:
       - "搭一个 fcc Ni 的原胞"                                  # → build-crystal-from-params
       - "从 Cu bulk 切 (110) slab，5 层，真空 15 Å"             # → assemble-atomic-structure
       - "这个分子晶体 CIF 切 (010) 表面，不要切断分子"          # → operate-molecular-crystal
-      - "切 LiCoO2 (003) slab，极性面，auto-fix 偶极"           # → tasker-polar-surface
       - "帮我用 LAMMPS 跑 NPT"                                  # → lammps
 
   - skill: assemble-atomic-structure
@@ -265,7 +262,6 @@ cases:
       - "搭一个 fcc Ni 的原胞"                                  # → build-crystal-from-params
       - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
       - "这个分子晶体 CIF 切 (010) 表面，不要切断分子"          # → operate-molecular-crystal
-      - "ZnO (0001) 是不是极性面，先判一下再切"                 # → tasker-polar-surface
       - "把这个 CIF 转成 POSCAR，元素顺序也理一下"              # → retrieve-structure
 
   - skill: operate-molecular-crystal
@@ -285,30 +281,7 @@ cases:
       - "从 Cu bulk 切 (110) slab，5 层，真空 15 Å"             # → assemble-atomic-structure
       - "把这个 POSCAR 扩成 3x3x2"                              # → transform-atomic-structure
       - "搭一个 fcc Ni 的原胞"                                  # → build-crystal-from-params
-      - "切 LiCoO2 (003) slab，极性面，auto-fix 偶极"           # → tasker-polar-surface
       - "帮我用 CP2K 做分子动力学"                              # → cp2k
-
-  - skill: tasker-polar-surface
-    positive:
-      - "切 LiCoO2 (003) slab，极性面，auto-fix 偶极"
-      - "ZnO (0001) 是不是极性面，先判一下再切"
-      - "帮我构造一个 rocksalt MgO(111) 的非极性对称 slab"
-      - "判断这个 perovskite (001) slab 的 Tasker type，并给稳定终止面"
-      - "MgO (111) 是 Tasker 几型，切的时候要怎么处理"
-      - "NaCl (111) 给一个非极性 slab"
-      - "SrTiO3 (110) 极性面 slab，按 Tasker auto-fix 跑一遍"
-      - "Al2O3 (0001) 表面建模，注意要不要 reconstruct"
-      - "Fe3O4 (001) 催化体系，slab 选 Tasker 合规的"
-      - "氧化物极性面 reconstruct 后输出 POSCAR"
-      - "Cut a polar PbTiO3 (001) slab with Tasker auto-fix, give me the final POSCAR"
-      - "Build a non-polar TiO2 (110) slab and validate the dipole is zero"
-    negative:
-      - "从 Cu bulk 切 (110) slab，5 层，真空 15 Å"             # → assemble-atomic-structure
-      - "在 Pt(111) top 位放一个 CO 分子"                       # → assemble-atomic-structure
-      - "这个分子晶体 CIF 切 (010) 表面，不要切断分子"          # → operate-molecular-crystal
-      - "把这个 CIF 转成 POSCAR，元素顺序也理一下"              # → retrieve-structure
-      - "用 VASPKIT 算这个 slab 的功函数"                       # → vaspkit-postprocess
-
 
   - skill: checkcif-validator
     positive:
