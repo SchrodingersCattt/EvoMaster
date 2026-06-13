@@ -1,5 +1,5 @@
 """DeliverySnapshot 的构造与 confirm 范围：snapshot 持全量行，
-confirm 只 ack snapshot rows 的 id（交付边界 = 查询执行瞬间）。"""
+confirm ack snapshot rows 与 run 内前台观察集的并集。"""
 
 from __future__ import annotations
 
@@ -66,15 +66,16 @@ def test_snapshot_reads_detail_limit_from_env(monkeypatch):
     assert snap.detail_limit == 7
 
 
-def test_snapshot_returns_none_when_no_pending_rows():
+def test_snapshot_empty_rows_returns_object_not_none():
+    # 身份可解析即返回对象：空 rows 是合法交付边界，观察集空集起步。
     table = MagicMock()
     table.list_pending_terminal_snapshot.return_value = []
-    assert (
-        bohrium_delivery_ack.snapshot(
-            "sess-1", sessions_service=_sessions(), jobs_table=table
-        )
-        is None
+    snap = bohrium_delivery_ack.snapshot(
+        "sess-1", sessions_service=_sessions(), jobs_table=table
     )
+    assert snap is not None
+    assert snap.rows == ()
+    assert snap.observed_terminal == set()
 
 
 def test_snapshot_returns_none_without_org_binding():
@@ -88,15 +89,14 @@ def test_snapshot_returns_none_without_org_binding():
     table.list_pending_terminal_snapshot.assert_not_called()
 
 
-def test_snapshot_returns_none_on_query_failure_without_raising():
+def test_snapshot_rows_query_failure_degrades_to_empty_rows():
+    # rows 查询失败但身份正常：本轮不渲染存量 pending，观察集仍可工作。
     table = MagicMock()
     table.list_pending_terminal_snapshot.side_effect = RuntimeError("db down")
-    assert (
-        bohrium_delivery_ack.snapshot(
-            "sess-1", sessions_service=_sessions(), jobs_table=table
-        )
-        is None
+    snap = bohrium_delivery_ack.snapshot(
+        "sess-1", sessions_service=_sessions(), jobs_table=table
     )
+    assert snap is not None and snap.rows == ()
 
 
 def test_confirm_acks_exactly_snapshot_row_ids():
@@ -151,3 +151,46 @@ def test_snapshot_returns_none_when_session_missing():
         is None
     )
     table.list_pending_terminal_snapshot.assert_not_called()
+
+
+def test_snapshot_identity_lookup_failure_returns_none():
+    svc = MagicMock()
+    svc.get_session.side_effect = RuntimeError("db down")
+    assert (
+        bohrium_delivery_ack.snapshot("s", sessions_service=svc, jobs_table=MagicMock())
+        is None
+    )
+
+
+def test_confirm_acks_union_of_rows_and_observed():
+    table = MagicMock()
+    table.mark_handled_by_ids.return_value = 2
+    table.mark_handled_by_job_keys.return_value = 1
+    snap = bohrium_delivery_ack.DeliverySnapshot(
+        user_id="u1",
+        org_id="o1",
+        session_id="s",
+        rows=(_row(11, "a"), _row(12, "b")),
+        detail_limit=20,
+    )
+    snap.observed_terminal.add((True, "J"))
+
+    assert bohrium_delivery_ack.confirm(snap, jobs_table=table) == 3
+    assert table.mark_handled_by_ids.call_args.kwargs["row_ids"] == (11, 12)
+    kw = table.mark_handled_by_job_keys.call_args.kwargs
+    assert kw == {
+        "user_id": "u1",
+        "org_id": "o1",
+        "session_id": "s",
+        "job_keys": ((True, "J"),),
+    }
+
+
+def test_confirm_skips_dao_calls_for_empty_sets():
+    table = MagicMock()
+    snap = bohrium_delivery_ack.DeliverySnapshot(
+        user_id="u1", org_id="o1", session_id="s", rows=(), detail_limit=20
+    )
+    assert bohrium_delivery_ack.confirm(snap, jobs_table=table) == 0
+    table.mark_handled_by_ids.assert_not_called()
+    table.mark_handled_by_job_keys.assert_not_called()
