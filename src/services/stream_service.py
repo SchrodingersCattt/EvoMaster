@@ -380,6 +380,8 @@ class ChatStreamService:
 
         resolved_mode = self._resolve_mode(mode)
         model_val = (model or '').strip() or None
+        if model_val is None:
+            model_val = self._events_service.get_last_resolved_model_profile(sid)
         delivery_payload = delivery.model_dump() if delivery is not None else None
 
         def _system_event_writer(task_id: str, invocation_id: str) -> dict:
