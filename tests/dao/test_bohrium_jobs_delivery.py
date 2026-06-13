@@ -359,3 +359,29 @@ def test_mark_handled_by_job_keys_idempotent_and_session_scoped(
         )
         == 0
     )
+
+
+def test_scan_exposes_unknown_count_and_pending_age(jobs_table, sessions_shadow):
+    _register_session(sessions_shadow)
+    _seed_job(jobs_table, job_id="501", status="finished")
+    _seed_job(jobs_table, job_id="502")
+    _seed_job(jobs_table, job_id="503")
+    for jid in ("502", "503"):
+        jobs_table.mark_poll_error(
+            user_id="u1",
+            org_id="o1",
+            sandbox=False,
+            job_id=jid,
+            backoff_seconds=30,
+            lost_after_seconds=86400,
+        )
+    _shift_terminal_at(sessions_shadow, job_id="501", seconds_ago=600)
+
+    units = jobs_table.scan_delivery_units(limit=10)
+
+    assert len(units) == 1
+    unit = units[0]
+    assert unit["unknown_count"] == 2
+    assert unit["active"] == 2
+    assert unit["pending_terminal"] == 1
+    assert 550 <= unit["oldest_pending_age_seconds"] <= 650

@@ -349,6 +349,12 @@ class BohriumJobsTable(BaseTable):
                 SUM(t.status IN ({_SQL_FAILURE})
                     AND t.handled_at IS NOT NULL)                    AS failed_handled,
                 SUM(t.status = 'finished')                           AS succeeded,
+                SUM(t.status = 'unknown')                            AS unknown_count,
+                TIMESTAMPDIFF(SECOND,
+                    MIN(CASE WHEN t.terminal_at IS NOT NULL
+                             AND t.handled_at IS NULL
+                        THEN t.terminal_at END),
+                    NOW())                                           AS oldest_pending_age_seconds,
                 MAX(t.terminal_at)                                   AS max_terminal_at,
                 MAX(CASE WHEN t.terminal_at IS NOT NULL AND t.handled_at IS NULL
                          THEN t.id END)                              AS max_pending_terminal_id,
@@ -398,6 +404,8 @@ class BohriumJobsTable(BaseTable):
             "failed_total": int(row["failed_total"]),
             "failed_handled": int(row["failed_handled"]),
             "succeeded": int(row["succeeded"]),
+            "unknown_count": int(row["unknown_count"]),
+            "oldest_pending_age_seconds": int(row["oldest_pending_age_seconds"]),
             "max_terminal_at": row["max_terminal_at"],
             "max_pending_terminal_id": int(row["max_pending_terminal_id"]),
             "first_pending_terminal_at": row["first_pending_terminal_at"],
