@@ -29,7 +29,7 @@ include:
   - local: "ci/sync_question_catalog_jobs.yml"
   - local: "ci/baseline-eval.yml"
 
-# 所有 pipeline 都跑：扫描 SKILL.md，禁止引用个人名下镜像（prod-<编号> 命名空间），命中即失败
+# 所有 pipeline 都跑：扫描 SKILL.md，禁止引用个人名下镜像（prod-<编号> / hub/<用户名> 命名空间），命中即失败
 check-personal-images:
   stage: policy
   image: $REGISTRY/public/ubuntu:gitlab-docker
