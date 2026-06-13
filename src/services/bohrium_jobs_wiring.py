@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from collections.abc import Callable
+from typing import Any
 
 from matmaster.bohrium.status import to_ledger_status
 from matmaster.context.ports import SessionJobs, SessionJobsQuery
@@ -56,6 +57,7 @@ class _BohriumJobLedger:
         org_id: str,
         workspace: str,
         spawn_id: str | None = None,
+        observed_terminal: set[tuple[bool, str]] | None = None,
     ) -> None:
         self._table_ref = table_ref
         self._session_id = session_id
@@ -64,6 +66,7 @@ class _BohriumJobLedger:
         self._org_id = org_id
         self._workspace = workspace
         self._spawn_id = spawn_id
+        self._observed_terminal = observed_terminal
 
     def _require_identity(self) -> None:
         missing = [
@@ -122,6 +125,8 @@ class _BohriumJobLedger:
             is_terminal=decision.is_terminal,
             backoff_seconds=_FOREGROUND_POLL_BACKOFF_SECONDS,
         )
+        if decision.is_terminal and self._observed_terminal is not None:
+            self._observed_terminal.add((bool(sandbox), str(job_id)))
 
     def record_kill(self, *, job_id: str, sandbox: bool) -> None:
         self._require_identity()
@@ -152,29 +157,17 @@ class _RunSessionJobsPort:
             return SessionJobs.empty()
         try:
             table = self._table_ref.get()
-            active_call = asyncio.to_thread(
+            active = await asyncio.to_thread(
                 table.query_session_active,
                 user_id=self._user_id,
                 org_id=self._org_id,
                 session_id=query.session_id,
             )
             if self._snapshot is not None:
-                # 本轮交付边界固定：compaction 再调时返回同一 snapshot 的 pending
-                active = await active_call
-                pending = self._snapshot.rows
+                pending: tuple[dict[str, Any], ...] = self._snapshot.rows
                 detail_limit: int | None = self._snapshot.detail_limit
             else:
-                active, rows = await asyncio.gather(
-                    active_call,
-                    asyncio.to_thread(
-                        table.query_session_pending_terminal,
-                        user_id=self._user_id,
-                        org_id=self._org_id,
-                        session_id=query.session_id,
-                        limit=5,
-                    ),
-                )
-                pending = tuple(rows)
+                pending = ()
                 detail_limit = None
         except Exception:  # noqa: BLE001
             logger.warning(
@@ -214,6 +207,11 @@ def build_bohrium_jobs_ports(
             org_id=org_id,
             workspace=normalized_workspace,
             spawn_id=spawn_id,
+            observed_terminal=(
+                delivery_snapshot.observed_terminal
+                if delivery_snapshot is not None
+                else None
+            ),
         )
         if normalized_workspace is not None
         else None

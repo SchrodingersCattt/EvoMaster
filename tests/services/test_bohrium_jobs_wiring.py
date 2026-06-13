@@ -140,10 +140,10 @@ def test_record_poll_normalizes_status_code() -> None:
 
 
 @pytest.mark.asyncio
-async def test_session_jobs_port_loads_active_and_pending() -> None:
+async def test_jobs_port_without_snapshot_renders_empty_pending() -> None:
+    # 渲染统一为冻结语义：无 snapshot（身份降级）→ pending 恒空，active 仍实时。
     table = MagicMock()
     table.query_session_active.return_value = [{"job_id": "a"}]
-    table.query_session_pending_terminal.return_value = [{"job_id": "t"}]
     _, jobs_port = build_bohrium_jobs_ports(
         session_id="s",
         invocation_id="inv",
@@ -156,9 +156,8 @@ async def test_session_jobs_port_loads_active_and_pending() -> None:
 
     result = await jobs_port.load_session_jobs(SessionJobsQuery(session_id="s"))
     assert result.active_jobs == ({"job_id": "a"},)
-    assert result.pending_terminal_jobs == ({"job_id": "t"},)
-    assert table.query_session_active.call_args.kwargs["user_id"] == "u"
-    assert table.query_session_active.call_args.kwargs["org_id"] == "o"
+    assert result.pending_terminal_jobs == ()
+    assert result.detail_limit is None
 
 
 def test_ports_do_not_construct_table_until_identity_allows_use() -> None:
@@ -250,29 +249,37 @@ async def test_jobs_port_serves_pending_from_snapshot_with_detail_limit() -> Non
     # pending 据 snapshot.rows（失败优先序原样），不再裸查 limit=5 定交付集合
     assert result.pending_terminal_jobs == tuple(snap_rows)
     assert result.detail_limit == 20
-    table.query_session_pending_terminal.assert_not_called()
     # active 仍走实时查询（snapshot 只钉死 pending）
     assert result.active_jobs == ({"job_id": "a"},)
     table.query_session_active.assert_called_once()
 
 
-@pytest.mark.asyncio
-async def test_jobs_port_without_snapshot_keeps_legacy_read_path() -> None:
+def test_record_poll_terminal_feeds_observed_set() -> None:
     table = MagicMock()
-    table.query_session_active.return_value = []
-    table.query_session_pending_terminal.return_value = [{"job_id": "t"}]
-    _, jobs_port = build_bohrium_jobs_ports(
+    snap = _snapshot([])
+    ledger, _ = build_bohrium_jobs_ports(
         session_id="s",
         invocation_id="inv",
         user_id="u",
         org_id="o",
-        workspace=None,
+        workspace="/share/project",
+        table=table,
+        delivery_snapshot=snap,
+    )
+    ledger.record_poll(job_id="J", sandbox=True, status_code=2)
+    ledger.record_poll(job_id="K", sandbox=False, status_code=1)
+    assert snap.observed_terminal == {(True, "J")}
+
+
+def test_record_poll_without_snapshot_skips_observation() -> None:
+    table = MagicMock()
+    ledger, _ = build_bohrium_jobs_ports(
+        session_id="s",
+        invocation_id="inv",
+        user_id="u",
+        org_id="o",
+        workspace="/share/project",
         table=table,
     )
-    from matmaster.context.ports import SessionJobsQuery
-
-    result = await jobs_port.load_session_jobs(SessionJobsQuery(session_id="s"))
-
-    assert result.pending_terminal_jobs == ({"job_id": "t"},)
-    assert result.detail_limit is None
-    assert table.query_session_pending_terminal.call_args.kwargs["limit"] == 5
+    ledger.record_poll(job_id="J", sandbox=False, status_code=2)
+    table.apply_poll.assert_called_once()
