@@ -5,9 +5,7 @@ from pathlib import Path
 from matmaster.config.loader import load_agents_general_llm, load_llm_config
 
 _CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "config.yaml"
-_LLM_CONFIG_PATH = (
-    Path(__file__).resolve().parent.parent / "config" / "llm_config.yaml"
-)
+_LLM_CONFIG_PATH = Path(__file__).resolve().parent.parent / "config" / "llm_config.yaml"
 
 
 def test_default_agent_llm_is_deepseek_v4_pro():
