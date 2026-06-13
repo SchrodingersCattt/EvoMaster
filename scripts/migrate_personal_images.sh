@@ -9,8 +9,17 @@
 # - 仅「复制 + 校验 digest」，不删除源镜像（确认无误后再手动删旧的）。
 #
 # 用法：
-#   bash scripts/migrate_personal_images.sh            # 复制并校验
-#   DRY_RUN=1 bash scripts/migrate_personal_images.sh  # 只打印将执行的命令
+#   # 1) 跑内置默认清单（首次批量迁移）
+#   bash scripts/migrate_personal_images.sh
+#
+#   # 2) SOP：别人给一个镜像，临时转一个（推荐日常用法）
+#   #    只给源 -> 目标默认 dptech/matmaster/<原名:原tag>
+#   bash scripts/migrate_personal_images.sh registry.dp.tech/dptech/dp/native/prod-20000/foo:bar
+#   #    给源 + 目标 -> 可顺手改名（源/目标都可省略 registry.dp.tech/ 前缀）
+#   bash scripts/migrate_personal_images.sh prod-20000/a1:bar dptech/matmaster/gromacs:bar
+#
+#   # 任意用法前加 DRY_RUN=1 只打印将执行的命令（凭证已脱敏）
+#   DRY_RUN=1 bash scripts/migrate_personal_images.sh ...
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel 2>/dev/null || (cd "$(dirname "$0")/.." && pwd))"
@@ -33,9 +42,9 @@ if [ "$DRY_RUN" != "1" ] && ! command -v skopeo >/dev/null 2>&1; then
     exit 1
 fi
 
-# 待迁移镜像，格式：源相对路径|目标相对路径（均相对 ${REGISTRY}，保留各自 tag）
+# 内置默认清单，格式：源相对路径|目标相对路径（均相对 ${REGISTRY}，保留各自 tag）
 # 目标统一收敛到 dptech/matmaster，并规范化名字
-MIGRATIONS=(
+DEFAULT_MIGRATIONS=(
     "dptech/dp/native/prod-19853/orca:v6.1.1|dptech/matmaster/orca:v6.1.1"
     "dptech/dp/native/prod-19853/pyscf-geometric:dev-260608|dptech/matmaster/pyscf-geometric:dev-260608"
     "dptech/dp/native/prod-19853/mlips:dev-0421|dptech/matmaster/mlips:dev-0421"
@@ -45,6 +54,28 @@ MIGRATIONS=(
     "dptech/dp/native/hub/mrdic2/a1:1.0.1-1779698340|dptech/matmaster/gromacs:1.0.1-1779698340"
     "dptech/dp/native/hub/mrdic2/gpumd:1.0.2-1777991160|dptech/matmaster/gpumd:1.0.2-1777991160"
 )
+
+# 去掉 docker:// 与 registry 前缀，返回相对路径
+normalize_ref() {
+    local x="$1"
+    x="${x#docker://}"
+    x="${x#"${REGISTRY}"/}"
+    printf '%s' "$x"
+}
+
+# 有命令行参数：转单个（SOP 日常用法）；否则跑内置默认清单
+if [ "$#" -ge 1 ]; then
+    src_rel="$(normalize_ref "$1")"
+    if [ "$#" -ge 2 ]; then
+        dst_rel="$(normalize_ref "$2")"
+    else
+        # 目标默认 dptech/matmaster/<源镜像最后一段 name:tag>
+        dst_rel="dptech/matmaster/${src_rel##*/}"
+    fi
+    MIGRATIONS=("${src_rel}|${dst_rel}")
+else
+    MIGRATIONS=("${DEFAULT_MIGRATIONS[@]}")
+fi
 
 CREDS="${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}"
 
@@ -94,4 +125,4 @@ if [ "$fail" -ne 0 ]; then
     exit 1
 fi
 
-echo "全部完成。确认无误后可手动删除源镜像（prod-19853 / hub/mrdic2 命名空间），删除不影响 matmaster 下镜像。"
+echo "全部完成。确认无误后可手动删除对应源镜像，删除不影响 matmaster 下镜像。"
