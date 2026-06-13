@@ -34,12 +34,21 @@ if [ -f "$ROOT/.env" ]; then
 fi
 
 : "${REGISTRY:=registry.dp.tech}"
-: "${REGISTRY_USERNAME:?请在 .env 中设置 REGISTRY_USERNAME}"
-: "${REGISTRY_PASSWORD:?请在 .env 中设置 REGISTRY_PASSWORD}"
 
-if [ "$DRY_RUN" != "1" ] && ! command -v skopeo >/dev/null 2>&1; then
-    echo "未找到 skopeo，请先安装：brew install skopeo 或 apt-get install -y skopeo" >&2
-    exit 1
+# 非 DRY_RUN 才需要真实凭证与 skopeo，并提前登录：凭证写入临时 auth 文件，
+# 不经命令行参数传递，避免明文密码出现在进程列表（ps/proc）。
+if [ "$DRY_RUN" != "1" ]; then
+    : "${REGISTRY_USERNAME:?请在 .env 中设置 REGISTRY_USERNAME}"
+    : "${REGISTRY_PASSWORD:?请在 .env 中设置 REGISTRY_PASSWORD}"
+    command -v skopeo >/dev/null 2>&1 || {
+        echo "未找到 skopeo，请先安装：brew install skopeo 或 apt-get install -y skopeo" >&2
+        exit 1
+    }
+    REGISTRY_AUTH_FILE="$(mktemp)"
+    export REGISTRY_AUTH_FILE
+    trap 'rm -f "$REGISTRY_AUTH_FILE"' EXIT
+    printf '%s' "$REGISTRY_PASSWORD" |
+        skopeo login -u "$REGISTRY_USERNAME" --password-stdin "$REGISTRY"
 fi
 
 # 内置默认清单，格式：源相对路径|目标相对路径（均相对 ${REGISTRY}，保留各自 tag）
@@ -77,23 +86,20 @@ else
     MIGRATIONS=("${DEFAULT_MIGRATIONS[@]}")
 fi
 
-CREDS="${REGISTRY_USERNAME}:${REGISTRY_PASSWORD}"
-
 run() {
     if [ "$DRY_RUN" = "1" ]; then
-        # 打印时对凭证脱敏，避免明文密码进入日志/终端
-        local shown=()
-        local a
-        for a in "$@"; do
-            if [ "$a" = "$CREDS" ]; then
-                shown+=("<REGISTRY_USERNAME:REGISTRY_PASSWORD>")
-            else
-                shown+=("$a")
-            fi
-        done
-        printf 'DRY_RUN >>> %s\n' "${shown[*]}"
+        printf 'DRY_RUN >>> %s\n' "$*"
     else
         "$@"
+    fi
+}
+
+# 跨平台 sha256（Linux: sha256sum；macOS: shasum -a 256），读 stdin 输出纯哈希
+sha256_stdin() {
+    if command -v sha256sum >/dev/null 2>&1; then
+        sha256sum | awk '{print $1}'
+    else
+        shasum -a 256 | awk '{print $1}'
     fi
 }
 
@@ -102,18 +108,25 @@ for pair in "${MIGRATIONS[@]}"; do
     src="${REGISTRY}/${pair%%|*}"
     dst="${REGISTRY}/${pair##*|}"
     echo "==> 复制 ${pair%%|*}  ->  ${pair##*|}"
-    run skopeo copy --all \
-        --src-creds "$CREDS" \
-        --dest-creds "$CREDS" \
-        "docker://${src}" "docker://${dst}"
+    run skopeo copy --all "docker://${src}" "docker://${dst}"
 
     [ "$DRY_RUN" = "1" ] && continue
 
     echo "    校验 digest ..."
-    src_digest="$(skopeo inspect --creds "$CREDS" --format '{{.Digest}}' "docker://${src}")"
-    dst_digest="$(skopeo inspect --creds "$CREDS" --format '{{.Digest}}' "docker://${dst}")"
+    # 用 --raw 取完整 manifest（含多架构 manifest list），自行算 sha256 比对，
+    # 避免 {{.Digest}} 在多架构镜像上只解析单平台导致误判；
+    # inspect 失败不让 set -e 中断整轮，记 fail 后继续下一个。
+    src_raw="$(skopeo inspect --raw "docker://${src}" 2>/dev/null || true)"
+    dst_raw="$(skopeo inspect --raw "docker://${dst}" 2>/dev/null || true)"
+    if [ -z "$src_raw" ] || [ -z "$dst_raw" ]; then
+        echo "    ✗ 获取 manifest 失败（src 或 dst inspect 无输出）" >&2
+        fail=1
+        continue
+    fi
+    src_digest="$(printf '%s' "$src_raw" | sha256_stdin)"
+    dst_digest="$(printf '%s' "$dst_raw" | sha256_stdin)"
     if [ "$src_digest" = "$dst_digest" ]; then
-        echo "    OK  ${dst}  (${dst_digest})"
+        echo "    OK  ${dst}  (sha256:${dst_digest})"
     else
         echo "    ✗ digest 不一致：src=${src_digest} dst=${dst_digest}" >&2
         fail=1

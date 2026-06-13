@@ -14,10 +14,11 @@ cd "$ROOT"
 # registry.dp.tech/<...>/prod-<数字> 或 /hub/<用户名>/ ：命名空间紧跟路径分隔符，避免误伤镜像名
 PATTERN='registry\.dp\.tech/[^[:space:]]*/(prod-[0-9]+|hub/[^/[:space:]]+)'
 
-hits="$(grep -REn --include='SKILL.md' -- "$PATTERN" . || true)"
+hits="$(grep -REn --include='SKILL.md' \
+    --exclude-dir={.git,.venv,node_modules,.cache} -- "$PATTERN" . || true)"
 
 if [ -n "$hits" ]; then
-    echo "✗ 检测到 SKILL.md 引用了个人名下镜像（prod-<编号> 命名空间），CI 失败：" >&2
+    echo "✗ 检测到 SKILL.md 引用了个人名下镜像（prod-<编号> / hub/<用户名> 命名空间），CI 失败：" >&2
     echo "$hits" >&2
     echo >&2
     echo "请改用共享命名空间镜像（如 registry.dp.tech/dptech/<name>:<tag>）后重试。" >&2
