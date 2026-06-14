@@ -44,6 +44,7 @@ from src.services.session_directory_service import (
 from src.services.sessions_service import ChatSessionsService, get_sessions_service
 from src.services.stream_service import (
     ChatStreamService,
+    TriggerStreamContext,
     get_stream_service,
 )
 from src.services.user_service import UserService
@@ -151,9 +152,9 @@ async def _handle_internal_trigger(
         raise BaseErrorResponse(
             http_status=503, code=503, msg="队列服务不可用，请检查 REDIS_URL 配置"
         )
-    # trigger_run 是同步函数（多次 DB/Redis 往返 + 阻塞通知），放线程池避免卡事件循环
-    result = await asyncio.to_thread(
-        stream_svc.trigger_run,
+    # prepare 是同步函数（多次 DB/Redis 往返），放线程池避免卡事件循环。
+    prep = await asyncio.to_thread(
+        stream_svc.prepare_internal_trigger_run,
         sid,
         prompt,
         origin=(req.origin or "external_tool"),
@@ -162,20 +163,20 @@ async def _handle_internal_trigger(
         mode=req.mode,
         model=req.model,
     )
-    if result.status == "enqueued":
+    if isinstance(prep, TriggerStreamContext):
         return _sse_streaming_response(
-            request, stream_svc.generate_subscribe_stream(sid)
+            request, stream_svc.generate_internal_trigger_stream(sid, prep)
         )
     return JSONResponse(
         status_code=200,
         content={
             "code": 200,
-            "msg": result.status,
+            "msg": prep.status,
             "data": {
-                "status": result.status,
-                "task_id": result.task_id,
-                "invocation_id": result.invocation_id,
-                "reason": result.reason,
+                "status": prep.status,
+                "task_id": prep.task_id,
+                "invocation_id": prep.invocation_id,
+                "reason": prep.reason,
             },
         },
     )

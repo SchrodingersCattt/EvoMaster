@@ -1018,6 +1018,93 @@ class ChatStreamService:
             shutdown_event.set()
             sub_thread.join(timeout=2.0)
 
+    async def generate_internal_trigger_stream(
+        self,
+        session_id: str,
+        ctx: TriggerStreamContext,
+    ) -> AsyncGenerator[str, None]:
+        """内部 HTTP trigger 流：订阅就绪后才入队，再转发 Worker 实时事件。"""
+        sid = session_id.strip()
+        loop = asyncio.get_running_loop()
+        start_time_ms = int(time.time() * 1000)
+        logger.info(
+            'generate_internal_trigger_stream: start session_id=%s task_id=%s',
+            sid,
+            ctx.task_id,
+        )
+
+        payload = self._sessions_service.get_session_status_payload(sid)
+        payload['stream_started_at'] = start_time_ms
+        payload['invocation_id'] = ctx.invocation_id
+        yield self.sse_format(payload)
+        for batch in self._iter_history_replay_batches(
+            sid, exclude_task_id=ctx.task_id
+        ):
+            yield batch
+        yield self.sse_format(ctx.event)
+
+        (
+            redis_queue,
+            shutdown_event,
+            subscribe_ready,
+            sub_thread,
+        ) = _start_redis_stream_subscription(
+            sid,
+            loop,
+            thread_name=f"trigger-stream-{sid[:8]}",
+        )
+
+        try:
+            if not await asyncio.to_thread(subscribe_ready.wait, 3.0):
+                logger.warning(
+                    'generate_internal_trigger_stream: redis subscribe not ready '
+                    'before enqueue session_id=%s task_id=%s',
+                    sid,
+                    ctx.task_id,
+                )
+            if not self._enqueue_run(sid, ctx.job):
+                yield self.sse_format(
+                    {
+                        'source': 'System',
+                        'type': 'error',
+                        'content': 'Queue unavailable.',
+                        'session_id': sid,
+                        'invocation_id': ctx.invocation_id,
+                    }
+                )
+                yield self.sse_format(
+                    {
+                        'source': 'System',
+                        'type': 'stream_closed',
+                        'content': '',
+                        'session_id': sid,
+                        'invocation_id': ctx.invocation_id,
+                    }
+                )
+                return
+            if ctx.dedup_key:
+                get_redis_dao().mark_dedup_key_nx(ctx.dedup_key, ctx.task_id)
+            self._publish_user_wakeup(ctx.owner, sid, "trigger_enqueued")
+            while True:
+                try:
+                    payload = await asyncio.wait_for(redis_queue.get(), timeout=30.0)
+                except TimeoutError:
+                    yield self.sse_format(self._ping_payload(sid))
+                    continue
+                elapsed_ms = int(time.time() * 1000) - start_time_ms
+                out = {
+                    **payload,
+                    'elapsed_ms': elapsed_ms,
+                    'stream_started_at': start_time_ms,
+                    'invocation_id': payload.get('invocation_id') or ctx.invocation_id,
+                }
+                yield self.sse_format(out)
+                if payload.get('type') == 'stream_closed':
+                    break
+        finally:
+            shutdown_event.set()
+            sub_thread.join(timeout=2.0)
+
 
 @lru_cache
 def get_stream_service() -> ChatStreamService:

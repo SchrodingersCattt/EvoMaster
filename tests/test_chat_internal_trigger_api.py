@@ -28,19 +28,24 @@ def _clear_overrides(app, *dependencies):
 
 
 def test_internal_trigger_enqueues_with_valid_token():
-    from src.services.stream_service import TriggerResult
+    from src.services.stream_service import TriggerStreamContext
 
     fake_stream = MagicMock()
-    fake_stream.trigger_run.return_value = TriggerResult(
-        status="enqueued", task_id="trig_abc", invocation_id="inv_abc"
+    fake_stream.prepare_internal_trigger_run.return_value = TriggerStreamContext(
+        task_id="trig_abc",
+        invocation_id="inv_abc",
+        owner="owner-1",
+        job={"session_id": "sess"},
+        event={"source": "System", "type": "trigger"},
+        dedup_key="job:123:done",
     )
 
-    async def _empty_subscribe(_sid):
+    async def _empty_stream(_sid, _ctx):
         if False:
             yield ""
 
-    fake_stream.generate_subscribe_stream.side_effect = lambda sid: _empty_subscribe(
-        sid
+    fake_stream.generate_internal_trigger_stream.side_effect = (
+        lambda sid, ctx: _empty_stream(sid, ctx)
     )
 
     fake_sessions = MagicMock()
@@ -69,8 +74,8 @@ def test_internal_trigger_enqueues_with_valid_token():
             headers={"X-Internal-Token": "secret-token"},
         )
         assert resp.status_code == 200, resp.text
-        fake_stream.trigger_run.assert_called_once()
-        kwargs = fake_stream.trigger_run.call_args.kwargs
+        fake_stream.prepare_internal_trigger_run.assert_called_once()
+        kwargs = fake_stream.prepare_internal_trigger_run.call_args.kwargs
         assert kwargs["origin"] == "hpc_job"
         assert kwargs["dedup_key"] == "job:123:done"
         fake_sessions.can_access_session.assert_not_called()
@@ -84,7 +89,7 @@ def test_internal_trigger_deduped_returns_json_not_stream():
     from src.services.stream_service import TriggerResult
 
     fake_stream = MagicMock()
-    fake_stream.trigger_run.return_value = TriggerResult(
+    fake_stream.prepare_internal_trigger_run.return_value = TriggerResult(
         status="deduped", dedup_key="job:123:done"
     )
     fake_sessions = MagicMock()
@@ -110,7 +115,7 @@ def test_internal_trigger_deduped_returns_json_not_stream():
         assert resp.status_code == 200, resp.text
         body = resp.json()
         assert body["data"]["status"] == "deduped"
-        fake_stream.generate_subscribe_stream.assert_not_called()
+        fake_stream.generate_internal_trigger_stream.assert_not_called()
     finally:
         _clear_overrides(app, sessions_dep, stream_dep)
         for p in patches:
@@ -139,7 +144,7 @@ def test_internal_trigger_wrong_token_rejected_fail_closed():
             headers={"X-Internal-Token": "wrong-token"},
         )
         assert resp.status_code == 403, resp.text
-        fake_stream.trigger_run.assert_not_called()
+        fake_stream.prepare_internal_trigger_run.assert_not_called()
         fake_sessions.can_access_session.assert_not_called()
     finally:
         _clear_overrides(app, sessions_dep, stream_dep)
@@ -169,7 +174,7 @@ def test_internal_trigger_rejected_on_share_route():
             headers={"X-Internal-Token": "secret-token"},
         )
         assert resp.status_code == 403, resp.text
-        fake_stream.trigger_run.assert_not_called()
+        fake_stream.prepare_internal_trigger_run.assert_not_called()
         fake_sessions.can_access_session.assert_not_called()
     finally:
         _clear_overrides(app, sessions_dep, stream_dep)
