@@ -131,7 +131,6 @@ class WorkspaceJobs:
     active_jobs: tuple[JsonObject, ...] = ()
     pending_terminal_jobs: tuple[JsonObject, ...] = ()
     recent_terminal_jobs: tuple[JsonObject, ...] = ()
-    detail_limit: int | None = None  # 过渡字段，Task 5 末尾移除
     mode: Literal["workspace_observation", "session_workspace_delivery"] | None = None
     summary: WorkspaceJobsSummary | None = None
     export: WorkspaceJobsExport | None = None

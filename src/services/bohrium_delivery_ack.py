@@ -14,8 +14,6 @@ import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from src.utils.constant import env_int
-
 logger = logging.getLogger(__name__)
 
 
@@ -23,7 +21,6 @@ logger = logging.getLogger(__name__)
 class DeliverySnapshot:
     """一次 run 的交付边界快照 + run 内前台观察集（worker 内存对象，不落表）。
 
-    rows 持全量行、不预截断：展开几条详情由 renderer 按 detail_limit 决定。
     export_failure 由 read port 在 CSV 导出失败时写入（{reason, rows, target_path}），
     confirm 据此 gate snapshot.rows 的 ack；写入在 run 内上下文装配、读取在 run 收尾，
     与 observed_terminal 同属 frozen 字段绑定的可变容器，无时间重叠。
@@ -37,7 +34,6 @@ class DeliverySnapshot:
     session_id: str
     workspace: str
     rows: tuple[dict[str, Any], ...]
-    detail_limit: int
     observed_terminal: set[tuple[bool, str]] = field(default_factory=set)
     export_failure: dict[str, Any] = field(default_factory=dict)
 
@@ -103,7 +99,6 @@ def snapshot(
         session_id=session_id,
         workspace=workspace,
         rows=tuple(rows),
-        detail_limit=env_int("BOHRIUM_DELIVERY_DETAIL_LIMIT", 20),
     )
 
 

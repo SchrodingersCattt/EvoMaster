@@ -374,7 +374,6 @@ def _snapshot(rows):
         session_id="s",
         workspace="/share/project",
         rows=tuple(rows),
-        detail_limit=20,
     )
 
 

@@ -65,19 +65,6 @@ def test_snapshot_holds_full_rows():
     }
 
 
-def test_snapshot_reads_detail_limit_from_env(monkeypatch):
-    monkeypatch.setenv("BOHRIUM_DELIVERY_DETAIL_LIMIT", "7")
-    table = MagicMock()
-    table.list_pending_terminal_snapshot.return_value = [_row(1, "a")]
-    snap = bohrium_delivery_ack.snapshot(
-        "sess-1",
-        workspace="/share/project",
-        sessions_service=_sessions(),
-        jobs_table=table,
-    )
-    assert snap.detail_limit == 7
-
-
 def test_snapshot_empty_rows_returns_object_not_none():
     # 身份可解析即返回对象：空 rows 是合法交付边界，观察集空集起步。
     table = MagicMock()
@@ -154,23 +141,9 @@ def test_confirm_propagates_failure_to_caller():
         session_id="s",
         workspace="/share/project",
         rows=(_row(1, "a"),),
-        detail_limit=20,
     )
     with pytest.raises(RuntimeError):
         bohrium_delivery_ack.confirm(snap, jobs_table=table)
-
-
-def test_snapshot_detail_limit_defaults_when_env_unset(monkeypatch):
-    monkeypatch.delenv("BOHRIUM_DELIVERY_DETAIL_LIMIT", raising=False)
-    table = MagicMock()
-    table.list_pending_terminal_snapshot.return_value = [_row(1, "a")]
-    snap = bohrium_delivery_ack.snapshot(
-        "sess-1",
-        workspace="/share/project",
-        sessions_service=_sessions(),
-        jobs_table=table,
-    )
-    assert snap.detail_limit == 20
 
 
 def test_snapshot_returns_none_when_session_missing():
@@ -213,7 +186,6 @@ def test_confirm_acks_union_of_rows_and_observed():
         session_id="s",
         workspace="/share/project",
         rows=(_row(11, "a"), _row(12, "b")),
-        detail_limit=20,
     )
     snap.observed_terminal.add((True, "J"))
 
@@ -243,7 +215,6 @@ def test_confirm_skips_dao_calls_for_empty_sets():
         session_id="s",
         workspace="/share/project",
         rows=(),
-        detail_limit=20,
     )
     assert bohrium_delivery_ack.confirm(snap, jobs_table=table) == 0
     table.mark_handled_by_ids.assert_not_called()
@@ -272,7 +243,6 @@ def test_confirm_skips_rows_when_export_failed_but_acks_observed():
         session_id="s",
         workspace="/share/project",
         rows=(_row(11, "f1", status="failed"),),
-        detail_limit=20,
         export_failure={
             "reason": "write_failed",
             "rows": 1,
@@ -297,7 +267,6 @@ def test_confirm_acks_rows_when_export_failure_empty():
         session_id="s",
         workspace="/share/project",
         rows=(_row(11, "t1"),),
-        detail_limit=20,
     )
 
     affected = bohrium_delivery_ack.confirm(snap, jobs_table=table)
